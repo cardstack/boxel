@@ -54,6 +54,7 @@ import {
 } from '../factory-tool-builder.ts';
 import { deriveCatalogRealmUrl } from '../factory-catalog-realm.ts';
 import { logger } from '../logger.ts';
+import { startSpan } from '../run-trace.ts';
 import {
   assembleBootstrapPrompt,
   assembleImplementPrompt,
@@ -390,7 +391,12 @@ export class OpencodeFactoryAgent implements LoopAgent {
           body: {
             model: {
               providerID: FACTORY_PROVIDER_ID,
-              modelID: this.config.model,
+              // Per-turn budget override from the orchestrator's policy —
+              // any OpenRouter model id works here (e.g. `openai/gpt-5.2`,
+              // `moonshotai/kimi-k2`). `effort` has no opencode per-prompt
+              // equivalent yet, so only the model half of the budget
+              // applies on this backend.
+              modelID: context.modelBudget?.model ?? this.config.model,
             },
             system: systemPrompt,
             // Trim opencode's default tool catalog to only what the
@@ -570,9 +576,14 @@ async function startFactoryMcpServer(
     let typedArgs = (args ?? {}) as Record<string, unknown>;
     let start = Date.now();
     let result: unknown;
+    let endToolSpan = startSpan('tool', name);
     try {
       result = await tool.execute(typedArgs);
+      endToolSpan({
+        ok: !(result && typeof result === 'object' && 'error' in result),
+      });
     } catch (error) {
+      endToolSpan({ ok: false });
       result = {
         error: error instanceof Error ? error.message : String(error),
       };

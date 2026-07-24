@@ -39,6 +39,14 @@ export interface IssueStore {
   listIssues(): Promise<SchedulableIssue[]>;
   /** Re-read a single issue's current state from the realm. */
   refreshIssue(issueId: string): Promise<SchedulableIssue>;
+  /**
+   * Read an issue's status from the AUTHORITATIVE local workspace file
+   * (not the realm index). Returns undefined when the file is absent.
+   * Used to reconcile against a stale index snapshot — the control-plane
+   * sync pushes raw writes that don't wait for indexing, so `listIssues`
+   * can report a status the workspace has already moved past.
+   */
+  readLocalStatus?(issueId: string): Promise<string | undefined>;
   /** Update issue fields in the realm (e.g., status, priority). Descriptions are immutable — use addComment instead. */
   updateIssue(
     issueId: string,
@@ -135,6 +143,11 @@ export class IssueScheduler {
   /** True if any backlog or in_progress issue has no non-completed blockers. */
   hasUnblockedIssues(exclude?: ReadonlySet<string>): boolean {
     return this.getUnblockedIssues(exclude).length > 0;
+  }
+
+  /** Number of unblocked issues remaining (queue depth for monitor notes). */
+  unblockedCount(exclude?: ReadonlySet<string>): number {
+    return this.getUnblockedIssues(exclude).length;
   }
 
   /** True if the loaded issue list is non-empty (regardless of status). */
@@ -245,6 +258,20 @@ export class RealmIssueStore implements IssueStore {
     }
 
     return mapCardToSchedulableIssue(result.data[0]);
+  }
+
+  async readLocalStatus(issueId: string): Promise<string | undefined> {
+    let filePath = ensureJsonExtension(
+      toRealmRelativePath(issueId, this.realmUrl),
+    );
+    let readResult = await readCard(this.workspaceDir, filePath);
+    if (!readResult.ok || !readResult.document) {
+      return undefined;
+    }
+    let doc = readResult.document as unknown as LooseSingleCardDocument;
+    let status = (doc.data.attributes as Record<string, unknown> | undefined)
+      ?.status;
+    return typeof status === 'string' ? status : undefined;
   }
 
   async updateIssue(

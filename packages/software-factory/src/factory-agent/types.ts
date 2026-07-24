@@ -151,6 +151,7 @@ export interface TestResult {
 
 /** Steps in the post-iteration validation pipeline. */
 export type ValidationStep =
+  | 'imports'
   | 'parse'
   | 'lint'
   | 'evaluate'
@@ -249,6 +250,85 @@ export interface AgentContext {
    * See CS-10527.
    */
   enableBoxelUiDiscovery?: boolean;
+  /**
+   * V2 lean/design-first mode — implementation issues use the
+   * `issue-implement-v2` prompt (HTML-mockup design phase, no tests) and
+   * the lean skill core with on-demand `read_skill` loading.
+   */
+  v2?: boolean;
+  /**
+   * Context forking (v2): when set, the backend resumes this session —
+   * branching to a new session id when `fork` is true (the default) — so
+   * the turn inherits the primed conversation as a shared, provider-cached
+   * prefix instead of rebuilding context.
+   */
+  resumeSession?: { sessionId: string; fork?: boolean };
+  /**
+   * Prime turn (v2 context forking): use the `prime` prompt template —
+   * read the design language, skills, and precedent once; the session id
+   * captured from this turn seeds every subsequent fork.
+   */
+  primeTurn?: boolean;
+  /**
+   * Live streaming hook (v2 live blog): invoked for every factory MCP tool
+   * result as it lands, and for native Write/Edit tool_use blocks as they
+   * stream (result undefined for those). Must never throw — callers wrap
+   * it defensively, but keep handlers cheap and fire-and-forget.
+   */
+  onToolCall?: (entry: {
+    tool: string;
+    args: Record<string, unknown>;
+    result?: unknown;
+    durationMs?: number;
+  }) => void;
+  /**
+   * Coarse activity heartbeat (v3 RunMonitor): invoked with a short
+   * description for every backend stream event that isn't already an
+   * onToolCall — e.g. each complete assistant message on the Claude
+   * backend. Used only to reset the stall clock; silence between calls
+   * means the model is generating. Must never throw.
+   */
+  onActivity?: (desc: string) => void;
+  /**
+   * Phase-split (v2): which half of a split issue this turn is. 'design'
+   * turns produce accepted mockups + design notes only; 'build' turns
+   * translate them into card code, forked from the design session.
+   * Unset = the combined single-turn v2 flow.
+   */
+  phase?: 'design' | 'build';
+  /**
+   * Acceptance walkthrough (v3): when set, this turn is a post-completion
+   * VERIFIER pass, not an implementation turn — the agent reads the render
+   * gate's screenshots, verdicts each acceptance criterion (visible
+   * affordance required), files defect issues for gaps, and posts
+   * needs-human-verify items. Selects the `acceptance-walkthrough` prompt.
+   */
+  acceptanceTurn?: {
+    renderSummary: string;
+    screenshots: {
+      cardPath: string;
+      format: string;
+      outputPath: string;
+      suspectBlank?: boolean;
+    }[];
+    failedCaptures: {
+      cardPath: string;
+      format: string;
+      error: string;
+    }[];
+  };
+  /**
+   * Model/thinking budget for THIS turn, chosen by the orchestrator's
+   * policy (turn type — prime / bootstrap / build / fix), not by the
+   * issue. Undefined fields inherit the session default. Note: provider
+   * prompt cache is per-model, so a budget that switches model re-ingests
+   * a forked prime prefix uncached (usually still cheaper on a smaller
+   * model).
+   */
+  modelBudget?: {
+    model?: string;
+    effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+  };
 }
 
 export interface AgentAction {
@@ -296,6 +376,20 @@ export interface AgentRunResult {
   toolCalls: LoopToolCallEntry[];
   /** Clarification message when status is 'blocked'. */
   message?: string;
+  /** Backend session id for this turn (claude backend) — fork seed for v2 context forking. */
+  sessionId?: string;
+  /**
+   * Token/cost usage for this turn when the backend reports it (the Claude
+   * SDK's terminal `result` message). Absent when the turn was aborted by
+   * a control signal before the result message arrived. Consumed by the
+   * v3 RunMonitor's turn-telemetry entries.
+   */
+  usage?: {
+    inputTokens?: number;
+    outputTokens?: number;
+    cacheReadTokens?: number;
+    costUsd?: number;
+  };
 }
 
 /**

@@ -7,6 +7,7 @@ import type {
   ResolvedSkill,
 } from './factory-agent/index.ts';
 import { logger } from './logger.ts';
+import { startSpan } from './run-trace.ts';
 
 const log = logger('factory-skill-loader');
 
@@ -52,6 +53,15 @@ const DEFAULT_FALLBACK_DIRS = [
   // matching flag (`--enable-boxel-ui-discovery`) is on.
   join(PACKAGE_ROOT, '.agents', 'skills'),
 ];
+
+/**
+ * All skill search directories in precedence order (primary first). Exposed
+ * for the on-demand skill tools (`list_skills` / `read_skill`) so their
+ * catalog matches exactly what the loader can resolve.
+ */
+export function skillSearchDirs(): string[] {
+  return [DEFAULT_SKILLS_DIR, ...DEFAULT_FALLBACK_DIRS];
+}
 
 /** Approximate characters per token for budget estimation. */
 const CHARS_PER_TOKEN = 4;
@@ -165,7 +175,7 @@ export const ALWAYS_LOAD_REFERENCES: readonly string[] = [
  * and the validation test uses this set strictly: once a name ships in the
  * built skill, the test fails until it is removed from here.
  */
-export const PENDING_BOXEL_REFERENCES: readonly string[] = ['qunit-testing.md'];
+export const PENDING_BOXEL_REFERENCES: readonly string[] = [];
 
 // ---------------------------------------------------------------------------
 // Internal types for tracking reference metadata
@@ -201,13 +211,22 @@ export interface DefaultSkillResolverOptions {
    * See CS-10527.
    */
   enableBoxelUiDiscovery?: boolean;
+  /**
+   * V2 lean mode — front-load only a small core (the design-first V2
+   * operations skill + file structure + cardinal rules); every other
+   * skill is discoverable at runtime via the `list_skills` / `read_skill`
+   * tools. Bootstrap issues are unaffected.
+   */
+  v2?: boolean;
 }
 
 export class DefaultSkillResolver implements SkillResolver {
   private enableBoxelUiDiscovery: boolean;
+  private v2: boolean;
 
   constructor(options: DefaultSkillResolverOptions = {}) {
     this.enableBoxelUiDiscovery = options.enableBoxelUiDiscovery === true;
+    this.v2 = options.v2 === true;
   }
 
   /**
@@ -233,11 +252,54 @@ export class DefaultSkillResolver implements SkillResolver {
       return ['software-factory-bootstrap', 'boxel-file-structure'];
     }
 
+    // Port-analysis issues (v3 GitHub-port flow) are research turns — no
+    // card authoring, so the design-first operations skill would only
+    // mislead. File-structure covers the tracker JSON they do write.
+    if (issueType === 'analysis') {
+      return ['boxel-file-structure'];
+    }
+
+    // Design-foundation turns author a brand guide + tokens + family
+    // coherence sheet — taste work, not card code. File-structure covers
+    // the KA JSON; boxel-design carries the visual-language method (it
+    // resolves from the materialized catalog's fallback dirs).
+    if (issueType === 'design') {
+      return ['boxel-file-structure', 'boxel-design'];
+    }
+
+    // V2 lean mode: small always-on core; everything else on demand via
+    // the list_skills / read_skill tools. The design-first workflow and
+    // the "when you need X, read Y" pointer table live in the V2
+    // operations skill itself.
+    if (this.v2) {
+      let leanSkills = [
+        'software-factory-operations-v2',
+        'boxel-file-structure',
+        'boxel-workspace-cardinal-rules',
+      ];
+      for (let skillName of extractKnowledgeSkillTags(project, issue)) {
+        if (!leanSkills.includes(skillName)) {
+          leanSkills.push(skillName);
+        }
+      }
+      log.info(
+        `Resolved skills (v2 lean) for issue "${issue.id}": ${leanSkills.join(', ')}`,
+      );
+      return leanSkills;
+    }
+
     let skills: string[] = [
       'boxel',
       'boxel-file-structure',
       'boxel-api',
       'boxel-command',
+      // Local-only addition for this workspace's factory runs: hard-won,
+      // silent-realm-corrupting gotchas (DateField/DateTimeField mismatch,
+      // external URL in a relationships link poisoning the whole realm's
+      // indexing transaction, etc.) that upstream's boxel-development refs
+      // don't cover. Not an upstream change — lives in this checkout's
+      // .agents/skills/ only.
+      'boxel-workspace-cardinal-rules',
     ];
 
     if (matchesAnyKeyword(issueText, FILE_DEF_KEYWORDS)) {
@@ -328,6 +390,9 @@ export class SkillLoader implements SkillLoaderInterface {
     skillNames: string[],
     issue?: IssueData,
   ): Promise<ResolvedSkill[]> {
+    let endLoadSpan = startSpan('skills', 'load', {
+      skills: skillNames.join(','),
+    });
     let results: ResolvedSkill[] = [];
 
     for (let name of skillNames) {
@@ -343,6 +408,7 @@ export class SkillLoader implements SkillLoaderInterface {
       }
     }
 
+    endLoadSpan({ loaded: results.length });
     return results;
   }
 

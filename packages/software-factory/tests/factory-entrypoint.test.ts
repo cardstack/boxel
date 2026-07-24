@@ -6,6 +6,7 @@ import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type
 import {
   FactoryEntrypointUsageError,
   buildFactoryEntrypointSummary,
+  buildModelPolicy,
   getFactoryEntrypointUsage,
   parseFactoryEntrypointArgs,
   runFactoryEntrypoint,
@@ -66,16 +67,16 @@ module('factory-entrypoint', function (hooks) {
       'https://realms.example.test/',
     ]);
 
-    assert.deepEqual(options, {
+    // Round-trip through JSON to drop undefined-valued optional flags, so
+    // this assertion pins the defined defaults without re-enumerating every
+    // optional flag the parser knows about.
+    assert.deepEqual(JSON.parse(JSON.stringify(options)), {
       briefUrl,
       targetRealm,
+      controlRealm: null,
       realmServerUrl: 'https://realms.example.test/',
       agent: 'claude',
-      openRouterModel: undefined,
-      openRouterApiKey: undefined,
-      debug: undefined,
       retryBlocked: true,
-      enableBoxelUiDiscovery: undefined,
     });
   });
 
@@ -213,7 +214,9 @@ module('factory-entrypoint', function (hooks) {
       () => parseFactoryEntrypointArgs(['--target-realm', targetRealm]),
       (error: unknown) =>
         error instanceof FactoryEntrypointUsageError &&
-        error.message === 'Missing required --brief-url',
+        /Missing required input: pass --brief-url .* or --repo-url/.test(
+          error.message,
+        ),
     );
   });
 
@@ -742,5 +745,52 @@ module('factory-entrypoint', function (hooks) {
       linkProjectCalled,
       'linkBootstrapIssueProject must not run for a pre-existing realm',
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildModelPolicy — review turn budget
+// ---------------------------------------------------------------------------
+
+module('factory-entrypoint > buildModelPolicy review budget', function () {
+  test('review turn is unbudgeted by default (inherits flagship)', function (assert) {
+    let policy = buildModelPolicy({ v2: true });
+    assert.strictEqual(policy?.acceptance, undefined);
+  });
+
+  test('--review-model opts the review turn into a cheaper budget', function (assert) {
+    let policy = buildModelPolicy({ v2: true, reviewModel: 'claude-sonnet-5' });
+    assert.deepEqual(policy?.acceptance, {
+      model: 'claude-sonnet-5',
+      effort: 'medium',
+    });
+  });
+
+  test('review-model inherit keeps the flagship, effort-only budgets effort', function (assert) {
+    let policy = buildModelPolicy({
+      v2: true,
+      reviewModel: 'inherit',
+      reviewEffort: 'low',
+    });
+    assert.deepEqual(policy?.acceptance, { effort: 'low' });
+  });
+});
+
+module('factory-entrypoint > buildModelPolicy bootstrap budget', function () {
+  test('bootstrap defaults to claude-sonnet-5 at medium under v2', function (assert) {
+    let policy = buildModelPolicy({ v2: true });
+    assert.deepEqual(policy?.bootstrap, {
+      model: 'claude-sonnet-5',
+      effort: 'medium',
+    });
+  });
+
+  test('bootstrap-model inherit keeps the session flagship', function (assert) {
+    let policy = buildModelPolicy({ v2: true, bootstrapModel: 'inherit' });
+    assert.deepEqual(policy?.bootstrap, { effort: 'medium' });
+  });
+
+  test('no policy at all outside v2', function (assert) {
+    assert.strictEqual(buildModelPolicy({}), undefined);
   });
 });

@@ -442,7 +442,12 @@ module('factory-agent-claude-code', function () {
         'function',
         'canUseTool is wired so native fs ops can be scoped to the workspace',
       );
-      assert.deepEqual(capturedOptions!.settingSources, []);
+      // 'project' (not 'user'/'local'): the factory materializes its
+      // skill catalog into `<workspace>/.claude/skills/` and the harness
+      // discovers it natively, while staying isolated from the host
+      // user's own Claude settings. This agent has a workspaceDir, so
+      // project settings load; without one it stays [].
+      assert.deepEqual(capturedOptions!.settingSources, ['project']);
     });
 
     test('native fs tools are NOT auto-approved so canUseTool can gate them (CS-11033)', async function (assert) {

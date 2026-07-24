@@ -16,10 +16,12 @@ import type {
 } from '../factory-agent/index.ts';
 
 import type { Validator } from '../issue-loop.ts';
+import { startSpan } from '../run-trace.ts';
 
 import { TestValidationStep } from './test-step.ts';
 import { LintValidationStep } from './lint-step.ts';
 import { EvalValidationStep } from './eval-step.ts';
+import { ImportsValidationStep } from './imports-step.ts';
 import { InstantiateValidationStep } from './instantiate-step.ts';
 import { ParseValidationStep } from './parse-step.ts';
 
@@ -77,8 +79,21 @@ export class ValidationPipeline implements Validator {
       return { passed: true, steps: [] };
     }
 
+    // Steps run concurrently, so step spans overlap inside the pipeline
+    // span — the visualization should treat the pipeline duration as the
+    // wall-clock cost and the step durations as attribution.
     let settled = await Promise.allSettled(
-      this.runners.map((runner) => runner.run(targetRealm, iteration)),
+      this.runners.map(async (runner) => {
+        let endStepSpan = startSpan('validation', runner.step, { iteration });
+        try {
+          let result = await runner.run(targetRealm, iteration);
+          endStepSpan({ passed: result.passed });
+          return result;
+        } catch (error) {
+          endStepSpan({ passed: false, error: true });
+          throw error;
+        }
+      }),
     );
 
     let stepResults: ValidationStepResult[] = [];
@@ -179,6 +194,20 @@ export interface ValidationPipelineConfig {
   searchSpecsFn?: InstantiateValidationStepConfig['searchSpecsFn'];
   /** Injected for testing — passed through to ParseValidationStep. */
   parseSearchSpecsFn?: ParseValidationStepConfig['searchSpecsFn'];
+  /**
+   * Include the QUnit test step (default true). The V2 lean loop sets this
+   * to false — tests belong to a separate hardening phase, so the per-issue
+   * pipeline is parse/lint/eval/instantiate only.
+   */
+  includeTestStep?: boolean;
+  /**
+   * Valid `@cardstack/boxel-host/tools/<name>` module names, derived from
+   * the host build at run start (v3 import gate). When set, the pipeline
+   * gains an in-process `imports` step that fails any workspace .gts
+   * importing a host tool that doesn't exist — the class of failure that
+   * previously only surfaced at runtime in the browser. Absent = no gate.
+   */
+  hostToolImports?: string[];
 }
 
 /**
@@ -240,11 +269,22 @@ export function createDefaultPipeline(
     fetchFilenames: config.fetchFilenames,
   };
 
-  return new ValidationPipeline([
+  let steps: ValidationStepRunner[] = [
     new ParseValidationStep(parseConfig),
     new LintValidationStep(lintConfig),
     new EvalValidationStep(evalConfig),
     new InstantiateValidationStep(instantiateConfig),
-    new TestValidationStep(testConfig),
-  ]);
+  ];
+  if (config.hostToolImports) {
+    steps.unshift(
+      new ImportsValidationStep({
+        workspaceDir: config.workspaceDir,
+        hostToolImports: config.hostToolImports,
+      }),
+    );
+  }
+  if (config.includeTestStep !== false) {
+    steps.push(new TestValidationStep(testConfig));
+  }
+  return new ValidationPipeline(steps);
 }

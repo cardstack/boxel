@@ -403,7 +403,11 @@ module('factory-entrypoint integration', function () {
     );
 
     assert.strictEqual(result.status, 1);
-    assert.true(/Missing required --brief-url/.test(result.stderr));
+    assert.true(
+      /Missing required input: pass --brief-url .* or --repo-url/.test(
+        result.stderr,
+      ),
+    );
     assert.true(/Usage:/.test(result.stderr));
     assert.true(/--target-realm <realm>/.test(result.stderr));
   });

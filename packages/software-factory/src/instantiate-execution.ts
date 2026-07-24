@@ -721,6 +721,31 @@ async function defaultSearchSpecs(
     let specCardUrl = new URL(specId, ensureTrailingSlash(realmUrl)).href;
     let moduleUrl = new URL(ref.module, specCardUrl).href;
 
+    // LOCAL PATCH (CS-12195): a Spec whose `ref.module` is itself
+    // cross-origin from the target realm (a bare instance of a base-realm
+    // card, no local subclass — e.g. a plain `Theme` instance, which some
+    // v0 briefs explicitly require: "no new CardDef, no subclass") can
+    // NEVER pass prerender instantiation — the prerender refuses
+    // cross-origin module loads unconditionally (see the same-named guard
+    // in `prepareExampleInstance` below). Every example would fail with
+    // the identical "adopts from a module … does not match target realm"
+    // error regardless of how correct the instance data is. Skip these the
+    // same way non-instantiable specTypes are skipped above: parse, eval,
+    // and lint already validate everything about the instance data that's
+    // actually this realm's responsibility; the base card class itself is
+    // validated by the base realm's own suite, not here.
+    let refModuleOrigin = new URL(moduleUrl).origin;
+    let targetRealmOrigin = new URL(realmUrl).origin;
+    if (refModuleOrigin !== targetRealmOrigin) {
+      log.info(
+        `Spec ${specId} refs a cross-origin base module (${moduleUrl}) with ` +
+          `no local subclass — prerender instantiation is structurally ` +
+          `impossible (cross-origin), skipping. parse/eval/lint already ` +
+          `cover this instance.`,
+      );
+      continue;
+    }
+
     let relationships = (card as Record<string, unknown>).relationships as
       | Record<string, unknown>
       | undefined;

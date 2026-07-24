@@ -1006,7 +1006,8 @@ module('factory-skill-loader > curated boxel references', function () {
   test('pending references are still pending', function (assert) {
     // Strict on purpose: once a pending name ships in the built skill,
     // remove it from PENDING_BOXEL_REFERENCES (and any transitional notes
-    // that reference it).
+    // that reference it). An empty pending list makes zero assertions.
+    assert.expect(PENDING_BOXEL_REFERENCES.length);
     for (let name of PENDING_BOXEL_REFERENCES) {
       assert.false(
         existsSync(join(builtRefsDir, name)),

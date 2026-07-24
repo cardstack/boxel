@@ -58,9 +58,11 @@ import {
   type FactoryTool,
   type ToolCallEntry,
 } from '../factory-tool-builder.ts';
+import { TurnToolTelemetry } from './agent-tool-telemetry.ts';
 import { deriveCatalogRealmUrl } from '../factory-catalog-realm.ts';
 import { jsonSchemaToZodShape } from '../factory-tool-schema-adapter.ts';
 import { logger } from '../logger.ts';
+import { startSpan, traceEvent } from '../run-trace.ts';
 
 const MCP_SERVER_NAME = 'factory';
 const MAX_TOOL_USE_TURNS = 100;
@@ -130,11 +132,28 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
     let userPrompt = this.buildUserPrompt(context);
 
     let toolCallLog: ToolCallEntry[] = [];
+    let telemetry = new TurnToolTelemetry(this.config.workspaceDir);
+    let sessionId: string | undefined;
+    let usage: AgentRunResult['usage'];
+    // Running totals from per-assistant-message usage. The terminal
+    // `result` message is the authoritative source, but our signal-capture
+    // path aborts the query the moment the agent calls signal_done — the
+    // result message never arrives on ANY successful turn, so without this
+    // fallback every telemetry entry ships with no token counts at all.
+    let streamedUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0 };
+    let sawStreamedUsage = false;
     let captured: CapturedSignal | undefined;
     let abortController = new AbortController();
 
     let sdkTools = buildSdkToolsFromFactoryTools(mcpFactoryTools, {
-      onToolCall: (entry) => toolCallLog.push(entry),
+      onToolCall: (entry) => {
+        toolCallLog.push(entry);
+        try {
+          context.onToolCall?.(entry);
+        } catch {
+          // Live-blog streaming must never break the run.
+        }
+      },
       onSignal: (signal) => {
         captured = signal;
         abortController.abort();
@@ -177,6 +196,15 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
     let options: Options = {
       systemPrompt,
       mcpServers: { [MCP_SERVER_NAME]: mcpServer },
+      // Per-turn model/thinking budget from the orchestrator's policy
+      // (fix iterations don't need the flagship model at full effort).
+      // Absent fields inherit the session default.
+      ...(context.modelBudget?.model
+        ? { model: context.modelBudget.model }
+        : {}),
+      ...(context.modelBudget?.effort
+        ? { effort: context.modelBudget.effort }
+        : {}),
       // When `workspaceDir` is configured, expose the SDK's native fs /
       // shell tools so the model can work on workspace files directly
       // (`Read` / `Write` / `Edit`) and run inspection helpers (`Bash`,
@@ -217,10 +245,25 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
       // relative-path commands (`cat sticky-note.gts`) inside the
       // workspace by default.
       ...(workspaceDir ? { cwd: workspaceDir } : {}),
-      // Isolate from the host user's Claude Code settings — we want
-      // deterministic agent behavior regardless of whose machine this
-      // runs on.
-      settingSources: [],
+      // Load PROJECT-level settings only: the factory materializes its
+      // skill catalog into `<workspace>/.claude/skills/` at run start
+      // (workspace-skills.ts), and 'project' lets the harness discover
+      // those the same way Claude Code discovers any project's skills —
+      // the model's trained lookup path. Deliberately NOT 'user'/'local':
+      // still isolated from the host user's own Claude settings, and the
+      // workspace lives under os.tmpdir() so no parent .claude can leak
+      // in. Without a workspaceDir there is no cwd to load from — keep
+      // the empty (fully isolated) behavior.
+      settingSources: workspaceDir ? ['project'] : [],
+      // Context forking (v2): resume a primed session, branching to a new
+      // session id so every fork inherits the primed conversation as a
+      // shared (provider-cached) prefix without mutating the original.
+      ...(context.resumeSession
+        ? {
+            resume: context.resumeSession.sessionId,
+            forkSession: context.resumeSession.fork !== false,
+          }
+        : {}),
       abortController,
       debug: this.config.debug === true,
     };
@@ -236,15 +279,113 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
         // once per factory run, guarded by `this.modelLogged`. Matches
         // the openrouter path's `Agent backend: openrouter (model=…)`
         // format for a single consistent log line across backends.
+        // Non-init system messages are SDK lifecycle overhead — compaction
+        // boundaries especially, which have shown up as multi-minute silent
+        // gaps inside turns. Mark them so the trace can attribute that time
+        // to SDK overhead rather than model work.
+        if (message.type === 'system') {
+          let subtype = (message as { subtype?: string }).subtype;
+          if (subtype && subtype !== 'init') {
+            traceEvent('inference', `sdk-${subtype}`);
+          }
+        }
         if (
-          !this.modelLogged &&
           message.type === 'system' &&
           (message as { subtype?: string }).subtype === 'init'
         ) {
-          let modelName = (message as { model?: string }).model;
-          if (modelName) {
-            log.info(`Agent backend: claude (model=${modelName})`);
-            this.modelLogged = true;
+          let initSessionId = (message as { session_id?: string }).session_id;
+          if (initSessionId) {
+            sessionId = initSessionId;
+          }
+          if (!this.modelLogged) {
+            let modelName = (message as { model?: string }).model;
+            if (modelName) {
+              log.info(`Agent backend: claude (model=${modelName})`);
+              this.modelLogged = true;
+            }
+          }
+        }
+        // Capture token/cost usage from the terminal result message so the
+        // orchestrator's turn telemetry can report what the turn cost.
+        if (message.type === 'result') {
+          let r = message as {
+            total_cost_usd?: number;
+            usage?: {
+              input_tokens?: number;
+              output_tokens?: number;
+              cache_read_input_tokens?: number;
+            };
+          };
+          usage = {
+            inputTokens: r.usage?.input_tokens,
+            outputTokens: r.usage?.output_tokens,
+            cacheReadTokens: r.usage?.cache_read_input_tokens,
+            costUsd: r.total_cost_usd,
+          };
+        }
+        // Accumulate per-call usage from each assistant message: summed
+        // input/cache-read reflects total billed tokens across the turn's
+        // API calls; summed output is total generated. Kept as a fallback
+        // for signal-aborted turns (see streamedUsage above).
+        if (message.type === 'assistant') {
+          let u = (
+            message as {
+              message?: {
+                usage?: {
+                  input_tokens?: number;
+                  output_tokens?: number;
+                  cache_read_input_tokens?: number;
+                };
+              };
+            }
+          ).message?.usage;
+          if (u) {
+            sawStreamedUsage = true;
+            streamedUsage.inputTokens += u.input_tokens ?? 0;
+            streamedUsage.outputTokens += u.output_tokens ?? 0;
+            streamedUsage.cacheReadTokens += u.cache_read_input_tokens ?? 0;
+          }
+        }
+        // Coarse activity heartbeat (v3 RunMonitor): every complete
+        // assistant message resets the stall clock. Silence between
+        // messages = the model is generating.
+        if (context.onActivity && message.type === 'assistant') {
+          try {
+            context.onActivity(
+              summarizeAssistantMessage(
+                message as { message: { content?: unknown } },
+              ).slice(0, 120),
+            );
+          } catch {
+            // Monitoring must never break the run.
+          }
+        }
+        // Record every streamed tool_use for the always-on waste audit, and
+        // stream native Write/Edit sightings to the live-blog hook as they
+        // land (MCP factory tools stream via buildSdkToolsFromFactoryTools).
+        if (message.type === 'assistant') {
+          try {
+            let content = (message as { message?: { content?: unknown } })
+              .message?.content;
+            if (Array.isArray(content)) {
+              for (let block of content) {
+                let b = block as {
+                  type?: string;
+                  name?: string;
+                  input?: Record<string, unknown>;
+                };
+                if (b?.type !== 'tool_use' || !b.name) continue;
+                telemetry.record(b.name, b.input ?? {});
+                if (
+                  context.onToolCall &&
+                  (b.name === 'Write' || b.name === 'Edit')
+                ) {
+                  context.onToolCall({ tool: b.name, args: b.input ?? {} });
+                }
+              }
+            }
+          } catch {
+            // Telemetry / live-blog streaming must never break the run.
           }
         }
         if (this.config.debug) {
@@ -255,17 +396,46 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
     } catch (error) {
       // An intentional abort from our signal-capture path is not an error.
       if (!captured) {
+        telemetry.finish();
         throw error;
       }
     }
 
+    // Always-on per-turn waste audit (re-reads, whole-file rewrites,
+    // screenshot thrash, mutating Bash). Emitted once per turn regardless of
+    // how the turn ended.
+    telemetry.finish();
+
+    // Signal-aborted turns never see the terminal result message — fall
+    // back to the streamed running totals so telemetry still gets tokens.
+    if (!usage && sawStreamedUsage) {
+      usage = streamedUsage;
+    }
+
+    // The terminal result message's usage and the per-assistant-message
+    // sums can differ (the terminal number has undercounted in practice).
+    // Emit both so the trace shows real token/cache traffic per turn.
+    if (sawStreamedUsage) {
+      traceEvent('inference', 'usage', {
+        sumIn: streamedUsage.inputTokens,
+        sumOut: streamedUsage.outputTokens,
+        sumCacheRead: streamedUsage.cacheReadTokens,
+        termIn: usage?.inputTokens,
+        termOut: usage?.outputTokens,
+        termCacheRead: usage?.cacheReadTokens,
+        costUsd: usage?.costUsd,
+      });
+    }
+
     if (captured?.kind === 'done') {
-      return { status: 'done', toolCalls: toolCallLog };
+      return { status: 'done', toolCalls: toolCallLog, sessionId, usage };
     }
     if (captured?.kind === 'clarification') {
       return {
         status: 'blocked',
         toolCalls: toolCallLog,
+        sessionId,
+        usage,
         message: captured.message,
       };
     }
@@ -276,6 +446,8 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
     return {
       status: toolCallLog.length > 0 ? 'done' : 'needs_iteration',
       toolCalls: toolCallLog,
+      sessionId,
+      usage,
     };
   }
 
@@ -382,6 +554,48 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
 
   private buildUserPrompt(context: AgentContext): string {
     let issueType = (context.issue as Record<string, unknown>).issueType;
+    if (context.primeTurn === true) {
+      return this.promptLoader.load('prime', {
+        project: context.project,
+        knowledge: context.knowledge,
+      });
+    }
+    if (context.acceptanceTurn) {
+      return this.promptLoader.load('acceptance-walkthrough', {
+        issue: context.issue,
+        // Only a real project card (URL id) is linkable from a defect
+        // issue — the 'bootstrap-pending' stub would serialize as a
+        // dangling relative link.
+        project: context.project?.id?.startsWith('http')
+          ? context.project
+          : undefined,
+        darkfactoryModuleUrl: requireDarkfactoryModuleUrl(context),
+        renderSummary: context.acceptanceTurn.renderSummary,
+        screenshots: context.acceptanceTurn.screenshots,
+        failedCaptures:
+          context.acceptanceTurn.failedCaptures.length > 0
+            ? context.acceptanceTurn.failedCaptures
+            : undefined,
+      });
+    }
+    if (issueType === 'design') {
+      // Design-foundation turn (hierarchical design): look & feel →
+      // brand guide + tokens.css → family coherence sheet. Runs once,
+      // after bootstrap, before every implementation issue.
+      return this.promptLoader.load('issue-design-foundation', {
+        issue: context.issue,
+        project: context.project,
+        knowledge: context.knowledge,
+      });
+    }
+    if (issueType === 'analysis') {
+      // Port-analysis research turn (v3 GitHub-port flow): study the
+      // source repo + media, write the port-background Knowledge Article.
+      return this.promptLoader.load('issue-analysis', {
+        issue: context.issue,
+        darkfactoryModuleUrl: requireDarkfactoryModuleUrl(context),
+      });
+    }
     if (issueType === 'bootstrap' && context.briefUrl) {
       return assembleBootstrapPrompt({
         context,
@@ -451,9 +665,17 @@ export function buildSdkToolsFromFactoryTools(
         let start = Date.now();
         let typedArgs = args as Record<string, unknown>;
         let result: unknown;
+        // Trace at the MCP dispatch point: this is where the claude
+        // backend's factory tools actually execute, so these spans carve
+        // in-turn tool time out of the surrounding `inference` span.
+        let endToolSpan = startSpan('tool', factoryTool.name);
         try {
           result = await factoryTool.execute(typedArgs);
+          endToolSpan({
+            ok: !(result && typeof result === 'object' && 'error' in result),
+          });
         } catch (error) {
+          endToolSpan({ ok: false });
           result = {
             error: error instanceof Error ? error.message : String(error),
           };

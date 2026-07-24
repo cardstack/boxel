@@ -12,8 +12,12 @@
  * Phase 1's runFactoryLoop() remains unchanged and coexists with this.
  */
 
+import { readFile, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+
 import type {
   AgentContext,
+  AgentRunResult,
   IssueData,
   SchedulableIssue,
   ValidationResults,
@@ -26,7 +30,27 @@ import type { IssueStore } from './issue-scheduler.ts';
 
 import { IssueScheduler } from './issue-scheduler.ts';
 import { logger } from './logger.ts';
+import { startSpan, traceEvent } from './run-trace.ts';
+import { isBugFixIssue } from './factory-prompt-loader.ts';
+import {
+  type RunLogWriter,
+  createRunLogStreamHandler,
+  designEntriesFromToolCalls,
+  cardPathsFromToolCalls,
+  persistDesignScreenshot,
+} from './run-log.ts';
+import type { RunMonitor } from './run-monitor.ts';
+import {
+  type RenderGate,
+  type CardScreenshotResult,
+  summarizeRenderResults,
+} from './render-gate.ts';
+import { discoverRecentInstanceCardPaths } from './instance-discovery.ts';
 import { retryWithPoll } from './retry-with-poll.ts';
+import {
+  retryTransientAgentError,
+  errorMessage,
+} from './transient-agent-error.ts';
 
 let log = logger('issue-loop');
 
@@ -107,6 +131,13 @@ export interface IssueLoopConfig {
   createValidator: (issueId: string) => Validator;
   targetRealm: string;
   /**
+   * Control realm hosting issues / run log / validations under the v3
+   * split. Defaults to `targetRealm` (no split). Only used for run-log
+   * link targeting — the issue store and sync plumbing are wired to the
+   * right realms upstream.
+   */
+  controlRealm?: string;
+  /**
    * Module URL for the tracker schema (Project / Issue / KnowledgeArticle).
    * Surfaced in the system prompt so the agent can hand-write the correct
    * `meta.adoptsFrom.module` when constructing tracker JSON via native `Write`.
@@ -130,6 +161,87 @@ export interface IssueLoopConfig {
    */
   syncWorkspace: () => Promise<{ ok: boolean; error?: string }>;
   briefUrl?: string;
+  /** Live-blog writer (v2): appends run events to Runs/<slug>.json in the target realm. */
+  runLog?: RunLogWriter;
+  /**
+   * Orchestrator monitor (v3): stall narration, per-turn telemetry,
+   * scheduler + watchdog notes onto the run log. The loop drives
+   * beginTurn/endTurn around every agent.run and feeds stream events
+   * into the stall clock; the wiring owns start()/stop().
+   */
+  monitor?: RunMonitor;
+  /**
+   * Render gate (v3 P0): after each non-bootstrap issue completes,
+   * screenshot the cards it shipped via the realm server's
+   * `_screenshot-card`, attach the renders to the run log, and — unless
+   * `acceptanceWalkthrough` is false — run a verifier turn that reads the
+   * PNGs and verdicts each acceptance criterion, filing defect issues for
+   * gaps. Both are best-effort: a gate failure never un-does the issue.
+   */
+  renderGate?: RenderGate;
+  /**
+   * Run the acceptance-walkthrough verifier turn after the render gate.
+   * Default true when `renderGate` is set.
+   */
+  acceptanceWalkthrough?: boolean;
+  /**
+   * Execute factory-generated polish issues (`issueType: 'enhancement'`,
+   * the bootstrap's pass-2 scope). Default false: the loop leaves them on
+   * the board awaiting an operator instead of auto-executing — their own
+   * generated text says operators may cancel them wholesale, and an
+   * unattended run has nobody standing there to do so.
+   */
+  includePolish?: boolean;
+  /**
+   * Per-turn model/thinking budget policy, keyed by turn type. The
+   * ORCHESTRATOR owns this (turn type is deterministic here); issues
+   * don't carry budgets. `fix` applies to inner iterations ≥ 2 —
+   * mechanical lint/parse fix-ups that don't need the flagship model at
+   * full effort. Absent keys inherit the session default.
+   */
+  modelPolicy?: {
+    prime?: {
+      model?: string;
+      effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    };
+    bootstrap?: {
+      model?: string;
+      effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    };
+    design?: {
+      model?: string;
+      effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    };
+    build?: {
+      model?: string;
+      effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    };
+    fix?: {
+      model?: string;
+      effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    };
+    acceptance?: {
+      model?: string;
+      effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    };
+  };
+  /**
+   * Phase-split (v2): run each implementation issue's first iteration as
+   * TWO turns — a design turn (mockups + notes, flagship budget) and a
+   * build turn (translation, cheap budget) forked from the design
+   * session. The economics: BUILD emits the big files, so that's where a
+   * cheaper model pays for its cache re-ingest; DESIGN is where taste
+   * lives, so it keeps the strong model.
+   */
+  phaseSplit?: boolean;
+  /**
+   * Context forking (v2): before the first implementation issue, run one
+   * priming turn (read skills/design-language/precedent, write
+   * design/DESIGN-NOTES.md) and fork every implementation issue's session
+   * from it — shared provider-cached prefix instead of per-issue context
+   * rebuilds.
+   */
+  forkContext?: boolean;
   /** Maximum inner-loop iterations per issue. Default: 8. */
   maxIterationsPerIssue?: number;
   /** Maximum outer-loop cycles (safety guard). Default: 50. */
@@ -219,6 +331,137 @@ function issueSummaryLabel(issue: SchedulableIssue): string {
   return summary ? `"${issue.id}" — "${summary}"` : `"${issue.id}"`;
 }
 
+/** Short stable issue identifier for trace tags (URL basename). */
+function issueSlug(issue: SchedulableIssue): string {
+  let id = String(issue.id);
+  let basename = id.split('/').filter(Boolean).pop();
+  return basename ?? id;
+}
+
+/** Realm-relative card path for an issue (for run-log show-me links). */
+function issueCardPath(
+  issue: SchedulableIssue,
+  targetRealm: string,
+): string | undefined {
+  if (typeof issue.id === 'string' && issue.id.startsWith(targetRealm)) {
+    return issue.id.slice(targetRealm.length).replace(/\.json$/, '');
+  }
+  return undefined;
+}
+
+/**
+ * Bootstrap, analysis, and design-foundation issues are meta-work: no
+ * product code, no validation pipeline, no design/build phase split, no
+ * render gate. (Design-foundation IS a design turn already — splitting
+ * it or screenshotting instances it never wrote makes no sense.)
+ */
+function isMetaIssue(issue: SchedulableIssue): boolean {
+  return (
+    issue.issueType === 'bootstrap' ||
+    issue.issueType === 'analysis' ||
+    issue.issueType === 'design'
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Session-reuse decision (continuation vs fresh context)
+// ---------------------------------------------------------------------------
+
+/**
+ * After the maximum continued chain, reset to a fresh context. Bounds context
+ * growth across a long fix loop and the risk of the agent anchoring on an
+ * approach that isn't working — and keeps the resumed prefix inside the
+ * provider cache window.
+ */
+const MAX_CONTINUED_CHAIN = 3;
+
+/**
+ * A compact signature of a validation failure: which steps failed and how
+ * many total errors. Used to tell whether a fix iteration made progress
+ * (fewer errors / different steps) or stalled (same failure again).
+ */
+export interface FailureFingerprint {
+  steps: string;
+  errorCount: number;
+}
+
+export function failureFingerprint(
+  results?: ValidationResults,
+): FailureFingerprint {
+  if (!results || results.passed) return { steps: '', errorCount: 0 };
+  let failing = results.steps.filter((s) => !s.passed);
+  return {
+    steps: failing
+      .map((s) => s.step)
+      .sort()
+      .join(','),
+    errorCount: failing.reduce((n, s) => n + s.errors.length, 0),
+  };
+}
+
+export type SessionStrategy = 'fresh' | 'continue';
+
+/**
+ * Decide whether a follow-on turn should CONTINUE the prior iteration's
+ * session (its reads/edits stay in context — the agent fixes instead of
+ * re-reading) or start FRESH from the primed skills/design context.
+ *
+ * Continue while the fix is converging. Reset to fresh when either:
+ *  - the same failures repeat with no fewer errors (the chained frame isn't
+ *    helping — a clean context may break the agent out of a wrong approach), or
+ *  - the continued chain hit MAX_CONTINUED_CHAIN (bound context + cache window).
+ *
+ * The first turn (or any turn with no prior session) is always fresh.
+ */
+export function decideSessionStrategy(params: {
+  iteration: number;
+  hasPriorSession: boolean;
+  chainDepth: number;
+  previousFailure?: FailureFingerprint;
+  currentFailure?: FailureFingerprint;
+}): { strategy: SessionStrategy; reason: string } {
+  let {
+    iteration,
+    hasPriorSession,
+    chainDepth,
+    previousFailure,
+    currentFailure,
+  } = params;
+  if (iteration <= 1 || !hasPriorSession) {
+    return { strategy: 'fresh', reason: 'first turn' };
+  }
+  if (chainDepth >= MAX_CONTINUED_CHAIN) {
+    return {
+      strategy: 'fresh',
+      reason: `continued ${MAX_CONTINUED_CHAIN}× — resetting to a fresh context`,
+    };
+  }
+  if (
+    previousFailure &&
+    currentFailure &&
+    currentFailure.steps !== '' &&
+    currentFailure.steps === previousFailure.steps &&
+    currentFailure.errorCount >= previousFailure.errorCount
+  ) {
+    return {
+      strategy: 'fresh',
+      reason: 'same failures, no progress — fresh context to break the frame',
+    };
+  }
+  return {
+    strategy: 'continue',
+    reason: 'converging — keep the working context',
+  };
+}
+
+/** Human-facing issue title for the run log (no quoting/id noise). */
+function issueDisplayTitle(issue: SchedulableIssue): string {
+  let summary = issue.summary ?? (issue as Record<string, unknown>).title;
+  return typeof summary === 'string' && summary.trim() !== ''
+    ? summary
+    : issue.id;
+}
+
 function formatValidation(results: ValidationResults): string {
   if (results.passed) {
     let stepCount = results.steps.length;
@@ -272,8 +515,17 @@ export async function runIssueLoop(
     createValidator,
     targetRealm,
     darkfactoryModuleUrl,
+    workspaceDir,
     syncWorkspace,
     briefUrl,
+    runLog,
+    monitor,
+    renderGate,
+    acceptanceWalkthrough = true,
+    includePolish = false,
+    modelPolicy,
+    phaseSplit = false,
+    forkContext = false,
     maxIterationsPerIssue = DEFAULT_MAX_ITERATIONS_PER_ISSUE,
     maxOuterCycles = DEFAULT_MAX_OUTER_CYCLES,
     debug = false,
@@ -281,12 +533,135 @@ export async function runIssueLoop(
     onBootstrapComplete,
   } = config;
 
+  let controlRealm = config.controlRealm ?? targetRealm;
+
+  let endRunSpan = startSpan('run', 'issue-loop', { targetRealm });
+
   let scheduler = new IssueScheduler(issueStore);
+  let endLoadSpan = startSpan('scheduler', 'load-issues');
   await scheduler.loadIssues();
+  endLoadSpan();
+
+  // A crash/stop mid-review strands an issue at 'review' — a status the
+  // scheduler never picks. Reset stragglers to in_progress so a restart
+  // re-runs the work turn (idempotent for finished work: the agent sees
+  // everything exists, signals done, and re-enters review).
+  try {
+    for (let stranded of await issueStore.listIssues()) {
+      if (stranded.status === 'review') {
+        log.info(
+          `Resetting stranded in-review issue to in_progress: ${stranded.id}`,
+        );
+        await issueStore.updateIssue(stranded.id, { status: 'in_progress' });
+      }
+    }
+    await scheduler.loadIssues();
+  } catch (err) {
+    log.warn(
+      `Failed to reset stranded review issues: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
+  // Run one agent turn under the monitor: begin/end telemetry plus the
+  // stall clock (tool events + coarse assistant-message activity). A
+  // no-op passthrough when no monitor is wired.
+  let runTurn = async (
+    context: AgentContext,
+    info: {
+      issueTitle: string;
+      turnType: string;
+      iteration?: number;
+      maxIterations?: number;
+    },
+  ): Promise<AgentRunResult> => {
+    let prevOnToolCall = context.onToolCall;
+    let prevOnActivity = context.onActivity;
+    if (monitor) {
+      context.onToolCall = (entry) => {
+        monitor.noteToolEvent(entry);
+        prevOnToolCall?.(entry);
+      };
+      context.onActivity = (desc) => monitor.noteActivity(desc);
+      monitor.beginTurn({
+        ...info,
+        model: context.modelBudget?.model,
+        effort: context.modelBudget?.effort,
+      });
+    }
+    let turnStartMs = Date.now();
+    let endTurnSpan = startSpan('inference', info.turnType, {
+      issue: info.issueTitle,
+      iteration: info.iteration,
+      model: context.modelBudget?.model ?? 'inherit',
+      effort: context.modelBudget?.effort ?? 'inherit',
+      resumed: Boolean(context.resumeSession),
+    });
+    try {
+      // Transient SDK/network faults (idle stream timeouts, connection
+      // resets) otherwise crash the whole multi-hour process — observed
+      // taking down a run 5 issues deep (wardrobe, 2026-07-17) on an SDK
+      // "Stream idle timeout" with no code defect involved. Retry the
+      // turn itself a couple of times before surfacing as a real failure;
+      // non-transient errors (agent logic, tool errors) still throw
+      // immediately on the first attempt.
+      let result = await retryTransientAgentError(
+        () => agent.run(context, tools),
+        (attempt, error) => {
+          log.warn(
+            `  Turn attempt ${attempt} hit a transient error, retrying: ${errorMessage(error)}`,
+          );
+          monitor?.noteWatchdog(
+            'agent-retry',
+            `Transient error, retrying turn (attempt ${attempt + 1})`,
+            { body: errorMessage(error) },
+          );
+        },
+      );
+      monitor?.endTurn({
+        status: result.status,
+        durationMs: Date.now() - turnStartMs,
+        usage: result.usage,
+      });
+      let usage = result.usage as
+        | {
+            inputTokens?: number;
+            outputTokens?: number;
+            cacheReadTokens?: number;
+            costUsd?: number;
+          }
+        | undefined;
+      endTurnSpan({
+        status: result.status,
+        toolCalls: result.toolCalls.length,
+        tokensIn: usage?.inputTokens,
+        tokensOut: usage?.outputTokens,
+        tokensCacheRead: usage?.cacheReadTokens,
+        costUsd: usage?.costUsd,
+      });
+      return result;
+    } catch (error) {
+      monitor?.endTurn({
+        status: 'error',
+        durationMs: Date.now() - turnStartMs,
+      });
+      endTurnSpan({ status: 'error' });
+      throw error;
+    } finally {
+      // Restore the un-wrapped hooks: a later turn may spread this context
+      // (phase-split's buildContext) and would otherwise double-wrap,
+      // double-counting every tool event in the monitor's stats.
+      context.onToolCall = prevOnToolCall;
+      context.onActivity = prevOnActivity;
+    }
+  };
 
   let issueResults: IssueIterationResult[] = [];
   let outerCycles = 0;
   let exhaustedIssues = new Set<string>();
+  // Issues the polish policy left on the board — excluded from picking via
+  // `exhaustedIssues`, but NOT counted as unresolved work when deciding the
+  // run outcome (a skipped polish pass is a pending decision, not a failure).
+  let policySkipped = new Set<string>();
 
   // Wall-clock attribution. `grand`/`cur` accumulate the three cost buckets
   // across the whole run and within the current outer cycle respectively;
@@ -315,6 +690,7 @@ export async function runIssueLoop(
     let hasAnyIssues = scheduler.hasAnyIssues();
     if (hasAnyIssues) {
       log.info('All issues are blocked — nothing to do');
+      endRunSpan({ outcome: 'no_unblocked_issues' });
       return {
         outcome: 'no_unblocked_issues',
         outerCycles: 0,
@@ -322,12 +698,68 @@ export async function runIssueLoop(
       };
     }
     log.info('No issues found — nothing to do');
+    endRunSpan({ outcome: 'all_issues_done' });
     return { outcome: 'all_issues_done', outerCycles: 0, issueResults: [] };
   }
 
   // -------------------------------------------------------------------------
   // Outer loop: iterate over unblocked issues
   // -------------------------------------------------------------------------
+
+  if (runLog) {
+    await runLog.start();
+  }
+
+  // Materialize issue events as run-log entry cards so the query-backed feed
+  // unions them with the build entries (in the containsMany days these were
+  // pushed straight onto the array; the query model's equivalent is emitting
+  // one entry per event). Status TRANSITIONS especially have to be captured
+  // here — the Issue card stores only its current status, so a later query
+  // can't reconstruct the history. `issue-picked` (→in_progress pickup) and
+  // `issue-done` (→done) stay bespoke (they drive nowWorkingOn + the Issues-
+  // done facet); these cover every other transition and the agent comments.
+  // Both link the issue via `issueUrl` (a light atom chip), matching the
+  // post_update entries — NOT `cardPath`, which would embed the whole Issue
+  // card in every comment/status row (heavy and repetitive across one
+  // issue's lifecycle). `iss.id` is the issue's absolute URL.
+  let emitStatusChange = async (
+    iss: SchedulableIssue,
+    to: string,
+    from?: string,
+    detail?: string,
+  ): Promise<void> => {
+    if (!runLog) return;
+    let arrow = from ? `${from} → ${to}` : `→ ${to}`;
+    await runLog.append([
+      {
+        kind: 'status-change',
+        headline: `${issueDisplayTitle(iss)}: ${arrow}`,
+        body: detail,
+        issueUrl: iss.id,
+        who: 'orchestrator',
+      },
+    ]);
+  };
+  let emitComment = async (
+    iss: SchedulableIssue,
+    author: string,
+    body: string,
+  ): Promise<void> => {
+    if (!runLog) return;
+    await runLog.append([
+      {
+        kind: 'comment',
+        headline: `${author} commented on ${issueDisplayTitle(iss)}`,
+        body,
+        who: author,
+        issueUrl: iss.id,
+      },
+    ]);
+  };
+
+  // fork-context mode: undefined = not yet primed; null = priming failed
+  // (run without forking); string = fork seed session id.
+  let primeSessionId: string | null | undefined;
 
   while (
     scheduler.hasUnblockedIssues(exhaustedIssues) &&
@@ -343,11 +775,144 @@ export async function runIssueLoop(
       break;
     }
 
+    // Reconcile against the AUTHORITATIVE local workspace file before doing
+    // any work. `pickNextIssue` draws from `listIssues`, which reads the
+    // realm INDEX; under the control/product split the control-plane sync
+    // pushes raw writes that don't wait for indexing, so a seed the workspace
+    // has already marked `done` (a completed analysis/bootstrap issue on a
+    // resume) can still show `in_progress`/`backlog` in the index and get
+    // re-picked — the exact "PORT-0 re-runs the repo study on restart" waste.
+    // A local `done` means the index is just stale: skip and exclude it. A
+    // genuinely interrupted issue reads `in_progress` locally too, so this
+    // never skips real resumable work.
+    if (typeof issueStore.readLocalStatus === 'function') {
+      let localStatus = await issueStore.readLocalStatus(issue.id);
+      if (localStatus === 'done' && issue.status !== 'done') {
+        log.info(
+          `Outer cycle ${outerCycles}: skipping ${issueSummaryLabel(issue)} — workspace file says done, the realm index is stale (${issue.status})`,
+        );
+        traceEvent('scheduler', 'skip-stale-done', {
+          issue: issueSlug(issue),
+          cycle: outerCycles,
+        });
+        exhaustedIssues.add(issue.id);
+        continue;
+      }
+    }
+
+    // Factory-generated polish does not auto-execute. The bootstrap plans
+    // pass-2 enhancement issues whose own text says operators may cancel
+    // them wholesale — a decision an unattended run cannot make, so the
+    // loop leaves them on the board for a human (or `--include-polish`).
+    if (!includePolish && issue.issueType === 'enhancement') {
+      log.info(
+        `Outer cycle ${outerCycles}: leaving polish issue on the board: ${issueSummaryLabel(issue)} — pass --include-polish to execute polish passes unattended`,
+      );
+      traceEvent('scheduler', 'skip-polish', {
+        issue: issueSlug(issue),
+        cycle: outerCycles,
+      });
+      if (runLog && policySkipped.size === 0) {
+        await runLog.append([
+          {
+            kind: 'phase',
+            headline: 'Polish pass left on the board',
+            body: `${issueDisplayTitle(issue)} awaits operator approval — run with --include-polish to execute polish passes unattended.`,
+            issueUrl: issue.id,
+            who: 'orchestrator',
+          },
+        ]);
+      }
+      monitor?.noteScheduler(
+        `Polish left on the board: "${issueDisplayTitle(issue)}" (run with --include-polish to execute)`,
+      );
+      policySkipped.add(issue.id);
+      exhaustedIssues.add(issue.id);
+      continue;
+    }
+
+    if (runLog) {
+      let issueTitle = issueDisplayTitle(issue);
+      await runLog.append(
+        [
+          {
+            kind: 'issue-picked',
+            headline: `Started: ${issueTitle}`,
+            body:
+              issue.status !== 'in_progress'
+                ? 'Issue status: backlog → in progress'
+                : undefined,
+            cardPath: issueCardPath(issue, controlRealm),
+            cardRealm: 'control' as const,
+          },
+        ],
+        { nowWorkingOn: issueTitle },
+      );
+    }
+
+    if (monitor) {
+      let remaining = scheduler.unblockedCount(exhaustedIssues);
+      monitor.noteScheduler(
+        `Queue: picked "${issueDisplayTitle(issue)}" — ${remaining} unblocked issue${remaining === 1 ? '' : 's'} in the queue`,
+        `Priority ${issue.priority} · status ${issue.status} · up to ${maxIterationsPerIssue} iterations before this issue blocks.`,
+      );
+    }
+
+    // Context forking (v2): one priming turn before the first
+    // implementation issue. The prime reads skills + design language +
+    // precedent and writes design/DESIGN-NOTES.md; its session id seeds a
+    // fork for every implementation turn that follows.
+    if (forkContext && primeSessionId === undefined && !isMetaIssue(issue)) {
+      try {
+        log.info('Priming shared context session (fork-context mode)...');
+        let primeContext = await contextBuilder.buildForIssue({
+          issue,
+          targetRealm,
+          darkfactoryModuleUrl,
+        });
+        primeContext.primeTurn = true;
+        if (modelPolicy?.prime) {
+          primeContext.modelBudget = modelPolicy.prime;
+        }
+        let primeResult = await runTurn(primeContext, {
+          issueTitle: 'shared design context',
+          turnType: 'prime',
+        });
+        if (primeResult.sessionId) {
+          primeSessionId = primeResult.sessionId;
+          log.info(
+            `Prime session captured: ${primeSessionId} (${primeResult.toolCalls.length} tool calls)`,
+          );
+          if (runLog) {
+            await runLog.append([
+              {
+                kind: 'phase',
+                headline: 'Shared design context primed',
+                body: 'Skills, design language, and precedent loaded once — every card build forks from here.',
+              },
+            ]);
+          }
+        } else {
+          log.warn('Prime turn returned no session id — forking disabled');
+          primeSessionId = null;
+        }
+      } catch (error) {
+        log.warn(`Prime turn failed (${String(error)}) — forking disabled`);
+        primeSessionId = null;
+      }
+    }
+
     // Reset per-issue timing accumulators; `cycleStartMs` anchors this
     // issue's total wall clock and `cycleSyncStartMs` its sync baseline.
     cur = { agentMs: 0, validationMs: 0, syncMs: 0 };
     let cycleStartMs = Date.now();
     let cycleSyncStartMs = getSyncElapsedMs();
+
+    let endIssueSpan = startSpan('issue', issueSlug(issue), {
+      cycle: outerCycles,
+      issueType: issue.issueType ?? 'implementation',
+      priority: issue.priority,
+    });
 
     log.info(
       `Outer cycle ${outerCycles}: picked issue ${issueSummaryLabel(issue)} (status=${issue.status}, priority=${issue.priority})`,
@@ -393,7 +958,14 @@ export async function runIssueLoop(
 
     // Create a fresh validator scoped to this issue so that artifacts
     // (e.g. TestRun cards) are named per-issue rather than shared.
-    let validator = createValidator(issue.id);
+    // Bootstrap issues create Project/Board/Knowledge-Article/Issue cards,
+    // never a Catalog Spec — so `instantiate` structurally can never pass
+    // for them (see CS-12185). Skip straight to NoOpValidator (already
+    // built for exactly this per its own docstring) instead of burning
+    // maxIterationsPerIssue on an unwinnable validation.
+    let validator = isMetaIssue(issue)
+      ? new NoOpValidator()
+      : createValidator(issue.id);
 
     // -----------------------------------------------------------------------
     // Inner loop: iterate on a single issue with validation
@@ -404,13 +976,222 @@ export async function runIssueLoop(
     let validationContext: string | undefined;
     let exitReason: IssueIterationResult['exitReason'] = 'max_iterations';
     let innerIterations = 0;
+    // Chained inner-loop session: after the first iteration, a fix iteration
+    // MAY resume the PRIOR iteration's session (below) so the files and edits
+    // it already read stay in context — the agent fixes what validation
+    // flagged instead of re-reading to re-orient. The orchestrator decides
+    // continue-vs-fresh per turn (decideSessionStrategy); chainDepth and
+    // prevFailure feed that decision. All reset per issue.
+    let iterationSessionId: string | undefined;
+    let chainDepth = 0;
+    let prevFailure: FailureFingerprint | undefined;
 
+    // Live blog: one stream handler per issue (state — seen writes, design
+    // rounds, instance paths — accumulates across iterations). Each
+    // iteration's context points at the same handler.
+    let streamHandler: ReturnType<typeof createRunLogStreamHandler> | undefined;
+    if (runLog) {
+      // Capture the id before the closure: `issue` is a mutable let the
+      // loop reassigns, so TS can't keep its narrowing inside a callback.
+      let streamIssueId = issue.id;
+      streamHandler = createRunLogStreamHandler({
+        runLog,
+        addIssueComment: (body: string) =>
+          issueStore.addComment(streamIssueId, {
+            body,
+            author: 'factory-agent',
+          }),
+        workspaceDir,
+        // Absolute issue-card URL so every streamed feed row links back to
+        // the issue it belongs to (issues live in the control realm).
+        issueUrl: streamIssueId.startsWith('http') ? streamIssueId : undefined,
+      });
+    }
+
+    // -----------------------------------------------------------------------
+    // PM review gate. A finished issue goes to 'review' and a fresh
+    // reviewer turn (flagship budget — taste judgment) judges the OUTPUT:
+    // render captures + acceptance criteria, product-manager style.
+    // Biased to ship; empowered to bounce ONCE with comments (rework),
+    // file follow-up issues, and reprioritize backlog issues. The
+    // verdict comes back through a scratch file the reviewer Writes
+    // (`.factory-scratch/review-verdict.json`) — no new tool plumbing,
+    // and the file never syncs (dotdir).
+    // -----------------------------------------------------------------------
+    let reviewBounces = 0;
+    let runReviewGate = async (): Promise<{
+      verdict: 'approve' | 'rework';
+      feedback?: string;
+    }> => {
+      // `issue` is a mutable outer binding; capture the narrowed value —
+      // the gate only runs from inside the inner loop where it's set.
+      let reviewIssue = issue;
+      if (!reviewIssue) return { verdict: 'approve' };
+      try {
+        let gateCardPaths = streamHandler?.instanceCardPaths() ?? [];
+        if (gateCardPaths.length === 0) {
+          gateCardPaths = cardPathsFromToolCalls(allToolCalls);
+        }
+        if (gateCardPaths.length === 0) {
+          // Resumed issues (post-restart, agent verifies + signals done
+          // without writing) and Edit-only fix turns produce zero
+          // sightings. Fall back to the newest product instances on disk
+          // so the reviewer judges real screenshots — zero captures
+          // previously cascaded into false "no renderable surface"
+          // defect chains (wardrobe defect-no-render → v2 → v3).
+          gateCardPaths = await discoverRecentInstanceCardPaths(workspaceDir);
+          if (gateCardPaths.length > 0) {
+            log.info(
+              `  Render gate: no instance writes this turn — falling back to newest workspace instances (${gateCardPaths.join(', ')})`,
+            );
+          }
+        }
+        let renderResults: CardScreenshotResult[] = [];
+        if (renderGate && gateCardPaths.length > 0) {
+          log.info(
+            `  Render gate: capturing ${Math.min(gateCardPaths.length, 4)} card(s)`,
+          );
+          let endGateSpan = startSpan('render-gate', 'capture', {
+            issue: issueSlug(reviewIssue),
+            cards: Math.min(gateCardPaths.length, 4),
+          });
+          renderResults = await renderGate.captureCards(gateCardPaths);
+          endGateSpan({ ok: renderResults.filter((r) => r.ok).length });
+          // Push the PNGs (design/render/ rides the product sync) so the
+          // run-log image links resolve.
+          await syncWorkspace();
+        }
+        if (runLog && renderResults.length > 0) {
+          let summary = summarizeRenderResults(renderResults);
+          let shotEntries = await Promise.all(
+            renderResults
+              .filter((r) => r.ok && r.format === 'isolated' && r.outputPath)
+              .slice(0, 3)
+              .map(async (r) => ({
+                kind: 'design' as const,
+                headline: `Render check: ${r.cardPath}${r.suspectBlank ? ' — SUSPECTED BLANK' : ''}`,
+                // design/render/ is BUILD-turn scratch the agent may clean
+                // up on a later issue; persist into design-history/ so this
+                // link survives — see persistDesignScreenshot's doc comment.
+                imageCardPath: await persistDesignScreenshot(
+                  workspaceDir,
+                  r.outputPath as string,
+                ),
+              })),
+          );
+          await runLog.append([
+            ...shotEntries,
+            {
+              kind: 'validation' as const,
+              headline: 'Render gate',
+              body: summary,
+            },
+          ]);
+          monitor?.noteScheduler(`Render gate: ${summary}`);
+        }
+
+        log.info('  Review turn starting');
+        let reviewContext = await contextBuilder.buildForIssue({
+          issue: reviewIssue,
+          targetRealm,
+          darkfactoryModuleUrl,
+        });
+        reviewContext.acceptanceTurn = {
+          renderSummary:
+            renderResults.length > 0
+              ? summarizeRenderResults(renderResults)
+              : 'no card surfaces were captured',
+          screenshots: renderResults
+            .filter(
+              (r): r is CardScreenshotResult & { outputPath: string } =>
+                r.ok && r.outputPath !== undefined,
+            )
+            .map((r) => ({
+              cardPath: r.cardPath,
+              format: r.format,
+              outputPath: r.outputPath,
+              ...(r.suspectBlank ? { suspectBlank: true } : {}),
+            })),
+          failedCaptures: renderResults
+            .filter((r) => !r.ok)
+            .map((r) => ({
+              cardPath: r.cardPath,
+              format: r.format,
+              error: r.error ?? 'unknown',
+            })),
+        };
+        if (modelPolicy?.acceptance) {
+          reviewContext.modelBudget = modelPolicy.acceptance;
+        }
+        if (streamHandler) {
+          reviewContext.onToolCall = streamHandler.handler;
+        }
+        let reviewResult = await runTurn(reviewContext, {
+          issueTitle: issueDisplayTitle(reviewIssue),
+          turnType: 'review',
+        });
+        allToolCalls.push(...reviewResult.toolCalls);
+        // Follow-up issues / backlog edits the reviewer filed are
+        // control-plane files — sync so the scheduler sees them.
+        await syncWorkspace();
+
+        // Read the reviewer's verdict file. Missing or malformed →
+        // bias to ship: approve.
+        let verdictPath = join(
+          workspaceDir,
+          '.factory-scratch',
+          'review-verdict.json',
+        );
+        try {
+          let raw = await readFile(verdictPath, 'utf8');
+          await rm(verdictPath, { force: true });
+          let parsed = JSON.parse(raw) as {
+            verdict?: string;
+            feedback?: string;
+          };
+          if (
+            parsed?.verdict === 'rework' &&
+            typeof parsed.feedback === 'string' &&
+            parsed.feedback.trim() !== ''
+          ) {
+            return { verdict: 'rework', feedback: parsed.feedback.trim() };
+          }
+        } catch {
+          // No verdict file — the prompt says APPROVE needs no file.
+        }
+        return { verdict: 'approve' };
+      } catch (error) {
+        log.warn(
+          `  Review gate failed — bias to ship, approving: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        return { verdict: 'approve' };
+      }
+    };
+
+    // Iteration spans use a close-previous pattern: the body has several
+    // break/continue exits, so each span is closed when the next iteration
+    // opens (or after the loop). Inter-iteration overhead lands in the
+    // owning iteration's span, which is where it belongs.
+    let endIterationSpan: () => void = () => {};
     for (let iteration = 1; iteration <= maxIterationsPerIssue; iteration++) {
       innerIterations = iteration;
+      endIterationSpan();
+      endIterationSpan = startSpan('iteration', issueSlug(issue), {
+        iteration,
+      });
 
       log.info(
         `  Inner iteration ${iteration}/${maxIterationsPerIssue} for issue ${issueSummaryLabel(issue)}`,
       );
+
+      if (runLog && iteration > 1) {
+        await runLog.append([
+          {
+            kind: 'iteration',
+            headline: `Iteration ${iteration} of ${maxIterationsPerIssue} — revising after validation feedback`,
+          },
+        ]);
+      }
 
       // Build context — includes pre-formatted validation context from prior iteration
       let context = await contextBuilder.buildForIssue({
@@ -422,22 +1203,188 @@ export async function runIssueLoop(
         briefUrl,
       });
 
+      // Session reuse — the orchestrator decides continue-vs-fresh per turn.
+      // CONTINUE resumes the prior iteration's session so its reads + edits
+      // stay in context (a fix turn becomes "here's what failed, fix it",
+      // no re-read). FRESH forks the primed skills/design/precedent session
+      // instead — used on the first turn, and as a circuit-breaker when the
+      // agent is stuck repeating a failure or the chain grew too deep. Both
+      // fork (fork: true) so the parent session is never mutated. Meta issues
+      // (bootstrap/analysis/design) run once, so they always go fresh.
+      let currentFailure = failureFingerprint(validationResults);
+      let decision = decideSessionStrategy({
+        iteration,
+        hasPriorSession: Boolean(iterationSessionId) && !isMetaIssue(issue),
+        chainDepth,
+        previousFailure: prevFailure,
+        currentFailure,
+      });
+      if (decision.strategy === 'continue' && iterationSessionId) {
+        context.resumeSession = { sessionId: iterationSessionId, fork: true };
+        chainDepth += 1;
+      } else {
+        if (typeof primeSessionId === 'string' && !isMetaIssue(issue)) {
+          context.resumeSession = { sessionId: primeSessionId, fork: true };
+        }
+        chainDepth = 0;
+      }
+      prevFailure = currentFailure;
+      if (iteration > 1 && !isMetaIssue(issue)) {
+        log.info(
+          `  Context strategy: ${decision.strategy} (${decision.reason})`,
+        );
+      }
+
+      // Live blog: stream design screenshots, .gts writes, failed checks,
+      // and the agent's own post_update commentary onto the run-log card
+      // (and issue comments) AS THEY HAPPEN — a long agent turn must never
+      // leave the run log silent.
+      if (streamHandler) {
+        context.onToolCall = streamHandler.handler;
+      }
+
+      // Model/thinking budget by turn type: bootstrap and first
+      // implementation iterations do design-taste work; iterations ≥ 2
+      // are mechanical fix-ups and run on the cheaper budget.
+      let turnBudget =
+        issue.issueType === 'bootstrap'
+          ? modelPolicy?.bootstrap
+          : issue.issueType === 'analysis' || issue.issueType === 'design'
+            ? undefined // research/taste turns inherit the flagship session
+            : iteration >= 2
+              ? modelPolicy?.fix
+              : modelPolicy?.build;
+      if (turnBudget) {
+        context.modelBudget = turnBudget;
+        log.info(
+          `  Turn budget: model=${turnBudget.model ?? 'inherit'}, effort=${turnBudget.effort ?? 'inherit'}`,
+        );
+      }
+
       // Run the agent — it calls tools during its turn. Realm-touching `run_*`
       // tools sync the workspace before executing, so subtract that tool-sync
       // time from the agent's wall clock: it's attributed to sync (via the
       // shared counter), not to the model.
       let agentStartMs = Date.now();
       let agentSyncStartMs = getSyncElapsedMs();
-      let result = await agent.run(context, tools);
+      let result: AgentRunResult;
+      if (
+        phaseSplit &&
+        !isMetaIssue(issue) &&
+        !isBugFixIssue(issue) &&
+        iteration === 1 &&
+        context.v2 === true
+      ) {
+        // Phase-split: DESIGN turn (taste — strong budget) then BUILD turn
+        // (translation — cheap budget) forked from the design session so
+        // the accepted design context carries over without re-reading.
+        // Bug-fix issues are excluded — a defect on a shipped card needs a
+        // diagnose-and-fix turn, not a fresh design round (issue-fix-v2).
+        context.phase = 'design';
+        // Unconditional: the turn-budget block above just stamped the BUILD
+        // budget (iteration 1 of a non-meta issue selects modelPolicy.build)
+        // onto this same context, and `modelPolicy.design` is intentionally
+        // unset (= inherit the session flagship). A conditional override
+        // could never fire, so the taste turn silently ran on the cheap
+        // translation model.
+        context.modelBudget = modelPolicy?.design;
+        log.info(
+          `  Phase-split: DESIGN turn starting (budget ${
+            modelPolicy?.design
+              ? `${modelPolicy.design.model ?? 'inherit'}/${modelPolicy.design.effort ?? 'inherit'}`
+              : 'inherit flagship session'
+          })`,
+        );
+        let designResult = await runTurn(context, {
+          issueTitle: issueDisplayTitle(issue),
+          turnType: 'design',
+          iteration,
+          maxIterations: maxIterationsPerIssue,
+        });
+        allToolCalls.push(...designResult.toolCalls);
+        if (designResult.status === 'blocked') {
+          result = designResult;
+        } else {
+          let buildContext: AgentContext = { ...context };
+          buildContext.phase = 'build';
+          buildContext.modelBudget = modelPolicy?.build;
+          if (designResult.sessionId) {
+            buildContext.resumeSession = {
+              sessionId: designResult.sessionId,
+              fork: true,
+            };
+          }
+          let buildBudgetLabel = modelPolicy?.build
+            ? `${modelPolicy.build.model ?? 'inherit'}/${modelPolicy.build.effort ?? 'inherit'}`
+            : 'inherit';
+          log.info(
+            `  Phase-split: BUILD turn starting (budget ${buildBudgetLabel})`,
+          );
+          if (runLog) {
+            await runLog.append(
+              [
+                {
+                  kind: 'phase',
+                  headline: 'Design accepted — handing off to the build turn',
+                  body: `Mockups + design notes locked; translation runs on the ${buildBudgetLabel} budget, forked from the design session.`,
+                },
+              ],
+              undefined,
+              { stream: true },
+            );
+          }
+          result = await runTurn(buildContext, {
+            issueTitle: issueDisplayTitle(issue),
+            turnType: 'build',
+            iteration,
+            maxIterations: maxIterationsPerIssue,
+          });
+        }
+      } else {
+        result = await runTurn(context, {
+          issueTitle: issueDisplayTitle(issue),
+          turnType:
+            issue.issueType === 'bootstrap'
+              ? 'bootstrap'
+              : issue.issueType === 'analysis'
+                ? 'analysis'
+                : issue.issueType === 'design'
+                  ? 'design-foundation'
+                  : isBugFixIssue(issue) || iteration >= 2
+                    ? 'fix'
+                    : 'implement',
+          iteration,
+          maxIterations: maxIterationsPerIssue,
+        });
+      }
       let toolSyncMs = getSyncElapsedMs() - agentSyncStartMs;
       let agentMs = Math.max(0, Date.now() - agentStartMs - toolSyncMs);
       cur.agentMs += agentMs;
       grand.agentMs += agentMs;
       allToolCalls.push(...result.toolCalls);
 
+      // Seed the next iteration's chain from this turn's session (the build
+      // turn's, in phase-split). Non-meta only — meta issues never chain.
+      if (result.sessionId && !isMetaIssue(issue)) {
+        iterationSessionId = result.sessionId;
+      }
+
       log.info(
         `  Agent returned ${result.toolCalls.length} tool call(s)${debug ? ` in ${fmtSecs(agentMs)}` : ''}`,
       );
+
+      // Post-turn design summary only when nothing streamed live (the
+      // stream handler already posted each design round as it happened).
+      if (runLog && !streamHandler?.sawDesign()) {
+        let designEntries = await designEntriesFromToolCalls(
+          result.toolCalls,
+          targetRealm,
+          workspaceDir,
+        );
+        if (designEntries.length > 0) {
+          await runLog.append(designEntries);
+        }
+      }
 
       // The agent itself reports "I cannot proceed" via two paths:
       // calling `request_clarification` (clarification.message), or
@@ -449,6 +1396,17 @@ export async function runIssueLoop(
         let blockMessage =
           result.message?.trim() || 'agent reported it could not proceed';
         log.info(`  Agent reported blocked: ${blockMessage}`);
+        if (runLog) {
+          await runLog.append([
+            {
+              kind: 'blocked',
+              headline: `Blocked: ${issueDisplayTitle(issue)}`,
+              body: blockMessage,
+              cardPath: issueCardPath(issue, controlRealm),
+              cardRealm: 'control' as const,
+            },
+          ]);
+        }
         try {
           await issueStore.updateIssue(issue.id, { status: 'blocked' });
           await syncWorkspace();
@@ -470,7 +1428,20 @@ export async function runIssueLoop(
       // Pass the iteration number so all steps use it as the sequence
       // number in artifact filenames (parse_slug-1, lint_slug-1, etc.)
       let validationStartMs = Date.now();
+      let endValidationSpan = startSpan('validation', 'pipeline', {
+        issue: issueSlug(issue),
+        iteration,
+      });
       validationResults = await validator.validate(targetRealm, iteration);
+      endValidationSpan({
+        passed: validationResults.passed,
+        steps: validationResults.steps.length,
+        failedSteps:
+          validationResults.steps
+            .filter((s) => !s.passed)
+            .map((s) => s.step)
+            .join(',') || undefined,
+      });
       let validationMs = Date.now() - validationStartMs;
       cur.validationMs += validationMs;
       grand.validationMs += validationMs;
@@ -513,19 +1484,119 @@ export async function runIssueLoop(
         }`,
       );
 
+      if (runLog && validationResults) {
+        // Link the most informative step's Validation card: the first
+        // failing step, else the last step that ran. Step cards are written
+        // by the pipeline at Validations/<step>_<issueId>-<iteration>
+        // ('evaluate' files as 'eval_'). The in-process 'imports' step
+        // writes no artifact card, so it can't be the linked focus.
+        let linkableSteps = validationResults.steps.filter(
+          (s) => s.step !== 'imports',
+        );
+        let focusStep =
+          linkableSteps.find((s) => !s.passed) ??
+          linkableSteps[linkableSteps.length - 1];
+        let stepFile =
+          focusStep?.step === 'evaluate' ? 'eval' : focusStep?.step;
+        await runLog.append([
+          {
+            kind: 'validation',
+            headline: validationResults.passed
+              ? 'Validation passed'
+              : 'Validation failed — revising',
+            body: formatValidation(validationResults),
+            ...(focusStep
+              ? {
+                  cardPath: `Validations/${stepFile}_${issue.id}-${iteration}`,
+                  cardRealm: 'control' as const,
+                }
+              : {}),
+          },
+        ]);
+      }
+
       // The loop owns issue status transitions. The agent signals
-      // completion via signal_done; the loop promotes to "done" only
-      // when signal_done is called, validation passes, AND the sync
+      // completion via signal_done; the loop promotes only when
+      // signal_done is called, validation passes, AND the sync
       // succeeded. A failed sync means the realm doesn't have the
       // agent's writes, so marking the issue done would claim
       // completion for work that isn't actually delivered.
+      //
+      // Reviewable issues go 'in_progress' → 'review' → (PM review turn)
+      // → 'done', or bounce back ONCE to 'in_progress' with the
+      // reviewer's comments as next-iteration context.
       let agentSignaledDone = result.toolCalls.some(
         (tc) => tc.tool === 'signal_done',
       );
 
+      let reworkFeedback: string | undefined;
       if (agentSignaledDone && validationResults?.passed && !syncFailed) {
+        let reviewable =
+          renderGate !== undefined &&
+          acceptanceWalkthrough &&
+          !isMetaIssue(issue) &&
+          // Never review a defect issue: the reviewer is what FILES
+          // defect issues, so reviewing defect fixes can chain
+          // (defect-v2 → v3 …, observed on wardrobe 2026-07-17).
+          issue.issueType !== 'defect';
+        if (reviewable) {
+          try {
+            await issueStore.updateIssue(issue.id, { status: 'review' });
+            await emitStatusChange(issue, 'review', 'in_progress');
+          } catch (err) {
+            log.warn(
+              `  Failed to mark issue in review: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
+          let review = await runReviewGate();
+          if (review.verdict === 'rework' && reviewBounces === 0) {
+            reworkFeedback = review.feedback;
+          } else if (review.verdict === 'rework') {
+            log.info(
+              '  Reviewer requested rework again — bias to ship: approving; further improvements belong in follow-up issues',
+            );
+          }
+        }
+      }
+
+      if (reworkFeedback) {
+        reviewBounces++;
+        log.info('  Review verdict: rework — sending back with comments');
+        try {
+          await issueStore.addComment(issue.id, {
+            body: `**Review — rework requested**\n\n${reworkFeedback}`,
+            author: 'reviewer',
+          });
+          await issueStore.updateIssue(issue.id, { status: 'in_progress' });
+        } catch (err) {
+          log.warn(
+            `  Failed to record rework feedback: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+        // The next inner iteration runs as a fix turn with the review
+        // feedback in its validation-context slot.
+        validationContext = [
+          '# Review feedback (rework requested)',
+          '',
+          'The reviewer sent this issue back. Address the points below with',
+          'surgical Edits, then signal_done again.',
+          '',
+          reworkFeedback,
+        ].join('\n');
+        // Reopen (review → in_progress) with the reviewer's feedback as the
+        // entry body, so both the state change and the comment show in the feed.
+        await emitStatusChange(issue, 'in_progress', 'review', reworkFeedback);
+        await syncWorkspace();
+      } else if (
+        agentSignaledDone &&
+        validationResults?.passed &&
+        !syncFailed
+      ) {
         try {
           await issueStore.updateIssue(issue.id, { status: 'done' });
+          // The `issue-done` milestone entry (emitted below on exitReason
+          // === 'done') is the canonical done event in the feed, so no
+          // separate status-change entry here.
           // updateIssue writes the status flip to the local workspace.
           // refreshIssueState below queries the realm's search index, so
           // the flip has to reach the realm before the refresh — otherwise
@@ -563,7 +1634,10 @@ export async function runIssueLoop(
       // settle on the next pass. Other paths (sync failed, validation
       // failed) refresh once and trust whatever the index shows.
       let expectedDoneSync =
-        agentSignaledDone && validationResults?.passed && !syncFailed;
+        agentSignaledDone &&
+        validationResults?.passed &&
+        !syncFailed &&
+        !reworkFeedback;
       let currentIssue: SchedulableIssue = issue;
       issue = expectedDoneSync
         ? await retryWithPoll(
@@ -614,6 +1688,7 @@ export async function runIssueLoop(
             body: commentBody,
             author: 'orchestrator',
           });
+          await emitComment(issue, 'orchestrator', commentBody);
         } catch (err) {
           log.warn(
             `  Failed to add blocking comment to issue: ${err instanceof Error ? err.message : String(err)}`,
@@ -625,6 +1700,17 @@ export async function runIssueLoop(
             status: 'blocked',
           });
           exitReason = 'blocked';
+          if (runLog) {
+            await runLog.append([
+              {
+                kind: 'blocked',
+                headline: `Issue status: in progress → blocked (max iterations)`,
+                body: `Validation still failing after ${maxIterationsPerIssue} iterations — orchestrator comment added to the issue with the failure context.`,
+                cardPath: issueCardPath(issue, controlRealm),
+                cardRealm: 'control' as const,
+              },
+            ]);
+          }
         } catch (err) {
           log.warn(
             `  Failed to update issue status to blocked: ${err instanceof Error ? err.message : String(err)}`,
@@ -634,6 +1720,7 @@ export async function runIssueLoop(
 
       exhaustedIssues.add(issue.id);
     }
+    endIterationSpan();
 
     // All syncs during this issue (loop-owned + tool-triggered) accrued to the
     // shared counter; the delta is this issue's sync time.
@@ -645,9 +1732,41 @@ export async function runIssueLoop(
       totalMs: Date.now() - cycleStartMs,
     };
 
+    endIssueSpan({
+      exitReason,
+      iterations: innerIterations,
+      agentMs: issueTiming.agentMs,
+      validationMs: issueTiming.validationMs,
+      syncMs: issueTiming.syncMs,
+    });
+
     log.info(
       `Outer cycle ${outerCycles}: issue ${issueSummaryLabel(issue)} completed — exitReason=${exitReason}, iterations=${innerIterations}`,
     );
+
+    if (runLog && exitReason === 'done') {
+      // Native Writes never reach allToolCalls (only MCP tool results do) —
+      // the stream handler's sightings are the real source of instance
+      // paths; cardPathsFromToolCalls stays as a fallback for wirings
+      // without streaming.
+      let cardPaths = streamHandler?.instanceCardPaths() ?? [];
+      if (cardPaths.length === 0) {
+        cardPaths = cardPathsFromToolCalls(allToolCalls);
+      }
+      let cardEntries = cardPaths.slice(0, 3).map((cardPath) => ({
+        kind: 'card-ready' as const,
+        headline: `Card ready: ${cardPath.split('/').pop()?.replace(/-/g, ' ') ?? cardPath}`,
+        body: 'This is the live card — click through to open it.',
+        cardPath,
+      }));
+      await runLog.append([
+        ...cardEntries,
+        {
+          kind: 'issue-done',
+          headline: `Done: ${issueDisplayTitle(issue)}`,
+        },
+      ]);
+    }
     if (debug) {
       log.info(
         `  Timing: agent ${fmtSecs(issueTiming.agentMs)}, validation ${fmtSecs(issueTiming.validationMs)}, sync ${fmtSecs(issueTiming.syncMs)}, total ${fmtSecs(issueTiming.totalMs)}`,
@@ -700,7 +1819,9 @@ export async function runIssueLoop(
     outcome = 'max_outer_cycles';
   } else {
     let allDone = issueResults.every((r) => r.exitReason === 'done');
-    let hasExhausted = exhaustedIssues.size > 0;
+    let hasExhausted = [...exhaustedIssues].some(
+      (id) => !policySkipped.has(id),
+    );
 
     if (allDone && !hasExhausted) {
       outcome = 'all_issues_done';
@@ -711,6 +1832,12 @@ export async function runIssueLoop(
   }
 
   log.info(`Outer loop finished: outcome=${outcome}, cycles=${outerCycles}`);
+
+  if (runLog) {
+    await runLog.finish(
+      outcome === 'all_issues_done' ? 'completed' : 'stopped',
+    );
+  }
 
   // Mark the project as completed only when ALL issues in the realm are done
   // (not just the ones we processed). This prevents marking complete when
@@ -751,6 +1878,14 @@ export async function runIssueLoop(
   if (debug) {
     logTimingSummary(issueResults, grand);
   }
+
+  endRunSpan({
+    outcome,
+    cycles: outerCycles,
+    agentMs: grand.agentMs,
+    validationMs: grand.validationMs,
+    syncMs: grand.syncMs,
+  });
 
   return { outcome, outerCycles, issueResults };
 }

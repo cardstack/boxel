@@ -34,6 +34,19 @@ import { ContextBuilder } from './factory-context-builder.ts';
 import { inferDarkfactoryModuleUrl } from './factory-seed.ts';
 import { DefaultSkillResolver, SkillLoader } from './factory-skill-loader.ts';
 import {
+  ControlPlaneSync,
+  ensureControlPlaneIgnoreFile,
+} from './control-plane-sync.ts';
+import {
+  defaultHostToolsDir,
+  deriveHostToolImports,
+} from './host-import-manifest.ts';
+import { retryWithPoll } from './retry-with-poll.ts';
+import { startSpan, withSpan } from './run-trace.ts';
+import { RenderGate } from './render-gate.ts';
+import { RunLogWriter } from './run-log.ts';
+import { RunMonitor, type MonitorLevel } from './run-monitor.ts';
+import {
   buildFactoryTools,
   type FactoryTool,
   type ToolBuilderConfig,
@@ -49,6 +62,7 @@ import {
 import { RealmIssueStore, type IssueStore } from './issue-scheduler.ts';
 import { RealmIssueRelationshipLoader } from './realm-issue-relationship-loader.ts';
 import { withStdoutRedirected } from './redirect-stdout.ts';
+import { materializeWorkspaceSkills } from './workspace-skills.ts';
 
 let log = logger('factory-issue-loop-wiring');
 
@@ -104,6 +118,80 @@ export interface IssueLoopWiringConfig {
    */
   enableBoxelUiDiscovery?: boolean;
   /**
+   * V2 lean/design-first mode: lean skill core + on-demand read_skill,
+   * HTML-mockup design phase in the implement prompt, and no QUnit step
+   * in the validation pipeline (tests move to a later hardening phase).
+   * Also turns boxel-ui discovery on unless explicitly disabled upstream.
+   */
+  v2?: boolean;
+  /** Brief title — names the live-blog RunLog card (v2). */
+  runTitle?: string;
+  /** Context forking (v2): prime once, fork every implementation turn. */
+  forkContext?: boolean;
+  /** Per-turn model/effort budget policy (orchestrator-owned; see IssueLoopConfig). */
+  modelPolicy?: {
+    prime?: {
+      model?: string;
+      effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    };
+    bootstrap?: {
+      model?: string;
+      effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    };
+    design?: {
+      model?: string;
+      effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    };
+    build?: {
+      model?: string;
+      effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    };
+    fix?: {
+      model?: string;
+      effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    };
+    acceptance?: {
+      model?: string;
+      effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    };
+  };
+  /** Phase-split (v2): design turn + build turn per issue (see IssueLoopConfig). */
+  phaseSplit?: boolean;
+  /**
+   * Orchestrator monitor level (v3). Applies only under v2 (needs the run
+   * log). 'normal' (default) posts stall narration, turn telemetry,
+   * scheduler notes, and sync failures; 'verbose' adds turn starts, heals,
+   * and sync successes; 'quiet' keeps stalls + failures only.
+   */
+  monitorLevel?: MonitorLevel;
+  /**
+   * Control realm (v3 split): issues, tracker cards, validation artifacts,
+   * and the run log live here; the product (`targetRealm`) keeps only the
+   * built defs + instances. When set (and different from the target
+   * realm), control-plane paths are excluded from the product atomic sync
+   * via `.boxelignore` and raw-written to this realm instead — which also
+   * makes the entire control plane immune to the /_atomic FieldDef strip.
+   * Unset = v2 behavior (everything in the target realm).
+   */
+  controlRealm?: string;
+  /**
+   * Share the entrypoint's ControlPlaneSync (with its pushed-hash state)
+   * instead of constructing a fresh one — avoids re-pushing every control
+   * file at loop start. Only meaningful when `controlRealm` is set.
+   */
+  controlSync?: ControlPlaneSync;
+  /**
+   * Render gate + acceptance walkthrough (v3 P0). On by default under
+   * `v2`; pass false to skip the post-issue screenshot capture and the
+   * verifier turn (e.g. deployments without a prerenderer).
+   */
+  renderGate?: boolean;
+  /**
+   * Execute factory-generated polish issues (issueType `enhancement`)
+   * unattended. Default false — they stay on the board for an operator.
+   */
+  includePolish?: boolean;
+  /**
    * Invoked once, right after the bootstrap issue completes. The entrypoint
    * uses this to link the realm index's `board` relationship as soon as the
    * IssueTracker exists, instead of waiting for the entire loop to return.
@@ -124,14 +212,51 @@ export async function runFactoryIssueLoop(
   let client = config.client;
   let workspaceDir = config.workspaceDir;
 
-  // 1. Issue store
+  // v3 control/product split: when a distinct control realm is configured,
+  // issues / tracker / validations / run log live there and are raw-written
+  // (never atomic-synced); the target realm keeps only the product.
+  let controlRealm = config.controlRealm
+    ? ensureTrailingSlash(config.controlRealm)
+    : targetRealm;
+  let split = controlRealm !== targetRealm;
+  let controlSync: ControlPlaneSync | undefined;
+  if (split) {
+    await ensureControlPlaneIgnoreFile(workspaceDir);
+    controlSync =
+      config.controlSync ??
+      new ControlPlaneSync({ client, controlRealm, workspaceDir });
+    log.info(`Control/product split active: control realm=${controlRealm}`);
+  }
+
+  // Materialize the skill catalog into `<workspace>/.claude/skills/` so
+  // agents can look skills up the way Claude Code does — native
+  // Glob/Grep/Read over real files (searchable, instinct-aligned) —
+  // instead of only through the read_skill MCP tool. Dotdirs never sync
+  // to the realm. Best-effort by design.
+  await withSpan('skills', 'materialize', undefined, () =>
+    materializeWorkspaceSkills(workspaceDir),
+  );
+
+  // 1. Issue store — reads/writes the control realm under the split.
   let darkfactoryModuleUrl = inferDarkfactoryModuleUrl(targetRealm);
   let issueStore = new RealmIssueStore({
-    realmUrl: targetRealm,
+    realmUrl: controlRealm,
     darkfactoryModuleUrl,
     client,
     workspaceDir,
   });
+
+  // Under the split the seed issue reaches the control realm via raw
+  // writes, which don't wait for indexing — bounded-poll so the loop's
+  // first listIssues doesn't race the indexer and exit "all done, 0
+  // issues". (The non-split path pushes with waitForIndex instead.)
+  if (split) {
+    await retryWithPoll(
+      () => issueStore.listIssues(),
+      (issues) => issues.length === 0,
+      { totalWaitMs: 20_000, pollMs: 1_000 },
+    );
+  }
 
   // 1b. Retry blocked issues (default on, opt out with --no-retry-blocked)
   if (config.retryBlocked) {
@@ -141,15 +266,29 @@ export async function runFactoryIssueLoop(
   // 2. Context builder with issue relationship loader
   let issueLoader = new RealmIssueRelationshipLoader({
     workspaceDir,
-    realmUrl: targetRealm,
+    realmUrl: controlRealm,
   });
+  // v3 import gate: derive the host-tools catalogue from the host source
+  // in this checkout, once per run. Feeds BOTH sides of the gate — the
+  // generated manifest skill in every agent context, and the static
+  // `imports` validation step. Degrades to no gate when the host source
+  // isn't present (undefined).
+  let hostToolImports = await withSpan(
+    'manifest',
+    'host-imports',
+    undefined,
+    () => deriveHostToolImports(defaultHostToolsDir(PACKAGE_ROOT)),
+  );
   let contextBuilder = new ContextBuilder({
     skillResolver: new DefaultSkillResolver({
       enableBoxelUiDiscovery: config.enableBoxelUiDiscovery === true,
+      v2: config.v2 === true,
     }),
     skillLoader: new SkillLoader(),
     issueLoader,
     enableBoxelUiDiscovery: config.enableBoxelUiDiscovery === true,
+    v2: config.v2 === true,
+    hostToolImports,
   });
 
   // 3. Tool infrastructure
@@ -195,11 +334,72 @@ export async function runFactoryIssueLoop(
   // through this `syncWorkspace`, so the loop can read `getSyncElapsedMs()` to
   // attribute tool-triggered sync time to sync rather than agent time.
   let syncElapsedMs = 0;
+  // Every sync goes through the corrupting /_atomic?waitForIndex path,
+  // which strips containsMany FieldDef data from card sources — including
+  // the run-log instance whenever ANY sync uploads it (agent-triggered
+  // run_* tool syncs included, and conflict re-uploads after out-of-band
+  // raw writes). Set once the RunLogWriter exists; runs after every
+  // successful sync so the live blog can never stay stripped.
+  let postSyncHeal: (() => Promise<void>) | undefined;
+  // Set once the RunMonitor exists (v2 only) — watchdog notes for sync
+  // failures (normal level) and heals/successes (verbose).
+  let monitor: RunMonitor | undefined;
   let syncWorkspace = async () => {
     let start = Date.now();
+    let endSyncSpan = startSpan('sync', 'workspace');
     try {
-      return await syncGate.sync();
+      // Product sync (atomic; control paths excluded via .boxelignore under
+      // the split), then the control-plane raw-write sync. Both must land
+      // for the composite to report ok — the loop refuses to mark issues
+      // done on a failed sync, and that guarantee has to cover both realms.
+      let endProductSpan = startSpan('sync', 'product');
+      let result = await syncGate.sync();
+      endProductSpan({ ok: result.ok });
+      if (controlSync) {
+        let endControlSpan = startSpan('sync', 'control');
+        let controlResult = await controlSync.sync();
+        endControlSpan({ ok: controlResult.ok });
+        if (!controlResult.ok) {
+          result = {
+            ok: false,
+            error: [
+              result.ok ? undefined : result.error,
+              `control-plane sync: ${controlResult.error ?? 'unknown error'}`,
+            ]
+              .filter(Boolean)
+              .join('; '),
+          };
+        }
+      }
+      if (!result.ok) {
+        monitor?.noteWatchdog(
+          'sync-failed',
+          'Workspace sync to the realm failed',
+          {
+            body: `${result.error ?? 'unknown error'} — the loop retries on the next turn; the issue cannot be marked done until a sync lands.`,
+            failure: true,
+          },
+        );
+      }
+      // Heal is only needed when the run log rides the atomic sync path
+      // (no split). Under the split the run log is raw-written to the
+      // control realm and never exposed to the FieldDef strip.
+      if (result.ok && postSyncHeal && !split) {
+        try {
+          await postSyncHeal();
+          monitor?.noteWatchdog(
+            'heal',
+            'Run-log instance healed after sync (atomic FieldDef-strip workaround)',
+          );
+        } catch {
+          // Healing is best-effort; never fail a sync over it.
+        }
+      }
+      endSyncSpan({ ok: result.ok });
+      return result;
     } finally {
+      // Idempotent close: a throw path lands here with the span still open.
+      endSyncSpan({ error: true });
       syncElapsedMs += Date.now() - start;
     }
   };
@@ -263,10 +463,49 @@ export async function runFactoryIssueLoop(
       issueId,
       fetchFilenames: (realmUrl: string) => client.listFiles(realmUrl),
       cache: validationCache,
+      includeTestStep: config.v2 !== true,
+      hostToolImports,
     });
 
   // 6. Run issue loop
   log.info(`Starting issue loop: targetRealm=${targetRealm}`);
+
+  let runLog: RunLogWriter | undefined;
+  if (config.v2 === true) {
+    let runSlug = (config.briefUrl.split('/').pop() ?? 'factory-run')
+      .replace(/\.json$/i, '')
+      .toLowerCase();
+    runLog = new RunLogWriter({
+      workspaceDir,
+      targetRealm,
+      controlRealm,
+      runSlug,
+      runTitle: config.runTitle ?? runSlug,
+      syncWorkspace,
+      // Streamed appends raw-write straight to the realm that hosts the
+      // run log — the control realm under the split.
+      rawWriteFile: (relativePath, content) =>
+        client.write(controlRealm, relativePath, content),
+    });
+    let createdRunLog = runLog;
+    postSyncHeal = () => createdRunLog.healInstance();
+    monitor = new RunMonitor({
+      runLog,
+      level: config.monitorLevel ?? 'normal',
+    });
+  }
+
+  // Render gate (v3 P0): on by default under v2 — the runtime feedback
+  // loop is the point of v3, so skipping it is the explicit opt-out.
+  let renderGate: RenderGate | undefined;
+  if (config.v2 === true && config.renderGate !== false) {
+    renderGate = new RenderGate({
+      client,
+      realmServerUrl,
+      targetRealm,
+      workspaceDir,
+    });
+  }
 
   let issueLoopConfig: IssueLoopConfig = {
     agent,
@@ -275,10 +514,18 @@ export async function runFactoryIssueLoop(
     issueStore,
     createValidator,
     targetRealm,
+    controlRealm,
     darkfactoryModuleUrl,
     workspaceDir,
     syncWorkspace,
     briefUrl: config.briefUrl,
+    runLog,
+    monitor,
+    renderGate,
+    modelPolicy: config.modelPolicy,
+    phaseSplit: config.phaseSplit === true,
+    forkContext: config.forkContext === true,
+    includePolish: config.includePolish === true,
     maxIterationsPerIssue: config.maxIterationsPerIssue,
     maxOuterCycles: config.maxOuterCycles,
     debug: config.debug,
@@ -287,8 +534,10 @@ export async function runFactoryIssueLoop(
   };
 
   try {
+    monitor?.start();
     return await runIssueLoop(issueLoopConfig);
   } finally {
+    monitor?.stop();
     // Some agents (notably `OpencodeFactoryAgent`) hold persistent
     // backend state across iterations — long-lived opencode subprocess
     // + MCP server + JWT'd HTTP client. Tear that down here so a

@@ -10,6 +10,7 @@ import {
   RealmIssueStore,
   type IssueStore,
 } from '../src/issue-scheduler.ts';
+import { createTestWorkspace } from './helpers/workspace-fixture.ts';
 
 // ---------------------------------------------------------------------------
 // MockIssueStore
@@ -506,5 +507,55 @@ module('issue-scheduler > RealmIssueStore issue-type filter', function () {
       module: 'http://localhost:4201/software-factory/issue-tracker',
       name: 'Issue',
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// RealmIssueStore.readLocalStatus — authoritative workspace-file status
+// ---------------------------------------------------------------------------
+
+module('issue-scheduler > RealmIssueStore readLocalStatus', function (hooks) {
+  const realmUrl = 'http://localhost:4201/user/my-test-realm/';
+  const darkfactoryModuleUrl =
+    'http://localhost:4201/software-factory/darkfactory';
+  let workspace: ReturnType<typeof createTestWorkspace>;
+
+  hooks.beforeEach(function () {
+    workspace = createTestWorkspace();
+  });
+  hooks.afterEach(function () {
+    workspace.cleanup();
+  });
+
+  function makeStore() {
+    return new RealmIssueStore({
+      realmUrl,
+      darkfactoryModuleUrl,
+      client: {} as unknown as BoxelCLIClient,
+      workspaceDir: workspace.dir,
+    });
+  }
+
+  test('reads the status from the local workspace file, not the realm index', async function (assert) {
+    // The workspace file is the source of truth the sync pushes; the index
+    // can lag behind it. A completed seed reads `done` here even while the
+    // index still reports `in_progress`.
+    workspace.write(
+      'Issues/port-analysis-seed.json',
+      JSON.stringify({
+        data: { type: 'card', attributes: { status: 'done' } },
+      }),
+    );
+    let status = await makeStore().readLocalStatus(
+      `${realmUrl}Issues/port-analysis-seed`,
+    );
+    assert.strictEqual(status, 'done');
+  });
+
+  test('returns undefined when the workspace file is absent', async function (assert) {
+    let status = await makeStore().readLocalStatus(
+      `${realmUrl}Issues/never-written`,
+    );
+    assert.strictEqual(status, undefined);
   });
 });
