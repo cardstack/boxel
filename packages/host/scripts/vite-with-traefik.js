@@ -294,8 +294,8 @@ function startWithTraefik({ subcommand, defaultPort, label, nodeMemory }) {
 
   const slug = getEnvSlug();
   // Belt-and-suspenders: vite-serve.js / serve-dist.js also call this
-  // up-front (before boxel-ui conditional-build) so the second start
-  // exits immediately. Repeat here for direct callers of startWithTraefik.
+  // up-front so the second start exits immediately. Repeat here for
+  // direct callers of startWithTraefik.
   refuseIfAnotherSlugLocked();
 
   ensureTraefik();
