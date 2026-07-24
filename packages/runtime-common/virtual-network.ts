@@ -42,8 +42,13 @@ export class VirtualNetwork {
   // relationship is only stable between changes.
   private mappingChangeListeners = new Set<() => void>();
 
-  constructor(nativeFetch = createEnvironmentAwareFetch()) {
+  constructor(
+    nativeFetch = createEnvironmentAwareFetch(),
+    opts?: { fetchHeaderTimeoutMs?: number },
+  ) {
     this.nativeFetch = nativeFetch;
+    this.fetchHeaderTimeoutMs =
+      opts?.fetchHeaderTimeoutMs ?? defaultFetchHeaderTimeoutMs;
     this.mount(this.packageShimHandler.handle);
   }
 
@@ -385,6 +390,7 @@ export class VirtualNetwork {
   }
 
   private nativeFetch: typeof globalThis.fetch;
+  private fetchHeaderTimeoutMs: number;
 
   private resolveURLMapping(
     url: string,
@@ -488,8 +494,22 @@ export class VirtualNetwork {
       return next(await this.mapRequest(request, 'virtual-to-real'));
     });
 
-    return withRetries(new URL(request.url), () =>
-      fetcher(this.nativeFetch, handlers, this)(request, init),
+    return withRetries(
+      new URL(request.url),
+      this.fetchHeaderTimeoutMs,
+      (attemptSignal?: AbortSignal) => {
+        // Each attempt gets its own abort signal (see withRetries) so that a
+        // fetch aborted for stalling on one attempt doesn't poison the next.
+        // Rebuild the Request from a clone rather than mutating the original:
+        // the original is reused across attempts and constructing a Request
+        // consumes its body.
+        let attemptRequest = attemptSignal
+          ? new Request(request.clone(), {
+              signal: mergeAbortSignals(request.signal, attemptSignal),
+            })
+          : request;
+        return fetcher(this.nativeFetch, handlers, this)(attemptRequest, init);
+      },
     );
   }
 
@@ -577,6 +597,51 @@ const maxAttempts = 10;
 const backOffMs = 100;
 const retryableLocalHosts = new Set(['localhost', '127.0.0.1']);
 
+// Longest a retryable base-realm fetch may wait for response headers in the
+// browser test suite before it is aborted and retried (see withRetries). A
+// stall where the response headers never arrive is the failure mode the
+// thrown-error retry net above does not cover: the fetch neither resolves nor
+// rejects. Comfortably above normal base-artifact header latency (sub-second)
+// yet far below a per-test timeout, so it only ever fires on a genuine stall,
+// and the retry then gets its headers on a fresh connection.
+const defaultFetchHeaderTimeoutMs = 10_000;
+
+// Whether a retryable fetch should also be bounded by a header-arrival timeout.
+// Browser test suite only: `document` is absent in node / worker / env-mode
+// processes, where a legitimately slow response (e.g. a heavy `_search`) must
+// never be aborted and retried. `__environment === 'test'` is the same gate
+// shouldRetryFetch uses to decide base-realm retryability in the host.
+export function shouldTimeoutRetryableFetch(url: URL): boolean {
+  let g = globalThis as { document?: unknown; __environment?: string };
+  return (
+    typeof g.document !== 'undefined' &&
+    g.__environment === 'test' &&
+    shouldRetryFetch(url)
+  );
+}
+
+// Combine an optional caller-supplied signal with the per-attempt timeout
+// signal so a fetch is aborted when either fires.
+function mergeAbortSignals(
+  a: AbortSignal | null | undefined,
+  b: AbortSignal | null | undefined,
+): AbortSignal | undefined {
+  let signals = [a, b].filter((s): s is AbortSignal => Boolean(s));
+  if (signals.length <= 1) {
+    return signals[0];
+  }
+  let combine = (
+    AbortSignal as unknown as {
+      any?: (signals: AbortSignal[]) => AbortSignal;
+    }
+  ).any;
+  // AbortSignal.any is present in every runtime we target; if it were somehow
+  // missing, honor the timeout signal (the last one) so the bound still holds.
+  return typeof combine === 'function'
+    ? combine(signals)
+    : signals[signals.length - 1];
+}
+
 export function shouldRetryFetch(url: URL): boolean {
   // Env-mode services live at `<service>.<slug>.localhost` and are
   // reached through a local Traefik. The realm-server worker fetches
@@ -631,12 +696,33 @@ export function shouldRetryFetch(url: URL): boolean {
 
 async function withRetries(
   url: URL,
-  fetchFn: () => ReturnType<typeof globalThis.fetch>,
+  timeoutMs: number,
+  fetchFn: (attemptSignal?: AbortSignal) => ReturnType<typeof globalThis.fetch>,
 ) {
   let attempt = 0;
   for (;;) {
+    // For a retryable fetch in the browser test suite, bound how long this
+    // attempt may wait for response headers. A stall where the headers never
+    // arrive would otherwise leave the fetch neither resolved nor rejected,
+    // hanging the fetcher test-waiter until QUnit's global timeout; the abort
+    // turns that into the same retryable failure the catch below recovers
+    // from. The timer is cleared the moment the fetch settles, so a resolved
+    // response's body stream is never aborted (withRetries only awaits the
+    // response's headers, not its body).
+    let controller: AbortController | undefined;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    if (shouldTimeoutRetryableFetch(url)) {
+      controller = new AbortController();
+      timeoutId = setTimeout(() => {
+        let timeoutError = new Error(
+          `fetch for ${url.href} exceeded ${timeoutMs}ms without response headers`,
+        );
+        timeoutError.name = 'FetchHeaderTimeout';
+        controller!.abort(timeoutError);
+      }, timeoutMs);
+    }
     try {
-      return await fetchFn();
+      return await fetchFn(controller?.signal);
     } catch (err: any) {
       if (!shouldRetryFetch(url) || ++attempt > maxAttempts) {
         if (shouldRetryFetch(url) && attempt > maxAttempts) {
@@ -650,17 +736,24 @@ async function withRetries(
         }
         throw err;
       }
+      // Include the error so a failure surfaces which shape it took — a thrown
+      // `TypeError: Failed to fetch` or an aborted header stall
+      // (`FetchHeaderTimeout`).
       console.error(
-        `Encountered fetch failed for ${
-          url.href
-        } retry attempt #${attempt} in ${attempt * backOffMs}ms`,
+        `Encountered fetch failed for ${url.href} (${err?.name ?? 'Error'}: ${
+          err?.message ?? String(err)
+        }) retry attempt #${attempt} in ${attempt * backOffMs}ms`,
       );
       await new Promise((r) => setTimeout(r, attempt * backOffMs));
+    } finally {
+      if (timeoutId !== undefined) {
+        clearTimeout(timeoutId);
+      }
     }
   }
 }
 
-async function buildRequest(url: string, originalRequest: Request) {
+export async function buildRequest(url: string, originalRequest: Request) {
   if (url === originalRequest.url) {
     return originalRequest;
   }
@@ -693,5 +786,11 @@ async function buildRequest(url: string, originalRequest: Request) {
     cache: originalRequest.cache,
     redirect: originalRequest.redirect,
     integrity: originalRequest.integrity,
+    // Carry the abort signal across the remap so a caller's abort — and the
+    // per-attempt header-stall timeout in withRetries — still cancels the
+    // native fetch. The host maps virtual base-realm URLs
+    // (https://cardstack.com/base/...) to the resolved realm URL here, so
+    // without this the base fetch that reaches the network has no signal.
+    signal: originalRequest.signal,
   });
 }

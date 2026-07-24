@@ -1,6 +1,11 @@
 import { module, test } from 'qunit';
 
-import { shouldRetryFetch } from '@cardstack/runtime-common/virtual-network';
+import { VirtualNetwork } from '@cardstack/runtime-common';
+import {
+  buildRequest,
+  shouldRetryFetch,
+  shouldTimeoutRetryableFetch,
+} from '@cardstack/runtime-common/virtual-network';
 
 // `shouldRetryFetch` is the pure predicate that gates the in-app fetch-retry
 // safety net (see virtual-network.ts). The net papers over a transient CI
@@ -99,5 +104,170 @@ module('Unit | virtual-network shouldRetryFetch', function () {
         'production fetch flow is unaffected for the localhost URL',
       );
     });
+  });
+});
+
+// `shouldTimeoutRetryableFetch` gates the header-arrival timeout that turns a
+// stall — response headers that never arrive, so the fetch hangs instead of
+// throwing — into the same retryable failure the throw path already recovers
+// from. It bounds only fetches that are already retryable, and only in the
+// browser test suite: a slow response in node / worker / env-mode (e.g. a
+// heavy `_search`) must never be aborted and retried.
+module('Unit | virtual-network shouldTimeoutRetryableFetch', function () {
+  test('bounds a retryable base-realm fetch in the test environment', function (assert) {
+    withEnvironment('test', () => {
+      assert.true(
+        shouldTimeoutRetryableFetch(
+          new URL('https://realm-server.ci.localhost/base/_info'),
+        ),
+        'the base _info fetch that can stall before headers is bounded',
+      );
+      assert.true(
+        shouldTimeoutRetryableFetch(
+          new URL('https://cardstack.com/base/card-api'),
+        ),
+        'a virtual base-realm artifact is bounded',
+      );
+    });
+  });
+
+  test('does not bound a non-retryable fetch even in the test environment', function (assert) {
+    withEnvironment('test', () => {
+      assert.false(
+        shouldTimeoutRetryableFetch(
+          new URL(
+            'https://realm-server.ci.localhost/testuser/personal/Author/1',
+          ),
+        ),
+        'a user realm on the same host is not bounded',
+      );
+      assert.false(
+        shouldTimeoutRetryableFetch(
+          new URL('http://test-realm/test/SystemCard/default'),
+        ),
+        'the in-browser test realm host is not bounded',
+      );
+    });
+  });
+
+  test('does not bound anything outside the test environment', function (assert) {
+    withEnvironment(undefined, () => {
+      assert.false(
+        shouldTimeoutRetryableFetch(
+          new URL('https://cardstack.com/base/card-api'),
+        ),
+        'production / env-mode fetch flow keeps no header-timeout',
+      );
+    });
+  });
+});
+
+// A native fetch whose first attempt stalls at the header stage (never
+// resolves; rejects only when its request signal aborts, exactly as a real
+// fetch does), then succeeds. Mirrors a base-realm fetch whose response headers
+// never arrive, so the unbounded fetch hangs until QUnit's global timeout.
+function stallingThenOkFetch(): {
+  fetch: typeof globalThis.fetch;
+  attempts: () => number;
+  signalSeen: () => boolean;
+} {
+  let attempt = 0;
+  let sawAbort = false;
+  let fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+    attempt++;
+    let signal =
+      input instanceof Request ? input.signal : (init?.signal ?? undefined);
+    if (attempt === 1) {
+      return new Promise<Response>((_resolve, reject) => {
+        if (!signal) {
+          // No signal reached the fetch, so nothing can abort this attempt: it
+          // stays pending and the test fails via QUnit's timeout.
+          return;
+        }
+        let onAbort = () => {
+          sawAbort = true;
+          reject(signal.reason);
+        };
+        if (signal.aborted) {
+          onAbort();
+          return;
+        }
+        signal.addEventListener('abort', onAbort, { once: true });
+      });
+    }
+    let ok = new Response('{"ok":true}', {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+    // A real fetch response carries its resolved URL; mirror that (configurable
+    // so the virtual network's own url bookkeeping can still overwrite it)
+    // rather than returning the empty-url default a bare Response would have.
+    let url = input instanceof Request ? input.url : String(input);
+    Object.defineProperty(ok, 'url', { value: url, configurable: true });
+    return Promise.resolve(ok);
+  }) as typeof globalThis.fetch;
+  return { fetch, attempts: () => attempt, signalSeen: () => sawAbort };
+}
+
+module('Unit | virtual-network header-stall recovery', function () {
+  test('aborts a stalled retryable base fetch and recovers on the retry', async function (assert) {
+    let g = globalThis as { __environment?: string };
+    let had = '__environment' in g;
+    let prev = g.__environment;
+    g.__environment = 'test';
+    try {
+      let { fetch, attempts, signalSeen } = stallingThenOkFetch();
+      // Tiny header timeout so the stalled first attempt is aborted promptly;
+      // the second attempt then succeeds.
+      let vn = new VirtualNetwork(fetch, { fetchHeaderTimeoutMs: 20 });
+      let response = await vn.fetch('https://cardstack.com/base/card-api');
+      assert.strictEqual(
+        response.status,
+        200,
+        'recovered with a 200 after the stalled attempt was aborted',
+      );
+      assert.true(
+        attempts() >= 2,
+        'the stalled first attempt was retried on a fresh fetch',
+      );
+      assert.true(
+        signalSeen(),
+        'the aborted attempt fired the per-attempt timeout signal',
+      );
+    } finally {
+      if (had) {
+        g.__environment = prev;
+      } else {
+        delete g.__environment;
+      }
+    }
+  });
+
+  // The host reaches the base realm through a virtual-to-real URL mapping, and
+  // the per-attempt timeout signal is attached before that mapping runs. The
+  // remapped request must carry the signal through, or the native fetch for a
+  // base artifact addressed at the virtual host never sees the abort.
+  test('buildRequest carries the abort signal onto the remapped request', async function (assert) {
+    let controller = new AbortController();
+    let original = new Request('https://cardstack.com/base/_info', {
+      method: 'QUERY',
+      body: JSON.stringify({ realms: ['https://cardstack.com/base/'] }),
+      signal: controller.signal,
+    });
+    let remapped = await buildRequest(
+      'https://realm-server.ci.localhost/base/_info',
+      original,
+    );
+    assert.notStrictEqual(
+      remapped.url,
+      original.url,
+      'the request was rebuilt at the mapped real URL',
+    );
+    assert.false(remapped.signal.aborted, 'not aborted before the abort fires');
+    controller.abort(new Error('stall'));
+    assert.true(
+      remapped.signal.aborted,
+      'aborting the original aborts the remapped request',
+    );
   });
 });

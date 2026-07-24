@@ -165,7 +165,7 @@ export const ALWAYS_LOAD_REFERENCES: readonly string[] = [
  * and the validation test uses this set strictly: once a name ships in the
  * built skill, the test fails until it is removed from here.
  */
-export const PENDING_BOXEL_REFERENCES: readonly string[] = ['qunit-testing.md'];
+export const PENDING_BOXEL_REFERENCES: readonly string[] = [];
 
 // ---------------------------------------------------------------------------
 // Internal types for tracking reference metadata
