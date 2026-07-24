@@ -52,7 +52,11 @@ const testRealm2URL = 'http://test-realm/test2/';
 
 function getResourceForTest(
   parent: object,
-  args: () => { named: { query: SearchEntryWireQuery | undefined } },
+  args: () => {
+    named: {
+      query: SearchEntryWireQuery | undefined;
+    };
+  },
 ) {
   return SearchEntriesResource.from(parent, args) as unknown as Omit<
     SearchEntriesResource,
@@ -62,7 +66,9 @@ function getResourceForTest(
     loaded: Promise<void>;
     modify: (
       positional: never[],
-      named: { query: SearchEntryWireQuery | undefined },
+      named: {
+        query: SearchEntryWireQuery | undefined;
+      },
     ) => void;
   };
 }
@@ -1706,6 +1712,10 @@ module('Integration | search-entries resource', function (hooks) {
       assert.strictEqual(search.entries.length, 0);
       assert.strictEqual(search.errors?.length, 1);
       assert.strictEqual(search.errors?.[0].type, 'instance-error');
+      assert.false(
+        search.isLoading,
+        'a failed run settles isLoading (no permanent "Searching…")',
+      );
 
       await realm.write('books/3.json', bookDoc('Paper'));
       await waitUntil(() => search.entries.length === 3, { timeout: 10_000 });

@@ -11,12 +11,32 @@ import {
 
 import {
   getRenderableSearchEntries,
+  RenderableSearchEntries,
   type RenderableSearchEntry,
 } from '../../resources/renderable-search-entries';
 
 import type { HydrationMode } from './hydratable-card';
+import type { SearchEntriesResource } from '../../resources/search-entries';
 
 import type StoreService from '../../services/store';
+
+// The card-facing signature plus one host-only, optional extra: the search
+// sheet hands in a service-owned search resource so its results survive the
+// sheet's close/reopen (the resource outlives the component). It stays off the
+// public `SearchResultsComponentSignature` (the `@context` contract cards see)
+// and is absent for every other consumer — the card choosers, playground, and
+// card authors — so their behavior is unchanged.
+interface HostSearchResultsSignature {
+  Element: SearchResultsComponentSignature['Element'];
+  Args: SearchResultsComponentSignature['Args'] & {
+    // A pre-built search resource (owned by the caller, e.g. the search-sheet
+    // service) to render instead of the component's own. When present the
+    // component varies nothing through `@query` — the resource's owner drives
+    // it. When absent the component creates and owns its resource as before.
+    resource?: SearchEntriesResource;
+  };
+  Blocks: SearchResultsComponentSignature['Blocks'];
+}
 
 // The one search component family. Consumes the heterogeneous `entry`
 // stream from `getSearchEntriesResource` (through the shared render-stable
@@ -26,7 +46,7 @@ import type StoreService from '../../services/store';
 // `errors`); used without one it renders the default stream of
 // `entry.component`s itself. Additive: it supersedes the `prerendered-card-search`
 // component and the live `SearchContent` tree as call sites migrate.
-export default class SearchResults extends Component<SearchResultsComponentSignature> {
+export default class SearchResults extends Component<HostSearchResultsSignature> {
   @service declare private store: StoreService;
   #log = runtimeLogger('search-results');
 
@@ -38,16 +58,25 @@ export default class SearchResults extends Component<SearchResultsComponentSigna
     return this.args.overlays ?? true;
   }
 
-  // Created once per component: the underlying search resource owns its realm
-  // subscriptions and re-runs through the reactive query thunk, while the
-  // view-model layer memoizes render-stable entries on top. The query varies
-  // through the thunk, never by rebuilding this.
-  private renderables = getRenderableSearchEntries(
-    this,
-    () => this.args.query,
-    () => this.mode,
-    () => this.overlays,
-  );
+  // Created once per component: the view-model layer memoizes render-stable
+  // entries on top of a search resource. With `@resource` it wraps the
+  // caller-owned resource (whose subscriptions and re-runs outlive this
+  // component); otherwise it creates and owns one, parented here, varying only
+  // through the reactive `@query` thunk. Whether `@resource` is passed is fixed
+  // for a given consumer (the sheet always, the choosers never), so branching
+  // once at construction is sound.
+  private renderables = this.args.resource
+    ? new RenderableSearchEntries(
+        this.args.resource,
+        () => this.mode,
+        () => this.overlays,
+      )
+    : getRenderableSearchEntries(
+        this,
+        () => this.args.query,
+        () => this.mode,
+        () => this.overlays,
+      );
 
   private get results(): SearchResultsYield {
     return {

@@ -51,6 +51,7 @@ import type AiAssistantPanelService from '../../services/ai-assistant-panel-serv
 import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RecentCardsService from '../../services/recent-cards-service';
+import type SearchSheetStateService from '../../services/search-sheet-state';
 import type StoreService from '../../services/store';
 import type { SearchSheetMode } from '../search-sheet';
 import type { Submode } from '../submode-switcher';
@@ -137,6 +138,8 @@ export default class SubmodeLayout extends Component<Signature> {
   @service declare private store: StoreService;
   @service declare private aiAssistantPanelService: AiAssistantPanelService;
   @service declare private recentCardsService: RecentCardsService;
+  @service('search-sheet-state')
+  declare private searchSheetState: SearchSheetStateService;
 
   private searchElement: HTMLElement | null = null;
   private suppressSearchClose = false;
@@ -346,7 +349,15 @@ export default class SubmodeLayout extends Component<Signature> {
 
   @action private openSearchSheetToPrompt() {
     if (this.searchSheetMode === SearchSheetModes.Closed) {
-      this.searchSheetMode = SearchSheetModes.SearchPrompt;
+      // Reopen straight to the results view when a search is persisted, so the
+      // restored results are shown immediately rather than the compact prompt.
+      // Gate on the service's own `hasActiveSearch` (term OR type OR realm) —
+      // the same predicate that produces `mainQuery` — so a filter-only search
+      // (e.g. code mode's "Find instances", which sets a type with no term)
+      // reopens to its live results rather than the recents-only compact prompt.
+      this.searchSheetMode = this.searchSheetState.hasActiveSearch
+        ? SearchSheetModes.SearchResults
+        : SearchSheetModes.SearchPrompt;
     }
 
     this.searchElement?.focus();
