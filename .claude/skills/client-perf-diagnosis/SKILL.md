@@ -1,6 +1,6 @@
 ---
 name: client-perf-diagnosis
-description: Diagnose a client-side performance complaint from the browser telemetry the host emits — an always-on passive instrument that beacons six event types (card-load, server-request, deserialize, wedge, rebuild, realm-event) to the realm-server's `/_client-telemetry` route, which re-emits each as one `boxel:client-perf` JSON log line that alloy ships to Loki and the "Client Performance" Grafana dashboard (uid `boxel-client-perf`) reads with `| json`. Every event carries the authenticated `matrix_user_id` and a per-tab `session_id`, so a report is attributable to one account. Covers (1) a user says a card was slow to load — pivot to their `matrix_user_id`, find the slow `card-load` events (the "Loading card…" window) and their `settle_ms`, then explain the cost from that user's `server-request` / `deserialize` / `wedge` events in the same session; (2) a browser froze or went unresponsive — read the `wedge` events (a main-thread freeze at or above the wedge threshold), whose `top_frames` breadcrumb names the blocking script as `fn @ url:char` (source-map-resolvable for minified builds) with optional JS self-profiler stacks; (3) slow realm-server round-trips — `server-request` latency by endpoint, joined to the server's own `realm:requests` / `realm:search-timing` stage breakdown via the `x-boxel-logging-correlation-id` correlation id; (4) heavy response deserialization — `deserialize` duration by `card_type` against `doc_bytes` / `included_count`; (5) loader/store rebuild churn after a code edit — `rebuild` cost grouped by the `trigger_module` that forced the rebuild; (6) realm index-event write-burst churn — `realm-event` reload work per incoming index event, own-write vs external; and (7) turning any of the above into a single-user or single-session drill-down via the dashboard's `matrix_user_id` / `session_id` template variables. Use when someone reports the app was slow, a tab froze, a card took seconds to open, or asks which user is hitting client performance problems. The client half joins to the server half via the correlation id — for the realm-server-side render / search / indexing view of the same request, layer the `indexing-diagnostics` skill on top. For reading the raw realm-server logs directly, see `tail-logs`.
+description: Diagnose a client-side performance complaint from the browser telemetry the host emits — an always-on passive instrument that beacons six signal event types (card-load, server-request, deserialize, wedge, rebuild, realm-event) plus a keepalive liveness beacon to the realm-server's `/_client-telemetry` route, which re-emits each as one `boxel:client-perf` JSON log line that alloy ships to Loki and the "Client Performance" Grafana dashboard (uid `boxel-client-perf`) reads with `| json`. Every event carries the authenticated `matrix_user_id` and a per-tab `session_id`, so a report is attributable to one account. Covers (1) a user says a card was slow to load — pivot to their `matrix_user_id`, find the slow `card-load` events (the "Loading card…" window) and their `settle_ms`, then explain the cost from that user's `server-request` / `deserialize` / `wedge` events in the same session; (2) a browser froze or went unresponsive — read the `wedge` events (a main-thread freeze at or above the wedge threshold), whose `top_frames` breadcrumb names the blocking script as `fn @ url:char` (source-map-resolvable for minified builds) with optional JS self-profiler stacks; (3) slow realm-server round-trips — `server-request` latency by endpoint, joined to the server's own `realm:requests` / `realm:search-timing` stage breakdown via the `x-boxel-logging-correlation-id` correlation id; (4) heavy response deserialization — `deserialize` duration by `card_type` against `doc_bytes` / `included_count`; (5) loader/store rebuild churn after a code edit — `rebuild` cost grouped by the `trigger_module` that forced the rebuild; (6) realm index-event write-burst churn — `realm-event` reload work per incoming index event, own-write vs external; and (7) turning any of the above into a single-user or single-session drill-down via the dashboard's `matrix_user_id` / `session_id` template variables. Use when someone reports the app was slow, a tab froze, a card took seconds to open, or asks which user is hitting client performance problems. The client half joins to the server half via the correlation id — for the realm-server-side render / search / indexing view of the same request, layer the `indexing-diagnostics` skill on top. For reading the raw realm-server logs directly, see `tail-logs`.
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
@@ -28,15 +28,15 @@ The instrument gathers at each signal's natural cadence, decoupled from how ofte
 
 So measurement resolution is finer than network chatter, and a healthy idle tab is nearly silent on the wire. Two consequences for reading the data:
 
-- A tab is **quiet while hidden** — browsers throttle background timers, so a large heartbeat gap in a backgrounded tab is not a wedge, and the instrument does not report it as one. Gaps are only trusted while the tab is foregrounded, and a wedge is only emitted when a heartbeat gap is corroborated by a LoAF/longtask observation.
+- A tab is **quiet while hidden** — browsers throttle background timers, so a heartbeat gap in a backgrounded tab is not a wedge and is dropped outright (the instrument keeps the heartbeat clock current on resume rather than measuring the hidden interval). A foreground gap is filtered once more against an OS sleep/suspend wake: a genuine freeze always leaves a LoAF/longtask entry, so an uncorroborated gap (checked across a short grace window, since the observer callback can lag the heartbeat) is treated as a sleep wake and dropped — but only where such an observer is available; with none, the heartbeat gap alone stands.
 - A `keepalive` event with a nonzero `max_gap_ms` is the low-grade jank channel; a `wedge` event is the incident-grade freeze channel (a gap at or above the wedge threshold). Read `keepalive.max_gap_ms` for "the tab was a bit janky", `wedge` for "the tab locked up".
 
 ## Where the data lives — labels vs. JSON fields
 
 Loki indexes only **low-cardinality stream labels**; everything else is a JSON field extracted at query time. This split is deliberate — it keeps per-user/per-session drill-down possible without exploding Loki's index.
 
-- **Stream labels** (cheap selectors, always in `{…}`): `service="realm-server"` and `env` (`local` / `staging` / `production`, stamped by alloy per environment). These are the only labels.
-- **JSON fields** (extracted with `| json`, then filtered): `channel` (always `boxel:client-perf`), `event_type`, `matrix_user_id`, `session_id`, `app_version`, `ts` (epoch ms), plus every per-event field below.
+- **Stream labels** (cheap selectors, always in `{…}`): `service="realm-server"` and `env` (`local` / `staging` / `production`, stamped by alloy per environment). These are the only labels on the client-perf stream.
+- **JSON fields** (extracted with `| json`, then filtered): `channel` (always `boxel:client-perf`), `event_type`, `matrix_user_id`, `session_id`, `app_version`, `env` (the host build's environment, distinct from the stream label), `realm` (on most events), `ts` (epoch ms), plus every per-event field below.
 
 > The `env` **stream label** (set by alloy, selects which environment's log stream you read) is distinct from any per-event `env` **JSON field** (the host build's environment). Queries select on the stream label: `{service="realm-server", env="production"}`.
 
@@ -54,7 +54,7 @@ Common envelope on every line: `ts`, `event_type`, `channel`, `matrix_user_id`, 
 
 | `event_type` | what it measures | key fields |
 | --- | --- | --- |
-| `card-load` | card-to-interactive latency — the "Loading card…" window | `card_id`, `loading_ms` (request→first content), `settle_ms` (→fully loaded), `num_loads`, `loaded_ids[]`, `slowest_loads[]` (`{id, ms, outcome}`) |
+| `card-load` | card-to-interactive latency — the "Loading card…" window | `card_id`, `loading_ms` (window-open until the store reports the load resolved), `settle_ms` (one event-loop turn later, once the render settles — the fuller card-to-interactive number), `num_loads`, `loaded_ids[]`, `slowest_loads[]` (`{id, ms, outcome}`) |
 | `server-request` | one realm-server round-trip, client-observed | `endpoint` (normalized, ids stripped), `method`, `status`, `duration_ms`, `resp_bytes`, `retried`, `correlation_id` |
 | `deserialize` | turning a response into card instances | `duration_ms`, `doc_bytes`, `included_count`, `card_type` |
 | `wedge` | a main-thread freeze at/above the wedge threshold | `duration_ms`, `worst_gap_ms`, `blocked_ms`, `longtask_count`, `top_frame_function`, `top_frame_url`, `top_frame_char`, `top_frame_blocked_ms`, `top_frames` (`fn @ url:char` breadcrumb), `loaf_scripts[]`, `profiler_stacks[]` (sampled sessions) |
@@ -95,15 +95,15 @@ If that returns rows, the pipeline is healthy and any empty panel is a filter/ti
 
 ### Staging / production
 
-The data lives in the hosted Grafana. Open the **Client Performance** dashboard and set the `env` template variable to `staging` / `production`. Everything else in this skill — the modes, the field meanings, the queries — is identical; only the `env` label and the Grafana you open change. No database tunnel is needed (unlike server-side render diagnostics): the whole client story is in Loki.
+The data lives in the hosted Grafana for that environment. Each environment's dashboard has its `env` baked in (a hidden constant substituted at apply time), so you don't switch `env` — you open that environment's Grafana and use the account/session controls below. Everything else in this skill — the modes, the field meanings, the queries — is identical. No database tunnel is needed (unlike server-side render diagnostics): the whole client story is in Loki.
 
-### The three template variables (the drill-down controls)
+### The drill-down controls
 
-Every panel is filtered by three dashboard variables, and they are the entire user-attribution mechanism:
+Two dashboard variables are the entire user-attribution mechanism; the third is a fixed per-deployment constant:
 
-- **`env`** — selects the Loki stream (`{… env="$env"}`). One environment at a time.
 - **`matrix_user_id`** — the account. Defaults to `$__all` (a match-all regex, so "All" really means all users, including anonymous/synthetic sessions). Pick a user to scope the whole board to that account. In LogQL this is `| matrix_user_id=~"$matrix_user_id"`.
 - **`session_id`** — a free-text box, matched as a substring: `| session_id=~".*${session_id}.*"`. Empty matches every session; paste a session id to isolate one tab.
+- **`env`** — not an operator control: a hidden constant baked into each environment's dashboard at apply time, so `{… env="$env"}` resolves to that deployment. You change environment by opening its Grafana, not by picking a value here.
 
 Picking a `matrix_user_id` (and optionally a `session_id`) turns every panel on the board into a single-client view. That is the move Mode A is built on.
 
@@ -124,13 +124,13 @@ topk(20, max by (card_id) (
 ))
 ```
 
-`loading_ms` is time to first content; `settle_ms` is time to fully loaded (the number the user experiences as "still spinning"). A card-load with a large `settle_ms` and a large `num_loads` pulled a lot of documents to become interactive — the `slowest_loads[]` array on that line names which ids were slowest and whether they errored.
+`loading_ms` is the elapsed time until the store reports the load resolved; `settle_ms` is measured one event-loop turn later, once the render has settled — the fuller card-to-interactive number, and the one the user experiences as "still spinning". (Neither is a first-paint metric; they differ by about a tick.) A card-load with a large `settle_ms` and a large `num_loads` pulled a lot of documents to become interactive — the `slowest_loads[]` array on that line names which ids were slowest and whether they errored.
 
 **Step 3 — pin the session and the moment.** Once you have a slow `card_id`, find the `session_id` and timestamp of that specific event by reading the raw line (see [Reading raw lines](#reading-raw-lines)), then paste the `session_id` into the dashboard variable. Now the whole board is that one tab, and you can read what else was happening around that `ts`.
 
 **Step 4 — spider into the cause.** The card-load names the *symptom and its magnitude*; the other event types in the same pinned session name the *cause*. With the session isolated and the slow card-load's `ts` in hand, walk outward into each event type and let the one that overlaps the window explain it:
 
-- **Slow server round-trips** → [Mode C](#mode-c--slow-realm-server-round-trips-and-the-server-side-join). A card-load that spent its time on the network shows up as slow `server-request.duration_ms`; a `server-request` with `retried="true"` added backoff latency from a re-attempted fetch. The `correlation_id` then crosses to the server's own timing — *why the server was slow*.
+- **Slow server round-trips** → [Mode C](#mode-c--slow-realm-server-round-trips-and-the-server-side-join). A card-load that spent its time on the network shows up as slow `server-request.duration_ms`; a `server-request` with `retried="true"` re-attempted the fetch after a transient auth (401) refresh, folding the extra round-trip into `duration_ms`. The `correlation_id` then crosses to the server's own timing — *why the server was slow*.
 - **A main-thread freeze** → [Mode B](#mode-b--a-browser-froze--went-unresponsive). If the tab locked up mid-load, a `wedge` overlaps the window and its `settle_ms` includes the freeze; the wedge's `top_frames` breadcrumb names the blocking script.
 - **Heavy deserialization** → [Mode D](#mode-d--heavy-response-deserialization). Large `deserialize.duration_ms` / `doc_bytes` for a `card_type` in the load — a big linked graph deserializes slowly.
 - **Rebuild churn** → [Mode E](#mode-e--rebuild-churn-after-a-code-edit). If the load raced a loader/store rebuild (a `rebuild` event in the window), the card waited on the rebuild; `trigger_module` names what forced it.
@@ -140,7 +140,7 @@ Whichever event overlaps the window with the outsized number is the lead. The wh
 
 ## Mode B — a browser froze / went unresponsive
 
-A `wedge` event is emitted when the main thread is frozen for a heartbeat gap at or above the wedge threshold *and* the freeze is corroborated by a LoAF/longtask observation (so timer coalescing after a tab was backgrounded is not misreported).
+A `wedge` event is emitted when a foregrounded tab's main thread freezes for a heartbeat gap at or above the wedge threshold. A backgrounded tab's throttled gaps are excluded outright; a foreground gap is checked against an OS sleep/suspend wake by requiring a corroborating LoAF/longtask entry (a real freeze always leaves one, though the observer callback can lag the heartbeat, so the check spans a short grace window) — so a sleep wake isn't misreported as a freeze.
 
 **Find the wedges**, per user, grouped by the blocking frame:
 
@@ -158,7 +158,7 @@ topk(15, sum by (top_frame_function, top_frame_url) (
 - `top_frame_function` / `top_frame_url` / `top_frame_char` — the single worst blocking script as scalar fields (groupable). `top_frame_char` is a source character offset: with a source map it resolves to a line/column even for a minified production build, where the function name alone is useless.
 - `top_frames` — a readable multi-frame summary (`fn @ url:char`, worst few), so the frame can be reasoned about beyond one name. Read it from the raw line.
 - `loaf_scripts[]` — the worst blocking scripts the LoAF observer attributed, each with `source_url`, `function_name`, `char_position`, `invoker`, `blocking_duration_ms`.
-- `profiler_stacks[]` — on sessions the JS self-profiler sampled, real sampled call stacks spanning the freeze. Absent on unsampled sessions; the LoAF breadcrumb still ships either way.
+- `profiler_stacks[]` — on sessions the JS self-profiler sampled, real sampled call stacks spanning the freeze. Absent on sessions the profiler didn't sample, and on any session where the JS self-profiler API or its document policy isn't available; the LoAF breadcrumb still ships either way.
 
 `blocked_ms` is the total blocked time in the wedge window; `worst_gap_ms` is the single largest heartbeat gap; `longtask_count` is how many long tasks piled up.
 
@@ -241,7 +241,7 @@ count(count by (session_id) (count_over_time({service="realm-server", env="$env"
   | session_id=~".*${session_id}.*" [$__range])))
 ```
 
-Group any of the health queries `by (matrix_user_id)` instead of the default aggregation to get a per-user leaderboard (worst card-to-interactive, wedge count, retry count). The dashboard's **By user** row does exactly this; from a row there, copy the `matrix_user_id` back into the variable to drill in.
+Group any of the health queries `by (matrix_user_id)` instead of the default aggregation to get a per-user leaderboard. The dashboard's **By user** row does exactly this — wedges by user, worst card-to-interactive by user, and signal-event volume per user; from a row there, copy the `matrix_user_id` back into the variable to drill in.
 
 ## Reading raw lines
 
