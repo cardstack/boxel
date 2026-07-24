@@ -47,7 +47,10 @@ export default class Switch extends Component<SwitchSiganture> {
 
           width: var(--boxel-switch-width, 2.125rem);
           height: var(--boxel-switch-height, 1.25rem);
-          border-radius: 1.25rem;
+          /* full pill regardless of rendered size: a fixed radius tuned to
+             the natural height squares off when a consumer sizes the switch
+             taller */
+          border-radius: 999px;
           padding: 1px;
           display: inline-flex;
           align-items: center;
@@ -60,6 +63,9 @@ export default class Switch extends Component<SwitchSiganture> {
         }
 
         input[type='checkbox'] {
+          /* -webkit- prefix is required for iOS Safari, which otherwise
+             keeps the native checkbox and ignores our thumb styling */
+          -webkit-appearance: none;
           appearance: none;
         }
 
