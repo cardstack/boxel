@@ -1373,7 +1373,8 @@
                     "Time": true
                   },
                   "renameByName": {
-                    "Value #A": "count"
+                    "Value #A": "max duration_ms",
+                    "Value #B": "retried"
                   }
                 }
               }
@@ -1631,7 +1632,9 @@
                     "Time": true
                   },
                   "renameByName": {
-                    "Value #A": "count"
+                    "Value #A": "avg duration_ms",
+                    "Value #B": "avg doc_bytes",
+                    "Value #C": "avg included_count"
                   }
                 }
               }
@@ -2187,7 +2190,9 @@
                     "Time": true
                   },
                   "renameByName": {
-                    "Value #A": "rebuilds"
+                    "Value #A": "rebuilds",
+                    "Value #B": "avg modules_refetched",
+                    "Value #C": "avg cards_reloaded"
                   }
                 }
               }
