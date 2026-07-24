@@ -37,19 +37,21 @@ const DEFAULT_SKILLS_DIR = join(PACKAGE_ROOT, '.agents', 'skills-orchestrator');
  *   plugin skills (`boxel`, `boxel-api`, `boxel-command`, `boxel-file-def`,
  *   etc.) — boxel-cli owns the entire Boxel API surface, so its skills
  *   describe the platform. Same directory the plugin distributes to end
- *   users; the `boxel` skill and its references are built from the
- *   boxel-skills repo by `pnpm build:skills`.
- * - The monorepo root `.agents/skills/` hosts shared domain skills
- *   (`ember-best-practices`).
+ *   users; these skills and `ember-best-practices` /
+ *   `boxel-ui-component-discovery` are built from the boxel-skills repo by
+ *   `pnpm build:skills`.
+ * - The monorepo root `.agents/skills/` remains a fallback slot for shared
+ *   domain skills, but currently holds none (its former resident
+ *   `ember-best-practices` now ships from boxel-skills via the plugin dir).
  */
 const DEFAULT_FALLBACK_DIRS = [
   join(MONOREPO_ROOT, 'packages', 'boxel-cli', 'plugin', 'skills'),
   join(MONOREPO_ROOT, '.agents', 'skills'),
   // Package-local interactive skills (`packages/software-factory/.agents/skills`)
-  // are the primary skill set for the runbook (interactive Claude Code) loop and
-  // also where the optional `boxel-ui-component-discovery` skill lives. Listing
-  // them here lets the orchestrator's resolver pick them up too when the
-  // matching flag (`--enable-boxel-ui-discovery`) is on.
+  // are the primary skill set for the runbook (interactive Claude Code) loop.
+  // Listing them here lets the orchestrator's resolver pick them up too.
+  // `boxel-ui-component-discovery` (gated by `--enable-boxel-ui-discovery`)
+  // now resolves from the plugin dir above, not from here.
   join(PACKAGE_ROOT, '.agents', 'skills'),
 ];
 
@@ -164,8 +166,10 @@ export const ALWAYS_LOAD_REFERENCES: readonly string[] = [
  * harmless at runtime (`filterBoxelRefs` filters what's actually on disk),
  * and the validation test uses this set strictly: once a name ships in the
  * built skill, the test fails until it is removed from here.
+ *
+ * Empty: `qunit-testing.md` shipped in boxel-skills v0.0.30.
  */
-export const PENDING_BOXEL_REFERENCES: readonly string[] = ['qunit-testing.md'];
+export const PENDING_BOXEL_REFERENCES: readonly string[] = [];
 
 // ---------------------------------------------------------------------------
 // Internal types for tracking reference metadata
