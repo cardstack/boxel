@@ -153,7 +153,10 @@ const WEDGE_GAP_MS = 10_000;
 // never exceeds it; the flush also chunks by count and serialized-body size.
 const MAX_BUFFERED_EVENTS = 400;
 const MAX_EVENTS_PER_FLUSH = 400;
-const MAX_FLUSH_BODY_BYTES = 200 * 1024; // under the server's 256KB cap
+// `fetch(keepalive)` bodies share a ~64KB per-origin browser budget, so a flush
+// must stay under that (it is also well under the server's 256KB cap). Measured
+// in UTF-8 bytes, not UTF-16 code units.
+const MAX_FLUSH_BODY_BYTES = 60 * 1024;
 const MAX_LOADED_IDS = 50;
 const MAX_SLOWEST_LOADS = 10;
 const MAX_LOAF_SCRIPTS = 10;
@@ -189,6 +192,15 @@ function isDocumentHidden(): boolean {
   return (
     typeof document !== 'undefined' && document.visibilityState === 'hidden'
   );
+}
+
+// UTF-8 byte length, matching the realm-server's TextEncoder-based size check.
+function byteLength(s: string): number {
+  try {
+    return new TextEncoder().encode(s).length;
+  } catch {
+    return s.length;
+  }
 }
 
 export default class ClientTelemetryService
@@ -529,7 +541,7 @@ export default class ClientTelemetryService
     // and byte caps; the remainder stays buffered for the next flush tick.
     let chunk = this.#buffer.slice(0, MAX_EVENTS_PER_FLUSH);
     let body = this.#buildBody(chunk);
-    while (chunk.length > 1 && body.length > MAX_FLUSH_BODY_BYTES) {
+    while (chunk.length > 1 && byteLength(body) > MAX_FLUSH_BODY_BYTES) {
       chunk = chunk.slice(0, Math.ceil(chunk.length / 2));
       body = this.#buildBody(chunk);
     }

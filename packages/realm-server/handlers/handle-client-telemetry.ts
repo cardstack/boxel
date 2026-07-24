@@ -11,7 +11,8 @@ import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 // Nothing caps the request body server-side, so this handler enforces its own
 // small ceiling to reject abusive telemetry beacons.
 const MAX_TELEMETRY_BODY_BYTES = 256 * 1024;
-// Upper bound on the number of events accepted in a single beacon batch.
+// Upper bound on events accepted in a single beacon batch — headroom above the
+// host instrument's 400-event flush chunk, not a contract the client relies on.
 const MAX_TELEMETRY_EVENTS = 500;
 
 // Each accepted event is emitted as one line on this channel. alloy scrapes
@@ -29,9 +30,25 @@ export default function handleClientTelemetry(): (
 ) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     try {
+      // Reject on the declared size before buffering the whole request body.
+      let declaredLength = Number(ctxt.req.headers['content-length'] ?? '');
+      if (
+        Number.isFinite(declaredLength) &&
+        declaredLength > MAX_TELEMETRY_BODY_BYTES
+      ) {
+        await sendResponseForError(
+          ctxt,
+          413,
+          'Payload Too Large',
+          `Telemetry payload exceeds maximum allowed size (${MAX_TELEMETRY_BODY_BYTES} bytes)`,
+        );
+        return;
+      }
+
       let request = await fetchRequestFromContext(ctxt);
       let body = await request.text();
 
+      // Fallback byte check for requests without (or with a lying) Content-Length.
       if (
         new TextEncoder().encode(body).byteLength > MAX_TELEMETRY_BODY_BYTES
       ) {
