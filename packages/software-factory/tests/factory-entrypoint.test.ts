@@ -775,3 +775,22 @@ module('factory-entrypoint > buildModelPolicy review budget', function () {
     assert.deepEqual(policy?.acceptance, { effort: 'low' });
   });
 });
+
+module('factory-entrypoint > buildModelPolicy bootstrap budget', function () {
+  test('bootstrap defaults to claude-sonnet-5 at medium under v2', function (assert) {
+    let policy = buildModelPolicy({ v2: true });
+    assert.deepEqual(policy?.bootstrap, {
+      model: 'claude-sonnet-5',
+      effort: 'medium',
+    });
+  });
+
+  test('bootstrap-model inherit keeps the session flagship', function (assert) {
+    let policy = buildModelPolicy({ v2: true, bootstrapModel: 'inherit' });
+    assert.deepEqual(policy?.bootstrap, { effort: 'medium' });
+  });
+
+  test('no policy at all outside v2', function (assert) {
+    assert.strictEqual(buildModelPolicy({}), undefined);
+  });
+});

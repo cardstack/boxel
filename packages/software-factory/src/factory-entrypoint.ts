@@ -142,6 +142,14 @@ export interface FactoryEntrypointOptions {
   /** Effort for phase-split build turns. Default `medium`. */
   buildEffort?: string;
   /**
+   * Model for the bootstrap turn (planning + tracker-card writing).
+   * Defaults to `claude-sonnet-5` under --v2 — the turn's output is
+   * mostly mechanical JSON; pass `inherit` to keep the session flagship.
+   */
+  bootstrapModel?: string;
+  /** Effort for the bootstrap turn. Default `medium` under --v2. */
+  bootstrapEffort?: string;
+  /**
    * Model for the review turn (the PM gate after the render gate). By
    * default the review inherits the session flagship — cheap-tier reviews
    * shipped false verdicts, so downgrading is an explicit experiment, not
@@ -303,6 +311,11 @@ export function getFactoryEntrypointUsage(): string {
     '  --no-phase-split            Disable the v3 default phase-split (DESIGN turn on the',
     '                              flagship model + BUILD turn on claude-sonnet-5, forked).',
     '                              Only meaningful with --v2, where phase-split is on by default.',
+    '  --bootstrap-model <model>   Model for the bootstrap (planning) turn. Default under --v2:',
+    '                              claude-sonnet-5 — mostly mechanical tracker JSON. Pass',
+    '                              `inherit` to keep the session flagship.',
+    '  --bootstrap-effort <effort> Effort for the bootstrap turn (low|medium|high|xhigh|max).',
+    '                              Default medium.',
     '  --review-model <model>      Model for the post-issue review turn. Default: inherit the',
     '                              session flagship (cheap-tier reviews shipped false verdicts,',
     '                              so downgrading is an explicit experiment). `inherit` is a no-op.',
@@ -405,6 +418,12 @@ export function parseFactoryEntrypointArgs(
           type: 'boolean',
         },
         'review-model': {
+          type: 'string',
+        },
+        'bootstrap-model': {
+          type: 'string',
+        },
+        'bootstrap-effort': {
           type: 'string',
         },
         'review-effort': {
@@ -528,6 +547,14 @@ export function parseFactoryEntrypointArgs(
       typeof parsed.values['review-model'] === 'string'
         ? parsed.values['review-model']
         : undefined,
+    bootstrapModel:
+      typeof parsed.values['bootstrap-model'] === 'string'
+        ? parsed.values['bootstrap-model']
+        : undefined,
+    bootstrapEffort:
+      typeof parsed.values['bootstrap-effort'] === 'string'
+        ? parsed.values['bootstrap-effort']
+        : undefined,
     reviewEffort:
       typeof parsed.values['review-effort'] === 'string'
         ? parsed.values['review-effort']
@@ -602,8 +629,11 @@ export function buildModelPolicy(options: {
   buildEffort?: string;
   reviewModel?: string;
   reviewEffort?: string;
+  bootstrapModel?: string;
+  bootstrapEffort?: string;
 }):
   | {
+      bootstrap?: TurnBudget;
       design?: TurnBudget;
       build?: TurnBudget;
       fix?: TurnBudget;
@@ -619,6 +649,7 @@ export function buildModelPolicy(options: {
       ? undefined
       : options.fixModel;
   let policy: {
+    bootstrap?: TurnBudget;
     design?: TurnBudget;
     build?: TurnBudget;
     fix?: TurnBudget;
@@ -645,6 +676,17 @@ export function buildModelPolicy(options: {
       effort: normalizeEffort(options.reviewEffort, 'medium'),
     };
   }
+
+  // Bootstrap: plans the project and writes tracker JSON — long mechanical
+  // output where the family switch beats flagship cost, like build turns.
+  let bootstrapModel =
+    options.bootstrapModel === 'inherit'
+      ? undefined
+      : (options.bootstrapModel ?? 'claude-sonnet-5');
+  policy.bootstrap = {
+    ...(bootstrapModel ? { model: bootstrapModel } : {}),
+    effort: normalizeEffort(options.bootstrapEffort, 'medium'),
+  };
 
   // Phase-split build turns: LARGE output (the .gts emissions) — the one
   // turn type where a family switch beats the cache re-ingest cost, so
