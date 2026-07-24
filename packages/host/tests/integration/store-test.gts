@@ -3261,19 +3261,19 @@ module('Integration | Store', function (hooks) {
   // in these tests, so resetLoader-call-count == rebuild-count.
   function countRebuilds() {
     let count = 0;
-    let realResetLoader = loaderService.resetLoader.bind(loaderService);
-    loaderService.resetLoader = ((
+    let original = loaderService.resetLoader;
+    loaderService.resetLoader = function (
       options?: Parameters<LoaderService['resetLoader']>[0],
-    ) => {
+    ) {
       count++;
-      return realResetLoader(options);
-    }) as LoaderService['resetLoader'];
+      return original.call(loaderService, options);
+    } as LoaderService['resetLoader'];
     return {
       get count() {
         return count;
       },
       restore() {
-        loaderService.resetLoader = realResetLoader;
+        loaderService.resetLoader = original;
       },
     };
   }
