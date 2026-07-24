@@ -128,6 +128,15 @@ module('Integration | modifier | persist-scroll-position', function (hooks) {
     await triggerEvent(scroller, 'scroll');
     assert.deepEqual(recorded, [], 'a gesture-less scroll is ignored');
 
+    // A programmatic `scrollTop` assignment fires its `scroll` event on the
+    // next rendering, not synchronously, and `settled()` does not await that
+    // frame. Drain it here — while there is still no gesture, so the modifier
+    // ignores it — otherwise it can land during the wheel below, after the
+    // gesture has flipped the modifier into recording mode, and be recorded as
+    // a spurious user offset (90).
+    // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- must await the browser's post-assignment scroll frame
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+
     // After a real gesture, the user's scrolling is recorded. (A single move
     // can emit more than one `scroll` — the native one plus the synthetic test
     // event — so assert the value rather than the call count.)
@@ -138,7 +147,9 @@ module('Integration | modifier | persist-scroll-position', function (hooks) {
       recorded.length >= 1 && recorded.every((v) => v === 120);
     assert.ok(
       recordedOnlyTheUserOffset,
-      'the user scroll offset (120) is recorded',
+      `the user scroll offset (120) is recorded (recorded: ${JSON.stringify(
+        recorded,
+      )})`,
     );
   });
 
