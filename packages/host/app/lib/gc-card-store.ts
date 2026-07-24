@@ -194,6 +194,9 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     url: string;
     ms: number;
     outcome: 'ok' | 'error';
+    // Load generation at completion, so a consumer can scope entries to a window
+    // (e.g. client-telemetry's per-card-load slowest-loads list).
+    generation: number;
   }> = [];
   #recentFileMetaLoads: Array<{ url: string; ms: number }> = [];
   static #MAX_DIAGNOSTIC_HISTORY = 20;
@@ -419,6 +422,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
           url,
           ms: Date.now() - startedAt,
           outcome,
+          generation: this.#loadGeneration,
         });
       }
     }
@@ -510,6 +514,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     url: string;
     ms: number;
     outcome: 'ok' | 'error';
+    generation: number;
   }> {
     return [...this.#recentCardDocLoads];
   }

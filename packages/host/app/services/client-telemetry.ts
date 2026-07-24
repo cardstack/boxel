@@ -145,6 +145,9 @@ const KEEPALIVE_INTERVAL_MS = 25_000;
 // Main-thread liveness probe; a callback arriving this late implies the thread
 // was busy in between.
 const HEARTBEAT_INTERVAL_MS = 100;
+// A card-load window is abandoned if it hasn't settled within this long, so a
+// single perpetually-in-flight load can't suppress all later card-load events.
+const CARD_LOAD_WATCHDOG_MS = 30_000;
 // A heartbeat gap this large or larger counts as a wedge: an incident-grade
 // main-thread freeze, not the sub-second jank a keepalive's max_gap_ms already
 // captures.
@@ -325,9 +328,27 @@ export default class ClientTelemetryService
       let realm = response.headers.get('x-boxel-realm-url') || null;
       let contentLength = response.headers.get('content-length');
       let respBytes = contentLength ? Number(contentLength) : 0;
+      let endpoint = normalizeEndpoint(req.url, req.method);
+      // A retried attempt means the auth stack reauthenticated past a transient
+      // 401 on the previous attempt. Drop that buffered 401 so it doesn't count
+      // as an error rate. Best-effort: it may already have flushed, and a
+      // genuinely-repeated 401 (reauth failed) still leaves one event.
+      if (retried) {
+        for (let i = this.#buffer.length - 1; i >= 0; i--) {
+          let ev = this.#buffer[i];
+          if (
+            ev.event_type === 'server-request' &&
+            ev.endpoint === endpoint &&
+            ev.status === 401
+          ) {
+            this.#buffer.splice(i, 1);
+            break;
+          }
+        }
+      }
       this.recordEvent({
         event_type: 'server-request',
-        endpoint: normalizeEndpoint(req.url, req.method),
+        endpoint,
         method: req.method,
         status: response.status,
         duration_ms: Math.round(durationMs),
@@ -615,7 +636,11 @@ export default class ClientTelemetryService
       this.#maxGapSinceKeepalive = gap;
     }
     if (gap >= WEDGE_GAP_MS) {
-      this.#emitWedge(n - gap, n, gap);
+      // Defer a macrotask so the long-animation-frame / longtask observer
+      // callbacks for this gap are delivered (they queue behind the same long
+      // task) before we attribute the wedge.
+      let windowStart = n - gap;
+      setTimeout(() => this.#emitWedge(windowStart, n, gap), 0);
     }
     this.#pollCardLoad();
   }
@@ -627,6 +652,19 @@ export default class ClientTelemetryService
     let longtasksInWindow = this.#longtaskHistory.filter(
       (e) => e.startTime >= windowStart && e.startTime <= windowEnd,
     );
+    // A wake from OS sleep/suspend (or a throttled timer) surfaces as a huge
+    // heartbeat gap with no task actually having run — drop it rather than
+    // reporting a phantom freeze. A real freeze of this length always leaves a
+    // longtask/LoAF entry. Only enforce this where an observer is active; with
+    // neither, the heartbeat is the only signal we have.
+    let hasObserver = Boolean(this.#loafObserver || this.#longtaskObserver);
+    if (
+      hasObserver &&
+      loafInWindow.length === 0 &&
+      longtasksInWindow.length === 0
+    ) {
+      return;
+    }
     let blockedMs = 0;
     let scripts: WedgeEvent['loaf_scripts'] = [];
     for (let entry of loafInWindow) {
@@ -710,13 +748,25 @@ export default class ClientTelemetryService
     realm: TelemetryRealm,
   ): Promise<void> {
     try {
-      await this.store.loaded();
+      // Race against a watchdog so a stuck load doesn't hold the window open
+      // for the tab's lifetime (which would suppress every later card-load).
+      await Promise.race([
+        this.store.loaded(),
+        new Promise<void>((resolve) =>
+          setTimeout(resolve, CARD_LOAD_WATCHDOG_MS),
+        ),
+      ]);
       let loadingMs = now() - startedAt;
       await nextTick();
       let settleMs = now() - startedAt;
       let endGeneration = this.#safeLoadGeneration();
       let numLoads = Math.max(0, endGeneration - startGeneration);
-      let recent = this.#recentCardDocLoads();
+      // Scope to doc loads that completed inside this card-load window
+      // (generation advanced past the window's start), so a slow background
+      // reload from an earlier window is not misattributed to this card.
+      let recent = this.#recentCardDocLoads().filter(
+        (r) => (r.generation ?? 0) > startGeneration,
+      );
       let loadedIds = recent.map((r) => r.url).slice(0, MAX_LOADED_IDS);
       let slowest = [...recent]
         .sort((a, b) => b.ms - a.ms)
@@ -765,6 +815,7 @@ export default class ClientTelemetryService
     url: string;
     ms: number;
     outcome?: 'ok' | 'error';
+    generation?: number;
   }> {
     try {
       return this.store.recentCardDocLoads();
@@ -1043,8 +1094,21 @@ export function createServerRequestTimingMiddleware(
     if (!telemetry?.isEnabled) {
       return next(req);
     }
+    // Stamp a logging correlation id on the outgoing request (when it doesn't
+    // already carry one) so the server's realm:requests / realm:search-timing
+    // log lines — which echo `corr=<id>` for the id they receive — can be joined
+    // to this client-side timing. Set before `next(req)` so the id that reaches
+    // the server is the same one recorded on the event below.
     let attempt = (requestAttemptCounts.get(req) ?? 0) + 1;
     requestAttemptCounts.set(req, attempt);
+    if (!req.headers.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER)) {
+      try {
+        req.headers.set(X_BOXEL_LOGGING_CORRELATION_ID_HEADER, uuidv4());
+      } catch {
+        // Some Request instances have immutable headers; correlation is then
+        // best-effort and the event simply carries a null id.
+      }
+    }
     let start = now();
     let response = await next(req);
     telemetry.recordServerRequestTiming(

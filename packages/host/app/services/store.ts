@@ -597,6 +597,7 @@ export default class StoreService extends Service implements StoreInterface {
     url: string;
     ms: number;
     outcome?: 'ok' | 'error';
+    generation?: number;
   }> {
     return (
       (
@@ -605,6 +606,7 @@ export default class StoreService extends Service implements StoreInterface {
             url: string;
             ms: number;
             outcome?: 'ok' | 'error';
+            generation?: number;
           }>;
         }
       ).recentCardDocLoads?.() ?? []
@@ -1780,6 +1782,14 @@ export default class StoreService extends Service implements StoreInterface {
   // Defensive lookup of the telemetry service — never forces the hooked path
   // to depend on telemetry being present or healthy.
   #clientTelemetry(): ClientTelemetryService | undefined {
+    // Never instantiate the instrument inside a prerender tab: it self-gates
+    // from arming, but the lookup would still construct it on the hot render
+    // path. Mirrors the guard in the initializer and the timing middleware.
+    if (
+      (globalThis as { __boxelRenderContext?: unknown }).__boxelRenderContext
+    ) {
+      return undefined;
+    }
     try {
       return getOwner(this)?.lookup('service:client-telemetry') as
         | ClientTelemetryService
