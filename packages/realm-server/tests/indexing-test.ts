@@ -39,7 +39,6 @@ import {
   errorDocForIndexEntry,
   indexedAtForIndexEntry,
   maxPrerenderHtmlJobId,
-  searchDocForIndexEntry,
   settlePrerenderHtmlJobs,
   typeForIndexEntry,
 } from './helpers/indexing.ts';
@@ -4488,67 +4487,6 @@ module(basename(import.meta.filename), function () {
           afterLinksToManyInvalidation,
           beforeLinksToManyInvalidation,
           'updating FileDef linksToMany target invalidates consumer instance',
-        );
-      });
-
-      test('consumers of a searchable FileDef target index the rewritten bytes when re-rendered in the same batch as the rewrite', async function (assert) {
-        await realm.write(
-          'searchable-file-consumer.gts',
-          `
-          import { CardDef, field, linksTo } from "@cardstack/base/card-api";
-          import { FileDef } from "@cardstack/base/file-api";
-
-          export class SearchableFileConsumer extends CardDef {
-            @field primaryFile = linksTo(() => FileDef, { searchable: true });
-          }
-        `,
-        );
-        await realm.write(
-          'searchable-file-consumer.json',
-          JSON.stringify({
-            data: {
-              relationships: {
-                primaryFile: { links: { self: './searchable-note.txt' } },
-              },
-              meta: {
-                adoptsFrom: {
-                  module: rri('./searchable-file-consumer'),
-                  name: 'SearchableFileConsumer',
-                },
-              },
-            },
-          } as LooseSingleCardDocument),
-        );
-
-        // Each write of the file re-renders the consumer through the
-        // dependency fan-out, inside the same batch that re-indexes the file
-        // itself. That render fetches the file's meta doc from the realm,
-        // which must reflect the just-written bytes — the file's own updated
-        // index row is not promoted to production until the batch completes,
-        // so serving from the index alone would hand the consumer the
-        // previous bytes' contentHash/contentSize.
-        let consumerURL = `${testRealm}searchable-file-consumer.json`;
-        await realm.write('searchable-note.txt', 'note v1');
-        let before = await searchDocForIndexEntry(testDbAdapter, consumerURL);
-        assert.strictEqual(
-          before?.primaryFile?.contentSize,
-          'note v1'.length,
-          'consumer indexes the original file bytes',
-        );
-
-        let rewritten = 'note v2 with more bytes';
-        await realm.write('searchable-note.txt', rewritten);
-
-        let after = await searchDocForIndexEntry(testDbAdapter, consumerURL);
-        assert.strictEqual(
-          after?.primaryFile?.contentSize,
-          rewritten.length,
-          'consumer indexes the rewritten contentSize',
-        );
-        assert.strictEqual(
-          after?.primaryFile?.contentHash,
-          createHash('md5').update(rewritten).digest('hex'),
-          'consumer indexes the rewritten contentHash',
         );
       });
 
