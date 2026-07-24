@@ -1042,9 +1042,14 @@ export default class ClientTelemetryService
       if (document.visibilityState === 'hidden') {
         this.#flush('hidden');
       } else {
-        // Resuming: discard the throttled hidden interval so the first visible
-        // heartbeat gap isn't misread as a wedge.
+        // Resuming from hidden: discard the throttled hidden interval so the
+        // first visible heartbeat gap isn't misread as a wedge, and fast-forward
+        // the load-generation cursor past any background reloads that advanced
+        // it while hidden. Card-load windows aren't measured while hidden, so a
+        // hidden-period generation jump must not open a window on resume — that
+        // would attribute background reloads to the now-focused card.
         this.#lastHeartbeatAt = now();
+        this.#lastLoadGeneration = this.#safeLoadGeneration();
       }
     };
     window.addEventListener('pagehide', this.#pagehideHandler);
