@@ -722,10 +722,11 @@ module('Integration | operator-mode | ui', function (hooks) {
     await click(`[data-test-operator-mode-stack]`);
     assert.dom(`[data-test-search-sheet="closed"]`).exists();
 
-    // Reopen search sheet — no search term was entered, so it returns to the
-    // compact prompt.
+    // Reopen search sheet. A realm filter is an active search (the reopen gate
+    // keys on term OR type OR realm), so it reopens straight to the results
+    // view rather than the compact prompt.
     await click(`[data-test-open-search-field]`);
-    assert.dom(`[data-test-search-sheet="search-prompt"]`).exists();
+    assert.dom(`[data-test-search-sheet="search-results"]`).exists();
 
     // The realm filter is preserved across a plain close/reopen (only an
     // explicit Cancel or Escape clears it). Reopen the picker and confirm the
