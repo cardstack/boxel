@@ -10,6 +10,7 @@ import LinkOffIcon from '@cardstack/boxel-icons/link-off';
 
 import {
   bfmRefFormatAndSize,
+  bfmResolvedEmbedStyle,
   buildWaiter,
   cardTypeName,
   fileNameFromUrl,
@@ -271,14 +272,14 @@ export default class MarkDownTemplate extends GlimmerComponent<{
           let format: CardSlotFormat = derived.format;
           let sizeStyle: string | undefined = derived.sizeStyle;
 
-          // Fitted slots carry an inline width/height plus `overflow: hidden`
-          // so the resolved instance occupies the requested footprint.
-          let resolvedStyle: ReturnType<typeof htmlSafe> | undefined;
-          if (format === 'fitted') {
-            resolvedStyle = htmlSafe(
-              sizeStyle ? `${sizeStyle}; overflow: hidden` : 'overflow: hidden',
-            );
-          }
+          // Non-atom resolved slots carry a footprint so the instance occupies
+          // a definite box instead of collapsing (isolated/inline-embedded
+          // default templates lay out at 100%). Fitted uses its requested
+          // dimensions; embedded/isolated get shared defaults. Same helper as
+          // the other render surfaces so footprints stay in lockstep.
+          let resolvedStyleRaw = bfmResolvedEmbedStyle(format, kind, sizeStyle);
+          let resolvedStyle: ReturnType<typeof htmlSafe> | undefined =
+            resolvedStyleRaw ? htmlSafe(resolvedStyleRaw) : undefined;
 
           let resolvedUrl = resolveUrl(rawUrl, baseUrl);
 

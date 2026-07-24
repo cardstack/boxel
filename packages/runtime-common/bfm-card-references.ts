@@ -238,6 +238,55 @@ export function bfmRefFormatAndSize(
 }
 
 /**
+ * Inline style for a *resolved* BFM embed slot so `isolated` / `embedded` /
+ * `fitted` occupy a definite footprint instead of collapsing to zero.
+ *
+ * The default `isolated` and (inline) `embedded` card/file templates lay out
+ * with `width`/`height: 100%`, which resolves against a shrink-wrapping
+ * inline-block — or an unbounded block — and collapses. Every render surface
+ * (the saved `MarkdownTemplate`, the host preview panel, the CodeMirror source
+ * editor, and the embed chooser preview) shares this helper so a resolved
+ * embed occupies the same footprint everywhere, matching the loading/broken
+ * placeholders.
+ *
+ * `fittedSizeStyle` is the `width`/`height` string that `bfmRefFormatAndSize`
+ * derives for a fitted spec; it is ignored for the other formats.
+ *
+ * Footprints:
+ *  - `atom`                 — none (intrinsic pill).
+ *  - `fitted`               — the requested dimensions + `overflow: hidden`.
+ *  - inline `embedded`      — 16rem × 9.375rem (matches `--embedded` placeholder height).
+ *  - inline `isolated`      — 24rem × 18.75rem (matches `--isolated` placeholder height).
+ *  - block `embedded`       — none (flows naturally at full width).
+ *  - block `isolated`       — `min-height: 18.75rem`, growable (matches `--isolated` placeholder).
+ */
+export function bfmResolvedEmbedStyle(
+  format: BfmRefFormat,
+  kind: 'inline' | 'block',
+  fittedSizeStyle?: string,
+): string | undefined {
+  if (format === 'fitted') {
+    return fittedSizeStyle
+      ? `${fittedSizeStyle}; overflow: hidden`
+      : 'overflow: hidden';
+  }
+  if (kind === 'inline') {
+    if (format === 'embedded') {
+      return 'width: 16rem; height: 9.375rem; overflow: hidden';
+    }
+    if (format === 'isolated') {
+      return 'width: 24rem; height: 18.75rem; overflow: hidden';
+    }
+    return undefined; // inline atom
+  }
+  // block placement
+  if (format === 'isolated') {
+    return 'min-height: 18.75rem';
+  }
+  return undefined; // block atom / block embedded flow naturally
+}
+
+/**
  * Builds the `data-boxel-bfm-format` / `-width` / `-height` attribute string
  * for a BFM size specifier (the part after `|`). Returns `''` when there is no
  * specifier or it doesn't parse. Shared by the inline and block renderers so

@@ -13,6 +13,7 @@ import { eq, not } from '@cardstack/boxel-ui/helpers';
 
 import {
   bfmRefFormatAndSize,
+  bfmResolvedEmbedStyle,
   type BfmSizeSpec,
 } from '@cardstack/runtime-common/bfm-card-references';
 
@@ -266,38 +267,25 @@ export default class MarkdownEmbedPreview extends Component<Signature> {
     return sizeStyle ? htmlSafe(sizeStyle) : undefined;
   }
 
-  // Fitted slots carry an inline width/height plus `overflow: hidden` so the
-  // instance occupies the requested footprint — derived through the same helper
-  // the live markdown renderer uses (`rendered-markdown.gts`). Inline embedded
-  // and isolated have no intrinsic inline width: the default template's
-  // `width/height: 100%` resolves against the inline-block wrapper, which is
-  // itself shrink-wrapping, and the box collapses. Give the wrapper a definite
-  // footprint that matches the live renderer's loading placeholders so the
-  // preview shows a real card body.
+  // Resolved-embed footprint, shared with the live markdown render surfaces
+  // (saved `MarkdownTemplate`, host preview panel, CodeMirror editor) through
+  // `bfmResolvedEmbedStyle`. Isolated and inline embedded have no intrinsic
+  // inline width — their default `width/height: 100%` resolves against a
+  // shrink-wrapping wrapper and the box collapses — so the helper hands back a
+  // definite footprint that matches the live renderers' loading placeholders.
   private get sizeStyle(): ReturnType<typeof htmlSafe> | undefined {
     let { format } = this.args;
+    let fittedSizeStyle: string | undefined;
     if (format === 'fitted') {
       let { width, height } = this.args.sizeSpec ?? { format: 'fitted' };
-      let { sizeStyle } = bfmRefFormatAndSize(
+      fittedSizeStyle = bfmRefFormatAndSize(
         'fitted',
         width === undefined ? undefined : String(width),
         height === undefined ? undefined : String(height),
-      );
-      return htmlSafe(
-        sizeStyle ? `${sizeStyle}; overflow: hidden` : 'overflow: hidden',
-      );
+      ).sizeStyle;
     }
-    if (
-      this.kind === 'inline' &&
-      (format === 'embedded' || format === 'isolated')
-    ) {
-      let footprint =
-        format === 'isolated'
-          ? 'width: 24rem; height: 18.75rem'
-          : 'width: 16rem; height: 9.375rem';
-      return htmlSafe(`${footprint}; overflow: hidden`);
-    }
-    return undefined;
+    let style = bfmResolvedEmbedStyle(format, this.kind, fittedSizeStyle);
+    return style ? htmlSafe(style) : undefined;
   }
 
   <template>

@@ -324,6 +324,29 @@ module('Acceptance | markdown BFM card references', function (hooks) {
             '',
             '::file[https://nonexistent.example/gone.pdf]',
           ].join('\n'),
+          // A plain markdown target embedded across the full format matrix.
+          // MarkdownDef defines atom/embedded/fitted/isolated, so each combo
+          // renders a distinct `data-test-markdown-*` hook.
+          'documents/target.md': ['# Target Doc', '', 'Body text.'].join('\n'),
+          'bfm-file-matrix.md': [
+            '# BFM File Matrix',
+            '',
+            `:file[${testRealmURL}documents/target.md | atom]`,
+            '',
+            `:file[${testRealmURL}documents/target.md | embedded]`,
+            '',
+            `:file[${testRealmURL}documents/target.md | fitted w:200 h:150]`,
+            '',
+            `:file[${testRealmURL}documents/target.md | isolated]`,
+            '',
+            `::file[${testRealmURL}documents/target.md | atom]`,
+            '',
+            `::file[${testRealmURL}documents/target.md | embedded]`,
+            '',
+            `::file[${testRealmURL}documents/target.md | fitted w:200 h:150]`,
+            '',
+            `::file[${testRealmURL}documents/target.md | isolated]`,
+          ].join('\n'),
           'mermaid-test.md': [
             '# Mermaid Test',
             '',
@@ -470,6 +493,35 @@ module('Acceptance | markdown BFM card references', function (hooks) {
         `${testRealmURL}documents/notes.txt`,
         'inline fallback path is hidden after the file resolves',
       );
+  });
+
+  test('every file format renders in both inline and block placement', async function (assert) {
+    // CS-12320: the file half of the resolved-render matrix. Each format ×
+    // placement must render the referenced markdown file in the requested
+    // format — isolated must not collapse.
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}bfm-file-matrix.md`,
+    });
+    await settled();
+
+    for (let [placement, wrapper] of [
+      ['inline', '[data-test-markdown-bfm-inline-file]'],
+      ['block', '[data-test-markdown-bfm-block-file]'],
+    ] as const) {
+      for (let format of ['atom', 'embedded', 'fitted', 'isolated'] as const) {
+        assert
+          .dom(`${wrapper} [data-test-markdown-${format}]`)
+          .exists(`${format} file renders in ${placement} placement`);
+      }
+    }
+
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-inline]')
+      .doesNotExist('no unresolved inline file placeholders remain');
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-block]')
+      .doesNotExist('no unresolved block file placeholders remain');
   });
 
   test('shows fallback for unresolvable file references', async function (assert) {

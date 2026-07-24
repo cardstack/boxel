@@ -48,6 +48,7 @@ import {
   type BfmRefFormat,
   type BfmRefRange,
   bfmRefFormatAndSize,
+  bfmResolvedEmbedStyle,
   extractBfmRefRanges,
   parseBfmSizeSpec,
 } from '@cardstack/runtime-common/bfm-card-references';
@@ -941,14 +942,10 @@ function createCardTargetNotifier(
                 el.getAttribute('data-boxel-bfm-height') ?? undefined,
                 kind === 'inline' ? 'atom' : 'embedded',
               );
-              // Fitted slots carry the width/height plus `overflow: hidden` so
-              // the resolved instance occupies the requested footprint.
-              let style =
-                format === 'fitted'
-                  ? sizeStyle
-                    ? `${sizeStyle}; overflow: hidden`
-                    : 'overflow: hidden'
-                  : undefined;
+              // Non-atom slots carry a footprint so the resolved instance
+              // occupies a definite box instead of collapsing. Same helper as
+              // the saved/preview renderers so footprints stay in lockstep.
+              let style = bfmResolvedEmbedStyle(format, kind, sizeStyle);
               targets.push({
                 element: el as HTMLElement,
                 cardId,
