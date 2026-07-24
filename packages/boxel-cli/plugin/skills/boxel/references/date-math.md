@@ -104,7 +104,7 @@ The `toISOString().slice(0, 10)` trick gives a stable `YYYY-MM-DD` bucket key th
 
 ```ts
 // ❌ Don't do this — formatDateTime is a Glimmer helper, not a value function
-@field title = contains(StringField, {
+@field cardTitle = contains(StringField, {
   computeVia: function() {
     return formatDateTime(this.date); // ReferenceError at index time
   },

@@ -1,3 +1,53 @@
+# Spec usage
+
+## Catalog Spec card instances
+
+For each top-level card definition, write a Catalog Spec card instance in the realm's `Spec/` folder. This makes the card discoverable in the Boxel catalog.
+
+Specs adopt from the `Spec` class exported by `https://cardstack.com/base/spec` — that module lives in the base realm, not your realm.
+
+### Required shape
+
+```json
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "specType": "card",
+      "ref": { "module": "../sticky-note", "name": "StickyNote" },
+      "readMe": "...",
+      "cardInfo": { "name": "Sticky Note", "summary": "..." }
+    },
+    "relationships": {
+      "linkedExamples.0": { "links": { "self": "../StickyNote/welcome-note" } }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
+```
+
+Key concepts:
+
+- `ref` — a CodeRef pointing to the card definition (module path + exported class name). The module path is relative from the Spec card to the `.gts` file (e.g., `../sticky-note` from `Spec/sticky-note.json`).
+- `specType` — `"card"` for CardDef, `"field"` for FieldDef, `"component"` for standalone components.
+- `linkedExamples` — a `linksToMany` relationship pointing to sample card instances. Use dotted keys (`linkedExamples.0`, `linkedExamples.1`, …) — the array form is rejected by the indexer. Create at least one sample instance and link it here.
+- Don't try to validate a Spec by instantiating the `Spec` definition itself: its module lives in the base realm, and the prerender enforces same-origin module loads, so that always fails. Validate a Spec through its `linkedExamples` instances instead.
+
+### Sample card instances
+
+Create at least one sample instance with realistic data for each top-level card. Sample instances serve as both catalog examples and test fixtures.
+
+Place sample instances in a folder named after the card type (e.g., `StickyNote/welcome-note.json`). The `linkedExamples` relationship in the Spec card points to these using a relative path without the `.json` suffix (e.g., `../StickyNote/welcome-note`).
+
+## Spec type usage patterns
+
+How each type of definition is imported and used in code.
+
 **Card specs (linksTo/linksToMany):**
 ```gts
 import { Author } from './author';

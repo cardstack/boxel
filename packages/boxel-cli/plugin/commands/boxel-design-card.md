@@ -1,6 +1,6 @@
 ---
 name: boxel-design-card
-description: Improve a card's visual design — colors, typography, mood, asset direction, theme tokens.
+description: Workflow to improve an EXISTING card's visual design end-to-end — Theme check, design discovery, tokenization. Routes into boxel-design (visual decisions) and boxel-ui-guidelines (template implementation); use this for the procedure, those skills for the rules.
 boxel:
   kind: skill
 ---
@@ -35,15 +35,7 @@ boxel:
 
 2. Run the design discovery process from `boxel-design`: mood, audience, references, distinctive angle. Use those to inform the Theme card's `visualDNA` + `cssVariables`.
 
-3. Link `cardInfo.theme` on every relevant instance:
-   ```json
-   "relationships": {
-     "cardInfo.theme": {
-       "links": { "self": "../Theme/<name>" }
-     }
-   }
-   ```
-   The relationship key has a literal dot — `"cardInfo.theme"`, not nested.
+3. Link `cardInfo.theme` on every relevant instance — the relationship key has a literal dot (`"cardInfo.theme"`, not nested). Exact JSON shape: `theme-first-workflow/README.md`.
 
 4. Update templates' `<style scoped>` blocks to reference only theme tokens (`var(--background)`, `var(--card)`, `var(--primary)`, `var(--font-sans)`, etc.). Strip any hard-coded colors.
 
@@ -59,4 +51,4 @@ boxel:
 
 - "Looks the same after edit" → check that the instance has `cardInfo.theme` set; without it, the Theme's CSS variables aren't injected.
 - "Theme card not applying" → confirm the linked Theme exists at the URL in `cardInfo.theme.links.self`; confirm `cssVariables` includes `:root { ... }` selectors.
-- "Style changes work locally but not after sync" → the realm needs to re-index the Theme card after `cssVariables` updates. Use `/boxel-debug-runtime` or `npx boxel realm cancel-indexing` + manual re-trigger.
+- "Style changes work locally but not after sync" → the realm needs to re-index the Theme card after `cssVariables` updates. Touch the Theme file (`npx boxel file touch`) or use `/boxel-debug-runtime`. Do **not** reach for `cancel-indexing` — slow indexing is not stuck indexing (see `boxel-environment/references/indexing-operations.md`).

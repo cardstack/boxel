@@ -50,7 +50,7 @@ class MorphTemplate extends GlimmerComponent<{
 
   <template>
     <article class='card card--{{@format}}'>
-      <h1 class='card__title'><@fields.title /></h1>
+      <h1 class='card__title'><@fields.cardTitle /></h1>
       <p class='card__tagline'><@fields.tagline /></p>
       <section class='card__body'><@fields.body /></section>
       {{#if (eq @format 'isolated')}}
@@ -83,7 +83,7 @@ class MorphTemplate extends GlimmerComponent<{
 
 export class Article extends CardDef {
   static displayName = 'Article';
-  @field title   = contains(StringField);
+  @field cardTitle = contains(StringField);
   @field tagline = contains(StringField);
   @field body    = contains(StringField);
 
