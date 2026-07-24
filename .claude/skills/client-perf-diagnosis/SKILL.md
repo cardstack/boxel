@@ -58,7 +58,7 @@ Common envelope on every line: `ts`, `event_type`, `channel`, `matrix_user_id`, 
 | `server-request` | one realm-server round-trip, client-observed | `endpoint` (normalized, ids stripped), `method`, `status`, `duration_ms`, `resp_bytes`, `retried`, `correlation_id` |
 | `deserialize` | turning a response into card instances | `duration_ms`, `doc_bytes`, `included_count`, `card_type` |
 | `wedge` | a main-thread freeze at/above the wedge threshold | `duration_ms`, `worst_gap_ms`, `blocked_ms`, `longtask_count`, `top_frame_function`, `top_frame_url`, `top_frame_char`, `top_frame_blocked_ms`, `top_frames` (`fn @ url:char` breadcrumb), `loaf_scripts[]`, `profiler_stacks[]` (sampled sessions) |
-| `rebuild` | loader/store rebuild after a code invalidation | `duration_ms`, `trigger_module` (grouping key), `trigger_modules[]`, `modules_refetched`, `cards_reloaded` |
+| `rebuild` | loader/store rebuild after a code invalidation | `duration_ms`, `trigger_module` (grouping key), `trigger_modules[]`, `modules_refetched`, `cards_reloaded`, `coalesced_events` (index events that collapsed into this rebuild) |
 | `realm-event` | the tab's work processing one incoming index event | `index_type` (`incremental`/`full`), `invalidations_count`, `invalidated_ids[]`, `reloads_triggered`, `own_write`, `processing_ms` |
 | `keepalive` | liveness beacon from an otherwise-quiet tab | `window_ms`, `max_gap_ms` |
 
@@ -207,6 +207,17 @@ sum by (trigger_module) (count_over_time({service="realm-server", env="$env"} | 
 ```
 
 `avg by (trigger_module) (... | unwrap cards_reloaded ...)` and `... | unwrap modules_refetched ...` show which module's edits are the most expensive to absorb. A `trigger_module` that reloads many cards on every edit is a hot dependency.
+
+**How many events did this rebuild absorb?** `coalesced_events` is the number of incremental index events that collapsed into this one rebuild. Rebuilds are coalesced: at most one runs in flight and one stays pending, so a burst of executable invalidations arriving faster than a rebuild completes bounds to two rebuilds regardless of burst length, and the trailing rebuild carries the whole burst's `coalesced_events`. Read it against the `realm-event` count in the same window:
+
+```logql
+quantile_over_time(0.95, {service="realm-server", env="$env"} | json
+  | channel="boxel:client-perf" | event_type="rebuild"
+  | matrix_user_id=~"$matrix_user_id" | session_id=~".*${session_id}.*"
+  | unwrap coalesced_events [$__interval]) by ()
+```
+
+`coalesced_events` = 1 is an isolated edit — one event, one rebuild. `coalesced_events` > 1 is a write burst (an agent session writing every few seconds is the typical source) absorbed into a single rebuild: the tab paid one full-graph re-fetch for many events instead of one per event. So the burst signature is **few `rebuild` events with high `coalesced_events`**, not one `rebuild` per `realm-event`. During a burst, one `rebuild` per incoming `realm-event` with `coalesced_events` stuck at 1 means the events are landing slower than a rebuild completes (each finishes before the next arrives) — no burst to coalesce — rather than coalescing failing to engage.
 
 **Why did it rebuild?** A rebuild in a session the user wasn't editing usually traces to an incoming index event: look for a `realm-event` in the same window whose `invalidated_ids[]` contains this `trigger_module` ([Mode F](#mode-f--realm-index-event-write-burst-churn)). That distinguishes a self-inflicted rebuild (the user saved a module) from one pushed by someone else's write.
 
