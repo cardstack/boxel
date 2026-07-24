@@ -287,7 +287,9 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
 
             <codeBlock.actions as |actions|>
               <actions.copyCode
-                @code={{this.extractReplaceCode @codeData.searchReplaceBlock}}
+                @textToCopy={{this.extractReplaceCode
+                  @codeData.searchReplaceBlock
+                }}
               />
               {{! This is just to show the ✅ icon to signalize that the code patch has been applied }}
               <actions.applyCodePatch
@@ -325,7 +327,9 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
             />
 
             <codeBlock.actions as |actions|>
-              <actions.copyCode @code={{this.codeDiffResource.modifiedCode}} />
+              <actions.copyCode
+                @textToCopy={{this.codeDiffResource.modifiedCode}}
+              />
 
               <actions.applyCodePatch
                 @codeData={{@codeData}}
@@ -366,7 +370,7 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
         {{/if}}
         <codeBlock.editor @code={{this.codeForEditor}} />
         <codeBlock.actions as |actions|>
-          <actions.copyCode @code={{@codeData.code}} />
+          <actions.copyCode @textToCopy={{@codeData.code}} />
         </codeBlock.actions>
       {{/if}}
     </CodeBlock>
