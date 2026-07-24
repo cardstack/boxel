@@ -30,12 +30,22 @@ export default function handleClientTelemetry(): (
 ) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     try {
-      // Reject on the declared size before buffering the whole request body.
+      // The body is read fully into memory below, so bound it by the declared
+      // Content-Length before reading. A telemetry beacon is always a
+      // materialized JSON string, so a well-formed client always declares a
+      // length; require one (rather than buffer an unbounded or chunked body)
+      // and reject an oversized declaration up front.
       let declaredLength = Number(ctxt.req.headers['content-length'] ?? '');
-      if (
-        Number.isFinite(declaredLength) &&
-        declaredLength > MAX_TELEMETRY_BODY_BYTES
-      ) {
+      if (!Number.isFinite(declaredLength) || declaredLength <= 0) {
+        await sendResponseForError(
+          ctxt,
+          411,
+          'Length Required',
+          'Telemetry payload must declare a Content-Length',
+        );
+        return;
+      }
+      if (declaredLength > MAX_TELEMETRY_BODY_BYTES) {
         await sendResponseForError(
           ctxt,
           413,
@@ -48,7 +58,8 @@ export default function handleClientTelemetry(): (
       let request = await fetchRequestFromContext(ctxt);
       let body = await request.text();
 
-      // Fallback byte check for requests without (or with a lying) Content-Length.
+      // Defense in depth against a Content-Length that under-reports the actual
+      // body (multi-byte UTF-8, a lying header).
       if (
         new TextEncoder().encode(body).byteLength > MAX_TELEMETRY_BODY_BYTES
       ) {
