@@ -1,6 +1,10 @@
 import { module, test } from 'qunit';
 
-import { shouldRetryFetch } from '@cardstack/runtime-common/virtual-network';
+import { VirtualNetwork } from '@cardstack/runtime-common';
+import {
+  shouldRetryFetch,
+  shouldTimeoutRetryableFetch,
+} from '@cardstack/runtime-common/virtual-network';
 
 // `shouldRetryFetch` is the pure predicate that gates the in-app fetch-retry
 // safety net (see virtual-network.ts). The net papers over a transient CI
@@ -99,5 +103,128 @@ module('Unit | virtual-network shouldRetryFetch', function () {
         'production fetch flow is unaffected for the localhost URL',
       );
     });
+  });
+});
+
+// `shouldTimeoutRetryableFetch` gates the header-arrival timeout that turns the
+// second shape of the CI "vanish" — headers that never arrive, so the fetch
+// hangs instead of throwing — into the same retryable failure the throw path
+// already recovers from. It bounds only fetches that are already retryable, and
+// only in the browser test suite: a slow response in node / worker / env-mode
+// (e.g. a heavy `_search`) must never be aborted and retried.
+module('Unit | virtual-network shouldTimeoutRetryableFetch', function () {
+  test('bounds a retryable base-realm fetch in the test environment', function (assert) {
+    withEnvironment('test', () => {
+      assert.true(
+        shouldTimeoutRetryableFetch(
+          new URL('https://realm-server.ci.localhost/base/_info'),
+        ),
+        'the base _info fetch that hung in CI is bounded',
+      );
+      assert.true(
+        shouldTimeoutRetryableFetch(
+          new URL('https://cardstack.com/base/card-api'),
+        ),
+        'a virtual base-realm artifact is bounded',
+      );
+    });
+  });
+
+  test('does not bound a non-retryable fetch even in the test environment', function (assert) {
+    withEnvironment('test', () => {
+      assert.false(
+        shouldTimeoutRetryableFetch(
+          new URL(
+            'https://realm-server.ci.localhost/testuser/personal/Author/1',
+          ),
+        ),
+        'a user realm on the same host is not bounded',
+      );
+      assert.false(
+        shouldTimeoutRetryableFetch(
+          new URL('http://test-realm/test/SystemCard/default'),
+        ),
+        'the in-browser test realm host is not bounded',
+      );
+    });
+  });
+
+  test('does not bound anything outside the test environment', function (assert) {
+    withEnvironment(undefined, () => {
+      assert.false(
+        shouldTimeoutRetryableFetch(
+          new URL('https://cardstack.com/base/card-api'),
+        ),
+        'production / env-mode fetch flow keeps no header-timeout',
+      );
+    });
+  });
+});
+
+// A native fetch whose first attempt stalls at the header stage (never
+// resolves; rejects only when its request signal aborts, exactly as a real
+// fetch does), then succeeds. Mirrors the CI failure where base/_info headers
+// never arrived and the unbounded fetch hung until QUnit's global timeout.
+function stallingThenOkFetch(): {
+  fetch: typeof globalThis.fetch;
+  attempts: () => number;
+} {
+  let attempt = 0;
+  let fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+    attempt++;
+    let signal =
+      input instanceof Request ? input.signal : (init?.signal ?? undefined);
+    if (attempt === 1) {
+      return new Promise<Response>((_resolve, reject) => {
+        if (!signal) {
+          return; // no signal wired => hang (fix broken); QUnit will time out
+        }
+        if (signal.aborted) {
+          reject(signal.reason);
+          return;
+        }
+        signal.addEventListener('abort', () => reject(signal.reason), {
+          once: true,
+        });
+      });
+    }
+    return Promise.resolve(
+      new Response('{"ok":true}', {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+  }) as typeof globalThis.fetch;
+  return { fetch, attempts: () => attempt };
+}
+
+module('Unit | virtual-network header-stall recovery', function () {
+  test('aborts a stalled retryable base fetch and recovers on the retry', async function (assert) {
+    let g = globalThis as { __environment?: string };
+    let had = '__environment' in g;
+    let prev = g.__environment;
+    g.__environment = 'test';
+    try {
+      let { fetch, attempts } = stallingThenOkFetch();
+      // Tiny header timeout so the stalled first attempt is aborted promptly;
+      // the second attempt then succeeds.
+      let vn = new VirtualNetwork(fetch, { fetchHeaderTimeoutMs: 20 });
+      let response = await vn.fetch('https://cardstack.com/base/card-api');
+      assert.strictEqual(
+        response.status,
+        200,
+        'recovered with a 200 after the stalled attempt was aborted',
+      );
+      assert.true(
+        attempts() >= 2,
+        'the stalled first attempt was retried on a fresh fetch',
+      );
+    } finally {
+      if (had) {
+        g.__environment = prev;
+      } else {
+        delete g.__environment;
+      }
+    }
   });
 });
