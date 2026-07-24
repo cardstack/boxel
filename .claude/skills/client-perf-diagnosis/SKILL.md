@@ -130,7 +130,7 @@ topk(20, max by (card_id) (
 
 **Step 4 — spider into the cause.** The card-load names the *symptom and its magnitude*; the other event types in the same pinned session name the *cause*. With the session isolated and the slow card-load's `ts` in hand, walk outward into each event type and let the one that overlaps the window explain it:
 
-- **Slow server round-trips** → [Mode C](#mode-c--slow-realm-server-round-trips-and-the-server-side-join). A card-load that spent its time on the network shows up as slow `server-request.duration_ms`; a `server-request` with `retried="true"` re-attempted the fetch after a transient auth (401) refresh, folding the extra round-trip into `duration_ms`. The `correlation_id` then crosses to the server's own timing — *why the server was slow*.
+- **Slow server round-trips** → [Mode C](#mode-c--slow-realm-server-round-trips-and-the-server-side-join). A card-load that spent its time on the network shows up as slow `server-request.duration_ms`; a `server-request` with `retried="true"` re-attempted the fetch after a transient auth (401). Note `duration_ms` covers **only the final successful attempt** — each attempt is timed separately and the transient 401 event is dropped from the stream — so it excludes the reauth round-trip rather than including it. The `correlation_id` then crosses to the server's own timing — *why the server was slow*.
 - **A main-thread freeze** → [Mode B](#mode-b--a-browser-froze--went-unresponsive). If the tab locked up mid-load, a `wedge` overlaps the window and its `settle_ms` includes the freeze; the wedge's `top_frames` breadcrumb names the blocking script.
 - **Heavy deserialization** → [Mode D](#mode-d--heavy-response-deserialization). Large `deserialize.duration_ms` / `doc_bytes` for a `card_type` in the load — a big linked graph deserializes slowly.
 - **Rebuild churn** → [Mode E](#mode-e--rebuild-churn-after-a-code-edit). If the load raced a loader/store rebuild (a `rebuild` event in the window), the card waited on the rebuild; `trigger_module` names what forced it.
@@ -148,10 +148,11 @@ A `wedge` event is emitted when a foregrounded tab's main thread freezes for a h
 topk(15, sum by (top_frame_function, top_frame_url) (
   count_over_time({service="realm-server", env="$env"} | json
     | channel="boxel:client-perf" | matrix_user_id=~"$matrix_user_id"
-    | session_id=~".*${session_id}.*" | event_type="wedge"
-    | top_frame_function!="" [$__range])
+    | session_id=~".*${session_id}.*" | event_type="wedge" [$__range])
 ))
 ```
+
+Don't add a `top_frame_function!=""` filter here: a wedge corroborated only by a longtask (no LoAF script attribution) carries an empty `top_frame_function` yet is a real freeze — filtering it out would hide exactly the symptom you're chasing. Those wedges group under the blank frame; read their `top_frames` / `longtask_count` / `blocked_ms` from the raw line.
 
 **Read the breadcrumb.** Each wedge carries:
 
