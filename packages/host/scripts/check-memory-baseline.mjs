@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 
 // Compares per-module memory deltas from a CI run against a committed baseline.
-// Exits 0 on pass/warn, exits 1 on hard failure (>2x baseline or +50MB absolute).
+// Exits 0 on pass/warn, exits 1 on hard failure — when a module's delta clears
+// its recent ceiling by more than the larger of +50MB, 100% of the baseline, or
+// the module's own observed run-to-run swing.
 //
 // Usage: node check-memory-baseline.mjs <reports-dir> <baseline-json>
 //
@@ -134,14 +136,13 @@ for (const [mod, data] of Object.entries(current)) {
     effectiveBase * SOFT_RELATIVE,
   );
   // The hard threshold also absorbs the module's demonstrated peak-to-peak
-  // noise, so a run must clear the ceiling by more than the module has already
-  // shown it can move on its own before it blocks. This is what keeps a module
-  // whose recent window is entirely negative honest: its baseline and ceiling
-  // both floor to zero, so the absolute gate alone would fail any single
-  // positive reading — including one from a module that routinely swings by
-  // >100MB and merely landed positive this run. Sizing the threshold to the
-  // observed swing lets that reading through while a genuine step past the
-  // swing still blocks.
+  // noise. When a module's recent window is entirely negative, its mean baseline
+  // and its ceiling both floor to zero, so the +50MB absolute term alone would
+  // block any single reading over 50MB — even from a module that routinely
+  // swings by >100MB and merely landed positive this run. Sizing the threshold
+  // to the observed swing means a run has to clear the recent ceiling by more
+  // than the module's own run-to-run range before it blocks; tighter-window
+  // modules fall back to the absolute/relative terms.
   const hardThreshold = Math.max(
     HARD_ABSOLUTE_MB,
     effectiveBase * HARD_RELATIVE,
@@ -195,7 +196,7 @@ const baselineHeader =
 
 if (failures.length > 0) {
   lines.push(
-    `### Failures (>${HARD_RELATIVE * 100}% increase or +${HARD_ABSOLUTE_MB}MB)\n`,
+    `### Failures (over recent ceiling by >${HARD_ABSOLUTE_MB}MB, >${HARD_RELATIVE * 100}%, or the observed swing)\n`,
   );
   lines.push(
     `| Module | ${baselineHeader} | Current | Change | Recent samples |`,
