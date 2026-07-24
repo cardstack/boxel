@@ -3,7 +3,10 @@ import { htmlSafe } from '@ember/template';
 
 import Component from '@glimmer/component';
 
-import { BrokenLinkTemplate } from '@cardstack/boxel-ui/components';
+import {
+  BrokenLinkTemplate,
+  LoadingIndicator,
+} from '@cardstack/boxel-ui/components';
 import type {
   BrokenLinkErrorDoc,
   BrokenLinkItemType,
@@ -30,7 +33,10 @@ const EMPTY_ERROR_DOC: BrokenLinkErrorDoc = Object.freeze({});
 interface EmbedSignature {
   Element: HTMLElement;
   Args: {
-    target: CardDef | FileDef;
+    // The resolved instance to render. Absent while `loading` — the box then
+    // holds a spinner in place of the card body, keeping the same footprint.
+    target?: CardDef | FileDef;
+    loading?: boolean;
     format: Format;
     kind: 'inline' | 'block';
     sizeStyle?: ReturnType<typeof htmlSafe>;
@@ -52,33 +58,45 @@ const Embed: TOC<EmbedSignature> = <template>
           "markdown-embed-preview--inline-embed"
         }}
         {{if @sizeStyle "markdown-embed-preview--fitted"}}
-        {{if (not (eq @format "atom")) "markdown-embed-preview--card-frame"}}'
+        {{if (not (eq @format "atom")) "markdown-embed-preview--card-frame"}}
+        {{if @loading "is-loading"}}'
       style={{@sizeStyle}}
-      data-test-markdown-embed-preview
-      data-test-markdown-embed-preview-format={{@format}}
+      data-test-markdown-embed-preview={{if (not @loading) 'true'}}
+      data-test-markdown-embed-preview-format={{if (not @loading) @format}}
+      data-test-markdown-embed-preview-loading={{if @loading 'true'}}
       ...attributes
     >
-      <CardRenderer
-        @card={{@target}}
-        @format={{@format}}
-        @displayContainer={{false}}
-      />
+      {{#if @target}}
+        <CardRenderer
+          @card={{@target}}
+          @format={{@format}}
+          @displayContainer={{false}}
+        />
+      {{else if @loading}}
+        <LoadingIndicator class='markdown-embed-preview__spinner' />
+      {{/if}}
     </span>
   {{else}}
     <div
       class='markdown-embed-preview markdown-embed-preview--block
         {{if @sizeStyle "markdown-embed-preview--fitted"}}
-        {{if (not (eq @format "atom")) "markdown-embed-preview--card-frame"}}'
+        {{if (not (eq @format "atom")) "markdown-embed-preview--card-frame"}}
+        {{if @loading "is-loading"}}'
       style={{@sizeStyle}}
-      data-test-markdown-embed-preview
-      data-test-markdown-embed-preview-format={{@format}}
+      data-test-markdown-embed-preview={{if (not @loading) 'true'}}
+      data-test-markdown-embed-preview-format={{if (not @loading) @format}}
+      data-test-markdown-embed-preview-loading={{if @loading 'true'}}
       ...attributes
     >
-      <CardRenderer
-        @card={{@target}}
-        @format={{@format}}
-        @displayContainer={{false}}
-      />
+      {{#if @target}}
+        <CardRenderer
+          @card={{@target}}
+          @format={{@format}}
+          @displayContainer={{false}}
+        />
+      {{else if @loading}}
+        <LoadingIndicator class='markdown-embed-preview__spinner' />
+      {{/if}}
     </div>
   {{/if}}
   <style scoped>
@@ -108,6 +126,24 @@ const Embed: TOC<EmbedSignature> = <template>
       border-radius: var(--boxel-border-radius);
       background-color: var(--boxel-light);
       overflow: hidden;
+    }
+    /* Loading placeholder: keep the resolved embed's footprint (size + frame)
+       but center a small spinner where the card body will land. Force a flex
+       box so the spinner centers in the block / inline-embed variants (the atom
+       variant is already inline-flex). */
+    .markdown-embed-preview.is-loading {
+      align-items: center;
+      justify-content: center;
+    }
+    .markdown-embed-preview--block.is-loading {
+      display: flex;
+    }
+    .markdown-embed-preview--inline-embed.is-loading {
+      display: inline-flex;
+    }
+    /* Small enough to sit inside an atom pill, unobtrusive in larger frames. */
+    .markdown-embed-preview__spinner {
+      --boxel-loading-indicator-size: 1.25rem;
     }
   </style>
 </template>;
@@ -194,6 +230,10 @@ interface Signature {
     // nothing. Absent when the ref failed to resolve; the broken-ref args
     // below then drive the render.
     target?: CardDef | FileDef;
+    // True while the caller is still resolving the target. Renders a
+    // size-matched loading placeholder (the card's footprint with a spinner)
+    // in the embed's slot until `target` or a broken-ref state arrives.
+    loading?: boolean;
     // Broken-ref render: when `brokenUrl` is present (and `target` is not),
     // render `BrokenLinkTemplate` instead of the embed. The same warning box +
     // reveal overlay the base `linksTo` broken UI shows, format-aware so the
@@ -327,6 +367,13 @@ export default class MarkdownEmbedPreview extends Component<Signature> {
               @kind={{this.kind}}
               @sizeStyle={{this.sizeStyle}}
             />
+          {{else if @loading}}
+            <Embed
+              @loading={{true}}
+              @format={{this.renderFormat}}
+              @kind={{this.kind}}
+              @sizeStyle={{this.sizeStyle}}
+            />
           {{else if @brokenUrl}}
             <BrokenEmbed
               @brokenUrl={{@brokenUrl}}
@@ -360,6 +407,14 @@ export default class MarkdownEmbedPreview extends Component<Signature> {
     {{else if @target}}
       <Embed
         @target={{@target}}
+        @format={{this.renderFormat}}
+        @kind={{this.kind}}
+        @sizeStyle={{this.sizeStyle}}
+        ...attributes
+      />
+    {{else if @loading}}
+      <Embed
+        @loading={{true}}
         @format={{this.renderFormat}}
         @kind={{this.kind}}
         @sizeStyle={{this.sizeStyle}}

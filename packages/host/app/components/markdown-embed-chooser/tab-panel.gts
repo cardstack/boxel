@@ -199,10 +199,18 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
   }
 
   // A pick is resolving: its URL is set but neither the instance nor an error
-  // has landed yet. Drives the loading indicator so a slow (cold) load reads as
-  // "loading", not as the "nothing selected" placeholder.
+  // has landed yet. Drives the loading placeholder so a slow (cold) load reads
+  // as "loading", not as the "nothing selected" placeholder.
   private get isLoading(): boolean {
     return this.loadTarget.isRunning;
+  }
+
+  // The pane mounts while a pick is loading, resolved, or errored — so the
+  // format/size controls and the size-matched preview stay put across the
+  // load (no jump to a bare spinner). The empty placeholder shows only before
+  // anything is picked.
+  private get showPane(): boolean {
+    return this.hasPreview || this.isLoading;
   }
 
   // Broken-ref state threaded to the pane. Each is undefined unless the load
@@ -343,9 +351,10 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
         {{/if}}
       </div>
       <div class='markdown-embed-chooser-tab-panel__right'>
-        {{#if this.hasPreview}}
+        {{#if this.showPane}}
           <MarkdownEmbedPreviewPane
             @target={{this.selectedTarget}}
+            @loading={{this.isLoading}}
             @refType={{@refType}}
             @selection={{@selection}}
             @documentBaseUrl={{@documentBaseUrl}}
@@ -357,13 +366,6 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
             @brokenItemType={{this.brokenItemType}}
             @errorDoc={{this.brokenErrorDoc}}
           />
-        {{else if this.isLoading}}
-          <div
-            class='markdown-embed-chooser-tab-panel__loading'
-            data-test-markdown-embed-preview-loading
-          >
-            <LoadingIndicator />
-          </div>
         {{else}}
           <p
             class='markdown-embed-chooser-tab-panel__empty'
@@ -440,15 +442,6 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
         font: var(--boxel-font-sm);
         color: var(--boxel-450);
         text-align: center;
-      }
-      /* Shown while a picked row's instance is still resolving, in place of the
-         empty placeholder, so a slow (cold) load doesn't read as "no selection". */
-      .markdown-embed-chooser-tab-panel__loading {
-        flex: 1 1 auto;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: var(--boxel-sp);
       }
       .markdown-embed-chooser-tab-panel__current {
         display: flex;

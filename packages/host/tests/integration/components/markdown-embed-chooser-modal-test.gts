@@ -637,6 +637,18 @@ module('Integration | markdown-embed-chooser-modal', function (hooks) {
         '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-preview-empty]',
       )
       .doesNotExist('the empty placeholder is suppressed during loading');
+    assert
+      .dom(
+        '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-preview-pane]',
+      )
+      .exists(
+        'the preview pane (with its format controls) stays mounted while loading',
+      );
+    assert
+      .dom(
+        '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-preview]',
+      )
+      .doesNotExist('the resolved embed is not shown until the load completes');
 
     releaseLoad();
     await settled();
