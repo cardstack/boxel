@@ -635,11 +635,22 @@ function mergeAbortSignals(
       any?: (signals: AbortSignal[]) => AbortSignal;
     }
   ).any;
-  // AbortSignal.any is present in every runtime we target; if it were somehow
-  // missing, honor the timeout signal (the last one) so the bound still holds.
-  return typeof combine === 'function'
-    ? combine(signals)
-    : signals[signals.length - 1];
+  if (typeof combine === 'function') {
+    return combine(signals);
+  }
+  // Fallback for a runtime without AbortSignal.any: mirror both signals onto a
+  // single controller so either firing aborts the fetch, carrying its reason.
+  let controller = new AbortController();
+  for (let signal of signals) {
+    if (signal.aborted) {
+      controller.abort(signal.reason);
+      break;
+    }
+    signal.addEventListener('abort', () => controller.abort(signal.reason), {
+      once: true,
+    });
+  }
+  return controller.signal;
 }
 
 export function shouldRetryFetch(url: URL): boolean {
@@ -724,6 +735,13 @@ async function withRetries(
     try {
       return await fetchFn(controller?.signal);
     } catch (err: any) {
+      // A caller-initiated abort is not a transient failure — surface it at
+      // once rather than retrying the already-aborted request. The per-attempt
+      // header-stall abort names its error `FetchHeaderTimeout`, so it falls
+      // through to the retry path below.
+      if (err?.name === 'AbortError') {
+        throw err;
+      }
       if (!shouldRetryFetch(url) || ++attempt > maxAttempts) {
         if (shouldRetryFetch(url) && attempt > maxAttempts) {
           // Final-exhaustion log: distinct from the per-attempt warning so
