@@ -187,6 +187,11 @@ export interface IssueLoopWiringConfig {
    */
   renderGate?: boolean;
   /**
+   * Execute factory-generated polish issues (issueType `enhancement`)
+   * unattended. Default false — they stay on the board for an operator.
+   */
+  includePolish?: boolean;
+  /**
    * Invoked once, right after the bootstrap issue completes. The entrypoint
    * uses this to link the realm index's `board` relationship as soon as the
    * IssueTracker exists, instead of waiting for the entire loop to return.
@@ -520,6 +525,7 @@ export async function runFactoryIssueLoop(
     modelPolicy: config.modelPolicy,
     phaseSplit: config.phaseSplit === true,
     forkContext: config.forkContext === true,
+    includePolish: config.includePolish === true,
     maxIterationsPerIssue: config.maxIterationsPerIssue,
     maxOuterCycles: config.maxOuterCycles,
     debug: config.debug,

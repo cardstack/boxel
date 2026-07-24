@@ -1519,3 +1519,86 @@ module('issue-loop > decideSessionStrategy', function () {
     assert.strictEqual(d.strategy, 'fresh');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Polish gating — factory-generated enhancement issues await an operator
+// ---------------------------------------------------------------------------
+
+module('issue-loop > polish gating', function () {
+  function makePolishStore(): MockIssueStore {
+    return new MockIssueStore([
+      makeIssue({ id: 'iss-1', status: 'backlog', priority: 'high', order: 1 }),
+      makeIssue({
+        id: 'iss-1-pass-2',
+        status: 'backlog',
+        priority: 'low',
+        order: 2,
+        issueType: 'enhancement',
+        summary: 'Pass 2 — polish',
+      }),
+    ]);
+  }
+
+  test('enhancement issues stay on the board by default', async function (assert) {
+    let store = makePolishStore();
+    let agent = new MockLoopAgent(
+      [
+        {
+          toolCalls: [
+            { tool: 'write_file', args: { path: 'card.gts', content: 'v1' } },
+          ],
+          updateIssue: { id: 'iss-1', status: 'done' },
+        },
+      ],
+      store,
+    );
+
+    let result = await runIssueLoop(
+      makeLoopConfig({ agent, issueStore: store }),
+    );
+
+    assert.strictEqual(result.outcome, 'all_issues_done');
+    assert.strictEqual(result.issueResults.length, 1, 'only iss-1 executed');
+    assert.strictEqual(result.issueResults[0].issueId, 'iss-1');
+    let polish = (await store.listIssues()).find(
+      (i) => i.id === 'iss-1-pass-2',
+    );
+    assert.strictEqual(
+      polish?.status,
+      'backlog',
+      'polish issue untouched, awaiting operator',
+    );
+  });
+
+  test('includePolish executes enhancement issues', async function (assert) {
+    let store = makePolishStore();
+    let agent = new MockLoopAgent(
+      [
+        {
+          toolCalls: [
+            { tool: 'write_file', args: { path: 'card.gts', content: 'v1' } },
+          ],
+          updateIssue: { id: 'iss-1', status: 'done' },
+        },
+        {
+          toolCalls: [
+            { tool: 'write_file', args: { path: 'card.gts', content: 'v2' } },
+          ],
+          updateIssue: { id: 'iss-1-pass-2', status: 'done' },
+        },
+      ],
+      store,
+    );
+
+    let result = await runIssueLoop(
+      makeLoopConfig({ agent, issueStore: store, includePolish: true }),
+    );
+
+    assert.strictEqual(result.outcome, 'all_issues_done');
+    assert.strictEqual(result.issueResults.length, 2, 'both issues executed');
+    assert.deepEqual(
+      result.issueResults.map((r) => r.issueId),
+      ['iss-1', 'iss-1-pass-2'],
+    );
+  });
+});

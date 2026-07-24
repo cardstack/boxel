@@ -185,6 +185,14 @@ export interface IssueLoopConfig {
    */
   acceptanceWalkthrough?: boolean;
   /**
+   * Execute factory-generated polish issues (`issueType: 'enhancement'`,
+   * the bootstrap's pass-2 scope). Default false: the loop leaves them on
+   * the board awaiting an operator instead of auto-executing — their own
+   * generated text says operators may cancel them wholesale, and an
+   * unattended run has nobody standing there to do so.
+   */
+  includePolish?: boolean;
+  /**
    * Per-turn model/thinking budget policy, keyed by turn type. The
    * ORCHESTRATOR owns this (turn type is deterministic here); issues
    * don't carry budgets. `fix` applies to inner iterations ≥ 2 —
@@ -514,6 +522,7 @@ export async function runIssueLoop(
     monitor,
     renderGate,
     acceptanceWalkthrough = true,
+    includePolish = false,
     modelPolicy,
     phaseSplit = false,
     forkContext = false,
@@ -649,6 +658,10 @@ export async function runIssueLoop(
   let issueResults: IssueIterationResult[] = [];
   let outerCycles = 0;
   let exhaustedIssues = new Set<string>();
+  // Issues the polish policy left on the board — excluded from picking via
+  // `exhaustedIssues`, but NOT counted as unresolved work when deciding the
+  // run outcome (a skipped polish pass is a pending decision, not a failure).
+  let policySkipped = new Set<string>();
 
   // Wall-clock attribution. `grand`/`cur` accumulate the three cost buckets
   // across the whole run and within the current outer cycle respectively;
@@ -785,6 +798,37 @@ export async function runIssueLoop(
         exhaustedIssues.add(issue.id);
         continue;
       }
+    }
+
+    // Factory-generated polish does not auto-execute. The bootstrap plans
+    // pass-2 enhancement issues whose own text says operators may cancel
+    // them wholesale — a decision an unattended run cannot make, so the
+    // loop leaves them on the board for a human (or `--include-polish`).
+    if (!includePolish && issue.issueType === 'enhancement') {
+      log.info(
+        `Outer cycle ${outerCycles}: leaving polish issue on the board: ${issueSummaryLabel(issue)} — pass --include-polish to execute polish passes unattended`,
+      );
+      traceEvent('scheduler', 'skip-polish', {
+        issue: issueSlug(issue),
+        cycle: outerCycles,
+      });
+      if (runLog && policySkipped.size === 0) {
+        await runLog.append([
+          {
+            kind: 'phase',
+            headline: 'Polish pass left on the board',
+            body: `${issueDisplayTitle(issue)} awaits operator approval — run with --include-polish to execute polish passes unattended.`,
+            issueUrl: issue.id,
+            who: 'orchestrator',
+          },
+        ]);
+      }
+      monitor?.noteScheduler(
+        `Polish left on the board: "${issueDisplayTitle(issue)}" (run with --include-polish to execute)`,
+      );
+      policySkipped.add(issue.id);
+      exhaustedIssues.add(issue.id);
+      continue;
     }
 
     if (runLog) {
@@ -1775,7 +1819,9 @@ export async function runIssueLoop(
     outcome = 'max_outer_cycles';
   } else {
     let allDone = issueResults.every((r) => r.exitReason === 'done');
-    let hasExhausted = exhaustedIssues.size > 0;
+    let hasExhausted = [...exhaustedIssues].some(
+      (id) => !policySkipped.has(id),
+    );
 
     if (allDone && !hasExhausted) {
       outcome = 'all_issues_done';

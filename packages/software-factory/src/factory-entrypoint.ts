@@ -110,6 +110,12 @@ export interface FactoryEntrypointOptions {
   /** Context forking: prime once per brief, fork every implementation turn. */
   forkContext?: boolean;
   /**
+   * Execute factory-generated polish issues (the bootstrap's pass-2
+   * `enhancement` scope) unattended. Default false: the loop leaves them
+   * on the board awaiting operator approval.
+   */
+  includePolish?: boolean;
+  /**
    * Model for fix iterations (inner iterations ≥ 2 — mechanical lint/parse
    * fix-ups). Defaults to `claude-sonnet-5` under --v2; pass `inherit` to
    * keep the session model for every turn.
@@ -287,6 +293,9 @@ export function getFactoryEntrypointUsage(): string {
     '  --no-phase-split            Disable the v3 default phase-split (DESIGN turn on the',
     '                              flagship model + BUILD turn on claude-sonnet-5, forked).',
     '                              Only meaningful with --v2, where phase-split is on by default.',
+    "  --include-polish            Execute factory-generated polish issues (the bootstrap's",
+    '                              pass-2 enhancement scope) unattended. By default they stay',
+    '                              on the board awaiting operator approval.',
     '  --no-render-gate            Skip the v3 render gate + acceptance walkthrough (post-issue',
     '                              _screenshot-card captures and the verifier turn that reads',
     '                              them, verdicts acceptance criteria, and files defect issues).',
@@ -360,6 +369,9 @@ export function parseFactoryEntrypointArgs(
           type: 'boolean',
         },
         'fork-context': {
+          type: 'boolean',
+        },
+        'include-polish': {
           type: 'boolean',
         },
         'fix-model': {
@@ -473,6 +485,7 @@ export function parseFactoryEntrypointArgs(
         : undefined,
     v2: parsed.values.v2 === true ? true : undefined,
     forkContext: parsed.values['fork-context'] === true ? true : undefined,
+    includePolish: parsed.values['include-polish'] === true ? true : undefined,
     fixModel:
       typeof parsed.values['fix-model'] === 'string'
         ? parsed.values['fix-model']
@@ -869,6 +882,7 @@ export async function runFactoryEntrypoint(
     v2: options.v2,
     runTitle: brief.title,
     forkContext: options.forkContext,
+    includePolish: options.includePolish,
     modelPolicy: buildModelPolicy({ ...options, phaseSplit }),
     phaseSplit,
     renderGate: options.renderGate,
