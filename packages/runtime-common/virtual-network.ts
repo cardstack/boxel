@@ -34,6 +34,13 @@ export class VirtualNetwork {
   // a pure function of the realm mappings, so entries stay valid until a
   // mapping is added or removed (both clear the cache).
   private toURLHrefCache = new Map<string, string>();
+  // Memo for unresolveURL, the inverse of toURLHref. It runs on the store's
+  // hottest paths — every card deserialize and every gc-card-store keying /
+  // GC-sweep access folds its id through here — and each miss pays a native
+  // `new URL()` in the virtual→real mapping chase. Like toURLHrefCache, this is
+  // a pure function of the realm mappings, so entries stay valid until a
+  // mapping is added or removed (both clear it).
+  private unresolveURLCache = new Map<string, RealmResourceIdentifier>();
 
   // Notified whenever a realm-prefix mapping changes — added, removed, or
   // re-registered against a new target. Consumers that key caches by the RRI
@@ -83,6 +90,10 @@ export class VirtualNetwork {
 
   addURLMapping(from: URL, to: URL) {
     this.urlMappings.push([from.href, to.href]);
+    // Both memos resolve through urlMappings (toURLHref via toURL, unresolveURL
+    // via its virtual→real chase), so a new URL mapping invalidates them.
+    this.toURLHrefCache.clear();
+    this.unresolveURLCache.clear();
   }
 
   mapURL(
@@ -113,6 +124,7 @@ export class VirtualNetwork {
     let normalizedTarget = ensureTrailingSlash(targetURL);
     this.realmMappings.set(normalizedId, normalizedTarget);
     this.toURLHrefCache.clear();
+    this.unresolveURLCache.clear();
     this.addImportMap(
       normalizedId,
       (rest) => new URL(rest, normalizedTarget).href,
@@ -131,6 +143,7 @@ export class VirtualNetwork {
     this.realmMappings.delete(normalizedId);
     this.importMap.delete(normalizedId);
     this.toURLHrefCache.clear();
+    this.unresolveURLCache.clear();
     this.notifyMappingChange();
   }
 
@@ -166,6 +179,22 @@ export class VirtualNetwork {
    * Inputs that match no prefix and no URL mapping are returned as-is.
    */
   unresolveURL(url: string): RealmResourceIdentifier {
+    let cached = this.unresolveURLCache.get(url);
+    if (cached !== undefined) {
+      return cached;
+    }
+    let result = this.computeUnresolveURL(url);
+    this.unresolveURLCache.set(url, result);
+    // TEMP (CS-11450 diagnostic): surface monotonic cache growth. Revert.
+    if (this.unresolveURLCache.size % 2000 === 0) {
+      console.log(
+        `[CACHE-PROBE] unresolveURLCache.size=${this.unresolveURLCache.size} toURLHrefCache.size=${this.toURLHrefCache.size}`,
+      );
+    }
+    return result;
+  }
+
+  private computeUnresolveURL(url: string): RealmResourceIdentifier {
     for (let [prefix, target] of this.realmMappings) {
       if (url.startsWith(target)) {
         return (prefix + url.slice(target.length)) as RealmResourceIdentifier;

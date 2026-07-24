@@ -406,6 +406,9 @@ const stores = initSharedState(
   'stores',
   () => new WeakMap<BaseDef, CardStore>(),
 );
+// TEMP (CS-11450 diagnostic): per-id deserialize-create counter to detect an
+// identity-map miss storm. Revert.
+const deserializeCreateCounts = new Map<string, number>();
 const subscribers = initSharedState(
   'subscribers',
   () => new WeakMap<BaseDef, Set<CardChangeSubscriber>>(),
@@ -516,6 +519,14 @@ export interface CardStore {
   // undefined when the reference can't be resolved (no network available, or
   // an unresolvable reference) so callers can degrade to URL math.
   resolveURL(reference: string, base?: string): URL | undefined;
+  // Fold an id to its canonical RRI form: a mapped realm's URL collapses to
+  // its `@scope/name/...` prefix, an already-canonical RRI is returned
+  // unchanged, and anything with no registered mapping (an unmapped realm's
+  // URL, a local id) passes through as-is. The inverse of `resolveURL`'s
+  // boundary role — card code canonicalizes an incoming id to the opaque
+  // interior form without holding the network. Returns the input unchanged
+  // when no network is available.
+  canonicalizeId(id: string): string;
   getCard(url: string): CardDef | undefined;
   getFileMeta(url: string): FileDef | undefined;
   setCard(url: string, instance: CardDef): void;
@@ -4161,7 +4172,14 @@ export async function updateFromSerialized<T extends BaseDefConstructor>(
 ): Promise<BaseInstanceType<T>> {
   stores.set(instance, store);
   if (!instance[relativeTo] && doc.data.id) {
-    instance[relativeTo] = rri(doc.data.id);
+    // Card ids fold to canonical RRI; FileDef ids stay URL (see
+    // `_createFromSerialized`).
+    let isFileLike = isFileDef(
+      Reflect.getPrototypeOf(instance)!.constructor as typeof BaseDef,
+    );
+    instance[relativeTo] = rri(
+      isFileLike ? doc.data.id : store.canonicalizeId(doc.data.id),
+    );
   }
 
   if (isCardInstance(instance)) {
@@ -4208,23 +4226,45 @@ async function _createFromSerialized<T extends BaseDefConstructor>(
   if (!doc) {
     doc = { data: resource };
   }
+  let isFileLike = isFileMetaResource(resource) || isFileDef(card);
+  // Fold the incoming id onto the canonical interior form (RRI for a mapped
+  // realm; unchanged for an unmapped realm or a local id) at this ingest
+  // boundary, so the in-memory `id` field, the identity-map key, and the
+  // relative-resolution base all share one opaque spelling. Scoped to card
+  // instances; FileDef ids stay in URL form (their identity is entangled with
+  // the file-extract invalidation contract).
+  let canonicalId =
+    resource.id != null && !isFileLike
+      ? (store.canonicalizeId(resource.id) as typeof resource.id)
+      : resource.id;
   let instance: BaseInstanceType<T> | undefined;
-  if (resource.id != null || resource.lid != null) {
-    let resourceId = (resource.id ?? resource.lid)!;
-    let cachedInstance =
-      isFileMetaResource(resource) || isFileDef(card)
-        ? store.getFileMeta(resourceId)
-        : store.getCard(resourceId);
+  if (canonicalId != null || resource.lid != null) {
+    let resourceId = (canonicalId ?? resource.lid)!;
+    let cachedInstance = isFileLike
+      ? store.getFileMeta(resourceId)
+      : store.getCard(resourceId);
     if (cachedInstance && instanceOf(cachedInstance, card as any)) {
       instance = cachedInstance as BaseInstanceType<T>;
     }
   }
   if (!instance) {
     instance = new card({
-      id: resource.id,
+      id: canonicalId,
       [localId]: resource.lid,
     }) as BaseInstanceType<T>;
     instance[relativeTo] = _relativeTo;
+    // TEMP (CS-11450 diagnostic): a re-creation storm (same id constructed
+    // many times) means the identity-map lookup above is missing — the
+    // signature of a store-key form divergence. Revert.
+    if (canonicalId != null) {
+      let n = (deserializeCreateCounts.get(canonicalId) ?? 0) + 1;
+      deserializeCreateCounts.set(canonicalId, n);
+      if (n === 25 || n === 100 || n % 500 === 0) {
+        console.log(
+          `[DESER-PROBE] created id=${JSON.stringify(canonicalId)} ${n} times (identity-map miss storm?)`,
+        );
+      }
+    }
   }
   stores.set(instance, store);
   return await _updateFromSerialized({
@@ -4415,7 +4455,14 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
       ...resource.attributes,
       ...nonNestedRelationships,
       ...linksToManyRelationships,
-      ...(resource.id !== undefined ? { id: resource.id } : {}),
+      ...(resource.id !== undefined
+        ? {
+            id:
+              isFileMetaResource(resource) || isFileDef(card)
+                ? resource.id
+                : store.canonicalizeId(resource.id),
+          }
+        : {}),
     }).map(async ([fieldName, value]) => {
       let field = getField(instance, fieldName);
       if (!field) {
@@ -4954,6 +5001,16 @@ class FallbackCardStore implements CardStore {
     } catch {
       return undefined;
     }
+  }
+
+  canonicalizeId(id: string): string {
+    let vn: VirtualNetwork | undefined;
+    try {
+      vn = myLoader().getVirtualNetwork();
+    } catch {
+      return id;
+    }
+    return vn ? vn.unresolveURL(id) : id;
   }
 
   getCard(id: string) {
