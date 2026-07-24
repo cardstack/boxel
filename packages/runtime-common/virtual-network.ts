@@ -786,5 +786,11 @@ async function buildRequest(url: string, originalRequest: Request) {
     cache: originalRequest.cache,
     redirect: originalRequest.redirect,
     integrity: originalRequest.integrity,
+    // Carry the abort signal across the remap so a caller's abort — and the
+    // per-attempt header-stall timeout in withRetries — still cancels the
+    // native fetch. The host maps virtual base-realm URLs
+    // (https://cardstack.com/base/...) to the resolved realm URL here, so
+    // without this the base fetch that reaches the network has no signal.
+    signal: originalRequest.signal,
   });
 }

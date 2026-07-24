@@ -168,8 +168,10 @@ module('Unit | virtual-network shouldTimeoutRetryableFetch', function () {
 function stallingThenOkFetch(): {
   fetch: typeof globalThis.fetch;
   attempts: () => number;
+  signalSeen: () => boolean;
 } {
   let attempt = 0;
+  let sawAbort = false;
   let fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     attempt++;
     let signal =
@@ -179,13 +181,15 @@ function stallingThenOkFetch(): {
         if (!signal) {
           return; // no signal wired => hang (fix broken); QUnit will time out
         }
-        if (signal.aborted) {
+        let onAbort = () => {
+          sawAbort = true;
           reject(signal.reason);
+        };
+        if (signal.aborted) {
+          onAbort();
           return;
         }
-        signal.addEventListener('abort', () => reject(signal.reason), {
-          once: true,
-        });
+        signal.addEventListener('abort', onAbort, { once: true });
       });
     }
     return Promise.resolve(
@@ -195,7 +199,7 @@ function stallingThenOkFetch(): {
       }),
     );
   }) as typeof globalThis.fetch;
-  return { fetch, attempts: () => attempt };
+  return { fetch, attempts: () => attempt, signalSeen: () => sawAbort };
 }
 
 module('Unit | virtual-network header-stall recovery', function () {
@@ -205,10 +209,18 @@ module('Unit | virtual-network header-stall recovery', function () {
     let prev = g.__environment;
     g.__environment = 'test';
     try {
-      let { fetch, attempts } = stallingThenOkFetch();
+      let { fetch, attempts, signalSeen } = stallingThenOkFetch();
       // Tiny header timeout so the stalled first attempt is aborted promptly;
       // the second attempt then succeeds.
       let vn = new VirtualNetwork(fetch, { fetchHeaderTimeoutMs: 20 });
+      // The host reaches the base realm through a virtual-to-real URL mapping,
+      // so exercise that path: the per-attempt timeout signal is attached
+      // before the mapping runs and must survive the request being rebuilt at
+      // the mapped URL, or the native fetch never sees the abort.
+      vn.addURLMapping(
+        new URL('https://cardstack.com/base/'),
+        new URL('https://realm-server.ci.localhost/base/'),
+      );
       let response = await vn.fetch('https://cardstack.com/base/card-api');
       assert.strictEqual(
         response.status,
@@ -218,6 +230,10 @@ module('Unit | virtual-network header-stall recovery', function () {
       assert.true(
         attempts() >= 2,
         'the stalled first attempt was retried on a fresh fetch',
+      );
+      assert.true(
+        signalSeen(),
+        'the native fetch received an abort signal through the URL mapping',
       );
     } finally {
       if (had) {
