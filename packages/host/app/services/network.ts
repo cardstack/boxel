@@ -17,18 +17,18 @@ import { authErrorEventMiddleware } from '../utils/auth-error-guard';
 
 import type LoaderService from './loader-service';
 import type RealmService from './realm';
-import type ResetService from './reset';
+import type SessionService from './session';
 
 export default class NetworkService extends Service {
   @service declare loaderService: LoaderService;
   @service declare realm: RealmService;
-  @service declare reset: ResetService;
+  @service declare session: SessionService;
 
   virtualNetwork = this.makeVirtualNetwork();
 
   constructor(owner: Owner) {
     super(owner);
-    this.reset.register(this);
+    this.session.register(this);
   }
 
   get fetch() {

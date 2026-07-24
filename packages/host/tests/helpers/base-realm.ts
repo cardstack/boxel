@@ -25,7 +25,9 @@ import type * as FileApiModule from '@cardstack/base/file-api';
 import type * as MarkdownFieldModule from '@cardstack/base/markdown';
 import type * as NumberFieldModule from '@cardstack/base/number';
 import type * as PhoneNumberFieldModule from '@cardstack/base/phone-number';
+import type * as ProcessCardModule from '@cardstack/base/process-card';
 import type * as RealmFieldModule from '@cardstack/base/realm';
+import type * as RemixCardModule from '@cardstack/base/remix-card';
 import type * as RichMarkdownModule from '@cardstack/base/rich-markdown';
 import type * as SearchableModule from '@cardstack/base/searchable';
 import type * as SkillModule from '@cardstack/base/skill';
@@ -36,6 +38,7 @@ import type * as TimeFieldModule from '@cardstack/base/time';
 import type * as DurationFieldModule from '@cardstack/base/time/duration';
 import type * as RelativeTimeFieldModule from '@cardstack/base/time/relative-time';
 import type * as TimeRangeFieldModule from '@cardstack/base/time/time-range';
+import type * as WorkspaceModule from '@cardstack/base/workspace';
 
 type StringField = (typeof StringFieldModule)['default'];
 let StringField: StringField;
@@ -126,6 +129,15 @@ let PhoneNumberField: PhoneNumberField;
 
 type CardsGrid = (typeof CardsGridModule)['CardsGrid'];
 let CardsGrid: CardsGrid;
+
+type Workspace = (typeof WorkspaceModule)['Workspace'];
+let Workspace: Workspace;
+
+type ProcessCard = (typeof ProcessCardModule)['ProcessCard'];
+let ProcessCard: ProcessCard;
+
+type RemixCard = (typeof RemixCardModule)['RemixCard'];
+let RemixCard: RemixCard;
 
 type Skill = (typeof SkillModule)['Skill'];
 let Skill: Skill;
@@ -347,6 +359,16 @@ async function initialize() {
     await loader.import<typeof CardsGridModule>('@cardstack/base/cards-grid')
   ).CardsGrid;
 
+  ProcessCard = (
+    await loader.import<typeof ProcessCardModule>(
+      '@cardstack/base/process-card',
+    )
+  ).ProcessCard;
+
+  RemixCard = (
+    await loader.import<typeof RemixCardModule>('@cardstack/base/remix-card')
+  ).RemixCard;
+
   Skill = (await loader.import<typeof SkillModule>('@cardstack/base/skill'))
     .Skill;
 
@@ -419,6 +441,21 @@ export async function setupBaseRealm(hooks: NestedHooks) {
   hooks.beforeEach(initialize);
 }
 
+// Workspace pulls in a large transitive module graph (CardsGridLayout, several
+// icons, BoxelInput, the publish-realm host tool). Loading it in the shared
+// `initialize()` would import that graph into every setupBaseRealm test, so it
+// is opt-in: only tests that exercise the Workspace card call this.
+async function initializeWorkspace() {
+  let loader = getService('loader-service').loader;
+  Workspace = (
+    await loader.import<typeof WorkspaceModule>('@cardstack/base/workspace')
+  ).Workspace;
+}
+
+export function setupWorkspaceCard(hooks: NestedHooks) {
+  hooks.beforeEach(initializeWorkspace);
+}
+
 export {
   cardAPI,
   StringField,
@@ -452,6 +489,9 @@ export {
   RichMarkdownField,
   PhoneNumberField,
   CardsGrid,
+  Workspace,
+  ProcessCard,
+  RemixCard,
   SystemCard,
   ModelConfiguration,
   FileDef,

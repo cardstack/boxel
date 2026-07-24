@@ -31,6 +31,7 @@ import {
   INITIAL_SLIDING_SYNC_LIST_TIMELINE_LIMIT,
   SLIDING_SYNC_TIMEOUT,
   APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
+  APP_BOXEL_ORIGINATING_DEVICE_ID_KEY,
   isToolResultEventType,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -467,7 +468,49 @@ Common issues are:
               ? JSON.parse(event.getContent().data)
               : event.getContent().data;
           const agentId = contentData.context?.agentId;
-          const responder = new Responder(client, room.roomId, agentId);
+          // Route to-device streaming previews (see AI_BOT_STREAMING_MODE
+          // handling in Responder) at the device that composed the prompt for
+          // this turn. A continuation triggered by a tool / code-patch result
+          // carries no device id, so fall back to the most recent stamped
+          // user-prompt event in the turn's history — otherwise multi-step
+          // turns would stop streaming after the first tool call even on the
+          // originating device. Absent entirely on older clients that never
+          // stamped the id — Responder falls back to the `off`-mode behavior.
+          const readDeviceTarget = (
+            content: Record<string, unknown> | undefined,
+            sender: string | undefined | null,
+          ): { userId: string; deviceId: string } | undefined => {
+            const deviceId = content?.[APP_BOXEL_ORIGINATING_DEVICE_ID_KEY];
+            return typeof deviceId === 'string' && deviceId && sender
+              ? { userId: sender, deviceId }
+              : undefined;
+          };
+          let streamPreviewTarget = readDeviceTarget(
+            event.getContent() as Record<string, unknown>,
+            event.getSender(),
+          );
+          if (!streamPreviewTarget) {
+            for (let i = eventList.length - 1; i >= 0; i--) {
+              const candidate = eventList[i] as unknown as {
+                content?: Record<string, unknown>;
+                sender?: string;
+              };
+              const target = readDeviceTarget(
+                candidate.content,
+                candidate.sender,
+              );
+              if (target) {
+                streamPreviewTarget = target;
+                break;
+              }
+            }
+          }
+          const responder = new Responder(
+            client,
+            room.roomId,
+            agentId,
+            streamPreviewTarget,
+          );
 
           if (Responder.eventWillDefinitelyTriggerResponse(event)) {
             await responder.ensureThinkingMessageSent();

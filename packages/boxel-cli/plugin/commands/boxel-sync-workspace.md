@@ -30,6 +30,7 @@ boxel:
 2. `skills/boxel/references/lint-workflow.md` (mandatory lint gate for `.gts` work).
 3. `skills/boxel-patterns/references/integration-surfaces.md` §10 (full boxel-cli surface).
 4. The target realm's `.boxel-sync.json` (file → md5 manifest) and `.boxel-history/` (per-realm git history) if inspecting state.
+5. `skills/boxel-environment/references/fresh-realm-push-integrity.md` before the first deployment to a new or reset realm.
 
 ## Procedure
 
@@ -53,7 +54,7 @@ npx boxel realm push <local-dir> <realm-url>
 
 Flags: `--delete` (also remove remotes not in local — destructive, confirm), `--force` (re-upload everything), `--dry-run`.
 
-After pushing GTS changes, run real installed npm `boxel` lint and render validation. Do not treat `npx boxel check <file>` as lint; it only reports sync state.
+After pushing GTS changes, run the installed npm lint and render-validation gates. The current monorepo CLI has no `npx boxel check`; use `npx boxel file lint` / `npx boxel lint`.
 
 ### C. Bidirectional sync
 
@@ -63,6 +64,8 @@ npx boxel realm sync <local-dir> <realm-url> --prefer-newest
 
 Flags: `--prefer-local`, `--prefer-remote`, `--prefer-newest` (one required), `--delete`, `--dry-run`.
 
+> **Fresh-realm ordering:** do not send definitions and instances as one mixed first push when instances contain nested realm-defined fields. Push `.gts` definitions, wait for their schemas to report ready, then write `.json` instances. A mixed push can preserve card counts while silently replacing nested leaf values with `null`. See `fresh-realm-push-integrity.md`.
+
 ### D. Check status (real subcommand)
 
 ```sh
@@ -71,14 +74,14 @@ npx boxel realm status <local-dir>
 
 Classifies each file as added/modified/deleted relative to the manifest. No flags needed for the basic view.
 
-### E. Watch for changes and auto-sync
+### E. Watch for server-side changes
 
 ```sh
 npx boxel realm watch start <local-dir>
 npx boxel realm watch stop                    # stops the watcher for this workspace
 ```
 
-Watch acquires a lock via `.boxel-sync.json` so only one watcher runs per workspace. Use `stop` (without args) to halt the running one. Logs go to a per-workspace location.
+Watch pulls server-side realm changes into the local workspace; it is not a local auto-push loop. It acquires a lock via `.boxel-sync.json` so only one watcher runs per workspace. Use `stop` (without args) to halt the running one. Logs go to a per-workspace location.
 
 ### F. Inspect / restore checkpoints
 
@@ -111,6 +114,24 @@ npx boxel realm cancel-indexing --realm <url> --cancel-pending    # also drop qu
 npx boxel realm remove <realm-url>                                # remove a realm (destructive)
 ```
 
+### H1. Publish to host mode
+
+```sh
+npx boxel realm publish <source-realm-url> <published-realm-url>
+npx boxel realm publish <source-realm-url> <published-realm-url> --no-wait
+npx boxel realm unpublish <published-realm-url>
+```
+
+Publishing creates an anonymously readable host-mode copy. A readiness-poll timeout does not prove that publication failed; probe the published URL before retrying. See `link-host-mode-paths` for `realm.json` routing.
+
+### H2. Diagnose indexing failures
+
+```sh
+npx boxel realm indexing-errors --realm <url>
+```
+
+Use this before scraping search responses when a push leaves cards unindexed. If the installed CLI predates the subcommand, inspect the realm's indexing diagnostics through the environment workflow instead.
+
 ### I. Federated search across realms
 
 ```sh
@@ -118,6 +139,8 @@ npx boxel search '<query-json>' --realms <url1>,<url2>
 ```
 
 Hits the `/_federated-search` endpoint. Supports the full Boxel `Query` shape (`filter` / `on` / `sort`). Server JWT handled by the active profile.
+
+For typed render validation, prefer the installed CLI as the compatibility layer: run `npx boxel search --realm <url> --query '<json>' --json` and inspect `relationships.html`. Direct `/_search-prerendered` and `/_search-v2` routes vary by deployment. If `/_search-prerendered` is exposed, it requires HTTP `QUERY`; a `GET`, 404, or method error is an endpoint failure, not an empty successful search.
 
 ### J. File ops on a realm (no full sync needed)
 
@@ -133,27 +156,22 @@ Useful for surgical realm edits without pulling the whole thing locally.
 
 ### J1. Lint Boxel source
 
-Use the installed npm `@cardstack/boxel-cli` 0.2.0+ lint surface, not `npx boxel check`.
+Use the installed npm `@cardstack/boxel-cli` lint surface. The current monorepo CLI has no `npx boxel check`.
 
 ```sh
 npx boxel file lint <realm-relative-path> --realm <realm-url> --file <absolute-local-file>
 npx boxel lint <realm-relative-path> --realm <realm-url>
 npx boxel lint --realm <realm-url>
+npx boxel parse [path]                    # local Glint + JSON document validation
 ```
 
 Clean lint is the human output `No lint issues found` or JSON with an empty `messages` array. `ok: true` with messages is not clean.
 
 > ⚠️ **Lint plus render.** Lint catches compile/syntax/import/template-scope problems; render validation still matters after a push:
 >
-> 1. **After push** of a `.gts` change, hit `/_search-prerendered` to confirm the realm successfully prerendered the supported formats (`embedded`, `fitted`, `atom`, `head`). A 200 with rendered HTML means the card compiles + serializes; a 5xx with an indexing error means the file is broken.
+> 1. **After push** of a `.gts` change, run a typed `npx boxel search --json` and inspect its HTML relationships to confirm the realm successfully prerendered the supported formats. Use direct `/_search-prerendered` only when that deployment exposes it.
 > 2. **For isolated format**, prerender doesn't cover it — open the card in the live app (`/boxel-preview-card`) or render via a `run-command` invocation. Isolated-only errors won't show up in `_search-prerendered`.
 > 3. If the lint command is genuinely unavailable, record the CLI gap and use render validation as a fallback. That fallback is not a clean lint.
-
-> ⚠️ **Manifest compatibility bug observed 2026-05-21.** `npx boxel check <file>` can crash before doing any useful check when `.boxel-sync.json` contains `realmUrl` but no `workspaceUrl`:
->
-> `TypeError: Cannot read properties of undefined (reading 'endsWith')`
->
-> This is another reason not to treat `npx boxel check` as a lint gate. If this happens, record it in the CLI improvements log and continue with installed npm `boxel` lint plus server-side render validation.
 
 ### Escape hatch when `npx boxel realm push` hangs
 
@@ -193,7 +211,7 @@ Routes through the realm prerenderer. Useful for scripted reindexing, schema int
 ### L. Consolidate multiple workspaces
 
 ```sh
-boxel consolidate-workspaces
+npx boxel consolidate-workspaces
 ```
 
 Merge multiple watched workspaces (advanced — interactive prompts).
@@ -201,13 +219,16 @@ Merge multiple watched workspaces (advanced — interactive prompts).
 ### M. Profile management
 
 ```sh
-boxel profile list
-boxel profile use <name>
-boxel profile create <name> [--realm-server-url <url>] [--user-id <id>]
-boxel profile delete <name>
+npx boxel profile list
+npx boxel profile add [-u <matrix-id>] [--matrix-url <url>] [--realm-server-url <url>]
+npx boxel profile switch <profile-id>
+npx boxel profile remove <profile-id>
+npx boxel profile migrate
 ```
 
-Each profile holds a different realm-server URL + auth context. Useful when working against staging vs prod.
+The namespaced CLI uses `add` / `switch` / `remove`, not the legacy standalone `create` / `use` / `delete`. Profile switching changes the global active profile; record the previous profile and restore it after a temporary environment switch.
+
+If a saved profile has credentials but no Matrix access token, re-run `profile add` with the password supplied through `BOXEL_PASSWORD` from a secure source. Never print the password or place it in committed shell history.
 
 ## Done Criteria (self-verify)
 
@@ -215,8 +236,9 @@ Each profile holds a different realm-server URL + auth context. Useful when work
 - [ ] For `sync`: one of `--prefer-local`, `--prefer-remote`, `--prefer-newest` was specified.
 - [ ] After pull/sync: `.boxel-sync.json` exists in the local directory.
 - [ ] After push/sync: `npx boxel realm status <dir>` returns clean (no pending changes).
-- [ ] After GTS push/sync: installed npm `boxel` lint was clean for each changed `.gts` file (`npx boxel file lint ... --file <local-file>` before push and `npx boxel lint <path> --realm <url>` after push). `npx boxel check` alone is **not** enough — it only reports sync state.
-- [ ] After GTS push/sync: a `_search-prerendered` hit confirmed the realm accepted the file for `embedded`/`fitted`/`atom`/`head`, AND at least one affected card was opened in the live app to exercise `isolated`.
+- [ ] After GTS push/sync: installed npm `boxel` lint was clean for each changed `.gts` file (`npx boxel file lint ... --file <local-file>` before push and `npx boxel lint <path> --realm <url>` after push).
+- [ ] After GTS push/sync: a typed CLI search returned the expected HTML relationships for prerendered formats, AND at least one affected card was opened in the live app to exercise `isolated`.
+- [ ] After the first push to a fresh realm: definitions were ready before instances were written, and at least one nested compound-field instance was read back and compared with local source.
 - [ ] The workspace root `.gitignore` continues to exclude `realms-staging.stack.cards/`, `app.boxel.ai/`, `stack.cards/` — realm content stays out of the workspace repo.
 
 ## Failure Recovery
@@ -228,6 +250,8 @@ Each profile holds a different realm-server URL + auth context. Useful when work
 - **Realm not reachable** → `npx boxel realm wait-for-ready --realm <url>` to block until ready.
 - **Indexing stuck** → `npx boxel realm cancel-indexing --realm <url>` to clear the queue.
 - **Installed CLI missing commands** → `/usr/local/bin/boxel` may be stale. Rebuild from `~/Projects/boxel/packages/boxel-cli` and re-link.
+- **Profile has no stored Matrix access token** → re-run `npx boxel profile add` for that identity with `BOXEL_PASSWORD` supplied securely, then restore the previously active profile after the task.
+- **Fresh realm has the right card count but blank nested content** → stop debugging CSS. Read the stored JSON, wait for schemas to become ready, then force `npx boxel file write` for every affected instance. `realm sync` can skip them because local hashes did not change.
 
 ## Hand-off
 

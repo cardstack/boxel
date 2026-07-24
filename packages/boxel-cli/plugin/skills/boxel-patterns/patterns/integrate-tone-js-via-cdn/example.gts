@@ -49,7 +49,7 @@ function tone(): any {
 export class ChordPlayer extends CardDef {
   static displayName = 'Chord Player';
 
-  @field title = contains(StringField);
+  @field cardTitle = contains(StringField);
 
   static isolated = class Isolated extends Component<typeof ChordPlayer> {
     @tracked ready = false;
@@ -99,7 +99,7 @@ export class ChordPlayer extends CardDef {
 
     <template>
       <div class='chord-player'>
-        <h1>{{if @model.title @model.title 'Chord Player'}}</h1>
+        <h1>{{if @model.cardTitle @model.cardTitle 'Chord Player'}}</h1>
 
         {{#if this.error}}
           <p class='error'>{{this.error}}</p>

@@ -6,7 +6,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import type { Select } from 'ember-power-select/components/power-select';
 
-import { eq } from '../../helpers.ts';
+import { eq } from '../../helpers.gts';
 import BoxelInput from '../input/index.gts';
 import type { PickerOption } from './index.gts';
 import PickerOptionRow from './option-row.gts';

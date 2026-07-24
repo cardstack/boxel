@@ -9,7 +9,7 @@ import type {
 import PowerSelect from 'ember-power-select/components/power-select';
 import BeforeOptions from 'ember-power-select/components/power-select/before-options';
 
-import { cn, not } from '../../helpers.ts';
+import { cn, not } from '../../helpers.gts';
 import { BoxelAfterOptionsComponent } from './after-options.gts';
 import BoxelSelectedItem, {
   type SelectedItemSignature,

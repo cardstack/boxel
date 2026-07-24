@@ -18,7 +18,7 @@ import { RecentCards } from '../utils/local-storage-keys';
 import type CardService from './card-service';
 import type NetworkService from './network';
 import type RecentFilesService from './recent-files-service';
-import type ResetService from './reset';
+import type SessionService from './session';
 import type StoreService from './store';
 import type * as CardAPI from '@cardstack/base/card-api';
 import type { CardDef, BaseDef } from '@cardstack/base/card-api';
@@ -29,7 +29,7 @@ export interface RecentCard {
 }
 
 export default class RecentCardsService extends Service {
-  @service declare private reset: ResetService;
+  @service declare private session: SessionService;
   @service declare private cardService: CardService;
   @service declare private recentFilesService: RecentFilesService;
   @service declare private store: StoreService;
@@ -42,7 +42,7 @@ export default class RecentCardsService extends Service {
   constructor(owner: Owner) {
     super(owner);
     this.resetState();
-    this.reset.register(this);
+    this.session.register(this);
     registerDestructor(this, () => {
       this.clearPendingCardIdSubscriptions();
     });

@@ -7,7 +7,7 @@ import {
   fittedFormatById,
   fittedFormatIds,
   sanitizeHtmlSafe,
-} from '../../helpers.ts';
+} from '../../helpers.gts';
 import GridItemContainer, {
   type GridItemContainerSignature,
 } from './grid-item-container/index.gts';

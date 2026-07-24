@@ -4,18 +4,17 @@
 
 A `fitted` child card must **not** impose its own intrinsic minimum height or rely on its content to size the surface. The parent (a grid, a filmstrip, a CardsGrid) decides the cell envelope; the child fills it.
 
-Safer fitted-card defaults to set on the outermost element:
+**The host establishes a size container named `fitted-card` around every fitted template — query it; never create your own container on the root.** The host wrapper (`.field-component-card.fitted-format`) already sets `width: 100%; height: 100%; overflow: hidden; container-type: size; container-name: fitted-card` (see `boxel-ui-guidelines/references/delegated-render-control.md`). Your template's root is a single `.fit` grid that fills that wrapper:
 
 ```css
-.cq {
-  width: 100%;
+.fit {
+  width: 100%;   /* match the host wrapper's 100% × 100% — never fixed or min/max dimensions */
   height: 100%;
-  min-height: 0;
-  box-sizing: border-box;
-  container-type: size;
-  container-name: card;
+  display: grid;
 }
 ```
+
+Matching the wrapper with `100%` sizing is the one sanctioned sizing declaration on the root. Everything else in the child contract's fitted row — fixed/min/max dimensions, `border`, `border-radius`, `box-shadow`, `container-type`, `container-name` — stays off the root (the host owns them). The runtime also provides a universal `box-sizing: border-box` reset, so templates never need to declare it. The fitted child may use a different background/foreground pairing from the theme's default, such as `background-color: var(--card); color: var(--card-foreground)`.
 
 Plus: stable grid/flex tracks (no `auto` rows for body content — use `minmax(0, 1fr)`), explicit `overflow: hidden` on every region, and text clamps (`-webkit-line-clamp: N`, `display: -webkit-box`, `-webkit-box-orient: vertical`).
 
@@ -27,47 +26,73 @@ Plus: stable grid/flex tracks (no `auto` rows for body content — use `minmax(0
 
 This guide teaches how to build Boxel card fitted views using **only CSS container queries** — no JavaScript modifiers, no ResizeObserver, no post-layout DOM manipulation. It replaces the three-modifier engine (FitGridModifier + LineBudgetModifier + PretextModifier) documented in older FITTED-LAYOUT-GUIDE.md material.
 
-**Reference implementations:**
-- `news-card-cq.gts` — Standard stacked + thumbnail sidebar layouts
-- `stock-ticker-card-cq.gts` — No-image domain card (dark terminal theme)
-- `recipe-card-cq.gts` — Complex 7-region card with line budget replacement
-- `hotel-room-card-cq.gts` — Magazine spread layouts at wide sizes
+**Reference implementations:** see the File Inventory at the end of this guide.
 
-## The Two-Element Pattern
+## Prefer `<FittedCard>` for standard compositions — hand-roll special templates
 
-**CRITICAL RULE:** CSS container queries cannot style the container element itself — only its descendants. You MUST use a two-element pattern:
+For standard fitted compositions — image/placeholder + eyebrow + title + subtitle + meta + footer + badges — use the **`FittedCard`** component from `@cardstack/boxel-ui/components` instead of hand-rolling the grid and quanta in this guide. It implements the rules here internally: it queries the host's `fitted-card` container (no local container on the root), switches vertical/horizontal/compact layouts by aspect-ratio and size breakpoints, and exposes `--fc-*` custom properties for typography, spacing, image sizing, and per-section visibility.
+
+**When a special fitted template is required, don't reach for `FittedCard`** — hand-roll it with the rest of this guide. "Special" means the kind of design catalogued in the File Inventory below: a dark-terminal stock ticker, a ticket stub with a CSS barcode, a boarding pass with an SVG flight path, a magazine spread with custom region flows, a serif fine-dining menu. Bending the slot model around a bespoke composition costs more than building the composition directly.
+
+```gts
+import { FittedCard } from '@cardstack/boxel-ui/components';
+
+<FittedCard @imageUrl={{@model.imageUrl}} @imageAlt={{@model.title}}>
+  <:placeholder><BookOpen width='24' height='24' /></:placeholder>
+  <:badgeLeft><Pill @size='extra-small'>New</Pill></:badgeLeft>
+  <:eyebrow>Non-fiction</:eyebrow>
+  <:title><@fields.cardTitle /></:title>
+  <:subtitle><@fields.cardDescription /></:subtitle>
+  <:meta><span>150 mins</span></:meta>
+  <:footer><span>320 pages</span><span>2024</span></:footer>
+</FittedCard>
+```
+
+**No-image cards** (domain/data cards with no media): omit `@imageUrl`, `:image`, AND `:placeholder` — the image column doesn't render at all, and the content column switches to its no-image layout (`justify-content: space-between`, gap from `--fc-content-gap-no-image`):
+
+```gts
+<FittedCard>
+  <:eyebrow>NASDAQ</:eyebrow>
+  <:title><@fields.cardTitle /></:title>
+  <:subtitle><@fields.companyName /></:subtitle>
+  <:meta><span class='price'>{{formatCurrency @model.price currency='USD'}}</span></:meta>
+  <:footer><span>Vol {{formatNumber @model.volume size='tiny'}}</span><span>{{@model.changePct}}%</span></:footer>
+</FittedCard>
+
+<style scoped>
+  .price { font-size: var(--fc-meta-font-size); font-weight: 800; }
+</style>
+```
+
+(Providing `:placeholder` instead renders the image column with your icon/content on the `--fc-image-background` gradient — use that when the card *usually* has media and this instance just lacks it; omit all three when the card type never has media.)
+
+Source: [`packages/boxel-ui/addon/src/components/fitted-card/`](https://github.com/cardstack/boxel/tree/main/packages/boxel-ui/addon/src/components/fitted-card) — read the component's doc comment for the full named-block / arg / `--fc-*` API (including `@layout` to force vertical/horizontal and the `--fc-*-display` visibility overrides).
+
+Tune, don't fork: when the composition IS standard, prefer setting `--fc-*` variables and `@container fitted-card (...)` overrides from your card's scoped CSS over forking the layout. When it isn't — see the special-template rule above — hand-roll from the start; the File Inventory references show what that looks like.
+
+## Query the Host Container (`fitted-card`)
+
+**CRITICAL RULE:** CSS container queries cannot style the container element itself — only its descendants. The host wrapper IS the container, so your entire template — including its root `.fit` grid — is a descendant and can be styled by `@container fitted-card (...)` rules:
 
 ```gts
 <template>
-  <div class="cq">           {{! ← Container: sets size context }}
-    <article class="fit">    {{! ← Grid: styled BY container queries }}
-      ...regions...
-    </article>
-  </div>
+  <article class="fit">    {{! ← root grid, styled BY queries against the host's fitted-card container }}
+    ...regions...
+  </article>
 </template>
 ```
 
 ```css
-.cq {
-  container-type: size;    /* enables both width AND height queries */
-  container-name: card;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-}
-
 .fit {
   width: 100%;
   height: 100%;
   display: grid;
-  overflow: hidden;
-  box-sizing: border-box;
 }
 ```
 
-**Why `container-type: size`?** Fitted cards have fixed width AND height set by the parent. We need both `@container (width ...)` and `@container (height ...)` queries. `container-type: size` enables both. This is safe because the parent guarantees both dimensions.
+**Why does this work without a local container?** The host sets `container-type: size; container-name: fitted-card` on the wrapper. `size` enables both `@container (width ...)` and `@container (height ...)` queries — safe because the parent guarantees both dimensions.
 
-**If you use a single element** (the grid IS the container), none of your `@container` rules for grid-template, padding, gap, or CSS custom properties on that element will work. The layout will be completely broken. This was the #1 mistake in the initial implementation.
+**If you create your own container on the root** (`container-type` on `.fit`), none of your `@container` rules for grid-template, padding, gap, or CSS custom properties on that element will work — a container cannot be styled by its own queries — and you'd be competing with the host wrapper in violation of the child contract in `delegated-render-control.md`. Earlier versions of this guide prescribed a local two-element `.cq` → `.fit` skeleton; that is superseded — query the host's `fitted-card` container instead.
 
 ## Size Classification
 
@@ -90,16 +115,18 @@ This guide teaches how to build Boxel card fitted views using **only CSS contain
 | medium | 170-260px | Hide tags, clamp meta to 1 line |
 | wide | >260px | Show tags, horizontal thumbnails at h40/h65/h105 |
 
+> ⚠️ **Why tags hide below 260px:** tag pills with `flex-wrap: wrap` consume unpredictable height, destabilizing the layout. `@container card (width <= 260px) { .r-tags { display: none; } }`
+
 ### Container Query Syntax
 
 ```css
 /* Height quantum */
-@container card (height <= 50px) { /* h40 */ }
-@container card (50px < height <= 80px) { /* h65 */ }
-@container card (80px < height <= 130px) { /* h105 */ }
+@container fitted-card (height <= 50px) { /* h40 */ }
+@container fitted-card (50px < height <= 80px) { /* h65 */ }
+@container fitted-card (80px < height <= 130px) { /* h105 */ }
 
 /* Compound: width + height */
-@container card (width > 260px) and (200px < height <= 320px) { /* wide h275 */ }
+@container fitted-card (width > 260px) and (200px < height <= 320px) { /* wide h275 */ }
 ```
 
 ## Grid Template Patterns
@@ -117,13 +144,13 @@ grid-template-rows: minmax(0, 35%) auto minmax(0, 1fr) auto auto;
 /*                   hero            head body            tags meta */
 ```
 
-**Why:** With `auto`, the body row takes its full content height regardless of available space, pushing tags and meta off the bottom. With `minmax(0, 1fr)`, the body gets whatever space remains after hero (percentage), head (auto = line-clamped content), tags (auto), and meta (auto). If that's 0px, the body collapses gracefully — its `overflow: hidden` clips any content.
+**Why:** With `auto`, the body row takes its full content height regardless of available space, pushing tags and meta off the bottom — even with `overflow: hidden` on the grid, each `auto` row still gets its content size. With `minmax(0, 1fr)`, the body gets whatever space remains after hero (percentage), head (auto = line-clamped content), tags (auto), and meta (auto). If that's 0px, the body collapses gracefully — its `overflow: hidden` clips any content.
 
 ### Grid Templates Per Height Quantum
 
 ```css
 /* h40: head only */
-@container card (height <= 50px) {
+@container fitted-card (height <= 50px) {
   .fit {
     grid-template-rows: 1fr;
     grid-template-areas: "head";
@@ -134,7 +161,7 @@ grid-template-rows: minmax(0, 35%) auto minmax(0, 1fr) auto auto;
 }
 
 /* h65: head + meta */
-@container card (50px < height <= 80px) {
+@container fitted-card (50px < height <= 80px) {
   .fit {
     grid-template-rows: 1fr auto;
     grid-template-areas: "head" "meta";
@@ -143,7 +170,7 @@ grid-template-rows: minmax(0, 35%) auto minmax(0, 1fr) auto auto;
 }
 
 /* h105: head + body + meta */
-@container card (80px < height <= 130px) {
+@container fitted-card (80px < height <= 130px) {
   .fit {
     grid-template-rows: auto auto 1fr;
     grid-template-areas: "head" "body" "meta";
@@ -152,7 +179,7 @@ grid-template-rows: minmax(0, 35%) auto minmax(0, 1fr) auto auto;
 }
 
 /* h170: head + body + meta (no hero) */
-@container card (width <= 260px) and (130px < height <= 200px) {
+@container fitted-card (width <= 260px) and (130px < height <= 200px) {
   .fit {
     grid-template-rows: auto minmax(0, 1fr) auto;
     grid-template-areas: "head" "body" "meta";
@@ -160,7 +187,7 @@ grid-template-rows: minmax(0, 35%) auto minmax(0, 1fr) auto auto;
   .r-hero { display: none; }
   .r-tags { display: none; }
 }
-@container card (width > 260px) and (130px < height <= 200px) {
+@container fitted-card (width > 260px) and (130px < height <= 200px) {
   .fit {
     grid-template-rows: auto minmax(0, 1fr) auto auto;
     grid-template-areas: "head" "body" "tags" "meta";
@@ -169,7 +196,7 @@ grid-template-rows: minmax(0, 35%) auto minmax(0, 1fr) auto auto;
 }
 
 /* h275: hero + all content */
-@container card (width > 260px) and (200px < height <= 320px) {
+@container fitted-card (width > 260px) and (200px < height <= 320px) {
   .fit {
     grid-template-rows: minmax(0, 30%) auto minmax(0, 1fr) auto auto;
     grid-template-areas: "hero" "head" "body" "tags" "meta";
@@ -177,13 +204,15 @@ grid-template-rows: minmax(0, 35%) auto minmax(0, 1fr) auto auto;
 }
 
 /* h445: hero (larger) + all content */
-@container card (width > 260px) and (height > 320px) {
+@container fitted-card (width > 260px) and (height > 320px) {
   .fit {
     grid-template-rows: minmax(0, 38%) auto minmax(0, 1fr) auto auto;
     grid-template-areas: "hero" "head" "body" "tags" "meta";
   }
 }
 ```
+
+> ⚠️ **Hero percentage must be conservative.** A percentage hero shrinks with the container: at h275, `35%` = 96px at 275px tall but only 70px at 200px tall. Use 30% for h275 and 35-38% for h445 so text still fits at the short end of each range (as the templates above do).
 
 ### Handling Missing Images with `:not(:has())`
 
@@ -201,7 +230,7 @@ When the hero image is optional, provide alternative templates:
 For wide containers at h40/h65/h105, switch to 2-column layout with thumbnail:
 
 ```css
-@container card (width > 260px) and (50px < height <= 80px) {
+@container fitted-card (width > 260px) and (50px < height <= 80px) {
   .fit:has(.r-hero) {
     grid-template-columns: 50px 1fr;
     grid-template-rows: 1fr auto;
@@ -247,21 +276,21 @@ Cards progress through layout modes as width increases. Each mode has a minimum 
 
 ```css
 /* ✅ Thumbnail sidebar at >260px — fixed image column */
-@container card (width > 260px) and (50px < height <= 80px) {
+@container fitted-card (width > 260px) and (50px < height <= 80px) {
   .fit:has(.r-hero) {
     grid-template-columns: 55px 1fr;
   }
 }
 
 /* ✅ Magazine spread at >370px — percentage image column */
-@container card (width > 370px) and (130px < height <= 200px) {
+@container fitted-card (width > 370px) and (130px < height <= 200px) {
   .fit:has(.r-hero) {
     grid-template-columns: 45% 1fr;
   }
 }
 
 /* ❌ WRONG — magazine spread at >260px, content column too narrow */
-@container card (width > 260px) and (130px < height <= 200px) {
+@container fitted-card (width > 260px) and (130px < height <= 200px) {
   .fit:has(.r-hero) {
     grid-template-columns: 45% 1fr; /* at 265px: content = 134px! */
   }
@@ -304,7 +333,7 @@ When the image is optional, always provide a fallback grid that uses stacked lay
 
 ```css
 /* Magazine spread only when image exists AND width is sufficient */
-@container card (width > 370px) and (200px < height <= 320px) {
+@container fitted-card (width > 370px) and (200px < height <= 320px) {
   .fit:has(.r-hero) {
     grid-template-columns: 45% 1fr;
     /* ... 2-column areas ... */
@@ -352,6 +381,8 @@ The body region should use flex column layout for internal spacing:
 }
 ```
 
+> ⚠️ **Meta row is `auto`, not `1fr`.** The bottom meta row should take its content size; `1fr` wastes space or opens a gap between body text and meta. Use `align-self: end` on the meta region to dock it.
+
 ## Line Clamping
 
 ### Boilerplate
@@ -367,23 +398,25 @@ Every text element that needs clamping requires this base:
 }
 ```
 
+> ⚠️ Missing any of these three declarations and `-webkit-line-clamp` silently does nothing.
+
 ### Pre-Declared Clamp Values
 
 Instead of the JS modifier computing line allocation at runtime, you declare the clamp value at each size breakpoint:
 
 ```css
-@container card (height <= 50px) {
+@container fitted-card (height <= 50px) {
   .headline { -webkit-line-clamp: 1; }
 }
-@container card (50px < height <= 80px) {
+@container fitted-card (50px < height <= 80px) {
   .headline { -webkit-line-clamp: 2; }
 }
-@container card (80px < height <= 130px) {
+@container fitted-card (80px < height <= 130px) {
   .headline { -webkit-line-clamp: 2; }
   .subhead  { -webkit-line-clamp: 1; }
   .excerpt  { display: none; }
 }
-@container card (130px < height <= 200px) {
+@container fitted-card (130px < height <= 200px) {
   .headline { -webkit-line-clamp: 3; }
   .subhead  { -webkit-line-clamp: 1; }
   .excerpt  { -webkit-line-clamp: 2; }
@@ -407,7 +440,7 @@ The JS system's "priority-1 gets 3x more lines" is encoded directly: at every br
 
 ```css
 /* Narrow h170: headline needs more lines, hide subhead */
-@container card (width <= 170px) and (130px < height <= 200px) {
+@container fitted-card (width <= 170px) and (130px < height <= 200px) {
   .headline { -webkit-line-clamp: 4; }
   .subhead  { display: none; }
   .excerpt  { -webkit-line-clamp: 2; }
@@ -435,13 +468,15 @@ Example for 250×275 (medium, h275) with hero:
 - Excerpt at 12px × 1.35 = 16px/line → 2 lines = 32px
 - Total body: 48px ← fits in 90px with breathing room
 
-**If the math doesn't work at the smallest size in a range, reduce the clamp or font size.** The h275 range (200-320px) is wide — values must work at 200px tall, not just 275px.
+**If the math doesn't work at the smallest size in a range, reduce the clamp.** The h275 range (200-320px) is wide — values must work at 200px tall, not just 275px. Always calculate line budgets for the WORST case (smallest height in the range). The `pow()`-based scale + per-role `max()` floors (next section) handle font sizes automatically — but the line-clamp values you pick per quantum still need to be conservative for the smallest size in the band.
 
 ## Comfort-Scored Typography — `pow()`-based hierarchical scale
 
 ### Approach: One Base, One Ratio, `pow()` Hierarchy
 
-**All fitted cards MUST use continuous container-query unit scaling, driven by a single hierarchical scale.** Anchor the whole type system on ONE base size that grows with the container, then derive each role (headline, body, meta, etc.) by raising/lowering it via `pow()` with a typographic ratio. Each derived size gets a `max()` floor so it stays readable at the smallest container sizes.
+**Scope: this mandate applies to HAND-ROLLED fitted templates.** `FittedCard`-based templates handle typography through the component's stepped theme-token sizes (`--boxel-font-size-*`) and its `--fc-*-font-size` tuning variables — do not retrofit the `pow()` hierarchy onto them.
+
+**All hand-rolled fitted templates MUST use continuous container-query unit scaling, driven by a single hierarchical scale.** Anchor the whole type system on ONE base size that grows with the container, then derive each role (headline, body, meta, etc.) by raising/lowering it via `pow()` with a typographic ratio. Each derived size gets a `max()` floor so it stays readable at the smallest container sizes.
 
 This replaces both (a) the original 18-block stepped `@container` font-size grid, and (b) the additive `4cqi + 1.5cqb` formula per role. One base, one ratio, hierarchical exponents, explicit minimums — fewer variables to tune, and the *relative* hierarchy is preserved automatically as the base scales.
 
@@ -492,7 +527,7 @@ This replaces both (a) the original 18-block stepped `@container` font-size grid
 - **Single source of truth.** Want a denser scale? Change `--type-ratio` to 1.2. Want all text bigger? Bump the base's clamp. Every role moves together, preserving the visual hierarchy.
 - **Floors per role, not globally.** The body and headline shouldn't have the same minimum — the headline can drop to 11px in a tight strip, but its derived base might want to clamp at a different floor than meta. `max()` per role handles that without re-deriving from a different base.
 - **Cleaner mental model.** "Headline is 2 ratio-steps above body" is a single sentence. The previous additive formula encoded the same hierarchy through 6 separate hand-tuned coefficients, harder to keep consistent.
-- **CSS `pow()` is real.** Supported in Chrome 117+, Safari 17+, Firefox 118+ (late 2023). Boxel runs in modern browsers; this is safe.
+- **CSS `pow()` is real.** Supported in Chrome 117+, Safari 17+, Firefox 118+ (late 2023). Boxel runs in modern browsers; this is safe. (If you ever must support older browsers, replace `pow(var(--type-ratio), 2)` with the literal multiplication `var(--type-ratio) * var(--type-ratio)` — uglier, same result.)
 
 **Tuning knobs:**
 
@@ -521,30 +556,9 @@ The `pow()`-based formulas approximate the original hand-tuned table at standard
 
 Match the table for "good enough" cases at small/medium sizes; the formulas give slightly larger values at very wide containers (where the table caps), which is generally desirable — large cards can afford bigger type.
 
-### Full Comfort Table (Reference Only — Don't Implement Stepped)
+### Comfort Thresholds (Historical — Superseded by `pow()`)
 
-The table below documents the original stepped values. Preserved for reference and validation, but **do not implement stepped `@container` blocks for font sizes** — use the `pow()`-based continuous formulas above instead.
-
-| Width | Height | Headline | Body | Subhead | Meta | Tag | Pad | Gap |
-|-------|--------|----------|------|---------|------|-----|-----|-----|
-| ≤170 | ≤50 | 11px | 9px | 9px | 8px | 7px | 5px | 2px |
-| ≤170 | 50-80 | 12px | 9px | 9px | 8px | 8px | 5px | 2px |
-| ≤170 | 80-130 | 13px | 10px | 10px | 8px | 8px | 5px | 2px |
-| ≤170 | 130-200 | 14px | 10px | 10px | 9px | 8px | 5px | 2px |
-| ≤170 | 200-320 | 14px | 11px | 11px | 9px | 8px | 5px | 2px |
-| ≤170 | >320 | 14px | 11px | 11px | 9px | 8px | 5px | 2px |
-| 170-260 | ≤50 | 12px | 9px | 9px | 8px | 8px | 7px | 4px |
-| 170-260 | 50-80 | 13px | 10px | 10px | 9px | 9px | 7px | 4px |
-| 170-260 | 80-130 | 14px | 11px | 11px | 9px | 9px | 7px | 4px |
-| 170-260 | 130-200 | 16px | 11px | 11px | 9px | 9px | 7px | 4px |
-| 170-260 | 200-320 | 18px | 12px | 12px | 10px | 10px | 7px | 4px |
-| 170-260 | >320 | 18px | 12px | 12px | 10px | 10px | 7px | 4px |
-| >260 | ≤50 | 15px | 11px | 11px | 9px | 9px | 10px | 6px |
-| >260 | 50-80 | 15px | 11px | 11px | 9px | 9px | 10px | 6px |
-| >260 | 80-130 | 16px | 12px | 12px | 10px | 10px | 10px | 6px |
-| >260 | 130-200 | 18px | 12px | 12px | 10px | 10px | 10px | 6px |
-| >260 | 200-320 | 18px | 12px | 12px | 10px | 10px | 10px | 6px |
-| >260 | >320 | 24px | 14px | 14px | 11px | 11px | 10px | 7px |
+An earlier version of this system used an 18-cell stepped table of hand-tuned comfort sizes — one row per width-class × height-quantum combination, roughly headline 11px → 24px, body 9px → 14px, pad 5px → 10px from the smallest cell to the largest. The continuous `pow()` formulas above supersede it: they reproduce those comfort values at standard sizes (the spot checks above quote the table's values) while scaling smoothly between them. **Do not implement stepped `@container` blocks for font sizes.**
 
 ### Behavioral Overrides (Stepped Rules That Remain)
 
@@ -552,12 +566,12 @@ While font sizes and spacing scale continuously, some **behavioral rules** still
 
 ```css
 /* Hide elements at small sizes — binary decision, not gradual */
-@container card (width <= 170px) and (height <= 50px) {
+@container fitted-card (width <= 170px) and (height <= 50px) {
   .chg { display: none; }
 }
 
 /* Adjust line clamps at specific thresholds */
-@container card (width <= 170px) and (130px < height <= 200px) {
+@container fitted-card (width <= 170px) and (130px < height <= 200px) {
   .headline { -webkit-line-clamp: 4; }
   .subhead { display: none; }
 }
@@ -567,20 +581,20 @@ While font sizes and spacing scale continuously, some **behavioral rules** still
 
 ### Using the Variables
 
-Content styles reference the variables with fallbacks:
+Content styles reference the variables bare — `.fit` (the parent) already declares every `--fit-*` variable with its floor, so descendants never carry inline fallbacks:
 
 ```css
 .headline {
-  font-size: var(--fit-headline-size, 14px);
-  line-height: var(--fit-headline-lh, 1.18);
+  font-size: var(--fit-headline-size);
+  line-height: var(--fit-headline-lh);
 }
 .subhead {
-  font-size: var(--fit-subhead-size, 12px);
-  line-height: var(--fit-body-lh, 1.35);
+  font-size: var(--fit-subhead-size);
+  line-height: var(--fit-body-lh);
 }
 .excerpt {
-  font-size: var(--fit-body-size, 11px);
-  line-height: var(--fit-body-lh, 1.4);
+  font-size: var(--fit-body-size);
+  line-height: var(--fit-body-lh);
 }
 ```
 
@@ -596,15 +610,15 @@ Some "metadata" is actually **key info** — price, status, availability — tha
 ```css
 /* Key info: bigger, bolder, colored — not buried in meta */
 .price {
-  font-size: var(--fit-keyinfo-size, 14px);
+  font-size: var(--fit-keyinfo-size);
   font-weight: 800;
-  color: var(--primary, #6366f1);
+  color: var(--primary);
 }
 
 /* Regular meta: small, muted, subordinate */
 .author, .date, .source {
-  font-size: var(--fit-meta-size, 9px);
-  color: var(--muted-foreground, #9b8bb0);
+  font-size: var(--fit-meta-size);
+  color: var(--muted-foreground);
 }
 ```
 
@@ -616,7 +630,7 @@ Some "metadata" is actually **key info** — price, status, availability — tha
 
 ### 1. Container Cannot Style Itself
 
-`@container card (...) { .fit { ... } }` only works if `.fit` is a DESCENDANT of the element with `container-name: card`. If `.fit` IS the container, nothing happens. Always use the two-element pattern.
+`@container fitted-card (...) { .fit { ... } }` only works because `.fit` is a DESCENDANT of the host wrapper carrying `container-name: fitted-card`. If you make `.fit` a container itself, nothing happens — a container cannot be styled by its own queries. Never create your own container on the fitted root; query the host's `fitted-card` container.
 
 ### 2. `auto` Grid Rows Overflow
 
@@ -643,7 +657,7 @@ At h275, `35%` hero = 96px at 275px tall but only 70px at 200px tall. Use 30% fo
 Tag pills with `flex-wrap: wrap` consume unpredictable height. Hide them at narrow/medium widths to avoid layout instability:
 
 ```css
-@container card (width <= 260px) { .r-tags { display: none; } }
+@container fitted-card (width <= 260px) { .r-tags { display: none; } }
 ```
 
 ### 8. Meta Should Be `auto`, Not `1fr`
@@ -676,32 +690,29 @@ Every fitted card has regions. Common patterns:
 
 ```gts
 <template>
-  <div class="cq">
-    <article class="fit">
-      {{#if @model.imageUrl}}
-        <div class="r-hero"><img class="hero-img" src={{@model.imageUrl}} alt="" /></div>
-      {{/if}}
-      <div class="r-head">
-        <h3 class="headline">{{@model.title}}</h3>
-      </div>
-      <div class="r-body">
-        <p class="excerpt">{{@model.description}}</p>
-      </div>
-      <div class="r-meta">
-        <span>{{@model.author}}</span>
-      </div>
-    </article>
-  </div>
+  <article class="fit">
+    {{#if @model.imageUrl}}
+      <div class="r-hero"><img class="hero-img" src={{@model.imageUrl}} alt="" /></div>
+    {{/if}}
+    <div class="r-head">
+      <h3 class="headline">{{@model.title}}</h3>
+    </div>
+    <div class="r-body">
+      <p class="excerpt">{{@model.description}}</p>
+    </div>
+    <div class="r-meta">
+      <span>{{@model.author}}</span>
+    </div>
+  </article>
 </template>
 ```
 
-No modifiers. No `data-line-*` attributes. No `{{this.fitGrid}}`.
+No modifiers. No `data-line-*` attributes. No `{{this.fitGrid}}`. No local container — the host wrapper provides the `fitted-card` size container.
 
 ### Step 3: Write the Base CSS
 
 ```css
-.cq { container-type: size; container-name: card; width: 100%; height: 100%; overflow: hidden; }
-.fit { width: 100%; height: 100%; display: grid; overflow: hidden; box-sizing: border-box; }
+.fit { width: 100%; height: 100%; display: grid; }
 .r-hero, .r-head, .r-body, .r-tags, .r-meta { overflow: hidden; min-height: 0; }
 .headline, .excerpt { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; margin: 0; }
 ```
@@ -720,7 +731,7 @@ Start from the smallest height quantum and work up. For each quantum:
 2. Set the line clamp values
 3. Add behavioral overrides (element hiding, line-clamp adjustments at specific width×height combos)
 
-**Do NOT set `--fit-*` font/spacing variables inside `@container` blocks** — the `pow()` hierarchy handles this automatically.
+**Do NOT set `--fit-*` font/spacing variables inside `@container` blocks** — the `pow()` hierarchy is computed once on `.fit`; per-quantum blocks override only structure, line clamps, and visibility. If you find yourself overriding `--fit-headline-size` inside a `@container` rule, adjust the base clamp range or `--type-ratio` instead.
 
 ### Step 6: Test in Format Preview
 
@@ -748,13 +759,11 @@ Open the Format Preview card, link your card instance, and check all 16 sizes. U
 ### After (Container Queries)
 
 ```gts
-<div class="cq">
-  <article class="fit">
-    <div class="r-head">
-      <h3 class="headline">{{@model.headline}}</h3>
-    </div>
-  </article>
-</div>
+<article class="fit">
+  <div class="r-head">
+    <h3 class="headline">{{@model.headline}}</h3>
+  </div>
+</article>
 ```
 
 No modifiers, no data attributes. All layout logic lives in CSS.
@@ -775,8 +784,10 @@ No modifiers, no data attributes. All layout logic lives in CSS.
 
 ## Quick Checklist for New CQ Fitted Views
 
-- [ ] Two-element pattern: `.cq` (container) wraps `.fit` (grid)
-- [ ] `container-type: size` on the outer element
+> This checklist is for **hand-rolled** fitted templates. A `FittedCard`-based template skips it — the component covers these internally; verify it at the 16 sizes and tune `--fc-*` variables instead.
+
+- [ ] Single root `.fit` grid; all `@container` rules query the host's `fitted-card` container
+- [ ] No `container-type` / `container-name` anywhere in the template — the host wrapper provides the size container
 - [ ] All regions have `overflow: hidden; min-height: 0`
 - [ ] Body region uses `minmax(0, 1fr)` grid row, not `auto`
 - [ ] Line clamp boilerplate on all clamped text elements
@@ -833,15 +844,21 @@ A card looks art-directed when these six moves are all present. Missing any one 
 One serif (the body voice: headline, dek, lede, stat values) and one sans-serif (the micro-labels: eyebrows, stat labels, byline meta, review counts). Never mix three families. Never set the eyebrow in the serif. Never set a stat value in the sans.
 
 ```css
-.headline   { font-family: var(--font-serif, 'Playfair Display', Georgia, serif); }
-.dek        { font-family: var(--font-serif, 'Lora', Georgia, serif); font-style: italic; }
-.stat-val   { font-family: var(--font-serif, ...); }
+/* Declare the pairing ONCE on the composition root — --font-serif has no
+   default value, so this local declaration is where its one fallback lives */
+.masthead {
+  --serif: var(--font-serif, Georgia, serif);
+  --sans: var(--font-sans, system-ui, sans-serif);
+}
+.headline   { font-family: var(--serif); }
+.dek        { font-family: var(--serif); font-style: italic; }
+.stat-val   { font-family: var(--serif); }
 .eyebrow,
 .stat-lbl,
-.review-count { font-family: var(--font-sans, 'Inter', sans-serif); }
+.review-count { font-family: var(--sans); }
 ```
 
-The theme card supplies `--font-serif` and `--font-sans`. Always reference them. Always provide a safe fallback (`Georgia, serif` / `system-ui, sans-serif`).
+The theme card supplies `--font-serif` and `--font-sans`. Always reference them. `--font-serif` has no default, so it needs a safe fallback (`Georgia, serif`) — given once, in the composition root's local-variable declaration, never inline per selector.
 
 #### 2. Weight rhythm — pair a large, light serif with tiny, bold sans
 

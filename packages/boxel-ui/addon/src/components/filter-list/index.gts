@@ -5,7 +5,7 @@ import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { cn } from '../../helpers.ts';
+import { cn } from '../../helpers.gts';
 import DropdownArrow from '../../icons/dropdown-arrow-down.gts';
 import type { Icon } from '../../icons/types.ts';
 import Button from '../button/index.gts';

@@ -15,6 +15,7 @@ export default {
         allowDeclareFields: true,
       },
     ],
+    'ember-concurrency/async-arrow-task-transform',
     [
       'babel-plugin-ember-template-compilation',
       {
@@ -23,7 +24,10 @@ export default {
           'ember-cli-htmlbars-inline-precompile',
           'htmlbars-inline-precompile',
         ],
-        transforms: [...templateCompatSupport()],
+        transforms: [
+          ...templateCompatSupport(),
+          'glimmer-scoped-css/ast-transform',
+        ],
       },
     ],
     [

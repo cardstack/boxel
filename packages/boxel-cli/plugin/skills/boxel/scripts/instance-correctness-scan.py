@@ -25,7 +25,7 @@ Usage:
 Exit code 0 = clean; 1 = one or more issues found. Pair with pre-push hooks
 or pre-commit checks.
 
-See `.claude/skills/boxel/SKILL.md` Cardinal Rules 12, 13, 14.
+See `.claude/skills/boxel/SKILL.md` Cardinal Rules 11, 12, 13.
 """
 import re
 import sys

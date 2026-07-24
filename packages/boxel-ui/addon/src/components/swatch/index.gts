@@ -1,6 +1,6 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
-import { cn, cssVar, eq, not } from '../../helpers.ts';
+import { cn, cssVar, eq, not } from '../../helpers.gts';
 
 interface Signature {
   Args: {

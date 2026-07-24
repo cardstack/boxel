@@ -88,6 +88,8 @@ module('Integration | Store', function (hooks) {
   let cardStore: CardStore;
   let PersonDef: typeof CardDefType;
   let BoomPersonDef: typeof CardDefType;
+  let EmployeeDef: typeof CardDefType;
+  let ManagerDef: typeof CardDefType;
   let realmService: RealmService;
 
   setupLocalIndexing(hooks);
@@ -151,6 +153,27 @@ module('Integration | Store', function (hooks) {
       };
     }
     BoomPersonDef = BoomPerson;
+
+    class Employee extends CardDef {
+      static displayName = 'Employee';
+      @field name = contains(StringField);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <div data-test-employee-badge>Employee: <@fields.name /></div>
+        </template>
+      };
+    }
+    EmployeeDef = Employee;
+
+    class Manager extends Employee {
+      static displayName = 'Manager';
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <div data-test-manager-badge>Manager: <@fields.name /></div>
+        </template>
+      };
+    }
+    ManagerDef = Manager;
     loaderService = getService('loader-service');
     loader = loaderService.loader;
     api = await loader.import('@cardstack/base/card-api');
@@ -165,6 +188,8 @@ module('Integration | Store', function (hooks) {
         contents: {
           'person.gts': { Person },
           'boom-person.gts': { BoomPerson },
+          'employee.gts': { Employee },
+          'manager.gts': { Manager },
           'Person/hassan.json': new Person({ name: 'Hassan' }),
           'Person/jade.json': new Person({ name: 'Jade' }),
           'Person/queenzy.json': new Person({ name: 'Queenzy' }),
@@ -2263,6 +2288,120 @@ module('Integration | Store', function (hooks) {
       newInstance[localId],
       'the updated instance is a different object than the original instance',
     );
+  });
+
+  test('an instance live updates to a new type when its adoptsFrom changes', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}Person/hassan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    let original = storeService.peek(
+      `${testRealmURL}Person/hassan`,
+    ) as CardDefType;
+    assert.true(
+      original instanceof PersonDef,
+      'the card starts out as a Person',
+    );
+    assert.dom('[data-test-employee-badge]').doesNotExist();
+
+    // Re-point the card's meta.adoptsFrom at an unrelated type — mirrors a user
+    // changing the adoptsFrom of a realm index card (CardsGrid) to a custom
+    // index card by editing its JSON.
+    await testRealm.write(
+      'Person/hassan.json',
+      JSON.stringify({
+        data: {
+          attributes: {
+            name: 'Hassan',
+          },
+          meta: {
+            adoptsFrom: {
+              module: testRRI('employee'),
+              name: 'Employee',
+            },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+
+    await waitUntil(
+      () =>
+        storeService.peek(`${testRealmURL}Person/hassan`) instanceof
+        EmployeeDef,
+      { timeout: 5_000 },
+    );
+    let reloaded = storeService.peek(
+      `${testRealmURL}Person/hassan`,
+    ) as CardDefType;
+    assert.true(
+      reloaded instanceof EmployeeDef,
+      'the store now holds an Employee instance for the same id',
+    );
+
+    await waitFor('[data-test-employee-badge]', { timeout: 5_000 });
+    assert
+      .dom('[data-test-employee-badge]')
+      .containsText(
+        'Employee: Hassan',
+        'the card re-rendered using the new type',
+      );
+  });
+
+  test('an instance rebuilds when its adoptsFrom changes to an ancestor type', async function (assert) {
+    await testRealm.write(
+      'Manager/m1.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'Hassan' },
+          meta: {
+            adoptsFrom: { module: testRRI('manager'), name: 'Manager' },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+    setCardInOperatorModeState(`${testRealmURL}Manager/m1`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await waitFor('[data-test-manager-badge]');
+    let original = storeService.peek(
+      `${testRealmURL}Manager/m1`,
+    ) as CardDefType;
+    assert.true(original instanceof ManagerDef, 'the card starts as a Manager');
+
+    // Re-point at the ancestor type. A subtype check would treat the Manager
+    // instance as already compatible and keep rendering the subclass; the
+    // store must rebuild it as exactly Employee.
+    await testRealm.write(
+      'Manager/m1.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'Hassan' },
+          meta: {
+            adoptsFrom: { module: testRRI('employee'), name: 'Employee' },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+
+    await waitUntil(
+      () => {
+        let c = storeService.peek(`${testRealmURL}Manager/m1`);
+        return c instanceof EmployeeDef && !(c instanceof ManagerDef);
+      },
+      { timeout: 5_000 },
+    );
+    await waitFor('[data-test-employee-badge]', { timeout: 5_000 });
+    assert
+      .dom('[data-test-employee-badge]')
+      .containsText('Employee: Hassan', 'rebuilt as the ancestor type');
+    assert
+      .dom('[data-test-manager-badge]')
+      .doesNotExist('no longer rendered as the Manager subclass');
   });
 
   test('an instance can live update thru an error state', async function (assert) {

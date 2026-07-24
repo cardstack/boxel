@@ -1456,7 +1456,13 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     loadedValue: any,
     relativeTo: RealmResourceIdentifier | URL | undefined,
     opts: DeserializeOpts,
-  ): Promise<BaseInstanceType<CardT> | null | NotLoadedValue> {
+  ): Promise<
+    | BaseInstanceType<CardT>
+    | null
+    | NotLoadedValue
+    | LinkErrorValue
+    | LinkNotFoundValue
+  > {
     if (!isRelationship(value)) {
       throw new Error(
         `linkTo field '${
@@ -1491,6 +1497,17 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     let resource =
       resourceId != null ? resourceFrom(doc, resourceId) : undefined;
     if (!resource) {
+      // A terminal sentinel (link-error / link-not-found) is carried forward only
+      // when the wire reference is unchanged, so a known-broken link is not
+      // re-armed to a fresh not-loaded marker — which the getter WOULD retry — on
+      // reload. A re-pointed reference re-arms (the sentinel no longer describes
+      // the target); a target that has since become resolvable is present in the
+      // reload document, so `resource` is truthy above and this branch never runs.
+      if (isLinkError(loadedValue) || isLinkNotFound(loadedValue)) {
+        return resolveRef(loadedValue.reference, relativeTo) === href
+          ? loadedValue
+          : { type: 'not-loaded', reference };
+      }
       if (loadedValue !== undefined) {
         return loadedValue;
       }
@@ -1734,15 +1751,6 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
       // shape; the structured failure surfaces through `getRelationshipMembershipState`.
       let bucketEntry = deserialized.get(this.name);
       if (isLinkError(bucketEntry) || isLinkNotFound(bucketEntry)) {
-        // DIAGNOSTIC LOGGING (CS-11221) — remove after CI passes.
-        console.error(
-          '[CS-11221 DIAG] linksToMany getter returning emptyValue (bucket sentinel)',
-          {
-            fieldName: this.name,
-            ownerType: instance?.constructor?.name,
-            sentinelType: (bucketEntry as { type?: string })?.type,
-          },
-        );
         return this.emptyValue(instance) as BaseInstanceType<FieldT>;
       }
       let records = searchResource.instances ?? ([] as any[]);
@@ -2081,6 +2089,24 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
           resource = resourceFrom(doc, reference);
         }
         if (!resource) {
+          // Carry a terminal sentinel (link-error / link-not-found) forward when
+          // the wire reference is unchanged, so a known-broken element is not
+          // re-armed to a fresh not-loaded marker — which the next render would
+          // re-fetch — on every reload. The WatchedArray hides sentinels from
+          // index access, so scan the raw backing array to find one. A target
+          // that has since become resolvable is present in the reload document,
+          // so `resource` is truthy above and this branch never runs: the element
+          // loads and the card heals.
+          if (Array.isArray(loadedValues)) {
+            let carried = rawArrayValues(loadedValues).find(
+              (v) =>
+                (isLinkError(v) || isLinkNotFound(v)) &&
+                resolveRef(v.reference, relativeTo) === normalizedReference,
+            );
+            if (carried) {
+              return carried;
+            }
+          }
           return {
             type: 'not-loaded',
             reference,
@@ -4258,11 +4284,15 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
 
   let existingOverrides = getFieldOverrides(instance);
   let loadedValues = getDataBucket(instance);
+  // A resource's references (adoptsFrom, relationship links) are relative to the
+  // resource's own id, independent of the document that delivered it. So resolve
+  // them against this instance's own id when it is saved, and fall back to the
+  // threaded deserialization context only for an unsaved instance that has no id
+  // of its own.
   let instanceRelativeTo: RealmResourceIdentifier | URL | undefined =
-    instance[relativeTo] ??
     ('id' in instance && typeof instance.id === 'string'
       ? (instance.id as RealmResourceIdentifier)
-      : undefined);
+      : undefined) ?? instance[relativeTo];
 
   function getFieldMeta(
     fieldsMeta: CardFields | undefined,
@@ -4335,8 +4365,9 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
     }
     let override = await loadCardDef(overrideMeta.adoptsFrom, {
       loader: myLoader(),
-      // Prefer the deserialization context (instanceRelativeTo) so overrides resolve
-      // relative to the document we fetched (e.g. catalog/index), then fall back to the resource id.
+      // A field override's module ref is relative to this resource's own id, the
+      // same rule as adoptsFrom; instanceRelativeTo already resolves to the
+      // instance's own id when saved, with resource.id as the fallback.
       relativeTo:
         instanceRelativeTo ?? (resource.id ? rri(resource.id) : undefined),
       dependencyTrackingContext: opts?.dependencyTrackingContext,
@@ -4445,12 +4476,14 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
       if (overrideApplied) {
         field = (getField(instance, fieldName) ?? field) as Field<T>;
       }
-      // Prefer the deserialization context ([relativeTo]) when available; fall back to the instance id
+      // A resource's relationship links are relative to the resource's own id,
+      // independent of the document that delivered it — so resolve against this
+      // instance's own id when saved, falling back to the threaded context only
+      // for an unsaved instance with no id of its own.
       let relativeToVal: RealmResourceIdentifier | URL | undefined =
-        instance[relativeTo] ??
         ('id' in instance && typeof instance.id === 'string'
           ? (instance.id as RealmResourceIdentifier)
-          : undefined);
+          : undefined) ?? instance[relativeTo];
       let deserializedValue = await getDeserializedValue({
         card,
         loadedValue: loadedValues.get(fieldName),

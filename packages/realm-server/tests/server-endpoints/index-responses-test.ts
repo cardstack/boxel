@@ -1605,4 +1605,324 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       });
     },
   );
+
+  // Host routing rules must resolve a bare sub-path (e.g. /pricing) as well
+  // as the trailing-slash form, and canonicalize between them. The bug: the
+  // bare form 404'd for generic (non-text/html) Accept
+  // headers — crawlers, link-unfurlers, curl — because serve-index bailed to
+  // the module resolver when the path wasn't itself an indexed card
+  // instance, without first consulting the routing map. The trailing-slash
+  // form took the directory-index branch and rendered. This module publishes
+  // a realm whose routed instance lives in a subdirectory (its id therefore
+  // does NOT equal the routed path, so the card-id fallback cannot mask the
+  // bug) and asserts both forms plus the 308 canonical redirect.
+  module(
+    'Published realm: host routing rules + trailing-slash canonicalization',
+    function (hooks) {
+      let testRealmHttpServer: Server;
+      let testRealmServer: Awaited<
+        ReturnType<typeof runTestRealmServer>
+      >['testRealmServer'];
+      let request: SuperTest<Test>;
+      let dbAdapter: PgAdapter;
+      let dir: DirResult;
+      let sourceRealmUrlString: string;
+      let publishedRealmURLString: string;
+      let publishedRealmHost: string;
+      let publishedRealmPath: string;
+      let ownerUserId = '@mango:localhost';
+
+      hooks.beforeEach(function () {
+        dir = dirSync();
+      });
+      setupDB(hooks, {
+        beforeEach: async (_dbAdapter, _publisher, _runner) => {
+          dbAdapter = _dbAdapter;
+          let virtualNetwork = createVirtualNetwork();
+          let testRealmDir = join(dir.name, 'realm_server_routing', 'test');
+          ensureDirSync(testRealmDir);
+          ({ testRealmHttpServer, testRealmServer } = await runTestRealmServer({
+            virtualNetwork,
+            testRealmDir,
+            fileSystem: {},
+            realmsRootPath: join(dir.name, 'realm_server_routing'),
+            realmURL: new URL('http://127.0.0.1:4444/test/'),
+            dbAdapter: _dbAdapter,
+            publisher: _publisher,
+            runner: _runner,
+            matrixURL,
+            permissions: {
+              '*': ['read', 'write'],
+              [ownerUserId]: DEFAULT_PERMISSIONS,
+            },
+            domainsForPublishedRealms: {
+              boxelSpace: 'localhost',
+              boxelSite: 'localhost:4444',
+            },
+          }));
+          request = supertest(testRealmHttpServer);
+
+          // Create a publishable source realm.
+          let endpoint = 'routing-source';
+          let createResponse = await request
+            .post('/_create-realm')
+            .set('Accept', 'application/vnd.api+json')
+            .set('Content-Type', 'application/json')
+            .set(
+              'Authorization',
+              `Bearer ${createRealmServerJWT(
+                { user: ownerUserId, sessionRoom: 'session-room-test' },
+                realmSecretSeed,
+              )}`,
+            )
+            .send(
+              JSON.stringify({
+                data: {
+                  type: 'realm',
+                  attributes: { name: 'Routing Source Realm', endpoint },
+                },
+              }),
+            );
+          if (createResponse.status !== 202) {
+            throw new Error(
+              `/_create-realm failed with status ${createResponse.status}: ` +
+                (createResponse.text ||
+                  (createResponse.body
+                    ? JSON.stringify(createResponse.body)
+                    : '')),
+            );
+          }
+
+          sourceRealmUrlString = createResponse.body.data.id;
+          let sourceRealmPath = new URL(sourceRealmUrlString).pathname;
+
+          // Make the source realm publicly readable.
+          await _dbAdapter.execute(`
+            INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
+            VALUES ('${sourceRealmUrlString}', '*', true, true, true)
+          `);
+
+          // The routed instance lives in a subdirectory. Its id is
+          // <realm>/pages/pricing, which is deliberately NOT the routed path
+          // (<realm>/pricing) — so a 200 on /pricing can only come from the
+          // routing map, never from the card-id fallback.
+          let instanceResponse = await request
+            .post(`${sourceRealmPath}pages/pricing.json`)
+            .set('Accept', 'application/vnd.card+source')
+            .send(
+              JSON.stringify({
+                data: {
+                  type: 'card',
+                  id: `${sourceRealmUrlString}pages/pricing`,
+                  attributes: { cardInfo: { name: 'Pricing' } },
+                  meta: {
+                    adoptsFrom: {
+                      module: '@cardstack/base/card-api',
+                      name: 'CardDef',
+                    },
+                  },
+                },
+              }),
+            );
+          if (instanceResponse.status !== 204) {
+            throw new Error(
+              `Failed to write pages/pricing: ${instanceResponse.status} ${instanceResponse.text}`,
+            );
+          }
+
+          // Overwrite realm.json with a routing rule mapping the bare
+          // sub-path /pricing to the subdirectory instance. Writing realm.json
+          // re-indexes the RealmConfig card, so the routing map picks the rule
+          // up (and, after publish, the published realm's own index does too).
+          let realmConfigResponse = await request
+            .post(`${sourceRealmPath}realm.json`)
+            .set('Accept', 'application/vnd.card+source')
+            .send(
+              JSON.stringify({
+                data: {
+                  type: 'card',
+                  attributes: {
+                    cardInfo: { name: 'Routing Source Realm' },
+                    hostRoutingRules: [{ path: '/' }, { path: '/pricing' }],
+                  },
+                  relationships: {
+                    'hostRoutingRules.0.instance': {
+                      links: { self: './index' },
+                    },
+                    'hostRoutingRules.1.instance': {
+                      links: { self: './pages/pricing' },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: '@cardstack/base/realm-config',
+                      name: 'RealmConfig',
+                    },
+                  },
+                },
+              }),
+            );
+          if (realmConfigResponse.status !== 204) {
+            throw new Error(
+              `Failed to write realm.json: ${realmConfigResponse.status} ${realmConfigResponse.text}`,
+            );
+          }
+
+          // Publish the source realm — triggers a full from-scratch reindex of
+          // the published copy.
+          publishedRealmURLString =
+            'http://routingtest.localhost:4444/routing-source/';
+          publishedRealmHost = new URL(publishedRealmURLString).host;
+          publishedRealmPath = new URL(publishedRealmURLString).pathname;
+
+          let publishResponse = await request
+            .post('/_publish-realm')
+            .set('Accept', 'application/vnd.api+json')
+            .set('Content-Type', 'application/json')
+            .set(
+              'Authorization',
+              `Bearer ${createRealmServerJWT(
+                { user: ownerUserId, sessionRoom: 'session-room-test' },
+                realmSecretSeed,
+              )}`,
+            )
+            .send(
+              JSON.stringify({
+                sourceRealmURL: sourceRealmUrlString,
+                publishedRealmURL: publishedRealmURLString,
+              }),
+            );
+          if (publishResponse.status !== 202) {
+            throw new Error(
+              `Failed to publish realm: ${publishResponse.status} ${publishResponse.text}`,
+            );
+          }
+
+          await testRealmServer.testingOnlyReconcile();
+          let readinessResponse = await request
+            .get(`${publishedRealmPath}_readiness-check`)
+            .set('Host', publishedRealmHost)
+            .set('Accept', 'application/vnd.api+json');
+          if (readinessResponse.status !== 200) {
+            throw new Error(
+              `Published realm not ready: ${readinessResponse.status} ${readinessResponse.text}`,
+            );
+          }
+          await settlePrerenderHtmlJobs(dbAdapter, publishedRealmURLString);
+        },
+        afterEach: async () => {
+          await closeServer(testRealmHttpServer);
+        },
+      });
+
+      test('bare routed sub-path serves HTML for a generic Accept header (regression: was 404)', async function (assert) {
+        let response = await request
+          .get(`${publishedRealmPath}pricing`)
+          .set('Host', publishedRealmHost)
+          .set('Accept', '*/*');
+
+        assert.strictEqual(
+          response.status,
+          200,
+          `bare /pricing serves for */* (was 404 via the module resolver). body=${response.text?.slice(
+            0,
+            300,
+          )}`,
+        );
+      });
+
+      test('bare routed sub-path serves HTML for text/html', async function (assert) {
+        let response = await request
+          .get(`${publishedRealmPath}pricing`)
+          .set('Host', publishedRealmHost)
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'bare /pricing serves HTML');
+      });
+
+      test('trailing-slash form 308-redirects to the canonical bare form', async function (assert) {
+        let response = await request
+          .get(`${publishedRealmPath}pricing/`)
+          .set('Host', publishedRealmHost)
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 308, '/pricing/ is redirected');
+        let location = response.headers['location'] ?? '';
+        assert.true(
+          location.endsWith(`${publishedRealmPath}pricing`),
+          `redirect strips the trailing slash (location=${location})`,
+        );
+        assert.false(
+          location.endsWith('/pricing/'),
+          `redirect target has no trailing slash (location=${location})`,
+        );
+      });
+
+      test('trailing-slash form is also canonicalized for a generic Accept header', async function (assert) {
+        let response = await request
+          .get(`${publishedRealmPath}pricing/`)
+          .set('Host', publishedRealmHost)
+          .set('Accept', '*/*');
+
+        assert.strictEqual(
+          response.status,
+          308,
+          '/pricing/ is redirected for */* too',
+        );
+      });
+
+      test('a non-public realm does not disclose routes via a canonical redirect', async function (assert) {
+        // Drop the published realm's permissions so it is no longer publicly
+        // readable. `fetchRealmPermissions` reads this table uncached, so the
+        // next request sees the change immediately.
+        await dbAdapter.execute(
+          `DELETE FROM realm_user_permissions WHERE realm_url = '${publishedRealmURLString}'`,
+        );
+
+        let response = await request
+          .get(`${publishedRealmPath}pricing/`)
+          .set('Host', publishedRealmHost)
+          .set('Accept', 'text/html');
+
+        // The public-permission gate runs before the routing-map lookup, so a
+        // non-public realm falls through to the generic Boxel shell instead of
+        // emitting a route-specific 308 that would reveal the private route
+        // exists.
+        assert.notStrictEqual(
+          response.status,
+          308,
+          'no route-specific redirect is emitted for a non-public realm',
+        );
+        assert.strictEqual(
+          response.status,
+          200,
+          'serves the generic shell for a non-public realm',
+        );
+      });
+
+      test('a non-public realm does not disclose bare routes to a generic Accept header', async function (assert) {
+        await dbAdapter.execute(
+          `DELETE FROM realm_user_permissions WHERE realm_url = '${publishedRealmURLString}'`,
+        );
+
+        // The bare-path gate consults the routing map for */* requests; if it
+        // did so without checking public read, a real route would answer 200
+        // (generic shell) while a non-route 404s — enumerating private routes.
+        let routed = await request
+          .get(`${publishedRealmPath}pricing`) // a real rule
+          .set('Host', publishedRealmHost)
+          .set('Accept', '*/*');
+        let bogus = await request
+          .get(`${publishedRealmPath}not-a-route`) // no rule
+          .set('Host', publishedRealmHost)
+          .set('Accept', '*/*');
+
+        assert.strictEqual(
+          routed.status,
+          bogus.status,
+          `a routed and a non-routed bare path are indistinguishable on a non-public realm (routed=${routed.status}, bogus=${bogus.status})`,
+        );
+      });
+    },
+  );
 });

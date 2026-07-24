@@ -153,10 +153,11 @@ async function main(): Promise<void> {
   // Summary: list all discoverable skills
   log.info('--- All discoverable skills ---');
   let allSkillNames = [
-    'boxel-development',
+    'boxel',
     'boxel-file-structure',
     'boxel-api',
     'boxel-command',
+    'boxel-file-def',
     'ember-best-practices',
     'software-factory-operations',
   ];

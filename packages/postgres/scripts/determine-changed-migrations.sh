@@ -35,7 +35,7 @@ fi
 
 echo "Using base SHA $BASE_SHA"
 
-CHANGED="$(git diff --name-only --diff-filter=AM "$BASE_SHA" "$TARGET_SHA" -- 'packages/postgres/migrations/*.js' 'packages/postgres/migrations/*.ts')"
+CHANGED="$(git diff --name-only --diff-filter=AM "$BASE_SHA" "$TARGET_SHA" -- 'packages/postgres/migrations/*.js' 'packages/postgres/migrations/*.ts' 'packages/postgres/migrations-removal/*.js' 'packages/postgres/migrations-removal/*.ts')"
 echo "$CHANGED"
 
 COUNT="$(printf '%s\n' "$CHANGED" | awk 'NF' | wc -l | tr -d ' ')"
@@ -61,10 +61,12 @@ printf '%s\n' "$SORTED"
 # few extra seconds per CI run but exercises every DOWN/UP cycle on
 # every migration-touching PR.
 # Match node-pg-migrate's own discovery: only timestamp-prefixed files
-# count as migrations (excludes .eslintrc.js, README, etc.).
-TOTAL="$(find packages/postgres/migrations -maxdepth 1 -type f \( -name '[0-9]*.js' -o -name '[0-9]*.ts' \) | wc -l | tr -d ' ')"
+# count as migrations (excludes .eslintrc.js, README, etc.). Count BOTH phases
+# (migrations/ + migrations-removal/) so the count reverts the entire combined
+# chain — `pnpm migrate down` reverts that many across both phases.
+TOTAL="$(find packages/postgres/migrations packages/postgres/migrations-removal -maxdepth 1 -type f \( -name '[0-9]*.js' -o -name '[0-9]*.ts' \) | wc -l | tr -d ' ')"
 if [[ "$TOTAL" -eq 0 ]]; then
-  echo "No migrations found in packages/postgres/migrations" >&2
+  echo "No migrations found in packages/postgres/migrations or migrations-removal" >&2
   exit 1
 fi
 

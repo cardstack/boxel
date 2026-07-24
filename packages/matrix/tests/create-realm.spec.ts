@@ -32,9 +32,8 @@ test.describe('Create Realm via Dashboard', () => {
     await expect(
       page.locator(`[data-test-stack-card="${newRealmURL}index"]`),
     ).toBeVisible();
-    await expect(
-      page.locator(`[data-test-boxel-filter-list-button]`),
-    ).toHaveCount(3);
+    // A newly created realm defaults to a Workspace index card.
+    await expect(page.locator(`[data-test-workspace-index]`)).toBeVisible();
 
     await page.locator('[data-test-submode-switcher] button').click();
     await page.locator('[data-test-boxel-menu-item-text="Host"]').click();

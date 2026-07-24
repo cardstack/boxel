@@ -164,6 +164,9 @@ class RoutingRuleEdit extends Component<typeof RoutingRuleField> {
          pierced directly. */
       .path-cell :deep(.text-accessory) {
         padding-right: 0;
+        /* Match the mono input text so the fixed leading "/" reads as part
+           of the same path string rather than a separate label. */
+        font-family: var(--boxel-font-family-mono, monospace);
       }
       .path-cell :deep(.form-control) {
         padding-left: var(--boxel-sp-xxs);
@@ -374,30 +377,29 @@ class RealmConfigEdit extends Component<typeof RealmConfig> {
     </div>
     <style scoped>
       .realm-config-edit {
-        --hr-color: rgba(0 0 0 / 10%);
+        --realm-config-padding: var(--boxel-sp-xl);
+        --realm-config-hr-color: rgba(0 0 0 / 10%);
         display: grid;
       }
       .card-info-header {
         --boxel-header-min-height: 9.375rem;
-        --boxel-header-padding: var(--boxel-sp-xxl) var(--boxel-sp-xl)
-          var(--boxel-sp-xl);
+        --boxel-header-padding: var(--realm-config-padding);
         --boxel-header-gap: var(--boxel-sp-lg);
-        --boxel-header-border-color: var(--hr-color);
-        align-items: flex-start;
-        background-color: var(--muted, var(--boxel-100));
+        --boxel-header-border-color: var(--realm-config-hr-color);
+        background-color: var(--muted);
       }
       .own-display-fields {
         display: grid;
         gap: var(--boxel-sp-lg);
-        padding: var(--boxel-sp-xl);
-        background-color: var(--background, var(--boxel-light));
+        padding: var(--realm-config-padding);
+        background-color: var(--background);
       }
       .own-display-fields + .notes-footer {
-        border-top: 1px solid var(--hr-color);
+        border-top: 1px solid var(--realm-config-hr-color);
       }
       .notes-footer {
-        padding: var(--boxel-sp-xl);
-        background-color: var(--muted, var(--boxel-100));
+        padding: var(--realm-config-padding);
+        background-color: var(--muted);
       }
       .warning {
         background: #fef3c7;

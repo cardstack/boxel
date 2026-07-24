@@ -844,6 +844,128 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(fileItems.length, 0, 'no file rows leak in');
     });
 
+    test('a mixed `any` spanning a card-type anchor and a FileDef field-eq returns both kinds', async function (assert) {
+      // A mixed-kind chooser scopes its results with an OR across a card type
+      // and a FileDef-anchored field predicate (e.g. skill cards + skill `.md`
+      // files). Two positive type/on conditions compose under `any`: the
+      // branches live in separate SQL subexpressions, so the shared `types`
+      // cross-join alias — which blocks two positive type conditions under a
+      // single `every` chain — is not a problem for the OR shape. The file
+      // branch is a plain field-eq, so this generalizes to a filter like
+      // `{ on: MarkdownDef, eq: { kind: 'skill' } }`.
+      let helloUrl = `${realmHref}hello.md`;
+      let doc = await testRealm.realmIndexQueryEngine.searchEntries(
+        parseSearchEntryQueryFromPayload({
+          filter: {
+            any: [
+              { 'item.on': { module: `${realmHref}person`, name: 'Person' } },
+              {
+                'item.on': { module: baseRRI('card-api'), name: 'FileDef' },
+                eq: { 'item.name': 'hello.md' },
+              },
+            ],
+          },
+          fields: { entry: ['item'] },
+        }),
+      );
+      assert.ok(
+        entryFor(doc, johnId),
+        'John (card instance) matches the card-type branch',
+      );
+      assert.ok(
+        entryFor(doc, janeId),
+        'Jane (card instance) matches the card-type branch',
+      );
+      assert.strictEqual(
+        itemIn(doc, johnId)?.type,
+        'card',
+        'John carries a card item',
+      );
+      assert.ok(
+        entryFor(doc, helloUrl),
+        'hello.md (file) matches the FileDef field-eq branch',
+      );
+      assert.strictEqual(
+        itemIn(doc, helloUrl)?.type,
+        'file-meta',
+        'hello.md carries a file-meta item',
+      );
+    });
+
+    test('a file row is matchable and excludable by `eq: { item.id }`', async function (assert) {
+      // The file-indexer stamps `id` (= the file URL) into the file search_doc,
+      // so a file is addressable by `eq: { id }` the same way a card instance
+      // row is — the unified identity key a mixed-kind chooser uses across both
+      // kinds (e.g. to exclude an already-selected item regardless of kind).
+      let helloUrl = `${realmHref}hello.md`;
+      let doc = await testRealm.realmIndexQueryEngine.searchEntries(
+        parseSearchEntryQueryFromPayload({
+          filter: {
+            'item.on': { module: baseRRI('card-api'), name: 'FileDef' },
+            eq: { 'item.id': helloUrl },
+          },
+          fields: { entry: ['item'] },
+        }),
+      );
+      assert.ok(entryFor(doc, helloUrl), 'the file matches eq on item.id');
+      assert.strictEqual(
+        doc.meta.page.total,
+        1,
+        'exactly one row matches the id',
+      );
+
+      // And `not: { eq: { id } }` excludes it — the exclusion polarity a chooser
+      // relies on for already-selected items.
+      let excluded = await testRealm.realmIndexQueryEngine.searchEntries(
+        parseSearchEntryQueryFromPayload({
+          filter: {
+            every: [
+              { 'item.on': { module: baseRRI('card-api'), name: 'FileDef' } },
+              { not: { eq: { 'item.id': helloUrl } } },
+            ],
+          },
+          fields: { entry: ['item'] },
+        }),
+      );
+      assert.notOk(
+        entryFor(excluded, helloUrl),
+        'not: { eq: { id } } excludes the file row',
+      );
+    });
+
+    test('a dual-indexed card `.json` file row carries `id` = the `.json` URL (distinct from the instance row)', async function (assert) {
+      // A card `.json` produces two rows: the instance row (id `.../john`) and
+      // its dual-indexed file row (id `.../john.json`). The file row's stamped
+      // `id` is its own `.json` URL, so `eq: { id: '.../john.json' }` selects
+      // exactly that file row — never the instance — and the instance stays
+      // addressable by its bare id. `scope: 'all'` keeps both rows in play so
+      // the file row isn't deduped away before the id predicate runs.
+      let jsonUrl = `${johnId}.json`;
+      let doc = await testRealm.realmIndexQueryEngine.searchEntries(
+        parseSearchEntryQueryFromPayload({
+          scope: 'all',
+          filter: {
+            'item.on': { module: baseRRI('card-api'), name: 'FileDef' },
+            eq: { 'item.id': jsonUrl },
+          },
+          fields: { entry: ['item'] },
+        }),
+      );
+      assert.ok(
+        entryFor(doc, jsonUrl),
+        'the card `.json` file row matches its own `.json` id',
+      );
+      assert.strictEqual(
+        itemIn(doc, jsonUrl)?.type,
+        'file-meta',
+        'the matched row is the file-meta row, not the card instance',
+      );
+      assert.notOk(
+        entryFor(doc, johnId),
+        'the bare-id card instance row is not matched by the `.json` id',
+      );
+    });
+
     test('A-Z `_title` sort gives file rows real sort values (not a NULL that sinks them)', async function (assert) {
       // Regression guard for the mixed-search A-Z sort. A file row carries the
       // synthetic `_title` but not `cardTitle`, so sorting on `cardTitle`

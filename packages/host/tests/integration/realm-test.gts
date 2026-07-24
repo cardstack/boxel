@@ -801,7 +801,7 @@ module('Integration | realm', function (hooks) {
             realmURL: testRealmURL,
           },
           links: {
-            self: `../dir/owner`,
+            self: `./owner`,
           },
         },
       ],
@@ -988,11 +988,8 @@ module('Integration | realm', function (hooks) {
           data: {
             type: 'card',
             attributes: {
-              email: null,
-              posts: null,
               firstName: 'Van Gogh',
               lastName: 'Abdel-Rahman',
-              cardInfo,
             },
             meta: {
               adoptsFrom: {
@@ -1170,7 +1167,6 @@ module('Integration | realm', function (hooks) {
             ],
             sponsors: ['Burton'],
             posts: [],
-            cardInfo,
           },
           meta: {
             adoptsFrom: {
@@ -1233,6 +1229,9 @@ module('Integration | realm', function (hooks) {
             relationships: {
               'pets.0': {
                 links: { self: `${testRealmURL}dir/van-gogh` },
+              },
+              'pets.1': {
+                links: { self: `${testRealmURL}dir/mango` },
               },
               friend: { links: { self: `${testRealmURL}dir/friend` } },
             },
@@ -1325,7 +1324,7 @@ module('Integration | realm', function (hooks) {
         {
           type: 'card',
           id: `${testRealmURL}dir/friend`,
-          links: { self: `./dir/friend` },
+          links: { self: `./friend` },
           attributes: {
             cardDescription: 'Person',
             email: null,
@@ -1353,7 +1352,7 @@ module('Integration | realm', function (hooks) {
         {
           type: 'card',
           id: `${testRealmURL}dir/van-gogh`,
-          links: { self: `./dir/van-gogh` },
+          links: { self: `./van-gogh` },
           attributes: {
             firstName: 'Van Gogh',
             cardTitle: 'Van Gogh',
@@ -1388,7 +1387,7 @@ module('Integration | realm', function (hooks) {
       {
         data: {
           type: 'card',
-          attributes: { firstName: 'Jackie', cardInfo },
+          attributes: { firstName: 'Jackie' },
           relationships: {
             'pets.0': { links: { self: `./dir/van-gogh` } },
             friend: { links: { self: `./dir/friend` } },
@@ -2331,7 +2330,6 @@ module('Integration | realm', function (hooks) {
           type: 'card',
           attributes: {
             firstName: 'Mango',
-            cardInfo,
           },
           relationships: {
             owner: {
@@ -2495,7 +2493,6 @@ module('Integration | realm', function (hooks) {
               model: 'C300',
               year: '2024',
             },
-            cardInfo,
           },
           meta: {
             adoptsFrom: {
@@ -3313,10 +3310,14 @@ module('Integration | realm', function (hooks) {
         `${mountedRealmURL}spreadsheet/Spreadsheet/${spreadsheet1Id}`,
     );
     assert.ok(included, 'linked spreadsheet card is included');
+    // The included card's module is relativized against its own id
+    // (spreadsheet/Spreadsheet/spreadsheet-1), not the primary document
+    // (index). `../spreadsheet` resolves to spreadsheet/spreadsheet from the
+    // card's own directory; the consumer resolves it against the same id.
     assert.strictEqual(
       included?.meta?.adoptsFrom?.module,
-      './spreadsheet/spreadsheet',
-      'adoptsFrom.module has the correct path',
+      '../spreadsheet',
+      'included adoptsFrom.module is relative to the resource own id',
     );
   });
 

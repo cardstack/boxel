@@ -55,6 +55,25 @@ Reuse an existing semantic token before inventing a new one, and **name tokens b
 
 For "readable text/icons on a colored surface," the codebase uses the pervasive **`<surface>` / `<surface>-foreground` pairing** (shadcn/Tailwind-style): `--foreground`, `--muted-foreground`, `--primary`/`--primary-foreground`, `--accent-foreground`, `--card-foreground`, plus component-local `--boxel-*-foreground`. The idiom is `color: var(--primary-foreground, var(--boxel-dark))`.
 
+**Don't reference numbered palette tokens (`--boxel-100`…`--boxel-500`) directly in component CSS.** They are the primitive layer — fixed values that do not flip between light and dark. The semantic role tokens resolve _through_ them and _are_ themed for both modes. Reach for the role token every time:
+
+| Instead of the numbered palette                 | Use the semantic role token     |
+| ----------------------------------------------- | ------------------------------- |
+| `--boxel-200` (muted surface / track)           | `--muted`                       |
+| `--boxel-450` / `--boxel-500` (secondary text)  | `--muted-foreground`            |
+| `--boxel-light` / `--boxel-dark` (base text/bg) | `--foreground` / `--background` |
+
+```css
+/* Wrong — primitive palette, doesn't theme */
+color: var(--boxel-450);
+background-color: var(--boxel-200);
+/* Right — semantic role, themed light + dark */
+color: var(--muted-foreground);
+background-color: var(--muted);
+```
+
+For the accent, `--primary` is the top-level role token — it resolves to `--boxel-highlight` (§6) but lines up with the shadcn-style `--primary`/`--primary-foreground` pairing the shared components use, so prefer `--primary` for accent fills in component CSS.
+
 The adorn refactor therefore landed on existing/semantic tokens rather than hue-named ones:
 
 - darker teal for hover/selected → `--boxel-highlight-hover` (resolves through `--boxel-dark-teal: #00da9f`). Don't add a parallel "teal-hover" variable.
@@ -100,6 +119,30 @@ Don't hand-concatenate classes with inline `{{if}}`/`{{unless}}` inside a class 
 /* prefer the semantic token, not the raw palette color */
 --adorn-accent-light: var(--boxel-highlight); /* not var(--boxel-teal) */
 background-color: var(--boxel-highlight); /* not var(--boxel-teal) */
+```
+
+### 7. Don't use the `font` shorthand
+
+The `font` shorthand requires (and therefore resets) `font-family`, so it drops the inherited themed family. Set the axes you actually mean — `font-weight`, `font-size`, `line-height` — and let `font-family` inherit. The bundled `--boxel-font-*` tokens (e.g. `--boxel-font-xs`) are themselves `size/line-height family` shorthands, so feeding them to `font:` is the same trap; use the split `--boxel-font-size-*` + `--boxel-line-height-*` tokens instead. Reserve `font:` for the rare case you deliberately want a non-themed family.
+
+```css
+/* Wrong — resets font-family off the themed family */
+font: 500 var(--boxel-font-xs);
+/* Right — themed family inherited */
+font-weight: 500;
+font-size: var(--boxel-font-size-xs);
+line-height: var(--boxel-line-height-xs);
+```
+
+### 8. Reach for an existing boxel-ui component before hand-rolling
+
+Before building a common UI primitive — progress bar, pill, button, avatar, tabs, tooltip, badge — check `@cardstack/boxel-ui/components` for one. The shared components are already themed (they consume `--primary`/`--muted`/etc.) and carry their accessibility markup, so reusing one is both less code and correct-by-default. Hand-roll only when nothing fits, and surface the gap.
+
+```hbs
+{{! Wrong — a hand-rolled track + fill div you then have to theme yourself }}
+<div class='bar'><div class='fill' style={{this.widthStyle}}></div></div>
+{{! Right — the shared, themed component }}
+<ProgressBar @value={{this.percent}} @max={{100}} />
 ```
 
 ---

@@ -35,6 +35,7 @@ import {
   uploadArtifact,
   type ArtifactKeyParts,
 } from './artifact-sink.ts';
+import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel.ts';
 
 import type { CDPSession, Page } from 'puppeteer';
 
@@ -1588,7 +1589,11 @@ export async function withTimeout<T>(
   fn: () => Promise<T>,
   timeoutMs = cardRenderTimeout,
   profileContext?: RenderProfileContext,
+  signal?: AbortSignal,
 ): Promise<T | RenderError> {
+  // A caller that has already gone away gets no render at all — bail
+  // before the render bookkeeping below so the counter stays balanced.
+  throwIfAborted(signal, 'rendering');
   // Every render funnels through here, so this counter is the live
   // count of concurrent renders in this process. Capture it (including
   // this render) at the moment the race resolves — the timeout block
@@ -1619,8 +1624,9 @@ export async function withTimeout<T>(
   // otherwise a render that finishes fast leaves a pending timer holding
   // the event loop for the full `timeoutMs`.
   let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
+  let abortListener: (() => void) | undefined;
   try {
-    result = await Promise.race([
+    let racers: Array<Promise<T | { timeout: true }>> = [
       renderFn().catch((err) => {
         // Puppeteer's own TimeoutError (from waitForFunction/waitForSelector)
         // should be treated the same as our outer timeout
@@ -1634,11 +1640,53 @@ export async function withTimeout<T>(
           r({ timeout: true });
         }, timeoutMs);
       }),
-    ]);
+    ];
+    if (signal) {
+      // A client abort mid-render must interrupt the wait NOW — a
+      // wedged renderer can pin the render promise until a protocol
+      // timeout, long after anyone is listening for the result. Reject
+      // (rather than resolve a timeout marker) so the cancel surfaces
+      // as `PrerenderCancelledError` and skips the timeout-path
+      // diagnostics below: those burn seconds of CDP probing to
+      // explain a hang to a caller, and this caller is gone. The
+      // abandoned render promise stays pending until the cancel
+      // handler disposes the page; its eventual rejection is absorbed
+      // by this settled race.
+      racers.push(
+        new Promise<never>((_resolve, reject) => {
+          abortListener = () =>
+            reject(
+              new PrerenderCancelledError({
+                state: 'rendering',
+                reason:
+                  typeof signal.reason === 'string' ? signal.reason : undefined,
+              }),
+            );
+          // AbortSignal never replays `abort` for listeners attached
+          // after the fact, so re-check before attaching. No await
+          // separates the entry check above from this attach, so no
+          // abort can land between them — the re-check keeps the
+          // no-missed-abort guarantee local instead of resting on that
+          // ordering.
+          if (signal.aborted) {
+            abortListener();
+          } else {
+            signal.addEventListener('abort', abortListener, { once: true });
+          }
+        }),
+      );
+    }
+    result = await Promise.race(racers);
     concurrentRenders = activeRenderCount;
   } finally {
     activeRenderCount--;
     clearTimeout(timeoutTimer);
+    // The signal spans the whole request while this race is per-step:
+    // detach so a multi-step visit doesn't stack one listener per step
+    // on the shared signal.
+    if (signal && abortListener) {
+      signal.removeEventListener('abort', abortListener);
+    }
   }
   if (
     result &&

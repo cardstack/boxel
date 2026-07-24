@@ -210,6 +210,13 @@ export class Loader {
   private fetchImplementation: Fetch;
   private resolveImport: (moduleIdentifier: string) => string;
   private virtualNetwork: VirtualNetwork | undefined;
+  // Unsubscribe for the realm-mapping-change listener registered below. The
+  // VirtualNetwork outlives any single loader (LoaderService replaces the
+  // loader on every module edit / session boundary), so a loader that isn't
+  // unsubscribed when it's discarded stays pinned — along with its whole
+  // module cache — by the listener the network still holds. `dispose()`
+  // releases it; the owner calls that before dropping the loader.
+  private unsubscribeMappingChange: (() => void) | undefined;
   // When the host runs inside a prerender, `setTimeout` is suppressed by
   // the render-timer-stub so the default sleep used by
   // `fetchWithTransientRetry` would never resolve and a transient 5xx on
@@ -231,6 +238,24 @@ export class Loader {
       resolveImport ?? ((moduleIdentifier) => moduleIdentifier);
     this.retrySleep = options?.retrySleep;
     this.virtualNetwork = options?.virtualNetwork;
+    // Module caches are keyed by canonical RRI form (see moduleCacheKey), whose
+    // relationship to a real URL is only stable between realm-mapping changes.
+    // Discard the RRI-keyed caches whenever a mapping is added or removed so an
+    // entry can't outlive the spelling it was keyed under.
+    this.unsubscribeMappingChange = this.virtualNetwork?.onMappingChange(() => {
+      this.modules.clear();
+      this.moduleCanonicalURLs.clear();
+      this.knownDepsCache.clear();
+    });
+  }
+
+  // Release the realm-mapping-change subscription so this loader can be
+  // garbage-collected once discarded. Only detaches the listener — the caches
+  // are left intact because a discarded loader may still be draining in-flight
+  // imports, and once nothing references it the maps are collected wholesale.
+  dispose() {
+    this.unsubscribeMappingChange?.();
+    this.unsubscribeMappingChange = undefined;
   }
 
   getVirtualNetwork(): VirtualNetwork | undefined {
@@ -833,36 +858,23 @@ export class Loader {
     }
   };
 
-  // Cache key for the per-module maps. Collapses the virtual-alias URL and the
-  // resolved real URL of the same module onto one key, so a base module
-  // imported via the alias (`https://cardstack.com/base/X`) and via the RRI
-  // prefix (`@cardstack/base/X` → resolveImport → resolved real URL) share one
-  // cached module — and therefore one class object. Without this, the alias
-  // and RRI forms evaluate as two distinct modules and `instanceof` /
-  // polymorphic-field identity checks across them diverge. Mirrors the
-  // real→virtual convention used by `canonicalizeTrackingKey`.
+  // Cache key for the per-module maps: the canonical RRI form. Every spelling
+  // of a module — its resolved real URL, the virtual-alias URL, and the RRI
+  // prefix — folds to one RRI via `unresolveURL`, so a base module reached by
+  // any of them shares one cached module and therefore one class object.
+  // Without this collapse the spellings evaluate as distinct modules and
+  // `instanceof` / polymorphic-field identity checks across them diverge.
+  // Modules with no realm-prefix mapping (user realms, bare package specifiers)
+  // are returned unchanged by `unresolveURL`.
   //
-  // The key deliberately does NOT use the realm-prefix (RRI) form even
-  // though that's the canonical form for identifiers flowing out of the
-  // loader: realm-prefix mappings can be registered and removed while a
-  // loader is live (tests scope temporary prefixes via
-  // `addRealmMapping`/`removeRealmMapping`), and a mapping-sensitive key
-  // would orphan already-cached entries whenever a mapping changes —
-  // re-evaluating the same module under a new key and splitting class
-  // identities across the old and new copies.
+  // The RRI→URL relationship is only stable between realm-mapping changes, so
+  // the caches keyed here are discarded whenever a mapping is added or removed
+  // (see the `onMappingChange` subscription in the constructor).
   private moduleCacheKey(moduleIdentifier: string): string {
     let trimmed = trimModuleIdentifier(moduleIdentifier);
-    if (this.virtualNetwork) {
-      try {
-        let virtual = this.virtualNetwork.mapURL(trimmed, 'real-to-virtual');
-        if (virtual) {
-          return virtual.href;
-        }
-      } catch {
-        // not a parseable URL (e.g. a bare specifier) — fall through
-      }
-    }
-    return trimmed;
+    return this.virtualNetwork
+      ? this.virtualNetwork.unresolveURL(trimmed)
+      : trimmed;
   }
 
   private getModule(moduleIdentifier: string): Module | undefined {

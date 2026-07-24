@@ -24,11 +24,10 @@ import { formatDateTime, formatNumber, formatCurrency } from '@cardstack/boxel-u
 **Optional `markdown` Format:** A working default (HTML-to-markdown fallback) is provided; only define `static markdown` when the default output is poor — see `boxel-markdown-format`.
 
 ```gts
-// ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══
-// ¹ Core imports - ALWAYS needed for definitions
+// Core imports - ALWAYS needed for definitions
 import { CardDef, FieldDef, Component, field, contains, containsMany, linksTo, linksToMany } from 'https://cardstack.com/base/card-api';
 
-// ² Base field imports (only what you use)
+// Base field imports (only what you use)
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import BooleanField from 'https://cardstack.com/base/boolean';
@@ -40,7 +39,7 @@ import BigIntegerField from 'https://cardstack.com/base/big-integer';
 import CodeRefField from 'https://cardstack.com/base/code-ref';
 import Base64ImageField from 'https://cardstack.com/base/base64-image'; // 🚨 NEVER USE - embeds binary in JSON, crashes AI context; use FileDef types instead
 
-// ⁸ FileDef imports - for file fields (use linksTo, never contains)
+// FileDef imports - for file fields (use linksTo, never contains)
 import FileDef from 'https://cardstack.com/base/file-api';
 import ImageDef from 'https://cardstack.com/base/image-file-def';     // any image
 import PngDef from 'https://cardstack.com/base/png-image-def';        // .png
@@ -67,11 +66,11 @@ import AddressField from 'https://cardstack.com/base/address';
 // export class FancyAddressField extends BaseAddressField { }
 // Never import and define the same field name - it causes conflicts!
 
-// ³ UI Component imports
+// UI Component imports
 import { Button, Pill, Avatar, FieldContainer, CardContainer, BoxelSelect, ViewSelector, KanbanPlane, autoPlaceKanban } from '@cardstack/boxel-ui/components';
 import type { KanbanColumnConfig, KanbanPlacement } from '@cardstack/boxel-ui/components';
 
-// ⁴ Helper imports
+// Helper imports
 import { eq, gt, gte, lt, lte, and, or, not, cn, add, subtract, multiply, divide } from '@cardstack/boxel-ui/helpers';
 import { formatDateTime, formatNumber, formatCurrency, formatDuration, formatRelativeTime, optional, pick } from '@cardstack/boxel-ui/helpers';
 import { markdownEscape } from '@cardstack/boxel-ui/helpers'; // escape user-supplied strings in `static markdown` templates
@@ -90,22 +89,22 @@ import { task, restartableTask, timeout } from 'ember-concurrency'; // timeout i
 
 // Import preflight: if a template uses (fn ...), {{on ...}},
 // concat/get/array/hash, Boxel UI predicates, or formatters, the import must
-// be present explicitly. See references/common-imports.md.
+// be present explicitly. See common-imports.md.
 
-// ⁶ TIMING RULE: NEVER use requestAnimationFrame
+// TIMING RULE: NEVER use requestAnimationFrame
 // - DOM timing: Use Glimmer modifiers with cleanup
 // - Async coordination: Use task/restartableTask from ember-concurrency  
 // - Delays: Use await timeout(ms) from ember-concurrency, not setTimeout
 // - NEVER `await someTask.perform()` (or `.then()` it) from outside a task — that downcasts the cancelable TaskInstance to a Promise, surfacing cancelations as unhandled `TaskCancelation` rejections. If the caller needs to await a task, the caller must itself be a task; invoke top-level tasks from a synchronous local handler bound with `{{on}}`.
 
-// ⁵ Icon imports
+// Icon imports
 import EmailIcon from '@cardstack/boxel-icons/mail';
 import PhoneIcon from '@cardstack/boxel-icons/phone';
 import RocketIcon from '@cardstack/boxel-icons/rocket';
 // Available from Lucide, Lucide Labs, and Tabler icon sets
 // NOTE: Only use for static card/field type icons, NOT in templates
 
-// ⁷ Drag/drop kanban
+// Drag/drop kanban
 // Use KanbanPlane for lane-based drag/drop boards; do not hand-roll pointer
 // drag in card templates. Persist placements by stable item id + column key +
 // sortOrder, map to KanbanPlacement.index only at render time, and render child

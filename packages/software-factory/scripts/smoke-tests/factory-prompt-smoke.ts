@@ -74,7 +74,7 @@ const SAMPLE_CONTEXT: AgentContext = {
   ],
   skills: [
     {
-      name: 'boxel-development',
+      name: 'boxel',
       content:
         'Follow Boxel card patterns: use CardDef base class, @field decorators, ' +
         'Component<typeof T> for templates, and scoped CSS.',

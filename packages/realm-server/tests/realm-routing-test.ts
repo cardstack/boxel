@@ -13,8 +13,9 @@ import { resolveRealmsForFederatedRequest } from '../lib/realm-routing.ts';
 
 // CS-10054: fixture for Realm.getHostRoutingMap coverage. One rule uses
 // a relative reference (the recommended form, portable across realm URL
-// changes) and one is cross-realm — the latter must be dropped by the
-// same-realm guard.
+// changes), one is cross-realm — dropped by the same-realm guard — and
+// one is authored with a trailing slash, which must be normalized to its
+// slash-free form so it matches request paths.
 function makeRoutingFixture(): Record<
   string,
   string | LooseSingleCardDocument
@@ -48,7 +49,11 @@ function makeRoutingFixture(): Record<
           // `instance` is a linksTo on RoutingRuleField, so the link
           // target lives in `relationships` keyed by the field path
           // (`hostRoutingRules.<i>.instance`), not inline in attributes.
-          hostRoutingRules: [{ path: '/rel' }, { path: '/foreign' }],
+          hostRoutingRules: [
+            { path: '/rel' },
+            { path: '/foreign' },
+            { path: '/trailing/' },
+          ],
         },
         relationships: {
           'hostRoutingRules.0.instance': {
@@ -61,6 +66,11 @@ function makeRoutingFixture(): Record<
           // hand-editing realm.json.
           'hostRoutingRules.1.instance': {
             links: { self: 'http://otherrealm.test/x' },
+          },
+          // Authored with a trailing slash: the map must normalize the
+          // path to '/trailing' so it matches slash-stripped request paths.
+          'hostRoutingRules.2.instance': {
+            links: { self: './white-paper' },
           },
         },
         meta: {
@@ -92,13 +102,16 @@ module(basename(import.meta.filename), function () {
       await testRealm.indexing();
     });
 
-    test('resolves relative references and drops cross-realm rules', async function (assert) {
+    test('resolves relative references, drops cross-realm rules, and normalizes trailing slashes', async function (assert) {
       let map = await testRealm.getHostRoutingMap();
 
       assert.deepEqual(
         map,
-        [{ path: '/rel', id: `${realmURL.href}white-paper` }],
-        'relative reference resolved against the realm root; cross-realm rule filtered',
+        [
+          { path: '/rel', id: `${realmURL.href}white-paper` },
+          { path: '/trailing', id: `${realmURL.href}white-paper` },
+        ],
+        'relative reference resolved against the realm root; cross-realm rule filtered; trailing-slash rule normalized to /trailing',
       );
     });
 
@@ -187,8 +200,9 @@ module(basename(import.meta.filename), function () {
     // realm. ensureMounted publishes the Realm into reconciler.mounted
     // synchronously and then awaits realm.start(). For a brand-new
     // realm, start() awaits the first full index, which prerenders
-    // index.json. The CardsGrid in index.json fires _federated-search
-    // against the new realm. If resolveRealmsForFederatedRequest were
+    // index.json. The Workspace index card in index.json fires
+    // _federated-search against the new realm. If
+    // resolveRealmsForFederatedRequest were
     // to re-enter lookupOrMount() for the same URL, it would find the
     // URL in pendingMounts and await the very start() it is nested
     // inside — deadlocking until the prerender's 90s render timeout

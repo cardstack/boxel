@@ -217,6 +217,12 @@ export async function performFileIndexing({
     ...(extractResult.searchDoc ?? {}),
     ...(isCardInstance ? { [CARD_INSTANCE_FILE_KEY]: true } : {}),
     _title: name,
+    // Stamp `id` (the file's own URL) so a file row is addressable by
+    // `eq: { id }` the same way a card instance row is — `FileDef` already
+    // declares an `id` field, the search_doc just never carried it. Placed
+    // last (like `_title`) so it deterministically equals the file URL
+    // regardless of what the extractor's searchDoc contained.
+    id: fileURL,
   };
 
   // A frontmatter parse failure — or any diagnostics bag the frontmatter

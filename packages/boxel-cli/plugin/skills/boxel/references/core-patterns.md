@@ -1,9 +1,17 @@
-**Card with computed title:**
+**Card with computed cardTitle:**
+
+A card's display name comes from `cardTitle` (a computed pass-through from
+`cardInfo.name`). To derive it from another field, override `cardTitle`.
+Declaring your own `@field title` does NOT set the display name — the host
+reads `cardTitle`, not `title`. A plain `title` field is just ordinary data;
+that's fine when it's the primary field a `cardTitle` override reads, but on
+its own it leaves the card showing "Untitled" everywhere.
+
 ```gts
 export class BlogPost extends CardDef {
   @field headline = contains(StringField);
   
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function(this: BlogPost) {
       return this.headline ?? 'Untitled Post';
     }
@@ -42,7 +50,7 @@ export class BlogPost extends CardDef {
   static icon = FileTextIcon; // ✅ CORRECT: Boxel icons for static card/field type icons
   // prefersWideFormat = true is RIGHT for blog posts (long-form reading + hero
   // imagery want viewport width). Default is `false` — see
-  // `references/prefers-wide-format.md` for the full when-to-set-it rule.
+  // `prefers-wide-format.md` for the full when-to-set-it rule.
   static prefersWideFormat = true;
   
   @field headline = contains(StringField);
@@ -51,7 +59,7 @@ export class BlogPost extends CardDef {
   @field tags = containsMany(TagField);
   @field relatedPosts = linksToMany(() => BlogPost);
   
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function(this: BlogPost) {
       try {
         const baseTitle = this.headline ?? 'Untitled Post';
@@ -59,7 +67,7 @@ export class BlogPost extends CardDef {
         if (baseTitle.length <= maxLength) return baseTitle;
         return baseTitle.substring(0, maxLength - 3) + '...';
       } catch (e) {
-        console.error('BlogPost: Error computing title', e);
+        console.error('BlogPost: Error computing cardTitle', e);
         return 'Untitled Post';
       }
     }
@@ -111,15 +119,23 @@ export class AddressField extends FieldDef {
 }
 ```
 
+### Schema hygiene (quick checklist)
+
+Beyond the cardinal rules in `SKILL.md` (contains vs linksTo, exports, three formats):
+
+- **Never use JS/TS reserved words as field names** (`class`, `new`, `default`, `static`, …).
+- **No duplicate field definitions** — one `@field name = ...` per name per class.
+- **Keep computed fields simple and unidirectional** — no self-reference or cycles (see next section); wrap cross-card access in try-catch.
+
 ### 3. Computed Properties with Safety
 
 **CRITICAL:** Avoid cycles and infinite recursion in computed fields.
 
 ```gts
 // ❌ DANGEROUS: Self-reference causes infinite recursion
-@field title = contains(StringField, {
+@field cardTitle = contains(StringField, {
   computeVia: function(this: BlogPost) {
-    return this.title || 'Untitled'; // STACK OVERFLOW!
+    return this.cardTitle || 'Untitled'; // STACK OVERFLOW!
   }
 });
 
@@ -141,13 +157,11 @@ export class AddressField extends FieldDef {
 
 ### 4. Templates with Proper Computation Patterns
 
-**Remember:** When implementing templates via SEARCH/REPLACE, track all major sections with ⁿ and include the post-block notation `╰ ⁿ⁻ᵐ`
-
 ```gts
-static isolated = class Isolated extends Component<typeof BlogPost> { // ³⁰ Isolated format
+static isolated = class Isolated extends Component<typeof BlogPost> { // Isolated format
   @tracked showComments = false;
   
-  // ³¹ CRITICAL: Do ALL computation in functions, never in templates
+  // CRITICAL: Do ALL computation in functions, never in templates
   get safeTitle() {
     try {
       return this.args?.model?.title ?? 'Untitled Post';
@@ -173,7 +187,7 @@ static isolated = class Isolated extends Component<typeof BlogPost> { // ³⁰ I
   }
   
   <template>
-    <!-- ³² Responsive surface that adapts from wide layouts down to mobile -->
+    <!-- Responsive surface that adapts from wide layouts down to mobile -->
     <article class="blog-post-surface">
       <header>
         <time>{{if @model.publishDate (formatDateTime @model.publishDate 'MMMM D, YYYY') "Date not set"}}</time>
@@ -196,7 +210,7 @@ static isolated = class Isolated extends Component<typeof BlogPost> { // ³⁰ I
         {{/if}}
       </div>
       
-      <!-- ³³ Handle arrays with REQUIRED spacing -->
+      <!-- Handle arrays with REQUIRED spacing -->
       {{#if (gt @model.tags.length 0)}}
         <section class="tags-section">
           <h4>Tags</h4>
@@ -236,7 +250,7 @@ static isolated = class Isolated extends Component<typeof BlogPost> { // ³⁰ I
       {{/if}}
     </article>
     
-    <style scoped> /* ³⁴ Component styles */
+    <style scoped> /* Component styles */
       .blog-post-surface {
         container-type: inline-size;
         width: 100%;
@@ -271,7 +285,7 @@ static isolated = class Isolated extends Component<typeof BlogPost> { // ³⁰ I
         line-height: 1.25;
       }
       
-      /* ³⁵ CRITICAL: Always style buttons completely - never use unstyled */
+      /* CRITICAL: Always style buttons completely - never use unstyled */
       .comment-button {
         /* Style Boxel components to match your design */
         gap: var(--boxel-sp-2xs);
@@ -282,7 +296,7 @@ static isolated = class Isolated extends Component<typeof BlogPost> { // ³⁰ I
         height: 1rem;
       }
       
-      /* ³⁶ CRITICAL: Spacing for containsMany collections */
+      /* CRITICAL: Spacing for containsMany collections */
       .tags-container > .containsMany-field {
         display: flex;
         flex-wrap: wrap;

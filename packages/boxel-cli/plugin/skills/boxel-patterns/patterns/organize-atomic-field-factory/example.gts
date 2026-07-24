@@ -1,5 +1,6 @@
 import { StringField, Component } from 'https://cardstack.com/base/card-api';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 // 🧩 PATTERN: Atomic Field factory with view prop
 //

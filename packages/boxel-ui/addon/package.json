@@ -14,7 +14,7 @@
   },
   "scripts": {
     "build": "concurrently \"pnpm:build:*\" --names \"build:\"",
-    "build:js": "rollup --config",
+    "build:js": "echo 'noop'",
     "build:types": "ember-tsc --declaration --emitDeclarationOnly --noEmit false",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
@@ -124,11 +124,11 @@
     "version": 2
   },
   "exports": {
+    "./*.css": "./src/*.css",
     "./*": {
       "types": "./declarations/*.d.ts",
-      "default": "./dist/*.js"
+      "default": "./src/*.gts"
     },
-    "./styles/*.css": "./dist/styles/*.css",
     "./addon-main.js": "./addon-main.cjs"
   },
   "files": [

@@ -41,7 +41,7 @@ Regular HTML selects are limited to plain text. BoxelSelect lets you create rich
 #### Pattern: Rich Select with Custom Options
 
 ```gts
-export class OptionField extends FieldDef { // ⁴³ Option field for select
+export class OptionField extends FieldDef { // Option field for select
   static displayName = 'Option';
   
   @field key = contains(StringField);
@@ -58,10 +58,10 @@ export class OptionField extends FieldDef { // ⁴³ Option field for select
   };
 }
 
-export class ProductCategory extends CardDef { // ⁴⁴ Card using BoxelSelect
+export class ProductCategory extends CardDef { // Card using BoxelSelect
   @field selectedCategory = contains(OptionField);
   
-  static edit = class Edit extends Component<typeof this> { // ⁴⁵ Edit format
+  static edit = class Edit extends Component<typeof this> { // Edit format
     @tracked selectedOption = this.args.model?.selectedCategory;
 
     options = [

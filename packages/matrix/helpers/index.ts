@@ -31,6 +31,7 @@ interface ProfileAssertions {
 interface LoginOptions {
   url?: string;
   showAllCards?: boolean; //default true
+  openAiAssistant?: boolean; //default false; opens the AI assistant panel after login
 }
 
 // Shared SQL executor is created on demand for tests
@@ -157,7 +158,21 @@ export async function reloadAndOpenAiAssistant(page: Page) {
 }
 
 export async function openAiAssistant(page: Page) {
-  await page.locator('[data-test-open-ai-assistant]').click();
+  // The AI assistant panel is closed by default; the toggle button both opens
+  // and closes it. Wait for the toggle to render (operator mode's open/closed
+  // state is restored synchronously before first paint, so once the button is
+  // present the panel's presence already reflects that state) and only click
+  // when the panel is actually closed — otherwise a call made when it is
+  // already open (restored from URL/localStorage state) would toggle it back
+  // closed.
+  let openButton = page.locator('[data-test-open-ai-assistant]');
+  await openButton.waitFor();
+  let panel = page.locator('[data-test-ai-assistant-panel]');
+  if (await panel.isVisible()) {
+    return;
+  }
+  await openButton.click();
+  await panel.waitFor();
 }
 
 export async function createRealm(
@@ -440,6 +455,10 @@ export async function login(
   }, localStorageAuth);
 
   await openRoot(page, opts?.url);
+
+  if (opts?.openAiAssistant) {
+    await openAiAssistant(page);
+  }
 }
 
 export async function enterWorkspace(
@@ -450,12 +469,27 @@ export async function enterWorkspace(
 }
 
 export async function showAllCards(page: Page) {
+  // A realm's index is either the legacy CardsGrid — whose "All Cards" filter
+  // lists every card — or the default Workspace, whose Library tab renders the
+  // same live card grid. `.count()` is point-in-time, so wait for the index to
+  // render one of its browse affordances before deciding; checking right after
+  // a `goto` would otherwise miss both and silently no-op. A bespoke index has
+  // neither — leave it be.
+  let allCardsFilter = page.locator(
+    `[data-test-boxel-filter-list-button="All Cards"]`,
+  );
+  let libraryTab = page.locator(`[data-test-workspace-tab="library"]`);
   try {
-    await page
-      .locator(`[data-test-boxel-filter-list-button="All Cards"]`)
-      .click();
-  } catch (e) {
-    console.warn('all cards filter is not found');
+    await allCardsFilter.or(libraryTab).first().waitFor({ timeout: 30_000 });
+  } catch {
+    return;
+  }
+  if ((await allCardsFilter.count()) > 0) {
+    await allCardsFilter.click();
+    return;
+  }
+  if ((await libraryTab.count()) > 0) {
+    await libraryTab.click();
   }
 }
 

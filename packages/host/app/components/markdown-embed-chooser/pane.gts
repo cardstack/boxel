@@ -118,8 +118,18 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
     this.args.selection.setKind(kind);
   }
 
+  // A fresh Custom-size pick left empty would insert a size-less bare `fitted`,
+  // so the CTA is held disabled until a valid size is entered. The `isDirty`
+  // conjunct scopes that to an actual edit: a bare `::card[url | fitted]` opened
+  // for editing seeds the Custom category with no dimensions but is a valid,
+  // supported form, so its unchanged (non-dirty) state keeps the CTA enabled.
+  private get ctaDisabled(): boolean {
+    return !this.args.selection.hasValidSize && this.args.selection.isDirty;
+  }
+
   @action
   private insert() {
+    if (this.ctaDisabled) return;
     let bfm = this.bfmString;
     if (!bfm) return;
     this.args.onInsert(bfm);
@@ -207,6 +217,7 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
         <Button
           @kind='primary'
           @size='small'
+          @disabled={{this.ctaDisabled}}
           class='markdown-embed-preview-pane__cta'
           data-test-markdown-embed-preview-cta
           {{on 'click' this.insert}}

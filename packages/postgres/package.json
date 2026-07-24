@@ -21,12 +21,14 @@
     "@cardstack/local-types": "workspace:*",
     "@glint/ember-tsc": "catalog:",
     "concurrently": "catalog:",
-    "sql-parser-cst": "catalog:"
+    "sql-parser-cst": "catalog:",
+    "typescript": "catalog:"
   },
   "scripts": {
     "start:pg": "./scripts/start-pg.sh",
     "stop:pg": "./scripts/stop-pg.sh",
-    "migrate": "PGDATABASE=boxel ./scripts/ensure-db-exists.sh && PGPORT=5435 PGDATABASE=boxel PGUSER=postgres node ./scripts/fix-migration-names.ts && PGPORT=5435 PGDATABASE=boxel PGUSER=postgres node-pg-migrate --migrations-table migrations --no-check-order --ignore-pattern '.*\\.eslintrc\\.js|package\\.json' --verbose=false",
+    "migrate": "PGDATABASE=boxel ./scripts/ensure-db-exists.sh && PGPORT=5435 PGDATABASE=boxel PGUSER=postgres node ./scripts/fix-migration-names.ts && PGPORT=5435 PGDATABASE=boxel PGUSER=postgres ./scripts/migrate-local.sh",
+    "migrate:create-removal": "./scripts/migrate-local.sh create-removal",
     "make-schema": "./scripts/schema-dump.sh",
     "drop-db": "docker exec boxel-pg dropdb --if-exists -U postgres -w",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",

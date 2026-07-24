@@ -17,13 +17,13 @@ import { Component } from 'https://cardstack.com/base/card-api';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 
 class BlogPost extends CardDef {
-  @field title = contains(StringField);
+  @field cardTitle = contains(StringField);
   @field body  = contains(MarkdownField);
 
   static isolated = class extends Component<typeof BlogPost> {
     <template>
       <article>
-        <h1>{{@model.title}}</h1>
+        <h1>{{@model.cardTitle}}</h1>
         {{!--
           MarkdownField provides its own render via @fields delegation.
           The default output is rendered HTML — no extra wiring needed.

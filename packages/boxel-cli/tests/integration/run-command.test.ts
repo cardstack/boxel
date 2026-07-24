@@ -3,43 +3,43 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { runCommand } from '../../src/commands/run-command.ts';
-import { createRealm } from '../../src/commands/realm/create.ts';
-import { ProfileManager } from '../../src/lib/profile-manager.ts';
+import {
+  runCommand,
+  type RunCommandResult,
+} from '../../src/commands/run-command.ts';
+import type { ProfileManager } from '../../src/lib/profile-manager.ts';
 import {
   startTestRealmServer,
   stopTestRealmServer,
-  createTestProfileDir,
+  createTestHome,
   setupTestProfile,
-  uniqueRealmName,
+  createTestRealmViaCli,
 } from '../helpers/integration.ts';
+import { runBoxel } from '../helpers/run-boxel.ts';
 
+// `boxel run-command <command-specifier> --realm <url> [--input <json>]
+// [--json]` executes a host command on the realm server. We drive the
+// installed binary for the observable behaviors (a ready result,
+// no-profile). The remaining assertions inspect the exact JSON:API
+// request the command function builds or force HTTP/transport failures
+// via a fetch mock — surfaces only reachable in-process — so they stay
+// as in-process spies on the command function.
+
+let home: string;
 let profileManager: ProfileManager;
 let cleanupProfile: () => void;
 let realmUrl: string;
 
-async function createTestRealm(): Promise<string> {
-  let name = uniqueRealmName();
-  await createRealm(name, `Test ${name}`, { profileManager });
-
-  let realmTokens =
-    profileManager.getActiveProfile()!.profile.realmTokens ?? {};
-  let entry = Object.entries(realmTokens).find(([url]) => url.includes(name));
-  if (!entry) {
-    throw new Error(`No realm JWT stored for ${name}`);
-  }
-  return entry[0];
-}
-
 beforeAll(async () => {
   await startTestRealmServer();
 
-  let testProfile = createTestProfileDir();
-  profileManager = testProfile.profileManager;
-  cleanupProfile = testProfile.cleanup;
+  let testHome = createTestHome();
+  home = testHome.home;
+  profileManager = testHome.profileManager;
+  cleanupProfile = testHome.cleanup;
   await setupTestProfile(profileManager);
 
-  realmUrl = await createTestRealm();
+  ({ realmUrl } = await createTestRealmViaCli(home));
 });
 
 afterAll(async () => {
@@ -49,16 +49,25 @@ afterAll(async () => {
 
 describe('run-command (integration)', () => {
   it('executes a command and returns a ready result', async () => {
-    let result = await runCommand(
-      '@cardstack/boxel-host/commands/get-card-type-schema/default',
-      realmUrl,
-      { profileManager },
+    let res = await runBoxel(
+      [
+        'run-command',
+        '@cardstack/boxel-host/commands/get-card-type-schema/default',
+        '--realm',
+        realmUrl,
+        '--json',
+      ],
+      { home },
     );
-
+    expect(res.ok, res.stderr).toBe(true);
+    let result = res.json<RunCommandResult>();
     expect(result.status).toBe('ready');
   });
 
   it('sends correct JSON:API request shape', async () => {
+    // White-box: the outgoing request body isn't observable across the
+    // subprocess boundary, so this stays an in-process spy on the
+    // command function.
     let fetchSpy = vi.spyOn(profileManager, 'authedRealmServerFetch');
     try {
       await runCommand(
@@ -96,6 +105,7 @@ describe('run-command (integration)', () => {
   });
 
   it('sends null commandInput when no input provided', async () => {
+    // White-box: see note on request-shape test above.
     let fetchSpy = vi.spyOn(profileManager, 'authedRealmServerFetch');
     try {
       await runCommand(
@@ -111,22 +121,28 @@ describe('run-command (integration)', () => {
     }
   });
 
-  it('throws when no active profile', async () => {
-    let emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-empty-'));
-    let emptyManager = new ProfileManager(emptyDir);
-
-    await expect(
-      runCommand(
-        '@cardstack/boxel-host/commands/get-card-type-schema/default',
-        realmUrl,
-        { profileManager: emptyManager },
-      ),
-    ).rejects.toThrow('No active profile');
-
-    fs.rmSync(emptyDir, { recursive: true, force: true });
+  it('exits non-zero with a clear error when there is no active profile', async () => {
+    let emptyHome = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-empty-'));
+    try {
+      let res = await runBoxel(
+        [
+          'run-command',
+          '@cardstack/boxel-host/commands/get-card-type-schema/default',
+          '--realm',
+          realmUrl,
+        ],
+        { home: emptyHome },
+      );
+      expect(res.exitCode).toBe(1);
+      expect(res.stderr).toContain('No active profile');
+    } finally {
+      fs.rmSync(emptyHome, { recursive: true, force: true });
+    }
   });
 
   it('returns error status on non-2xx HTTP response', async () => {
+    // White-box: mocks the transport to a controlled HTTP failure, only
+    // possible in-process.
     let fetchSpy = vi
       .spyOn(profileManager, 'authedRealmServerFetch')
       .mockResolvedValueOnce(new Response('Not Found', { status: 404 }));
@@ -142,6 +158,7 @@ describe('run-command (integration)', () => {
   });
 
   it('returns error status when response body is not valid JSON', async () => {
+    // White-box: mocks the transport, only possible in-process.
     let fetchSpy = vi
       .spyOn(profileManager, 'authedRealmServerFetch')
       .mockResolvedValueOnce(new Response('not json', { status: 200 }));
@@ -157,6 +174,8 @@ describe('run-command (integration)', () => {
   });
 
   it('returns error status when fetch throws', async () => {
+    // White-box: forces the transport to reject, only possible
+    // in-process.
     let fetchSpy = vi
       .spyOn(profileManager, 'authedRealmServerFetch')
       .mockRejectedValueOnce(new Error('network failure'));
@@ -172,6 +191,8 @@ describe('run-command (integration)', () => {
   });
 
   it('strips trailing slash from realm server URL before appending endpoint', async () => {
+    // White-box: inspects the URL the command function builds, only
+    // observable in-process.
     let fetchSpy = vi.spyOn(profileManager, 'authedRealmServerFetch');
     try {
       await runCommand(

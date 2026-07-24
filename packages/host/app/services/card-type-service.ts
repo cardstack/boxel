@@ -19,7 +19,7 @@ import type CardService from '@cardstack/host/services/card-service';
 
 import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
-import type ResetService from '../services/reset';
+import type SessionService from '../services/session';
 import type * as CardAPI from '@cardstack/base/card-api';
 import type { BaseDef, Field, FieldType } from '@cardstack/base/card-api';
 
@@ -56,7 +56,7 @@ export default class CardTypeService extends Service {
   @service declare private cardService: CardService;
   @service declare private network: NetworkService;
   @service declare private loaderService: LoaderService;
-  @service declare private reset: ResetService;
+  @service declare private session: SessionService;
 
   private typeCache: Map<string, Type> = new Map();
   private moduleInfoCache: Map<string, ModuleInfo> = new Map();
@@ -64,7 +64,7 @@ export default class CardTypeService extends Service {
 
   constructor(owner: Owner) {
     super(owner);
-    this.reset.register(this);
+    this.session.register(this);
   }
 
   resetState() {
