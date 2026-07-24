@@ -14,7 +14,19 @@ const { module, test } = QUnit;
 
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
+import { playwrightBrowsersRoot } from '../src/preflight.ts';
+
 const packageRoot = resolve(import.meta.dirname, '..');
+
+// The spawned `factory:go` runs preflight, which locates the Playwright browser
+// cache via homedir(). These tests override HOME to isolate the boxel-cli
+// profile, which would hide the browsers CI installed under the real home and
+// make preflight abort the run before it reaches the behavior under test. Pin
+// the cache explicitly (resolved against this process's real home) so preflight
+// finds it regardless of the child's HOME. preflight honors
+// PLAYWRIGHT_BROWSERS_PATH ahead of homedir().
+const playwrightBrowsersPath =
+  process.env.PLAYWRIGHT_BROWSERS_PATH ?? playwrightBrowsersRoot();
 const stickyNoteFixture = readFileSync(
   resolve(import.meta.dirname, '../realm/Wiki/sticky-note.json'),
   'utf8',
@@ -344,6 +356,9 @@ module('factory-entrypoint integration', function () {
           encoding: 'utf8',
           env: {
             ...process.env,
+            ...(playwrightBrowsersPath
+              ? { PLAYWRIGHT_BROWSERS_PATH: playwrightBrowsersPath }
+              : {}),
             HOME: tempHome,
           },
         },
@@ -454,6 +469,9 @@ module('factory-entrypoint integration', function () {
           encoding: 'utf8',
           env: {
             ...process.env,
+            ...(playwrightBrowsersPath
+              ? { PLAYWRIGHT_BROWSERS_PATH: playwrightBrowsersPath }
+              : {}),
             HOME: '/tmp/no-boxel-cli-here',
           },
         },
