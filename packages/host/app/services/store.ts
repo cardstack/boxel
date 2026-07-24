@@ -1778,7 +1778,13 @@ export default class StoreService extends Service implements StoreInterface {
       );
     }
 
-    // if there are no more subscribers to this realm then unsubscribe from realm
+    // if there are no more subscribers to this realm then unsubscribe from
+    // realm. Note this uses a same-form startsWith, so a mapped realm whose
+    // instances are keyed in prefix form (e.g. the base realm) never matches
+    // and its subscription is left installed for the session — a benign,
+    // deliberate leak. Making the teardown form-aware races invalidation
+    // delivery, and removing it entirely regresses invalidation-heavy paths;
+    // see the realm-subscription-lifecycle follow-up.
     let realmHref = !isLocalId(id)
       ? [...this.subscriptions.keys()].find((realmURL) =>
           id.startsWith(realmURL),
@@ -3088,12 +3094,13 @@ export function asURL(
     return urlOrDoc.data.id;
   }
   let id = urlOrDoc.replace(/\.json$/, '');
-  // Locals stay as-is; remotes resolve through the VN to a normalized URL.
-  // Keying stays in URL form so it matches gc-card-store, which keys instances
-  // by their (URL-form) data.id. Flipping the store's canonical key to RRI is
-  // deferred — it needs gc-card-store keyed the same way and the URL
-  // normalization `toURL` provides here (see CS-11730).
-  return isLocalId(id) ? id : vn.toURL(id).href;
+  // Locals stay as-is; remotes fold to the canonical spelling — through the
+  // VN's URL parse first (normalizing slashes/encoding the way a served URL
+  // is spelled), then back to prefix form where a realm mapping exists. This
+  // matches the document branch above, which returns `data.id` verbatim and
+  // is canonical (prefix form for mapped realms) as served, so both branches
+  // key a mapped realm's instance identically.
+  return isLocalId(id) ? id : vn.unresolveURL(vn.toURL(id).href);
 }
 
 function isSystemCardDefaultId(

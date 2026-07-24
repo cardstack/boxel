@@ -140,13 +140,19 @@ export class CardStoreWithErrors implements CardStore {
   }
 
   private normalizeKey(id: string): string {
-    return this.normalizeURL(id).replace(/\.json$/, '');
+    let key = id.replace(/\.json$/, '');
+    // Cache keys fold to the canonical spelling (prefix form where a realm
+    // mapping exists) so prefix-form and URL-form lookups share an entry,
+    // matching the host store's keying.
+    return isLocalId(key)
+      ? key
+      : this.#virtualNetwork.unresolveURL(this.#virtualNetwork.toURL(key).href);
   }
 
   private normalizeURL(id: string): string {
     let key = id.replace(/\.json$/, '');
-    // Local IDs pass through; remote IDs canonicalize to URL form via the
-    // VN so prefix-form and URL-form lookups share a cache key.
+    // Load targets resolve to the real URL — this is the fetch boundary, and
+    // the loaded document's id is stamped from it.
     return isLocalId(key) ? id : this.#virtualNetwork.toURL(id).href;
   }
 
