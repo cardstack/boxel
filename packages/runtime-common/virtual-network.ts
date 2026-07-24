@@ -598,12 +598,12 @@ const backOffMs = 100;
 const retryableLocalHosts = new Set(['localhost', '127.0.0.1']);
 
 // Longest a retryable base-realm fetch may wait for response headers in the
-// browser test suite before it is aborted and retried (see withRetries). The
-// "vanish" above has a second shape besides a thrown `TypeError: Failed to
-// fetch`: the response headers simply never arrive, so the fetch neither
-// resolves nor rejects. Comfortably above normal base-artifact header latency
-// (sub-second) yet far below a per-test timeout, so it only ever fires on a
-// genuine stall, and the retry then gets its headers on a fresh connection.
+// browser test suite before it is aborted and retried (see withRetries). A
+// stall where the response headers never arrive is the failure mode the
+// thrown-error retry net above does not cover: the fetch neither resolves nor
+// rejects. Comfortably above normal base-artifact header latency (sub-second)
+// yet far below a per-test timeout, so it only ever fires on a genuine stall,
+// and the retry then gets its headers on a fresh connection.
 const defaultFetchHeaderTimeoutMs = 10_000;
 
 // Whether a retryable fetch should also be bounded by a header-arrival timeout.
@@ -702,7 +702,7 @@ async function withRetries(
   let attempt = 0;
   for (;;) {
     // For a retryable fetch in the browser test suite, bound how long this
-    // attempt may wait for response headers. A CI stall where headers never
+    // attempt may wait for response headers. A stall where the headers never
     // arrive would otherwise leave the fetch neither resolved nor rejected,
     // hanging the fetcher test-waiter until QUnit's global timeout; the abort
     // turns that into the same retryable failure the catch below recovers
@@ -736,8 +736,8 @@ async function withRetries(
         }
         throw err;
       }
-      // Include the error so a future failure shows which "vanish" shape it
-      // was — a thrown `TypeError: Failed to fetch` or an aborted header stall
+      // Include the error so a failure surfaces which shape it took — a thrown
+      // `TypeError: Failed to fetch` or an aborted header stall
       // (`FetchHeaderTimeout`).
       console.error(
         `Encountered fetch failed for ${url.href} (${err?.name ?? 'Error'}: ${

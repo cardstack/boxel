@@ -107,12 +107,12 @@ module('Unit | virtual-network shouldRetryFetch', function () {
   });
 });
 
-// `shouldTimeoutRetryableFetch` gates the header-arrival timeout that turns the
-// second shape of the CI "vanish" — headers that never arrive, so the fetch
-// hangs instead of throwing — into the same retryable failure the throw path
-// already recovers from. It bounds only fetches that are already retryable, and
-// only in the browser test suite: a slow response in node / worker / env-mode
-// (e.g. a heavy `_search`) must never be aborted and retried.
+// `shouldTimeoutRetryableFetch` gates the header-arrival timeout that turns a
+// stall — response headers that never arrive, so the fetch hangs instead of
+// throwing — into the same retryable failure the throw path already recovers
+// from. It bounds only fetches that are already retryable, and only in the
+// browser test suite: a slow response in node / worker / env-mode (e.g. a
+// heavy `_search`) must never be aborted and retried.
 module('Unit | virtual-network shouldTimeoutRetryableFetch', function () {
   test('bounds a retryable base-realm fetch in the test environment', function (assert) {
     withEnvironment('test', () => {
@@ -120,7 +120,7 @@ module('Unit | virtual-network shouldTimeoutRetryableFetch', function () {
         shouldTimeoutRetryableFetch(
           new URL('https://realm-server.ci.localhost/base/_info'),
         ),
-        'the base _info fetch that hung in CI is bounded',
+        'the base _info fetch that can stall before headers is bounded',
       );
       assert.true(
         shouldTimeoutRetryableFetch(
@@ -164,8 +164,8 @@ module('Unit | virtual-network shouldTimeoutRetryableFetch', function () {
 
 // A native fetch whose first attempt stalls at the header stage (never
 // resolves; rejects only when its request signal aborts, exactly as a real
-// fetch does), then succeeds. Mirrors the CI failure where base/_info headers
-// never arrived and the unbounded fetch hung until QUnit's global timeout.
+// fetch does), then succeeds. Mirrors a base-realm fetch whose response headers
+// never arrive, so the unbounded fetch hangs until QUnit's global timeout.
 function stallingThenOkFetch(): {
   fetch: typeof globalThis.fetch;
   attempts: () => number;
@@ -180,7 +180,9 @@ function stallingThenOkFetch(): {
     if (attempt === 1) {
       return new Promise<Response>((_resolve, reject) => {
         if (!signal) {
-          return; // no signal wired => hang (fix broken); QUnit will time out
+          // No signal reached the fetch, so nothing can abort this attempt: it
+          // stays pending and the test fails via QUnit's timeout.
+          return;
         }
         let onAbort = () => {
           sawAbort = true;
