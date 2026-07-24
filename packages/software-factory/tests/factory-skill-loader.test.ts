@@ -1007,6 +1007,10 @@ module('factory-skill-loader > curated boxel references', function () {
     // Strict on purpose: once a pending name ships in the built skill,
     // remove it from PENDING_BOXEL_REFERENCES (and any transitional notes
     // that reference it).
+    if (PENDING_BOXEL_REFERENCES.length === 0) {
+      assert.ok(true, 'no references are pending');
+      return;
+    }
     for (let name of PENDING_BOXEL_REFERENCES) {
       assert.false(
         existsSync(join(builtRefsDir, name)),
