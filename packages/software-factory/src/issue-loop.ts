@@ -823,13 +823,24 @@ export async function runIssueLoop(
     }
     // The scheduler reads the realm index; bound-poll until it reflects
     // the freshly-synced issues so the outer loop doesn't exit early.
+    // (retryWithPoll's predicate is needsRetry: keep polling WHILE the
+    // hardening issues are still absent. On timeout it returns the last
+    // result rather than throwing — the loop would then exit with the
+    // hardening issues parked on the board for the next run.)
+    let indexCaughtUp = false;
     try {
-      await retryWithPoll(
+      let issues = await retryWithPoll(
         () => issueStore.listIssues(),
-        (issues) => issues.some((i) => issuePhase(i) === 'hardening'),
+        (loaded) => !loaded.some((i) => issuePhase(i) === 'hardening'),
       );
+      indexCaughtUp = issues.some((i) => issuePhase(i) === 'hardening');
     } catch {
-      // Falls through — the end-of-cycle reload may still pick them up.
+      // listIssues itself failed — same story as a timeout.
+    }
+    if (!indexCaughtUp) {
+      log.warn(
+        'Hardening issues synced but not yet visible in the realm index — they stay on the board for a resume run',
+      );
     }
     if (runLog) {
       await runLog.append([
