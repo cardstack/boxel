@@ -270,4 +270,55 @@ module('Unit | virtual-network header-stall recovery', function () {
       'aborting the original aborts the remapped request',
     );
   });
+
+  test('a caller-initiated abort is surfaced at once, not retried', async function (assert) {
+    let g = globalThis as { __environment?: string };
+    let had = '__environment' in g;
+    let prev = g.__environment;
+    g.__environment = 'test';
+    try {
+      let attempts = 0;
+      let fetch = ((input: RequestInfo | URL) => {
+        attempts++;
+        let signal = input instanceof Request ? input.signal : undefined;
+        // Reject with the signal's reason when aborted, as a real fetch does.
+        return new Promise<Response>((_resolve, reject) => {
+          if (!signal) {
+            return;
+          }
+          let onAbort = () => reject(signal.reason);
+          if (signal.aborted) {
+            onAbort();
+          } else {
+            signal.addEventListener('abort', onAbort, { once: true });
+          }
+        });
+      }) as typeof globalThis.fetch;
+      // A large header timeout so only the caller's abort ends the fetch. The
+      // URL is retryable, so without the guard this would retry the
+      // already-aborted request rather than surfacing the abort.
+      let vn = new VirtualNetwork(fetch, { fetchHeaderTimeoutMs: 60_000 });
+      let caller = new AbortController();
+      let pending = vn.fetch(
+        new Request('https://cardstack.com/base/card-api', {
+          signal: caller.signal,
+        }),
+      );
+      caller.abort();
+      let caught: { name?: string } | undefined;
+      try {
+        await pending;
+      } catch (e) {
+        caught = e as { name?: string };
+      }
+      assert.strictEqual(caught?.name, 'AbortError', 'the abort was surfaced');
+      assert.strictEqual(attempts, 1, 'the aborted request was not retried');
+    } finally {
+      if (had) {
+        g.__environment = prev;
+      } else {
+        delete g.__environment;
+      }
+    }
+  });
 });
