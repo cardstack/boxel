@@ -69,7 +69,7 @@ export function hostTestHarnessExists(): boolean {
   return existsSync(hostTestHarnessPath());
 }
 
-function playwrightBrowsersRoot(): string | undefined {
+export function playwrightBrowsersRoot(): string | undefined {
   let configured = process.env.PLAYWRIGHT_BROWSERS_PATH;
   // '0' stores browsers inside node_modules rather than a shared cache; locating
   // them reliably there is not worth the complexity, so don't block on it.
