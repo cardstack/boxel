@@ -6,7 +6,6 @@ import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 
 import ArchiveIcon from '@cardstack/boxel-icons/archive';
-import CircleAlert from '@cardstack/boxel-icons/circle-alert';
 import CopyIcon from '@cardstack/boxel-icons/copy';
 import FileSettingsIcon from '@cardstack/boxel-icons/file-settings';
 import Home from '@cardstack/boxel-icons/home';
@@ -268,6 +267,9 @@ export default class Workspace extends Component<Signature> {
                     </ul>
                   </div>
                 {{/if}}
+                <p class='delete-modal__irreversible'>
+                  This action is not reversible.
+                </p>
               </div>
             </div>
 
@@ -279,30 +281,24 @@ export default class Workspace extends Component<Signature> {
           </:content>
           <:footer>
             <div class='delete-modal__footer'>
-              <span class='delete-modal__disclaimer'>
-                <CircleAlert width='13' height='13' />
-                This action is not reversible
-              </span>
-              <div class='delete-modal__actions'>
-                <Button
-                  @kind='secondary'
-                  @size='tall'
-                  @disabled={{this.deleteWorkspaceTask.isRunning}}
-                  {{on 'click' this.closeDeleteModal}}
-                  data-test-cancel-delete-button
-                >
-                  Cancel
-                </Button>
-                <Button
-                  @kind='destructive'
-                  @size='tall'
-                  @loading={{this.deleteWorkspaceTask.isRunning}}
-                  {{on 'click' (perform this.deleteWorkspaceTask)}}
-                  data-test-confirm-delete-button
-                >
-                  Delete this workspace
-                </Button>
-              </div>
+              <Button
+                @kind='secondary'
+                @size='tall'
+                @disabled={{this.deleteWorkspaceTask.isRunning}}
+                {{on 'click' this.closeDeleteModal}}
+                data-test-cancel-delete-button
+              >
+                Cancel
+              </Button>
+              <Button
+                @kind='destructive'
+                @size='tall'
+                @loading={{this.deleteWorkspaceTask.isRunning}}
+                {{on 'click' (perform this.deleteWorkspaceTask)}}
+                data-test-confirm-delete-button
+              >
+                Delete this workspace
+              </Button>
             </div>
           </:footer>
         </ModalContainer>
@@ -895,6 +891,10 @@ export default class Workspace extends Component<Signature> {
         flex-direction: column;
         gap: var(--boxel-sp-xs);
       }
+      .delete-modal__irreversible {
+        margin: 0;
+        font-weight: 600;
+      }
       .delete-modal__realms {
         display: flex;
         flex-direction: column;
@@ -920,26 +920,9 @@ export default class Workspace extends Component<Signature> {
       }
       .delete-modal__footer {
         display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--boxel-sp);
-        width: 100%;
-      }
-      .delete-modal__actions {
-        display: flex;
+        justify-content: flex-end;
         gap: var(--boxel-sp-sm);
-        align-items: center;
-        margin-left: auto;
-      }
-      .delete-modal__disclaimer {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--boxel-sp-xxs);
-        font: 500 var(--boxel-font-xs);
-        color: var(--boxel-danger);
-      }
-      .delete-modal__disclaimer > svg {
-        flex-shrink: 0;
+        width: 100%;
       }
       .workspace-chooser-archive-modal-container > :deep(.boxel-modal__inner) {
         display: flex;
