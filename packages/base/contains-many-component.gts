@@ -144,7 +144,7 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
             {{on 'click' this.add}}
             data-test-add-new
           >
-            <IconPlus class='icon' width='12px' height='12px' alt='plus' />
+            <IconPlus class='icon' width='12px' height='12px' role='presentation' />
             Add
             {{getPlural @field.card.displayName}}
           </Button>
