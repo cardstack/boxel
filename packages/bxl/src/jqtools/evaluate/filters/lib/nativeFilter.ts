@@ -30,7 +30,7 @@ export function wrapBareNativeFilters(
       const wrapped = ((input: Item, ...args: Item[]) =>
         generateItems(
           bareFilter(input.value, ...collectValues(args)),
-        )) as WrappedBareNativeFilter;
+        )) as unknown as WrappedBareNativeFilter;
       wrapped.bareNativeFilter = bareFilter;
       return [
         key,
