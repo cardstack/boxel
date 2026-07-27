@@ -41,7 +41,7 @@ export interface PillSignature {
     iconLeft?: [];
     iconRight?: [];
   };
-  Element: HTMLElement;
+  Element: HTMLElement | HTMLAnchorElement;
 }
 
 const Pill: TemplateOnlyComponent<PillSignature> = <template>
