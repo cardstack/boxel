@@ -63,4 +63,4 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
 
 **Source:** `boxel-catalog/components/grid.gts`, `boxel-catalog/components/card-list.gts`.
 
-**See also:** `pick-typed-sort`, `show-table-from-query`, `boxel/references/query-systems.md`, `boxel/references/fitted-formats.md`.
+**See also:** `show-list-prefer-prerendered` (why this cheap surface is the default over hydrating getters), `pick-typed-sort`, `show-table-from-query`, `boxel/references/query-systems.md`, `boxel/references/fitted-formats.md`.

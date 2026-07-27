@@ -1379,9 +1379,6 @@ importers:
       '@glint/ember-tsc':
         specifier: 'catalog:'
         version: 1.5.0(typescript@5.9.3)
-      '@rollup/plugin-babel':
-        specifier: 'catalog:'
-        version: 6.1.0(@babel/core@7.29.7)(@types/babel__core@7.20.5)(rollup@4.62.0)
       '@tsconfig/ember':
         specifier: 3.0.1
         version: 3.0.1
@@ -1445,12 +1442,6 @@ importers:
       prettier-plugin-ember-template-tag:
         specifier: 'catalog:'
         version: 2.1.6(prettier@3.8.4)
-      rollup:
-        specifier: 'catalog:'
-        version: 4.62.0
-      rollup-plugin-copy:
-        specifier: 'catalog:'
-        version: 3.5.0
       svgo:
         specifier: 'catalog:'
         version: 3.3.3
@@ -1596,6 +1587,9 @@ importers:
       ember-cli-htmlbars:
         specifier: ^6.3.0
         version: 6.3.0
+      ember-concurrency:
+        specifier: 'catalog:'
+        version: 5.2.0(@babel/core@7.29.7)(@glint/template@1.7.7)
       ember-css-url:
         specifier: ^1.0.0
         version: 1.0.0(patch_hash=0e5253a008cc7bf02424d786e7a8fb2397bc48962f3cd1443f2c0fdd8200c96d)
@@ -1653,6 +1647,9 @@ importers:
       eslint-plugin-qunit:
         specifier: 'catalog:'
         version: 8.2.6(eslint@8.57.1)
+      glimmer-scoped-css:
+        specifier: 'catalog:'
+        version: 0.8.1
       prettier:
         specifier: 'catalog:'
         version: 3.8.4

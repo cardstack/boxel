@@ -7,7 +7,7 @@ boxel:
     - codeRef:
         module: '@cardstack/boxel-host/tools/apply-markdown-edit'
         name: default
-        requiresApproval: true
+      requiresApproval: true
 ---
 
 # Markdown Field Editing

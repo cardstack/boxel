@@ -483,7 +483,7 @@ mise run infra:stop-admin
 
 #### Google Sign-In (local dev)
 
-The dev Synapse template ships with a Google OIDC block and a custom `user_mapping_provider` (`packages/matrix/support/synapse/modules/boxel_oidc_mapping_provider.py`) that auto-links Google sign-ins to existing Matrix accounts by verified email. The whole block is **gated on env vars** — without them, `packages/matrix/support/synapse/index.ts` strips the OIDC block from the generated `homeserver.yaml` so Synapse boots cleanly for unrelated work. The host's "Sign in with Google" button is also gated on the `GOOGLE_AUTH_ENABLED` feature flag (defaults `true` in `development`).
+The dev Synapse template ships with a Google OIDC block and a custom `user_mapping_provider` (`packages/matrix/support/synapse/modules/boxel_oidc_mapping_provider.py`) that auto-links Google sign-ins to existing Matrix accounts by verified email. The whole block is **gated on env vars** — without them, `packages/matrix/support/synapse/index.ts` strips the OIDC block from the generated `homeserver.yaml` so Synapse boots cleanly for unrelated work. The host's "Sign in with Google" button appears whenever the homeserver's login flows advertise the `oidc-google` IdP, so it shows up automatically once the OIDC block is in place.
 
 To enable Google sign-in locally:
 

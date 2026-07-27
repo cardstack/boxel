@@ -2,7 +2,7 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { concat } from '@ember/helper';
 import { hash } from '@ember/helper';
 
-import { and, bool, cn, element, eq, not } from '../../helpers.ts';
+import { and, bool, cn, element, eq, not } from '../../helpers.gts';
 import { getContrastColor } from '../../helpers/contrast-color.ts';
 import cssVar from '../../helpers/css-var.ts';
 import type { BoxelButtonSize } from '../button/index.gts';

@@ -1,6 +1,6 @@
 ---
 name: boxel-design
-description: Use when designing or styling a Boxel card — choosing colors, typography, theme variables, layout, or visual treatment. Activates for any visual decisions on a card.
+description: Use when DECIDING a Boxel card's visual language — mood, palette, typography direction, asset direction, one visual signature, the design-playbook process. This is the taste/decision layer. NOT for implementing tokens or CSS inside templates (that's boxel-ui-guidelines) and NOT for creating/editing Theme, StyleReference, or BrandGuide card artifacts (that's boxel-theme-development).
 boxel:
   kind: skill
 ---

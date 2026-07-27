@@ -2583,6 +2583,47 @@ export class ExportedCard extends ExportedCardParent {
       .exists();
   });
 
+  test('find instances starts clean, ignoring a previously persisted search', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}pet`,
+    });
+
+    // Leftovers from an earlier search-sheet session: a term, a realm scope
+    // that matches nothing here, and a scroll offset. A triggered "Find
+    // instances" must inherit none of it — the trigger resets the service
+    // before applying its own type filter.
+    let searchSheetState = getService('search-sheet-state');
+    searchSheetState.searchKey = 'Mango';
+    searchSheetState.selectedRealms = [new URL('http://unrelated-realm/')];
+    searchSheetState.resultsScrollTop = 240;
+
+    await waitFor('[data-boxel-selector-item-text="Pet"]');
+    await click('[data-boxel-selector-item-text="Pet"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    await click('[data-test-action-button="Find instances"]');
+    await waitFor('[data-test-search-sheet-search-result]');
+
+    // Both instances appear — the stale realm scope did not narrow the search.
+    assert.dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`).exists();
+    assert
+      .dom(`[data-test-search-result="${testRealmURL}Pet/vangogh"]`)
+      .exists();
+
+    assert.deepEqual(
+      searchSheetState.selectedRealms,
+      [],
+      'the leftover realm scope was cleared',
+    );
+    assert.strictEqual(
+      searchSheetState.resultsScrollTop,
+      0,
+      'the leftover scroll offset was cleared',
+    );
+  });
+
   test('find instances action is not displayed for non-exported Card definition', async function (assert) {
     await visitOperatorMode({
       stacks: [[]],

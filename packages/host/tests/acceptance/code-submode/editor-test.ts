@@ -108,6 +108,34 @@ module('Acceptance | code submode | editor tests', function (hooks) {
           }
         }
       `,
+          'snack.gts': `
+        import { contains, field, Component, CardDef } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
+
+        export class Snack extends CardDef {
+          static displayName = 'Snack';
+          @field name = contains(StringField);
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <div data-test-snack={{@model.name}}><@fields.name/></div>
+            </template>
+          }
+        }
+      `,
+          'treat.gts': `
+        import { contains, field, Component, CardDef } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
+
+        export class Treat extends CardDef {
+          static displayName = 'Treat';
+          @field name = contains(StringField);
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <div data-test-treat={{@model.name}}><@fields.name/></div>
+            </template>
+          }
+        }
+      `,
           'shipping-info.gts': `
         import { contains, field, Component, FieldDef } from "@cardstack/base/card-api";
         import StringField from "@cardstack/base/string";
@@ -224,6 +252,19 @@ module('Acceptance | code submode | editor tests', function (hooks) {
                 adoptsFrom: {
                   module: `${testRealmURL}pet`,
                   name: 'Pet',
+                },
+              },
+            },
+          },
+          'Snack/cookie.json': {
+            data: {
+              attributes: {
+                name: 'Cookie',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}snack`,
+                  name: 'Snack',
                 },
               },
             },
@@ -543,6 +584,62 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     assert
       .dom('[data-test-code-mode-card-renderer-body] [data-test-field="name"]')
       .containsText('MangoXXX');
+  });
+
+  test('changing a card instance adoptsFrom in the editor re-renders it as the new type after indexing', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Snack/cookie`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      codePath: `${testRealmURL}Snack/cookie.json`,
+    });
+
+    await waitFor('[data-test-code-mode-card-renderer-body] [data-test-snack]');
+    assert
+      .dom('[data-test-code-mode-card-renderer-body] [data-test-snack]')
+      .containsText('Cookie', 'the preview renders as the original Snack type');
+    assert
+      .dom('[data-test-code-mode-card-renderer-body] [data-test-treat]')
+      .doesNotExist();
+
+    // Re-point the card's meta.adoptsFrom at an unrelated type by editing its
+    // JSON in the editor. This exercises the full path through the realm
+    // server: save -> reindex -> index event -> store reload -> re-render.
+    setMonacoContent(
+      JSON.stringify({
+        data: {
+          attributes: {
+            name: 'Cookie',
+          },
+          meta: {
+            adoptsFrom: {
+              module: testRRI('treat'),
+              name: 'Treat',
+            },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+
+    await waitFor(
+      '[data-test-code-mode-card-renderer-body] [data-test-treat]',
+      { timeout: 10_000 },
+    );
+    assert
+      .dom('[data-test-code-mode-card-renderer-body] [data-test-treat]')
+      .containsText(
+        'Cookie',
+        'the preview re-rendered using the new Treat type',
+      );
+    assert
+      .dom('[data-test-code-mode-card-renderer-body] [data-test-snack]')
+      .doesNotExist('the stale Snack render is gone');
   });
 
   test('card instance changes made in monaco editor are synchronized with store', async function (assert) {

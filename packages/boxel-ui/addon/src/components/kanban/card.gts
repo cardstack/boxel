@@ -2,7 +2,7 @@ import { cn } from '@cardstack/boxel-ui/helpers';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import type { SafeString } from '@ember/template';
 
-import type { FittedFormatId } from '../../helpers.ts';
+import type { FittedFormatId } from '../../helpers.gts';
 import FittedCardContainer from '../fitted-card-container/index.gts';
 import type { KanbanPlacement } from './engine.ts';
 

@@ -111,6 +111,11 @@ if (testModules) {
   }
 }
 
+const qunitFilter = process.env.QUNIT_FILTER?.trim();
+if (qunitFilter) {
+  QUnit.config.filter = qunitFilter;
+}
+
 // Cleanup here ensures lingering servers/prerenderers/queues don't keep the
 // Node event loop alive after tests finish — and equivalently, don't leave
 // hardcoded test ports (4444-4471, etc.) bound after a test is aborted by
@@ -339,6 +344,7 @@ const ALL_TEST_FILES: string[] = [
   './boxel-domain-availability-test',
   './get-boxel-claimed-domain-test',
   './claim-boxel-domain-test',
+  './client-telemetry-test',
   './realm-identifiers-test',
   './bfm-card-references-test',
   './package-shim-handler-test',

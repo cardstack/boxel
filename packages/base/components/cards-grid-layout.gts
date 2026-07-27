@@ -37,6 +37,10 @@ export interface SortOption {
 }
 
 export interface FilterOption {
+  // Stable identity for selecting a filter and looking up its count. Prefer
+  // this over displayName for those comparisons so a user-defined type whose
+  // name happens to match a built-in group (e.g. "Cards") can't collide.
+  id?: string;
   displayName: string;
   icon?: Icon | string;
   query?: Query;

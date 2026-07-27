@@ -1,6 +1,6 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
-import { type FittedFormatSpec, cn, gt, gte } from '../../helpers.ts';
+import { type FittedFormatSpec, cn, gt, gte } from '../../helpers.gts';
 import CopyButton from '../copy-button/index.gts';
 
 export type Spec = Partial<FittedFormatSpec> & {

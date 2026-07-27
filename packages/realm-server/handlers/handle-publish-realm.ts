@@ -46,7 +46,7 @@ import { upsertPublishedRealmInRegistry } from '../lib/realm-registry-writes.ts'
 
 const log = logger('handle-publish');
 
-// The CardsGrid CardDef can be referenced two equivalent ways in a
+// A base CardDef can be referenced two equivalent ways in a
 // `meta.adoptsFrom.module` field — the absolute base-realm URL, or
 // the registered `@cardstack/base/` prefix form. `@cardstack/base/`
 // isn't currently wired as a virtual-network mapping in production
@@ -54,11 +54,39 @@ const log = logger('handle-publish');
 // disk is the absolute URL. Listing both forms keeps the detection
 // future-proof: once `@cardstack/base/` becomes a live prefix
 // mapping, `index.json` files that use it are still caught.
-const CARDS_GRID_MODULE_FORMS = new Set<string>([
-  'https://cardstack.com/base/cards-grid',
-  '@cardstack/base/cards-grid',
-]);
-const CARDS_GRID_NAME = 'CardsGrid';
+// The base CardDefs recognized as a realm's default index card. A realm
+// whose index adopts one of these opts into the prerendered default-index
+// fast-path on publish; a realm with a bespoke index card is left alone.
+// Both module forms are listed per card (see the note above): the absolute
+// base-realm URL and the `@cardstack/base/` prefix form.
+const DEFAULT_REALM_INDEX_ADOPTIONS: { name: string; modules: Set<string> }[] =
+  [
+    {
+      name: 'CardsGrid',
+      modules: new Set([
+        'https://cardstack.com/base/cards-grid',
+        '@cardstack/base/cards-grid',
+      ]),
+    },
+    {
+      name: 'Workspace',
+      modules: new Set([
+        'https://cardstack.com/base/workspace',
+        '@cardstack/base/workspace',
+      ]),
+    },
+  ];
+
+function isDefaultRealmIndexAdoption(adoptsFrom: {
+  module: string;
+  name: string;
+}): boolean {
+  return DEFAULT_REALM_INDEX_ADOPTIONS.some(
+    (adoption) =>
+      adoption.modules.has(adoptsFrom.module) &&
+      adoption.name === adoptsFrom.name,
+  );
+}
 
 const PUBLISHED_REALM_DOMAIN_OVERRIDES = getPublishedRealmDomainOverrides(
   process.env.PUBLISHED_REALM_DOMAIN_OVERRIDES,
@@ -138,8 +166,8 @@ async function maybeApplyPublishedRealmOverride(
   };
 }
 
-// If the published realm's index card is the default CardsGrid, write
-// `includePrerenderedDefaultRealmIndex: true` into the realm's
+// If the published realm's index card is a default index card (CardsGrid or
+// Workspace), write `includePrerenderedDefaultRealmIndex: true` into the realm's
 // RealmConfig card on disk so the indexer (which the publish handler
 // kicks off below) produces a real isolated HTML for the index card
 // instead of the boilerplate placeholder. Anonymous visitors of a
@@ -178,10 +206,7 @@ async function ensureRealmIndexBoilerplateOptIn(
   if (!isResolvedCodeRef(adoptsFrom)) {
     return;
   }
-  if (
-    !CARDS_GRID_MODULE_FORMS.has(adoptsFrom.module) ||
-    adoptsFrom.name !== CARDS_GRID_NAME
-  ) {
+  if (!isDefaultRealmIndexAdoption(adoptsFrom)) {
     return;
   }
   let realmConfigDoc: Record<string, unknown>;
@@ -606,7 +631,10 @@ export default function handlePublishRealm({
             queue,
             dbAdapter,
             userInitiatedPriority,
-            { clearLastModified: true },
+            // This publish is blocked on the published realm's HTML (readiness
+            // gates on it), so the prerender-html job this pass spawns runs
+            // co-equal with indexing rather than one tier below.
+            { clearLastModified: true, awaitedByPublish: true },
           );
 
           return { lastPublishedAt, publishedRealmId, isNewRealm };
@@ -654,7 +682,12 @@ export default function handlePublishRealm({
           (await reconciler.lookupOrMount(publishedRealmURL));
         if (publishedRealm) {
           void publishedRealm
-            .fullIndex(userInitiatedPriority, { clearLastModified: true })
+            .fullIndex(userInitiatedPriority, {
+              clearLastModified: true,
+              // Republish is awaiting this HTML for readiness, so its render
+              // runs co-equal with indexing (see prerenderHtmlPriority).
+              awaitedByPublish: true,
+            })
             .catch((err: unknown) => {
               log.error(
                 `background publish reindex failed for ${publishedRealmURL}: ${

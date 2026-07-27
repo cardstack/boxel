@@ -1,7 +1,7 @@
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 
-import { cn } from '../../helpers.ts';
+import { cn } from '../../helpers.gts';
 
 interface SwitchSiganture {
   Args: SwitchArgs;

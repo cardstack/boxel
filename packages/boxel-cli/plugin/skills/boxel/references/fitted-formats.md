@@ -1,6 +1,8 @@
 ## Fitted Format Essentials
 
-> 🔴 **REQUIRED for every fitted view.** All fitted templates MUST be built using the approach documented in [`container-query-fitted-layout.md`](./container-query-fitted-layout.md). The two-element `.cq` → `.fit` pattern, six height quanta with `minmax(0, 1fr)` body rows, `pow()`-based hierarchical typography with per-role minimums, line-budget math, and the magazine-spread / thumbnail-sidebar width thresholds are **not optional advice** — they're the standard. Hand-rolling per-format CSS without container queries, using `auto` rows for body content, or skipping `min-height: 0` on grid children will produce fitted views that overflow at edge sizes.
+> 🔴 **REQUIRED for every fitted view.** All fitted templates MUST be built using the approach documented in [`container-query-fitted-layout.md`](./container-query-fitted-layout.md) — either via the `FittedCard` component (preferred for standard compositions; implements the standard internally) or hand-rolled. For hand-rolled templates, the single-root `.fit` grid querying the host-provided `fitted-card` container (never create your own container on the root), six height quanta with `minmax(0, 1fr)` body rows, `pow()`-based hierarchical typography with per-role minimums, line-budget math, and the magazine-spread / thumbnail-sidebar width thresholds are **not optional advice** — they're the standard. Hand-rolling per-format CSS without container queries, using `auto` rows for body content, or skipping `min-height: 0` on grid children will produce fitted views that overflow at edge sizes.
+>
+> For standard compositions, prefer the `FittedCard` component from `@cardstack/boxel-ui/components` — it implements the standard internally and adapts across all 16 sizes (see the "Prefer `<FittedCard>`" section of the long guide).
 >
 > This file (fitted-formats.md) is a **quick reference for size classification + the 16 named sizes you must verify against**. For the actual implementation, read the long guide.
 
@@ -92,4 +94,4 @@ The fitted view must render correctly in all 16 sizes above. For each row in the
 - [ ] No `auto` rows for body content (use `minmax(0, 1fr)` per the container-query guide).
 - [ ] No overflowing scrollbars or missing visual rhythm at any cell.
 
-Server-side validation: hit `/_search-prerendered` with `format=fitted` for the card; the response includes pre-rendered HTML for each of the 16 named sizes. Open the live app's format preview to walk through them visually. `npx boxel check` does not do this — it's sync-state only.
+Server-side validation: run a typed `npx boxel search --json` and inspect the fitted HTML relationship returned for the card, then open the live app's format preview to walk through all 16 sizes visually. Direct `/_search-prerendered` access is deployment-specific; where exposed, it uses HTTP `QUERY`, not `GET`.

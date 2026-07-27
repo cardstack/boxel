@@ -1,7 +1,7 @@
 import Component from '@glimmer/component';
 import type { Select } from 'ember-power-select/components/power-select';
 
-import { cn } from '../../helpers.ts';
+import { cn } from '../../helpers.gts';
 import { not } from '../../helpers/truth-helpers.ts';
 import CaretDown from '../../icons/caret-down.gts';
 

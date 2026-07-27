@@ -2507,7 +2507,7 @@ module(`Integration | realm indexing`, function (hooks) {
             id: testRRI('Chain/1'),
             type: 'card',
             links: {
-              self: `../Chain/1`,
+              self: `./1`,
             },
             attributes: {
               name: 'Ethereum Mainnet',
@@ -2544,7 +2544,7 @@ module(`Integration | realm indexing`, function (hooks) {
             id: testRRI('Chain/2'),
             type: 'card',
             links: {
-              self: `../Chain/2`,
+              self: `./2`,
             },
             attributes: {
               name: 'Polygon',
@@ -3048,7 +3048,7 @@ module(`Integration | realm indexing`, function (hooks) {
         {
           id: testRRI('Pet/mango'),
           type: 'card',
-          links: { self: `../Pet/mango` },
+          links: { self: `./mango` },
           attributes: {
             cardDescription: null,
             firstName: 'Mango',
@@ -3082,7 +3082,7 @@ module(`Integration | realm indexing`, function (hooks) {
         {
           id: testRRI('Pet/vanGogh'),
           type: 'card',
-          links: { self: `../Pet/vanGogh` },
+          links: { self: `./vanGogh` },
           attributes: {
             cardDescription: null,
             firstName: 'Van Gogh',
@@ -5188,6 +5188,45 @@ posts/ignore-me.json
     assert.ok(
       (entry?.isolatedHtml ?? '').length > 0,
       'isolated_html has real content',
+    );
+  });
+
+  test('isolated HTML for a default Workspace realm-index card is replaced with the boilerplate when realm has not opted in', async function (assert) {
+    let { realm } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'index.json': {
+          data: {
+            type: 'card',
+            attributes: {},
+            meta: {
+              adoptsFrom: {
+                module: '@cardstack/base/workspace',
+                name: 'Workspace',
+              },
+            },
+          },
+        },
+        'realm.json': {
+          data: {
+            type: 'card',
+            attributes: {},
+            meta: {
+              adoptsFrom: {
+                module: '@cardstack/base/realm-config',
+                name: 'RealmConfig',
+              },
+            },
+          },
+        },
+      },
+    });
+    let entry = await getInstance(realm, new URL(`${testRealmURL}index`));
+    assert.ok(entry, 'realm index card is indexed');
+    assert.strictEqual(
+      entry?.isolatedHtml,
+      REALM_INDEX_BOILERPLATE_HTML,
+      'isolated_html is the boilerplate constant when a Workspace-indexed realm has not opted in',
     );
   });
 

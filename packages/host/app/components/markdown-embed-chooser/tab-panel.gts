@@ -5,7 +5,7 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { restartableTask } from 'ember-concurrency';
+import { didCancel, restartableTask } from 'ember-concurrency';
 
 import { BoxelButton, LoadingIndicator } from '@cardstack/boxel-ui/components';
 import type {
@@ -158,25 +158,59 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
       this.selectedUrl = url;
       this.selectedTarget = undefined;
       this.selectedError = undefined;
-      let result =
-        refType === 'card'
-          ? await this.store.get(url)
-          : await this.store.get<FileDef>(url, { type: 'file-meta' });
-      if (isCardErrorJSONAPI(result)) {
-        // Keep `selectedUrl` and leave `selectedTarget` undefined; the pane
-        // renders the broken-ref visual from `selectedError` instead of the
-        // resolved embed.
-        this.selectedError = result;
-        return;
+      try {
+        let result =
+          refType === 'card'
+            ? await this.store.get(url)
+            : await this.store.get<FileDef>(url, { type: 'file-meta' });
+        if (isCardErrorJSONAPI(result)) {
+          // Keep `selectedUrl` and leave `selectedTarget` undefined; the pane
+          // renders the broken-ref visual from `selectedError` instead of the
+          // resolved embed.
+          this.selectedError = result;
+          return;
+        }
+        this.selectedTarget = result as CardDef | FileDef;
+      } catch (e) {
+        // A superseding pick cancels this run; let that bubble so the newer
+        // load owns the state. `store.get` resolves its own errors as
+        // `CardErrorJSONAPI` (handled above), so reaching here means an
+        // unexpected throw — surface it as a broken ref rather than leaving
+        // the pane spinning on its loading state forever.
+        if (didCancel(e)) {
+          throw e;
+        }
+        this.selectedError = {
+          id: url,
+          status: 500,
+          title: 'Failed to load',
+          message: e instanceof Error ? e.message : String(e),
+        } as CardErrorJSONAPI;
       }
-      this.selectedTarget = result as CardDef | FileDef;
     },
   );
 
   // The pane mounts once a row is picked and either resolves (selectedTarget)
-  // or fails (selectedError); the empty placeholder shows only before then.
+  // or fails (selectedError). Before then the right column shows the loading
+  // indicator while `isLoading`, falling back to the empty placeholder only
+  // when nothing is being resolved.
   private get hasPreview(): boolean {
     return !!this.selectedTarget || !!this.selectedError;
+  }
+
+  // A pick is resolving: its URL is set but neither the instance nor an error
+  // has landed yet. Drives the loading placeholder so a slow (cold) load reads
+  // as "loading", not as the "nothing selected" placeholder.
+  private get isLoading(): boolean {
+    return this.loadTarget.isRunning;
+  }
+
+  // The pane mounts while a pick is loading, resolved, or errored — so the
+  // format/size controls and the size-matched preview stay put across the
+  // load (no jump to a bare spinner). The empty placeholder shows only before
+  // anything is picked.
+  private get showPane(): boolean {
+    return this.hasPreview || this.isLoading;
   }
 
   // Broken-ref state threaded to the pane. Each is undefined unless the load
@@ -317,9 +351,10 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
         {{/if}}
       </div>
       <div class='markdown-embed-chooser-tab-panel__right'>
-        {{#if this.hasPreview}}
+        {{#if this.showPane}}
           <MarkdownEmbedPreviewPane
             @target={{this.selectedTarget}}
+            @loading={{this.isLoading}}
             @refType={{@refType}}
             @selection={{@selection}}
             @documentBaseUrl={{@documentBaseUrl}}

@@ -718,8 +718,8 @@ export default class CardPrerender extends Component {
         throw new Error(this.localIndexer.renderError);
       }
       // The html sub-route flags this when the card is the realm's
-      // default CardsGrid index and the realm has not opted in to
-      // keeping its prerendered isolated HTML. Short-circuit the
+      // default index card (CardsGrid or Workspace) and the realm has
+      // not opted in to keeping its prerendered isolated HTML. Short-circuit the
       // Glimmer render entirely and return the boilerplate so the
       // indexer pays a constant write cost regardless of realm size.
       if (

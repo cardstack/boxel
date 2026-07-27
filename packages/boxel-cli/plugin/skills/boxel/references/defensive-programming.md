@@ -53,7 +53,7 @@ return (this.args.model?.progress ?? 0) + 10;
 When accessing data across card relationships, always wrap in try-catch to handle missing or malformed data:
 
 ```js
-// ³⁷ In computed properties or methods
+// In computed properties or methods
 get authorDisplayName() {
   try {
     const author = this.args?.model?.author;
@@ -79,7 +79,7 @@ get authorDisplayName() {
   }
 }
 
-// ³⁸ In template getters
+// In template getters
 get relatedPostsSummary() {
   try {
     const posts = this.args.model?.relatedPosts;

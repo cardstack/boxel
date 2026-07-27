@@ -12,7 +12,7 @@ import { on } from '@ember/modifier';
 import type { SafeString } from '@ember/template';
 import Component from '@glimmer/component';
 
-import type { FittedFormatId } from '../../helpers.ts';
+import type { FittedFormatId } from '../../helpers.gts';
 import { KanbanCard } from './card.gts';
 import { KanbanColumnHeader } from './column-header.gts';
 import type { KanbanDragManager } from './drag.gts';

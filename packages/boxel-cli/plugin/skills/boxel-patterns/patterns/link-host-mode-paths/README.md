@@ -69,6 +69,12 @@ Each rule's `instance` accepts:
 
 Cross-realm references are silently filtered at read time. The realm-server logs a warning when this happens.
 
+## Public asset paths
+
+There is no magic `$realm` template variable. When card code needs its model's realm, import the canonical `realmURL` Symbol from `@cardstack/runtime-common` and read `this.args.model?.[realmURL]?.href`; never substitute `Symbol.for('realmURL')`.
+
+That model realm is not automatically proof of the anonymous public asset origin. A raw FileDef `<img src>` can retain an authenticated source-realm URL in prerendered HTML. Keep the FileDef relationship so publication copies the file, but render raw public assets through a verified published URL or root-relative mount path. Root-relative mount paths are safer than `./assets/...` when both trailing-slash and no-trailing-slash page URLs are served.
+
 ## End-to-end request flow
 
 When a visitor hits `https://my-app.com/blog`:

@@ -6,7 +6,7 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 
-import { bool, cn, cssVar } from '../../helpers.ts';
+import { bool, cn, cssVar } from '../../helpers.gts';
 import ContextButton from '../context-button/index.gts';
 import FieldContainer from '../field-container/index.gts';
 import IconButton from '../icon-button/index.gts';

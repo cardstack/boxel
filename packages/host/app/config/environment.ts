@@ -56,7 +56,6 @@ export default config as {
   stripePaymentLink: string;
   featureFlags?: {
     AI_PATCHING_CORRECTNESS_CHECKS?: boolean;
-    GOOGLE_AUTH_ENABLED?: boolean;
   };
   publishedRealmDomainOverrides: string;
   publishedRealmBoxelSpaceDomain: string;

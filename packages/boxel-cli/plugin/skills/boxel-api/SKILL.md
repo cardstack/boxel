@@ -175,7 +175,7 @@ CodeRef fields (e.g. `ref` on a Spec card) are matched against the full `{ modul
 
 ## What this skill is **not** for
 
-- **Card development patterns** (`.gts` field declarations, templates, `linksTo` vs `contains`) — that's `boxel-development`.
+- **Card development patterns** (`.gts` field declarations, templates, `linksTo` vs `contains`) — that's `boxel`.
 - **JSON:API document structure** for card instances — that's `boxel-file-structure`.
 - **Sync / pull / track / watch CLI ergonomics** — those have their own per-command skills (`boxel-sync`, `boxel-track`, `boxel-watch`).
 - **Host commands via the prerenderer** (`/_run-command`) — that's the `boxel-command` skill.

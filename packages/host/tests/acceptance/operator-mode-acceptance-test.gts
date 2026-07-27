@@ -31,6 +31,7 @@ import ENV from '@cardstack/host/config/environment';
 import { tokenRefreshPeriodSec } from '@cardstack/host/services/realm';
 
 import {
+  AiAssistantOpen,
   ScrollPositions,
   SessionLocalStorageKey,
 } from '@cardstack/host/utils/local-storage-keys';
@@ -1581,6 +1582,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         ScrollPositions,
         JSON.stringify({ 'file-tree': [`${testRealmURL}Pet/mango.json`, 2] }),
       );
+      window.localStorage.setItem(AiAssistantOpen, 'true');
 
       await click('[data-test-profile-icon-button]');
       await click('[data-test-signout-button]');
@@ -1588,6 +1590,11 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.strictEqual(getRecentFiles(), null);
       assert.strictEqual(window.localStorage.getItem(ScrollPositions), null);
       assert.strictEqual(getPlaygroundSelections(), null);
+      assert.strictEqual(
+        window.localStorage.getItem(AiAssistantOpen),
+        null,
+        'AI assistant open preference is cleared on logout',
+      );
 
       assert.dom('[data-test-login-btn]').exists();
     });

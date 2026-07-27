@@ -98,6 +98,14 @@ export class MockUtils {
     );
   };
 
+  simulateToDeviceEvent = (
+    type: string,
+    content: Record<string, any>,
+    sender?: string,
+  ) => {
+    this.testState.sdk!.client!.simulateToDeviceEvent(type, content, sender);
+  };
+
   setReadReceipt = (roomId: string, eventId: string, reader: string) => {
     return this.testState.sdk!.serverState.addReceiptEvent(
       roomId,

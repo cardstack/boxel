@@ -144,7 +144,7 @@ export class RealmIndexUpdater {
 
   publishFullIndex(
     priority = systemInitiatedPriority,
-    opts?: { clearLastModified?: boolean },
+    opts?: { clearLastModified?: boolean; awaitedByPublish?: boolean },
   ): {
     published: Promise<Job<FromScratchResult>>;
     completed: Promise<FromScratchResult>;
@@ -163,6 +163,7 @@ export class RealmIndexUpdater {
         priority,
         {
           clearLastModified: opts?.clearLastModified,
+          awaitedByPublish: opts?.awaitedByPublish,
         },
       );
       return job;

@@ -1,9 +1,8 @@
 // Placeholder content the host returns as `isolatedHTML` when it
 // decides to skip the full isolated render for the realm's default
-// CardsGrid index card. The decision is made per-render in
-// `card-prerender.gts` based on the card URL, its adoptsFrom chain,
-// and the realm's `includePrerenderedDefaultRealmIndex` config field
-// — see the realm-index opt-in PR for the surrounding rationale.
+// index card (CardsGrid or Workspace). The decision is made per-render
+// in `card-prerender.gts` based on the card URL, its adoptsFrom chain,
+// and the realm's `includePrerenderedDefaultRealmIndex` config field.
 //
 // The boilerplate is intentionally minimal. Anywhere the placeholder
 // could be visible (the published-realm SSR injection slot, the
@@ -17,8 +16,8 @@
 // payload.
 export const REALM_INDEX_BOILERPLATE_HTML = `<section data-prerender>
   <div
-    class="boxel-cards-grid-shell"
-    data-boxel-cards-grid-index
+    class="boxel-realm-index-shell"
+    data-boxel-realm-index
     aria-busy="true"
   >
     Prerendered HTML for default realm index is disabled (can be configured in realm.json)

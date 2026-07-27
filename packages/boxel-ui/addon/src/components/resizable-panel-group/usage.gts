@@ -7,7 +7,7 @@ import {
   cssVariable,
 } from 'ember-freestyle/decorators/css-variable';
 
-import { not } from '../../helpers.ts';
+import { not } from '../../helpers.gts';
 import cssVar from '../../helpers/css-var.ts';
 import ResizablePanelGroup from './index.gts';
 

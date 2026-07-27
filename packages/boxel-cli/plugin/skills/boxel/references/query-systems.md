@@ -202,9 +202,9 @@ For benchmark-style coverage, exercise both common query surfaces across the set
 
 The newer display surface for a list of results (the `<SearchResults>` component). Declare an **`entry`-rooted** query and render the yielded entries; each `entry.component` renders itself — prerendered HTML (inert, hydrated lazily on interaction) or a live card — so the card never branches on which.
 
-**When to use what to query cards:**
-- Display a list of results (cards or files) → `@context.searchResultsComponent`.
-- Need the instances in JS (read / manipulate) → `getCards` (reactive) or `@context.store.search` (imperative, returns instances).
+**When to use what to query cards** (this is a **cost** decision — the display surface is cheap, the instance getters hydrate every row; see the pattern `show-list-prefer-prerendered`):
+- Display a list of results (cards or files) → `@context.searchResultsComponent`. Prerendered HTML, hydrated lazily per row. **Default for anything you only render.**
+- Need the instances in JS (read / manipulate / mutate) → `getCards` / `getCardCollection` (reactive) or `@context.store.search` (imperative). These trigger server `loadLinks` + serialization + Store hydration for every matching row — reserve for genuine read/mutate, and scope to the current realm (`this.args.model?.[realmURL]?.href`), not the whole federation.
 - Treat a query result as a field → query-backed fields (`linksTo` / `linksToMany` with a `query`).
 
 ```gts

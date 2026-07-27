@@ -5,7 +5,6 @@ import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
 import Login from '@cardstack/host/components/matrix/login';
-import type EnvironmentService from '@cardstack/host/services/environment-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
 import { setupMockMatrix } from '../../../helpers/mock-matrix';
@@ -46,12 +45,6 @@ module('Integration | Component | matrix/login', function (hooks) {
   let { setLoginFlows, setSsoLoginUrl, setLoginWithTokenInterceptor } =
     mockMatrixUtils;
 
-  function getEnvironmentService(testContext: any): EnvironmentService {
-    return testContext.owner.lookup(
-      'service:environment-service',
-    ) as EnvironmentService;
-  }
-
   function getMatrixService(testContext: any): MatrixService {
     return testContext.owner.lookup('service:matrix-service') as MatrixService;
   }
@@ -64,30 +57,19 @@ module('Integration | Component | matrix/login', function (hooks) {
     window.location.href = '/';
   });
 
-  test('hides Google button when GOOGLE_AUTH_ENABLED flag is off', async function (assert) {
-    getEnvironmentService(this).googleAuthEnabled = false;
-    setLoginFlows(GOOGLE_SSO_FLOW);
-    await render(<template><Login @setMode={{noop}} /></template>);
-    assert.dom('[data-test-google-login-btn]').doesNotExist();
-    assert.dom('[data-test-login-form]').exists();
-  });
-
   test('hides Google button when server advertises only m.login.password', async function (assert) {
-    getEnvironmentService(this).googleAuthEnabled = true;
     setLoginFlows(PASSWORD_ONLY_FLOW);
     await render(<template><Login @setMode={{noop}} /></template>);
     assert.dom('[data-test-google-login-btn]').doesNotExist();
   });
 
   test('hides Google button when m.login.sso is advertised but oidc-google IDP is missing', async function (assert) {
-    getEnvironmentService(this).googleAuthEnabled = true;
     setLoginFlows(OTHER_SSO_FLOW);
     await render(<template><Login @setMode={{noop}} /></template>);
     assert.dom('[data-test-google-login-btn]').doesNotExist();
   });
 
-  test('shows Google button when flag on AND oidc-google IDP advertised', async function (assert) {
-    getEnvironmentService(this).googleAuthEnabled = true;
+  test('shows Google button when oidc-google IDP advertised', async function (assert) {
     setLoginFlows(GOOGLE_SSO_FLOW);
     await render(<template><Login @setMode={{noop}} /></template>);
     assert.dom('[data-test-google-login-btn]').exists();
@@ -96,7 +78,6 @@ module('Integration | Component | matrix/login', function (hooks) {
   test('clicking Sign in with Google navigates via getSsoLoginUrl', async function (assert) {
     let expectedUrl =
       'http://localhost:8008/_matrix/client/v3/login/sso/redirect/oidc-google?redirectUrl=test';
-    getEnvironmentService(this).googleAuthEnabled = true;
     setLoginFlows(GOOGLE_SSO_FLOW);
     setSsoLoginUrl(expectedUrl);
     await render(<template><Login @setMode={{noop}} /></template>);
