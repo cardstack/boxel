@@ -3,8 +3,8 @@
     "type": "card",
     "meta": {
       "adoptsFrom": {
-        "module": "./cards-grid",
-        "name": "CardsGrid"
+        "module": "./workspace",
+        "name": "Workspace"
       }
     }
   }
