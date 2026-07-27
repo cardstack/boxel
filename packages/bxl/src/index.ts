@@ -146,7 +146,7 @@ export type {
   PreparedBoxelRuntime,
 } from './boxel-runtime.js';
 
-export const VERSION = '0.1.0-dev.0';
+export const VERSION = '0.1.0';
 
 /**
  * Build identity, useful for debugging stale caches in the realm
@@ -168,7 +168,7 @@ export const VERSION = '0.1.0-dev.0';
  *
  * console.log(BXL_BUILD_INFO);
  * // {
- * //   version: '0.1.0-dev.0',
+ * //   version: '0.1.0',
  * //   buildTime: '2026-05-07T15:42:01.000Z',
  * //   features: ['null-tolerance', 'jq-fx-tags', 'as-materialize',
  * //              'pascalcase-fallback', 'jq-keywords-guard'],

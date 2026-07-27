@@ -11,7 +11,26 @@ versions may change syntax behavior until `1.0.0`. See
 
 ## [Unreleased]
 
+## [0.1.0] — 2026-07-27
+
 ### Fixed
+
+- **Readable predicates and nested transforms capture the root record.**
+  Item fields resolve first inside predicates, `map`, `select`, and object
+  construction, with unresolved readable labels falling back to `$root`.
+  Expressions such as `Book[Bidder = Intent.Bidder]` no longer fail with an
+  undefined `Intent/0` call.
+- **Schema-known invalid members no longer fail silently.** Accessing an
+  unknown field on a schema-known object or array item raises a readable
+  compiler diagnostic. Input keys that differ from schema keys only by casing
+  produce a structured `input-key-casing-mismatch` evaluation warning.
+- **`present(no-match)` is Boolean.** `present(...)` now materializes an empty
+  argument stream as `null`, returning `false` instead of allowing the whole
+  expression to disappear and normalize to `null`.
+- **Runtime profile failures explain their capability boundary.** The
+  jq-core-only `runtime-bare` entry now points spreadsheet-formula callers to
+  the full runtime; `computeVia` continues to report derive-profile codes such
+  as `derive-def-banned` for unsupported user helpers.
 
 - **Parser: `A - (B + C)` no longer reassociates to `(A - B) + C`.**
   Long-standing bug in `Parser.normalizeBinaryAst` — equal-precedence
@@ -89,11 +108,11 @@ versions may change syntax behavior until `1.0.0`. See
 
 ### Infrastructure
 
+- The computed-field benchmark now registers the same eager extension
+  libraries as the Boxel realm bundle. This prevents calibration from silently
+  excluding engineering, financial, statistical, Bessel, and validation
+  formulas and reports performance over the representative workload.
+
 - `tsconfig.json` relaxed to match ported code realities
   (`noImplicitAny: false`, `noUncheckedIndexedAccess: false`,
   `exactOptionalPropertyTypes: false`). Re-tightening is a follow-up task.
-
-## [0.1.0] — Unreleased
-
-Initial public release. See [RELEASE-PLAN.md](./RELEASE-PLAN.md) for the
-definition-of-done checklist.

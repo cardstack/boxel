@@ -36,7 +36,7 @@ evaluateBxl('ROUND(Subtotal * "Tax Rate" / 100, 2)', invoice, { schema });
 // => 12.38
 ```
 
-> **Status: pre-release** (`0.1.0-dev.0`). First tagged release will be `0.1.0`. The public API is intentionally unstable below 1.0 — see [RELEASE-PLAN.md](./RELEASE-PLAN.md).
+> **Current release: `0.1.0`.** The public API is intentionally unstable below 1.0 — see [RELEASE-PLAN.md](./RELEASE-PLAN.md).
 
 ---
 
