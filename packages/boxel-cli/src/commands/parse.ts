@@ -135,18 +135,25 @@ const HOST_NODE_MODULES_PATH = join(PACKAGES_PATH, 'host', 'node_modules');
 // one would hide the rest. Resolve each package from the CLI's location
 // instead (Node's resolver walks the ancestor chain, finding nested and
 // hoisted alike) and symlink each into the workspace individually.
-const GLINT_RESOLVE_PACKAGES = [
-  '@glint/ember-tsc',
-  'content-tag',
-  '@glimmer/component',
-  '@glimmer/tracking',
-  'qunit',
-  // qunit ships no types of its own — `@types/qunit` supplies them, and
-  // qunit-dom augments that `Assert` interface. Both must be linked or a
-  // `.test.gts` calling `assert.dom(...)` fails to resolve `qunit`.
-  '@types/qunit',
-  'qunit-dom',
-];
+//
+// The set to link is exactly the CLI's own declared `dependencies`: each
+// is there so card code (or a `.test.gts`) can resolve it —
+// `@glint/ember-tsc`, `content-tag`, `@glimmer/*`, `qunit`, `qunit-dom`,
+// `@types/qunit`, `@universal-ember/test-support`, … Deriving the list
+// from package.json (rather than hand-maintaining one) keeps it from
+// silently drifting out of date — a curated list already dropped
+// `@types/qunit` and `@universal-ember/test-support`, each a
+// published-install-only "Cannot find module" regression.
+const CLI_DEPENDENCY_PACKAGES = (() => {
+  try {
+    let pkg = JSON.parse(
+      readFileSync(join(BOXEL_CLI_PATH, 'package.json'), 'utf8'),
+    ) as { dependencies?: Record<string, string> };
+    return Object.keys(pkg.dependencies ?? {});
+  } catch {
+    return [];
+  }
+})();
 
 let cachedTsconfigContent: string | undefined;
 
@@ -563,11 +570,11 @@ function resolvePackageRoot(pkg: string): string | undefined {
  * Assemble the temp workspace's `node_modules` by symlinking each
  * resolvable runtime dep individually. Unlike a single node_modules
  * symlink, this gathers deps that a published install may have split
- * across the nested and hoisted node_modules (see GLINT_RESOLVE_PACKAGES).
+ * across the nested and hoisted node_modules (see CLI_DEPENDENCY_PACKAGES).
  */
 function linkResolvedDeps(nodeModulesDir: string): void {
   mkdirSync(nodeModulesDir, { recursive: true });
-  for (let pkg of GLINT_RESOLVE_PACKAGES) {
+  for (let pkg of CLI_DEPENDENCY_PACKAGES) {
     let root = resolvePackageRoot(pkg);
     if (!root) continue;
     let dest = join(nodeModulesDir, pkg);

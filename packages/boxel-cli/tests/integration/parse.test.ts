@@ -46,6 +46,8 @@ async function parseFixture(name: string): Promise<ParseRealmResult> {
 //     (`formatDateTime` with its `format` named arg) plus direct
 //     interpolation of `contains(NumberField)` / `contains(TextAreaField)`
 //     field values.
+//   - test-support: a `.test.gts` importing `@universal-ember/test-support`
+//     (a CLI dependency card test files rely on).
 // ---------------------------------------------------------------------------
 const CLEAN_FIXTURES: { name: string; covers: string }[] = [
   {
@@ -57,6 +59,10 @@ const CLEAN_FIXTURES: { name: string; covers: string }[] = [
   {
     name: 'helpers-and-fields',
     covers: 'boxel-ui helper call + field interpolation',
+  },
+  {
+    name: 'test-support',
+    covers: '@universal-ember/test-support import in a .test.gts',
   },
 ];
 
