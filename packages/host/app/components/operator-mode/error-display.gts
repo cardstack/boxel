@@ -274,8 +274,8 @@ export default class ErrorDisplay
       // rather than leaving a slice of it unexplained: admission is
       // per-realm backpressure and tabProbe is the liveness check that can
       // retire a warm tab and force a cold start. Buckets the payload
-      // doesn't carry are omitted rather than shown as `0` — a diagnostic
-      // written before a bucket existed doesn't know it was zero.
+      // doesn't carry are omitted rather than shown as `0`: a diagnostic
+      // that omits a bucket isn't claiming the wait was zero.
       let waitKeys = [
         'semaphoreMs',
         'admissionMs',

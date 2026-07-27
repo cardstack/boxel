@@ -165,7 +165,7 @@ SELECT
   -- PRERENDER_TAB_HEALTH_PROBE_MS means tabs are being retired routinely,
   -- which is a content problem on specific realms rather than a sizing one
   -- — chase it with the indexing-diagnostics skill, not by adding tabs.
-  -- COALESCE because the key is absent on rows written before the probe.
+  -- COALESCE because not every row carries the key.
   percentile_cont(0.95) WITHIN GROUP (ORDER BY COALESCE((diagnostics->'waits'->>'tabProbeMs')::int, 0)) AS p95_probe_ms,
   max(COALESCE((diagnostics->'waits'->>'tabProbeMs')::int, 0)) AS max_probe_ms
 FROM boxel_index

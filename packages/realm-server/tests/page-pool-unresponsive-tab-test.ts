@@ -39,11 +39,10 @@ type StubTab = {
 
 function makeBrowserStub() {
   let tabs: StubTab[] = [];
-  // When set, every page the stub creates is born wedged. Racing a wedge
-  // against the pool's own tab creation from the test body can't reach the
-  // "no live tab anywhere" state deterministically — the pool wins often
-  // enough that the test passes on a healthy replacement instead of the
-  // path it names.
+  // When set, every page the stub creates is born wedged. Wedging pages from
+  // the test body instead cannot reach the "no live tab anywhere" state
+  // deterministically: tab creation wins that race often enough that a test
+  // would pass on a healthy replacement rather than on the path it names.
   let wedgeAtBirth: 'hang' | 'reject' | undefined;
   let browser = {
     async createBrowserContext() {
@@ -207,6 +206,16 @@ module(basename(import.meta.filename), function (hooks) {
     return first.pageId;
   }
 
+  // A probe that burns its whole budget reports roughly that budget, but not
+  // exactly: the elapsed time is measured with `Date.now()` around a
+  // `setTimeout`, and a timer can fire a millisecond early against that
+  // clock. So assertions about a spent budget compare against a fraction of
+  // it. That still separates the cases cleanly — a healthy probe against
+  // these stubs answers in under a millisecond.
+  function spentItsBudget(reportedMs: number, budgetMs: number): boolean {
+    return reportedMs >= budgetMs / 2;
+  }
+
   // Retirement is deliberately not awaited by the caller — the tab is
   // marked closing synchronously and Chrome catches up afterwards — so
   // assertions about the close poll for it.
@@ -246,12 +255,22 @@ module(basename(import.meta.filename), function (hooks) {
       'the swap is counted against the affinity that produced it',
     );
     assert.true(
-      second.waits.tabProbeMs >= 50,
+      spentItsBudget(second.waits.tabProbeMs, 50),
       `the probe budget is attributed to tabProbeMs (was ${second.waits.tabProbeMs}ms)`,
     );
+    // The buckets partition the launch, so they cannot sum past it. That is
+    // what pins the probe out of `tabQueueMs`, which is derived by subtracting
+    // the reported waits from the wall time spent selecting — an unsubtracted
+    // probe would be counted twice and break the sum. A ceiling on
+    // `tabQueueMs` alone would not hold: selecting a replacement tab is real
+    // work, and on a loaded machine it costs as much as the probe budget.
+    let { semaphoreMs, admissionMs, tabQueueMs, tabStartupMs, tabProbeMs } =
+      second.waits;
+    let bucketed =
+      semaphoreMs + admissionMs + tabQueueMs + tabStartupMs + tabProbeMs;
     assert.true(
-      second.waits.tabQueueMs < 50,
-      `probe time is kept out of tabQueueMs, which means warm-tab serialization (was ${second.waits.tabQueueMs}ms)`,
+      bucketed <= second.launchMs,
+      `the wait buckets partition launch rather than double-counting the probe (${bucketed}ms bucketed vs ${second.launchMs}ms launch)`,
     );
     await waitForClose(wedgedTab, 'the wedged tab to be closed');
     assert.true(
@@ -286,7 +305,7 @@ module(basename(import.meta.filename), function (hooks) {
     second.release();
   });
 
-  test('a responsive warm tab is still reused (the probe does not churn healthy tabs)', async function (assert) {
+  test('a responsive warm tab is reused (the probe does not churn healthy tabs)', async function (assert) {
     let { pool } = makePool(50);
     let firstPageId = await warmAffinityA(pool);
 
@@ -421,7 +440,7 @@ module(basename(import.meta.filename), function (hooks) {
 
     assert.ok(result.pageId, 'the caller still got a tab');
     assert.true(
-      result.waits.tabProbeMs >= budgetMs,
+      spentItsBudget(result.waits.tabProbeMs, budgetMs),
       `probe time across the attempts is reported (was ${result.waits.tabProbeMs}ms)`,
     );
     let handedBack = tabs.find((t) => t.page === result.page)!;

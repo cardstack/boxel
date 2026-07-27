@@ -11,8 +11,8 @@ import type { Page } from 'puppeteer';
 export type ResponsivenessProbe = {
   // False when the trivial evaluate neither resolved nor rejected inside
   // the budget (thread wedged), and also when the CDP round-trip failed
-  // outright (`error` is set) — in both cases the page cannot run script
-  // for us right now.
+  // outright (`error` is set) — in both cases the page did not run script
+  // for us.
   responsive: boolean;
   // Wall time the probe took. Roughly the CDP round-trip on a healthy
   // page; equal to the budget when the thread never answered.

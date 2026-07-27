@@ -2024,8 +2024,8 @@ export class PagePool {
 
   // Liveness gate on tab reuse.
   //
-  // Bookkeeping says nothing about whether a warm tab can still run
-  // script. A render that never settles leaves its tab holding the
+  // Bookkeeping says nothing about whether a warm tab can run script at
+  // all. A render that never settles leaves its tab holding the
   // renderer's JS thread — a runaway synchronous loop, an in-page timer
   // storm, an abandoned transition — and the tab stays in the pool because
   // eviction keys off the *outcome* of the visit that ran on it. That
@@ -2257,8 +2257,8 @@ export class PagePool {
         let stolen =
           !result.reused && donorKey !== null && donorKey !== affinityKey;
         if (result.reused || stolen) {
-          // The condemned tab is retired under whichever affinity owns it
-          // right now, which for a steal is still the donor.
+          // The condemned tab is retired under whichever affinity owns it,
+          // which for a steal is the donor.
           let owningKey = donorKey ?? affinityKey;
           let probe = await this.#probeReusedTab(
             result.entry,
