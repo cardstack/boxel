@@ -418,6 +418,79 @@ function buildRuntimeCommonDts(rcSrc: string, rcDst: string): void {
   }
 }
 
+/**
+ * Fail the build if any emitted declaration in `bundleDir` imports a
+ * *relative* module that isn't present in the bundle. Generated `.d.ts`
+ * keep the source's relative specifiers (e.g. `./marked.mts`), so a
+ * source file dropped from the emit leaves a dangling reference. Under
+ * `boxel parse`'s `skipLibCheck` that never errors — the referenced types
+ * silently collapse to `any`, quietly weakening the type-check the bundle
+ * exists to strengthen. Catch it here, at build time, where it's loud.
+ *
+ * Only relative specifiers are checked; bare package imports resolve
+ * against node_modules at parse time (see parse.ts's linkResolvedDeps),
+ * and non-module assets (`.json`, `.css`, …) are skipped.
+ */
+function assertBundleDeclRefsResolve(bundleDir: string, label: string): void {
+  let declFiles: string[] = [];
+  let walk = (dir: string): void => {
+    for (let entry of readdirSync(dir, { withFileTypes: true })) {
+      let full = join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (/\.d\.(m|c)?ts$/.test(entry.name)) declFiles.push(full);
+    }
+  };
+  walk(bundleDir);
+
+  // Captures the relative specifier of `from '…'`, `import('…')`, and
+  // `require('…')`.
+  let specRe =
+    /(?:\bfrom\s*|(?:\bimport|\brequire)\s*\(\s*)['"](\.\.?\/[^'"]+)['"]/g;
+  let dangling: string[] = [];
+  for (let file of declFiles) {
+    let content = readFileSync(file, 'utf8');
+    let match: RegExpExecArray | null;
+    while ((match = specRe.exec(content))) {
+      let spec = match[1];
+      let ext = spec.match(/\.[a-z0-9]+$/i)?.[0];
+      // Skip non-module assets; a specifier is a module ref when it's
+      // extensionless or carries a TS/JS extension.
+      if (
+        ext &&
+        !['.ts', '.mts', '.cts', '.js', '.mjs', '.cjs'].includes(ext)
+      ) {
+        continue;
+      }
+      let base = resolve(dirname(file), spec);
+      let stem = base.replace(/\.(d\.)?(m|c)?[tj]s$/i, '');
+      let candidates = [
+        base,
+        stem + '.d.ts',
+        stem + '.d.mts',
+        stem + '.d.cts',
+        join(stem, 'index.d.ts'),
+        join(stem, 'index.d.mts'),
+        join(stem, 'index.d.cts'),
+      ];
+      if (!candidates.some((c) => existsSync(c))) {
+        dangling.push(`${relative(bundleDir, file)} → ${spec}`);
+      }
+    }
+  }
+
+  if (dangling.length) {
+    console.error(
+      `\nBundle integrity check failed for ${label}: emitted declarations ` +
+        `reference files missing from the bundle. A dropped source leaves a ` +
+        `dangling relative import that skipLibCheck silently turns into ` +
+        `\`any\`. Include the missing source in the .d.ts build:\n` +
+        dangling.map((d) => `  ${d}`).join('\n') +
+        '\n',
+    );
+    process.exit(1);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Simple-copy vendors (everything except `base/` and `runtime-common/`)
 // ---------------------------------------------------------------------------
@@ -609,6 +682,7 @@ function main(): void {
   }
   process.stdout.write('  runtime-common … (running tsc --declaration) ');
   buildRuntimeCommonDts(rcSrc, rcDst);
+  assertBundleDeclRefsResolve(rcDst, 'runtime-common');
   let rcSize = dirSize(rcDst);
   total += rcSize;
   console.log(`${(rcSize / 1024 / 1024).toFixed(2)} MB`);
