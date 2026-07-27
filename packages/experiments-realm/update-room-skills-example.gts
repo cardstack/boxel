@@ -448,7 +448,7 @@ class Isolated extends Component<typeof UpdateRoomSkillsExample> {
 
       <Button
         class='apply-button'
-        @appearance='primary'
+        @kind='primary'
         disabled={{this.isApplyDisabled}}
         {{on 'click' this.applySkills}}
       >

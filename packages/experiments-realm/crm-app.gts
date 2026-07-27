@@ -587,7 +587,7 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
           <BoxelButton
             class='sidebar-create-button content-header-row-1'
             @kind='primary'
-            @size='large'
+            @size='tall'
             @disabled={{this.activeFilter.isCreateNewDisabled}}
             @loading={{this.createCard.isRunning}}
             {{on 'click' this.createNew}}
