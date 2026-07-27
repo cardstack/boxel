@@ -222,12 +222,10 @@ export default class Workspace extends Component<Signature> {
         >
           <:content>
             <div class='delete-modal__workspace-card'>
-              <div class='delete-modal__realm-icon-wrapper'>
-                <RealmIcon
-                  class='delete-modal__realm-icon'
-                  @realmInfo={{this.realmInfo}}
-                />
-              </div>
+              <RealmIcon
+                class='delete-modal__realm-icon'
+                @realmInfo={{this.realmInfo}}
+              />
               <div class='delete-modal__workspace-info'>
                 <span class='delete-modal__workspace-name'>{{this.name}}</span>
                 {{#if this.loadDeleteSummaryTask.isRunning}}
@@ -853,32 +851,11 @@ export default class Workspace extends Component<Signature> {
         gap: var(--boxel-sp-sm);
         background: var(--boxel-light-100);
         border-radius: var(--boxel-border-radius-lg);
-        padding: var(--boxel-sp);
-        min-height: 5.125rem;
-      }
-      .delete-modal__realm-icon-wrapper {
-        position: relative;
-        flex-shrink: 0;
-        border-radius: calc(
-          var(--boxel-border-radius-xs) + var(--boxel-border-radius-sm)
-        );
-        display: flex;
-      }
-      .delete-modal__realm-icon-wrapper::after {
-        content: '';
-        position: absolute;
-        inset: 0;
-        border-radius: inherit;
-        box-shadow: inset 0 0 0 1px rgba(255 255 255 / 50%);
-        z-index: 1;
-        pointer-events: none;
+        padding: var(--boxel-sp-sm);
       }
       .delete-modal__realm-icon {
-        --boxel-realm-icon-size: 2.625rem;
-        --boxel-realm-icon-border-radius: calc(
-          var(--boxel-border-radius-xs) + 6px
-        );
-        --boxel-realm-icon-background-color: var(--boxel-light);
+        flex-shrink: 0;
+        --boxel-realm-icon-size: 30px;
       }
       .delete-modal__workspace-info {
         display: flex;
@@ -890,7 +867,7 @@ export default class Workspace extends Component<Signature> {
         color: var(--boxel-dark);
       }
       .delete-modal__workspace-meta {
-        font: var(--boxel-font-sm);
+        font: var(--boxel-font-xs);
         color: var(--boxel-450);
       }
       .delete-modal__warning {
