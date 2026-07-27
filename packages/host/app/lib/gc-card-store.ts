@@ -328,6 +328,23 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     return this.#virtualNetwork.unresolveURL(id);
   }
 
+  // Normalize an id to the store's bucket-key form. Mirrors `store.ts`'s
+  // `asURL` exactly (locals as-is; remotes resolved to a URL via `toURL`) so
+  // the buckets key the same way the StoreService does — an RRI card id, its
+  // resolved URL, and a url-mapped alias all collapse to one key. NOT
+  // `unresolveURL`: that yields RRI for a prefix-mapped realm but leaves a
+  // url-mapped realm's URL as-is, which disagrees with `asURL` and splits keys.
+  #storeKey(id: string): string {
+    if (isLocalId(id)) {
+      return id;
+    }
+    try {
+      return this.#virtualNetwork.toURL(id).href;
+    } catch {
+      return id;
+    }
+  }
+
   getCard(id: string): CardDef | undefined {
     return this.getCardItem('instance', id) as CardDef | undefined;
   }
@@ -702,10 +719,8 @@ export default class CardStoreWithGarbageCollection implements CardStore {
       this.deleteFileMeta(id);
       return;
     }
-    // Card buckets are keyed by canonical RRI (see getCardItem / setCardItem);
-    // fold the incoming id so a delete by the resolved URL (store.asURL) clears
-    // the RRI-keyed identity. No-op for a local id or an unmapped realm.
-    id = this.#virtualNetwork.unresolveURL(id);
+    // Match the store's bucket-key form so a delete by any spelling clears it.
+    id = this.#storeKey(id);
     let localId = isLocalId(id) ? id : undefined;
     let remoteId = !isLocalId(id) ? id : undefined;
 
@@ -903,11 +918,9 @@ export default class CardStoreWithGarbageCollection implements CardStore {
 
   makeTracked(remoteId: string) {
     // File-meta is keyed by the full URL; card buckets by the stripped,
-    // canonical-RRI id (see getCardItem / setCardItem).
+    // store-key form (see getCardItem / setCardItem).
     let fileMetaId = remoteId;
-    remoteId = this.#virtualNetwork.unresolveURL(
-      remoteId.replace(/\.json$/, ''),
-    );
+    remoteId = this.#storeKey(remoteId.replace(/\.json$/, ''));
     let instance = this.#nonTrackedCardInstances.get(remoteId);
     if (instance) {
       this.setCardItem(remoteId, instance);
@@ -982,11 +995,10 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     id: string,
   ): CardDef | CardErrorJSONAPI | undefined {
     id = id.replace(/\.json$/, '');
-    // Key card instances by canonical RRI so a lookup lands regardless of the
-    // caller's spelling — a card's own `id` is canonical, while `store.asURL`
-    // hands us the resolved URL. `unresolveURL` is a no-op for a local id or an
-    // unmapped realm. File-meta buckets keep URL keys (handled separately).
-    id = this.#virtualNetwork.unresolveURL(id);
+    // Key card instances by the store-key form so a lookup lands regardless of
+    // the caller's spelling (a card's own RRI id, its resolved URL, or a
+    // url-mapped alias). File-meta buckets keep URL keys (handled separately).
+    id = this.#storeKey(id);
     let { item, localId } = this.tryFindingCardItem(type, id);
 
     if (!item && isLocalId(id)) {
@@ -1084,8 +1096,8 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     notTracked?: true,
   ) {
     id = id.replace(/\.json$/, '');
-    // Match the canonical-RRI keying used by getCardItem so set/get agree.
-    id = this.#virtualNetwork.unresolveURL(id);
+    // Match the store-key form used by getCardItem so set/get agree.
+    id = this.#storeKey(id);
     let cardBucket = notTracked
       ? this.#nonTrackedCardInstances
       : this.#cardInstances;
