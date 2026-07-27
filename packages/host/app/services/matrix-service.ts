@@ -460,6 +460,11 @@ export default class MatrixService extends Service {
                 await this.realmServer.setAvailableRealmIdentifiers(
                   legacyRealms.map(ri),
                 );
+                // Only do this after we've completed our overall login
+                if (this.session.isAuthenticated) {
+                  await this.loginToRealms();
+                  await this.loadMoreAuthRooms(legacyRealms);
+                }
               } else {
                 // Under the trusted-servers assembly this key is demoted
                 // from STATE to CHANGE SIGNAL: its payload is never applied
@@ -474,6 +479,11 @@ export default class MatrixService extends Service {
                 // of this key without replacing this signal. Best-effort,
                 // like the realm-servers listener: a reconcile failure must
                 // not crash the app from an async event handler.
+                // No login side effects here: when the reconcile decides
+                // a re-assembly is needed, assembleRealmsFromTrustedServers
+                // performs loginToRealms/loadMoreAuthRooms itself; when it
+                // decides the event is an echo, nothing changed and there
+                // is nothing to log in to.
                 try {
                   await this.reconcileRealmsTask.perform(legacyRealms);
                 } catch (err) {
@@ -484,11 +494,6 @@ export default class MatrixService extends Service {
                     );
                   }
                 }
-              }
-              // Only do this after we've completed our overall login
-              if (this.session.isAuthenticated) {
-                await this.loginToRealms();
-                await this.loadMoreAuthRooms(legacyRealms);
               }
               break;
             }
@@ -1106,6 +1111,23 @@ export default class MatrixService extends Service {
             await this.realmServer.fetchUserRealmsFromTrustedServers(
               trustedServers,
             );
+          // Seed echo detection: the initial sync re-emits the CURRENT
+          // `app.boxel.realms` content, and the reconcile must recognize
+          // that re-emission as an echo rather than a change.
+          try {
+            let legacyRealmsData = (await this.client.getAccountDataFromServer(
+              APP_BOXEL_REALMS_EVENT_TYPE,
+            )) as { realms: string[] } | null;
+            this.lastAnnouncedRealms = new Set(
+              (legacyRealmsData?.realms ?? []).map((u) =>
+                ensureTrailingSlash(u),
+              ),
+            );
+          } catch (err) {
+            // Unseeded means the first event reconciles once against boot
+            // state — harmless; the assembly is idempotent.
+            console.warn('Failed to seed app.boxel.realms echo baseline', err);
+          }
         } else {
           this.bootedFromLegacyRealmsList = true;
           if (isTesting())
@@ -1375,14 +1397,25 @@ export default class MatrixService extends Service {
     );
   }
 
+  // The `app.boxel.realms` set from the most recent signal (seeded at
+  // boot from account data). Echo detection compares announcement to
+  // PREVIOUS announcement — never to the assembled list, which can
+  // legitimately differ from the legacy key in steady state (the
+  // assembly may hold `_realm-auth`-granted realms the legacy list
+  // never contained; see appendRealmToAccountData). Comparing against
+  // the assembly would make every echo look like a change and re-fetch
+  // for nothing.
+  private lastAnnouncedRealms: Set<string> | undefined;
+
   // Bring the available-realms list back in line with server truth after
   // an `app.boxel.realms` change signal. The announced list is used only
   // to DECIDE — never applied as state:
   //
-  // - announced set equals the current user-realm set → an initial-sync
+  // - announcement equals the previous announcement → an initial-sync
   //   echo; no-op. This is what preserves the boot assembly.
-  // - sets differ (in either direction — additions AND removals) → re-run
-  //   the authoritative trusted-servers assembly, once.
+  // - announcement changed (in either direction — additions AND
+  //   removals) → re-run the authoritative trusted-servers assembly,
+  //   once.
   //
   // One pass is enough because the realm server commits the permission
   // rows `_realm-auth` reads BEFORE it writes `app.boxel.realms` (see
@@ -1396,13 +1429,13 @@ export default class MatrixService extends Service {
   // cancels any run in progress.
   reconcileRealmsTask = restartableTask(async (announced: string[]) => {
     let announcedSet = new Set(announced.map((u) => ensureTrailingSlash(u)));
-    let currentSet = new Set<string>(
-      this.realmServer.userRealmIdentifiers.map((u) => ensureTrailingSlash(u)),
-    );
-    let setsEqual =
-      announcedSet.size === currentSet.size &&
-      [...announcedSet].every((x) => currentSet.has(x));
-    if (setsEqual) {
+    let previous = this.lastAnnouncedRealms;
+    this.lastAnnouncedRealms = announcedSet;
+    if (
+      previous !== undefined &&
+      previous.size === announcedSet.size &&
+      [...announcedSet].every((x) => previous.has(x))
+    ) {
       return;
     }
     let trustedServers = await this.getRealmServersFromAccountData();
@@ -2198,6 +2231,7 @@ export default class MatrixService extends Service {
     }
     this.setPostLoginCompleted(false, 'resetState');
     this.bootedFromLegacyRealmsList = false;
+    this.lastAnnouncedRealms = undefined;
     this._isLoadingMoreAIRooms = false;
     this.messagesToSend.clear();
     this.cardsToSend.clear();
