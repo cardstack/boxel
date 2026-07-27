@@ -93,8 +93,12 @@ type JobCard = CardDef & {
   setupSurvey?: CardDef; // the separate, optional themed survey card
 };
 
-// honest ETA (same rules as the job card): linear from arrival rate,
-// only once 3 pieces are in, suppressed when implausible (> 30 min).
+// A projected ETA further out than this many minutes reads as noise rather
+// than signal, so it is suppressed.
+const ETA_IMPLAUSIBLE_MINUTES = 30;
+
+// honest ETA (same rules as the job card): linear from arrival rate, only
+// once 3 pieces are in, suppressed when implausible (see the threshold above).
 // The subset of a job card the ETA reads. A full `JobCard` satisfies it.
 export interface EtaJob {
   progressDone?: number;
@@ -117,7 +121,7 @@ export function etaMinutes(
     return undefined;
   }
   let mins = Math.round(((elapsed / done) * (total - done)) / 60000);
-  return mins > 30 ? undefined : mins;
+  return mins > ETA_IMPLAUSIBLE_MINUTES ? undefined : mins;
 }
 
 // A card modified within this window of its creation reads as "Created" in
@@ -208,6 +212,37 @@ function excludeSelfReferentialCards(on?: CodeRef): Filter[] {
 // flow writing many cards) emits a burst of index events; coalescing them into
 // one refresh avoids firing the panel searches several times per keystroke.
 const INDEX_REFRESH_DEBOUNCE_MS = 200;
+
+// Layout / bound tuning. These are internal tuning knobs rather than per-realm
+// settings, so they live as module constants — the one operator-facing lever,
+// tile density, is the `pinnedSize` edit-format setting that selects between
+// the two door heights below.
+
+// Activity feed: both the server query and the reveal-on-scroll pager are
+// bounded to this many of the most recently modified cards.
+const ACTIVITY_FEED_CAP = 100;
+// The feed reveals this many rows at a time as the sentinel scrolls into view.
+const FEED_REVEAL_CHUNK = 20;
+
+// Generic upper bound for realm-local search / chooser result pages. Callers
+// that need fewer rows may request a smaller page.
+const SEARCH_PAGE_SIZE = 100;
+
+// The header's ⌘K search lists this many hits inline; the rest live behind the
+// "See all" row in Library.
+const SEARCH_RESULTS_CAP = 8;
+
+// Pinned-card tile heights (px) for the two densities `pinnedSize` selects.
+const DOOR_TILE_HEIGHT_PX = 300;
+const DOOR_TILE_HEIGHT_COMPACT_PX = 220;
+
+// Base machinery the `_types` rail never lists: these are not realm content.
+const TYPE_RAIL_EXCLUDED_IDS = [
+  `${baseRealmRRI}card-api/CardDef`,
+  `${baseRealmRRI}cards-grid/CardsGrid`,
+  `${baseRealmRRI}card-api/FieldDef`,
+  `${baseRealmRRI}card-api/FileDef`,
+];
 
 function toMs(value: unknown): number | undefined {
   let ms =
@@ -632,10 +667,7 @@ class Isolated extends Component<typeof Workspace> {
                 <button
                   type='button'
                   class='rail-row
-                    {{if
-                      (eq option.id this.activeFilter.id)
-                      "selected"
-                    }}'
+                    {{if (eq option.id this.activeFilter.id) "selected"}}'
                   {{on 'click' (this.selectFilter option)}}
                 >
                   {{#let (this.iconComponent option) as |Icon|}}
@@ -656,10 +688,7 @@ class Isolated extends Component<typeof Workspace> {
                     <button
                       type='button'
                       class='rail-row type
-                        {{if
-                          (eq option.id this.activeFilter.id)
-                          "selected"
-                        }}'
+                        {{if (eq option.id this.activeFilter.id) "selected"}}'
                       {{on 'click' (this.selectFilter option)}}
                     >
                       {{#if (this.iconHtml option)}}
@@ -696,10 +725,7 @@ class Isolated extends Component<typeof Workspace> {
                   <button
                     type='button'
                     class='rail-row type
-                      {{if
-                        (eq option.id this.activeFilter.id)
-                        "selected"
-                      }}'
+                      {{if (eq option.id this.activeFilter.id) "selected"}}'
                     {{on 'click' (this.selectFilter option)}}
                   >
                     {{#if (this.iconHtml option)}}
@@ -885,7 +911,7 @@ class Isolated extends Component<typeof Workspace> {
                   <p class='empty-note'>No activity yet.</p>
                 {{/each}}
                 {{#if this.moreFeed}}
-                  {{! reveal-on-scroll: the sentinel appends the next 20 }}
+                  {{! reveal-on-scroll: the sentinel appends the next chunk }}
                   <div class='feed-more' {{this.watchFeedEnd}}>
                     <span class='feed-more-note'>Showing
                       {{this.visibleFeed.length}}
@@ -893,7 +919,9 @@ class Isolated extends Component<typeof Workspace> {
                       {{this.feedItems.length}}</span>
                   </div>
                 {{else if this.feedAtCap}}
-                  <p class='feed-end-note'>Showing the last 100 changes.</p>
+                  <p class='feed-end-note'>Showing the last
+                    {{this.activityFeedCap}}
+                    changes.</p>
                 {{/if}}
               </div>
             </section>
@@ -1644,7 +1672,8 @@ class Isolated extends Component<typeof Workspace> {
       .doors {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-        grid-auto-rows: var(--door-h, 300px); /* settings: tile size */
+        /* tile height set from DOOR_TILE_HEIGHT_* via doorsStyle */
+        grid-auto-rows: var(--door-h);
         gap: 20px;
       }
       /* Containment: the fitted face IS the shadowed card (so the host's
@@ -2323,7 +2352,7 @@ class Isolated extends Component<typeof Workspace> {
             ...excludeSelfReferentialCards(baseCardRef),
           ],
         },
-        page: { size: 100 },
+        page: { size: SEARCH_PAGE_SIZE },
       },
       {
         consumingRealm: this.args.model[realmURL],
@@ -2442,7 +2471,7 @@ class Isolated extends Component<typeof Workspace> {
     ) as CardDef[];
     this.searchTotal = hits.length;
     this.searchResults.splice(0, this.searchResults.length);
-    for (let card of hits.slice(0, 8)) {
+    for (let card of hits.slice(0, SEARCH_RESULTS_CAP)) {
       this.searchResults.push({
         id: card.id!,
         title: card.cardTitle ?? 'Untitled',
@@ -2637,10 +2666,12 @@ class Isolated extends Component<typeof Workspace> {
     return homeModulesOf(this.args.model);
   }
 
-  private get doorsStyle(): SafeString | undefined {
-    return this.args.model.pinnedSize === 'compact'
-      ? htmlSafe('--door-h: 220px')
-      : undefined;
+  private get doorsStyle(): SafeString {
+    let height =
+      this.args.model.pinnedSize === 'compact'
+        ? DOOR_TILE_HEIGHT_COMPACT_PX
+        : DOOR_TILE_HEIGHT_PX;
+    return htmlSafe(`--door-h: ${height}px`);
   }
 
   // settings gates: unset booleans read as their defaults
@@ -2798,7 +2829,8 @@ class Isolated extends Component<typeof Workspace> {
       ...this.activeFilter.query,
       filter,
       sort: this.activeSort?.sort,
-      page: { size: 100 }, // Bound the unified Library search on the server.
+      // Bound the unified Library search on the server.
+      page: { size: SEARCH_PAGE_SIZE },
     };
   }
 
@@ -2818,9 +2850,13 @@ class Isolated extends Component<typeof Workspace> {
       // Never fall back to all available realms.
       return []; // An unscoped search must remain idle.
     } //
-    // Bound hydration and federated-search scope. Default to 100 but let a
-    // caller that needs fewer (e.g. a single-row preview) request a smaller page.
-    return store.search({ page: { size: 100 }, ...query } as Query, [realm]);
+    // Bound hydration and federated-search scope. Default to SEARCH_PAGE_SIZE
+    // but let a caller that needs fewer (e.g. a single-row preview) request a
+    // smaller page.
+    return store.search(
+      { page: { size: SEARCH_PAGE_SIZE }, ...query } as Query,
+      [realm],
+    );
   }; //
 
   // The four library-group rows keep stable identities (@cached, no tracked
@@ -3025,7 +3061,7 @@ class Isolated extends Component<typeof Workspace> {
             on: specRef,
             every: [{ eq: { isCard: true } }],
           },
-          page: { size: 100 }, // Keep chooser result pages bounded.
+          page: { size: SEARCH_PAGE_SIZE }, // Keep chooser result pages bounded.
         },
         {
           consumingRealm: this.args.model[realmURL], // Scope the chooser to this Card Grid's realm.
@@ -3082,13 +3118,6 @@ class Isolated extends Component<typeof Workspace> {
         kind?: 'instance' | 'file';
       };
     }[];
-    let excludedTypeIds = [
-      `${baseRealmRRI}card-api/CardDef`,
-      `${baseRealmRRI}cards-grid/CardsGrid`,
-      `${baseRealmRRI}card-api/FieldDef`,
-      `${baseRealmRRI}card-api/FileDef`,
-    ];
-
     this.cardTypeFilters.splice(0, this.cardTypeFilters.length);
     this.fileTypeFilters.splice(0, this.fileTypeFilters.length);
     let cardTotal = 0;
@@ -3103,7 +3132,7 @@ class Isolated extends Component<typeof Workspace> {
         return;
       }
       let kind = summary.attributes.kind ?? 'instance';
-      if (excludedTypeIds.includes(summary.id)) {
+      if (TYPE_RAIL_EXCLUDED_IDS.includes(summary.id)) {
         return;
       }
       if (summary.id.endsWith('workspace/Workspace')) {
@@ -3139,9 +3168,8 @@ class Isolated extends Component<typeof Workspace> {
     this.fileTotal = fileTotal;
 
     this.activeFilter =
-      this.filterOptions.find(
-        (filter) => filter.id === this.activeFilter.id,
-      ) ?? this.filterOptions[0];
+      this.filterOptions.find((filter) => filter.id === this.activeFilter.id) ??
+      this.filterOptions[0];
   });
 
   private loadJobs = restartableTask(async () => {
@@ -3229,7 +3257,8 @@ class Isolated extends Component<typeof Workspace> {
   }[] = new TrackedArray();
 
   // Reveal-on-scroll pagination over the fetched window.
-  @tracked private feedShown = 20;
+  @tracked private feedShown = FEED_REVEAL_CHUNK;
+  private activityFeedCap = ACTIVITY_FEED_CAP; // for the "last N changes" note
 
   private get visibleFeed() {
     return this.feedItems.slice(0, this.feedShown);
@@ -3240,7 +3269,7 @@ class Isolated extends Component<typeof Workspace> {
   }
 
   private get feedAtCap() {
-    return this.feedItems.length >= 100;
+    return this.feedItems.length >= ACTIVITY_FEED_CAP;
   }
 
   watchFeedEnd = modifier((element: Element) => {
@@ -3248,7 +3277,10 @@ class Isolated extends Component<typeof Workspace> {
     let observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
-          this.feedShown = Math.min(this.feedShown + 20, this.feedItems.length);
+          this.feedShown = Math.min(
+            this.feedShown + FEED_REVEAL_CHUNK,
+            this.feedItems.length,
+          );
           // re-arm: observe() always delivers a fresh async notification
           // after the next layout, so a still-visible sentinel fires again
           observer.unobserve(element);
@@ -3274,7 +3306,8 @@ class Isolated extends Component<typeof Workspace> {
           every: [...excludeSelfReferentialCards()],
         },
         sort: [{ by: 'lastModified', direction: 'desc' }],
-        page: { size: 100 }, // Bound server results before instance hydration.
+        // Bound server results before instance hydration.
+        page: { size: ACTIVITY_FEED_CAP },
       } as Query,
       [realm],
     ); // Search only the Card Grid instance's realm.

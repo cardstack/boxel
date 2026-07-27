@@ -44,4 +44,38 @@ module('Integration | Card | workspace', function (hooks) {
 
     assert.dom('.settings-title').hasText('Workspace settings');
   });
+
+  // Graceful degradation: a Workspace whose `workspace` link (the realm's
+  // RealmConfig card) is absent must still render Home and settings with sane
+  // defaults rather than erroring on the missing instance.
+  module('missing RealmConfig', function () {
+    test('Home renders without a linked RealmConfig', async function (assert) {
+      let card = new Workspace({}); // no `workspace` link set
+      await renderCard(loader, card, 'isolated');
+
+      assert
+        .dom('[data-test-workspace-index]')
+        .exists('the isolated shell renders');
+      assert
+        .dom('nav.tabs .tab.active')
+        .hasText('Home', 'Home is active and its stage rendered without error');
+    });
+
+    test('settings render, omitting the config-owned identity inputs', async function (assert) {
+      let card = new Workspace({}); // no `workspace` link set
+      await renderCard(loader, card, 'edit');
+
+      assert
+        .dom('.settings-title')
+        .hasText('Workspace settings', 'the settings form still renders');
+      // Name/Icon live on the RealmConfig card, so they fall away when it is
+      // missing — the rest of the form (including the config-card picker) stays.
+      assert
+        .dom('input[placeholder="Workspace name"]')
+        .doesNotExist('the config-owned name input is omitted, not errored');
+      assert
+        .dom('input[placeholder="https://…"]')
+        .doesNotExist('the config-owned icon input is omitted, not errored');
+    });
+  });
 });
