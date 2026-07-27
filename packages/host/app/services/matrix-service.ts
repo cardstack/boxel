@@ -8,6 +8,7 @@ import { isTesting } from '@embroider/macros';
 import { cached, tracked } from '@glimmer/tracking';
 
 import {
+  didCancel,
   dropTask,
   rawTimeout,
   restartableTask,
@@ -218,12 +219,6 @@ export default class MatrixService extends Service {
   // gains content at runtime. Login-related side effects (`loginToRealms`,
   // `loadMoreAuthRooms`) still run regardless.
   private trustedRealmServersAuthoritative = false;
-  // The trusted server list backing the authoritative assembly, kept
-  // current by boot and by the realm-servers listener. Needed at
-  // `app.boxel.realms` event time: a realm created mid-session announces
-  // itself only through that legacy event, and re-running the trusted
-  // assembly requires the server list.
-  private trustedRealmServers: string[] = [];
   // Sticky for the lifetime of this instance once a boot assembles from the
   // legacy `app.boxel.realms` list. Keeps later start() calls on the legacy
   // path even after the lazy migration writes `app.boxel.realm-servers`, so
@@ -480,12 +475,14 @@ export default class MatrixService extends Service {
                 // like the realm-servers listener: a reconcile failure must
                 // not crash the app from an async event handler.
                 try {
-                  await this.reconcileRealmsWithAnnouncedList(legacyRealms);
+                  await this.reconcileRealmsTask.perform(legacyRealms);
                 } catch (err) {
-                  console.error(
-                    'Failed to reconcile realms after app.boxel.realms account-data event',
-                    err,
-                  );
+                  if (!didCancel(err)) {
+                    console.error(
+                      'Failed to reconcile realms after app.boxel.realms account-data event',
+                      err,
+                    );
+                  }
                 }
               }
               // Only do this after we've completed our overall login
@@ -510,9 +507,6 @@ export default class MatrixService extends Service {
               }
               let realmServers = e.event.content.realmServers as string[];
               this.trustedRealmServersAuthoritative = realmServers.length > 0;
-              if (this.trustedRealmServersAuthoritative) {
-                this.trustedRealmServers = realmServers;
-              }
               if (this.trustedRealmServersAuthoritative) {
                 // A server-pushed account-data event must not crash the app:
                 // assembly can reject (e.g. fetchUserRealmsFromTrustedServers
@@ -1104,9 +1098,6 @@ export default class MatrixService extends Service {
         // this flag here makes that re-emission a no-op for the available-
         // realms list — the realm-servers path is the authoritative source.
         this.trustedRealmServersAuthoritative = useTrustedServers;
-        if (useTrustedServers) {
-          this.trustedRealmServers = trustedServers;
-        }
         let userRealmURLs: string[];
         if (useTrustedServers) {
           if (isTesting())
@@ -1404,7 +1395,13 @@ export default class MatrixService extends Service {
   //   advertises is dropped on the first pass. If the announced list
   //   still disagrees after the budget, the trusted result stands — the
   //   next signal or boot converges it.
-  async reconcileRealmsWithAnnouncedList(announced: string[]): Promise<void> {
+  //
+  // Restartable on purpose: a newer signal supersedes an in-flight
+  // reconcile (its retry waits are cancelled and the latest announced
+  // list wins), so back-to-back realm creations coalesce instead of
+  // interleaving assemblies — and destroying the service cancels any
+  // pending retry outright.
+  reconcileRealmsTask = restartableTask(async (announced: string[]) => {
     let announcedSet = new Set(announced.map((u) => ensureTrailingSlash(u)));
     let currentSet = () =>
       new Set<string>(
@@ -1420,13 +1417,17 @@ export default class MatrixService extends Service {
     if (setsEqual(announcedSet, currentSet())) {
       return;
     }
-    await this.applyTrustedRealmServersAccountData(this.trustedRealmServers);
+    let trustedServers = await this.getRealmServersFromAccountData();
+    if (trustedServers.length === 0) {
+      return;
+    }
+    await this.applyTrustedRealmServersAccountData(trustedServers);
     for (let delayMs of MatrixService.RECONCILE_CATCHUP_DELAYS_MS) {
       if (missingAnnounced().length === 0) {
         return;
       }
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
-      await this.applyTrustedRealmServersAccountData(this.trustedRealmServers);
+      await timeout(delayMs);
+      await this.applyTrustedRealmServersAccountData(trustedServers);
     }
     let missing = missingAnnounced();
     if (missing.length > 0) {
@@ -1434,7 +1435,7 @@ export default class MatrixService extends Service {
         `Announced realm(s) still absent from the trusted-servers assembly after retries: ${missing.join(', ')} — keeping the trusted result`,
       );
     }
-  }
+  });
 
   // Re-assemble the available-realms list from a runtime
   // `app.boxel.realm-servers` account-data event. Unlike the fail-loud boot
@@ -2218,7 +2219,6 @@ export default class MatrixService extends Service {
     }
     this.setPostLoginCompleted(false, 'resetState');
     this.bootedFromLegacyRealmsList = false;
-    this.trustedRealmServers = [];
     this._isLoadingMoreAIRooms = false;
     this.messagesToSend.clear();
     this.cardsToSend.clear();
