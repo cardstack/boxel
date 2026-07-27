@@ -1430,7 +1430,6 @@ export default class MatrixService extends Service {
   reconcileRealmsTask = restartableTask(async (announced: string[]) => {
     let announcedSet = new Set(announced.map((u) => ensureTrailingSlash(u)));
     let previous = this.lastAnnouncedRealms;
-    this.lastAnnouncedRealms = announcedSet;
     if (
       previous !== undefined &&
       previous.size === announcedSet.size &&
@@ -1443,6 +1442,13 @@ export default class MatrixService extends Service {
       return;
     }
     await this.assembleRealmsFromTrustedServers(trustedServers);
+    // Committed only after the assembly lands: this task is restartable,
+    // so a redelivery of the SAME content could cancel a run mid-await.
+    // Recording the baseline up front would let that superseded run mark
+    // the change as seen without ever applying it; recording it here means
+    // a cancelled (or thrown, or no-trusted-servers) run leaves the
+    // baseline untouched and the next signal retries.
+    this.lastAnnouncedRealms = announcedSet;
   });
 
   // The one procedure that builds the available-realms list: ask each
@@ -2231,6 +2237,10 @@ export default class MatrixService extends Service {
     }
     this.setPostLoginCompleted(false, 'resetState');
     this.bootedFromLegacyRealmsList = false;
+    // This service outlives the session, so owner-destruction cancellation
+    // never fires at logout — cancel explicitly or an in-flight reconcile
+    // resumes after the reset and writes the previous user's realms back.
+    this.reconcileRealmsTask.cancelAll();
     this.lastAnnouncedRealms = undefined;
     this._isLoadingMoreAIRooms = false;
     this.messagesToSend.clear();

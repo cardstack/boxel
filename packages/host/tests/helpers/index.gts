@@ -88,8 +88,8 @@ export {
 export { createJWT, testRealmSecretSeed } from './test-auth';
 export {
   registerRealmAuthSessionRoomEnsurer,
+  removeRealmPermissions,
   resetCatalogRealmURL,
-  setRealmArchived,
   setRealmAuthFailure,
   setupAuthEndpoints,
   setCatalogRealmURL,

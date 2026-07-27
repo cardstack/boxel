@@ -12,9 +12,9 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import {
   testRealmURL,
+  removeRealmPermissions,
   setupIntegrationTestRealm,
   setupLocalIndexing,
-  setRealmArchived,
   setRealmAuthFailure,
   setupAuthEndpoints,
 } from '../helpers';
@@ -186,7 +186,7 @@ module(
       await matrixService.start();
     });
 
-    test('realms events reconcile the list in both directions (create, then archive)', async function (assert) {
+    test('realms events reconcile the list in both directions (create, then delete)', async function (assert) {
       let realmServer = getService('realm-server') as RealmServerService;
       let newRealmURL = ensureTrailingSlash(
         new URL('./new-workspace/', testRealmURL).href,
@@ -224,12 +224,14 @@ module(
         'the original realm is still present',
       );
 
-      // …and the reverse: the realm is archived externally. `_realm-auth`
-      // stops advertising it and the server rewrites `app.boxel.realms`
-      // without it. The signal set differs from ours (a removal), so the
-      // assembly re-runs and drops it — no retry needed, the assembly is
-      // authoritative.
-      setRealmArchived(newRealmURL, true);
+      // …and the reverse: the realm is deleted from another session.
+      // Deleting removes the realm's permission rows, so `_realm-auth`
+      // stops advertising it, and the deleting session rewrites
+      // `app.boxel.realms` without it (removeRealmFromAccountData) — the
+      // production flow that shrinks the announced list. The signal set
+      // differs from ours (a removal), so the assembly re-runs and drops
+      // it — no retry needed, the assembly is authoritative.
+      removeRealmPermissions(newRealmURL);
       mockMatrixUtils.simulateAccountDataEvent(APP_BOXEL_REALMS_EVENT_TYPE, {
         realms: [testRealmURL],
       });
@@ -239,7 +241,7 @@ module(
       );
       assert.notOk(
         realmServer.availableRealmIdentifiers.includes(ri(newRealmURL)),
-        'the archived realm disappears from the available list without a reload',
+        'the deleted realm disappears from the available list without a reload',
       );
       assert.ok(
         realmServer.availableRealmIdentifiers.includes(ri(testRealmURL)),

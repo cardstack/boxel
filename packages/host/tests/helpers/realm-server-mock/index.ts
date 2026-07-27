@@ -87,21 +87,13 @@ export function setupAuthEndpoints(
   }
 }
 
-// Archive (or restore) a realm directly in the mock server state, so
-// external-lifecycle flows can be exercised without driving the archive
-// HTTP route: an archived realm is omitted from `_realm-auth` enumeration,
-// matching the real server.
-export function setRealmArchived(realmURL: string, archived: boolean) {
+// Drop a realm's permission rows from the mock server state, as deleting
+// the realm does on the real server: `_realm-auth` enumerates from the
+// permission rows, so a realm with none disappears from its answer.
+export function removeRealmPermissions(realmURL: string) {
   let network = getService('network') as NetworkService;
   let state = ensureRealmServerMockState(network);
-  let normalized = ensureTrailingSlash(realmURL);
-  if (archived) {
-    state.archivedRealms.set(normalized, {
-      archivedAt: new Date().toISOString(),
-    });
-  } else {
-    state.archivedRealms.delete(normalized);
-  }
+  state.realmPermissions.delete(ensureTrailingSlash(realmURL));
 }
 
 // Simulate a trusted realm server going unreachable (or recovering) at its
