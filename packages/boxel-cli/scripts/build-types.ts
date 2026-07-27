@@ -346,13 +346,18 @@ function buildRuntimeCommonDts(rcSrc: string, rcDst: string): void {
           continue;
         }
         let rel = relative(rcSrc, full);
-        if (!rel.endsWith('.ts')) continue;
+        // Include `.mts` / `.cts` too, not just `.ts`: runtime-common has
+        // `marked.mts`, imported by exported modules (bfm-math, marked-
+        // sync, …). Dropping it leaves dangling `./marked.mts` references
+        // in their emitted `.d.ts` — which, under parse's skipLibCheck,
+        // silently collapse the affected types to `any`.
+        if (!/\.(m|c)?ts$/.test(rel)) continue;
         // Tests aren't part of the type surface and drag in test deps.
-        if (rel.endsWith('.test.ts') || rel.startsWith('tests/')) continue;
+        if (/\.test\.(m|c)?ts$/.test(rel) || rel.startsWith('tests/')) continue;
         let dst = join(tmpDir, rel);
         mkdirSync(dirname(dst), { recursive: true });
         writeFileSync(dst, readFileSync(full, 'utf8'), 'utf8');
-        if (rel.endsWith('.d.ts')) preexistingDts.push(rel);
+        if (/\.d\.(m|c)?ts$/.test(rel)) preexistingDts.push(rel);
       }
     };
     walk(rcSrc);
@@ -386,7 +391,9 @@ function buildRuntimeCommonDts(rcSrc: string, rcDst: string): void {
         skipLibCheck: true,
         rootDir: tmpDir,
       },
-      include: ['**/*.ts'],
+      // `**/*.ts` doesn't match `.mts` / `.cts`, so include them too or
+      // tsc won't emit declarations for `marked.mts` (copied above).
+      include: ['**/*.ts', '**/*.mts', '**/*.cts'],
     };
     let tsconfigPath = join(tmpDir, 'tsconfig.json');
     writeFileSync(tsconfigPath, JSON.stringify(tsconfig, null, 2), 'utf8');
