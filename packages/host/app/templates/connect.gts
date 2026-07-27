@@ -65,7 +65,7 @@ class ConnectComponent extends Component<ConnectComponentSignature> {
         <section class='session-container'>
           <BoxelIcon width='18' height='18' class='connect-icon' />
           <Avatar
-            @isReady={{this.matrixService.profile.loaded}}
+            @isReady={{this.matrixService.profile.isLoaded}}
             @userId={{this.matrixService.userId}}
             @displayName={{this.matrixService.profile.displayName}}
           />

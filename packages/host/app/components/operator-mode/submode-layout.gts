@@ -500,7 +500,7 @@ export default class SubmodeLayout extends Component<Signature> {
               data-test-profile-icon-button
             >
               <Avatar
-                @isReady={{this.matrixService.profile.loaded}}
+                @isReady={{this.matrixService.profile.isLoaded}}
                 @userId={{this.matrixService.userId}}
                 @displayName={{this.matrixService.profile.displayName}}
               />

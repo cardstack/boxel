@@ -212,7 +212,7 @@ export class ProfileInfo extends Component<ProfileInfoSignature> {
   <template>
     <div class='profile-popover-body' data-test-profile-icon-container>
       <Avatar
-        @isReady={{this.matrixService.profile.loaded}}
+        @isReady={{this.matrixService.profile.isLoaded}}
         @userId={{this.matrixService.userId}}
         @displayName={{this.matrixService.profile.displayName}}
       />
