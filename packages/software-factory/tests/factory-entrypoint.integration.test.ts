@@ -14,20 +14,9 @@ const { module, test } = QUnit;
 
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
-import { playwrightBrowsersRoot } from '../src/preflight.ts';
+import { playwrightBrowsersEnv } from './helpers/preflight-env.ts';
 
 const packageRoot = resolve(import.meta.dirname, '..');
-
-// The cases below move `HOME` to isolate the boxel profile, but preflight
-// resolves the Playwright browser cache from `HOME` too — under a temp home it
-// finds no `chromium_headless_shell-*` and refuses to run the factory at all.
-// Pin the child to the cache this process would use so only the profile is
-// isolated. Undefined only when `PLAYWRIGHT_BROWSERS_PATH=0`, which the
-// inherited env already carries through.
-const realPlaywrightBrowsersPath = playwrightBrowsersRoot();
-const playwrightBrowsersEnv = realPlaywrightBrowsersPath
-  ? { PLAYWRIGHT_BROWSERS_PATH: realPlaywrightBrowsersPath }
-  : {};
 const stickyNoteFixture = readFileSync(
   resolve(import.meta.dirname, '../realm/Wiki/sticky-note.json'),
   'utf8',
