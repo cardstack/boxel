@@ -81,6 +81,7 @@ export interface Signature {
     required?: boolean;
     size?: Values<typeof InputSizes>;
     state?: InputValidationState;
+    step?: string | number;
     type?: InputType;
     value?: string | number | boolean | null;
   };
@@ -185,6 +186,7 @@ export default class BoxelInput extends Component<Signature> {
           placeholder={{@placeholder}}
           min={{@min}}
           max={{@max}}
+          step={{@step}}
           required={{@required}}
           disabled={{@disabled}}
           readonly={{@readonly}}
