@@ -143,6 +143,22 @@ export type ActivityVerb = 'Created' | 'Updated' | 'Remixed';
 // the Activity feed rather than "Updated".
 const CREATED_WINDOW_MS = 120000;
 
+// Setup progress is announced on crossing a multiple of this, rather than on
+// every change, so a long-running job reports in a few times instead of
+// continuously.
+const PROGRESS_ANNOUNCE_STEP = 25;
+
+// Rounds a live percentage down to the last announced milestone. The status
+// region's text is derived from this, so it only changes when a milestone is
+// crossed — that is what keeps a job whose meter advances every few seconds from
+// interrupting a screen reader every few seconds.
+export function progressMilestone(pct: number): number {
+  return (
+    Math.floor(Math.max(0, pct) / PROGRESS_ANNOUNCE_STEP) *
+    PROGRESS_ANNOUNCE_STEP
+  );
+}
+
 export function classifyActivityVerb(
   modMs: number | undefined,
   createdMs: number | undefined,
@@ -173,6 +189,22 @@ export function activityVerbFor(
     ? 'Remixed'
     : classifyActivityVerb(modMs, createdMs);
 }
+
+// How the Frame typeahead's hotkey is spelled on the platform the user is
+// actually on. `setupSearchHotkey` binds `metaKey || ctrlKey`, so both spellings
+// work everywhere and this is purely about naming the one they'd reach for.
+// Matches on `Mac`, as codemirror-editor.gts's own mod-key label does.
+export function searchHotkeyLabel(platform: string): string {
+  return /Mac/i.test(platform) ? '⌘K' : 'Ctrl+K';
+}
+
+// Resolved once, against whichever browser evaluates this module. In the app
+// that is the user's own, which is the case this is for. A prerender pass
+// resolves it against the prerender browser instead, so generated HTML carries
+// that machine's spelling until the app renders the card live.
+const SEARCH_HOTKEY_LABEL = searchHotkeyLabel(
+  typeof navigator === 'undefined' ? '' : navigator.platform,
+);
 
 type RealmConfigCard = CardDef & { iconURL?: string }; // RealmConfig shape
 
@@ -351,6 +383,16 @@ class Isolated extends Component<typeof Workspace> {
       data-test-workspace-index
       {{this.setupRealmSubscription this.primaryRealm}}
     >
+      {{! Setup progress runs on its own — jobs start, advance and finish with no
+        interaction to hang an announcement off. Lives at the root, outside every
+        segment: the Activity tab's dot is always on screen while the dock that
+        details it is only rendered on that one tab, and a live region has to be
+        in the DOM before its text changes to be announced at all. }}
+      <span
+        class='boxel-sr-only'
+        role='status'
+        data-test-progress-announcement
+      >{{this.progressAnnouncement}}</span>
       <header class='frame'>
         <nav class='tabs' aria-label='Sections'>
           <button
@@ -373,7 +415,9 @@ class Isolated extends Component<typeof Workspace> {
           ><ActivityIcon class='tab-icon' />
             Activity{{#if this.runningJobs.length}}<span
                 class='attention-dot'
-              />{{/if}}</button>
+                aria-hidden='true'
+              /><span class='boxel-sr-only'>({{this.runningJobs.length}}
+                in progress)</span>{{/if}}</button>
         </nav>
         {{#if @model.signage}}
           {{! workspace signage — hover reveals the purpose annotation }}
@@ -388,15 +432,32 @@ class Isolated extends Component<typeof Workspace> {
               type='text'
               placeholder='Search'
               aria-label='Search this space'
+              aria-keyshortcuts='Meta+K Control+K'
+              aria-controls='workspace-search-results'
+              aria-expanded={{if this.searchResults.length 'true' 'false'}}
               value={{this.searchTerm}}
               {{on 'input' this.onSearchInput}}
               {{on 'keydown' this.onSearchKeydown}}
               {{on 'focus' this.onSearchFocus}}
               {{on 'focusout' this.onSearchBlur}}
             />
-            <span class='search-kbd'>⌘K</span>
+            {{! the visible hint is decorative — aria-keyshortcuts above carries
+              the same thing to assistive tech, in both spellings }}
+            <span
+              class='search-kbd'
+              aria-hidden='true'
+            >{{SEARCH_HOTKEY_LABEL}}</span>
+            {{! Results appear and refresh without any focus change, so nothing
+              would reach a screen reader on its own. Announced as a count
+              rather than a list of titles: the search reruns on each keystroke,
+              and reading matches back would talk over the user's typing. }}
+            <span
+              class='boxel-sr-only'
+              role='status'
+              data-test-search-announcement
+            >{{this.searchAnnouncement}}</span>
             {{#if this.searchResults.length}}
-              <div class='search-results'>
+              <div class='search-results' id='workspace-search-results'>
                 {{#each this.searchResults as |result|}}
                   <button
                     type='button'
@@ -441,7 +502,13 @@ class Isolated extends Component<typeof Workspace> {
                 class='setup-bar'
                 {{on 'click' (this.setSegment 'activity')}}
               >
-                <span class='setup-ring' style={{this.ringStyle job}}>
+                {{! ring and meter both restate the percentage this button
+                  already spells out in `.setup-pct`, so they are decoration }}
+                <span
+                  class='setup-ring'
+                  style={{this.ringStyle job}}
+                  aria-hidden='true'
+                >
                   <span class='setup-ring-hole' /></span>
                 <span class='setup-lines'>
                   <span class='setup-name'>Setting up
@@ -452,7 +519,7 @@ class Isolated extends Component<typeof Workspace> {
                       ·
                       {{this.jobEta job}}{{/if}}</span>
                 </span>
-                <span class='setup-track'><span
+                <span class='setup-track' aria-hidden='true'><span
                     class='setup-fill'
                     style={{this.jobFillStyle job}}
                   /></span>
@@ -818,22 +885,26 @@ class Isolated extends Component<typeof Workspace> {
           {{! Collapsing dock: the full panel scrolls away with the log;
             a one-line summary pins under the frame while it is off-screen. }}
           {{#if this.runningJobs.length}}
+            {{! No aria-label here: one would replace this button's own text as
+              its accessible name, and that text is the live summary of what is
+              being set up. The action is appended instead, so the name carries
+              both. }}
             <button
               type='button'
               class='dock-mini {{if this.dockCondensed "shown"}}'
-              aria-label='Show progress details'
               disabled={{if this.dockCondensed false true}}
               {{on 'click' this.revealDock}}
             >
-              <span class='dock-dot' />
+              <span class='dock-dot' aria-hidden='true' />
               <span class='dock-mini-title'>In progress</span>
               <span class='dock-mini-summary'>{{this.dockSummary}}</span>
-              <span class='dock-mini-track'>
+              <span class='dock-mini-track' aria-hidden='true'>
                 <span
                   class='dock-mini-fill'
                   style={{this.jobFillStyle this.firstRunningJob}}
                 />
               </span>
+              <span class='boxel-sr-only'>Show progress details</span>
             </button>
           {{/if}}
           <div
@@ -846,7 +917,7 @@ class Isolated extends Component<typeof Workspace> {
             {{#if this.runningJobs.length}}
               <div class='dock' {{this.trackDock}}>
                 <div class='dock-head'>
-                  <span class='dock-dot' />
+                  <span class='dock-dot' aria-hidden='true' />
                   <h2 class='dock-title'>In progress</h2>
                   <span class='dock-hint'>Keep this tab open until it finishes.</span>
                 </div>
@@ -2319,6 +2390,14 @@ class Isolated extends Component<typeof Workspace> {
         color: var(--grid-ink-quiet);
       }
 
+      /* A buried card sits behind another in the stack, so it must not keep
+         offering chrome to interact with. Both ancestors are host chrome the
+         host really renders: `.operator-mode` on the operator-mode container,
+         and `buried` on a stack item that isn't on top. They resolve from here
+         because scoping only attaches this card's attribute to the selector's
+         last compound, leaving the ancestor part to match outside it.
+         Host mode marks its stack items `buried` too, but has no
+         `.operator-mode` ancestor, so there this chrome stays visible. */
       .operator-mode .buried .frame-actions,
       .operator-mode .buried .doors {
         display: none;
@@ -2459,6 +2538,25 @@ class Isolated extends Component<typeof Workspace> {
     type: string;
     card: CardDef;
   }[] = new TrackedArray();
+
+  // What the search status region says. Empty unless there is a settled result
+  // for a term the user actually typed: `runSearch` debounces, so between the
+  // keystroke and the hits arriving the results are legitimately empty, and
+  // announcing that window would report "no matches" for every prefix of a term
+  // that does match.
+  get searchAnnouncement(): string {
+    if (!this.searchTerm.trim() || this.runSearch.isRunning) {
+      return '';
+    }
+    let shown = this.searchResults.length;
+    if (!shown) {
+      return 'No matching cards';
+    }
+    if (this.searchTotal > shown) {
+      return `Showing ${shown} of ${this.searchTotal} results`;
+    }
+    return shown === 1 ? '1 result' : `${shown} results`;
+  }
 
   setupSearchHotkey = modifier((element: Element) => {
     let input = element.querySelector('input');
@@ -2672,6 +2770,30 @@ class Isolated extends Component<typeof Workspace> {
 
   private get firstRunningJob() {
     return this.runningJobs[0]!; // Read only under the runningJobs.length guard.
+  }
+
+  // What the progress status region says. Deliberately coarser than the meters
+  // it stands in for: those advance continuously, and a region that changed with
+  // them would talk over everything else on the page. Quantising to quarters
+  // means the text changes at most four times per job, plus whenever the set of
+  // running jobs changes.
+  get progressAnnouncement(): string {
+    let jobs = this.runningJobs;
+    if (!jobs.length) {
+      return '';
+    }
+    if (jobs.length > 1) {
+      return `${jobs.length} tasks running`;
+    }
+    let job = jobs[0]!;
+    let name = this.jobName(job);
+    if (!job.card.progressTotal) {
+      // No total means jobPct is a placeholder, not a measurement.
+      return `Setting up ${name}`;
+    }
+    return `Setting up ${name}, ${progressMilestone(
+      this.jobPct(job),
+    )}% complete`;
   }
 
   get dockSummary(): string {

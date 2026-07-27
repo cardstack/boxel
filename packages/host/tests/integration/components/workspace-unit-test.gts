@@ -77,6 +77,47 @@ module('Integration | Card | workspace | pure functions', function (hooks) {
     });
   });
 
+  module('progressMilestone', function () {
+    test('holds steady between milestones', function (assert) {
+      // The point of the quantising: a meter creeping 26 -> 49 must not change
+      // the announced text, or the status region interrupts on every tick.
+      assert.strictEqual(ws.progressMilestone(26), 25);
+      assert.strictEqual(ws.progressMilestone(49), 25);
+    });
+
+    test('advances on crossing each quarter', function (assert) {
+      assert.strictEqual(ws.progressMilestone(0), 0);
+      assert.strictEqual(ws.progressMilestone(25), 25);
+      assert.strictEqual(ws.progressMilestone(50), 50);
+      assert.strictEqual(ws.progressMilestone(75), 75);
+      assert.strictEqual(ws.progressMilestone(100), 100);
+    });
+
+    test('clamps a negative percentage to zero', function (assert) {
+      assert.strictEqual(ws.progressMilestone(-5), 0);
+    });
+  });
+
+  module('searchHotkeyLabel', function () {
+    test('spells the Frame hotkey the way the platform does', function (assert) {
+      // Matches on `Mac`, as codemirror-editor.gts's own mod-key label does.
+      // Desktop-class Safari on an iPad also reports MacIntel, so the platforms
+      // that actually have a ⌘ key to press are covered.
+      assert.strictEqual(ws.searchHotkeyLabel('MacIntel'), '⌘K', 'macOS');
+      assert.strictEqual(ws.searchHotkeyLabel('Win32'), 'Ctrl+K', 'Windows');
+      assert.strictEqual(
+        ws.searchHotkeyLabel('Linux x86_64'),
+        'Ctrl+K',
+        'Linux',
+      );
+    });
+
+    test('falls back to Ctrl when the platform is unknown', function (assert) {
+      // What a prerender pass sees: no navigator, so the label is built from ''.
+      assert.strictEqual(ws.searchHotkeyLabel(''), 'Ctrl+K');
+    });
+  });
+
   module('classifyActivityVerb', function () {
     const created = 1_000_000;
 
