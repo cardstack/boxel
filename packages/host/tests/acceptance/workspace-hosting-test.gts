@@ -133,16 +133,94 @@ module('Acceptance | workspace hosting', function (hooks) {
     );
   });
 
+  test('a site that is unpublished stops being listed as live', async function (assert) {
+    await visitWorkspaceSettings();
+
+    await click(`[data-test-unpublish-site="${publishedRealmURL}"]`);
+
+    assert
+      .dom(`[data-test-unpublish-site="${publishedRealmURL}"]`)
+      .doesNotExist('the row for the unpublished destination is gone');
+    assert
+      .dom('[data-test-republish]')
+      .doesNotExist('Republish goes away with the last destination');
+    assert
+      .dom('[data-test-hosting-error]')
+      .doesNotExist('no error is reported');
+    assert
+      .dom('.settings')
+      .containsText(
+        'Not published',
+        'the section falls back to its not-published copy',
+      );
+  });
+
+  test('an unpublish the server rejects keeps the row and says so', async function (assert) {
+    let realmServer = getService('realm-server');
+    realmServer.unpublishRealm = async () => {
+      throw new Error('destination is locked');
+    };
+
+    await visitWorkspaceSettings();
+    await click(`[data-test-unpublish-site="${publishedRealmURL}"]`);
+
+    assert
+      .dom('[data-test-hosting-error]')
+      .hasText(
+        'Could not unpublish testuser.localhost: destination is locked',
+        'the failure the tool reported is surfaced',
+      );
+    assert
+      .dom(`[data-test-unpublish-site="${publishedRealmURL}"]`)
+      .exists('the site is still listed, because it is still published');
+  });
+
   test('Republish reaches the publish-realm tool', async function (assert) {
     await visitWorkspaceSettings();
 
-    await click('.publish-btn:not(.unpublish-btn)');
+    await click('[data-test-republish]');
     await waitUntil(() => publishCalls.length > 0);
 
     assert.deepEqual(
       publishCalls,
       [{ sourceRealmURL: testRealmURL, publishedRealmURL }],
       'the tool republished the existing destination',
+    );
+    assert
+      .dom(`[data-test-unpublish-site="${publishedRealmURL}"]`)
+      .exists('the destination is still listed after a republish');
+  });
+
+  test('either hosting action disables the other while it runs', async function (assert) {
+    let releaseUnpublish: (() => void) | undefined;
+    let realmServer = getService('realm-server');
+    let stalledUnpublish = realmServer.unpublishRealm;
+    realmServer.unpublishRealm = async (publishedURL: string) => {
+      await new Promise<void>((resolve) => (releaseUnpublish = resolve));
+      return stalledUnpublish.call(realmServer, publishedURL);
+    };
+
+    await visitWorkspaceSettings();
+
+    // Not awaited yet: the buttons have to be inspected while the request is
+    // still in flight, which is exactly what settling would wait past.
+    let clicked = click(`[data-test-unpublish-site="${publishedRealmURL}"]`);
+    await waitUntil(() => releaseUnpublish !== undefined);
+    await waitFor('[data-test-republish]:disabled');
+
+    assert
+      .dom('[data-test-republish]')
+      .isDisabled('Republish cannot put the site back mid-unpublish');
+    assert
+      .dom(`[data-test-unpublish-site="${publishedRealmURL}"]`)
+      .isDisabled('the in-flight destination cannot be unpublished twice');
+
+    releaseUnpublish!();
+    await clicked;
+    assert.deepEqual(
+      unpublishCalls,
+      [publishedRealmURL],
+      'the unpublish completed once released',
     );
   });
 });
