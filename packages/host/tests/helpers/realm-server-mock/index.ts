@@ -87,6 +87,23 @@ export function setupAuthEndpoints(
   }
 }
 
+// Archive (or restore) a realm directly in the mock server state, so
+// external-lifecycle flows can be exercised without driving the archive
+// HTTP route: an archived realm is omitted from `_realm-auth` enumeration,
+// matching the real server.
+export function setRealmArchived(realmURL: string, archived: boolean) {
+  let network = getService('network') as NetworkService;
+  let state = ensureRealmServerMockState(network);
+  let normalized = ensureTrailingSlash(realmURL);
+  if (archived) {
+    state.archivedRealms.set(normalized, {
+      archivedAt: new Date().toISOString(),
+    });
+  } else {
+    state.archivedRealms.delete(normalized);
+  }
+}
+
 // Simulate a trusted realm server going unreachable (or recovering) at its
 // `_realm-auth` endpoint, so boot-assembly graceful-degradation and retry can
 // be exercised deterministically.

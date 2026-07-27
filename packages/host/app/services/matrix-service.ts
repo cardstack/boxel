@@ -38,6 +38,7 @@ import {
   submissionBotUsername,
   logger,
   Deferred,
+  ensureTrailingSlash,
   ri,
   SEARCH_MARKER,
   REPLACE_MARKER,
@@ -464,32 +465,25 @@ export default class MatrixService extends Service {
                 await this.realmServer.setAvailableRealmIdentifiers(
                   legacyRealms.map(ri),
                 );
-              } else if (
-                legacyRealms.some(
-                  (url) =>
-                    !this.realmServer.availableRealmIdentifiers.includes(
-                      ri(url),
-                    ),
-                )
-              ) {
-                // A realm created mid-session (boxel-cli, the software
-                // factory, another tab) announces itself ONLY through this
-                // legacy event — `app.boxel.realm-servers` doesn't change
-                // when a realm is added to an already-trusted server. An
-                // event naming a realm we don't have yet is that signal:
-                // re-run the authoritative assembly so the workspace
-                // chooser picks it up without a reload. Initial-sync echoes
-                // carry no new URLs and stay no-ops, preserving the
-                // don't-clobber-boot guarantee above. Best-effort, like the
-                // realm-servers listener: assembly failure must not crash
-                // the app from an async event handler.
+              } else {
+                // Under the trusted-servers assembly this key is demoted
+                // from STATE to CHANGE SIGNAL: its payload is never applied
+                // to the available-realms list (only the authoritative
+                // assembly writes that), but the event is the one live
+                // signal that the user's realm membership changed — the
+                // realm server updates `app.boxel.realms` on membership
+                // changes (e.g. a realm created from boxel-cli, the
+                // software factory, or another tab), while
+                // `app.boxel.realm-servers` doesn't change when the server
+                // was already trusted. Do not remove the server-side write
+                // of this key without replacing this signal. Best-effort,
+                // like the realm-servers listener: a reconcile failure must
+                // not crash the app from an async event handler.
                 try {
-                  await this.applyTrustedRealmServersAccountData(
-                    this.trustedRealmServers,
-                  );
+                  await this.reconcileRealmsWithAnnouncedList(legacyRealms);
                 } catch (err) {
                   console.error(
-                    'Failed to refresh realms after app.boxel.realms account-data event',
+                    'Failed to reconcile realms after app.boxel.realms account-data event',
                     err,
                   );
                 }
@@ -1388,6 +1382,58 @@ export default class MatrixService extends Service {
         }
       }),
     );
+  }
+
+  // How long to wait between catch-up attempts when a change signal
+  // announces a realm that `_realm-auth` doesn't return yet (the realm
+  // server appends to `app.boxel.realms` after creating the realm, but
+  // the enumeration can lag the account-data write).
+  private static RECONCILE_CATCHUP_DELAYS_MS = [1_000, 3_000];
+
+  // Bring the available-realms list back in line with server truth after
+  // an `app.boxel.realms` change signal. The announced list is used only
+  // to DECIDE — never applied as state:
+  //
+  // - announced set equals the current user-realm set → an initial-sync
+  //   echo; no-op. This is what preserves the boot assembly.
+  // - sets differ (in either direction — additions AND removals) → re-run
+  //   the authoritative trusted-servers assembly.
+  // - an announced realm is still missing after assembly → `_realm-auth`
+  //   lagged the signal; retry on a short bounded backoff. Removals need
+  //   no retry: the assembly is authoritative, so anything it no longer
+  //   advertises is dropped on the first pass. If the announced list
+  //   still disagrees after the budget, the trusted result stands — the
+  //   next signal or boot converges it.
+  async reconcileRealmsWithAnnouncedList(announced: string[]): Promise<void> {
+    let announcedSet = new Set(announced.map((u) => ensureTrailingSlash(u)));
+    let currentSet = () =>
+      new Set<string>(
+        this.realmServer.userRealmIdentifiers.map((u) =>
+          ensureTrailingSlash(u),
+        ),
+      );
+    let setsEqual = (a: Set<string>, b: Set<string>) =>
+      a.size === b.size && [...a].every((x) => b.has(x));
+    let missingAnnounced = () =>
+      [...announcedSet].filter((u) => !currentSet().has(u));
+
+    if (setsEqual(announcedSet, currentSet())) {
+      return;
+    }
+    await this.applyTrustedRealmServersAccountData(this.trustedRealmServers);
+    for (let delayMs of MatrixService.RECONCILE_CATCHUP_DELAYS_MS) {
+      if (missingAnnounced().length === 0) {
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      await this.applyTrustedRealmServersAccountData(this.trustedRealmServers);
+    }
+    let missing = missingAnnounced();
+    if (missing.length > 0) {
+      console.warn(
+        `Announced realm(s) still absent from the trusted-servers assembly after retries: ${missing.join(', ')} — keeping the trusted result`,
+      );
+    }
   }
 
   // Re-assemble the available-realms list from a runtime

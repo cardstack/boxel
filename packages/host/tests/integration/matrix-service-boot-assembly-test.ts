@@ -14,6 +14,7 @@ import {
   testRealmURL,
   setupIntegrationTestRealm,
   setupLocalIndexing,
+  setRealmArchived,
   setRealmAuthFailure,
   setupAuthEndpoints,
 } from '../helpers';
@@ -185,7 +186,7 @@ module(
       await matrixService.start();
     });
 
-    test('a legacy realms event naming a new realm re-runs the trusted assembly', async function (assert) {
+    test('realms events reconcile the list in both directions (create, then archive)', async function (assert) {
       let realmServer = getService('realm-server') as RealmServerService;
       let newRealmURL = ensureTrailingSlash(
         new URL('./new-workspace/', testRealmURL).href,
@@ -221,6 +222,28 @@ module(
       assert.ok(
         realmServer.availableRealmIdentifiers.includes(ri(testRealmURL)),
         'the original realm is still present',
+      );
+
+      // …and the reverse: the realm is archived externally. `_realm-auth`
+      // stops advertising it and the server rewrites `app.boxel.realms`
+      // without it. The signal set differs from ours (a removal), so the
+      // assembly re-runs and drops it — no retry needed, the assembly is
+      // authoritative.
+      setRealmArchived(newRealmURL, true);
+      mockMatrixUtils.simulateAccountDataEvent(APP_BOXEL_REALMS_EVENT_TYPE, {
+        realms: [testRealmURL],
+      });
+
+      await waitUntil(
+        () => !realmServer.availableRealmIdentifiers.includes(ri(newRealmURL)),
+      );
+      assert.notOk(
+        realmServer.availableRealmIdentifiers.includes(ri(newRealmURL)),
+        'the archived realm disappears from the available list without a reload',
+      );
+      assert.ok(
+        realmServer.availableRealmIdentifiers.includes(ri(testRealmURL)),
+        'the original realm survives the removal reconcile',
       );
     });
   },
