@@ -6,6 +6,7 @@ import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 
 import ArchiveIcon from '@cardstack/boxel-icons/archive';
+import CircleAlert from '@cardstack/boxel-icons/circle-alert';
 import CopyIcon from '@cardstack/boxel-icons/copy';
 import FileSettingsIcon from '@cardstack/boxel-icons/file-settings';
 import Home from '@cardstack/boxel-icons/home';
@@ -281,6 +282,7 @@ export default class Workspace extends Component<Signature> {
           <:footer>
             <div class='delete-modal__footer'>
               <span class='delete-modal__disclaimer'>
+                <CircleAlert width='13' height='13' />
                 This action is not reversible
               </span>
               <div class='delete-modal__actions'>
@@ -953,8 +955,14 @@ export default class Workspace extends Component<Signature> {
         margin-left: auto;
       }
       .delete-modal__disclaimer {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--boxel-sp-xxs);
         font: 500 var(--boxel-font-xs);
         color: var(--boxel-danger);
+      }
+      .delete-modal__disclaimer > svg {
+        flex-shrink: 0;
       }
       .workspace-chooser-archive-modal-container > :deep(.boxel-modal__inner) {
         display: flex;
