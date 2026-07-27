@@ -105,6 +105,11 @@ export interface RebuildEvent extends BaseEvent {
   trigger_module: string;
   modules_refetched: number;
   cards_reloaded: number;
+  // How many incremental events collapsed into this single rebuild. 1 for an
+  // isolated change; >1 when a write burst arrived faster than a rebuild
+  // completes and the events coalesced into one in-flight plus one pending
+  // rebuild.
+  coalesced_events: number;
 }
 
 export interface RealmEvent extends BaseEvent {
