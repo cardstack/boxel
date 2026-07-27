@@ -77,8 +77,8 @@ export interface FactoryEntrypointOptions {
   /**
    * Control realm (v3 split): issues, tracker cards, validations, and the
    * run log live here; the target realm keeps only the built product.
-   * Created if missing, like the target realm. Null = no split (v2
-   * behavior — everything in the target realm).
+   * Created if missing, like the target realm. Null = no split
+   * (everything in the target realm).
    */
   controlRealm?: string | null;
   realmServerUrl: string | null;
@@ -107,8 +107,6 @@ export interface FactoryEntrypointOptions {
    * Set via `--enable-boxel-ui-discovery` on the CLI.
    */
   enableBoxelUiDiscovery?: boolean;
-  /** V2 lean/design-first mode (see factory-issue-loop-wiring). */
-  v2?: boolean;
   /** Context forking: prime once per brief, fork every implementation turn. */
   forkContext?: boolean;
   /**
@@ -119,24 +117,23 @@ export interface FactoryEntrypointOptions {
   includePolish?: boolean;
   /**
    * Model for fix iterations (inner iterations ≥ 2 — mechanical lint/parse
-   * fix-ups). Defaults to `claude-sonnet-5` under --v2; pass `inherit` to
-   * keep the session model for every turn.
+   * fix-ups). Pass `inherit` to keep the session model for every turn.
    */
   fixModel?: string;
-  /** Effort for fix iterations (low|medium|high|xhigh|max). Default `medium` under --v2. */
+  /** Effort for fix iterations (low|medium|high|xhigh|max). Default `medium`. */
   fixEffort?: string;
   /**
    * Phase-split: run each implementation issue as a DESIGN turn
    * (flagship budget) + a BUILD turn (cheap budget) forked from the
-   * design session. DEFAULT ON under --v2 (v3); `--no-phase-split`
-   * opts out. Explicit `--phase-split` forces it on.
+   * design session. DEFAULT ON; `--no-phase-split` opts out. Explicit
+   * `--phase-split` forces it on.
    */
   phaseSplit?: boolean;
   /**
    * Render gate + acceptance walkthrough (v3 P0): post-issue screenshot
    * capture via `_screenshot-card` and a verifier turn that reads the
    * PNGs, verdicts acceptance criteria, and files defect issues. Default
-   * on under --v2; `--no-render-gate` opts out.
+   * on; `--no-render-gate` opts out.
    */
   renderGate?: boolean;
   /** Model for phase-split build turns. Default `claude-sonnet-5`; `inherit` keeps the session model. */
@@ -145,11 +142,11 @@ export interface FactoryEntrypointOptions {
   buildEffort?: string;
   /**
    * Model for the bootstrap turn (planning + tracker-card writing).
-   * Defaults to `claude-sonnet-5` under --v2 — the turn's output is
-   * mostly mechanical JSON; pass `inherit` to keep the session flagship.
+   * Defaults to `claude-sonnet-5` — the turn's output is mostly
+   * mechanical JSON; pass `inherit` to keep the session flagship.
    */
   bootstrapModel?: string;
-  /** Effort for the bootstrap turn. Default `medium` under --v2. */
+  /** Effort for the bootstrap turn. Default `medium`. */
   bootstrapEffort?: string;
   /**
    * Model for the review turn (the PM gate after the render gate). By
@@ -162,8 +159,7 @@ export interface FactoryEntrypointOptions {
   /** Effort for the review turn when --review-model is set. Default `medium`. */
   reviewEffort?: string;
   /**
-   * Orchestrator monitor level (v3, requires --v2): quiet | normal |
-   * verbose. Default `normal` — stall narration, per-turn telemetry,
+   * Orchestrator monitor level: quiet | normal | verbose. Default `normal` — stall narration, per-turn telemetry,
    * scheduler notes, and sync failures on the run log.
    */
   monitorLevel?: 'quiet' | 'normal' | 'verbose';
@@ -296,7 +292,7 @@ export function getFactoryEntrypointUsage(): string {
     '                              the target realm keeps only the built product — so product',
     '                              .gts updates never invalidate the run log the operator is',
     '                              watching, and control churn never re-runs product queries.',
-    '                              Created if missing. Omit for v2 single-realm behavior.',
+    '                              Created if missing. Omit for single-realm behavior.',
     '  --no-retry-blocked          Skip retrying blocked issues (by default, blocked issues are reset to backlog)',
     '  --agent <provider>          LLM backend: "claude" (default, uses Claude Code Agent SDK),',
     '                              "codex" (not yet implemented),',
@@ -310,10 +306,9 @@ export function getFactoryEntrypointUsage(): string {
     '                              backend falls back to the realm server passthrough at',
     '                              `/_openrouter/chat/completions` — burns boxel tokens.',
     '  --debug                     Log LLM prompts and responses to stderr',
-    '  --no-phase-split            Disable the v3 default phase-split (DESIGN turn on the',
+    '  --no-phase-split            Disable the default phase-split (DESIGN turn on the',
     '                              flagship model + BUILD turn on claude-sonnet-5, forked).',
-    '                              Only meaningful with --v2, where phase-split is on by default.',
-    '  --bootstrap-model <model>   Model for the bootstrap (planning) turn. Default under --v2:',
+    '  --bootstrap-model <model>   Model for the bootstrap (planning) turn. Default:',
     '                              claude-sonnet-5 — mostly mechanical tracker JSON. Pass',
     '                              `inherit` to keep the session flagship.',
     '  --bootstrap-effort <effort> Effort for the bootstrap turn (low|medium|high|xhigh|max).',
@@ -329,7 +324,7 @@ export function getFactoryEntrypointUsage(): string {
     '  --no-render-gate            Skip the v3 render gate + acceptance walkthrough (post-issue',
     '                              _screenshot-card captures and the verifier turn that reads',
     '                              them, verdicts acceptance criteria, and files defect issues).',
-    '  --monitor-level <level>     Orchestrator monitor verbosity on the run log (requires --v2):',
+    '  --monitor-level <level>     Orchestrator monitor verbosity on the run log:',
     '                              "quiet" (stalls + failures only), "normal" (default — adds',
     '                              per-turn telemetry and scheduler notes), "verbose" (adds turn',
     '                              starts, heals, and sync successes).',
@@ -395,6 +390,8 @@ export function parseFactoryEntrypointArgs(
         'enable-boxel-ui-discovery': {
           type: 'boolean',
         },
+        // Deprecated no-op: design-first is the only pipeline now. Kept so
+        // existing commands with --v2 don't die on the strict parser.
         v2: {
           type: 'boolean',
         },
@@ -518,14 +515,9 @@ export function parseFactoryEntrypointArgs(
     openRouterApiKey,
     debug: parsed.values.debug === true ? true : undefined,
     retryBlocked: parsed.values['no-retry-blocked'] === true ? false : true,
-    // V2 turns boxel-ui discovery on by default — the design-first loop
-    // must search the catalog before hand-rolling UI.
-    enableBoxelUiDiscovery:
-      parsed.values['enable-boxel-ui-discovery'] === true ||
-      parsed.values.v2 === true
-        ? true
-        : undefined,
-    v2: parsed.values.v2 === true ? true : undefined,
+    // Boxel-ui discovery is on by default — the design-first loop must
+    // search the catalog before hand-rolling UI.
+    enableBoxelUiDiscovery: true,
     forkContext: parsed.values['fork-context'] === true ? true : undefined,
     includePolish: parsed.values['include-polish'] === true ? true : undefined,
     fixModel:
@@ -537,7 +529,7 @@ export function parseFactoryEntrypointArgs(
         ? parsed.values['fix-effort']
         : undefined,
     // Tri-state: --no-phase-split wins; explicit --phase-split forces on;
-    // otherwise undefined lets the v2 default (on) apply downstream.
+    // otherwise undefined lets the default (on) apply downstream.
     phaseSplit:
       parsed.values['no-phase-split'] === true
         ? false
@@ -602,7 +594,7 @@ function parseMonitorLevel(
  * relative to the prefix (e.g. bulk BUILD emission) — that's an explicit
  * `--fix-model <model>` opt-in, never the default.
  *
- * v2 default: fix iterations (mechanical lint/parse fix-ups) inherit the
+ * Default: fix iterations (mechanical lint/parse fix-ups) inherit the
  * session model at effort='medium'. `--fix-effort low|...` tunes it;
  * `--fix-model claude-sonnet-5` (or an OpenRouter id under the opencode
  * backend) opts into a family switch; `--fix-model inherit --fix-effort
@@ -623,7 +615,6 @@ function normalizeEffort(
 }
 
 export function buildModelPolicy(options: {
-  v2?: boolean;
   fixModel?: string;
   fixEffort?: string;
   phaseSplit?: boolean;
@@ -642,8 +633,6 @@ export function buildModelPolicy(options: {
       acceptance?: TurnBudget;
     }
   | undefined {
-  if (options.v2 !== true) return undefined;
-
   // Fix turns: short output vs a big primed prefix — in-family effort
   // reduction wins (cache preserved); family switch is explicit opt-in.
   let fixModel =
@@ -759,7 +748,7 @@ export async function runFactoryEntrypoint(
 
   // v3 control/product split: resolve + bootstrap the control realm the
   // same way as the target (created if missing). A control realm equal to
-  // the target degenerates to the single-realm v2 flow.
+  // the target degenerates to the single-realm flow.
   let controlRealmUrl: string | undefined;
   if (options.controlRealm) {
     let controlResolution = (
@@ -805,7 +794,6 @@ export async function runFactoryEntrypoint(
       targetRealm: targetRealm.url,
       controlRealm: controlRealmUrl,
       brief: briefSourceUrl,
-      v2: options.v2 === true,
     },
   });
 
@@ -855,10 +843,10 @@ export async function runFactoryEntrypoint(
     (dependencies?.createSeed ?? createSeedIssue)(brief, {
       darkfactoryModuleUrl,
       workspaceDir,
-      // v2: hierarchical design — a design-foundation issue (brand guide,
+      // Hierarchical design — a design-foundation issue (brand guide,
       // tokens, family coherence sheet) runs between bootstrap and the
       // implementation issues.
-      designFoundation: options.v2 === true,
+      designFoundation: true,
     }),
   );
 
@@ -954,9 +942,9 @@ export async function runFactoryEntrypoint(
     seedResult,
   );
 
-  // v3: phase-split is the default economics under --v2 (design on the
-  // flagship, build on the cheap model, forked). --no-phase-split opts out.
-  let phaseSplit = options.phaseSplit ?? options.v2 === true;
+  // Phase-split is the default economics (design on the flagship, build
+  // on the cheap model, forked). --no-phase-split opts out.
+  let phaseSplit = options.phaseSplit ?? true;
 
   // Run the issue-driven loop
   let loopFn = dependencies?.runIssueLoop ?? runFactoryIssueLoop;
@@ -975,7 +963,6 @@ export async function runFactoryEntrypoint(
     debug: options.debug,
     retryBlocked: options.retryBlocked,
     enableBoxelUiDiscovery: options.enableBoxelUiDiscovery,
-    v2: options.v2,
     runTitle: brief.title,
     forkContext: options.forkContext,
     includePolish: options.includePolish,

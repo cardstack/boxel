@@ -77,6 +77,7 @@ module('factory-entrypoint', function (hooks) {
       realmServerUrl: 'https://realms.example.test/',
       agent: 'claude',
       retryBlocked: true,
+      enableBoxelUiDiscovery: true,
     });
   });
 
@@ -754,12 +755,12 @@ module('factory-entrypoint', function (hooks) {
 
 module('factory-entrypoint > buildModelPolicy review budget', function () {
   test('review turn is unbudgeted by default (inherits flagship)', function (assert) {
-    let policy = buildModelPolicy({ v2: true });
+    let policy = buildModelPolicy({});
     assert.strictEqual(policy?.acceptance, undefined);
   });
 
   test('--review-model opts the review turn into a cheaper budget', function (assert) {
-    let policy = buildModelPolicy({ v2: true, reviewModel: 'claude-sonnet-5' });
+    let policy = buildModelPolicy({ reviewModel: 'claude-sonnet-5' });
     assert.deepEqual(policy?.acceptance, {
       model: 'claude-sonnet-5',
       effort: 'medium',
@@ -768,7 +769,6 @@ module('factory-entrypoint > buildModelPolicy review budget', function () {
 
   test('review-model inherit keeps the flagship, effort-only budgets effort', function (assert) {
     let policy = buildModelPolicy({
-      v2: true,
       reviewModel: 'inherit',
       reviewEffort: 'low',
     });
@@ -777,8 +777,8 @@ module('factory-entrypoint > buildModelPolicy review budget', function () {
 });
 
 module('factory-entrypoint > buildModelPolicy bootstrap budget', function () {
-  test('bootstrap defaults to claude-sonnet-5 at medium under v2', function (assert) {
-    let policy = buildModelPolicy({ v2: true });
+  test('bootstrap defaults to claude-sonnet-5 at medium', function (assert) {
+    let policy = buildModelPolicy({});
     assert.deepEqual(policy?.bootstrap, {
       model: 'claude-sonnet-5',
       effort: 'medium',
@@ -786,11 +786,11 @@ module('factory-entrypoint > buildModelPolicy bootstrap budget', function () {
   });
 
   test('bootstrap-model inherit keeps the session flagship', function (assert) {
-    let policy = buildModelPolicy({ v2: true, bootstrapModel: 'inherit' });
+    let policy = buildModelPolicy({ bootstrapModel: 'inherit' });
     assert.deepEqual(policy?.bootstrap, { effort: 'medium' });
   });
 
-  test('no policy at all outside v2', function (assert) {
-    assert.strictEqual(buildModelPolicy({}), undefined);
+  test('fix policy exists by default (effort medium, inherit model)', function (assert) {
+    assert.deepEqual(buildModelPolicy({})?.fix, { effort: 'medium' });
   });
 });

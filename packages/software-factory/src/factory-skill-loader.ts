@@ -88,37 +88,6 @@ const SKILL_PRIORITY: readonly string[] = [
 // Keyword matchers for skill resolution
 // ---------------------------------------------------------------------------
 
-/** Keywords in issue content that indicate .gts component work. */
-const GTS_KEYWORDS = [
-  '.gts',
-  'component',
-  'template',
-  'glimmer',
-  'ember',
-  'CardDef',
-  'FieldDef',
-];
-
-/**
- * Keywords in issue content that indicate file/media-asset work, which pulls
- * in the `boxel-file-def` skill (FileDef, ImageDef, MarkdownDef, and the
- * binary-persistence rules). Mirrors the trigger surface that skill's own
- * SKILL.md description advertises.
- */
-const FILE_DEF_KEYWORDS = [
-  'file',
-  'asset',
-  'FileDef',
-  'ImageDef',
-  'MarkdownDef',
-  'PngDef',
-  'CsvFileDef',
-  'upload',
-  'image',
-  'document',
-  'media',
-];
-
 /**
  * Reference files in the `boxel` skill's `references/` directory and the
  * keywords that trigger their inclusion. When an issue doesn't match any
@@ -204,51 +173,17 @@ export interface SkillResolver {
   resolve(issue: IssueData, project: ProjectData): string[];
 }
 
-export interface DefaultSkillResolverOptions {
-  /**
-   * Feature flag — when true, `boxel-ui-component-discovery` is added to the
-   * always-loaded skill set so the agent searches the catalog for boxel-ui
-   * Specs before writing UI in `.gts` files. When false (default), the skill
-   * is omitted and the agent has no awareness of it. Pair with the
-   * `enableBoxelUiDiscovery` flag passed to the system-prompt template so
-   * the catalog-search exception in `prompts/system.md` is also enabled.
-   * See CS-10527.
-   */
-  enableBoxelUiDiscovery?: boolean;
-  /**
-   * V2 lean mode — front-load only a small core (the design-first V2
-   * operations skill + file structure + cardinal rules); every other
-   * skill is discoverable at runtime via the `list_skills` / `read_skill`
-   * tools. Bootstrap issues are unaffected.
-   */
-  v2?: boolean;
-}
-
 export class DefaultSkillResolver implements SkillResolver {
-  private enableBoxelUiDiscovery: boolean;
-  private v2: boolean;
-
-  constructor(options: DefaultSkillResolverOptions = {}) {
-    this.enableBoxelUiDiscovery = options.enableBoxelUiDiscovery === true;
-    this.v2 = options.v2 === true;
-  }
-
   /**
    * Determine which skills to load based on issue and project context.
    *
-   * Resolution rules:
-   * 1. boxel + boxel-file-structure — always loaded
-   * 2. ember-best-practices — when issue involves .gts component code
-   * 3. software-factory-operations — for factory delivery workflow issues
-   * 4. boxel-api + boxel-command — always loaded so the agent has the realm
-   *    search query syntax and host-command failure modes inline.
-   * 5. boxel-file-def — when the issue involves file/media assets.
-   * 6. boxel-ui-component-discovery — always loaded when the
-   *    `enableBoxelUiDiscovery` flag was passed at construction time.
-   * 7. KnowledgeArticle tags can specify additional skills.
+   * Meta issues (bootstrap / analysis / design) get their own dedicated
+   * skill sets. Everything else gets the lean always-on core — the
+   * operations skill, file structure, and cardinal rules — plus any
+   * KnowledgeArticle skill tags; all other skills are discoverable at
+   * runtime via the `list_skills` / `read_skill` tools.
    */
   resolve(issue: IssueData, project: ProjectData): string[] {
-    let issueText = extractIssueText(issue);
     let issueType = (issue as Record<string, unknown>).issueType;
 
     // Bootstrap issues get the bootstrap skill instead of implementation skills
@@ -271,80 +206,24 @@ export class DefaultSkillResolver implements SkillResolver {
       return ['boxel-file-structure', 'boxel-design'];
     }
 
-    // V2 lean mode: small always-on core; everything else on demand via
-    // the list_skills / read_skill tools. The design-first workflow and
-    // the "when you need X, read Y" pointer table live in the V2
-    // operations skill itself.
-    if (this.v2) {
-      let leanSkills = [
-        'software-factory-operations-v2',
-        'boxel-file-structure',
-        'boxel-workspace-cardinal-rules',
-      ];
-      for (let skillName of extractKnowledgeSkillTags(project, issue)) {
-        if (!leanSkills.includes(skillName)) {
-          leanSkills.push(skillName);
-        }
-      }
-      log.info(
-        `Resolved skills (v2 lean) for issue "${issue.id}": ${leanSkills.join(', ')}`,
-      );
-      return leanSkills;
-    }
-
-    let skills: string[] = [
-      'boxel',
+    // Lean core: small always-on set; everything else on demand via the
+    // list_skills / read_skill tools. The design-first workflow and the
+    // "when you need X, read Y" pointer table live in the operations
+    // skill itself.
+    let leanSkills = [
+      'software-factory-operations-v2',
       'boxel-file-structure',
-      'boxel-api',
-      'boxel-command',
-      // Local-only addition for this workspace's factory runs: hard-won,
-      // silent-realm-corrupting gotchas (DateField/DateTimeField mismatch,
-      // external URL in a relationships link poisoning the whole realm's
-      // indexing transaction, etc.) that upstream's boxel-development refs
-      // don't cover. Not an upstream change — lives in this checkout's
-      // .agents/skills/ only.
       'boxel-workspace-cardinal-rules',
     ];
-
-    if (matchesAnyKeyword(issueText, FILE_DEF_KEYWORDS)) {
-      skills.push('boxel-file-def');
-    }
-
-    if (this.enableBoxelUiDiscovery) {
-      // Always loaded under the feature flag. The directive must apply even
-      // when the issue text doesn't contain `component` / `.gts` / `template`
-      // literally — briefs that just describe a form, view, or "isolated
-      // render" would otherwise miss the discovery skill and the agent would
-      // hand-roll UI. See CS-10527 for the test run where that happened.
-      skills.push('boxel-ui-component-discovery');
-    }
-
-    if (matchesAnyKeyword(issueText, GTS_KEYWORDS)) {
-      skills.push('ember-best-practices');
-    }
-
-    // Every non-bootstrap issue is a factory delivery issue (write/edit
-    // cards, run the validators, record progress), so always load the
-    // operations skill. It used to be gated on keywords in the issue text,
-    // which silently dropped the edit-in-place / guard-the-baseline guidance
-    // for sparse, human-authored issues (e.g. a one-line "Modernize the
-    // look" adjustment added via the board UI).
-    skills.push('software-factory-operations');
-
-    // Check for additional skills from knowledge articles on the project
-    // and from related knowledge on the issue itself.
-    let additionalSkills = extractKnowledgeSkillTags(project, issue);
-    for (let skillName of additionalSkills) {
-      if (!skills.includes(skillName)) {
-        skills.push(skillName);
+    for (let skillName of extractKnowledgeSkillTags(project, issue)) {
+      if (!leanSkills.includes(skillName)) {
+        leanSkills.push(skillName);
       }
     }
-
     log.info(
-      `Resolved skills for issue "${issue.id}" (issueType=${issueType ?? '(none)'}): ${skills.join(', ')}`,
+      `Resolved skills (lean core) for issue "${issue.id}": ${leanSkills.join(', ')}`,
     );
-
-    return skills;
+    return leanSkills;
   }
 }
 

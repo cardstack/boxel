@@ -117,16 +117,9 @@ export interface IssueLoopWiringConfig {
    * awareness of boxel-ui components. See CS-10527.
    */
   enableBoxelUiDiscovery?: boolean;
-  /**
-   * V2 lean/design-first mode: lean skill core + on-demand read_skill,
-   * HTML-mockup design phase in the implement prompt, and no QUnit step
-   * in the validation pipeline (tests move to a later hardening phase).
-   * Also turns boxel-ui discovery on unless explicitly disabled upstream.
-   */
-  v2?: boolean;
-  /** Brief title — names the live-blog RunLog card (v2). */
+  /** Brief title — names the live-blog RunLog card. */
   runTitle?: string;
-  /** Context forking (v2): prime once, fork every implementation turn. */
+  /** Context forking: prime once, fork every implementation turn. */
   forkContext?: boolean;
   /** Per-turn model/effort budget policy (orchestrator-owned; see IssueLoopConfig). */
   modelPolicy?: {
@@ -155,11 +148,11 @@ export interface IssueLoopWiringConfig {
       effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     };
   };
-  /** Phase-split (v2): design turn + build turn per issue (see IssueLoopConfig). */
+  /** Phase-split: design turn + build turn per issue (see IssueLoopConfig). */
   phaseSplit?: boolean;
   /**
-   * Orchestrator monitor level (v3). Applies only under v2 (needs the run
-   * log). 'normal' (default) posts stall narration, turn telemetry,
+   * Orchestrator monitor level (v3). 'normal' (default) posts stall
+   * narration, turn telemetry,
    * scheduler notes, and sync failures; 'verbose' adds turn starts, heals,
    * and sync successes; 'quiet' keeps stalls + failures only.
    */
@@ -171,7 +164,7 @@ export interface IssueLoopWiringConfig {
    * realm), control-plane paths are excluded from the product atomic sync
    * via `.boxelignore` and raw-written to this realm instead — which also
    * makes the entire control plane immune to the /_atomic FieldDef strip.
-   * Unset = v2 behavior (everything in the target realm).
+   * Unset = single-realm behavior (everything in the target realm).
    */
   controlRealm?: string;
   /**
@@ -181,9 +174,9 @@ export interface IssueLoopWiringConfig {
    */
   controlSync?: ControlPlaneSync;
   /**
-   * Render gate + acceptance walkthrough (v3 P0). On by default under
-   * `v2`; pass false to skip the post-issue screenshot capture and the
-   * verifier turn (e.g. deployments without a prerenderer).
+   * Render gate + acceptance walkthrough (v3 P0). On by default; pass
+   * false to skip the post-issue screenshot capture and the verifier
+   * turn (e.g. deployments without a prerenderer).
    */
   renderGate?: boolean;
   /**
@@ -280,14 +273,10 @@ export async function runFactoryIssueLoop(
     () => deriveHostToolImports(defaultHostToolsDir(PACKAGE_ROOT)),
   );
   let contextBuilder = new ContextBuilder({
-    skillResolver: new DefaultSkillResolver({
-      enableBoxelUiDiscovery: config.enableBoxelUiDiscovery === true,
-      v2: config.v2 === true,
-    }),
+    skillResolver: new DefaultSkillResolver(),
     skillLoader: new SkillLoader(),
     issueLoader,
     enableBoxelUiDiscovery: config.enableBoxelUiDiscovery === true,
-    v2: config.v2 === true,
     hostToolImports,
   });
 
@@ -341,7 +330,7 @@ export async function runFactoryIssueLoop(
   // raw writes). Set once the RunLogWriter exists; runs after every
   // successful sync so the live blog can never stay stripped.
   let postSyncHeal: (() => Promise<void>) | undefined;
-  // Set once the RunMonitor exists (v2 only) — watchdog notes for sync
+  // Set once the RunMonitor exists — watchdog notes for sync
   // failures (normal level) and heals/successes (verbose).
   let monitor: RunMonitor | undefined;
   let syncWorkspace = async () => {
@@ -463,7 +452,7 @@ export async function runFactoryIssueLoop(
       issueId,
       fetchFilenames: (realmUrl: string) => client.listFiles(realmUrl),
       cache: validationCache,
-      includeTestStep: config.v2 !== true,
+      includeTestStep: false,
       hostToolImports,
     });
 
@@ -471,7 +460,7 @@ export async function runFactoryIssueLoop(
   log.info(`Starting issue loop: targetRealm=${targetRealm}`);
 
   let runLog: RunLogWriter | undefined;
-  if (config.v2 === true) {
+  {
     let runSlug = (config.briefUrl.split('/').pop() ?? 'factory-run')
       .replace(/\.json$/i, '')
       .toLowerCase();
@@ -495,10 +484,10 @@ export async function runFactoryIssueLoop(
     });
   }
 
-  // Render gate (v3 P0): on by default under v2 — the runtime feedback
-  // loop is the point of v3, so skipping it is the explicit opt-out.
+  // Render gate (v3 P0): on by default — the runtime feedback loop is
+  // the point of the pipeline, so skipping it is the explicit opt-out.
   let renderGate: RenderGate | undefined;
-  if (config.v2 === true && config.renderGate !== false) {
+  if (config.renderGate !== false) {
     renderGate = new RenderGate({
       client,
       realmServerUrl,

@@ -251,12 +251,6 @@ export interface AgentContext {
    */
   enableBoxelUiDiscovery?: boolean;
   /**
-   * V2 lean/design-first mode — implementation issues use the
-   * `issue-implement-v2` prompt (HTML-mockup design phase, no tests) and
-   * the lean skill core with on-demand `read_skill` loading.
-   */
-  v2?: boolean;
-  /**
    * Context forking (v2): when set, the backend resumes this session —
    * branching to a new session id when `fork` is true (the default) — so
    * the turn inherits the primed conversation as a shared, provider-cached

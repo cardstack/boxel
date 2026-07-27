@@ -425,8 +425,8 @@ module('factory-prompt-loader > assembleImplementPrompt', function () {
     let result = assembleImplementPrompt({ context: ctx, loader });
 
     assert.ok(
-      result.includes('Implement this issue'),
-      'has implementation instructions',
+      result.includes('Work design-first'),
+      'has design-first implementation instructions',
     );
     assert.ok(result.includes('signal_done'), 'mentions signal_done');
   });
@@ -478,7 +478,7 @@ module('factory-prompt-loader > assembleImplementPrompt', function () {
       'includes tool output data',
     );
     assert.ok(
-      result.includes('Implement this issue'),
+      result.includes('Work design-first'),
       'still includes implementation instructions',
     );
   });
@@ -851,11 +851,10 @@ module('factory-prompt-loader > bug-fix routing', function () {
     assert.false(isBugFixIssue(undefined));
   });
 
-  test('a v2 defect issue gets the diagnose-and-fix prompt (no design round)', function (assert) {
+  test('a defect issue gets the diagnose-and-fix prompt (no design round)', function (assert) {
     let loader = new FilePromptLoader();
     let prompt = assembleImplementPrompt({
       context: makeMinimalContext({
-        v2: true,
         issue: {
           id: 'Issues/crash',
           issueType: 'defect',
@@ -878,11 +877,10 @@ module('factory-prompt-loader > bug-fix routing', function () {
     );
   });
 
-  test('a v2 feature issue still gets the design-first implement prompt', function (assert) {
+  test('a feature issue gets the design-first implement prompt', function (assert) {
     let loader = new FilePromptLoader();
     let prompt = assembleImplementPrompt({
       context: makeMinimalContext({
-        v2: true,
         issue: { id: 'Issues/new', issueType: 'feature', summary: 'new card' },
       }),
       loader,

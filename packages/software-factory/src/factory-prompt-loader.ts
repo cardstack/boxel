@@ -455,18 +455,15 @@ export function assembleImplementPrompt(
 
   // Prompt selection. Bug-fix issues take a diagnose-and-fix prompt with no
   // design round (the card already shipped; only its behavior is broken).
-  // Otherwise, phase-split (v2) gives the design and build turns dedicated
-  // prompts; an unsplit v2 turn keeps the combined design-first prompt.
-  let template =
-    context.v2 === true
-      ? isBugFixIssue(context.issue as { issueType?: string })
-        ? 'issue-fix-v2'
-        : context.phase === 'design'
-          ? 'issue-design-v2'
-          : context.phase === 'build'
-            ? 'issue-build-v2'
-            : 'issue-implement-v2'
-      : 'issue-implement';
+  // Otherwise, phase-split gives the design and build turns dedicated
+  // prompts; an unsplit turn keeps the combined design-first prompt.
+  let template = isBugFixIssue(context.issue as { issueType?: string })
+    ? 'issue-fix-v2'
+    : context.phase === 'design'
+      ? 'issue-design-v2'
+      : context.phase === 'build'
+        ? 'issue-build-v2'
+        : 'issue-implement-v2';
   return loader.load(template, {
     project: context.project,
     issue: context.issue,
@@ -485,16 +482,13 @@ export function assembleBootstrapPrompt(
 ): string {
   let { context, loader } = options;
 
-  // v2's bootstrap variant strips the QUnit/test requirements — the v2
+  // The bootstrap prompt strips the QUnit/test requirements — the per-issue
   // pipeline runs no tests, and baking them into issue descriptions made
   // agents write .test.gts despite the skill's no-tests hard rule.
-  return loader.load(
-    context.v2 === true ? 'bootstrap-implement-v2' : 'bootstrap-implement',
-    {
-      briefUrl: context.briefUrl,
-      issue: context.issue,
-    },
-  );
+  return loader.load('bootstrap-implement-v2', {
+    briefUrl: context.briefUrl,
+    issue: context.issue,
+  });
 }
 
 /**

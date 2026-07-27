@@ -95,100 +95,36 @@ function makeProject(overrides?: Partial<ProjectData>): ProjectData {
 // ---------------------------------------------------------------------------
 
 module('factory-skill-loader > DefaultSkillResolver', function () {
-  test('always includes boxel and boxel-file-structure', function (assert) {
+  test('implementation issues get the lean always-on core', function (assert) {
     let resolver = new DefaultSkillResolver();
     let issue = makeIssue({ description: 'Generic task with no keywords' });
     let project = makeProject();
 
     let skills = resolver.resolve(issue, project);
 
-    assert.true(skills.includes('boxel'), 'includes boxel');
-    assert.true(
-      skills.includes('boxel-file-structure'),
-      'includes boxel-file-structure',
-    );
-    assert.true(skills.includes('boxel-api'), 'includes boxel-api');
-    assert.true(skills.includes('boxel-command'), 'includes boxel-command');
+    assert.deepEqual(skills, [
+      'software-factory-operations-v2',
+      'boxel-file-structure',
+      'boxel-workspace-cardinal-rules',
+    ]);
   });
 
-  test('includes ember-best-practices when issue mentions .gts', function (assert) {
+  test('the lean core is keyword-independent', function (assert) {
+    // Everything beyond the core is on-demand via list_skills/read_skill —
+    // issue text must not change what gets front-loaded.
     let resolver = new DefaultSkillResolver();
-    let issue = makeIssue({
-      description: 'Create a new card definition in .gts format',
-    });
     let project = makeProject();
 
-    let skills = resolver.resolve(issue, project);
-
-    assert.true(
-      skills.includes('ember-best-practices'),
-      'includes ember-best-practices for .gts work',
+    let sparse = resolver.resolve(
+      makeIssue({ title: 'Modernize the look', issueType: 'adjustment' }),
+      project,
     );
-  });
-
-  test('includes ember-best-practices when issue mentions component', function (assert) {
-    let resolver = new DefaultSkillResolver();
-    let issue = makeIssue({
-      description: 'Build a new component for the dashboard',
-    });
-    let project = makeProject();
-
-    let skills = resolver.resolve(issue, project);
-
-    assert.true(
-      skills.includes('ember-best-practices'),
-      'includes ember-best-practices for component work',
+    let gts = resolver.resolve(
+      makeIssue({ description: 'Create a new card definition in .gts format' }),
+      project,
     );
-  });
 
-  test('includes ember-best-practices when issue mentions CardDef', function (assert) {
-    let resolver = new DefaultSkillResolver();
-    let issue = makeIssue({
-      title: 'Define a new CardDef for employees',
-    });
-    let project = makeProject();
-
-    let skills = resolver.resolve(issue, project);
-
-    assert.true(
-      skills.includes('ember-best-practices'),
-      'includes ember-best-practices for CardDef work',
-    );
-  });
-
-  test('includes software-factory-operations for delivery workflow issues', function (assert) {
-    let resolver = new DefaultSkillResolver();
-    let issue = makeIssue({
-      description: 'Improve the factory delivery pipeline',
-    });
-    let project = makeProject();
-
-    let skills = resolver.resolve(issue, project);
-
-    assert.true(
-      skills.includes('software-factory-operations'),
-      'includes software-factory-operations for factory workflow',
-    );
-  });
-
-  test('includes software-factory-operations even for sparse issues with no workflow keywords', function (assert) {
-    // Regression: a one-line human-authored adjustment added via the board
-    // UI ("Modernize the look") used to miss the operations skill because the
-    // loader gated it on workflow keywords in the issue text. Every
-    // non-bootstrap issue is a delivery issue, so it must always load.
-    let resolver = new DefaultSkillResolver();
-    let issue = makeIssue({
-      title: 'Modernize the look of the calculator',
-      issueType: 'adjustment',
-    });
-    let project = makeProject();
-
-    let skills = resolver.resolve(issue, project);
-
-    assert.true(
-      skills.includes('software-factory-operations'),
-      'sparse adjustment issue still loads the operations skill',
-    );
+    assert.deepEqual(sparse, gts, 'same core regardless of issue text');
   });
 
   test('extra skills can be opted in via knowledge article tags', function (assert) {
@@ -339,8 +275,8 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
 
     let skills = resolver.resolve(issue, project);
 
-    // Should still resolve the base skills without error
-    assert.true(skills.includes('boxel'));
+    // Should still resolve the lean core without error
+    assert.true(skills.includes('software-factory-operations-v2'));
     assert.true(skills.includes('boxel-file-structure'));
   });
 });
@@ -915,38 +851,28 @@ module('factory-skill-loader > enforceSkillBudget', function () {
 // ---------------------------------------------------------------------------
 
 module('factory-skill-loader > re-resolution on new issue', function () {
-  test('resolver produces different skills for different issues', function (assert) {
+  test('resolver differentiates by issue TYPE, not issue text', function (assert) {
     let resolver = new DefaultSkillResolver();
     let project = makeProject();
 
-    let issue1 = makeIssue({
-      description: 'Create a .gts component for the landing page',
-    });
-    let issue2 = makeIssue({
-      description: 'Improve the factory delivery pipeline',
-    });
-
-    let skills1 = resolver.resolve(issue1, project);
-    let skills2 = resolver.resolve(issue2, project);
-
-    assert.true(
-      skills1.includes('ember-best-practices'),
-      'issue1 gets ember-best-practices',
+    let bootstrap = resolver.resolve(
+      makeIssue({ issueType: 'bootstrap' }),
+      project,
+    );
+    let design = resolver.resolve(makeIssue({ issueType: 'design' }), project);
+    let feature = resolver.resolve(
+      makeIssue({ description: 'Create a .gts component' }),
+      project,
     );
 
-    // software-factory-operations now loads for every non-bootstrap issue,
-    // so it's no longer the differentiator — ember-best-practices is.
     assert.true(
-      skills1.includes('software-factory-operations'),
-      'issue1 gets software-factory-operations (always loaded)',
+      bootstrap.includes('software-factory-bootstrap'),
+      'bootstrap gets the bootstrap skill',
     );
+    assert.true(design.includes('boxel-design'), 'design gets boxel-design');
     assert.true(
-      skills2.includes('software-factory-operations'),
-      'issue2 gets software-factory-operations',
-    );
-    assert.false(
-      skills2.includes('ember-best-practices'),
-      'issue2 does not get ember-best-practices',
+      feature.includes('software-factory-operations-v2'),
+      'implementation issues get the lean operations core',
     );
   });
 

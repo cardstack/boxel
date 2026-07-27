@@ -1272,8 +1272,7 @@ export async function runIssueLoop(
         phaseSplit &&
         !isMetaIssue(issue) &&
         !isBugFixIssue(issue) &&
-        iteration === 1 &&
-        context.v2 === true
+        iteration === 1
       ) {
         // Phase-split: DESIGN turn (taste — strong budget) then BUILD turn
         // (translation — cheap budget) forked from the design session so

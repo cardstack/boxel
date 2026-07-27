@@ -41,7 +41,8 @@ process.** Everything below serves one of three sub-goals:
 
 ## Area 1 — v2: the lean, design-first build loop
 
-**What.** A `--v2` mode for `factory:go` that reorders each implementation turn
+**What.** The design-first build loop (originally a `--v2` mode, now the only
+`factory:go` pipeline) that reorders each implementation turn
 to **design first**: the agent writes a single self-contained HTML mockup with
 realistic sample copy, screenshots it, critiques and revises it, and only then
 translates the accepted mockup into a `.gts` card. v2 also drops the QUnit/test

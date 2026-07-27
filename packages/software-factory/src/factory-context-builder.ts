@@ -55,8 +55,6 @@ export interface ContextBuilderConfig {
    * See CS-10527.
    */
   enableBoxelUiDiscovery?: boolean;
-  /** V2 lean/design-first mode — carried onto every AgentContext. */
-  v2?: boolean;
   /**
    * Valid `@cardstack/boxel-host/tools/<name>` module names derived from
    * the host build (v3 import gate). When set, every built context gains
@@ -77,7 +75,6 @@ export class ContextBuilder {
   private maxSkillTokens: number | undefined;
   private issueLoader: IssueRelationshipLoader | undefined;
   private enableBoxelUiDiscovery: boolean;
-  private v2: boolean;
   private hostToolImports: string[] | undefined;
 
   constructor(config: ContextBuilderConfig) {
@@ -86,7 +83,6 @@ export class ContextBuilder {
     this.maxSkillTokens = config.maxSkillTokens;
     this.issueLoader = config.issueLoader;
     this.enableBoxelUiDiscovery = config.enableBoxelUiDiscovery === true;
-    this.v2 = config.v2 === true;
     this.hostToolImports = config.hostToolImports;
   }
 
@@ -145,7 +141,6 @@ export class ContextBuilder {
       skills,
       targetRealm,
       enableBoxelUiDiscovery: this.enableBoxelUiDiscovery,
-      v2: this.v2,
       ...(darkfactoryModuleUrl ? { darkfactoryModuleUrl } : {}),
     };
 
@@ -261,7 +256,6 @@ export class ContextBuilder {
       skills,
       targetRealm,
       enableBoxelUiDiscovery: this.enableBoxelUiDiscovery,
-      v2: this.v2,
       ...(darkfactoryModuleUrl ? { darkfactoryModuleUrl } : {}),
     };
 
