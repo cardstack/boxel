@@ -15,8 +15,11 @@ instructions live in two parallel directories:
   `.claude/skills` symlink). Describes the `boxel` CLI surface and the
   agent-owned status lifecycle.
 
-Both modes also fall back to `packages/boxel-cli/plugin/skills/` and
-the monorepo-root `.agents/skills/` for shared domain skills.
+Both modes also fall back to `packages/boxel-cli/plugin/skills/` for
+shared domain skills (including `ember-best-practices` and
+`boxel-ui-component-discovery`, now sourced from boxel-skills). The
+monorepo-root `.agents/skills/` remains a fallback slot but is
+currently empty.
 
 ## Commands
 

@@ -46,8 +46,9 @@ specific):
    the plugin distributes to end users. The `boxel` skill and
    its references are built from the boxel-skills repo by
    `pnpm build:skills`.
-2. monorepo root `.agents/skills/` — general domain skills
-   (`ember-best-practices`).
+2. monorepo root `.agents/skills/` — a fallback slot for shared
+   domain skills, currently empty (`ember-best-practices` now ships
+   from boxel-skills via the plugin dir above).
 
 The two software-factory skill sets diverged during CS-11149. They
 stay separated until the SDK orchestrator is retired; at that

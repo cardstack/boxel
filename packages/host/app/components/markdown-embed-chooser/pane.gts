@@ -59,6 +59,10 @@ interface Signature {
     // Overrides the dynamic "Insert as …" CTA label. Used in edit mode to
     // show 'Done' (clean) or 'Accept' (dirty) per the design spec.
     ctaLabelOverride?: string;
+    // True while the picked target is still resolving. The viewport renders a
+    // size-matched loading placeholder and the CTA is held disabled until the
+    // instance (or an error) lands.
+    loading?: boolean;
   };
 }
 
@@ -124,6 +128,9 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
   // for editing seeds the Custom category with no dimensions but is a valid,
   // supported form, so its unchanged (non-dirty) state keeps the CTA enabled.
   private get ctaDisabled(): boolean {
+    if (this.args.loading) {
+      return true;
+    }
     return !this.args.selection.hasValidSize && this.args.selection.isDirty;
   }
 
@@ -170,6 +177,7 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
       <div class='markdown-embed-preview-pane__viewport'>
         <MarkdownEmbedPreview
           @target={{@target}}
+          @loading={{@loading}}
           @brokenUrl={{@brokenUrl}}
           @brokenDisplayName={{@brokenDisplayName}}
           @brokenItemType={{@brokenItemType}}
