@@ -18,20 +18,6 @@ async function waitForScrollTop(el: HTMLElement, expected: number) {
   }
 }
 
-// Assigning `scrollTop` queues a *native* scroll event that the browser
-// dispatches on a later rendering update, not before the assignment returns —
-// and `settled()` doesn't await it. Pump real frames so that event lands while
-// the state it was produced under still holds. Without this, a scroll queued
-// before a gesture can be delivered after it, and the modifier reads the live
-// offset at delivery time, so it reads as user scrolling to wherever the
-// element has since been moved.
-async function drainNativeScrollEvents() {
-  for (let i = 0; i < 2; i++) {
-    // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- test must await the browser's own scroll-event dispatch
-    await new Promise((resolve) => requestAnimationFrame(resolve));
-  }
-}
-
 module('Integration | modifier | persist-scroll-position', function (hooks) {
   setupRenderingTest(hooks);
 
@@ -137,12 +123,9 @@ module('Integration | modifier | persist-scroll-position', function (hooks) {
     let scroller = document.querySelector('.scroller') as HTMLElement;
 
     // A scroll with no preceding gesture (a programmatic move or a layout
-    // reset) must not be recorded — including the browser's own event for this
-    // write, which has to be drained here rather than left to arrive after the
-    // gesture below.
+    // reset) must not be recorded.
     scroller.scrollTop = 90;
     await triggerEvent(scroller, 'scroll');
-    await drainNativeScrollEvents();
     assert.deepEqual(recorded, [], 'a gesture-less scroll is ignored');
 
     // After a real gesture, the user's scrolling is recorded. (A single move
@@ -151,7 +134,6 @@ module('Integration | modifier | persist-scroll-position', function (hooks) {
     await triggerEvent(scroller, 'wheel');
     scroller.scrollTop = 120;
     await triggerEvent(scroller, 'scroll');
-    await drainNativeScrollEvents();
     let recordedOnlyTheUserOffset =
       recorded.length >= 1 && recorded.every((v) => v === 120);
     assert.ok(
