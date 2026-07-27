@@ -46,9 +46,12 @@ let server = http.createServer((req, res) => {
     res.end('method not allowed');
     return;
   }
+  // Beat first, then now: sampled the other way round, a beat landing between
+  // the two reads yields a negative age.
+  let beatNs = readBeat();
   let verdict = judgeLiveness({
     nowNs: process.hrtime.bigint(),
-    beatNs: readBeat(),
+    beatNs,
     wedgeMs,
   });
   let body = JSON.stringify(verdict);
@@ -78,6 +81,5 @@ server.listen(port, host, () => {
   parentPort?.postMessage({
     type: 'listening',
     port: typeof bound === 'object' && bound ? bound.port : port,
-    wedgeMs,
   });
 });

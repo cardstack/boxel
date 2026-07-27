@@ -10,7 +10,15 @@ import type { LivenessResponderWorkerData } from './liveness-responder-worker.ts
 // exactly as before — so every failure here is logged and reported, never
 // thrown.
 
-const DEFAULT_WEDGE_MS = 30_000;
+// Sized against measured stalls rather than a round number. The worst
+// event-loop stall observed on a deployed realm-server during an overload
+// incident is ~25s (a deploy-churn event); a deep search-overload incident
+// peaked near 11s, and ordinary production operation stays under ~5s. 60s sits
+// well clear of all three while remaining far below anything a genuinely
+// stopped loop would produce, since a wedge does not recover and blows past any
+// threshold. Erring high costs only detection latency; erring low costs a
+// restart of a server that was busy, which is the outcome this exists to avoid.
+const DEFAULT_WEDGE_MS = 60_000;
 // Below a few seconds a threshold stops distinguishing a wedge from an ordinary
 // long synchronous span (a large serialization, a major GC), and starts calling
 // a server dead that is merely busy.
@@ -106,10 +114,12 @@ export function startLivenessResponder({
     worker.unref();
   };
 
+  let bound = false;
   worker.on(
     'message',
     (message: { type?: string; port?: number; message?: string }) => {
       if (message?.type === 'listening') {
+        bound = true;
         log.info(
           `liveness responder listening on ${host}:${message.port} wedgeMs=${wedgeMs}`,
         );
@@ -132,11 +142,16 @@ export function startLivenessResponder({
   });
   let expectedExit = false;
   worker.on('exit', (code) => {
-    // A thread that dies on its own is the quiet failure mode: the endpoint
-    // stops answering, and a check reading that as "unreachable, not wedged"
-    // carries on green, so nothing else will ever mention that wedge detection
-    // is off. This log and the Sentry report are the only notice.
-    if (!expectedExit) {
+    // A thread that dies after it was serving is the quiet failure mode: the
+    // endpoint stops answering, and a check reading that as "unreachable, not
+    // wedged" carries on green, so nothing else will ever mention that wedge
+    // detection is off. This log and the Sentry report are the only notice.
+    //
+    // Gated on having bound, because the worker's only handle is its server:
+    // when `listen` fails its loop empties and it exits immediately after. That
+    // exit is the same incident the branch above already reported, and calling
+    // it a thread death names a fault that didn't happen.
+    if (!expectedExit && bound) {
       log.error(`liveness responder thread exited on its own (code ${code})`);
       Sentry.captureException(
         new Error(`liveness responder thread exited on its own (code ${code})`),

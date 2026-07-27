@@ -82,6 +82,9 @@ function armPollingFromOwnThread(port: number): {
 } {
   let worker = new Worker(CLIENT_WORKER_SOURCE, {
     eval: true,
+    // Same reason the responder worker does it: CI launches the suite with
+    // `--require`, and this thread has no use for the parent's flags.
+    execArgv: [],
     workerData: {
       port,
       intervalMs: POLL_INTERVAL_MS,
@@ -116,8 +119,10 @@ function armPollingFromOwnThread(port: number): {
 }
 
 function blockMainThread(ms: number): void {
-  let until = Date.now() + ms;
-  while (Date.now() < until) {
+  // Monotonic, like the heartbeat this is stalling — the block's real duration
+  // is what the peak-stall assertion is measured against.
+  let until = process.hrtime.bigint() + BigInt(ms) * 1_000_000n;
+  while (process.hrtime.bigint() < until) {
     // Deliberately synchronous: nothing on this thread's event loop runs,
     // including the heartbeat that would otherwise report it as turning.
   }
@@ -275,12 +280,12 @@ module(basename(import.meta.filename), function (hooks) {
 
   test('the wedge threshold has a floor a malformed override cannot cross', function (assert) {
     assert.strictEqual(livenessWedgeMs('45000'), 45_000);
-    assert.strictEqual(livenessWedgeMs(undefined), 30_000);
-    assert.strictEqual(livenessWedgeMs('not-a-number'), 30_000);
+    assert.strictEqual(livenessWedgeMs(undefined), 60_000);
+    assert.strictEqual(livenessWedgeMs('not-a-number'), 60_000);
     // Clearing the variable means "use the default", not "use the floor" —
     // `Number('')` is 0, which is finite, so this needs handling of its own.
-    assert.strictEqual(livenessWedgeMs(''), 30_000);
-    assert.strictEqual(livenessWedgeMs('   '), 30_000);
+    assert.strictEqual(livenessWedgeMs(''), 60_000);
+    assert.strictEqual(livenessWedgeMs('   '), 60_000);
     assert.strictEqual(livenessWedgeMs('0'), 5_000);
     assert.strictEqual(livenessWedgeMs('-1'), 5_000);
   });

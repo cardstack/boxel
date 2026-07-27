@@ -39,11 +39,11 @@ export function judgeLiveness({
   beatNs: bigint;
   wedgeMs: number;
 }): LivenessVerdict {
-  // A never-written beat reads as 0, which makes the age the whole of process
-  // uptime and so fails any threshold. That is the honest answer for a buffer
-  // nobody has beaten into: nothing has reported the loop turning. In practice
-  // the heartbeat writes its first beat synchronously at construction, before
-  // the responder exists to be asked.
+  // `createHeartbeat` writes its first beat synchronously at construction, so a
+  // reader never sees the 0 an unwritten slot would hold. Worth knowing that the
+  // fallback if one ever did is weaker than it looks: these are CLOCK_MONOTONIC
+  // readings measured from host boot, not from an epoch, so a 0 beat only
+  // exceeds the threshold once the host has been up longer than `wedgeMs`.
   // Rounded to whole milliseconds: the threshold is seconds-scale, and a bare
   // integer reads better in the response body than a nanosecond-precision float.
   let heartbeatAgeMs = Math.round(Number(nowNs - beatNs) / NS_PER_MS);

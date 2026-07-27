@@ -32,11 +32,16 @@ monotonic reading into a `SharedArrayBuffer` on a 250ms interval; the worker rea
 it and reports its age:
 
 ```
-{ "alive": true, "heartbeatAgeMs": 41, "wedgeMs": 30000 }
+{ "alive": true, "heartbeatAgeMs": 41, "wedgeMs": 60000 }
 ```
 
 200 while the age is within `wedgeMs`, 503 past it. `REALM_LIVENESS_WEDGE_MS`
-tunes the threshold, with a 5s floor. The clock is `process.hrtime.bigint()`
+tunes the threshold, with a 5s floor. The 60s default is sized against measured
+stalls: the worst event-loop stall seen on a deployed realm-server during an
+overload incident is ~25s, a deep search-overload incident peaked near 11s, and
+ordinary production operation stays under ~5s. A genuinely stopped loop does not
+recover, so it exceeds any threshold — which makes erring high nearly free and
+erring low a restart of a server that was only busy. The clock is `process.hrtime.bigint()`
 rather than wall time, so an NTP or hypervisor step can neither age a fresh beat
 into a false wedge nor rejuvenate a stale one.
 
@@ -116,10 +121,19 @@ the trigger is wired up.
 
 The parameters matter as much as the endpoint. Replacement should require the
 endpoint to say "wedged" several times over: at 30s intervals with 3 retries, on
-top of the endpoint's own 30s threshold, that is roughly two minutes of a loop
-that has not turned. A `startPeriod` is required — there is a window early in boot
-where the module graph is still evaluating and nothing is listening yet, and every
-check in it is refused.
+top of the endpoint's own 60s threshold, that is around two and a half minutes of
+a loop that has not turned.
+
+Boot needs its own protection, but not for the reason it first appears. The
+responder binds at module scope, within milliseconds — so the unlistening window
+is tiny, and a fail-open probe treats it as healthy anyway. The exposure is the
+opposite one: everything after that point (fetching the host shell, migrations,
+mounting realms, the boot index) runs with the endpoint **live**, and a boot step
+that blocks the loop past `wedgeMs` produces a real 503 on a task that is merely
+starting up. That is what a service-level health-check grace period covers, and
+it is why one is set. Note also that AWS ends a container `startPeriod` at the
+first _successful_ check — which a fail-open probe delivers immediately — so a
+`startPeriod` alone would lapse long before boot finishes.
 
 The probe should also fail _open_: only an affirmative 503 means unhealthy. A
 plain `curl -f || exit 1` treats a refused connection the same as a wedge, which
