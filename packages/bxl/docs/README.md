@@ -9,6 +9,7 @@ This directory holds the v0.1 documentation set.
 | `profiles.md`               | Execution profile contracts and use cases      |
 | `predicate-sql.md`           | Predicate-profile SQL compiler contract        |
 | `query-then-process.md`      | Retrieval first, BXL post-query processing     |
+| `realm-collaboration-use-cases.md` | Real gateway policies, state transitions, ledgers, and audit findings |
 | `function-dispatch-hardening-proposal.md` | Excel/jq function-name collision dispatch proposal |
 | `grammar.ebnf`              | Formal grammar (matches implementation)        |
 | `sandbox.md`                | Sandbox contract, blocked builtins, budgets    |

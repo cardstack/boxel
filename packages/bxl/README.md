@@ -758,6 +758,7 @@ One-shot pipes too: `echo '{"n":42}' | bxl eval 'n * 2'` prints `84`.
 - [`docs/grammar.ebnf`](./docs/grammar.ebnf) — formal grammar
 - [`docs/sandbox.md`](./docs/sandbox.md) — sandbox contract and threat model
 - [`docs/profiles.md`](./docs/profiles.md) — profile contracts for restricted execution surfaces
+- [`docs/realm-collaboration-use-cases.md`](./docs/realm-collaboration-use-cases.md) — real gateway admission, transition, event, clock, and ledger patterns
 - [`docs/excel-compatibility.md`](./docs/excel-compatibility.md) — what pasted Excel formulas support
 - [`docs/formulas.md`](./docs/formulas.md) — Excel helper matrix (implemented, BXL-only, via jq, won't add)
 - [`docs/api.md`](./docs/api.md) — TypeScript API and option defaults

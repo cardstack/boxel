@@ -11,6 +11,18 @@ versions may change syntax behavior until `1.0.0`. See
 
 ## [Unreleased]
 
+### Added
+
+- **Realm-collaboration regression corpus.** Eighteen runnable examples cover
+  the six gateway evaluation stages observed across 88 static declarations:
+  admission, rejection diagnostics, state transitions, event projections,
+  clock transitions, and decision tests. A source audit command validates a
+  live realm checkout and reports raw-jq root-scope hazards.
+- **Real-world gateway guide.** Documents the envelope contract, host/runtime
+  responsibility boundary, recurring policy patterns, matrix-bot metadata,
+  and five unsafe `inside(.config...)` pipelines found in the ledger-lab
+  snapshot.
+
 ## [0.1.0] — 2026-07-27
 
 ### Fixed

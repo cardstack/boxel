@@ -25,6 +25,8 @@ value, and diagnostics. Docs reference cases by `id`.
 - `formula.ts`       — Excel-style formula helpers (~120 cases)
 - `edge-cases.ts`    — warnings, confusing syntax, hostile text
 - `contexts.ts`      — formulas, constraints, transforms, workflow gates
+- `realm-collaboration-examples.ts` — real gateway admission, transition,
+  event, clock, and decision-test cases from the collaboration realm
 - `excel-paste.ts`   — `=`, `<>`, `^`, `&`, formula coverage
 - `pred-filter.ts`   — `[* .pred]`, `[#N]`, ranges, implicit iteration
 
@@ -47,6 +49,7 @@ And a package-level formula bundle export:
 tsx examples/bxl-150.ts
 tsx examples/formula.ts
 node scripts/run-ts-entry.mjs tests/unit/bxl-realm-formula-bundles-cli.ts
+node scripts/run-ts-entry.mjs tests/unit/realm-collaboration-cli.ts
 ```
 
 Each script prints a pass/fail summary and exits non-zero on failure.
