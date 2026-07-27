@@ -634,6 +634,14 @@ function normalizeEffort(
 }
 
 export function buildModelPolicy(options: {
+  /**
+   * Agent backend. The claude-sonnet-5 DEFAULTS (bootstrap/build/harden)
+   * are Anthropic-SDK model ids and only apply on the claude backend —
+   * other backends (opencode/OpenRouter) have their own model namespace,
+   * where an unqualified Anthropic id is "Model not found". Explicit
+   * --*-model flags always pass through untouched on every backend.
+   */
+  agent?: string;
   fixModel?: string;
   fixEffort?: string;
   phaseSplit?: boolean;
@@ -653,6 +661,11 @@ export function buildModelPolicy(options: {
       harden?: TurnBudget;
     }
   | undefined {
+  let cheapDefault =
+    options.agent === undefined || options.agent === 'claude'
+      ? 'claude-sonnet-5'
+      : undefined;
+
   // Fix turns: short output vs a big primed prefix — in-family effort
   // reduction wins (cache preserved); family switch is explicit opt-in.
   let fixModel =
@@ -692,14 +705,17 @@ export function buildModelPolicy(options: {
   // Hardening turns write QUnit test files against an already-shipped,
   // already-reviewed card — mechanical translation work with the test
   // step as its gate, so the cheap tier is the default.
-  policy.harden = { model: 'claude-sonnet-5', effort: 'medium' };
+  policy.harden = {
+    ...(cheapDefault ? { model: cheapDefault } : {}),
+    effort: 'medium',
+  };
 
   // Bootstrap: plans the project and writes tracker JSON — long mechanical
   // output where the family switch beats flagship cost, like build turns.
   let bootstrapModel =
     options.bootstrapModel === 'inherit'
       ? undefined
-      : (options.bootstrapModel ?? 'claude-sonnet-5');
+      : (options.bootstrapModel ?? cheapDefault);
   policy.bootstrap = {
     ...(bootstrapModel ? { model: bootstrapModel } : {}),
     effort: normalizeEffort(options.bootstrapEffort, 'medium'),
@@ -714,7 +730,7 @@ export function buildModelPolicy(options: {
     let buildModel =
       options.buildModel === 'inherit'
         ? undefined
-        : (options.buildModel ?? 'claude-sonnet-5');
+        : (options.buildModel ?? cheapDefault);
     policy.build = {
       ...(buildModel ? { model: buildModel } : {}),
       effort: normalizeEffort(options.buildEffort, 'medium'),

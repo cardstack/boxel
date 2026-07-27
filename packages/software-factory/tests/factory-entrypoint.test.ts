@@ -800,6 +800,22 @@ module('factory-entrypoint > buildModelPolicy bootstrap budget', function () {
       effort: 'medium',
     });
   });
+
+  test('non-claude backends get no Anthropic model defaults', function (assert) {
+    // The sonnet defaults are Anthropic-SDK ids; on opencode/OpenRouter
+    // they would resolve to "Model not found". Effort budgets still apply;
+    // explicit flags still pass through.
+    let policy = buildModelPolicy({ agent: 'openrouter', phaseSplit: true });
+    assert.deepEqual(policy?.bootstrap, { effort: 'medium' });
+    assert.deepEqual(policy?.build, { effort: 'medium' });
+    assert.deepEqual(policy?.harden, { effort: 'medium' });
+
+    let explicit = buildModelPolicy({
+      agent: 'openrouter',
+      buildModel: 'anthropic/claude-sonnet-4',
+    });
+    assert.strictEqual(explicit?.bootstrap?.model, undefined);
+  });
 });
 
 module('factory-entrypoint > --through phase parsing', function () {
