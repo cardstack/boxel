@@ -6,7 +6,6 @@ import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 
 import ArchiveIcon from '@cardstack/boxel-icons/archive';
-import CircleAlert from '@cardstack/boxel-icons/circle-alert';
 import CopyIcon from '@cardstack/boxel-icons/copy';
 import FileSettingsIcon from '@cardstack/boxel-icons/file-settings';
 import Home from '@cardstack/boxel-icons/home';
@@ -33,6 +32,7 @@ import {
   Lock,
   Star,
   StarFilled,
+  Warning as WarningIcon,
 } from '@cardstack/boxel-ui/icons';
 
 import {
@@ -242,18 +242,19 @@ export default class Workspace extends Component<Signature> {
               </div>
             </div>
 
-            <div class='delete-modal__warning-box'>
-              <CircleAlert class='delete-modal__warning-icon' />
-              <div class='delete-modal__warning-content'>
-                <p class='delete-modal__warning-text'>
-                  <strong>
-                    This permanently deletes the workspace and any custom
-                    domains tied to it.
-                  </strong>
-                  <strong>
-                    Links to cards in this workspace may stop working elsewhere.
-                  </strong>
-                </p>
+            <div class='delete-modal__warning warning'>
+              <WarningIcon
+                class='delete-modal__warning-icon'
+                width='20'
+                height='20'
+                role='presentation'
+              />
+              <div class='delete-modal__warning-body'>
+                <div>
+                  This permanently deletes the workspace and any custom domains
+                  tied to it. Links to cards in this workspace may stop working
+                  elsewhere.
+                </div>
                 {{#if this.hasPublishedRealms}}
                   <div class='delete-modal__realms'>
                     <p class='delete-modal__realms-title'>
@@ -272,7 +273,9 @@ export default class Workspace extends Component<Signature> {
             </div>
 
             {{#if this.deleteError}}
-              <p class='delete-modal__error'>{{this.deleteError}}</p>
+              <div class='delete-modal__warning error' data-test-delete-error>
+                {{this.deleteError}}
+              </div>
             {{/if}}
           </:content>
           <:footer>
@@ -840,10 +843,6 @@ export default class Workspace extends Component<Signature> {
         margin-top: 0;
       }
       .delete-modal__warning-icon {
-        width: var(--boxel-icon-lg);
-        height: var(--boxel-icon-lg);
-        min-width: var(--boxel-icon-lg);
-        color: var(--boxel-danger);
         flex-shrink: 0;
       }
       .delete-modal__workspace-card {
@@ -892,27 +891,30 @@ export default class Workspace extends Component<Signature> {
         font: var(--boxel-font-sm);
         color: var(--boxel-450);
       }
-      .delete-modal__warning-box {
-        background: var(--boxel-danger-bg);
-        border-radius: var(--boxel-border-radius-lg);
-        padding: var(--boxel-sp);
+      .delete-modal__warning {
         display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-sm);
+        border-radius: var(--boxel-border-radius-lg);
+        font: var(--boxel-font-sm);
+      }
+      .delete-modal__warning.warning {
         flex-direction: row;
         align-items: flex-start;
         gap: var(--boxel-sp-sm);
-      }
-      .delete-modal__warning-content {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-sm);
-      }
-      .delete-modal__warning-text {
-        margin: 0;
-        font: 500 var(--boxel-font-sm);
+        background-color: var(--boxel-warning-200);
         color: var(--boxel-dark);
+      }
+      .delete-modal__warning.error {
+        border: 1px solid var(--boxel-error-200);
+        background-color: rgb(from var(--boxel-error-200) r g b / 8%);
+        color: var(--boxel-error-200);
+      }
+      .delete-modal__warning-body {
         display: flex;
         flex-direction: column;
-        gap: var(--boxel-sp-2xs);
+        gap: var(--boxel-sp-xs);
       }
       .delete-modal__realms {
         display: flex;
@@ -936,11 +938,6 @@ export default class Workspace extends Component<Signature> {
         font: var(--boxel-font-sm);
         color: var(--boxel-dark);
         list-style: disc;
-      }
-      .delete-modal__error {
-        margin: 0;
-        font: 500 var(--boxel-font-sm);
-        color: var(--boxel-danger);
       }
       .delete-modal__footer {
         display: flex;
