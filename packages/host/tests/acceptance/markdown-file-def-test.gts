@@ -516,6 +516,28 @@ module('Acceptance | markdown BFM card references', function (hooks) {
       }
     }
 
+    // A rendered template alone doesn't prove the slot is visible — the
+    // collapse bug left the instance in the DOM at zero size. Pin the
+    // footprint on the slot the collapse hit hardest.
+    assert
+      .dom(
+        '[data-test-markdown-bfm-block-file]:has([data-test-markdown-isolated])',
+      )
+      .hasAttribute(
+        'style',
+        /min-height: 18\.75rem/,
+        'block isolated file slot carries a growable min-height',
+      );
+    assert
+      .dom(
+        '[data-test-markdown-bfm-inline-file]:has([data-test-markdown-isolated])',
+      )
+      .hasAttribute(
+        'style',
+        /width: 24rem/,
+        'inline isolated file slot carries the shared footprint',
+      );
+
     assert
       .dom('[data-test-markdown-bfm-unresolved-inline]')
       .doesNotExist('no unresolved inline file placeholders remain');

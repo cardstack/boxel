@@ -272,14 +272,18 @@ export default class RenderedMarkdown extends Component<Signature> {
           let format: CardSlotFormat = derived.format;
           let sizeStyle: string | undefined = derived.sizeStyle;
 
-          // Non-atom resolved slots carry a footprint so the instance occupies
-          // a definite box instead of collapsing (isolated/inline-embedded
+          // Non-atom slots carry a footprint so the instance occupies a
+          // definite box instead of collapsing (isolated/inline-embedded
           // default templates lay out at 100%). Fitted uses its requested
-          // dimensions; embedded/isolated get shared defaults. Same helper as
-          // the other render surfaces so footprints stay in lockstep.
-          let resolvedStyleRaw = bfmResolvedEmbedStyle(format, kind, sizeStyle);
-          let resolvedStyle: ReturnType<typeof htmlSafe> | undefined =
-            resolvedStyleRaw ? htmlSafe(resolvedStyleRaw) : undefined;
+          // dimensions; embedded/isolated get shared defaults. The same style
+          // goes on the loading shimmer and broken-link box so the layout
+          // doesn't jump as the slot transitions between states, and the same
+          // helper drives the other render surfaces so footprints stay in
+          // lockstep.
+          let styleRaw = bfmResolvedEmbedStyle(format, kind, sizeStyle);
+          let style: ReturnType<typeof htmlSafe> | undefined = styleRaw
+            ? htmlSafe(styleRaw)
+            : undefined;
 
           let resolvedUrl = resolveUrl(rawUrl, baseUrl);
 
@@ -293,7 +297,7 @@ export default class RenderedMarkdown extends Component<Signature> {
                 state: 'resolved',
                 format,
                 file,
-                style: resolvedStyle,
+                style,
               });
               continue;
             }
@@ -307,7 +311,7 @@ export default class RenderedMarkdown extends Component<Signature> {
                 state: 'resolved',
                 format,
                 card,
-                style: resolvedStyle,
+                style,
               });
               continue;
             }
@@ -315,7 +319,6 @@ export default class RenderedMarkdown extends Component<Signature> {
 
           // No matching instance yet: show the sized loading shimmer until the
           // load settles (showFallback), then fall back to the broken-link box.
-          let style = sizeStyle ? htmlSafe(sizeStyle) : undefined;
           if (!showFallback) {
             slots.push({
               element: el,
@@ -874,8 +877,9 @@ export default class RenderedMarkdown extends Component<Signature> {
 
         /* Placeholder footprint shared by loading + broken states. The
            default block sizes approximate the eventual card so the layout does
-           not jump when the card resolves; explicit fitted dimensions arrive
-           as an inline style that overrides these. */
+           not jump when the card resolves; the slot's shared inline footprint
+           (fitted dimensions, inline embedded/isolated defaults, block
+           isolated min-height) overrides these when present. */
         .markdown-bfm-loading--embedded,
         .markdown-bfm-broken--embedded {
           width: 100%;

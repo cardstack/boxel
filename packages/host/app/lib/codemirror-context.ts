@@ -63,9 +63,10 @@ export interface CardWidgetTarget {
   // 'card' refs (`:card[URL]`) resolve to CardDef instances; 'file' refs
   // (`:file[URL]`) resolve to FileDef instances.
   refType: 'card' | 'file';
-  // Inline sizing (`width`/`height`, plus `overflow: hidden` for fitted) derived
-  // from the directive's size specifier. Undefined for non-fitted formats.
-  // Mirrors the style the saved/preview markdown renderers apply.
+  // Inline sizing derived from the directive's format — fitted dimensions plus
+  // `overflow: hidden`, or the shared non-atom footprint from
+  // `bfmResolvedEmbedStyle`. Undefined for atom and block embedded. Mirrors
+  // the style the saved/preview markdown renderers apply.
   style?: string;
 }
 

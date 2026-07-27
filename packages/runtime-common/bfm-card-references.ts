@@ -238,16 +238,17 @@ export function bfmRefFormatAndSize(
 }
 
 /**
- * Inline style for a *resolved* BFM embed slot so `isolated` / `embedded` /
- * `fitted` occupy a definite footprint instead of collapsing to zero.
+ * Inline style for a BFM embed slot so `isolated` / `embedded` / `fitted`
+ * occupy a definite footprint instead of collapsing to zero. Applied to the
+ * resolved instance and to its loading-shimmer / broken-link placeholders
+ * alike, so the layout doesn't jump as a slot transitions between states.
  *
  * The default `isolated` and (inline) `embedded` card/file templates lay out
  * with `width`/`height: 100%`, which resolves against a shrink-wrapping
  * inline-block — or an unbounded block — and collapses. Every render surface
  * (the saved `MarkdownTemplate`, the host preview panel, the CodeMirror source
- * editor, and the embed chooser preview) shares this helper so a resolved
- * embed occupies the same footprint everywhere, matching the loading/broken
- * placeholders.
+ * editor, and the embed chooser preview) shares this helper so an embed
+ * occupies the same footprint everywhere.
  *
  * `fittedSizeStyle` is the `width`/`height` string that `bfmRefFormatAndSize`
  * derives for a fitted spec; it is ignored for the other formats.
