@@ -2,13 +2,21 @@
 //
 // A fresh `pnpm install`-only checkout is missing several build artifacts and
 // tool binaries that the factory needs, and historically each surfaced as a
-// separate opaque crash from deep inside a run (CS-12186). This module detects
-// all of them up front so the entrypoint can fail once with a single
-// actionable message, and so `pnpm factory:setup` can provision them.
+// separate opaque crash from deep inside a run. This module detects all of them
+// up front so the entrypoint can fail once with a single actionable message, and
+// so `pnpm factory:setup` can provision them.
 //
 // It deliberately imports nothing from `@cardstack/boxel-cli` — one of the
 // prerequisites it checks for is boxel-cli's own `dist/api.js`, so importing it
 // here would defeat the purpose (the import would crash before the check runs).
+//
+// That constraint is load-bearing for more than this file: `factory:setup` is
+// what *builds* `dist/api.js`, and it reaches this module through
+// `scripts/factory-setup.ts` → `setup-logger.ts` → `logger.ts`. Every link in
+// that chain has to stay boxel-cli-free. If one of them grows a runtime import
+// of `@cardstack/boxel-cli/api`, `factory:setup` starts crashing on exactly the
+// fresh checkout it exists to fix, and the failure won't look related to
+// whatever change caused it.
 
 import { existsSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -17,6 +25,16 @@ import { join } from 'node:path';
 export const MIN_NODE_MAJOR = 24;
 // Matches `.nvmrc` and root package.json `devEngines.runtime`.
 export const PINNED_NODE = '24.17.0';
+
+// Whether argv is asking for usage. Lives here, apart from the usage text it
+// guards, because the CLI has to answer this question *before* importing the
+// entrypoint module — that import pulls in boxel-cli, which is one of the
+// prerequisites that may be missing. This module is the one both sides can
+// import, so both read the same rule instead of keeping their own copy.
+export function wantsFactoryEntrypointHelp(argv: string[]): boolean {
+  let normalized = argv[0] === '--' ? argv.slice(1) : argv;
+  return normalized.includes('--help');
+}
 
 export interface Prerequisite {
   id: 'node' | 'boxel-cli-api' | 'host-dist' | 'playwright-chromium';

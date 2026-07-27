@@ -1,7 +1,7 @@
 // This should be first
 import '../src/setup-logger.ts';
 
-// Idempotent bootstrap for `pnpm factory:go` on a fresh checkout (CS-12186).
+// Idempotent bootstrap for `pnpm factory:go` on a fresh checkout.
 // Builds the boxel-cli API bundle, builds the host app in dev mode (so the
 // test harness has its `dist/tests/index.html` entry), and downloads the
 // Playwright Chromium headless-shell binary — skipping any step whose artifact

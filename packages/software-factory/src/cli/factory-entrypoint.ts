@@ -5,26 +5,22 @@ import { configureLogger, logger, setLogTimestampsEnabled } from '../logger.ts';
 import {
   formatMissingPrerequisites,
   missingPrerequisites,
+  wantsFactoryEntrypointHelp,
 } from '../preflight.ts';
 
 let log = logger('factory-entrypoint');
 
-function wantsHelp(argv: string[]): boolean {
-  let normalized = argv[0] === '--' ? argv.slice(1) : argv;
-  return normalized.includes('--help');
-}
-
 async function main(): Promise<void> {
   let argv = process.argv.slice(2);
-  let helpRequested = wantsHelp(argv);
+  let helpRequested = wantsFactoryEntrypointHelp(argv);
 
   // Preflight BEFORE importing anything from @cardstack/boxel-cli. That import
   // resolves to boxel-cli/dist/api.js — one of the build artifacts a fresh
-  // checkout is missing (CS-12186) — so a missing prerequisite would otherwise
-  // crash at module load with an opaque ERR_MODULE_NOT_FOUND before any of our
-  // code runs. Report every missing prerequisite at once and point at
-  // `pnpm factory:setup`. Skipped for --help so usage stays available on an
-  // otherwise-provisioned checkout.
+  // checkout is missing — so a missing prerequisite would otherwise crash at
+  // module load with an opaque ERR_MODULE_NOT_FOUND before any of our code runs.
+  // Report every missing prerequisite at once and point at `pnpm factory:setup`.
+  // Skipped for --help so usage stays available on an otherwise-provisioned
+  // checkout.
   if (!helpRequested) {
     let missing = missingPrerequisites();
     if (missing.length > 0) {
@@ -64,13 +60,12 @@ async function main(): Promise<void> {
     getFactoryEntrypointUsage,
     parseFactoryEntrypointArgs,
     runFactoryEntrypoint,
-    wantsFactoryEntrypointHelp,
   } = entrypoint;
   let { FactoryBriefError } = briefModule;
   let { BoxelCLIClient } = cli;
 
   try {
-    if (wantsFactoryEntrypointHelp(argv)) {
+    if (helpRequested) {
       console.log(getFactoryEntrypointUsage());
       return;
     }
