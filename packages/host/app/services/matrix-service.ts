@@ -516,7 +516,7 @@ export default class MatrixService extends Service {
                 // start(); here we log and leave the available-realms list as
                 // it was.
                 try {
-                  await this.applyTrustedRealmServersAccountData(realmServers);
+                  await this.assembleRealmsFromTrustedServers(realmServers);
                 } catch (err) {
                   console.error(
                     'Failed to assemble realms from trusted servers in app.boxel.realm-servers account data',
@@ -1409,11 +1409,15 @@ export default class MatrixService extends Service {
     if (trustedServers.length === 0) {
       return;
     }
-    await this.applyTrustedRealmServersAccountData(trustedServers);
+    await this.assembleRealmsFromTrustedServers(trustedServers);
   });
 
-  // Re-assemble the available-realms list from a runtime
-  // `app.boxel.realm-servers` account-data event. Unlike the fail-loud boot
+  // The one procedure that builds the available-realms list: ask each
+  // trusted realm server via `_realm-auth` which realms this user has
+  // (the answer carries the realm URLs AND a JWT per realm), then
+  // replace the user entries and log in. Boot runs this, the
+  // `app.boxel.realm-servers` listener runs it, and the reconcile task
+  // re-runs it when a change signal arrives. Unlike the fail-loud boot
   // assembly, an event-time refresh must be conservative: because
   // `fetchUserRealmsFromTrustedServers` now returns a partial list when a
   // trusted server is unreachable (rather than throwing), replacing the list
@@ -1422,7 +1426,7 @@ export default class MatrixService extends Service {
   // merge (add newly-discovered realms, never remove) and let the retry
   // reconcile; only a fully reachable assembly is authoritative enough to
   // remove realms. Called by the AccountData listener and directly by tests.
-  async applyTrustedRealmServersAccountData(realmServers: string[]) {
+  async assembleRealmsFromTrustedServers(realmServers: string[]) {
     let realmURLs =
       await this.realmServer.fetchUserRealmsFromTrustedServers(realmServers);
     if (this.realmServer.unreachableRealmServers.length > 0) {

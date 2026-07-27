@@ -514,7 +514,7 @@ module(
 
       // The server goes down; a runtime account-data refresh arrives.
       setRealmAuthFailure(true);
-      await matrixService.applyTrustedRealmServersAccountData([
+      await matrixService.assembleRealmsFromTrustedServers([
         testRealmServerURL,
       ]);
 
