@@ -709,7 +709,7 @@ async function runGlintCheck(
         file: originalFile.path,
         line: parseInt(lineStr, 10),
         column: parseInt(colStr, 10),
-        message,
+        message: explainDiagnostic(tsCode, message),
       });
     }
 
@@ -731,6 +731,28 @@ async function runGlintCheck(
       // best-effort cleanup
     }
   }
+}
+
+/**
+ * Turn a few cryptic TS diagnostics into actionable guidance for card
+ * authors. The raw text is accurate but doesn't say what to change.
+ */
+function explainDiagnostic(tsCode: string, message: string): string {
+  // TS1206 "Decorators are not valid here." Card code hits this when a
+  // decorator (`@tracked`, `@field`) sits on a member of a format-class
+  // *expression* (`static isolated = class { … }`). TypeScript's legacy
+  // decorators are only allowed on class *declarations*, so this pattern
+  // can't type-check even though it runs. The fix is to move the reactive
+  // state into a top-level component the format class renders.
+  if (tsCode === 'TS1206') {
+    return (
+      `${message} Decorators like @tracked aren't allowed inside a ` +
+      `format-class expression (e.g. \`static isolated = class { … }\`). ` +
+      `Move reactive state into a top-level component that the format ` +
+      `class renders.`
+    );
+  }
+  return message;
 }
 
 // ---------------------------------------------------------------------------
