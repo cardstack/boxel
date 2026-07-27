@@ -490,6 +490,12 @@ export async function showAllCards(page: Page) {
   }
   if ((await libraryTab.count()) > 0) {
     await libraryTab.click();
+    // The Library opens on "Everything", which lists a card instance twice —
+    // once as the instance and once as the file-meta row for its `.json` — and
+    // both rows carry the same extension-stripped `data-test-cards-grid-item`.
+    // Selecting "Cards" narrows to instances only, so a locator keyed on a card
+    // id resolves to exactly one element, matching CardsGrid's "All Cards".
+    await page.locator(`[data-test-workspace-filter="cards"]`).click();
   }
 }
 

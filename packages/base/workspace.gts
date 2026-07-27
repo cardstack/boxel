@@ -5,14 +5,24 @@ import { htmlSafe, type SafeString } from '@ember/template';
 import { cached, tracked } from '@glimmer/tracking';
 import { restartableTask, timeout } from 'ember-concurrency';
 import { modifier } from 'ember-modifier';
-import { TrackedArray } from 'tracked-built-ins';
+import { TrackedArray, TrackedObject, TrackedSet } from 'tracked-built-ins';
 
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import BooleanField from './boolean';
-// host-mode mutation: publish is a registered host tool (tools/index.ts)
-import PublishRealmCommand from '@cardstack/boxel-host/tools/publish-realm';
-import { PublishRealmInput } from './command';
+// host-mode mutation: publish and unpublish are registered host tools
+// (tools/index.ts shims them onto the loader's virtual network, so these
+// specifiers resolve for card code in operator mode and under prerender)
+import GetPublishedRealmsTool from '@cardstack/boxel-host/tools/get-published-realms';
+import PublishRealmTool from '@cardstack/boxel-host/tools/publish-realm';
+import UnpublishRealmTool from '@cardstack/boxel-host/tools/unpublish-realm';
+import {
+  GetPublishedRealmsInput,
+  PublishRealmInput,
+  UnpublishRealmInput,
+  type PublishedRealmInfo,
+  type PublishTargetResult,
+} from './command';
 
 import LayoutGridPlusIcon from '@cardstack/boxel-icons/layout-grid-plus';
 import Captions from '@cardstack/boxel-icons/captions';
@@ -158,30 +168,42 @@ function homeModulesOf(model: Partial<Workspace>): string[] {
   return configured;
 }
 
+interface PublishedSite {
+  url: string;
+  host: string;
+  when?: string;
+}
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
+}
+
+// One row of the hosting list. `at` is an epoch-ms timestamp in whichever form
+// its source hands over — a number from meta.realmInfo, a string from the
+// get-published-realms tool — and is absent for a destination the server has
+// no publish timestamp for, which must read as "no date" rather than 1970.
+function publishedSite(url: string, at: unknown): PublishedSite {
+  let ms = at == null || at === '' ? NaN : Number(at);
+  return {
+    url,
+    host: hostOf(url),
+    when: Number.isFinite(ms) ? relativeTime(ms) : undefined,
+  };
+}
+
 // published sites, read synchronously off meta.realmInfo (source-realm
 // shape: lastPublishedAt is a map of publishedRealmURL → epoch-ms string)
-function publishedSitesOf(
-  model: Partial<Workspace>,
-): { url: string; host: string; when?: string }[] {
+function publishedSitesOf(model: Partial<Workspace>): PublishedSite[] {
   let info = model[realmInfo];
   let published = info?.lastPublishedAt;
   if (!published || typeof published !== 'object') {
     return [];
   }
-  return Object.entries(published).map(([url, at]) => {
-    let host: string;
-    try {
-      host = new URL(url).host;
-    } catch {
-      host = url;
-    }
-    let ms = Number(at);
-    return {
-      url,
-      host,
-      when: Number.isFinite(ms) ? relativeTime(ms) : undefined,
-    };
-  });
+  return Object.entries(published).map(([url, at]) => publishedSite(url, at));
 }
 
 // Types that are machinery rather than content — the Home inventory folds
@@ -668,6 +690,7 @@ class Isolated extends Component<typeof Workspace> {
                   type='button'
                   class='rail-row
                     {{if (eq option.id this.activeFilter.id) "selected"}}'
+                  data-test-workspace-filter={{option.id}}
                   {{on 'click' (this.selectFilter option)}}
                 >
                   {{#let (this.iconComponent option) as |Icon|}}
@@ -689,6 +712,7 @@ class Isolated extends Component<typeof Workspace> {
                       type='button'
                       class='rail-row type
                         {{if (eq option.id this.activeFilter.id) "selected"}}'
+                      data-test-workspace-filter={{option.id}}
                       {{on 'click' (this.selectFilter option)}}
                     >
                       {{#if (this.iconHtml option)}}
@@ -726,6 +750,7 @@ class Isolated extends Component<typeof Workspace> {
                     type='button'
                     class='rail-row type
                       {{if (eq option.id this.activeFilter.id) "selected"}}'
+                    data-test-workspace-filter={{option.id}}
                     {{on 'click' (this.selectFilter option)}}
                   >
                     {{#if (this.iconHtml option)}}
@@ -2853,10 +2878,22 @@ class Isolated extends Component<typeof Workspace> {
     // Bound hydration and federated-search scope. Default to SEARCH_PAGE_SIZE
     // but let a caller that needs fewer (e.g. a single-row preview) request a
     // smaller page.
-    return store.search(
-      { page: { size: SEARCH_PAGE_SIZE }, ...query } as Query,
-      [realm],
-    );
+    try {
+      return await store.search(
+        { page: { size: SEARCH_PAGE_SIZE }, ...query } as Query,
+        [realm],
+      );
+    } catch (e) {
+      // These searches feed passive panels — the Home inventory, the recent
+      // preview, the Activity feed — every one of which reads fine as empty.
+      // The realm can also be unsearchable for reasons the card can't fix: the
+      // host refuses to mint a token for a realm on a different realm server
+      // than its own, so a Workspace rendered from a foreign realm server
+      // rejects here on every panel. Degrade to empty instead of letting the
+      // rejection escape the task and surface as an unhandled error.
+      console.warn(`Workspace search failed for realm ${realm}`, e);
+      return [];
+    }
   }; //
 
   // The four library-group rows keep stable identities (@cached, no tracked
@@ -3436,12 +3473,50 @@ export class Workspace extends CardDef {
       return this.args.model.pinnedSize === 'compact' ? 'compact' : 'regular';
     }
 
-    // Hosting: present published sites (free on realmInfo) and mutate
-    // via the registered publish-realm host command. First-time publish
-    // (domain choice) stays in the workspace menu's publish flow.
-    get publishedSites() {
-      return publishedSitesOf(this.args.model);
+    // Hosting: present published sites and mutate them via the registered
+    // publish-realm / unpublish-realm host tools. First-time publish (domain
+    // choice) stays in the host submode's publish flow; this format acts on
+    // destinations that already exist.
+    //
+    // The list starts from `meta.realmInfo`, which is a snapshot taken when the
+    // card was (de)serialized — a mutation here changes hosting state without
+    // changing that snapshot, and unpublish triggers no reindex, so nothing
+    // would rebuild it in-session. Once a mutation lands, re-read the list
+    // through the get-published-realms tool and prefer its answer from then on;
+    // otherwise an unpublished site would keep being listed as live until the
+    // card was reloaded. `TrackedObject` rather than `@tracked` fields because
+    // this is a class expression, where decorators aren't allowed.
+    private hosting = new TrackedObject<{
+      sites: PublishedSite[] | undefined;
+      error: string | undefined;
+    }>({ sites: undefined, error: undefined });
+
+    get publishedSites(): PublishedSite[] {
+      return this.hosting.sites ?? publishedSitesOf(this.args.model);
     }
+
+    get hostingError() {
+      return this.hosting.error;
+    }
+
+    // Re-reads the authoritative list. The tool reports RealmService's own
+    // hosting state, which both mutations write through, so this reflects what
+    // actually happened server-side rather than what was requested.
+    private reloadPublishedSites = async () => {
+      let commandContext = this.args.context?.commandContext;
+      let realm = this.args.model[realmURL]?.href;
+      if (!commandContext || !realm) {
+        return;
+      }
+      let { results } = await new GetPublishedRealmsTool(
+        commandContext,
+      ).execute(new GetPublishedRealmsInput({ realmURL: realm }));
+      // Annotated because this module is also compiled by projects that don't
+      // map `@cardstack/boxel-host/tools/*` and so see the tool as `any`.
+      this.hosting.sites = (results ?? []).map((site: PublishedRealmInfo) =>
+        publishedSite(site.publishedRealmURL, site.lastPublishedAt),
+      );
+    };
 
     get isPublishable() {
       return this.args.model[realmInfo]?.publishable === true;
@@ -3458,16 +3533,83 @@ export class Workspace extends CardDef {
       if (!commandContext || !realm || !urls.length) {
         return;
       }
-      await new PublishRealmCommand(commandContext).execute(
+      this.hosting.error = undefined;
+      let { results } = await new PublishRealmTool(commandContext).execute(
         new PublishRealmInput({
           realmURL: realm,
           publishedRealmURLs: urls,
         }),
       );
+      // Per-destination outcomes come back on the result rather than as a
+      // rejection, so a publish that didn't happen is only visible here.
+      let failure = (results ?? []).find(
+        (result: PublishTargetResult) => result.status === 'error',
+      );
+      if (failure) {
+        this.hosting.error = `Could not republish ${hostOf(
+          failure.publishedRealmURL,
+        )}: ${failure.error || 'unknown error'}`;
+      }
+      // Refresh either way: with the publish timestamps of whatever did land.
+      await this.reloadPublishedSites();
     });
 
     get publishBusy() {
       return this.republishTask.isRunning;
+    }
+
+    unpublish = (publishedRealmURL: string) => () => {
+      this.unpublishTask.perform(publishedRealmURL);
+    };
+
+    // Which site is in flight, so one row can label itself while the others
+    // stay idle — `unpublishTask.isRunning` is true for all of them.
+    private unpublishing = new TrackedSet<string>();
+
+    private unpublishTask = restartableTask(
+      async (publishedRealmURL: string) => {
+        let commandContext = this.args.context?.commandContext;
+        let realm = this.args.model[realmURL]?.href;
+        if (!commandContext || !realm) {
+          return;
+        }
+        this.hosting.error = undefined;
+        this.unpublishing.add(publishedRealmURL);
+        try {
+          let result = await new UnpublishRealmTool(commandContext).execute(
+            new UnpublishRealmInput({
+              realmURL: realm,
+              publishedRealmURL,
+            }),
+          );
+          // The tool maps a rejected request onto an error result instead of
+          // throwing, so leaving the row in place depends on reading it.
+          if (result.status === 'error') {
+            this.hosting.error = `Could not unpublish ${hostOf(
+              publishedRealmURL,
+            )}: ${result.error || 'unknown error'}`;
+            return;
+          }
+          await this.reloadPublishedSites();
+        } finally {
+          this.unpublishing.delete(publishedRealmURL);
+        }
+      },
+    );
+
+    isUnpublishing = (publishedRealmURL: string) =>
+      this.unpublishing.has(publishedRealmURL);
+
+    get unpublishBusy() {
+      return this.unpublishTask.isRunning;
+    }
+
+    // Either mutation blocks both controls: Republish acts on the whole list,
+    // so republishing a destination that is mid-unpublish would put the site
+    // back up. Matches the host submode's modal, which disables its publish
+    // controls whenever an unpublish is running.
+    get hostingBusy() {
+      return this.publishBusy || this.unpublishBusy;
     }
 
     <template>
@@ -3728,6 +3870,17 @@ export class Workspace extends CardDef {
               </div>
               <div class='setting-control'><@fields.workspace /></div>
             </div>
+            {{#if this.hostingError}}
+              <div class='setting'>
+                <div class='setting-text'>
+                  <span class='setting-label'>Hosting</span>
+                  <p
+                    class='setting-help hosting-error'
+                    data-test-hosting-error
+                  >{{this.hostingError}}</p>
+                </div>
+              </div>
+            {{/if}}
             {{#if this.publishedSites.length}}
               {{#each this.publishedSites as |site|}}
                 <div class='setting'>
@@ -3740,6 +3893,17 @@ export class Workspace extends CardDef {
                     {{#if site.when}}
                       <span class='site-when'>{{site.when}}</span>
                     {{/if}}
+                    <button
+                      type='button'
+                      class='publish-btn unpublish-btn'
+                      disabled={{this.hostingBusy}}
+                      data-test-unpublish-site={{site.url}}
+                      {{on 'click' (this.unpublish site.url)}}
+                    >{{if
+                        (this.isUnpublishing site.url)
+                        'Unpublishing…'
+                        'Unpublish'
+                      }}</button>
                   </div>
                 </div>
               {{/each}}
@@ -3753,7 +3917,8 @@ export class Workspace extends CardDef {
                   <button
                     type='button'
                     class='publish-btn'
-                    disabled={{this.publishBusy}}
+                    disabled={{this.hostingBusy}}
+                    data-test-republish
                     {{on 'click' this.republish}}
                   >{{if this.publishBusy 'Publishing…' 'Republish'}}</button>
                 </div>
@@ -3762,8 +3927,8 @@ export class Workspace extends CardDef {
               <div class='setting'>
                 <div class='setting-text'>
                   <span class='setting-label'>Publishing</span>
-                  <p class='setting-help'>Not published. Use Publish in the
-                    workspace menu to put this space on the web.</p>
+                  <p class='setting-help'>Not published. Use Publish in the Host
+                    submode toolbar to put this space on the web.</p>
                 </div>
               </div>
             {{else}}
@@ -3973,6 +4138,21 @@ export class Workspace extends CardDef {
         .publish-btn:disabled {
           opacity: 0.6;
           cursor: default;
+        }
+        /* Sits at the end of the site row, and reads as the destructive
+          counterpart to Republish rather than a second primary action. */
+        .unpublish-btn {
+          margin-left: auto;
+          padding: 5px 10px;
+          font-size: 11.5px;
+          color: var(--grid-ink-quiet);
+        }
+        .unpublish-btn:hover:not(:disabled) {
+          border-color: var(--grid-broken);
+          color: var(--grid-broken);
+        }
+        .hosting-error {
+          color: var(--grid-broken);
         }
         .choice-opt:focus-visible,
         .order-move:focus-visible,
