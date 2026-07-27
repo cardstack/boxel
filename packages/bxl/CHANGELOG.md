@@ -11,6 +11,8 @@ versions may change syntax behavior until `1.0.0`. See
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-07-27
+
 ### Added
 
 - **Realm-collaboration regression corpus.** Eighteen runnable examples cover
@@ -22,6 +24,9 @@ versions may change syntax behavior until `1.0.0`. See
   responsibility boundary, recurring policy patterns, matrix-bot metadata,
   and five unsafe `inside(.config...)` pipelines found in the ledger-lab
   snapshot.
+- **Browser corpus runner.** `npm run demo:realm-collaboration` opens an
+  interactive 18-case results page with stage/status filters and expandable
+  source, input, expected/actual output, and compiled jq.
 
 ## [0.1.0] — 2026-07-27
 
