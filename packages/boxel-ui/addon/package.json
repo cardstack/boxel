@@ -14,7 +14,6 @@
   },
   "scripts": {
     "build": "concurrently \"pnpm:build:*\" --names \"build:\"",
-    "build:js": "echo 'noop'",
     "build:types": "ember-tsc --declaration --emitDeclarationOnly --noEmit false",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
@@ -26,9 +25,7 @@
     "rebuild:icons": "node bin/rebuild-icons.mjs",
     "rebuild:usage": "node bin/rebuild-usage.mjs",
     "generate:component-specs": "node bin/generate-component-specs.mjs",
-    "prepack": "rollup --config",
     "start": "concurrently \"pnpm:start:*\" --names \"start:\"",
-    "start:js": "rollup --config --watch --no-watch.clearScreen",
     "start:types": "ember-tsc --declaration --emitDeclarationOnly --watch",
     "test": "echo 'A v2 addon does not have tests, run tests in test-app'",
     "test:ember": "ember test"
@@ -79,7 +76,6 @@
     "@cardstack/local-types": "workspace:*",
     "@embroider/addon-dev": "^8.0.0",
     "@embroider/macros": "~1.16.5",
-    "@rollup/plugin-babel": "catalog:",
     "@tsconfig/ember": "3.0.1",
     "@types/dompurify": "catalog:",
     "@types/lodash-es": "catalog:",
@@ -101,8 +97,6 @@
     "glimmer-scoped-css": "catalog:",
     "prettier": "catalog:",
     "prettier-plugin-ember-template-tag": "catalog:",
-    "rollup": "catalog:",
-    "rollup-plugin-copy": "catalog:",
     "svgo": "catalog:",
     "@glint/ember-tsc": "catalog:"
   },
@@ -134,7 +128,6 @@
   "files": [
     "addon-main.cjs",
     "declarations",
-    "dist",
     "public"
   ],
   "typesVersions": {

@@ -1006,14 +1006,15 @@ module('factory-skill-loader > curated boxel references', function () {
   test('pending references are still pending', function (assert) {
     // Strict on purpose: once a pending name ships in the built skill,
     // remove it from PENDING_BOXEL_REFERENCES (and any transitional notes
-    // that reference it). expect() accepts the empty case, where the loop
-    // runs no assertions.
-    assert.expect(PENDING_BOXEL_REFERENCES.length);
-    for (let name of PENDING_BOXEL_REFERENCES) {
-      assert.false(
+    // that reference it). Asserted as one comparison over the whole set so
+    // the test still carries an assertion when nothing is pending, and names
+    // every offender at once when something is.
+    assert.deepEqual(
+      PENDING_BOXEL_REFERENCES.filter((name) =>
         existsSync(join(builtRefsDir, name)),
-        `${name} has shipped in the built boxel skill — remove it from PENDING_BOXEL_REFERENCES`,
-      );
-    }
+      ),
+      [],
+      'no pending reference has shipped in the built boxel skill yet — once one does, remove it from PENDING_BOXEL_REFERENCES',
+    );
   });
 });

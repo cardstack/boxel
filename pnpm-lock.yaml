@@ -1379,9 +1379,6 @@ importers:
       '@glint/ember-tsc':
         specifier: 'catalog:'
         version: 1.5.0(typescript@5.9.3)
-      '@rollup/plugin-babel':
-        specifier: 'catalog:'
-        version: 6.1.0(@babel/core@7.29.7)(@types/babel__core@7.20.5)(rollup@4.62.0)
       '@tsconfig/ember':
         specifier: 3.0.1
         version: 3.0.1
@@ -1445,12 +1442,6 @@ importers:
       prettier-plugin-ember-template-tag:
         specifier: 'catalog:'
         version: 2.1.6(prettier@3.8.4)
-      rollup:
-        specifier: 'catalog:'
-        version: 4.62.0
-      rollup-plugin-copy:
-        specifier: 'catalog:'
-        version: 3.5.0
       svgo:
         specifier: 'catalog:'
         version: 3.3.3
