@@ -15,9 +15,12 @@ import { PagePool } from '../prerender/page-pool.ts';
 // PagePool probes a warm tab's main thread before handing it back out: one
 // trivial `page.evaluate` under a short budget. A tab whose thread is free
 // answers in about a millisecond regardless of what its last render did, so
-// a failure means the thread cannot run script at all. That tab is retired
-// along with any sibling sharing its BrowserContext (same renderer process,
-// same JS thread), and the caller re-selects a live tab.
+// a failure means the thread cannot run script at all. That one tab is
+// retired — every pool entry has its own BrowserContext, so its siblings
+// are on their own renderer processes and aren't implicated — and the
+// caller re-selects a live tab. Retiring the affinity's last tab is an
+// affinity teardown, and is skipped entirely when the pool has no
+// replacement to offer.
 
 // Observation record for one stub tab, kept beside the puppeteer-shaped page
 // rather than on it so tests read live state (the page's own methods mutate
@@ -28,26 +31,43 @@ type StubTab = {
   context: unknown;
   closed: boolean;
   evaluateCalls: number;
-  // Flips `evaluate` from "answers immediately" to the failure mode under
-  // test: a tab whose thread never comes back (`'hang'`) or whose target is
-  // gone (`'reject'`).
-  wedge: (mode: 'hang' | 'reject') => void;
+  // Flips `evaluate` between answering immediately and the failure mode
+  // under test: a tab whose thread never comes back (`'hang'`) or whose
+  // target is gone (`'reject'`). `undefined` restores a healthy tab.
+  wedge: (mode?: 'hang' | 'reject') => void;
 };
 
 function makeBrowserStub() {
   let tabs: StubTab[] = [];
+  // When set, every page the stub creates is born wedged. Racing a wedge
+  // against the pool's own tab creation from the test body can't reach the
+  // "no live tab anywhere" state deterministically — the pool wins often
+  // enough that the test passes on a healthy replacement instead of the
+  // path it names.
+  let wedgeAtBirth: 'hang' | 'reject' | undefined;
   let browser = {
     async createBrowserContext() {
       let context: any;
+      let contextTabs: StubTab[] = [];
       context = {
+        // Closing a BrowserContext takes its pages down with it. Modelling
+        // that matters: `#closeEntry` closes the context rather than the
+        // page whenever the entry owns its context, so a no-op here would
+        // leave `closed` false for a tab that really was torn down and any
+        // assertion about a surviving tab would hold vacuously.
+        async close() {
+          for (let tab of contextTabs) {
+            tab.closed = true;
+          }
+        },
         async newPage() {
-          let wedged: 'hang' | 'reject' | undefined;
+          let wedged: 'hang' | 'reject' | undefined = wedgeAtBirth;
           let tab: StubTab = {
             page: undefined,
             context,
             closed: false,
             evaluateCalls: 0,
-            wedge(mode: 'hang' | 'reject') {
+            wedge(mode?: 'hang' | 'reject') {
               wedged = mode;
             },
           };
@@ -81,9 +101,9 @@ function makeBrowserStub() {
           };
           tab.page = page;
           tabs.push(tab);
+          contextTabs.push(tab);
           return page;
         },
-        async close() {},
       };
       return context;
     },
@@ -96,6 +116,12 @@ function makeBrowserStub() {
       async cleanupUserDataDirs() {},
     },
     tabs,
+    wedgeEveryNewPage(mode: 'hang' | 'reject') {
+      wedgeAtBirth = mode;
+      for (let tab of tabs) {
+        tab.wedge(mode);
+      }
+    },
   };
 }
 
@@ -153,19 +179,23 @@ module(basename(import.meta.filename), function (hooks) {
   // `tabHealthProbeMs` is deliberately tiny: the stub answers a healthy
   // probe synchronously, so the budget only bounds how long the wedged
   // cases take to be recognized.
-  function makePool(tabHealthProbeMs: number) {
-    let { manager, tabs } = makeBrowserStub();
+  function makePool(
+    tabHealthProbeMs: number,
+    opts?: { maxPages?: number; disableStandbyRefill?: boolean },
+  ) {
+    let { manager, tabs, wedgeEveryNewPage } = makeBrowserStub();
     let pool = new PagePool({
-      maxPages: 2,
+      maxPages: opts?.maxPages ?? 2,
       serverURL: 'http://localhost',
       browserManager: manager as any,
       boxelHostURL: 'http://localhost:4200',
       standbyTimeoutMs: 500,
       disableFileAdmission: true,
       tabHealthProbeMs,
+      ...(opts?.disableStandbyRefill ? { disableStandbyRefill: true } : {}),
     });
     pools.push(pool);
-    return { pool, tabs };
+    return { pool, tabs, wedgeEveryNewPage };
   }
 
   // Warm affinity 'A', hand its tab back, and leave a standby ready so the
@@ -273,11 +303,11 @@ module(basename(import.meta.filename), function (hooks) {
     second.release();
   });
 
-  test('a sibling tab on its own BrowserContext survives the retirement', async function (assert) {
-    // An affinity's second tab comes from a standby, which owns its own
-    // BrowserContext — so it has its own renderer process and its own JS
-    // thread. Nothing observed about the wedged tab says that thread is
-    // stuck, so the sibling has to keep running.
+  test('a sibling tab of the same affinity survives the retirement', async function (assert) {
+    // Every pool entry gets its own BrowserContext, hence its own renderer
+    // process and its own JS thread, so one tab failing its probe says
+    // nothing about the affinity's other tabs. They keep running and are
+    // each gated by their own probe on their next reuse.
     process.env.PRERENDER_PAGE_POOL_MIN = '2';
     process.env.PRERENDER_PAGE_POOL_MAX = '4';
     process.env.PRERENDER_AFFINITY_TAB_MAX = '2';
@@ -314,17 +344,196 @@ module(basename(import.meta.filename), function (hooks) {
       'the failed probe was recorded',
     );
     await waitForClose(firstTab, 'the wedged tab to be closed');
-    assert.false(
-      siblingTab.closed,
-      'the sibling on its own context was left running',
-    );
+    assert.false(siblingTab.closed, 'the sibling was left running');
     assert.notStrictEqual(
       third.pageId,
       first.pageId,
       'the caller did not get the wedged tab',
     );
+    // The affinity is still live — retiring one of several tabs is not an
+    // affinity teardown, so the realm keeps its warm state.
+    assert.true(
+      pool.getWarmAffinities().includes('A'),
+      'the affinity survives a single-tab retirement',
+    );
 
     third.release();
+  });
+
+  test('an abort cuts the probe short without retiring the tab', async function (assert) {
+    // The probe holds the tab lease and the affinity's admission permit
+    // while it waits, so a caller that goes away has to be released
+    // promptly rather than at the end of the budget. And an abandoned probe
+    // says nothing about the page — concluding "wedged" from it would cost
+    // the pool a warm tab over a cancellation.
+    let budgetMs = 5000;
+    let { pool, tabs } = makePool(budgetMs);
+    await warmAffinityA(pool);
+    tabs[0].wedge('hang');
+
+    let controller = new AbortController();
+    let startedAt = Date.now();
+    // Fire once the probe is in flight, so the abort races the probe rather
+    // than the pre-selection abort check.
+    let abortTimer = setTimeout(() => controller.abort('caller went away'), 25);
+    let outcome = await pool
+      .getPage('A', 'file', { signal: controller.signal })
+      .then(
+        (page) => {
+          page.release();
+          return 'resolved';
+        },
+        (e: Error) => e.name,
+      );
+    clearTimeout(abortTimer);
+    let elapsed = Date.now() - startedAt;
+
+    assert.strictEqual(
+      outcome,
+      'PrerenderCancelledError',
+      'the call bails out on the abort',
+    );
+    assert.true(
+      elapsed < budgetMs / 2,
+      `the probe did not hold the caller for its budget (returned after ${elapsed}ms of ${budgetMs}ms)`,
+    );
+    assert.deepEqual(
+      pool.getUnresponsiveTabSwaps(),
+      {},
+      'nothing was retired on the strength of an abandoned probe',
+    );
+    assert.false(tabs[0].closed, 'the warm tab is still in the pool');
+  });
+
+  test('a wedged tab is handed back rather than erroring the caller', async function (assert) {
+    // Re-selection is bounded, and every tab the pool can produce is
+    // wedged here, so the loop necessarily runs out of options. The caller
+    // must end up holding a tab: the render timeout is a failure mode
+    // callers already handle, whereas a tab-selection error is one the
+    // Prerenderer answers by restarting the whole browser. Whatever it
+    // gets must not be a page already marked closing under it.
+    let budgetMs = 20;
+    let { pool, tabs, wedgeEveryNewPage } = makePool(budgetMs);
+    await warmAffinityA(pool);
+    wedgeEveryNewPage('hang');
+
+    let result = await pool.getPage('A');
+
+    assert.ok(result.pageId, 'the caller still got a tab');
+    assert.true(
+      result.waits.tabProbeMs >= budgetMs,
+      `probe time across the attempts is reported (was ${result.waits.tabProbeMs}ms)`,
+    );
+    let handedBack = tabs.find((t) => t.page === result.page)!;
+    assert.false(
+      handedBack.closed,
+      'the tab handed back is not one that was already closed',
+    );
+    // Retirement stops short of the re-selection budget rather than
+    // emptying the pool of tabs chasing a healthy one.
+    let swaps = pool.getUnresponsiveTabSwaps()['A'] ?? 0;
+    assert.true(swaps >= 1, `the wedged warm tab was retired (was ${swaps})`);
+    assert.true(
+      swaps < 3,
+      `retirement did not consume every re-selection attempt (was ${swaps})`,
+    );
+
+    result.release();
+  });
+
+  test('a wedged tab is kept when the pool has no replacement to offer', async function (assert) {
+    // Retiring the last tab an affinity can get would leave selection with
+    // nothing to return; it throws in that case, and the Prerenderer turns
+    // a non-cancel throw from a visit into a full browser restart. One
+    // realm's wedged tab must not cost every affinity on the server its
+    // warm state, so the gate declines to retire and rides the wedge out.
+    // A pool pinned to a single tab, with that tab bound to the affinity:
+    // no second live tab, no expansion budget, and — because the refill is
+    // off once a tab is in use — no dormant standby either. So there is
+    // provably nothing to swap in. (The refill still warms the pool while
+    // it holds no tabs, which is how the affinity gets its one tab.)
+    for (let key of ['PRERENDER_PAGE_POOL_MIN', 'PRERENDER_PAGE_POOL_MAX']) {
+      delete process.env[key];
+    }
+    process.env.PRERENDER_AFFINITY_TAB_MAX = '1';
+    let { pool, tabs } = makePool(20, {
+      maxPages: 1,
+      disableStandbyRefill: true,
+    });
+    await pool.warmStandbys();
+    let first = await pool.getPage('A');
+    first.release();
+    tabs[0].wedge('hang');
+
+    let result = await pool.getPage('A');
+
+    assert.strictEqual(
+      result.pageId,
+      first.pageId,
+      'the caller was handed the wedged tab rather than an error',
+    );
+    assert.deepEqual(
+      pool.getUnresponsiveTabSwaps(),
+      {},
+      'nothing was retired, because nothing could replace it',
+    );
+    assert.false(tabs[0].closed, 'the wedged tab is still in the pool');
+
+    result.release();
+  });
+
+  test('an abort during a stolen tab’s probe leaves the donor stealable', async function (assert) {
+    // A cross-affinity steal hands out another realm's warm tab, so the
+    // probe covers it too. The steal marks the donor `transitioning` for the
+    // duration of the migration, and the probe is now the longest thing
+    // inside that window — so the abort path has to clear the mark. A
+    // stranded `transitioning` flag is permanent: it bars the tab from every
+    // future steal and from the contraction loop's idleness test.
+    for (let key of ['PRERENDER_PAGE_POOL_MIN', 'PRERENDER_PAGE_POOL_MAX']) {
+      delete process.env[key];
+    }
+    process.env.PRERENDER_AFFINITY_TAB_MAX = '1';
+    let { pool, tabs } = makePool(5000, {
+      maxPages: 1,
+      disableStandbyRefill: true,
+    });
+    await pool.warmStandbys();
+    // 'A' takes the pool's only tab and hands it back, so it is idle and
+    // stealable but cannot be replaced by a standby.
+    let donor = await pool.getPage('A');
+    donor.release();
+    tabs[0].wedge('hang');
+
+    // 'B' is brand new: no tab of its own, no standby, no expansion budget,
+    // so selection falls through to stealing A's idle tab — and probes it.
+    let controller = new AbortController();
+    let abortTimer = setTimeout(() => controller.abort('caller went away'), 25);
+    let stolen = await pool
+      .getPage('B', 'file', { signal: controller.signal })
+      .then(
+        (page) => {
+          page.release();
+          return 'resolved';
+        },
+        (e: Error) => e.name,
+      );
+    clearTimeout(abortTimer);
+    assert.strictEqual(
+      stolen,
+      'PrerenderCancelledError',
+      'the steal was abandoned by the abort',
+    );
+
+    // The donor answers again, so a later steal has no reason to fail —
+    // unless the abandoned migration left the tab marked in transition.
+    tabs[0].wedge();
+    let next = await pool.getPage('C');
+    assert.strictEqual(
+      next.pageId,
+      donor.pageId,
+      'a later affinity could still steal the donor tab',
+    );
+    next.release();
   });
 
   test('the gate is off at probe budget 0 — the wedged tab is handed back out', async function (assert) {

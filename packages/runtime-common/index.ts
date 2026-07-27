@@ -324,9 +324,12 @@ export interface RenderTimeoutDiagnostics {
   // Whether this render landed on a tab that was already bound to its
   // affinity. `true` = warm tab, fast launch + cached BrowserContext
   // fetches. `false` = a freshly spawned or commandeered tab — pays
-  // the cold-start cost. Triage signal: a slow render with
-  // `tabReused=false` is a cold-start tax (look at `tabStartupMs`);
-  // with `tabReused=true` it's a real render-side stall.
+  // the cold-start cost. Triage signal: with `tabReused=true` a slow
+  // render is a real render-side stall. With `false` it's a cold start,
+  // and `tabProbeMs` says which kind: near-zero means the affinity simply
+  // had no warm tab (a cold-start tax — look at `tabStartupMs`), while a
+  // multi-second value means there WAS a warm tab and the liveness probe
+  // retired it, so this render paid for someone else's wedge.
   tabReused?: boolean;
   // Total wall time spent in `PagePool.getPage` before render work
   // began. The `waits` sub-fields below each cover a specific await;

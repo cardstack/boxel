@@ -7,6 +7,7 @@ import {
 import type { ConsoleMessage, HTTPRequest, Page } from 'puppeteer';
 import type { BrowserContext } from 'puppeteer';
 import { resolvePrerenderManagerURL } from './config.ts';
+import { prerenderRenderTimeoutMs } from './prerender-constants.ts';
 import type { BrowserManager } from './browser-manager.ts';
 import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel.ts';
 import { AsyncSemaphore } from './async-semaphore.ts';
@@ -151,6 +152,11 @@ type PoolEntry = {
   // `affinitySnapshot` diagnostic.
   currentQueue?: PrerenderQueue;
   closing?: boolean;
+  // Set once `#closeEntry` has run for this entry. Distinct from `closing`,
+  // which marks a close that has *started* — the teardown parks on the tab
+  // lease, so the two states are far apart in time and only `closed` can
+  // make a second close a no-op.
+  closed?: boolean;
   transitioning?: boolean;
 };
 // BrowserContext shared across all Pages that belong to the same
@@ -176,6 +182,7 @@ type StandbyEntry = {
   lastUsedAt: number;
   queue: TabQueue;
   closing?: boolean;
+  closed?: boolean;
   transitioning?: boolean;
 };
 type Entry = PoolEntry | StandbyEntry;
@@ -233,13 +240,17 @@ const CONSOLE_ERROR_LIMIT = 50;
 // at all — and spending 3s to find that out beats spending the whole
 // render timeout discovering it one step at a time.
 //
-// The budget also has to clear the longest legitimate *synchronous* task
-// a same-affinity sibling tab can hold the shared renderer's thread for
-// (Glimmer flushes a component tree in one go), or a heavy-but-healthy
-// neighbour would read as a wedge. Seconds of uninterrupted synchronous
-// work is already pathological, so 3s leaves real headroom over normal
-// renders while staying 20x inside the timeout it replaces.
+// The margin over that millisecond is the false-positive guard. A pooled
+// tab is idle at hand-off and has its own renderer process, so nothing
+// inside the page competes for its thread; failing a 3s probe takes either
+// a genuine wedge or CPU starvation of the whole box. Three orders of
+// magnitude over the observed cost buys that headroom while staying 20x
+// inside the timeout it replaces.
 const DEFAULT_TAB_HEALTH_PROBE_MS = 3000;
+// Floor for an operator-supplied budget. A probe has to outlast the CDP
+// round trip it is timing (single-digit milliseconds on a healthy tab) by
+// enough margin that normal jitter doesn't read as a wedge.
+const MIN_TAB_HEALTH_PROBE_MS = 250;
 
 export class StandbyTargetNotReadyError extends Error {}
 
@@ -259,6 +270,59 @@ function parsePositiveInt(raw: string | undefined): number | undefined {
   if (raw === undefined || raw === '') return undefined;
   let n = Number(raw);
   if (!Number.isInteger(n) || n < 1) return undefined;
+  return n;
+}
+
+// Resolve the reuse-probe budget from `PRERENDER_TAB_HEALTH_PROBE_MS`.
+//
+// `parsePositiveInt` can't serve here because `0` is meaningful — it turns
+// the gate off — so this parses directly while keeping that helper's two
+// guards, both of which matter for a knob whose zero value is a kill
+// switch. Blank / whitespace-only is treated as unset rather than as `0`:
+// `Number('')` is `0`, so a `PRERENDER_TAB_HEALTH_PROBE_MS=` line in a task
+// definition or a sourced env file would otherwise disable the gate
+// silently. Non-integers are rejected the same way, since a fractional
+// budget below a millisecond fails every probe and would retire every warm
+// tab in the pool.
+//
+// Both bounds fall back to the default rather than to the boundary, because
+// a value outside them is a misconfiguration and the boundaries themselves
+// are bad budgets:
+//
+//   - Below `MIN_TAB_HEALTH_PROBE_MS` the budget is under the cost of the
+//     CDP round trip it is timing, so every reuse fails its probe and the
+//     pool retires its entire warm fleet. `PRERENDER_TAB_HEALTH_PROBE_MS=1`
+//     is a plausible typo with that effect, so it can't be honoured.
+//   - At or above the render timeout the probe is strictly worse than not
+//     probing: it holds the tab lease and the affinity's file-admission
+//     permit for longer than the render it is protecting would have taken
+//     to fail. Staying well under it also keeps the budget inside the range
+//     where `setTimeout` behaves — Node clamps a delay past 2^31−1 ms down
+//     to 1 ms, which would invert the knob into "retire every warm tab".
+//
+// `0` is the one value outside those bounds that is honoured: it is the
+// kill switch, not a budget.
+function parseTabHealthProbeMs(): number {
+  let raw = process.env.PRERENDER_TAB_HEALTH_PROBE_MS;
+  if (raw === undefined || raw.trim() === '') {
+    return DEFAULT_TAB_HEALTH_PROBE_MS;
+  }
+  let n = Number(raw);
+  if (!Number.isInteger(n) || n < 0) {
+    log.warn(
+      `PRERENDER_TAB_HEALTH_PROBE_MS=${raw} invalid (must be an integer >= 0; 0 disables the reuse probe); using ${DEFAULT_TAB_HEALTH_PROBE_MS}`,
+    );
+    return DEFAULT_TAB_HEALTH_PROBE_MS;
+  }
+  if (n === 0) {
+    return 0;
+  }
+  if (n < MIN_TAB_HEALTH_PROBE_MS || n >= prerenderRenderTimeoutMs) {
+    log.warn(
+      `PRERENDER_TAB_HEALTH_PROBE_MS=${n} out of range (must be 0, or between ${MIN_TAB_HEALTH_PROBE_MS} and ${prerenderRenderTimeoutMs - 1}ms); using ${DEFAULT_TAB_HEALTH_PROBE_MS}`,
+    );
+    return DEFAULT_TAB_HEALTH_PROBE_MS;
+  }
   return n;
 }
 
@@ -427,9 +491,10 @@ export class PagePool {
   // Budget for the pre-reuse responsiveness probe; `0` disables the gate
   // entirely and hands warm tabs straight back out.
   #tabHealthProbeMs: number;
-  // Count of warm tabs the probe found unresponsive and swapped out,
-  // keyed by affinity. Read by `getUnresponsiveTabSwaps` for the
-  // fleet-health log line and by tests.
+  // Count of warm tabs the probe found unresponsive and retired, keyed by
+  // the affinity that owned the tab. Read by `getUnresponsiveTabSwaps` for
+  // the fleet-health log line and by tests; cleared with the rest of the
+  // per-affinity state in `closeAll`.
   #unresponsiveTabSwaps = new Map<string, number>();
   // When true, `#acquireFileAdmission` becomes a no-op. Used by existing
   // PagePool unit tests that predate the admission feature and exercise
@@ -594,15 +659,8 @@ export class PagePool {
     this.#disableStandbyRefill = options.disableStandbyRefill ?? false;
     this.#onAffinityDisposed = options.onAffinityDisposed;
     this.#disableFileAdmission = options.disableFileAdmission ?? false;
-    // `parsePositiveInt` rejects `0`, and `0` is the meaningful "turn the
-    // gate off" value here, so parse this one directly. Anything invalid
-    // falls back to the default rather than silently disabling the gate.
-    let envProbeMs = Number(process.env.PRERENDER_TAB_HEALTH_PROBE_MS);
     this.#tabHealthProbeMs =
-      options.tabHealthProbeMs ??
-      (Number.isFinite(envProbeMs) && envProbeMs >= 0
-        ? envProbeMs
-        : DEFAULT_TAB_HEALTH_PROBE_MS);
+      options.tabHealthProbeMs ?? parseTabHealthProbeMs();
     // Resolve the per-affinity file-admission cap.
     //
     // Two ceilings depending on whether the dynamic-pool envelope is
@@ -938,8 +996,9 @@ export class PagePool {
     // Per-stage breakdown so operators can tell "waited for the global
     // render semaphore" (saturation) apart from "waited behind the
     // per-affinity file-admission cap" apart from "waited behind the
-    // affinity's tab queue" apart from "warmed a new tab." All four
-    // are operationally distinct.
+    // affinity's tab queue" apart from "warmed a new tab" apart from
+    // "probed a warm tab for liveness." All five are operationally
+    // distinct.
     waits: {
       semaphoreMs: number;
       admissionMs: number;
@@ -1044,6 +1103,14 @@ export class PagePool {
     // resolving, release the tab we just got so the next
     // queued acquirer isn't blocked, then throw.
     if (signal?.aborted) {
+      // A cross-affinity steal marks its donor `transitioning` while the
+      // migration is in flight, and the success path below clears it. This
+      // return abandons the migration instead, so clear it here too:
+      // `transitioning` excludes the tab from future steals AND from the
+      // contraction loop's idleness test, so leaving it set would strand
+      // the donor — permanently unstealable, and pinning the pool above
+      // its idle floor.
+      entry.transitioning = false;
       releaseTab();
       releaseAdmission?.();
       throwIfAborted(signal);
@@ -1290,6 +1357,7 @@ export class PagePool {
     this.#sharedContexts.clear();
     this.#lru.clear();
     this.#fileAdmission.clear();
+    this.#unresponsiveTabSwaps.clear();
     this.#ensuringStandbys = null;
     this.#creatingStandbys = 0;
   }
@@ -1962,8 +2030,7 @@ export class PagePool {
   // storm, an abandoned transition — and the tab stays in the pool because
   // eviction keys off the *outcome* of the visit that ran on it. That
   // covers a visit whose error reached `#maybeEvict`, but not a visit that
-  // reported success and left the thread busy behind it, and not a tab
-  // starved by a sibling page sharing the same renderer. So the next visit
+  // reported success and left the thread busy behind it. So the next visit
   // routed here stalls from its very first CDP call and only the render
   // timeout ends it, minutes of capacity later.
   //
@@ -1975,62 +2042,121 @@ export class PagePool {
   // its warm caches. Only a thread that cannot run our script at all
   // fails, which is the wedge the eviction rule already exists for.
   //
+  // The probe races the caller's signal as well as its budget. A caller
+  // that has gone away must not keep the tab lease and the affinity's
+  // file-admission permit parked here for the rest of the budget — the
+  // cancel path exists to hand the affinity's capacity back promptly. An
+  // aborted probe draws no conclusion about the tab.
+  //
   // Returns `undefined` when the gate is switched off, so callers can tell
   // "not probed" from "probed and responsive".
   async #probeReusedTab(
     entry: PoolEntry,
     affinityKey: string,
+    signal?: AbortSignal,
   ): Promise<ResponsivenessProbe | undefined> {
     if (this.#tabHealthProbeMs <= 0) {
       return undefined;
     }
-    let probe = await probePageResponsive(entry.page, this.#tabHealthProbeMs);
-    if (!probe.responsive) {
+    let probe = await probePageResponsive(
+      entry.page,
+      this.#tabHealthProbeMs,
+      signal,
+    );
+    if (!probe.responsive && !probe.aborted) {
       log.warn(
         `unresponsive warm tab for ${affinityKey}: pageId=${entry.pageId} ` +
           `did not answer a trivial evaluate within ${this.#tabHealthProbeMs}ms` +
-          (probe.error ? `; evaluate rejected: ${probe.error}` : ''),
+          (probe.error ? `; evaluate failed: ${probe.error}` : ''),
       );
     }
     return probe;
   }
 
-  // Per-affinity count of warm tabs retired by the reuse gate. A rising
-  // count on one affinity says that realm is producing renders that leave
-  // the tab's JS thread busy after the visit ends — the signal that sends
-  // triage to the realm's content rather than to the pool's sizing.
+  // Per-affinity count of warm tabs retired by the reuse gate, accumulated
+  // since the pool last started — `closeAll` clears it, so a browser
+  // restart resets these counts along with the tabs they describe. A rising
+  // count on one affinity is a
+  // pointer at that realm's content rather than at the pool's sizing: its
+  // renders are either leaving the tab's JS thread busy past the end of a
+  // visit, or killing the renderer outright. The probe can't tell those
+  // apart — the per-failure `log.warn` carries the discriminator.
+  //
+  // Floor, not a total: a failure on the last re-selection attempt hands
+  // the tab back instead of retiring it, and isn't counted.
   getUnresponsiveTabSwaps(): Record<string, number> {
     return Object.fromEntries(this.#unresponsiveTabSwaps);
   }
 
-  // Retire a tab that failed its reuse probe, together with every live
-  // sibling sharing its BrowserContext.
+  // Can the pool hand this affinity a different tab if the one it has is
+  // retired?
   //
-  // Chrome gives same-context same-origin pages a single renderer process,
-  // so those siblings share the wedged tab's JS thread and whatever is
-  // holding it starves them too. Siblings that adopted a BrowserContext of
-  // their own — which `#affinityTabMax > 1` can produce, and which
-  // `#closeEntry` already accounts for — get their own thread, and nothing
-  // observed here says it is wedged, so they are left running.
+  // Retiring the last tab an affinity can get is a bad trade. Selection
+  // would find nothing to return and throw `No standby page available for
+  // prerender`, and the Prerenderer turns a non-cancel throw from a visit
+  // into a full browser restart — every affinity on the server loses its
+  // warm tab and BrowserContext because one realm's tab was wedged. Riding
+  // the wedged tab to the render timeout costs one visit instead.
   //
-  // The caller holds the failed tab's lease, so `#closeEntry` parks on the
-  // queue and the close lands once the caller releases. A sibling that's
-  // mid-render parks the same way: it finishes first and is retired on
-  // release, so a slow-but-progressing neighbour is never cut off.
-  async #retireWedgedTabs(
-    entry: PoolEntry,
-    affinityKey: string,
-  ): Promise<void> {
+  // Three ways a replacement can appear, cheapest first: another live tab
+  // already bound to the affinity; a dormant standby waiting to be
+  // commandeered; or expansion budget, which lets the refill create one.
+  // Read synchronously, so a concurrent caller can still take the standby
+  // out from under this decision — in that case selection throws as it
+  // would have anyway. The point is to stop retiring when the pool
+  // demonstrably has nothing, not to reserve the replacement.
+  //
+  // The expansion ceiling is the one THIS caller can reach: the
+  // high-priority tier is only open to callers at or above the threshold,
+  // so reading the tier ceiling for a background caller would claim
+  // headroom it can't actually use.
+  #canReplaceRetiredTab(affinityKey: string, priority: number): boolean {
     let entries = this.#affinityPages.get(affinityKey);
-    let live = entries ? [...entries].filter((e) => !e.closing) : [];
-    let sharing = live.filter((e) => e.context === entry.context);
-    if (sharing.length === live.length) {
-      // Nothing of the affinity survives, which makes this an affinity
-      // teardown: route it through `disposeAffinity` so the affinity-level
-      // bookkeeping runs too — `#onAffinityDisposed` (batch ownership, icon
-      // memo) and the manager notification. Same options a wedged render's
-      // eviction uses, keeping the BrowserContext as an orphan so the
-      // replacement tab still inherits the realm's warm HTTP cache.
+    // The condemned tab is itself live and counted here, so it takes a
+    // second live entry for the affinity to have a tab of its own to fall
+    // back on.
+    let liveCount = entries
+      ? [...entries].filter((entry) => !entry.closing).length
+      : 0;
+    if (liveCount > 1) return true;
+    if (this.#standbys.size > 0) return true;
+    let ceiling =
+      priority >= this.#highPriorityThreshold
+        ? this.#highPriorityMaxPages
+        : this.#maxBurstPages;
+    return this.#maxPages < ceiling;
+  }
+
+  // Retire a tab that failed its reuse probe.
+  //
+  // Scope is the one tab the probe actually condemned. A wedge is a
+  // property of the renderer process behind the page, and every pool entry
+  // gets its own: `#tryClaimOrphanContext` only hands out a shared
+  // BrowserContext whose `pageCount` is 0, and every other way an entry is
+  // created (`#assignStandbyToAffinity`, `#reassignAffinityTab`) brings a
+  // context of its own. So an affinity's other tabs are not implicated by
+  // this one's failure, and each is gated by its own probe on its next
+  // reuse.
+  //
+  // When the condemned tab is the affinity's only live one, retirement is
+  // an affinity teardown, so it routes through `disposeAffinity` to pick up
+  // the affinity-level bookkeeping: `#onAffinityDisposed` (batch ownership,
+  // icon memo), the manager notification, and orphan retention of the
+  // BrowserContext so the replacement tab inherits the realm's warm HTTP
+  // cache. `retainConsoleErrors` is left off: nothing is going to read this
+  // page's console bucket again — the visit that poisoned the tab has
+  // already returned, and each visit resets the bucket at its start rather
+  // than reading a previous visit's — so keeping it would only leak a
+  // per-pageId map entry for a page that is going away.
+  //
+  // The caller holds the tab's lease either way, so `#closeEntry` parks on
+  // the queue and the close lands once the caller releases.
+  async #retireWedgedTab(entry: PoolEntry, affinityKey: string): Promise<void> {
+    let entries = this.#affinityPages.get(affinityKey);
+    let otherLive = entries
+      ? [...entries].filter((e) => e !== entry && !e.closing)
+      : [];
+    if (otherLive.length === 0) {
       try {
         await this.disposeAffinity(affinityKey, {
           awaitIdle: false,
@@ -2041,21 +2167,21 @@ export class PagePool {
       }
       return;
     }
-    for (let victim of sharing) {
-      victim.closing = true;
-      // Keep the entry in `#affinityPages` until Chrome has actually let
-      // go: `closing` filters it from routing, while still counting toward
-      // `#poolEntryCount` so the standby refill can't oversubscribe the
-      // pool against a page that is still resident.
-      void this.#closeEntry(victim).finally(() => {
-        let current = this.#affinityPages.get(affinityKey);
-        if (!current) return;
-        current.delete(victim);
-        if (current.size === 0) {
-          this.#affinityPages.delete(affinityKey);
-        }
+    entry.closing = true;
+    // Keep the entry in `#affinityPages` until Chrome has actually let go:
+    // `closing` filters it from routing, while still counting toward
+    // `#poolEntryCount` so the standby refill can't oversubscribe the pool
+    // against a page that is still resident. `#detachAffinityEntry` does
+    // the rest of the unhooking — LRU key, affinity set, shared-context
+    // accounting — so a retired tab can't strand an affinity key in the
+    // LRU, which would pin `#evictLRUAffinity` on a dead entry forever.
+    void this.#closeEntry(entry)
+      .catch((e) => {
+        log.warn(`Error closing unresponsive tab ${entry.pageId}:`, e);
+      })
+      .finally(() => {
+        this.#detachAffinityEntry(entry);
       });
-    }
     this.#kickStandbyRefill('unresponsive tab retirement');
   }
 
@@ -2079,10 +2205,10 @@ export class PagePool {
   // Bounded so a sustained dispose storm degrades to the prior behavior
   // rather than spinning here.
   //
-  // The same loop carries the second hand-off gate: a warm tab is probed
-  // for main-thread liveness before it is handed back out (see
-  // `#probeReusedTab`). Both gates share the retry budget, since both mean
-  // "the lease we just won is worthless, pick another tab".
+  // The same loop carries the second hand-off gate: a tab that has already
+  // served a render is probed for main-thread liveness before it is handed
+  // back out (see `#probeReusedTab`). Both gates share the retry budget,
+  // since both mean "the lease we just won is worthless, pick another tab".
   async #selectEntryForAffinity(
     affinityKey: string,
     queue: PrerenderQueue,
@@ -2110,50 +2236,97 @@ export class PagePool {
       );
       let lastAttempt = attempt === MAX_RESELECT_ATTEMPTS - 1;
       let reselectReason: string | undefined;
+      // Set when a re-selection would be pointless or harmful, so the loop
+      // hands the caller what it already holds instead of trying again.
+      let handBack = false;
       if (!this.#isEntryLive(result.entry)) {
         reselectReason =
           `acquired lease on a doomed entry ` +
           `(pageId=${result.entry.pageId}) disposed after handoff`;
-      } else if (result.reused) {
-        // Only reuse needs the probe. `reused: false` covers freshly
-        // spawned pages, commandeered standbys, and cross-affinity
-        // steals — none of which is the tab that just finished rendering
-        // for this affinity, and a brand-new page has no prior render to
-        // have been poisoned by.
-        let probe = await this.#probeReusedTab(result.entry, affinityKey);
-        if (probe) {
-          // Probe time is a distinct wait, not tab-queue contention:
-          // `tabQueueMs` is derived by subtracting the startup wait from
-          // the wall time in here, so an unreported probe would inflate it
-          // and read as warm-tab serialization — the signal operators size
-          // the pool from.
-          carriedProbeMs += probe.elapsedMs;
-        }
-        if (probe && !probe.responsive) {
-          reselectReason =
-            `warm tab (pageId=${result.entry.pageId}) failed the ` +
-            `responsiveness probe after ${probe.elapsedMs}ms` +
-            (probe.error ? ` (${probe.error})` : '');
-          // Skipped on the final attempt: retiring the tab and then
-          // handing it back would give the caller a page marked `closing`.
-          if (!lastAttempt) {
-            this.#unresponsiveTabSwaps.set(
-              affinityKey,
-              (this.#unresponsiveTabSwaps.get(affinityKey) ?? 0) + 1,
-            );
-            await this.#retireWedgedTabs(result.entry, affinityKey);
+      } else {
+        // Probe any selection that already served a render, because a wedge
+        // belongs to the page's renderer process rather than to the realm
+        // it rendered for. That's `reused: true` — a warm tab of this
+        // affinity, whether idle or handed over by a parked-waiter
+        // hand-off — plus the cross-affinity steal, which is a warm tab of
+        // a *different* affinity and is identified here by still carrying
+        // the donor's key (`getPage` re-tags it after selection). Freshly
+        // spawned pages and commandeered standbys have no prior render to
+        // have been poisoned by, so they skip it.
+        let donorKey = result.entry.affinityKey;
+        let stolen =
+          !result.reused && donorKey !== null && donorKey !== affinityKey;
+        if (result.reused || stolen) {
+          // The condemned tab is retired under whichever affinity owns it
+          // right now, which for a steal is still the donor.
+          let owningKey = donorKey ?? affinityKey;
+          let probe = await this.#probeReusedTab(
+            result.entry,
+            owningKey,
+            signal,
+          );
+          if (probe) {
+            // Probe time is a distinct wait, not tab-queue contention:
+            // `tabQueueMs` is derived by subtracting the startup wait from
+            // the wall time in here, so an unreported probe would inflate
+            // it and read as warm-tab serialization — the signal operators
+            // size the pool from.
+            carriedProbeMs += probe.elapsedMs;
+          }
+          // An aborted probe says nothing about the tab: the caller is
+          // going away, and the abort check downstream in `getPage` is what
+          // ends this call. Retiring on it would destroy a warm tab over a
+          // cancellation.
+          if (probe && !probe.responsive && !probe.aborted) {
+            reselectReason =
+              `warm tab (pageId=${result.entry.pageId}) failed the ` +
+              `responsiveness probe after ${probe.elapsedMs}ms` +
+              (probe.error ? ` (${probe.error})` : '');
+            // Retirement is conditional on the pool being able to produce
+            // something else, and is skipped on the final attempt where
+            // there is no re-selection left to hand a replacement over.
+            // Retiring with nowhere to go is worse than the stall it
+            // prevents: selection would then have no tab to return and
+            // would throw, and the Prerenderer answers a non-cancel throw
+            // from a visit by restarting the whole browser — so one realm's
+            // wedged tab would cost every affinity on this server its warm
+            // state.
+            if (
+              !lastAttempt &&
+              this.#canReplaceRetiredTab(owningKey, priority)
+            ) {
+              this.#unresponsiveTabSwaps.set(
+                owningKey,
+                (this.#unresponsiveTabSwaps.get(owningKey) ?? 0) + 1,
+              );
+              await this.#retireWedgedTab(result.entry, owningKey);
+            } else {
+              handBack = true;
+            }
+          } else if (probe && !this.#isEntryLive(result.entry)) {
+            // The probe is the only await between winning the lease and
+            // handing the tab over, so the doomed-lease window that
+            // `#isEntryLive` guards is open across it: a concurrent dispose
+            // (auth change, idle sweep, LRU eviction, a render error on a
+            // sibling) can detach this entry while the probe runs.
+            reselectReason =
+              `entry (pageId=${result.entry.pageId}) was disposed while ` +
+              `its liveness probe ran`;
           }
         }
       }
-      if (!reselectReason || lastAttempt) {
+      if (!reselectReason || lastAttempt || handBack) {
         if (reselectReason) {
-          // Out of retries with nothing better to hand over. The visit
-          // proceeds on the tab we have and the render-level timeout owns
-          // the outcome — a slow failure, but a failure the caller already
-          // handles, which beats throwing a tab-selection error at it.
+          // Nothing better to hand over. The visit proceeds on the tab we
+          // have and the render-level timeout owns the outcome: one slow
+          // failure on one affinity, which is the cheapest outcome still
+          // available once every re-selection has been tried or the pool has
+          // nothing to swap in.
           log.warn(
-            `handing back tab for ${affinityKey} despite: ${reselectReason} ` +
-              `(exhausted ${MAX_RESELECT_ATTEMPTS} re-selection attempts)`,
+            `handing back tab for ${affinityKey} despite: ${reselectReason}` +
+              (handBack
+                ? ` (no replacement tab available to swap in)`
+                : ` (exhausted ${MAX_RESELECT_ATTEMPTS} re-selection attempts)`),
           );
         }
         result.tabStartupMs += carriedStartupMs;
@@ -2819,6 +2992,19 @@ export class PagePool {
   }
 
   async #closeEntry(entry: Entry, retainConsoleErrors = false): Promise<void> {
+    // Idempotent. `closing` marks an in-flight close, so it can't stand in
+    // for "already closed" — the flag is set the moment a close begins and
+    // stays set while it parks on the tab lease. A second close of the same
+    // entry would run `#releaseSharedContextForClosedPage` again and
+    // decrement the shared context's `pageCount` for a page that was only
+    // ever counted once, which can drop a context to `0` while a live page
+    // is still attached to it and let the orphan claim hand that context
+    // out for a second page. Reachable whenever a tab is retired
+    // individually and its affinity is disposed before the close lands.
+    if (entry.closed) {
+      return;
+    }
+    entry.closed = true;
     let release: (() => void) | undefined;
     let affinityKey = entry.type === 'pool' ? entry.affinityKey : null;
     try {
