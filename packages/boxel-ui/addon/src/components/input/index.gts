@@ -82,7 +82,7 @@ export interface Signature {
     size?: Values<typeof InputSizes>;
     state?: InputValidationState;
     type?: InputType;
-    value: string | number | boolean | null | undefined;
+    value?: string | number | boolean | null;
   };
   Element: HTMLInputElement | HTMLTextAreaElement | HTMLDivElement;
 }
