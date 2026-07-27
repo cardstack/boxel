@@ -12,7 +12,7 @@ interface TriggerSignature {
 export class FilterTrigger extends GlimmerComponent<TriggerSignature> {
   <template>
     <div class='filter-trigger'>
-      <IconButton @icon={{ListFilter}} width='13px' height='13px' />
+      <IconButton @icon={{ListFilter}} @width='13px' @height='13px' />
       <span class='filter-trigger-text'>
         {{#if @isLoading}}
           Loading...
