@@ -12,8 +12,8 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { restartableTask } from 'ember-concurrency';
 
-import AskAiTool from '@cardstack/boxel-host/commands/ask-ai';
-import { AskAiInput } from './command';
+import UseAiAssistantTool from '@cardstack/boxel-host/commands/ai-assistant';
+import { UseAiAssistantInput } from './command';
 import { tracked } from '@glimmer/tracking';
 
 export class SuggestionField extends FieldDef {
@@ -44,21 +44,24 @@ export class AiAppGenerator extends CardDef {
       }
     };
 
-    executeAskAi = () => {
-      this.askAi.perform();
+    executeGenerateApp = () => {
+      this.generateApp.perform();
     };
 
-    askAi = restartableTask(async () => {
+    generateApp = restartableTask(async () => {
       let toolContext = this.args.context?.toolContext;
       if (!toolContext) {
         throw new Error('No command context found');
       }
 
-      let command = new AskAiTool(toolContext);
+      let command = new UseAiAssistantTool(toolContext);
       await command.execute(
-        new AskAiInput({
+        new UseAiAssistantInput({
+          roomId: 'new',
+          roomName: 'AI App Generator Assistant',
           prompt: this.args.model.promptValue,
           llmMode: 'act',
+          openRoom: true,
         }),
       );
     });
@@ -95,11 +98,11 @@ export class AiAppGenerator extends CardDef {
                 class='create-button'
                 @kind='primary'
                 @size='base'
-                {{on 'click' this.executeAskAi}}
-                disabled={{this.askAi.isRunning}}
+                {{on 'click' this.executeGenerateApp}}
+                disabled={{this.generateApp.isRunning}}
                 data-test-create-this-for-me
               >
-                {{if this.askAi.isRunning 'Creating...' 'Create this for me'}}
+                {{if this.generateApp.isRunning 'Creating...' 'Create this for me'}}
               </BoxelButton>
             </div>
           </div>

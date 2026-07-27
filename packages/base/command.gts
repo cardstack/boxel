@@ -239,17 +239,6 @@ export class CreateInstancesInput extends CardDef {
   @field exampleCard = linksTo(CardDef);
 }
 
-export class AskAiForCardJsonInput extends CreateInstancesInput {
-  @field prompt = contains(MarkdownField);
-  @field llmModel = contains(StringField);
-  @field skillCardIds = containsMany(StringField);
-}
-
-export class AskAiForCardJsonResult extends CardDef {
-  @field payload = contains(JsonField);
-  @field rawOutput = contains(StringField);
-}
-
 export class CreateInstanceResult extends CardDef {
   @field createdCard = linksTo(CardDef);
 }
@@ -581,15 +570,6 @@ export class SummarizeSessionInput extends CardDef {
 
 export class SummarizeSessionResult extends CardDef {
   @field summary = contains(StringField);
-}
-
-export class AskAiInput extends CardDef {
-  @field prompt = contains(StringField);
-  @field llmMode = contains(StringField); // 'ask' or 'act'
-}
-
-export class AskAiOutput extends CardDef {
-  @field response = contains(StringField);
 }
 
 export {
