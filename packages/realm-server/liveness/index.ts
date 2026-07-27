@@ -54,10 +54,28 @@ export function startLivenessResponder({
     host,
     wedgeMs,
   };
-  let worker = new Worker(
-    new URL('./liveness-responder-worker.ts', import.meta.url),
-    { workerData },
-  );
+  let worker: Worker;
+  try {
+    worker = new Worker(
+      new URL('./liveness-responder-worker.ts', import.meta.url),
+      { workerData },
+    );
+  } catch (err) {
+    // The constructor throws synchronously when the thread itself can't be
+    // created — the host is out of thread or memory headroom, say. This runs
+    // during the server's own startup, so letting it escape would turn a
+    // missing operational signal into a server that doesn't boot. Report it and
+    // hand back a responder that does nothing.
+    let error = err instanceof Error ? err : new Error(String(err));
+    log.error(
+      `liveness responder thread could not be started: ${error.message}`,
+    );
+    Sentry.captureException(error);
+    return {
+      listening: Promise.resolve(undefined),
+      stop: async () => {},
+    };
+  }
 
   let resolveListening!: (boundPort: number | undefined) => void;
   let listening = new Promise<number | undefined>((resolve) => {
