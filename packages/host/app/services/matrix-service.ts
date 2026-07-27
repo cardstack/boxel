@@ -1375,12 +1375,6 @@ export default class MatrixService extends Service {
     );
   }
 
-  // How long to wait between catch-up attempts when a change signal
-  // announces a realm that `_realm-auth` doesn't return yet (the realm
-  // server appends to `app.boxel.realms` after creating the realm, but
-  // the enumeration can lag the account-data write).
-  private static RECONCILE_CATCHUP_DELAYS_MS = [1_000, 3_000];
-
   // Bring the available-realms list back in line with server truth after
   // an `app.boxel.realms` change signal. The announced list is used only
   // to DECIDE — never applied as state:
@@ -1388,33 +1382,27 @@ export default class MatrixService extends Service {
   // - announced set equals the current user-realm set → an initial-sync
   //   echo; no-op. This is what preserves the boot assembly.
   // - sets differ (in either direction — additions AND removals) → re-run
-  //   the authoritative trusted-servers assembly.
-  // - an announced realm is still missing after assembly → `_realm-auth`
-  //   lagged the signal; retry on a short bounded backoff. Removals need
-  //   no retry: the assembly is authoritative, so anything it no longer
-  //   advertises is dropped on the first pass. If the announced list
-  //   still disagrees after the budget, the trusted result stands — the
-  //   next signal or boot converges it.
+  //   the authoritative trusted-servers assembly, once.
+  //
+  // One pass is enough because the realm server commits the permission
+  // rows `_realm-auth` reads BEFORE it writes `app.boxel.realms` (see
+  // handle-upsert-realm-user-permission), and the event can't arrive
+  // before the write that caused it — so by signal time the enumeration
+  // is consistent. If that ordering is ever violated, the trusted result
+  // stands and the next signal or boot converges it.
   //
   // Restartable on purpose: a newer signal supersedes an in-flight
-  // reconcile (its retry waits are cancelled and the latest announced
-  // list wins), so back-to-back realm creations coalesce instead of
-  // interleaving assemblies — and destroying the service cancels any
-  // pending retry outright.
+  // reconcile with the latest announced list, and destroying the service
+  // cancels any run in progress.
   reconcileRealmsTask = restartableTask(async (announced: string[]) => {
     let announcedSet = new Set(announced.map((u) => ensureTrailingSlash(u)));
-    let currentSet = () =>
-      new Set<string>(
-        this.realmServer.userRealmIdentifiers.map((u) =>
-          ensureTrailingSlash(u),
-        ),
-      );
-    let setsEqual = (a: Set<string>, b: Set<string>) =>
-      a.size === b.size && [...a].every((x) => b.has(x));
-    let missingAnnounced = () =>
-      [...announcedSet].filter((u) => !currentSet().has(u));
-
-    if (setsEqual(announcedSet, currentSet())) {
+    let currentSet = new Set<string>(
+      this.realmServer.userRealmIdentifiers.map((u) => ensureTrailingSlash(u)),
+    );
+    let setsEqual =
+      announcedSet.size === currentSet.size &&
+      [...announcedSet].every((x) => currentSet.has(x));
+    if (setsEqual) {
       return;
     }
     let trustedServers = await this.getRealmServersFromAccountData();
@@ -1422,19 +1410,6 @@ export default class MatrixService extends Service {
       return;
     }
     await this.applyTrustedRealmServersAccountData(trustedServers);
-    for (let delayMs of MatrixService.RECONCILE_CATCHUP_DELAYS_MS) {
-      if (missingAnnounced().length === 0) {
-        return;
-      }
-      await timeout(delayMs);
-      await this.applyTrustedRealmServersAccountData(trustedServers);
-    }
-    let missing = missingAnnounced();
-    if (missing.length > 0) {
-      console.warn(
-        `Announced realm(s) still absent from the trusted-servers assembly after retries: ${missing.join(', ')} — keeping the trusted result`,
-      );
-    }
   });
 
   // Re-assemble the available-realms list from a runtime
