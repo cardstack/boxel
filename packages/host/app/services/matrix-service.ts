@@ -217,6 +217,12 @@ export default class MatrixService extends Service {
   // gains content at runtime. Login-related side effects (`loginToRealms`,
   // `loadMoreAuthRooms`) still run regardless.
   private trustedRealmServersAuthoritative = false;
+  // The trusted server list backing the authoritative assembly, kept
+  // current by boot and by the realm-servers listener. Needed at
+  // `app.boxel.realms` event time: a realm created mid-session announces
+  // itself only through that legacy event, and re-running the trusted
+  // assembly requires the server list.
+  private trustedRealmServers: string[] = [];
   // Sticky for the lifetime of this instance once a boot assembles from the
   // legacy `app.boxel.realms` list. Keeps later start() calls on the legacy
   // path even after the lazy migration writes `app.boxel.realm-servers`, so
@@ -458,6 +464,35 @@ export default class MatrixService extends Service {
                 await this.realmServer.setAvailableRealmIdentifiers(
                   legacyRealms.map(ri),
                 );
+              } else if (
+                legacyRealms.some(
+                  (url) =>
+                    !this.realmServer.availableRealmIdentifiers.includes(
+                      ri(url),
+                    ),
+                )
+              ) {
+                // A realm created mid-session (boxel-cli, the software
+                // factory, another tab) announces itself ONLY through this
+                // legacy event — `app.boxel.realm-servers` doesn't change
+                // when a realm is added to an already-trusted server. An
+                // event naming a realm we don't have yet is that signal:
+                // re-run the authoritative assembly so the workspace
+                // chooser picks it up without a reload. Initial-sync echoes
+                // carry no new URLs and stay no-ops, preserving the
+                // don't-clobber-boot guarantee above. Best-effort, like the
+                // realm-servers listener: assembly failure must not crash
+                // the app from an async event handler.
+                try {
+                  await this.applyTrustedRealmServersAccountData(
+                    this.trustedRealmServers,
+                  );
+                } catch (err) {
+                  console.error(
+                    'Failed to refresh realms after app.boxel.realms account-data event',
+                    err,
+                  );
+                }
               }
               // Only do this after we've completed our overall login
               if (this.session.isAuthenticated) {
@@ -481,6 +516,9 @@ export default class MatrixService extends Service {
               }
               let realmServers = e.event.content.realmServers as string[];
               this.trustedRealmServersAuthoritative = realmServers.length > 0;
+              if (this.trustedRealmServersAuthoritative) {
+                this.trustedRealmServers = realmServers;
+              }
               if (this.trustedRealmServersAuthoritative) {
                 // A server-pushed account-data event must not crash the app:
                 // assembly can reject (e.g. fetchUserRealmsFromTrustedServers
@@ -1072,6 +1110,9 @@ export default class MatrixService extends Service {
         // this flag here makes that re-emission a no-op for the available-
         // realms list — the realm-servers path is the authoritative source.
         this.trustedRealmServersAuthoritative = useTrustedServers;
+        if (useTrustedServers) {
+          this.trustedRealmServers = trustedServers;
+        }
         let userRealmURLs: string[];
         if (useTrustedServers) {
           if (isTesting())
@@ -2131,6 +2172,7 @@ export default class MatrixService extends Service {
     }
     this.setPostLoginCompleted(false, 'resetState');
     this.bootedFromLegacyRealmsList = false;
+    this.trustedRealmServers = [];
     this._isLoadingMoreAIRooms = false;
     this.messagesToSend.clear();
     this.cardsToSend.clear();

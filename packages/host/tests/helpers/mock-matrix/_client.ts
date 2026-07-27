@@ -773,6 +773,20 @@ export class MockClient implements ExtendedClient {
     }
   }
 
+  // Dispatch an AccountData event as if the homeserver pushed updated
+  // account data — e.g. a realm server appending a freshly-created realm
+  // to `app.boxel.realms` from outside this session (boxel-cli, the
+  // software factory, another tab). Keeps sdkOpts in sync for the known
+  // keys so later reads agree with what the event announced.
+  simulateAccountDataEvent(type: string, content: Record<string, any>) {
+    if (type === APP_BOXEL_REALMS_EVENT_TYPE) {
+      this.sdkOpts.activeRealms = (content as any).realms;
+    } else if (type === APP_BOXEL_REALM_SERVERS_EVENT_TYPE) {
+      this.sdkOpts.activeRealmServers = (content as any).realmServers;
+    }
+    this.emitEvent(new MatrixEvent({ type, content }));
+  }
+
   private emitLocalEchoUpdated(event: MatrixEvent, oldEventId?: string) {
     let handlers = this.listeners[this.sdk.RoomEvent.LocalEchoUpdated];
     if (handlers) {

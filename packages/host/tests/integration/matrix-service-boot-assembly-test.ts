@@ -1,9 +1,10 @@
-import type { RenderingTestContext } from '@ember/test-helpers';
+import { waitUntil, type RenderingTestContext } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm, ensureTrailingSlash, ri } from '@cardstack/runtime-common';
+import { APP_BOXEL_REALMS_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import ENV from '@cardstack/host/config/environment';
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -14,6 +15,7 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   setRealmAuthFailure,
+  setupAuthEndpoints,
 } from '../helpers';
 
 import { setupBaseRealm } from '../helpers/base-realm';
@@ -145,6 +147,80 @@ module(
       assert.ok(
         realmServer.availableRealmIdentifiers.includes(ri(testRealmURL)),
         'testRealmURL from _realm-auth survives the legacy event',
+      );
+    });
+  },
+);
+
+// A realm created OUTSIDE this session (boxel-cli, the software factory,
+// another tab) announces itself only through the legacy `app.boxel.realms`
+// account-data event — `app.boxel.realm-servers` doesn't change when a
+// realm is added to an already-trusted server. When such an event names a
+// realm the session doesn't have, the trusted-servers assembly re-runs so
+// the workspace chooser picks the realm up without a reload; echoes that
+// carry no new realms stay no-ops (previous module).
+module(
+  'Integration | matrix-service | realm created mid-session appears without a reload',
+  function (hooks) {
+    setupRenderingTest(hooks);
+    setupBaseRealm(hooks);
+    setupLocalIndexing(hooks);
+
+    let mockMatrixUtils = setupMockMatrix(hooks, {
+      loggedInAs: '@testuser:localhost',
+      activeRealms: [],
+      activeRealmServers: [testRealmServerURL],
+    });
+
+    hooks.beforeEach(async function (this: RenderingTestContext) {
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {},
+        startMatrix: false,
+      });
+      let realmServer = getService('realm-server') as RealmServerService;
+      await realmServer.setAvailableRealmIdentifiers([]);
+      let matrixService = getService('matrix-service') as MatrixService;
+      await matrixService.ready;
+      await matrixService.start();
+    });
+
+    test('a legacy realms event naming a new realm re-runs the trusted assembly', async function (assert) {
+      let realmServer = getService('realm-server') as RealmServerService;
+      let newRealmURL = ensureTrailingSlash(
+        new URL('./new-workspace/', testRealmURL).href,
+      );
+      assert.ok(
+        realmServer.availableRealmIdentifiers.includes(ri(testRealmURL)),
+        'precondition: boot assembled the trusted-servers realm list',
+      );
+      assert.notOk(
+        realmServer.availableRealmIdentifiers.includes(ri(newRealmURL)),
+        'precondition: the new realm is not known yet',
+      );
+
+      // The realm now exists server-side: `_realm-auth` starts advertising
+      // it alongside the original realm…
+      setupAuthEndpoints({
+        [testRealmURL]: ['read', 'write'],
+        [newRealmURL]: ['read', 'write'],
+      });
+      // …and the realm server appends it to the user's `app.boxel.realms`
+      // account data, which matrix pushes to this session.
+      mockMatrixUtils.simulateAccountDataEvent(APP_BOXEL_REALMS_EVENT_TYPE, {
+        realms: [testRealmURL, newRealmURL],
+      });
+
+      await waitUntil(() =>
+        realmServer.availableRealmIdentifiers.includes(ri(newRealmURL)),
+      );
+      assert.ok(
+        realmServer.availableRealmIdentifiers.includes(ri(newRealmURL)),
+        'the new realm appears in the available list without a reload',
+      );
+      assert.ok(
+        realmServer.availableRealmIdentifiers.includes(ri(testRealmURL)),
+        'the original realm is still present',
       );
     });
   },
