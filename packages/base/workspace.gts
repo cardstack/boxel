@@ -636,6 +636,7 @@ class Isolated extends Component<typeof Workspace> {
                       (eq option.id this.activeFilter.id)
                       "selected"
                     }}'
+                  data-test-workspace-filter={{option.id}}
                   {{on 'click' (this.selectFilter option)}}
                 >
                   {{#let (this.iconComponent option) as |Icon|}}
@@ -660,6 +661,7 @@ class Isolated extends Component<typeof Workspace> {
                           (eq option.id this.activeFilter.id)
                           "selected"
                         }}'
+                      data-test-workspace-filter={{option.id}}
                       {{on 'click' (this.selectFilter option)}}
                     >
                       {{#if (this.iconHtml option)}}
@@ -700,6 +702,7 @@ class Isolated extends Component<typeof Workspace> {
                         (eq option.id this.activeFilter.id)
                         "selected"
                       }}'
+                    data-test-workspace-filter={{option.id}}
                     {{on 'click' (this.selectFilter option)}}
                   >
                     {{#if (this.iconHtml option)}}
