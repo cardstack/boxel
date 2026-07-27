@@ -24,7 +24,7 @@ boxel run-command <command-specifier> --realm <realm-url> [--input '<json>'] [--
 
 - `<command-specifier>` — the module path of the command (e.g. `@cardstack/boxel-host/commands/get-card-type-schema/default`).
 - `--realm` — the realm URL the command runs against. Required.
-- `--input` — JSON string passed as the command's input. Optional; some commands take no input.
+- `--input` — JSON string passed as the command's input. Optional; some commands take no input. Keys map to the input card's field names. A `linksTo` field is given the target card's **ID string**, and a `linksToMany` field an **array of ID strings** — the host resolves each ID to the actual card before running the command.
 - `--json` — emit the raw response instead of the formatted summary.
 
 ### Example
@@ -33,6 +33,14 @@ boxel run-command <command-specifier> --realm <realm-url> [--input '<json>'] [--
 boxel run-command @cardstack/boxel-host/commands/get-card-type-schema/default \
   --realm http://localhost:4201/my-realm/ \
   --input '{"codeRef":{"module":"http://localhost:4201/my-realm/sticky-note","name":"StickyNote"}}'
+```
+
+A command whose input has a `linksTo(CardDef)` field (here named `card`) takes that card's ID string:
+
+```
+boxel run-command @cardstack/boxel-host/commands/screenshot-card/default \
+  --realm http://localhost:4201/my-realm/ \
+  --input '{"card":"http://localhost:4201/my-realm/Author/1","format":"isolated"}'
 ```
 
 ## Programmatic
