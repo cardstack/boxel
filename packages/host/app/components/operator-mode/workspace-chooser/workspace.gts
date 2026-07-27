@@ -211,19 +211,15 @@ export default class Workspace extends Component<Signature> {
       </div>
       {{#if this.showDeleteModal}}
         <ModalContainer
-          @title=''
+          @title='Delete Workspace'
           @onClose={{this.closeDeleteModal}}
           @size='medium'
+          @isCloseDisabled={{this.deleteWorkspaceTask.isRunning}}
           @cardContainerClass='workspace-chooser-delete-modal'
           class='workspace-chooser-delete-modal-container'
           data-test-delete-modal={{@realmIdentifier}}
         >
           <:content>
-            <div class='delete-modal__header'>
-              <CircleAlert class='delete-modal__warning-icon' />
-              <h2 class='delete-modal__title'>Delete Workspace</h2>
-            </div>
-
             <div class='delete-modal__workspace-card'>
               <div class='delete-modal__realm-icon-wrapper'>
                 <RealmIcon
@@ -247,29 +243,32 @@ export default class Workspace extends Component<Signature> {
             </div>
 
             <div class='delete-modal__warning-box'>
-              <p class='delete-modal__warning-text'>
-                <strong>
-                  This permanently deletes the workspace and any custom domains
-                  tied to it.
-                </strong>
-                <strong>
-                  Links to cards in this workspace may stop working elsewhere.
-                </strong>
-              </p>
-              {{#if this.hasPublishedRealms}}
-                <div class='delete-modal__realms'>
-                  <p class='delete-modal__realms-title'>
-                    Published
-                    {{pluralize 'realm' this.publishedRealmURLs.length}}
-                    that will also be removed
-                  </p>
-                  <ul class='delete-modal__realms-list'>
-                    {{#each this.publishedRealmURLs as |publishedRealmURL|}}
-                      <li>{{publishedRealmURL}}</li>
-                    {{/each}}
-                  </ul>
-                </div>
-              {{/if}}
+              <CircleAlert class='delete-modal__warning-icon' />
+              <div class='delete-modal__warning-content'>
+                <p class='delete-modal__warning-text'>
+                  <strong>
+                    This permanently deletes the workspace and any custom
+                    domains tied to it.
+                  </strong>
+                  <strong>
+                    Links to cards in this workspace may stop working elsewhere.
+                  </strong>
+                </p>
+                {{#if this.hasPublishedRealms}}
+                  <div class='delete-modal__realms'>
+                    <p class='delete-modal__realms-title'>
+                      Published
+                      {{pluralize 'realm' this.publishedRealmURLs.length}}
+                      that will also be removed
+                    </p>
+                    <ul class='delete-modal__realms-list'>
+                      {{#each this.publishedRealmURLs as |publishedRealmURL|}}
+                        <li>{{publishedRealmURL}}</li>
+                      {{/each}}
+                    </ul>
+                  </div>
+                {{/if}}
+              </div>
             </div>
 
             {{#if this.deleteError}}
@@ -278,30 +277,29 @@ export default class Workspace extends Component<Signature> {
           </:content>
           <:footer>
             <div class='delete-modal__footer'>
-              <div class='delete-modal__actions'>
-                {{#if this.deleteWorkspaceTask.isRunning}}
-                  <LoadingIndicator class='delete-modal__spinner' />
-                {{else}}
-                  <Button
-                    {{on 'click' this.closeDeleteModal}}
-                    class='delete-modal__cancel'
-                    data-test-cancel-delete-button
-                  >
-                    Cancel
-                  </Button>
-                  <button
-                    type='button'
-                    class='delete-modal__confirm'
-                    data-test-confirm-delete-button
-                    {{on 'click' (perform this.deleteWorkspaceTask)}}
-                  >
-                    Delete this workspace
-                  </button>
-                {{/if}}
-              </div>
               <span class='delete-modal__disclaimer'>
                 This action is not reversible
               </span>
+              <div class='delete-modal__actions'>
+                <Button
+                  @kind='secondary'
+                  @size='tall'
+                  @disabled={{this.deleteWorkspaceTask.isRunning}}
+                  {{on 'click' this.closeDeleteModal}}
+                  data-test-cancel-delete-button
+                >
+                  Cancel
+                </Button>
+                <Button
+                  @kind='destructive'
+                  @size='tall'
+                  @loading={{this.deleteWorkspaceTask.isRunning}}
+                  {{on 'click' (perform this.deleteWorkspaceTask)}}
+                  data-test-confirm-delete-button
+                >
+                  Delete this workspace
+                </Button>
+              </div>
             </div>
           </:footer>
         </ModalContainer>
@@ -822,41 +820,24 @@ export default class Workspace extends Component<Signature> {
       .workspace-menu__list {
         --boxel-menu-item-content-padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
       }
+      .workspace-chooser-delete-modal-container {
+        --stack-card-footer-height: auto;
+      }
       .workspace-chooser-delete-modal-container > :deep(.boxel-modal__inner) {
         display: flex;
       }
       :deep(.workspace-chooser-delete-modal) {
-        border-radius: var(--boxel-border-radius-xxl);
-        max-width: var(--boxel-md-container);
         height: auto;
         display: flex;
         flex-direction: column;
-      }
-      :deep(.workspace-chooser-delete-modal > .dialog-box__header) {
-        display: none;
       }
       :deep(.workspace-chooser-delete-modal > .dialog-box__content) {
-        padding: var(--boxel-sp-lg) var(--boxel-sp-xl);
-        overflow: visible;
-        height: auto;
-        flex: none;
         display: flex;
         flex-direction: column;
-        gap: var(--boxel-sp-lg);
+        gap: var(--boxel-sp);
       }
       :deep(.workspace-chooser-delete-modal > .dialog-box__content > * + *) {
         margin-top: 0;
-      }
-      :deep(.workspace-chooser-delete-modal > .dialog-box__footer) {
-        height: auto;
-        flex: none;
-        padding: 0 var(--boxel-sp-xl) var(--boxel-sp-xl);
-        border-top: none;
-      }
-      .delete-modal__header {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-sm);
       }
       .delete-modal__warning-icon {
         width: var(--boxel-icon-lg);
@@ -864,12 +845,6 @@ export default class Workspace extends Component<Signature> {
         min-width: var(--boxel-icon-lg);
         color: var(--boxel-danger);
         flex-shrink: 0;
-      }
-      .delete-modal__title {
-        font-size: 1.625rem;
-        font-weight: 700;
-        color: var(--boxel-dark);
-        margin: 0;
       }
       .delete-modal__workspace-card {
         display: flex;
@@ -924,6 +899,12 @@ export default class Workspace extends Component<Signature> {
         border-radius: var(--boxel-border-radius-lg);
         padding: var(--boxel-sp-lg);
         display: flex;
+        flex-direction: row;
+        align-items: flex-start;
+        gap: var(--boxel-sp-sm);
+      }
+      .delete-modal__warning-content {
+        display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-sm);
       }
@@ -969,56 +950,21 @@ export default class Workspace extends Component<Signature> {
       }
       .delete-modal__footer {
         display: flex;
-        flex-direction: column;
-        align-items: flex-end;
-        gap: var(--boxel-sp-xs);
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--boxel-sp);
         width: 100%;
       }
       .delete-modal__actions {
         display: flex;
         gap: var(--boxel-sp-sm);
         align-items: center;
-      }
-      .delete-modal__cancel {
-        background: none;
-        border: 1px solid var(--boxel-450);
-        border-radius: var(--boxel-border-radius-xxl);
-        padding: 0 var(--boxel-sp-lg);
-        height: var(--boxel-button-tall);
-        font-size: var(--boxel-font-size-sm);
-        font-weight: 700;
-        color: var(--boxel-dark);
-        cursor: pointer;
-        transition:
-          border-color 0.15s ease,
-          background 0.15s ease;
-      }
-      .delete-modal__cancel:hover {
-        border-color: var(--boxel-550);
-        background: var(--boxel-light-100);
-      }
-      .delete-modal__confirm {
-        background: var(--boxel-danger);
-        border: none;
-        border-radius: var(--boxel-border-radius-xxl);
-        padding: 0 1.5rem;
-        height: var(--boxel-button-tall);
-        font-size: var(--boxel-font-size-sm);
-        font-weight: 700;
-        color: var(--boxel-light);
-        cursor: pointer;
-        transition: background 0.15s ease;
-      }
-      .delete-modal__confirm:hover {
-        background: var(--boxel-danger-hover);
+        margin-left: auto;
       }
       .delete-modal__disclaimer {
         font-size: var(--boxel-font-size-xs);
         font-weight: 700;
         color: var(--boxel-danger);
-      }
-      .delete-modal__spinner {
-        --boxel-loading-indicator-size: 2rem;
       }
       .workspace-chooser-archive-modal-container > :deep(.boxel-modal__inner) {
         display: flex;
