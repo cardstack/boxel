@@ -996,6 +996,7 @@ export class Prerenderer {
           // log entirely so grep-able lines all describe real load.
           return;
         }
+        let swaps = this.#pagePool.getUnresponsiveTabSwaps();
         let perAffinity = snap.affinities
           .map((a) => {
             let q = a.byQueue;
@@ -1032,7 +1033,15 @@ export class Prerenderer {
               a.tabQueuedByPriority,
               a.admissionQueuedByPriority,
             );
-            return `${a.affinityKey}(tabs=${a.tabCount}, pending=${a.pendingTotal}, max=${a.maxPending}${queueDetail}${admissionDetail}${priorityDetail})`;
+            // Cumulative count of warm tabs this affinity has had retired
+            // for failing the reuse responsiveness probe. Printed only
+            // once it's non-zero, so its presence on a line is itself the
+            // signal that this realm renders content that leaves the JS
+            // thread busy after a visit ends.
+            let swapCount = swaps[a.affinityKey] ?? 0;
+            let swapDetail =
+              swapCount > 0 ? `, unresponsiveSwaps=${swapCount}` : '';
+            return `${a.affinityKey}(tabs=${a.tabCount}, pending=${a.pendingTotal}, max=${a.maxPending}${queueDetail}${admissionDetail}${priorityDetail}${swapDetail})`;
           })
           .join(' ');
         log.info(

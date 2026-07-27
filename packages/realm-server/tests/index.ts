@@ -268,6 +268,8 @@ const ALL_TEST_FILES: string[] = [
   './page-pool-eviction-recovery-test',
   './page-pool-standby-refill-test',
   './page-pool-cert-verifier-retry-test',
+  './page-pool-lease-revalidation-test',
+  './page-pool-unresponsive-tab-test',
   './prerender-deadlock-test',
   './runtime-exception-capture-test',
   './clamp-serialized-error-test',
