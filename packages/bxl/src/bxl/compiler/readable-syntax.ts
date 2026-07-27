@@ -1611,28 +1611,45 @@ function hasExplicitCurrentItem(tokens: Token[]): boolean {
   );
 }
 
-function compileValue(tokens: Token[], scope: ReadableSchema | undefined): CompileChunk {
-  const compiler = new Compiler(tokens, { schema: scope });
+interface PredicateCompileContext {
+  itemScope?: ReadableSchema;
+  rootScope?: ReadableSchema;
+  rootPathPrefix?: string;
+  bindings?: Iterable<string>;
+}
+
+function compileValue(
+  tokens: Token[],
+  context: PredicateCompileContext,
+): CompileChunk {
+  const scope = context.rootScope ?? context.itemScope;
+  const compiler = new Compiler(tokens, {
+    schema: scope,
+    rootPathPrefix: context.rootScope ? context.rootPathPrefix : undefined,
+    itemScope: context.itemScope,
+    bindings: context.bindings,
+  });
   return compiler.compile(scope);
 }
 
 function compilePredicate(
   tokens: Token[],
-  itemScope: ReadableSchema | undefined,
+  context: PredicateCompileContext,
 ): CompileChunk {
   const rangesOr = splitTopLevel(tokens, 0, tokens.length, 'or');
   if (rangesOr.length > 1) {
     const parts = rangesOr.map(([start, end]) =>
-      compilePredicate(tokens.slice(start, end), itemScope),
+      compilePredicate(tokens.slice(start, end), context),
     );
     return {
       source: parts.map((part) => `(${part.source})`).join(' or '),
       changed: parts.some((part) => part.changed),
       warnings: parts.flatMap((part) => part.warnings),
+      needsRootBinding: parts.some((part) => part.needsRootBinding),
     };
   }
 
-  const sqlConstruct = compileSqlPredicateConstruct(tokens, itemScope);
+  const sqlConstruct = compileSqlPredicateConstruct(tokens, context);
   if (sqlConstruct) {
     return sqlConstruct;
   }
@@ -1640,30 +1657,33 @@ function compilePredicate(
   const rangesAnd = splitTopLevel(tokens, 0, tokens.length, 'and');
   if (rangesAnd.length > 1) {
     const parts = rangesAnd.map(([start, end]) =>
-      compilePredicate(tokens.slice(start, end), itemScope),
+      compilePredicate(tokens.slice(start, end), context),
     );
     return {
       source: parts.map((part) => `(${part.source})`).join(' and '),
       changed: parts.some((part) => part.changed),
       warnings: parts.flatMap((part) => part.warnings),
+      needsRootBinding: parts.some((part) => part.needsRootBinding),
     };
   }
 
   if (isIdent(tokens[0], 'not')) {
-    const inner = compilePredicate(tokens.slice(1), itemScope);
+    const inner = compilePredicate(tokens.slice(1), context);
     return {
       source: `(${inner.source}) | not`,
       changed: true,
       warnings: inner.warnings,
+      needsRootBinding: inner.needsRootBinding,
     };
   }
 
   if (tokens[0]?.value === '(' && tokens[tokens.length - 1]?.value === ')') {
-    const inner = compilePredicate(tokens.slice(1, -1), itemScope);
+    const inner = compilePredicate(tokens.slice(1, -1), context);
     return {
       source: `(${inner.source})`,
       changed: inner.changed,
       warnings: inner.warnings,
+      needsRootBinding: inner.needsRootBinding,
     };
   }
 
@@ -1688,20 +1708,24 @@ function compilePredicate(
     // `select(<value>)`. Matches Excel's `[Taxable]` convention where a
     // literal `true` keeps the row and `false` / `null` / missing filter
     // it out.
-    const presence = compileValue(tokens, itemScope);
+    const presence = compileValue(tokens, context);
     return {
       source: presence.source,
       changed: true,
       warnings: presence.warnings,
+      needsRootBinding: presence.needsRootBinding,
     };
   }
 
-  const left = compileValue(tokens.slice(0, opIndex), itemScope);
+  const left = compileValue(tokens.slice(0, opIndex), context);
   const op = tokens[opIndex].value.toUpperCase() === 'IN'
     ? tokens[opIndex].value.toUpperCase()
     : tokens[opIndex].value;
-  const right = compileValue(tokens.slice(opIndex + 1), itemScope);
+  const right = compileValue(tokens.slice(opIndex + 1), context);
   const warnings = [...left.warnings, ...right.warnings];
+  const needsRootBinding = Boolean(
+    left.needsRootBinding || right.needsRootBinding,
+  );
 
   switch (op) {
     case '=':
@@ -1709,6 +1733,7 @@ function compilePredicate(
         source: `${left.source} == ${right.source}`,
         changed: true,
         warnings,
+        needsRootBinding,
       };
     case '==':
     case '!=':
@@ -1720,6 +1745,7 @@ function compilePredicate(
         source: `${left.source} ${op} ${right.source}`,
         changed: left.changed || right.changed,
         warnings,
+        needsRootBinding,
       };
     case 'IN':
       return {
@@ -1733,6 +1759,7 @@ function compilePredicate(
               'Readable IN predicates compile to IN(value); add a native helper before using this in production.',
           },
         ],
+        needsRootBinding,
       };
     default:
       throw new ReadableSyntaxError(`Unsupported predicate operator '${op}'`);
@@ -1741,7 +1768,7 @@ function compilePredicate(
 
 function compileSqlPredicateConstruct(
   tokens: Token[],
-  itemScope: ReadableSchema | undefined,
+  context: PredicateCompileContext,
 ): CompileChunk | undefined {
   const isIndex = findTopLevelWord(tokens, 'is');
   if (isIndex > 0) {
@@ -1749,12 +1776,13 @@ function compileSqlPredicateConstruct(
     const literalIndex = notIndex === -1 ? isIndex + 1 : isIndex + 2;
     const literal = sqlIsLiteral(tokens[literalIndex]);
     if (literal && literalIndex === tokens.length - 1) {
-      const left = compileValue(tokens.slice(0, isIndex), itemScope);
+      const left = compileValue(tokens.slice(0, isIndex), context);
       const op = notIndex === -1 ? '==' : '!=';
       return {
         source: `${left.source} ${op} ${literal}`,
         changed: true,
         warnings: left.warnings,
+        needsRootBinding: left.needsRootBinding,
       };
     }
   }
@@ -1767,14 +1795,19 @@ function compileSqlPredicateConstruct(
     const leftEnd = notIndex === -1 ? betweenIndex : notIndex;
     const andIndex = findTopLevelWord(tokens, 'and', betweenIndex + 1);
     if (andIndex > betweenIndex + 1 && andIndex < tokens.length - 1) {
-      const left = compileValue(tokens.slice(0, leftEnd), itemScope);
-      const lower = compileValue(tokens.slice(betweenIndex + 1, andIndex), itemScope);
-      const upper = compileValue(tokens.slice(andIndex + 1), itemScope);
+      const left = compileValue(tokens.slice(0, leftEnd), context);
+      const lower = compileValue(tokens.slice(betweenIndex + 1, andIndex), context);
+      const upper = compileValue(tokens.slice(andIndex + 1), context);
       const source = `between(${left.source}; ${lower.source}; ${upper.source})`;
       return {
         source: notIndex === -1 ? source : `(${source} | not)`,
         changed: true,
         warnings: [...left.warnings, ...lower.warnings, ...upper.warnings],
+        needsRootBinding: Boolean(
+          left.needsRootBinding ||
+          lower.needsRootBinding ||
+          upper.needsRootBinding
+        ),
       };
     }
   }
@@ -1783,20 +1816,23 @@ function compileSqlPredicateConstruct(
   if (likeIndex > 0) {
     const notIndex = isIdent(tokens[likeIndex - 1], 'not') ? likeIndex - 1 : -1;
     const leftEnd = notIndex === -1 ? likeIndex : notIndex;
-    const left = compileValue(tokens.slice(0, leftEnd), itemScope);
-    const pattern = compileValue(tokens.slice(likeIndex + 1), itemScope);
+    const left = compileValue(tokens.slice(0, leftEnd), context);
+    const pattern = compileValue(tokens.slice(likeIndex + 1), context);
     const source = `like(${left.source}; ${pattern.source})`;
     return {
       source: notIndex === -1 ? source : `(${source} | not)`,
       changed: true,
       warnings: [...left.warnings, ...pattern.warnings],
+      needsRootBinding: Boolean(
+        left.needsRootBinding || pattern.needsRootBinding
+      ),
     };
   }
 
   const inIndex = findTopLevelWord(tokens, 'in');
   if (inIndex > 0 && isIdent(tokens[inIndex - 1], 'not')) {
-    const left = compileValue(tokens.slice(0, inIndex - 1), itemScope);
-    const right = compileValue(tokens.slice(inIndex + 1), itemScope);
+    const left = compileValue(tokens.slice(0, inIndex - 1), context);
+    const right = compileValue(tokens.slice(inIndex + 1), context);
     return {
       source: `((${left.source} | IN(${right.source})) | not)`,
       changed: true,
@@ -1809,6 +1845,9 @@ function compileSqlPredicateConstruct(
             'Readable IN predicates compile to IN(value); add a native helper before using this in production.',
         },
       ],
+      needsRootBinding: Boolean(
+        left.needsRootBinding || right.needsRootBinding
+      ),
     };
   }
 
@@ -2182,7 +2221,12 @@ class Compiler {
       const conditionRange = ranges[1];
       args[1] = compilePredicate(
         this.tokens.slice(conditionRange[0], conditionRange[1]),
-        args[0].streamItemScope,
+        {
+          itemScope: args[0].streamItemScope,
+          rootScope: this.schema,
+          rootPathPrefix: rootPathPrefix ?? '$root',
+          bindings: this.bindings,
+        },
       );
     }
 
@@ -2356,12 +2400,22 @@ class Compiler {
       this.index++;
       changed = true;
     } else {
-      const label = this.readLabelToken(scope);
+      // Once `.` has moved to a nested item (a predicate, map/select
+      // argument, or the RHS of a stream-producing pipe), readable bare
+      // labels resolve item-first and root-second. This keeps `Bidder`
+      // intuitive inside a Book predicate while allowing `Intent.Bidder`
+      // to capture the envelope through `$root`.
+      const nestedItemScope = itemScope && itemScope !== scope
+        ? itemScope
+        : undefined;
+      const label = this.readLabelToken(nestedItemScope ?? scope, scope);
       if (!label || this.tokens[this.index]?.value === '(') {
         this.index = start;
         return null;
       }
-      const resolved = resolveField(scope, label.value);
+      const itemResolved = resolveField(nestedItemScope, label.value);
+      const rootResolved = resolveField(scope, label.value);
+      const resolved = itemResolved ?? rootResolved;
       const fallbackKey =
         !resolved && allowPascalFallback ? pascalCaseToCamelKey(label) : null;
       if (!resolved && !fallbackKey) {
@@ -2369,9 +2423,12 @@ class Compiler {
         return null;
       }
       const key = resolved?.field.key ?? fallbackKey!;
-      out = rootPathPrefix
-        ? `${rootPathPrefix}.${key}`
-        : `.${key}`;
+      const resolvesAgainstItem = Boolean(itemResolved);
+      out = resolvesAgainstItem
+        ? `.${key}`
+        : rootPathPrefix
+          ? `${rootPathPrefix}.${key}`
+          : `.${key}`;
       valueScope = resolved?.valueScope;
       arrayItemScope = resolved?.arrayItemScope;
       pendingImplicitArray = resolved?.field.kind === 'array';
@@ -2415,6 +2472,11 @@ class Compiler {
         const resolved = resolveField(valueScope, label.value);
         const fallbackKey =
           !resolved && allowPascalFallback ? pascalCaseToCamelKey(label) : null;
+        if (!resolved && !fallbackKey && valueScope) {
+          throw new ReadableSyntaxError(
+            `Unknown field '${label.value}' in schema-aware path.`,
+          );
+        }
         out += `${optional ? '?' : ''}.${resolved?.field.key ?? fallbackKey ?? label.value}`;
         valueScope = resolved?.valueScope;
         arrayItemScope = resolved?.arrayItemScope;
@@ -2471,7 +2533,10 @@ class Compiler {
     };
   }
 
-  private readLabelToken(scope: ReadableSchema | undefined): Token | undefined {
+  private readLabelToken(
+    scope: ReadableSchema | undefined,
+    fallbackScope?: ReadableSchema,
+  ): Token | undefined {
     const token = this.tokens[this.index];
     if (!token || !['ident', 'string'].includes(token.type)) {
       return undefined;
@@ -2499,7 +2564,10 @@ class Compiler {
 
         parts.push(current.value);
         const phrase = parts.join(' ');
-        if (scope && resolveField(scope, phrase)) {
+        if (
+          (scope && resolveField(scope, phrase)) ||
+          (fallbackScope && resolveField(fallbackScope, phrase))
+        ) {
           best = { value: phrase, next: i + 1 };
         }
       }
@@ -2581,7 +2649,12 @@ class Compiler {
           'Filter-all [* ...] predicates must use explicit current-item paths such as [* .Field] or [* ."Display Label"].',
         );
       }
-      const predicate = compilePredicate(predTokens, item);
+      const predicate = compilePredicate(predTokens, {
+        itemScope: item,
+        rootScope: this.schema,
+        rootPathPrefix: rootPathPrefix ?? '$root',
+        bindings: this.bindings,
+      });
       return {
         source: `[${base}[] | select(${predicate.source})`,
         changed: true,
@@ -2591,6 +2664,7 @@ class Compiler {
         arrayItemScope: item,
         streamItemScope: item,
         openMaterialized: true,
+        needsRootBinding: predicate.needsRootBinding,
       };
     }
 
@@ -2785,13 +2859,19 @@ class Compiler {
     const commaRanges = splitTopLevel(inner, 0, inner.length, ',');
     if (commaRanges.length === 2 && isSimpleHumanIndex(inner.slice(...commaRanges[0]))) {
       const indexText = indexTextFromHumanIndex(inner.slice(...commaRanges[0]));
-      const predicate = compilePredicate(inner.slice(...commaRanges[1]), item);
+      const predicate = compilePredicate(inner.slice(...commaRanges[1]), {
+        itemScope: item,
+        rootScope: this.schema,
+        rootPathPrefix: rootPathPrefix ?? '$root',
+        bindings: this.bindings,
+      });
       return {
         source: `(${base}[${indexText}] | select(${predicate.source}))`,
         changed: true,
         warnings: predicate.warnings,
         next: this.index,
         valueScope: item,
+        needsRootBinding: predicate.needsRootBinding,
       };
     }
 
@@ -2840,13 +2920,19 @@ class Compiler {
     }
 
     if (isPredicateLike(inner) && item) {
-      const predicate = compilePredicate(inner, item);
+      const predicate = compilePredicate(inner, {
+        itemScope: item,
+        rootScope: this.schema,
+        rootPathPrefix: rootPathPrefix ?? '$root',
+        bindings: this.bindings,
+      });
       return {
         source: `first(${base}[] | select(${predicate.source}))`,
         changed: true,
         warnings: predicate.warnings,
         next: this.index,
         valueScope: item,
+        needsRootBinding: predicate.needsRootBinding,
       };
     }
 

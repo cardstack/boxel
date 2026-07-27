@@ -48,12 +48,26 @@ export function evaluateBxlBare(
   input: unknown,
   options: BxlBareOptions = {},
 ) {
-  const run = runNativeJq(expression, input, {
-    schema: options.schema,
-    readableSyntax: options.readableSyntax,
-    libraries: ['core'] as any,
-    runtimeLimits: options.runtimeLimits,
-  });
+  let run;
+  try {
+    run = runNativeJq(expression, input, {
+      schema: options.schema,
+      readableSyntax: options.readableSyntax,
+      libraries: ['core'] as any,
+      runtimeLimits: options.runtimeLimits,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const missingFormula = message.match(/'([A-Z][A-Z0-9_]*\/\d+)' is not defined/);
+    if (missingFormula) {
+      throw new Error(
+        `runtime-bare contains jq core only; ${missingFormula[1]} is a ` +
+        `spreadsheet formula. Import from '@cardstack/bxl/runtime' (or the ` +
+        `main '@cardstack/bxl' entry) to enable the formula library.`,
+      );
+    }
+    throw error;
+  }
 
   if (run.outputs.length === 0) return null;
   if (run.outputs.length === 1) return run.outputs[0];

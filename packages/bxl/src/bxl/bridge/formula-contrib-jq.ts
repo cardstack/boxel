@@ -62,7 +62,7 @@ def IFS(c1; v1; c2; v2; c3; v3; c4; v4; c5; v5; c6; v6; c7; v7; c8; v8):
 # semantics (null only, NOT empty string). present(x) below is the
 # looser, form-friendly positive form that treats "" as absent too.
 def present(x):
-  . as $in | ($in | x) as $v | ($v != null) and ($v != "");
+  . as $in | [($in | x)][0] as $v | ($v != null) and ($v != "");
 
 # when(p; q): conditional-requirement / implication.
 # Reads "when p, require q" and vacuously passes when p is false.

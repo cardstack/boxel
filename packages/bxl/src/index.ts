@@ -449,6 +449,53 @@ function normalizeBxlOutputs(outputs: unknown[]): unknown {
   return outputs;
 }
 
+function schemaInputWarnings(
+  input: unknown,
+  schema: ReadableSchema | undefined,
+  path = '$',
+): ReadableSyntaxWarning[] {
+  if (!schema || !input || typeof input !== 'object' || Array.isArray(input)) {
+    return [];
+  }
+
+  const record = input as Record<string, unknown>;
+  const keys = Object.keys(record);
+  const warnings: ReadableSyntaxWarning[] = [];
+
+  for (const field of schema.fields) {
+    if (!Object.prototype.hasOwnProperty.call(record, field.key)) {
+      const casingMatch = keys.find(
+        (key) => key !== field.key && key.toLowerCase() === field.key.toLowerCase(),
+      );
+      if (casingMatch) {
+        warnings.push({
+          code: 'input-key-casing-mismatch',
+          message:
+            `Input key '${path}.${casingMatch}' differs from schema key ` +
+            `'${path}.${field.key}' only by casing; readable BXL compiled for ` +
+            `'${field.key}' and will not read '${casingMatch}'.`,
+        });
+      }
+      continue;
+    }
+
+    const value = record[field.key];
+    if (field.kind === 'array' && Array.isArray(value) && field.item) {
+      value.forEach((entry, index) => {
+        warnings.push(
+          ...schemaInputWarnings(entry, field.item, `${path}.${field.key}[${index}]`),
+        );
+      });
+    } else if (field.kind === 'object' && field.fields) {
+      warnings.push(
+        ...schemaInputWarnings(value, { fields: field.fields }, `${path}.${field.key}`),
+      );
+    }
+  }
+
+  return warnings;
+}
+
 /**
  * Compile and evaluate a BXL expression against a single input.
  *
@@ -491,7 +538,10 @@ export function evaluateBxl(
   return {
     source: run.source,
     compiledSource: run.compiledSource,
-    warnings: run.readableWarnings,
+    warnings: [
+      ...run.readableWarnings,
+      ...schemaInputWarnings(input, options.schema),
+    ],
     outputs: run.outputs,
     value: normalizeBxlOutputs(run.outputs),
   };
@@ -569,7 +619,10 @@ function preparedBxlFromNative(
       return {
         source: run.source,
         compiledSource: run.compiledSource,
-        warnings: run.readableWarnings,
+        warnings: [
+          ...run.readableWarnings,
+          ...schemaInputWarnings(input, options.schema),
+        ],
         outputs: run.outputs,
         value: normalizeBxlOutputs(run.outputs),
       };

@@ -67,7 +67,7 @@ The eight design decisions that make BXL feel the way it does:
 - **Labels instead of paths** — `Subtotal + "Tax Amount"` beats `.subtotal + .taxAmount`. Labels resolve against a schema at compile time.
 - **1-based rows** — `"Line Item"[#4]` is the fourth row. `[3]` remains the jq-native 0-based escape hatch.
 - **Implicit iteration** — `"Line Item"."Line Total"` auto-materializes across the array. No `map` for the common case.
-- **Two predicate shapes** — `[pred]` picks the first match (scalar). `[* .pred]` keeps every match (array) with explicit jq item scope. Replaces `VLOOKUP` / `SUMIF` without a separate builtin.
+- **Two predicate shapes** — `[pred]` picks the first match (scalar). `[* .pred]` keeps every match (array) with explicit jq item scope. Predicate labels resolve against the row first and then the captured root, so `Book[Bidder = Intent.Bidder]` works without textual substitution.
 - **One positional selector family** — `[#1]`, `[#first]`, `[#last]`, `[#last-1]`, `[#4..#last-3]`, `[#1, #2, #7..#9, #11]`, `[#odd]`, `[#even]`, `[#only]`. CSS inspired the readability; BXL keeps it all inside `[#...]`.
 - **Paste Excel unchanged** — `=`, `<>`, `^`, `&`, leading `=` all work. `ROUND`, `SUM`, `IF`, `VLOOKUP` match Microsoft Excel exactly.
 - **Source idioms are preserved** — `ROUND("Unit Price", 2)` is paste-compatible with Excel. `present(x)`, `when(p, q)`, `words(s)` are BXL-native. `isEmail(x)` and `isURL(x, options)` keep validator.js's familiar camelCase shape.
@@ -350,7 +350,9 @@ BXL:  SUM("Line Item"[* ."Taxable"]."Line Total")
 
 If you already know jq, you already know BXL. If you don't, every pipeline jq supports still works — BXL just gives you a readable shortcut when a schema is available.
 
-**One rule about labels and pipes.** BXL's readable labels (`"Line Item"`, `"Bill To".Name`, `Subtotal`) resolve against the root record at compile time. Inside a pipe stage — `map`, `select`, `sort_by`, `any`, `all`, `reduce`, `foreach` — the context is the *current item*, addressed by jq-native paths (`.sku`, `.lineTotal`). Readable labels on the top level, `.path` inside pipes. Same convention jq users already follow, just with an optional schema-aware layer on top.
+**One rule about labels and pipes.** At the top level, readable labels (`"Line Item"`, `"Bill To".Name`, `Subtotal`) resolve against the root record. Inside a predicate or item-producing pipe stage (`map`, `select`, `sort_by`, `any`, `all`), a readable label resolves against the current item first and falls back to the captured root. Thus `Book[Bidder = Intent.Bidder]` and `Book[all] | map({ bidder: Bidder, requested: Intent.Bidder })` are both root-safe. jq-native `.sku` still explicitly means the current item, and `$root` remains available in hand-written jq.
+
+When a schema-known object or array item is followed by an unknown member, compilation fails with `ReadableSyntaxError` instead of emitting a path that silently returns `null`. At evaluation time, input keys that differ from schema keys only by casing produce an `input-key-casing-mismatch` warning in the result.
 
 ### 3 · XPath · tree paths with predicates
 
@@ -571,7 +573,7 @@ Profiles are the practical answer. BXL stays one language and one AST, but hosts
 | `predicate` | Query-time boolean filtering | row-level read filters, search constraints | Requires a query-shaped boolean predicate; rejects transforms, runtime-only helpers, validator.js functions, and non-lowerable FormulaJS calls unless a host explicitly lowers them. |
 | `derive` | Headless write/index-time computation | `computeVia`, denormalized fields, search facets | Allows deterministic record-local Excel/jq computation, including lazy extensions and aggregation, while rejecting request context and volatile runtime behavior. |
 
-Boxel `computeVia` belongs in `derive`, not `compute`: it often needs aggregation over nested record data, but it runs in a headless write/index-time environment where the result should not depend on the current user, request, wall clock, or runtime metadata. The `bxl()` / `expression()` factory enforces this profile when it constructs a compute function.
+Boxel `computeVia` belongs in `derive`, not `compute`: it often needs aggregation over nested record data, but it runs in a headless write/index-time environment where the result should not depend on the current user, request, wall clock, or runtime metadata. The `bxl()` / `expression()` factory enforces this profile when it constructs a compute function. In particular, unrestricted `prepareBxl()` accepts jq `def`, while `bxl()` / `expression()` rejects it with `derive-def-banned`; use a built-in helper when the same computation must run as `computeVia`.
 
 Profile violations are parser diagnostics:
 
@@ -651,11 +653,15 @@ Every function takes an optional `{ schema, runtimeLimits }` options object. Sub
 @cardstack/bxl/compiler        — parser + compiler only
 @cardstack/bxl/linter          — parser-only diagnostics
 @cardstack/bxl/runtime         — jq evaluator + helpers
-@cardstack/bxl/runtime-bare    — jq evaluator, no helpers
+@cardstack/bxl/runtime-bare    — jq-core evaluator, no spreadsheet helpers
 @cardstack/bxl/syntax/textmate — TextMate grammar for editors
 ```
 
 Full API reference in [`docs/api.md`](./docs/api.md).
+
+`runtime-bare` is intentionally a capability subset, not a second spelling of the full runtime. Calls such as `AND(...)`, `ROUND(...)`, or `DATE(...)` report that the spreadsheet formula library is absent and point to `@cardstack/bxl/runtime`. jq collection operators such as `map`, `select`, array `+`, and pipes remain available.
+
+Some names in older dialect inventories are jq operations rather than BXL functions: use `[Rows[] | select(predicate)]` for `FILTER`, `Rows | map(expression)` for `MAP`, `array + [value]` for append, and `left + right` for array concatenation (`CONCAT(...)` is also available for text). Use the `null` literal to construct a blank and `ISBLANK(value)` to test one. `DATE(...)` and `DAYS(...)` are implemented; `SECOND(...)` extracts a time component, while `SECONDS(...)` is not a defined duration helper.
 
 ---
 

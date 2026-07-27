@@ -342,4 +342,86 @@ deepStrictEqual(
   '#8 jq startswith pipe evaluates inside comprehensions',
 );
 
+// ─────────────────────────────────────────────────────────────────────────
+// Bug #9 — nested readable scopes lost access to the root envelope.
+// Item fields now resolve first, with unresolved readable labels falling
+// back to a captured `$root`. Schema-known invalid members fail at compile
+// time instead of quietly producing nulls.
+// ─────────────────────────────────────────────────────────────────────────
+
+const rootAwareSchema: ReadableSchema = {
+  fields: [
+    {
+      key: 'books', label: 'Book', kind: 'array',
+      item: { fields: [{ key: 'bidder', label: 'Bidder' }] },
+    },
+    {
+      key: 'intent', label: 'Intent', kind: 'object',
+      fields: [{ key: 'bidder', label: 'Bidder' }],
+    },
+  ],
+};
+
+const rootAwareInput = {
+  books: [{ bidder: 'Ada' }, { bidder: 'Bob' }],
+  intent: { bidder: 'Bob' },
+};
+
+strictEqual(
+  compileReadableSyntax('Book[Bidder = Intent.Bidder]', {
+    schema: rootAwareSchema,
+  }).source,
+  '. as $root | first(.books[] | select(.bidder == $root.intent.bidder))',
+  '#9 predicate captures root while keeping item field local',
+);
+
+deepStrictEqual(
+  evaluateBxl('Book[Bidder = Intent.Bidder]', rootAwareInput, {
+    schema: rootAwareSchema,
+  }).value,
+  { bidder: 'Bob' },
+  '#9 root-aware predicate evaluates',
+);
+
+deepStrictEqual(
+  evaluateBxl(
+    'Book[all] | map({ bidder: Bidder, requested: Intent.Bidder })',
+    rootAwareInput,
+    { schema: rootAwareSchema },
+  ).value,
+  [
+    { bidder: 'Ada', requested: 'Bob' },
+    { bidder: 'Bob', requested: 'Bob' },
+  ],
+  '#9 map/object scope resolves item first and root second',
+);
+
+throws(
+  () => compileReadableSyntax('Book."Standing Count"', {
+    schema: rootAwareSchema,
+  }),
+  /Unknown field 'Standing Count' in schema-aware path/,
+  '#9 invalid array-item member is a compiler diagnostic',
+);
+
+strictEqual(
+  evaluateBxl('present(Book[Bidder = "Nobody"])', rootAwareInput, {
+    schema: rootAwareSchema,
+  }).value,
+  false,
+  '#9 present(no-match) is Boolean false, not an empty-stream null',
+);
+
+const casingResult = evaluateBxl(
+  'Book',
+  { Books: rootAwareInput.books, intent: rootAwareInput.intent },
+  { schema: rootAwareSchema },
+);
+ok(
+  casingResult.warnings.some(
+    (warning) => warning.code === 'input-key-casing-mismatch',
+  ),
+  '#9 casing mismatch produces a structured runtime warning',
+);
+
 console.log('BXL compiler bug regressions: all checks passed');
