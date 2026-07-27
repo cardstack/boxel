@@ -329,13 +329,12 @@ export interface RenderTimeoutDiagnostics {
   // with `tabReused=true` it's a real render-side stall.
   tabReused?: boolean;
   // Total wall time spent in `PagePool.getPage` before render work
-  // began. The three `waits` sub-fields below each cover a specific
-  // await; `launchMs` is measured around the full method and so is
-  // typically >= `semaphoreMs + tabQueueMs + tabStartupMs` — the
-  // residual is synchronous bookkeeping (affinity reassignment,
-  // LRU touch, standby top-up kickoff) that doesn't fall into any
-  // of the three buckets. For triage the sub-field breakdown is
-  // what matters: which *await* dominated launch time.
+  // began. The `waits` sub-fields below each cover a specific await;
+  // `launchMs` is measured around the full method and so is typically
+  // >= their sum — the residual is synchronous bookkeeping (affinity
+  // reassignment, LRU touch, standby top-up kickoff) that doesn't fall
+  // into any bucket. For triage the sub-field breakdown is what
+  // matters: which *await* dominated launch time.
   launchMs?: number;
   waits?: {
     semaphoreMs?: number;
@@ -348,6 +347,13 @@ export interface RenderTimeoutDiagnostics {
     admissionMs?: number;
     tabQueueMs?: number;
     tabStartupMs?: number;
+    // Wall time spent probing warm tabs for main-thread liveness before
+    // reuse. Around a millisecond on a healthy tab; a multi-second value
+    // means a tab failed the probe and was retired, so this render paid
+    // the probe budget plus a replacement tab instead of stalling on a
+    // wedged one. Reported apart from `tabQueueMs` so a retired-tab swap
+    // isn't read as warm-tab serialization.
+    tabProbeMs?: number;
   };
   // Elapsed between render start and the timeout. If ~= timeoutMs the
   // render itself stalled; if << timeoutMs the launch dominated.

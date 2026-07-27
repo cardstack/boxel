@@ -945,6 +945,7 @@ export class PagePool {
       admissionMs: number;
       tabQueueMs: number;
       tabStartupMs: number;
+      tabProbeMs: number;
     };
     pageId: string;
     release: () => void;
@@ -1014,8 +1015,9 @@ export class PagePool {
     let reused: boolean;
     let releaseTab: () => void;
     let tabStartupMs: number;
+    let tabProbeMs: number;
     try {
-      ({ entry, reused, releaseTab, tabStartupMs } =
+      ({ entry, reused, releaseTab, tabStartupMs, tabProbeMs } =
         await this.#selectEntryForAffinity(
           affinityKey,
           queue,
@@ -1028,10 +1030,15 @@ export class PagePool {
     }
     // `tabQueueMs` is the time spent waiting on the per-affinity tab
     // queue / orphan-spawn / cross-affinity-steal selection — i.e. the
-    // wall time inside `#selectEntryForAffinity` MINUS any standby-
-    // refill wait the function performed (which is reported separately
-    // as `tabStartupMs`).
-    let tabQueueMs = Math.max(0, Date.now() - tabQueueStart - tabStartupMs);
+    // wall time inside `#selectEntryForAffinity` MINUS the waits that
+    // function reports separately: the standby-refill wait
+    // (`tabStartupMs`) and the warm-tab liveness probes (`tabProbeMs`).
+    // Both subtractions matter for triage: leaving them in would make a
+    // cold start or a probed-out wedge read as warm-tab serialization.
+    let tabQueueMs = Math.max(
+      0,
+      Date.now() - tabQueueStart - tabStartupMs - tabProbeMs,
+    );
     // Race between the tab being acquired and the signal firing:
     // if the signal fired while `#selectEntryForAffinity` was
     // resolving, release the tab we just got so the next
@@ -1106,7 +1113,7 @@ export class PagePool {
       pageId: entry.pageId,
       reused,
       launchMs: Date.now() - t0,
-      waits: { semaphoreMs, admissionMs, tabQueueMs, tabStartupMs },
+      waits: { semaphoreMs, admissionMs, tabQueueMs, tabStartupMs, tabProbeMs },
       release,
     };
   }
@@ -1996,6 +2003,62 @@ export class PagePool {
     return Object.fromEntries(this.#unresponsiveTabSwaps);
   }
 
+  // Retire a tab that failed its reuse probe, together with every live
+  // sibling sharing its BrowserContext.
+  //
+  // Chrome gives same-context same-origin pages a single renderer process,
+  // so those siblings share the wedged tab's JS thread and whatever is
+  // holding it starves them too. Siblings that adopted a BrowserContext of
+  // their own — which `#affinityTabMax > 1` can produce, and which
+  // `#closeEntry` already accounts for — get their own thread, and nothing
+  // observed here says it is wedged, so they are left running.
+  //
+  // The caller holds the failed tab's lease, so `#closeEntry` parks on the
+  // queue and the close lands once the caller releases. A sibling that's
+  // mid-render parks the same way: it finishes first and is retired on
+  // release, so a slow-but-progressing neighbour is never cut off.
+  async #retireWedgedTabs(
+    entry: PoolEntry,
+    affinityKey: string,
+  ): Promise<void> {
+    let entries = this.#affinityPages.get(affinityKey);
+    let live = entries ? [...entries].filter((e) => !e.closing) : [];
+    let sharing = live.filter((e) => e.context === entry.context);
+    if (sharing.length === live.length) {
+      // Nothing of the affinity survives, which makes this an affinity
+      // teardown: route it through `disposeAffinity` so the affinity-level
+      // bookkeeping runs too — `#onAffinityDisposed` (batch ownership, icon
+      // memo) and the manager notification. Same options a wedged render's
+      // eviction uses, keeping the BrowserContext as an orphan so the
+      // replacement tab still inherits the realm's warm HTTP cache.
+      try {
+        await this.disposeAffinity(affinityKey, {
+          awaitIdle: false,
+          retainSharedContext: true,
+        });
+      } catch (e) {
+        log.warn(`Error disposing unresponsive affinity ${affinityKey}:`, e);
+      }
+      return;
+    }
+    for (let victim of sharing) {
+      victim.closing = true;
+      // Keep the entry in `#affinityPages` until Chrome has actually let
+      // go: `closing` filters it from routing, while still counting toward
+      // `#poolEntryCount` so the standby refill can't oversubscribe the
+      // pool against a page that is still resident.
+      void this.#closeEntry(victim).finally(() => {
+        let current = this.#affinityPages.get(affinityKey);
+        if (!current) return;
+        current.delete(victim);
+        if (current.size === 0) {
+          this.#affinityPages.delete(affinityKey);
+        }
+      });
+    }
+    this.#kickStandbyRefill('unresponsive tab retirement');
+  }
+
   // `#selectEntryForAffinityOnce` filters `entry.closing` at selection
   // time, but a caller that parks on a tab's `TabQueue` and receives the
   // lease later has no such guard: when a render ends on a pooled tab,
@@ -2030,9 +2093,14 @@ export class PagePool {
     reused: boolean;
     releaseTab: () => void;
     tabStartupMs: number;
+    // Wall time this call spent probing warm tabs for liveness, summed
+    // across every re-selection attempt. Reported separately so it can be
+    // taken back out of `tabQueueMs`, which is derived by subtraction.
+    tabProbeMs: number;
   }> {
     const MAX_RESELECT_ATTEMPTS = 3;
     let carriedStartupMs = 0;
+    let carriedProbeMs = 0;
     for (let attempt = 0; attempt < MAX_RESELECT_ATTEMPTS; attempt++) {
       let result = await this.#selectEntryForAffinityOnce(
         affinityKey,
@@ -2053,40 +2121,27 @@ export class PagePool {
         // for this affinity, and a brand-new page has no prior render to
         // have been poisoned by.
         let probe = await this.#probeReusedTab(result.entry, affinityKey);
+        if (probe) {
+          // Probe time is a distinct wait, not tab-queue contention:
+          // `tabQueueMs` is derived by subtracting the startup wait from
+          // the wall time in here, so an unreported probe would inflate it
+          // and read as warm-tab serialization — the signal operators size
+          // the pool from.
+          carriedProbeMs += probe.elapsedMs;
+        }
         if (probe && !probe.responsive) {
           reselectReason =
             `warm tab (pageId=${result.entry.pageId}) failed the ` +
             `responsiveness probe after ${probe.elapsedMs}ms` +
             (probe.error ? ` (${probe.error})` : '');
-          // The affinity's tabs share one BrowserContext, hence one
-          // renderer process and one JS thread, so nothing here can tell
-          // which of its pages is holding the thread — retire them all.
-          // These are the same options a wedged render's eviction uses,
-          // including keeping the context as an orphan so the replacement
-          // tab still inherits the realm's warm HTTP cache.
-          // `awaitIdle: false` lets a sibling tab that's mid-render finish
-          // and be retired on release, so a slow-but-progressing
-          // neighbour is never cut off.
-          //
-          // Skipped on the final attempt: disposing and then handing the
-          // entry back would give the caller a page marked `closing`.
+          // Skipped on the final attempt: retiring the tab and then
+          // handing it back would give the caller a page marked `closing`.
           if (!lastAttempt) {
             this.#unresponsiveTabSwaps.set(
               affinityKey,
               (this.#unresponsiveTabSwaps.get(affinityKey) ?? 0) + 1,
             );
-            try {
-              await this.disposeAffinity(affinityKey, {
-                awaitIdle: false,
-                retainConsoleErrors: true,
-                retainSharedContext: true,
-              });
-            } catch (e) {
-              log.warn(
-                `Error disposing unresponsive affinity ${affinityKey}:`,
-                e,
-              );
-            }
+            await this.#retireWedgedTabs(result.entry, affinityKey);
           }
         }
       }
@@ -2102,7 +2157,7 @@ export class PagePool {
           );
         }
         result.tabStartupMs += carriedStartupMs;
-        return result;
+        return { ...result, tabProbeMs: carriedProbeMs };
       }
       carriedStartupMs += result.tabStartupMs;
       // A doomed cross-affinity donor was marked `transitioning` by the
