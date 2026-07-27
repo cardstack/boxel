@@ -354,8 +354,15 @@ log.info(`Realm paths: ${paths.map(String).join(', ')}`);
 // `--livenessPort` is omitted there is no responder and the heartbeat is a
 // no-cost timer.
 const heartbeat = startEventLoopHeartbeat();
+// Guarded on a real port rather than merely present: yargs turns
+// `--livenessPort=` and `--no-livenessPort` into 0, and a bare `--livenessPort`
+// into NaN. Zero would bind an arbitrary ephemeral port and log it as a success
+// while a check aimed at the configured one is refused forever — a wedge that
+// never was, reported by logs that look fine.
 const livenessResponder =
-  livenessPort != null
+  typeof livenessPort === 'number' &&
+  Number.isInteger(livenessPort) &&
+  livenessPort > 0
     ? startLivenessResponder({ buffer: heartbeat.buffer, port: livenessPort })
     : undefined;
 

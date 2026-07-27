@@ -26,17 +26,19 @@ elsewhere.
 
 ### `GET /_liveness` — the wedge check
 
-Served off a `worker_threads` worker on a loopback-only port
-(`--livenessPort`), from `packages/realm-server/liveness/`. The main thread writes
-a timestamp into a `SharedArrayBuffer` on a 250ms interval; the worker reads that
-timestamp and reports its age:
+Served off a `worker_threads` worker bound to `127.0.0.1` on the port given by
+`--livenessPort`, from `packages/realm-server/liveness/`. The main thread writes a
+monotonic reading into a `SharedArrayBuffer` on a 250ms interval; the worker reads
+it and reports its age:
 
 ```
 { "alive": true, "heartbeatAgeMs": 41, "wedgeMs": 30000 }
 ```
 
 200 while the age is within `wedgeMs`, 503 past it. `REALM_LIVENESS_WEDGE_MS`
-tunes the threshold, with a 5s floor.
+tunes the threshold, with a 5s floor. The clock is `process.hrtime.bigint()`
+rather than wall time, so an NTP or hypervisor step can neither age a fresh beat
+into a false wedge nor rejuvenate a stale one.
 
 Because the answer comes off a different thread and depends on nothing but shared
 memory, it is available exactly when `GET /` is not. And because the value it
@@ -51,6 +53,12 @@ cases `GET /` cannot tell apart:
 
 Both middle and bottom rows look identical to a load balancer. Only the bottom one
 is worth a restart.
+
+What the beat proves is that the timers phase runs — not that the process can
+accept a connection or make useful progress. A server thrashing on a near-full
+heap, or out of file descriptors, still beats and still answers 200. That is
+tolerable because the ALB check keeps its own replacement power over exactly
+those cases, but it is a reason not to over-trust a 200 here on its own.
 
 ### The `realm:health` log line
 
@@ -93,31 +101,56 @@ equivalent split. It has two health signals — the ALB target-group check and t
 container `healthCheck` — and **both** replace the task when they fail. There is no
 "stop routing but keep this task".
 
-The two signals here approximate the split as closely as ECS allows:
+The two signals approximate the split as closely as ECS allows:
 
 - The **ALB check** (`GET /`) drives routing and deregistration, with its timeout
   and unhealthy threshold set wide enough that transient saturation cannot cross
   them.
-- The **container `healthCheck`** curls `/_liveness` on the loopback port and is
-  what actually decides replacement, on a signal that only a stalled loop trips.
+- A **container `healthCheck`** curls `/_liveness` on the loopback port and
+  decides replacement, on a signal that only a stalled loop trips.
+
+The container check lives in the task definition, not in this repo. The
+realm-server serves the endpoint whenever `--livenessPort` is set, whether or not
+anything is checking it — so the presence of the endpoint does not by itself mean
+the trigger is wired up.
+
+The parameters matter as much as the endpoint. Replacement should require the
+endpoint to say "wedged" several times over: at 30s intervals with 3 retries, on
+top of the endpoint's own 30s threshold, that is roughly two minutes of a loop
+that has not turned. A `startPeriod` is required — there is a window early in boot
+where the module graph is still evaluating and nothing is listening yet, and every
+check in it is refused.
+
+The probe should also fail _open_: only an affirmative 503 means unhealthy. A
+plain `curl -f || exit 1` treats a refused connection the same as a wedge, which
+turns a responder that failed to bind into a task-replacement loop — and outside a
+deployment there is no circuit breaker to bound it. The endpoint is an operational
+signal, and losing it should cost the signal, not the service.
 
 The result is not a true readiness/liveness split — a saturated target is still
 eventually deregistered, and a broad flood still produces 5xx at the load balancer.
-What it does buy is that transient saturation stops causing task replacement, so
+What it buys is that transient saturation stops causing task replacement, so
 recovery once load abates is fast instead of being fought by a cold cache.
 
-`/_liveness` binds loopback only, so it is reachable from a check running inside the
-container and from nowhere else. It is unauthenticated, and it stays off the routable
-address for that reason.
+`/_liveness` binds IPv4 loopback only, so it is reachable from inside the task and
+nowhere else. Under `awsvpc` every container in the task shares that network
+namespace, so any sidecar can reach it too. It is unauthenticated, which is why it
+stays off the routable address. Point checks at `127.0.0.1` rather than
+`localhost`, which can resolve to `::1` first.
 
 ## Operating
 
-**A liveness port that never binds looks like a wedge.** A container check pointed
-at an endpoint that is not being served fails every time, which restart-loops the
-service. The endpoint must therefore ship and be verified serving _before_ anything
-is wired to check it, and on rollback the check must come off _before_ the image
-goes back to one that does not serve it. A bind failure is logged on
-`realm:liveness` and reported to Sentry; serving is unaffected either way.
+**Ship the endpoint before wiring a check at it.** With a fail-open probe an
+unreachable endpoint reads as healthy, so getting this backwards is not
+destructive — but the check is then silently inert, reporting green on a server
+nobody is watching for wedges. Verify `curl 127.0.0.1:<port>/_liveness` from
+inside a task before trusting the trigger, and on rollback expect the same
+inertness rather than an outage.
+
+**A responder that is not answering is invisible by design.** A bind failure or a
+dead responder thread leaves serving untouched — that is the intent — so the only
+notice is a `realm:liveness` log line and a Sentry report. Those are the signal
+that wedge detection has stopped working; nothing else will say so.
 
 **When `GET /` starts failing**, read `realm:health` for the same window before
 concluding anything:

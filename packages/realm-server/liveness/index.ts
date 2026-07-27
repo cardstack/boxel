@@ -22,7 +22,14 @@ const LOOPBACK_HOST = '127.0.0.1';
 export function livenessWedgeMs(
   raw: string | undefined = process.env.REALM_LIVENESS_WEDGE_MS,
 ): number {
-  let parsed = raw != null ? Number(raw) : NaN;
+  // An empty or whitespace-only value counts as unset, not as zero. Setting a
+  // variable to "" is an ordinary way to clear it in a task definition, and
+  // `Number('')` is 0 — which is finite, so it would otherwise skip the default
+  // and clamp all the way down to the floor. Getting the shortest permitted
+  // threshold from an attempt to remove the override is the wrong surprise when
+  // the consequence is a task restart.
+  let trimmed = raw?.trim();
+  let parsed = trimmed ? Number(trimmed) : NaN;
   if (!Number.isFinite(parsed)) {
     return DEFAULT_WEDGE_MS;
   }
@@ -58,7 +65,11 @@ export function startLivenessResponder({
   try {
     worker = new Worker(
       new URL('./liveness-responder-worker.ts', import.meta.url),
-      { workerData },
+      // A worker inherits `process.execArgv` by default, which couples the
+      // responder to whatever the realm-server happened to be launched with —
+      // `--input-type=module`, for one, stops the worker starting at all. It
+      // needs no flags of its own.
+      { workerData, execArgv: [] },
     );
   } catch (err) {
     // The constructor throws synchronously when the thread itself can't be
@@ -119,11 +130,25 @@ export function startLivenessResponder({
     Sentry.captureException(err);
     settle(undefined);
   });
-  worker.on('exit', () => settle(undefined));
+  let expectedExit = false;
+  worker.on('exit', (code) => {
+    // A thread that dies on its own is the quiet failure mode: the endpoint
+    // stops answering, and a check reading that as "unreachable, not wedged"
+    // carries on green, so nothing else will ever mention that wedge detection
+    // is off. This log and the Sentry report are the only notice.
+    if (!expectedExit) {
+      log.error(`liveness responder thread exited on its own (code ${code})`);
+      Sentry.captureException(
+        new Error(`liveness responder thread exited on its own (code ${code})`),
+      );
+    }
+    settle(undefined);
+  });
 
   return {
     listening,
     stop: async () => {
+      expectedExit = true;
       await worker.terminate();
     },
   };

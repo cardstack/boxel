@@ -2,6 +2,8 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 import { Worker } from 'node:worker_threads';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import {
   createHeartbeat,
   startEventLoopHeartbeat,
@@ -70,11 +72,13 @@ interface LivenessSample {
 // way would make the caller await every poll before it got to block — and the
 // polls would then all land on an unblocked thread.
 //
-// `polling` resolves once the client thread is up and has started polling;
-// `reported` resolves with every answer it collected.
+// `polling` resolves once the client thread has been told to start; `reported`
+// resolves with every answer it collected. `stop` is for the failure paths —
+// this worker is referenced, so leaving one behind would hold the suite open.
 function armPollingFromOwnThread(port: number): {
   polling: Promise<void>;
   reported: Promise<LivenessSample[]>;
+  stop: () => Promise<void>;
 } {
   let worker = new Worker(CLIENT_WORKER_SOURCE, {
     eval: true,
@@ -89,7 +93,6 @@ function armPollingFromOwnThread(port: number): {
       'message',
       (message: { ready?: boolean; samples?: LivenessSample[] }) => {
         if (message?.samples) {
-          void worker.terminate();
           resolve(message.samples);
         }
       },
@@ -103,7 +106,13 @@ function armPollingFromOwnThread(port: number): {
     });
     worker.once('error', reject);
   });
-  return { polling, reported };
+  return {
+    polling,
+    reported,
+    stop: async () => {
+      await worker.terminate();
+    },
+  };
 }
 
 function blockMainThread(ms: number): void {
@@ -117,10 +126,15 @@ function blockMainThread(ms: number): void {
 module(basename(import.meta.filename), function (hooks) {
   let heartbeat: Heartbeat | undefined;
   let responder: LivenessResponder | undefined;
+  // The client thread is referenced, so an assertion that throws mid-test would
+  // otherwise leave it running and hold the suite open.
+  let stopPolling: (() => Promise<void>) | undefined;
 
   hooks.afterEach(async function () {
+    await stopPolling?.();
     await responder?.stop();
     heartbeat?.stop();
+    stopPolling = undefined;
     responder = undefined;
     heartbeat = undefined;
   });
@@ -144,7 +158,7 @@ module(basename(import.meta.filename), function (hooks) {
     // puts it.
     let port = await serveLiveness(createHeartbeat());
 
-    writeBeat(heartbeat!.buffer, Date.now() - 10_000);
+    writeBeat(heartbeat!.buffer, process.hrtime.bigint() - 10_000_000_000n);
     let wedged = await fetch(`http://127.0.0.1:${port}/_liveness`);
     assert.strictEqual(wedged.status, 503);
     let wedgedBody = await wedged.json();
@@ -155,7 +169,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
     assert.strictEqual(wedgedBody.wedgeMs, WEDGE_MS);
 
-    writeBeat(heartbeat!.buffer, Date.now());
+    writeBeat(heartbeat!.buffer, process.hrtime.bigint());
     let alive = await fetch(`http://127.0.0.1:${port}/_liveness`);
     assert.strictEqual(alive.status, 200);
     assert.true((await alive.json()).alive);
@@ -167,7 +181,8 @@ module(basename(import.meta.filename), function (hooks) {
     // keeps answering from its own thread off the shared buffer. Nothing in that
     // path is the blocked thread.
     let port = await serveLiveness(startEventLoopHeartbeat());
-    let { polling, reported } = armPollingFromOwnThread(port);
+    let { polling, reported, stop } = armPollingFromOwnThread(port);
+    stopPolling = stop;
     await polling;
 
     blockMainThread(2_000);
@@ -189,9 +204,14 @@ module(basename(import.meta.filename), function (hooks) {
         .map((v) => v.heartbeatAgeMs)
         .join(',')}`,
     );
+    // The block ran for 2s against a 300ms threshold, so the stall the responder
+    // measured has to reach most of that — not merely clear the threshold, which
+    // a 503 already implies.
     assert.true(
-      wedged.every((v) => v.alive === false && v.heartbeatAgeMs > WEDGE_MS),
-      'each wedged answer carries the measured stall',
+      Math.max(...wedged.map((v) => v.heartbeatAgeMs)) > 1_500,
+      `measured the stall's real depth, peak age ${Math.max(
+        ...wedged.map((v) => v.heartbeatAgeMs),
+      )}ms`,
     );
     assert.true(
       verdicts.some((v) => v.status === 200),
@@ -216,16 +236,51 @@ module(basename(import.meta.filename), function (hooks) {
     let port = await serveLiveness(startEventLoopHeartbeat());
     let other = await fetch(`http://127.0.0.1:${port}/`);
     assert.strictEqual(other.status, 404);
+    // The right path with the wrong method says so, rather than looking like a
+    // build that doesn't serve the endpoint at all.
     let posted = await fetch(`http://127.0.0.1:${port}/_liveness`, {
       method: 'POST',
     });
-    assert.strictEqual(posted.status, 404);
+    assert.strictEqual(posted.status, 405);
+    assert.strictEqual(posted.headers.get('allow'), 'GET, HEAD');
+  });
+
+  test('a port it cannot bind leaves the server serving', async function (assert) {
+    // The failure this module exists to absorb. The responder is an operational
+    // signal; losing it must cost nothing but the signal, and must say so.
+    let squatter = createServer((_req, res) => res.end());
+    await new Promise<void>((resolve) =>
+      squatter.listen(0, '127.0.0.1', resolve),
+    );
+    let taken = (squatter.address() as AddressInfo).port;
+    try {
+      heartbeat = createHeartbeat();
+      responder = startLivenessResponder({
+        buffer: heartbeat.buffer,
+        port: taken,
+        wedgeMs: WEDGE_MS,
+      });
+      assert.strictEqual(
+        await responder.listening,
+        undefined,
+        'reports that it never bound rather than hanging',
+      );
+      await responder.stop();
+      responder = undefined;
+    } finally {
+      await new Promise<void>((resolve) => squatter.close(() => resolve()));
+    }
+    assert.true(true, 'and startup returned normally instead of throwing');
   });
 
   test('the wedge threshold has a floor a malformed override cannot cross', function (assert) {
     assert.strictEqual(livenessWedgeMs('45000'), 45_000);
     assert.strictEqual(livenessWedgeMs(undefined), 30_000);
     assert.strictEqual(livenessWedgeMs('not-a-number'), 30_000);
+    // Clearing the variable means "use the default", not "use the floor" —
+    // `Number('')` is 0, which is finite, so this needs handling of its own.
+    assert.strictEqual(livenessWedgeMs(''), 30_000);
+    assert.strictEqual(livenessWedgeMs('   '), 30_000);
     assert.strictEqual(livenessWedgeMs('0'), 5_000);
     assert.strictEqual(livenessWedgeMs('-1'), 5_000);
   });

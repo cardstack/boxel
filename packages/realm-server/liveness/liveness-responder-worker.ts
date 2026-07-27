@@ -34,17 +34,21 @@ let server = http.createServer((req, res) => {
   // `req.url` is a path, never absolute-form, for the requests this endpoint
   // serves; compare on the path prefix so a query string doesn't miss.
   let path = (req.url ?? '').split('?')[0];
-  if (
-    path !== LIVENESS_PATH ||
-    (req.method !== 'GET' && req.method !== 'HEAD')
-  ) {
+  if (path !== LIVENESS_PATH) {
     res.writeHead(404, { 'content-type': 'text/plain' });
     res.end('not found');
     return;
   }
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    // 405 over 404 so a check pointed at the right path with the wrong method
+    // says so, rather than looking like a version that doesn't serve it.
+    res.writeHead(405, { 'content-type': 'text/plain', allow: 'GET, HEAD' });
+    res.end('method not allowed');
+    return;
+  }
   let verdict = judgeLiveness({
-    nowMs: Date.now(),
-    beatMs: readBeat(),
+    nowNs: process.hrtime.bigint(),
+    beatNs: readBeat(),
     wedgeMs,
   });
   let body = JSON.stringify(verdict);

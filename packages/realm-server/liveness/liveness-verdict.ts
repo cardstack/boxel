@@ -11,6 +11,10 @@
 // cold definition/transpile cache and lands back in the same load. The second
 // cannot recover on its own. `wedgeMs` is where that line sits: a beat age
 // under it means "late, still turning", over it means "not turning".
+//
+// Both readings are `process.hrtime.bigint()` nanoseconds off the same
+// process-wide base, so the age is a true elapsed duration and cannot be
+// distorted by a wall-clock adjustment in either direction.
 
 export interface LivenessVerdict {
   // True while the main thread is still turning its event loop, whether or not
@@ -24,26 +28,25 @@ export interface LivenessVerdict {
   wedgeMs: number;
 }
 
+const NS_PER_MS = 1_000_000;
+
 export function judgeLiveness({
-  nowMs,
-  beatMs,
+  nowNs,
+  beatNs,
   wedgeMs,
 }: {
-  nowMs: number;
-  beatMs: number;
+  nowNs: bigint;
+  beatNs: bigint;
   wedgeMs: number;
 }): LivenessVerdict {
-  // A never-written beat reads as epoch 0, which yields an enormous age and so
-  // fails the threshold. That is the honest answer for a buffer nobody has
-  // beaten into: nothing has reported the loop turning. In practice the
-  // heartbeat writes its first beat synchronously at construction, before the
-  // responder exists to be asked.
-  let heartbeatAgeMs = nowMs - beatMs;
-  // A clock that went backwards (NTP step) would otherwise read as a negative
-  // age and pass trivially; clamp so the age is always a duration.
-  if (heartbeatAgeMs < 0) {
-    heartbeatAgeMs = 0;
-  }
+  // A never-written beat reads as 0, which makes the age the whole of process
+  // uptime and so fails any threshold. That is the honest answer for a buffer
+  // nobody has beaten into: nothing has reported the loop turning. In practice
+  // the heartbeat writes its first beat synchronously at construction, before
+  // the responder exists to be asked.
+  // Rounded to whole milliseconds: the threshold is seconds-scale, and a bare
+  // integer reads better in the response body than a nanosecond-precision float.
+  let heartbeatAgeMs = Math.round(Number(nowNs - beatNs) / NS_PER_MS);
   return {
     alive: heartbeatAgeMs <= wedgeMs,
     heartbeatAgeMs,

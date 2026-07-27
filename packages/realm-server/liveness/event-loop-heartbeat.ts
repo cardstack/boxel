@@ -8,9 +8,16 @@
 // A shared buffer the reader polls has no such dependency: the beat simply
 // stops advancing, and its age is the measurement.
 //
-// `BigInt64Array` because the value is an epoch millisecond, which does not fit
-// in the int32 that `Atomics` otherwise offers. `Atomics` on an 8-byte aligned
-// slot is already atomic on every platform we run; using it explicitly is what
+// The clock is `process.hrtime.bigint()`, not `Date.now()`. It is monotonic, so
+// an NTP or hypervisor step can't age a beat that was just written (a forward
+// step past the wedge threshold would otherwise condemn a healthy server) or
+// rejuvenate one that is genuinely stale. Its base is per-process, not
+// per-thread, so a reading taken on the responder thread is directly comparable
+// to a beat written on the main thread.
+//
+// `BigInt64Array` because the value is nanoseconds, far past what the int32
+// `Atomics` otherwise offers can hold. `Atomics` on an 8-byte aligned slot is
+// already tear-free on every platform we run; using it explicitly is what
 // documents the cross-thread visibility the reader depends on.
 
 // How often the main thread rewrites the beat. Fixed rather than configurable:
@@ -34,16 +41,16 @@ export interface Heartbeat {
 // with `writeBeat`.
 export function createHeartbeat(): Heartbeat {
   let buffer = new SharedArrayBuffer(BigInt64Array.BYTES_PER_ELEMENT);
-  let beat = () => writeBeat(buffer, Date.now());
-  // Beat once here so the buffer is never observed at epoch 0 by a reader that
+  // View built once and closed over, so a beat allocates nothing beyond the
+  // BigInt itself.
+  let view = new BigInt64Array(buffer);
+  let beat = () => {
+    Atomics.store(view, BEAT_SLOT, process.hrtime.bigint());
+  };
+  // Beat once here so the buffer is never observed at 0 by a reader that
   // attaches before the first interval tick.
   beat();
   return { buffer, beat, stop: () => {} };
-}
-
-// The single encoder of a beat into the shared buffer.
-export function writeBeat(buffer: SharedArrayBuffer, atMs: number): void {
-  Atomics.store(new BigInt64Array(buffer), BEAT_SLOT, BigInt(atMs));
 }
 
 export function startEventLoopHeartbeat(): Heartbeat {
@@ -57,11 +64,17 @@ export function startEventLoopHeartbeat(): Heartbeat {
   };
 }
 
+// Places a beat at an explicit monotonic reading, for a caller that needs one
+// of a chosen age without waiting for real time to pass.
+export function writeBeat(buffer: SharedArrayBuffer, atNs: bigint): void {
+  Atomics.store(new BigInt64Array(buffer), BEAT_SLOT, atNs);
+}
+
 // Binds a reader to a buffer produced by `createHeartbeat`, for a holder of the
 // buffer that doesn't have the closure that writes it — the responder worker,
 // which receives the buffer through `workerData`. The typed-array view is built
-// once here rather than per read, so answering a request allocates nothing.
-export function createBeatReader(buffer: SharedArrayBuffer): () => number {
+// once here rather than per read.
+export function createBeatReader(buffer: SharedArrayBuffer): () => bigint {
   let view = new BigInt64Array(buffer);
-  return () => Number(Atomics.load(view, BEAT_SLOT));
+  return () => Atomics.load(view, BEAT_SLOT);
 }
