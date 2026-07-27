@@ -246,6 +246,8 @@ const ALL_TEST_FILES: string[] = [
   './indexing-test',
   './lazy-mount-test',
   './listener-dispatcher-test',
+  './liveness-verdict-test',
+  './liveness-responder-test',
   './module-cache-race-test',
   './module-syntax-test',
   './network-inflight-tracker-test',

@@ -43,6 +43,8 @@ import { ModuleCacheCoordinator } from './lib/module-cache-coordination.ts';
 import { JobsFinishedListener } from './lib/jobs-finished-listener.ts';
 import { JobScopedSearchCache } from './job-scoped-search-cache.ts';
 import { startHealthSampler } from './health-sampler.ts';
+import { startEventLoopHeartbeat } from './liveness/event-loop-heartbeat.ts';
+import { startLivenessResponder } from './liveness/index.ts';
 import { resolveFullIndexOnStartup } from './lib/full-index-on-startup.ts';
 import { PUBLISHED_DIRECTORY_NAME } from '@cardstack/runtime-common';
 
@@ -196,6 +198,7 @@ let {
   migrateDB,
   workerManagerPort,
   workerManagerUrl,
+  livenessPort,
   prerendererUrl,
 } = yargs(process.argv.slice(2))
   .usage('Start realm server')
@@ -263,6 +266,11 @@ let {
       description:
         'The full URL of the worker manager. Used in branch mode instead of workerManagerPort.',
       type: 'string',
+    },
+    livenessPort: {
+      description:
+        'Loopback-only port on which to answer GET /_liveness with this process’s main-thread liveness, served off a worker thread so the answer survives a saturated event loop. Omit to not serve it at all.',
+      type: 'number',
     },
     prerendererUrl: {
       demandOption: true,
@@ -336,9 +344,20 @@ let autoMigrate = migrateDB || undefined;
 log.info(
   `Realm server boot config: port=${port} serverURL=${serverURL} distURL=${distURL} matrixURL=${matrixURL} realmsRootPath=${realmsRootPath} migrateDB=${Boolean(
     migrateDB,
-  )} workerManagerPort=${workerManagerPort ?? 'none'} prerendererUrl=${prerendererUrl} enableFileWatcher=${ENABLE_FILE_WATCHER} fullIndexOnStartupOverride=${FULL_INDEX_ON_STARTUP_OVERRIDE ?? 'unset (bootstrap-only)'}`,
+  )} workerManagerPort=${workerManagerPort ?? 'none'} livenessPort=${livenessPort ?? 'none'} prerendererUrl=${prerendererUrl} enableFileWatcher=${ENABLE_FILE_WATCHER} fullIndexOnStartupOverride=${FULL_INDEX_ON_STARTUP_OVERRIDE ?? 'unset (bootstrap-only)'}`,
 );
 log.info(`Realm paths: ${paths.map(String).join(', ')}`);
+
+// Start beating before anything else, so the shared buffer reflects a turning
+// event loop for the whole of boot rather than only from the point the server is
+// assembled. The responder reads that buffer from a thread of its own; when
+// `--livenessPort` is omitted there is no responder and the heartbeat is a
+// no-cost timer.
+const heartbeat = startEventLoopHeartbeat();
+const livenessResponder =
+  livenessPort != null
+    ? startLivenessResponder({ buffer: heartbeat.buffer, port: livenessPort })
+    : undefined;
 
 const getIndexHTML = async () => {
   let response = await fetch(distURL);
@@ -713,7 +732,12 @@ const reportHostShellToManager = async () => {
           jobsFinishedListener?.shutDown(),
           moduleCacheInvalidationListener?.shutDown(),
           moduleCacheCoordinator?.shutDown(),
+          livenessResponder?.stop(),
         ]);
+        // Stopped only once the responder is gone, never before: the loop is
+        // still turning while the shutdown above runs, and a check arriving in
+        // that window should read a beating heartbeat rather than a frozen one.
+        heartbeat.stop();
         queue.destroy(); // warning this is async
         dbAdapter.close(); // warning this is async
         console.log(`realm server on port ${stopPort} has stopped`);

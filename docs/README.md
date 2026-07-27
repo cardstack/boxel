@@ -21,4 +21,5 @@ The following are important concepts:
 
 ## Operations
 
+- [Realm-server health signals](realm-server-health-signals.md): which check answers which question, why an event-loop-gated failure is honest, and what to do when the loop saturates.
 - From-scratch indexing timeout: set `FROM_SCRATCH_JOB_TIMEOUT_SEC` (seconds) to control the from-scratch indexing job timeout and the queue worker cap; default is 3600.
