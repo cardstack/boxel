@@ -1,7 +1,10 @@
-import { click, visit, waitFor } from '@ember/test-helpers';
+import { click, settled, visit, waitFor } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
+
+import { testRealmInfo } from '@cardstack/runtime-common/helpers/const';
+import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import {
   setupLocalIndexing,
@@ -117,5 +120,44 @@ module('Acceptance | workspace card', function (hooks) {
         'from First Note',
         'the event names the source it was cloned from',
       );
+  });
+
+  test('a completed indexing pass surfaces in the Activity feed', async function (assert) {
+    await visit('/');
+    await click('[data-test-workspace-button="Unnamed Workspace"]');
+    await waitFor(`${STACK} nav.tabs`);
+    await click(`${STACK} nav.tabs .tab:nth-child(3)`); // Activity
+
+    // Deliver a realm index event the way the realm-server would, over the
+    // realm's matrix room the Workspace subscribes to.
+    let realmRoomId = mockMatrixUtils.getRoomIdForRealmAndUser(
+      testRealmURL,
+      '@testuser:localhost',
+    );
+    mockMatrixUtils.simulateRemoteMessage(
+      realmRoomId,
+      testRealmInfo.realmUserId!,
+      {
+        type: APP_BOXEL_REALM_EVENT_TYPE,
+        content: {
+          eventName: 'index',
+          indexType: 'incremental',
+          invalidations: [`${testRealmURL}Note/1`, `${testRealmURL}Note/2`],
+          realmURL: testRealmURL,
+        },
+      },
+    );
+    await settled();
+
+    await waitFor(`${STACK} .feed-verb.indexed`);
+    assert
+      .dom(`${STACK} .feed-verb.indexed`)
+      .hasText('Indexed', 'the indexing pass reads as a first-class event');
+    assert
+      .dom(`${STACK} .feed-event-tile`)
+      .exists('a card-less event tile stands in for the embedded card');
+    assert
+      .dom(`${STACK} .activity-pane`)
+      .containsText('2 cards reindexed', 'the event describes the pass');
   });
 });
