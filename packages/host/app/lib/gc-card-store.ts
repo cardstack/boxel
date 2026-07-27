@@ -339,7 +339,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
       return id;
     }
     try {
-      return this.#virtualNetwork.toURL(id).href;
+      return this.#virtualNetwork.toRealURLHref(id);
     } catch {
       return id;
     }

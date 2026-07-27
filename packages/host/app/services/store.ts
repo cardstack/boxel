@@ -3066,16 +3066,20 @@ export function asURL(
   urlOrDoc: string | LooseSingleCardDocument,
   vn: VirtualNetwork,
 ) {
-  if (typeof urlOrDoc !== 'string') {
-    return urlOrDoc.data.id;
+  let id =
+    typeof urlOrDoc === 'string' ? urlOrDoc.replace(/\.json$/, '') : undefined;
+  if (id === undefined) {
+    id = (urlOrDoc as LooseSingleCardDocument).data.id;
+    if (id == null) {
+      return undefined;
+    }
   }
-  let id = urlOrDoc.replace(/\.json$/, '');
-  // Locals stay as-is; remotes resolve through the VN to a normalized URL.
-  // Keying stays in URL form so it matches gc-card-store, which keys instances
-  // by their (URL-form) data.id. Flipping the store's canonical key to RRI is
-  // deferred — it needs gc-card-store keyed the same way and the URL
-  // normalization `toURL` provides here (see CS-11730).
-  return isLocalId(id) ? id : vn.toURL(id).href;
+  // The store keys every instance by its canonical real (served) URL — the one
+  // form that unifies a card id's every spelling (RRI, virtual alias, url-
+  // mapped alias, real URL). Both the string and document overloads route
+  // through it so a lookup by any spelling lands on the same entry, and so the
+  // key matches gc-card-store, which keys by the same form. Locals stay as-is.
+  return isLocalId(id) ? id : vn.toRealURLHref(id);
 }
 
 function isSystemCardDefaultId(
