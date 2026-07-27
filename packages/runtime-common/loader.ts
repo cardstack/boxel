@@ -188,6 +188,12 @@ function defaultSleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// TEMP (CS-11450 diagnostic): per-URL module-fetch counter. `load()` runs only
+// on a module-cache MISS, so a high count means the cache key is unstable and
+// the module is re-fetched — the base/card-api FetchHeaderTimeout signature.
+// Revert.
+const moduleLoadCounts = new Map<string, number>();
+
 let nonce = 0;
 export class Loader {
   nonce = nonce++; // the nonce is a useful debugging tool that let's us compare loaders
@@ -1188,6 +1194,16 @@ export class Loader {
     | { type: 'source'; source: string; url: string }
     | { type: 'shimmed'; module: Record<string, unknown>; url: string }
   > {
+    // TEMP (CS-11450 diagnostic): count network loads per module. A module the
+    // cache holds should load once; repeats mean moduleCacheKey isn't stable.
+    let lc = (moduleLoadCounts.get(moduleURL.href) ?? 0) + 1;
+    moduleLoadCounts.set(moduleURL.href, lc);
+    if (lc === 3 || lc === 10 || lc % 25 === 0) {
+      // eslint-disable-next-line no-console
+      console.log(
+        `[LOAD-PROBE] fetched ${moduleURL.href} ${lc} times; cacheKey=${JSON.stringify(this.moduleCacheKey(moduleURL.href))}`,
+      );
+    }
     let response: MaybeCachedResponse;
     try {
       // Retry transient upstream 5xx responses (502/503/504) with short
