@@ -2823,7 +2823,21 @@ class Isolated extends Component<typeof Workspace> {
     } //
     // Bound hydration and federated-search scope. Default to 100 but let a
     // caller that needs fewer (e.g. a single-row preview) request a smaller page.
-    return store.search({ page: { size: 100 }, ...query } as Query, [realm]);
+    try {
+      return await store.search({ page: { size: 100 }, ...query } as Query, [
+        realm,
+      ]);
+    } catch (e) {
+      // These searches feed passive panels — the Home inventory, the recent
+      // preview, the Activity feed — every one of which reads fine as empty.
+      // The realm can also be unsearchable for reasons the card can't fix: the
+      // host refuses to mint a token for a realm on a different realm server
+      // than its own, so a Workspace rendered from a foreign realm server
+      // rejects here on every panel. Degrade to empty instead of letting the
+      // rejection escape the task and surface as an unhandled error.
+      console.warn(`Workspace search failed for realm ${realm}`, e);
+      return [];
+    }
   }; //
 
   // The four library-group rows keep stable identities (@cached, no tracked
