@@ -131,7 +131,9 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
             // Ember build mode. Falls back to whatever the build baked in when
             // this server has no REALM_SENTRY_ENVIRONMENT (e.g. local dev).
             hostedEnvironment:
-              process.env.REALM_SENTRY_ENVIRONMENT || config.hostedEnvironment,
+              process.env.REALM_SENTRY_ENVIRONMENT ||
+              config.hostedEnvironment ||
+              'local',
             resolvedBaseRealmURL: rewriteRealmURL(config.resolvedBaseRealmURL),
             resolvedCatalogRealmURL: rewriteRealmURL(
               config.resolvedCatalogRealmURL,
