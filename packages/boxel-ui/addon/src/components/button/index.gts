@@ -85,7 +85,13 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
       <button
         class={{classes}}
         aria-label={{if @loading 'loading'}}
-        aria-disabled={{@disabled}}
+        {{! 'true', not the raw boolean: Glimmer renders a bare true as
+            aria-disabled="", and ARIA treats any value that isn't exactly
+            "true"/"false" as the default, false. The native disabled
+            attribute below carries the real state either way, so this was
+            benign — but it contradicted itself, and matched none of the
+            [aria-disabled='true'] selectors used across the codebase. }}
+        aria-disabled={{if @disabled 'true'}}
         disabled={{@disabled}}
         data-test-boxel-button
         ...attributes
@@ -100,9 +106,20 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
         {{yield}}
       </button>
     {{else if (eq @as 'anchor')}}
+      {{! An <a> we've stripped the href from is not a link — it maps to the
+          generic role, where aria-disabled is not supported and gets dropped.
+          role='link' is what makes the disabled state reach assistive tech;
+          without it the CSS below fades the element and announces nothing.
+
+          Keyed on @disabled only, never on a falsy @href: callers are free to
+          pass href as a plain attribute through ...attributes (see
+          base/skill-plus.gts, base/default-templates/theme-dashboard.gts), and
+          those are real links that must not be labelled unavailable. }}
       <a
         class={{classes}}
         href={{unless @disabled (if @href (sanitizeHtml @href))}}
+        role={{if @disabled 'link'}}
+        aria-disabled={{if @disabled 'true'}}
         data-test-boxel-button
         ...attributes
       >
