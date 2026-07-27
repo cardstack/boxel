@@ -487,6 +487,13 @@ export class OpencodeFactoryAgent implements LoopAgent {
     if (issueType === 'bootstrap' && context.briefUrl) {
       return assembleBootstrapPrompt({ context, loader: this.promptLoader });
     }
+    if (issueType === 'hardening' && !context.validationContext) {
+      return this.promptLoader.load('issue-harden', {
+        issue: context.issue,
+        project: context.project,
+        knowledge: context.knowledge,
+      });
+    }
     if (context.validationContext) {
       return assembleIteratePrompt({
         context,

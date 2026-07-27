@@ -325,12 +325,6 @@ export interface AssembleIteratePromptOptions {
   loader: PromptLoader;
 }
 
-export interface AssembleTestPromptOptions {
-  context: AgentContext;
-  implementedFiles: { path: string; content: string; realm: string }[];
-  loader: PromptLoader;
-}
-
 /**
  * Build tool results data with outputFormat propagated from tool manifests.
  * Shared between assembleImplementPrompt and assembleIteratePrompt.
@@ -488,18 +482,6 @@ export function assembleBootstrapPrompt(
   return loader.load('bootstrap-implement-v2', {
     briefUrl: context.briefUrl,
     issue: context.issue,
-  });
-}
-
-/**
- * Assemble the user prompt for a test generation pass.
- */
-export function assembleTestPrompt(options: AssembleTestPromptOptions): string {
-  let { context, implementedFiles, loader } = options;
-
-  return loader.load('issue-test', {
-    issue: context.issue,
-    implementedFiles,
   });
 }
 

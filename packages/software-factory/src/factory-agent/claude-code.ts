@@ -602,6 +602,16 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
         loader: this.promptLoader,
       });
     }
+    if (issueType === 'hardening' && !context.validationContext) {
+      // Hardening turn: QUnit tests for an already-shipped card. Fix
+      // iterations (validationContext set) fall through to the iterate
+      // prompt like any other issue.
+      return this.promptLoader.load('issue-harden', {
+        issue: context.issue,
+        project: context.project,
+        knowledge: context.knowledge,
+      });
+    }
     if (context.validationContext) {
       return assembleIteratePrompt({
         context,

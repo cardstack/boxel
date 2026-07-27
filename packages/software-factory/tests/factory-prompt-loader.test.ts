@@ -5,7 +5,6 @@ import {
   assembleImplementPrompt,
   assembleIteratePrompt,
   assembleSystemPrompt,
-  assembleTestPrompt,
   buildOneShotMessages,
   FilePromptLoader,
   interpolate,
@@ -694,36 +693,27 @@ module('factory-prompt-loader > assembleIteratePrompt', function () {
 });
 
 // ---------------------------------------------------------------------------
-// assembleTestPrompt
+// issue-harden template
 // ---------------------------------------------------------------------------
 
-module('factory-prompt-loader > assembleTestPrompt', function () {
-  test('includes issue and implemented files', function (assert) {
+module('factory-prompt-loader > issue-harden template', function () {
+  test('renders the hardening turn prompt', function (assert) {
     let loader = new FilePromptLoader();
-    let ctx = makeMinimalContext({
-      issue: { id: 'Issues/t1', summary: 'Test issue' },
+    let result = loader.load('issue-harden', {
+      project: { objective: 'Build a sticky note family' },
+      issue: {
+        id: 'Issues/harden-sticky-note',
+        summary: 'Harden: Implement Sticky Note card',
+        description: 'Write QUnit tests for the shipped work of SN-1.',
+        acceptanceCriteria: '- [ ] run_tests passes',
+      },
+      knowledge: [],
     });
 
-    let result = assembleTestPrompt({
-      context: ctx,
-      implementedFiles: [
-        {
-          path: 'sticky-note.gts',
-          content: 'export class StickyNote {}',
-          realm: 'target',
-        },
-      ],
-      loader,
-    });
-
-    assert.ok(result.includes('Issues/t1'), 'includes issue ID');
-    assert.ok(result.includes('sticky-note.gts'), 'includes file path');
-    assert.ok(
-      result.includes('export class StickyNote'),
-      'includes file content',
-    );
-    assert.ok(result.includes('target realm'), 'includes realm');
-    assert.ok(result.includes('signal_done'), 'instructs to call signal_done');
+    assert.ok(result.includes('Issues/harden-sticky-note'), 'issue id');
+    assert.ok(result.includes('HARDENING turn'), 'hardening instructions');
+    assert.ok(result.includes('runTests()'), 'QUnit conventions');
+    assert.ok(result.includes('signal_done'), 'signals done via MCP tool');
   });
 });
 

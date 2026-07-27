@@ -60,6 +60,7 @@ import {
   type IssueLoopResult,
 } from './issue-loop.ts';
 import { RealmIssueStore, type IssueStore } from './issue-scheduler.ts';
+import type { FactoryPhase } from './factory-phase.ts';
 import { RealmIssueRelationshipLoader } from './realm-issue-relationship-loader.ts';
 import { withStdoutRedirected } from './redirect-stdout.ts';
 import { materializeWorkspaceSkills } from './workspace-skills.ts';
@@ -147,6 +148,10 @@ export interface IssueLoopWiringConfig {
       model?: string;
       effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     };
+    harden?: {
+      model?: string;
+      effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    };
   };
   /** Phase-split: design turn + build turn per issue (see IssueLoopConfig). */
   phaseSplit?: boolean;
@@ -180,10 +185,10 @@ export interface IssueLoopWiringConfig {
    */
   renderGate?: boolean;
   /**
-   * Execute factory-generated polish issues (issueType `enhancement`)
-   * unattended. Default false — they stay on the board for an operator.
+   * Run the lifecycle through this phase (inclusive); later-phase issues
+   * stay on the board for an operator. Default `implementation`.
    */
-  includePolish?: boolean;
+  throughPhase?: FactoryPhase;
   /**
    * Invoked once, right after the bootstrap issue completes. The entrypoint
    * uses this to link the realm index's `board` relationship as soon as the
@@ -438,7 +443,10 @@ export async function runFactoryIssueLoop(
   }
 
   // 5. Validator factory
-  let createValidator = (issueId: string) =>
+  let createValidator = (
+    issueId: string,
+    options?: { includeTests?: boolean },
+  ) =>
     createDefaultPipeline({
       client,
       realmServerUrl,
@@ -452,7 +460,9 @@ export async function runFactoryIssueLoop(
       issueId,
       fetchFilenames: (realmUrl: string) => client.listFiles(realmUrl),
       cache: validationCache,
-      includeTestStep: false,
+      // The per-issue pipeline runs no tests; the QUnit step belongs to
+      // hardening-phase issues only.
+      includeTestStep: options?.includeTests === true,
       hostToolImports,
     });
 
@@ -514,7 +524,7 @@ export async function runFactoryIssueLoop(
     modelPolicy: config.modelPolicy,
     phaseSplit: config.phaseSplit === true,
     forkContext: config.forkContext === true,
-    includePolish: config.includePolish === true,
+    throughPhase: config.throughPhase,
     maxIterationsPerIssue: config.maxIterationsPerIssue,
     maxOuterCycles: config.maxOuterCycles,
     debug: config.debug,

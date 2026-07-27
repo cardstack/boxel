@@ -4,6 +4,7 @@ const { module, test } = QUnit;
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 
 import {
+  createHardeningIssues,
   createSeedIssue,
   linkProjectToSeedIssue,
 } from '../src/factory-seed.ts';
@@ -297,5 +298,93 @@ module('factory-seed > createSeedIssue resume guard', function (hooks) {
       'backlog',
       'bootstrap re-armed for the new brief',
     );
+  });
+});
+
+module('factory-seed > createHardeningIssues', function (hooks) {
+  let workspace: ReturnType<typeof createTestWorkspace>;
+
+  hooks.beforeEach(function () {
+    workspace = createTestWorkspace();
+    workspace.write(
+      'Issues/sticky-note.json',
+      JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: { issueId: 'SN-1', status: 'done', issueType: 'feature' },
+          relationships: {
+            project: { links: { self: '../Projects/sticky-note' } },
+          },
+          meta: { adoptsFrom: { module: DARKFACTORY, name: 'Issue' } },
+        },
+      }),
+    );
+  });
+
+  hooks.afterEach(function () {
+    workspace.cleanup();
+  });
+
+  test('writes one hardening issue per implementation issue', async function (assert) {
+    let created = await createHardeningIssues({
+      darkfactoryModuleUrl: DARKFACTORY,
+      workspaceDir: workspace.dir,
+      issues: [
+        {
+          id: `${REALM}Issues/sticky-note`,
+          issueId: 'SN-1',
+          summary: 'Implement Sticky Note card',
+          acceptanceCriteria: '- [ ] renders in 3 formats',
+        },
+      ],
+    });
+
+    assert.deepEqual(created, ['Issues/harden-sticky-note']);
+    let doc = JSON.parse(workspace.read('Issues/harden-sticky-note.json'));
+    assert.strictEqual(doc.data.attributes.issueType, 'hardening');
+    assert.strictEqual(doc.data.attributes.issueId, 'HARD-SN-1');
+    assert.strictEqual(doc.data.attributes.status, 'backlog');
+    assert.true(
+      doc.data.attributes.description.includes('renders in 3 formats'),
+      'source acceptance criteria echoed into the description',
+    );
+    assert.deepEqual(
+      doc.data.relationships['blockedBy.0'],
+      { links: { self: '../Issues/sticky-note' } },
+      'blocked by the source issue',
+    );
+    assert.deepEqual(
+      doc.data.relationships.project,
+      { links: { self: '../Projects/sticky-note' } },
+      'project relationship copied from the source issue (board visibility)',
+    );
+  });
+
+  test('is idempotent — existing hardening files are left alone', async function (assert) {
+    let options = {
+      darkfactoryModuleUrl: DARKFACTORY,
+      workspaceDir: workspace.dir,
+      issues: [{ id: `${REALM}Issues/sticky-note`, issueId: 'SN-1' }],
+    };
+    assert.deepEqual(await createHardeningIssues(options), [
+      'Issues/harden-sticky-note',
+    ]);
+    assert.deepEqual(
+      await createHardeningIssues(options),
+      [],
+      'second call creates nothing',
+    );
+  });
+
+  test('a source issue without a local card file still gets a hardening issue (no project link)', async function (assert) {
+    let created = await createHardeningIssues({
+      darkfactoryModuleUrl: DARKFACTORY,
+      workspaceDir: workspace.dir,
+      issues: [{ id: `${REALM}Issues/ghost-card`, summary: 'Ghost' }],
+    });
+
+    assert.deepEqual(created, ['Issues/harden-ghost-card']);
+    let doc = JSON.parse(workspace.read('Issues/harden-ghost-card.json'));
+    assert.strictEqual(doc.data.relationships.project, undefined);
   });
 });

@@ -25,6 +25,11 @@ import {
 } from './factory-brief.ts';
 import { FactoryEntrypointUsageError } from './factory-entrypoint-errors.ts';
 import {
+  FACTORY_PHASES,
+  parseFactoryPhase,
+  type FactoryPhase,
+} from './factory-phase.ts';
+import {
   assertAgentProviderImplemented,
   runFactoryIssueLoop,
   type IssueLoopWiringConfig,
@@ -110,11 +115,11 @@ export interface FactoryEntrypointOptions {
   /** Context forking: prime once per brief, fork every implementation turn. */
   forkContext?: boolean;
   /**
-   * Execute factory-generated polish issues (the bootstrap's pass-2
-   * `enhancement` scope) unattended. Default false: the loop leaves them
-   * on the board awaiting operator approval.
+   * Run the lifecycle through this phase (inclusive): design |
+   * implementation | hardening | polishing. Later-phase issues stay on
+   * the board awaiting operator approval. Default `implementation`.
    */
-  includePolish?: boolean;
+  throughPhase?: FactoryPhase;
   /**
    * Model for fix iterations (inner iterations ≥ 2 — mechanical lint/parse
    * fix-ups). Pass `inherit` to keep the session model for every turn.
@@ -318,9 +323,13 @@ export function getFactoryEntrypointUsage(): string {
     '                              so downgrading is an explicit experiment). `inherit` is a no-op.',
     '  --review-effort <effort>    Effort for the review turn when --review-model is set',
     '                              (low|medium|high|xhigh|max). Default medium.',
-    "  --include-polish            Execute factory-generated polish issues (the bootstrap's",
-    '                              pass-2 enhancement scope) unattended. By default they stay',
-    '                              on the board awaiting operator approval.',
+    '  --through <phase>           Run the lifecycle through this phase (inclusive):',
+    '                              design | implementation | hardening | polishing.',
+    '                              Default implementation. Later-phase issues stay on the',
+    '                              board awaiting operator approval. hardening synthesizes',
+    '                              one QUnit test-pass issue per shipped implementation',
+    "                              issue; polishing also executes the bootstrap's",
+    '                              pass-2 enhancement scope unattended.',
     '  --no-render-gate            Skip the v3 render gate + acceptance walkthrough (post-issue',
     '                              _screenshot-card captures and the verifier turn that reads',
     '                              them, verdicts acceptance criteria, and files defect issues).',
@@ -398,8 +407,8 @@ export function parseFactoryEntrypointArgs(
         'fork-context': {
           type: 'boolean',
         },
-        'include-polish': {
-          type: 'boolean',
+        through: {
+          type: 'string',
         },
         'fix-model': {
           type: 'string',
@@ -519,7 +528,7 @@ export function parseFactoryEntrypointArgs(
     // search the catalog before hand-rolling UI.
     enableBoxelUiDiscovery: true,
     forkContext: parsed.values['fork-context'] === true ? true : undefined,
-    includePolish: parsed.values['include-polish'] === true ? true : undefined,
+    throughPhase: parseThroughPhase(parsed.values.through),
     fixModel:
       typeof parsed.values['fix-model'] === 'string'
         ? parsed.values['fix-model']
@@ -563,6 +572,16 @@ export function parseFactoryEntrypointArgs(
         : undefined,
     monitorLevel: parseMonitorLevel(parsed.values['monitor-level']),
   };
+}
+
+function parseThroughPhase(raw: unknown): FactoryPhase | undefined {
+  try {
+    return parseFactoryPhase(raw);
+  } catch (error) {
+    throw new FactoryEntrypointUsageError(
+      `Invalid --through: ${error instanceof Error ? error.message : String(error)} Valid values: ${FACTORY_PHASES.join(', ')}.`,
+    );
+  }
 }
 
 function parseMonitorLevel(
@@ -631,6 +650,7 @@ export function buildModelPolicy(options: {
       build?: TurnBudget;
       fix?: TurnBudget;
       acceptance?: TurnBudget;
+      harden?: TurnBudget;
     }
   | undefined {
   // Fix turns: short output vs a big primed prefix — in-family effort
@@ -645,6 +665,7 @@ export function buildModelPolicy(options: {
     build?: TurnBudget;
     fix?: TurnBudget;
     acceptance?: TurnBudget;
+    harden?: TurnBudget;
   } = {
     fix: {
       ...(fixModel ? { model: fixModel } : {}),
@@ -667,6 +688,11 @@ export function buildModelPolicy(options: {
       effort: normalizeEffort(options.reviewEffort, 'medium'),
     };
   }
+
+  // Hardening turns write QUnit test files against an already-shipped,
+  // already-reviewed card — mechanical translation work with the test
+  // step as its gate, so the cheap tier is the default.
+  policy.harden = { model: 'claude-sonnet-5', effort: 'medium' };
 
   // Bootstrap: plans the project and writes tracker JSON — long mechanical
   // output where the family switch beats flagship cost, like build turns.
@@ -965,7 +991,7 @@ export async function runFactoryEntrypoint(
     enableBoxelUiDiscovery: options.enableBoxelUiDiscovery,
     runTitle: brief.title,
     forkContext: options.forkContext,
-    includePolish: options.includePolish,
+    throughPhase: options.throughPhase,
     modelPolicy: buildModelPolicy({ ...options, phaseSplit }),
     phaseSplit,
     renderGate: options.renderGate,

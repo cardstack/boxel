@@ -29,6 +29,8 @@ import type { FactoryTool, ToolCallEntry } from './factory-tool-builder.ts';
 import type { IssueStore } from './issue-scheduler.ts';
 
 import { IssueScheduler } from './issue-scheduler.ts';
+import { issuePhase, phaseRank, type FactoryPhase } from './factory-phase.ts';
+import { createHardeningIssues } from './factory-seed.ts';
 import { logger } from './logger.ts';
 import { startSpan, traceEvent } from './run-trace.ts';
 import { isBugFixIssue } from './factory-prompt-loader.ts';
@@ -128,7 +130,10 @@ export interface IssueLoopConfig {
    * Receives the issue ID so the validator can scope artifacts (e.g. TestRun
    * slugs) to the specific issue being validated.
    */
-  createValidator: (issueId: string) => Validator;
+  createValidator: (
+    issueId: string,
+    options?: { includeTests?: boolean },
+  ) => Validator;
   targetRealm: string;
   /**
    * Control realm hosting issues / run log / validations under the v3
@@ -185,13 +190,13 @@ export interface IssueLoopConfig {
    */
   acceptanceWalkthrough?: boolean;
   /**
-   * Execute factory-generated polish issues (`issueType: 'enhancement'`,
-   * the bootstrap's pass-2 scope). Default false: the loop leaves them on
-   * the board awaiting an operator instead of auto-executing — their own
-   * generated text says operators may cancel them wholesale, and an
-   * unattended run has nobody standing there to do so.
+   * Run the lifecycle through this phase (inclusive) and leave every
+   * later-phase issue on the board as an operator decision point.
+   * Default `implementation`. Targeting `hardening` (or later) also
+   * makes the loop synthesize one hardening issue per done
+   * implementation issue once implementation drains. See factory-phase.ts.
    */
-  includePolish?: boolean;
+  throughPhase?: FactoryPhase;
   /**
    * Per-turn model/thinking budget policy, keyed by turn type. The
    * ORCHESTRATOR owns this (turn type is deterministic here); issues
@@ -221,6 +226,10 @@ export interface IssueLoopConfig {
       effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     };
     acceptance?: {
+      model?: string;
+      effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+    };
+    harden?: {
       model?: string;
       effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     };
@@ -522,7 +531,7 @@ export async function runIssueLoop(
     monitor,
     renderGate,
     acceptanceWalkthrough = true,
-    includePolish = false,
+    throughPhase = 'implementation',
     modelPolicy,
     phaseSplit = false,
     forkContext = false,
@@ -757,6 +766,87 @@ export async function runIssueLoop(
     ]);
   };
 
+  // Hardening synthesis: when the run targets the hardening phase (or
+  // later), the loop writes one hardening issue per done implementation
+  // issue once implementation drains — mechanically, no inference (see
+  // createHardeningIssues). Runs before the outer loop for resumes whose
+  // implementation phase already finished, and after each cycle so the
+  // transition happens the moment the last implementation issue lands.
+  let hardeningSeeded = false;
+  let maybeSeedHardening = async (): Promise<void> => {
+    if (
+      hardeningSeeded ||
+      phaseRank(throughPhase) < phaseRank('hardening') ||
+      !darkfactoryModuleUrl
+    ) {
+      return;
+    }
+    let all: SchedulableIssue[];
+    try {
+      all = await issueStore.listIssues();
+    } catch {
+      return;
+    }
+    if (all.some((i) => issuePhase(i) === 'hardening')) {
+      hardeningSeeded = true;
+      return;
+    }
+    let impl = all.filter((i) => issuePhase(i) === 'implementation');
+    if (impl.length === 0 || !impl.every((i) => i.status === 'done')) {
+      return;
+    }
+    let created = await createHardeningIssues({
+      darkfactoryModuleUrl,
+      workspaceDir,
+      issues: impl.map((i) => ({
+        id: i.id,
+        issueId: typeof i.issueId === 'string' ? i.issueId : undefined,
+        summary: i.summary,
+        acceptanceCriteria:
+          typeof i.acceptanceCriteria === 'string'
+            ? i.acceptanceCriteria
+            : undefined,
+      })),
+    });
+    hardeningSeeded = true;
+    if (created.length === 0) return;
+    log.info(
+      `Hardening phase: synthesized ${created.length} issue(s): ${created.join(', ')}`,
+    );
+    traceEvent('scheduler', 'seed-hardening', { count: created.length });
+    let seedSync = await syncWorkspace();
+    if (!seedSync.ok) {
+      log.warn(
+        `Failed to sync hardening issues: ${seedSync.error ?? 'unknown error'}`,
+      );
+      return;
+    }
+    // The scheduler reads the realm index; bound-poll until it reflects
+    // the freshly-synced issues so the outer loop doesn't exit early.
+    try {
+      await retryWithPoll(
+        () => issueStore.listIssues(),
+        (issues) => issues.some((i) => issuePhase(i) === 'hardening'),
+      );
+    } catch {
+      // Falls through — the end-of-cycle reload may still pick them up.
+    }
+    if (runLog) {
+      await runLog.append([
+        {
+          kind: 'phase',
+          headline: 'Implementation complete — entering the hardening phase',
+          body: `${created.length} hardening issue(s) queued: QUnit test passes over the shipped cards.`,
+          who: 'orchestrator',
+        },
+      ]);
+    }
+    monitor?.noteScheduler(
+      `Hardening phase: ${created.length} issue(s) synthesized`,
+    );
+  };
+  await maybeSeedHardening();
+
   // fork-context mode: undefined = not yet primed; null = priming failed
   // (run without forking); string = fork seed session id.
   let primeSessionId: string | null | undefined;
@@ -800,31 +890,34 @@ export async function runIssueLoop(
       }
     }
 
-    // Factory-generated polish does not auto-execute. The bootstrap plans
-    // pass-2 enhancement issues whose own text says operators may cancel
-    // them wholesale — a decision an unattended run cannot make, so the
-    // loop leaves them on the board for a human (or `--include-polish`).
-    if (!includePolish && issue.issueType === 'enhancement') {
+    // Issues beyond the run's target phase do not auto-execute — they
+    // stay on the board as the operator's decision point (the bootstrap's
+    // pass-2 polish scope in particular says operators may cancel it
+    // wholesale, a decision an unattended run cannot make). `--through
+    // <phase>` widens the target.
+    let phase = issuePhase(issue);
+    if (phaseRank(phase) > phaseRank(throughPhase)) {
       log.info(
-        `Outer cycle ${outerCycles}: leaving polish issue on the board: ${issueSummaryLabel(issue)} — pass --include-polish to execute polish passes unattended`,
+        `Outer cycle ${outerCycles}: leaving ${phase} issue on the board: ${issueSummaryLabel(issue)} — pass --through ${phase} to execute it unattended`,
       );
-      traceEvent('scheduler', 'skip-polish', {
+      traceEvent('scheduler', 'skip-phase', {
         issue: issueSlug(issue),
+        phase,
         cycle: outerCycles,
       });
       if (runLog && policySkipped.size === 0) {
         await runLog.append([
           {
             kind: 'phase',
-            headline: 'Polish pass left on the board',
-            body: `${issueDisplayTitle(issue)} awaits operator approval — run with --include-polish to execute polish passes unattended.`,
+            headline: `${phase.charAt(0).toUpperCase()}${phase.slice(1)} left on the board`,
+            body: `${issueDisplayTitle(issue)} awaits operator approval — run with --through ${phase} to execute the ${phase} phase unattended.`,
             issueUrl: issue.id,
             who: 'orchestrator',
           },
         ]);
       }
       monitor?.noteScheduler(
-        `Polish left on the board: "${issueDisplayTitle(issue)}" (run with --include-polish to execute)`,
+        `${phase} left on the board: "${issueDisplayTitle(issue)}" (run with --through ${phase} to execute)`,
       );
       policySkipped.add(issue.id);
       exhaustedIssues.add(issue.id);
@@ -965,7 +1058,9 @@ export async function runIssueLoop(
     // maxIterationsPerIssue on an unwinnable validation.
     let validator = isMetaIssue(issue)
       ? new NoOpValidator()
-      : createValidator(issue.id);
+      : createValidator(issue.id, {
+          includeTests: issue.issueType === 'hardening',
+        });
 
     // -----------------------------------------------------------------------
     // Inner loop: iterate on a single issue with validation
@@ -1253,7 +1348,9 @@ export async function runIssueLoop(
             ? undefined // research/taste turns inherit the flagship session
             : iteration >= 2
               ? modelPolicy?.fix
-              : modelPolicy?.build;
+              : issue.issueType === 'hardening'
+                ? modelPolicy?.harden
+                : modelPolicy?.build;
       if (turnBudget) {
         context.modelBudget = turnBudget;
         log.info(
@@ -1272,6 +1369,9 @@ export async function runIssueLoop(
         phaseSplit &&
         !isMetaIssue(issue) &&
         !isBugFixIssue(issue) &&
+        // Hardening turns write tests against an already-shipped card —
+        // there is no design round to split off.
+        issue.issueType !== 'hardening' &&
         iteration === 1
       ) {
         // Phase-split: DESIGN turn (taste — strong budget) then BUILD turn
@@ -1349,9 +1449,13 @@ export async function runIssueLoop(
                 ? 'analysis'
                 : issue.issueType === 'design'
                   ? 'design-foundation'
-                  : isBugFixIssue(issue) || iteration >= 2
-                    ? 'fix'
-                    : 'implement',
+                  : issue.issueType === 'hardening'
+                    ? iteration >= 2
+                      ? 'fix'
+                      : 'harden'
+                    : isBugFixIssue(issue) || iteration >= 2
+                      ? 'fix'
+                      : 'implement',
           iteration,
           maxIterations: maxIterationsPerIssue,
         });
@@ -1537,7 +1641,10 @@ export async function runIssueLoop(
           // Never review a defect issue: the reviewer is what FILES
           // defect issues, so reviewing defect fixes can chain
           // (defect-v2 → v3 …, observed on wardrobe 2026-07-17).
-          issue.issueType !== 'defect';
+          issue.issueType !== 'defect' &&
+          // Hardening turns ship test files; the validation pipeline's
+          // test step IS their gate — a PM taste review adds nothing.
+          issue.issueType !== 'hardening';
         if (reviewable) {
           try {
             await issueStore.updateIssue(issue.id, { status: 'review' });
@@ -1804,7 +1911,9 @@ export async function runIssueLoop(
       }
     }
 
-    // Reload issues to pick up new issues the agent may have created
+    // Phase transition check, then reload to pick up new issues the
+    // agent (or the hardening synthesis) may have created.
+    await maybeSeedHardening();
     await scheduler.loadIssues();
   }
 

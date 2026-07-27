@@ -703,3 +703,152 @@ function adjustSeedInstructions(brief: FactoryBrief): {
     summary: 'Seed the source card and create adjustment issues',
   };
 }
+
+// ---------------------------------------------------------------------------
+// Hardening issues
+// ---------------------------------------------------------------------------
+
+export interface CreateHardeningIssuesOptions {
+  darkfactoryModuleUrl: string;
+  workspaceDir: string;
+  /**
+   * The done implementation issues to harden — one hardening issue is
+   * written per entry. Each needs the issue's absolute card URL (`id`)
+   * and its display fields; the source card file is also read from the
+   * workspace to copy the `project` relationship so the hardening issue
+   * shows on the project-scoped board.
+   */
+  issues: {
+    id: string;
+    issueId?: string;
+    summary?: string;
+    acceptanceCriteria?: string;
+  }[];
+}
+
+/**
+ * Synthesize hardening issues — the QUnit test pass over shipped cards —
+ * one per done implementation issue. Written mechanically by the loop
+ * (no inference) when the run targets the hardening phase; the scheduler
+ * picks them up like any other issue. Idempotent: an existing hardening
+ * file for an issue is left untouched.
+ *
+ * Returns the realm-relative paths (without `.json`) of the files it
+ * created.
+ */
+export async function createHardeningIssues(
+  options: CreateHardeningIssuesOptions,
+): Promise<string[]> {
+  let { darkfactoryModuleUrl, workspaceDir, issues } = options;
+  let created: string[] = [];
+  let order = 1000; // after everything the bootstrap planned
+
+  for (let issue of issues) {
+    let slug = issueSlugFromId(issue.id);
+    if (!slug) {
+      log.warn(`Cannot derive a slug for hardening issue source: ${issue.id}`);
+      continue;
+    }
+    let hardenPath = `Issues/harden-${slug}`;
+    let hardenFile = `${hardenPath}.json`;
+
+    let existing = await readCard(workspaceDir, hardenFile);
+    if (existing.ok) {
+      continue;
+    }
+
+    // Copy the project relationship from the source issue so the
+    // hardening issue is visible on the project-scoped board.
+    let projectRelationship: unknown;
+    let sourceRead = await readCard(workspaceDir, `Issues/${slug}.json`);
+    if (sourceRead.ok && sourceRead.document) {
+      let data = sourceRead.document.data as
+        | { relationships?: { project?: unknown } }
+        | undefined;
+      projectRelationship = data?.relationships?.project;
+    }
+
+    let now = new Date().toISOString();
+    let displayName = issue.summary ?? slug;
+    let description = [
+      `Write QUnit tests for the shipped work of ${issue.issueId ?? slug}`,
+      `("${displayName}"). The card and its Spec/examples already exist in`,
+      `the workspace — read them first; do NOT redesign or modify the card`,
+      `itself unless a test exposes a real defect.`,
+      ``,
+      `Cover, in priority order:`,
+      `1. The issue's acceptance criteria (listed below when present).`,
+      `2. Field behavior: computed fields, defaults, edge values.`,
+      `3. Rendering: the card renders in isolated, embedded, and fitted`,
+      `   formats without errors.`,
+      ``,
+      ...(issue.acceptanceCriteria
+        ? [`Source acceptance criteria:`, ``, issue.acceptanceCriteria, ``]
+        : []),
+      `Test files are co-located with the card definition as`,
+      `\`<card-name>.test.gts\` and follow the QUnit conventions in your`,
+      `turn instructions. Keep all test data in browser memory — no realm`,
+      `writes from tests.`,
+    ].join('\n');
+
+    let document = {
+      data: {
+        type: 'card' as const,
+        attributes: {
+          issueId: `HARD-${issue.issueId ?? slug}`,
+          summary: `Harden: ${displayName}`,
+          description,
+          issueType: 'hardening',
+          status: 'backlog',
+          priority: 'medium',
+          order: order++,
+          acceptanceCriteria: [
+            '- [ ] `<card-name>.test.gts` written, co-located with the card definition',
+            "- [ ] Tests cover the source issue's acceptance criteria and field behavior",
+            '- [ ] `run_tests` passes',
+          ].join('\n'),
+          createdAt: now,
+          updatedAt: now,
+        },
+        relationships: {
+          'blockedBy.0': {
+            links: { self: `../Issues/${slug}` },
+          },
+          ...(projectRelationship
+            ? { project: projectRelationship as Record<string, unknown> }
+            : {}),
+        },
+        meta: {
+          adoptsFrom: {
+            module: darkfactoryModuleUrl,
+            name: 'Issue',
+          },
+        },
+      },
+    };
+
+    let write = await writeCard(
+      workspaceDir,
+      hardenFile,
+      JSON.stringify(document, null, 2),
+    );
+    if (!write.ok) {
+      log.warn(
+        `Failed to write hardening issue ${hardenFile}: ${write.error ?? 'unknown error'}`,
+      );
+      continue;
+    }
+    log.info(`Hardening issue created: ${hardenPath}`);
+    created.push(hardenPath);
+  }
+
+  return created;
+}
+
+/** `https://…/realm/Issues/sticky-note(.json)` → `sticky-note`. */
+function issueSlugFromId(id: string): string | undefined {
+  let tail = id.split('/').pop();
+  if (!tail) return undefined;
+  let slug = decodeURIComponent(tail).replace(/\.json$/i, '');
+  return slug || undefined;
+}

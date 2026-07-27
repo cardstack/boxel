@@ -793,4 +793,44 @@ module('factory-entrypoint > buildModelPolicy bootstrap budget', function () {
   test('fix policy exists by default (effort medium, inherit model)', function (assert) {
     assert.deepEqual(buildModelPolicy({})?.fix, { effort: 'medium' });
   });
+
+  test('hardening turns default to claude-sonnet-5 at medium', function (assert) {
+    assert.deepEqual(buildModelPolicy({})?.harden, {
+      model: 'claude-sonnet-5',
+      effort: 'medium',
+    });
+  });
+});
+
+module('factory-entrypoint > --through phase parsing', function () {
+  let base = [
+    '--brief-url',
+    'https://realms.example.test/wiki/brief',
+    '--target-realm',
+    'https://realms.example.test/user/realm/',
+  ];
+
+  test('defaults to undefined (loop applies implementation)', function (assert) {
+    let options = parseFactoryEntrypointArgs([...base]);
+    assert.strictEqual(options.throughPhase, undefined);
+  });
+
+  test('accepts each lifecycle phase', function (assert) {
+    for (let phase of [
+      'design',
+      'implementation',
+      'hardening',
+      'polishing',
+    ] as const) {
+      let options = parseFactoryEntrypointArgs([...base, '--through', phase]);
+      assert.strictEqual(options.throughPhase, phase);
+    }
+  });
+
+  test('rejects an unknown phase', function (assert) {
+    assert.throws(
+      () => parseFactoryEntrypointArgs([...base, '--through', 'shipping']),
+      /Invalid --through/,
+    );
+  });
 });

@@ -1521,10 +1521,10 @@ module('issue-loop > decideSessionStrategy', function () {
 });
 
 // ---------------------------------------------------------------------------
-// Polish gating — factory-generated enhancement issues await an operator
+// Phase gating — issues beyond the run's target phase await an operator
 // ---------------------------------------------------------------------------
 
-module('issue-loop > polish gating', function () {
+module('issue-loop > phase gating', function () {
   function makePolishStore(): MockIssueStore {
     return new MockIssueStore([
       makeIssue({ id: 'iss-1', status: 'backlog', priority: 'high', order: 1 }),
@@ -1539,7 +1539,7 @@ module('issue-loop > polish gating', function () {
     ]);
   }
 
-  test('enhancement issues stay on the board by default', async function (assert) {
+  test('polishing-phase issues stay on the board by default', async function (assert) {
     let store = makePolishStore();
     let agent = new MockLoopAgent(
       [
@@ -1570,7 +1570,7 @@ module('issue-loop > polish gating', function () {
     );
   });
 
-  test('includePolish executes enhancement issues', async function (assert) {
+  test('--through polishing executes enhancement issues', async function (assert) {
     let store = makePolishStore();
     let agent = new MockLoopAgent(
       [
@@ -1591,7 +1591,11 @@ module('issue-loop > polish gating', function () {
     );
 
     let result = await runIssueLoop(
-      makeLoopConfig({ agent, issueStore: store, includePolish: true }),
+      makeLoopConfig({
+        agent,
+        issueStore: store,
+        throughPhase: 'polishing',
+      }),
     );
 
     assert.strictEqual(result.outcome, 'all_issues_done');
@@ -1600,5 +1604,77 @@ module('issue-loop > polish gating', function () {
       result.issueResults.map((r) => r.issueId),
       ['iss-1', 'iss-1-pass-2'],
     );
+  });
+
+  test('hardening issues stay on the board at the default target', async function (assert) {
+    let store = new MockIssueStore([
+      makeIssue({ id: 'iss-1', status: 'done', order: 1 }),
+      makeIssue({
+        id: 'harden-iss-1',
+        status: 'backlog',
+        order: 2,
+        issueType: 'hardening',
+        summary: 'Harden: iss-1',
+      }),
+    ]);
+    let agent = new MockLoopAgent([], store);
+
+    let result = await runIssueLoop(
+      makeLoopConfig({ agent, issueStore: store }),
+    );
+
+    assert.strictEqual(result.issueResults.length, 0, 'nothing executed');
+    let harden = (await store.listIssues()).find(
+      (i) => i.id === 'harden-iss-1',
+    );
+    assert.strictEqual(harden?.status, 'backlog', 'hardening issue parked');
+  });
+
+  test('--through hardening executes hardening issues but parks polish', async function (assert) {
+    let store = new MockIssueStore([
+      makeIssue({ id: 'iss-1', status: 'done', order: 1 }),
+      makeIssue({
+        id: 'harden-iss-1',
+        status: 'backlog',
+        order: 2,
+        issueType: 'hardening',
+        summary: 'Harden: iss-1',
+      }),
+      makeIssue({
+        id: 'iss-1-pass-2',
+        status: 'backlog',
+        order: 3,
+        issueType: 'enhancement',
+        summary: 'Pass 2 — polish',
+      }),
+    ]);
+    let agent = new MockLoopAgent(
+      [
+        {
+          toolCalls: [
+            {
+              tool: 'write_file',
+              args: { path: 'card.test.gts', content: 'tests' },
+            },
+          ],
+          updateIssue: { id: 'harden-iss-1', status: 'done' },
+        },
+      ],
+      store,
+    );
+
+    let result = await runIssueLoop(
+      makeLoopConfig({ agent, issueStore: store, throughPhase: 'hardening' }),
+    );
+
+    assert.deepEqual(
+      result.issueResults.map((r) => r.issueId),
+      ['harden-iss-1'],
+      'hardening executed',
+    );
+    let polish = (await store.listIssues()).find(
+      (i) => i.id === 'iss-1-pass-2',
+    );
+    assert.strictEqual(polish?.status, 'backlog', 'polish still parked');
   });
 });
