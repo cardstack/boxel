@@ -885,19 +885,17 @@ export default class Workspace extends Component<Signature> {
         gap: var(--boxel-sp-4xs);
       }
       .delete-modal__workspace-name {
-        font-size: var(--boxel-font-size-sm);
-        font-weight: 700;
+        font: 600 var(--boxel-font-sm);
         color: var(--boxel-dark);
       }
       .delete-modal__workspace-meta {
-        font-size: var(--boxel-font-size-sm);
-        font-weight: 400;
-        color: var(--boxel-dark);
+        font: var(--boxel-font-sm);
+        color: var(--boxel-450);
       }
       .delete-modal__warning-box {
         background: var(--boxel-danger-bg);
         border-radius: var(--boxel-border-radius-lg);
-        padding: var(--boxel-sp-lg);
+        padding: var(--boxel-sp);
         display: flex;
         flex-direction: row;
         align-items: flex-start;
@@ -910,8 +908,7 @@ export default class Workspace extends Component<Signature> {
       }
       .delete-modal__warning-text {
         margin: 0;
-        font-size: var(--boxel-font-size-sm);
-        font-weight: 700;
+        font: 500 var(--boxel-font-sm);
         color: var(--boxel-dark);
         display: flex;
         flex-direction: column;
@@ -920,13 +917,12 @@ export default class Workspace extends Component<Signature> {
       .delete-modal__realms {
         display: flex;
         flex-direction: column;
-        gap: 0.5rem;
+        gap: var(--boxel-sp-xs);
         margin-top: var(--boxel-sp-4xs);
       }
       .delete-modal__realms-title {
         margin: 0;
-        font-size: var(--boxel-font-size-sm);
-        font-weight: 700;
+        font: 600 var(--boxel-font-sm);
         color: var(--boxel-dark);
       }
       .delete-modal__realms-list {
@@ -934,19 +930,17 @@ export default class Workspace extends Component<Signature> {
         padding-left: var(--boxel-sp-lg);
         display: flex;
         flex-direction: column;
-        gap: 0.5rem;
+        gap: var(--boxel-sp-xs);
       }
       .delete-modal__realms-list li {
-        font-size: var(--boxel-font-size-sm);
-        font-weight: 500;
+        font: var(--boxel-font-sm);
         color: var(--boxel-dark);
         list-style: disc;
       }
       .delete-modal__error {
-        color: var(--boxel-danger);
-        font-size: var(--boxel-font-size-sm);
-        font-weight: 600;
         margin: 0;
+        font: 500 var(--boxel-font-sm);
+        color: var(--boxel-danger);
       }
       .delete-modal__footer {
         display: flex;
@@ -962,8 +956,7 @@ export default class Workspace extends Component<Signature> {
         margin-left: auto;
       }
       .delete-modal__disclaimer {
-        font-size: var(--boxel-font-size-xs);
-        font-weight: 700;
+        font: 500 var(--boxel-font-xs);
         color: var(--boxel-danger);
       }
       .workspace-chooser-archive-modal-container > :deep(.boxel-modal__inner) {
