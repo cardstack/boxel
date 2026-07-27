@@ -63,7 +63,14 @@ export class VirtualNetwork {
     return () => this.mappingChangeListeners.delete(listener);
   }
 
-  private notifyMappingChange() {
+  private notifyMappingChange(reason?: string) {
+    // TEMP (CS-11450 diagnostic): a short caller hint so CI shows what churns
+    // realm mappings (and thus wipes the loader module cache). Revert.
+    let caller = (new Error().stack ?? '').split('\n').slice(2, 5).join(' <- ');
+    // eslint-disable-next-line no-console
+    console.log(
+      `[MAPCHANGE-PROBE] ${reason ?? '?'} listeners=${this.mappingChangeListeners.size} caller=${caller.replace(/\s+/g, ' ').slice(0, 300)}`,
+    );
     for (let listener of this.mappingChangeListeners) {
       listener();
     }
@@ -134,7 +141,7 @@ export class VirtualNetwork {
       normalizedId,
       (rest) => new URL(rest, normalizedTarget).href,
     );
-    this.notifyMappingChange();
+    this.notifyMappingChange(`addRealmMapping ${normalizedId}`);
   }
 
   /**
@@ -150,7 +157,7 @@ export class VirtualNetwork {
     this.toURLHrefCache.clear();
     this.unresolveURLCache.clear();
     this.realURLHrefCache.clear();
-    this.notifyMappingChange();
+    this.notifyMappingChange(`removeRealmMapping ${normalizedId}`);
   }
 
   knownRealms(): RealmIdentifier[] {

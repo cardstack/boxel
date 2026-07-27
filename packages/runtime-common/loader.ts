@@ -249,6 +249,15 @@ export class Loader {
     // Discard the RRI-keyed caches whenever a mapping is added or removed so an
     // entry can't outlive the spelling it was keyed under.
     this.unsubscribeMappingChange = this.virtualNetwork?.onMappingChange(() => {
+      // TEMP (CS-11450 diagnostic): a full module-cache wipe on every mapping
+      // change forces base modules to re-fetch. Log how big a wipe this is so
+      // CI shows the churn frequency + magnitude. Revert.
+      if (this.modules.size > 0) {
+        // eslint-disable-next-line no-console
+        console.log(
+          `[CLEAR-PROBE] loader ${this.nonce} clearing ${this.modules.size} modules on mapping change`,
+        );
+      }
       this.modules.clear();
       this.moduleCanonicalURLs.clear();
       this.knownDepsCache.clear();
