@@ -5,14 +5,17 @@ import { htmlSafe, type SafeString } from '@ember/template';
 import { cached, tracked } from '@glimmer/tracking';
 import { restartableTask, timeout } from 'ember-concurrency';
 import { modifier } from 'ember-modifier';
-import { TrackedArray } from 'tracked-built-ins';
+import { TrackedArray, TrackedSet } from 'tracked-built-ins';
 
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import BooleanField from './boolean';
-// host-mode mutation: publish is a registered host tool (tools/index.ts)
-import PublishRealmCommand from '@cardstack/boxel-host/tools/publish-realm';
-import { PublishRealmInput } from './command';
+// host-mode mutation: publish and unpublish are registered host tools
+// (tools/index.ts shims them onto the loader's virtual network, so these
+// specifiers resolve for card code in operator mode and under prerender)
+import PublishRealmTool from '@cardstack/boxel-host/tools/publish-realm';
+import UnpublishRealmTool from '@cardstack/boxel-host/tools/unpublish-realm';
+import { PublishRealmInput, UnpublishRealmInput } from './command';
 
 import LayoutGridPlusIcon from '@cardstack/boxel-icons/layout-grid-plus';
 import Captions from '@cardstack/boxel-icons/captions';
@@ -3403,9 +3406,10 @@ export class Workspace extends CardDef {
       return this.args.model.pinnedSize === 'compact' ? 'compact' : 'regular';
     }
 
-    // Hosting: present published sites (free on realmInfo) and mutate
-    // via the registered publish-realm host command. First-time publish
-    // (domain choice) stays in the workspace menu's publish flow.
+    // Hosting: present published sites (free on realmInfo) and mutate via the
+    // registered publish-realm / unpublish-realm host tools. First-time publish
+    // (domain choice) stays in the host submode's publish flow; this format
+    // acts on destinations that already exist.
     get publishedSites() {
       return publishedSitesOf(this.args.model);
     }
@@ -3425,7 +3429,7 @@ export class Workspace extends CardDef {
       if (!commandContext || !realm || !urls.length) {
         return;
       }
-      await new PublishRealmCommand(commandContext).execute(
+      await new PublishRealmTool(commandContext).execute(
         new PublishRealmInput({
           realmURL: realm,
           publishedRealmURLs: urls,
@@ -3435,6 +3439,44 @@ export class Workspace extends CardDef {
 
     get publishBusy() {
       return this.republishTask.isRunning;
+    }
+
+    unpublish = (publishedRealmURL: string) => () => {
+      this.unpublishTask.perform(publishedRealmURL);
+    };
+
+    // Which site is in flight, so one row can label itself while the others
+    // stay idle — `unpublishTask.isRunning` is true for all of them. A
+    // TrackedSet rather than a `@tracked` field because this is a class
+    // expression, where decorators aren't allowed.
+    private unpublishing = new TrackedSet<string>();
+
+    private unpublishTask = restartableTask(
+      async (publishedRealmURL: string) => {
+        let commandContext = this.args.context?.commandContext;
+        let realm = this.args.model[realmURL]?.href;
+        if (!commandContext || !realm) {
+          return;
+        }
+        this.unpublishing.add(publishedRealmURL);
+        try {
+          await new UnpublishRealmTool(commandContext).execute(
+            new UnpublishRealmInput({
+              realmURL: realm,
+              publishedRealmURL,
+            }),
+          );
+        } finally {
+          this.unpublishing.delete(publishedRealmURL);
+        }
+      },
+    );
+
+    isUnpublishing = (publishedRealmURL: string) =>
+      this.unpublishing.has(publishedRealmURL);
+
+    get unpublishBusy() {
+      return this.unpublishTask.isRunning;
     }
 
     <template>
@@ -3707,6 +3749,17 @@ export class Workspace extends CardDef {
                     {{#if site.when}}
                       <span class='site-when'>{{site.when}}</span>
                     {{/if}}
+                    <button
+                      type='button'
+                      class='publish-btn unpublish-btn'
+                      disabled={{this.unpublishBusy}}
+                      data-test-unpublish-site={{site.url}}
+                      {{on 'click' (this.unpublish site.url)}}
+                    >{{if
+                        (this.isUnpublishing site.url)
+                        'Unpublishing…'
+                        'Unpublish'
+                      }}</button>
                   </div>
                 </div>
               {{/each}}
@@ -3730,7 +3783,7 @@ export class Workspace extends CardDef {
                 <div class='setting-text'>
                   <span class='setting-label'>Publishing</span>
                   <p class='setting-help'>Not published. Use Publish in the
-                    workspace menu to put this space on the web.</p>
+                    Host submode toolbar to put this space on the web.</p>
                 </div>
               </div>
             {{else}}
@@ -3940,6 +3993,18 @@ export class Workspace extends CardDef {
         .publish-btn:disabled {
           opacity: 0.6;
           cursor: default;
+        }
+        /* Sits at the end of the site row, and reads as the destructive
+          counterpart to Republish rather than a second primary action. */
+        .unpublish-btn {
+          margin-left: auto;
+          padding: 5px 10px;
+          font-size: 11.5px;
+          color: var(--grid-ink-quiet);
+        }
+        .unpublish-btn:hover:not(:disabled) {
+          border-color: var(--grid-broken);
+          color: var(--grid-broken);
         }
         .choice-opt:focus-visible,
         .order-move:focus-visible,
