@@ -85,7 +85,13 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
       <button
         class={{classes}}
         aria-label={{if @loading 'loading'}}
-        aria-disabled={{@disabled}}
+        {{! 'true', not the raw boolean: Glimmer renders a bare true as
+            aria-disabled="", and ARIA treats any value that isn't exactly
+            "true"/"false" as the default, false. The native disabled
+            attribute below carries the real state either way, so this was
+            benign — but it contradicted itself, and matched none of the
+            [aria-disabled='true'] selectors used across the codebase. }}
+        aria-disabled={{if @disabled 'true'}}
         disabled={{@disabled}}
         data-test-boxel-button
         ...attributes
