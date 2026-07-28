@@ -44,6 +44,22 @@ export class VirtualNetwork {
   // Memo for toRealURLHref (the store's single canonical key). Same hot-path
   // and invalidation contract as the two caches above.
   private realURLHrefCache = new Map<string, string>();
+  // The three URL memos above are keyed by per-instance / per-module ids, so in
+  // a long-lived process (the realm-server's indexing + prerender) their key
+  // set is effectively unbounded — left to grow, they add steady heap and GC
+  // pressure that shows up as slow module serving. Cap each with FIFO eviction:
+  // the memo is a pure function of the mappings, so any retained entry stays
+  // valid and eviction only costs a recompute on the next miss.
+  static #MAX_URL_CACHE = 20_000;
+  #setBoundedCache<V>(cache: Map<string, V>, key: string, value: V): void {
+    if (!cache.has(key) && cache.size >= VirtualNetwork.#MAX_URL_CACHE) {
+      let oldest = cache.keys().next().value;
+      if (oldest !== undefined) {
+        cache.delete(oldest);
+      }
+    }
+    cache.set(key, value);
+  }
 
   // Notified whenever a realm-prefix mapping changes — added, removed, or
   // re-registered against a new target. Consumers that key caches by the RRI
@@ -68,14 +84,7 @@ export class VirtualNetwork {
     return () => this.mappingChangeListeners.delete(listener);
   }
 
-  private notifyMappingChange(reason?: string) {
-    // TEMP (CS-11450 diagnostic): a short caller hint so CI shows what churns
-    // realm mappings (and thus wipes the loader module cache). Revert.
-    let caller = (new Error().stack ?? '').split('\n').slice(2, 5).join(' <- ');
-    // eslint-disable-next-line no-console
-    console.log(
-      `[MAPCHANGE-PROBE] ${reason ?? '?'} listeners=${this.mappingChangeListeners.size} caller=${caller.replace(/\s+/g, ' ').slice(0, 300)}`,
-    );
+  private notifyMappingChange() {
     for (let listener of this.mappingChangeListeners) {
       listener();
     }
@@ -146,7 +155,7 @@ export class VirtualNetwork {
       normalizedId,
       (rest) => new URL(rest, normalizedTarget).href,
     );
-    this.notifyMappingChange(`addRealmMapping ${normalizedId}`);
+    this.notifyMappingChange();
   }
 
   /**
@@ -162,7 +171,7 @@ export class VirtualNetwork {
     this.toURLHrefCache.clear();
     this.unresolveURLCache.clear();
     this.realURLHrefCache.clear();
-    this.notifyMappingChange(`removeRealmMapping ${normalizedId}`);
+    this.notifyMappingChange();
   }
 
   knownRealms(): RealmIdentifier[] {
@@ -202,13 +211,7 @@ export class VirtualNetwork {
       return cached;
     }
     let result = this.computeUnresolveURL(url);
-    this.unresolveURLCache.set(url, result);
-    // TEMP (CS-11450 diagnostic): surface monotonic cache growth. Revert.
-    if (this.unresolveURLCache.size % 2000 === 0) {
-      console.log(
-        `[CACHE-PROBE] unresolveURLCache.size=${this.unresolveURLCache.size} toURLHrefCache.size=${this.toURLHrefCache.size}`,
-      );
-    }
+    this.#setBoundedCache(this.unresolveURLCache, url, result);
     return result;
   }
 
@@ -338,7 +341,7 @@ export class VirtualNetwork {
       return cached;
     }
     let href = this.toURL(rri).href;
-    this.toURLHrefCache.set(rri, href);
+    this.#setBoundedCache(this.toURLHrefCache, rri, href);
     return href;
   }
 
@@ -358,7 +361,7 @@ export class VirtualNetwork {
     }
     let viaToURL = this.toURL(id).href;
     let real = this.mapURL(viaToURL, 'virtual-to-real')?.href ?? viaToURL;
-    this.realURLHrefCache.set(id, real);
+    this.#setBoundedCache(this.realURLHrefCache, id, real);
     return real;
   }
 
