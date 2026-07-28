@@ -315,8 +315,12 @@ test.describe('Commands', () => {
     await openAiAssistant(page);
     await showAllCards(page);
 
-    // create a skill card
-    await page.locator('[data-test-create-new-card-button]').click();
+    // create a skill card — open the chooser via the index-agnostic
+    // operator-mode "New" button rather than the CardsGrid-only + button.
+    await page.locator('[data-test-new-file-button]').click();
+    await page
+      .locator('[data-test-boxel-menu-item-text="Choose a card type..."]')
+      .click();
     await page.locator('[data-test-search-field]').fill('Skill');
     await page
       .locator(

@@ -1,4 +1,5 @@
 import type Owner from '@ember/owner';
+import { getOwner } from '@ember/owner';
 import Service, { service } from '@ember/service';
 
 import { isTesting } from '@embroider/macros';
@@ -14,6 +15,8 @@ import config from '@cardstack/host/config/environment';
 
 import { shimExternals } from '../lib/externals';
 import { authErrorEventMiddleware } from '../utils/auth-error-guard';
+
+import { createServerRequestTimingMiddleware } from './client-telemetry';
 
 import type LoaderService from './loader-service';
 import type RealmService from './realm';
@@ -40,9 +43,17 @@ export default class NetworkService extends Service {
   }
 
   get authedFetch() {
+    // The timing middleware is innermost (last): it wraps each real network
+    // attempt, so an auth-retry (the authorization middleware re-running the
+    // chain on a 401) is observed as a separate, retried-flagged attempt. It
+    // is a passive no-op whenever telemetry is disabled.
     return fetcher(
       this.fetch,
-      [authorizationMiddleware(this.realm), authErrorEventMiddleware()],
+      [
+        authorizationMiddleware(this.realm),
+        authErrorEventMiddleware(),
+        createServerRequestTimingMiddleware(getOwner(this)!),
+      ],
       this.virtualNetwork,
     );
   }

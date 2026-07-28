@@ -14,10 +14,21 @@ interface Signature {
 }
 
 export default class ProgressBar extends Component<Signature> {
+  get max(): number {
+    return this.args.max ?? 100;
+  }
+
+  // The current value, clamped into [0, max] so it's always a valid
+  // `aria-valuenow` between `aria-valuemin` and `aria-valuemax`.
+  get valueNow(): number {
+    return Math.min(Math.max(this.args.value ?? 0, 0), this.max);
+  }
+
   get progressPercentage(): string {
-    const max = this.args.max ?? 100;
-    const value = this.args.value ?? 0;
-    return Math.round(Math.min(Math.max((value / max) * 100, 0), 100)) + '%';
+    // Guard the degenerate max=0 case so aria-valuetext (announced by screen
+    // readers) and the CSS width don't become "NaN%".
+    const pct = this.max === 0 ? 0 : (this.valueNow / this.max) * 100;
+    return Math.round(pct) + '%';
   }
 
   get progressWidth(): ReturnType<typeof htmlSafe> {
@@ -32,11 +43,24 @@ export default class ProgressBar extends Component<Signature> {
     return position ?? 'end';
   }
 
+  // A node with role="progressbar" must have an accessible name, and — unlike
+  // roles that take their name from content — the visible label text does not
+  // supply one. Fall back to a generic name when no label is passed so the
+  // progressbar always has one; callers with context pass a specific `@label`.
+  get accessibleLabel(): string {
+    return this.args.label || 'Progress';
+  }
+
   <template>
     <div
       class='boxel-progress-bar'
       data-test-boxel-progress-bar
-      aria-label={{@label}}
+      role='progressbar'
+      aria-valuenow={{this.valueNow}}
+      aria-valuemin='0'
+      aria-valuemax={{this.max}}
+      aria-valuetext={{this.progressPercentage}}
+      aria-label={{this.accessibleLabel}}
       ...attributes
     >
       <div class='progress-bar-container'>

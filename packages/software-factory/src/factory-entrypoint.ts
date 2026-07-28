@@ -320,10 +320,10 @@ export function parseFactoryEntrypointArgs(
   };
 }
 
-export function wantsFactoryEntrypointHelp(argv: string[]): boolean {
-  let normalizedArgv = argv[0] === '--' ? argv.slice(1) : argv;
-  return normalizedArgv.includes('--help');
-}
+// Defined in preflight.ts, which the CLI can import before this module: it has
+// to detect --help while loading boxel-cli is still unsafe. Re-exported here so
+// callers that already have this module keep reaching it by the same name.
+export { wantsFactoryEntrypointHelp } from './preflight.ts';
 
 export async function runFactoryEntrypoint(
   options: FactoryEntrypointOptions,
@@ -377,9 +377,9 @@ export async function runFactoryEntrypoint(
   let pullTargetRealm = dependencies?.pullTargetRealm ?? defaultPullTargetRealm;
   await pullTargetRealm(client, targetRealm.url, workspaceDir);
 
-  // For a realm the factory just created, replace the default CardsGrid
-  // index page with a RealmDashboard instance so the realm opens to the
-  // factory dashboard. A pre-existing realm keeps its current index page.
+  // For a realm the factory just created, replace the default index page
+  // with a RealmDashboard instance so the realm opens to the factory
+  // dashboard. A pre-existing realm keeps its current index page.
   if (targetRealm.createdRealm) {
     let writeRealmIndex =
       dependencies?.writeRealmIndex ?? writeRealmDashboardCard;

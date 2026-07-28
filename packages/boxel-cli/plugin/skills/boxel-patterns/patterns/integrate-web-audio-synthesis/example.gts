@@ -90,7 +90,7 @@ const errorTone = () =>
 export class SoundFeedbackDemo extends CardDef {
   static displayName = 'Sound Feedback Demo';
 
-  @field title = contains(StringField);
+  @field cardTitle = contains(StringField);
 
   static isolated = class Isolated extends Component<
     typeof SoundFeedbackDemo
@@ -101,7 +101,7 @@ export class SoundFeedbackDemo extends CardDef {
 
     <template>
       <div class='demo'>
-        <h1>{{if @model.title @model.title 'Sound Feedback'}}</h1>
+        <h1>{{if @model.cardTitle @model.cardTitle 'Sound Feedback'}}</h1>
         <div class='buttons'>
           <button type='button' {{on 'click' this.click}}>Click</button>
           <button type='button' {{on 'click' this.success}}>Success</button>

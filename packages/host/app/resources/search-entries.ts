@@ -1,4 +1,8 @@
-import { isDestroyed, registerDestructor } from '@ember/destroyable';
+import {
+  isDestroyed,
+  isDestroying,
+  registerDestructor,
+} from '@ember/destroyable';
 import { getOwner } from '@ember/owner';
 import { service } from '@ember/service';
 import { buildWaiter } from '@ember/test-waiters';
@@ -12,6 +16,7 @@ import { TrackedArray } from 'tracked-built-ins';
 
 import {
   subscribeToRealm,
+  Deferred,
   htmlQueryRenderingSelection,
   isCardResource,
   isCssResource,
@@ -138,6 +143,17 @@ export class SearchEntriesResource extends Resource<Args> {
   // fetch must not narrow it).
   private hasCompletedFullRun = false;
 
+  // True once any run has finished (success OR failure, full OR partial). Drives
+  // `isLoading` across the microtask gap between a query being set in modify()
+  // and the deferred task starting — distinct from `hasCompletedFullRun`, which
+  // means specifically a *successful full* run and gates the partial-refresh
+  // path. A failed run must still report settled (or every consumer shows
+  // "Searching…" forever), but must NOT unlock the partial-refresh path over an
+  // empty/undefined result set — hence the two flags. Plain untracked field:
+  // read in `isLoading` and written here, never mutated mid-render; the tracked
+  // `search.isRunning` dependency drives recomputation.
+  #hasSettled = false;
+
   #previousQuery: SearchEntryWireQuery | undefined;
   #previousRealms: string[] | undefined;
   #idleClearScheduled = false;
@@ -218,6 +234,7 @@ export class SearchEntriesResource extends Resource<Args> {
       // cleared query, same as on teardown.
       this.#refreshEpoch++;
       this.hasCompletedFullRun = false;
+      this.#hasSettled = false;
       this.search.cancelAll();
       for (let subscription of this.subscriptions) {
         subscription.unsubscribe();
@@ -318,11 +335,46 @@ export class SearchEntriesResource extends Resource<Args> {
     this.realmsNeedingRefresh.clear();
     this.pendingSelectiveRefresh = undefined;
     this.hasCompletedFullRun = false;
-    this.#trackSearchLoad(this.search.perform());
+    this.#hasSettled = false;
+
+    // Start the search out of the render that triggered this modify. A consumer
+    // reads the task's `isRunning` (through `isLoading`) during render, so a
+    // synchronous `perform()` here — which flips `isRunning` — would mutate a
+    // value already consumed in the same computation, tripping Glimmer's
+    // backtracking assertion (a `<SearchResults>` mounting with a query already
+    // set — a chooser or the playground — hits this). Register the load
+    // synchronously (via a Deferred) so a prerender still waits for the search,
+    // but defer the task start a microtask so its `isRunning` write lands after
+    // the render. `isLoading` below still reports loading across that gap.
+    let loaded = new Deferred<void>();
+    this.#trackSearchLoad(loaded.promise);
+    void Promise.resolve().then(() => {
+      if (isDestroyed(this) || isDestroying(this)) {
+        loaded.fulfill();
+        return;
+      }
+      this.search.perform().then(
+        () => loaded.fulfill(),
+        () => loaded.fulfill(),
+      );
+    });
   }
 
   get isLoading() {
-    return this.search.isRunning;
+    // In flight when the task is running, and also across the microtask gap
+    // between a query being set in modify() and the deferred task actually
+    // starting — otherwise a just-set query briefly reads as
+    // settled-with-no-results (which e.g. makes the playground autogenerate a
+    // blank instance). Settles on `#hasSettled`, not `hasCompletedFullRun`, so
+    // a *failed* run also reports settled — a 500/network failure leaves the
+    // error entry rendered, not a permanent "Searching…". `#previousQuery` /
+    // `#hasSettled` are plain fields — reading them here, and writing them in
+    // modify()/the task, never mutates tracked state mid-render (that would
+    // backtrack); the tracked `isRunning` dependency drives recomputation.
+    return (
+      this.search.isRunning ||
+      (this.#previousQuery !== undefined && !this.#hasSettled)
+    );
   }
 
   get entries(): SearchEntry[] {
@@ -471,6 +523,11 @@ export class SearchEntriesResource extends Resource<Args> {
         // them.
       }
     } finally {
+      // Every run that reaches here has settled — success or failure — so
+      // `isLoading` can go false. A cancelled run (superseded by a restart)
+      // also lands here; the replacement run keeps `search.isRunning` true, so
+      // `isLoading` stays true across the handoff regardless.
+      this.#hasSettled = true;
       waiter.endAsync(token);
     }
   });

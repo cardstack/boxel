@@ -13,7 +13,7 @@ Before finalizing any card template, verify:
 - [ ] No fixed widths that ignore available space — use relative units or `max-width`
 - [ ] Responsive layout uses `@container` queries, not `@media` viewport queries or `vw`/`vh` units
 - [ ] Icons and SVGs never use hardcoded hex fills — use theme color tokens via CSS
-- [ ] No hardcoded fallback values scattered in `var()` calls — if fallbacks are needed, define them once on the parent container. Falling back to another CSS variable is fine: `var(--token, var(--other-token))`
+- [ ] No hardcoded fallbacks on theme/semantic tokens (`var(--primary, #6366f1)` is a violation — the token is always defined). Locally-defined component variables are declared once (with defaults) on the parent container and referenced bare in descendants; conditionally-existing tokens (`--boxel-fs-*`, `--font-serif`) get their one fallback at that parent declaration. Falling back to another CSS variable is fine: `var(--token, var(--other-token))`
 - [ ] Prefers `<@fields.field />` for all simple field rendering; `@model.x` for conditionals, HTML attributes, context-specific fallback value, and JS getters
 - [ ] Custom HTML/CSS replaced with existing boxel-ui components wherever possible
 - [ ] Kanban/status boards use `KanbanPlane` and persisted placements; no hand-rolled pointer drag in card templates

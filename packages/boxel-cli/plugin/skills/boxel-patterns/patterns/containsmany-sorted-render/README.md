@@ -4,7 +4,7 @@ validated: source-proven
 
 # containsmany-sorted-render — Render a `containsMany` field in a different order
 
-> ⚠️ **Status — fitted block pre-dates the CQ-mandatory rule.** The `static fitted` template in `example.gts` hand-rolls layout instead of the two-element `.cq → .fit` container-query pattern. The pattern's *core mechanics* (sorting + `@fields.notes.[i]` index-bridge, edit + isolated formats) are correct and source-proven; treat the fitted slot as a placeholder and rewrite per [`boxel/references/container-query-fitted-layout.md`](../../../boxel/references/container-query-fitted-layout.md) before relying on it. (P2 in the skill-tree review.)
+> ⚠️ **Status — fitted block pre-dates the CQ-mandatory rule.** The `static fitted` template in `example.gts` hand-rolls layout instead of the single-root `.fit` container-query pattern (querying the host's `fitted-card` container). The pattern's *core mechanics* (sorting + `@fields.notes.[i]` index-bridge, edit + isolated formats) are correct and source-proven; treat the fitted slot as a placeholder and rewrite per [`boxel/references/container-query-fitted-layout.md`](../../../boxel/references/container-query-fitted-layout.md) before relying on it. (P2 in the skill-tree review.)
 
 **What this gives you:** A way to render a `containsMany(SomeFieldDef)` array sorted (or filtered) without losing the host's per-item edit behavior. The trick is the `@fields.notes.[i]` *index-bridge*: sort indices in component land, but delegate actual rendering back through `@fields` so the Boxel host wires up edit-mode, validation, and templates for you.
 

@@ -11,7 +11,7 @@ import { isTesting } from '@embroider/macros';
 import { tracked } from '@glimmer/tracking';
 
 import { formatDistanceToNow } from 'date-fns';
-import { task } from 'ember-concurrency';
+import { keepLatestTask, task } from 'ember-concurrency';
 
 import { cloneDeep } from 'lodash-es';
 import { isEqual } from 'lodash-es';
@@ -115,6 +115,7 @@ import {
 
 import type { CardSaveSubscriber } from './card-service';
 import type CardService from './card-service';
+import type ClientTelemetryService from './client-telemetry';
 import type EnvironmentService from './environment-service';
 
 import type HostModeService from './host-mode-service';
@@ -130,7 +131,10 @@ import type { SearchResource } from '../resources/search';
 import type * as CardAPI from '@cardstack/base/card-api';
 import type { CardDef, BaseDef } from '@cardstack/base/card-api';
 import type { FileDef } from '@cardstack/base/file-api';
-import type { RealmEventContent } from '@cardstack/base/matrix-event';
+import type {
+  IncrementalIndexEventContent,
+  RealmEventContent,
+} from '@cardstack/base/matrix-event';
 
 export { CardErrorJSONAPI, CardSaveSubscriber };
 
@@ -592,11 +596,21 @@ export default class StoreService extends Service implements StoreInterface {
       ).fileMetaDocLoadsInFlight?.() ?? []
     );
   }
-  recentCardDocLoads(): Array<{ url: string; ms: number }> {
+  recentCardDocLoads(): Array<{
+    url: string;
+    ms: number;
+    outcome?: 'ok' | 'error';
+    generation?: number;
+  }> {
     return (
       (
         this.store as unknown as {
-          recentCardDocLoads?: () => Array<{ url: string; ms: number }>;
+          recentCardDocLoads?: () => Array<{
+            url: string;
+            ms: number;
+            outcome?: 'ok' | 'error';
+            generation?: number;
+          }>;
         }
       ).recentCardDocLoads?.() ?? []
     );
@@ -1752,10 +1766,40 @@ export default class StoreService extends Service implements StoreInterface {
         store: this.store,
         dependencyTrackingContext,
       })) as T;
+    // Time the deserialize and report it (no-op when telemetry is disabled).
+    let telemetry = this.#clientTelemetry();
+    let deserializeStart = telemetry?.isEnabled ? performance.now() : undefined;
     let card = shouldStubTimers
       ? await withStubbedRenderTimers(performCreate)
       : await performCreate();
+    if (telemetry?.isEnabled && deserializeStart !== undefined) {
+      telemetry.recordDeserialize({
+        durationMs: performance.now() - deserializeStart,
+        doc,
+        resource,
+      });
+    }
     return card;
+  }
+
+  // Defensive lookup of the telemetry service — never forces the hooked path
+  // to depend on telemetry being present or healthy.
+  #clientTelemetry(): ClientTelemetryService | undefined {
+    // Never instantiate the instrument inside a prerender tab: it self-gates
+    // from arming, but the lookup would still construct it on the hot render
+    // path. Mirrors the guard in the initializer and the timing middleware.
+    if (
+      (globalThis as { __boxelRenderContext?: unknown }).__boxelRenderContext
+    ) {
+      return undefined;
+    }
+    try {
+      return getOwner(this)?.lookup('service:client-telemetry') as
+        | ClientTelemetryService
+        | undefined;
+    } catch {
+      return undefined;
+    }
   }
 
   private async setup() {
@@ -1820,30 +1864,98 @@ export default class StoreService extends Service implements StoreInterface {
       return;
     }
 
+    let telemetry = this.#clientTelemetry();
+    let processingStart = telemetry?.isEnabled ? performance.now() : undefined;
+
+    if (event.indexType === 'full') {
+      // A full reindex carries no per-file invalidation list; report it as a
+      // thin realm-event so the dashboard still sees the pass happened.
+      telemetry?.recordEvent({
+        event_type: 'realm-event',
+        realm: event.realmURL,
+        index_type: 'full',
+        invalidations_count: 0,
+        invalidated_ids: [],
+        reloads_triggered: 0,
+        own_write: false,
+        processing_ms: 0,
+      });
+      return;
+    }
+
     if (event.indexType !== 'incremental') {
       return;
     }
     let invalidations = event.invalidations as string[];
+    let ownWrite = event.clientRequestId
+      ? this.cardService.clientRequestIds.has(event.clientRequestId)
+      : false;
 
-    if (
-      invalidations.find(
-        (i) =>
-          hasExecutableExtension(i) &&
+    // The invalidation triggers a rebuild when it touches an already-loaded
+    // executable module: the loader must be flushed so the updated code is
+    // picked up before the open card graph re-runs. Net-new modules that were
+    // never loaded don't need one. Once a rebuild is in flight, fold every
+    // further executable invalidation into it regardless of `isModuleLoaded` —
+    // the freshly reset loader reports those modules as not-loaded, so the
+    // probe alone would drop a mid-burst code change.
+    let executableInvalidations = invalidations.filter(hasExecutableExtension);
+    let needsRebuild =
+      executableInvalidations.length > 0 &&
+      (this.rebuildForCodeChange.isRunning ||
+        executableInvalidations.some((i) =>
           this.loaderService.loader.isModuleLoaded(i),
-      )
-    ) {
-      // the invalidation included code changes to modules that are already
-      // loaded. in this case we need to flush the loader so that we can pick
-      // up the updated code before re-running the card. net-new modules that
-      // have never been loaded don't require a loader reset.
-      this.loaderService.resetLoader();
-      this.store.reset();
-      this.reestablishReferences.perform();
+        ));
+
+    let reloadsTriggered = 0;
+    if (needsRebuild) {
+      // Coalesce the rebuild. `keepLatestTask` keeps at most one rebuild in
+      // flight and one pending, so a burst of executable invalidations arriving
+      // faster than a rebuild completes collapses into at most 2 rebuilds; the
+      // final rebuild re-fetches current server state, so the end result
+      // reflects the latest generation. This is scheduling only and does not
+      // touch reactivity: an isolated change triggers a single reset and
+      // re-render.
+      if (telemetry?.isEnabled) {
+        this.#accumulatePendingRebuild(event.realmURL, executableInvalidations);
+      }
+      this.rebuildForCodeChange.perform();
+      // The rebuild subsumes the per-invalidation reloads below: store.reset
+      // empties the graph and reestablishReferences re-fetches every live
+      // reference, so running that loop too would only re-fetch cards the
+      // rebuild is about to discard.
+    } else {
+      reloadsTriggered = this.#reloadInvalidatedInstances(event, invalidations);
     }
 
+    if (telemetry?.isEnabled) {
+      telemetry.recordEvent({
+        event_type: 'realm-event',
+        realm: event.realmURL,
+        index_type: 'incremental',
+        invalidations_count: invalidations.length,
+        invalidated_ids: invalidations.slice(0, 50),
+        reloads_triggered: reloadsTriggered,
+        own_write: ownWrite,
+        processing_ms:
+          processingStart !== undefined
+            ? Math.round(performance.now() - processingStart)
+            : 0,
+      });
+    }
+  };
+
+  // Reload the individual cards / file-meta resources named by an incremental
+  // invalidation that did not trigger a full rebuild. Returns the number of
+  // reloads kicked off (for realm-event telemetry).
+  #reloadInvalidatedInstances(
+    event: IncrementalIndexEventContent,
+    invalidations: string[],
+  ): number {
+    let reloadsTriggered = 0;
     for (let invalidation of invalidations) {
       if (hasExecutableExtension(invalidation)) {
-        // we already dealt with this
+        // Executable modules have no card instance to reload here; when an
+        // already-loaded one changed, the coalesced rebuild handled it.
         continue;
       }
       let fileMetaInstance =
@@ -1854,6 +1966,7 @@ export default class StoreService extends Service implements StoreInterface {
           `reloading file-meta resource ${invalidation} because it was previously loaded`,
         );
         this.reloadFileMetaTask.perform(invalidation);
+        reloadsTriggered++;
       }
       let clientRequestId = event.clientRequestId ?? undefined;
 
@@ -1912,6 +2025,7 @@ export default class StoreService extends Service implements StoreInterface {
 
           if (reloadFile) {
             this.reloadTask.perform(instance);
+            reloadsTriggered++;
           } else {
             realmEventsLogger.debug(
               `ignoring invalidation ${invalidation} for request id ${clientRequestId}`,
@@ -1922,6 +2036,7 @@ export default class StoreService extends Service implements StoreInterface {
             `reloading file resource ${invalidation} because it is in an error state`,
           );
           this.loadInstanceTask.perform(invalidation);
+          reloadsTriggered++;
         }
       } else {
         realmEventsLogger.debug(
@@ -1948,9 +2063,12 @@ export default class StoreService extends Service implements StoreInterface {
           `reloading index card ${indexCardId} because the realm config card was re-indexed`,
         );
         this.reloadTask.perform(indexCard);
+        reloadsTriggered++;
       }
     }
-  };
+
+    return reloadsTriggered;
+  }
 
   private loadInstanceTask = task(
     async (idOrDoc: string | LooseSingleCardDocument) => {
@@ -1997,6 +2115,74 @@ export default class StoreService extends Service implements StoreInterface {
     await Promise.all(
       [...remoteIds].map((id) => this.getCardInstance({ idOrDoc: id })),
     );
+    return remoteIds.size;
+  });
+
+  // Telemetry metadata for the pending/in-flight coalesced rebuild, merged
+  // across every executable invalidation that collapses into it. Drained when
+  // the rebuild task begins so the emitted `rebuild` event describes exactly
+  // the code changes that rebuild picked up. Only populated when telemetry is
+  // enabled; the coalescing itself does not depend on it.
+  #pendingRebuild:
+    | {
+        realm: string;
+        triggerModules: Set<string>;
+        modulesRefetched: Set<string>;
+        events: number;
+      }
+    | undefined = undefined;
+
+  #accumulatePendingRebuild(realm: string, executableInvalidations: string[]) {
+    let pending = (this.#pendingRebuild ??= {
+      realm,
+      triggerModules: new Set<string>(),
+      modulesRefetched: new Set<string>(),
+      events: 0,
+    });
+    // The most recent event's realm labels the rebuild; a burst is
+    // overwhelmingly single-realm, and the final generation wins regardless.
+    pending.realm = realm;
+    pending.events++;
+    for (let module of executableInvalidations) {
+      pending.triggerModules.add(module);
+      if (this.loaderService.loader.isModuleLoaded(module)) {
+        pending.modulesRefetched.add(module);
+      }
+    }
+  }
+
+  // Coalesced client rebuild: flush the loader, reset the store, and re-fetch
+  // every live card reference. `keepLatest` bounds a write burst to one
+  // in-flight rebuild plus one pending — intermediate events collapse into the
+  // pending slot — so a burst of rapid executable invalidations costs at most 2
+  // rebuilds regardless of its length. The final rebuild re-fetches current
+  // server state, so the end state reflects the latest generation. This is
+  // scheduling only: each rebuild is the full load-bearing reset, not a partial
+  // one.
+  private rebuildForCodeChange = keepLatestTask(async () => {
+    let telemetry = this.#clientTelemetry();
+    let pending = this.#pendingRebuild;
+    this.#pendingRebuild = undefined;
+    let rebuildStart =
+      telemetry?.isEnabled && pending ? performance.now() : undefined;
+
+    this.loaderService.resetLoader();
+    this.store.reset();
+    let cardsReloaded = await this.reestablishReferences.perform();
+
+    if (telemetry?.isEnabled && pending && rebuildStart !== undefined) {
+      let triggerModules = [...pending.triggerModules].slice(0, 20);
+      telemetry.recordEvent({
+        event_type: 'rebuild',
+        realm: pending.realm,
+        duration_ms: Math.round(performance.now() - rebuildStart),
+        trigger_modules: triggerModules,
+        trigger_module: triggerModules[0] ?? '',
+        modules_refetched: pending.modulesRefetched.size,
+        cards_reloaded: cardsReloaded ?? 0,
+        coalesced_events: pending.events,
+      });
+    }
   });
 
   private reloadTask = task(async (instance: CardDef) => {

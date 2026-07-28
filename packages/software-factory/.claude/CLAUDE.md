@@ -41,11 +41,14 @@ Fallback dirs for both modes (skills that aren't software-factory
 specific):
 
 1. `packages/boxel-cli/plugin/skills/` — boxel-cli Claude Code
-   plugin skills (`boxel-api`, `boxel-command`); same directory
-   the plugin distributes to end users.
-2. monorepo root `.agents/skills/` — general domain skills
-   (`boxel-development`, `boxel-file-structure`,
-   `ember-best-practices`).
+   plugin skills (`boxel`, `boxel-api`, `boxel-command`,
+   `boxel-file-structure`, `boxel-file-def`); same directory
+   the plugin distributes to end users. The `boxel` skill and
+   its references are built from the boxel-skills repo by
+   `pnpm build:skills`.
+2. monorepo root `.agents/skills/` — a fallback slot for shared
+   domain skills, currently empty (`ember-best-practices` now ships
+   from boxel-skills via the plugin dir above).
 
 The two software-factory skill sets diverged during CS-11149. They
 stay separated until the SDK orchestrator is retired; at that

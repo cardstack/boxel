@@ -4,7 +4,7 @@ validated: source-proven
 
 # layout-kanban-drag-drop - Persistent drag-and-drop kanban board
 
-> ⚠️ **Status — fitted blocks pre-date the CQ-mandatory rule.** The two `static fitted` templates in `example.gts` (WorkItem + WorkBoard) hand-roll width-based layout instead of the two-element `.cq → .fit` container-query pattern. The pattern's *core mechanics* (KanbanPlane wiring, placements data model, pointer drag, WIP limits, hidden columns) are source-proven against `@cardstack/boxel-ui`; treat the fitted slots as placeholders and rewrite per [`boxel/references/container-query-fitted-layout.md`](../../../boxel/references/container-query-fitted-layout.md) before relying on them. (P2 in the skill-tree review.)
+> ⚠️ **Status — fitted blocks pre-date the CQ-mandatory rule.** The two `static fitted` templates in `example.gts` (WorkItem + WorkBoard) hand-roll width-based layout instead of the single-root `.fit` container-query pattern (querying the host's `fitted-card` container). The pattern's *core mechanics* (KanbanPlane wiring, placements data model, pointer drag, WIP limits, hidden columns) are source-proven against `@cardstack/boxel-ui`; treat the fitted slots as placeholders and rewrite per [`boxel/references/container-query-fitted-layout.md`](../../../boxel/references/container-query-fitted-layout.md) before relying on them. (P2 in the skill-tree review.)
 
 **What this gives you:** A board card with columns, fitted child cards, pointer drag, keyboard reordering, drag ghost, insertion gaps, hidden/collapsed columns, WIP limits, and persisted placements.
 

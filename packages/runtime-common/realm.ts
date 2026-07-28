@@ -44,6 +44,7 @@ import {
   HtmlResourceType,
 } from './resource-types.ts';
 import { normalizeRelationships } from './relationship-utils.ts';
+import { normalizeRoutingPath } from './host-routing-validation.ts';
 import type { LocalPath } from './paths.ts';
 import { RealmPaths, ensureTrailingSlash, join } from './paths.ts';
 import type ms from 'ms';
@@ -226,9 +227,10 @@ export type RealmInfo = {
   publishable: boolean | null;
   lastPublishedAt: string | Record<string, string> | null;
   // Opt-in to producing the full prerendered isolated HTML for the
-  // realm's default CardsGrid index card. When undefined / null /
-  // false the host's render route substitutes a small boilerplate
-  // placeholder instead and skips the (expensive) isolated render.
+  // realm's default index card (CardsGrid or Workspace). When
+  // undefined / null / false the host's render route substitutes a
+  // small boilerplate placeholder instead and skips the (expensive)
+  // isolated render.
   // The lever is primarily set by the publish handler on the
   // published realm snapshot so anonymous-visitor SSR injection has
   // real content; unpublished realms typically have nothing reading
@@ -4477,13 +4479,18 @@ export class Realm {
       typeof searchDoc.contentSize === 'number'
         ? searchDoc.contentSize
         : undefined;
-    // Only hit the DB when the indexed searchDoc is missing a value.
-    let persistedMeta =
-      (searchHash === undefined || searchSize === undefined) && this.#dbAdapter
-        ? await getContentMeta(this.#dbAdapter, this.url, localPath)
-        : { contentHash: undefined, contentSize: undefined };
-    let contentHash = searchHash ?? persistedMeta.contentHash;
-    let contentSize = searchSize ?? persistedMeta.contentSize;
+    // `realm_file_meta` is written in the same critical section as the file's
+    // bytes, so it is authoritative for content-derived values. It is
+    // preferred over the indexed values, which lag one batch promotion behind:
+    // a render inside the batch that re-indexes this file reads the pre-swap
+    // production row, so a card linking the file sees the file's index row at
+    // its previous contentHash/contentSize. The indexed values remain as
+    // fallbacks for files whose bytes were never hashed at write time.
+    let persistedMeta = this.#dbAdapter
+      ? await getContentMeta(this.#dbAdapter, this.url, localPath)
+      : { contentHash: undefined, contentSize: undefined };
+    let contentHash = persistedMeta.contentHash ?? searchHash;
+    let contentSize = persistedMeta.contentSize ?? searchSize;
     let adoptsFrom =
       codeRefFromInternalKey(fileEntry.types?.[0]) ??
       (isCodeRef(fileEntry.resource?.meta?.adoptsFrom)
@@ -4499,8 +4506,11 @@ export class Realm {
         resourceAttributes.contentType ??
         searchDoc.contentType ??
         inferredContentType,
-      contentHash: resourceAttributes.contentHash ?? contentHash,
-      contentSize: resourceAttributes.contentSize ?? contentSize,
+      // The persisted write-time values win over the indexed resource's for
+      // the same staleness reason as above; the resource's extract-computed
+      // values cover files that predate write-time hashing.
+      contentHash: contentHash ?? resourceAttributes.contentHash,
+      contentSize: contentSize ?? resourceAttributes.contentSize,
       lastModified: fileEntry.lastModified ?? unixTime(Date.now()),
       createdAt: createdAt ?? unixTime(Date.now()),
     };
@@ -6813,6 +6823,15 @@ export class Realm {
         let path = (rule as Record<string, unknown>).path;
         let instance = (rule as Record<string, unknown>).instance;
         if (typeof path !== 'string') return [];
+        // Normalize a rule authored with a trailing slash ('/pricing/') to
+        // its canonical slash-free form ('/pricing'). Request paths are
+        // matched slash-insensitively (RealmPaths.local strips trailing
+        // slashes), so an un-normalized '/pricing/' rule would never match;
+        // normalizing here also feeds the correct canonical form to the
+        // serve-index redirect and the client-side routing map. Shared with
+        // the editor's duplicate detection so a '/pricing' + '/pricing/'
+        // collision is flagged there. The realm-root rule '/' is preserved.
+        let normalizedPath = normalizeRoutingPath(path);
         if (!instance || typeof instance !== 'object') return [];
         let id = (instance as Record<string, unknown>).id;
         if (typeof id !== 'string') return [];
@@ -6834,11 +6853,11 @@ export class Realm {
         // are handled correctly.
         if (!this.paths.inRealm(idURL)) {
           this.#log.warn(
-            `dropping host routing rule for path "${path}" — target ${id} is outside this realm`,
+            `dropping host routing rule for path "${normalizedPath}" — target ${id} is outside this realm`,
           );
           return [];
         }
-        return [{ path, id }];
+        return [{ path: normalizedPath, id }];
       });
       return (this.#cachedHostRoutingMap = map);
     } catch (e) {

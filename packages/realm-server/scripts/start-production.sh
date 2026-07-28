@@ -40,6 +40,7 @@ NODE_NO_WARNINGS=1 \
   PUBLISHED_REALM_BOXEL_SITE_DOMAIN='boxel.site' \
   exec node main.ts \
   --port=3000 \
+  --livenessPort=3010 \
   --matrixURL='https://matrix.boxel.ai' \
   --realmsRootPath='/persistent/realms' \
   --serverURL='https://app.boxel.ai' \

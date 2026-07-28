@@ -7,23 +7,23 @@ boxel:
     - codeRef:
         module: '@cardstack/catalog/commands/listing-create'
         name: default
-        requiresApproval: false
+      requiresApproval: false
     - codeRef:
         module: '@cardstack/catalog/commands/listing-use'
         name: default
-        requiresApproval: false
+      requiresApproval: false
     - codeRef:
         module: '@cardstack/catalog/commands/listing-install'
         name: default
-        requiresApproval: false
+      requiresApproval: false
     - codeRef:
         module: '@cardstack/catalog/commands/listing-remix'
         name: default
-        requiresApproval: false
+      requiresApproval: false
     - codeRef:
         module: '@cardstack/boxel-host/tools/preview-format'
         name: default
-        requiresApproval: false
+      requiresApproval: false
 ---
 
 # catalog-listing

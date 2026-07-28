@@ -3,6 +3,7 @@ import {
   click,
   fillIn,
   render,
+  settled,
   triggerEvent,
   triggerKeyEvent,
   waitFor,
@@ -572,6 +573,159 @@ module('Integration | markdown-embed-chooser-modal', function (hooks) {
       { refType: 'card', url: mango, bfm: `:card[${mango}]` },
       'resolves with the serialized BFM directive for the picked card',
     );
+  });
+
+  test('the preview pane shows a loading indicator (not the empty placeholder) while a picked card resolves', async function (assert) {
+    // Gate the store load for the picked card so the loading window is
+    // observable. Other loads (search, base realm) pass straight through.
+    let store = getService('store') as StoreService;
+    let origGet = store.get.bind(store);
+    let releaseLoad!: () => void;
+    let gate = new Promise<void>((resolve) => (releaseLoad = resolve));
+    store.get = ((id: string, opts?: unknown) => {
+      if (id === mango) {
+        return gate.then(() => origGet(id, opts as never));
+      }
+      return origGet(id, opts as never);
+    }) as typeof store.get;
+
+    await render(
+      <template>
+        <HostContextProvider>
+          <MarkdownEmbedChooserModal />
+        </HostContextProvider>
+      </template>,
+    );
+
+    let svc = getService(
+      'markdown-embed-chooser',
+    ) as MarkdownEmbedChooserService;
+    let pending = svc.chooseCardOrFile({ defaultTab: 'card' });
+    await waitFor('[data-test-markdown-embed-chooser-modal]');
+
+    await fillIn(
+      '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-search-field]',
+      'Mango',
+    );
+    await waitFor(
+      `[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-item-button="${mango}"]`,
+      { timeout: 5000 },
+    );
+
+    // Fire the click natively rather than via `click()` (which awaits
+    // settledness and would block on the gated load task) so we can assert the
+    // in-flight loading state.
+    (
+      document.querySelector(
+        `[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-item-button="${mango}"]`,
+      ) as HTMLElement
+    ).click();
+
+    await waitFor(
+      '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-preview-loading]',
+      { timeout: 5000 },
+    );
+    assert
+      .dom(
+        '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-preview-loading]',
+      )
+      .exists(
+        'the preview pane shows a loading indicator while the pick loads',
+      );
+    assert
+      .dom(
+        '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-preview-empty]',
+      )
+      .doesNotExist('the empty placeholder is suppressed during loading');
+    assert
+      .dom(
+        '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-preview-pane]',
+      )
+      .exists(
+        'the preview pane (with its format controls) stays mounted while loading',
+      );
+    assert
+      .dom(
+        '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-preview]',
+      )
+      .doesNotExist('the resolved embed is not shown until the load completes');
+
+    releaseLoad();
+    await settled();
+
+    assert
+      .dom(
+        '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-preview]',
+      )
+      .exists('the resolved card renders its embed once the load completes');
+    assert
+      .dom(
+        '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-preview-loading]',
+      )
+      .doesNotExist('the loading indicator clears once the preview is shown');
+
+    svc.resolve(undefined);
+    await pending;
+  });
+
+  test('a card load that throws shows the broken preview, not a stuck loading/empty state', async function (assert) {
+    let store = getService('store') as StoreService;
+    let origGet = store.get.bind(store);
+    store.get = ((id: string, opts?: unknown) => {
+      if (id === mango) {
+        return Promise.reject(new Error('boom'));
+      }
+      return origGet(id, opts as never);
+    }) as typeof store.get;
+
+    await render(
+      <template>
+        <HostContextProvider>
+          <MarkdownEmbedChooserModal />
+        </HostContextProvider>
+      </template>,
+    );
+
+    let svc = getService(
+      'markdown-embed-chooser',
+    ) as MarkdownEmbedChooserService;
+    let pending = svc.chooseCardOrFile({ defaultTab: 'card' });
+    await waitFor('[data-test-markdown-embed-chooser-modal]');
+
+    await fillIn(
+      '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-search-field]',
+      'Mango',
+    );
+    await waitFor(
+      `[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-item-button="${mango}"]`,
+      { timeout: 5000 },
+    );
+    await click(
+      `[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-item-button="${mango}"]`,
+    );
+
+    await waitFor(
+      '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-broken-link-template]',
+      { timeout: 5000 },
+    );
+    assert
+      .dom(
+        '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-broken-link-template]',
+      )
+      .exists('a thrown load surfaces the broken-ref visual');
+    assert
+      .dom(
+        '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-preview-empty]',
+      )
+      .doesNotExist('the empty placeholder is suppressed for a failed load');
+    assert
+      .dom(
+        '[data-test-markdown-embed-chooser-tab-panel="card"] [data-test-markdown-embed-preview-loading]',
+      )
+      .doesNotExist('the pane does not stay stuck on the loading indicator');
+
+    svc.resolve(undefined);
+    await pending;
   });
 
   test('a picked card serializes a document-relative ref when a base URL is supplied', async function (assert) {

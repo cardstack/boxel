@@ -9,6 +9,7 @@
     "boxel:search": "NODE_NO_WARNINGS=1 node scripts/boxel-search.ts",
     "cache:prepare": "NODE_NO_WARNINGS=1 node src/cli/cache-realm.ts",
     "factory:go": "NODE_NO_WARNINGS=1 node src/cli/factory-entrypoint.ts",
+    "factory:setup": "NODE_NO_WARNINGS=1 node scripts/factory-setup.ts",
     "smoke:context": "NODE_NO_WARNINGS=1 node scripts/smoke-tests/factory-context-smoke.ts",
     "smoke:prompt": "NODE_NO_WARNINGS=1 node scripts/smoke-tests/factory-prompt-smoke.ts",
     "smoke:skill": "NODE_NO_WARNINGS=1 node scripts/smoke-tests/factory-skill-smoke.ts",

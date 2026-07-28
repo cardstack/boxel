@@ -318,21 +318,25 @@ Verify visually that stage 3 matches stage 1. If anything shifted, your theme ex
 
 Now you have the design language (in the theme) and the flagship layout (in isolated). Derive the constrained formats from the visual identity.
 
-**Critical — every format leaves outer chrome to the host.** Read `boxel-ui-guidelines/references/delegated-render-control.md` ("The flip side — what the CHILD card MUST NOT do"). The host wraps every format with a CardContainer that provides `border-radius`, `background`, `border`/`box-shadow`, `overflow: hidden`. The child format must NOT decorate its outermost element with these — the parent and host own the box; the child owns what's inside it.
+**Critical — every format leaves outer chrome to the host.** Read `boxel-ui-guidelines/references/delegated-render-control.md` ("The flip side — what the CHILD card MUST NOT do"). The host wraps every format with a CardContainer that provides `border-radius`, `border`, `box-shadow`, `overflow: hidden`. The child format must NOT decorate its outermost element with these — the parent and host own the box boundaries; the child owns what's inside it.
 
 This rule is what lets a parent (like the Row & Rail Programme showcase) embed your card and override the chrome to match its design language. If your `isolated` adds `border-radius: 8px` to its outer `<article>`, it fights every parent that tries to override.
 
-Per format, outer-element rules:
+Per format, outer-element rules. `CardContainer` — which wraps every card render — already applies the theme's `background-color`, `color`, `font-family` (`--font-sans`, falling back to the Boxel sans stack), and body `font-size`; all inherited for free. Don't declare these on the root unless deviating: `font-family` only for a non-sans card voice (such as `--font-serif`); `background-color`/`color` only when a pairing other than the theme's main background/foreground is preferred. `fitted` and `embedded` may make that switch (e.g. `--card` + `--card-foreground`); `isolated` and CardDef `edit` keep the theme's pair.
 
 | Format | OK on outermost | NOT OK |
 |---|---|---|
-| `isolated` | `color`, `font-family`, inner padding, inner grid/flex | `border-radius`, `border`, `box-shadow`, opaque `background`, `overflow` |
-| `embedded` | same | same — plus no `width/height/max-width` |
-| `fitted` | `color`, `font-family`, inner padding, inner grid template | `border-radius`, `border`, `box-shadow`, `background`, `width/height/min/max-height`, `overflow`, `container-type`, `container-name` |
+| `isolated` | `font-family` (only if not `--font-sans`), inner padding, inner grid/flex | `border-radius`, `border`, `box-shadow`, `overflow`, background/foreground overrides (use the theme's) |
+| `embedded` | same — plus a different background/foreground pairing (e.g. `--card` + `--card-foreground`) | `border-radius`, `border`, `box-shadow`, `overflow`, `width/height/max-width` |
+| `fitted` | a different background/foreground pairing (e.g. `--card` + `--card-foreground`), `font-family` (only if not `--font-sans`), inner padding, inner grid template | `border-radius`, `border`, `box-shadow`, `width/height/min/max-height`, `container-type`, `container-name` |
 | `atom` | inline content only | `padding`, `border`, `border-radius`, `background`, any `display:` other than default |
-| `edit` | form field spacing, internal layout | same as embedded |
+| `edit` | form field spacing, internal layout | same as isolated (keep the theme's background/foreground) |
+
+Compound-field `embedded`/`edit` templates are the exception: nested inside a card surface, they may choose a different background/foreground combo to distinguish themselves — usually `--card` + `--card-foreground`.
 
 **If the brand demands a specific outer treatment** (sharp corners, custom border), put it on the **Theme card** (`--radius`, `--background`, `--border`). The wrapper's `--themed` cascade picks it up. Every linked card gets it for free — without format CSS contention.
+
+**Fitted — start from `<FittedCard>` for standard compositions.** For standard compositions (image + eyebrow + title + subtitle + meta + footer + badges), use the `FittedCard` component from `@cardstack/boxel-ui/components` and carry the design identity through its `--fc-*` variables and slot content — see the "Prefer `<FittedCard>`" section of `container-query-fitted-layout.md`. When the design calls for a special fitted template (barcode ticket stub, terminal ticker, boarding pass, magazine spread — the kind in that guide's File Inventory), skip `FittedCard` and hand-roll per the guide.
 
 **Fitted — the one rule that's actually a rule: FEATURE THE MEDIA.**
 
@@ -344,7 +348,7 @@ Layout latitude in fitted:
 - Keep one editorial micro-object if it scales (eyebrow with tracking does; drop cap doesn't)
 - Drop the schema-rich content; show only the 3-4 fields that survive at 200×200
 
-**Before declaring fitted done, walk all 16 named sizes.** The host previews fitted at 16 specific size boxes (3 badges + 5 strips + 5 tiles + 3 cards). A fitted layout that nails one size and breaks at another isn't done. The full table — Small/Medium/Large Badge, Single/Double/Triple/Double-Wide/Triple-Wide Strip, Small/Regular/CardsGrid/Tall/Large Tile, Compact/Full/Expanded Card — and the per-cell verification checklist live in [`fitted-formats.md`](fitted-formats.md). Use the live app's format preview to walk them visually; `npx boxel check` is not a substitute.
+**Before declaring fitted done, walk all 16 named sizes.** The host previews fitted at 16 specific size boxes (3 badges + 5 strips + 5 tiles + 3 cards). A fitted layout that nails one size and breaks at another isn't done. The full table — Small/Medium/Large Badge, Single/Double/Triple/Double-Wide/Triple-Wide Strip, Small/Regular/CardsGrid/Tall/Large Tile, Compact/Full/Expanded Card — and the per-cell verification checklist live in [`fitted-formats.md`](fitted-formats.md). Use the live app's format preview to walk them visually.
 
 **Embedded — compressed isolated.**
 

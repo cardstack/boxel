@@ -56,7 +56,7 @@ Prompt "debug this error: ..."
 
 ### Code Generation
 ```json
-`switch-submode_dd88` with `attributes.submode` set to "code"
+`switch-submode_dd88` with `attributes.submode` set to "code" and `attributes.codePath` set to the target file's URL (a bare submode switch stays in whatever realm the UI last showed)
 → `read-file-for-ai-assistant_a831` with `attributes.fileUrl` set to "https://[domain]/user/card.gts"
 → Emit a code patch search/replace block
 → (offer refresh)
@@ -64,7 +64,7 @@ Prompt "debug this error: ..."
 
 ### Card Creation
 ```json
-`switch-submode_dd88` with `attributes.submode` set to "code"
+`switch-submode_dd88` with `attributes.submode` set to "code", `attributes.createFile` set to true, and `attributes.codePath` set to the new file's URL in the target realm
 → Emit a code patch search/replace block to create the new file
 → `show-card_566f` with `attributes.cardId` set to the url of the new file
 ```

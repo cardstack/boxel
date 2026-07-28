@@ -576,6 +576,6 @@ over in the same session.
   each freshly-created implementation Issue (write `.gts` /
   `.test.gts` / instances / Spec, run validators, fix failures,
   mark done).
-- `boxel-development` — `.gts` card authoring patterns.
+- `boxel` — `.gts` card authoring patterns.
 - `realm-sync` — `boxel realm push` / `boxel realm pull` / `boxel realm sync` / realm-creation
   surface.

@@ -262,17 +262,6 @@ function surfaceSearchResourceErrorState(
   }
 
   let sentinel = buildQueryFieldSentinel(instance, field, errors);
-  // DIAGNOSTIC LOGGING (CS-11221) — remove after CI passes. Don't read
-  // `instance.id` here: the field getter for `id` initializes the bucket
-  // via emptyValue, violating the pure-read contract callers depend on.
-  console.error('[CS-11221 DIAG] surface plant sentinel', {
-    fieldName: field.name,
-    ownerType: instance?.constructor?.name,
-    sentinelType: sentinel.type,
-    errorCount: errors.length,
-    firstErrorStatus: errors[0]?.error?.status,
-    firstErrorMessage: errors[0]?.error?.message,
-  });
   bucket.set(field.name, sentinel);
   fieldState.surfacedErrorSentinel = sentinel;
 }

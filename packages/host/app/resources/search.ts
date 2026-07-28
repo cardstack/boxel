@@ -817,14 +817,6 @@ export class SearchResource<
         if (didCancel(err)) {
           throw err;
         }
-        // DIAGNOSTIC LOGGING (CS-11221).
-        console.error('[CS-11221 DIAG] search task caught error', {
-          query: JSON.stringify(query),
-          realms: this.realmsToSearch,
-          errMessage: (err as { message?: unknown })?.message,
-          errStatus: (err as { status?: unknown })?.status,
-          errName: (err as { name?: unknown })?.name,
-        });
         this.#log.error(`search task failed`, err);
         this._errors = [searchErrorEntry(err)];
         this._meta = { page: { total: 0 } };

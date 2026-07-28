@@ -100,6 +100,11 @@ module('Responding', (hooks) => {
     clock = FakeTimers.install();
     fakeMatrixClient = new FakeMatrixClient();
     responder = new Responder(fakeMatrixClient, 'room-id', 'abc123agentId');
+    // Most tests here exercise room-edit streaming mechanics (thinking-message
+    // replacement, throttled edits, event splitting). Since the default mode is
+    // now to-device, pin room-edits as the module baseline; tests that target a
+    // different mode override this and reset it in their own teardown.
+    process.env.AI_BOT_STREAMING_MODE = 'room-edits';
   });
 
   hooks.afterEach(() => {
@@ -108,6 +113,7 @@ module('Responding', (hooks) => {
     responder.finalize();
     fakeMatrixClient.resetSentEvents();
     responder.matrixResponsePublisher.eventSizeMax = DEFAULT_EVENT_SIZE_MAX;
+    delete process.env.AI_BOT_STREAMING_MODE;
   });
 
   test('Sends thinking message', async () => {
@@ -350,6 +356,146 @@ module('Responding', (hooks) => {
     } finally {
       delete process.env.AI_BOT_STREAMING_MODE;
     }
+  });
+
+  test('per-turn telemetry records mode, event counts, and token usage', async () => {
+    process.env.AI_BOT_STREAMING_MODE = 'to-device';
+    try {
+      responder = new Responder(fakeMatrixClient, 'room-id', 'abc123agentId', {
+        userId: '@alice:example.com',
+        deviceId: 'DEVICEALICE',
+      });
+
+      await responder.ensureThinkingMessageSent();
+
+      for (let i = 0; i < 5; i++) {
+        await responder.onChunk({} as any, snapshotWithContent('content ' + i));
+        await clock.tickAsync(300);
+      }
+
+      // The final chunk carries usage (the only chunk that does), which the
+      // Responder tallies for the telemetry line.
+      await responder.onChunk(
+        { usage: { prompt_tokens: 120, completion_tokens: 42 } } as any,
+        snapshotWithContent('content 4'),
+      );
+
+      let toDeviceCount = fakeMatrixClient.getSentToDeviceEvents().length;
+      await responder.finalize();
+
+      let telemetry = responder.turnTelemetry;
+      assert.equal(telemetry.mode, 'to-device', 'mode is recorded');
+      assert.equal(
+        telemetry.roomEvents,
+        2,
+        'room events = thinking placeholder + one final consolidated event',
+      );
+      assert.equal(
+        telemetry.toDeviceEvents,
+        toDeviceCount,
+        'to-device count matches the previews actually sent',
+      );
+      assert.ok(telemetry.toDeviceEvents >= 1, 'at least one preview was sent');
+      assert.equal(telemetry.promptTokens, 120, 'prompt tokens captured');
+      assert.equal(
+        telemetry.completionTokens,
+        42,
+        'completion tokens captured',
+      );
+      assert.equal(telemetry.canceled, false, 'not canceled');
+      assert.equal(telemetry.roomId, 'room-id', 'roomId recorded');
+      assert.equal(telemetry.agentId, 'abc123agentId', 'agentId recorded');
+      assert.ok(
+        telemetry.streamMs !== undefined &&
+          telemetry.streamMs <= telemetry.durationMs,
+        'streamMs isolates the streaming window and is no larger than whole-turn durationMs',
+      );
+    } finally {
+      delete process.env.AI_BOT_STREAMING_MODE;
+    }
+  });
+
+  test('per-turn telemetry counts room-edits mid-turn events (the comparison baseline)', async () => {
+    // The module baseline is room-edits (set in beforeEach) — the "before" side
+    // of the streaming-mode comparison, where each mid-turn edit is its own room
+    // event. Pins that this stays high, so a regression that stopped counting
+    // mid-turn edits can't silently collapse it to ~2 like the other modes.
+    await responder.ensureThinkingMessageSent();
+    for (let i = 0; i < 5; i++) {
+      await responder.onChunk({} as any, snapshotWithContent('content ' + i));
+      await clock.tickAsync(300);
+    }
+    await responder.finalize();
+
+    let telemetry = responder.turnTelemetry;
+    assert.equal(telemetry.mode, 'room-edits', 'room-edits mode is active');
+    assert.ok(
+      telemetry.roomEvents > 2,
+      `room-edits emits a room event per mid-turn edit (got ${telemetry.roomEvents})`,
+    );
+    assert.equal(
+      telemetry.toDeviceEvents,
+      0,
+      'room-edits never uses the to-device channel',
+    );
+  });
+
+  test('default streaming mode (no env var) is to-device', async () => {
+    // Guards the default flip: with AI_BOT_STREAMING_MODE unset the turn runs
+    // in to-device mode, so only the placeholder + one consolidated room edit
+    // land regardless of whether a preview target is present.
+    delete process.env.AI_BOT_STREAMING_MODE;
+    await responder.ensureThinkingMessageSent();
+    for (let i = 0; i < 5; i++) {
+      await responder.onChunk({} as any, snapshotWithContent('content ' + i));
+      await clock.tickAsync(300);
+    }
+    await responder.finalize();
+
+    let telemetry = responder.turnTelemetry;
+    assert.equal(telemetry.mode, 'to-device', 'default mode is to-device');
+    assert.equal(
+      telemetry.roomEvents,
+      2,
+      `default collapses to placeholder + one final room edit (got ${telemetry.roomEvents})`,
+    );
+  });
+
+  test('per-turn telemetry is emitted once for a turn that errors without finalize', async () => {
+    // Several error paths in main.ts end a turn via onError() without ever
+    // calling finalize(); those turns still emit room events, so telemetry has
+    // to land from onError() too or the comparison loses them. Count actual
+    // emissions (guard-passes), not method invocations, by watching the
+    // telemetryLogged flag flip.
+    let emits = 0;
+    const responderAny = responder as unknown as {
+      logTurnTelemetry: () => void;
+      telemetryLogged: boolean;
+    };
+    const original = responderAny.logTurnTelemetry.bind(responder);
+    responderAny.logTurnTelemetry = () => {
+      const before = responderAny.telemetryLogged;
+      original();
+      if (!before && responderAny.telemetryLogged) {
+        emits++;
+      }
+    };
+
+    await responder.ensureThinkingMessageSent();
+    await responder.onChunk({} as any, snapshotWithContent('partial'));
+    await clock.tickAsync(300);
+    assert.equal(emits, 0, 'nothing is logged mid-turn');
+
+    await responder.onError('boom');
+    assert.equal(emits, 1, 'the error path emits the telemetry line');
+    assert.ok(
+      responder.turnTelemetry.roomEvents >= 2,
+      'the errored turn reports the room events it emitted (placeholder + error)',
+    );
+
+    // A late finalize() must not emit a second line for the same turn.
+    await responder.finalize();
+    assert.equal(emits, 1, 'the once-per-turn guard suppresses a duplicate');
   });
 
   test('`to-device` streaming mode without a target device falls back to `off` behavior', async () => {

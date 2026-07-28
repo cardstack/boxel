@@ -801,7 +801,7 @@ module('Integration | realm', function (hooks) {
             realmURL: testRealmURL,
           },
           links: {
-            self: `../dir/owner`,
+            self: `./owner`,
           },
         },
       ],
@@ -1324,7 +1324,7 @@ module('Integration | realm', function (hooks) {
         {
           type: 'card',
           id: `${testRealmURL}dir/friend`,
-          links: { self: `./dir/friend` },
+          links: { self: `./friend` },
           attributes: {
             cardDescription: 'Person',
             email: null,
@@ -1352,7 +1352,7 @@ module('Integration | realm', function (hooks) {
         {
           type: 'card',
           id: `${testRealmURL}dir/van-gogh`,
-          links: { self: `./dir/van-gogh` },
+          links: { self: `./van-gogh` },
           attributes: {
             firstName: 'Van Gogh',
             cardTitle: 'Van Gogh',
@@ -3310,10 +3310,14 @@ module('Integration | realm', function (hooks) {
         `${mountedRealmURL}spreadsheet/Spreadsheet/${spreadsheet1Id}`,
     );
     assert.ok(included, 'linked spreadsheet card is included');
+    // The included card's module is relativized against its own id
+    // (spreadsheet/Spreadsheet/spreadsheet-1), not the primary document
+    // (index). `../spreadsheet` resolves to spreadsheet/spreadsheet from the
+    // card's own directory; the consumer resolves it against the same id.
     assert.strictEqual(
       included?.meta?.adoptsFrom?.module,
-      './spreadsheet/spreadsheet',
-      'adoptsFrom.module has the correct path',
+      '../spreadsheet',
+      'included adoptsFrom.module is relative to the resource own id',
     );
   });
 

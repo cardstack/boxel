@@ -21,6 +21,7 @@ import {
 
 **Layout & Containers:**
 - `CardContainer` — wraps card content with correct border/shadow/padding. all cards are already wrapped in this.
+- `FittedCard` — **the preferred starting point for `fitted` templates.** Slot-fill layout (`:placeholder`, `:badgeLeft`/`:badgeRight`, `:badgeRow`, `:eyebrow`, `:title`, `:subtitle`, `:meta`, `:footer`, `:image`, `:background`) that queries the host's `fitted-card` container internally and adapts across all 16 fitted sizes; tune via `--fc-*` custom properties. Hand-roll per `boxel/references/container-query-fitted-layout.md` only when the slot model can't express the design.
 - `GridContainer` — responsive grid layout
 - `Container` — generic container
 - `ResizablePanelGroup` — resizable panel layouts

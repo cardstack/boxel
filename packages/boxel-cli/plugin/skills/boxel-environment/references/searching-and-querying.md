@@ -7,11 +7,11 @@ boxel:
     - codeRef:
         module: '@cardstack/boxel-host/tools/search-cards'
         name: SearchCardsByTypeAndTitleCommand
-        requiresApproval: false
+      requiresApproval: false
     - codeRef:
         module: '@cardstack/boxel-host/tools/search-cards'
         name: SearchCardsByQueryCommand
-        requiresApproval: false
+      requiresApproval: false
 ---
 
 ## Query Structure
