@@ -39,6 +39,24 @@ export class VirtualNetwork {
   // mapping chase. Same pure-function-of-mappings contract as toURLHrefCache:
   // entries stay valid until a realm or URL mapping changes.
   private unresolveURLCache = new Map<string, RealmResourceIdentifier>();
+  // Cap on the URL memos above. A VirtualNetwork is process-long-lived (notably
+  // in the realm server), and toURLHref/unresolveURL are called with distinct
+  // card, index, and request URLs — unique or nonexistent inputs would
+  // otherwise accumulate for the lifetime of the process. On overflow the
+  // oldest entry is evicted (Map preserves insertion order), which suits the
+  // "same identifiers resolved repeatedly" pattern these memos target.
+  private static readonly MAX_URL_CACHE = 20_000;
+
+  private setBoundedCache<V>(cache: Map<string, V>, key: string, value: V): V {
+    if (cache.size >= VirtualNetwork.MAX_URL_CACHE) {
+      let oldest = cache.keys().next().value;
+      if (oldest !== undefined) {
+        cache.delete(oldest);
+      }
+    }
+    cache.set(key, value);
+    return value;
+  }
 
   // Notified whenever a realm-prefix mapping changes — added, removed, or
   // re-registered against a new target. Consumers that key caches by the RRI
@@ -187,8 +205,7 @@ export class VirtualNetwork {
       return cached;
     }
     let result = this.computeUnresolveURL(url);
-    this.unresolveURLCache.set(url, result);
-    return result;
+    return this.setBoundedCache(this.unresolveURLCache, url, result);
   }
 
   private computeUnresolveURL(url: string): RealmResourceIdentifier {
@@ -317,8 +334,7 @@ export class VirtualNetwork {
       return cached;
     }
     let href = this.toURL(rri).href;
-    this.toURLHrefCache.set(rri, href);
-    return href;
+    return this.setBoundedCache(this.toURLHrefCache, rri, href);
   }
 
   /**
