@@ -20,6 +20,7 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { eq, MenuItem, or, toMenuItems } from '@cardstack/boxel-ui/helpers';
 import { Folder, IconPlusThin } from '@cardstack/boxel-ui/icons';
+import type { Icon } from '@cardstack/boxel-ui/icons';
 
 import {
   CardContextName,
@@ -232,7 +233,9 @@ export default class PlaygroundPanel extends Component<Signature> {
       new MenuItem({
         label: 'Create new instance',
         action: () => this.createNew(),
-        icon: this.createNewIsRunning ? LoadingIndicator : IconPlusThin,
+        icon: (this.createNewIsRunning
+          ? LoadingIndicator
+          : IconPlusThin) as Icon,
         disabled: this.createNewIsRunning || !this.canWriteRealm,
       }),
       new MenuItem({
