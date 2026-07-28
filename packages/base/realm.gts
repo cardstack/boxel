@@ -20,8 +20,8 @@ type RealmMeta = {
   realmIdentifier: string;
   canWrite: boolean;
   info: {
-    name?: string;
-    iconURL?: string;
+    name: string;
+    iconURL: string | null;
   };
 };
 
