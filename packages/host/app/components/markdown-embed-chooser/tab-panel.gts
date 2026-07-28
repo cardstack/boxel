@@ -199,7 +199,10 @@ export default class MarkdownEmbedChooserTabPanel extends Component<Signature> {
       title: e.title,
       message: e.message,
       stack: e.meta?.stack ?? undefined,
-      additionalErrors: e.additionalErrors ?? null,
+      additionalErrors:
+        e.additionalErrors?.map((err) =>
+          'errorDetail' in err ? err.errorDetail : err,
+        ) ?? null,
     };
   }
 
