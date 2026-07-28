@@ -341,7 +341,7 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
       await this.patchWorkflowCard(ctx, {
         attributes: { lintStatus: 'failed', lintErrors: [message] },
       });
-      throw new Error(message);
+      throw new Error(message, { cause: lintError });
     }
 
     if (!outcome.passed) {

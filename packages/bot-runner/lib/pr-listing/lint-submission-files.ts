@@ -102,8 +102,9 @@ async function lintFileViaJob(
 ): Promise<LintResult> {
   let job = await queuePublisher.publish<LintResult>({
     jobType: 'lint-source',
-    // Same 10-bucket spread the realm _lint endpoint uses, so concurrent
-    // submissions can lint in parallel without flooding the worker pool.
+    // 10-way shard (mirroring the realm _lint endpoint's spread, keyed by
+    // file index here) so concurrent submissions can lint in parallel
+    // without flooding the worker pool.
     concurrencyGroup: `lint:submission:${index % 10}`,
     timeout: LINT_JOB_TIMEOUT_SEC,
     priority: userInitiatedPriority,

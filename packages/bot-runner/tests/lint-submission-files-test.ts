@@ -71,7 +71,7 @@ module('lint-submission-files', () => {
           filename: 'catalog/MyListing/component.gts',
         },
       },
-      'publishes the same payload shape the realm _lint endpoint uses',
+      'publishes the lint-source payload the worker task consumes',
     );
     assert.strictEqual(
       publishedJobs[1].concurrencyGroup,
