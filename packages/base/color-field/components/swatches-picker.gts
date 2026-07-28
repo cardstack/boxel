@@ -5,6 +5,10 @@ import { ColorPalette } from '@cardstack/boxel-ui/components';
 import type { ColorFieldSignature } from '../util/color-field-signature';
 
 export default class SwatchesPicker extends Component<ColorFieldSignature> {
+  private handleChange = (value: string | null) => {
+    this.args.set?.(value);
+  };
+
   get paletteColors() {
     const options = (
       this.args.configuration as ColorFieldConfiguration & {
@@ -17,7 +21,7 @@ export default class SwatchesPicker extends Component<ColorFieldSignature> {
   <template>
     <ColorPalette
       @color={{@model}}
-      @onChange={{@set}}
+      @onChange={{this.handleChange}}
       @disabled={{not @canEdit}}
       @paletteColors={{this.paletteColors}}
     />
