@@ -417,7 +417,7 @@ class _FileResource extends Resource<Args> {
           this.loaderService.resetLoader({
             clearFetchCache: true,
             reason: 'file-resource-external-invalidation',
-            invalidatedModule: normalizedURL,
+            codeChange: true,
           });
         }
         this.read.perform({ force: true });
@@ -449,7 +449,17 @@ class _FileResource extends Resource<Args> {
           clientRequestId: opts?.clientRequestId,
         },
       );
-      if (moduleWasLoaded) {
+      // When the store is subscribed to this realm, the realm's index event for
+      // this write drives the rebuild — and drives it at the right moment,
+      // after indexing, where re-fetching returns the written content rather
+      // than racing it. Only re-establish here for a realm the store never
+      // subscribed to (nothing loaded from it, so no index event arrives),
+      // which is reachable from a code-mode view of a module whose realm has no
+      // instance in the store.
+      if (
+        moduleWasLoaded &&
+        !this.store.isSubscribedToRealmOf(rri(this._url))
+      ) {
         this.store.refreshReferencesForCodeChange('file write');
       }
       if (this.innerState.state === 'not-found') {

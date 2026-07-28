@@ -3564,12 +3564,57 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  test('a flush blinds every loaded module, not just the one written', async function (assert) {
+    let hassan = `${testRealmURL}Person/hassan`;
+    await renderCard(hassan);
+
+    let employeeModule = `${testRealmURL}employee.gts`;
+    await loaderService.loader.import(employeeModule);
+    assert.true(
+      loaderService.loader.isModuleLoaded(employeeModule),
+      'precondition: a second module is loaded',
+    );
+
+    let telemetry = captureTelemetry();
+    try {
+      // The flush that a write performs replaces the loader, so every module it
+      // held goes with it — not only the one being written. An invalidation
+      // naming one of those other modules still has to rebuild.
+      loaderService.resetLoader({
+        clearFetchCache: true,
+        reason: 'source-write',
+        codeChange: true,
+      });
+      assert.false(
+        loaderService.loader.isModuleLoaded(employeeModule),
+        'precondition: the flush took the second module with it',
+      );
+
+      (storeService as any).handleInvalidations({
+        eventName: 'index',
+        indexType: 'incremental',
+        realmURL: testRealmURL,
+        invalidations: [employeeModule],
+      } as RealmEventContent);
+      await telemetry.waitForEvent('rebuild');
+      await settled();
+    } finally {
+      telemetry.restore();
+    }
+
+    assert.strictEqual(
+      telemetry.events('rebuild').length,
+      1,
+      `a module the flush discarded still rebuilds (captured: ${telemetry.summary()})`,
+    );
+  });
+
   test('a flush record does not survive a session boundary', async function (assert) {
     let personModule = `${testRealmURL}person.gts`;
     loaderService.resetLoader({
       clearFetchCache: true,
       reason: 'source-write',
-      invalidatedModule: personModule,
+      codeChange: true,
     });
 
     // A write whose index event never arrives — the tab logged out first, or
@@ -3603,7 +3648,7 @@ module('Integration | Store', function (hooks) {
       loaderService.resetLoader({
         clearFetchCache: true,
         reason: 'file-resource-external-invalidation',
-        invalidatedModule: personModule,
+        codeChange: true,
       });
       assert.false(
         loaderService.loader.isModuleLoaded(personModule),

@@ -295,7 +295,7 @@ export default class CardService extends Service {
       ) {
         this.loaderService.resetLoader({
           reason: 'source-write',
-          invalidatedModule: url.href,
+          codeChange: true,
         });
       }
 

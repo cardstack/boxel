@@ -410,6 +410,15 @@ export default class StoreService extends Service implements StoreInterface {
     this.store = this.createCardStore();
   }
 
+  // Whether an index event for this url's realm would reach the store. A realm
+  // is only subscribed once something takes a reference on one of its
+  // instances, so a code-mode view of a module in a realm with nothing loaded
+  // from it is not covered by the event-driven rebuild.
+  isSubscribedToRealmOf(url: RealmResourceIdentifier | URL): boolean {
+    let realmURL = this.realm.realmOf(url);
+    return realmURL ? this.subscriptions.has(realmURL) : false;
+  }
+
   refreshReferencesForCodeChange(reason?: string) {
     let reasonSuffix = reason ? ` (${reason})` : '';
     storeLogger.debug(`resetting store for code change${reasonSuffix}`);
@@ -2192,6 +2201,9 @@ export default class StoreService extends Service implements StoreInterface {
     this.loaderService.resetLoader();
     this.store.reset();
     let cardsReloaded = await this.reestablishReferences.perform();
+    // The graph is re-established against the current loader, so the snapshot
+    // of what an earlier flush discarded has nothing left to answer for.
+    this.loaderService.clearModulesFlushedForCodeChange();
 
     if (telemetry?.isEnabled && pending && rebuildStart !== undefined) {
       let triggerModules = [...pending.triggerModules].slice(0, 20);

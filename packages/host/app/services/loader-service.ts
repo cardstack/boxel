@@ -30,9 +30,6 @@ import type SessionService from './session';
 
 const log = logger('loader-service');
 
-// A tab edits few distinct modules, so this only bounds a pathological case.
-const MAX_FLUSHED_FOR_CODE_CHANGE = 100;
-
 export default class LoaderService extends Service {
   @service declare private realmInfoService: RealmInfoService;
   @service declare private realm: RealmService;
@@ -48,10 +45,10 @@ export default class LoaderService extends Service {
   // live module as a net-new module. The realm index event for that same change
   // always lands after the flush that a local write or an open editor already
   // performed, so the store's rebuild decision has to survive it. Entries are
-  // consumed by the invalidation they belong to, and dropped at a session
-  // boundary — a write whose index event never arrived (a logout, a failed
-  // indexing pass) must not leave a record for the next session, which has its
-  // own idea of which modules it loaded.
+  // consumed by the invalidation they belong to, dropped once a rebuild has
+  // re-established the graph, and dropped at a session boundary — a write whose
+  // index event never arrived (a logout, a failed indexing pass) must not leave
+  // a record for the next session, which has its own idea of what it loaded.
   private flushedForCodeChange = new Set<string>();
 
   constructor(owner: Owner) {
@@ -80,50 +77,39 @@ export default class LoaderService extends Service {
     previous?.dispose();
   }
 
-  // Whether this module was flushed from the loader because its source
-  // changed, consuming the record so a single flush arms a single rebuild.
-  // Callers pair this with `loader.isModuleLoaded` — the module counts as
-  // loaded if it is loaded now or was loaded in the loader a code change just
-  // discarded.
+  // Whether this module was among those a code change flushed out of the
+  // loader, consuming the record so one flush arms one rebuild. Callers pair
+  // this with `loader.isModuleLoaded` — the module counts as loaded if it is
+  // loaded now, or was loaded in a loader a code change just discarded.
   public takeModuleFlushedForCodeChange(moduleIdentifier: string): boolean {
-    return this.flushedForCodeChange.delete(
-      this.moduleFlushKey(moduleIdentifier),
-    );
+    let key = this.loader?.moduleKey(moduleIdentifier);
+    return key ? this.flushedForCodeChange.delete(key) : false;
   }
 
-  private noteModuleFlushedForCodeChange(moduleIdentifier: string) {
-    if (this.flushedForCodeChange.size >= MAX_FLUSHED_FOR_CODE_CHANGE) {
-      let oldest = this.flushedForCodeChange.values().next();
-      if (!oldest.done) {
-        this.flushedForCodeChange.delete(oldest.value);
-      }
-    }
-    this.flushedForCodeChange.add(this.moduleFlushKey(moduleIdentifier));
+  // Once a rebuild has re-established the graph, the live loader is
+  // authoritative again and the snapshot has no more work to do.
+  public clearModulesFlushedForCodeChange() {
+    this.flushedForCodeChange.clear();
   }
 
-  // A module reaches the two sides of a flush record under either spelling — a
-  // realm invalidation may name it scoped (`@cardstack/base/card-api`) while a
-  // local write names its URL — so both sides collapse to the canonical form
-  // the loader itself keys module identity under.
-  private moduleFlushKey(moduleIdentifier: string): string {
-    try {
-      return this.network.virtualNetwork.unresolveURL(moduleIdentifier);
-    } catch {
-      return moduleIdentifier;
+  // A flush replaces the loader wholesale, so every module it held becomes
+  // invisible — not just the one being written. Snapshot the whole set, keyed
+  // the way the loader keys module identity, so the invalidation that follows
+  // resolves against it no matter which module it names.
+  private snapshotFlushedModules(previous: Loader | undefined) {
+    for (let key of previous?.loadedModuleKeys ?? []) {
+      this.flushedForCodeChange.add(key);
     }
   }
 
   public resetLoader(options?: {
     clearFetchCache?: boolean;
     reason?: string;
-    // The module whose own source changed and prompted this flush. Recorded so
-    // the realm index event that arrives afterwards can still tell the module
-    // was loaded.
-    invalidatedModule?: string;
+    // Set when this flush is for a module whose own source changed. The realm
+    // index event for that write lands afterwards, by which point the replaced
+    // loader reports nothing as loaded.
+    codeChange?: boolean;
   }) {
-    if (options?.invalidatedModule) {
-      this.noteModuleFlushedForCodeChange(options.invalidatedModule);
-    }
     // clearFetchCache requests must never be debounced--the caller is
     // signalling that cached responses are stale (e.g. a module was
     // rewritten). Skipping this would cause re-indexing to use the old
@@ -132,6 +118,9 @@ export default class LoaderService extends Service {
       this.resetTime = Date.now();
       log.debug(`resetting loader (clearFetchCache, ${options.reason ?? ''})`);
       clearFetchCache();
+      if (options.codeChange) {
+        this.snapshotFlushedModules(this.loader);
+      }
       this.loader?.dispose();
       this.loader = this.makeInstance();
       return;
@@ -148,6 +137,9 @@ export default class LoaderService extends Service {
       // by default we keep the fetch cache so we can take advantage of HTTP
       // caching when rebuilding the loader state
       let previous = this.loader;
+      if (options?.codeChange) {
+        this.snapshotFlushedModules(previous);
+      }
       if (previous) {
         this.loader = Loader.cloneLoader(previous);
         previous.dispose();
@@ -155,6 +147,9 @@ export default class LoaderService extends Service {
         this.loader = this.makeInstance();
       }
     }
+    // A debounced call returns without replacing the loader, so nothing was
+    // flushed and nothing is recorded — the live loader still answers for
+    // itself.
   }
 
   private makeInstance() {
