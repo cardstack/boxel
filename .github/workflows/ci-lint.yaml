@@ -52,6 +52,16 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/boxel-ui/addon
+      - name: Lint Host
+        # Must run BEFORE Build Boxel UI: once declarations/ exists, Boxel UI
+        # imports resolve to .d.ts files whose relative .gts re-export
+        # specifiers don't resolve, so (under skipLibCheck) every Boxel UI
+        # symbol silently degrades to `any` and the host type check stops
+        # checking Boxel UI component invocations. Linting host first keeps
+        # it type-checking against the Boxel UI source.
+        if: ${{ !cancelled() }}
+        run: pnpm run lint
+        working-directory: packages/host
       - name: Build Boxel UI
         # To faciliate linting of projects that depend on Boxel UI
         if: ${{ !cancelled() }}
@@ -61,10 +71,6 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/boxel-ui/test-app
-      - name: Lint Host
-        if: ${{ !cancelled() }}
-        run: pnpm run lint
-        working-directory: packages/host
       - name: Lint Matrix
         if: ${{ !cancelled() }}
         run: pnpm run lint
