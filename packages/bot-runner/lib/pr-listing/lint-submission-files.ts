@@ -6,7 +6,7 @@ import {
   type LintResult,
   type QueuePublisher,
 } from '@cardstack/runtime-common';
-import { extname } from 'node:path';
+import { isLintableFilename } from '@cardstack/runtime-common/tasks/lint';
 
 export interface SubmissionFile {
   filename: string;
@@ -22,11 +22,6 @@ export interface LintOutcome {
 
 const log = logger('bot-runner');
 
-// Union of the lint-source task's ESLINT_EXTENSIONS and
-// TEMPLATE_LINT_EXTENSIONS (runtime-common/tasks/lint.ts); other files pass
-// through the lint step untouched.
-const LINTABLE_EXTENSIONS = new Set(['.js', '.ts', '.gjs', '.gts', '.hbs']);
-
 const LINT_JOB_TIMEOUT_SEC = 30;
 
 export function makeLintSubmissionFiles(queuePublisher: QueuePublisher) {
@@ -34,7 +29,9 @@ export function makeLintSubmissionFiles(queuePublisher: QueuePublisher) {
     files: SubmissionFile[],
     opts: { roomId: string; listingId: string },
   ): Promise<LintOutcome> {
-    let lintableCount = files.filter(isLintable).length;
+    let lintableCount = files.filter((f) =>
+      isLintableFilename(f.filename),
+    ).length;
     log.info('submission lint: publishing lint-source jobs', {
       roomId: opts.roomId,
       listingId: opts.listingId,
@@ -44,7 +41,9 @@ export function makeLintSubmissionFiles(queuePublisher: QueuePublisher) {
 
     let results = await Promise.all(
       files.map((file, i) =>
-        isLintable(file) ? lintFileViaJob(queuePublisher, file, i) : null,
+        isLintableFilename(file.filename)
+          ? lintFileViaJob(queuePublisher, file, i)
+          : null,
       ),
     );
 
@@ -91,10 +90,6 @@ export function makeLintSubmissionFiles(queuePublisher: QueuePublisher) {
   };
 }
 
-function isLintable(file: SubmissionFile): boolean {
-  return LINTABLE_EXTENSIONS.has(extname(file.filename).toLowerCase());
-}
-
 async function lintFileViaJob(
   queuePublisher: QueuePublisher,
   file: SubmissionFile,
@@ -126,6 +121,6 @@ async function lintFileViaJob(
 }
 
 function formatLintError(filename: string, message: LintMessage): string {
-  let rule = message.ruleId ?? message.source ?? 'lint';
+  let rule = message.ruleId ?? 'lint';
   return `${filename}:${message.line}:${message.column} [${rule}] ${message.message}`;
 }

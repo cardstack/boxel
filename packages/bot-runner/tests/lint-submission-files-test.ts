@@ -113,8 +113,23 @@ module('lint-submission-files', () => {
     let files: SubmissionFile[] = [
       { filename: 'bad.gts', contents: 'nope' },
       { filename: 'warned.gts', contents: 'meh' },
+      { filename: 'unparseable.gts', contents: '<<<' },
     ];
     let { queuePublisher } = makeQueuePublisher({
+      'unparseable.gts': cleanResult({
+        output: '<<<',
+        passed: false,
+        messages: [
+          {
+            ruleId: null,
+            severity: 2,
+            message: 'ESLint failed to process source: Unexpected token',
+            line: 1,
+            column: 1,
+            source: 'eslint',
+          },
+        ],
+      }),
       'bad.gts': cleanResult({
         output: 'nope',
         passed: false,
@@ -149,6 +164,9 @@ module('lint-submission-files', () => {
     assert.false(outcome.passed, 'severity-2 message fails the lint gate');
     assert.deepEqual(outcome.lintErrors, [
       'bad.gts:3:7 [@cardstack/boxel/no-literal-realm-urls] Do not hardcode realm URLs',
+      // A rule-less finding reads `[lint]`; the engine name belongs to the
+      // message, not the rule slot.
+      'unparseable.gts:1:1 [lint] ESLint failed to process source: Unexpected token',
     ]);
   });
 

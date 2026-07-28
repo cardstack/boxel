@@ -165,6 +165,13 @@ async function initTemplateLinter(): Promise<any> {
 const ESLINT_EXTENSIONS = new Set(['.js', '.ts', '.gjs', '.gts']);
 const TEMPLATE_LINT_EXTENSIONS = new Set(['.hbs', '.gts', '.gjs']);
 
+// Callers that gate work on whether a file reaches an engine at all (e.g. the
+// submission lint fan-out) ask here, so coverage tracks routing.
+export function isLintableFilename(filename: string): boolean {
+  const ext = extname(filename).toLowerCase();
+  return ESLINT_EXTENSIONS.has(ext) || TEMPLATE_LINT_EXTENSIONS.has(ext);
+}
+
 // ---------------------------------------------------------------------------
 // Task
 // ---------------------------------------------------------------------------
