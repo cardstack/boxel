@@ -180,12 +180,32 @@ function closeInstanceChooser() {
   )?.click();
 }
 
+type OptionItem = RenderableSearchEntryLike | FieldOption | FileDef;
+
+// The template branches on @isFileMeta/@isField, which the parent keeps in
+// sync with the kind of options it passed; these narrow each branch's item.
+function optionItems(options: OptionsDropdownSignature['Args']['options']) {
+  return (options ?? []) as OptionItem[];
+}
+
+function asFile(item: OptionItem) {
+  return item as FileDef;
+}
+
+function fieldOf(item: OptionItem) {
+  return (item as FieldOption).field;
+}
+
+function componentOf(item: OptionItem) {
+  return (item as RenderableSearchEntryLike).component;
+}
+
 export const OptionsDropdown: TemplateOnlyComponent<OptionsDropdownSignature> =
   <template>
     <BoxelSelect
       class='instance-chooser'
       @dropdownClass='instances-dropdown-content'
-      @options={{@options}}
+      @options={{optionItems @options}}
       @selected={{@selected}}
       @selectedItemComponent={{component
         SelectedItem
@@ -219,15 +239,17 @@ export const OptionsDropdown: TemplateOnlyComponent<OptionsDropdownSignature> =
     >
       {{#if @isFileMeta}}
         <div class='file-item'>
-          <CardRenderer @card={{item}} @format='atom' />
+          <CardRenderer @card={{asFile item}} @format='atom' />
         </div>
       {{else if @isField}}
         <CardContainer class='field' @displayBoundaries={{true}}>
-          <CardRenderer @card={{item.field}} @format='atom' />
+          <CardRenderer @card={{fieldOf item}} @format='atom' />
         </CardContainer>
       {{else}}
         <CardContainer class='card' @displayBoundaries={{true}}>
-          <item.component />
+          {{#let (componentOf item) as |ItemComponent|}}
+            <ItemComponent />
+          {{/let}}
         </CardContainer>
       {{/if}}
     </BoxelSelect>
