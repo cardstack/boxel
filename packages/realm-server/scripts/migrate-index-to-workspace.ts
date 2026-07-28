@@ -72,7 +72,7 @@
  *     --rollback ./migrate-index-to-workspace-manifest.json
  */
 import { readFileSync, writeFileSync, readdirSync, existsSync } from 'fs';
-import { join, resolve, sep } from 'path';
+import { join, relative, resolve, sep } from 'path';
 import { fileURLToPath } from 'url';
 import { PUBLISHED_DIRECTORY_NAME } from '@cardstack/runtime-common/constants';
 
@@ -250,6 +250,13 @@ type RealmReport = {
   forced: boolean;
   willMigrate: boolean;
   extras: string[];
+  /**
+   * The realm's path relative to the realms root it was discovered under —
+   * `<user>/<realm>`, which is what `/_grafana-reindex?realm=` wants. Absent
+   * for a realm named as an explicit directory argument, where the disk path
+   * says nothing about the URL the realm is served at.
+   */
+  reindexPath?: string;
 };
 
 type ManifestEntry = { path: string; original: string };
@@ -301,56 +308,42 @@ export function discoverPublishedRealms(realmsRoot: string): string[] {
   return childDirs(publishedRoot).map((diskId) => join(publishedRoot, diskId));
 }
 
-function classifyRealm(realmDir: string): RealmReport {
+function classifyRealm(
+  realmDir: string,
+  reindexPath: string | undefined,
+): RealmReport {
   let indexPath = join(realmDir, 'index.json');
+  let base = {
+    realmDir,
+    indexPath,
+    forced: false,
+    willMigrate: false,
+    extras: [] as string[],
+    reindexPath,
+  };
+  let unusable = (reason: string): RealmReport => ({
+    ...base,
+    classification: { kind: 'unusable', reason },
+  });
+
   if (!existsSync(indexPath)) {
-    return {
-      realmDir,
-      indexPath,
-      classification: { kind: 'unusable', reason: 'no index.json' },
-      forced: false,
-      willMigrate: false,
-      extras: [],
-    };
+    return unusable('no index.json');
   }
   let source: string;
   try {
     source = readFileSync(indexPath, 'utf8');
   } catch (err) {
-    return {
-      realmDir,
-      indexPath,
-      classification: {
-        kind: 'unusable',
-        reason: `unreadable: ${(err as Error).message}`,
-      },
-      forced: false,
-      willMigrate: false,
-      extras: [],
-    };
+    return unusable(`unreadable: ${(err as Error).message}`);
   }
   let doc: any;
   try {
     doc = JSON.parse(source);
   } catch (err) {
-    return {
-      realmDir,
-      indexPath,
-      classification: {
-        kind: 'unusable',
-        reason: `invalid JSON: ${(err as Error).message}`,
-      },
-      forced: false,
-      willMigrate: false,
-      extras: [],
-    };
+    return unusable(`invalid JSON: ${(err as Error).message}`);
   }
   return {
-    realmDir,
-    indexPath,
+    ...base,
     classification: classify(doc?.data?.meta?.adoptsFrom),
-    forced: false,
-    willMigrate: false,
     extras: extraKeys(source),
   };
 }
@@ -479,14 +472,29 @@ export function main(argv: string[]): number {
     return rollback(args.rollback);
   }
 
-  let realmDirs = [...args.dirs];
+  // Each discovered realm remembers the realms root it came from, so its
+  // `<user>/<realm>` path — the value `/_grafana-reindex?realm=` takes — can be
+  // printed alongside the disk path. An explicit directory argument gets none:
+  // its disk path implies nothing about the URL the realm is served at.
+  let discovered = new Map<string, string | undefined>();
+  for (let dir of args.dirs) {
+    discovered.set(dir, undefined);
+  }
   for (let root of args.realmsRoots) {
-    realmDirs.push(...discoverUserRealms(root));
-    if (args.published) {
-      realmDirs.push(...discoverPublishedRealms(root));
+    let fromRoot = [
+      ...discoverUserRealms(root),
+      ...(args.published ? discoverPublishedRealms(root) : []),
+    ];
+    for (let dir of fromRoot) {
+      if (!discovered.has(dir)) {
+        discovered.set(dir, relative(root, dir));
+      }
     }
   }
-  realmDirs = [...new Set(realmDirs)].filter((dir) => isDirectory(dir)).sort();
+
+  let realmDirs = [...discovered.keys()]
+    .filter((dir) => isDirectory(dir))
+    .sort();
 
   if (realmDirs.length === 0) {
     console.error(
@@ -495,7 +503,7 @@ export function main(argv: string[]): number {
     return 1;
   }
 
-  let reports = realmDirs.map(classifyRealm);
+  let reports = realmDirs.map((dir) => classifyRealm(dir, discovered.get(dir)));
   let unmatchedIncludes = new Set(args.include);
   for (let report of reports) {
     let hit = args.include.find((include) =>
@@ -547,6 +555,7 @@ export function main(argv: string[]): number {
           manifest: args.dryRun || manifest.length === 0 ? null : args.manifest,
           realms: reports.map((report) => ({
             realmDir: report.realmDir,
+            reindexPath: report.reindexPath ?? null,
             classification: report.classification,
             forced: report.forced,
             willMigrate: report.willMigrate,
@@ -588,10 +597,21 @@ export function main(argv: string[]): number {
       );
     }
     if (migrating.length > 0) {
-      console.log('\nReindex these realms (they were changed on disk):');
+      console.log(
+        `\nReindex these ${migrating.length} realm(s) — the server does not watch the filesystem,\nso the change is invisible to the index until one runs:`,
+      );
       for (let report of migrating) {
-        console.log(`  ${report.realmDir}`);
+        console.log(`  ${report.reindexPath ?? report.realmDir}`);
       }
+      console.log(
+        '\nAs a realm= list for /_grafana-reindex (one per line, pipe into a loop):',
+      );
+      console.log(
+        migrating
+          .map((report) => report.reindexPath)
+          .filter(Boolean)
+          .join('\n'),
+      );
     }
   }
 

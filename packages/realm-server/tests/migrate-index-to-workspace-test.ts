@@ -412,6 +412,37 @@ module('Unit | migrate-index-to-workspace', function () {
       });
     });
 
+    test('the report gives each migrated realm as a reindex realm= path', function (assert) {
+      withTempDir((dir) => {
+        makeRealm(
+          dir,
+          'buck/mar10',
+          indexCard('@cardstack/base/cards-grid', 'CardsGrid'),
+        );
+        // Three levels deep, so the two-level owner walk does not reach it and
+        // it is only in scope as an explicit argument.
+        let explicit = makeRealm(
+          dir,
+          'deep/deeper/deepest/thing',
+          indexCard('@cardstack/base/cards-grid', 'CardsGrid'),
+        );
+
+        let { out } = captureLogs(() =>
+          main(['--dry-run', '--realms-root', dir, explicit]),
+        );
+
+        let realmList = out.slice(out.indexOf('As a realm= list'));
+        assert.ok(
+          realmList.includes(join('buck', 'mar10')),
+          'a realm found under a realms root is listed as <user>/<realm>',
+        );
+        assert.notOk(
+          realmList.includes('thing'),
+          'an explicitly named directory is omitted — its disk path implies no URL',
+        );
+      });
+    });
+
     test('--include migrates a realm whose index is a hand-rolled workspace', function (assert) {
       withTempDir((dir) => {
         let handRolled = makeRealm(
