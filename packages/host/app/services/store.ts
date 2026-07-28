@@ -429,7 +429,7 @@ export default class StoreService extends Service implements StoreInterface {
       let report = (cardsReloaded: number) =>
         telemetry.recordEvent({
           event_type: 'rebuild',
-          source: 'write',
+          rebuild_source: 'write',
           realm: opts?.realm ?? null,
           duration_ms: Math.round(performance.now() - start),
           trigger_modules: triggerModules,
@@ -441,9 +441,9 @@ export default class StoreService extends Service implements StoreInterface {
       refetch.then(
         (cardsReloaded) => report(cardsReloaded ?? 0),
         (e) => {
-          // A cancelled re-establishment (a reset racing it) is not a rebuild
-          // worth reporting — but a genuine failure is a rebuild the tab paid
-          // for, and the one most worth seeing on the dashboard.
+          // A cancelled re-establishment (the owner tearing down mid-flight)
+          // is not a rebuild worth reporting — but a genuine failure is a
+          // rebuild the tab paid for, and the one most worth seeing.
           if (!didCancel(e)) {
             report(0);
           }
@@ -2252,7 +2252,7 @@ export default class StoreService extends Service implements StoreInterface {
         let triggerModules = [...pending.triggerModules].slice(0, 20);
         telemetry.recordEvent({
           event_type: 'rebuild',
-          source: 'realm-event',
+          rebuild_source: 'realm-event',
           realm: pending.realm,
           duration_ms: Math.round(performance.now() - rebuildStart),
           trigger_modules: triggerModules,

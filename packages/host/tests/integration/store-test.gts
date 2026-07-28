@@ -3473,7 +3473,7 @@ module('Integration | Store', function (hooks) {
     );
     let rebuild = rebuilds[0] as RebuildEvent;
     assert.strictEqual(
-      rebuild.source,
+      rebuild.rebuild_source,
       'realm-event',
       'an event-driven rebuild names its source',
     );
@@ -3598,7 +3598,11 @@ module('Integration | Store', function (hooks) {
       `the write-time re-establishment is reported (captured: ${telemetry.summary()})`,
     );
     let rebuild = rebuilds[0] as RebuildEvent;
-    assert.strictEqual(rebuild.source, 'write', 'the source names the save');
+    assert.strictEqual(
+      rebuild.rebuild_source,
+      'write',
+      'the source names the save',
+    );
     assert.strictEqual(
       rebuild.trigger_module,
       personModule,

@@ -2102,7 +2102,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "description": "Rebuild event rate per interval (left axis) and p95 rebuild duration_ms (right axis, ms). Split by source: realm-event rebuilds are driven by an incoming index event (someone\u2019s write landing on this tab); write rebuilds are the tab\u2019s own code-mode save re-establishing the graph at save time.",
+            "description": "Rebuild event rate per interval (left axis) and p95 rebuild duration_ms (right axis, ms). Split by rebuild_source: realm-event rebuilds are driven by an incoming index event (someone\u2019s write landing on this tab); write rebuilds are the tab\u2019s own code-mode save re-establishing the graph at save time.",
             "fieldConfig": {
               "defaults": {
                 "color": {
@@ -2197,10 +2197,10 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "sum by (source) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"rebuild\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__interval]))",
+                "expr": "sum by (rebuild_source) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"rebuild\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__interval]))",
                 "queryType": "range",
                 "refId": "A",
-                "legendFormat": "rebuilds ({{source}})"
+                "legendFormat": "rebuilds ({{rebuild_source}})"
               },
               {
                 "datasource": {
@@ -2222,7 +2222,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "description": "Per trigger_modules group: rebuild count (A), avg modules_refetched (B), avg cards_reloaded (C) over the range. Identifies which module changes drive the most expensive client rebuilds.",
+            "description": "Per trigger_modules group: rebuild count (A), avg modules_refetched (B), avg cards_reloaded (C) over the range. Identifies which module changes drive the most expensive client rebuilds. modules_refetched is read from event-driven rebuilds only; a write-sourced rebuild does not measure module re-imports.",
             "fieldConfig": {
               "defaults": {
                 "color": {
@@ -2290,7 +2290,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "avg by (trigger_module) (avg_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"rebuild\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap modules_refetched [$__range]))",
+                "expr": "avg by (trigger_module) (avg_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"rebuild\" | rebuild_source=\"realm-event\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap modules_refetched [$__range]))",
                 "queryType": "instant",
                 "refId": "B",
                 "legendFormat": ""

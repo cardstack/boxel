@@ -101,7 +101,11 @@ export interface RebuildEvent extends BaseEvent {
   // What drove the rebuild: an incoming realm index event, or this tab's own
   // write re-establishing the graph at save time. A save of a loaded module in
   // a realm the store is subscribed to pays both — one rebuild per source.
-  source: 'realm-event' | 'write';
+  // Named rebuild_source, not source: the firelens log router wraps each
+  // deployed log line in an envelope that carries its own `source` key, and
+  // the dashboard's wrapper-unwrap parse keeps the first occurrence of a
+  // duplicated label — the wrapper's — silently dropping the event's.
+  rebuild_source: 'realm-event' | 'write';
   duration_ms: number;
   trigger_modules: string[];
   // Scalar grouping key (the first trigger module) — the dashboard groups
