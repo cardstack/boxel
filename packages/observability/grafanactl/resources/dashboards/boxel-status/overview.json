@@ -262,7 +262,7 @@
           "type": "loki",
           "uid": "loki"
         },
-        "description": "Users with the app open right now: distinct Matrix accounts that emitted a client performance event within a rolling 5-minute window, evaluated across the dashboard time range. Big number is the latest 5-minute count; sparkline shows how it moved over the range. Counted from the browser telemetry the app itself emits: a client-perf beacon carries the account id from its authenticated session token, so this is people with Boxel open rather than Matrix accounts that happen to be syncing (the AI bot syncs too, and never loads the app). Counted per account, so one person with several tabs open counts once — the Client Performance board breaks the same window down per session.",
+        "description": "Users with the app open right now: distinct Matrix accounts that emitted a client performance event within a rolling 5-minute window, evaluated across the dashboard time range. Big number is the latest 5-minute count; sparkline shows how it moved over the range. Counted from the browser telemetry the app itself emits: a client-perf beacon carries the account id from its authenticated session token, so this is people with Boxel open rather than Matrix accounts that happen to be syncing (the AI bot syncs too, and never loads the app). Counted per account, so one person with several tabs open counts once — the Host App Client Performance board breaks the same window down per session.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -271,7 +271,7 @@
             "decimals": 0,
             "links": [
               {
-                "title": "Open Client Performance dashboard",
+                "title": "Open Host App Client Performance dashboard",
                 "url": "/d/boxel-client-perf/client-performance?${__url_time_range}",
                 "targetBlank": false
               }
@@ -319,7 +319,7 @@
         "id": 30,
         "links": [
           {
-            "title": "Open Client Performance dashboard",
+            "title": "Open Host App Client Performance dashboard",
             "url": "/d/boxel-client-perf/client-performance?${__url_time_range}",
             "targetBlank": false,
             "type": "link",
@@ -363,7 +363,7 @@
           "type": "loki",
           "uid": "loki"
         },
-        "description": "Matrix accounts with the app open in the last 5 minutes, and how many sessions (browser tabs) each has. Counted from the browser telemetry the app itself emits: a client-perf beacon carries the account id from its authenticated session token, so this is people with Boxel open rather than Matrix accounts that happen to be syncing (the AI bot syncs too, and never loads the app). Click a user to open the Client Performance board scoped to that account.",
+        "description": "Matrix accounts with the app open in the last 5 minutes, and how many sessions (browser tabs) each has. Counted from the browser telemetry the app itself emits: a client-perf beacon carries the account id from its authenticated session token, so this is people with Boxel open rather than Matrix accounts that happen to be syncing (the AI bot syncs too, and never loads the app). Click a user to open the Host App Client Performance board scoped to that account.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -411,7 +411,7 @@
                   "id": "links",
                   "value": [
                     {
-                      "title": "Open in Client Performance dashboard",
+                      "title": "Open in Host App Client Performance dashboard",
                       "url": "/d/boxel-client-perf/client-performance?${__url_time_range}&var-matrix_user_id=${__value.text:percentencode}",
                       "targetBlank": false
                     }
