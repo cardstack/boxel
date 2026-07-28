@@ -30,6 +30,9 @@ import type SessionService from './session';
 
 const log = logger('loader-service');
 
+// A tab edits few distinct modules, so this only bounds a pathological case.
+const MAX_FLUSHED_FOR_CODE_CHANGE = 100;
+
 export default class LoaderService extends Service {
   @service declare private realmInfoService: RealmInfoService;
   @service declare private realm: RealmService;
@@ -38,6 +41,15 @@ export default class LoaderService extends Service {
 
   @tracked public loader = this.makeInstance();
   private resetTime: number | undefined;
+
+  // Modules flushed from the loader because their own source changed. A flush
+  // replaces the loader with one that carries no loaded modules, so anything
+  // deciding "was this module loaded?" after the flush reads a code change to a
+  // live module as a net-new module. The realm index event for that same change
+  // always lands after the flush that a local write or an open editor already
+  // performed, so the store's rebuild decision has to survive it. Entries are
+  // consumed by the invalidation they belong to.
+  private flushedForCodeChange = new Set<string>();
 
   constructor(owner: Owner) {
     super(owner);
@@ -65,7 +77,50 @@ export default class LoaderService extends Service {
     previous?.dispose();
   }
 
-  public resetLoader(options?: { clearFetchCache?: boolean; reason?: string }) {
+  // Whether this module was flushed from the loader because its source
+  // changed, consuming the record so a single flush arms a single rebuild.
+  // Callers pair this with `loader.isModuleLoaded` — the module counts as
+  // loaded if it is loaded now or was loaded in the loader a code change just
+  // discarded.
+  public takeModuleFlushedForCodeChange(moduleIdentifier: string): boolean {
+    return this.flushedForCodeChange.delete(
+      this.moduleFlushKey(moduleIdentifier),
+    );
+  }
+
+  private noteModuleFlushedForCodeChange(moduleIdentifier: string) {
+    if (this.flushedForCodeChange.size >= MAX_FLUSHED_FOR_CODE_CHANGE) {
+      let oldest = this.flushedForCodeChange.values().next();
+      if (!oldest.done) {
+        this.flushedForCodeChange.delete(oldest.value);
+      }
+    }
+    this.flushedForCodeChange.add(this.moduleFlushKey(moduleIdentifier));
+  }
+
+  // A module reaches the two sides of a flush record under either spelling — a
+  // realm invalidation may name it scoped (`@cardstack/base/card-api`) while a
+  // local write names its URL — so both sides collapse to the canonical form
+  // the loader itself keys module identity under.
+  private moduleFlushKey(moduleIdentifier: string): string {
+    try {
+      return this.network.virtualNetwork.unresolveURL(moduleIdentifier);
+    } catch {
+      return moduleIdentifier;
+    }
+  }
+
+  public resetLoader(options?: {
+    clearFetchCache?: boolean;
+    reason?: string;
+    // The module whose own source changed and prompted this flush. Recorded so
+    // the realm index event that arrives afterwards can still tell the module
+    // was loaded.
+    invalidatedModule?: string;
+  }) {
+    if (options?.invalidatedModule) {
+      this.noteModuleFlushedForCodeChange(options.invalidatedModule);
+    }
     // clearFetchCache requests must never be debounced--the caller is
     // signalling that cached responses are stale (e.g. a module was
     // rewritten). Skipping this would cause re-indexing to use the old

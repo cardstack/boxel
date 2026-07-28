@@ -1894,14 +1894,24 @@ export default class StoreService extends Service implements StoreInterface {
     // The invalidation triggers a rebuild when it touches an already-loaded
     // executable module: the loader must be flushed so the updated code is
     // picked up before the open card graph re-runs. Net-new modules that were
-    // never loaded don't need one. Once a rebuild is in flight, fold every
-    // further executable invalidation into it regardless of `isModuleLoaded` —
-    // the freshly reset loader reports those modules as not-loaded, so the
-    // probe alone would drop a mid-burst code change.
+    // never loaded don't need one. `isModuleLoaded` alone can't answer that,
+    // because a loader the code change already flushed carries no loaded
+    // modules and so reports every module as net-new. Two flushes beat this
+    // event to the punch: a rebuild already in flight (fold every further
+    // executable invalidation into it), and the flush a local write or an open
+    // editor performed for this very module the moment it was rewritten.
     let executableInvalidations = invalidations.filter(hasExecutableExtension);
+    // Drain the flush records for every module in this event before deciding,
+    // so a record can never linger to arm an unrelated later rebuild.
+    let alreadyFlushed = new Set(
+      executableInvalidations.filter((i) =>
+        this.loaderService.takeModuleFlushedForCodeChange(i),
+      ),
+    );
     let needsRebuild =
       executableInvalidations.length > 0 &&
       (this.rebuildForCodeChange.isRunning ||
+        alreadyFlushed.size > 0 ||
         executableInvalidations.some((i) =>
           this.loaderService.loader.isModuleLoaded(i),
         ));
@@ -1916,7 +1926,11 @@ export default class StoreService extends Service implements StoreInterface {
       // touch reactivity: an isolated change triggers a single reset and
       // re-render.
       if (telemetry?.isEnabled) {
-        this.#accumulatePendingRebuild(event.realmURL, executableInvalidations);
+        this.#accumulatePendingRebuild(
+          event.realmURL,
+          executableInvalidations,
+          alreadyFlushed,
+        );
       }
       this.rebuildForCodeChange.perform();
       // The rebuild subsumes the per-invalidation reloads below: store.reset
@@ -2132,7 +2146,11 @@ export default class StoreService extends Service implements StoreInterface {
       }
     | undefined = undefined;
 
-  #accumulatePendingRebuild(realm: string, executableInvalidations: string[]) {
+  #accumulatePendingRebuild(
+    realm: string,
+    executableInvalidations: string[],
+    alreadyFlushed: Set<string>,
+  ) {
     let pending = (this.#pendingRebuild ??= {
       realm,
       triggerModules: new Set<string>(),
@@ -2145,7 +2163,12 @@ export default class StoreService extends Service implements StoreInterface {
     pending.events++;
     for (let module of executableInvalidations) {
       pending.triggerModules.add(module);
-      if (this.loaderService.loader.isModuleLoaded(module)) {
+      // A module the code change already flushed was loaded and the rebuild
+      // will re-fetch it, even though the flushed loader no longer reports it.
+      if (
+        alreadyFlushed.has(module) ||
+        this.loaderService.loader.isModuleLoaded(module)
+      ) {
         pending.modulesRefetched.add(module);
       }
     }

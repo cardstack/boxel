@@ -417,6 +417,7 @@ class _FileResource extends Resource<Args> {
           this.loaderService.resetLoader({
             clearFetchCache: true,
             reason: 'file-resource-external-invalidation',
+            invalidatedModule: normalizedURL,
           });
         }
         this.read.perform({ force: true });

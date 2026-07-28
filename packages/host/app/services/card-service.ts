@@ -293,7 +293,10 @@ export default class CardService extends Service {
         options?.resetLoader &&
         this.loaderService.loader.isModuleLoaded(url.href)
       ) {
-        this.loaderService.resetLoader();
+        this.loaderService.resetLoader({
+          reason: 'source-write',
+          invalidatedModule: url.href,
+        });
       }
 
       return response;
