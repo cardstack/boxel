@@ -368,8 +368,8 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
     };
   }
 
-  @action private onChangeView(id: ViewOption) {
-    this.selectedView = id;
+  @action private onChangeView(id: string) {
+    this.selectedView = id as ViewOption;
   }
 
   @action private onSort(option: SortOption) {

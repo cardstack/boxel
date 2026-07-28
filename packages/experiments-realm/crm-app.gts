@@ -535,8 +535,8 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
     this.searchKey = searchKey;
   }
 
-  @action private onChangeView(id: ViewOption) {
-    this.selectedView = id;
+  @action private onChangeView(id: string) {
+    this.selectedView = id as ViewOption;
   }
   @action private onSort(option: SortOption) {
     this.activeFilter.selectedSort = option;
