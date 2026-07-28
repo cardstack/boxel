@@ -134,6 +134,11 @@ export function etaMinutes(
   return mins > ETA_IMPLAUSIBLE_MINUTES ? undefined : mins;
 }
 
+// The verbs the Activity feed labels an event with. A card save is classified
+// as Created/Updated by timing; a RemixCard instance is a first-class Remixed
+// event regardless of when it was written.
+export type ActivityVerb = 'Created' | 'Updated' | 'Remixed';
+
 // A card modified within this window of its creation reads as "Created" in
 // the Activity feed rather than "Updated".
 const CREATED_WINDOW_MS = 120000;
@@ -147,6 +152,26 @@ export function classifyActivityVerb(
     Math.abs(modMs - createdMs) < CREATED_WINDOW_MS
     ? 'Created'
     : 'Updated';
+}
+
+// RemixCard's displayName. The feed recognizes a remix structurally (by
+// displayName, like SYSTEM_TYPE_NAMES) so this module keeps compiling without a
+// static RemixCard import — matching how loadJobs references it via codeRef.
+const REMIX_TYPE_NAME = 'Remix';
+// The subset of RemixCard the feed reads: the source it was cloned from.
+type RemixCardLike = CardDef & { remixedFrom?: CardDef };
+
+// The Activity feed verb for a card. A RemixCard instance is the record of a
+// clone, so it is a first-class "Remixed" event regardless of write timing;
+// every other card is Created/Updated by how close its save is to its creation.
+export function activityVerbFor(
+  displayName: string | undefined,
+  modMs: number | undefined,
+  createdMs: number | undefined,
+): ActivityVerb {
+  return displayName === REMIX_TYPE_NAME
+    ? 'Remixed'
+    : classifyActivityVerb(modMs, createdMs);
 }
 
 type RealmConfigCard = CardDef & { iconURL?: string }; // RealmConfig shape
@@ -211,7 +236,7 @@ function publishedSitesOf(model: Partial<Workspace>): PublishedSite[] {
 const SYSTEM_TYPE_NAMES = new Set([
   'Theme',
   'Realm Config',
-  'Remix',
+  REMIX_TYPE_NAME,
   'Spec',
   'Skill',
   'Process',
@@ -918,7 +943,8 @@ class Isolated extends Component<typeof Workspace> {
                       <div class='feed-meta'>
                         <span
                           class='feed-verb
-                            {{if (eq item.verb "Created") "created"}}'
+                            {{if (eq item.verb "Created") "created"}}
+                            {{if (eq item.verb "Remixed") "remixed"}}'
                         >{{item.verb}}</span>
                         <span class='feed-type'>
                           <item.typeIcon class='feed-type-icon' />
@@ -927,6 +953,11 @@ class Isolated extends Component<typeof Workspace> {
                       {{#if item.title}}
                         <p class='feed-title'>{{item.title}}</p>
                       {{/if}}
+                      {{#let (this.remixSourceTitle item) as |source|}}
+                        {{#if source}}
+                          <p class='feed-remix-source'>from {{source}}</p>
+                        {{/if}}
+                      {{/let}}
                       {{#if item.note}}
                         <p class='feed-note-text'>{{item.note}}</p>
                       {{/if}}
@@ -1004,6 +1035,7 @@ class Isolated extends Component<typeof Workspace> {
         --grid-quick: 0.12s;
         --grid-soft: 0.18s;
         --grid-created: #00893a;
+        --grid-remixed: #7c3aed;
 
         display: flex;
         flex-direction: column;
@@ -1981,6 +2013,9 @@ class Isolated extends Component<typeof Workspace> {
       .feed-verb.created {
         color: var(--grid-created);
       }
+      .feed-verb.remixed {
+        color: var(--grid-remixed);
+      }
       .feed-type {
         display: inline-flex;
         align-items: center;
@@ -2002,6 +2037,14 @@ class Isolated extends Component<typeof Workspace> {
         margin: 0;
         font: 600 12.5px/1.35 var(--grid-sans);
         color: var(--grid-ink);
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+      .feed-remix-source {
+        margin: 0;
+        font: 500 11px/1.35 var(--grid-sans);
+        color: var(--grid-ink-meta);
         overflow: hidden;
         white-space: nowrap;
         text-overflow: ellipsis;
@@ -3284,7 +3327,7 @@ class Isolated extends Component<typeof Workspace> {
     when: string | undefined;
     absolute: string | undefined;
     note: string | undefined;
-    verb: 'Created' | 'Updated';
+    verb: ActivityVerb;
     dayLabel: string;
     showDay: boolean;
     title: string | undefined; // card identity for the log line
@@ -3308,6 +3351,19 @@ class Isolated extends Component<typeof Workspace> {
   private get feedAtCap() {
     return this.feedItems.length >= ACTIVITY_FEED_CAP;
   }
+
+  // The source a remix was cloned from, read live off the card so it fills in
+  // when the linked instance finishes loading (the linksTo getter lazily loads
+  // and tracks). Undefined for non-remix rows and remixes with no source set.
+  remixSourceTitle = (item: {
+    verb: ActivityVerb;
+    card: CardDef;
+  }): string | undefined => {
+    if (item.verb !== 'Remixed') {
+      return undefined;
+    }
+    return (item.card as RemixCardLike).remixedFrom?.cardTitle ?? undefined;
+  };
 
   watchFeedEnd = modifier((element: Element) => {
     let root = element.closest('.scroll-container');
@@ -3360,9 +3416,9 @@ class Isolated extends Component<typeof Workspace> {
       let card = instance as CardDef;
       let modMs = toMs(getCardMeta(card, 'lastModified'));
       let createdMs = toMs(getCardMeta(card, 'resourceCreatedAt'));
-      let verb = classifyActivityVerb(modMs, createdMs);
-      let day = modMs !== undefined ? dayLabelFor(modMs) : '';
       let ctor = card.constructor as typeof CardDef; // type identity for the log line
+      let verb = activityVerbFor(ctor.displayName, modMs, createdMs);
+      let day = modMs !== undefined ? dayLabelFor(modMs) : '';
       this.feedItems.push({
         id: card.id!,
         component: (card.constructor as typeof BaseDef).getComponent(card),
