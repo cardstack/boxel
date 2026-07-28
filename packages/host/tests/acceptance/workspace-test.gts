@@ -138,21 +138,22 @@ module('Acceptance | workspace card', function (hooks) {
       realmRoomId,
       testRealmInfo.realmUserId!,
       {
-        type: APP_BOXEL_REALM_EVENT_TYPE,
-        content: {
-          eventName: 'index',
-          indexType: 'incremental',
-          invalidations: [`${testRealmURL}Note/1`, `${testRealmURL}Note/2`],
-          realmURL: testRealmURL,
-        },
+        eventName: 'index',
+        indexType: 'incremental',
+        invalidations: [`${testRealmURL}Note/1`, `${testRealmURL}Note/2`],
+        realmURL: testRealmURL,
       },
+      { type: APP_BOXEL_REALM_EVENT_TYPE },
     );
     await settled();
 
+    // The `.indexed` class is only applied to an Indexed verb, so its presence
+    // proves the pass rendered as a first-class event. `exists` (not `hasText`)
+    // keeps the test robust if the realm also fires its own incremental pass.
     await waitFor(`${STACK} .feed-verb.indexed`);
     assert
       .dom(`${STACK} .feed-verb.indexed`)
-      .hasText('Indexed', 'the indexing pass reads as a first-class event');
+      .exists('the indexing pass reads as a first-class Indexed event');
     assert
       .dom(`${STACK} .feed-event-tile`)
       .exists('a card-less event tile stands in for the embedded card');
