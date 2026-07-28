@@ -105,4 +105,36 @@ module('Integration | Card | workspace | pure functions', function (hooks) {
       );
     });
   });
+
+  module('activityVerbFor', function () {
+    const created = 1_000_000;
+
+    test('a RemixCard is a first-class "Remixed" event regardless of timing', function (assert) {
+      // The remix verb wins even when the save timing would otherwise read as a
+      // fresh "Created" — the RemixCard instance IS the record of the clone.
+      assert.strictEqual(
+        ws.activityVerbFor('Remix', created + 60_000, created),
+        'Remixed',
+      );
+      assert.strictEqual(
+        ws.activityVerbFor('Remix', created + 300_000, created),
+        'Remixed',
+      );
+    });
+
+    test('a non-remix card falls back to the Created/Updated timing rule', function (assert) {
+      assert.strictEqual(
+        ws.activityVerbFor('Note', created + 60_000, created),
+        'Created',
+      );
+      assert.strictEqual(
+        ws.activityVerbFor('Note', created + 300_000, created),
+        'Updated',
+      );
+      assert.strictEqual(
+        ws.activityVerbFor(undefined, created + 60_000, created),
+        'Created',
+      );
+    });
+  });
 });

@@ -59,6 +59,22 @@ module('Acceptance | workspace card', function (hooks) {
         'note.gts': { Note },
         'index.json': new Workspace(),
         'Note/1.json': new Note({ cardTitle: 'First Note' }),
+        // A remix cloned from Note/1 — its own indexed instance is the record
+        // of the clone that the Activity feed surfaces as a "Remixed" event.
+        'Remix/1.json': {
+          data: {
+            attributes: { listingName: 'Remixed Space' },
+            relationships: {
+              remixedFrom: { links: { self: '../Note/1' } },
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/remix-card',
+                name: 'RemixCard',
+              },
+            },
+          },
+        },
       },
     });
   });
@@ -81,5 +97,25 @@ module('Acceptance | workspace card', function (hooks) {
 
     await click(`${STACK} nav.tabs .tab:nth-child(3)`);
     assert.dom(`${STACK} .activity-pane`).exists('Activity pane renders');
+  });
+
+  test('a remix surfaces in the Activity feed as a first-class event', async function (assert) {
+    await visit('/');
+    await click('[data-test-workspace-button="Unnamed Workspace"]');
+    await waitFor(`${STACK} nav.tabs`);
+
+    await click(`${STACK} nav.tabs .tab:nth-child(3)`); // Activity
+    await waitFor(`${STACK} .feed-verb.remixed`);
+    assert
+      .dom(`${STACK} .feed-verb.remixed`)
+      .hasText('Remixed', 'the remix reads as a Remixed event, not a save');
+
+    await waitFor(`${STACK} .feed-remix-source`);
+    assert
+      .dom(`${STACK} .feed-remix-source`)
+      .hasText(
+        'from First Note',
+        'the event names the source it was cloned from',
+      );
   });
 });
