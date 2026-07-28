@@ -11,7 +11,7 @@ import { isTesting } from '@embroider/macros';
 import { tracked } from '@glimmer/tracking';
 
 import { formatDistanceToNow } from 'date-fns';
-import { keepLatestTask, task } from 'ember-concurrency';
+import { keepLatestTask, task, didCancel } from 'ember-concurrency';
 
 import { cloneDeep } from 'lodash-es';
 import { isEqual } from 'lodash-es';
@@ -426,24 +426,29 @@ export default class StoreService extends Service implements StoreInterface {
       // realm's index event, so this pass is otherwise invisible on the
       // dashboard — a session editing a module in a realm the store holds no
       // instances from does all of its rebuilding here.
-      refetch
-        .then((cardsReloaded) => {
-          telemetry.recordEvent({
-            event_type: 'rebuild',
-            source: 'write',
-            realm: opts?.realm ?? null,
-            duration_ms: Math.round(performance.now() - start),
-            trigger_modules: triggerModules,
-            trigger_module: triggerModules[0] ?? '',
-            modules_refetched: triggerModules.length,
-            cards_reloaded: cardsReloaded ?? 0,
-            coalesced_events: 0,
-          });
-        })
-        .catch(() => {
-          // The task can be cancelled by a reset racing it; a cancelled
-          // re-establishment is not a rebuild worth reporting.
+      let report = (cardsReloaded: number) =>
+        telemetry.recordEvent({
+          event_type: 'rebuild',
+          source: 'write',
+          realm: opts?.realm ?? null,
+          duration_ms: Math.round(performance.now() - start),
+          trigger_modules: triggerModules,
+          trigger_module: triggerModules[0] ?? '',
+          modules_refetched: 0,
+          cards_reloaded: cardsReloaded,
+          coalesced_events: 0,
         });
+      refetch.then(
+        (cardsReloaded) => report(cardsReloaded ?? 0),
+        (e) => {
+          // A cancelled re-establishment (a reset racing it) is not a rebuild
+          // worth reporting — but a genuine failure is a rebuild the tab paid
+          // for, and the one most worth seeing on the dashboard.
+          if (!didCancel(e)) {
+            report(0);
+          }
+        },
+      );
     }
   }
 
@@ -1915,7 +1920,6 @@ export default class StoreService extends Service implements StoreInterface {
         index_type: 'full',
         invalidations_count: 0,
         invalidated_ids: [],
-        first_invalidated_id: '',
         reloads_triggered: 0,
         own_write: false,
         processing_ms: 0,
@@ -1987,7 +1991,6 @@ export default class StoreService extends Service implements StoreInterface {
         index_type: 'incremental',
         invalidations_count: invalidations.length,
         invalidated_ids: invalidations.slice(0, 50),
-        first_invalidated_id: invalidations[0] ?? '',
         reloads_triggered: reloadsTriggered,
         own_write: ownWrite,
         processing_ms:

@@ -3614,6 +3614,11 @@ module('Integration | Store', function (hooks) {
       0,
       'no index event drove this rebuild',
     );
+    assert.strictEqual(
+      rebuild.modules_refetched,
+      0,
+      'a write-sourced rebuild does not claim module re-imports it cannot measure',
+    );
   });
 
   test('a realm event carries its raw args minus the invalidation list', async function (assert) {
@@ -3636,11 +3641,6 @@ module('Integration | Store', function (hooks) {
 
     let events = telemetry.events('realm-event');
     assert.strictEqual(events.length, 1, 'one realm-event is emitted');
-    assert.strictEqual(
-      (events[0] as any).first_invalidated_id,
-      hassan,
-      'the first invalidation is surfaced as a scalar grouping key',
-    );
     let args = (events[0] as any).event_args;
     assert.strictEqual(
       args.eventName,

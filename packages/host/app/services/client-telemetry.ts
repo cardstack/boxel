@@ -107,6 +107,9 @@ export interface RebuildEvent extends BaseEvent {
   // Scalar grouping key (the first trigger module) — the dashboard groups
   // rebuild cost by this, since `| json` does not extract array elements.
   trigger_module: string;
+  // How many trigger modules the loader had loaded and the re-established
+  // graph re-fetches. Meaningful on the realm-event source only; a
+  // write-sourced rebuild does not measure module re-imports and reports 0.
   modules_refetched: number;
   cards_reloaded: number;
   // How many incremental events collapsed into this single rebuild. 1 for an
@@ -122,12 +125,6 @@ export interface RealmEvent extends BaseEvent {
   index_type: 'incremental' | 'full';
   invalidations_count: number;
   invalidated_ids: string[];
-  // Scalar grouping key — the first entry of invalidated_ids, since `| json`
-  // does not extract array elements. The realm lists the written file's own
-  // invalidation alongside its dependents, so grouping by this ranks the
-  // files whose writes generate the churn; the full fan-out stays in
-  // invalidated_ids on the raw line.
-  first_invalidated_id: string;
   reloads_triggered: number;
   own_write: boolean;
   processing_ms: number;

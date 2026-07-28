@@ -64,7 +64,7 @@ Common envelope on every line: `ts`, `event_type`, `channel`, `matrix_user_id`, 
 | `deserialize`    | turning a response into card instances                   | `duration_ms`, `doc_bytes`, `included_count`, `card_type`                                                                                                                                                                                                                                                                                         |
 | `wedge`          | a main-thread freeze at/above the wedge threshold        | `duration_ms`, `worst_gap_ms`, `blocked_ms`, `longtask_count`, `top_frame_function`, `top_frame_url`, `top_frame_char`, `top_frame_blocked_ms`, `top_frames` (`fn @ url:char` breadcrumb), `loaf_scripts[]`, `profiler_stacks[]` (sampled sessions)                                                                                               |
 | `rebuild`        | loader/store rebuild after a code change                 | `source` (`realm-event` = driven by an incoming index event; `write` = the tab's own code-mode save re-establishing the graph at save time), `duration_ms`, `trigger_module` (grouping key), `trigger_modules[]`, `modules_refetched`, `cards_reloaded`, `coalesced_events` (index events that collapsed into this rebuild; always 0 for `write`) |
-| `realm-event`    | the tab's work processing one incoming index event       | `index_type` (`incremental`/`full`), `invalidations_count`, `invalidated_ids[]`, `first_invalidated_id` (scalar grouping key — the first invalidation, which the realm lists alongside the write's dependents), `reloads_triggered`, `own_write`, `processing_ms`                                                                                 |
+| `realm-event`    | the tab's work processing one incoming index event       | `index_type` (`incremental`/`full`), `invalidations_count`, `invalidated_ids[]`, `reloads_triggered`, `own_write`, `processing_ms`                                                                                                                                                                                                                |
 | `keepalive`      | liveness beacon from an otherwise-quiet tab              | `window_ms`, `max_gap_ms`                                                                                                                                                                                                                                                                                                                         |
 
 Array fields (`loaf_scripts`, `slowest_loads`, `loaded_ids`, `profiler_stacks`) are **not** extractable by `| json` element-by-element — that is why the wedge event also carries flat scalar `top_frame_*` fields for grouping. To see an array's contents, read the raw log line (see [Reading raw lines](#reading-raw-lines)).
@@ -255,13 +255,6 @@ Split `own_write` (the tab's own edits echoing back) from external events with `
 - A **`card-load`** (or a spike in another load's `num_loads` / `slowest_loads`) whose reloaded ids intersect a realm-event's `invalidated_ids` — the tab reloaded a linked card because an index event invalidated it, not because the user navigated. `reloads_triggered` counts exactly these knock-on reloads.
 
 So the reading order for "why was the tab busy" is often backwards from the symptom: land on the `rebuild` / `card-load` cost first (Modes E/A), then find the `realm-event` in the same session-and-window whose `invalidated_ids` explain it.
-
-**Which files generate the churn?** `first_invalidated_id` is the scalar grouping key for exactly this (the array itself is not groupable by `| json`): the dashboard's **Most-invalidated files** table ranks files by how many incremental events named them first, with the largest single-event fan-out beside each. An executable high on that list is the file whose edits every subscribed tab pays a rebuild for:
-
-```logql
-topk(25, sum by (first_invalidated_id) (count_over_time({service="realm-server", env="$env"} |= "boxel:client-perf" | json
-  | channel="boxel:client-perf" | event_type="realm-event" | first_invalidated_id!="" [$__range])))
-```
 
 ## Mode G — scope anything to one user or one session
 
