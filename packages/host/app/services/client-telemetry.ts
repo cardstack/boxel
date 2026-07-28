@@ -607,7 +607,7 @@ export default class ClientTelemetryService
       v: 1,
       session_id: this.#sessionId,
       matrix_user_id: this.#matrixUserId,
-      env: config.environment,
+      env: config.hostedEnvironment,
       ...(appVersion ? { app_version: appVersion } : {}),
       events,
     });

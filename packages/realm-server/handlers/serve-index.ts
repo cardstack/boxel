@@ -126,6 +126,14 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
             matrixServerName:
               process.env.MATRIX_SERVER_NAME || matrixClient.matrixURL.hostname,
             realmServerURL: serverURL.href,
+            // Stamp the deployed environment the host is running in so client
+            // telemetry (and anything else) can report it, rather than the
+            // Ember build mode. Falls back to whatever the build baked in when
+            // this server has no REALM_SENTRY_ENVIRONMENT (e.g. local dev).
+            hostedEnvironment:
+              process.env.REALM_SENTRY_ENVIRONMENT ||
+              config.hostedEnvironment ||
+              'local',
             resolvedBaseRealmURL: rewriteRealmURL(config.resolvedBaseRealmURL),
             resolvedCatalogRealmURL: rewriteRealmURL(
               config.resolvedCatalogRealmURL,
