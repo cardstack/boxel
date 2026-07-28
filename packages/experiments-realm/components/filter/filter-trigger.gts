@@ -2,9 +2,18 @@ import GlimmerComponent from '@glimmer/component';
 import { IconButton } from '@cardstack/boxel-ui/components';
 import ListFilter from '@cardstack/boxel-icons/list-filter';
 
+// power-select invokes its trigger component with these extra named args and
+// a default block; they must be declared here (even though unused) for this
+// component to satisfy its @triggerComponent contract
 interface TriggerSignature {
   Args: {
     isLoading?: boolean;
+    placeholder?: string;
+    select?: unknown;
+    selectedItemComponent?: unknown;
+  };
+  Blocks: {
+    default: [unknown, any];
   };
   Element: HTMLDivElement;
 }
