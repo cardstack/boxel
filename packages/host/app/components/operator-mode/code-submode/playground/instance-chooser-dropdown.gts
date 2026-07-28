@@ -176,7 +176,7 @@ function closeInstanceChooser() {
   (
     document.querySelector(
       '[data-playground-instance-chooser][aria-expanded="true"]',
-    ) as BoxelSelect | null
+    ) as HTMLElement | null
   )?.click();
 }
 
