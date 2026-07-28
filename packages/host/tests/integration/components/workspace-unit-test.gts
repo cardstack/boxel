@@ -98,6 +98,26 @@ module('Integration | Card | workspace | pure functions', function (hooks) {
     });
   });
 
+  module('describeSearchResults', function () {
+    test('names a genuine settled zero as no matches', function (assert) {
+      // Reached only on settle, so an empty result here is a real "no matches",
+      // not the debounce window or a dismissed dropdown (those never call it).
+      assert.strictEqual(ws.describeSearchResults(0, 0), 'No matching cards');
+    });
+
+    test('counts the shown results, singular and plural', function (assert) {
+      assert.strictEqual(ws.describeSearchResults(1, 1), '1 result');
+      assert.strictEqual(ws.describeSearchResults(3, 3), '3 results');
+    });
+
+    test('reports the shown-of-total split when the list is capped', function (assert) {
+      assert.strictEqual(
+        ws.describeSearchResults(8, 40),
+        'Showing 8 of 40 results',
+      );
+    });
+  });
+
   module('searchHotkeyLabel', function () {
     test('spells the Frame hotkey the way the platform does', function (assert) {
       // Matches on `Mac`, as codemirror-editor.gts's own mod-key label does.

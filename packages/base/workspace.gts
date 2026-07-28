@@ -159,6 +159,20 @@ export function progressMilestone(pct: number): number {
   );
 }
 
+// The text the search status region announces once a search has settled.
+// `shown` is what the dropdown lists (capped), `total` the full hit count.
+// A settled zero is a real "no matches"; the caller is responsible for only
+// reaching here on settle, never for the empty debounce or dismissal windows.
+export function describeSearchResults(shown: number, total: number): string {
+  if (!shown) {
+    return 'No matching cards';
+  }
+  if (total > shown) {
+    return `Showing ${shown} of ${total} results`;
+  }
+  return shown === 1 ? '1 result' : `${shown} results`;
+}
+
 export function classifyActivityVerb(
   modMs: number | undefined,
   createdMs: number | undefined,
@@ -433,8 +447,6 @@ class Isolated extends Component<typeof Workspace> {
               placeholder='Search'
               aria-label='Search this space'
               aria-keyshortcuts='Meta+K Control+K'
-              aria-controls='workspace-search-results'
-              aria-expanded={{if this.searchResults.length 'true' 'false'}}
               value={{this.searchTerm}}
               {{on 'input' this.onSearchInput}}
               {{on 'keydown' this.onSearchKeydown}}
@@ -456,8 +468,12 @@ class Isolated extends Component<typeof Workspace> {
               role='status'
               data-test-search-announcement
             >{{this.searchAnnouncement}}</span>
+            {{! Results are click-only, so this is not a combobox: an
+              `aria-controls`/`aria-expanded` textbox would name a role AT does
+              not honour on an <input> and dangle when the list is empty. The
+              status region above carries the count instead. }}
             {{#if this.searchResults.length}}
-              <div class='search-results' id='workspace-search-results'>
+              <div class='search-results'>
                 {{#each this.searchResults as |result|}}
                   <button
                     type='button'
@@ -2466,6 +2482,14 @@ class Isolated extends Component<typeof Workspace> {
     );
   }
 
+  // A live region going from text to empty announces nothing, so the progress
+  // region falling silent would never speak that setup finished. This carries a
+  // one-shot "Setup complete", set only on the running→idle transition tracked
+  // in `loadJobs` — never on the initial load of a space whose jobs finished in
+  // a past session, which is why it is pushed state rather than derived.
+  @tracked private setupCompleteAnnouncement = '';
+  #hadRunningJobs = false;
+
   // Door surround chrome: the grid owns the kicker and footer
   // around each entry point's fitted face; index-aligned with the
   // @fields.entryPoints iteration.
@@ -2539,24 +2563,17 @@ class Isolated extends Component<typeof Workspace> {
     card: CardDef;
   }[] = new TrackedArray();
 
-  // What the search status region says. Empty unless there is a settled result
-  // for a term the user actually typed: `runSearch` debounces, so between the
-  // keystroke and the hits arriving the results are legitimately empty, and
-  // announcing that window would report "no matches" for every prefix of a term
-  // that does match.
-  get searchAnnouncement(): string {
-    if (!this.searchTerm.trim() || this.runSearch.isRunning) {
-      return '';
-    }
-    let shown = this.searchResults.length;
-    if (!shown) {
-      return 'No matching cards';
-    }
-    if (this.searchTotal > shown) {
-      return `Showing ${shown} of ${this.searchTotal} results`;
-    }
-    return shown === 1 ? '1 result' : `${shown} results`;
-  }
+  // What the search status region says, held as settled state rather than
+  // derived live from `searchResults`. Two consequences the live form got wrong:
+  //  - it read the debounce window as "no matches" for every prefix on the way
+  //    to a term that matches, and blanking to '' each keystroke made the region
+  //    re-announce an unchanged count as if it were new;
+  //  - it read the term, not the results, so a blur that clears the dropdown but
+  //    leaves the term announced "No matching cards" for a search that matched.
+  // Instead this is set only where a search actually settles, and cleared only
+  // where the dropdown is dismissed, so an in-flight search keeps showing the
+  // previous answer and a dismissal falls silent.
+  @tracked private searchAnnouncement = '';
 
   setupSearchHotkey = modifier((element: Element) => {
     let input = element.querySelector('input');
@@ -2580,6 +2597,7 @@ class Isolated extends Component<typeof Workspace> {
     if (ke.key === 'Escape') {
       this.searchTerm = '';
       this.searchResults.splice(0, this.searchResults.length);
+      this.searchAnnouncement = ''; // dismissed, not "no matches"
       this.clearLibrarySearch(); // Esc also restores the rail selection
       (ev.target as HTMLInputElement).blur();
     } else if (ke.key === 'Enter') {
@@ -2603,6 +2621,10 @@ class Isolated extends Component<typeof Workspace> {
   private hideResults = restartableTask(async () => {
     await timeout(200);
     this.searchResults.splice(0, this.searchResults.length);
+    // Clearing the dropdown on blur is a dismissal, not a search that returned
+    // nothing — leaving the term set here would otherwise re-announce
+    // "No matching cards" for a search that did match.
+    this.searchAnnouncement = '';
   });
 
   openResult = (result: { card: CardDef }) => () => {
@@ -2610,6 +2632,7 @@ class Isolated extends Component<typeof Workspace> {
     this.searchTerm = '';
     this.hideResults.cancelAll();
     this.searchResults.splice(0, this.searchResults.length);
+    this.searchAnnouncement = '';
   };
 
   private runSearch = restartableTask(async () => {
@@ -2618,6 +2641,7 @@ class Isolated extends Component<typeof Workspace> {
     let store = this.args.context?.store;
     if (!term || !store) {
       this.searchResults.splice(0, this.searchResults.length);
+      this.searchAnnouncement = ''; // never ran; nothing settled to announce
       return;
     }
     // CLI-verified shape: `contains` only matches when paired with a
@@ -2651,6 +2675,12 @@ class Isolated extends Component<typeof Workspace> {
         card,
       });
     }
+    // Settled: this is the one place a real count (including a genuine zero)
+    // becomes the announcement.
+    this.searchAnnouncement = describeSearchResults(
+      this.searchResults.length,
+      this.searchTotal,
+    );
   });
 
   @tracked private searchTotal = 0; // full hit count for the See-all row
@@ -2780,7 +2810,9 @@ class Isolated extends Component<typeof Workspace> {
   get progressAnnouncement(): string {
     let jobs = this.runningJobs;
     if (!jobs.length) {
-      return '';
+      // Empty until a run has finished this session, then the one-shot
+      // "Setup complete" — so falling idle is spoken instead of going silent.
+      return this.setupCompleteAnnouncement;
     }
     if (jobs.length > 1) {
       return `${jobs.length} tasks running`;
@@ -3414,6 +3446,16 @@ class Isolated extends Component<typeof Workspace> {
         component: (card.constructor as typeof BaseDef).getComponent(card),
       });
     }
+    // Speak completion once, on the running→idle edge. A fresh run underway
+    // clears the terminal announcement (the region is showing "Setting up…"
+    // anyway); the last job leaving clears it on the next start, not now.
+    let running = this.runningJobs.length > 0;
+    if (running) {
+      this.setupCompleteAnnouncement = '';
+    } else if (this.#hadRunningJobs) {
+      this.setupCompleteAnnouncement = 'Setup complete';
+    }
+    this.#hadRunningJobs = running;
   });
 
   private refreshOnIndex = (ev: RealmEventContent) => {
