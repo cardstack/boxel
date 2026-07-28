@@ -326,7 +326,7 @@ module('command runner', () => {
         commandInput: {
           cardId: submissionCardUrl,
           patch: {
-            attributes: { lintStatus: 'in-progress' },
+            attributes: { lintStatus: 'in-progress', lintErrors: [] },
           },
         },
       },
@@ -342,7 +342,11 @@ module('command runner', () => {
         commandInput: {
           cardId: submissionCardUrl,
           patch: {
-            attributes: { lintStatus: 'passed', lintFixedCount: 0 },
+            attributes: {
+              lintStatus: 'passed',
+              lintErrors: [],
+              lintFixedCount: 0,
+            },
           },
         },
       },
@@ -1281,7 +1285,7 @@ module('command runner', () => {
       );
     assert.deepEqual(
       patchAttrs[0],
-      { lintStatus: 'in-progress' },
+      { lintStatus: 'in-progress', lintErrors: [] },
       'lint marked in-progress before running',
     );
     assert.deepEqual(
@@ -1466,8 +1470,8 @@ module('command runner', () => {
       .find((attrs) => attrs?.lintStatus === 'passed');
     assert.deepEqual(
       passedPatch,
-      { lintStatus: 'passed', lintFixedCount: 1 },
-      'lintFixedCount recorded on the workflow card',
+      { lintStatus: 'passed', lintErrors: [], lintFixedCount: 1 },
+      'lintFixedCount recorded and a prior run’s errors cleared, so a passing card never carries stale findings',
     );
   });
 });

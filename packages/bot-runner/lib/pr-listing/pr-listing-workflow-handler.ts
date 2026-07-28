@@ -322,8 +322,10 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
     ctx: WorkflowContext,
     textFiles: FileContent[],
   ): Promise<FileContent[]> {
+    // Drop any prior run's findings as this one starts: every terminal state
+    // below writes the findings it produced, so leftovers would contradict it.
     await this.patchWorkflowCard(ctx, {
-      attributes: { lintStatus: 'in-progress' },
+      attributes: { lintStatus: 'in-progress', lintErrors: [] },
     });
     log.info('pr-listing-create: linting files', {
       fileCount: textFiles.length,
@@ -364,6 +366,7 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
     await this.patchWorkflowCard(ctx, {
       attributes: {
         lintStatus: 'passed',
+        lintErrors: [],
         lintFixedCount: outcome.fixedFileCount,
       },
     });
