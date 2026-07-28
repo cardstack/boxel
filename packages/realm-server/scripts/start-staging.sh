@@ -40,6 +40,7 @@ NODE_NO_WARNINGS=1 \
   PUBLISHED_REALM_BOXEL_SITE_DOMAIN='staging.boxel.build' \
   exec node main.ts \
   --port=3000 \
+  --livenessPort=3010 \
   --matrixURL='https://matrix-staging.stack.cards' \
   --realmsRootPath='/persistent/realms' \
   --serverURL='https://realms-staging.stack.cards' \
