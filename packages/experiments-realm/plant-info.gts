@@ -39,10 +39,12 @@ class Edit extends Component<typeof DropdownField> {
   </template>
 
   get menuItems() {
-    return this.args.model.options?.map((v: string) =>
-      menuItemFunc([v, () => (this.args.model.selectedValue = v)], {
-        checked: this.args.model.selectedValue === v,
-      }),
+    return (
+      this.args.model.options?.map((v: string) =>
+        menuItemFunc([v, () => (this.args.model.selectedValue = v)], {
+          checked: this.args.model.selectedValue === v,
+        }),
+      ) ?? []
     );
   }
 }
