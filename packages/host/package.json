@@ -152,6 +152,7 @@
     "ethers": "catalog:",
     "eventemitter3": "catalog:",
     "fast-json-stable-stringify": "catalog:",
+    "fflate": "catalog:",
     "filesize": "catalog:",
     "flat": "catalog:",
     "glimmer-scoped-css": "catalog:",

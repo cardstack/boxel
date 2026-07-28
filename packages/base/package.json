@@ -21,6 +21,7 @@
     "ember-modifier": "^3.2.1",
     "ember-resources": "catalog:",
     "ember-template-lint": "catalog:",
+    "fflate": "catalog:",
     "matrix-js-sdk": "catalog:",
     "super-fast-md5": "catalog:",
     "@floating-ui/dom": "catalog:",

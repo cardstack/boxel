@@ -5,6 +5,10 @@ import {
   baseRealm,
   baseRRI,
   isFileDefCodeRef,
+  urlNamesFile,
+  resolveFileDefCodeRef,
+  inferContentType,
+  isBinaryFilename,
 } from '@cardstack/runtime-common';
 import type { RealmResourceIdentifier } from '@cardstack/runtime-common';
 
@@ -59,6 +63,13 @@ module('Unit | isFileDefCodeRef', function (hooks) {
       ),
       'PngDef',
     );
+    assert.true(
+      isFileDefCodeRef(
+        { module: baseRRI('3mf-file-def'), name: 'ThreeMfDef' },
+        virtualNetwork,
+      ),
+      'ThreeMfDef',
+    );
   });
 
   test('rejects a non-FileDef card ref', function (assert) {
@@ -90,6 +101,44 @@ module('Unit | isFileDefCodeRef', function (hooks) {
         virtualNetwork,
       ),
       'a structured (non-module/name) ref is not treated as a FileDef ref',
+    );
+  });
+});
+
+module('Unit | 3mf file def wiring', function (hooks) {
+  let virtualNetwork: VirtualNetwork;
+
+  hooks.beforeEach(function () {
+    virtualNetwork = new VirtualNetwork();
+    virtualNetwork.addURLMapping(
+      new URL(baseRealm.url),
+      new URL(resolvedBaseRealmURL),
+    );
+    virtualNetwork.addRealmMapping('@cardstack/base/', resolvedBaseRealmURL);
+  });
+
+  test('urlNamesFile recognizes a .3mf URL', function (assert) {
+    assert.true(urlNamesFile(new URL('http://test-realm/test/widget.3mf')));
+    assert.false(urlNamesFile(new URL('http://test-realm/test/Widget/config')));
+  });
+
+  test('resolveFileDefCodeRef maps .3mf to ThreeMfDef', function (assert) {
+    let ref = resolveFileDefCodeRef(
+      new URL('http://test-realm/test/widget.3mf'),
+      virtualNetwork,
+    );
+    assert.strictEqual(ref.name, 'ThreeMfDef', 'resolves to ThreeMfDef');
+    assert.true(
+      ref.module.endsWith('3mf-file-def'),
+      'resolves the 3mf-file-def module',
+    );
+  });
+
+  test('.3mf infers the model/3mf content type and is binary', function (assert) {
+    assert.strictEqual(inferContentType('widget.3mf'), 'model/3mf');
+    assert.true(
+      isBinaryFilename('widget.3mf'),
+      '3mf is a binary ZIP container',
     );
   });
 });

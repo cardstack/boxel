@@ -447,6 +447,9 @@ catalogs:
     fast-json-stable-stringify:
       specifier: ^2.1.0
       version: 2.1.0
+    fflate:
+      specifier: ^0.8.3
+      version: 0.8.3
     file-loader:
       specifier: ^6.2.0
       version: 6.2.0
@@ -940,6 +943,9 @@ importers:
       ember-template-lint:
         specifier: 'catalog:'
         version: 7.9.3
+      fflate:
+        specifier: 'catalog:'
+        version: 0.8.3
       matrix-js-sdk:
         specifier: 'catalog:'
         version: 38.3.0(patch_hash=cee0baf579283943dc5a6b48977e8ed40a13fc111b5de9c91814893f9a4989fb)
@@ -1221,7 +1227,7 @@ importers:
         version: 5.5.6(@types/eslint@8.56.5)(eslint-config-prettier@9.1.2(eslint@8.57.1))(eslint@8.57.1)(prettier@3.8.4)
       http-server:
         specifier: ^14.1.1
-        version: 14.1.1(debug@4.3.4)
+        version: 14.1.1
       lucide-static:
         specifier: ^0.447.0
         version: 0.447.0
@@ -2309,6 +2315,9 @@ importers:
       fast-json-stable-stringify:
         specifier: 'catalog:'
         version: 2.1.0
+      fflate:
+        specifier: 'catalog:'
+        version: 0.8.3
       filesize:
         specifier: 'catalog:'
         version: 10.1.6
@@ -2741,7 +2750,7 @@ importers:
         version: 11.1.0
       http-server:
         specifier: 'catalog:'
-        version: 14.1.1(debug@4.3.4)
+        version: 14.1.1
       js-yaml:
         specifier: 'catalog:'
         version: 4.2.0
@@ -2834,7 +2843,7 @@ importers:
         version: 3.2.0
       wait-on:
         specifier: ^9.0.4
-        version: 9.0.10(debug@4.3.4)
+        version: 9.0.10
       wtfnode:
         specifier: ^0.10.1
         version: 0.10.1
@@ -10312,6 +10321,9 @@ packages:
     peerDependenciesMeta:
       picomatch:
         optional: true
+
+  fflate@0.8.3:
+    resolution: {integrity: sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA==}
 
   figures@2.0.0:
     resolution: {integrity: sha512-Oa2M9atig69ZkfwiApY8F2Yy+tzMbazyvqv21R0NsSC8floSOC09BbT1ITWAdoMGQvJ/aZnR1KMwdx9tvHnTNA==}
@@ -20612,7 +20624,7 @@ snapshots:
     transitivePeerDependencies:
       - debug
 
-  axios@1.18.0(debug@4.3.4):
+  axios@1.18.0:
     dependencies:
       follow-redirects: 1.16.0(debug@4.3.4)
       form-data: 4.0.6
@@ -22884,7 +22896,7 @@ snapshots:
       heimdalljs-fs-monitor: 1.1.2
       heimdalljs-graph: 1.0.0
       heimdalljs-logger: 0.1.10
-      http-proxy: 1.18.1(debug@4.3.4)
+      http-proxy: 1.18.1
       inflection: 2.0.1
       inquirer: 9.3.8(@types/node@24.13.2)
       is-git-url: 1.0.0
@@ -23026,7 +23038,7 @@ snapshots:
       heimdalljs-fs-monitor: 1.1.2
       heimdalljs-graph: 1.0.0
       heimdalljs-logger: 0.1.10
-      http-proxy: 1.18.1(debug@4.3.4)
+      http-proxy: 1.18.1
       inflection: 3.0.2
       inquirer: 13.4.3(@types/node@25.9.3)
       is-git-url: 1.0.0
@@ -24576,6 +24588,8 @@ snapshots:
     optionalDependencies:
       picomatch: 4.0.4
 
+  fflate@0.8.3: {}
+
   figures@2.0.0:
     dependencies:
       escape-string-regexp: 1.0.5
@@ -25387,7 +25401,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  http-proxy@1.18.1(debug@4.3.4):
+  http-proxy@1.18.1:
     dependencies:
       eventemitter3: 4.0.7
       follow-redirects: 1.16.0(debug@4.3.4)
@@ -25395,14 +25409,14 @@ snapshots:
     transitivePeerDependencies:
       - debug
 
-  http-server@14.1.1(debug@4.3.4):
+  http-server@14.1.1:
     dependencies:
       basic-auth: 2.0.1
       chalk: 4.1.2
       corser: 2.0.1
       he: 1.2.0
       html-encoding-sniffer: 3.0.0
-      http-proxy: 1.18.1(debug@4.3.4)
+      http-proxy: 1.18.1
       mime: 1.6.0
       minimist: 1.2.8
       opener: 1.5.2
@@ -26158,7 +26172,7 @@ snapshots:
 
   koa-proxies@0.12.4(koa@2.16.4):
     dependencies:
-      http-proxy: 1.18.1(debug@4.3.4)
+      http-proxy: 1.18.1
       koa: 2.16.4
       path-match: 1.2.4
       uuid: 8.3.2
@@ -29220,7 +29234,7 @@ snapshots:
       execa: 9.6.1
       express: 5.2.1
       glob: 13.0.6
-      http-proxy: 1.18.1(debug@4.3.4)
+      http-proxy: 1.18.1
       js-yaml: 4.2.0
       lodash: 4.18.1
       minimatch: 10.2.5
@@ -30020,9 +30034,9 @@ snapshots:
     transitivePeerDependencies:
       - debug
 
-  wait-on@9.0.10(debug@4.3.4):
+  wait-on@9.0.10:
     dependencies:
-      axios: 1.18.0(debug@4.3.4)
+      axios: 1.18.0
       joi: 18.2.1
       lodash: 4.18.1
       minimist: 1.2.8

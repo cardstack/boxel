@@ -4,6 +4,8 @@ const DEFAULT_FILE_CONTENT_TYPE = 'application/octet-stream';
 const CONTENT_TYPE_OVERRIDES: Record<string, string> = {
   '.gts': 'text/typescript+glimmer',
   '.ts': 'text/typescript',
+  // 3MF (3D printing) — IANA-registered `model/3mf`; mime-db has no entry.
+  '.3mf': 'model/3mf',
 };
 
 export function inferContentType(filename: string): string {
@@ -29,6 +31,7 @@ export function isBinaryFilename(filename: string): boolean {
     mimeType.startsWith('font/') ||
     mimeType.startsWith('audio/') ||
     mimeType === 'application/pdf' ||
-    mimeType === 'application/vnd.ms-fontobject' // .eot legacy font
+    mimeType === 'application/vnd.ms-fontobject' || // .eot legacy font
+    mimeType === 'model/3mf' // 3MF is a binary ZIP container
   );
 }

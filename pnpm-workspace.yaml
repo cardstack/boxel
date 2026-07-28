@@ -162,6 +162,7 @@ catalog:
   ethers: ^6.6.2
   eventemitter3: ^5.0.1
   fast-json-stable-stringify: ^2.1.0
+  fflate: ^0.8.3
   file-loader: ^6.2.0
   filesize: ^10.0.12
   flat: ^5.0.2
