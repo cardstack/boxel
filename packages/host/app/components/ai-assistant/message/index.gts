@@ -201,13 +201,48 @@ class ScrollPosition extends Modifier<ScrollPositionSignature> {
       ) <= BOTTOM_THRESHOLD;
     setScrollPosition({ isBottom });
   }, 500);
+  // The conversation is the `1fr` row of the room's grid, so anything that
+  // makes the footer taller — an action bar appearing, attached-file pills, a
+  // taller chat input — shrinks the conversation's viewport. Shrinking the
+  // viewport leaves `scrollTop` alone, so a conversation sitting at the bottom
+  // quietly ends up short of it: `scrollHeight` and `scrollTop` are unchanged
+  // while the distance to the bottom grows by whatever height the viewport
+  // lost. Nothing else re-scrolls for this, since a viewport resize is neither
+  // a scroller registration nor a message-subtree mutation. So re-pin here,
+  // deciding against the pre-resize height — a conversation the reader had
+  // parked away from the bottom stays where they left it.
+  private clientHeightBeforeResize?: number;
+  private handleResize = () => {
+    let element = this.element;
+    if (!element) {
+      return;
+    }
+    let previousClientHeight = this.clientHeightBeforeResize;
+    this.clientHeightBeforeResize = element.clientHeight;
+    if (
+      previousClientHeight == null ||
+      previousClientHeight === element.clientHeight
+    ) {
+      return;
+    }
+    let wasAtBottom =
+      Math.abs(
+        element.scrollHeight - previousClientHeight - element.scrollTop,
+      ) <= BOTTOM_THRESHOLD;
+    if (wasAtBottom) {
+      element.scrollTop = element.scrollHeight - element.clientHeight;
+    }
+  };
+  private resizeObserver = new ResizeObserver(() => this.handleResize());
   private cleanup() {
     if (this.element) {
       this.element.removeEventListener('scroll', this.detectPosition);
     }
     this.detectPosition.cancel();
+    this.resizeObserver.disconnect();
     this.element = undefined;
     this.setScrollPosition = undefined;
+    this.clientHeightBeforeResize = undefined;
   }
   modify(
     element: HTMLElement,
@@ -235,6 +270,13 @@ class ScrollPosition extends Modifier<ScrollPositionSignature> {
       this.element?.removeEventListener('scroll', this.detectPosition);
       this.element = element;
       element.addEventListener('scroll', this.detectPosition);
+      // Seed the pre-resize height at registration rather than leaving the
+      // first ResizeObserver callback to establish it: the auto-scroll to the
+      // newest message can land before that callback runs, and a resize in the
+      // same frame would then have no earlier height to compare against.
+      this.clientHeightBeforeResize = element.clientHeight;
+      this.resizeObserver.disconnect();
+      this.resizeObserver.observe(element);
     }
   }
 }

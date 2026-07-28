@@ -193,12 +193,76 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
     return conversationElement.scrollTop < 20;
   }
 
+  // A scroll position that ends up in the wrong place is only diagnosable from
+  // how it got there. The conversation's viewport height, its content height,
+  // and its scroll offset each move independently, and which of them moved last
+  // is what separates a scroll that never ran from one that ran and was then
+  // invalidated by a later layout change. So record every distinct geometry the
+  // conversation passes through and report the sequence on failure.
+  //
+  // This samples per frame rather than off `scroll` and `resize` events because
+  // the sequence worth seeing starts before the panel opens — the interesting
+  // failure is one where the conversation is already scrolled by the time it
+  // first renders — and because it has to capture layout as painted, which is
+  // what the rule below otherwise guards against.
+  const MAX_GEOMETRY_SAMPLES = 40;
+  let scrollGeometryLog: string[] = [];
+  let stopSamplingScrollGeometry: (() => void) | undefined;
+
+  hooks.beforeEach(function () {
+    scrollGeometryLog = [];
+    let startedAt = performance.now();
+    let previousGeometry: string | undefined;
+    let sampling = true;
+    let sample = () => {
+      if (!sampling) {
+        return;
+      }
+      let conversationElement = document.querySelector(
+        '[data-test-ai-assistant-conversation]',
+      );
+      if (conversationElement) {
+        let { scrollHeight, clientHeight } = conversationElement;
+        let scrollTop = Math.round(conversationElement.scrollTop);
+        let geometry = `scrollHeight=${scrollHeight} clientHeight=${clientHeight} scrollTop=${scrollTop}`;
+        if (
+          geometry !== previousGeometry &&
+          scrollGeometryLog.length < MAX_GEOMETRY_SAMPLES
+        ) {
+          previousGeometry = geometry;
+          scrollGeometryLog.push(
+            `+${Math.round(
+              performance.now() - startedAt,
+            )}ms ${geometry} distanceFromBottom=${
+              scrollHeight - clientHeight - scrollTop
+            }`,
+          );
+        }
+      }
+      // eslint-disable-next-line @cardstack/boxel/no-raf-for-state
+      requestAnimationFrame(sample);
+    };
+    // eslint-disable-next-line @cardstack/boxel/no-raf-for-state
+    requestAnimationFrame(sample);
+    stopSamplingScrollGeometry = () => (sampling = false);
+  });
+
+  hooks.afterEach(function () {
+    stopSamplingScrollGeometry?.();
+    stopSamplingScrollGeometry = undefined;
+  });
+
   function describeScrollPosition() {
+    let history = scrollGeometryLog.length
+      ? `\n  conversation geometry through this test:\n    ${scrollGeometryLog.join(
+          '\n    ',
+        )}`
+      : '';
     let conversationElement = document.querySelector(
       '[data-test-ai-assistant-conversation]',
     );
     if (!conversationElement) {
-      return 'no [data-test-ai-assistant-conversation] element';
+      return `no [data-test-ai-assistant-conversation] element${history}`;
     }
     let { scrollHeight, clientHeight, scrollTop } = conversationElement;
     // Signed: positive means content still sits below the fold (not scrolled
@@ -206,17 +270,15 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
     // scrolled-to-bottom check compares the absolute value against the
     // threshold, so the sign is diagnostic-only.
     let distanceFromBottom = scrollHeight - clientHeight - scrollTop;
-    return `scrollHeight=${scrollHeight} clientHeight=${clientHeight} scrollTop=${scrollTop} distanceFromBottom=${distanceFromBottom} bottomThreshold=${BOTTOM_THRESHOLD}`;
+    return `scrollHeight=${scrollHeight} clientHeight=${clientHeight} scrollTop=${scrollTop} distanceFromBottom=${distanceFromBottom} bottomThreshold=${BOTTOM_THRESHOLD}${history}`;
   }
 
-  // The auto-scroll that keeps the newest message in view fires when the last
-  // message registers its scroller and again whenever that message's subtree
-  // mutates. Avatars, card pills, and markdown can finish rendering (and shift
-  // layout) after the test runloop has otherwise settled, which moves the
-  // scroll position before the component re-scrolls to correct it. A single
-  // synchronous read races that correction, so poll until the conversation
-  // settles at the target position. On timeout, report the exact geometry so a
-  // future failure is diagnosable instead of a bare `expected true`.
+  // The panel scrolls to the newest message when the last message registers its
+  // scroller, re-scrolls when that message's subtree mutates, and re-pins when
+  // the conversation's viewport resizes under it. Any of those can land after
+  // the test runloop has otherwise settled, so poll until the conversation
+  // reaches the target position rather than reading it once. On timeout, report
+  // the geometry and the sequence it moved through.
   async function assertScrolledToBottom(
     assert: Assert,
     message = 'AI assistant is scrolled to bottom',
@@ -335,6 +397,49 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
       .doesNotExist(
         'unread messages button does not exist when scrolled to the bottom',
       );
+  });
+
+  // The conversation is the `1fr` row of the room's grid, so a taller footer
+  // shrinks its viewport without touching `scrollHeight` or `scrollTop` —
+  // widening the gap to the bottom by however much height the viewport lost.
+  // Shrinking the room reproduces that without depending on which footer
+  // control happens to render late.
+  function shrinkConversationViewport(byPixels: number) {
+    let roomElement = document.querySelector(
+      '[data-test-room]',
+    ) as HTMLElement | null;
+    if (!roomElement) {
+      throw new Error('Expected a room element');
+    }
+    roomElement.style.height = `${roomElement.clientHeight - byPixels}px`;
+  }
+
+  test('it stays at the bottom when the conversation viewport shrinks', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    fillRoomWithReadMessages(roomId);
+    await waitFor('[data-test-message-idx="39"]');
+    await scrollAiAssistantToBottom();
+
+    shrinkConversationViewport(BOTTOM_THRESHOLD + 10);
+
+    await assertScrolledToBottom(
+      assert,
+      'AI assistant stays at the bottom after the conversation viewport shrinks',
+    );
+  });
+
+  test('it holds its scroll position when the conversation viewport shrinks away from the bottom', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    fillRoomWithReadMessages(roomId);
+    await waitFor('[data-test-message-idx="39"]');
+    await scrollAiAssistantToTop();
+
+    shrinkConversationViewport(BOTTOM_THRESHOLD + 10);
+
+    await assertScrolledToTop(
+      assert,
+      'AI assistant holds its scroll position when the viewport shrinks and the conversation is not at the bottom',
+    );
   });
 
   test('it scrolls to first unread message when opening a room with unread messages', async function (assert) {
