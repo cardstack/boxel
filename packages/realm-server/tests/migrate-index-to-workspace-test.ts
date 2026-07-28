@@ -9,7 +9,7 @@ import {
   rmSync,
 } from 'fs';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { basename, join } from 'path';
 
 import {
   classify,
@@ -65,7 +65,11 @@ function captureLogs(fn: () => number): { code: number; out: string } {
   }
 }
 
-module('Unit | migrate-index-to-workspace', function () {
+// The outermost module must be the file's basename: CI shards this suite by
+// setting TEST_MODULES, which becomes a QUnit filter anchored on each file's
+// own name. A module named anything else matches nothing and the whole file is
+// silently skipped in CI while still passing locally.
+module(basename(import.meta.filename), function () {
   module('splitBaseModule', function () {
     test('recognizes the prefix form and every deployment-URL spelling', function (assert) {
       assert.deepEqual(splitBaseModule('@cardstack/base/cards-grid'), {
