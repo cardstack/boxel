@@ -7,6 +7,7 @@ import {
   SupportedMimeType,
   type Realm,
 } from '@cardstack/runtime-common';
+import { indexingConcurrencyGroup } from '@cardstack/runtime-common/jobs/indexing';
 import * as Sentry from '@sentry/node';
 import {
   sendResponseForSystemError,
@@ -42,7 +43,10 @@ export default function handleArchiveRealm({
       // rebuilds boxel_index from disk via the full-reindex enqueue, so
       // any partial work left behind by an in-flight cancellation is
       // discarded on restore.
-      await cancelAllJobsInConcurrencyGroup(dbAdapter, `indexing:${realmURL}`);
+      await cancelAllJobsInConcurrencyGroup(
+        dbAdapter,
+        indexingConcurrencyGroup(realmURL),
+      );
 
       let response = createResponse({
         body: JSON.stringify(

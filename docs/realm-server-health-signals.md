@@ -78,6 +78,54 @@ Silent on an idle, healthy server — so its presence in the logs is itself the
 signal. Lag climbing in step with `inFlightSearch` is the fingerprint of the loop
 being starved by concurrent search serialization.
 
+## `_readiness-check` is not one of them
+
+`GET /<realm>/_readiness-check` shares the word "readiness" but answers a different
+question: whether **one realm's content** is indexed and, on request, rendered — not
+whether this server is fit to serve traffic. Nothing routes or restarts on it: the
+ALB target group checks `GET /`, the external canary checks `HEAD /`, and a container
+health check, where one is wired, targets `/_liveness`.
+
+Its callers reach well past the publish and create flows. `boxel realm
+wait-for-ready` and `boxel realm create` poll it, the Playwright harness gates test
+startup on it for the test, skills, and base realms, and a dozen `wait-on` / `curl`
+loops across the mise tasks and CI workflows use it as "this realm is usable". Those
+last two groups constrain any change here, because they poll on tight intervals with
+no per-request timeout of their own.
+
+Blocking is therefore the correct behavior, not a symptom. The endpoint holds the
+request open while work is outstanding and answers 503 with `Retry-After` plus an
+`X-Boxel-Not-Ready: index | prerender-html` header naming the stage. Every caller
+retries on a non-ok status, so a 503 costs a poll rather than an error — which is
+also why the hold is short by design: a hold that outlives a caller's own deadline
+converts its poll loop into a single failed attempt, so the budget stays under the
+shortest deadline any caller brings.
+
+The gating has to read shared state, because in a multi-replica deployment the poll
+need not reach the replica that did the work. In-process indexing state is
+per-replica, and on its own it lets any other replica find the realm mounted with
+nothing in flight and report ready in milliseconds against an index with minutes
+left to run. So the check gates on the realm's index jobs and — with
+`awaitPrerenderHtml=true` — on its rendered HTML generation, both of which every
+replica reads identically out of Postgres.
+
+What that buys is bounded, and worth stating precisely: the gate proves no index
+work is **outstanding**, not that any of it **succeeded**. A rejected job — a handler
+that threw, a job abandoned after its retry budget, an operator cancel via
+`/_cancel-indexing-job`, an archive — leaves the lane clear and readiness answers
+200 over an index that never landed. That is deliberate, and it matches the render
+gate, which likewise treats a failed render as work that is finished. A realm whose
+indexing failed surfaces as missing or errored content, not as a readiness check
+that hangs forever.
+
+Two consequences follow from reading shared state, both intended. A deploy enqueues
+a system reindex for every realm, so readiness across the fleet reports not-ready
+until those passes drain — the realms really are behind their source. And a wedged
+worker holds its realm's lane until the reservation reaper collects it, so that
+realm reports not-ready on every replica for as long as that takes. Both are the
+answer a caller can act on: the alternative is a 200 from whichever replica happens
+to be ignorant of the work.
+
 ## An event-loop-gated failure is honest
 
 When the loop is saturated and the load balancer's check times out, the check is
