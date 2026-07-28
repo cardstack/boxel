@@ -23,7 +23,7 @@ export default class AvatarGroup extends GlimmerComponent<AvatarGroupSignature> 
   <template>
     <div class='avatar-group' ...attributes>
       <Avatar
-        @userID={{@userId}}
+        @userId={{@userId}}
         @displayName={{@name}}
         @thumbnailURL={{@thumbnailURL}}
         @isReady={{true}}

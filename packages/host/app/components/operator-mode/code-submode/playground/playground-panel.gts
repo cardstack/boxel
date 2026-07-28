@@ -13,13 +13,13 @@ import ToElsewhere from 'ember-elsewhere/components/to-elsewhere';
 import { consume, provide } from 'ember-provide-consume-context';
 import { resource, use } from 'ember-resources';
 
-import type { BoxelSelect } from '@cardstack/boxel-ui/components';
 import {
   CardContainer,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 import { eq, MenuItem, or, toMenuItems } from '@cardstack/boxel-ui/helpers';
 import { Folder, IconPlusThin } from '@cardstack/boxel-ui/icons';
+import type { Icon } from '@cardstack/boxel-ui/icons';
 
 import {
   CardContextName,
@@ -232,7 +232,9 @@ export default class PlaygroundPanel extends Component<Signature> {
       new MenuItem({
         label: 'Create new instance',
         action: () => this.createNew(),
-        icon: this.createNewIsRunning ? LoadingIndicator : IconPlusThin,
+        icon: (this.createNewIsRunning
+          ? LoadingIndicator
+          : IconPlusThin) as Icon,
         disabled: this.createNewIsRunning || !this.canWriteRealm,
       }),
       new MenuItem({
@@ -906,7 +908,7 @@ export default class PlaygroundPanel extends Component<Signature> {
     (
       document.querySelector(
         '[data-playground-instance-chooser][aria-expanded="true"]',
-      ) as BoxelSelect | null
+      ) as HTMLElement | null
     )?.click();
 
   private get currentFileDef(): FileDef | undefined {

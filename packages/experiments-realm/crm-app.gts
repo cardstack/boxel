@@ -535,8 +535,8 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
     this.searchKey = searchKey;
   }
 
-  @action private onChangeView(id: ViewOption) {
-    this.selectedView = id;
+  @action private onChangeView(id: string) {
+    this.selectedView = id as ViewOption;
   }
   @action private onSort(option: SortOption) {
     this.activeFilter.selectedSort = option;
@@ -587,7 +587,7 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
           <BoxelButton
             class='sidebar-create-button content-header-row-1'
             @kind='primary'
-            @size='large'
+            @size='tall'
             @disabled={{this.activeFilter.isCreateNewDisabled}}
             @loading={{this.createCard.isRunning}}
             {{on 'click' this.createNew}}

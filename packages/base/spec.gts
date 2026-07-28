@@ -564,7 +564,9 @@ export class SpecModuleSection extends GlimmerComponent<SpecModuleSectionSignatu
       <div class='code-ref-container'>
         <FieldContainer @label='URL' @vertical={{true}} @labelFontSize='small'>
           <div class='code-ref-row'>
-            <RealmIcon class='realm-icon' @realmInfo={{this.realmInfo}} />
+            {{#if this.realmInfo}}
+              <RealmIcon class='realm-icon' @realmInfo={{this.realmInfo}} />
+            {{/if}}
             <span class='code-ref-value' data-test-module-href>
               {{this.moduleHref}}
             </span>

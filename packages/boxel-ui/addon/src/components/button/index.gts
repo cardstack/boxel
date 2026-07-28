@@ -55,7 +55,7 @@ interface Signature {
     as?: string;
     class?: string;
     disabled?: boolean;
-    href?: string;
+    href?: string | null;
     kind?: BoxelButtonKind;
     loading?: boolean;
     models?: any;

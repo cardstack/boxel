@@ -6,7 +6,7 @@ import { modifier } from 'ember-modifier';
 
 import {
   BoxelInput,
-  type BoxelInputBottomTreatments,
+  type BoxelInputBottomTreatment,
 } from '@cardstack/boxel-ui/components';
 import { IconSearch } from '@cardstack/boxel-ui/icons';
 import { autoFocus } from '@cardstack/boxel-ui/modifiers';
@@ -40,7 +40,7 @@ interface Signature {
     onKeyDown?: (ev: Event) => void;
     onInputInsertion?: (element: HTMLElement) => void;
     pickerDestination?: string;
-    bottomTreatment?: BoxelInputBottomTreatments;
+    bottomTreatment?: BoxelInputBottomTreatment;
     state?: 'none' | 'valid' | 'invalid' | 'loading' | 'initial';
     id?: string;
     hidePickers?: boolean;

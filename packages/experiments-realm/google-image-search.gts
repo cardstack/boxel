@@ -158,8 +158,8 @@ export class GoogleImageSearch extends CardDef {
           </FieldContainer>
 
           <Button
-            @variant='primary'
-            @size='medium'
+            @kind='primary'
+            @size='base'
             @disabled={{this.isLoading}}
             class='search-button'
             {{on 'click' this.performSearch}}
@@ -179,7 +179,7 @@ export class GoogleImageSearch extends CardDef {
         {{#if this.isError}}
           <div class='error-state'>
             <p class='error-message'>{{this.errorMessage}}</p>
-            <Button @variant='secondary' @onClick={{this.performSearch}}>
+            <Button @kind='secondary' {{on 'click' this.performSearch}}>
               Try Again
             </Button>
           </div>
@@ -227,7 +227,7 @@ export class GoogleImageSearch extends CardDef {
                       {{/if}}
                     </div>
                     <Button
-                      @variant='secondary'
+                      @kind='secondary'
                       @size='small'
                       class='open-image-button'
                       {{on 'click' (fn this.openImageInNewTab image.imageUrl)}}
@@ -242,8 +242,8 @@ export class GoogleImageSearch extends CardDef {
             {{#if (or this.canGoPrevious this.canGoNext)}}
               <div class='pagination'>
                 <Button
-                  @variant='secondary'
-                  @onClick={{this.previousPage}}
+                  @kind='secondary'
+                  {{on 'click' this.previousPage}}
                   @disabled={{not this.canGoPrevious}}
                   class='pagination-button'
                 >
@@ -261,8 +261,8 @@ export class GoogleImageSearch extends CardDef {
                 </span>
 
                 <Button
-                  @variant='secondary'
-                  @onClick={{this.nextPage}}
+                  @kind='secondary'
+                  {{on 'click' this.nextPage}}
                   @disabled={{not this.canGoNext}}
                   class='pagination-button'
                 >

@@ -23,7 +23,10 @@ interface TriggerButtonSignature {
   Args: {
     isCollapsed?: boolean;
     isDisabled?: boolean;
-    bindings: ModifierLike<{ Args: { Positional: unknown[] } }>;
+    bindings: ModifierLike<{
+      Args: { Positional: unknown[] };
+      Element: HTMLElement;
+    }>;
   };
   Element: HTMLButtonElement;
 }

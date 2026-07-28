@@ -337,7 +337,7 @@ export default class ErrorDisplay
         <CopyButton
           @textToCopy={{this.errorText}}
           @width='16px'
-          @heigth='16px'
+          @height='16px'
         />
         <Button
           class='toggle-details-button'

@@ -27,7 +27,10 @@ class ProcessTemplate extends Component<typeof ProcessCard> {
         </span>
         <h3 class='process-card__name'><@fields.cardTitle /></h3>
       </header>
-      <ProgressBar @value={{@model.percentComplete}} @max={{100}} />
+      <ProgressBar
+        @value={{if @model.percentComplete @model.percentComplete 0}}
+        @max={{100}}
+      />
       <footer class='process-card__footer'>
         <span class='process-card__count'>{{@model.progressLabel}}</span>
         <span
