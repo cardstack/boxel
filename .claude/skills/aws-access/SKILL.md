@@ -352,7 +352,7 @@ kill $TUNNEL_PID
 ### When this is useful
 
 - Confirming a `.gts` or `.json` file actually exists at a particular path before chasing why indexing skipped it.
-- Looking at `index.json` / `cards-grid.json` for a realm.
+- Reading a realm's `index.json` to see which card its root adopts — `Workspace` for realms on the default index card, `CardsGrid` (or its `IndexCard` alias) for older ones, or something bespoke.
 - Verifying file mtimes / sizes for a realm where the user reports "X is missing".
 - Cross-referencing what the indexer saw against what actually landed on disk.
 
