@@ -1901,11 +1901,9 @@ export default class StoreService extends Service implements StoreInterface {
     // executable invalidation into it), and the flush a local write or an open
     // editor performed for this very module the moment it was rewritten.
     let executableInvalidations = invalidations.filter(hasExecutableExtension);
-    // Drain the flush records for every module in this event before deciding,
-    // so a record can never linger to arm an unrelated later rebuild.
     let alreadyFlushed = new Set(
       executableInvalidations.filter((i) =>
-        this.loaderService.takeModuleFlushedForCodeChange(i),
+        this.loaderService.wasModuleFlushedForCodeChange(i),
       ),
     );
     let needsRebuild =
@@ -2189,13 +2187,11 @@ export default class StoreService extends Service implements StoreInterface {
     let rebuildStart =
       telemetry?.isEnabled && pending ? performance.now() : undefined;
 
+    // This reset also drops the flush records that armed this rebuild — a
+    // plain loader replacement supersedes them — while a code-change flush
+    // landing *during* the re-fetch below writes fresh records against the new
+    // loader, so the invalidation still to come for that write finds them.
     this.loaderService.resetLoader();
-    // Drop the snapshot before re-establishing, not after. The records that
-    // armed this rebuild were consumed when it was decided on, so what's left
-    // is leftovers this rebuild supersedes — while a flush that lands *during*
-    // the re-fetch describes a code change this rebuild is too late to pick up,
-    // and its records have to survive for the invalidation still to come.
-    this.loaderService.clearModulesFlushedForCodeChange();
     this.store.reset();
     let cardsReloaded: number | undefined;
     try {

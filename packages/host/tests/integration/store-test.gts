@@ -3706,6 +3706,10 @@ module('Integration | Store', function (hooks) {
       reason: 'source-write',
       codeChange: true,
     });
+    assert.true(
+      loaderService.wasModuleFlushedForCodeChange(personModule),
+      'precondition: the flush recorded the module',
+    );
 
     // A write whose index event never arrives — the tab logged out first, or
     // indexing failed — leaves a record behind. The next session has its own
@@ -3714,7 +3718,7 @@ module('Integration | Store', function (hooks) {
     loaderService.resetState();
 
     assert.false(
-      loaderService.takeModuleFlushedForCodeChange(personModule),
+      loaderService.wasModuleFlushedForCodeChange(personModule),
       'the record is dropped when the loader crosses a session boundary',
     );
   });
