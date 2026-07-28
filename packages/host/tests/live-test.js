@@ -67,6 +67,13 @@ export async function loadRealmTests(application) {
     import('@cardstack/host/config/environment'),
   ]);
 
+  // Mutate the shared config module object directly (not just the copy
+  // handed to loaderInstance's shim below) so every app instance created
+  // later by individual tests' setupApplicationTest — which import
+  // '@cardstack/host/config/environment' as a normal static import, not
+  // through this loader — also sees the real catalog realm address.
+  hostConfigEnvironment.default.resolvedCatalogRealmURL = realmURL;
+
   const loaderInstance = application.buildInstance({
     rootElement: '#ember-testing-loader',
   });
