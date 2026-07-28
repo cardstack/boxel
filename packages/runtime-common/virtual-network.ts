@@ -41,10 +41,7 @@ export class VirtualNetwork {
   // a pure function of the realm mappings, so entries stay valid until a
   // mapping is added or removed (both clear it).
   private unresolveURLCache = new Map<string, RealmResourceIdentifier>();
-  // Memo for toRealURLHref (the store's single canonical key). Same hot-path
-  // and invalidation contract as the two caches above.
-  private realURLHrefCache = new Map<string, string>();
-  // The three URL memos above are keyed by per-instance / per-module ids, so in
+  // The two URL memos above are keyed by per-instance / per-module ids, so in
   // a long-lived process (the realm-server's indexing + prerender) their key
   // set is effectively unbounded — left to grow, they add steady heap and GC
   // pressure that shows up as slow module serving. Cap each with FIFO eviction:
@@ -118,7 +115,6 @@ export class VirtualNetwork {
     // via its virtual→real chase), so a new URL mapping invalidates them.
     this.toURLHrefCache.clear();
     this.unresolveURLCache.clear();
-    this.realURLHrefCache.clear();
   }
 
   mapURL(
@@ -150,7 +146,6 @@ export class VirtualNetwork {
     this.realmMappings.set(normalizedId, normalizedTarget);
     this.toURLHrefCache.clear();
     this.unresolveURLCache.clear();
-    this.realURLHrefCache.clear();
     this.addImportMap(
       normalizedId,
       (rest) => new URL(rest, normalizedTarget).href,
@@ -170,7 +165,6 @@ export class VirtualNetwork {
     this.importMap.delete(normalizedId);
     this.toURLHrefCache.clear();
     this.unresolveURLCache.clear();
-    this.realURLHrefCache.clear();
     this.notifyMappingChange();
   }
 
@@ -343,26 +337,6 @@ export class VirtualNetwork {
     let href = this.toURL(rri).href;
     this.#setBoundedCache(this.toURLHrefCache, rri, href);
     return href;
-  }
-
-  // The store's single canonical key: the fully-resolved real (served) URL.
-  // Collapses every spelling a card id can take — an RRI prefix, a virtual
-  // alias (`https://cardstack.com/base/X`), a url-mapped alias (env-mode's
-  // `localhost:4202/test/X`), or the real URL itself — onto one href, so the
-  // identity map holds one entry per card no matter how a caller spells the id.
-  // `toURL` folds an RRI/relative ref to a URL but leaves an alias untouched;
-  // `mapURL('virtual-to-real')` then collapses any remaining virtual/url-mapped
-  // alias onto its real target (and no-ops on a URL that is already real).
-  // Memoized like toURLHref — same pure-function-of-mappings invalidation.
-  toRealURLHref(id: string): string {
-    let cached = this.realURLHrefCache.get(id);
-    if (cached !== undefined) {
-      return cached;
-    }
-    let viaToURL = this.toURL(id).href;
-    let real = this.mapURL(viaToURL, 'virtual-to-real')?.href ?? viaToURL;
-    this.#setBoundedCache(this.realURLHrefCache, id, real);
-    return real;
   }
 
   /**
