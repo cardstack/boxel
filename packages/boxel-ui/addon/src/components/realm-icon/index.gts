@@ -8,7 +8,7 @@ export type RealmDisplayInfo = {
   iconURL: string | null;
   isIndexing?: boolean;
   name: string;
-  publishable: boolean | null;
+  publishable?: boolean | null;
 };
 interface Signature {
   Args: {
