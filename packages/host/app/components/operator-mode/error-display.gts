@@ -253,8 +253,10 @@ export default class ErrorDisplay
           totalElapsedMs?: number;
           waits?: {
             semaphoreMs?: number;
+            admissionMs?: number;
             tabQueueMs?: number;
             tabStartupMs?: number;
+            tabProbeMs?: number;
           };
           renderStage?: string;
           stageAgeMs?: number;
@@ -268,15 +270,27 @@ export default class ErrorDisplay
     }
     if (typeof d.launchMs === 'number') {
       let waits = d.waits;
-      if (
-        waits &&
-        (typeof waits.semaphoreMs === 'number' ||
-          typeof waits.tabQueueMs === 'number' ||
-          typeof waits.tabStartupMs === 'number')
-      ) {
-        parts.push(
-          `launch=${d.launchMs}ms (semaphore=${waits.semaphoreMs ?? 0}ms, tabQueue=${waits.tabQueueMs ?? 0}ms, tabStartup=${waits.tabStartupMs ?? 0}ms)`,
-        );
+      // Every bucket the pool reports, so the line accounts for launch time
+      // rather than leaving a slice of it unexplained: admission is
+      // per-realm backpressure and tabProbe is the liveness check that can
+      // retire a warm tab and force a cold start. Buckets the payload
+      // doesn't carry are omitted rather than shown as `0`: a diagnostic
+      // that omits a bucket isn't claiming the wait was zero.
+      let waitKeys = [
+        'semaphoreMs',
+        'admissionMs',
+        'tabQueueMs',
+        'tabStartupMs',
+        'tabProbeMs',
+      ] as const;
+      let present = waits
+        ? waitKeys.filter((k) => typeof waits[k] === 'number')
+        : [];
+      if (waits && present.length > 0) {
+        let breakdown = present
+          .map((k) => `${k.replace(/Ms$/, '')}=${waits[k]}ms`)
+          .join(', ');
+        parts.push(`launch=${d.launchMs}ms (${breakdown})`);
       } else {
         parts.push(`launch=${d.launchMs}ms`);
       }
