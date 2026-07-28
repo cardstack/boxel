@@ -239,6 +239,7 @@ const ALL_TEST_FILES: string[] = [
   './cpu-profiler-affinity-gate-test',
   './definition-lookup-test',
   './searchable-parity-diff-test',
+  './migrate-index-to-workspace-test',
   './file-watcher-events-test',
   './full-index-on-startup-test',
   './full-reindex-test',
