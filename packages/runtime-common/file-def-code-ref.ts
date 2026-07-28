@@ -39,6 +39,7 @@ const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
   '.opus': { module: baseModule('ogg-audio-def'), name: 'OggDef' },
   '.m4a': { module: baseModule('m4a-audio-def'), name: 'M4aDef' },
   '.flac': { module: baseModule('flac-audio-def'), name: 'FlacDef' },
+  '.stl': { module: baseModule('stl-file-def'), name: 'StlDef' },
   '.mismatch': {
     module: './filedef-mismatch' as RealmResourceIdentifier,
     name: 'FileDef',

@@ -29,6 +29,13 @@ export function isBinaryFilename(filename: string): boolean {
     mimeType.startsWith('font/') ||
     mimeType.startsWith('audio/') ||
     mimeType === 'application/pdf' ||
-    mimeType === 'application/vnd.ms-fontobject' // .eot legacy font
+    mimeType === 'application/vnd.ms-fontobject' || // .eot legacy font
+    // STL 3D meshes. `.stl` resolves to `model/stl` (or the legacy
+    // `application/vnd.ms-pki.stl`) — neither matches a prefix above, so
+    // without this the common binary encoding would be read as UTF-8 text and
+    // its bytes mangled. ASCII STL is technically text, but binary is the
+    // default encoding and erring toward binary is the safe choice.
+    mimeType === 'model/stl' ||
+    mimeType === 'application/vnd.ms-pki.stl'
   );
 }
