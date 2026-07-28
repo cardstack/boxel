@@ -43,24 +43,29 @@ Loki indexes only **low-cardinality stream labels**; everything else is a JSON f
 Every query therefore starts:
 
 ```logql
-{service="realm-server", env="<env>"} | json | channel="boxel:client-perf" | event_type="<type>"
+{service="realm-server", env="<env>"} |= "boxel:client-perf" | json
+  | channel="boxel:client-perf" | event_type="<type>"
 ```
 
 and then filters by `matrix_user_id` / `session_id` and unwraps a numeric field.
+
+The leading `|=` line filter is load-bearing, not decorative. Client-perf lines are a small fraction of the realm-server stream, and `| json` on a deployed environment's whole stream parses every request log line in the range before anything gets filtered out. Grafana splits a range query into sub-queries, so a board full of unfiltered parses shows up as cancelled queries, `400 … eof`, and `504 gateway time-out` from Loki rather than as one slow panel. Keep the substring filter ahead of the first parser in anything you write; the dashboard's own queries all do.
+
+In deployed environments each line arrives wrapped by the firelens log router, so the dashboard's queries unwrap it before the real parse — `| json | line_format "{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}" | json`. The `|=` filter still works ahead of that, because the substring survives the wrapper's JSON escaping.
 
 ## The event glossary
 
 Common envelope on every line: `ts`, `event_type`, `channel`, `matrix_user_id`, `session_id`, `env`, `app_version`, and (on most) `realm`.
 
-| `event_type` | what it measures | key fields |
-| --- | --- | --- |
-| `card-load` | card-to-interactive latency — the "Loading card…" window | `card_id`, `loading_ms` (window-open until the store reports the load resolved), `settle_ms` (one event-loop turn later, once the render settles — the fuller card-to-interactive number), `num_loads`, `loaded_ids[]`, `slowest_loads[]` (`{id, ms, outcome}`) |
-| `server-request` | one realm-server round-trip, client-observed | `endpoint` (normalized, ids stripped), `method`, `status`, `duration_ms`, `resp_bytes`, `retried`, `correlation_id` |
-| `deserialize` | turning a response into card instances | `duration_ms`, `doc_bytes`, `included_count`, `card_type` |
-| `wedge` | a main-thread freeze at/above the wedge threshold | `duration_ms`, `worst_gap_ms`, `blocked_ms`, `longtask_count`, `top_frame_function`, `top_frame_url`, `top_frame_char`, `top_frame_blocked_ms`, `top_frames` (`fn @ url:char` breadcrumb), `loaf_scripts[]`, `profiler_stacks[]` (sampled sessions) |
-| `rebuild` | loader/store rebuild after a code invalidation | `duration_ms`, `trigger_module` (grouping key), `trigger_modules[]`, `modules_refetched`, `cards_reloaded`, `coalesced_events` (index events that collapsed into this rebuild) |
-| `realm-event` | the tab's work processing one incoming index event | `index_type` (`incremental`/`full`), `invalidations_count`, `invalidated_ids[]`, `reloads_triggered`, `own_write`, `processing_ms` |
-| `keepalive` | liveness beacon from an otherwise-quiet tab | `window_ms`, `max_gap_ms` |
+| `event_type`     | what it measures                                         | key fields                                                                                                                                                                                                                                                      |
+| ---------------- | -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `card-load`      | card-to-interactive latency — the "Loading card…" window | `card_id`, `loading_ms` (window-open until the store reports the load resolved), `settle_ms` (one event-loop turn later, once the render settles — the fuller card-to-interactive number), `num_loads`, `loaded_ids[]`, `slowest_loads[]` (`{id, ms, outcome}`) |
+| `server-request` | one realm-server round-trip, client-observed             | `endpoint` (normalized, ids stripped), `method`, `status`, `duration_ms`, `resp_bytes`, `retried`, `correlation_id`                                                                                                                                             |
+| `deserialize`    | turning a response into card instances                   | `duration_ms`, `doc_bytes`, `included_count`, `card_type`                                                                                                                                                                                                       |
+| `wedge`          | a main-thread freeze at/above the wedge threshold        | `duration_ms`, `worst_gap_ms`, `blocked_ms`, `longtask_count`, `top_frame_function`, `top_frame_url`, `top_frame_char`, `top_frame_blocked_ms`, `top_frames` (`fn @ url:char` breadcrumb), `loaf_scripts[]`, `profiler_stacks[]` (sampled sessions)             |
+| `rebuild`        | loader/store rebuild after a code invalidation           | `duration_ms`, `trigger_module` (grouping key), `trigger_modules[]`, `modules_refetched`, `cards_reloaded`, `coalesced_events` (index events that collapsed into this rebuild)                                                                                  |
+| `realm-event`    | the tab's work processing one incoming index event       | `index_type` (`incremental`/`full`), `invalidations_count`, `invalidated_ids[]`, `reloads_triggered`, `own_write`, `processing_ms`                                                                                                                              |
+| `keepalive`      | liveness beacon from an otherwise-quiet tab              | `window_ms`, `max_gap_ms`                                                                                                                                                                                                                                       |
 
 Array fields (`loaf_scripts`, `slowest_loads`, `loaded_ids`, `profiler_stacks`) are **not** extractable by `| json` element-by-element — that is why the wedge event also carries flat scalar `top_frame_*` fields for grouping. To see an array's contents, read the raw log line (see [Reading raw lines](#reading-raw-lines)).
 
@@ -85,7 +90,7 @@ Sanity-check the path end-to-end by querying Loki's HTTP API directly:
 ```bash
 # Are any client-perf lines landing at all (last 15m)?
 curl -sG 'http://localhost:3100/loki/api/v1/query_range' \
-  --data-urlencode 'query={service="realm-server", env="local"} | json | channel="boxel:client-perf"' \
+  --data-urlencode 'query={service="realm-server", env="local"} |= "boxel:client-perf" | json | channel="boxel:client-perf"' \
   --data-urlencode "start=$(( ($(date +%s) - 900) ))000000000" \
   --data-urlencode "end=$(date +%s)000000000" \
   --data-urlencode 'limit=20' | python3 -m json.tool | head -60
@@ -109,15 +114,15 @@ Picking a `matrix_user_id` (and optionally a `session_id`) turns every panel on 
 
 ## Mode A — a user reports their card was slow to load
 
-This is the common one: *"user XYZ said the app was slow loading their card."* You have an account and a vague symptom. Turn it into a measured window and a cause.
+This is the common one: _"user XYZ said the app was slow loading their card."_ You have an account and a vague symptom. Turn it into a measured window and a cause.
 
 **Step 1 — get the account's `matrix_user_id`.** It's the Matrix user id (`@localpart:server`). In the dashboard, the `matrix_user_id` variable is populated from the users table, so you can pick it from the dropdown. Select it (and leave `session_id` empty to start).
 
-**Step 2 — find the slow card-load(s).** The card-load event *is* the "Loading card…" window. Look at that user's slowest card-loads by `settle_ms`, keyed by `card_id`:
+**Step 2 — find the slow card-load(s).** The card-load event _is_ the "Loading card…" window. Look at that user's slowest card-loads by `settle_ms`, keyed by `card_id`:
 
 ```logql
 topk(20, max by (card_id) (
-  max_over_time({service="realm-server", env="$env"} | json
+  max_over_time({service="realm-server", env="$env"} |= "boxel:client-perf" | json
     | channel="boxel:client-perf" | event_type="card-load"
     | matrix_user_id=~"$matrix_user_id" | session_id=~".*${session_id}.*"
     | unwrap settle_ms [$__range])
@@ -128,9 +133,9 @@ topk(20, max by (card_id) (
 
 **Step 3 — pin the session and the moment.** Once you have a slow `card_id`, find the `session_id` and timestamp of that specific event by reading the raw line (see [Reading raw lines](#reading-raw-lines)), then paste the `session_id` into the dashboard variable. Now the whole board is that one tab, and you can read what else was happening around that `ts`.
 
-**Step 4 — spider into the cause.** The card-load names the *symptom and its magnitude*; the other event types in the same pinned session name the *cause*. With the session isolated and the slow card-load's `ts` in hand, walk outward into each event type and let the one that overlaps the window explain it:
+**Step 4 — spider into the cause.** The card-load names the _symptom and its magnitude_; the other event types in the same pinned session name the _cause_. With the session isolated and the slow card-load's `ts` in hand, walk outward into each event type and let the one that overlaps the window explain it:
 
-- **Slow server round-trips** → [Mode C](#mode-c--slow-realm-server-round-trips-and-the-server-side-join). A card-load that spent its time on the network shows up as slow `server-request.duration_ms`; a `server-request` with `retried="true"` re-attempted the fetch after a transient auth (401). Note `duration_ms` covers **only the final successful attempt** — each attempt is timed separately and the transient 401 event is dropped from the stream — so it excludes the reauth round-trip rather than including it. The `correlation_id` then crosses to the server's own timing — *why the server was slow*.
+- **Slow server round-trips** → [Mode C](#mode-c--slow-realm-server-round-trips-and-the-server-side-join). A card-load that spent its time on the network shows up as slow `server-request.duration_ms`; a `server-request` with `retried="true"` re-attempted the fetch after a transient auth (401). Note `duration_ms` covers **only the final successful attempt** — each attempt is timed separately and the transient 401 event is dropped from the stream — so it excludes the reauth round-trip rather than including it. The `correlation_id` then crosses to the server's own timing — _why the server was slow_.
 - **A main-thread freeze** → [Mode B](#mode-b--a-browser-froze--went-unresponsive). If the tab locked up mid-load, a `wedge` overlaps the window and its `settle_ms` includes the freeze; the wedge's `top_frames` breadcrumb names the blocking script.
 - **Heavy deserialization** → [Mode D](#mode-d--heavy-response-deserialization). Large `deserialize.duration_ms` / `doc_bytes` for a `card_type` in the load — a big linked graph deserializes slowly.
 - **Rebuild churn** → [Mode E](#mode-e--rebuild-churn-after-a-code-edit). If the load raced a loader/store rebuild (a `rebuild` event in the window), the card waited on the rebuild; `trigger_module` names what forced it.
@@ -146,7 +151,7 @@ A `wedge` event is emitted when a foregrounded tab's main thread freezes for a h
 
 ```logql
 topk(15, sum by (top_frame_function, top_frame_url) (
-  count_over_time({service="realm-server", env="$env"} | json
+  count_over_time({service="realm-server", env="$env"} |= "boxel:client-perf" | json
     | channel="boxel:client-perf" | matrix_user_id=~"$matrix_user_id"
     | session_id=~".*${session_id}.*" | event_type="wedge" [$__range])
 ))
@@ -170,26 +175,26 @@ Don't add a `top_frame_function!=""` filter here: a wedge corroborated only by a
 **p95 by endpoint**, and **most-retried endpoints**:
 
 ```logql
-quantile_over_time(0.95, {service="realm-server", env="$env"} | json
+quantile_over_time(0.95, {service="realm-server", env="$env"} |= "boxel:client-perf" | json
   | channel="boxel:client-perf" | event_type="server-request"
   | matrix_user_id=~"$matrix_user_id" | session_id=~".*${session_id}.*"
   | unwrap duration_ms [$__interval]) by (endpoint)
 ```
 
 ```logql
-sum by (endpoint) (count_over_time({service="realm-server", env="$env"} | json
+sum by (endpoint) (count_over_time({service="realm-server", env="$env"} |= "boxel:client-perf" | json
   | channel="boxel:client-perf" | event_type="server-request" | retried="true"
   | matrix_user_id=~"$matrix_user_id" | session_id=~".*${session_id}.*" [$__range]))
 ```
 
-**The join to the server's own view.** `server-request.correlation_id` is the `x-boxel-logging-correlation-id` the client stamps on the outgoing request. The realm-server logs the same id as `corr=<id>` on its `realm:requests` (`dur=` total) line and, for searches, its `realm:search-timing` stage breakdown. So a client-observed slow request splits into *network/queue time* vs *server processing time*: grab the `correlation_id` from the raw client line, then search the realm-server logs for `corr=<that id>`. The server-side stage attribution (parse / SQL / loadLinks / serialize / queue) is covered by the `indexing-diagnostics` skill's search-timing mode — this is where the client and server halves of one request meet.
+**The join to the server's own view.** `server-request.correlation_id` is the `x-boxel-logging-correlation-id` the client stamps on the outgoing request. The realm-server logs the same id as `corr=<id>` on its `realm:requests` (`dur=` total) line and, for searches, its `realm:search-timing` stage breakdown. So a client-observed slow request splits into _network/queue time_ vs _server processing time_: grab the `correlation_id` from the raw client line, then search the realm-server logs for `corr=<that id>`. The server-side stage attribution (parse / SQL / loadLinks / serialize / queue) is covered by the `indexing-diagnostics` skill's search-timing mode — this is where the client and server halves of one request meet.
 
 ## Mode D — heavy response deserialization
 
 `deserialize` times turning a fetched document into card instances. A heavy linked graph (an index/dashboard card) is the classic outlier.
 
 ```logql
-quantile_over_time(0.95, {service="realm-server", env="$env"} | json
+quantile_over_time(0.95, {service="realm-server", env="$env"} |= "boxel:client-perf" | json
   | channel="boxel:client-perf" | event_type="deserialize"
   | matrix_user_id=~"$matrix_user_id" | session_id=~".*${session_id}.*"
   | unwrap duration_ms [$__interval]) by (card_type)
@@ -201,8 +206,10 @@ Correlate `duration_ms` against `doc_bytes` and `included_count` (swap the `unwr
 
 A `rebuild` event fires when a `.gts`/code invalidation forces a loader/store rebuild. It is attributed to **why** it rebuilt: `trigger_module` is the invalidated module that forced it (the grouping key; `trigger_modules[]` has the full set).
 
+A rebuild is bookkept across two things that happen at different times: the loader flush, and the realm index event for the same write. Several places flush the loader the instant a module is rewritten — a save from the app, the code-mode file resource reacting to an external write, a rebuild already in flight — and the index event lands afterwards. Because a flush installs a fresh loader that reports every realm module as not-loaded, the store cannot decide from the live loader alone whether the invalidated module mattered; it also consults the flush record the write left behind. When reading this row, an empty `rebuild` series next to a healthy `realm-event` series is therefore the signature worth distrusting: the tab was absorbing index events, so the question is whether it stopped attributing the rebuilds rather than whether users stopped editing code.
+
 ```logql
-sum by (trigger_module) (count_over_time({service="realm-server", env="$env"} | json
+sum by (trigger_module) (count_over_time({service="realm-server", env="$env"} |= "boxel:client-perf" | json
   | channel="boxel:client-perf" | event_type="rebuild"
   | matrix_user_id=~"$matrix_user_id" | session_id=~".*${session_id}.*" [$__range]))
 ```
@@ -212,7 +219,7 @@ sum by (trigger_module) (count_over_time({service="realm-server", env="$env"} | 
 **How many events did this rebuild absorb?** `coalesced_events` is the number of incremental index events that collapsed into this one rebuild. Rebuilds are coalesced: at most one runs in flight and one stays pending, so a burst of executable invalidations arriving faster than a rebuild completes bounds to two rebuilds regardless of burst length, and the trailing rebuild carries the whole burst's `coalesced_events`. Read it against the `realm-event` count in the same window:
 
 ```logql
-quantile_over_time(0.95, {service="realm-server", env="$env"} | json
+quantile_over_time(0.95, {service="realm-server", env="$env"} |= "boxel:client-perf" | json
   | channel="boxel:client-perf" | event_type="rebuild"
   | matrix_user_id=~"$matrix_user_id" | session_id=~".*${session_id}.*"
   | unwrap coalesced_events [$__interval]) by ()
@@ -224,16 +231,16 @@ quantile_over_time(0.95, {service="realm-server", env="$env"} | json
 
 ## Mode F — realm index-event write-burst churn
 
-`realm-event` is often the **"why" behind reloads** — the causal upstream of the other modes. It measures the tab's cost to process one incoming realm index event (the write-burst churn from the client's side), and that same incoming event is frequently what set the other costs in motion — *why* a rebuild fired, and *why* a card reloaded links the user never asked for. When Mode A, D, or E shows churn without an obvious local trigger, look for a `realm-event` in the same window — it is the answer to "why did this happen when I didn't touch anything?"
+`realm-event` is often the **"why" behind reloads** — the causal upstream of the other modes. It measures the tab's cost to process one incoming realm index event (the write-burst churn from the client's side), and that same incoming event is frequently what set the other costs in motion — _why_ a rebuild fired, and _why_ a card reloaded links the user never asked for. When Mode A, D, or E shows churn without an obvious local trigger, look for a `realm-event` in the same window — it is the answer to "why did this happen when I didn't touch anything?"
 
 ```logql
-sum(sum_over_time({service="realm-server", env="$env"} | json
+sum(sum_over_time({service="realm-server", env="$env"} |= "boxel:client-perf" | json
   | channel="boxel:client-perf" | event_type="realm-event"
   | matrix_user_id=~"$matrix_user_id" | session_id=~".*${session_id}.*"
   | unwrap reloads_triggered [$__interval]))
 ```
 
-Split `own_write` (the tab's own edits echoing back) from external events with `sum by (own_write) (count_over_time(... event_type="realm-event" ...))`: a tab drowning in *external* events with high `reloads_triggered` is paying for someone else's write burst, whereas high `own_write` churn is self-inflicted. `processing_ms` is the per-event reload cost; `index_type` distinguishes an incremental event from a full-reindex broadcast.
+Split `own_write` (the tab's own edits echoing back) from external events with `sum by (own_write) (count_over_time(... event_type="realm-event" ...))`: a tab drowning in _external_ events with high `reloads_triggered` is paying for someone else's write burst, whereas high `own_write` churn is self-inflicted. `processing_ms` is the per-event reload cost; `index_type` distinguishes an incremental event from a full-reindex broadcast.
 
 **Trace the causal chain.** The event's `invalidated_ids[]` (bounded, read from the raw line) is what the index event marked stale, and it links the realm-event to its downstream cost:
 
@@ -244,14 +251,27 @@ So the reading order for "why was the tab busy" is often backwards from the symp
 
 ## Mode G — scope anything to one user or one session
 
-Every mode above already threads `matrix_user_id` and `session_id`. To go the other direction — *which* users/sessions are hitting problems — count distinct sessions and rank users:
+Every mode above already threads `matrix_user_id` and `session_id`. To go the other direction — _which_ users/sessions are hitting problems — count distinct sessions and rank users.
+
+**Mind the difference between "active now" and "seen in the window."** The lookback duration is the whole distinction, and getting it wrong is the easiest way to misread this data:
 
 ```logql
-# active sessions in range (any client-perf signal)
-count(count by (session_id) (count_over_time({service="realm-server", env="$env"} | json
+# sessions active now — a rolling 5m lookback, so a tab counts only while it is
+# still beaconing. Any quiet tab keeps beaconing a keepalive on a fixed cadence,
+# so a live session always lands inside a 5m window.
+count(count by (session_id) (count_over_time({service="realm-server", env="$env"} |= "boxel:client-perf" | json
   | channel="boxel:client-perf" | matrix_user_id=~"$matrix_user_id"
-  | session_id=~".*${session_id}.*" [$__range])))
+  | session_id=~".*${session_id}.*" [5m])))
+
+# sessions seen anywhere in the window — swap the lookback for [$__range]. This
+# is cumulative: it only grows as you widen the time picker, and a single person
+# reloading the app contributes a session per load, because a session id is
+# minted per tab.
 ```
+
+The dashboard's Overview row leads with **Active sessions (5m)** as a right-now number, with the list of users holding those sessions directly beneath it and an **Active sessions over time by user** panel stacking the same 5m-window count per account across the range — so the total height is concurrency and the colours are who. The stats beside it are labelled `(range)` because they are cumulative over the time picker, and the contrast is deliberate.
+
+Swap the outer `count by (session_id)` for `count by (matrix_user_id)` to get accounts instead of tabs. That per-account form over the same 5m window is what the **Overview** board publishes as its Concurrent Users headline (minus the drill filters), so the two boards agree by construction. It is app-sourced: `matrix_user_id` comes from the beacon's authenticated session token rather than the browser, and only the host emits these events, so Matrix accounts that sync without loading the app (the AI bot runs a sliding-sync client of its own) are not in it. Unauthenticated browsing is not in it either — the instrument buffers but cannot beacon without a realm-server session token.
 
 Group any of the health queries `by (matrix_user_id)` instead of the default aggregation to get a per-user leaderboard. The dashboard's **By user** row does exactly this — wedges by user, worst card-to-interactive by user, and signal-event volume per user; from a row there, copy the `matrix_user_id` back into the variable to drill in.
 
@@ -261,7 +281,7 @@ Aggregations can't show you array fields (`loaf_scripts`, `slowest_loads`, `top_
 
 ```bash
 curl -sG 'http://localhost:3100/loki/api/v1/query_range' \
-  --data-urlencode 'query={service="realm-server", env="local"} | json
+  --data-urlencode 'query={service="realm-server", env="local"} |= "boxel:client-perf" | json
       | channel="boxel:client-perf" | event_type="wedge" | matrix_user_id=~"@user:example.com"' \
   --data-urlencode "start=$(( ($(date +%s) - 3600) ))000000000" \
   --data-urlencode "end=$(date +%s)000000000" \
