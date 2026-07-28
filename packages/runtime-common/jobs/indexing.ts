@@ -49,11 +49,16 @@ export function indexingConcurrencyGroup(realmURL: string): string {
 //
 // The budget is deliberately short. Holding a request open is only a courtesy
 // to the poller — `Retry-After` already tells it to come back — and a hold
-// longer than a caller's own deadline is worse than no hold at all: the
-// caller's loop condition is re-checked only between requests, so one hold
-// that outlives its budget turns a poll loop into a single failed attempt. It
-// therefore stays under the shortest deadline any caller brings, which is the
-// 15s in `boxel realm create`.
+// longer than a caller's deadline is worse than no hold at all. The binding
+// constraint is the per-request kind: the CI readiness probes cap each attempt
+// at `curl --max-time 15`, so a hold past that yields a connection timeout on
+// every attempt instead of a status the loop can read. The budget stays under
+// that with margin.
+//
+// It bounds one request, not a caller's total: a poller re-checks its own
+// deadline only between requests, so an attempt started just under the wire can
+// still overshoot by the length of the hold. Shortening the hold shrinks that
+// overshoot rather than removing it.
 export async function awaitRealmIndexSettled(
   dbAdapter: DBAdapter,
   realmURL: string,

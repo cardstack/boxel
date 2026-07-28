@@ -11,14 +11,27 @@
 // index with it.
 //
 // CONCURRENTLY avoids locking queue writes during the build in production; it
-// cannot run inside a transaction, hence noTransaction().
+// cannot run inside a transaction, hence noTransaction(). node-pg-migrate logs
+// `#> WARNING: Need to break single transaction! <` when applying this
+// migration; that is expected, not a failure.
+//
+// An interrupted CONCURRENTLY build — the gated migration task is bounded and
+// stopped on timeout, so a slow build can be killed mid-flight — leaves an
+// INVALID index under the target name, which the planner ignores. `IF NOT
+// EXISTS` matches on relation name alone and would treat that leftover as
+// done, so the index would carry write overhead forever while serving no read.
+// The CREATE is therefore preceded by an unconditional DROP, making retries
+// self-healing.
 
 exports.shorthands = undefined;
 
 exports.up = (pgm) => {
   pgm.noTransaction();
+  pgm.sql(
+    `DROP INDEX CONCURRENTLY IF EXISTS jobs_unfulfilled_concurrency_group_idx;`,
+  );
   pgm.sql(`
-    CREATE INDEX CONCURRENTLY IF NOT EXISTS jobs_unfulfilled_concurrency_group_idx
+    CREATE INDEX CONCURRENTLY jobs_unfulfilled_concurrency_group_idx
       ON jobs (concurrency_group)
       WHERE status = 'unfulfilled';
   `);
@@ -26,7 +39,7 @@ exports.up = (pgm) => {
 
 exports.down = (pgm) => {
   pgm.noTransaction();
-  pgm.sql(`
-    DROP INDEX CONCURRENTLY IF EXISTS jobs_unfulfilled_concurrency_group_idx;
-  `);
+  pgm.sql(
+    `DROP INDEX CONCURRENTLY IF EXISTS jobs_unfulfilled_concurrency_group_idx;`,
+  );
 };

@@ -88,7 +88,8 @@ health check, where one is wired, targets `/_liveness`.
 
 It has more callers than the publish and create flows it was built for. `boxel realm
 wait-for-ready` and `boxel realm create` poll it, the Playwright harness gates test
-startup on it for every mounted realm, and a dozen `wait-on` / `curl` loops across
+startup on it for the test, skills, and base realms, and a dozen `wait-on` / `curl`
+loops across
 the mise tasks and CI workflows use it as "this realm is usable now". Those last two
 groups matter when reasoning about a change here, because they poll on tight
 intervals with no per-request timeout of their own.
@@ -122,8 +123,9 @@ Two consequences follow from reading shared state, both intended. A deploy enque
 a system reindex for every realm, so readiness across the fleet reports not-ready
 until those passes drain — the realms really are behind their source. And a wedged
 worker holds its realm's lane until the reservation reaper collects it, so that
-realm reports not-ready on every replica for as long as that takes, where it
-previously reported ready on all but one.
+realm reports not-ready on every replica for as long as that takes. Both are the
+answer a caller can act on: the alternative is a 200 from whichever replica happens
+to be ignorant of the work.
 
 ## An event-loop-gated failure is honest
 

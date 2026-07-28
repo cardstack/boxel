@@ -6,6 +6,7 @@ import {
   awaitRealmIndexSettled,
   indexingConcurrencyGroup,
 } from '@cardstack/runtime-common/jobs/indexing';
+import { prerenderHtmlConcurrencyGroup } from '@cardstack/runtime-common/jobs/prerender-html';
 import { setupDB } from './helpers/index.ts';
 
 const realmURL = 'http://localhost:4201/test/';
@@ -96,9 +97,12 @@ module(basename(import.meta.filename), function (hooks) {
         `INSERT INTO jobs (job_type, concurrency_group, timeout, priority, args)
            VALUES ('prerender_html', $1, 3600, 9, $2)`,
         {
+          // Built from the helper, not a literal: this test's whole assertion
+          // is that the two lanes are distinct, so a hardcoded name that drifted
+          // from the real one would keep passing while proving nothing.
           bind: [
-            `prerender-html:${realmURL}`,
-            JSON.stringify({ realmURL: realmURL }),
+            prerenderHtmlConcurrencyGroup(realmURL),
+            JSON.stringify({ realmURL }),
           ],
         },
       );

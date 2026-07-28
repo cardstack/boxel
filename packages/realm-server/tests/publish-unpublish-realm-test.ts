@@ -35,6 +35,7 @@ import {
   matrixURL,
   waitUntil,
 } from './helpers/index.ts';
+import { indexingConcurrencyGroup } from '@cardstack/runtime-common/jobs/indexing';
 import { settlePrerenderHtmlJobs } from './helpers/indexing.ts';
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
 
@@ -1536,7 +1537,7 @@ module(basename(import.meta.filename), function () {
              RETURNING id`,
           {
             bind: [
-              `indexing:${publishedRealmURL}`,
+              indexingConcurrencyGroup(publishedRealmURL),
               JSON.stringify({ realmURL: publishedRealmURL }),
             ],
           },

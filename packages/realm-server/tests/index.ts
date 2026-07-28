@@ -302,6 +302,7 @@ const ALL_TEST_FILES: string[] = [
   './pg-adapter-subscribe-test',
   './module-cache-coordination-test',
   './realm-endpoints/archived-seal-test',
+  './realm-endpoints/readiness-check-test',
   './realm-endpoints/directory-test',
   './realm-endpoints/indexing-errors-test',
   './realm-endpoints/info-test',
