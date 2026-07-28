@@ -1228,18 +1228,14 @@ export class Realm {
     // rows, so #startup skips its from-scratch pass and #startedUp resolves
     // without reflecting the swapped files. Every replica reads the same job
     // rows, so the realm's index lane holding no outstanding work is the same
-    // answer everywhere.
-    //
-    // Postgres only — `jobs` has no SQLite counterpart, and the browser realm
-    // it backs runs one process, where the gates above are already complete.
-    if (this.#dbAdapter.kind === 'pg') {
-      if (!(await awaitRealmIndexSettled(this.#dbAdapter, this.url))) {
-        // The lane never drained within budget — a job queued behind a long
-        // backlog, or one whose worker died and has yet to be reaped. Keep the
-        // caller polling instead of reporting a realm ready whose index is
-        // knowably behind its source.
-        return notReady('index');
-      }
+    // answer everywhere. A realm with no server-side queue has no such lane and
+    // reports settled without a query.
+    if (!(await awaitRealmIndexSettled(this.#dbAdapter, this.url))) {
+      // The lane never drained within budget — a job queued behind a long
+      // backlog, or one whose worker died and has yet to be reaped. Keep the
+      // caller polling instead of reporting a realm ready whose index is
+      // knowably behind its source.
+      return notReady('index');
     }
 
     // Opt-in: also await the published HTML being live for the current

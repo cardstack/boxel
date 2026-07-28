@@ -86,13 +86,12 @@ whether this server is fit to serve traffic. Nothing routes or restarts on it: t
 ALB target group checks `GET /`, the external canary checks `HEAD /`, and a container
 health check, where one is wired, targets `/_liveness`.
 
-It has more callers than the publish and create flows it was built for. `boxel realm
+Its callers reach well past the publish and create flows. `boxel realm
 wait-for-ready` and `boxel realm create` poll it, the Playwright harness gates test
 startup on it for the test, skills, and base realms, and a dozen `wait-on` / `curl`
-loops across
-the mise tasks and CI workflows use it as "this realm is usable now". Those last two
-groups matter when reasoning about a change here, because they poll on tight
-intervals with no per-request timeout of their own.
+loops across the mise tasks and CI workflows use it as "this realm is usable". Those
+last two groups constrain any change here, because they poll on tight intervals with
+no per-request timeout of their own.
 
 Blocking is therefore the correct behavior, not a symptom. The endpoint holds the
 request open while work is outstanding and answers 503 with `Retry-After` plus an
@@ -111,8 +110,8 @@ left to run. So the check gates on the realm's index jobs and — with
 replica reads identically out of Postgres.
 
 What that buys is bounded, and worth stating precisely: the gate proves no index
-work is **outstanding**, not that any of it **succeeded**. A job that was rejected —
-a handler that threw, a job abandoned after its retry budget, an operator cancel via
+work is **outstanding**, not that any of it **succeeded**. A rejected job — a handler
+that threw, a job abandoned after its retry budget, an operator cancel via
 `/_cancel-indexing-job`, an archive — leaves the lane clear and readiness answers
 200 over an index that never landed. That is deliberate, and it matches the render
 gate, which likewise treats a failed render as work that is finished. A realm whose

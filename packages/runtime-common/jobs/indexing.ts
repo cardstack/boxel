@@ -39,8 +39,13 @@ export function indexingConcurrencyGroup(realmURL: string): string {
 // createRealm mounts and indexes before its own 202. There is no window where
 // a caller can observe an empty lane for work it has already been promised.
 //
-// Postgres only: `jobs` is a server-side table, absent from the browser
-// realm's SQLite schema. Callers gate on `dbAdapter.kind`.
+// A realm with no server-side queue has no lane it could be behind, and
+// answers settled without a query: `jobs` is Postgres-only, absent from the
+// browser realm's SQLite schema, and that realm is a single process whose
+// in-process gates already see all of its own indexing. Handling it here rather
+// than at the call site keeps the contract total, so a caller that doesn't
+// know about the asymmetry gets the right answer instead of a missing-table
+// error.
 //
 // Woken by NOTIFY rather than tight-polling: pg-queue emits `NOTIFY
 // jobs_finished` when a job's finalize transaction commits, so re-checking on
@@ -56,14 +61,18 @@ export function indexingConcurrencyGroup(realmURL: string): string {
 // that with margin.
 //
 // It bounds one request, not a caller's total: a poller re-checks its own
-// deadline only between requests, so an attempt started just under the wire can
-// still overshoot by the length of the hold. Shortening the hold shrinks that
-// overshoot rather than removing it.
+// deadline only between requests, so an attempt started just under the wire
+// overshoots by up to the length of the hold. A shorter budget bounds that
+// overshoot; no budget removes it.
 export async function awaitRealmIndexSettled(
   dbAdapter: DBAdapter,
   realmURL: string,
   opts?: { timeoutMs?: number; pollIntervalMs?: number },
 ): Promise<boolean> {
+  if (dbAdapter.kind !== 'pg') {
+    return true;
+  }
+
   let timeoutMs = opts?.timeoutMs ?? 10_000;
   let pollIntervalMs = opts?.pollIntervalMs ?? 1000;
 

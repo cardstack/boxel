@@ -112,6 +112,30 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
+    // `jobs` exists only where there is a server-side queue. An adapter without
+    // one answers settled without touching the table, so a caller that doesn't
+    // know about the asymmetry gets the right answer rather than a
+    // missing-table error. Stand in for such an adapter by flipping `kind` —
+    // the query would still succeed against this database, so a fast-path
+    // regression shows up as the unfulfilled row being noticed.
+    test('an adapter with no job queue answers settled without querying', async function (assert) {
+      await enqueueIndexJob(dbAdapter, realmURL);
+      let queueless = Object.create(dbAdapter, {
+        kind: { value: 'sqlite' },
+      }) as PgAdapter;
+      assert.true(
+        await awaitRealmIndexSettled(queueless, realmURL, { timeoutMs: 200 }),
+        'settled despite an unfulfilled row this adapter would never look for',
+      );
+      assert.false(
+        await awaitRealmIndexSettled(dbAdapter, realmURL, {
+          timeoutMs: 200,
+          pollIntervalMs: 50,
+        }),
+        'the same row does hold the gate for a queue-backed adapter',
+      );
+    });
+
     test('the gate releases when the job leaves the lane', async function (assert) {
       let jobId = await enqueueIndexJob(dbAdapter, realmURL);
 
