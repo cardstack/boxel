@@ -53,12 +53,13 @@ jobs:
         run: pnpm run lint
         working-directory: packages/boxel-ui/addon
       - name: Lint Host
-        # Must run BEFORE Build Boxel UI: once declarations/ exists, Boxel UI
-        # imports resolve to .d.ts files whose relative .gts re-export
-        # specifiers don't resolve, so (under skipLibCheck) every Boxel UI
-        # symbol silently degrades to `any` and the host type check stops
-        # checking Boxel UI component invocations. Linting host first keeps
-        # it type-checking against the Boxel UI source.
+        # Runs BEFORE Build Boxel UI so host type-checks against the Boxel UI
+        # source, exactly as local development does (declarations/ is never
+        # built locally). This also guards against declaration-emit
+        # regressions: an unresolvable import inside a .d.ts is silently
+        # suppressed under skipLibCheck and degrades every Boxel UI symbol to
+        # `any`, turning the host type check into a no-op (see boxel-ui's
+        # bin/fix-declaration-extensions.mjs).
         if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/host

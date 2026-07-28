@@ -14,7 +14,7 @@
   },
   "scripts": {
     "build": "concurrently \"pnpm:build:*\" --names \"build:\"",
-    "build:types": "ember-tsc --declaration --emitDeclarationOnly --noEmit false",
+    "build:types": "ember-tsc --declaration --emitDeclarationOnly --noEmit false && node bin/fix-declaration-extensions.mjs",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
     "lint:hbs": "ember-template-lint .",
