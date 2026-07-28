@@ -6,12 +6,13 @@ import type { Spec } from '@cardstack/base/spec';
 import type { CardDef } from '@cardstack/base/card-api';
 import { RealmPaths, join } from './paths.ts';
 import type { ResolvedCodeRef } from './code-ref.ts';
-import { resolveAdoptedCodeRef } from './code-ref.ts';
-import { realmURL } from './constants.ts';
+import { canonicalModuleKey, resolveAdoptsFrom } from './code-ref.ts';
+import { baseRealmRRI, realmURL } from './constants.ts';
 import { logger } from './log.ts';
 import type { LocalPath } from './paths.ts';
-import { rri } from './realm-identifiers.ts';
+import { ri, rri } from './realm-identifiers.ts';
 import type { RealmResourceIdentifier } from './realm-identifiers.ts';
+import { resolveRRIReference } from './url.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 
 // Local mirror of the boxel-catalog Listing shape — that repo isn't cloned in boxel CI. (CS-11166)
@@ -23,7 +24,45 @@ export interface Listing extends CardDef {
   skills: any[];
 }
 
-const baseRealmPath = new RealmPaths(new URL('https://cardstack.com/base/'));
+// Fold a module reference onto one canonical spelling. Callers do this once,
+// where a ref enters the planner, so every decision below is a plain prefix
+// test rather than a per-check sniff at the three forms a base-realm ref can
+// arrive in (`@cardstack/base/x`, the `cardstack.com` alias, the real backing
+// URL).
+function canonicalRef(
+  codeRef: ResolvedCodeRef,
+  virtualNetwork: VirtualNetwork,
+): ResolvedCodeRef {
+  return {
+    ...codeRef,
+    module: rri(canonicalModuleKey(codeRef.module, virtualNetwork)),
+  };
+}
+
+function isInBaseRealm(module: RealmResourceIdentifier): boolean {
+  return module.startsWith(baseRealmRRI);
+}
+
+// The one place a canonical ref is resolved to a real URL. `sourceCodeRef`
+// feeds the copy step's source read (`ReadSourceCommand`), which parses it with
+// `new URL` and so cannot take a prefix RRI. Nothing else in the plan is
+// materialized — in particular a base-realm `targetCodeRef` stays prefix form,
+// because it is written into the installed card's `meta.adoptsFrom`, where an
+// environment-specific URL would defeat the portability RRI exists to provide.
+// CS-12198 tracks making that consumer RRI-aware, retiring this.
+function fetchableRef(
+  codeRef: ResolvedCodeRef,
+  virtualNetwork: VirtualNetwork,
+): ResolvedCodeRef {
+  try {
+    return {
+      ...codeRef,
+      module: rri(virtualNetwork.toURLHref(codeRef.module)),
+    };
+  } catch {
+    return codeRef;
+  }
+}
 
 // sourceCodeRef -- (installs module) --> targetCodeRef
 // sourceCodeRef: code ref of the code from the source realm
@@ -119,15 +158,28 @@ export class ListingPathResolver {
       throw new Error('Cannot derive realm from listing');
     }
 
-    this.sourceRealmPath = new RealmPaths(sourceRealmURL, virtualNetwork);
+    this.sourceRealmPath = this.canonicalRealmPath(sourceRealmURL);
     this.targetDirectoryPath = new RealmPaths(
       new URL(join(this.targetRealmPath.url, this.targetDirectoryName)),
       virtualNetwork,
     );
   }
 
+  // The realms we measure ids against must be in the same form as the ids
+  // themselves: `RealmPaths.local` slices the id by `realm.url.length`, which
+  // silently yields garbage when one side is a prefix RRI and the other its
+  // real URL. Canonicalizing here keeps that slice honest for mapped realms
+  // (the catalog, which is exactly the source realm in production). Unmapped
+  // realms canonicalize to themselves, so this is a no-op for them.
+  private canonicalRealmPath(realm: URL): RealmPaths {
+    return new RealmPaths(
+      ri(canonicalModuleKey(realm.href, this.virtualNetwork)),
+      this.virtualNetwork,
+    );
+  }
+
   addKnownRealmURL(url: URL): void {
-    let realmPath = new RealmPaths(url, this.virtualNetwork);
+    let realmPath = this.canonicalRealmPath(url);
     if (
       realmPath.url !== this.sourceRealmPath.url &&
       !this.foreignRealmPaths.some((p) => p.url === realmPath.url)
@@ -136,11 +188,13 @@ export class ListingPathResolver {
     }
   }
 
-  local(href: string): LocalPath {
-    let url = new URL(href, this.sourceRealmPath.url);
-    let id = rri(url.href);
+  // Takes a canonical identifier, not an href: `RealmPaths.local`/`inRealm`
+  // work on either form directly, so there is no round-trip through `new URL`
+  // — which would silently mis-join a prefix RRI onto the source realm
+  // (`@cardstack/base/skill` → `<sourceRealm>/@cardstack/base/skill`).
+  local(id: RealmResourceIdentifier): LocalPath {
     if (this.sourceRealmPath.inRealm(id)) {
-      return this.sourceRealmPath.local(url);
+      return this.sourceRealmPath.local(id);
     }
     // Try known foreign realm paths (longest URL first to handle nested realms)
     let sorted = [...this.foreignRealmPaths].sort(
@@ -148,22 +202,33 @@ export class ListingPathResolver {
     );
     for (let foreignPath of sorted) {
       if (foreignPath.inRealm(id)) {
-        return foreignPath.local(url);
+        return foreignPath.local(id);
       }
     }
-    // Fallback: strip only the origin, preserving full path for safety
-    let path = decodeURI(url.pathname).replace(/^\//, '').replace(/\/+$/, '');
-    return path;
+    return this.localFallback(id);
   }
 
-  targetLid(href: string): string {
-    let local = this.local(href);
-    return join(this.targetDirectoryName, local);
+  // No known realm contains this id: strip just the realm-identifying prefix
+  // and keep the rest of the path. That prefix is the origin for a URL, and the
+  // `@scope/name` namespace for a prefix RRI.
+  private localFallback(id: RealmResourceIdentifier): LocalPath {
+    if (id.startsWith('@')) {
+      return id.split('/').slice(2).join('/').replace(/\/+$/, '');
+    }
+    try {
+      let { pathname } = new URL(id);
+      return decodeURI(pathname).replace(/^\//, '').replace(/\/+$/, '');
+    } catch {
+      return id.replace(/^\//, '').replace(/\/+$/, '');
+    }
   }
 
-  target(href: string): string {
-    let local = this.local(href);
-    return join(this.targetDirectoryPath.url, local);
+  targetLid(id: RealmResourceIdentifier): string {
+    return join(this.targetDirectoryName, this.local(id));
+  }
+
+  target(id: RealmResourceIdentifier): RealmResourceIdentifier {
+    return this.targetDirectoryPath.fileRRI(this.local(id));
   }
 }
 
@@ -217,21 +282,18 @@ export class PlanBuilder {
   }
 }
 
+// `codeRef` must already be canonical (see `canonicalRef`).
 function resolveTargetCodeRef(
   codeRef: ResolvedCodeRef,
   resolver: ListingPathResolver,
-  virtualNetwork: VirtualNetwork,
 ): ResolvedCodeRef {
-  if (baseRealmPath.inRealm(codeRef.module)) {
+  if (isInBaseRealm(codeRef.module)) {
     return codeRef;
-  } else {
-    let moduleURL = virtualNetwork.toURL(codeRef.module);
-    let targetModule = resolver.target(moduleURL.href);
-    return {
-      name: codeRef.name,
-      module: targetModule as RealmResourceIdentifier,
-    };
   }
+  return {
+    name: codeRef.name,
+    module: resolver.target(codeRef.module),
+  };
 }
 
 export function planModuleInstall(
@@ -242,24 +304,30 @@ export function planModuleInstall(
   if (specs.length == 0) {
     return new InstallPlan([], []);
   }
-  let codeRefs: ResolvedCodeRef[] = specs.map((s) => {
-    return {
-      module: s.moduleHref as RealmResourceIdentifier,
-      name: s.ref.name,
-    };
-  });
-  let modulesCopy = codeRefs.flatMap((sourceCodeRef: ResolvedCodeRef) => {
-    if (baseRealmPath.inRealm(sourceCodeRef.module)) {
+  // `spec.ref` is the canonical code ref; `spec.moduleHref` is deliberately a
+  // resolved real URL for readers that cannot take an RRI (see its computeVia),
+  // so it is not the right input for install planning.
+  let codeRefs: ResolvedCodeRef[] = specs.flatMap((s) => {
+    if (!s.ref?.module) {
       return [];
     }
-    let targetCodeRef = resolveTargetCodeRef(
-      sourceCodeRef,
-      resolver,
-      virtualNetwork,
-    );
+    return [
+      canonicalRef(
+        {
+          module: rri(resolveRRIReference(s.ref.module, s.id)),
+          name: s.ref.name,
+        },
+        virtualNetwork,
+      ),
+    ];
+  });
+  let modulesCopy = codeRefs.flatMap((sourceCodeRef: ResolvedCodeRef) => {
+    if (isInBaseRealm(sourceCodeRef.module)) {
+      return [];
+    }
     let copyMeta = {
-      sourceCodeRef,
-      targetCodeRef,
+      sourceCodeRef: fetchableRef(sourceCodeRef, virtualNetwork),
+      targetCodeRef: resolveTargetCodeRef(sourceCodeRef, resolver),
     };
     return [copyMeta];
   });
@@ -274,31 +342,37 @@ export function planInstanceInstall(
   let instancesCopy: CopyInstanceMeta[] = [];
   let modulesCopy: CopyMeta[] = [];
   for (let instance of instances) {
-    let sourceCodeRef = resolveAdoptedCodeRef(instance, virtualNetwork);
-    let lid = resolver.local(virtualNetwork.toURL(instance.id).href);
-    if (baseRealmPath.inRealm(rri(instance.id))) {
+    // Omitting the VirtualNetwork resolves in RRI space, so the adopted ref
+    // arrives canonical rather than as a materialized URL.
+    let adopted = resolveAdoptsFrom(instance);
+    if (!adopted) {
+      throw new Error('code ref is not resolved');
+    }
+    let sourceCodeRef = canonicalRef(adopted, virtualNetwork);
+    if (!instance.id) {
+      throw new Error('Cannot install an instance that has not been saved');
+    }
+    let instanceId = rri(canonicalModuleKey(instance.id, virtualNetwork));
+    if (isInBaseRealm(instanceId)) {
       throw new Error('Cannot install instance from base realm');
     }
-    if (!baseRealmPath.inRealm(sourceCodeRef.module)) {
-      let targetCodeRef = resolveTargetCodeRef(
-        sourceCodeRef,
-        resolver,
-        virtualNetwork,
-      );
+    let lid = resolver.targetLid(instanceId);
+    if (!isInBaseRealm(sourceCodeRef.module)) {
+      let targetCodeRef = resolveTargetCodeRef(sourceCodeRef, resolver);
       modulesCopy.push({
-        sourceCodeRef,
+        sourceCodeRef: fetchableRef(sourceCodeRef, virtualNetwork),
         targetCodeRef,
       });
       instancesCopy.push({
         sourceCard: instance,
-        lid: resolver.targetLid(lid),
+        lid,
         targetCodeRef,
       });
     } else {
       instancesCopy.push({
         sourceCard: instance,
         targetCodeRef: sourceCodeRef,
-        lid: resolver.targetLid(lid),
+        lid,
       });
     }
   }
