@@ -33,11 +33,18 @@
  * Flags:
  *   --dry-run              Report what would change; write nothing. Default is
  *                          to apply, so a first pass should always be a dry run.
- *   --persistent <root>    Scan the realm trees the deployed server mounts: the
- *                          public realms directly under <root> (see
- *                          PUBLIC_REALM_DIRS) plus every <root>/realms/<user>/<realm>.
  *   --realms-root <dir>    Scan every <dir>/<user>/<realm> as a realm root.
- *                          Repeatable; this is the user-realms half of --persistent.
+ *                          Repeatable. This is the flag to reach for: user
+ *                          realms are the ones that only exist on a realm
+ *                          server's disk, so this migration is their only path.
+ *   --persistent <root>    Also scan the public realms directly under <root>
+ *                          (see PUBLIC_REALM_DIRS) alongside <root>/realms.
+ *                          Those realms are deploy-managed — their contents
+ *                          come from this repo — so migrating them on disk
+ *                          duplicates what a deploy already carries, and for a
+ *                          realm the repo has deliberately left on CardsGrid it
+ *                          contradicts that decision. Prefer --realms-root
+ *                          unless a realm server has drifted from its deploy.
  *   --published            Also scan the published snapshots under
  *                          <realms-root>/_published/<disk-id>. Off by default:
  *                          a snapshot is regenerated from its source realm on
@@ -53,11 +60,11 @@
  *   --rollback <file>      Restore every file recorded in a manifest and exit.
  *
  * Examples:
- *   # Preview every realm the deployed server mounts
- *   node scripts/migrate-index-to-workspace.ts --dry-run --persistent /persistent
+ *   # Preview every user realm
+ *   node scripts/migrate-index-to-workspace.ts --dry-run --realms-root /persistent/realms
  *
  *   # Apply, also migrating two realms whose index is a hand-rolled workspace
- *   node scripts/migrate-index-to-workspace.ts --persistent /persistent \
+ *   node scripts/migrate-index-to-workspace.ts --realms-root /persistent/realms \
  *     --include ctse/demo --include buck/mar10
  *
  *   # Undo
