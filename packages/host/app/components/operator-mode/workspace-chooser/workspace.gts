@@ -217,6 +217,7 @@ export default class Workspace extends Component<Signature> {
           @isCloseDisabled={{this.deleteWorkspaceTask.isRunning}}
           @cardContainerClass='workspace-chooser-delete-modal'
           class='workspace-chooser-delete-modal-container'
+          aria-label='Delete Workspace'
           data-test-delete-modal={{@realmIdentifier}}
         >
           <:content>
@@ -294,6 +295,7 @@ export default class Workspace extends Component<Signature> {
                 @kind='destructive'
                 @size='tall'
                 @loading={{this.deleteWorkspaceTask.isRunning}}
+                @disabled={{this.deleteWorkspaceTask.isRunning}}
                 {{on 'click' (perform this.deleteWorkspaceTask)}}
                 data-test-confirm-delete-button
               >
@@ -851,7 +853,7 @@ export default class Workspace extends Component<Signature> {
       }
       .delete-modal__realm-icon {
         flex-shrink: 0;
-        --boxel-realm-icon-size: 30px;
+        --boxel-realm-icon-size: 1.875rem;
       }
       .delete-modal__workspace-info {
         display: flex;
@@ -859,11 +861,14 @@ export default class Workspace extends Component<Signature> {
         gap: var(--boxel-sp-4xs);
       }
       .delete-modal__workspace-name {
-        font: 600 var(--boxel-font-sm);
+        font-size: var(--boxel-font-size-sm);
+        line-height: var(--boxel-line-height-sm);
+        font-weight: 600;
         color: var(--boxel-dark);
       }
       .delete-modal__workspace-meta {
-        font: var(--boxel-font-xs);
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
         color: var(--boxel-450);
       }
       .delete-modal__warning {
@@ -872,7 +877,8 @@ export default class Workspace extends Component<Signature> {
         gap: var(--boxel-sp-xs);
         padding: var(--boxel-sp-sm);
         border-radius: var(--boxel-border-radius-lg);
-        font: var(--boxel-font-sm);
+        font-size: var(--boxel-font-size-sm);
+        line-height: var(--boxel-line-height-sm);
       }
       .delete-modal__warning.warning {
         flex-direction: row;
@@ -903,7 +909,9 @@ export default class Workspace extends Component<Signature> {
       }
       .delete-modal__realms-title {
         margin: 0;
-        font: 600 var(--boxel-font-sm);
+        font-size: var(--boxel-font-size-sm);
+        line-height: var(--boxel-line-height-sm);
+        font-weight: 600;
         color: var(--boxel-dark);
       }
       .delete-modal__realms-list {
@@ -914,7 +922,8 @@ export default class Workspace extends Component<Signature> {
         gap: var(--boxel-sp-xs);
       }
       .delete-modal__realms-list li {
-        font: var(--boxel-font-sm);
+        font-size: var(--boxel-font-size-sm);
+        line-height: var(--boxel-line-height-sm);
         color: var(--boxel-dark);
         list-style: disc;
       }
