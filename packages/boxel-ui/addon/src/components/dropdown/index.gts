@@ -51,9 +51,10 @@ interface Signature {
         Args: {
           Positional: unknown[];
         };
-        // note: should only be used with Button, but HTMLAnchorElement is included so that the
-        // trigger bindings can be applied to BoxelButton without glint error
-        Element: HTMLButtonElement | HTMLAnchorElement;
+        // note: the trigger should be an interactive element (Button or a
+        // component like Pill that renders one), but that isn't expressible
+        // here, so any element is accepted
+        Element: HTMLElement;
       }>,
     ];
   };
