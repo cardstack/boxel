@@ -1,4 +1,5 @@
 import { Deferred } from './deferred.ts';
+import { awaitRealmIndexSettled } from './jobs/indexing.ts';
 import { awaitPublishedHtmlReady } from './jobs/prerender-html.ts';
 import type { RealmVisibility } from './realm-visibility.ts';
 import type { SearchOpts } from './search-utils.ts';
@@ -1183,6 +1184,19 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ) {
+    // Report not-ready as a 503 with a retry hint rather than a false 200: a
+    // poller keeps waiting, and a single-shot caller sees the failure instead
+    // of treating the work it is waiting on as complete.
+    let notReady = () =>
+      createResponse({
+        body: null,
+        init: {
+          headers: { 'content-type': 'text/html', 'Retry-After': '1' },
+          status: 503,
+        },
+        requestContext,
+      });
+
     await this.#startedUp.promise;
     // #startedUp is a one-time gate that resolves after the first start()'s
     // from-scratch index. On a republish the realm is already mounted with a
@@ -1193,6 +1207,29 @@ export class Realm {
     let inflight = this.indexing();
     if (inflight) {
       await inflight;
+    }
+
+    // Both gates above read per-process state: they see only the indexing this
+    // instance itself started. Behind a load balancer fronting several
+    // realm-server replicas, a poll can land on a replica that did not handle
+    // the publish or create — it finds the realm mounted with nothing in
+    // flight and answers ready while the other replica's index is still
+    // running. A republish is the sharp case: the realm already has index
+    // rows, so #startup skips its from-scratch pass and #startedUp resolves
+    // without reflecting the swapped files. Every replica reads the same job
+    // rows, so the realm's index lane holding no outstanding work is the same
+    // answer everywhere.
+    //
+    // Postgres only — `jobs` has no SQLite counterpart, and the browser realm
+    // it backs runs one process, where the gates above are already complete.
+    if (this.#dbAdapter.kind === 'pg') {
+      if (!(await awaitRealmIndexSettled(this.#dbAdapter, this.url))) {
+        // The lane never drained within budget — a job queued behind a long
+        // backlog, or one whose worker died and has yet to be reaped. Keep the
+        // caller polling instead of reporting a realm ready whose index is
+        // knowably behind its source.
+        return notReady();
+      }
     }
 
     // Opt-in: also await the published HTML being live for the current
@@ -1208,18 +1245,8 @@ export class Realm {
       let htmlReady = await awaitPublishedHtmlReady(this.#dbAdapter, this.url);
       if (!htmlReady) {
         // The current generation's HTML never became live within budget (a
-        // stuck/failed render, or a queue backlog longer than the wait). Report
-        // not-ready rather than a false 200 so a poller keeps waiting and a
-        // single-shot caller sees the failure instead of treating the publish
-        // as complete on an unrendered realm.
-        return createResponse({
-          body: null,
-          init: {
-            headers: { 'content-type': 'text/html', 'Retry-After': '1' },
-            status: 503,
-          },
-          requestContext,
-        });
+        // stuck/failed render, or a queue backlog longer than the wait).
+        return notReady();
       }
     }
 

@@ -78,6 +78,27 @@ Silent on an idle, healthy server — so its presence in the logs is itself the
 signal. Lag climbing in step with `inFlightSearch` is the fingerprint of the loop
 being starved by concurrent search serialization.
 
+## `_readiness-check` is not one of them
+
+`GET /<realm>/_readiness-check` shares the word "readiness" but answers a different
+question: whether **one realm's content** is indexed and, on request, rendered —
+not whether this server is fit to serve traffic. Nothing routes or restarts on it.
+Its callers are the publish and create flows, which get a 202 back before the
+indexing they kicked off has finished, and poll this endpoint to learn when it has.
+
+Blocking is therefore the correct behavior, not a symptom. The endpoint holds the
+request open until the realm's index has settled, and answers 503 with a
+`Retry-After` — never a premature 200 — when it hasn't settled within budget. Every
+caller retries on its own timeout, so a 503 costs a poll rather than an error.
+
+The gating has to read shared state, because in a multi-replica deployment the poll
+need not reach the replica that did the work. In-process indexing state is
+per-replica, and on its own it lets any other replica find the realm mounted with
+nothing in flight and report ready in milliseconds against an index with minutes
+left to run. So the check gates on the realm's index jobs and — with
+`awaitPrerenderHtml=true` — on its rendered HTML generation, both of which every
+replica reads identically out of Postgres.
+
 ## An event-loop-gated failure is honest
 
 When the loop is saturated and the load balancer's check times out, the check is

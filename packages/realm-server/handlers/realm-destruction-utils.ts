@@ -6,6 +6,7 @@ import {
   param,
   separatedByCommas,
 } from '@cardstack/runtime-common';
+import { indexingConcurrencyGroup } from '@cardstack/runtime-common/jobs/indexing';
 import { prerenderHtmlConcurrencyGroup } from '@cardstack/runtime-common/jobs/prerender-html';
 import fsExtra from 'fs-extra';
 const { pathExistsSync, readdirSync, removeSync } = fsExtra;
@@ -80,7 +81,7 @@ export async function removeRealmDatabaseArtifacts(args: {
   // prerendered_html rows, silently pinning them against the monotonic swap
   // guard until the new realm's generation catches up.
   for (let concurrencyGroup of [
-    `indexing:${realmURL}`,
+    indexingConcurrencyGroup(realmURL),
     prerenderHtmlConcurrencyGroup(realmURL),
   ]) {
     await cancelRunningJobsInConcurrencyGroup(dbAdapter, concurrencyGroup, q);
