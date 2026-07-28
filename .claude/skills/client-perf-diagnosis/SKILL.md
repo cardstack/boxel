@@ -208,7 +208,7 @@ A `rebuild` event fires when a `.gts`/code invalidation forces a loader/store re
 
 A rebuild spans two moments. The loader is flushed the instant a module is rewritten — by a save from the app, or by the code-mode file resource reacting to someone else's write — and the realm's index event for that same write lands later, after indexing. The flush installs a replacement loader that reports every module as not-loaded, so the store cannot decide from the live loader alone whether an invalidated module mattered to this tab; it also consults the snapshot of what the discarded loader held. That snapshot is why a code change made from inside the app is attributed at all, and why the attribution covers modules other than the one that was written.
 
-Reading the row against `realm-event` is still the useful cross-check, in both directions. Rebuilds without a matching incoming event are self-inflicted (this tab saved the module); rebuilds far outnumbered by incremental `realm-event`s carrying executable `invalidated_ids` means code changes are landing that this tab is not absorbing.
+Every rebuild is driven by an incoming index event, so each one has a `realm-event` beside it in the same session and window — read that event's `own_write` to tell a save made in this tab from someone else's write. The cross-check that carries information is the other direction: incremental `realm-event`s carrying executable `invalidated_ids` that no rebuild follows means code changes are landing that this tab is not absorbing.
 
 ```logql
 sum by (trigger_module) (count_over_time({service="realm-server", env="$env"} |= "boxel:client-perf" | json

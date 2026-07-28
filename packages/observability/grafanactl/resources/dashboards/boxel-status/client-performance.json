@@ -102,11 +102,13 @@
             "editorMode": "code",
             "expr": "count(count by (session_id) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [5m]))) or vector(0)",
             "queryType": "range",
-            "refId": "A"
+            "refId": "A",
+            "interval": "1m"
           }
         ],
         "title": "Active sessions (5m)",
-        "type": "stat"
+        "type": "stat",
+        "interval": "1m"
       },
       {
         "datasource": {

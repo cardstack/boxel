@@ -410,15 +410,6 @@ export default class StoreService extends Service implements StoreInterface {
     this.store = this.createCardStore();
   }
 
-  // Whether an index event for this url's realm would reach the store. A realm
-  // is only subscribed once something takes a reference on one of its
-  // instances, so a code-mode view of a module in a realm with nothing loaded
-  // from it is not covered by the event-driven rebuild.
-  isSubscribedToRealmOf(url: RealmResourceIdentifier | URL): boolean {
-    let realmURL = this.realm.realmOf(url);
-    return realmURL ? this.subscriptions.has(realmURL) : false;
-  }
-
   refreshReferencesForCodeChange(reason?: string) {
     let reasonSuffix = reason ? ` (${reason})` : '';
     storeLogger.debug(`resetting store for code change${reasonSuffix}`);
@@ -2199,24 +2190,32 @@ export default class StoreService extends Service implements StoreInterface {
       telemetry?.isEnabled && pending ? performance.now() : undefined;
 
     this.loaderService.resetLoader();
-    this.store.reset();
-    let cardsReloaded = await this.reestablishReferences.perform();
-    // The graph is re-established against the current loader, so the snapshot
-    // of what an earlier flush discarded has nothing left to answer for.
+    // Drop the snapshot before re-establishing, not after. The records that
+    // armed this rebuild were consumed when it was decided on, so what's left
+    // is leftovers this rebuild supersedes — while a flush that lands *during*
+    // the re-fetch describes a code change this rebuild is too late to pick up,
+    // and its records have to survive for the invalidation still to come.
     this.loaderService.clearModulesFlushedForCodeChange();
-
-    if (telemetry?.isEnabled && pending && rebuildStart !== undefined) {
-      let triggerModules = [...pending.triggerModules].slice(0, 20);
-      telemetry.recordEvent({
-        event_type: 'rebuild',
-        realm: pending.realm,
-        duration_ms: Math.round(performance.now() - rebuildStart),
-        trigger_modules: triggerModules,
-        trigger_module: triggerModules[0] ?? '',
-        modules_refetched: pending.modulesRefetched.size,
-        cards_reloaded: cardsReloaded ?? 0,
-        coalesced_events: pending.events,
-      });
+    this.store.reset();
+    let cardsReloaded: number | undefined;
+    try {
+      cardsReloaded = await this.reestablishReferences.perform();
+    } finally {
+      // A rebuild that failed partway is still a rebuild the tab paid for, and
+      // the one most worth seeing on the dashboard.
+      if (telemetry?.isEnabled && pending && rebuildStart !== undefined) {
+        let triggerModules = [...pending.triggerModules].slice(0, 20);
+        telemetry.recordEvent({
+          event_type: 'rebuild',
+          realm: pending.realm,
+          duration_ms: Math.round(performance.now() - rebuildStart),
+          trigger_modules: triggerModules,
+          trigger_module: triggerModules[0] ?? '',
+          modules_refetched: pending.modulesRefetched.size,
+          cards_reloaded: cardsReloaded ?? 0,
+          coalesced_events: pending.events,
+        });
+      }
     }
   });
 

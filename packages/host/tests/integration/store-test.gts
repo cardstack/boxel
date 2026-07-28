@@ -3609,6 +3609,96 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  test('a flush during a rebuild is still picked up by the invalidation after it', async function (assert) {
+    let hassan = `${testRealmURL}Person/hassan`;
+    await renderCard(hassan);
+
+    let personModule = `${testRealmURL}person.gts`;
+    let employeeModule = `${testRealmURL}employee.gts`;
+
+    let telemetry = captureTelemetry();
+    try {
+      (storeService as any).handleInvalidations({
+        eventName: 'index',
+        indexType: 'incremental',
+        realmURL: testRealmURL,
+        invalidations: [personModule],
+      } as RealmEventContent);
+      await waitUntil(
+        () => (storeService as any).rebuildForCodeChange.isRunning,
+        { timeout: 5_000 },
+      );
+
+      // Load the module inside the rebuild's window: the rebuild flushed the
+      // loader on the way in, so anything imported before it is gone by now,
+      // exactly as a re-established graph re-imports as it re-fetches.
+      await loaderService.loader.import(employeeModule);
+
+      // A write landing while a rebuild is in flight describes a code change
+      // that rebuild is already too late to pick up, so its record has to
+      // outlive the rebuild and be there for the invalidation still to come.
+      loaderService.resetLoader({
+        clearFetchCache: true,
+        reason: 'file-resource-external-invalidation',
+        codeChange: true,
+      });
+      await telemetry.waitForEvent('rebuild');
+      await settled();
+      let afterFirst = telemetry.events('rebuild').length;
+
+      (storeService as any).handleInvalidations({
+        eventName: 'index',
+        indexType: 'incremental',
+        realmURL: testRealmURL,
+        invalidations: [employeeModule],
+      } as RealmEventContent);
+      await waitUntil(() => telemetry.events('rebuild').length > afterFirst, {
+        timeout: 10_000,
+      }).catch(() => {});
+      await settled();
+
+      assert.true(
+        telemetry.events('rebuild').length > afterFirst,
+        `the invalidation after the rebuild still rebuilds (captured: ${telemetry.summary()})`,
+      );
+    } finally {
+      telemetry.restore();
+    }
+  });
+
+  test('an invalidation for a module nothing loaded does not rebuild', async function (assert) {
+    let hassan = `${testRealmURL}Person/hassan`;
+    await renderCard(hassan);
+
+    let telemetry = captureTelemetry();
+    try {
+      // The snapshot must not turn every executable invalidation into a
+      // rebuild — a module this tab never imported still has nothing to
+      // re-establish, flush or no flush.
+      loaderService.resetLoader({
+        clearFetchCache: true,
+        reason: 'source-write',
+        codeChange: true,
+      });
+
+      (storeService as any).handleInvalidations({
+        eventName: 'index',
+        indexType: 'incremental',
+        realmURL: testRealmURL,
+        invalidations: [`${testRealmURL}never-loaded.gts`],
+      } as RealmEventContent);
+      await settled();
+    } finally {
+      telemetry.restore();
+    }
+
+    assert.strictEqual(
+      telemetry.events('rebuild').length,
+      0,
+      `a module nothing loaded does not rebuild (captured: ${telemetry.summary()})`,
+    );
+  });
+
   test('a flush record does not survive a session boundary', async function (assert) {
     let personModule = `${testRealmURL}person.gts`;
     loaderService.resetLoader({

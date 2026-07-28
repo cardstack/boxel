@@ -349,7 +349,7 @@
               "uid": "loki"
             },
             "editorMode": "code",
-            "expr": "count(count by (matrix_user_id) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" [5m]))) or vector(0)",
+            "expr": "count(count by (matrix_user_id) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | matrix_user_id!=\"\" [5m]))) or vector(0)",
             "queryType": "range",
             "legendFormat": "Concurrent Users",
             "refId": "A"
@@ -466,7 +466,7 @@
               "uid": "loki"
             },
             "editorMode": "code",
-            "expr": "count by (matrix_user_id) (count by (matrix_user_id, session_id) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" [5m])))",
+            "expr": "count by (matrix_user_id) (count by (matrix_user_id, session_id) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | matrix_user_id!=\"\" [5m])))",
             "queryType": "instant",
             "legendFormat": "{{matrix_user_id}}",
             "refId": "A"
