@@ -98,6 +98,10 @@ export interface WedgeEvent extends BaseEvent {
 
 export interface RebuildEvent extends BaseEvent {
   event_type: 'rebuild';
+  // What drove the rebuild: an incoming realm index event, or this tab's own
+  // write re-establishing the graph at save time. A save of a loaded module in
+  // a realm the store is subscribed to pays both — one rebuild per source.
+  source: 'realm-event' | 'write';
   duration_ms: number;
   trigger_modules: string[];
   // Scalar grouping key (the first trigger module) — the dashboard groups
@@ -108,7 +112,7 @@ export interface RebuildEvent extends BaseEvent {
   // How many incremental events collapsed into this single rebuild. 1 for an
   // isolated change; >1 when a write burst arrived faster than a rebuild
   // completes and the events coalesced into one in-flight plus one pending
-  // rebuild.
+  // rebuild. Always 0 for a write-sourced rebuild, which no event drove.
   coalesced_events: number;
 }
 
@@ -118,9 +122,19 @@ export interface RealmEvent extends BaseEvent {
   index_type: 'incremental' | 'full';
   invalidations_count: number;
   invalidated_ids: string[];
+  // Scalar grouping key — the first entry of invalidated_ids, since `| json`
+  // does not extract array elements. The realm lists the written file's own
+  // invalidation alongside its dependents, so grouping by this ranks the
+  // files whose writes generate the churn; the full fan-out stays in
+  // invalidated_ids on the raw line.
+  first_invalidated_id: string;
   reloads_triggered: number;
   own_write: boolean;
   processing_ms: number;
+  // The raw realm event as received, minus its invalidation list (already
+  // tracked as invalidated_ids). Not surfaced on the dashboard; carried so a
+  // raw-line read has the full payload the tab acted on.
+  event_args: Record<string, unknown>;
 }
 
 export interface KeepaliveEvent extends BaseEvent {

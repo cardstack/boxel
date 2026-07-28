@@ -410,11 +410,41 @@ export default class StoreService extends Service implements StoreInterface {
     this.store = this.createCardStore();
   }
 
-  refreshReferencesForCodeChange(reason?: string) {
+  refreshReferencesForCodeChange(
+    reason?: string,
+    opts?: { triggerModule?: string; realm?: string },
+  ) {
     let reasonSuffix = reason ? ` (${reason})` : '';
     storeLogger.debug(`resetting store for code change${reasonSuffix}`);
+    let telemetry = this.#clientTelemetry();
+    let start = telemetry?.isEnabled ? performance.now() : undefined;
     this.store.reset();
-    this.reestablishReferences.perform();
+    let refetch = this.reestablishReferences.perform();
+    if (telemetry?.isEnabled && start !== undefined) {
+      let triggerModules = opts?.triggerModule ? [opts.triggerModule] : [];
+      // A code-mode save re-establishes the graph without waiting for the
+      // realm's index event, so this pass is otherwise invisible on the
+      // dashboard — a session editing a module in a realm the store holds no
+      // instances from does all of its rebuilding here.
+      refetch
+        .then((cardsReloaded) => {
+          telemetry.recordEvent({
+            event_type: 'rebuild',
+            source: 'write',
+            realm: opts?.realm ?? null,
+            duration_ms: Math.round(performance.now() - start),
+            trigger_modules: triggerModules,
+            trigger_module: triggerModules[0] ?? '',
+            modules_refetched: triggerModules.length,
+            cards_reloaded: cardsReloaded ?? 0,
+            coalesced_events: 0,
+          });
+        })
+        .catch(() => {
+          // The task can be cancelled by a reset racing it; a cancelled
+          // re-establishment is not a rebuild worth reporting.
+        });
+    }
   }
 
   // Notify-on-delete for callers that hold a card by direct JS reference rather
@@ -1866,6 +1896,15 @@ export default class StoreService extends Service implements StoreInterface {
 
     let telemetry = this.#clientTelemetry();
     let processingStart = telemetry?.isEnabled ? performance.now() : undefined;
+    // The raw event, minus its invalidation list — that list is tracked
+    // separately (bounded) as invalidated_ids, and can be large.
+    let eventArgs = () => {
+      let { invalidations: _invalidations, ...rest } = event as unknown as {
+        invalidations?: unknown;
+        [key: string]: unknown;
+      };
+      return rest;
+    };
 
     if (event.indexType === 'full') {
       // A full reindex carries no per-file invalidation list; report it as a
@@ -1876,9 +1915,11 @@ export default class StoreService extends Service implements StoreInterface {
         index_type: 'full',
         invalidations_count: 0,
         invalidated_ids: [],
+        first_invalidated_id: '',
         reloads_triggered: 0,
         own_write: false,
         processing_ms: 0,
+        event_args: eventArgs(),
       });
       return;
     }
@@ -1946,12 +1987,14 @@ export default class StoreService extends Service implements StoreInterface {
         index_type: 'incremental',
         invalidations_count: invalidations.length,
         invalidated_ids: invalidations.slice(0, 50),
+        first_invalidated_id: invalidations[0] ?? '',
         reloads_triggered: reloadsTriggered,
         own_write: ownWrite,
         processing_ms:
           processingStart !== undefined
             ? Math.round(performance.now() - processingStart)
             : 0,
+        event_args: eventArgs(),
       });
     }
   };
@@ -2206,6 +2249,7 @@ export default class StoreService extends Service implements StoreInterface {
         let triggerModules = [...pending.triggerModules].slice(0, 20);
         telemetry.recordEvent({
           event_type: 'rebuild',
+          source: 'realm-event',
           realm: pending.realm,
           duration_ms: Math.round(performance.now() - rebuildStart),
           trigger_modules: triggerModules,
