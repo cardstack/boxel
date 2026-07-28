@@ -33,6 +33,12 @@ export function indexingConcurrencyGroup(realmURL: string): string {
 // enqueued so far is durable. Resolves true when the lane is clear, false on
 // timeout.
 //
+// The lane is a point-in-time read, and it is safe to take one because the
+// flows that poll for readiness enqueue durably before they respond: publish
+// commits its reindex job inside the write lock it returns 202 from, and
+// createRealm mounts and indexes before its own 202. There is no window where
+// a caller can observe an empty lane for work it has already been promised.
+//
 // Postgres only: `jobs` is a server-side table, absent from the browser
 // realm's SQLite schema. Callers gate on `dbAdapter.kind`.
 //
@@ -40,12 +46,20 @@ export function indexingConcurrencyGroup(realmURL: string): string {
 // jobs_finished` when a job's finalize transaction commits, so re-checking on
 // that signal catches the lane draining near-instantly. The periodic poll is a
 // safety net for a missed notification, so it stays coarse.
+//
+// The budget is deliberately short. Holding a request open is only a courtesy
+// to the poller — `Retry-After` already tells it to come back — and a hold
+// longer than a caller's own deadline is worse than no hold at all: the
+// caller's loop condition is re-checked only between requests, so one hold
+// that outlives its budget turns a poll loop into a single failed attempt. It
+// therefore stays under the shortest deadline any caller brings, which is the
+// 15s in `boxel realm create`.
 export async function awaitRealmIndexSettled(
   dbAdapter: DBAdapter,
   realmURL: string,
   opts?: { timeoutMs?: number; pollIntervalMs?: number },
 ): Promise<boolean> {
-  let timeoutMs = opts?.timeoutMs ?? 60_000;
+  let timeoutMs = opts?.timeoutMs ?? 10_000;
   let pollIntervalMs = opts?.pollIntervalMs ?? 1000;
 
   let hasSettled = async () => {

@@ -1,5 +1,8 @@
 import { Deferred } from './deferred.ts';
-import { awaitRealmIndexSettled } from './jobs/indexing.ts';
+import {
+  awaitRealmIndexSettled,
+  indexingConcurrencyGroup,
+} from './jobs/indexing.ts';
 import { awaitPublishedHtmlReady } from './jobs/prerender-html.ts';
 import type { RealmVisibility } from './realm-visibility.ts';
 import type { SearchOpts } from './search-utils.ts';
@@ -1186,12 +1189,19 @@ export class Realm {
   ) {
     // Report not-ready as a 503 with a retry hint rather than a false 200: a
     // poller keeps waiting, and a single-shot caller sees the failure instead
-    // of treating the work it is waiting on as complete.
-    let notReady = () =>
+    // of treating the work it is waiting on as complete. `X-Boxel-Not-Ready`
+    // names which stage is outstanding — the two have different causes and
+    // different remedies, and the poll loops that consume this discard the
+    // body, so the header is the only place an operator can read it from.
+    let notReady = (stage: 'index' | 'prerender-html') =>
       createResponse({
         body: null,
         init: {
-          headers: { 'content-type': 'text/html', 'Retry-After': '1' },
+          headers: {
+            'content-type': 'text/html',
+            'Retry-After': '1',
+            'X-Boxel-Not-Ready': stage,
+          },
           status: 503,
         },
         requestContext,
@@ -1228,7 +1238,7 @@ export class Realm {
         // backlog, or one whose worker died and has yet to be reaped. Keep the
         // caller polling instead of reporting a realm ready whose index is
         // knowably behind its source.
-        return notReady();
+        return notReady('index');
       }
     }
 
@@ -1246,7 +1256,7 @@ export class Realm {
       if (!htmlReady) {
         // The current generation's HTML never became live within budget (a
         // stuck/failed render, or a queue backlog longer than the wait).
-        return notReady();
+        return notReady('prerender-html');
       }
     }
 
@@ -1367,12 +1377,12 @@ export class Realm {
     if (cancelPending) {
       await cancelAllJobsInConcurrencyGroup(
         this.#dbAdapter,
-        `indexing:${this.url}`,
+        indexingConcurrencyGroup(this.url),
       );
     } else {
       await cancelRunningJobsInConcurrencyGroup(
         this.#dbAdapter,
-        `indexing:${this.url}`,
+        indexingConcurrencyGroup(this.url),
       );
     }
 

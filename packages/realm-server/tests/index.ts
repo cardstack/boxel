@@ -231,6 +231,7 @@ const ALL_TEST_FILES: string[] = [
   './atomic-batch-indexing-test',
   './atomic-endpoints-test',
   './auth-client-test',
+  './await-realm-index-settled-test',
   './billing-test',
   './card-dependencies-endpoint-test',
   './card-endpoints-test',
