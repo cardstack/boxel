@@ -428,6 +428,43 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
     );
   });
 
+  test('it pins to the bottom when a viewport shrink makes a short conversation scrollable', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    simulateRemoteMessage(roomId, '@testuser:localhost', {
+      body: 'question #1',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+    });
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'answer #1',
+      msgtype: 'm.text',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+    });
+    await waitFor('[data-test-message-idx="1"]');
+
+    let conversationElement = document.querySelector(
+      '[data-test-ai-assistant-conversation]',
+    )!;
+    // A conversation whose messages all fit reports `scrollHeight` clamped to
+    // the padding box, so its distance from the bottom reads as zero rather
+    // than as the unused height — which is what makes the re-pin treat a fully
+    // visible conversation as pinned.
+    assert.strictEqual(
+      conversationElement.scrollHeight,
+      conversationElement.clientHeight,
+      'the conversation fits its viewport before the shrink',
+    );
+
+    shrinkConversationViewport(conversationElement.clientHeight - 80);
+
+    await assertScrolledToBottom(
+      assert,
+      'AI assistant pins to the bottom when a viewport shrink makes the conversation scrollable',
+    );
+  });
+
   test('it holds its scroll position when the conversation viewport shrinks away from the bottom', async function (assert) {
     let roomId = await renderAiAssistantPanel();
     fillRoomWithReadMessages(roomId);

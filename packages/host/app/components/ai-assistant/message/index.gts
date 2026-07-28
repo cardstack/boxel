@@ -208,9 +208,9 @@ class ScrollPosition extends Modifier<ScrollPositionSignature> {
   // quietly ends up short of it: `scrollHeight` and `scrollTop` are unchanged
   // while the distance to the bottom grows by whatever height the viewport
   // lost. Nothing else re-scrolls for this, since a viewport resize is neither
-  // a scroller registration nor a message-subtree mutation. So re-pin here,
-  // deciding against the pre-resize height — a conversation the reader had
-  // parked away from the bottom stays where they left it.
+  // a scroller registration nor a message-subtree mutation. So re-pin against
+  // the pre-resize height — a conversation the reader had parked away from the
+  // bottom stays where they left it.
   private clientHeightBeforeResize?: number;
   private handleResize = () => {
     let element = this.element;
@@ -225,10 +225,17 @@ class ScrollPosition extends Modifier<ScrollPositionSignature> {
     ) {
       return;
     }
+    // Signed, unlike the scrolled-to-bottom checks elsewhere, which compare a
+    // single layout where a negative means over-scrolled. This measures a fresh
+    // `scrollHeight` against the pre-resize height, and `scrollHeight` reports
+    // `max(content height, padding box)`: a conversation whose messages all fit
+    // reports the viewport height, and shrinking the viewport releases that
+    // clamp so `scrollHeight` drops alongside `clientHeight`. A negative
+    // therefore means the content fit the old viewport with room to spare —
+    // nothing was below the fold, so the conversation counts as pinned.
     let wasAtBottom =
-      Math.abs(
-        element.scrollHeight - previousClientHeight - element.scrollTop,
-      ) <= BOTTOM_THRESHOLD;
+      element.scrollHeight - previousClientHeight - element.scrollTop <=
+      BOTTOM_THRESHOLD;
     if (wasAtBottom) {
       element.scrollTop = element.scrollHeight - element.clientHeight;
     }
