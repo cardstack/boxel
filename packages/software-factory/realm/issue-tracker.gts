@@ -3160,7 +3160,6 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
                       <ContextButton
                         @icon={{ListFilter}}
                         @label='Group by'
-                        @variant='secondary'
                         {{bindings}}
                       />
                     </:trigger>
