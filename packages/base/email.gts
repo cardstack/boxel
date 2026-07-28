@@ -15,10 +15,10 @@ import MailIcon from '@cardstack/boxel-icons/mail';
 
 class Edit extends Component<typeof EmailField> {
   @action private handleChange(
-    value: string,
-    validation: EmailFormatValidationError,
+    value: string | null,
+    validation: EmailFormatValidationError | null,
   ) {
-    if (validation === null && this.args.model !== value) {
+    if (validation === null && value !== null && this.args.model !== value) {
       this.args.set(value);
     }
   }
