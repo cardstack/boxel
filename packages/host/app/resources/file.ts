@@ -451,11 +451,14 @@ class _FileResource extends Resource<Args> {
       );
       // A rendered card only picks up new code when the store re-establishes
       // it: a card resource reads the store, not the loader, so flushing the
-      // loader alone leaves the open preview on the superseded class. Keep this
-      // refresh unconditional. The realm's index event drives a second, later
-      // pass for realms the store is subscribed to, but waiting for it would
-      // hold the preview stale until indexing completes — and for a realm
-      // nothing is loaded from, no event arrives at all.
+      // loader alone leaves an open preview on the superseded class. The
+      // realm's index event drives a second, later pass, but waiting for it
+      // would hold the preview stale until indexing completes — and gating
+      // this pass on the store's realm subscription would withhold it exactly
+      // when a preview is on screen, since an open playground is itself what
+      // subscribes the realm. The moduleWasLoaded gate is the one that
+      // belongs here: a write to a module nothing imported has no rendered
+      // consumers to refresh.
       if (moduleWasLoaded) {
         this.store.refreshReferencesForCodeChange('file write');
       }

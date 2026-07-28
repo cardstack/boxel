@@ -2187,10 +2187,13 @@ export default class StoreService extends Service implements StoreInterface {
     let rebuildStart =
       telemetry?.isEnabled && pending ? performance.now() : undefined;
 
-    // This reset also drops the flush records that armed this rebuild — a
-    // plain loader replacement supersedes them — while a code-change flush
-    // landing *during* the re-fetch below writes fresh records against the new
-    // loader, so the invalidation still to come for that write finds them.
+    // When this reset actually replaces the loader — it is debounce-eligible,
+    // so it may not — it also drops the flush records that armed this rebuild:
+    // a plain replacement supersedes them. Records that outlive a debounced
+    // reset cost at most one extra rebuild later, whose own reset drops them.
+    // A code-change flush landing *during* the re-fetch below writes fresh
+    // records against the new loader, so the invalidation still to come for
+    // that write finds them.
     this.loaderService.resetLoader();
     this.store.reset();
     let cardsReloaded: number | undefined;
