@@ -48,7 +48,10 @@ export default class LoaderService extends Service {
   // live module as a net-new module. The realm index event for that same change
   // always lands after the flush that a local write or an open editor already
   // performed, so the store's rebuild decision has to survive it. Entries are
-  // consumed by the invalidation they belong to.
+  // consumed by the invalidation they belong to, and dropped at a session
+  // boundary — a write whose index event never arrived (a logout, a failed
+  // indexing pass) must not leave a record for the next session, which has its
+  // own idea of which modules it loaded.
   private flushedForCodeChange = new Set<string>();
 
   constructor(owner: Owner) {
@@ -200,6 +203,7 @@ export default class LoaderService extends Service {
   private clearSessionCaches() {
     // This clears cached module fetches and scoped styles at session/test
     // boundaries so private realm assets do not leak across owners.
+    this.flushedForCodeChange.clear();
     clearFetchCache();
     clearInjectedScopedCSS();
     clearKnownFileMetaUrls();

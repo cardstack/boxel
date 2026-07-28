@@ -3564,6 +3564,26 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  test('a flush record does not survive a session boundary', async function (assert) {
+    let personModule = `${testRealmURL}person.gts`;
+    loaderService.resetLoader({
+      clearFetchCache: true,
+      reason: 'source-write',
+      invalidatedModule: personModule,
+    });
+
+    // A write whose index event never arrives — the tab logged out first, or
+    // indexing failed — leaves a record behind. The next session has its own
+    // idea of which modules it loaded, so the record must not survive to make
+    // that session rebuild for a module it never had.
+    loaderService.resetState();
+
+    assert.false(
+      loaderService.takeModuleFlushedForCodeChange(personModule),
+      'the record is dropped when the loader crosses a session boundary',
+    );
+  });
+
   test('an open editor flushing the loader first does not suppress the rebuild', async function (assert) {
     let hassan = `${testRealmURL}Person/hassan`;
     await renderCard(hassan);
