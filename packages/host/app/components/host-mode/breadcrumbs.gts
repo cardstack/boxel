@@ -78,6 +78,7 @@ export default class HostModeBreadcrumbs extends Component<Signature> {
               <HostModeBreadcrumbItem
                 @cardId={{cardId}}
                 @disabled={{not (this.canNavigate cardId)}}
+                @isCurrent={{this.isLast index}}
                 @onClick={{this.handleBreadcrumbClick}}
               />
               {{#unless (this.isLast index)}}
@@ -95,10 +96,14 @@ export default class HostModeBreadcrumbs extends Component<Signature> {
       .host-mode-breadcrumbs {
         display: inline-flex;
         align-items: center;
+        max-width: 100%;
+        box-sizing: border-box;
         background-color: var(--boxel-700);
         box-shadow: var(--boxel-deep-box-shadow);
-        border: solid 1px rgba(255, 255, 255, 0.35);
-        padding: var(--boxel-sp-xxs) var(--boxel-sp-xs);
+        border: 1px solid var(--boxel-light-35);
+        min-height: 2.25rem;
+        padding-block: 0;
+        padding-inline: var(--boxel-sp-xs);
         border-radius: 7px;
       }
 
@@ -113,18 +118,44 @@ export default class HostModeBreadcrumbs extends Component<Signature> {
         margin: 0;
         padding: 0;
         align-items: center;
+        max-width: 100%;
       }
 
       .item {
         display: inline-flex;
         align-items: center;
-        gap: var(--boxel-sp-xxs);
+        gap: var(--boxel-sp-2xs);
+        flex-shrink: 0;
+      }
+
+      .item:first-child {
+        flex-shrink: 1;
+        min-width: 2.5rem;
+      }
+
+      .item:first-child :deep(.breadcrumb-item) {
+        min-width: 2.5rem;
+      }
+
+      .item:last-child {
+        flex-shrink: 2;
+        min-width: 2.5rem;
+      }
+
+      .item:last-child :deep(.breadcrumb-item) {
+        min-width: 2.5rem;
       }
 
       .separator {
-        color: rgba(255, 255, 255, 0.7);
+        color: var(--boxel-light-70);
         font-size: var(--boxel-font-size);
         line-height: 1;
+      }
+
+      @media (max-width: 30rem) {
+        .host-mode-breadcrumbs {
+          padding-inline: var(--boxel-sp-3xs);
+        }
       }
     </style>
   </template>

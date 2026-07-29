@@ -15,6 +15,7 @@ interface Signature {
   Args: {
     cardId: string;
     disabled?: boolean;
+    isCurrent?: boolean;
     onClick?: (cardId: string) => void;
   };
 }
@@ -83,15 +84,19 @@ export default class HostModeBreadcrumbItem extends Component<Signature> {
       class='breadcrumb-item'
       disabled={{this.isDisabled}}
       title={{this.label}}
+      aria-current={{if @isCurrent 'page'}}
       data-test-host-mode-breadcrumb={{@cardId}}
       {{on 'click' this.handleClick}}
     >
       {{#if this.card}}
         {{#if this.iconComponent}}
           {{#let this.iconComponent as |Icon|}}
-            <span class='icon' aria-hidden='true'>
-              <Icon />
-            </span>
+            <Icon
+              class='breadcrumb-item-icon'
+              width='18'
+              height='18'
+              aria-hidden='true'
+            />
           {{/let}}
         {{/if}}
         <span class='label'>{{this.label}}</span>
@@ -108,7 +113,7 @@ export default class HostModeBreadcrumbItem extends Component<Signature> {
       .breadcrumb-item {
         display: inline-flex;
         align-items: center;
-        gap: var(--boxel-sp-xxs);
+        gap: var(--boxel-sp-2xs);
         max-width: 16rem;
         background: none;
         border: none;
@@ -121,17 +126,23 @@ export default class HostModeBreadcrumbItem extends Component<Signature> {
       }
 
       .breadcrumb-item:focus-visible {
-        outline: 1px solid rgba(255, 255, 255, 0.6);
+        outline: 1px solid var(--boxel-light-60);
         border-radius: var(--boxel-border-radius-lg);
       }
 
-      .icon {
+      .breadcrumb-item-icon {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 18px;
-        height: 18px;
-        color: var(--boxel-teal);
+        flex-shrink: 0;
+        color: var(--boxel-highlight);
+      }
+
+      @media (max-width: 30rem) {
+        .breadcrumb-item-icon {
+          width: 0.75rem;
+          height: 0.75rem;
+        }
       }
 
       .label {

@@ -195,6 +195,8 @@
   --boxel-light: #fff;
   --boxel-dark: #000;
   --boxel-light-35: rgba(255, 255, 255, 0.35);
+  --boxel-light-60: rgba(255, 255, 255, 0.6);
+  --boxel-light-70: rgba(255, 255, 255, 0.7);
   --boxel-dark-10: rgba(0, 0, 0, 0.1);
   --boxel-dark-50: rgba(0, 0, 0, 0.5);
   --boxel-dark-80: rgba(0, 0, 0, 0.8);
