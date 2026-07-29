@@ -471,9 +471,18 @@ export async function runFactoryIssueLoop(
 
   let runLog: RunLogWriter | undefined;
   {
-    let runSlug = (config.briefUrl.split('/').pop() ?? 'factory-run')
-      .replace(/\.json$/i, '')
-      .toLowerCase();
+    // Last NONEMPTY path segment: a trailing slash (common for --repo-url)
+    // must not yield an empty slug, or every such run writes Runs/.json
+    // and successive runs overwrite each other's history.
+    let runSlug =
+      (
+        config.briefUrl
+          .split('/')
+          .filter((segment) => segment.length > 0)
+          .pop() ?? ''
+      )
+        .replace(/\.json$/i, '')
+        .toLowerCase() || 'factory-run';
     runLog = new RunLogWriter({
       workspaceDir,
       targetRealm,

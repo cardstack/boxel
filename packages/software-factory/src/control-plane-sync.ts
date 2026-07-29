@@ -210,11 +210,17 @@ export class ControlPlaneSync {
       }
       let paths = (listing.filenames ?? []).filter(isControlPath);
       let pulled = 0;
+      let unreadable: string[] = [];
       for (let relPath of paths) {
         let localPath = join(this.workspaceDir, relPath);
         let localExists = await fileExists(localPath);
         let read = await this.client.read(this.controlRealm, relPath);
         if (!read.ok || typeof read.content !== 'string') {
+          // A listed file we cannot read means the pull is INCOMPLETE — if
+          // it's a seed or the Project, callers acting on "absent" would
+          // recreate it and the next sync could overwrite completed remote
+          // state with a fresh stub. Record and fail below.
+          unreadable.push(`${relPath}: ${read.error ?? 'no content'}`);
           continue;
         }
         this.lastPushed.set(relPath, sha1(read.content));
@@ -223,6 +229,11 @@ export class ControlPlaneSync {
           await writeFile(localPath, read.content, 'utf8');
           pulled++;
         }
+      }
+      if (unreadable.length > 0) {
+        let error = `control-plane pull incomplete — failed to read ${unreadable.length} listed file(s): ${unreadable.join('; ')}`;
+        log.warn(error);
+        return { ok: false, error, pulled };
       }
       if (pulled > 0) {
         log.info(`Pulled ${pulled} control-plane file(s) from control realm`);

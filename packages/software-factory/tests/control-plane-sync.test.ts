@@ -123,6 +123,45 @@ test('pull fetches only control paths and seeds the hash gate', async () => {
   }
 });
 
+test('pull fails when a listed control file cannot be read', async () => {
+  let workspaceDir = await makeWorkspace();
+  try {
+    let { client, remoteFiles } = makeFakeClient({
+      'Issues/bootstrap-seed.json': '{"status":"done"}',
+      'Issues/flaky.json': '{"status":"backlog"}',
+    });
+    // Listed but unreadable: simulate a transient read failure by removing
+    // the content after listing sees it.
+    let originalRead = client.read.bind(client);
+    (client as { read: unknown }).read = async (
+      realm: string,
+      path: string,
+    ) => {
+      if (path === 'Issues/flaky.json') {
+        return { ok: false, error: 'socket hang up' };
+      }
+      return originalRead(realm, path);
+    };
+    void remoteFiles;
+
+    let sync = new ControlPlaneSync({
+      client,
+      controlRealm: CONTROL_REALM,
+      workspaceDir,
+    });
+
+    let pull = await sync.pull();
+    // An incomplete pull must not report success — a caller treating the
+    // missing file as absent would recreate it and overwrite remote state
+    // on the next sync.
+    assert.equal(pull.ok, false);
+    assert.match(pull.error ?? '', /Issues\/flaky\.json/);
+    assert.match(pull.error ?? '', /socket hang up/);
+  } finally {
+    await rm(workspaceDir, { recursive: true, force: true });
+  }
+});
+
 test('ensureControlPlaneIgnoreFile is idempotent and appends to user content', async () => {
   let workspaceDir = await makeWorkspace();
   try {

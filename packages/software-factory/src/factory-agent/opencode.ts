@@ -484,6 +484,44 @@ export class OpencodeFactoryAgent implements LoopAgent {
 
   private buildPrompt(context: AgentContext): string {
     let issueType = (context.issue as Record<string, unknown>).issueType;
+    if (context.primeTurn === true) {
+      return this.promptLoader.load('prime', {
+        project: context.project,
+        knowledge: context.knowledge,
+      });
+    }
+    // Acceptance dispatch must precede the issue-type branches: the review
+    // turn reuses the issue context, and falling through to the implement
+    // prompt would let the "reviewer" edit product files that runReviewGate
+    // then syncs — with a missing verdict defaulting to approval.
+    if (context.acceptanceTurn) {
+      return this.promptLoader.load('acceptance-walkthrough', {
+        issue: context.issue,
+        project: context.project?.id?.startsWith('http')
+          ? context.project
+          : undefined,
+        darkfactoryModuleUrl: requireDarkfactoryModuleUrl(context),
+        renderSummary: context.acceptanceTurn.renderSummary,
+        screenshots: context.acceptanceTurn.screenshots,
+        failedCaptures:
+          context.acceptanceTurn.failedCaptures.length > 0
+            ? context.acceptanceTurn.failedCaptures
+            : undefined,
+      });
+    }
+    if (issueType === 'design') {
+      return this.promptLoader.load('issue-design-foundation', {
+        issue: context.issue,
+        project: context.project,
+        knowledge: context.knowledge,
+      });
+    }
+    if (issueType === 'analysis') {
+      return this.promptLoader.load('issue-analysis', {
+        issue: context.issue,
+        darkfactoryModuleUrl: requireDarkfactoryModuleUrl(context),
+      });
+    }
     if (issueType === 'bootstrap' && context.briefUrl) {
       return assembleBootstrapPrompt({ context, loader: this.promptLoader });
     }

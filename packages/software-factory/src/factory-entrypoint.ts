@@ -855,9 +855,20 @@ export async function runFactoryEntrypoint(
       controlRealm: controlRealmUrl,
       workspaceDir,
     });
-    await withSpan('startup', 'pull-control-realm', undefined, () =>
-      controlSync!.pull(),
+    let controlPull = await withSpan(
+      'startup',
+      'pull-control-realm',
+      undefined,
+      () => controlSync!.pull(),
     );
+    if (!controlPull.ok) {
+      // Proceeding on an incomplete pull means resume state (seeds, the
+      // enriched Project) looks absent, gets recreated, and the next sync
+      // overwrites completed remote state with fresh stubs.
+      throw new Error(
+        `Control realm pull failed — refusing to run against incomplete resume state: ${controlPull.error ?? 'unknown error'}`,
+      );
+    }
   }
 
   // Legacy single-realm mode only: replace the default CardsGrid index
