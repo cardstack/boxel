@@ -72,7 +72,7 @@ export interface FactoryEntrypointOptions {
    */
   briefUrl?: string;
   /**
-   * A GitHub repository URL for an inspired-by port (v3). The factory
+   * A GitHub repository URL for an inspired-by port. The factory
    * synthesizes the brief from the repo and seeds a PORT-ANALYSIS issue
    * that digs into the repo's code — dependencies, specialized logic,
    * tests and fixtures — before bootstrap plans anything.
@@ -80,7 +80,7 @@ export interface FactoryEntrypointOptions {
   repoUrl?: string;
   targetRealm: string | null;
   /**
-   * Control realm (v3 split): issues, tracker cards, validations, and the
+   * Control realm (split): issues, tracker cards, validations, and the
    * run log live here; the target realm keeps only the built product.
    * Created if missing, like the target realm. Null = no split
    * (everything in the target realm).
@@ -135,7 +135,7 @@ export interface FactoryEntrypointOptions {
    */
   phaseSplit?: boolean;
   /**
-   * Render gate + acceptance walkthrough (v3 P0): post-issue screenshot
+   * Render gate + acceptance walkthrough: post-issue screenshot
    * capture via `_screenshot-card` and a verifier turn that reads the
    * PNGs, verdicts acceptance criteria, and files defect issues. Default
    * on; `--no-render-gate` opts out.
@@ -291,7 +291,7 @@ export function getFactoryEntrypointUsage(): string {
     '',
     'Options:',
     '  --realm-server-url <url>   Realm server URL (default: from active Boxel profile)',
-    '  --control-realm <realm>     Control realm for the v3 control/product split. Issues,',
+    '  --control-realm <realm>     Control realm for the control/product split. Issues,',
     '                              tracker cards, validation artifacts, and the run log live',
     '                              here (raw-written, immune to the atomic FieldDef strip);',
     '                              the target realm keeps only the built product — so product',
@@ -330,7 +330,7 @@ export function getFactoryEntrypointUsage(): string {
     '                              one QUnit test-pass issue per shipped implementation',
     "                              issue; polishing also executes the bootstrap's",
     '                              pass-2 enhancement scope unattended.',
-    '  --no-render-gate            Skip the v3 render gate + acceptance walkthrough (post-issue',
+    '  --no-render-gate            Skip the render gate + acceptance walkthrough (post-issue',
     '                              _screenshot-card captures and the verifier turn that reads',
     '                              them, verdicts acceptance criteria, and files defect issues).',
     '  --monitor-level <level>     Orchestrator monitor verbosity on the run log:',
@@ -788,7 +788,7 @@ export async function runFactoryEntrypoint(
       ),
   );
 
-  // v3 control/product split: resolve + bootstrap the control realm the
+  // control/product split: resolve + bootstrap the control realm the
   // same way as the target (created if missing). A control realm equal to
   // the target degenerates to the single-realm flow.
   let controlRealmUrl: string | undefined;

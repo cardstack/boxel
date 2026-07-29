@@ -139,7 +139,7 @@ maintained: the reviewer updates it as the build's reality evolves.
 - `status` — `"backlog"`
 - `priority` — `"high"` for the first, `"medium"` for subsequent
 - `order` — sequential, respecting dependency order (cards with no dependencies first)
-- `acceptanceCriteria` — checklist covering design artifacts, card definition (3 formats), spec with populated title/description, and examples. Validation gates are `run_lint`, `run_parse`, `run_evaluate`, `run_instantiate` — the v2 pipeline runs NO tests; never list `.test.gts` or `run_tests`.
+- `acceptanceCriteria` — checklist covering design artifacts, card definition (3 formats), spec with populated title/description, and examples. Validation gates are `run_lint`, `run_parse`, `run_evaluate`, `run_instantiate` — the per-issue pipeline runs NO tests; never list `.test.gts` or `run_tests`.
 - Relationships:
   - `project` → `../Projects/<slug>`
   - `relatedKnowledge.0` → `../Knowledge Articles/<slug>-brief-context`

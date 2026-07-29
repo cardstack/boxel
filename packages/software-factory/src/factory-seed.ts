@@ -55,7 +55,7 @@ export interface SeedIssueOptions {
    */
   workspaceDir: string;
   /**
-   * v2/v3: also seed a DESIGN-FOUNDATION issue (blockedBy bootstrap,
+   * Also seed a DESIGN-FOUNDATION issue (blockedBy bootstrap,
    * blocking every implementation issue) that establishes the shared
    * design language BEFORE any card is designed: overall look & feel →
    * brand guide with guiding words + CSS variables → a one-sheet simple
@@ -196,7 +196,7 @@ export async function createSeedIssue(
 
   let document = buildSeedIssueDocument(brief, darkfactoryModuleUrl);
 
-  // GitHub-port flow (v3): a PORT-ANALYSIS issue runs before bootstrap —
+  // GitHub-port flow: a PORT-ANALYSIS issue runs before bootstrap —
   // it studies the source repo (README, screenshots, demo media, code
   // layout) and writes the port-background Knowledge Article that
   // bootstrap plans the card family from. Bootstrap is blockedBy it.
@@ -225,7 +225,7 @@ export async function createSeedIssue(
     }
   }
 
-  // Design-foundation phase (v2/v3): runs after bootstrap, before every
+  // Design-foundation phase : runs after bootstrap, before every
   // implementation issue. Establishes the design language once so all
   // per-card design turns inherit it — coherence first, detail later.
   if (designFoundation) {
@@ -508,7 +508,7 @@ function buildSeedIssueDocument(
 }
 
 /**
- * The PORT-ANALYSIS seed issue (v3 GitHub-port flow). The prompt template
+ * The PORT-ANALYSIS seed issue (GitHub-port flow). The prompt template
  * `issue-analysis.md` carries the full research protocol; the issue
  * description carries the repo pointer and the acceptance contract.
  */

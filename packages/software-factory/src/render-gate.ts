@@ -1,5 +1,5 @@
 /**
- * Render gate (v3 P0) — the first rung of the runtime feedback loop.
+ * Render gate the first rung of the runtime feedback loop.
  *
  * Every static gate can pass while the card renders an empty section, a
  * broken layout, or an invisible affordance (the wardrobe run shipped all

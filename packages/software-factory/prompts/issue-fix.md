@@ -107,7 +107,7 @@ concrete, 1–3 sentences. Never work silently for more than a few minutes.
   parse/lint/eval/instantiate automatically. Do NOT set the issue status
   yourself.
 
-## After you finish (v3 render gate)
+## After you finish (render gate)
 
 The orchestrator will screenshot the affected card (a real host render) and a
 verifier agent will judge the fix against the PIXELS — the defect only counts

@@ -140,7 +140,7 @@ export interface IssueLoopConfig {
   ) => Validator;
   targetRealm: string;
   /**
-   * Control realm hosting issues / run log / validations under the v3
+   * Control realm hosting issues / run log / validations under the
    * split. Defaults to `targetRealm` (no split). Only used for run-log
    * link targeting — the issue store and sync plumbing are wired to the
    * right realms upstream.
@@ -170,17 +170,17 @@ export interface IssueLoopConfig {
    */
   syncWorkspace: () => Promise<{ ok: boolean; error?: string }>;
   briefUrl?: string;
-  /** Live-blog writer (v2): appends run events to Runs/<slug>.json in the target realm. */
+  /** Live-blog writer: appends run events to Runs/<slug>.json in the target realm. */
   runLog?: RunLogWriter;
   /**
-   * Orchestrator monitor (v3): stall narration, per-turn telemetry,
+   * Orchestrator monitor: stall narration, per-turn telemetry,
    * scheduler + watchdog notes onto the run log. The loop drives
    * beginTurn/endTurn around every agent.run and feeds stream events
    * into the stall clock; the wiring owns start()/stop().
    */
   monitor?: RunMonitor;
   /**
-   * Render gate (v3 P0): after each non-bootstrap issue completes,
+   * Render gate: after each non-bootstrap issue completes,
    * screenshot the cards it shipped via the realm server's
    * `_screenshot-card`, attach the renders to the run log, and — unless
    * `acceptanceWalkthrough` is false — run a verifier turn that reads the
@@ -239,7 +239,7 @@ export interface IssueLoopConfig {
     };
   };
   /**
-   * Phase-split (v2): run each implementation issue's first iteration as
+   * Phase-split: run each implementation issue's first iteration as
    * TWO turns — a design turn (mockups + notes, flagship budget) and a
    * build turn (translation, cheap budget) forked from the design
    * session. The economics: BUILD emits the big files, so that's where a
@@ -248,7 +248,7 @@ export interface IssueLoopConfig {
    */
   phaseSplit?: boolean;
   /**
-   * Context forking (v2): before the first implementation issue, run one
+   * Context forking: before the first implementation issue, run one
    * priming turn (read skills/design-language/precedent, write
    * design/DESIGN-NOTES.md) and fork every implementation issue's session
    * from it — shared provider-cached prefix instead of per-issue context
@@ -972,7 +972,7 @@ export async function runIssueLoop(
       );
     }
 
-    // Context forking (v2): one priming turn before the first
+    // Context forking: one priming turn before the first
     // implementation issue. The prime reads skills + design language +
     // precedent and writes design/DESIGN-NOTES.md; its session id seeds a
     // fork for every implementation turn that follows.
@@ -1405,7 +1405,7 @@ export async function runIssueLoop(
         // (translation — cheap budget) forked from the design session so
         // the accepted design context carries over without re-reading.
         // Bug-fix issues are excluded — a defect on a shipped card needs a
-        // diagnose-and-fix turn, not a fresh design round (issue-fix-v2).
+        // diagnose-and-fix turn, not a fresh design round (issue-fix).
         context.phase = 'design';
         // Unconditional: the turn-budget block above just stamped the BUILD
         // budget (iteration 1 of a non-meta issue selects modelPolicy.build)

@@ -1,5 +1,5 @@
 /**
- * Imports validation step (v3) — the static half of the host-import
+ * Imports validation step — the static half of the host-import
  * manifest gate.
  *
  * Scans every workspace `.gts` module for `@cardstack/boxel-host/tools/`

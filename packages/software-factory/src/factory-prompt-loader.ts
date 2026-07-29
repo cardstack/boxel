@@ -452,12 +452,12 @@ export function assembleImplementPrompt(
   // Otherwise, phase-split gives the design and build turns dedicated
   // prompts; an unsplit turn keeps the combined design-first prompt.
   let template = isBugFixIssue(context.issue as { issueType?: string })
-    ? 'issue-fix-v2'
+    ? 'issue-fix'
     : context.phase === 'design'
-      ? 'issue-design-v2'
+      ? 'issue-design'
       : context.phase === 'build'
-        ? 'issue-build-v2'
-        : 'issue-implement-v2';
+        ? 'issue-build'
+        : 'issue-implement';
   return loader.load(template, {
     project: context.project,
     issue: context.issue,
@@ -479,7 +479,7 @@ export function assembleBootstrapPrompt(
   // The bootstrap prompt strips the QUnit/test requirements — the per-issue
   // pipeline runs no tests, and baking them into issue descriptions made
   // agents write .test.gts despite the skill's no-tests hard rule.
-  return loader.load('bootstrap-implement-v2', {
+  return loader.load('bootstrap-implement', {
     briefUrl: context.briefUrl,
     issue: context.issue,
   });

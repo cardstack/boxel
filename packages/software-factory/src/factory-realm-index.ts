@@ -131,7 +131,7 @@ export interface LinkBoardToRealmIndexOptions {
   searchRetryDelayMs?: number;
   /**
    * Write the board link as an absolute card URL instead of a
-   * realm-relative `./path`. Required under the v3 control/product split:
+   * realm-relative `./path`. Required under the control/product split:
    * the index card lives in the product realm while the IssueTracker
    * board lives in the control realm, so a relative link would dangle.
    */

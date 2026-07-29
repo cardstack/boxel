@@ -202,7 +202,7 @@ export interface ValidationPipelineConfig {
   includeTestStep?: boolean;
   /**
    * Valid `@cardstack/boxel-host/tools/<name>` module names, derived from
-   * the host build at run start (v3 import gate). When set, the pipeline
+   * the host build at run start (import gate). When set, the pipeline
    * gains an in-process `imports` step that fails any workspace .gts
    * importing a host tool that doesn't exist — the class of failure that
    * previously only surfaced at runtime in the browser. Absent = no gate.

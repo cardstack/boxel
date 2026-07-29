@@ -191,7 +191,7 @@ export class DefaultSkillResolver implements SkillResolver {
       return ['software-factory-bootstrap', 'boxel-file-structure'];
     }
 
-    // Port-analysis issues (v3 GitHub-port flow) are research turns — no
+    // Port-analysis issues (GitHub-port flow) are research turns — no
     // card authoring, so the design-first operations skill would only
     // mislead. File-structure covers the tracker JSON they do write.
     if (issueType === 'analysis') {
@@ -211,7 +211,7 @@ export class DefaultSkillResolver implements SkillResolver {
     // "when you need X, read Y" pointer table live in the operations
     // skill itself.
     let leanSkills = [
-      'software-factory-operations-v2',
+      'software-factory-operations',
       'boxel-file-structure',
       'boxel-workspace-cardinal-rules',
     ];

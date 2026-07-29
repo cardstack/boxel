@@ -255,7 +255,7 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
       // in. Without a workspaceDir there is no cwd to load from — keep
       // the empty (fully isolated) behavior.
       settingSources: workspaceDir ? ['project'] : [],
-      // Context forking (v2): resume a primed session, branching to a new
+      // Context forking: resume a primed session, branching to a new
       // session id so every fork inherits the primed conversation as a
       // shared (provider-cached) prefix without mutating the original.
       ...(context.resumeSession
@@ -346,7 +346,7 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
             streamedUsage.cacheReadTokens += u.cache_read_input_tokens ?? 0;
           }
         }
-        // Coarse activity heartbeat (v3 RunMonitor): every complete
+        // Coarse activity heartbeat (RunMonitor): every complete
         // assistant message resets the stall clock. Silence between
         // messages = the model is generating.
         if (context.onActivity && message.type === 'assistant') {
@@ -589,7 +589,7 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
       });
     }
     if (issueType === 'analysis') {
-      // Port-analysis research turn (v3 GitHub-port flow): study the
+      // Port-analysis research turn (GitHub-port flow): study the
       // source repo + media, write the port-background Knowledge Article.
       return this.promptLoader.load('issue-analysis', {
         issue: context.issue,

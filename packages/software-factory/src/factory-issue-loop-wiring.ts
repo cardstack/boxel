@@ -156,14 +156,14 @@ export interface IssueLoopWiringConfig {
   /** Phase-split: design turn + build turn per issue (see IssueLoopConfig). */
   phaseSplit?: boolean;
   /**
-   * Orchestrator monitor level (v3). 'normal' (default) posts stall
+   * Orchestrator monitor level. 'normal' (default) posts stall
    * narration, turn telemetry,
    * scheduler notes, and sync failures; 'verbose' adds turn starts, heals,
    * and sync successes; 'quiet' keeps stalls + failures only.
    */
   monitorLevel?: MonitorLevel;
   /**
-   * Control realm (v3 split): issues, tracker cards, validation artifacts,
+   * Control realm (split): issues, tracker cards, validation artifacts,
    * and the run log live here; the product (`targetRealm`) keeps only the
    * built defs + instances. When set (and different from the target
    * realm), control-plane paths are excluded from the product atomic sync
@@ -179,7 +179,7 @@ export interface IssueLoopWiringConfig {
    */
   controlSync?: ControlPlaneSync;
   /**
-   * Render gate + acceptance walkthrough (v3 P0). On by default; pass
+   * Render gate + acceptance walkthrough. On by default; pass
    * false to skip the post-issue screenshot capture and the verifier
    * turn (e.g. deployments without a prerenderer).
    */
@@ -210,7 +210,7 @@ export async function runFactoryIssueLoop(
   let client = config.client;
   let workspaceDir = config.workspaceDir;
 
-  // v3 control/product split: when a distinct control realm is configured,
+  // control/product split: when a distinct control realm is configured,
   // issues / tracker / validations / run log live there and are raw-written
   // (never atomic-synced); the target realm keeps only the product.
   let controlRealm = config.controlRealm
@@ -266,7 +266,7 @@ export async function runFactoryIssueLoop(
     workspaceDir,
     realmUrl: controlRealm,
   });
-  // v3 import gate: derive the host-tools catalogue from the host source
+  // import gate: derive the host-tools catalogue from the host source
   // in this checkout, once per run. Feeds BOTH sides of the gate — the
   // generated manifest skill in every agent context, and the static
   // `imports` validation step. Degrades to no gate when the host source
@@ -494,7 +494,7 @@ export async function runFactoryIssueLoop(
     });
   }
 
-  // Render gate (v3 P0): on by default — the runtime feedback loop is
+  // Render gate: on by default — the runtime feedback loop is
   // the point of the pipeline, so skipping it is the explicit opt-out.
   let renderGate: RenderGate | undefined;
   if (config.renderGate !== false) {

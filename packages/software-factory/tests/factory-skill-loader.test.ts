@@ -103,7 +103,7 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
     let skills = resolver.resolve(issue, project);
 
     assert.deepEqual(skills, [
-      'software-factory-operations-v2',
+      'software-factory-operations',
       'boxel-file-structure',
       'boxel-workspace-cardinal-rules',
     ]);
@@ -276,7 +276,7 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
     let skills = resolver.resolve(issue, project);
 
     // Should still resolve the lean core without error
-    assert.true(skills.includes('software-factory-operations-v2'));
+    assert.true(skills.includes('software-factory-operations'));
     assert.true(skills.includes('boxel-file-structure'));
   });
 });
@@ -871,7 +871,7 @@ module('factory-skill-loader > re-resolution on new issue', function () {
     );
     assert.true(design.includes('boxel-design'), 'design gets boxel-design');
     assert.true(
-      feature.includes('software-factory-operations-v2'),
+      feature.includes('software-factory-operations'),
       'implementation issues get the lean operations core',
     );
   });

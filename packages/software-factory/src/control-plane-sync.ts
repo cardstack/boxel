@@ -1,5 +1,5 @@
 /**
- * Control-plane sync — the control half of the v3 control/product realm
+ * Control-plane sync — the control half of the control/product realm
  * split.
  *
  * With `--control-realm` set, the factory keeps ONE local workspace but
@@ -131,7 +131,7 @@ const SCRATCH_MARKER = '# software-factory local scratch';
 /**
  * Keep `.factory-scratch/` (the analysis turn's download area — repo
  * files, media, extracted video frames) out of EVERY sync. Written for
- * all v2+ runs, split or not; same marker-block mechanics as the
+ * all runs, split or not; same marker-block mechanics as the
  * control-plane ignore.
  */
 export async function ensureScratchIgnoreFile(

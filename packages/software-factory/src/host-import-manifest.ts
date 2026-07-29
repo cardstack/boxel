@@ -1,5 +1,5 @@
 /**
- * Host-import manifest — v3 contract-drift gate.
+ * Host-import manifest — contract-drift gate.
  *
  * Root cause of two of the five wardrobe-run field failures: agents (and
  * the workspace skills they read) carried a stale memory of

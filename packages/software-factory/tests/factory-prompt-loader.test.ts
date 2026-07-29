@@ -853,10 +853,7 @@ module('factory-prompt-loader > bug-fix routing', function () {
       }),
       loader,
     });
-    assert.true(
-      /bug fix on an existing card/i.test(prompt),
-      'uses issue-fix-v2',
-    );
+    assert.true(/bug fix on an existing card/i.test(prompt), 'uses issue-fix');
     assert.true(
       /Do NOT run a design round/i.test(prompt),
       'explicitly forbids the design round',

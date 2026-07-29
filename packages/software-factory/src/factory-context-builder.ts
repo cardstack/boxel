@@ -57,7 +57,7 @@ export interface ContextBuilderConfig {
   enableBoxelUiDiscovery?: boolean;
   /**
    * Valid `@cardstack/boxel-host/tools/<name>` module names derived from
-   * the host build (v3 import gate). When set, every built context gains
+   * the host build (import gate). When set, every built context gains
    * a generated `host-tools-import-manifest` skill so the agent writes
    * imports against the real catalogue instead of its prior — the
    * `commands/`→`tools/` rename failure class.

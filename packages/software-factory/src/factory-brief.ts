@@ -25,7 +25,7 @@ export interface FactoryBrief {
   sourceCardUrl?: string;
   /**
    * Set when `--brief-url` pointed at a GitHub repository instead of a
-   * Boxel brief card (v3 port flow). The brief is synthesized from the
+   * Boxel brief card (port flow). The brief is synthesized from the
    * repo's metadata + README, and the seed step adds a PORT-ANALYSIS
    * issue ahead of bootstrap: a research turn that pulls the repo's
    * README, screenshots, and demo media, reads them, and writes the

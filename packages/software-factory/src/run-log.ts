@@ -146,7 +146,7 @@ export interface RunLogEntryInput {
     | 'agent-spawn'
     | 'blocked'
     | 'note'
-    // Orchestrator monitor (v3): stall narration / scheduler / watchdog
+    // Orchestrator monitor: stall narration / scheduler / watchdog
     // notes, and per-turn cost/duration telemetry. See run-monitor.ts.
     | 'monitor'
     | 'telemetry';
@@ -166,7 +166,7 @@ export interface RunLogEntryInput {
    */
   cardPath?: string;
   /**
-   * Which realm `cardPath` is relative to under the v3 control/product
+   * Which realm `cardPath` is relative to under the control/product
    * split: 'product' (default — built cards in the target realm) or
    * 'control' (issues, validation artifacts). Links are written as
    * absolute URLs so they resolve regardless of which realm hosts the
@@ -188,7 +188,7 @@ export interface RunLogWriterOptions {
   workspaceDir: string;
   targetRealm: string;
   /**
-   * Control realm hosting the run log under the v3 split. Defaults to
+   * Control realm hosting the run log under the split. Defaults to
    * `targetRealm` (no split). Entry links resolve absolute: cardPath
    * against `targetRealm` (or `controlRealm` when the entry says
    * `cardRealm: 'control'`), imageCardPath against `targetRealm` (design

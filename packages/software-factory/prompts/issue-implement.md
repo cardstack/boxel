@@ -119,7 +119,7 @@ minutes.
   yourself. Calling `signal_done` without the design artifacts, the card,
   an instance, and a Spec is a failure.
 
-## After you finish (v3 render gate)
+## After you finish (render gate)
 
 The orchestrator will screenshot the cards you shipped (real host
 renders) and a verifier agent will judge every acceptance criterion
