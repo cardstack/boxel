@@ -443,10 +443,16 @@ export default class StoreService extends Service implements StoreInterface {
         (e) => {
           // A cancelled re-establishment (the owner tearing down mid-flight)
           // is not a rebuild worth reporting — but a genuine failure is a
-          // rebuild the tab paid for, and the one most worth seeing.
-          if (!didCancel(e)) {
-            report(0);
+          // rebuild the tab paid for, and the one most worth seeing. Reporting
+          // it must not also swallow it: reading a task instance's promise
+          // marks its errors handled, which mutes ember-concurrency's
+          // uncaught-error reporting, so the rethrow restores the surface as
+          // an unhandled rejection.
+          if (didCancel(e)) {
+            return;
           }
+          report(0);
+          throw e;
         },
       );
     }

@@ -3569,6 +3569,44 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  test('a write-time rebuild reports the cards it re-established', async function (assert) {
+    // The counterpart shape to the code-mode-only session: with a card
+    // rendered, the write-time pass re-fetches the live graph, and
+    // cards_reloaded is the one field whose value crosses from the
+    // re-establishment task into the event.
+    let hassan = `${testRealmURL}Person/hassan`;
+    await renderCard(hassan);
+
+    let personModule = `${testRealmURL}person.gts`;
+    let telemetry = captureTelemetry();
+    try {
+      storeService.refreshReferencesForCodeChange('file write', {
+        triggerModule: personModule,
+        realm: testRealmURL,
+      });
+      await telemetry.waitForEvent('rebuild');
+      await settled();
+    } finally {
+      telemetry.restore();
+    }
+
+    let rebuilds = telemetry.events('rebuild');
+    assert.strictEqual(
+      rebuilds.length,
+      1,
+      `one write-time rebuild is reported (captured: ${telemetry.summary()})`,
+    );
+    assert.true(
+      (rebuilds[0] as RebuildEvent).cards_reloaded >= 1,
+      `the re-established graph is counted (${(rebuilds[0] as RebuildEvent).cards_reloaded} reloaded)`,
+    );
+    assert.strictEqual(
+      (rebuilds[0] as RebuildEvent).rebuild_source,
+      'write',
+      'the save is the source',
+    );
+  });
+
   test('a code-mode save reports the rebuild it performs at write time', async function (assert) {
     // The shape of a code-mode editing session: the module is loaded (the
     // module inspector imports it), but the store holds no instance from its
