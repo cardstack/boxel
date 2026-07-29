@@ -20,7 +20,9 @@ import {
   userInitiatedPriority,
 } from '@cardstack/runtime-common';
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
+import { REALMS_LIST_UPDATED_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import { insertSourceRealmInRegistry } from '../lib/realm-registry-writes.ts';
+import type { SendEvent } from './send-event.ts';
 import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.ts';
 import {
   fetchRequestFromContext,
@@ -245,6 +247,7 @@ export async function createRealm(
 
 export default function handleCreateRealmRequest(
   deps: CreateRealmDeps,
+  sendEvent: SendEvent,
 ): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let token = ctxt.state.token as RealmServerTokenClaim;
@@ -351,6 +354,19 @@ export default function handleCreateRealmRequest(
       },
     });
     await setContextResponse(ctxt, response);
+
+    // Tell the owner's other sessions their realm list changed so a session
+    // viewing the workspace chooser refreshes without a reload. Best-effort:
+    // the realm is already created and the response sent, so a failed notify
+    // must not turn a successful creation into an error.
+    try {
+      await sendEvent(ownerUserId, REALMS_LIST_UPDATED_EVENT_TYPE);
+    } catch (e: any) {
+      log.error(
+        `Failed to send ${REALMS_LIST_UPDATED_EVENT_TYPE} event after creating realm ${url} for ${ownerUserId}`,
+        e,
+      );
+    }
     return;
   };
 }

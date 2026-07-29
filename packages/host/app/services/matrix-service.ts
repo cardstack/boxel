@@ -65,6 +65,7 @@ import {
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_REALMS_EVENT_TYPE,
   APP_BOXEL_REALM_SERVERS_EVENT_TYPE,
+  REALMS_LIST_UPDATED_EVENT_TYPE,
   APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE,
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_LLM_MODE,
@@ -287,6 +288,16 @@ export default class MatrixService extends Service {
     // never double-reset by the participant registry.
     this.setLoggerLevelFromEnvironment();
     this.setAgentId();
+    // The realm server pushes this to the owner's session room whenever their
+    // set of accessible realms changes server-side (create/delete/archive/
+    // unarchive) — including from another tab, the CLI, or an AI agent. Re-derive
+    // the list so a session viewing the workspace chooser updates live. Wired
+    // once here (subscriptions are app-scoped and survive logout; see
+    // RealmServerService.resetState) rather than per session start.
+    this.realmServer.subscribeEvent(
+      REALMS_LIST_UPDATED_EVENT_TYPE,
+      this.refreshRealmsList.bind(this),
+    );
     this.#ready = this.loadState.perform();
     registerDestructor(this, () => this.teardownClient());
   }
@@ -1347,6 +1358,34 @@ export default class MatrixService extends Service {
         }
       }),
     );
+  }
+
+  // React to a realm-server `realms-list-updated` push: re-derive the
+  // available-realms list so a session viewing the workspace chooser reflects a
+  // realm created/deleted/archived/unarchived out of band (another tab, the
+  // CLI, an AI agent) without a reload. Only trusted-server sessions need this —
+  // their list is assembled authoritatively from `_realm-auth`, so an
+  // out-of-band change reaches them through no other channel. Legacy sessions
+  // derive the list from `app.boxel.realms` account data, whose Matrix sync
+  // already delivers such changes (see the AccountData listener), so they are
+  // left to that path. Best-effort: a push must never crash the app, so
+  // assembly failures are logged and the current list is left intact.
+  private async refreshRealmsList() {
+    if (!this.trustedRealmServersAuthoritative) {
+      return;
+    }
+    try {
+      let realmServers = await this.getRealmServersFromAccountData();
+      if (realmServers.length === 0) {
+        return;
+      }
+      await this.applyTrustedRealmServersAccountData(realmServers);
+    } catch (err) {
+      console.error(
+        'Failed to refresh realms list after realms-list-updated event',
+        err,
+      );
+    }
   }
 
   // Re-assemble the available-realms list from a runtime

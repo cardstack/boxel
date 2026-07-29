@@ -9,6 +9,7 @@ import {
   type Realm,
 } from '@cardstack/runtime-common';
 import * as Sentry from '@sentry/node';
+import { REALMS_LIST_UPDATED_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import {
   sendResponseForSystemError,
   setContextResponse,
@@ -21,6 +22,7 @@ const log = logger('handle-unarchive');
 export default function handleUnarchiveRealm({
   dbAdapter,
   queue,
+  sendEvent,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let target = await resolveAndAuthorizeArchiveTarget(
@@ -31,7 +33,7 @@ export default function handleUnarchiveRealm({
     if (!target) {
       return;
     }
-    let { realmURL, permissions } = target;
+    let { realmURL, permissions, ownerUserId } = target;
 
     try {
       // Capture archived state before clearing it: only a realm that was
@@ -77,6 +79,16 @@ export default function handleUnarchiveRealm({
         },
       });
       await setContextResponse(ctxt, response);
+
+      // Tell the owner's other sessions their realm list changed so a session
+      // viewing the workspace chooser restores the realm to Your Workspaces
+      // without a reload. Best-effort: the realm is already restored, so a
+      // failed notify must not turn a successful unarchive into an error.
+      try {
+        await sendEvent(ownerUserId, REALMS_LIST_UPDATED_EVENT_TYPE);
+      } catch (error) {
+        Sentry.captureException(error);
+      }
     } catch (error: any) {
       log.error(`Error unarchiving realm ${realmURL}:`, error);
       Sentry.captureException(error);

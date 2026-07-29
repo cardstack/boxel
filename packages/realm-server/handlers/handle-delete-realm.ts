@@ -23,6 +23,7 @@ import {
   sendResponseForUnprocessableEntity,
   setContextResponse,
 } from '../middleware/index.ts';
+import { REALMS_LIST_UPDATED_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import type { CreateRoutesArgs } from '../routes.ts';
 import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 import {
@@ -45,6 +46,7 @@ interface DeleteRealmJSON {
 export default function handleDeleteRealm({
   dbAdapter,
   realmsRootPath,
+  sendEvent,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let token = ctxt.state.token as RealmServerTokenClaim;
@@ -269,6 +271,16 @@ export default function handleDeleteRealm({
           },
         }),
       );
+
+      // Tell the owner's other sessions their realm list changed so a session
+      // viewing the workspace chooser drops the deleted realm without a reload.
+      // Best-effort: the realm is already gone, so a failed notify must not
+      // turn a successful delete into an error.
+      try {
+        await sendEvent(ownerUserId, REALMS_LIST_UPDATED_EVENT_TYPE);
+      } catch (error) {
+        Sentry.captureException(error);
+      }
     } catch (error: any) {
       Sentry.captureException(error);
       await sendResponseForSystemError(ctxt, error.message);

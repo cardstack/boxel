@@ -8,6 +8,7 @@ import {
   type Realm,
 } from '@cardstack/runtime-common';
 import * as Sentry from '@sentry/node';
+import { REALMS_LIST_UPDATED_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import {
   sendResponseForSystemError,
   setContextResponse,
@@ -19,6 +20,7 @@ const log = logger('handle-archive');
 
 export default function handleArchiveRealm({
   dbAdapter,
+  sendEvent,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let target = await resolveAndAuthorizeArchiveTarget(
@@ -29,7 +31,7 @@ export default function handleArchiveRealm({
     if (!target) {
       return;
     }
-    let { realmURL, permissions } = target;
+    let { realmURL, permissions, ownerUserId } = target;
 
     try {
       await archiveRealm(dbAdapter, new URL(realmURL));
@@ -66,6 +68,16 @@ export default function handleArchiveRealm({
         },
       });
       await setContextResponse(ctxt, response);
+
+      // Tell the owner's other sessions their realm list changed so a session
+      // viewing the workspace chooser moves the realm into Archived without a
+      // reload. Best-effort: the realm is already archived, so a failed notify
+      // must not turn a successful archive into an error.
+      try {
+        await sendEvent(ownerUserId, REALMS_LIST_UPDATED_EVENT_TYPE);
+      } catch (error) {
+        Sentry.captureException(error);
+      }
     } catch (error: any) {
       log.error(`Error archiving realm ${realmURL}:`, error);
       Sentry.captureException(error);
