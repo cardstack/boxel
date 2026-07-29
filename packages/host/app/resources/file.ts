@@ -460,7 +460,10 @@ class _FileResource extends Resource<Args> {
       // belongs here: a write to a module nothing imported has no rendered
       // consumers to refresh.
       if (moduleWasLoaded) {
-        this.store.refreshReferencesForCodeChange('file write');
+        this.store.refreshReferencesForCodeChange('file write', {
+          triggerModule: this._url,
+          realm: state.realmURL,
+        });
       }
       if (this.innerState.state === 'not-found') {
         // TODO think about the "unauthorized" scenario

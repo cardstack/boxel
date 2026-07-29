@@ -3473,6 +3473,11 @@ module('Integration | Store', function (hooks) {
     );
     let rebuild = rebuilds[0] as RebuildEvent;
     assert.strictEqual(
+      rebuild.rebuild_source,
+      'realm-event',
+      'an event-driven rebuild names its source',
+    );
+    assert.strictEqual(
       rebuild.trigger_module,
       personModule,
       'the invalidated module is the scalar grouping key',
@@ -3561,6 +3566,137 @@ module('Integration | Store', function (hooks) {
     assert.true(
       isCardInstance(storeService.peek(hassan)),
       'the card is re-established after the rebuild',
+    );
+  });
+
+  test('a write-time rebuild reports the cards it re-established', async function (assert) {
+    // The counterpart shape to the code-mode-only session: with a card
+    // rendered, the write-time pass re-fetches the live graph, and
+    // cards_reloaded is the one field whose value crosses from the
+    // re-establishment task into the event.
+    let hassan = `${testRealmURL}Person/hassan`;
+    await renderCard(hassan);
+
+    let personModule = `${testRealmURL}person.gts`;
+    let telemetry = captureTelemetry();
+    try {
+      storeService.refreshReferencesForCodeChange('file write', {
+        triggerModule: personModule,
+        realm: testRealmURL,
+      });
+      await telemetry.waitForEvent('rebuild');
+      await settled();
+    } finally {
+      telemetry.restore();
+    }
+
+    let rebuilds = telemetry.events('rebuild');
+    assert.strictEqual(
+      rebuilds.length,
+      1,
+      `one write-time rebuild is reported (captured: ${telemetry.summary()})`,
+    );
+    assert.true(
+      (rebuilds[0] as RebuildEvent).cards_reloaded >= 1,
+      `the re-established graph is counted (${(rebuilds[0] as RebuildEvent).cards_reloaded} reloaded)`,
+    );
+    assert.strictEqual(
+      (rebuilds[0] as RebuildEvent).rebuild_source,
+      'write',
+      'the save is the source',
+    );
+  });
+
+  test('a code-mode save reports the rebuild it performs at write time', async function (assert) {
+    // The shape of a code-mode editing session: the module is loaded (the
+    // module inspector imports it), but the store holds no instance from its
+    // realm — so no realm subscription exists and the index event for the
+    // write never reaches the store. Everything that happens on save happens
+    // at write time, and it has to be reported from there or the session's
+    // rebuilds are invisible.
+    let personModule = `${testRealmURL}person.gts`;
+    await loaderService.loader.import(personModule);
+
+    let telemetry = captureTelemetry();
+    try {
+      storeService.refreshReferencesForCodeChange('file write', {
+        triggerModule: personModule,
+        realm: testRealmURL,
+      });
+      await telemetry.waitForEvent('rebuild');
+      await settled();
+    } finally {
+      telemetry.restore();
+    }
+
+    let rebuilds = telemetry.events('rebuild');
+    assert.strictEqual(
+      rebuilds.length,
+      1,
+      `the write-time re-establishment is reported (captured: ${telemetry.summary()})`,
+    );
+    let rebuild = rebuilds[0] as RebuildEvent;
+    assert.strictEqual(
+      rebuild.rebuild_source,
+      'write',
+      'the source names the save',
+    );
+    assert.strictEqual(
+      rebuild.trigger_module,
+      personModule,
+      'the saved module is the trigger',
+    );
+    assert.strictEqual(
+      rebuild.realm,
+      testRealmURL,
+      'the event is attributed to the realm written to',
+    );
+    assert.strictEqual(
+      rebuild.coalesced_events,
+      0,
+      'no index event drove this rebuild',
+    );
+    assert.strictEqual(
+      rebuild.modules_refetched,
+      0,
+      'a write-sourced rebuild does not claim module re-imports it cannot measure',
+    );
+  });
+
+  test('a realm event carries its raw args minus the invalidation list', async function (assert) {
+    let hassan = `${testRealmURL}Person/hassan`;
+    await renderCard(hassan);
+
+    let telemetry = captureTelemetry();
+    try {
+      (storeService as any).handleInvalidations({
+        eventName: 'index',
+        indexType: 'incremental',
+        realmURL: testRealmURL,
+        clientRequestId: 'editor:test-request',
+        invalidations: [hassan],
+      } as RealmEventContent);
+      await settled();
+    } finally {
+      telemetry.restore();
+    }
+
+    let events = telemetry.events('realm-event');
+    assert.strictEqual(events.length, 1, 'one realm-event is emitted');
+    let args = (events[0] as any).event_args;
+    assert.strictEqual(
+      args.eventName,
+      'index',
+      'the raw event name rides along',
+    );
+    assert.strictEqual(
+      args.clientRequestId,
+      'editor:test-request',
+      'fields beyond the tracked ones are preserved',
+    );
+    assert.false(
+      'invalidations' in args,
+      'the invalidation list is tracked separately, not duplicated',
     );
   });
 

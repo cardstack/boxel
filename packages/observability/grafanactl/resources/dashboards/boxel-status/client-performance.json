@@ -48,74 +48,7 @@
           "type": "loki",
           "uid": "loki"
         },
-        "description": "Client sessions that emitted a client-perf event within the last 5m of the selected time range \u2014 sessions active right now, not every session seen across the range. A session id is minted per browser tab and survives a reload as a new id, so one person with two tabs open counts as two. Drill filters (user/session) narrow this.",
-        "fieldConfig": {
-          "defaults": {
-            "color": {
-              "mode": "thresholds"
-            },
-            "mappings": [],
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {
-                  "color": "blue"
-                },
-                {
-                  "color": "green",
-                  "value": 1
-                }
-              ]
-            },
-            "unit": "short"
-          },
-          "overrides": []
-        },
-        "gridPos": {
-          "h": 4,
-          "w": 6,
-          "x": 0,
-          "y": 1
-        },
-        "id": 3,
-        "options": {
-          "colorMode": "value",
-          "graphMode": "area",
-          "justifyMode": "center",
-          "orientation": "auto",
-          "reduceOptions": {
-            "calcs": [
-              "lastNotNull"
-            ],
-            "fields": "",
-            "values": false
-          },
-          "textMode": "auto"
-        },
-        "pluginVersion": "12.4.3",
-        "targets": [
-          {
-            "datasource": {
-              "type": "loki",
-              "uid": "loki"
-            },
-            "editorMode": "code",
-            "expr": "count(count by (session_id) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [5m]))) or vector(0)",
-            "queryType": "range",
-            "refId": "A",
-            "interval": "1m"
-          }
-        ],
-        "title": "Active sessions (5m)",
-        "type": "stat",
-        "interval": "1m"
-      },
-      {
-        "datasource": {
-          "type": "loki",
-          "uid": "loki"
-        },
-        "description": "Count of card-load events in the selected range.",
+        "description": "Card loads completed within the last 5 minutes of the selected time range \u2014 the number is the latest 5-minute count, the sparkline is how that count moved across the range. A card load is one \"Loading card\u2026\" window resolving.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -136,8 +69,8 @@
         },
         "gridPos": {
           "h": 4,
-          "w": 6,
-          "x": 6,
+          "w": 8,
+          "x": 0,
           "y": 1
         },
         "id": 4,
@@ -163,20 +96,22 @@
               "uid": "loki"
             },
             "editorMode": "code",
-            "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"card-load\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__range]))",
-            "queryType": "instant",
-            "refId": "A"
+            "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"card-load\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [5m])) or vector(0)",
+            "queryType": "range",
+            "refId": "A",
+            "interval": "1m"
           }
         ],
-        "title": "Card loads (range)",
-        "type": "stat"
+        "title": "Card loads (5m)",
+        "type": "stat",
+        "interval": "1m"
       },
       {
         "datasource": {
           "type": "loki",
           "uid": "loki"
         },
-        "description": "Count of wedge events (main-thread stalls) in the selected range. Non-zero is worth investigating in the wedge row below.  A wedge is a main-thread freeze of 10s or more (the 100ms heartbeat missed a tick by \u226510s). Sub-second jank is not counted here; see a keepalive's max_gap_ms for that.",
+        "description": "Main-thread freezes of 10s or more within the last 5 minutes of the selected time range \u2014 the number is the latest 5-minute count, the sparkline is how freezes were distributed across the range. Anything non-zero is worth the wedge row below; sub-second jank lives in keepalive max_gap_ms instead.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -205,8 +140,8 @@
         },
         "gridPos": {
           "h": 4,
-          "w": 6,
-          "x": 12,
+          "w": 8,
+          "x": 8,
           "y": 1
         },
         "id": 5,
@@ -232,20 +167,22 @@
               "uid": "loki"
             },
             "editorMode": "code",
-            "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"wedge\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__range]))",
-            "queryType": "instant",
-            "refId": "A"
+            "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"wedge\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [5m])) or vector(0)",
+            "queryType": "range",
+            "refId": "A",
+            "interval": "1m"
           }
         ],
-        "title": "Wedges \u226510s (range)",
-        "type": "stat"
+        "title": "Wedges \u226510s (5m)",
+        "type": "stat",
+        "interval": "1m"
       },
       {
         "datasource": {
           "type": "loki",
           "uid": "loki"
         },
-        "description": "Count of rebuild events (loader/module refetch cycles) in the selected range.",
+        "description": "Loader/store rebuilds within the last 5 minutes of the selected time range \u2014 the number is the latest 5-minute count, the sparkline is how rebuilds were distributed across the range. Counts both sources: rebuilds driven by incoming index events and the write-time re-establishment a code-mode save performs.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -270,8 +207,8 @@
         },
         "gridPos": {
           "h": 4,
-          "w": 6,
-          "x": 18,
+          "w": 8,
+          "x": 16,
           "y": 1
         },
         "id": 6,
@@ -297,13 +234,15 @@
               "uid": "loki"
             },
             "editorMode": "code",
-            "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"rebuild\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__range]))",
-            "queryType": "instant",
-            "refId": "A"
+            "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"rebuild\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [5m])) or vector(0)",
+            "queryType": "range",
+            "refId": "A",
+            "interval": "1m"
           }
         ],
-        "title": "Rebuilds (range)",
-        "type": "stat"
+        "title": "Rebuilds (5m)",
+        "type": "stat",
+        "interval": "1m"
       },
       {
         "datasource": {
@@ -360,8 +299,8 @@
         },
         "gridPos": {
           "h": 8,
-          "w": 9,
-          "x": 6,
+          "w": 12,
+          "x": 0,
           "y": 5
         },
         "id": 7,
@@ -463,8 +402,8 @@
         },
         "gridPos": {
           "h": 8,
-          "w": 9,
-          "x": 15,
+          "w": 12,
+          "x": 12,
           "y": 5
         },
         "id": 8,
@@ -538,128 +477,7 @@
           "type": "loki",
           "uid": "loki"
         },
-        "description": "Matrix users with a client session active in the last 5 minutes. Click a user to scope the whole board to that account.",
-        "fieldConfig": {
-          "defaults": {
-            "color": {
-              "mode": "thresholds"
-            },
-            "custom": {
-              "align": "left",
-              "cellOptions": {
-                "type": "auto"
-              },
-              "filterable": true,
-              "inspect": false,
-              "minWidth": 120
-            },
-            "mappings": [],
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {
-                  "color": "transparent",
-                  "value": null
-                }
-              ]
-            }
-          },
-          "overrides": [
-            {
-              "matcher": {
-                "id": "byName",
-                "options": "matrix_user_id"
-              },
-              "properties": [
-                {
-                  "id": "displayName",
-                  "value": "Matrix User"
-                },
-                {
-                  "id": "color",
-                  "value": {
-                    "mode": "fixed",
-                    "fixedColor": "#8ab8ff"
-                  }
-                },
-                {
-                  "id": "links",
-                  "value": [
-                    {
-                      "title": "Scope this board to the user",
-                      "url": "/d/boxel-client-perf/client-performance?${__url_time_range}&var-matrix_user_id=${__value.text:percentencode}",
-                      "targetBlank": false
-                    }
-                  ]
-                }
-              ]
-            }
-          ]
-        },
-        "gridPos": {
-          "h": 8,
-          "w": 6,
-          "x": 0,
-          "y": 5
-        },
-        "id": 91,
-        "options": {
-          "cellHeight": "sm",
-          "footer": {
-            "countRows": false,
-            "fields": "",
-            "reducer": [
-              "sum"
-            ],
-            "show": false
-          },
-          "showHeader": false,
-          "sortBy": [
-            {
-              "desc": false,
-              "displayName": "Matrix User"
-            }
-          ]
-        },
-        "pluginVersion": "12.4.3",
-        "targets": [
-          {
-            "datasource": {
-              "type": "loki",
-              "uid": "loki"
-            },
-            "editorMode": "code",
-            "expr": "sum by (matrix_user_id) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [5m]))",
-            "queryType": "instant",
-            "legendFormat": "{{matrix_user_id}}",
-            "refId": "A"
-          }
-        ],
-        "title": "",
-        "transformations": [
-          {
-            "id": "labelsToFields",
-            "options": {
-              "mode": "columns"
-            }
-          },
-          {
-            "id": "filterFieldsByName",
-            "options": {
-              "include": {
-                "pattern": "^matrix_user_id$"
-              }
-            }
-          }
-        ],
-        "type": "table"
-      },
-      {
-        "datasource": {
-          "type": "loki",
-          "uid": "loki"
-        },
-        "description": "Active sessions over the selected time range, stacked by account: at each point, how many sessions each user had active in the preceding 5m. Total stack height is the concurrent session count, so the shape shows when the app was busy and the colours show who was on. One session is one browser tab.",
+        "description": "Active sessions over the selected time range, stacked by account: at each point, how many sessions each user had active in the preceding 5m. Total stack height is concurrency, the colours are who, and the legend doubles as the current-user list. The grey \"build in use\" legend rows name the host build(s) the active sessions run (from the app_version every beacon stamps): one row means every session is on that build; a second row right after a deploy is a tab that has not reloaded and still runs the previous code. Hovering the chart names which user is on which build. One session is one browser tab. The hover attribution is a third query byte-identical to the bands query, differing only in display name \u2014 Grafana cannot vary legend and tooltip names independently, so deleting the \"duplicate\" removes the user \u2192 build hover.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -711,7 +529,77 @@
             },
             "unit": "short"
           },
-          "overrides": []
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "A"
+              },
+              "properties": [
+                {
+                  "id": "custom.hideFrom",
+                  "value": {
+                    "viz": false,
+                    "legend": false,
+                    "tooltip": true
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "B"
+              },
+              "properties": [
+                {
+                  "id": "custom.hideFrom",
+                  "value": {
+                    "viz": true,
+                    "legend": false,
+                    "tooltip": true
+                  }
+                },
+                {
+                  "id": "custom.stacking",
+                  "value": {
+                    "group": "B",
+                    "mode": "none"
+                  }
+                },
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "#8e8e8e"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "C"
+              },
+              "properties": [
+                {
+                  "id": "custom.hideFrom",
+                  "value": {
+                    "viz": true,
+                    "legend": true,
+                    "tooltip": false
+                  }
+                },
+                {
+                  "id": "custom.stacking",
+                  "value": {
+                    "group": "C",
+                    "mode": "none"
+                  }
+                }
+              ]
+            }
+          ]
         },
         "gridPos": {
           "h": 8,
@@ -723,7 +611,7 @@
         "options": {
           "legend": {
             "calcs": [
-              "lastNotNull",
+              "last",
               "max"
             ],
             "displayMode": "table",
@@ -743,11 +631,35 @@
               "uid": "loki"
             },
             "editorMode": "code",
-            "expr": "count by (matrix_user_id) (count by (matrix_user_id, session_id) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [5m])))",
+            "expr": "count by (matrix_user_id, app_version) (count by (matrix_user_id, app_version, session_id) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [5m])))",
             "queryType": "range",
-            "refId": "A",
+            "interval": "1m",
             "legendFormat": "{{matrix_user_id}}",
-            "interval": "1m"
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "count by (app_version) (count by (app_version, session_id) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [5m])))",
+            "queryType": "range",
+            "interval": "1m",
+            "legendFormat": "build in use: {{app_version}}",
+            "refId": "B"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "count by (matrix_user_id, app_version) (count by (matrix_user_id, app_version, session_id) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [5m])))",
+            "queryType": "range",
+            "interval": "1m",
+            "legendFormat": "{{matrix_user_id}} \u2192 {{app_version}}",
+            "refId": "C"
           }
         ],
         "title": "Active sessions over time by user",
@@ -997,7 +909,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "description": "Top 20 card_id values by worst observed settle_ms over the selected range. Instant query; widen the time range to survey more history.",
+            "description": "Top 20 card_id values by worst observed settle_ms over the selected range. Instant query; widen the time range to survey more history. Each row names the user who experienced it \u2014 a max is one person's worst moment, not an average.",
             "fieldConfig": {
               "defaults": {
                 "color": {
@@ -1054,7 +966,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "topk(20, max by (card_id) (max_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"card-load\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap settle_ms [$__range])))",
+                "expr": "topk(20, max by (card_id, matrix_user_id) (max_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"card-load\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap settle_ms [$__range])))",
                 "queryType": "instant",
                 "refId": "A",
                 "legendFormat": ""
@@ -1078,7 +990,12 @@
                     "Time": true
                   },
                   "renameByName": {
-                    "Value #A": "max settle_ms"
+                    "Value #A": "max settle_ms",
+                    "matrix_user_id": "user"
+                  },
+                  "indexByName": {
+                    "card_id": 0,
+                    "matrix_user_id": 1
                   }
                 }
               }
@@ -1504,7 +1421,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "description": "Per-endpoint worst-case duration_ms (query A) and retried-request count (query B) over the selected range. Instant queries merged on endpoint.",
+            "description": "Per-endpoint worst-case duration_ms (query A) and retried-request count (query B) over the selected range. Instant queries merged on endpoint. Rows carry the user the number came from; a slowest-request row is one person's round-trip.",
             "fieldConfig": {
               "defaults": {
                 "color": {
@@ -1561,7 +1478,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "topk(15, max by (endpoint) (max_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"server-request\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap duration_ms [$__range])))",
+                "expr": "topk(15, max by (endpoint, matrix_user_id) (max_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"server-request\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap duration_ms [$__range])))",
                 "queryType": "instant",
                 "refId": "A",
                 "legendFormat": ""
@@ -1572,7 +1489,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "sum by (endpoint) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"server-request\" | retried=\"true\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__range]))",
+                "expr": "sum by (endpoint, matrix_user_id) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"server-request\" | retried=\"true\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__range]))",
                 "queryType": "instant",
                 "refId": "B",
                 "legendFormat": ""
@@ -1597,7 +1514,8 @@
                   },
                   "renameByName": {
                     "Value #A": "max duration_ms",
-                    "Value #B": "retried"
+                    "Value #B": "retried",
+                    "matrix_user_id": "user"
                   }
                 }
               }
@@ -1882,7 +1800,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "description": "Wedge event rate per interval (left axis) and the worst blocked_ms observed per interval (right axis, ms). A wedge is a main-thread stall; blocked_ms is how long the thread was blocked.  A wedge is a main-thread freeze of 10s or more (the 100ms heartbeat missed a tick by \u226510s). Sub-second jank is not counted here; see a keepalive's max_gap_ms for that.",
+            "description": "Wedge event rate per interval (left axis) and the worst blocked_ms observed per interval (right axis, ms). A wedge is a main-thread stall; blocked_ms is how long the thread was blocked.  A wedge is a main-thread freeze of 10s or more (the 100ms heartbeat missed a tick by \u226510s). Sub-second jank is not counted here; see a keepalive's max_gap_ms for that. The blocked-time series splits per user, so the hover names whose thread froze; the rate stays an aggregate.",
             "fieldConfig": {
               "defaults": {
                 "color": {
@@ -1988,10 +1906,10 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "max_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"wedge\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap blocked_ms [$__interval]) by ()",
+                "expr": "max by (matrix_user_id) (max_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"wedge\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap blocked_ms [$__interval]) by ())",
                 "queryType": "range",
                 "refId": "B",
-                "legendFormat": "max blocked_ms"
+                "legendFormat": "max blocked_ms \u00b7 {{matrix_user_id}}"
               }
             ],
             "title": "wedge rate & max blocked_ms",
@@ -2190,7 +2108,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "description": "Rebuild event rate per interval (left axis) and p95 rebuild duration_ms (right axis, ms).",
+            "description": "Rebuild event rate per interval (left axis) and p95 rebuild duration_ms (right axis, ms). Split by rebuild_source: realm-event rebuilds are driven by an incoming index event (someone\u2019s write landing on this tab); write rebuilds are the tab\u2019s own code-mode save re-establishing the graph at save time.",
             "fieldConfig": {
               "defaults": {
                 "color": {
@@ -2285,10 +2203,10 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"rebuild\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__interval]))",
+                "expr": "sum by (rebuild_source) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"rebuild\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__interval]))",
                 "queryType": "range",
                 "refId": "A",
-                "legendFormat": "rebuilds"
+                "legendFormat": "rebuilds ({{rebuild_source}})"
               },
               {
                 "datasource": {
@@ -2310,7 +2228,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "description": "Per trigger_modules group: rebuild count (A), avg modules_refetched (B), avg cards_reloaded (C) over the range. Identifies which module changes drive the most expensive client rebuilds.",
+            "description": "Per trigger_modules group: rebuild count (A), avg modules_refetched (B), avg cards_reloaded (C) over the range. Identifies which module changes drive the most expensive client rebuilds. modules_refetched is read from event-driven rebuilds only; a write-sourced rebuild does not measure module re-imports.",
             "fieldConfig": {
               "defaults": {
                 "color": {
@@ -2378,7 +2296,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "avg by (trigger_module) (avg_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"rebuild\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap modules_refetched [$__range]))",
+                "expr": "avg by (trigger_module) (avg_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"rebuild\" | rebuild_source=\"realm-event\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap modules_refetched [$__range]))",
                 "queryType": "instant",
                 "refId": "B",
                 "legendFormat": ""
@@ -2961,7 +2879,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "description": "Users ranked by number of main-thread wedges over the range.  A wedge is a main-thread freeze of 10s or more (the 100ms heartbeat missed a tick by \u226510s). Sub-second jank is not counted here; see a keepalive's max_gap_ms for that.",
+            "description": "Main-thread freezes at or above the wedge threshold, by the account that suffered them and the script frame that was blocking (`fn @ url:char` \u2014 the char offset source-map-resolves even for minified builds). The frame is what makes a row actionable: it names the code that held the thread. A blank frame is a freeze corroborated only by a longtask, with no LoAF script attribution \u2014 real, and its blocked time can read 0, which is why rows also carry a wedge count and the limit sits far above any plausible row count: every wedging user stays on the board. Worst blocked ms is the single worst freeze for that user+frame.",
             "fieldConfig": {
               "defaults": {
                 "color": {
@@ -3008,7 +2926,13 @@
                 ],
                 "show": false
               },
-              "showHeader": true
+              "showHeader": true,
+              "sortBy": [
+                {
+                  "desc": true,
+                  "displayName": "worst blocked ms"
+                }
+              ]
             },
             "pluginVersion": "12.4.3",
             "targets": [
@@ -3018,10 +2942,19 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "topk(25, sum by (matrix_user_id) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | event_type=\"wedge\" [$__range])))",
+                "expr": "topk(200, max by (matrix_user_id, top_frame_function, top_frame_url) (max_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | event_type=\"wedge\" | unwrap blocked_ms [$__range])))",
                 "queryType": "instant",
-                "refId": "A",
-                "legendFormat": ""
+                "refId": "A"
+              },
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "topk(200, sum by (matrix_user_id, top_frame_function, top_frame_url) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | event_type=\"wedge\" [$__range])))",
+                "queryType": "instant",
+                "refId": "B"
               }
             ],
             "title": "Wedges by user",
@@ -3029,7 +2962,9 @@
             "transformations": [
               {
                 "id": "labelsToFields",
-                "options": {}
+                "options": {
+                  "mode": "columns"
+                }
               },
               {
                 "id": "merge",
@@ -3042,7 +2977,18 @@
                     "Time": true
                   },
                   "renameByName": {
-                    "Value #A": "wedges"
+                    "Value #A": "worst blocked ms",
+                    "Value #B": "wedges",
+                    "matrix_user_id": "Matrix User",
+                    "top_frame_function": "blocking frame",
+                    "top_frame_url": "frame url"
+                  },
+                  "indexByName": {
+                    "matrix_user_id": 0,
+                    "top_frame_function": 1,
+                    "top_frame_url": 2,
+                    "Value #A": 3,
+                    "Value #B": 4
                   }
                 }
               }
@@ -3053,7 +2999,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "description": "Users ranked by their slowest observed card settle time.",
+            "description": "The slowest card-to-interactive each account experienced, named by the card that was slow \u2014 settle_ms is the \"Loading card\u2026\" window the user sat through. The card id is the why: it says which card to open the card-load row for, and repeated rows for one card across users point at the card, not the network.",
             "fieldConfig": {
               "defaults": {
                 "color": {
@@ -3100,7 +3046,13 @@
                 ],
                 "show": false
               },
-              "showHeader": true
+              "showHeader": true,
+              "sortBy": [
+                {
+                  "desc": true,
+                  "displayName": "max settle_ms"
+                }
+              ]
             },
             "pluginVersion": "12.4.3",
             "targets": [
@@ -3110,7 +3062,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "topk(25, max by (matrix_user_id) (max_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | event_type=\"card-load\" | unwrap settle_ms [$__range])))",
+                "expr": "topk(25, max by (matrix_user_id, card_id) (max_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | event_type=\"card-load\" | unwrap settle_ms [$__range])))",
                 "queryType": "instant",
                 "refId": "A",
                 "legendFormat": ""
@@ -3121,7 +3073,9 @@
             "transformations": [
               {
                 "id": "labelsToFields",
-                "options": {}
+                "options": {
+                  "mode": "columns"
+                }
               },
               {
                 "id": "merge",
@@ -3134,7 +3088,15 @@
                     "Time": true
                   },
                   "renameByName": {
-                    "Value #A": "max settle_ms"
+                    "Value #A": "max settle_ms",
+                    "Value": "max settle_ms",
+                    "matrix_user_id": "Matrix User",
+                    "card_id": "card"
+                  },
+                  "indexByName": {
+                    "matrix_user_id": 0,
+                    "card_id": 1,
+                    "Value #A": 2
                   }
                 }
               }
@@ -3145,7 +3107,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "description": "Total non-keepalive telemetry events per user \u2014 overall anomaly volume.",
+            "description": "What kind of signals each account is generating \u2014 volume alone is not a problem (an active user loads many cards), so the mix is the read: wedges are freezes, rebuilds are code-change absorption cost, server-request and deserialize columns rise with ordinary activity. A user whose column weight sits in wedge/rebuild is having a bad time; one whose weight is card-load is just busy.",
             "fieldConfig": {
               "defaults": {
                 "color": {
@@ -3192,7 +3154,8 @@
                 ],
                 "show": false
               },
-              "showHeader": true
+              "showHeader": true,
+              "sortBy": []
             },
             "pluginVersion": "12.4.3",
             "targets": [
@@ -3202,31 +3165,39 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "topk(25, sum by (matrix_user_id) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | event_type!=\"keepalive\" [$__range])))",
+                "expr": "sum by (matrix_user_id, event_type) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | event_type!=\"keepalive\" [$__range]))",
                 "queryType": "instant",
                 "refId": "A",
                 "legendFormat": ""
               }
             ],
-            "title": "Signal events by user",
+            "title": "Signal mix by user",
             "type": "table",
             "transformations": [
               {
                 "id": "labelsToFields",
-                "options": {}
+                "options": {
+                  "mode": "columns"
+                }
               },
               {
                 "id": "merge",
                 "options": {}
               },
               {
+                "id": "groupingToMatrix",
+                "options": {
+                  "columnField": "event_type",
+                  "rowField": "matrix_user_id",
+                  "valueField": "Value #A",
+                  "emptyValue": "zero"
+                }
+              },
+              {
                 "id": "organize",
                 "options": {
-                  "excludeByName": {
-                    "Time": true
-                  },
                   "renameByName": {
-                    "Value #A": "events"
+                    "matrix_user_id\\event_type": "Matrix User"
                   }
                 }
               }
@@ -3299,7 +3270,7 @@
     },
     "timepicker": {},
     "timezone": "browser",
-    "title": "Client Performance",
+    "title": "Host App Client Performance",
     "weekStart": ""
   }
 }
