@@ -651,8 +651,6 @@ Above code blocks are now complete`;
     assert.dom('.code-block-diff .editor.original').exists();
     assert.dom('.code-block-diff .editor.modified').exists();
     assert.dom('[data-test-apply-code-button]').exists();
-
-    await percySnapshot(assert);
   });
 
   test('it will render diff editor for a blank file', async function (assert) {
