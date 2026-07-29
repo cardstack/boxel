@@ -559,3 +559,53 @@ module('issue-scheduler > RealmIssueStore readLocalStatus', function (hooks) {
     assert.strictEqual(status, undefined);
   });
 });
+
+module('issue-scheduler > local issue overlay', function () {
+  test('addLocalIssues makes an unindexed issue schedulable immediately', async function (assert) {
+    let store = new MockIssueStore([
+      makeIssue({ id: 'impl', status: 'done', order: 1 }),
+    ]);
+    let scheduler = new IssueScheduler(store);
+    await scheduler.loadIssues();
+
+    scheduler.addLocalIssues([
+      makeIssue({
+        id: 'harden-impl',
+        status: 'backlog',
+        order: 2,
+        blockedBy: ['impl'],
+      }),
+    ]);
+
+    assert.true(scheduler.hasUnblockedIssues(), 'local issue is eligible');
+    assert.strictEqual(scheduler.pickNextIssue()?.id, 'harden-impl');
+  });
+
+  test('local issues survive loadIssues until the index catches up', async function (assert) {
+    let store = new MockIssueStore([
+      makeIssue({ id: 'impl', status: 'done', order: 1 }),
+    ]);
+    let scheduler = new IssueScheduler(store);
+    await scheduler.loadIssues();
+    scheduler.addLocalIssues([
+      makeIssue({ id: 'harden-impl', status: 'backlog', order: 2 }),
+    ]);
+
+    // Index still lagging: reload keeps the local overlay.
+    await scheduler.loadIssues();
+    assert.strictEqual(scheduler.pickNextIssue()?.id, 'harden-impl');
+
+    // Index caught up (with fresher state): the indexed row wins.
+    store.issues.push(
+      makeIssue({ id: 'harden-impl', status: 'in_progress', order: 2 }),
+    );
+    await scheduler.loadIssues();
+    let picked = scheduler.pickNextIssue();
+    assert.strictEqual(picked?.id, 'harden-impl');
+    assert.strictEqual(
+      picked?.status,
+      'in_progress',
+      'indexed state replaces the local overlay',
+    );
+  });
+});

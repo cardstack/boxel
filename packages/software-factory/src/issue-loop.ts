@@ -28,9 +28,13 @@ import type { LoopAgent } from './factory-agent/index.ts';
 import type { FactoryTool, ToolCallEntry } from './factory-tool-builder.ts';
 import type { IssueStore } from './issue-scheduler.ts';
 
-import { IssueScheduler } from './issue-scheduler.ts';
+import {
+  IssueScheduler,
+  mapCardToSchedulableIssue,
+} from './issue-scheduler.ts';
 import { issuePhase, phaseRank, type FactoryPhase } from './factory-phase.ts';
 import { createHardeningIssues } from './factory-seed.ts';
+import { readCard } from './workspace-fs.ts';
 import { logger } from './logger.ts';
 import { startSpan, traceEvent } from './run-trace.ts';
 import { isBugFixIssue } from './factory-prompt-loader.ts';
@@ -819,29 +823,35 @@ export async function runIssueLoop(
       log.warn(
         `Failed to sync hardening issues: ${seedSync.error ?? 'unknown error'}`,
       );
-      return;
     }
-    // The scheduler reads the realm index; bound-poll until it reflects
-    // the freshly-synced issues so the outer loop doesn't exit early.
-    // (retryWithPoll's predicate is needsRetry: keep polling WHILE the
-    // hardening issues are still absent. On timeout it returns the last
-    // result rather than throwing — the loop would then exit with the
-    // hardening issues parked on the board for the next run.)
-    let indexCaughtUp = false;
-    try {
-      let issues = await retryWithPoll(
-        () => issueStore.listIssues(),
-        (loaded) => !loaded.some((i) => issuePhase(i) === 'hardening'),
-      );
-      indexCaughtUp = issues.some((i) => issuePhase(i) === 'hardening');
-    } catch {
-      // listIssues itself failed — same story as a timeout.
+    // NEVER wait on the realm index for issues this loop just wrote —
+    // control-plane raw writes index asynchronously (observed minutes
+    // behind under post-review load). Register them with the scheduler
+    // directly from the files on disk; context building and refresh both
+    // read the local workspace, and the index catches up on its own.
+    let realmBase = controlRealm.endsWith('/')
+      ? controlRealm
+      : `${controlRealm}/`;
+    let injected: SchedulableIssue[] = [];
+    for (let path of created) {
+      let read = await readCard(workspaceDir, `${path}.json`);
+      if (read.ok && read.document) {
+        let doc = read.document as {
+          data: {
+            attributes?: Record<string, unknown>;
+            relationships?: Record<string, unknown>;
+          };
+        };
+        injected.push(
+          mapCardToSchedulableIssue({
+            id: `${realmBase}${path}`,
+            attributes: doc.data.attributes,
+            relationships: doc.data.relationships,
+          }),
+        );
+      }
     }
-    if (!indexCaughtUp) {
-      log.warn(
-        'Hardening issues synced but not yet visible in the realm index — they stay on the board for a resume run',
-      );
-    }
+    scheduler.addLocalIssues(injected);
     if (runLog) {
       await runLog.append([
         {

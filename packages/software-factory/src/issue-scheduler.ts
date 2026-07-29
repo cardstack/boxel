@@ -84,9 +84,42 @@ export class IssueScheduler {
     this.issueStore = issueStore;
   }
 
+  // Issues the ORCHESTRATOR just wrote (e.g. synthesized hardening
+  // issues) that the realm index may not reflect yet — control-plane
+  // raw writes index asynchronously, sometimes minutes behind under
+  // load. Kept merged into the working list until the index catches
+  // up, so the loop never has to poll the index for state it authored.
+  private localIssues: Map<string, SchedulableIssue> = new Map();
+
+  /**
+   * Register orchestrator-written issues directly, without waiting for
+   * the realm index. They participate in scheduling immediately and are
+   * dropped from the local overlay once `loadIssues` sees them indexed.
+   */
+  addLocalIssues(issues: SchedulableIssue[]): void {
+    for (let issue of issues) {
+      this.localIssues.set(issue.id, issue);
+      if (!this.issues.some((i) => i.id === issue.id)) {
+        this.issues.push(issue);
+      }
+    }
+    log.info(
+      `Registered ${issues.length} local issue(s) ahead of the index: ${issues
+        .map((i) => i.id)
+        .join(', ')}`,
+    );
+  }
+
   /** Load (or reload) the full issue list from the store. */
   async loadIssues(): Promise<void> {
     this.issues = await this.issueStore.listIssues();
+    for (let [id, local] of this.localIssues) {
+      if (this.issues.some((i) => i.id === id)) {
+        this.localIssues.delete(id);
+      } else {
+        this.issues.push(local);
+      }
+    }
     log.info(`Loaded ${this.issues.length} issue(s) from store`);
   }
 
@@ -251,13 +284,30 @@ export class RealmIssueStore implements IssueStore {
       },
     });
 
-    if (!result.ok || !result.data?.length) {
-      throw new Error(
-        `Failed to refresh issue "${issueId}": ${!result.ok ? result.error : 'not found'}`,
-      );
+    if (result.ok && result.data?.length) {
+      return mapCardToSchedulableIssue(result.data[0]);
     }
 
-    return mapCardToSchedulableIssue(result.data[0]);
+    // Index lag fallback: the local workspace file is the authoritative
+    // source (the loop writes status flips there first), so an issue the
+    // index hasn't caught up to yet — e.g. a freshly synthesized
+    // hardening issue — refreshes from disk instead of failing.
+    let filePath = ensureJsonExtension(
+      toRealmRelativePath(issueId, this.realmUrl),
+    );
+    let readResult = await readCard(this.workspaceDir, filePath);
+    if (readResult.ok && readResult.document) {
+      let doc = readResult.document as unknown as LooseSingleCardDocument;
+      return mapCardToSchedulableIssue({
+        id: issueId,
+        attributes: doc.data.attributes,
+        relationships: doc.data.relationships,
+      });
+    }
+
+    throw new Error(
+      `Failed to refresh issue "${issueId}": ${!result.ok ? result.error : 'not found in index or workspace'}`,
+    );
   }
 
   async readLocalStatus(issueId: string): Promise<string | undefined> {
@@ -450,7 +500,7 @@ function extractLinksToManyIds(
  * Extracts scheduling fields from the card's attributes, falling back
  * to safe defaults for any missing fields.
  */
-function mapCardToSchedulableIssue(
+export function mapCardToSchedulableIssue(
   card: Record<string, unknown>,
 ): SchedulableIssue {
   let attrs = (card.attributes ?? card) as Record<string, unknown>;
