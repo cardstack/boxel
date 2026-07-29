@@ -429,8 +429,8 @@ module('Integration | Service | client-telemetry', function (hooks) {
     ];
 
     cases.forEach(([frame], i) => {
-      // The message is deliberately plain: a message that reads like a frame
-      // would be a different test (the one below).
+      // The message is deliberately plain, so each case exercises only its frame
+      // shape. A message that reads like a frame is its own test.
       dispatchUncaught(errorWithStack(`frame shape ${i}`, [frame]));
     });
 
@@ -558,11 +558,13 @@ module('Integration | Service | client-telemetry', function (hooks) {
     svc.enableForTest();
     svc.drainBufferForTest();
 
-    // The header budget has to key off "is this line a frame", and the cheap
-    // tests for that are wrong in opposite directions: a message mentioning a
-    // scoped module or a user id carries a bare `@`, and a message can span
-    // lines, so bounding only the first one leaves the rest to crowd the frames
-    // out. Each of these once emitted a stack with no frames at all.
+    // The header budget rests on deciding which lines are the message, and the
+    // cheap ways to decide that fail in opposite directions: a message
+    // mentioning a scoped module or an account carries a bare `@`, so a marker
+    // test reads it as a frame and skips the budget; and a message can span
+    // lines, so bounding only the first leaves the rest to crowd the frames out.
+    // Each case here is a message the budget has to catch — miss any one and the
+    // stack ships with no frames at all, which is the whole point of carrying it.
     let bulk = 'x'.repeat(3000);
     let cases: Array<[string, string]> = [
       ['a plain oversized message', `failed to save: ${bulk}`],
