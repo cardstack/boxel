@@ -19,6 +19,7 @@ import {
   localId,
   baseCardRef,
   realmURL,
+  rri,
   Deferred,
   SupportedMimeType,
   type Loader,
@@ -31,6 +32,10 @@ import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import type CardStore from '@cardstack/host/lib/gc-card-store';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
+import type {
+  RebuildEvent,
+  TelemetryEventInput,
+} from '@cardstack/host/services/client-telemetry';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
@@ -1923,7 +1928,11 @@ module('Integration | Store', function (hooks) {
     );
     assert.false(didSave, 'instance has not been persisted yet');
 
-    await waitUntil(() => didSave);
+    // The fire-and-forget save (doNotWaitForPersist) completes a write +
+    // incremental index round-trip before onSave fires — comfortably over the
+    // 1s waitUntil default under load. Match the save slack the sibling
+    // "adding to the store" test uses.
+    await waitUntil(() => didSave, { timeout: 10000 });
 
     let file = await testRealmAdapter.openFile('Person/hassan.json');
     assert.strictEqual(
@@ -3249,6 +3258,518 @@ module('Integration | Store', function (hooks) {
       storeService.getReferenceCount(jade),
       1,
       `reference count for ${jade} is 1`,
+    );
+  });
+
+  // Count full rebuilds by the loader flush each one performs: the coalesced
+  // rebuild calls resetLoader exactly once, and nothing else flushes the loader
+  // in these tests, so resetLoader-call-count == rebuild-count.
+  function countRebuilds() {
+    let count = 0;
+    let original = loaderService.resetLoader;
+    loaderService.resetLoader = function (
+      options?: Parameters<LoaderService['resetLoader']>[0],
+    ) {
+      count++;
+      return original.call(loaderService, options);
+    } as LoaderService['resetLoader'];
+    return {
+      get count() {
+        return count;
+      },
+      restore() {
+        loaderService.resetLoader = original;
+      },
+    };
+  }
+
+  async function renderCard(id: string) {
+    class Driver {
+      @tracked id: string | undefined;
+    }
+    let driver = new Driver();
+    class ResourceConsumer extends GlimmerComponent {
+      resource = getCard(this, () => driver.id);
+      get renderedCard() {
+        return this.resource.card?.constructor.getComponent(this.resource.card);
+      }
+      <template>
+        {{#if this.resource.card}}
+          <this.renderedCard data-test-rendered-card={{this.resource.id}} />
+        {{/if}}
+      </template>
+    }
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><ResourceConsumer /></template>
+      },
+    );
+    driver.id = id;
+    await waitFor(`[data-test-rendered-card="${id}"]`, { timeout: 5_000 });
+  }
+
+  test('a burst of executable invalidations coalesces to at most two rebuilds', async function (assert) {
+    let hassan = `${testRealmURL}Person/hassan`;
+    await renderCard(hassan);
+
+    let personModule = `${testRealmURL}person.gts`;
+    assert.true(
+      loaderService.loader.isModuleLoaded(personModule),
+      'precondition: the person module is loaded',
+    );
+
+    let rebuilds = countRebuilds();
+    try {
+      // Deliver executable invalidations faster than a rebuild can complete —
+      // synchronously, before the first rebuild's re-fetch settles.
+      let event: RealmEventContent = {
+        eventName: 'index',
+        indexType: 'incremental',
+        realmURL: testRealmURL,
+        invalidations: [personModule],
+      };
+      for (let i = 0; i < 6; i++) {
+        (storeService as any).handleInvalidations(event);
+      }
+      await settled();
+    } finally {
+      rebuilds.restore();
+    }
+
+    let coalesced = rebuilds.count >= 1 && rebuilds.count <= 2;
+    assert.ok(
+      coalesced,
+      `6 rapid executable invalidations coalesce to at most 2 rebuilds (saw ${rebuilds.count})`,
+    );
+
+    // End state reflects the latest generation: the open card is re-established
+    // and rendered against current server state.
+    await waitFor(`[data-test-rendered-card="${hassan}"]`, { timeout: 5_000 });
+    let instance = storeService.peek(hassan);
+    assert.true(
+      isCardInstance(instance),
+      'the open card is re-established after the burst',
+    );
+    assert.strictEqual(
+      (instance as any).name,
+      'Hassan',
+      'the re-established card reflects current server state',
+    );
+    assert.strictEqual(
+      storeService.getReferenceCount(hassan),
+      1,
+      'reference count stays balanced across the burst',
+    );
+  });
+
+  test('an isolated executable invalidation still triggers exactly one rebuild', async function (assert) {
+    let hassan = `${testRealmURL}Person/hassan`;
+    await renderCard(hassan);
+
+    let personModule = `${testRealmURL}person.gts`;
+    assert.true(
+      loaderService.loader.isModuleLoaded(personModule),
+      'precondition: the person module is loaded',
+    );
+
+    let rebuilds = countRebuilds();
+    try {
+      (storeService as any).handleInvalidations({
+        eventName: 'index',
+        indexType: 'incremental',
+        realmURL: testRealmURL,
+        invalidations: [personModule],
+      } as RealmEventContent);
+      await settled();
+    } finally {
+      rebuilds.restore();
+    }
+
+    assert.strictEqual(
+      rebuilds.count,
+      1,
+      'a single executable invalidation resets exactly once, as before',
+    );
+    await waitFor(`[data-test-rendered-card="${hassan}"]`, { timeout: 5_000 });
+    assert.true(
+      isCardInstance(storeService.peek(hassan)),
+      'the card is re-established after the single rebuild',
+    );
+  });
+
+  // Arms the client-performance instrument (dormant under isTesting() until a
+  // test opts in) and captures the events the rebuild path emits. Captured at
+  // record time rather than drained afterwards so the assertion can't race the
+  // instrument's own flush loop.
+  function captureTelemetry() {
+    let telemetry = getService('client-telemetry');
+    let captured: TelemetryEventInput[] = [];
+    telemetry.enableForTest();
+    let original = telemetry.recordEvent;
+    telemetry.recordEvent = function (evt: TelemetryEventInput) {
+      captured.push(evt);
+      return original.call(telemetry, evt);
+    };
+    return {
+      events(eventType: string) {
+        return captured.filter((e) => e.event_type === eventType);
+      },
+      summary() {
+        return captured.map((e) => e.event_type).join(',') || '<none>';
+      },
+      // The rebuild event is emitted after the rebuild's re-fetch resolves,
+      // which outlives `settled()` — the loader flush and store reset run
+      // before the task's first await, so a settled tick proves the rebuild
+      // started, not that it finished. Wait for the event itself.
+      async waitForEvent(eventType: string) {
+        try {
+          await waitUntil(() => this.events(eventType).length > 0, {
+            timeout: 10_000,
+          });
+        } catch {
+          // Let the caller's assertion report the miss with its own message.
+        }
+      },
+      restore() {
+        telemetry.recordEvent = original;
+        telemetry.teardown();
+      },
+    };
+  }
+
+  test('a rebuild emits a rebuild telemetry event describing the code change', async function (assert) {
+    let hassan = `${testRealmURL}Person/hassan`;
+    await renderCard(hassan);
+
+    let personModule = `${testRealmURL}person.gts`;
+    assert.true(
+      loaderService.loader.isModuleLoaded(personModule),
+      'precondition: the person module is loaded',
+    );
+
+    let telemetry = captureTelemetry();
+    try {
+      assert.true(
+        getService('client-telemetry').isEnabled,
+        'precondition: the instrument is armed',
+      );
+      (storeService as any).handleInvalidations({
+        eventName: 'index',
+        indexType: 'incremental',
+        realmURL: testRealmURL,
+        invalidations: [personModule],
+      } as RealmEventContent);
+      await telemetry.waitForEvent('rebuild');
+      await settled();
+    } finally {
+      telemetry.restore();
+    }
+
+    let rebuilds = telemetry.events('rebuild');
+    assert.strictEqual(
+      rebuilds.length,
+      1,
+      `one rebuild event is emitted (captured: ${telemetry.summary()})`,
+    );
+    let rebuild = rebuilds[0] as RebuildEvent;
+    assert.strictEqual(
+      rebuild.trigger_module,
+      personModule,
+      'the invalidated module is the scalar grouping key',
+    );
+    assert.deepEqual(
+      rebuild.trigger_modules,
+      [personModule],
+      'the full trigger set names the invalidated module',
+    );
+    assert.strictEqual(
+      rebuild.coalesced_events,
+      1,
+      'an isolated edit reports a single coalesced event',
+    );
+    assert.strictEqual(
+      rebuild.modules_refetched,
+      1,
+      'the loaded module counts as refetched',
+    );
+    assert.strictEqual(
+      rebuild.realm,
+      testRealmURL,
+      'the event is attributed to the realm that was written to',
+    );
+    assert.true(
+      rebuild.cards_reloaded >= 1,
+      `the open card graph is re-established (${rebuild.cards_reloaded} reloaded)`,
+    );
+  });
+
+  test('saving a module from the app rebuilds and reports it', async function (assert) {
+    let hassan = `${testRealmURL}Person/hassan`;
+    await renderCard(hassan);
+
+    let personModule = `${testRealmURL}person.gts`;
+    assert.true(
+      loaderService.loader.isModuleLoaded(personModule),
+      'precondition: the person module is loaded',
+    );
+    let cardService = getService('card-service');
+    let { content } = await cardService.getSource(rri(personModule));
+
+    let telemetry = captureTelemetry();
+    try {
+      // Saving a module flushes the loader at write time, well before the
+      // realm's index event for that write reaches the store. The flushed
+      // loader carries no loaded modules, so the store must not read the
+      // invalidation that follows as a change to a module nobody had loaded.
+      await cardService.saveSource(new URL(personModule), content, 'editor', {
+        resetLoader: true,
+      });
+      assert.false(
+        loaderService.loader.isModuleLoaded(personModule),
+        'precondition: the write flushed the module out of the loader',
+      );
+
+      (storeService as any).handleInvalidations({
+        eventName: 'index',
+        indexType: 'incremental',
+        realmURL: testRealmURL,
+        invalidations: [personModule],
+      } as RealmEventContent);
+      await telemetry.waitForEvent('rebuild');
+      await settled();
+    } finally {
+      telemetry.restore();
+    }
+
+    let rebuilds = telemetry.events('rebuild');
+    assert.strictEqual(
+      rebuilds.length,
+      1,
+      `the invalidation after the write still rebuilds (captured: ${telemetry.summary()})`,
+    );
+    assert.strictEqual(
+      (rebuilds[0] as RebuildEvent).trigger_module,
+      personModule,
+      'the saved module is named as the rebuild trigger',
+    );
+    assert.strictEqual(
+      (rebuilds[0] as RebuildEvent).modules_refetched,
+      1,
+      'the module the write flushed still counts as refetched',
+    );
+    await waitFor(`[data-test-rendered-card="${hassan}"]`, { timeout: 5_000 });
+    assert.true(
+      isCardInstance(storeService.peek(hassan)),
+      'the card is re-established after the rebuild',
+    );
+  });
+
+  test('a flush blinds every loaded module, not just the one written', async function (assert) {
+    let hassan = `${testRealmURL}Person/hassan`;
+    await renderCard(hassan);
+
+    let employeeModule = `${testRealmURL}employee.gts`;
+    await loaderService.loader.import(employeeModule);
+    assert.true(
+      loaderService.loader.isModuleLoaded(employeeModule),
+      'precondition: a second module is loaded',
+    );
+
+    let telemetry = captureTelemetry();
+    try {
+      // The flush that a write performs replaces the loader, so every module it
+      // held goes with it — not only the one being written. An invalidation
+      // naming one of those other modules still has to rebuild.
+      loaderService.resetLoader({
+        clearFetchCache: true,
+        reason: 'source-write',
+        codeChange: true,
+      });
+      assert.false(
+        loaderService.loader.isModuleLoaded(employeeModule),
+        'precondition: the flush took the second module with it',
+      );
+
+      (storeService as any).handleInvalidations({
+        eventName: 'index',
+        indexType: 'incremental',
+        realmURL: testRealmURL,
+        invalidations: [employeeModule],
+      } as RealmEventContent);
+      await telemetry.waitForEvent('rebuild');
+      await settled();
+    } finally {
+      telemetry.restore();
+    }
+
+    assert.strictEqual(
+      telemetry.events('rebuild').length,
+      1,
+      `a module the flush discarded still rebuilds (captured: ${telemetry.summary()})`,
+    );
+  });
+
+  test('a flush during a rebuild is still picked up by the invalidation after it', async function (assert) {
+    let hassan = `${testRealmURL}Person/hassan`;
+    await renderCard(hassan);
+
+    let personModule = `${testRealmURL}person.gts`;
+    let employeeModule = `${testRealmURL}employee.gts`;
+
+    let telemetry = captureTelemetry();
+    try {
+      (storeService as any).handleInvalidations({
+        eventName: 'index',
+        indexType: 'incremental',
+        realmURL: testRealmURL,
+        invalidations: [personModule],
+      } as RealmEventContent);
+      await waitUntil(
+        () => (storeService as any).rebuildForCodeChange.isRunning,
+        { timeout: 5_000 },
+      );
+
+      // Load the module inside the rebuild's window: the rebuild flushed the
+      // loader on the way in, so anything imported before it is gone by now,
+      // exactly as a re-established graph re-imports as it re-fetches.
+      await loaderService.loader.import(employeeModule);
+
+      // A write landing while a rebuild is in flight describes a code change
+      // that rebuild is already too late to pick up, so its record has to
+      // outlive the rebuild and be there for the invalidation still to come.
+      loaderService.resetLoader({
+        clearFetchCache: true,
+        reason: 'file-resource-external-invalidation',
+        codeChange: true,
+      });
+      await telemetry.waitForEvent('rebuild');
+      await settled();
+      let afterFirst = telemetry.events('rebuild').length;
+
+      (storeService as any).handleInvalidations({
+        eventName: 'index',
+        indexType: 'incremental',
+        realmURL: testRealmURL,
+        invalidations: [employeeModule],
+      } as RealmEventContent);
+      await waitUntil(() => telemetry.events('rebuild').length > afterFirst, {
+        timeout: 10_000,
+      }).catch(() => {});
+      await settled();
+
+      assert.true(
+        telemetry.events('rebuild').length > afterFirst,
+        `the invalidation after the rebuild still rebuilds (captured: ${telemetry.summary()})`,
+      );
+    } finally {
+      telemetry.restore();
+    }
+  });
+
+  test('an invalidation for a module nothing loaded does not rebuild', async function (assert) {
+    let hassan = `${testRealmURL}Person/hassan`;
+    await renderCard(hassan);
+
+    let telemetry = captureTelemetry();
+    try {
+      // The snapshot must not turn every executable invalidation into a
+      // rebuild — a module this tab never imported still has nothing to
+      // re-establish, flush or no flush.
+      loaderService.resetLoader({
+        clearFetchCache: true,
+        reason: 'source-write',
+        codeChange: true,
+      });
+
+      (storeService as any).handleInvalidations({
+        eventName: 'index',
+        indexType: 'incremental',
+        realmURL: testRealmURL,
+        invalidations: [`${testRealmURL}never-loaded.gts`],
+      } as RealmEventContent);
+      await settled();
+    } finally {
+      telemetry.restore();
+    }
+
+    assert.strictEqual(
+      telemetry.events('rebuild').length,
+      0,
+      `a module nothing loaded does not rebuild (captured: ${telemetry.summary()})`,
+    );
+  });
+
+  test('a flush record does not survive a session boundary', async function (assert) {
+    let personModule = `${testRealmURL}person.gts`;
+    loaderService.resetLoader({
+      clearFetchCache: true,
+      reason: 'source-write',
+      codeChange: true,
+    });
+    assert.true(
+      loaderService.wasModuleFlushedForCodeChange(personModule),
+      'precondition: the flush recorded the module',
+    );
+
+    // A write whose index event never arrives — the tab logged out first, or
+    // indexing failed — leaves a record behind. The next session has its own
+    // idea of which modules it loaded, so the record must not survive to make
+    // that session rebuild for a module it never had.
+    loaderService.resetState();
+
+    assert.false(
+      loaderService.wasModuleFlushedForCodeChange(personModule),
+      'the record is dropped when the loader crosses a session boundary',
+    );
+  });
+
+  test('an open editor flushing the loader first does not suppress the rebuild', async function (assert) {
+    let hassan = `${testRealmURL}Person/hassan`;
+    await renderCard(hassan);
+
+    let personModule = `${testRealmURL}person.gts`;
+    assert.true(
+      loaderService.loader.isModuleLoaded(personModule),
+      'precondition: the person module is loaded',
+    );
+
+    let telemetry = captureTelemetry();
+    try {
+      // The code-mode file resource subscribes to the same realm events as the
+      // store and flushes the loader for the file it holds. Either subscriber
+      // may run first, so the store's rebuild decision cannot depend on a
+      // loader the other one already replaced.
+      loaderService.resetLoader({
+        clearFetchCache: true,
+        reason: 'file-resource-external-invalidation',
+        codeChange: true,
+      });
+      assert.false(
+        loaderService.loader.isModuleLoaded(personModule),
+        'precondition: the flushed loader reports the module as not loaded',
+      );
+
+      (storeService as any).handleInvalidations({
+        eventName: 'index',
+        indexType: 'incremental',
+        realmURL: testRealmURL,
+        invalidations: [personModule],
+      } as RealmEventContent);
+      await telemetry.waitForEvent('rebuild');
+      await settled();
+    } finally {
+      telemetry.restore();
+    }
+
+    assert.strictEqual(
+      telemetry.events('rebuild').length,
+      1,
+      `the rebuild survives a flush by the other subscriber (captured: ${telemetry.summary()})`,
+    );
+    await waitFor(`[data-test-rendered-card="${hassan}"]`, { timeout: 5_000 });
+    assert.true(
+      isCardInstance(storeService.peek(hassan)),
+      'the card is re-established after the rebuild',
     );
   });
 });

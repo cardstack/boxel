@@ -41,11 +41,11 @@ export class DndColumn {
 export interface DndKanbanBoardSignature<DndColumn> {
   Args: DndKanbanBoardArgs<DndColumn>;
   Blocks: {
-    card: [card?: DndItem, column?: DndColumn];
+    card: [card: DndItem, column: DndColumn];
     // We yield the card and column back to the consumer so they can decide how to render it or use additional information
     // This rendering by the block will typically occur at the card of the kanaban
     // but with more sophistication you can use it somewhere else
-    header: [column?: DndColumn];
+    header: [column: DndColumn];
   };
 }
 

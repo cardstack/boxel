@@ -9,7 +9,7 @@ import Button, { type BoxelButtonKind } from '../button/index.gts';
 
 interface MessagesSignature {
   Args: {
-    messages: string[];
+    messages: (string | undefined)[];
     type?: 'error' | 'warning';
   };
   Element: HTMLDivElement;

@@ -14,7 +14,43 @@ const { module, test } = QUnit;
 
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
+import { missingPrerequisites } from '../src/preflight.ts';
+import { playwrightBrowsersEnv } from './helpers/preflight-env.ts';
+
 const packageRoot = resolve(import.meta.dirname, '..');
+
+/**
+ * Why the tests that assert on `factory:go`'s *argument* handling can't run
+ * here, or undefined if they can.
+ *
+ * Those spawn the real package script, so preflight runs inside the child and
+ * refuses before any arg parsing happens. On a checkout nobody has provisioned
+ * that refusal is correct behavior, not a failure worth reporting — and
+ * reporting it as one points the reader at arg parsing when the real cause is
+ * unbuilt artifacts, on precisely the fresh checkout preflight exists to explain.
+ *
+ * Never skips in CI: there the artifacts are built as part of the run, so a
+ * missing prerequisite is a real problem that has to fail loudly rather than
+ * quietly reduce coverage.
+ */
+function unprovisionedSkipReason(): string | undefined {
+  let missing = missingPrerequisites();
+  if (missing.length === 0 || process.env.CI) {
+    return undefined;
+  }
+  return missing.map((prerequisite) => prerequisite.id).join(', ');
+}
+
+const argHandlingSkipReason = unprovisionedSkipReason();
+if (argHandlingSkipReason) {
+  console.warn(
+    'Skipping the factory:go argument tests — run `pnpm factory:setup` ' +
+      `first (missing: ${argHandlingSkipReason})`,
+  );
+}
+// Resolved when the tests are defined rather than checked inside them, so they
+// register as skipped instead of reporting a pass they never performed.
+const argHandlingTest = argHandlingSkipReason ? test.skip : test;
 const stickyNoteFixture = readFileSync(
   resolve(import.meta.dirname, '../realm/Wiki/sticky-note.json'),
   'utf8',
@@ -345,6 +381,7 @@ module('factory-entrypoint integration', function () {
           env: {
             ...process.env,
             HOME: tempHome,
+            ...playwrightBrowsersEnv,
           },
         },
       );
@@ -386,43 +423,57 @@ module('factory-entrypoint integration', function () {
     }
   });
 
-  test('factory:go package script fails clearly when required inputs are missing', function (assert) {
-    let result = spawnSync(
-      'pnpm',
-      [
-        '--silent',
-        'factory:go',
-        '--',
-        '--target-realm',
-        'https://realms.example.test/testuser/personal/',
-      ],
-      {
-        cwd: packageRoot,
-        encoding: 'utf8',
-      },
-    );
+  argHandlingTest(
+    'factory:go package script fails clearly when required inputs are missing',
+    function (assert) {
+      let result = spawnSync(
+        'pnpm',
+        [
+          '--silent',
+          'factory:go',
+          '--',
+          '--target-realm',
+          'https://realms.example.test/testuser/personal/',
+        ],
+        {
+          cwd: packageRoot,
+          encoding: 'utf8',
+        },
+      );
 
-    assert.strictEqual(result.status, 1);
-    assert.true(
-      /Missing required input: pass --brief-url .* or --repo-url/.test(
-        result.stderr,
-      ),
-    );
-    assert.true(/Usage:/.test(result.stderr));
-    assert.true(/--target-realm <realm>/.test(result.stderr));
-  });
+      assert.strictEqual(result.status, 1);
+      assert.true(
+        /Missing required input: pass --brief-url .* or --repo-url/.test(
+          result.stderr,
+        ),
+      );
+      assert.true(/Usage:/.test(result.stderr));
+      assert.true(/--target-realm <realm>/.test(result.stderr));
+    },
+  );
 
-  test('factory:go package script prints usage with --help', function (assert) {
-    let result = spawnSync('pnpm', ['--silent', 'factory:go', '--', '--help'], {
-      cwd: packageRoot,
-      encoding: 'utf8',
-    });
+  // Preflight is skipped for --help, but the deferred boxel-cli import then
+  // throws and the entrypoint's catch re-runs the check, so on an unprovisioned
+  // checkout this exits 1 with the prerequisites list rather than the usage
+  // asserted below.
+  argHandlingTest(
+    'factory:go package script prints usage with --help',
+    function (assert) {
+      let result = spawnSync(
+        'pnpm',
+        ['--silent', 'factory:go', '--', '--help'],
+        {
+          cwd: packageRoot,
+          encoding: 'utf8',
+        },
+      );
 
-    assert.strictEqual(result.status, 0, result.stderr);
-    assert.true(/Usage:/.test(result.stdout));
-    assert.true(/--brief-url <url>/.test(result.stdout));
-    assert.true(/--no-retry-blocked/.test(result.stdout));
-  });
+      assert.strictEqual(result.status, 0, result.stderr);
+      assert.true(/Usage:/.test(result.stdout));
+      assert.true(/--brief-url <url>/.test(result.stdout));
+      assert.true(/--no-retry-blocked/.test(result.stdout));
+    },
+  );
 
   test('factory:go fails clearly when no profile is configured', async function (assert) {
     let server = createServer((_request, response) => {
@@ -459,6 +510,7 @@ module('factory-entrypoint integration', function () {
           env: {
             ...process.env,
             HOME: '/tmp/no-boxel-cli-here',
+            ...playwrightBrowsersEnv,
           },
         },
       );

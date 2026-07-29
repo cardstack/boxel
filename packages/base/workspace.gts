@@ -5,14 +5,24 @@ import { htmlSafe, type SafeString } from '@ember/template';
 import { cached, tracked } from '@glimmer/tracking';
 import { restartableTask, timeout } from 'ember-concurrency';
 import { modifier } from 'ember-modifier';
-import { TrackedArray } from 'tracked-built-ins';
+import { TrackedArray, TrackedObject, TrackedSet } from 'tracked-built-ins';
 
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import BooleanField from './boolean';
-// host-mode mutation: publish is a registered host tool (tools/index.ts)
-import PublishRealmCommand from '@cardstack/boxel-host/tools/publish-realm';
-import { PublishRealmInput } from './command';
+// host-mode mutation: publish and unpublish are registered host tools
+// (tools/index.ts shims them onto the loader's virtual network, so these
+// specifiers resolve for card code in operator mode and under prerender)
+import GetPublishedRealmsTool from '@cardstack/boxel-host/tools/get-published-realms';
+import PublishRealmTool from '@cardstack/boxel-host/tools/publish-realm';
+import UnpublishRealmTool from '@cardstack/boxel-host/tools/unpublish-realm';
+import {
+  GetPublishedRealmsInput,
+  PublishRealmInput,
+  UnpublishRealmInput,
+  type PublishedRealmInfo,
+  type PublishTargetResult,
+} from './command';
 
 import LayoutGridPlusIcon from '@cardstack/boxel-icons/layout-grid-plus';
 import Captions from '@cardstack/boxel-icons/captions';
@@ -93,8 +103,12 @@ type JobCard = CardDef & {
   setupSurvey?: CardDef; // the separate, optional themed survey card
 };
 
-// honest ETA (same rules as the job card): linear from arrival rate,
-// only once 3 pieces are in, suppressed when implausible (> 30 min).
+// A projected ETA further out than this many minutes reads as noise rather
+// than signal, so it is suppressed.
+const ETA_IMPLAUSIBLE_MINUTES = 30;
+
+// honest ETA (same rules as the job card): linear from arrival rate, only
+// once 3 pieces are in, suppressed when implausible (see the threshold above).
 // The subset of a job card the ETA reads. A full `JobCard` satisfies it.
 export interface EtaJob {
   progressDone?: number;
@@ -117,8 +131,13 @@ export function etaMinutes(
     return undefined;
   }
   let mins = Math.round(((elapsed / done) * (total - done)) / 60000);
-  return mins > 30 ? undefined : mins;
+  return mins > ETA_IMPLAUSIBLE_MINUTES ? undefined : mins;
 }
+
+// The verbs the Activity feed labels an event with. A card save is classified
+// as Created/Updated by timing; a RemixCard instance is a first-class Remixed
+// event regardless of when it was written.
+export type ActivityVerb = 'Created' | 'Updated' | 'Remixed';
 
 // A card modified within this window of its creation reads as "Created" in
 // the Activity feed rather than "Updated".
@@ -133,6 +152,26 @@ export function classifyActivityVerb(
     Math.abs(modMs - createdMs) < CREATED_WINDOW_MS
     ? 'Created'
     : 'Updated';
+}
+
+// RemixCard's displayName. The feed recognizes a remix structurally (by
+// displayName, like SYSTEM_TYPE_NAMES) so this module keeps compiling without a
+// static RemixCard import — matching how loadJobs references it via codeRef.
+const REMIX_TYPE_NAME = 'Remix';
+// The subset of RemixCard the feed reads: the source it was cloned from.
+type RemixCardLike = CardDef & { remixedFrom?: CardDef };
+
+// The Activity feed verb for a card. A RemixCard instance is the record of a
+// clone, so it is a first-class "Remixed" event regardless of write timing;
+// every other card is Created/Updated by how close its save is to its creation.
+export function activityVerbFor(
+  displayName: string | undefined,
+  modMs: number | undefined,
+  createdMs: number | undefined,
+): ActivityVerb {
+  return displayName === REMIX_TYPE_NAME
+    ? 'Remixed'
+    : classifyActivityVerb(modMs, createdMs);
 }
 
 type RealmConfigCard = CardDef & { iconURL?: string }; // RealmConfig shape
@@ -154,30 +193,42 @@ function homeModulesOf(model: Partial<Workspace>): string[] {
   return configured;
 }
 
+interface PublishedSite {
+  url: string;
+  host: string;
+  when?: string;
+}
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
+}
+
+// One row of the hosting list. `at` is an epoch-ms timestamp in whichever form
+// its source hands over — a number from meta.realmInfo, a string from the
+// get-published-realms tool — and is absent for a destination the server has
+// no publish timestamp for, which must read as "no date" rather than 1970.
+function publishedSite(url: string, at: unknown): PublishedSite {
+  let ms = at == null || at === '' ? NaN : Number(at);
+  return {
+    url,
+    host: hostOf(url),
+    when: Number.isFinite(ms) ? relativeTime(ms) : undefined,
+  };
+}
+
 // published sites, read synchronously off meta.realmInfo (source-realm
 // shape: lastPublishedAt is a map of publishedRealmURL → epoch-ms string)
-function publishedSitesOf(
-  model: Partial<Workspace>,
-): { url: string; host: string; when?: string }[] {
+function publishedSitesOf(model: Partial<Workspace>): PublishedSite[] {
   let info = model[realmInfo];
   let published = info?.lastPublishedAt;
   if (!published || typeof published !== 'object') {
     return [];
   }
-  return Object.entries(published).map(([url, at]) => {
-    let host: string;
-    try {
-      host = new URL(url).host;
-    } catch {
-      host = url;
-    }
-    let ms = Number(at);
-    return {
-      url,
-      host,
-      when: Number.isFinite(ms) ? relativeTime(ms) : undefined,
-    };
-  });
+  return Object.entries(published).map(([url, at]) => publishedSite(url, at));
 }
 
 // Types that are machinery rather than content — the Home inventory folds
@@ -185,7 +236,7 @@ function publishedSitesOf(
 const SYSTEM_TYPE_NAMES = new Set([
   'Theme',
   'Realm Config',
-  'Remix',
+  REMIX_TYPE_NAME,
   'Spec',
   'Skill',
   'Process',
@@ -208,6 +259,37 @@ function excludeSelfReferentialCards(on?: CodeRef): Filter[] {
 // flow writing many cards) emits a burst of index events; coalescing them into
 // one refresh avoids firing the panel searches several times per keystroke.
 const INDEX_REFRESH_DEBOUNCE_MS = 200;
+
+// Layout / bound tuning. These are internal tuning knobs rather than per-realm
+// settings, so they live as module constants — the one operator-facing lever,
+// tile density, is the `pinnedSize` edit-format setting that selects between
+// the two door heights below.
+
+// Activity feed: both the server query and the reveal-on-scroll pager are
+// bounded to this many of the most recently modified cards.
+const ACTIVITY_FEED_CAP = 100;
+// The feed reveals this many rows at a time as the sentinel scrolls into view.
+const FEED_REVEAL_CHUNK = 20;
+
+// Generic upper bound for realm-local search / chooser result pages. Callers
+// that need fewer rows may request a smaller page.
+const SEARCH_PAGE_SIZE = 100;
+
+// The header's ⌘K search lists this many hits inline; the rest live behind the
+// "See all" row in Library.
+const SEARCH_RESULTS_CAP = 8;
+
+// Pinned-card tile heights (px) for the two densities `pinnedSize` selects.
+const DOOR_TILE_HEIGHT_PX = 300;
+const DOOR_TILE_HEIGHT_COMPACT_PX = 220;
+
+// Base machinery the `_types` rail never lists: these are not realm content.
+const TYPE_RAIL_EXCLUDED_IDS = [
+  `${baseRealmRRI}card-api/CardDef`,
+  `${baseRealmRRI}cards-grid/CardsGrid`,
+  `${baseRealmRRI}card-api/FieldDef`,
+  `${baseRealmRRI}card-api/FileDef`,
+];
 
 function toMs(value: unknown): number | undefined {
   let ms =
@@ -632,10 +714,8 @@ class Isolated extends Component<typeof Workspace> {
                 <button
                   type='button'
                   class='rail-row
-                    {{if
-                      (eq option.id this.activeFilter.id)
-                      "selected"
-                    }}'
+                    {{if (eq option.id this.activeFilter.id) "selected"}}'
+                  data-test-workspace-filter={{option.id}}
                   {{on 'click' (this.selectFilter option)}}
                 >
                   {{#let (this.iconComponent option) as |Icon|}}
@@ -656,10 +736,8 @@ class Isolated extends Component<typeof Workspace> {
                     <button
                       type='button'
                       class='rail-row type
-                        {{if
-                          (eq option.id this.activeFilter.id)
-                          "selected"
-                        }}'
+                        {{if (eq option.id this.activeFilter.id) "selected"}}'
+                      data-test-workspace-filter={{option.id}}
                       {{on 'click' (this.selectFilter option)}}
                     >
                       {{#if (this.iconHtml option)}}
@@ -696,10 +774,8 @@ class Isolated extends Component<typeof Workspace> {
                   <button
                     type='button'
                     class='rail-row type
-                      {{if
-                        (eq option.id this.activeFilter.id)
-                        "selected"
-                      }}'
+                      {{if (eq option.id this.activeFilter.id) "selected"}}'
+                    data-test-workspace-filter={{option.id}}
                     {{on 'click' (this.selectFilter option)}}
                   >
                     {{#if (this.iconHtml option)}}
@@ -867,7 +943,8 @@ class Isolated extends Component<typeof Workspace> {
                       <div class='feed-meta'>
                         <span
                           class='feed-verb
-                            {{if (eq item.verb "Created") "created"}}'
+                            {{if (eq item.verb "Created") "created"}}
+                            {{if (eq item.verb "Remixed") "remixed"}}'
                         >{{item.verb}}</span>
                         <span class='feed-type'>
                           <item.typeIcon class='feed-type-icon' />
@@ -876,6 +953,11 @@ class Isolated extends Component<typeof Workspace> {
                       {{#if item.title}}
                         <p class='feed-title'>{{item.title}}</p>
                       {{/if}}
+                      {{#let (this.remixSourceTitle item) as |source|}}
+                        {{#if source}}
+                          <p class='feed-remix-source'>from {{source}}</p>
+                        {{/if}}
+                      {{/let}}
                       {{#if item.note}}
                         <p class='feed-note-text'>{{item.note}}</p>
                       {{/if}}
@@ -885,7 +967,7 @@ class Isolated extends Component<typeof Workspace> {
                   <p class='empty-note'>No activity yet.</p>
                 {{/each}}
                 {{#if this.moreFeed}}
-                  {{! reveal-on-scroll: the sentinel appends the next 20 }}
+                  {{! reveal-on-scroll: the sentinel appends the next chunk }}
                   <div class='feed-more' {{this.watchFeedEnd}}>
                     <span class='feed-more-note'>Showing
                       {{this.visibleFeed.length}}
@@ -893,7 +975,9 @@ class Isolated extends Component<typeof Workspace> {
                       {{this.feedItems.length}}</span>
                   </div>
                 {{else if this.feedAtCap}}
-                  <p class='feed-end-note'>Showing the last 100 changes.</p>
+                  <p class='feed-end-note'>Showing the last
+                    {{this.activityFeedCap}}
+                    changes.</p>
                 {{/if}}
               </div>
             </section>
@@ -951,6 +1035,7 @@ class Isolated extends Component<typeof Workspace> {
         --grid-quick: 0.12s;
         --grid-soft: 0.18s;
         --grid-created: #00893a;
+        --grid-remixed: #7c3aed;
 
         display: flex;
         flex-direction: column;
@@ -1226,6 +1311,12 @@ class Isolated extends Component<typeof Workspace> {
         font: 500 13px var(--grid-sans);
         color: var(--grid-nav-ink);
         cursor: pointer;
+        /* Without this the row keeps its max-content width instead of the
+           rail's, so a long type name pushes the count and the + past the
+           rail's right edge rather than ellipsizing. The ellipsis on
+           .rail-name only engages once the row itself is allowed to be
+           narrower than its content. */
+        min-width: 0;
       }
       .rail-row.type {
         padding: 5px 10px;
@@ -1644,7 +1735,8 @@ class Isolated extends Component<typeof Workspace> {
       .doors {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-        grid-auto-rows: var(--door-h, 300px); /* settings: tile size */
+        /* tile height set from DOOR_TILE_HEIGHT_* via doorsStyle */
+        grid-auto-rows: var(--door-h);
         gap: 20px;
       }
       /* Containment: the fitted face IS the shadowed card (so the host's
@@ -1927,6 +2019,9 @@ class Isolated extends Component<typeof Workspace> {
       .feed-verb.created {
         color: var(--grid-created);
       }
+      .feed-verb.remixed {
+        color: var(--grid-remixed);
+      }
       .feed-type {
         display: inline-flex;
         align-items: center;
@@ -1948,6 +2043,14 @@ class Isolated extends Component<typeof Workspace> {
         margin: 0;
         font: 600 12.5px/1.35 var(--grid-sans);
         color: var(--grid-ink);
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+      .feed-remix-source {
+        margin: 0;
+        font: 500 11px/1.35 var(--grid-sans);
+        color: var(--grid-ink-meta);
         overflow: hidden;
         white-space: nowrap;
         text-overflow: ellipsis;
@@ -2323,7 +2426,7 @@ class Isolated extends Component<typeof Workspace> {
             ...excludeSelfReferentialCards(baseCardRef),
           ],
         },
-        page: { size: 100 },
+        page: { size: SEARCH_PAGE_SIZE },
       },
       {
         consumingRealm: this.args.model[realmURL],
@@ -2442,7 +2545,7 @@ class Isolated extends Component<typeof Workspace> {
     ) as CardDef[];
     this.searchTotal = hits.length;
     this.searchResults.splice(0, this.searchResults.length);
-    for (let card of hits.slice(0, 8)) {
+    for (let card of hits.slice(0, SEARCH_RESULTS_CAP)) {
       this.searchResults.push({
         id: card.id!,
         title: card.cardTitle ?? 'Untitled',
@@ -2637,10 +2740,12 @@ class Isolated extends Component<typeof Workspace> {
     return homeModulesOf(this.args.model);
   }
 
-  private get doorsStyle(): SafeString | undefined {
-    return this.args.model.pinnedSize === 'compact'
-      ? htmlSafe('--door-h: 220px')
-      : undefined;
+  private get doorsStyle(): SafeString {
+    let height =
+      this.args.model.pinnedSize === 'compact'
+        ? DOOR_TILE_HEIGHT_COMPACT_PX
+        : DOOR_TILE_HEIGHT_PX;
+    return htmlSafe(`--door-h: ${height}px`);
   }
 
   // settings gates: unset booleans read as their defaults
@@ -2798,7 +2903,8 @@ class Isolated extends Component<typeof Workspace> {
       ...this.activeFilter.query,
       filter,
       sort: this.activeSort?.sort,
-      page: { size: 100 }, // Bound the unified Library search on the server.
+      // Bound the unified Library search on the server.
+      page: { size: SEARCH_PAGE_SIZE },
     };
   }
 
@@ -2818,9 +2924,25 @@ class Isolated extends Component<typeof Workspace> {
       // Never fall back to all available realms.
       return []; // An unscoped search must remain idle.
     } //
-    // Bound hydration and federated-search scope. Default to 100 but let a
-    // caller that needs fewer (e.g. a single-row preview) request a smaller page.
-    return store.search({ page: { size: 100 }, ...query } as Query, [realm]);
+    // Bound hydration and federated-search scope. Default to SEARCH_PAGE_SIZE
+    // but let a caller that needs fewer (e.g. a single-row preview) request a
+    // smaller page.
+    try {
+      return await store.search(
+        { page: { size: SEARCH_PAGE_SIZE }, ...query } as Query,
+        [realm],
+      );
+    } catch (e) {
+      // These searches feed passive panels — the Home inventory, the recent
+      // preview, the Activity feed — every one of which reads fine as empty.
+      // The realm can also be unsearchable for reasons the card can't fix: the
+      // host refuses to mint a token for a realm on a different realm server
+      // than its own, so a Workspace rendered from a foreign realm server
+      // rejects here on every panel. Degrade to empty instead of letting the
+      // rejection escape the task and surface as an unhandled error.
+      console.warn(`Workspace search failed for realm ${realm}`, e);
+      return [];
+    }
   }; //
 
   // The four library-group rows keep stable identities (@cached, no tracked
@@ -3025,7 +3147,7 @@ class Isolated extends Component<typeof Workspace> {
             on: specRef,
             every: [{ eq: { isCard: true } }],
           },
-          page: { size: 100 }, // Keep chooser result pages bounded.
+          page: { size: SEARCH_PAGE_SIZE }, // Keep chooser result pages bounded.
         },
         {
           consumingRealm: this.args.model[realmURL], // Scope the chooser to this Card Grid's realm.
@@ -3082,13 +3204,6 @@ class Isolated extends Component<typeof Workspace> {
         kind?: 'instance' | 'file';
       };
     }[];
-    let excludedTypeIds = [
-      `${baseRealmRRI}card-api/CardDef`,
-      `${baseRealmRRI}cards-grid/CardsGrid`,
-      `${baseRealmRRI}card-api/FieldDef`,
-      `${baseRealmRRI}card-api/FileDef`,
-    ];
-
     this.cardTypeFilters.splice(0, this.cardTypeFilters.length);
     this.fileTypeFilters.splice(0, this.fileTypeFilters.length);
     let cardTotal = 0;
@@ -3103,7 +3218,7 @@ class Isolated extends Component<typeof Workspace> {
         return;
       }
       let kind = summary.attributes.kind ?? 'instance';
-      if (excludedTypeIds.includes(summary.id)) {
+      if (TYPE_RAIL_EXCLUDED_IDS.includes(summary.id)) {
         return;
       }
       if (summary.id.endsWith('workspace/Workspace')) {
@@ -3139,9 +3254,8 @@ class Isolated extends Component<typeof Workspace> {
     this.fileTotal = fileTotal;
 
     this.activeFilter =
-      this.filterOptions.find(
-        (filter) => filter.id === this.activeFilter.id,
-      ) ?? this.filterOptions[0];
+      this.filterOptions.find((filter) => filter.id === this.activeFilter.id) ??
+      this.filterOptions[0];
   });
 
   private loadJobs = restartableTask(async () => {
@@ -3219,7 +3333,7 @@ class Isolated extends Component<typeof Workspace> {
     when: string | undefined;
     absolute: string | undefined;
     note: string | undefined;
-    verb: 'Created' | 'Updated';
+    verb: ActivityVerb;
     dayLabel: string;
     showDay: boolean;
     title: string | undefined; // card identity for the log line
@@ -3229,7 +3343,8 @@ class Isolated extends Component<typeof Workspace> {
   }[] = new TrackedArray();
 
   // Reveal-on-scroll pagination over the fetched window.
-  @tracked private feedShown = 20;
+  @tracked private feedShown = FEED_REVEAL_CHUNK;
+  private activityFeedCap = ACTIVITY_FEED_CAP; // for the "last N changes" note
 
   private get visibleFeed() {
     return this.feedItems.slice(0, this.feedShown);
@@ -3240,15 +3355,31 @@ class Isolated extends Component<typeof Workspace> {
   }
 
   private get feedAtCap() {
-    return this.feedItems.length >= 100;
+    return this.feedItems.length >= ACTIVITY_FEED_CAP;
   }
+
+  // The source a remix was cloned from, read live off the card so it fills in
+  // when the linked instance finishes loading (the linksTo getter lazily loads
+  // and tracks). Undefined for non-remix rows and remixes with no source set.
+  remixSourceTitle = (item: {
+    verb: ActivityVerb;
+    card: CardDef;
+  }): string | undefined => {
+    if (item.verb !== 'Remixed') {
+      return undefined;
+    }
+    return (item.card as RemixCardLike).remixedFrom?.cardTitle ?? undefined;
+  };
 
   watchFeedEnd = modifier((element: Element) => {
     let root = element.closest('.scroll-container');
     let observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
-          this.feedShown = Math.min(this.feedShown + 20, this.feedItems.length);
+          this.feedShown = Math.min(
+            this.feedShown + FEED_REVEAL_CHUNK,
+            this.feedItems.length,
+          );
           // re-arm: observe() always delivers a fresh async notification
           // after the next layout, so a still-visible sentinel fires again
           observer.unobserve(element);
@@ -3274,7 +3405,8 @@ class Isolated extends Component<typeof Workspace> {
           every: [...excludeSelfReferentialCards()],
         },
         sort: [{ by: 'lastModified', direction: 'desc' }],
-        page: { size: 100 }, // Bound server results before instance hydration.
+        // Bound server results before instance hydration.
+        page: { size: ACTIVITY_FEED_CAP },
       } as Query,
       [realm],
     ); // Search only the Card Grid instance's realm.
@@ -3290,9 +3422,9 @@ class Isolated extends Component<typeof Workspace> {
       let card = instance as CardDef;
       let modMs = toMs(getCardMeta(card, 'lastModified'));
       let createdMs = toMs(getCardMeta(card, 'resourceCreatedAt'));
-      let verb = classifyActivityVerb(modMs, createdMs);
-      let day = modMs !== undefined ? dayLabelFor(modMs) : '';
       let ctor = card.constructor as typeof CardDef; // type identity for the log line
+      let verb = activityVerbFor(ctor.displayName, modMs, createdMs);
+      let day = modMs !== undefined ? dayLabelFor(modMs) : '';
       this.feedItems.push({
         id: card.id!,
         component: (card.constructor as typeof BaseDef).getComponent(card),
@@ -3403,12 +3535,50 @@ export class Workspace extends CardDef {
       return this.args.model.pinnedSize === 'compact' ? 'compact' : 'regular';
     }
 
-    // Hosting: present published sites (free on realmInfo) and mutate
-    // via the registered publish-realm host command. First-time publish
-    // (domain choice) stays in the workspace menu's publish flow.
-    get publishedSites() {
-      return publishedSitesOf(this.args.model);
+    // Hosting: present published sites and mutate them via the registered
+    // publish-realm / unpublish-realm host tools. First-time publish (domain
+    // choice) stays in the host submode's publish flow; this format acts on
+    // destinations that already exist.
+    //
+    // The list starts from `meta.realmInfo`, which is a snapshot taken when the
+    // card was (de)serialized — a mutation here changes hosting state without
+    // changing that snapshot, and unpublish triggers no reindex, so nothing
+    // would rebuild it in-session. Once a mutation lands, re-read the list
+    // through the get-published-realms tool and prefer its answer from then on;
+    // otherwise an unpublished site would keep being listed as live until the
+    // card was reloaded. `TrackedObject` rather than `@tracked` fields because
+    // this is a class expression, where decorators aren't allowed.
+    private hosting = new TrackedObject<{
+      sites: PublishedSite[] | undefined;
+      error: string | undefined;
+    }>({ sites: undefined, error: undefined });
+
+    get publishedSites(): PublishedSite[] {
+      return this.hosting.sites ?? publishedSitesOf(this.args.model);
     }
+
+    get hostingError() {
+      return this.hosting.error;
+    }
+
+    // Re-reads the authoritative list. The tool reports RealmService's own
+    // hosting state, which both mutations write through, so this reflects what
+    // actually happened server-side rather than what was requested.
+    private reloadPublishedSites = async () => {
+      let commandContext = this.args.context?.commandContext;
+      let realm = this.args.model[realmURL]?.href;
+      if (!commandContext || !realm) {
+        return;
+      }
+      let { results } = await new GetPublishedRealmsTool(
+        commandContext,
+      ).execute(new GetPublishedRealmsInput({ realmURL: realm }));
+      // Annotated because this module is also compiled by projects that don't
+      // map `@cardstack/boxel-host/tools/*` and so see the tool as `any`.
+      this.hosting.sites = (results ?? []).map((site: PublishedRealmInfo) =>
+        publishedSite(site.publishedRealmURL, site.lastPublishedAt),
+      );
+    };
 
     get isPublishable() {
       return this.args.model[realmInfo]?.publishable === true;
@@ -3425,16 +3595,83 @@ export class Workspace extends CardDef {
       if (!commandContext || !realm || !urls.length) {
         return;
       }
-      await new PublishRealmCommand(commandContext).execute(
+      this.hosting.error = undefined;
+      let { results } = await new PublishRealmTool(commandContext).execute(
         new PublishRealmInput({
           realmURL: realm,
           publishedRealmURLs: urls,
         }),
       );
+      // Per-destination outcomes come back on the result rather than as a
+      // rejection, so a publish that didn't happen is only visible here.
+      let failure = (results ?? []).find(
+        (result: PublishTargetResult) => result.status === 'error',
+      );
+      if (failure) {
+        this.hosting.error = `Could not republish ${hostOf(
+          failure.publishedRealmURL,
+        )}: ${failure.error || 'unknown error'}`;
+      }
+      // Refresh either way: with the publish timestamps of whatever did land.
+      await this.reloadPublishedSites();
     });
 
     get publishBusy() {
       return this.republishTask.isRunning;
+    }
+
+    unpublish = (publishedRealmURL: string) => () => {
+      this.unpublishTask.perform(publishedRealmURL);
+    };
+
+    // Which site is in flight, so one row can label itself while the others
+    // stay idle — `unpublishTask.isRunning` is true for all of them.
+    private unpublishing = new TrackedSet<string>();
+
+    private unpublishTask = restartableTask(
+      async (publishedRealmURL: string) => {
+        let commandContext = this.args.context?.commandContext;
+        let realm = this.args.model[realmURL]?.href;
+        if (!commandContext || !realm) {
+          return;
+        }
+        this.hosting.error = undefined;
+        this.unpublishing.add(publishedRealmURL);
+        try {
+          let result = await new UnpublishRealmTool(commandContext).execute(
+            new UnpublishRealmInput({
+              realmURL: realm,
+              publishedRealmURL,
+            }),
+          );
+          // The tool maps a rejected request onto an error result instead of
+          // throwing, so leaving the row in place depends on reading it.
+          if (result.status === 'error') {
+            this.hosting.error = `Could not unpublish ${hostOf(
+              publishedRealmURL,
+            )}: ${result.error || 'unknown error'}`;
+            return;
+          }
+          await this.reloadPublishedSites();
+        } finally {
+          this.unpublishing.delete(publishedRealmURL);
+        }
+      },
+    );
+
+    isUnpublishing = (publishedRealmURL: string) =>
+      this.unpublishing.has(publishedRealmURL);
+
+    get unpublishBusy() {
+      return this.unpublishTask.isRunning;
+    }
+
+    // Either mutation blocks both controls: Republish acts on the whole list,
+    // so republishing a destination that is mid-unpublish would put the site
+    // back up. Matches the host submode's modal, which disables its publish
+    // controls whenever an unpublish is running.
+    get hostingBusy() {
+      return this.publishBusy || this.unpublishBusy;
     }
 
     <template>
@@ -3695,6 +3932,17 @@ export class Workspace extends CardDef {
               </div>
               <div class='setting-control'><@fields.workspace /></div>
             </div>
+            {{#if this.hostingError}}
+              <div class='setting'>
+                <div class='setting-text'>
+                  <span class='setting-label'>Hosting</span>
+                  <p
+                    class='setting-help hosting-error'
+                    data-test-hosting-error
+                  >{{this.hostingError}}</p>
+                </div>
+              </div>
+            {{/if}}
             {{#if this.publishedSites.length}}
               {{#each this.publishedSites as |site|}}
                 <div class='setting'>
@@ -3707,6 +3955,17 @@ export class Workspace extends CardDef {
                     {{#if site.when}}
                       <span class='site-when'>{{site.when}}</span>
                     {{/if}}
+                    <button
+                      type='button'
+                      class='publish-btn unpublish-btn'
+                      disabled={{this.hostingBusy}}
+                      data-test-unpublish-site={{site.url}}
+                      {{on 'click' (this.unpublish site.url)}}
+                    >{{if
+                        (this.isUnpublishing site.url)
+                        'Unpublishing…'
+                        'Unpublish'
+                      }}</button>
                   </div>
                 </div>
               {{/each}}
@@ -3720,7 +3979,8 @@ export class Workspace extends CardDef {
                   <button
                     type='button'
                     class='publish-btn'
-                    disabled={{this.publishBusy}}
+                    disabled={{this.hostingBusy}}
+                    data-test-republish
                     {{on 'click' this.republish}}
                   >{{if this.publishBusy 'Publishing…' 'Republish'}}</button>
                 </div>
@@ -3729,8 +3989,8 @@ export class Workspace extends CardDef {
               <div class='setting'>
                 <div class='setting-text'>
                   <span class='setting-label'>Publishing</span>
-                  <p class='setting-help'>Not published. Use Publish in the
-                    workspace menu to put this space on the web.</p>
+                  <p class='setting-help'>Not published. Use Publish in the Host
+                    submode toolbar to put this space on the web.</p>
                 </div>
               </div>
             {{else}}
@@ -3940,6 +4200,21 @@ export class Workspace extends CardDef {
         .publish-btn:disabled {
           opacity: 0.6;
           cursor: default;
+        }
+        /* Sits at the end of the site row, and reads as the destructive
+          counterpart to Republish rather than a second primary action. */
+        .unpublish-btn {
+          margin-left: auto;
+          padding: 5px 10px;
+          font-size: 11.5px;
+          color: var(--grid-ink-quiet);
+        }
+        .unpublish-btn:hover:not(:disabled) {
+          border-color: var(--grid-broken);
+          color: var(--grid-broken);
+        }
+        .hosting-error {
+          color: var(--grid-broken);
         }
         .choice-opt:focus-visible,
         .order-move:focus-visible,

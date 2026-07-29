@@ -1,4 +1,8 @@
-import NumberField from '@cardstack/base/number';
+import NumberField, {
+  deserializeForUI,
+  serializeForUI,
+} from '@cardstack/base/number';
+import { TextInputValidator } from '@cardstack/base/text-input-validator';
 import {
   FieldDef,
   field,
@@ -6,7 +10,7 @@ import {
   linksTo,
 } from '@cardstack/base/card-api';
 import { Component } from '@cardstack/base/card-api';
-import { codeRef } from '@cardstack/runtime-common';
+import { codeRef, NumberSerializer } from '@cardstack/runtime-common';
 import { Currency } from './asset';
 import { action } from '@ember/object';
 
@@ -52,13 +56,27 @@ class Edit extends Component<typeof MonetaryAmount> {
     () => [new URL('./', here).href],
   );
 
+  get currencyOptions() {
+    return this.liveCurrencyQuery?.instances ?? [];
+  }
+
   @action
-  setAmount(val: number) {
+  setAmount(val: number | null | undefined) {
     let newModel = new MonetaryAmount();
-    newModel.amount = val;
+    if (val != null) {
+      newModel.amount = val;
+    }
     newModel.currency = this.args.model.currency as Currency;
     this.args.set(newModel);
   }
+
+  textInputValidator: TextInputValidator<number> = new TextInputValidator(
+    () => this.args.model.amount ?? null,
+    (val) => this.setAmount(val),
+    deserializeForUI,
+    serializeForUI,
+    NumberSerializer.validate,
+  );
 
   @action
   setCurrency(val: Currency) {
@@ -72,9 +90,10 @@ class Edit extends Component<typeof MonetaryAmount> {
     <BoxelInputGroup
       @id={{this.id}}
       @placeholder='0.00'
-      @value={{@model.amount}}
-      @invalid={{false}}
-      @onInput={{this.setAmount}}
+      @value={{this.textInputValidator.asString}}
+      @state={{if this.textInputValidator.isInvalid 'invalid' 'none'}}
+      @errorMessage={{this.textInputValidator.errorMessage}}
+      @onInput={{this.textInputValidator.onInput}}
       @autocomplete='off'
       @inputmode='decimal'
       class='input-selectable-currency-amount'
@@ -86,7 +105,7 @@ class Edit extends Component<typeof MonetaryAmount> {
         <Accessories.Select
           class='input-selectable-currency-amount__select'
           @placeholder='Choose...'
-          @options={{this.liveCurrencyQuery.instances}}
+          @options={{this.currencyOptions}}
           @selected={{@model.currency}}
           @onChange={{this.setCurrency}}
           @dropdownClass='input-selectable-currency-amount__dropdown'

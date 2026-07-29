@@ -14,6 +14,14 @@
  *                                   --declaration --emitDeclarationOnly`).
  *                                   Source `.d.ts` files in `base/types`
  *                                   are passed through as-is.
+ * - `bundled-types/runtime-common/` — auto-generated `.d.ts` for
+ *                                   `packages/runtime-common`. See
+ *                                   `buildRuntimeCommonDts()`. Backs the
+ *                                   `@cardstack/runtime-common` path
+ *                                   alias; base's `.d.ts` import its
+ *                                   `primitive`/`realmURL` symbols and
+ *                                   field/query types, on which card
+ *                                   field-value typing depends.
  * - `bundled-types/host-types/`  — `packages/host/types/*` ambient
  *                                   `.d.ts` files, referenced via the
  *                                   `'*': ['<host>/types/*']` fallback
@@ -303,8 +311,188 @@ function annotateInferredTypes(code: string): string {
     );
 }
 
+/**
+ * Generate `.d.ts` for every module in `packages/runtime-common` and
+ * copy them into the destination. Runtime-common is plain `.ts` (no
+ * `<template>`), so unlike `base/` there's no content-tag preprocess and
+ * no `: any` annotation — the declarations emit faithfully.
+ *
+ * That fidelity is the point: `base/`'s bundled `.d.ts` imports the
+ * `primitive` / `realmURL` `unique symbol`s and the field / query types
+ * from `@cardstack/runtime-common`, and card-api's field-value mapping
+ * (`@model.someNumberField` → `number`, via `T extends { [primitive]:
+ * infer P }`) only resolves when those symbol identities are present.
+ * Card code reaches these through the `@cardstack/runtime-common` path
+ * alias in parse.ts's tsconfig.
+ */
+function buildRuntimeCommonDts(rcSrc: string, rcDst: string): void {
+  let tmpDir = mkdtempSync(join(tmpdir(), 'boxel-cli-rc-dts-'));
+  try {
+    // Copy `.ts` source into tmpDir (skip node_modules/dist/tests).
+    // Pre-existing `.d.ts` are passed through; tsc emits the rest.
+    let preexistingDts: string[] = [];
+    let walk = (dir: string): void => {
+      for (let entry of readdirSync(dir, { withFileTypes: true })) {
+        if (
+          entry.name === 'node_modules' ||
+          entry.name === 'dist' ||
+          entry.name.startsWith('.cache')
+        ) {
+          continue;
+        }
+        let full = join(dir, entry.name);
+        if (entry.isDirectory()) {
+          walk(full);
+          continue;
+        }
+        let rel = relative(rcSrc, full);
+        // Include `.mts` / `.cts` too, not just `.ts`: runtime-common has
+        // `marked.mts`, imported by exported modules (bfm-math, marked-
+        // sync, …). Dropping it leaves dangling `./marked.mts` references
+        // in their emitted `.d.ts` — which, under parse's skipLibCheck,
+        // silently collapse the affected types to `any`.
+        if (!/\.(m|c)?ts$/.test(rel)) continue;
+        // Tests aren't part of the type surface and drag in test deps.
+        if (/\.test\.(m|c)?ts$/.test(rel) || rel.startsWith('tests/')) continue;
+        let dst = join(tmpDir, rel);
+        mkdirSync(dirname(dst), { recursive: true });
+        writeFileSync(dst, readFileSync(full, 'utf8'), 'utf8');
+        if (/\.d\.(m|c)?ts$/.test(rel)) preexistingDts.push(rel);
+      }
+    };
+    walk(rcSrc);
+
+    // Link host's node_modules so runtime-common's imports resolve.
+    let nodeModulesLink = join(tmpDir, 'node_modules');
+    if (!existsSync(nodeModulesLink)) {
+      execFileSync(
+        'ln',
+        [
+          '-sf',
+          join(MONOREPO_PACKAGES, 'host', 'node_modules'),
+          'node_modules',
+        ],
+        { cwd: tmpDir },
+      );
+    }
+
+    let outDir = join(tmpDir, '.dts-out');
+    let tsconfig = {
+      extends: join(MONOREPO_PACKAGES, 'host', 'tsconfig.json'),
+      compilerOptions: {
+        noEmit: false,
+        declaration: true,
+        emitDeclarationOnly: true,
+        outDir,
+        inlineSourceMap: false,
+        inlineSources: false,
+        noUnusedLocals: false,
+        noUnusedParameters: false,
+        skipLibCheck: true,
+        rootDir: tmpDir,
+      },
+      // `**/*.ts` doesn't match `.mts` / `.cts`, so include them too or
+      // tsc won't emit declarations for `marked.mts` (copied above).
+      include: ['**/*.ts', '**/*.mts', '**/*.cts'],
+    };
+    let tsconfigPath = join(tmpDir, 'tsconfig.json');
+    writeFileSync(tsconfigPath, JSON.stringify(tsconfig, null, 2), 'utf8');
+
+    // Same sandboxed emit as base/: declarations for imports that reach
+    // outside rootDir (host, base) are dropped rather than written to
+    // their source locations.
+    runTscEmitOnly(tsconfigPath, outDir);
+
+    rmSync(rcDst, { recursive: true, force: true });
+    mkdirSync(rcDst, { recursive: true });
+    if (existsSync(outDir)) {
+      cpSync(outDir, rcDst, { recursive: true });
+    }
+    for (let rel of preexistingDts) {
+      let to = join(rcDst, rel);
+      mkdirSync(dirname(to), { recursive: true });
+      cpSync(join(tmpDir, rel), to);
+    }
+  } finally {
+    rmSync(tmpDir, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Fail the build if any emitted declaration in `bundleDir` imports a
+ * *relative* module that isn't present in the bundle. Generated `.d.ts`
+ * keep the source's relative specifiers (e.g. `./marked.mts`), so a
+ * source file dropped from the emit leaves a dangling reference. Under
+ * `boxel parse`'s `skipLibCheck` that never errors — the referenced types
+ * silently collapse to `any`, quietly weakening the type-check the bundle
+ * exists to strengthen. Catch it here, at build time, where it's loud.
+ *
+ * Only relative specifiers are checked; bare package imports resolve
+ * against node_modules at parse time (see parse.ts's linkResolvedDeps),
+ * and non-module assets (`.json`, `.css`, …) are skipped.
+ */
+function assertBundleDeclRefsResolve(bundleDir: string, label: string): void {
+  let declFiles: string[] = [];
+  let walk = (dir: string): void => {
+    for (let entry of readdirSync(dir, { withFileTypes: true })) {
+      let full = join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (/\.d\.(m|c)?ts$/.test(entry.name)) declFiles.push(full);
+    }
+  };
+  walk(bundleDir);
+
+  // Captures the relative specifier of `from '…'`, `import('…')`, and
+  // `require('…')`.
+  let specRe =
+    /(?:\bfrom\s*|(?:\bimport|\brequire)\s*\(\s*)['"](\.\.?\/[^'"]+)['"]/g;
+  let dangling: string[] = [];
+  for (let file of declFiles) {
+    let content = readFileSync(file, 'utf8');
+    let match: RegExpExecArray | null;
+    while ((match = specRe.exec(content))) {
+      let spec = match[1];
+      let ext = spec.match(/\.[a-z0-9]+$/i)?.[0];
+      // Skip non-module assets; a specifier is a module ref when it's
+      // extensionless or carries a TS/JS extension.
+      if (
+        ext &&
+        !['.ts', '.mts', '.cts', '.js', '.mjs', '.cjs'].includes(ext)
+      ) {
+        continue;
+      }
+      let base = resolve(dirname(file), spec);
+      let stem = base.replace(/\.(d\.)?(m|c)?[tj]s$/i, '');
+      let candidates = [
+        base,
+        stem + '.d.ts',
+        stem + '.d.mts',
+        stem + '.d.cts',
+        join(stem, 'index.d.ts'),
+        join(stem, 'index.d.mts'),
+        join(stem, 'index.d.cts'),
+      ];
+      if (!candidates.some((c) => existsSync(c))) {
+        dangling.push(`${relative(bundleDir, file)} → ${spec}`);
+      }
+    }
+  }
+
+  if (dangling.length) {
+    console.error(
+      `\nBundle integrity check failed for ${label}: emitted declarations ` +
+        `reference files missing from the bundle. A dropped source leaves a ` +
+        `dangling relative import that skipLibCheck silently turns into ` +
+        `\`any\`. Include the missing source in the .d.ts build:\n` +
+        dangling.map((d) => `  ${d}`).join('\n') +
+        '\n',
+    );
+    process.exit(1);
+  }
+}
+
 // ---------------------------------------------------------------------------
-// Simple-copy vendors (everything except `base/`)
+// Simple-copy vendors (everything except `base/` and `runtime-common/`)
 // ---------------------------------------------------------------------------
 
 interface Vendor {
@@ -482,6 +670,22 @@ function main(): void {
   let baseSize = dirSize(baseDst);
   total += baseSize;
   console.log(`${(baseSize / 1024 / 1024).toFixed(2)} MB`);
+
+  // runtime-common runs through the .d.ts pipeline too: base's bundled
+  // declarations import its symbols and types, and card field-value
+  // typing depends on them.
+  let rcSrc = join(MONOREPO_PACKAGES, 'runtime-common');
+  let rcDst = join(outRoot, 'runtime-common');
+  if (!safeIsDirectory(rcSrc)) {
+    console.error(`Missing packages/runtime-common at ${rcSrc}`);
+    process.exit(1);
+  }
+  process.stdout.write('  runtime-common … (running tsc --declaration) ');
+  buildRuntimeCommonDts(rcSrc, rcDst);
+  assertBundleDeclRefsResolve(rcDst, 'runtime-common');
+  let rcSize = dirSize(rcDst);
+  total += rcSize;
+  console.log(`${(rcSize / 1024 / 1024).toFixed(2)} MB`);
 
   // Other vendors are simple copies with filters.
   for (let vendor of VENDORS) {

@@ -126,6 +126,14 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
             matrixServerName:
               process.env.MATRIX_SERVER_NAME || matrixClient.matrixURL.hostname,
             realmServerURL: serverURL.href,
+            // Stamp the deployed environment the host is running in so client
+            // telemetry (and anything else) can report it, rather than the
+            // Ember build mode. Falls back to whatever the build baked in when
+            // this server has no REALM_SENTRY_ENVIRONMENT (e.g. local dev).
+            hostedEnvironment:
+              process.env.REALM_SENTRY_ENVIRONMENT ||
+              config.hostedEnvironment ||
+              'local',
             resolvedBaseRealmURL: rewriteRealmURL(config.resolvedBaseRealmURL),
             resolvedCatalogRealmURL: rewriteRealmURL(
               config.resolvedCatalogRealmURL,
@@ -310,6 +318,11 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     }
 
     ctxt.type = 'html';
+
+    // Permit the JS Self-Profiling API so client-telemetry's Tier-2 wedge
+    // stack sampling can run. Harmless for documents that never construct a
+    // Profiler, and ignored by browsers that don't support the policy.
+    ctxt.set('Document-Policy', 'js-profiling');
 
     // Resolve the realm once and reuse it for the permissions check and the
     // routing-map lookup below. `findOrMountRealm` can fall back to a DB probe

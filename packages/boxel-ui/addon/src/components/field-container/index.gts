@@ -15,7 +15,7 @@ export interface Signature {
     iconHeight?: string;
     iconWidth?: string;
     inline?: boolean;
-    label: string;
+    label?: string;
     labelFontSize?: BoxelLabelFontSize;
     tag?: keyof HTMLElementTagNameMap;
     vertical?: boolean;
@@ -52,13 +52,15 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
             role='presentation'
           />
         {{/if}}
-        <Label
-          class='label'
-          @size={{@labelFontSize}}
-          data-test-boxel-field-label
-        >
-          {{@label}}
-        </Label>
+        {{#if @label}}
+          <Label
+            class='label'
+            @size={{@labelFontSize}}
+            data-test-boxel-field-label
+          >
+            {{@label}}
+          </Label>
+        {{/if}}
         {{yield to='label'}}
       </div>
       <div class='content'>

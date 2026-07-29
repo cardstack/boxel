@@ -55,8 +55,9 @@ interface CardWidgetTarget {
   kind: 'inline' | 'block';
   // 'card' refs resolve to CardDef instances; 'file' refs to FileDef instances.
   refType: 'card' | 'file';
-  // Inline sizing derived from the directive's size specifier (width/height plus
-  // `overflow: hidden` for fitted). Undefined for non-fitted formats.
+  // Inline sizing derived from the directive's format — fitted dimensions plus
+  // `overflow: hidden`, or the shared non-atom footprint from
+  // `bfmResolvedEmbedStyle`. Undefined for atom and block embedded.
   style?: string;
 }
 
