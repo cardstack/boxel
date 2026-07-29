@@ -301,6 +301,99 @@ module('factory-seed > createSeedIssue resume guard', function (hooks) {
   });
 });
 
+module('factory-seed > seeded tracker surfaces', function (hooks) {
+  let workspace: ReturnType<typeof createTestWorkspace>;
+  const REPO = 'https://github.com/acme/wardrobe';
+
+  hooks.beforeEach(function () {
+    workspace = createTestWorkspace();
+  });
+  hooks.afterEach(function () {
+    workspace.cleanup();
+  });
+
+  test('createSeedIssue seeds the Project and IssueTracker board before any agent turn', async function (assert) {
+    await createSeedIssue(portBrief(REPO), {
+      darkfactoryModuleUrl: DARKFACTORY,
+      workspaceDir: workspace.dir,
+      designFoundation: true,
+    });
+
+    let project = JSON.parse(workspace.read('Projects/port-wardrobe.json'));
+    assert.strictEqual(project.data.attributes.projectName, 'Port: wardrobe');
+    assert.strictEqual(project.data.attributes.projectStatus, 'active');
+    assert.deepEqual(project.data.meta.adoptsFrom, {
+      module: DARKFACTORY,
+      name: 'Project',
+    });
+
+    let board = JSON.parse(workspace.read('Boards/port-wardrobe.json'));
+    assert.strictEqual(
+      board.data.attributes.boardTitle,
+      'Port: wardrobe Board',
+    );
+    assert.deepEqual(
+      board.data.relationships.project,
+      { links: { self: '../Projects/port-wardrobe' } },
+      'board is project-scoped',
+    );
+    assert.deepEqual(board.data.meta.adoptsFrom, {
+      module: DARKFACTORY,
+      name: 'IssueTracker',
+    });
+  });
+
+  test('every seed issue carries its project relationship inline', async function (assert) {
+    await createSeedIssue(portBrief(REPO), {
+      darkfactoryModuleUrl: DARKFACTORY,
+      workspaceDir: workspace.dir,
+      designFoundation: true,
+    });
+
+    for (let file of [
+      SEED_ISSUE_FILE,
+      ANALYSIS_ISSUE_FILE,
+      DESIGN_FOUNDATION_ISSUE_FILE,
+    ]) {
+      let doc = JSON.parse(workspace.read(file));
+      assert.deepEqual(
+        doc.data.relationships.project,
+        { links: { self: '../Projects/port-wardrobe' } },
+        `${file} links the seeded project at write time`,
+      );
+    }
+  });
+
+  test('an existing Project is never clobbered on re-run', async function (assert) {
+    workspace.write(
+      'Projects/port-wardrobe.json',
+      JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: {
+            projectName: 'Port: wardrobe',
+            successCriteria: 'ENRICHED BY BOOTSTRAP',
+          },
+          meta: { adoptsFrom: { module: DARKFACTORY, name: 'Project' } },
+        },
+      }),
+    );
+
+    await createSeedIssue(portBrief(REPO), {
+      darkfactoryModuleUrl: DARKFACTORY,
+      workspaceDir: workspace.dir,
+      designFoundation: true,
+    });
+
+    let project = JSON.parse(workspace.read('Projects/port-wardrobe.json'));
+    assert.strictEqual(
+      project.data.attributes.successCriteria,
+      'ENRICHED BY BOOTSTRAP',
+      'seeder is create-if-missing, resume keeps enrichment',
+    );
+  });
+});
+
 module('factory-seed > createHardeningIssues', function (hooks) {
   let workspace: ReturnType<typeof createTestWorkspace>;
 

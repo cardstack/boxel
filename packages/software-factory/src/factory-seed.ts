@@ -71,6 +71,38 @@ export interface SeedIssueOptions {
 // ---------------------------------------------------------------------------
 
 const SEED_ISSUE_PATH = 'Issues/bootstrap-seed';
+/**
+ * Realm-relative Project card path for a brief (no .json). The Project
+ * and Board are seeded MECHANICALLY before any agent turn — the tracker
+ * must exist from second zero so the board shows the seeds in progress;
+ * the bootstrap turn enriches the Project rather than creating it.
+ */
+export function projectPathForBrief(brief: { title: string }): string {
+  return `Projects/${briefSlug(brief.title)}`;
+}
+export function boardPathForBrief(brief: { title: string }): string {
+  return `Boards/${briefSlug(brief.title)}`;
+}
+
+function briefSlug(title: string): string {
+  let slug = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return slug || 'project';
+}
+
+function projectCodeForTitle(title: string): string {
+  let initials = title
+    .split(/[^a-zA-Z0-9]+/)
+    .filter(Boolean)
+    .map((w) => w[0].toUpperCase())
+    .join('')
+    .slice(0, 4);
+  return initials.length >= 2
+    ? initials
+    : (title.slice(0, 2) || 'PR').toUpperCase();
+}
 const SEED_ISSUE_FILE = `${SEED_ISSUE_PATH}.json`;
 export const ANALYSIS_ISSUE_PATH = 'Issues/port-analysis-seed';
 const ANALYSIS_ISSUE_FILE = `${ANALYSIS_ISSUE_PATH}.json`;
@@ -103,6 +135,52 @@ export async function createSeedIssue(
     throw new Error(
       `Failed to check for existing seed issue: ${existing.error ?? 'unknown error'}`,
     );
+  }
+
+  // Seed the tracker surfaces before any issue: a Project stub (the
+  // bootstrap turn enriches it) and the IssueTracker board. Both are
+  // formulaic JSON — writing them here means the board exists from
+  // second zero (showing the seeds in progress) and every seed can carry
+  // its `project` relationship inline instead of being retro-linked
+  // after bootstrap. Create-if-missing: resumes and re-arms never
+  // clobber an enriched Project.
+  let projectPath = projectPathForBrief(brief);
+  let boardPath = boardPathForBrief(brief);
+  let existingProject = await readCard(workspaceDir, `${projectPath}.json`);
+  if (!existingProject.ok && existingProject.status === 404) {
+    let write = await writeCard(
+      workspaceDir,
+      `${projectPath}.json`,
+      JSON.stringify(
+        buildSeedProjectDocument(brief, darkfactoryModuleUrl),
+        null,
+        2,
+      ),
+    );
+    if (!write.ok) {
+      throw new Error(
+        `Failed to create seed Project card: ${write.error ?? 'unknown error'}`,
+      );
+    }
+    log.info(`Project card seeded: ${projectPath}`);
+  }
+  let existingBoard = await readCard(workspaceDir, `${boardPath}.json`);
+  if (!existingBoard.ok && existingBoard.status === 404) {
+    let write = await writeCard(
+      workspaceDir,
+      `${boardPath}.json`,
+      JSON.stringify(
+        buildSeedBoardDocument(brief, darkfactoryModuleUrl),
+        null,
+        2,
+      ),
+    );
+    if (!write.ok) {
+      throw new Error(
+        `Failed to create seed IssueTracker board: ${write.error ?? 'unknown error'}`,
+      );
+    }
+    log.info(`IssueTracker board seeded: ${boardPath}`);
   }
 
   // Resume vs re-arm. On a restart the entrypoint pulls the control realm
@@ -406,16 +484,19 @@ function buildSeedIssueDocument(
         createdAt: now,
         updatedAt: now,
       },
-      // Under the port flow, bootstrap waits for the analysis issue.
-      ...(port
-        ? {
-            relationships: {
+      relationships: {
+        project: {
+          links: { self: `../${projectPathForBrief(brief)}` },
+        },
+        // Under the port flow, bootstrap waits for the analysis issue.
+        ...(port
+          ? {
               'blockedBy.0': {
                 links: { self: `../${ANALYSIS_ISSUE_PATH}` },
               },
-            },
-          }
-        : {}),
+            }
+          : {}),
+      },
       meta: {
         adoptsFrom: {
           module: darkfactoryModuleUrl,
@@ -487,6 +568,11 @@ function buildAnalysisSeedIssueDocument(
         createdAt: now,
         updatedAt: now,
       },
+      relationships: {
+        project: {
+          links: { self: `../${projectPathForBrief(brief)}` },
+        },
+      },
       meta: {
         adoptsFrom: {
           module: darkfactoryModuleUrl,
@@ -554,6 +640,9 @@ function buildDesignFoundationSeedIssueDocument(
         updatedAt: now,
       },
       relationships: {
+        project: {
+          links: { self: `../${projectPathForBrief(_brief)}` },
+        },
         'blockedBy.0': {
           links: { self: `../${SEED_ISSUE_PATH}` },
         },
@@ -851,4 +940,65 @@ function issueSlugFromId(id: string): string | undefined {
   if (!tail) return undefined;
   let slug = decodeURIComponent(tail).replace(/\.json$/i, '');
   return slug || undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Seeded tracker surfaces
+// ---------------------------------------------------------------------------
+
+/**
+ * The Project stub the seeder writes before any agent turn. Mechanical
+ * fields only — the bootstrap turn enriches successCriteria/scope with
+ * judgment and links the Knowledge Articles it creates.
+ */
+function buildSeedProjectDocument(
+  brief: FactoryBrief,
+  darkfactoryModuleUrl: string,
+) {
+  return {
+    data: {
+      type: 'card' as const,
+      attributes: {
+        projectName: brief.title,
+        projectCode: projectCodeForTitle(brief.title),
+        projectStatus: 'active',
+        objective: brief.contentSummary,
+        scope: brief.content,
+        technicalContext: `Generated by factory:go from brief at ${brief.sourceUrl}`,
+      },
+      meta: {
+        adoptsFrom: {
+          module: darkfactoryModuleUrl,
+          name: 'Project',
+        },
+      },
+    },
+  };
+}
+
+/** The IssueTracker board, project-scoped, seeded alongside the Project. */
+function buildSeedBoardDocument(
+  brief: FactoryBrief,
+  darkfactoryModuleUrl: string,
+) {
+  return {
+    data: {
+      type: 'card' as const,
+      attributes: {
+        boardTitle: `${brief.title} Board`,
+        hideEmptyColumns: false,
+      },
+      relationships: {
+        project: {
+          links: { self: `../${projectPathForBrief(brief)}` },
+        },
+      },
+      meta: {
+        adoptsFrom: {
+          module: darkfactoryModuleUrl,
+          name: 'IssueTracker',
+        },
+      },
+    },
+  };
 }
