@@ -31,7 +31,7 @@
     "links": [],
     "panels": [
       {
-        "description": "Which account every panel below is scoped to. The User variable filters each query, so a name here means the whole board shows one client's events \u2014 grey 'All users' means nothing is filtered. Rendered from the focused_user and focused_user_color variables, which derive the label and its colour from the User selection; a dashboard title cannot interpolate a variable, so the name lives in a panel.",
+        "description": "Which account every panel below is scoped to. The User variable filters each query, so a name here means the whole board shows one client's events, and \"All\" means nothing is filtered. A dashboard title cannot interpolate a variable, so the name lives in a panel. The name is the User variable's own display text; the colour comes from the focused_user_color variable.",
         "gridPos": {
           "h": 3,
           "w": 24,
@@ -45,7 +45,7 @@
             "showLineNumbers": false,
             "showMiniMap": false
           },
-          "content": "<div style=\"display:flex;align-items:center;justify-content:center;gap:14px;height:100%;width:100%;overflow:hidden;font-family:Inter,system-ui,sans-serif\"><span style=\"font-size:13px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--text-secondary)\">scoped to</span><span style=\"font-size:32px;font-weight:700;letter-spacing:1px;color:${focused_user_color}\">${focused_user}</span></div>",
+          "content": "<div style=\"display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:14px;height:100%;width:100%;padding:0 12px;box-sizing:border-box;text-align:center;font-family:Inter,system-ui,sans-serif\"><span style=\"font-size:13px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:#8e8e8e\">scoped to</span><span style=\"font-size:32px;font-weight:700;letter-spacing:1px;min-width:0;word-break:break-all;color:${focused_user_color}\">${matrix_user_id:text}</span></div>",
           "mode": "html"
         },
         "pluginVersion": "12.4.3",
@@ -500,7 +500,7 @@
           "type": "loki",
           "uid": "loki"
         },
-        "description": "Active sessions over the selected time range, stacked by account: at each point, how many sessions each user had active in the preceding 5m. Total stack height is concurrency, the colours are who, and the legend doubles as the current-user list. The grey \"build in use\" legend rows name the host build(s) the active sessions run (from the app_version every beacon stamps): one row means every session is on that build; a second row right after a deploy is a tab that has not reloaded and still runs the previous code. Hovering the chart names which user is on which build. One session is one browser tab. The hover attribution is a third query byte-identical to the bands query, differing only in display name \u2014 Grafana cannot vary legend and tooltip names independently, so deleting the \"duplicate\" removes the user \u2192 build hover.",
+        "description": "Active sessions over the selected time range, stacked by account: at each point, how many sessions each user had active in the preceding 5m. Total stack height is concurrency, the colours are who, and the legend doubles as the current-user list. The grey \"build in use\" legend rows name the host build(s) the active sessions run (from the app_version every beacon stamps): one row means every session is on that build; a second row right after a deploy is a tab that has not reloaded and still runs the previous code. Hovering the chart names which user is on which build. One session is one browser tab. The hover attribution is a third query byte-identical to the bands query, differing only in display name \u2014 Grafana cannot vary legend and tooltip names independently, so deleting the \"duplicate\" removes the user \u2192 build hover. Clicking inside a band offers a link that scopes the whole board to that band's account; the link follows the series nearest the click, so click within the user you want.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -766,7 +766,7 @@
               "h": 8,
               "w": 12,
               "x": 0,
-              "y": 23
+              "y": 26
             },
             "id": 9,
             "options": {
@@ -880,7 +880,7 @@
               "h": 8,
               "w": 12,
               "x": 12,
-              "y": 23
+              "y": 26
             },
             "id": 10,
             "options": {
@@ -976,7 +976,7 @@
               "h": 9,
               "w": 12,
               "x": 0,
-              "y": 31
+              "y": 34
             },
             "id": 11,
             "options": {
@@ -1091,7 +1091,7 @@
               "h": 9,
               "w": 12,
               "x": 12,
-              "y": 31
+              "y": 34
             },
             "id": 12,
             "options": {
@@ -1208,7 +1208,7 @@
               "h": 8,
               "w": 12,
               "x": 0,
-              "y": 33
+              "y": 36
             },
             "id": 14,
             "options": {
@@ -1300,7 +1300,7 @@
               "h": 8,
               "w": 12,
               "x": 12,
-              "y": 33
+              "y": 36
             },
             "id": 15,
             "options": {
@@ -1414,7 +1414,7 @@
               "h": 8,
               "w": 12,
               "x": 0,
-              "y": 41
+              "y": 44
             },
             "id": 16,
             "options": {
@@ -1488,7 +1488,7 @@
               "h": 8,
               "w": 12,
               "x": 12,
-              "y": 41
+              "y": 44
             },
             "id": 17,
             "options": {
@@ -1564,7 +1564,7 @@
               "h": 10,
               "w": 24,
               "x": 0,
-              "y": 49
+              "y": 52
             },
             "id": 18,
             "options": {
@@ -1663,7 +1663,7 @@
               "h": 8,
               "w": 12,
               "x": 0,
-              "y": 51
+              "y": 54
             },
             "id": 20,
             "options": {
@@ -1737,7 +1737,7 @@
               "h": 8,
               "w": 12,
               "x": 12,
-              "y": 51
+              "y": 54
             },
             "id": 21,
             "options": {
@@ -1902,7 +1902,7 @@
               "h": 8,
               "w": 24,
               "x": 0,
-              "y": 53
+              "y": 56
             },
             "id": 23,
             "options": {
@@ -1958,7 +1958,7 @@
               "h": 12,
               "w": 24,
               "x": 0,
-              "y": 61
+              "y": 64
             },
             "id": 24,
             "options": {
@@ -2025,7 +2025,7 @@
               "h": 9,
               "w": 24,
               "x": 0,
-              "y": 73
+              "y": 76
             },
             "id": 38,
             "options": {
@@ -2092,7 +2092,7 @@
               "h": 10,
               "w": 24,
               "x": 0,
-              "y": 128
+              "y": 131
             },
             "id": 39,
             "options": {
@@ -2210,7 +2210,7 @@
               "h": 8,
               "w": 12,
               "x": 0,
-              "y": 55
+              "y": 58
             },
             "id": 26,
             "options": {
@@ -2295,7 +2295,7 @@
               "h": 8,
               "w": 12,
               "x": 12,
-              "y": 55
+              "y": 58
             },
             "id": 27,
             "options": {
@@ -2443,7 +2443,7 @@
               "h": 8,
               "w": 8,
               "x": 0,
-              "y": 57
+              "y": 60
             },
             "id": 29,
             "options": {
@@ -2546,7 +2546,7 @@
               "h": 8,
               "w": 8,
               "x": 8,
-              "y": 57
+              "y": 60
             },
             "id": 30,
             "options": {
@@ -2638,7 +2638,7 @@
               "h": 8,
               "w": 8,
               "x": 16,
-              "y": 57
+              "y": 60
             },
             "id": 31,
             "options": {
@@ -2755,7 +2755,7 @@
               "h": 8,
               "w": 24,
               "x": 0,
-              "y": 59
+              "y": 62
             },
             "id": 33,
             "options": {
@@ -2825,7 +2825,7 @@
               "h": 12,
               "w": 24,
               "x": 0,
-              "y": 61
+              "y": 64
             },
             "id": 35,
             "options": {
@@ -2863,7 +2863,7 @@
               "h": 12,
               "w": 24,
               "x": 0,
-              "y": 73
+              "y": 76
             },
             "id": 36,
             "options": {
@@ -2946,7 +2946,7 @@
               "h": 9,
               "w": 8,
               "x": 0,
-              "y": 63
+              "y": 66
             },
             "id": 41,
             "options": {
@@ -3066,7 +3066,7 @@
               "h": 9,
               "w": 8,
               "x": 8,
-              "y": 63
+              "y": 66
             },
             "id": 42,
             "options": {
@@ -3174,7 +3174,7 @@
               "h": 9,
               "w": 8,
               "x": 16,
-              "y": 63
+              "y": 66
             },
             "id": 43,
             "options": {
@@ -3300,28 +3300,8 @@
             "type": "grafana-postgresql-datasource",
             "uid": "cef5v5sl9k7i8f"
           },
-          "definition": "SELECT CASE WHEN '$matrix_user_id' = '.*' THEN 'All users' ELSE '$matrix_user_id' END AS focused_user;",
-          "description": "Label the header panel renders: the account the board is scoped to, or 'All users' when the User variable is on All. Derived in SQL because a text panel interpolates a variable but cannot branch on it, and the All selection interpolates as its allValue regex '.*' rather than a readable name.",
-          "hide": 2,
-          "includeAll": false,
-          "label": "focused_user",
-          "multi": false,
-          "name": "focused_user",
-          "options": [],
-          "query": "SELECT CASE WHEN '$matrix_user_id' = '.*' THEN 'All users' ELSE '$matrix_user_id' END AS focused_user;",
-          "refresh": 1,
-          "regex": "",
-          "skipUrlSync": true,
-          "sort": 0,
-          "type": "query"
-        },
-        {
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "cef5v5sl9k7i8f"
-          },
           "definition": "SELECT CASE WHEN '$matrix_user_id' = '.*' THEN '#8e8e8e' ELSE '#ff66c4' END AS focused_user_color;",
-          "description": "Colour the header panel renders focused_user in \u2014 the pink this stack uses for a matrix user id elsewhere when one account is selected, grey when the board covers everyone. Carries the scoped-vs-platform-wide distinction at a glance, which the name alone does not.",
+          "description": "Colour the header panel renders the scoped account in \u2014 the pink this stack uses for a matrix user id elsewhere when one account is selected, grey when the board covers everyone. Carries the scoped-vs-platform-wide distinction at a glance, which the name alone does not. Derived in SQL because a text panel interpolates a variable but cannot branch on its value; the comparison is against '.*' because that is the User variable's allValue. An empty result drops the colour declaration, so the name still renders.",
           "hide": 2,
           "includeAll": false,
           "label": "focused_user_color",
