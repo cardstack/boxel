@@ -26,6 +26,8 @@ import {
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 
+import { scheduleNativeTimeout } from '@cardstack/host/utils/render-timer-stub';
+
 import type {
   BaseDef,
   CardDef,
@@ -653,8 +655,11 @@ export default class CardStoreWithGarbageCollection implements CardStore {
         );
         await Promise.race([
           Promise.allSettled(pendingLoads),
+          // scheduleNativeTimeout, NOT setTimeout: timers are stubbed during
+          // prerender (render-timer-stub), so a plain setTimeout here never
+          // fires and the tripwire can't trip. The native escape hatch does.
           new Promise((_resolve, reject) =>
-            setTimeout(
+            scheduleNativeTimeout(
               () => reject(tripwire()),
               Math.max(0, hangDeadline - Date.now()),
             ),
