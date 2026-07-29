@@ -1,6 +1,6 @@
 /**
  * The factory lifecycle phases, in execution order. A run works phases
- * front to back and stops after the `--through` target: everything in a
+ * front to back and stops after the `--to-phase` target: everything in a
  * later phase stays on the board as a visible decision point for the
  * operator instead of executing unattended.
  *
@@ -34,7 +34,7 @@ export function phaseRank(phase: FactoryPhase): number {
 }
 
 /**
- * Parse a `--through` value. Returns undefined for undefined input (let
+ * Parse a `--to-phase` value. Returns undefined for undefined input (let
  * the default apply); throws on an unknown phase name.
  */
 export function parseFactoryPhase(raw: unknown): FactoryPhase | undefined {

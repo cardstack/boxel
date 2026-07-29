@@ -1570,7 +1570,7 @@ module('issue-loop > phase gating', function () {
     );
   });
 
-  test('--through polishing executes enhancement issues', async function (assert) {
+  test('--to-phase polishing executes enhancement issues', async function (assert) {
     let store = makePolishStore();
     let agent = new MockLoopAgent(
       [
@@ -1594,7 +1594,7 @@ module('issue-loop > phase gating', function () {
       makeLoopConfig({
         agent,
         issueStore: store,
-        throughPhase: 'polishing',
+        toPhase: 'polishing',
       }),
     );
 
@@ -1630,7 +1630,7 @@ module('issue-loop > phase gating', function () {
     assert.strictEqual(harden?.status, 'backlog', 'hardening issue parked');
   });
 
-  test('--through hardening executes hardening issues but parks polish', async function (assert) {
+  test('--to-phase hardening executes hardening issues but parks polish', async function (assert) {
     let store = new MockIssueStore([
       makeIssue({ id: 'iss-1', status: 'done', order: 1 }),
       makeIssue({
@@ -1664,7 +1664,7 @@ module('issue-loop > phase gating', function () {
     );
 
     let result = await runIssueLoop(
-      makeLoopConfig({ agent, issueStore: store, throughPhase: 'hardening' }),
+      makeLoopConfig({ agent, issueStore: store, toPhase: 'hardening' }),
     );
 
     assert.deepEqual(

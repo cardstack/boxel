@@ -188,7 +188,7 @@ export interface IssueLoopWiringConfig {
    * Run the lifecycle through this phase (inclusive); later-phase issues
    * stay on the board for an operator. Default `implementation`.
    */
-  throughPhase?: FactoryPhase;
+  toPhase?: FactoryPhase;
   /**
    * Invoked once, right after the bootstrap issue completes. The entrypoint
    * uses this to link the realm index's `board` relationship as soon as the
@@ -524,7 +524,7 @@ export async function runFactoryIssueLoop(
     modelPolicy: config.modelPolicy,
     phaseSplit: config.phaseSplit === true,
     forkContext: config.forkContext === true,
-    throughPhase: config.throughPhase,
+    toPhase: config.toPhase,
     maxIterationsPerIssue: config.maxIterationsPerIssue,
     maxOuterCycles: config.maxOuterCycles,
     debug: config.debug,

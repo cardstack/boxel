@@ -196,7 +196,7 @@ export interface IssueLoopConfig {
    * makes the loop synthesize one hardening issue per done
    * implementation issue once implementation drains. See factory-phase.ts.
    */
-  throughPhase?: FactoryPhase;
+  toPhase?: FactoryPhase;
   /**
    * Per-turn model/thinking budget policy, keyed by turn type. The
    * ORCHESTRATOR owns this (turn type is deterministic here); issues
@@ -531,7 +531,7 @@ export async function runIssueLoop(
     monitor,
     renderGate,
     acceptanceWalkthrough = true,
-    throughPhase = 'implementation',
+    toPhase = 'implementation',
     modelPolicy,
     phaseSplit = false,
     forkContext = false,
@@ -776,7 +776,7 @@ export async function runIssueLoop(
   let maybeSeedHardening = async (): Promise<void> => {
     if (
       hardeningSeeded ||
-      phaseRank(throughPhase) < phaseRank('hardening') ||
+      phaseRank(toPhase) < phaseRank('hardening') ||
       !darkfactoryModuleUrl
     ) {
       return;
@@ -904,12 +904,12 @@ export async function runIssueLoop(
     // Issues beyond the run's target phase do not auto-execute — they
     // stay on the board as the operator's decision point (the bootstrap's
     // pass-2 polish scope in particular says operators may cancel it
-    // wholesale, a decision an unattended run cannot make). `--through
+    // wholesale, a decision an unattended run cannot make). `--to-phase
     // <phase>` widens the target.
     let phase = issuePhase(issue);
-    if (phaseRank(phase) > phaseRank(throughPhase)) {
+    if (phaseRank(phase) > phaseRank(toPhase)) {
       log.info(
-        `Outer cycle ${outerCycles}: leaving ${phase} issue on the board: ${issueSummaryLabel(issue)} — pass --through ${phase} to execute it unattended`,
+        `Outer cycle ${outerCycles}: leaving ${phase} issue on the board: ${issueSummaryLabel(issue)} — pass --to-phase ${phase} to execute it unattended`,
       );
       traceEvent('scheduler', 'skip-phase', {
         issue: issueSlug(issue),
@@ -921,14 +921,14 @@ export async function runIssueLoop(
           {
             kind: 'phase',
             headline: `${phase.charAt(0).toUpperCase()}${phase.slice(1)} left on the board`,
-            body: `${issueDisplayTitle(issue)} awaits operator approval — run with --through ${phase} to execute the ${phase} phase unattended.`,
+            body: `${issueDisplayTitle(issue)} awaits operator approval — run with --to-phase ${phase} to execute the ${phase} phase unattended.`,
             issueUrl: issue.id,
             who: 'orchestrator',
           },
         ]);
       }
       monitor?.noteScheduler(
-        `${phase} left on the board: "${issueDisplayTitle(issue)}" (run with --through ${phase} to execute)`,
+        `${phase} left on the board: "${issueDisplayTitle(issue)}" (run with --to-phase ${phase} to execute)`,
       );
       policySkipped.add(issue.id);
       exhaustedIssues.add(issue.id);

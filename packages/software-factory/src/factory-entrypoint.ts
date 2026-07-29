@@ -119,7 +119,7 @@ export interface FactoryEntrypointOptions {
    * implementation | hardening | polishing. Later-phase issues stay on
    * the board awaiting operator approval. Default `implementation`.
    */
-  throughPhase?: FactoryPhase;
+  toPhase?: FactoryPhase;
   /**
    * Model for fix iterations (inner iterations ≥ 2 — mechanical lint/parse
    * fix-ups). Pass `inherit` to keep the session model for every turn.
@@ -323,7 +323,7 @@ export function getFactoryEntrypointUsage(): string {
     '                              so downgrading is an explicit experiment). `inherit` is a no-op.',
     '  --review-effort <effort>    Effort for the review turn when --review-model is set',
     '                              (low|medium|high|xhigh|max). Default medium.',
-    '  --through <phase>           Run the lifecycle through this phase (inclusive):',
+    '  --to-phase <phase>           Run the lifecycle through this phase (inclusive):',
     '                              design | implementation | hardening | polishing.',
     '                              Default implementation. Later-phase issues stay on the',
     '                              board awaiting operator approval. hardening synthesizes',
@@ -407,7 +407,7 @@ export function parseFactoryEntrypointArgs(
         'fork-context': {
           type: 'boolean',
         },
-        through: {
+        'to-phase': {
           type: 'string',
         },
         'fix-model': {
@@ -528,7 +528,7 @@ export function parseFactoryEntrypointArgs(
     // search the catalog before hand-rolling UI.
     enableBoxelUiDiscovery: true,
     forkContext: parsed.values['fork-context'] === true ? true : undefined,
-    throughPhase: parseThroughPhase(parsed.values.through),
+    toPhase: parseToPhase(parsed.values['to-phase']),
     fixModel:
       typeof parsed.values['fix-model'] === 'string'
         ? parsed.values['fix-model']
@@ -574,12 +574,12 @@ export function parseFactoryEntrypointArgs(
   };
 }
 
-function parseThroughPhase(raw: unknown): FactoryPhase | undefined {
+function parseToPhase(raw: unknown): FactoryPhase | undefined {
   try {
     return parseFactoryPhase(raw);
   } catch (error) {
     throw new FactoryEntrypointUsageError(
-      `Invalid --through: ${error instanceof Error ? error.message : String(error)} Valid values: ${FACTORY_PHASES.join(', ')}.`,
+      `Invalid --to-phase: ${error instanceof Error ? error.message : String(error)} Valid values: ${FACTORY_PHASES.join(', ')}.`,
     );
   }
 }
@@ -1007,7 +1007,7 @@ export async function runFactoryEntrypoint(
     enableBoxelUiDiscovery: options.enableBoxelUiDiscovery,
     runTitle: brief.title,
     forkContext: options.forkContext,
-    throughPhase: options.throughPhase,
+    toPhase: options.toPhase,
     modelPolicy: buildModelPolicy({ ...options, phaseSplit }),
     phaseSplit,
     renderGate: options.renderGate,

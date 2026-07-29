@@ -818,7 +818,7 @@ module('factory-entrypoint > buildModelPolicy bootstrap budget', function () {
   });
 });
 
-module('factory-entrypoint > --through phase parsing', function () {
+module('factory-entrypoint > --to-phase phase parsing', function () {
   let base = [
     '--brief-url',
     'https://realms.example.test/wiki/brief',
@@ -828,7 +828,7 @@ module('factory-entrypoint > --through phase parsing', function () {
 
   test('defaults to undefined (loop applies implementation)', function (assert) {
     let options = parseFactoryEntrypointArgs([...base]);
-    assert.strictEqual(options.throughPhase, undefined);
+    assert.strictEqual(options.toPhase, undefined);
   });
 
   test('accepts each lifecycle phase', function (assert) {
@@ -838,15 +838,15 @@ module('factory-entrypoint > --through phase parsing', function () {
       'hardening',
       'polishing',
     ] as const) {
-      let options = parseFactoryEntrypointArgs([...base, '--through', phase]);
-      assert.strictEqual(options.throughPhase, phase);
+      let options = parseFactoryEntrypointArgs([...base, '--to-phase', phase]);
+      assert.strictEqual(options.toPhase, phase);
     }
   });
 
   test('rejects an unknown phase', function (assert) {
     assert.throws(
-      () => parseFactoryEntrypointArgs([...base, '--through', 'shipping']),
-      /Invalid --through/,
+      () => parseFactoryEntrypointArgs([...base, '--to-phase', 'shipping']),
+      /Invalid --to-phase/,
     );
   });
 });
