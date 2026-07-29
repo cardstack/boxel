@@ -1,8 +1,9 @@
-import { babel } from '@rollup/plugin-babel';
-import { Addon } from '@embroider/addon-dev/rollup';
-import { scopedCSS } from 'glimmer-scoped-css/rollup';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { Addon } from '@embroider/addon-dev/rollup';
+import { babel } from '@rollup/plugin-babel';
+import { scopedCSS } from 'glimmer-scoped-css/rollup';
 
 const addon = new Addon({
   srcDir: 'src',

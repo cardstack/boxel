@@ -60,7 +60,9 @@ export default class BoxelSelect<ItemT = any> extends Component<
   }
 
   private syncCustomProps() {
-    if (!this.selectEl || !this.dropdownContainer) return;
+    if (!this.selectEl || !this.dropdownContainer) {
+      return;
+    }
     const cs = getComputedStyle(this.selectEl);
 
     const themeVars = [
@@ -103,7 +105,9 @@ export default class BoxelSelect<ItemT = any> extends Component<
   }
 
   private startObservingTheme() {
-    if (!this.selectEl) return;
+    if (!this.selectEl) {
+      return;
+    }
 
     // Don't set up theme observation when renderInPlace is true
     // as the dropdown will inherit styles naturally through CSS
@@ -149,7 +153,9 @@ export default class BoxelSelect<ItemT = any> extends Component<
   }
 
   private detectAndSetThemeColors() {
-    if (!this.selectEl || !this.dropdownContainer) return;
+    if (!this.selectEl || !this.dropdownContainer) {
+      return;
+    }
 
     // Check if theme variables are available
     const cs = getComputedStyle(this.selectEl);

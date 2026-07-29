@@ -110,9 +110,12 @@ export class KanbanPlaneInner extends Component<{
 
   shouldShiftDown = (p: KanbanPlacement): boolean => {
     const ins = this.manager.insertion;
-    if (!ins || !this.isActivelyMoving || p.columnId !== ins.columnId)
+    if (!ins || !this.isActivelyMoving || p.columnId !== ins.columnId) {
       return false;
-    if (p.index === this.manager.activeDragIndex) return false;
+    }
+    if (p.index === this.manager.activeDragIndex) {
+      return false;
+    }
     return p.sortOrder >= ins.position;
   };
 
@@ -135,9 +138,13 @@ export class KanbanPlaneInner extends Component<{
   };
 
   insertionBoxStyle = (colId: string): SafeString => {
-    if (!this.showInsertionBox(colId)) return sanitizeHtmlSafe('display: none');
+    if (!this.showInsertionBox(colId)) {
+      return sanitizeHtmlSafe('display: none');
+    }
     const off = this.manager.insertionBoxOffset;
-    if (!off) return sanitizeHtmlSafe('display: none');
+    if (!off) {
+      return sanitizeHtmlSafe('display: none');
+    }
     const height = off.height > 0 ? off.height : this.cardFormat.height;
     return sanitizeHtmlSafe(
       `transform: translateY(${off.yOffset}px); height: ${height}px`,
@@ -162,10 +169,14 @@ export class KanbanPlaneInner extends Component<{
 
   get roverIndex(): number | null {
     const sel = this.manager.selectedIndex;
-    if (sel !== null) return sel;
+    if (sel !== null) {
+      return sel;
+    }
     for (const col of this.columns) {
       const cards = this.columnCards(col.key);
-      if (cards.length > 0) return cards[0]!.index;
+      if (cards.length > 0) {
+        return cards[0]!.index;
+      }
     }
     return null;
   }

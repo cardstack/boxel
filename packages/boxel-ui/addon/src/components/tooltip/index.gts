@@ -83,7 +83,9 @@ export default class Tooltip extends Component<Signature> {
   }
 
   private syncCustomProps() {
-    if (!this.triggerEl || !this.overlayContainer) return;
+    if (!this.triggerEl || !this.overlayContainer) {
+      return;
+    }
     const cs = getComputedStyle(this.triggerEl);
 
     const themeVars = [
@@ -129,7 +131,9 @@ export default class Tooltip extends Component<Signature> {
   }
 
   private startObservingTheme() {
-    if (!this.triggerEl) return;
+    if (!this.triggerEl) {
+      return;
+    }
 
     this.syncCustomProps();
 

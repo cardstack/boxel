@@ -1,5 +1,4 @@
 declare module 'ember-sortable/modifiers/sortable-group' {
-  /* eslint-disable @typescript-eslint/ban-types */
   import Modifier from 'ember-modifier';
 
   export default class SortableGroupModifier extends Modifier<{
