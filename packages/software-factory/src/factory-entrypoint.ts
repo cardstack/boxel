@@ -399,11 +399,6 @@ export function parseFactoryEntrypointArgs(
         'enable-boxel-ui-discovery': {
           type: 'boolean',
         },
-        // Deprecated no-op: design-first is the only pipeline now. Kept so
-        // existing commands with --v2 don't die on the strict parser.
-        v2: {
-          type: 'boolean',
-        },
         'fork-context': {
           type: 'boolean',
         },
