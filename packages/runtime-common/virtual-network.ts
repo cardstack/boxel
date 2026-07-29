@@ -111,8 +111,9 @@ export class VirtualNetwork {
 
   addURLMapping(from: URL, to: URL) {
     this.urlMappings.push([from.href, to.href]);
-    // Both memos resolve through urlMappings (toURLHref via toURL, unresolveURL
-    // via its virtual→real chase), so a new URL mapping invalidates them.
+    // unresolveURL chases through urlMappings (via resolveURLMapping), so a new
+    // URL mapping invalidates its memo. toURLHref resolves only through
+    // realmMappings, so clearing its cache here is purely defensive.
     this.toURLHrefCache.clear();
     this.unresolveURLCache.clear();
   }
