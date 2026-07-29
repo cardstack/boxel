@@ -121,7 +121,11 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
           HOME: tempProfileHome,
           ...playwrightBrowsersEnv,
         },
-        timeoutMs: 120_000,
+        // The failing-agent path runs up to five inner iterations, each
+        // with run-log appends and monitor bookkeeping (always on since
+        // the v1 pipeline's removal) — 120s straddled the real duration
+        // and flaked on CI timing jitter.
+        timeoutMs: 240_000,
       },
     );
 
