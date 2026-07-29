@@ -9,37 +9,58 @@ import { setupRenderingTest } from '../helpers/setup';
 import { suspendGlobalErrorHook } from '../helpers/uncaught-exceptions';
 
 // A `window` error event shaped like the one a browser dispatches for an
-// uncaught throw. The module suspends QUnit's global error hook, so these
-// synthetic throws are collected rather than failing the suite.
+// uncaught throw.
+//
+// An ErrorEvent dispatched at the window invokes `window.onerror`, and two
+// harnesses hook it: QUnit, whose uncaught-exception path this module suspends,
+// and — under the test runner that CI uses — testem's client, which reports
+// anything reaching `window.onerror` to its server as a "Global error" and fails
+// the run. Suspending QUnit's hook does nothing about testem's. So the property
+// itself is detached for the length of each dispatch, which covers every such
+// handler including ones no test knows about. `assertNoGlobalErrorReported`
+// keeps this honest without depending on which runner is driving.
 function dispatchUncaught(
   error: unknown,
   location: { filename?: string; lineno?: number; colno?: number } = {},
 ) {
   let message = (error as { message?: unknown })?.message;
-  window.dispatchEvent(
-    new ErrorEvent('error', {
-      message: `Uncaught ${typeof message === 'string' ? message : String(error)}`,
-      filename: location.filename ?? '',
-      lineno: location.lineno ?? 0,
-      colno: location.colno ?? 0,
-      error,
-    }),
-  );
+  let savedOnError = window.onerror;
+  window.onerror = null;
+  try {
+    window.dispatchEvent(
+      new ErrorEvent('error', {
+        message: `Uncaught ${typeof message === 'string' ? message : String(error)}`,
+        filename: location.filename ?? '',
+        lineno: location.lineno ?? 0,
+        colno: location.colno ?? 0,
+        error,
+      }),
+    );
+  } finally {
+    window.onerror = savedOnError;
+  }
 }
 
-// QUnit routes every `window.onerror` call through its uncaught-exception hook,
-// which this module's suspension collects and the suite's diagnostics log. That
-// is what proves a single dispatch behaves like a real uncaught throw, but a
-// test that throws hundreds of times does not need hundreds of log lines to make
-// its point.
-function quietly(body: () => void) {
-  let saved = window.onerror;
-  window.onerror = null;
+// A synthetic throw must stay invisible to whatever global error reporting the
+// harness installed, or it fails the run it is supposed to be exercising. Probe
+// with a handler of our own rather than trusting a specific runner's plumbing.
+function assertNoGlobalErrorReported(
+  assert: Assert,
+  body: () => void,
+  message: string,
+) {
+  let reported = 0;
+  let savedOnError = window.onerror;
+  window.onerror = () => {
+    reported++;
+    return true;
+  };
   try {
     body();
   } finally {
-    window.onerror = saved;
+    window.onerror = savedOnError;
   }
+  assert.strictEqual(reported, 0, message);
 }
 
 function dispatchRejection(reason: unknown) {
@@ -79,10 +100,12 @@ module('Integration | Service | client-telemetry', function (hooks) {
     loggedInAs: '@testuser:localhost',
     autostart: true,
   });
-  // Several tests dispatch uncaught errors and unhandled rejections on purpose;
-  // QUnit would otherwise report each as a suite-level failure. The collector
-  // doubles as proof the synthetic dispatch really did travel the global
-  // error path.
+  // Several tests dispatch unhandled rejections on purpose, and QUnit's own
+  // listener would report each as a suite-level failure. The collector doubles as
+  // proof that such a dispatch really does travel the global rejection path.
+  // (Uncaught errors need no suspension here — `dispatchUncaught` detaches
+  // `window.onerror` for the length of its dispatch, which is what every runner
+  // hooks.)
   let { capturedExceptions } = suspendGlobalErrorHook(hooks);
 
   function telemetry(): ClientTelemetryService {
@@ -248,11 +271,16 @@ module('Integration | Service | client-telemetry', function (hooks) {
     svc.drainBufferForTest();
 
     let thrown = new Error('boom');
-    dispatchUncaught(thrown, {
-      filename: 'https://realm.example/my-realm/person.gts',
-      lineno: 42,
-      colno: 7,
-    });
+    assertNoGlobalErrorReported(
+      assert,
+      () =>
+        dispatchUncaught(thrown, {
+          filename: 'https://realm.example/my-realm/person.gts',
+          lineno: 42,
+          colno: 7,
+        }),
+      "a synthetic throw stays invisible to the harness's global error reporting",
+    );
 
     let events = clientErrors(svc);
     assert.strictEqual(events.length, 1, 'one client-error event buffered');
@@ -284,11 +312,6 @@ module('Integration | Service | client-telemetry', function (hooks) {
     assert.true(
       e.stack.includes(e.top_frame_function),
       'the scalar top frame is lifted out of the captured stack',
-    );
-    assert.strictEqual(
-      capturedExceptions.length,
-      1,
-      'the synthetic throw travelled the real global error path',
     );
   });
 
@@ -323,6 +346,17 @@ module('Integration | Service | client-telemetry', function (hooks) {
     );
     assert.strictEqual(e.line, 9);
     assert.strictEqual(e.col, 15);
+    // Containment, not an exact count: the collector spans the module and the
+    // app's own boot leaves incidental rejections in it (a mock-matrix fetch
+    // that fails in the test environment), so a count would assert on unrelated
+    // noise. What matters is that this rejection reached the global path at all —
+    // which is why the module suspends that path in the first place.
+    assert.true(
+      capturedExceptions.some(
+        (captured) => (captured as Error | undefined)?.message === 'rejected',
+      ),
+      'the synthetic rejection travelled the real global rejection path',
+    );
   });
 
   test('the top frame is parsed out of every engine and url shape', function (assert) {
@@ -394,12 +428,10 @@ module('Integration | Service | client-telemetry', function (hooks) {
       ],
     ];
 
-    quietly(() => {
-      cases.forEach(([frame], i) => {
-        // The message is deliberately plain: a message that reads like a frame
-        // would be a different test (the one below).
-        dispatchUncaught(errorWithStack(`frame shape ${i}`, [frame]));
-      });
+    cases.forEach(([frame], i) => {
+      // The message is deliberately plain: a message that reads like a frame
+      // would be a different test (the one below).
+      dispatchUncaught(errorWithStack(`frame shape ${i}`, [frame]));
     });
 
     let events = clientErrors(svc);
@@ -557,11 +589,9 @@ module('Integration | Service | client-telemetry', function (hooks) {
       slowest_loads: [],
     });
     let looping = errorWithStack('render loop', frames(3));
-    quietly(() => {
-      for (let i = 0; i < 300; i++) {
-        dispatchUncaught(looping);
-      }
-    });
+    for (let i = 0; i < 300; i++) {
+      dispatchUncaught(looping);
+    }
 
     let buffered = svc.drainBufferForTest();
     let errors = buffered.filter((e) => e.event_type === 'client-error');
@@ -583,11 +613,9 @@ module('Integration | Service | client-telemetry', function (hooks) {
     svc.enableForTest();
     svc.drainBufferForTest();
 
-    quietly(() => {
-      for (let i = 0; i < 30; i++) {
-        dispatchUncaught(errorWithStack(`distinct failure ${i}`, frames(2)));
-      }
-    });
+    for (let i = 0; i < 30; i++) {
+      dispatchUncaught(errorWithStack(`distinct failure ${i}`, frames(2)));
+    }
 
     let errors = clientErrors(svc);
     assert.true(
@@ -607,10 +635,8 @@ module('Integration | Service | client-telemetry', function (hooks) {
     svc.drainBufferForTest();
 
     let base = 'unable to fetch https://realm.example/my-realm/Person/';
-    quietly(() => {
-      dispatchUncaught(errorWithStack(`${base}abc123: 404`, frames(2)));
-      dispatchUncaught(errorWithStack(`${base}def456: 404`, frames(2)));
-    });
+    dispatchUncaught(errorWithStack(`${base}abc123: 404`, frames(2)));
+    dispatchUncaught(errorWithStack(`${base}def456: 404`, frames(2)));
 
     let errors = clientErrors(svc);
     assert.strictEqual(
@@ -634,7 +660,7 @@ module('Integration | Service | client-telemetry', function (hooks) {
   test('the error channel is dormant until a test opts in', function (assert) {
     let svc = telemetry();
     assert.false(svc.isEnabled, 'precondition: dormant under isTesting()');
-    quietly(() => dispatchUncaught(new Error('should not be recorded')));
+    dispatchUncaught(new Error('should not be recorded'));
     assert.strictEqual(
       svc.drainBufferForTest().length,
       0,
@@ -650,7 +676,7 @@ module('Integration | Service | client-telemetry', function (hooks) {
     let saved = globals.__boxelRenderContext;
     globals.__boxelRenderContext = true;
     try {
-      quietly(() => dispatchUncaught(new Error('a render that threw')));
+      dispatchUncaught(new Error('a render that threw'));
       assert.strictEqual(
         clientErrors(svc).length,
         0,
@@ -677,7 +703,7 @@ module('Integration | Service | client-telemetry', function (hooks) {
       0,
       'recordEvent is a no-op once disarmed',
     );
-    quietly(() => dispatchUncaught(new Error('after teardown')));
+    dispatchUncaught(new Error('after teardown'));
     assert.strictEqual(
       svc.drainBufferForTest().length,
       0,
