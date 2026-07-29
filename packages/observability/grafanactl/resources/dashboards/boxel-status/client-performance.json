@@ -31,12 +31,35 @@
     "links": [],
     "panels": [
       {
+        "description": "Which account every panel below is scoped to. The User variable filters each query, so a name here means the whole board shows one client's events \u2014 grey 'All users' means nothing is filtered. Rendered from the focused_user and focused_user_color variables, which derive the label and its colour from the User selection; a dashboard title cannot interpolate a variable, so the name lives in a panel.",
+        "gridPos": {
+          "h": 3,
+          "w": 24,
+          "x": 0,
+          "y": 0
+        },
+        "id": 93,
+        "options": {
+          "code": {
+            "language": "plaintext",
+            "showLineNumbers": false,
+            "showMiniMap": false
+          },
+          "content": "<div style=\"display:flex;align-items:center;justify-content:center;gap:14px;height:100%;width:100%;overflow:hidden;font-family:Inter,system-ui,sans-serif\"><span style=\"font-size:13px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--text-secondary)\">scoped to</span><span style=\"font-size:32px;font-weight:700;letter-spacing:1px;color:${focused_user_color}\">${focused_user}</span></div>",
+          "mode": "html"
+        },
+        "pluginVersion": "12.4.3",
+        "title": "",
+        "transparent": true,
+        "type": "text"
+      },
+      {
         "collapsed": false,
         "gridPos": {
           "h": 1,
           "w": 24,
           "x": 0,
-          "y": 0
+          "y": 3
         },
         "id": 2,
         "panels": [],
@@ -71,7 +94,7 @@
           "h": 4,
           "w": 8,
           "x": 0,
-          "y": 1
+          "y": 4
         },
         "id": 4,
         "options": {
@@ -142,7 +165,7 @@
           "h": 4,
           "w": 8,
           "x": 8,
-          "y": 1
+          "y": 4
         },
         "id": 5,
         "options": {
@@ -209,7 +232,7 @@
           "h": 4,
           "w": 8,
           "x": 16,
-          "y": 1
+          "y": 4
         },
         "id": 6,
         "options": {
@@ -301,7 +324,7 @@
           "h": 8,
           "w": 12,
           "x": 0,
-          "y": 5
+          "y": 8
         },
         "id": 7,
         "options": {
@@ -404,7 +427,7 @@
           "h": 8,
           "w": 12,
           "x": 12,
-          "y": 5
+          "y": 8
         },
         "id": 8,
         "options": {
@@ -543,6 +566,16 @@
                     "legend": false,
                     "tooltip": true
                   }
+                },
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "title": "Focus this dashboard on ${__field.labels.matrix_user_id}",
+                      "url": "/d/${__dashboard.uid}?${__url_time_range}&var-matrix_user_id=${__field.labels.matrix_user_id:percentencode}",
+                      "targetBlank": false
+                    }
+                  ]
                 }
               ]
             },
@@ -605,7 +638,7 @@
           "h": 8,
           "w": 24,
           "x": 0,
-          "y": 13
+          "y": 16
         },
         "id": 92,
         "options": {
@@ -672,7 +705,7 @@
           "h": 1,
           "w": 24,
           "x": 0,
-          "y": 22
+          "y": 25
         },
         "id": 13,
         "panels": [
@@ -1114,7 +1147,7 @@
           "h": 1,
           "w": 24,
           "x": 0,
-          "y": 32
+          "y": 35
         },
         "id": 19,
         "panels": [
@@ -1569,7 +1602,7 @@
           "h": 1,
           "w": 24,
           "x": 0,
-          "y": 50
+          "y": 53
         },
         "id": 22,
         "panels": [
@@ -1791,7 +1824,7 @@
           "h": 1,
           "w": 24,
           "x": 0,
-          "y": 52
+          "y": 55
         },
         "id": 25,
         "panels": [
@@ -2099,7 +2132,7 @@
           "h": 1,
           "w": 24,
           "x": 0,
-          "y": 54
+          "y": 57
         },
         "id": 28,
         "panels": [
@@ -2349,7 +2382,7 @@
           "h": 1,
           "w": 24,
           "x": 0,
-          "y": 56
+          "y": 59
         },
         "id": 32,
         "panels": [
@@ -2661,7 +2694,7 @@
           "h": 1,
           "w": 24,
           "x": 0,
-          "y": 58
+          "y": 61
         },
         "id": 34,
         "panels": [
@@ -2778,7 +2811,7 @@
           "h": 1,
           "w": 24,
           "x": 0,
-          "y": 60
+          "y": 63
         },
         "id": 37,
         "panels": [
@@ -2868,7 +2901,7 @@
           "h": 1,
           "w": 24,
           "x": 0,
-          "y": 62
+          "y": 65
         },
         "id": 40,
         "title": "By user \u2014 who is hitting issues",
@@ -3261,6 +3294,46 @@
           "query": "",
           "skipUrlSync": false,
           "type": "textbox"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "cef5v5sl9k7i8f"
+          },
+          "definition": "SELECT CASE WHEN '$matrix_user_id' = '.*' THEN 'All users' ELSE '$matrix_user_id' END AS focused_user;",
+          "description": "Label the header panel renders: the account the board is scoped to, or 'All users' when the User variable is on All. Derived in SQL because a text panel interpolates a variable but cannot branch on it, and the All selection interpolates as its allValue regex '.*' rather than a readable name.",
+          "hide": 2,
+          "includeAll": false,
+          "label": "focused_user",
+          "multi": false,
+          "name": "focused_user",
+          "options": [],
+          "query": "SELECT CASE WHEN '$matrix_user_id' = '.*' THEN 'All users' ELSE '$matrix_user_id' END AS focused_user;",
+          "refresh": 1,
+          "regex": "",
+          "skipUrlSync": true,
+          "sort": 0,
+          "type": "query"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "cef5v5sl9k7i8f"
+          },
+          "definition": "SELECT CASE WHEN '$matrix_user_id' = '.*' THEN '#8e8e8e' ELSE '#ff66c4' END AS focused_user_color;",
+          "description": "Colour the header panel renders focused_user in \u2014 the pink this stack uses for a matrix user id elsewhere when one account is selected, grey when the board covers everyone. Carries the scoped-vs-platform-wide distinction at a glance, which the name alone does not.",
+          "hide": 2,
+          "includeAll": false,
+          "label": "focused_user_color",
+          "multi": false,
+          "name": "focused_user_color",
+          "options": [],
+          "query": "SELECT CASE WHEN '$matrix_user_id' = '.*' THEN '#8e8e8e' ELSE '#ff66c4' END AS focused_user_color;",
+          "refresh": 1,
+          "regex": "",
+          "skipUrlSync": true,
+          "sort": 0,
+          "type": "query"
         }
       ]
     },
