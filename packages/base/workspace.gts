@@ -32,6 +32,7 @@ import LayoutGridIcon from '@cardstack/boxel-icons/layout-grid';
 import ActivityIcon from '@cardstack/boxel-icons/activity';
 import DoorOpenIcon from '@cardstack/boxel-icons/door-open';
 import SearchIcon from '@cardstack/boxel-icons/search';
+import DatabaseIcon from '@cardstack/boxel-icons/database';
 
 import {
   chooseCard,
@@ -72,7 +73,7 @@ import {
   type BoxComponent,
 } from './card-api';
 import { MarkdownDef } from './markdown-file-def'; // realm README
-import type { RealmEventContent } from './matrix-event';
+import type { RealmEventContent, IndexRealmEventContent } from './matrix-event';
 import { Spec } from './spec';
 
 // This file is always loaded through the Boxel loader, which supplies
@@ -132,8 +133,8 @@ export function etaMinutes(
 
 // The verbs the Activity feed labels an event with. A card save is classified
 // as Created/Updated by timing; a RemixCard instance is a first-class Remixed
-// event regardless of when it was written.
-export type ActivityVerb = 'Created' | 'Updated' | 'Remixed';
+// event; a completed realm indexing pass is a first-class Indexed event.
+export type ActivityVerb = 'Created' | 'Updated' | 'Remixed' | 'Indexed';
 
 // A card modified within this window of its creation reads as "Created" in
 // the Activity feed rather than "Updated".
@@ -169,6 +170,57 @@ export function activityVerbFor(
     ? 'Remixed'
     : classifyActivityVerb(modMs, createdMs);
 }
+
+// The type label shown beside the Indexed verb in the feed.
+const INDEX_TYPE_NAME = 'Indexing';
+
+// A completed realm indexing pass, described for the Activity feed. Returns
+// undefined for realm events that are not first-class feed entries — the
+// pre-index 'incremental-index-initiation' signal (no committed state yet) and
+// any non-index event — so callers can skip them.
+export function indexEventTitle(ev: RealmEventContent): string | undefined {
+  if (ev.eventName !== 'index') {
+    return undefined;
+  }
+  switch (ev.indexType) {
+    case 'incremental': {
+      // `invalidations` is the realm's full invalidation set — instances plus
+      // any modules whose save cascaded — not a card count, so label it
+      // "items" rather than "cards" to avoid overcounting a shared-module edit.
+      let n = ev.invalidations?.length ?? 0;
+      return n === 1 ? '1 item reindexed' : `${n} items reindexed`;
+    }
+    case 'full':
+      return 'Full reindex';
+    case 'copy': {
+      let host = hostOf(ev.sourceRealmURL);
+      return host ? `Copied from ${host}` : 'Copied from another realm';
+    }
+    default:
+      return undefined; // initiation signal and any future index types
+  }
+}
+
+// A single Activity-feed row. `kind` discriminates a card save (which carries a
+// `component`/`card` to render and open) from a card-less index event (rendered
+// as an icon tile). The time fields are derived from `ms` when the merged feed
+// is assembled.
+type FeedRow = {
+  kind: 'card' | 'index';
+  id: string;
+  ms: number | undefined;
+  when: string | undefined;
+  absolute: string | undefined;
+  dayLabel: string;
+  showDay: boolean;
+  verb: ActivityVerb;
+  title: string | undefined;
+  typeName: string;
+  typeIcon: typeof CardDef.icon;
+  note: string | undefined;
+  component: BoxComponent | undefined; // card kind only
+  card: CardDef | undefined; // card kind only
+};
 
 type RealmConfigCard = CardDef & { iconURL?: string }; // RealmConfig shape
 
@@ -888,7 +940,7 @@ class Isolated extends Component<typeof Workspace> {
                   first.</p>
               </div>
               <div class='feed'>
-                {{#each this.visibleFeed as |item|}}
+                {{#each this.visibleFeed key='id' as |item|}}
                   {{#if item.showDay}}
                     <div class='feed-day'>
                       <span class='feed-day-label'>{{item.dayLabel}}</span>
@@ -901,15 +953,29 @@ class Isolated extends Component<typeof Workspace> {
                         item.when
                         '—'
                       }}</span>
-                    <div class='feed-card'>
-                      <item.component @format='embedded' />
-                      <button
-                        type='button'
-                        class='tile-open'
-                        aria-label='Open {{if item.title item.title "card"}}'
-                        {{on 'click' (this.openCard item.card)}}
-                      ></button>
-                    </div>
+                    {{#let item.component as |Embedded|}}
+                      {{#if Embedded}}
+                        <div class='feed-card'>
+                          <Embedded @format='embedded' />
+                          <button
+                            type='button'
+                            class='tile-open'
+                            aria-label='Open {{if
+                              item.title
+                              item.title
+                              "card"
+                            }}'
+                            {{on 'click' (this.openCard item.card)}}
+                          ></button>
+                        </div>
+                      {{else}}
+                        {{! card-less event (e.g. an indexing pass): an icon
+                          tile stands in for the embedded card. }}
+                        <div class='feed-card feed-event-tile'>
+                          <item.typeIcon class='feed-event-icon' />
+                        </div>
+                      {{/if}}
+                    {{/let}}
                     <div class='feed-note'>
                       {{! Rich event entry: verb + type (icon) meta row,
                         title anchor, then the change note. The right column
@@ -918,7 +984,8 @@ class Isolated extends Component<typeof Workspace> {
                         <span
                           class='feed-verb
                             {{if (eq item.verb "Created") "created"}}
-                            {{if (eq item.verb "Remixed") "remixed"}}'
+                            {{if (eq item.verb "Remixed") "remixed"}}
+                            {{if (eq item.verb "Indexed") "indexed"}}'
                         >{{item.verb}}</span>
                         <span class='feed-type'>
                           <item.typeIcon class='feed-type-icon' />
@@ -946,7 +1013,7 @@ class Isolated extends Component<typeof Workspace> {
                     <span class='feed-more-note'>Showing
                       {{this.visibleFeed.length}}
                       of
-                      {{this.feedItems.length}}</span>
+                      {{this.feed.length}}</span>
                   </div>
                 {{else if this.feedAtCap}}
                   <p class='feed-end-note'>Showing the last 100 changes.</p>
@@ -1008,6 +1075,7 @@ class Isolated extends Component<typeof Workspace> {
         --grid-soft: 0.18s;
         --grid-created: #00893a;
         --grid-remixed: #7c3aed;
+        --grid-indexed: #2563eb;
 
         display: flex;
         flex-direction: column;
@@ -1962,6 +2030,21 @@ class Isolated extends Component<typeof Workspace> {
         border-radius: 10px;
         overflow: hidden;
       }
+      /* card-less event tile (e.g. an indexing pass) stands in for the
+         embedded card in the same column */
+      .feed-event-tile {
+        display: grid;
+        place-items: center;
+        height: 72px;
+        background-color: var(--grid-surface);
+        border: 1px solid var(--grid-border);
+        border-radius: 10px;
+        color: var(--grid-indexed);
+      }
+      .feed-event-icon {
+        width: 24px;
+        height: 24px;
+      }
       .feed-note {
         min-width: 0;
         padding-top: 10px;
@@ -1986,6 +2069,9 @@ class Isolated extends Component<typeof Workspace> {
       }
       .feed-verb.remixed {
         color: var(--grid-remixed);
+      }
+      .feed-verb.indexed {
+        color: var(--grid-indexed);
       }
       .feed-type {
         display: inline-flex;
@@ -3221,9 +3307,8 @@ class Isolated extends Component<typeof Workspace> {
     this.fileTotal = fileTotal;
 
     this.activeFilter =
-      this.filterOptions.find(
-        (filter) => filter.id === this.activeFilter.id,
-      ) ?? this.filterOptions[0];
+      this.filterOptions.find((filter) => filter.id === this.activeFilter.id) ??
+      this.filterOptions[0];
   });
 
   private loadJobs = restartableTask(async () => {
@@ -3274,9 +3359,27 @@ class Isolated extends Component<typeof Workspace> {
         ev.indexType === 'full' ||
         ev.indexType === 'copy')
     ) {
+      this.recordIndexEvent(ev);
       this.refreshAfterIndex.perform();
     }
   };
+
+  // Log a completed indexing pass as a first-class Activity event. Stamped at
+  // receipt (the event carries no timestamp) and bounded to the feed cap.
+  private recordIndexEvent(ev: IndexRealmEventContent) {
+    let title = indexEventTitle(ev);
+    if (!title) {
+      return;
+    }
+    this.indexLog.unshift({
+      id: `index-${this.indexEventSeq++}`,
+      ms: Date.now(),
+      title,
+    });
+    if (this.indexLog.length > 100) {
+      this.indexLog.splice(100, this.indexLog.length - 100);
+    }
+  }
 
   // Coalesce a burst of index events into a single refresh: each event restarts
   // the task, cancelling the pending timeout, so the panel searches fan out once
@@ -3291,38 +3394,78 @@ class Isolated extends Component<typeof Workspace> {
     }
   });
 
-  // The Activity log: everything in the realm, reverse-chron by
-  // lastModified. Each row carries when / what / why: timestamp rail,
-  // the card, and a change note (`cardInfo.notes` — the convention slot a
-  // human or AI fills in when saving a change).
-  private feedItems: {
-    id: string;
-    component: BoxComponent;
-    when: string | undefined;
-    absolute: string | undefined;
-    note: string | undefined;
-    verb: ActivityVerb;
-    dayLabel: string;
-    showDay: boolean;
-    title: string | undefined; // card identity for the log line
-    typeName: string;
-    typeIcon: typeof CardDef.icon;
-    card: CardDef; // for the tile-open overlay
-  }[] = new TrackedArray();
+  // The Activity log merges two event sources, reverse-chron by timestamp:
+  // card saves (from the realm search) and completed realm indexing passes
+  // (from the realm subscription — these are not indexed cards, so they live
+  // in their own log). Each row carries when / what / why: timestamp rail, a
+  // card or event tile, and a change note.
+  private cardFeed: FeedRow[] = new TrackedArray();
 
-  // Reveal-on-scroll pagination over the fetched window.
+  // Completed indexing passes, surfaced as first-class events. Accumulated from
+  // the realm subscription (they are not cards), stamped at receipt, and bounded
+  // to the feed cap so a long-lived session cannot grow this without limit.
+  private indexLog: {
+    id: string;
+    ms: number;
+    title: string;
+  }[] = new TrackedArray();
+  private indexEventSeq = 0;
+
+  // Reveal-on-scroll pagination over the merged window.
   @tracked private feedShown = 20;
 
+  // Merge card + index events, order newest-first, bound to the cap, then
+  // compute the day headers in that final order.
+  @cached
+  private get feed(): FeedRow[] {
+    let merged: FeedRow[] = [
+      ...this.cardFeed,
+      ...this.indexLog.map(
+        (e): FeedRow => ({
+          kind: 'index',
+          id: e.id,
+          ms: e.ms,
+          when: undefined,
+          absolute: undefined,
+          dayLabel: '',
+          showDay: false,
+          verb: 'Indexed',
+          title: e.title,
+          typeName: INDEX_TYPE_NAME,
+          typeIcon: DatabaseIcon,
+          note: undefined,
+          component: undefined,
+          card: undefined,
+        }),
+      ),
+    ];
+    merged.sort((a, b) => (b.ms ?? 0) - (a.ms ?? 0));
+    let prevDay: string | undefined;
+    return merged.slice(0, 100).map((row): FeedRow => {
+      let day = row.ms !== undefined ? dayLabelFor(row.ms) : '';
+      let showDay = Boolean(day) && day !== prevDay;
+      prevDay = day || prevDay;
+      return {
+        ...row,
+        when: row.ms !== undefined ? relativeTime(row.ms) : undefined,
+        absolute:
+          row.ms !== undefined ? new Date(row.ms).toLocaleString() : undefined,
+        dayLabel: day,
+        showDay,
+      };
+    });
+  }
+
   private get visibleFeed() {
-    return this.feedItems.slice(0, this.feedShown);
+    return this.feed.slice(0, this.feedShown);
   }
 
   private get moreFeed() {
-    return this.feedItems.length > this.feedShown;
+    return this.feed.length > this.feedShown;
   }
 
   private get feedAtCap() {
-    return this.feedItems.length >= 100;
+    return this.feed.length >= 100;
   }
 
   // The source a remix was cloned from, read live off the card so it fills in
@@ -3330,9 +3473,9 @@ class Isolated extends Component<typeof Workspace> {
   // and tracks). Undefined for non-remix rows and remixes with no source set.
   remixSourceTitle = (item: {
     verb: ActivityVerb;
-    card: CardDef;
+    card: CardDef | undefined;
   }): string | undefined => {
-    if (item.verb !== 'Remixed') {
+    if (item.verb !== 'Remixed' || !item.card) {
       return undefined;
     }
     return (item.card as RemixCardLike).remixedFrom?.cardTitle ?? undefined;
@@ -3343,7 +3486,7 @@ class Isolated extends Component<typeof Workspace> {
     let observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
-          this.feedShown = Math.min(this.feedShown + 20, this.feedItems.length);
+          this.feedShown = Math.min(this.feedShown + 20, this.feed.length);
           // re-arm: observe() always delivers a fresh async notification
           // after the next layout, so a still-visible sentinel fires again
           observer.unobserve(element);
@@ -3373,11 +3516,10 @@ class Isolated extends Component<typeof Workspace> {
       } as Query,
       [realm],
     ); // Search only the Card Grid instance's realm.
-    this.feedItems.splice(0, this.feedItems.length);
+    this.cardFeed.splice(0, this.cardFeed.length);
     let seen = new Set<string>();
-    let prevDay: string | undefined;
     for (let instance of instances ?? []) {
-      // build the full fetched window (≤100); the template reveals in 20s
+      // build the full fetched window (≤100); the merged feed reveals in 20s
       if (!isCardInstance(instance) || !instance.id || seen.has(instance.id)) {
         continue;
       }
@@ -3386,24 +3528,24 @@ class Isolated extends Component<typeof Workspace> {
       let modMs = toMs(getCardMeta(card, 'lastModified'));
       let createdMs = toMs(getCardMeta(card, 'resourceCreatedAt'));
       let ctor = card.constructor as typeof CardDef; // type identity for the log line
-      let verb = activityVerbFor(ctor.displayName, modMs, createdMs);
-      let day = modMs !== undefined ? dayLabelFor(modMs) : '';
-      this.feedItems.push({
+      // The day header, `when`, and `absolute` are derived when the card and
+      // index events are merged into their final reverse-chron order.
+      this.cardFeed.push({
+        kind: 'card',
         id: card.id!,
-        component: (card.constructor as typeof BaseDef).getComponent(card),
-        when: modMs !== undefined ? relativeTime(modMs) : undefined,
-        absolute:
-          modMs !== undefined ? new Date(modMs).toLocaleString() : undefined,
+        ms: modMs,
+        when: undefined,
+        absolute: undefined,
+        dayLabel: '',
+        showDay: false,
         note: card.cardInfo?.notes ?? undefined,
-        verb,
-        dayLabel: day,
-        showDay: Boolean(day) && day !== prevDay,
+        verb: activityVerbFor(ctor.displayName, modMs, createdMs),
         title: card.cardTitle ?? undefined,
         typeName: ctor.displayName,
         typeIcon: ctor.icon,
+        component: (card.constructor as typeof BaseDef).getComponent(card),
         card,
       });
-      prevDay = day || prevDay;
     }
   });
 }

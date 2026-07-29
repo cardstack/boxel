@@ -137,4 +137,64 @@ module('Integration | Card | workspace | pure functions', function (hooks) {
       );
     });
   });
+
+  module('indexEventTitle', function () {
+    const realmURL = 'http://test-realm/';
+
+    test('an incremental pass reports how many items it reindexed', function (assert) {
+      assert.strictEqual(
+        ws.indexEventTitle({
+          eventName: 'index',
+          indexType: 'incremental',
+          invalidations: ['a', 'b', 'c'],
+          realmURL,
+        }),
+        '3 items reindexed',
+      );
+    });
+
+    test('a single-item incremental pass is singular', function (assert) {
+      assert.strictEqual(
+        ws.indexEventTitle({
+          eventName: 'index',
+          indexType: 'incremental',
+          invalidations: ['a'],
+          realmURL,
+        }),
+        '1 item reindexed',
+      );
+    });
+
+    test('a full reindex is labeled as such', function (assert) {
+      assert.strictEqual(
+        ws.indexEventTitle({ eventName: 'index', indexType: 'full', realmURL }),
+        'Full reindex',
+      );
+    });
+
+    test('a copy names the source realm host', function (assert) {
+      assert.strictEqual(
+        ws.indexEventTitle({
+          eventName: 'index',
+          indexType: 'copy',
+          sourceRealmURL: 'https://source.example.com/realm/',
+          realmURL,
+        }),
+        'Copied from source.example.com',
+      );
+    });
+
+    test('the pre-index initiation signal is not a feed event', function (assert) {
+      // It has no committed state yet, so it must not surface a row.
+      assert.strictEqual(
+        ws.indexEventTitle({
+          eventName: 'index',
+          indexType: 'incremental-index-initiation',
+          updatedFile: 'index.json',
+          realmURL,
+        }),
+        undefined,
+      );
+    });
+  });
 });
