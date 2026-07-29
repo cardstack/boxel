@@ -160,9 +160,12 @@ export interface ClientErrorEvent extends BaseEvent {
   // groups by this so one logical error is one row; `message` keeps the
   // verbatim text of the occurrence that opened the event.
   message_key: string;
-  // The throw's own stack, newline-separated, deepest frames dropped first so
-  // the throw site always survives the bound. Read from the raw line — `| json`
-  // extracts it whole and it is the field a diagnosis actually needs.
+  // The throw's own stack, newline-separated. The message the engine opens it
+  // with is bounded separately from the frames, and frames are dropped from the
+  // deep end, so the throw site survives the bound in every case where the
+  // engine gave one. Read from the raw line — `| json` extracts it whole and it
+  // is the field a diagnosis actually needs. Empty only when the throw carried
+  // no error object to take a stack from.
   stack: string;
   // Scalar grouping key for where errors come from, mirroring the wedge event's
   // field of the same name. Empty when the stack names no function.
@@ -178,6 +181,12 @@ export interface ClientErrorEvent extends BaseEvent {
   // count, so a storm cannot flood the flush budget; sum the field for the true
   // occurrence count.
   dedup_count: number;
+  // 0 on an ordinary event, where dedup_count counts occurrences of the one
+  // error this event describes. Nonzero on the shared slot a window falls back
+  // to once its event budget is spent: the count then spans that many *distinct*
+  // errors, of which the message and stack here are only a sample. Without this,
+  // a folded group reads identically to a genuine loop.
+  folded_signatures: number;
   realm: TelemetryRealm;
 }
 
@@ -232,16 +241,25 @@ const MAX_SLOWEST_LOADS = 10;
 // the message is what yields: eight frames does not clear the framework frames
 // between a throw and the app code that caused it.
 const MAX_ERROR_MESSAGE_CHARS = 300;
+// Shorter than the message: this one is read as a grouping key in a table cell.
+const MAX_ERROR_MESSAGE_KEY_CHARS = 160;
+// Frames, not lines: the message above them is bounded separately.
 const MAX_ERROR_STACK_FRAMES = 16;
 const MAX_ERROR_STACK_CHARS = 2_000;
-// The stack's opening line is the message, not a frame, and it has to leave room
+// The message the engine opens a stack with is not a frame and has to leave room
 // for the frames below it.
 const MAX_ERROR_STACK_HEADER_CHARS = 500;
 // Error events emitted per flush window. Past this many distinct errors in one
-// window, further ones fold into a single event whose count covers the group —
-// so a storm of *distinct* errors is bounded too, and cannot evict the other
-// signal types from the ring buffer. A saturated window (12 × ~2.4KB) still
-// fits well inside MAX_FLUSH_BODY_BYTES with a full stack on every event.
+// window, further ones fold into a single event whose count covers the group, so
+// a storm of *distinct* errors is bounded like a storm of identical ones: a
+// window costs at most this many of the ring buffer's 400 slots, leaving the
+// other signal types their capacity. The bound is on emissions per window, not a
+// hard cap on buffered error events — a buffer already at capacity evicts the
+// slot an event is tracked by, and the next occurrence then starts a new event —
+// so a saturated window can run somewhat over this before the buffer drains.
+// A saturated window is ~29KB of ASCII against MAX_FLUSH_BODY_BYTES, which the
+// flush's byte-aware chunking absorbs; a multi-byte-heavy stack costs more per
+// character and simply chunks into more requests.
 const MAX_ERROR_EVENTS_PER_FLUSH = 12;
 const MAX_LOAF_SCRIPTS = 10;
 const MAX_PROFILER_STACKS = 12;
@@ -350,8 +368,14 @@ export default class ClientTelemetryService
   // timer / observer / listener. Safe to call more than once (the service's
   // own destructor and the instance initializer both invoke it).
   teardown(): void {
-    this.#flush('teardown');
-    this.stop();
+    // Release even if the final flush throws: the listeners and timers hold this
+    // service, and through it the owner, so leaking them on the way out would
+    // pin the whole application instance.
+    try {
+      this.#flush('teardown');
+    } finally {
+      this.stop();
+    }
   }
 
   // Whether the instrument is currently armed. Hooks read this to stay a
@@ -755,10 +779,15 @@ export default class ClientTelemetryService
       // copy: where the throw happened is a fact about the error, and must not
       // depend on how much of the stack fit in the budget.
       let frame = topStackFrame(detail.stack ?? '');
+      // The grouping key is derived from the whole message, not the truncated
+      // one. Keying off the truncation would merge two different failures whose
+      // messages happen to share a long prefix — which is exactly the shape a
+      // message carrying a serialized document has.
+      let messageKey = errorMessageKey(detail.message);
       let message = truncate(detail.message, MAX_ERROR_MESSAGE_CHARS);
-      let messageKey = errorMessageKey(message);
       let signature = `${detail.kind} ${messageKey} ${frame.raw}`;
       let key = signature;
+      let folded = 0;
       let pending = this.#errorDedup.get(signature);
       // Counting a repeat on a still-buffered event costs no extra event: the
       // flush serializes the buffer at send time, after this mutation.
@@ -774,9 +803,11 @@ export default class ClientTelemetryService
         let overflow = this.#errorDedup.get(OVERFLOW_ERROR_KEY);
         if (overflow && this.#buffer.includes(overflow)) {
           overflow.dedup_count++;
+          overflow.folded_signatures++;
           return;
         }
         key = OVERFLOW_ERROR_KEY;
+        folded = 1;
       }
       let evt: ClientErrorEvent = {
         event_type: 'client-error',
@@ -790,6 +821,7 @@ export default class ClientTelemetryService
         line: detail.line || frame.line,
         col: detail.col || frame.col,
         dedup_count: 1,
+        folded_signatures: folded,
         realm: this.#currentCardContext().realm,
       };
       this.#push(evt);
@@ -812,6 +844,11 @@ export default class ClientTelemetryService
         this.#errorDedup.delete(key);
       }
     }
+    // The shared slot goes unconditionally, even while still buffered: it is the
+    // one slot that mixes unrelated errors, so letting it span windows would
+    // keep folding new ones onto a message and a timestamp from an older window.
+    // A window boundary always starts a fresh group.
+    this.#errorDedup.delete(OVERFLOW_ERROR_KEY);
     this.#errorEventsSinceFlush = this.#errorDedup.size;
   }
 
@@ -1449,9 +1486,13 @@ function asErrorLike(value: unknown): ErrorLike | undefined {
 }
 
 // `TypeError: ...` rather than the bare message: the class is the first thing a
-// reader wants and `message` never carries it.
+// reader wants and `message` never carries it. Only a real Error contributes its
+// name — on a merely error-shaped object (a card instance rejected as a reason)
+// `name` is an ordinary field, and prefixing the message with a field value
+// would read as a class that does not exist.
 function describeError(error: ErrorLike): string {
-  let name = typeof error.name === 'string' ? error.name : '';
+  let name =
+    error instanceof Error && typeof error.name === 'string' ? error.name : '';
   return name ? `${name}: ${error.message}` : error.message;
 }
 
@@ -1469,9 +1510,9 @@ function stringifyReason(reason: unknown): string {
 }
 
 // Cut to a budget, marking the cut so a truncated value doesn't read as the
-// whole one.
+// whole one. The marker is counted, so the result never exceeds the budget.
 function truncate(value: string, max: number): string {
-  return value.length > max ? `${value.slice(0, max)}…` : value;
+  return value.length > max ? `${value.slice(0, max - 1)}…` : value;
 }
 
 // The stack as the engine gave it, bounded. Frames are taken from the top so the
@@ -1484,26 +1525,37 @@ function boundStack(stack: string | undefined): string {
   let lines = stack
     .split('\n')
     .map((line) => line.trim())
-    .filter(Boolean)
-    .slice(0, MAX_ERROR_STACK_FRAMES);
+    .filter(Boolean);
   if (lines.length === 0) {
     return '';
   }
-  // A V8 stack opens with the message rather than a frame, and a message is
-  // unbounded — an error carrying a response body or a serialized document runs
-  // to thousands of characters. Bound that header against its own budget first:
-  // otherwise it consumes the whole allowance, dropping deep frames does not
-  // help, and every frame gets discarded — losing exactly what the stack is
-  // here for.
-  if (!isFrameLine(lines[0])) {
-    lines[0] = truncate(lines[0], MAX_ERROR_STACK_HEADER_CHARS);
+  // Everything above the first frame is the message the engine opened the stack
+  // with. It is not a frame, it is unbounded — an error carrying a response body
+  // or a serialized document runs to thousands of characters — and it can span
+  // lines. So it is bounded on its own rather than competing with the frames for
+  // one allowance: otherwise it takes the whole budget, dropping deep frames
+  // does not help, and every frame is discarded, losing what the stack is for.
+  let firstFrame = lines.findIndex((line) => frameAt(line) !== undefined);
+  let header = firstFrame === -1 ? lines : lines.slice(0, firstFrame);
+  let frames =
+    firstFrame === -1
+      ? []
+      : lines.slice(firstFrame, firstFrame + MAX_ERROR_STACK_FRAMES);
+  let head = header.length
+    ? truncate(header.join('\n'), MAX_ERROR_STACK_HEADER_CHARS)
+    : '';
+  let assemble = (count: number) =>
+    (head ? [head, ...frames.slice(0, count)] : frames.slice(0, count)).join(
+      '\n',
+    );
+  let kept = frames.length;
+  let out = assemble(kept);
+  // Then drop frames from the deep end — the least informative ones — to fit.
+  while (out.length > MAX_ERROR_STACK_CHARS && kept > 1) {
+    kept--;
+    out = assemble(kept);
   }
-  let out = lines.join('\n');
-  while (out.length > MAX_ERROR_STACK_CHARS && lines.length > 1) {
-    lines.pop();
-    out = lines.join('\n');
-  }
-  return out.slice(0, MAX_ERROR_STACK_CHARS);
+  return truncate(out, MAX_ERROR_STACK_CHARS);
 }
 
 interface StackFrame {
@@ -1574,14 +1626,20 @@ function isFrameLine(candidate: string): boolean {
   return V8_FRAME_PREFIX_RE.test(trimmed) || trimmed.includes('@');
 }
 
+// One line read as a frame, or undefined if it isn't one. Both tests matter and
+// neither is sufficient alone: the marker rejects a message that merely happens
+// to be frame-shaped, and requiring a parseable `:line:col` rejects a message
+// that merely mentions a scoped module (`@cardstack/…`) or a user id — which the
+// marker alone accepts, since it looks for a bare `@`.
+function frameAt(line: string): StackFrame | undefined {
+  return isFrameLine(line) ? parseStackFrame(line) : undefined;
+}
+
 // The topmost frame that carries a location.
 function topStackFrame(stack: string): StackFrame {
   let lines = stack.split('\n');
   for (let candidate of lines) {
-    if (!isFrameLine(candidate)) {
-      continue;
-    }
-    let frame = parseStackFrame(candidate);
+    let frame = frameAt(candidate);
     if (frame) {
       return frame;
     }
@@ -1595,16 +1653,46 @@ function topStackFrame(stack: string): StackFrame {
   };
 }
 
-// Collapse the parts of a message that vary per occurrence — instance ids,
-// uuids, hashes, timestamps — so the same failure against a different card
-// groups as one row rather than one row per card. A token needs four characters
-// before a digit turns it into a placeholder, which leaves the short numbers
-// that carry meaning (an HTTP status, a small count) intact.
+// Collapse the parts of a message that vary per occurrence so the same failure
+// against a different card groups as one row rather than one row per card. The
+// rule is narrow on purpose: a token of four or more word characters that
+// contains a digit becomes a placeholder. That covers uuids, content hashes,
+// timestamps, and the generated ids most instance urls carry, and it leaves the
+// short numbers that carry meaning (an HTTP status, a small count) intact. It
+// does not collapse a short or digit-free id — `…/Person/abc` stays distinct
+// from `…/Person/xyz` — because nothing distinguishes those from a meaningful
+// word, so this is a grouping key, not a guarantee of one row per failure.
+//
+// Newlines and runs of whitespace collapse to a single space: the key is read in
+// a dashboard table cell, where a multi-line value breaks the row.
 function errorMessageKey(message: string): string {
-  return message
+  let normalized = message
     .replace(/\b(?=[\w-]{4,}\b)[\w-]*\d[\w-]*\b/g, '*')
     .replace(/\*(?:[\s/.:_-]*\*)+/g, '*')
-    .slice(0, MAX_ERROR_MESSAGE_CHARS);
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (normalized.length <= MAX_ERROR_MESSAGE_KEY_CHARS) {
+    return normalized;
+  }
+  // A message past the key budget is usually one carrying a payload, and two of
+  // those tend to share a long prefix and diverge only near the end. Cutting to
+  // the budget would give them one key, merging two different failures and
+  // reporting only whichever arrived first — so the tail rides along as a short
+  // digest instead. Same message, same key; different message, different key;
+  // bounded either way.
+  let digest = keyDigest(normalized);
+  return `${normalized.slice(0, MAX_ERROR_MESSAGE_KEY_CHARS - digest.length - 2)}…#${digest}`;
+}
+
+// FNV-1a, 32 bits. Not a security hash and not required to be: it only has to
+// keep two different messages on two different grouping keys.
+function keyDigest(value: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < value.length; i++) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
 }
 
 function isRenderContext(): boolean {

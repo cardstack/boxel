@@ -481,7 +481,11 @@ module('Integration | Service | client-telemetry', function (hooks) {
 
     dispatchRejection(errorWithStack('deep', frames(40)));
     let byFrameCount = clientErrors(svc)[0].stack.split('\n');
-    assert.strictEqual(byFrameCount.length, 16, 'bounded by frame count');
+    assert.strictEqual(
+      byFrameCount.length,
+      17,
+      'bounded by frame count — 16 frames, plus the message above them',
+    );
     assert.strictEqual(
       byFrameCount[0],
       'Error: deep',
@@ -543,9 +547,104 @@ module('Integration | Service | client-telemetry', function (hooks) {
     assert.strictEqual(e.line, 1);
     assert.strictEqual(
       e.message,
-      `${`Error: ${'x'.repeat(4000)}`.slice(0, 300)}…`,
+      `${`Error: ${'x'.repeat(4000)}`.slice(0, 299)}…`,
       'the message field keeps its own tighter budget',
     );
+    assert.strictEqual(e.message.length, 300, 'the marker counts against it');
+  });
+
+  test('the frames survive every shape of oversized message', function (assert) {
+    let svc = telemetry();
+    svc.enableForTest();
+    svc.drainBufferForTest();
+
+    // The header budget has to key off "is this line a frame", and the cheap
+    // tests for that are wrong in opposite directions: a message mentioning a
+    // scoped module or a user id carries a bare `@`, and a message can span
+    // lines, so bounding only the first one leaves the rest to crowd the frames
+    // out. Each of these once emitted a stack with no frames at all.
+    let bulk = 'x'.repeat(3000);
+    let cases: Array<[string, string]> = [
+      ['a plain oversized message', `failed to save: ${bulk}`],
+      [
+        'a message naming a scoped module',
+        `cannot load @cardstack/boxel-ui/components: ${bulk}`,
+      ],
+      ['a message naming an account', `@user:localhost denied: ${bulk}`],
+      [
+        'a message spanning several lines',
+        `failed to save\n${'y'.repeat(1200)}\n${'z'.repeat(1200)}`,
+      ],
+    ];
+
+    cases.forEach(([label, message]) => {
+      dispatchRejection(errorWithStack(message, frames(3)));
+      let e = clientErrors(svc)[0];
+      let lines = e.stack.split('\n');
+      assert.true(e.stack.length <= 2000, `${label}: within budget`);
+      assert.strictEqual(
+        lines.filter((line) => line.startsWith('at frame')).length,
+        3,
+        `${label}: every frame survives`,
+      );
+      assert.strictEqual(
+        e.top_frame_function,
+        'frame0',
+        `${label}: the throw site is still named`,
+      );
+    });
+  });
+
+  test('a stack of frames with no message at all keeps them', function (assert) {
+    let svc = telemetry();
+    svc.enableForTest();
+    svc.drainBufferForTest();
+
+    // SpiderMonkey and JSC write frames with no message line above them, so
+    // there is no header to bound — the whole stack is frames.
+    let error = new Error('firefox shaped');
+    error.stack = [
+      'computeTitle@https://realm.example/my-realm/person.gts:12:34',
+      'render@https://realm.example/my-realm/card.gts:3:1',
+    ].join('\n');
+    dispatchRejection(error);
+
+    let e = clientErrors(svc)[0];
+    assert.strictEqual(
+      e.stack,
+      'computeTitle@https://realm.example/my-realm/person.gts:12:34\n' +
+        'render@https://realm.example/my-realm/card.gts:3:1',
+      'both frames kept, nothing mistaken for a header',
+    );
+    assert.strictEqual(e.top_frame_function, 'computeTitle');
+  });
+
+  test('two long messages sharing a prefix stay distinct errors', function (assert) {
+    let svc = telemetry();
+    svc.enableForTest();
+    svc.drainBufferForTest();
+
+    // A message carrying a serialized document is longer than the grouping key,
+    // and two of them differ only at the end. Cutting the key to its budget
+    // would merge them and report only the first.
+    let prefix = `failed to save document ${'q'.repeat(400)}`;
+    dispatchRejection(errorWithStack(`${prefix} cause: network`, frames(2)));
+    dispatchRejection(errorWithStack(`${prefix} cause: conflict`, frames(2)));
+
+    let errors = clientErrors(svc);
+    assert.strictEqual(errors.length, 2, 'two errors, not one merged pair');
+    assert.notStrictEqual(
+      errors[0].message_key,
+      errors[1].message_key,
+      'their grouping keys differ even though the messages share a long prefix',
+    );
+    errors.forEach((e) => {
+      assert.true(e.message_key.length <= 160, 'and each key stays bounded');
+      assert.notOk(
+        e.message_key.includes('\n'),
+        'and stays on one line, since it is read in a table cell',
+      );
+    });
   });
 
   test('a rejection with no error object reports a message and no stack', function (assert) {
@@ -626,6 +725,21 @@ module('Integration | Service | client-telemetry', function (hooks) {
       errors.reduce((sum, e) => sum + e.dedup_count, 0),
       30,
       'no occurrence is lost — the folded event counts the whole group',
+    );
+    // The folded event's message is only a sample of its group, so it has to say
+    // so: otherwise it reads exactly like one error that looped that many times.
+    let folded = errors.filter((e) => e.folded_signatures > 0);
+    assert.strictEqual(folded.length, 1, 'exactly one event is a folded group');
+    assert.strictEqual(
+      folded[0].folded_signatures,
+      30 - (errors.length - 1),
+      'and it says how many distinct errors it stands for',
+    );
+    assert.true(
+      errors
+        .filter((e) => e.folded_signatures === 0)
+        .every((e) => e.dedup_count === 1),
+      'an unfolded event counts occurrences of its own error only',
     );
   });
 
