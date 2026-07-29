@@ -662,10 +662,10 @@ jobs:
           path: /tmp/memory-report-${{ matrix.shardIndex }}.json
           retention-days: 30
       - name: Print realm server logs
-        if: ${{ !cancelled() }}
+        if: ${{ always() }}
         run: cat /tmp/server.log
       - name: Extract worker and prerender logs
-        if: ${{ !cancelled() }}
+        if: ${{ always() }}
         run: |
           grep -E '^\[start:worker-development' /tmp/server.log > /tmp/worker-manager.log || true
           grep -E '^\[start:prerender-dev' /tmp/server.log > /tmp/prerender-server.log || true
@@ -676,7 +676,7 @@ jobs:
           grep -E '^\[start:host-dist' /tmp/server.log > /tmp/host-dist.log || true
       - name: Upload realm server log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: ${{ !cancelled() }}
+        if: ${{ always() }}
         with:
           name: realm-server-log-${{ matrix.shardIndex }}
           path: /tmp/server.log
