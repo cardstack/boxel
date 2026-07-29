@@ -3278,11 +3278,14 @@ export function asURL(
       return undefined;
     }
   }
-  // The store keys every instance by its canonical RRI — the same form
-  // `canonicalizeId` gives `card.id`, so a lookup by any spelling lands on the
-  // same entry (unresolveURL is idempotent) and reuses the memo `canonicalizeId`
-  // already populated. gc-card-store keys the same way. Locals stay as-is.
-  return isLocalId(id) ? id : vn.unresolveURL(id);
+  // The store keys every instance by the single canonical form that folds ALL
+  // spellings — RRI `card.id`, a link's virtual/url-mapped alias, and the real
+  // URL — onto one key (`toRealURLHref`), so a lookup by any of them lands on
+  // the same entry. `unresolveURL` cannot serve as the key: it leaves a
+  // virtual/url-mapped alias unchanged, so that spelling would split from the
+  // RRI and orphan an inflight-load deferred. gc-card-store and render-service
+  // key the same way. Locals stay as-is.
+  return isLocalId(id) ? id : vn.toRealURLHref(id);
 }
 
 function isSystemCardDefaultId(

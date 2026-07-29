@@ -339,16 +339,16 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   }
 
   // Normalize an id to the store's bucket-key form. Mirrors `store.ts`'s
-  // `asURL` exactly (locals as-is; remotes resolved to a URL via `toURL`) so
-  // the buckets key the same way the StoreService does — an RRI card id, its
-  // resolved URL, and a url-mapped alias all collapse to one key. NOT
+  // `asURL` exactly (locals as-is; remotes folded via `toRealURLHref`) so the
+  // buckets key the same way the StoreService does — an RRI card id, its
+  // virtual/url-mapped alias, and the real URL all collapse to one key. NOT
   // `unresolveURL`: that yields RRI for a prefix-mapped realm but leaves a
-  // url-mapped realm's URL as-is, which disagrees with `asURL` and splits keys.
+  // url-mapped/virtual alias as-is, which disagrees with `asURL` and splits keys.
   #storeKey(id: string): string {
     if (isLocalId(id)) {
       return id;
     }
-    return this.#virtualNetwork.unresolveURL(id);
+    return this.#virtualNetwork.toRealURLHref(id);
   }
 
   getCard(id: string): CardDef | undefined {

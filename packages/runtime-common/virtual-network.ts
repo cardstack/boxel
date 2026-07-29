@@ -41,7 +41,13 @@ export class VirtualNetwork {
   // a pure function of the realm mappings, so entries stay valid until a
   // mapping is added or removed (both clear it).
   private unresolveURLCache = new Map<string, RealmResourceIdentifier>();
-  // The two URL memos above are keyed by per-instance / per-module ids, so in
+  // Memo for toRealURLHref — the single canonical STORE KEY. It folds every id
+  // spelling (RRI, virtual alias, url-mapped alias, real URL) onto the real
+  // served URL, so the stores bucket a card the same way regardless of which
+  // form a lookup arrives in. Same pure-function-of-mappings contract as the
+  // memos above.
+  private realURLHrefCache = new Map<string, string>();
+  // The URL memos above are keyed by per-instance / per-module ids, so in
   // a long-lived process (the realm-server's indexing + prerender) their key
   // set is effectively unbounded — left to grow, they add steady heap and GC
   // pressure that shows up as slow module serving. Cap each with FIFO eviction:
@@ -111,10 +117,13 @@ export class VirtualNetwork {
 
   addURLMapping(from: URL, to: URL) {
     this.urlMappings.push([from.href, to.href]);
-    // Both memos resolve through urlMappings (toURLHref via toURL, unresolveURL
-    // via its virtual→real chase), so a new URL mapping invalidates them.
+    // unresolveURL and toRealURLHref chase through urlMappings (the latter via
+    // its virtual→real mapURL step), so a new URL mapping invalidates their
+    // memos. toURLHref resolves only through realmMappings, so clearing its
+    // cache here is purely defensive.
     this.toURLHrefCache.clear();
     this.unresolveURLCache.clear();
+    this.realURLHrefCache.clear();
   }
 
   mapURL(
@@ -146,6 +155,7 @@ export class VirtualNetwork {
     this.realmMappings.set(normalizedId, normalizedTarget);
     this.toURLHrefCache.clear();
     this.unresolveURLCache.clear();
+    this.realURLHrefCache.clear();
     this.addImportMap(
       normalizedId,
       (rest) => new URL(rest, normalizedTarget).href,
@@ -165,6 +175,7 @@ export class VirtualNetwork {
     this.importMap.delete(normalizedId);
     this.toURLHrefCache.clear();
     this.unresolveURLCache.clear();
+    this.realURLHrefCache.clear();
     this.notifyMappingChange();
   }
 
@@ -337,6 +348,27 @@ export class VirtualNetwork {
     let href = this.toURL(rri).href;
     this.#setBoundedCache(this.toURLHrefCache, rri, href);
     return href;
+  }
+
+  /**
+   * Fold any id spelling onto the real served URL — the single canonical key
+   * the stores bucket by. `toURL` first resolves an RRI prefix (or leaves a
+   * URL alone); `mapURL(·, 'virtual-to-real')` then collapses a virtual or
+   * url-mapped alias onto its real backing URL. The composition is total: an
+   * RRI, its virtual alias, a url-mapped alias, and the real URL all converge,
+   * so a lookup by `card.id`, a link's `self`, or a requested URL lands on the
+   * same entry. `unresolveURL` alone is NOT usable as the key — it leaves a
+   * virtual/url-mapped alias unchanged, so those spellings split from the RRI.
+   */
+  toRealURLHref(id: string): string {
+    let cached = this.realURLHrefCache.get(id);
+    if (cached !== undefined) {
+      return cached;
+    }
+    let viaToURL = this.toURL(id).href;
+    let real = this.mapURL(viaToURL, 'virtual-to-real')?.href ?? viaToURL;
+    this.#setBoundedCache(this.realURLHrefCache, id, real);
+    return real;
   }
 
   /**

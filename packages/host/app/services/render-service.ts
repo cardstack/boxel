@@ -149,9 +149,13 @@ export class CardStoreWithErrors implements CardStore {
 
   private normalizeURL(id: string): string {
     let key = id.replace(/\.json$/, '');
-    // Local IDs pass through; remote IDs canonicalize to URL form via the
-    // VN so prefix-form and URL-form lookups share a cache key.
-    return isLocalId(key) ? id : this.#virtualNetwork.toURL(id).href;
+    // Local IDs pass through; remote IDs fold onto the real served URL via
+    // `toRealURLHref` — the same total fold StoreService/gc-card-store use, so
+    // an RRI `card.id`, a virtual/url-mapped alias, and the real URL all share
+    // one key. Plain `toURL` is NOT a total fold (an RRI resolves to its
+    // virtual alias while a real URL stays real, splitting the two), which
+    // orphaned inflight-load deferreds during render.
+    return isLocalId(key) ? id : this.#virtualNetwork.toRealURLHref(id);
   }
 
   trackLoad(load: Promise<unknown>) {
