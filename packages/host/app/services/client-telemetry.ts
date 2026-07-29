@@ -103,8 +103,12 @@ export interface RebuildEvent extends BaseEvent {
   // a realm the store is subscribed to pays both — one rebuild per source.
   // Named rebuild_source, not source: the firelens log router wraps each
   // deployed log line in an envelope that carries its own `source` key, and
-  // the dashboard's wrapper-unwrap parse keeps the first occurrence of a
-  // duplicated label — the wrapper's — silently dropping the event's.
+  // the dashboard's wrapper-unwrap parse extracts the wrapper's value first.
+  // When the second parse hits the same key, Loki keeps the first extraction
+  // and drops the event's — the `_extracted` suffix it appends for conflicts
+  // with stream labels does not apply to parsed-vs-parsed conflicts — so a
+  // field named `source` would be unreachable on deployed environments while
+  // working against a local file tail, which has no wrapper.
   rebuild_source: 'realm-event' | 'write';
   duration_ms: number;
   trigger_modules: string[];
@@ -133,8 +137,9 @@ export interface RealmEvent extends BaseEvent {
   own_write: boolean;
   processing_ms: number;
   // The raw realm event as received, minus its invalidation list (already
-  // tracked as invalidated_ids). Not surfaced on the dashboard; carried so a
-  // raw-line read has the full payload the tab acted on.
+  // tracked as invalidated_ids). No panel reads it, but `| json` flattens
+  // nested objects, so its members are queryable as `event_args_*` labels as
+  // well as on the raw line.
   event_args: Record<string, unknown>;
 }
 
@@ -419,7 +424,7 @@ export default class ClientTelemetryService
         duration_ms: Math.round(durationMs),
         doc_bytes: docBytes,
         included_count: Array.isArray(included) ? included.length : 0,
-        card_type: codeRefName(resource?.meta?.adoptsFrom),
+        card_type: codeRefURL(resource?.meta?.adoptsFrom, resource?.id),
         realm,
       });
     } catch (e) {
@@ -1200,16 +1205,32 @@ function normalizeEndpoint(rawUrl: string, method: string): string {
 
 // A CodeRef is usually `{ module, name }`; other shapes (fieldOf / ancestorOf)
 // have no direct name, so we surface null there.
-function codeRefName(adoptsFrom: unknown): string | null {
+// A card type as an address, not a bare class name: the module the type lives
+// in with the export name as the final segment (<moduleURL>/<ExportName>), so
+// a dashboard row says where the code is. A relative module specifier is
+// resolved against the instance's own id; a scoped one (@cardstack/base/...)
+// is already canonical and passes through.
+function codeRefURL(
+  adoptsFrom: unknown,
+  instanceId: string | undefined,
+): string | null {
   if (
-    adoptsFrom &&
-    typeof adoptsFrom === 'object' &&
-    'name' in adoptsFrom &&
-    typeof (adoptsFrom as { name: unknown }).name === 'string'
+    !adoptsFrom ||
+    typeof adoptsFrom !== 'object' ||
+    typeof (adoptsFrom as { name?: unknown }).name !== 'string' ||
+    typeof (adoptsFrom as { module?: unknown }).module !== 'string'
   ) {
-    return (adoptsFrom as { name: string }).name;
+    return null;
   }
-  return null;
+  let { module, name } = adoptsFrom as { module: string; name: string };
+  if (module.startsWith('.') && instanceId) {
+    try {
+      module = new URL(module, instanceId).href;
+    } catch {
+      // keep the relative spelling rather than dropping the event
+    }
+  }
+  return `${module}/${name}`;
 }
 
 function supportedEntryTypes(): readonly string[] {

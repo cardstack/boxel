@@ -477,7 +477,7 @@
           "type": "loki",
           "uid": "loki"
         },
-        "description": "Active sessions over the selected time range, stacked by account: at each point, how many sessions each user had active in the preceding 5m. Total stack height is concurrency, the colours are who, and the legend doubles as the current-user list. The grey \"build in use\" legend rows name the host build(s) the active sessions run (from the app_version every beacon stamps): one row means every session is on that build; a second row right after a deploy is a tab that has not reloaded and still runs the previous code. Hovering the chart names which user is on which build. One session is one browser tab.",
+        "description": "Active sessions over the selected time range, stacked by account: at each point, how many sessions each user had active in the preceding 5m. Total stack height is concurrency, the colours are who, and the legend doubles as the current-user list. The grey \"build in use\" legend rows name the host build(s) the active sessions run (from the app_version every beacon stamps): one row means every session is on that build; a second row right after a deploy is a tab that has not reloaded and still runs the previous code. Hovering the chart names which user is on which build. One session is one browser tab. The hover attribution is a third query byte-identical to the bands query, differing only in display name \u2014 Grafana cannot vary legend and tooltip names independently, so deleting the \"duplicate\" removes the user \u2192 build hover.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -909,7 +909,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "description": "Top 20 card_id values by worst observed settle_ms over the selected range. Instant query; widen the time range to survey more history.",
+            "description": "Top 20 card_id values by worst observed settle_ms over the selected range. Instant query; widen the time range to survey more history. Each row names the user who experienced it \u2014 a max is one person's worst moment, not an average.",
             "fieldConfig": {
               "defaults": {
                 "color": {
@@ -966,7 +966,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "topk(20, max by (card_id) (max_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"card-load\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap settle_ms [$__range])))",
+                "expr": "topk(20, max by (card_id, matrix_user_id) (max_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"card-load\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap settle_ms [$__range])))",
                 "queryType": "instant",
                 "refId": "A",
                 "legendFormat": ""
@@ -990,7 +990,12 @@
                     "Time": true
                   },
                   "renameByName": {
-                    "Value #A": "max settle_ms"
+                    "Value #A": "max settle_ms",
+                    "matrix_user_id": "user"
+                  },
+                  "indexByName": {
+                    "card_id": 0,
+                    "matrix_user_id": 1
                   }
                 }
               }
@@ -1416,7 +1421,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "description": "Per-endpoint worst-case duration_ms (query A) and retried-request count (query B) over the selected range. Instant queries merged on endpoint.",
+            "description": "Per-endpoint worst-case duration_ms (query A) and retried-request count (query B) over the selected range. Instant queries merged on endpoint. Rows carry the user the number came from; a slowest-request row is one person's round-trip.",
             "fieldConfig": {
               "defaults": {
                 "color": {
@@ -1473,7 +1478,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "topk(15, max by (endpoint) (max_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"server-request\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap duration_ms [$__range])))",
+                "expr": "topk(15, max by (endpoint, matrix_user_id) (max_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"server-request\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap duration_ms [$__range])))",
                 "queryType": "instant",
                 "refId": "A",
                 "legendFormat": ""
@@ -1484,7 +1489,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "sum by (endpoint) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"server-request\" | retried=\"true\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__range]))",
+                "expr": "sum by (endpoint, matrix_user_id) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"server-request\" | retried=\"true\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__range]))",
                 "queryType": "instant",
                 "refId": "B",
                 "legendFormat": ""
@@ -1509,7 +1514,8 @@
                   },
                   "renameByName": {
                     "Value #A": "max duration_ms",
-                    "Value #B": "retried"
+                    "Value #B": "retried",
+                    "matrix_user_id": "user"
                   }
                 }
               }
@@ -1794,7 +1800,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "description": "Wedge event rate per interval (left axis) and the worst blocked_ms observed per interval (right axis, ms). A wedge is a main-thread stall; blocked_ms is how long the thread was blocked.  A wedge is a main-thread freeze of 10s or more (the 100ms heartbeat missed a tick by \u226510s). Sub-second jank is not counted here; see a keepalive's max_gap_ms for that.",
+            "description": "Wedge event rate per interval (left axis) and the worst blocked_ms observed per interval (right axis, ms). A wedge is a main-thread stall; blocked_ms is how long the thread was blocked.  A wedge is a main-thread freeze of 10s or more (the 100ms heartbeat missed a tick by \u226510s). Sub-second jank is not counted here; see a keepalive's max_gap_ms for that. The blocked-time series splits per user, so the hover names whose thread froze; the rate stays an aggregate.",
             "fieldConfig": {
               "defaults": {
                 "color": {
@@ -1900,10 +1906,10 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "max_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"wedge\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap blocked_ms [$__interval]) by ()",
+                "expr": "max by (matrix_user_id) (max_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"wedge\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap blocked_ms [$__interval]) by ())",
                 "queryType": "range",
                 "refId": "B",
-                "legendFormat": "max blocked_ms"
+                "legendFormat": "max blocked_ms \u00b7 {{matrix_user_id}}"
               }
             ],
             "title": "wedge rate & max blocked_ms",
@@ -2873,7 +2879,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "description": "Main-thread freezes at or above the wedge threshold, by the account that suffered them and the script frame that was blocking (`fn @ url:char` \u2014 the char offset source-map-resolves even for minified builds). The frame is what makes a row actionable: it names the code that held the thread. A blank frame is a freeze corroborated only by a longtask, with no LoAF script attribution \u2014 real, but read its raw line for the breadcrumb. Value is the worst blocked time in any single wedge.",
+            "description": "Main-thread freezes at or above the wedge threshold, by the account that suffered them and the script frame that was blocking (`fn @ url:char` \u2014 the char offset source-map-resolves even for minified builds). The frame is what makes a row actionable: it names the code that held the thread. A blank frame is a freeze corroborated only by a longtask, with no LoAF script attribution \u2014 real, and its blocked time can read 0, which is why rows also carry a wedge count and the limit sits far above any plausible row count: every wedging user stays on the board. Worst blocked ms is the single worst freeze for that user+frame.",
             "fieldConfig": {
               "defaults": {
                 "color": {
@@ -2936,9 +2942,19 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "topk(25, max by (matrix_user_id, top_frame_function, top_frame_url) (max_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | event_type=\"wedge\" | unwrap blocked_ms [$__range])))",
+                "expr": "topk(200, max by (matrix_user_id, top_frame_function, top_frame_url) (max_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | event_type=\"wedge\" | unwrap blocked_ms [$__range])))",
                 "queryType": "instant",
                 "refId": "A"
+              },
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "topk(200, sum by (matrix_user_id, top_frame_function, top_frame_url) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | event_type=\"wedge\" [$__range])))",
+                "queryType": "instant",
+                "refId": "B"
               }
             ],
             "title": "Wedges by user",
@@ -2962,7 +2978,7 @@
                   },
                   "renameByName": {
                     "Value #A": "worst blocked ms",
-                    "Value": "worst blocked ms",
+                    "Value #B": "wedges",
                     "matrix_user_id": "Matrix User",
                     "top_frame_function": "blocking frame",
                     "top_frame_url": "frame url"
@@ -2971,7 +2987,8 @@
                     "matrix_user_id": 0,
                     "top_frame_function": 1,
                     "top_frame_url": 2,
-                    "Value #A": 3
+                    "Value #A": 3,
+                    "Value #B": 4
                   }
                 }
               }

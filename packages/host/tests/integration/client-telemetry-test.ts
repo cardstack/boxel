@@ -118,7 +118,11 @@ module('Integration | Service | client-telemetry', function (hooks) {
     assert.strictEqual(e.event_type, 'deserialize');
     assert.strictEqual(e.duration_ms, 12);
     assert.strictEqual(e.included_count, 2);
-    assert.strictEqual(e.card_type, 'Person');
+    assert.strictEqual(
+      e.card_type,
+      'https://realm.example/my-realm/person/Person',
+      'the type is addressed by module and export, not a bare class name',
+    );
     assert.strictEqual(e.realm, 'https://realm.example/my-realm/');
     assert.strictEqual(
       e.doc_bytes,
