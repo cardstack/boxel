@@ -54,14 +54,20 @@ function fetchableRef(
   codeRef: ResolvedCodeRef,
   virtualNetwork: VirtualNetwork,
 ): ResolvedCodeRef {
+  let module: string;
   try {
-    return {
-      ...codeRef,
-      module: rri(virtualNetwork.toURLHref(codeRef.module)),
-    };
-  } catch {
-    return codeRef;
+    module = virtualNetwork.toURLHref(codeRef.module);
+  } catch (e) {
+    // Fail while planning rather than handing an unresolvable identifier to the
+    // copy step, where it would surface as a bare `Invalid URL` far from its
+    // cause.
+    let error = new Error(
+      `Cannot resolve module "${codeRef.module}" to a fetchable URL; no realm mapping is registered for it`,
+    );
+    (error as any).cause = e;
+    throw error;
   }
+  return { ...codeRef, module: rri(module) };
 }
 
 // sourceCodeRef -- (installs module) --> targetCodeRef
@@ -346,7 +352,12 @@ export function planInstanceInstall(
     // arrives canonical rather than as a materialized URL.
     let adopted = resolveAdoptsFrom(instance);
     if (!adopted) {
-      throw new Error('code ref is not resolved');
+      // Covers both halves of the contract, which the caller cannot tell apart
+      // from the return value: no `adoptsFrom` at all, or one that does not
+      // resolve to a concrete module.
+      throw new Error(
+        `Cannot resolve adoptsFrom for instance "${instance.id}"; it is missing or does not resolve to a concrete module`,
+      );
     }
     let sourceCodeRef = canonicalRef(adopted, virtualNetwork);
     if (!instance.id) {

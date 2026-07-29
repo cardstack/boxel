@@ -328,6 +328,39 @@ module('Unit | Catalog | Install Plan Builder', function () {
         },
       ]);
     });
+
+    // The copy step reads `sourceModule` with `new URL`, so a prefix that
+    // resolves to nothing has to fail here rather than being handed onward as an
+    // unusable identifier.
+    test('spec whose realm prefix has no mapping fails during planning', function (assert) {
+      const specs = [
+        {
+          ref: { name: 'Some Ref Name', module: '@nobody/nowhere/some' },
+          [realmURL]: sourceRealmURL,
+        },
+      ] as unknown as Spec[];
+      const listing = {
+        name: 'Some Listing',
+        specs,
+        examples: [],
+        skills: [],
+        [realmURL]: sourceRealmURL,
+      } as any;
+      assert.throws(
+        () =>
+          planModuleInstall(
+            specs,
+            new ListingPathResolver(
+              targetRealmURL.href,
+              listing,
+              'xyz',
+              virtualNetwork,
+            ),
+            virtualNetwork,
+          ),
+        /Cannot resolve module "@nobody\/nowhere\/some" to a fetchable URL/,
+      );
+    });
   });
 
   module('planInstanceInstall()', function () {
