@@ -1524,6 +1524,76 @@ module('issue-loop > decideSessionStrategy', function () {
 // Phase gating — issues beyond the run's target phase await an operator
 // ---------------------------------------------------------------------------
 
+module('issue-loop > tests always gate once written', function (hooks) {
+  let workspace: { dir: string; cleanup: () => void };
+
+  hooks.beforeEach(async function () {
+    let { mkdtemp } = await import('node:fs/promises');
+    let { tmpdir } = await import('node:os');
+    let { join } = await import('node:path');
+    let { rmSync } = await import('node:fs');
+    let dir = await mkdtemp(join(tmpdir(), 'issue-loop-tests-gate-'));
+    workspace = {
+      dir,
+      cleanup: () => rmSync(dir, { recursive: true, force: true }),
+    };
+  });
+  hooks.afterEach(function () {
+    workspace.cleanup();
+  });
+
+  async function runOneIssue(workspaceDir: string) {
+    let store = new MockIssueStore([
+      makeIssue({ id: 'iss-1', status: 'backlog', order: 1 }),
+    ]);
+    let agent = new MockLoopAgent(
+      [
+        {
+          toolCalls: [
+            { tool: 'write_file', args: { path: 'card.gts', content: 'v1' } },
+          ],
+          updateIssue: { id: 'iss-1', status: 'done' },
+        },
+      ],
+      store,
+    );
+    let captured: { includeTests?: boolean }[] = [];
+    await runIssueLoop(
+      makeLoopConfig({
+        agent,
+        issueStore: store,
+        workspaceDir,
+        createValidator: (_id, options) => {
+          captured.push(options ?? {});
+          return new MockValidator([makePassingValidation()]);
+        },
+      }),
+    );
+    return captured;
+  }
+
+  test('no test files in the workspace → test step stays off', async function (assert) {
+    let captured = await runOneIssue(workspace.dir);
+    assert.strictEqual(captured.length, 1);
+    assert.notOk(captured[0].includeTests, 'no tests to gate with');
+  });
+
+  test('a .test.gts in the workspace turns the test step on for any issue', async function (assert) {
+    let { writeFile } = await import('node:fs/promises');
+    let { join } = await import('node:path');
+    await writeFile(
+      join(workspace.dir, 'card.test.gts'),
+      'export function runTests() {}',
+    );
+    let captured = await runOneIssue(workspace.dir);
+    assert.strictEqual(captured.length, 1);
+    assert.true(
+      captured[0].includeTests,
+      'hardening-written tests gate subsequent issues',
+    );
+  });
+});
+
 module('issue-loop > phase gating', function () {
   function makePolishStore(): MockIssueStore {
     return new MockIssueStore([

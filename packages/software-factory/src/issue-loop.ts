@@ -34,7 +34,7 @@ import {
 } from './issue-scheduler.ts';
 import { issuePhase, phaseRank, type FactoryPhase } from './factory-phase.ts';
 import { createHardeningIssues } from './factory-seed.ts';
-import { readCard } from './workspace-fs.ts';
+import { readCard, workspaceHasTestFiles } from './workspace-fs.ts';
 import { logger } from './logger.ts';
 import { startSpan, traceEvent } from './run-trace.ts';
 import { isBugFixIssue } from './factory-prompt-loader.ts';
@@ -1077,10 +1077,16 @@ export async function runIssueLoop(
     // for them (see CS-12185). Skip straight to NoOpValidator (already
     // built for exactly this per its own docstring) instead of burning
     // maxIterationsPerIssue on an unwinnable validation.
+    // Tests, once written, always gate: hardening issues run the QUnit
+    // step to validate the tests they author, and every issue AFTER
+    // hardening (polish, late defect fixes) runs it too so the pins
+    // hardening placed actually protect subsequent changes.
     let validator = isMetaIssue(issue)
       ? new NoOpValidator()
       : createValidator(issue.id, {
-          includeTests: issue.issueType === 'hardening',
+          includeTests:
+            issue.issueType === 'hardening' ||
+            (await workspaceHasTestFiles(workspaceDir)),
         });
 
     // -----------------------------------------------------------------------

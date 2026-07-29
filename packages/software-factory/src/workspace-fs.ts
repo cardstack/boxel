@@ -17,7 +17,14 @@
  * the same realm reuse the same on-disk state.
  */
 
-import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import {
+  mkdir,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
 
@@ -254,4 +261,29 @@ export async function ensureWorkspaceDir(workspaceDir: string): Promise<void> {
 export async function resetWorkspaceDir(workspaceDir: string): Promise<void> {
   await rm(workspaceDir, { recursive: true, force: true });
   await mkdir(workspaceDir, { recursive: true });
+}
+
+/**
+ * Whether any QUnit test file (`*.test.gts`) exists in the workspace.
+ * Once hardening has written tests, every subsequent issue's validation
+ * pipeline includes the test step — tests, once written, always gate.
+ * Dot-directories (`.factory-trace`, `.factory-scratch`, `.git`) are
+ * excluded; they never hold realm files.
+ */
+export async function workspaceHasTestFiles(
+  workspaceDir: string,
+): Promise<boolean> {
+  let entries: string[];
+  try {
+    entries = (await readdir(workspaceDir, {
+      recursive: true,
+    })) as string[];
+  } catch {
+    return false;
+  }
+  return entries.some(
+    (entry) =>
+      entry.endsWith('.test.gts') &&
+      !entry.split('/').some((segment) => segment.startsWith('.')),
+  );
 }
