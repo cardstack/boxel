@@ -389,6 +389,7 @@ export class UseAiAssistantInput extends CardDef {
   @field openRoom = contains(BooleanField);
   @field skillCards = linksToMany(Skill);
   @field skillCardIds = containsMany(StringField);
+  @field attachOpenCards = contains(BooleanField); // also attach the cards currently open in the host
   @field attachedCards = linksToMany(CardDef);
   @field attachedCardIds = containsMany(StringField);
   @field attachedFileIdentifiers = containsMany(StringField);

@@ -62,6 +62,7 @@ export class AiAppGenerator extends CardDef {
           prompt: this.args.model.promptValue,
           llmMode: 'act',
           openRoom: true,
+          attachOpenCards: true,
         }),
       );
     });
