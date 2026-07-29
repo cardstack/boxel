@@ -149,6 +149,38 @@ export interface KeepaliveEvent extends BaseEvent {
   max_gap_ms: number;
 }
 
+export interface ClientErrorEvent extends BaseEvent {
+  event_type: 'client-error';
+  // Which channel surfaced the failure: a `window` error event (an uncaught
+  // throw) or an unhandled promise rejection.
+  kind: 'error' | 'unhandledrejection';
+  message: string;
+  // Low-cardinality grouping key: the message with the parts that vary per
+  // occurrence — instance ids, uuids, hashes — collapsed to `*`. The dashboard
+  // groups by this so one logical error is one row; `message` keeps the
+  // verbatim text of the occurrence that opened the event.
+  message_key: string;
+  // The throw's own stack, newline-separated, deepest frames dropped first so
+  // the throw site always survives the bound. Read from the raw line — `| json`
+  // extracts it whole and it is the field a diagnosis actually needs.
+  stack: string;
+  // Scalar grouping key for where errors come from, mirroring the wedge event's
+  // field of the same name. Empty when the stack names no function.
+  top_frame_function: string;
+  // Where it threw. Taken from the error event when it provides a location, and
+  // otherwise parsed out of the stack's first frame, so a rejection — which
+  // carries no location of its own — reports one too.
+  source_url: string;
+  line: number;
+  col: number;
+  // How many occurrences of this error this single event accounts for. A render
+  // loop throwing the same error hundreds of times reports one event with a
+  // count, so a storm cannot flood the flush budget; sum the field for the true
+  // occurrence count.
+  dedup_count: number;
+  realm: TelemetryRealm;
+}
+
 export type TelemetryEvent =
   | ServerRequestEvent
   | DeserializeEvent
@@ -156,7 +188,8 @@ export type TelemetryEvent =
   | WedgeEvent
   | RebuildEvent
   | RealmEvent
-  | KeepaliveEvent;
+  | KeepaliveEvent
+  | ClientErrorEvent;
 
 // Distributive omit of `ts` — callers hand us the event minus its timestamp,
 // which the service stamps as it enters the ring buffer.
@@ -194,6 +227,19 @@ const MAX_EVENTS_PER_FLUSH = 400;
 const MAX_FLUSH_BODY_BYTES = 60 * 1024;
 const MAX_LOADED_IDS = 50;
 const MAX_SLOWEST_LOADS = 10;
+// Error bounds. The stack is the payload the event exists to carry — a message
+// says the app broke, the stack says where — so it gets the generous budget and
+// the message is what yields: eight frames does not clear the framework frames
+// between a throw and the app code that caused it.
+const MAX_ERROR_MESSAGE_CHARS = 300;
+const MAX_ERROR_STACK_FRAMES = 16;
+const MAX_ERROR_STACK_CHARS = 2_000;
+// Error events emitted per flush window. Past this many distinct errors in one
+// window, further ones fold into a single event whose count covers the group —
+// so a storm of *distinct* errors is bounded too, and cannot evict the other
+// signal types from the ring buffer. A saturated window (12 × ~2.4KB) still
+// fits well inside MAX_FLUSH_BODY_BYTES with a full stack on every event.
+const MAX_ERROR_EVENTS_PER_FLUSH = 12;
 const MAX_LOAF_SCRIPTS = 10;
 const MAX_PROFILER_STACKS = 12;
 const MAX_PROFILER_FRAMES = 32;
@@ -268,6 +314,8 @@ export default class ClientTelemetryService
   #profilerSampled: boolean | undefined;
   #visibilityHandler: (() => void) | undefined;
   #pagehideHandler: (() => void) | undefined;
+  #errorHandler: ((event: Event) => void) | undefined;
+  #rejectionHandler: ((event: Event) => void) | undefined;
 
   // Flush gating.
   #lastKeepaliveAt = now();
@@ -282,6 +330,11 @@ export default class ClientTelemetryService
   // Card-load window tracking.
   #lastLoadGeneration = 0;
   #cardLoadWindowOpen = false;
+
+  // Error dedup: signature → the still-buffered event counting its occurrences.
+  #errorDedup = new Map<string, ClientErrorEvent>();
+  #errorEventsSinceFlush = 0;
+  #reportingError = false;
 
   constructor(owner: Owner) {
     super(owner);
@@ -498,13 +551,15 @@ export default class ClientTelemetryService
     this.#longtaskHistory = [];
     this.#profilerSamples = [];
     this.#cardLoadWindowOpen = false;
+    this.#errorDedup.clear();
+    this.#errorEventsSinceFlush = 0;
   }
 
   #isAllowed(): boolean {
-    // Never instrument a prerender tab — the render path is hot and headless.
-    if (
-      (globalThis as { __boxelRenderContext?: unknown }).__boxelRenderContext
-    ) {
+    // Never instrument a prerender tab — the render path is hot and headless,
+    // and a render that throws is an expected indexing outcome rather than a
+    // client fault.
+    if (isRenderContext()) {
       return false;
     }
     // Off under tests unless a test opts in explicitly.
@@ -600,6 +655,7 @@ export default class ClientTelemetryService
       body = this.#buildBody(chunk);
     }
     this.#buffer.splice(0, chunk.length);
+    this.#pruneErrorDedup();
     try {
       // Raw fetch (not authedFetch) so the telemetry POST is neither timed by
       // our own middleware nor rewritten by the auth stack. keepalive lets the
@@ -638,6 +694,119 @@ export default class ClientTelemetryService
     if (this.#buffer.length > MAX_BUFFERED_EVENTS) {
       this.#buffer.splice(0, this.#buffer.length - MAX_BUFFERED_EVENTS);
     }
+  }
+
+  // ── Uncaught errors ──────────────────────────────────────────────────────
+  #onWindowError(event: Event): void {
+    let e = event as ErrorEvent;
+    let error = asErrorLike(e.error);
+    this.#reportError({
+      kind: 'error',
+      // A cross-origin script error carries no error object and a bare
+      // "Script error." message. Report it anyway: it is the only evidence
+      // that something threw.
+      message: error ? describeError(error) : stringifyReason(e.message),
+      stack: error?.stack,
+      sourceUrl: typeof e.filename === 'string' ? e.filename : '',
+      line: Number.isFinite(e.lineno) ? e.lineno : 0,
+      col: Number.isFinite(e.colno) ? e.colno : 0,
+    });
+  }
+
+  #onUnhandledRejection(event: Event): void {
+    let { reason } = event as PromiseRejectionEvent;
+    let error = asErrorLike(reason);
+    this.#reportError({
+      kind: 'unhandledrejection',
+      message: error ? describeError(error) : stringifyReason(reason),
+      stack: error?.stack,
+      // A rejection carries no location of its own; the stack's first frame is
+      // the only one available, and #reportError falls back to it.
+      sourceUrl: '',
+      line: 0,
+      col: 0,
+    });
+  }
+
+  #reportError(detail: {
+    kind: ClientErrorEvent['kind'];
+    message: string;
+    stack: string | undefined;
+    sourceUrl: string;
+    line: number;
+    col: number;
+  }): void {
+    // The render-context check is repeated here rather than left to arm-time
+    // gating so the guarantee is local to this path: a render that throws never
+    // beacons, however the instrument came to be armed — including a live tab
+    // that navigates onto a render-surface route, where it armed legitimately
+    // at boot and the route then sets the flag.
+    if (!this.#started || this.#reportingError || isRenderContext()) {
+      return;
+    }
+    // A throw from inside this handler would itself dispatch `error` and recurse.
+    this.#reportingError = true;
+    try {
+      let stack = boundStack(detail.stack);
+      let frame = topStackFrame(stack);
+      let message = detail.message.slice(0, MAX_ERROR_MESSAGE_CHARS);
+      let messageKey = errorMessageKey(message);
+      let signature = `${detail.kind} ${messageKey} ${frame.raw}`;
+      let key = signature;
+      let pending = this.#errorDedup.get(signature);
+      // Counting a repeat on a still-buffered event costs no extra event: the
+      // flush serializes the buffer at send time, after this mutation.
+      if (pending && this.#buffer.includes(pending)) {
+        pending.dedup_count++;
+        return;
+      }
+      if (this.#errorEventsSinceFlush >= MAX_ERROR_EVENTS_PER_FLUSH - 1) {
+        // Budget spent. Distinct errors past this point share one slot, so the
+        // event's message is a representative sample of the group and its
+        // dedup_count covers all of it — a storm of distinct errors stays as
+        // bounded as a storm of identical ones.
+        let overflow = this.#errorDedup.get(OVERFLOW_ERROR_KEY);
+        if (overflow && this.#buffer.includes(overflow)) {
+          overflow.dedup_count++;
+          return;
+        }
+        key = OVERFLOW_ERROR_KEY;
+      }
+      let evt: ClientErrorEvent = {
+        event_type: 'client-error',
+        ts: Date.now(),
+        kind: detail.kind,
+        message,
+        message_key: messageKey,
+        stack,
+        top_frame_function: frame.functionName,
+        source_url: detail.sourceUrl || frame.url,
+        line: detail.line || frame.line,
+        col: detail.col || frame.col,
+        dedup_count: 1,
+        realm: this.#currentCardContext().realm,
+      };
+      this.#push(evt);
+      this.#errorDedup.set(key, evt);
+      this.#errorEventsSinceFlush++;
+    } catch (e) {
+      console.error('client-telemetry error report failed', e);
+    } finally {
+      this.#reportingError = false;
+    }
+  }
+
+  // A transmission opens a new error window: an event that has been sent can no
+  // longer absorb a repeat, so its dedup slot goes. What survives is exactly the
+  // error events still buffered, which is also what the next window's budget has
+  // to account for.
+  #pruneErrorDedup(): void {
+    for (let [key, evt] of this.#errorDedup) {
+      if (!this.#buffer.includes(evt)) {
+        this.#errorDedup.delete(key);
+      }
+    }
+    this.#errorEventsSinceFlush = this.#errorDedup.size;
   }
 
   // ── Heartbeat: wedge detection + card-load windows ─────────────────────
@@ -1099,8 +1268,15 @@ export default class ClientTelemetryService
         this.#lastLoadGeneration = this.#safeLoadGeneration();
       }
     };
+    this.#errorHandler = (event: Event) => this.#onWindowError(event);
+    this.#rejectionHandler = (event: Event) =>
+      this.#onUnhandledRejection(event);
     window.addEventListener('pagehide', this.#pagehideHandler);
     window.addEventListener('visibilitychange', this.#visibilityHandler);
+    // Passive observers of what broke: neither handler consumes the event, so
+    // the browser's own reporting (and anything else listening) is unaffected.
+    window.addEventListener('error', this.#errorHandler);
+    window.addEventListener('unhandledrejection', this.#rejectionHandler);
   }
 
   #detachLifecycleListeners(): void {
@@ -1115,6 +1291,14 @@ export default class ClientTelemetryService
       window.removeEventListener('visibilitychange', this.#visibilityHandler);
       this.#visibilityHandler = undefined;
     }
+    if (this.#errorHandler) {
+      window.removeEventListener('error', this.#errorHandler);
+      this.#errorHandler = undefined;
+    }
+    if (this.#rejectionHandler) {
+      window.removeEventListener('unhandledrejection', this.#rejectionHandler);
+      this.#rejectionHandler = undefined;
+    }
   }
 }
 
@@ -1128,9 +1312,7 @@ export function createServerRequestTimingMiddleware(
   owner: Owner,
 ): FetcherMiddlewareHandler {
   return async (req, next) => {
-    if (
-      (globalThis as { __boxelRenderContext?: unknown }).__boxelRenderContext
-    ) {
+    if (isRenderContext()) {
       return next(req);
     }
     // A late-settling fetch can run against a torn-down owner (common in tests);
@@ -1231,6 +1413,170 @@ function codeRefURL(
     }
   }
   return `${module}/${name}`;
+}
+
+// ── Uncaught-error helpers ───────────────────────────────────────────────
+// The shared dedup slot for errors past a window's event budget.
+const OVERFLOW_ERROR_KEY = 'overflow';
+
+interface ErrorLike {
+  name?: string;
+  message: string;
+  stack?: string;
+}
+
+// A rejection reason is whatever was rejected with — an Error, a plain object,
+// a string, anything. Treat a `message` string as error-like so a
+// non-Error-but-error-shaped reason still reports a message and a stack.
+function asErrorLike(value: unknown): ErrorLike | undefined {
+  if (value instanceof Error) {
+    return value;
+  }
+  if (
+    value &&
+    typeof value === 'object' &&
+    typeof (value as { message?: unknown }).message === 'string'
+  ) {
+    return value as ErrorLike;
+  }
+  return undefined;
+}
+
+// `TypeError: ...` rather than the bare message: the class is the first thing a
+// reader wants and `message` never carries it.
+function describeError(error: ErrorLike): string {
+  let name = typeof error.name === 'string' ? error.name : '';
+  return name ? `${name}: ${error.message}` : error.message;
+}
+
+// A reason with no message of its own. String conversion can itself throw (a
+// symbol, a proxy), and this runs while reporting an error, so it cannot.
+function stringifyReason(reason: unknown): string {
+  if (typeof reason === 'string') {
+    return reason;
+  }
+  try {
+    return String(reason);
+  } catch {
+    return '';
+  }
+}
+
+// The stack as the engine gave it, bounded. Frames are taken from the top so the
+// throw site always survives; the deep tail — the least informative end — is what
+// gets dropped, first by frame count and then to fit the character budget.
+function boundStack(stack: string | undefined): string {
+  if (typeof stack !== 'string' || stack.length === 0) {
+    return '';
+  }
+  let frames = stack
+    .split('\n')
+    .map((frame) => frame.trim())
+    .filter(Boolean)
+    .slice(0, MAX_ERROR_STACK_FRAMES);
+  let out = frames.join('\n');
+  while (out.length > MAX_ERROR_STACK_CHARS && frames.length > 1) {
+    frames.pop();
+    out = frames.join('\n');
+  }
+  return out.slice(0, MAX_ERROR_STACK_CHARS);
+}
+
+interface StackFrame {
+  raw: string;
+  functionName: string;
+  url: string;
+  line: number;
+  col: number;
+}
+
+// A location's trailing `:line:col`, with everything before it taken as the url.
+// The url part is matched greedily rather than by excluding delimiters: a real
+// url can contain colons, parens, and percent-escapes, and dropping the last two
+// numeric groups is what actually identifies the line and column.
+const STACK_LOCATION_RE = /^(.*):(\d+):(\d+)$/;
+
+// Split one frame into a function name and a location. Frames are engine-specific
+// in shape but not in structure: V8 writes `at fn (location)` or a bare
+// `at location`, SpiderMonkey and JSC write `fn@location`. Splitting on the
+// *first* delimiter keeps the function name intact even when the location itself
+// contains parens or `@` — an eval frame, or a bundler url with escapes — since a
+// function name can contain neither.
+function parseStackFrame(candidate: string): StackFrame | undefined {
+  let rest = candidate.replace(/^at\s+/, '');
+  let functionName = '';
+  let location = rest;
+  let open = rest.indexOf(' (');
+  if (open !== -1 && rest.endsWith(')')) {
+    functionName = rest.slice(0, open);
+    location = rest.slice(open + 2, -1);
+  } else {
+    let at = rest.indexOf('@');
+    if (at > 0) {
+      functionName = rest.slice(0, at);
+      location = rest.slice(at + 1);
+    }
+  }
+  let match = STACK_LOCATION_RE.exec(location);
+  if (!match) {
+    return undefined;
+  }
+  let [, url, line, col] = match;
+  return {
+    raw: candidate,
+    functionName: functionName.trim(),
+    url,
+    line: Number(line),
+    col: Number(col),
+  };
+}
+
+// Every engine marks its frames: V8 prefixes each with `at`, SpiderMonkey and
+// JSC join the function name to the location with `@` (and write a bare `@` for
+// an anonymous one). V8 also opens the stack with the message, which carries no
+// such marker — and a message can otherwise be shaped exactly like a frame, so
+// the marker is what tells the two apart rather than position alone.
+function isFrameLine(candidate: string): boolean {
+  return /^at\s/.test(candidate.trim()) || candidate.includes('@');
+}
+
+// The topmost frame that carries a location.
+function topStackFrame(stack: string): StackFrame {
+  let lines = stack.split('\n');
+  for (let candidate of lines) {
+    if (!isFrameLine(candidate)) {
+      continue;
+    }
+    let frame = parseStackFrame(candidate);
+    if (frame) {
+      return frame;
+    }
+  }
+  return {
+    raw: lines[0] ?? '',
+    functionName: '',
+    url: '',
+    line: 0,
+    col: 0,
+  };
+}
+
+// Collapse the parts of a message that vary per occurrence — instance ids,
+// uuids, hashes, timestamps — so the same failure against a different card
+// groups as one row rather than one row per card. A token needs four characters
+// before a digit turns it into a placeholder, which leaves the short numbers
+// that carry meaning (an HTTP status, a small count) intact.
+function errorMessageKey(message: string): string {
+  return message
+    .replace(/\b(?=[\w-]{4,}\b)[\w-]*\d[\w-]*\b/g, '*')
+    .replace(/\*(?:[\s/.:_-]*\*)+/g, '*')
+    .slice(0, MAX_ERROR_MESSAGE_CHARS);
+}
+
+function isRenderContext(): boolean {
+  return Boolean(
+    (globalThis as { __boxelRenderContext?: unknown }).__boxelRenderContext,
+  );
 }
 
 function supportedEntryTypes(): readonly string[] {
