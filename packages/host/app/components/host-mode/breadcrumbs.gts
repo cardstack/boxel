@@ -115,29 +115,29 @@ export default class HostModeBreadcrumbs extends Component<Signature> {
         padding: 0;
         align-items: center;
         max-width: 100%;
+        overflow-x: auto;
+        scrollbar-width: none;
+      }
+
+      .list::-webkit-scrollbar {
+        display: none;
       }
 
       .item {
         display: inline-flex;
         align-items: center;
         gap: var(--boxel-sp-2xs);
-        flex-shrink: 0;
-      }
-
-      .item:first-child {
         flex-shrink: 1;
-        min-width: 4rem;
+        min-width: 2.5rem;
       }
 
-      .item:first-child :deep(.breadcrumb-item) {
-        min-width: 4rem;
-      }
-
+      .item:first-child,
       .item:last-child {
-        flex-shrink: 2;
+        flex-shrink: 0;
         min-width: 4rem;
       }
 
+      .item:first-child :deep(.breadcrumb-item),
       .item:last-child :deep(.breadcrumb-item) {
         min-width: 4rem;
       }
