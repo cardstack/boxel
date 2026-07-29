@@ -365,6 +365,24 @@ module('Integration | Service | client-telemetry', function (hooks) {
         12,
         34,
       ],
+      // A scoped package in a V8 location. The `@` belongs to the url here —
+      // splitting on it would cut the url in half.
+      [
+        '    at https://realm.example/assets/@cardstack/boxel-ui.js:1:2',
+        '',
+        'https://realm.example/assets/@cardstack/boxel-ui.js',
+        1,
+        2,
+      ],
+      // An anonymous SpiderMonkey / JSC frame: the delimiter leads, so the
+      // function name is empty and the url starts after it.
+      [
+        '@https://realm.example/my-realm/person.gts:12:34',
+        '',
+        'https://realm.example/my-realm/person.gts',
+        12,
+        34,
+      ],
       // A method on a class, and an async frame — both are function names with
       // spaces or dots in them.
       [
@@ -455,6 +473,46 @@ module('Integration | Service | client-telemetry', function (hooks) {
     assert.true(
       byChars.startsWith('Error: wide\nat frame0 '),
       'still truncated from the deep end, not the top',
+    );
+  });
+
+  test('an oversized message cannot starve the frames out of the stack', function (assert) {
+    let svc = telemetry();
+    svc.enableForTest();
+    svc.drainBufferForTest();
+
+    // An error carrying a response body or a serialized document runs to
+    // thousands of characters, and that message is the stack's first line.
+    dispatchRejection(errorWithStack('x'.repeat(4000), frames(3)));
+
+    let e = clientErrors(svc)[0];
+    let lines = e.stack.split('\n');
+    assert.true(e.stack.length <= 2000, 'still within the character budget');
+    assert.true(
+      lines[0].endsWith('…'),
+      'the oversized header is cut, and says so',
+    );
+    assert.strictEqual(
+      lines[1],
+      'at frame0 (https://realm.example/my-realm/d.gts:1:1)',
+      'the throw site survives a header that would otherwise consume the whole budget',
+    );
+    assert.strictEqual(
+      lines.length,
+      4,
+      'and so do the frames below it (header + 3)',
+    );
+    assert.strictEqual(
+      e.top_frame_function,
+      'frame0',
+      'the location fields come from the stack as given, not from the bounded copy',
+    );
+    assert.strictEqual(e.source_url, 'https://realm.example/my-realm/d.gts');
+    assert.strictEqual(e.line, 1);
+    assert.strictEqual(
+      e.message,
+      `${`Error: ${'x'.repeat(4000)}`.slice(0, 300)}…`,
+      'the message field keeps its own tighter budget',
     );
   });
 

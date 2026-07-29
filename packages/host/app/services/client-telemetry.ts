@@ -234,6 +234,9 @@ const MAX_SLOWEST_LOADS = 10;
 const MAX_ERROR_MESSAGE_CHARS = 300;
 const MAX_ERROR_STACK_FRAMES = 16;
 const MAX_ERROR_STACK_CHARS = 2_000;
+// The stack's opening line is the message, not a frame, and it has to leave room
+// for the frames below it.
+const MAX_ERROR_STACK_HEADER_CHARS = 500;
 // Error events emitted per flush window. Past this many distinct errors in one
 // window, further ones fold into a single event whose count covers the group —
 // so a storm of *distinct* errors is bounded too, and cannot evict the other
@@ -748,8 +751,11 @@ export default class ClientTelemetryService
     this.#reportingError = true;
     try {
       let stack = boundStack(detail.stack);
-      let frame = topStackFrame(stack);
-      let message = detail.message.slice(0, MAX_ERROR_MESSAGE_CHARS);
+      // Read the frame from the stack as the engine gave it, not from the bounded
+      // copy: where the throw happened is a fact about the error, and must not
+      // depend on how much of the stack fit in the budget.
+      let frame = topStackFrame(detail.stack ?? '');
+      let message = truncate(detail.message, MAX_ERROR_MESSAGE_CHARS);
       let messageKey = errorMessageKey(message);
       let signature = `${detail.kind} ${messageKey} ${frame.raw}`;
       let key = signature;
@@ -1462,6 +1468,12 @@ function stringifyReason(reason: unknown): string {
   }
 }
 
+// Cut to a budget, marking the cut so a truncated value doesn't read as the
+// whole one.
+function truncate(value: string, max: number): string {
+  return value.length > max ? `${value.slice(0, max)}…` : value;
+}
+
 // The stack as the engine gave it, bounded. Frames are taken from the top so the
 // throw site always survives; the deep tail — the least informative end — is what
 // gets dropped, first by frame count and then to fit the character budget.
@@ -1469,15 +1481,27 @@ function boundStack(stack: string | undefined): string {
   if (typeof stack !== 'string' || stack.length === 0) {
     return '';
   }
-  let frames = stack
+  let lines = stack
     .split('\n')
-    .map((frame) => frame.trim())
+    .map((line) => line.trim())
     .filter(Boolean)
     .slice(0, MAX_ERROR_STACK_FRAMES);
-  let out = frames.join('\n');
-  while (out.length > MAX_ERROR_STACK_CHARS && frames.length > 1) {
-    frames.pop();
-    out = frames.join('\n');
+  if (lines.length === 0) {
+    return '';
+  }
+  // A V8 stack opens with the message rather than a frame, and a message is
+  // unbounded — an error carrying a response body or a serialized document runs
+  // to thousands of characters. Bound that header against its own budget first:
+  // otherwise it consumes the whole allowance, dropping deep frames does not
+  // help, and every frame gets discarded — losing exactly what the stack is
+  // here for.
+  if (!isFrameLine(lines[0])) {
+    lines[0] = truncate(lines[0], MAX_ERROR_STACK_HEADER_CHARS);
+  }
+  let out = lines.join('\n');
+  while (out.length > MAX_ERROR_STACK_CHARS && lines.length > 1) {
+    lines.pop();
+    out = lines.join('\n');
   }
   return out.slice(0, MAX_ERROR_STACK_CHARS);
 }
@@ -1498,21 +1522,28 @@ const STACK_LOCATION_RE = /^(.*):(\d+):(\d+)$/;
 
 // Split one frame into a function name and a location. Frames are engine-specific
 // in shape but not in structure: V8 writes `at fn (location)` or a bare
-// `at location`, SpiderMonkey and JSC write `fn@location`. Splitting on the
-// *first* delimiter keeps the function name intact even when the location itself
-// contains parens or `@` — an eval frame, or a bundler url with escapes — since a
-// function name can contain neither.
+// `at location`, SpiderMonkey and JSC write `fn@location` (with an empty name for
+// an anonymous frame, so the `@` leads). Splitting on the *first* delimiter keeps
+// the function name intact when the location itself contains parens — an eval
+// frame, a bundler url with escapes — since a function name can contain none.
+//
+// Which delimiter applies is decided by the engine that wrote the frame, not by
+// which character appears first: a `@` inside a V8 location is part of the url
+// (`@cardstack/…`, `@ember/…` are ordinary path segments here), and treating it
+// as a delimiter would split the url in half.
 function parseStackFrame(candidate: string): StackFrame | undefined {
-  let rest = candidate.replace(/^at\s+/, '');
+  let trimmed = candidate.trim();
+  let isV8Frame = V8_FRAME_PREFIX_RE.test(trimmed);
+  let rest = trimmed.replace(V8_FRAME_PREFIX_RE, '');
   let functionName = '';
   let location = rest;
   let open = rest.indexOf(' (');
   if (open !== -1 && rest.endsWith(')')) {
     functionName = rest.slice(0, open);
     location = rest.slice(open + 2, -1);
-  } else {
+  } else if (!isV8Frame) {
     let at = rest.indexOf('@');
-    if (at > 0) {
+    if (at !== -1) {
       functionName = rest.slice(0, at);
       location = rest.slice(at + 1);
     }
@@ -1531,13 +1562,16 @@ function parseStackFrame(candidate: string): StackFrame | undefined {
   };
 }
 
+const V8_FRAME_PREFIX_RE = /^at\s+/;
+
 // Every engine marks its frames: V8 prefixes each with `at`, SpiderMonkey and
 // JSC join the function name to the location with `@` (and write a bare `@` for
 // an anonymous one). V8 also opens the stack with the message, which carries no
 // such marker — and a message can otherwise be shaped exactly like a frame, so
 // the marker is what tells the two apart rather than position alone.
 function isFrameLine(candidate: string): boolean {
-  return /^at\s/.test(candidate.trim()) || candidate.includes('@');
+  let trimmed = candidate.trim();
+  return V8_FRAME_PREFIX_RE.test(trimmed) || trimmed.includes('@');
 }
 
 // The topmost frame that carries a location.
