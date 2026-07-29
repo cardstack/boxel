@@ -1,6 +1,9 @@
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { Addon } from '@embroider/addon-dev/rollup';
 import { babel } from '@rollup/plugin-babel';
 import { scopedCSS } from 'glimmer-scoped-css/rollup';
@@ -13,6 +16,22 @@ const addon = new Addon({
 const rootDirectory = dirname(fileURLToPath(import.meta.url));
 const babelConfig = resolve(rootDirectory, './babel.publish.config.cjs');
 const tsConfig = resolve(rootDirectory, './tsconfig.publish.json');
+
+function emitStyles() {
+  const stylesDir = resolve(rootDirectory, 'src/styles');
+  return {
+    name: 'emit-styles',
+    generateBundle() {
+      for (const fileName of readdirSync(stylesDir)) {
+        this.emitFile({
+          type: 'asset',
+          fileName: `styles/${fileName}`,
+          source: readFileSync(join(stylesDir, fileName)),
+        });
+      }
+    },
+  };
+}
 
 export default {
   // This provides defaults that work well alongside `publicEntrypoints` below.
@@ -63,6 +82,14 @@ export default {
     // Addons are allowed to contain imports of .css files, which we want
     // rollup to leave alone and keep in the published output.
     addon.keepAssets(['**/*.css']),
+
+    // keepAssets only covers assets imported by the module graph. The
+    // stylesheets under styles/ are consumed by apps through the `./*.css`
+    // export (and fonts.css references the font binaries by relative URL),
+    // so emit them all. Emitting as bundle assets — rather than copying —
+    // keeps addon.clean() from treating them as stale files and deleting
+    // them.
+    emitStyles(),
 
     // Remove leftover build artifacts when starting a new build.
     addon.clean(),
