@@ -34,7 +34,10 @@ const stickyNoteFixture = readFileSync(
 
 test.use({ realmDir: bootstrapTargetDir });
 test.use({ realmServerMode: 'isolated' });
-test.setTimeout(180_000);
+// Must clear the child factory:go budget below (240s) plus realm-server
+// boot and post-run assertions — an outer timeout under the inner one
+// kills the test while the child is still legitimately running.
+test.setTimeout(360_000);
 
 test('factory:go creates a target realm and bootstraps project artifacts end-to-end', async ({
   realm,
