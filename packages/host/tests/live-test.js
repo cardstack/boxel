@@ -67,12 +67,22 @@ export async function loadRealmTests(application) {
     import('@cardstack/host/config/environment'),
   ]);
 
-  // Mutate the shared config module object directly (not just the copy
-  // handed to loaderInstance's shim below) so every app instance created
-  // later by individual tests' setupApplicationTest — which import
-  // '@cardstack/host/config/environment' as a normal static import, not
-  // through this loader — also sees the real catalog realm address.
-  hostConfigEnvironment.default.resolvedCatalogRealmURL = realmURL;
+  // The catalog live suites need the app to resolve `@cardstack/catalog/` to the
+  // realm actually under test, which in environment mode is not the build-time
+  // default. Only override when that realm really is a catalog realm: this
+  // runner also drives non-catalog realms — the skills realm is both the default
+  // above and what boxel's own CI passes — and pointing the catalog prefix at
+  // one of those would have `network.ts` resolve catalog imports and ids against
+  // the wrong realm.
+  const catalogRealmURL = new URL(realmURL).pathname.endsWith('/catalog/')
+    ? realmURL
+    : hostConfigEnvironment.default?.resolvedCatalogRealmURL;
+
+  // Mutate the shared config module object directly, not just the copy handed to
+  // loaderInstance's shim below, so app instances that individual tests create
+  // via setupApplicationTest — importing this config as a normal static import
+  // rather than through this loader — see it too.
+  hostConfigEnvironment.default.resolvedCatalogRealmURL = catalogRealmURL;
 
   const loaderInstance = application.buildInstance({
     rootElement: '#ember-testing-loader',
@@ -96,7 +106,7 @@ export async function loadRealmTests(application) {
     ...hostConfigEnvironment,
     default: {
       ...(hostConfigEnvironment.default ?? {}),
-      resolvedCatalogRealmURL: realmURL,
+      resolvedCatalogRealmURL: catalogRealmURL,
     },
   });
 
