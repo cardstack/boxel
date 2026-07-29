@@ -11,7 +11,7 @@ import { getCard } from '@cardstack/host/resources/card-resource';
 import type { ComponentLike } from '@glint/template';
 
 interface Signature {
-  Element: HTMLButtonElement;
+  Element: HTMLButtonElement | HTMLSpanElement;
   Args: {
     cardId: string;
     disabled?: boolean;
@@ -79,35 +79,61 @@ export default class HostModeBreadcrumbItem extends Component<Signature> {
   }
 
   <template>
-    <button
-      type='button'
-      class='breadcrumb-item'
-      disabled={{this.isDisabled}}
-      title={{this.label}}
-      aria-current={{if @isCurrent 'page'}}
-      data-test-host-mode-breadcrumb={{@cardId}}
-      {{on 'click' this.handleClick}}
-    >
-      {{#if this.card}}
-        {{#if this.iconComponent}}
-          {{#let this.iconComponent as |Icon|}}
-            <Icon
-              class='breadcrumb-item-icon'
-              width='18'
-              height='18'
-              aria-hidden='true'
-            />
-          {{/let}}
-        {{/if}}
-        <span class='label'>{{this.label}}</span>
-      {{else if this.isLoading}}
-        <span class='label muted'>
-          Loading…
+    {{#let this.iconComponent as |Icon|}}
+      {{#if @isCurrent}}
+        <span
+          class='breadcrumb-item'
+          aria-current='page'
+          title={{this.label}}
+          data-test-host-mode-breadcrumb={{@cardId}}
+        >
+          {{#if this.card}}
+            {{#if Icon}}
+              <Icon
+                class='breadcrumb-item-icon'
+                width='18'
+                height='18'
+                aria-hidden='true'
+              />
+            {{/if}}
+            <span class='label'>{{this.label}}</span>
+          {{else if this.isLoading}}
+            <span class='label muted'>
+              Loading…
+            </span>
+          {{else}}
+            <span class='label'>{{this.label}}</span>
+          {{/if}}
         </span>
       {{else}}
-        <span class='label'>{{this.label}}</span>
+        <button
+          type='button'
+          class='breadcrumb-item'
+          disabled={{this.isDisabled}}
+          title={{this.label}}
+          data-test-host-mode-breadcrumb={{@cardId}}
+          {{on 'click' this.handleClick}}
+        >
+          {{#if this.card}}
+            {{#if Icon}}
+              <Icon
+                class='breadcrumb-item-icon'
+                width='18'
+                height='18'
+                aria-hidden='true'
+              />
+            {{/if}}
+            <span class='label'>{{this.label}}</span>
+          {{else if this.isLoading}}
+            <span class='label muted'>
+              Loading…
+            </span>
+          {{else}}
+            <span class='label'>{{this.label}}</span>
+          {{/if}}
+        </button>
       {{/if}}
-    </button>
+    {{/let}}
 
     <style scoped>
       .breadcrumb-item {
@@ -115,9 +141,12 @@ export default class HostModeBreadcrumbItem extends Component<Signature> {
         align-items: center;
         gap: var(--boxel-sp-2xs);
         max-width: 16rem;
+        min-height: 1.5rem;
+        box-sizing: border-box;
         background: none;
         border: none;
-        padding: 0;
+        padding-block: var(--boxel-sp-4xs);
+        padding-inline: 0;
         margin: 0;
         color: inherit;
         white-space: nowrap;
@@ -125,7 +154,7 @@ export default class HostModeBreadcrumbItem extends Component<Signature> {
         overflow: hidden;
       }
 
-      .breadcrumb-item:focus-visible {
+      button.breadcrumb-item:focus-visible {
         outline: 1px solid var(--boxel-light-60);
         border-radius: var(--boxel-border-radius-lg);
       }

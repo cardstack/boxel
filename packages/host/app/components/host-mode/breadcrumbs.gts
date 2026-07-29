@@ -64,7 +64,7 @@ export default class HostModeBreadcrumbs extends Component<Signature> {
 
   <template>
     <nav
-      class='host-mode-breadcrumbs {{unless this.hasCards "empty"}}'
+      class='host-mode-breadcrumbs'
       aria-label='Card stack navigation'
       hidden={{not this.hasCards}}
       data-host-mode-breadcrumbs
@@ -73,7 +73,7 @@ export default class HostModeBreadcrumbs extends Component<Signature> {
     >
       {{#if this.hasCards}}
         <ol class='list'>
-          {{#each this.cardIds as |cardId index|}}
+          {{#each this.cardIds key='@identity' as |cardId index|}}
             <li class='item'>
               <HostModeBreadcrumbItem
                 @cardId={{cardId}}
@@ -107,10 +107,6 @@ export default class HostModeBreadcrumbs extends Component<Signature> {
         border-radius: 7px;
       }
 
-      .empty {
-        display: none;
-      }
-
       .list {
         display: inline-flex;
         list-style: none;
@@ -130,20 +126,20 @@ export default class HostModeBreadcrumbs extends Component<Signature> {
 
       .item:first-child {
         flex-shrink: 1;
-        min-width: 2.5rem;
+        min-width: 4rem;
       }
 
       .item:first-child :deep(.breadcrumb-item) {
-        min-width: 2.5rem;
+        min-width: 4rem;
       }
 
       .item:last-child {
         flex-shrink: 2;
-        min-width: 2.5rem;
+        min-width: 4rem;
       }
 
       .item:last-child :deep(.breadcrumb-item) {
-        min-width: 2.5rem;
+        min-width: 4rem;
       }
 
       .separator {
