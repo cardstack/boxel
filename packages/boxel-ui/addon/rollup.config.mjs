@@ -40,6 +40,19 @@ export default {
   // package.json#exports in every consumer, so leave them alone.
   external: [/^@cardstack\/boxel-ui\//],
 
+  // keepAssets rewrites the stylesheet modules that scopedCSS() generates
+  // from <style scoped> blocks; those have no original source to map back
+  // to, so the broken-sourcemap warning for that plugin is noise.
+  onwarn(warning, warn) {
+    if (
+      warning.code === 'SOURCEMAP_BROKEN' &&
+      warning.plugin === 'keep-assets'
+    ) {
+      return;
+    }
+    warn(warning);
+  },
+
   plugins: [
     // Everything under src/ is importable, matching the `./*` pattern in
     // package.json#exports.
