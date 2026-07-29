@@ -1311,6 +1311,12 @@ class Isolated extends Component<typeof Workspace> {
         font: 500 13px var(--grid-sans);
         color: var(--grid-nav-ink);
         cursor: pointer;
+        /* Without this the row keeps its max-content width instead of the
+           rail's, so a long type name pushes the count and the + past the
+           rail's right edge rather than ellipsizing. The ellipsis on
+           .rail-name only engages once the row itself is allowed to be
+           narrower than its content. */
+        min-width: 0;
       }
       .rail-row.type {
         padding: 5px 10px;
