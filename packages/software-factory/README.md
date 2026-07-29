@@ -1,41 +1,39 @@
 # Software Factory
 
-The software factory is an automated card-development system that takes a brief (a description of what card to build) and produces a working Boxel card — complete with card definition, sample instances, catalog spec, and QUnit tests — in a target realm.
+The software factory is an automated card-development system that takes a brief (a description of what to build) and produces a working Boxel card family in a target realm — design language first, then card definitions, catalog specs, and sample instances, with an optional QUnit hardening pass.
 
 ## How It Works
 
-The factory uses an **issue-driven agentic loop** where the LLM agent processes issues one at a time, with automated validation after every turn:
+The factory runs an **issue-driven agentic loop**: the agent processes issues one at a time, design before code, with automated validation after every turn and a render-gated review before anything counts as done.
 
-1. **Intake** — Fetch a brief card from a source realm, normalize it into a structured representation
-2. **Seed Issue** — Create a single bootstrap issue in the target realm (`Issues/bootstrap-seed`)
-3. **Bootstrap (via agent)** — The agent picks up the seed issue, reads the brief, and creates: a Project card, Knowledge Articles, and two implementation Issues
-4. **Implementation (via agent)** — The agent works through each implementation issue in priority/dependency order:
-   - Issue #1: Create card definition (`.gts`) and co-located QUnit tests (`.test.gts`)
-   - Issue #2: Create catalog spec (`Spec/`) with linked example instances
-5. **Validation (after every agent turn)** — The orchestrator runs a 5-step validation pipeline: parse, lint, evaluate, instantiate, and run tests. Failures are fed back to the agent for self-correction.
+1. **Intake** — fetch a brief card from a source realm (or synthesize one from a GitHub repo with `--repo-url`), normalize it into a structured representation.
+2. **Seeds** — write the bootstrap issue (`Issues/bootstrap-seed`) and a design-foundation issue (`Issues/design-foundation-seed`) that blocks all implementation work.
+3. **Bootstrap** — the agent reads the brief and creates the tracker: a Project card, Knowledge Articles, an IssueTracker board, and one implementation issue per entry-point card.
+4. **Design foundation** — one turn establishes the shared design language: a brand-guide Knowledge Article, `design/tokens.css`, and a family coherence sheet, screenshot-critiqued before any card is designed in detail.
+5. **Implementation** — each issue runs as a **design turn** (self-contained HTML mockup with realistic copy → screenshot → critique → revise, on the flagship model) followed by a **build turn** (translate the accepted mockup into `.gts` + Spec + examples, on the cheap model, forked from the design session).
+6. **Validation** — after every agent turn the orchestrator runs the pipeline: parse, lint, evaluate, instantiate, plus a host-tools import gate. Failures feed back into cheap fix iterations. (No per-issue tests — testing is the hardening phase's job.)
+7. **Render gate + review** — the finished issue's cards are screenshotted via the realm's prerenderer; a reviewer turn judges the renders against the acceptance criteria and either approves or bounces the issue back once with comments.
+8. **Later phases** — depending on `--to-phase`: a hardening pass (QUnit tests per shipped card) and/or the bootstrap's pass-2 polishing scope. Anything beyond the target phase stays on the board for an operator.
 
-The orchestrator (`runIssueLoop`) is a thin scheduler that picks the next unblocked issue, hands it to the agent, runs validation, and reads the updated issue state. All domain decisions (what to implement, when to create sub-issues, when to mark as blocked) live in the agent's prompt and skills.
+The orchestrator (`runIssueLoop`) is a thin scheduler: it picks the next unblocked issue, hands it to the agent, runs validation, and reads back the updated issue state. Domain decisions live in the agent's prompt and skills.
+
+### Lifecycle phases (`--to-phase`)
+
+The run works phases front to back and stops after the target phase (inclusive). Later-phase issues stay on the board as a visible decision point instead of executing unattended.
+
+| Phase                        | What runs                                                                                                             |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `design`                     | Bootstrap + the design-foundation issue only — a design-review checkpoint.                                            |
+| `implementation` _(default)_ | Everything through built, reviewed cards.                                                                             |
+| `hardening`                  | Also synthesizes one QUnit test-pass issue per shipped card; the test suite is its gate (no PM review).               |
+| `polishing`                  | Also executes the bootstrap's self-generated "pass 2" enhancement scope, which otherwise waits for operator approval. |
 
 ### Realm Roles
 
 - **Source realm** (`packages/software-factory/realm/`) — publishes shared modules, card type definitions (Project, Issue, KnowledgeArticle, TestRun), briefs, and templates. Never written to by the factory.
-- **Target realm** (user-specified) — receives all generated artifacts: card definitions, instances, specs, test files, and TestRun results.
+- **Target (product) realm** (user-specified) — receives the deliverable: card definitions, instances, specs. Keeps its stock index; it's the user's realm, not a factory surface.
+- **Control realm** (`--control-realm`, recommended) — receives the machinery: issues, tracker cards, validation artifacts, and the live run log. Splitting control from product means tracker churn never invalidates product queries and vice versa. Omit it and everything lands in the target realm.
 - **Fixture realm** (`test-fixtures/`) — disposable test input for development-time verification of the factory itself.
-
-### Target Realm Artifact Structure
-
-| Path                  | What it is                                                                                                              |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `index.json`          | `RealmDashboard` dashboard the realm opens to — Overview / Board / Artifacts tabs (only for realms the factory created) |
-| `cards-grid.json`     | `CardsGrid` instance the Artifacts tab renders                                                                          |
-| `Projects/`           | Project card with objective, scope, success criteria                                                                    |
-| `Issues/`             | Issue cards — bootstrap seed + implementation issues                                                                    |
-| `Knowledge Articles/` | Context articles derived from the brief                                                                                 |
-| `*.gts`               | Card definition files                                                                                                   |
-| `*.test.gts`          | Co-located QUnit test files                                                                                             |
-| `CardName/`           | Sample card instances with realistic data                                                                               |
-| `Spec/`               | Catalog Spec cards linking to card definitions and sample instances                                                     |
-| `Validations/`        | Validation artifacts — TestRun cards (test results) and lint results                                                    |
 
 ## Prerequisites
 
@@ -45,7 +43,7 @@ The orchestrator (`runIssueLoop`) is a thin scheduler that picks the next unbloc
 - LLM backend credentials, matching your chosen `--agent` (see [Choosing an LLM backend](#choosing-an-llm-backend---agent) below):
   - **Default (`--agent claude`)**: `claude` CLI installed and authenticated (run `claude login` once), or `ANTHROPIC_API_KEY` set in the environment. The factory uses the Claude Agent SDK, which picks up whichever is available.
   - **`--agent openrouter`**: `OPENROUTER_API_KEY` in the environment.
-  - **`--agent codex`**: not yet implemented (tracked in CS-10594).
+  - **`--agent codex`**: not yet implemented.
 
 ## Running the Factory
 
@@ -64,11 +62,14 @@ cd packages/software-factory
 
 pnpm factory:go \
   --brief-url https://localhost:4201/software-factory/Wiki/sticky-note \
-  --target-realm https://localhost:4201/your-username/my-test-realm/ \
+  --target-realm https://localhost:4201/your-username/my-app/ \
+  --control-realm https://localhost:4201/your-username/my-app-control/ \
   --debug
 ```
 
-The `--debug` flag shows LLM prompts, tool calls and their results, and `console.log` output from QUnit tests as they run.
+Both realms are created if missing. The `--debug` flag shows LLM prompts, tool calls and their results, and per-phase timing. Add `--to-phase hardening` to get a tested card family, or `--to-phase design` to stop at the design-language checkpoint.
+
+Re-running the same command against the same realms **resumes**: finished issues stay finished, and the loop picks up whatever the board says is next.
 
 The factory is a plain Node.js CLI. "Running it from inside Claude Code" just means Claude Code's Bash tool runs the same `pnpm factory:go …` command on your behalf — there's no separate mode, no custom skill required. You can always run it directly from your shell instead.
 
@@ -76,87 +77,95 @@ The factory is a plain Node.js CLI. "Running it from inside Claude Code" just me
 
 One CLI flag picks the LLM backend. Omit it to get the default.
 
-| Flag                            | Backend                                       | When to use                                            |
-| ------------------------------- | --------------------------------------------- | ------------------------------------------------------ |
-| _(omitted)_                     | `claude` (default)                            | Anywhere Claude Code can run.                          |
-| `--agent claude`                | Claude Code Agent SDK                         | Same as default; use to be explicit.                   |
-| `--agent openrouter`            | OpenRouter, model `anthropic/claude-opus-4-7` | You want the OpenRouter path.                          |
-| `--agent openrouter=<model-id>` | OpenRouter, specific model                    | E.g., `--agent openrouter=anthropic/claude-sonnet-4`.  |
-| `--agent codex`                 | Codex CLI (not yet implemented)               | Reserved; currently errors with a pointer to CS-10594. |
+| Flag                            | Backend                                       | When to use                                           |
+| ------------------------------- | --------------------------------------------- | ----------------------------------------------------- |
+| _(omitted)_                     | `claude` (default)                            | Anywhere Claude Code can run.                         |
+| `--agent claude`                | Claude Code Agent SDK                         | Same as default; use to be explicit.                  |
+| `--agent openrouter`            | OpenRouter, model `anthropic/claude-opus-4-7` | You want the OpenRouter path.                         |
+| `--agent openrouter=<model-id>` | OpenRouter, specific model                    | E.g., `--agent openrouter=anthropic/claude-sonnet-4`. |
+| `--agent codex`                 | Codex CLI (not yet implemented)               | Reserved; currently errors.                           |
 
-### Retrying blocked issues
+### Model budgets per turn type
 
-By default, the factory resets blocked issues to `backlog` with `critical` priority so the scheduler picks them up first. Only issues blocked by validation failures (not by dependency on another issue) are reset. Prior validation failure details are preserved in issue comments so the agent has context for the retry.
+Taste turns run on the strong model; mechanical turns default to the cheap tier (claude backend only — other backends inherit their session model unless a flag says otherwise). Each `--*-model` flag takes a model id or `inherit`; each `--*-effort` takes `low|medium|high|xhigh|max`.
 
-To skip retrying blocked issues, use `--no-retry-blocked`:
+| Turn                                | Default                    | Override                                  |
+| ----------------------------------- | -------------------------- | ----------------------------------------- |
+| Design foundation, per-issue design | session flagship           | _(none — deliberately unbudgeted)_        |
+| Bootstrap                           | `claude-sonnet-5` @ medium | `--bootstrap-model`, `--bootstrap-effort` |
+| Build                               | `claude-sonnet-5` @ medium | `--build-model`, `--build-effort`         |
+| Fix iterations                      | inherit @ medium           | `--fix-model`, `--fix-effort`             |
+| Review (PM gate)                    | session flagship           | `--review-model`, `--review-effort`       |
+| Hardening                           | `claude-sonnet-5` @ medium | _(none yet)_                              |
 
-```bash
-pnpm factory:go \
-  --brief-url https://localhost:4201/software-factory/Wiki/sticky-note \
-  --target-realm https://localhost:4201/your-username/my-test-realm/ \
-  --no-retry-blocked
-```
+Other useful flags: `--no-phase-split` (single combined turn per issue), `--no-render-gate` (skip screenshot capture + review, e.g. without a prerenderer), `--no-retry-blocked` (leave validation-blocked issues alone instead of resetting them to backlog), `--monitor-level quiet|normal|verbose` (run-log narration volume). `pnpm factory:go --help` is the authoritative list.
 
 ### What to expect on the command line
 
 ```
-[factory:go] brief=https://localhost:4201/software-factory/Wiki/sticky-note
-[factory:go] Starting seed issue + issue-driven loop...
-[factory-seed] Creating seed issue at Issues/bootstrap-seed.json
-[issue-loop] Starting issue loop: targetRealm=..., maxIterationsPerIssue=5
+[factory-entrypoint] brief=https://localhost:4201/software-factory/Wiki/sticky-note
+[factory-entrypoint] Starting seed issue + issue-driven loop...
 [issue-loop] Outer cycle 1: picked issue "Issues/bootstrap-seed" (status=backlog, priority=critical)
-[issue-loop]   Inner iteration 1/5 for issue "Issues/bootstrap-seed"
-  ... agent creates Project, Knowledge Articles, 2 implementation Issues ...
-[issue-loop] Outer cycle 2: picked issue "Issues/<slug>-define-card" (status=backlog, priority=high)
-  ... agent writes card definition + tests, validation pipeline runs ...
-[issue-loop] Outer cycle 3: picked issue "Issues/<slug>-catalog-spec" (status=backlog, priority=medium)
-  ... agent writes catalog spec + examples ...
-[issue-loop] Outer loop finished: outcome=all_issues_done, cycles=3
-[factory:go] Issue loop complete: outcome=all_issues_done outerCycles=3 issues=3
+  ... bootstrap creates Project, board, Knowledge Articles, implementation issue(s) ...
+[issue-loop] Outer cycle 2: picked issue "Issues/design-foundation-seed" ...
+  ... brand guide, design/tokens.css, family sheet — screenshot, critique, revise ...
+[issue-loop] Outer cycle 3: picked issue "Issues/sticky-note" ...
+[issue-loop]   Phase-split: DESIGN turn starting (budget inherit flagship session)
+[issue-loop]   Phase-split: BUILD turn starting (budget claude-sonnet-5/medium)
+  ... validation pipeline, render gate captures, review turn ...
+[issue-loop] Hardening phase: synthesized 1 issue(s): Issues/harden-sticky-note   (--to-phase hardening)
+[issue-loop] Outer cycle 4: leaving polishing issue on the board: "Sticky Note — pass 2" — pass --to-phase polishing to execute it unattended
+[issue-loop] Outer loop finished: outcome=all_issues_done
 ```
 
-### What to expect in the Boxel host app (target realm)
+A live run log (`Runs/<slug>` in the control realm) narrates the same run inside Boxel — design screenshots, validation results, and scheduler notes as they happen.
 
-A realm the factory created opens to the **Overview dashboard** (`index.json`, a
-`RealmDashboard` card) rather than a bare card grid. It has three tabs:
-Overview (project status, setup roadmap, issue KPIs, validation runs), Board
-(the kanban IssueTracker), and Artifacts (the CardsGrid of everything created).
+### What lands where
 
-| Folder / File                | What it is                                                                    |
-| ---------------------------- | ----------------------------------------------------------------------------- |
-| `index.json`                 | The Overview dashboard the realm opens to (Overview / Board / Artifacts tabs) |
-| `Projects/`                  | A Project card with the brief's objective and success criteria                |
-| `Issues/bootstrap-seed`      | Bootstrap issue — status `done`, issueType `bootstrap`                        |
-| `Issues/<slug>-define-card`  | Implementation issue #1 — card definition + tests                             |
-| `Issues/<slug>-catalog-spec` | Implementation issue #2 — catalog spec + examples                             |
-| `Knowledge Articles/`        | Brief context and agent onboarding articles                                   |
-| `*.gts`                      | Card definition file(s) for the implemented card                              |
-| `*.test.gts`                 | Co-located QUnit test file(s)                                                 |
-| `CardName/`                  | Sample card instance(s) with realistic data                                   |
-| `Spec/`                      | Catalog Spec card(s) linking to the card definition and sample instances      |
-| `Validations/`               | Validation artifacts — TestRun cards and lint results (pass/fail)             |
+Control realm (with the split):
+
+| Path                      | What it is                                                       |
+| ------------------------- | ---------------------------------------------------------------- |
+| `Projects/`               | Project card with objective, scope, success criteria             |
+| `Issues/`                 | Seeds, implementation issues, defects, hardening + polish issues |
+| `Boards/`                 | The kanban IssueTracker                                          |
+| `Knowledge Articles/`     | Brief context, agent onboarding, brand guide                     |
+| `Runs/`, `RunLogEntries/` | The live-blog run log                                            |
+| `Validations/`            | Validation artifacts — lint/parse/test result cards              |
+
+Target (product) realm:
+
+| Path         | What it is                                                     |
+| ------------ | -------------------------------------------------------------- |
+| `*.gts`      | Card definition files                                          |
+| `CardName/`  | Sample card instances with realistic data                      |
+| `Spec/`      | Catalog Spec cards linking definitions and samples             |
+| `design/`    | tokens.css, mockups, and render captures from the design turns |
+| `*.test.gts` | QUnit test files (hardening phase only)                        |
 
 ## Architecture
 
 ```
 factory:go → createSeedIssue() → runIssueLoop()
-                                    ├── IssueScheduler (picks next unblocked issue)
+                                    ├── IssueScheduler (picks next unblocked issue, phase-gated by --to-phase)
                                     ├── ContextBuilder.buildForIssue() (loads project/knowledge from issue relationships)
-                                    ├── ToolUseFactoryAgent.run() (LLM calls tools)
-                                    └── ValidationPipeline.validate() (parse, lint, evaluate, instantiate, test)
+                                    ├── ClaudeCodeFactoryAgent.run() (design turn → build turn, forked session)
+                                    ├── ValidationPipeline.validate() (parse, lint, evaluate, instantiate, imports; + tests for hardening issues)
+                                    └── RenderGate + review turn (screenshots → verdict → done or rework)
 ```
 
 Key modules:
 
-- `src/factory-entrypoint.ts` — CLI entrypoint, creates seed issue + runs issue loop
-- `src/factory-seed.ts` — creates the bootstrap seed issue in the realm; links its `project` once the bootstrap issue creates one
-- `src/factory-realm-index.ts` — writes the `RealmDashboard` dashboard for a freshly-created realm and links its `board` to the bootstrap IssueTracker
-- `src/factory-issue-loop-wiring.ts` — constructs all loop infrastructure (auth, tools, agent, validator)
+- `src/factory-entrypoint.ts` — CLI entrypoint, creates seed issues + runs issue loop
+- `src/factory-seed.ts` — writes the bootstrap/design-foundation/hardening issues; links seeds to the Project
+- `src/factory-phase.ts` — the lifecycle phase model behind `--to-phase`
+- `src/factory-issue-loop-wiring.ts` — constructs all loop infrastructure (auth, tools, agent, validator, run log, monitor)
 - `src/issue-loop.ts` — the two-level issue-driven loop (outer: issues, inner: iterations with validation)
 - `src/issue-scheduler.ts` — issue selection with priority/dependency ordering
-- `src/factory-agent-tool-use.ts` — LLM agent using native tool-use protocol
+- `src/factory-agent/claude-code.ts` — the Claude Agent SDK backend (`opencode.ts` for OpenRouter)
 - `src/factory-context-builder.ts` — assembles agent context from issue relationships
-- `src/validators/validation-pipeline.ts` — 5-step validation after every agent turn
+- `src/validators/validation-pipeline.ts` — the validation pipeline run after every agent turn
+- `src/run-trace.ts` — per-run NDJSON span telemetry (see `docs/run-trace.md`)
 
 ## Layout
 
