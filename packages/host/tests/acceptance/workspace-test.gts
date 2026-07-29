@@ -159,6 +159,6 @@ module('Acceptance | workspace card', function (hooks) {
       .exists('a card-less event tile stands in for the embedded card');
     assert
       .dom(`${STACK} .activity-pane`)
-      .containsText('2 cards reindexed', 'the event describes the pass');
+      .containsText('2 items reindexed', 'the event describes the pass');
   });
 });

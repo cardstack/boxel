@@ -141,7 +141,7 @@ module('Integration | Card | workspace | pure functions', function (hooks) {
   module('indexEventTitle', function () {
     const realmURL = 'http://test-realm/';
 
-    test('an incremental pass reports how many cards it reindexed', function (assert) {
+    test('an incremental pass reports how many items it reindexed', function (assert) {
       assert.strictEqual(
         ws.indexEventTitle({
           eventName: 'index',
@@ -149,11 +149,11 @@ module('Integration | Card | workspace | pure functions', function (hooks) {
           invalidations: ['a', 'b', 'c'],
           realmURL,
         }),
-        '3 cards reindexed',
+        '3 items reindexed',
       );
     });
 
-    test('a single-card incremental pass is singular', function (assert) {
+    test('a single-item incremental pass is singular', function (assert) {
       assert.strictEqual(
         ws.indexEventTitle({
           eventName: 'index',
@@ -161,7 +161,7 @@ module('Integration | Card | workspace | pure functions', function (hooks) {
           invalidations: ['a'],
           realmURL,
         }),
-        '1 card reindexed',
+        '1 item reindexed',
       );
     });
 

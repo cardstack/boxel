@@ -184,8 +184,11 @@ export function indexEventTitle(ev: RealmEventContent): string | undefined {
   }
   switch (ev.indexType) {
     case 'incremental': {
+      // `invalidations` is the realm's full invalidation set — instances plus
+      // any modules whose save cascaded — not a card count, so label it
+      // "items" rather than "cards" to avoid overcounting a shared-module edit.
       let n = ev.invalidations?.length ?? 0;
-      return n === 1 ? '1 card reindexed' : `${n} cards reindexed`;
+      return n === 1 ? '1 item reindexed' : `${n} items reindexed`;
     }
     case 'full':
       return 'Full reindex';
@@ -937,7 +940,7 @@ class Isolated extends Component<typeof Workspace> {
                   first.</p>
               </div>
               <div class='feed'>
-                {{#each this.visibleFeed as |item|}}
+                {{#each this.visibleFeed key='id' as |item|}}
                   {{#if item.showDay}}
                     <div class='feed-day'>
                       <span class='feed-day-label'>{{item.dayLabel}}</span>
