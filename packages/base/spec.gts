@@ -131,7 +131,7 @@ interface SpecHeaderSignature {
 export class SpecHeader extends GlimmerComponent<SpecHeaderSignature> {
   get defaultIcon() {
     if (!this.args.model) {
-      return;
+      return undefined;
     }
     return this.args.model.constructor?.icon;
   }
@@ -711,7 +711,7 @@ class Isolated extends Component<typeof Spec> {
 class Fitted extends Component<typeof Spec> {
   get defaultIcon() {
     if (!this.args.model) {
-      return;
+      return undefined;
     }
     return this.args.model.constructor?.icon;
   }
