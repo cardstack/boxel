@@ -51,8 +51,8 @@ async function fireRealmsListUpdated(realmServer: RealmServerService) {
   } as any);
 }
 
-// CS-12271: a realm created out of band (another tab, the CLI, an AI agent)
-// has no signal that reaches a trusted-server session — its realm list is
+// A realm created out of band (another tab, the CLI, an AI agent) has no
+// signal that reaches a trusted-server session — its realm list is
 // assembled authoritatively from `_realm-auth` at boot. The realm server now
 // pushes a `realms-list-updated` event to the owner's session room, and the
 // host re-derives the list so a session viewing the workspace chooser updates
