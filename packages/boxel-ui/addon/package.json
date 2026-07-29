@@ -13,20 +13,21 @@
     "test": "tests"
   },
   "scripts": {
-    "build": "concurrently \"pnpm:build:*\" --names \"build:\"",
-    "build:types": "ember-tsc --declaration --emitDeclarationOnly --noEmit false && node bin/fix-declaration-extensions.mjs",
+    "build": "rollup --config",
+    "generate:component-specs": "node bin/generate-component-specs.mjs",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
     "lint:hbs": "ember-template-lint .",
     "lint:hbs:fix": "ember-template-lint . --fix",
     "lint:js": "eslint . --report-unused-disable-directives --cache",
     "lint:js:fix": "eslint . --report-unused-disable-directives --fix",
+    "lint:publish": "pnpm build && publint run --level error",
     "lint:types": "ember-tsc --noEmit",
+    "prepack": "rollup --config",
     "rebuild:icons": "node bin/rebuild-icons.mjs",
     "rebuild:usage": "node bin/rebuild-usage.mjs",
-    "generate:component-specs": "node bin/generate-component-specs.mjs",
     "start": "concurrently \"pnpm:start:*\" --names \"start:\"",
-    "start:types": "ember-tsc --declaration --emitDeclarationOnly --watch",
+    "start:build": "rollup --config --watch",
     "test": "echo 'A v2 addon does not have tests, run tests in test-app'",
     "test:ember": "ember test"
   },
@@ -41,12 +42,13 @@
     "classnames": "catalog:",
     "countries-list": "catalog:",
     "dayjs": "catalog:",
+    "decorator-transforms": "catalog:",
     "dompurify": "catalog:",
     "ember-animated": "catalog:",
     "ember-basic-dropdown": "8.0.4",
-    "ember-css-url": "^1.0.0",
     "ember-concurrency": "catalog:",
     "ember-concurrency-ts": "catalog:",
+    "ember-css-url": "^1.0.0",
     "ember-draggable-modifiers": "^1.0.0",
     "ember-focus-trap": "^1.0.1",
     "ember-freestyle": "catalog:",
@@ -76,6 +78,8 @@
     "@cardstack/local-types": "workspace:*",
     "@embroider/addon-dev": "^8.0.0",
     "@embroider/macros": "~1.16.5",
+    "@glint/ember-tsc": "catalog:",
+    "@rollup/plugin-babel": "catalog:",
     "@tsconfig/ember": "3.0.1",
     "@types/dompurify": "catalog:",
     "@types/lodash-es": "catalog:",
@@ -97,8 +101,9 @@
     "glimmer-scoped-css": "catalog:",
     "prettier": "catalog:",
     "prettier-plugin-ember-template-tag": "catalog:",
-    "svgo": "catalog:",
-    "@glint/ember-tsc": "catalog:"
+    "publint": "^0.3.16",
+    "rollup": "catalog:",
+    "svgo": "catalog:"
   },
   "peerDependencies": {
     "ember-source": "catalog:",
@@ -128,13 +133,24 @@
   "files": [
     "addon-main.cjs",
     "declarations",
-    "public"
+    "dist",
+    "src"
   ],
   "typesVersions": {
     "*": {
       "*": [
         "declarations/*"
       ]
+    }
+  },
+  "publishConfig": {
+    "exports": {
+      "./*.css": "./dist/*.css",
+      "./*": {
+        "types": "./declarations/*.d.ts",
+        "default": "./dist/*.js"
+      },
+      "./addon-main.js": "./addon-main.cjs"
     }
   }
 }

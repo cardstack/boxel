@@ -1221,7 +1221,7 @@ importers:
         version: 5.5.6(@types/eslint@8.56.5)(eslint-config-prettier@9.1.2(eslint@8.57.1))(eslint@8.57.1)(prettier@3.8.4)
       http-server:
         specifier: ^14.1.1
-        version: 14.1.1(debug@4.3.4)
+        version: 14.1.1
       lucide-static:
         specifier: ^0.447.0
         version: 0.447.0
@@ -1273,6 +1273,9 @@ importers:
       dayjs:
         specifier: 'catalog:'
         version: 1.11.21
+      decorator-transforms:
+        specifier: 'catalog:'
+        version: 2.3.2(@babel/core@7.29.7)
       dompurify:
         specifier: 'catalog:'
         version: 3.4.10
@@ -1379,6 +1382,9 @@ importers:
       '@glint/ember-tsc':
         specifier: 'catalog:'
         version: 1.5.0(typescript@5.9.3)
+      '@rollup/plugin-babel':
+        specifier: 'catalog:'
+        version: 6.1.0(@babel/core@7.29.7)(@types/babel__core@7.20.5)(rollup@4.62.0)
       '@tsconfig/ember':
         specifier: 3.0.1
         version: 3.0.1
@@ -1442,6 +1448,12 @@ importers:
       prettier-plugin-ember-template-tag:
         specifier: 'catalog:'
         version: 2.1.6(prettier@3.8.4)
+      publint:
+        specifier: ^0.3.16
+        version: 0.3.22
+      rollup:
+        specifier: 'catalog:'
+        version: 4.62.0
       svgo:
         specifier: 'catalog:'
         version: 3.3.3
@@ -2732,7 +2744,7 @@ importers:
         version: 11.1.0
       http-server:
         specifier: 'catalog:'
-        version: 14.1.1(debug@4.3.4)
+        version: 14.1.1
       js-yaml:
         specifier: 'catalog:'
         version: 4.2.0
@@ -2825,7 +2837,7 @@ importers:
         version: 3.2.0
       wait-on:
         specifier: ^9.0.4
-        version: 9.0.10(debug@4.3.4)
+        version: 9.0.10
       wtfnode:
         specifier: ^0.10.1
         version: 0.10.1
@@ -6088,6 +6100,10 @@ packages:
 
   '@prisma/instrumentation@5.22.0':
     resolution: {integrity: sha512-LxccF392NN37ISGxIurUljZSh1YWnphO34V5a0+T7FVQG2u9bhAXRTJpgmQ3483woVhkraQZFF7cbRrpbw/F4Q==}
+
+  '@publint/pack@0.1.6':
+    resolution: {integrity: sha512-3uVNyGcVplhPZSLVyeIpL7+cIRn1YCSNHLG/rUIlBQMVH8YuN9++YF+5+UDIIO9RW98dujiUoTltO7RDB5bFJA==}
+    engines: {node: '>=18'}
 
   '@puppeteer/browsers@3.0.5':
     resolution: {integrity: sha512-xYXNuEQmHNIPWWcbL/skf2KF7seyp7c1xmKFRk3wmdFx7VwBsKVrtOLKs8ecaezsKPsWeF1YsgwIiElAscaryA==}
@@ -12287,6 +12303,10 @@ packages:
   morphdom@2.7.8:
     resolution: {integrity: sha512-D/fR4xgGUyVRbdMGU6Nejea1RFzYxYtyurG4Fbv2Fi/daKlWKuXGLOdXtl+3eIwL110cI2hz1ZojGICjjFLgTg==}
 
+  mri@1.2.0:
+    resolution: {integrity: sha512-tzzskb3bG8LvYGFF/mDTpq3jpI6Q9wc3LEmBaghu+DdCssd1FakN7Bc0hVNmEyGq1bq3RgfkCb3cmQLpNPOroA==}
+    engines: {node: '>=4'}
+
   ms@2.0.0:
     resolution: {integrity: sha512-Tpp60P6IUJDTuOq/5Z8cdskzJujfwqfOTkrwIwj7IRISpnkJnT6SyJ4PCPnGMoFjC9ddhal5KVIYtAt97ix05A==}
 
@@ -12790,6 +12810,9 @@ packages:
   package-manager-detector@1.6.0:
     resolution: {integrity: sha512-61A5ThoTiDG/C8s8UMZwSorAGwMJ0ERVGj2OjoW5pAalsNOg15+iQiPzrLJ4jhZ1HJzmC2PIHT2oEiH3R5fzNA==}
 
+  package-manager-detector@1.8.0:
+    resolution: {integrity: sha512-yQA4H19AmPEoMUeavPMDIe1higySl/gH/yaQrkT/s07Qp+7pp2hYz30N3z2l5BkjVkF9Ow6o0wjJamm2y7Sn0A==}
+
   package-up@5.0.0:
     resolution: {integrity: sha512-MQEgDUvXCa3sGvqHg3pzHO8e9gqTCMPVrWUko3vPQGntwegmFo52mZb2abIVTjFnUcW0BcPz0D93jV5Cas1DWA==}
     engines: {node: '>=18'}
@@ -13216,6 +13239,11 @@ packages:
 
   psl@1.15.0:
     resolution: {integrity: sha512-JZd3gMVBAVQkSs6HdNZo9Sdo0LNcQeMNP3CozBJb3JYC/QUYZTnKxP+f8oWRX4rHP5EurWxqAHTSwUCjlNKa1w==}
+
+  publint@0.3.22:
+    resolution: {integrity: sha512-6Z/scsr5CA7APdwyF35EY88CqgDj1textWuY788DVTJYPCWVv/Wn9G6KmLnrVRnStgYcahqN4wCDLZGSbQJ69w==}
+    engines: {node: '>=18'}
+    hasBin: true
 
   pump@3.0.4:
     resolution: {integrity: sha512-VS7sjc6KR7e1ukRFhQSY5LM2uBWAUPiOPa/A3mkKmiMwSmRFUITt0xuj+/lesgnCv+dPIEYlkzrcyXgquIHMcA==}
@@ -13672,6 +13700,10 @@ packages:
 
   rxjs@7.8.2:
     resolution: {integrity: sha512-dhKf903U/PQZY6boNNtAGdWbG85WAbjT/1xYoZIC7FAY0yWapOBQVsVrDl58W86//e1VpMNBtRV4MaXfdMySFA==}
+
+  sade@1.8.1:
+    resolution: {integrity: sha512-xal3CZX1Xlo/k4ApwCFrHVACi9fBqJ7V+mwhBsuf/1IOKbBy098Fex+Wa/5QMubw09pSZ/u8EY8PWgevJsXp1A==}
+    engines: {node: '>=6'}
 
   safe-array-concat@1.1.4:
     resolution: {integrity: sha512-wtZlHyOje6OZTGqAoaDKxFkgRtkF9CnHAVnCHKfuj200wAgL+bSJhdsCD2l0Qx/2ekEXjPWcyKkfGb5CPboslg==}
@@ -18861,6 +18893,10 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@publint/pack@0.1.6':
+    dependencies:
+      tinyexec: 1.2.4
+
   '@puppeteer/browsers@3.0.5':
     dependencies:
       modern-tar: 0.7.6
@@ -20603,7 +20639,7 @@ snapshots:
     transitivePeerDependencies:
       - debug
 
-  axios@1.18.0(debug@4.3.4):
+  axios@1.18.0:
     dependencies:
       follow-redirects: 1.16.0(debug@4.3.4)
       form-data: 4.0.6
@@ -22875,7 +22911,7 @@ snapshots:
       heimdalljs-fs-monitor: 1.1.2
       heimdalljs-graph: 1.0.0
       heimdalljs-logger: 0.1.10
-      http-proxy: 1.18.1(debug@4.3.4)
+      http-proxy: 1.18.1
       inflection: 2.0.1
       inquirer: 9.3.8(@types/node@24.13.2)
       is-git-url: 1.0.0
@@ -23017,7 +23053,7 @@ snapshots:
       heimdalljs-fs-monitor: 1.1.2
       heimdalljs-graph: 1.0.0
       heimdalljs-logger: 0.1.10
-      http-proxy: 1.18.1(debug@4.3.4)
+      http-proxy: 1.18.1
       inflection: 3.0.2
       inquirer: 13.4.3(@types/node@25.9.3)
       is-git-url: 1.0.0
@@ -25378,7 +25414,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  http-proxy@1.18.1(debug@4.3.4):
+  http-proxy@1.18.1:
     dependencies:
       eventemitter3: 4.0.7
       follow-redirects: 1.16.0(debug@4.3.4)
@@ -25386,14 +25422,14 @@ snapshots:
     transitivePeerDependencies:
       - debug
 
-  http-server@14.1.1(debug@4.3.4):
+  http-server@14.1.1:
     dependencies:
       basic-auth: 2.0.1
       chalk: 4.1.2
       corser: 2.0.1
       he: 1.2.0
       html-encoding-sniffer: 3.0.0
-      http-proxy: 1.18.1(debug@4.3.4)
+      http-proxy: 1.18.1
       mime: 1.6.0
       minimist: 1.2.8
       opener: 1.5.2
@@ -26149,7 +26185,7 @@ snapshots:
 
   koa-proxies@0.12.4(koa@2.16.4):
     dependencies:
-      http-proxy: 1.18.1(debug@4.3.4)
+      http-proxy: 1.18.1
       koa: 2.16.4
       path-match: 1.2.4
       uuid: 8.3.2
@@ -26802,6 +26838,8 @@ snapshots:
 
   morphdom@2.7.8: {}
 
+  mri@1.2.0: {}
+
   ms@2.0.0: {}
 
   ms@2.1.2: {}
@@ -27355,6 +27393,8 @@ snapshots:
 
   package-manager-detector@1.6.0: {}
 
+  package-manager-detector@1.8.0: {}
+
   package-up@5.0.0:
     dependencies:
       find-up-simple: 1.0.1
@@ -27735,6 +27775,13 @@ snapshots:
   psl@1.15.0:
     dependencies:
       punycode: 2.3.1
+
+  publint@0.3.22:
+    dependencies:
+      '@publint/pack': 0.1.6
+      package-manager-detector: 1.8.0
+      picocolors: 1.1.1
+      sade: 1.8.1
 
   pump@3.0.4:
     dependencies:
@@ -28306,6 +28353,10 @@ snapshots:
   rxjs@7.8.2:
     dependencies:
       tslib: 2.8.1
+
+  sade@1.8.1:
+    dependencies:
+      mri: 1.2.0
 
   safe-array-concat@1.1.4:
     dependencies:
@@ -29211,7 +29262,7 @@ snapshots:
       execa: 9.6.1
       express: 5.2.1
       glob: 13.0.6
-      http-proxy: 1.18.1(debug@4.3.4)
+      http-proxy: 1.18.1
       js-yaml: 4.2.0
       lodash: 4.18.1
       minimatch: 10.2.5
@@ -30011,9 +30062,9 @@ snapshots:
     transitivePeerDependencies:
       - debug
 
-  wait-on@9.0.10(debug@4.3.4):
+  wait-on@9.0.10:
     dependencies:
-      axios: 1.18.0(debug@4.3.4)
+      axios: 1.18.0
       joi: 18.2.1
       lodash: 4.18.1
       minimist: 1.2.8
