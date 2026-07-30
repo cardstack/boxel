@@ -36,5 +36,5 @@
     "target": "es2020",
     "traceResolution": false
   },
-  "include": ["app/**/*", "tests/**/*", "types/**/*"]
+  "include": ["app/**/*", "tests/**/*", "type-tests/**/*", "types/**/*"]
 }
