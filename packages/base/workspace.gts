@@ -38,6 +38,7 @@ import {
   codeRef,
   specRef,
   baseCardRef,
+  baseRealm,
   baseRealmRRI,
   isCardInstance,
   SupportedMimeType,
@@ -75,12 +76,11 @@ import { MarkdownDef } from './markdown-file-def'; // realm README
 import type { RealmEventContent } from './matrix-event';
 import { Spec } from './spec';
 
-// This file is always loaded through the Boxel loader, which supplies
-// `import.meta`. When type-checking, tsc sees the file as CommonJS output and
-// rejects the meta-property, so suppress it — the same pattern used elsewhere
-// in packages/base.
-// @ts-ignore
-const here: string = (import.meta as any).url;
+// This module's canonical URL, the base for sibling code refs below.
+// `import.meta.url` can't provide it in every evaluation environment (a
+// bundler reports the compiled chunk's URL, not the realm module's), so
+// state it directly.
+const here: string = new URL('./workspace', baseRealm.url).href;
 
 const [, StripView, GridView] = VIEW_OPTIONS;
 

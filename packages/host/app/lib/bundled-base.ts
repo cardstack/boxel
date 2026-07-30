@@ -11,8 +11,9 @@
 //   and friends hold persists across resets.
 // - The running base realm's *source* is no longer what executes in the
 //   host: editing base code in a realm (or reindexing it) has no effect
-//   on the host runtime until the host is rebuilt. Non-host consumers of
-//   the base realm (indexing, prerender) are unaffected.
+//   until the host is rebuilt. This includes indexing — the prerender
+//   renders with the host dist, so index output reflects the bundled base,
+//   not the realm-served source.
 //
 // The eager glob in bundled-base-modules.js compiles every base module
 // into the host's initial bundle through the same vite/embroider pipeline

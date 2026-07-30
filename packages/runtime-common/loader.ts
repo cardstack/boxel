@@ -421,6 +421,24 @@ export class Loader {
     return undefined;
   }
 
+  // Realm modules that a Loader evaluates discover their loader via
+  // `import.meta.loader`, which the Loader injects at eval time. Modules
+  // compiled into the host bundle instead (and registered as loader shims —
+  // see the host's bundled-base registration) are evaluated by the
+  // platform's module system, where `import.meta.loader` does not exist.
+  // The host publishes its active loader here so bundled modules can fall
+  // back to it; module code reads this only when `import.meta.loader` is
+  // absent.
+  static #forBundledModules: Loader | undefined;
+
+  static setForBundledModules(loader: Loader) {
+    Loader.#forBundledModules = loader;
+  }
+
+  static forBundledModules(): Loader | undefined {
+    return Loader.#forBundledModules;
+  }
+
   async import<T extends object>(
     moduleIdentifier: string,
     dependencyTrackingContext?: RuntimeDependencyTrackingContext,

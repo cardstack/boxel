@@ -77,7 +77,9 @@ export default class LoaderService extends Service {
     log.debug(`resetting loader for session boundary (${reason ?? ''})`);
     this.clearSessionCaches();
     let previous = this.loader;
-    this.loader = previous ? Loader.cloneLoader(previous) : this.makeInstance();
+    this.loader = previous
+      ? this.trackCurrent(Loader.cloneLoader(previous))
+      : this.makeInstance();
     previous?.dispose();
   }
 
@@ -146,7 +148,7 @@ export default class LoaderService extends Service {
       let previous = this.loader;
       this.recordLoaderReplacement(previous, options?.codeChange);
       if (previous) {
-        this.loader = Loader.cloneLoader(previous);
+        this.loader = this.trackCurrent(Loader.cloneLoader(previous));
         previous.dispose();
       } else {
         this.loader = this.makeInstance();
@@ -201,6 +203,15 @@ export default class LoaderService extends Service {
     // this loader (and every clone descended from it) serves them without
     // fetching from the base realm.
     shimBundledBase(loader);
+    return this.trackCurrent(loader);
+  }
+
+  // Bundled base modules can't discover their loader via
+  // `import.meta.loader` (the platform evaluated them, not a Loader), so
+  // every loader that becomes this service's active one is also published
+  // as the loader bundled modules fall back to.
+  private trackCurrent(loader: Loader): Loader {
+    Loader.setForBundledModules(loader);
     return loader;
   }
 
