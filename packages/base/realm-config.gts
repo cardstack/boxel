@@ -10,25 +10,34 @@ import {
   realmURL,
 } from './card-api';
 import BooleanField from './boolean';
+import NumberField from './number';
 import StringField from './string';
 import CardInfoTemplates from './default-templates/card-info';
 import {
   cardDefComputedFields,
+  DEFAULT_REDIRECT_STATUS,
   findDuplicateRoutingPaths,
   getField,
   getFieldIcon,
+  REDIRECT_STATUS_CODES,
+  validateRedirectTarget,
   validateRoutingPath,
 } from '@cardstack/runtime-common';
 import {
+  BoxelInput,
   BoxelInputGroup,
+  BoxelSelect,
   FieldContainer,
   Header,
+  RadioInput,
 } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import FileSettingsIcon from '@cardstack/boxel-icons/file-settings';
 import LinkIcon from '@cardstack/boxel-icons/link';
+import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
+import { tracked } from '@glimmer/tracking';
 import { startCase } from 'lodash-es';
 import type { FieldsTypeFor } from './card-api';
 
@@ -36,7 +45,12 @@ class RoutingRuleAtom extends Component<typeof RoutingRuleField> {
   <template>
     <span class='routing-rule-atom'>
       <span class='path'>{{if @model.path @model.path '(no path)'}}</span>
-      {{#if @model.instance}}
+      {{#if @model.redirectTo}}
+        <span class='arrow' aria-hidden='true'>→</span>
+        <span class='redirect-target' data-test-redirect-target>
+          {{@model.redirectTo}}
+        </span>
+      {{else if @model.instance}}
         <span class='arrow' aria-hidden='true'>→</span>
         <@fields.instance @format='atom' />
       {{/if}}
@@ -47,7 +61,8 @@ class RoutingRuleAtom extends Component<typeof RoutingRuleField> {
         align-items: center;
         gap: var(--boxel-sp-xxs);
       }
-      .path {
+      .path,
+      .redirect-target {
         font-family: var(--boxel-font-family-mono, monospace);
       }
       .arrow {
@@ -57,7 +72,25 @@ class RoutingRuleAtom extends Component<typeof RoutingRuleField> {
   </template>
 }
 
+let routingRuleKindGroupNumber = 0;
+
 class RoutingRuleEdit extends Component<typeof RoutingRuleField> {
+  // Which target editor is showing. Backed by the data: a rule whose
+  // `redirectTo` is non-null (empty string included — `setKind` seeds
+  // '' so the choice survives a reload) is a redirect rule. The tracked
+  // override exists only so the toggle responds instantly while the
+  // model write settles.
+  @tracked private kindOverride: 'card' | 'redirect' | null = null;
+
+  private kindItems: { id: 'card' | 'redirect'; text: string }[] = [
+    { id: 'card', text: 'Render a card' },
+    { id: 'redirect', text: 'Redirect' },
+  ];
+
+  private kindRadioGroup = `__routing_rule_kind${routingRuleKindGroupNumber++}__`;
+
+  private statusCodeOptions = [...REDIRECT_STATUS_CODES];
+
   constructor(owner: Owner, args: any) {
     super(owner, args);
     // The path input renders an empty input alongside a fixed `/`
@@ -104,6 +137,69 @@ class RoutingRuleEdit extends Component<typeof RoutingRuleField> {
     this.args.model.path = `/${trimmed}`;
   }
 
+  get kind(): 'card' | 'redirect' {
+    return (
+      this.kindOverride ??
+      (this.args.model.redirectTo != null ? 'redirect' : 'card')
+    );
+  }
+
+  get isRedirect(): boolean {
+    return this.kind === 'redirect';
+  }
+
+  // Switching kind clears the other kind's target so a rule is never
+  // ambiguous (the read path prefers `redirectTo` when both are set,
+  // but only a hand-edited realm.json can get into that state).
+  @action
+  setKind(kind: 'card' | 'redirect') {
+    this.kindOverride = kind;
+    if (kind === 'redirect') {
+      this.args.model.instance = undefined;
+      if (this.args.model.redirectTo == null) {
+        this.args.model.redirectTo = '';
+      }
+    } else {
+      this.args.model.redirectTo = undefined;
+      this.args.model.statusCode = undefined;
+    }
+  }
+
+  get redirectToValue(): string {
+    return this.args.model.redirectTo ?? '';
+  }
+
+  @action
+  setRedirectTo(value: string) {
+    this.args.model.redirectTo = value ?? '';
+  }
+
+  get redirectWarning(): string | undefined {
+    return validateRedirectTarget(this.args.model.redirectTo);
+  }
+
+  get selectedStatusCode(): number {
+    return this.args.model.statusCode ?? DEFAULT_REDIRECT_STATUS;
+  }
+
+  @action
+  setStatusCode(code: number) {
+    this.args.model.statusCode = code;
+  }
+
+  @action
+  statusCodeLabel(code: number): string {
+    switch (code) {
+      case 301:
+        return '301 · permanent';
+      case 308:
+        return '308 · permanent, method-preserving';
+      case 302:
+      default:
+        return '302 · temporary';
+    }
+  }
+
   // The chooser is locked to the consuming realm; pass it through
   // explicitly rather than letting LinksToEditor read it from
   // `RealmURLContext`. The context is only provided by the operator-mode
@@ -119,6 +215,21 @@ class RoutingRuleEdit extends Component<typeof RoutingRuleField> {
 
   <template>
     <div class='routing-rule-edit' data-test-routing-rule-edit>
+      <div class='kind-toggle' data-test-routing-rule-kind>
+        <RadioInput
+          @items={{this.kindItems}}
+          @groupDescription='Routing rule target'
+          name='{{this.kindRadioGroup}}'
+          @checkedId={{this.kind}}
+          @spacing='compact'
+          @hideBorder={{true}}
+          as |item|
+        >
+          <item.component @onChange={{fn this.setKind item.data.id}}>
+            {{item.data.text}}
+          </item.component>
+        </RadioInput>
+      </div>
       <div class='row'>
         <div class='path-cell'>
           <BoxelInputGroup
@@ -132,16 +243,43 @@ class RoutingRuleEdit extends Component<typeof RoutingRuleField> {
           </BoxelInputGroup>
         </div>
         <span class='arrow' aria-hidden='true'>→</span>
-        <div class='instance-cell'>
-          <@fields.instance
-            @lockConsumingRealm={{true}}
-            @consumingRealm={{this.consumingRealm}}
-          />
-        </div>
+        {{#if this.isRedirect}}
+          <div class='redirect-cell'>
+            <BoxelInput
+              @value={{this.redirectToValue}}
+              @onInput={{this.setRedirectTo}}
+              @placeholder='/path or https://example.com/page'
+              data-test-redirect-input
+            />
+            <div class='status-code-cell'>
+              <BoxelSelect
+                @options={{this.statusCodeOptions}}
+                @selected={{this.selectedStatusCode}}
+                @onChange={{this.setStatusCode}}
+                data-test-status-code-select
+                as |code|
+              >
+                {{this.statusCodeLabel code}}
+              </BoxelSelect>
+            </div>
+          </div>
+        {{else}}
+          <div class='instance-cell'>
+            <@fields.instance
+              @lockConsumingRealm={{true}}
+              @consumingRealm={{this.consumingRealm}}
+            />
+          </div>
+        {{/if}}
       </div>
       {{#if this.pathWarning}}
         <div class='path-warning' role='status' data-test-path-warning>
           {{this.pathWarning}}
+        </div>
+      {{/if}}
+      {{#if this.redirectWarning}}
+        <div class='path-warning' role='status' data-test-redirect-warning>
+          {{this.redirectWarning}}
         </div>
       {{/if}}
     </div>
@@ -182,6 +320,18 @@ class RoutingRuleEdit extends Component<typeof RoutingRuleField> {
       .instance-cell {
         min-width: 0;
       }
+      .redirect-cell {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: var(--boxel-sp-xs);
+        min-width: 0;
+      }
+      .redirect-cell :deep(input) {
+        font-family: var(--boxel-font-family-mono, monospace);
+      }
+      .status-code-cell {
+        min-width: 9rem;
+      }
       .path-warning {
         font-size: var(--boxel-font-size-xs);
         color: #92400e;
@@ -202,6 +352,16 @@ export class RoutingRuleField extends FieldDef {
   @field instance = linksTo(CardDef, {
     description:
       'Card instance to render when the realm is navigated at this path',
+  });
+
+  @field redirectTo = contains(StringField, {
+    description:
+      'Redirect target — a path in this realm (e.g. "/terms") or an external http(s) URL. When set, the path redirects instead of rendering a card',
+  });
+
+  @field statusCode = contains(NumberField, {
+    description:
+      'HTTP status for a redirect rule: 301, 302 (the default), or 308',
   });
 
   static atom = RoutingRuleAtom;

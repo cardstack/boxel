@@ -85,14 +85,21 @@ export default class Card extends Route {
     if (this.hostModeService.isActive) {
       let normalizedPath = params.path ?? '';
       // CS-10055: a routing rule in the realm config can map a bare path
-      // to a target card. When the path matches a rule, use the rule's
-      // target id directly; otherwise resolve the path as a card URL
-      // under the host-mode origin.
-      let routedId = this.hostModeService.resolveRoutedPath(
+      // to a target card. When the path matches a serve rule, use the
+      // rule's target id directly; otherwise resolve the path as a card
+      // URL under the host-mode origin. A redirect rule is never
+      // rendered — navigate to its target instead, mirroring the 3xx
+      // the server answers for a full-page request to this path.
+      let routed = this.hostModeService.resolveRoutedPath(
         normalizedPath || '/',
       );
+      if (routed && 'redirectTo' in routed) {
+        this.hostModeService.redirectTo(routed.redirectTo);
+        return;
+      }
       let cardUrl =
-        routedId ?? `${this.hostModeService.hostModeOrigin}/${normalizedPath}`;
+        routed?.id ??
+        `${this.hostModeService.hostModeOrigin}/${normalizedPath}`;
 
       return this.store.get(cardUrl);
     }

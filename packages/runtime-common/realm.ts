@@ -48,7 +48,13 @@ import {
   HtmlResourceType,
 } from './resource-types.ts';
 import { normalizeRelationships } from './relationship-utils.ts';
-import { normalizeRoutingPath } from './host-routing-validation.ts';
+import {
+  DEFAULT_REDIRECT_STATUS,
+  normalizeRoutingPath,
+  parseRedirectStatusCode,
+  validateRedirectTarget,
+  type HostRoutingRule,
+} from './host-routing-validation.ts';
 import type { LocalPath } from './paths.ts';
 import { RealmPaths, ensureTrailingSlash, join } from './paths.ts';
 import type ms from 'ms';
@@ -886,7 +892,7 @@ export class Realm {
   // every index swap (full/incremental/publish) both locally and on peer
   // replicas via the realm_index_updated broadcast. `null` means "not yet
   // computed"; an empty array is a valid cached result (no routing rules).
-  #cachedHostRoutingMap: { path: string; id: string }[] | null = null;
+  #cachedHostRoutingMap: HostRoutingRule[] | null = null;
 
   // This loader is not meant to be used operationally, rather it serves as a
   // template that we clone for each indexing operation
@@ -6833,8 +6839,10 @@ export class Realm {
   // The `instance` field is `linksTo(CardDef)`, so the indexed
   // searchDoc flattens each rule's link as `{ id, ...flattened
   // linked-card attrs }`. We only need the absolute `id` here.
-  // Returns absolute URLs.
-  async getHostRoutingMap(): Promise<{ path: string; id: string }[]> {
+  // Returns absolute URLs. A rule may instead declare a redirect
+  // (`redirectTo` + optional `statusCode`); those surface as redirect
+  // entries in the map.
+  async getHostRoutingMap(): Promise<HostRoutingRule[]> {
     if (this.#cachedHostRoutingMap) {
       return this.#cachedHostRoutingMap;
     }
@@ -6851,7 +6859,7 @@ export class Realm {
       if (!Array.isArray(rules)) {
         return (this.#cachedHostRoutingMap = []);
       }
-      let map = rules.flatMap((rule) => {
+      let map = rules.flatMap((rule): HostRoutingRule[] => {
         if (!rule || typeof rule !== 'object') return [];
         let path = (rule as Record<string, unknown>).path;
         let instance = (rule as Record<string, unknown>).instance;
@@ -6865,6 +6873,29 @@ export class Realm {
         // the editor's duplicate detection so a '/pricing' + '/pricing/'
         // collision is flagged there. The realm-root rule '/' is preserved.
         let normalizedPath = normalizeRoutingPath(path);
+        let redirectTo = (rule as Record<string, unknown>).redirectTo;
+        if (typeof redirectTo === 'string' && redirectTo.trim()) {
+          // A redirect rule. When a rule carries both `redirectTo` and
+          // `instance` (only possible by hand-editing realm.json — the
+          // editor clears one when the other is chosen), the redirect
+          // wins: it is the more explicit declaration, and silently
+          // dropping the rule would dead-end the path.
+          let target = redirectTo.trim();
+          let warning = validateRedirectTarget(target);
+          if (warning) {
+            this.#log.warn(
+              `dropping host routing rule for path "${normalizedPath}" — invalid redirect target ${JSON.stringify(
+                target,
+              )}: ${warning}`,
+            );
+            return [];
+          }
+          let statusCode =
+            parseRedirectStatusCode(
+              (rule as Record<string, unknown>).statusCode,
+            ) ?? DEFAULT_REDIRECT_STATUS;
+          return [{ path: normalizedPath, redirectTo: target, statusCode }];
+        }
         if (!instance || typeof instance !== 'object') return [];
         let id = (instance as Record<string, unknown>).id;
         if (typeof id !== 'string') return [];

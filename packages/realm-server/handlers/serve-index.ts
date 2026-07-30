@@ -1,9 +1,14 @@
 import type Koa from 'koa';
 import { JSDOM } from 'jsdom';
 import { merge } from 'lodash-es';
-import type { DBAdapter, Realm } from '@cardstack/runtime-common';
+import type {
+  DBAdapter,
+  HostRoutingRule,
+  Realm,
+} from '@cardstack/runtime-common';
 import {
   hasExtension,
+  isRedirectRoutingRule,
   logger,
   param,
   query,
@@ -387,13 +392,41 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     // a private routed path exists to an unauthenticated caller. The map is
     // also written into the @cardstack/host/config/environment meta tag
     // further down so the SPA can resolve the path post-hydration.
-    let routingMap: { path: string; id: string }[] = routedRealm
+    let routingMap: HostRoutingRule[] = routedRealm
       ? await routedRealm.getHostRoutingMap()
       : [];
     if (routingMap.length > 0) {
       // The match and its canonical form live once, in matchHostRoutingRule.
       let matched = await matchHostRoutingRule(requestURL, routingDeps);
       if (matched) {
+        if (isRedirectRoutingRule(matched.rule)) {
+          // A declared redirect rule. Redirect straight to the
+          // declared target from either trailing-slash form of the
+          // matched path — canonicalizing first would cost the client a
+          // second hop for no benefit. A realm-relative target resolves
+          // against the realm's mount pathname, mirroring how the
+          // rule's own `path` is mounted; extra leading slashes are
+          // collapsed so a target can never be read as protocol-
+          // relative. The request's query string carries over unless
+          // the target declares its own.
+          let { redirectTo, statusCode } = matched.rule;
+          let target: URL;
+          if (/^https?:/i.test(redirectTo)) {
+            target = new URL(redirectTo);
+          } else {
+            let realmPathname = new URL(matched.realm.url).pathname;
+            target = new URL(
+              realmPathname + redirectTo.replace(/^\/+/, ''),
+              requestURL,
+            );
+          }
+          if (requestURL.search && !target.search) {
+            target.search = requestURL.search;
+          }
+          ctxt.redirect(target.href);
+          ctxt.status = statusCode;
+          return;
+        }
         // Canonicalize the URL. A rule declared as '/pricing' matches both
         // '/pricing' and '/pricing/' (RealmPaths.local strips trailing
         // slashes); the canonical form is the realm mount pathname joined
@@ -517,10 +550,19 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       // the SPA's path lookup to be a direct equality match, prefix each
       // rule path with the realm's pathname before serializing.
       let realmPathname = new URL(routedRealm.url).pathname;
-      let hostScopedMap = routingMap.map((rule) => ({
-        path: realmPathname + rule.path.replace(/^\//, ''),
-        id: rule.id,
-      }));
+      let hostScopedMap = routingMap.map((rule) => {
+        let path = realmPathname + rule.path.replace(/^\//, '');
+        if (isRedirectRoutingRule(rule)) {
+          // A redirect rule's realm-relative target is prefixed the same
+          // way as its path, so the SPA can hand the value straight to a
+          // location change without knowing the realm's mount point.
+          let redirectTo = /^https?:/i.test(rule.redirectTo)
+            ? rule.redirectTo
+            : realmPathname + rule.redirectTo.replace(/^\/+/, '');
+          return { path, redirectTo, statusCode: rule.statusCode };
+        }
+        return { path, id: rule.id };
+      });
       // Per-request merge into the already-rewritten config meta tag.
       // The retrieveIndexHTML rewrite is cached process-wide because the
       // fields it touches are global; the routing map is per-realm so it

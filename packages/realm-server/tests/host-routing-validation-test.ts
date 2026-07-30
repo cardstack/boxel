@@ -70,4 +70,32 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(hostRoutingValidationTests, assert, {});
     });
   });
+
+  module('validateRedirectTarget', function () {
+    test('validateRedirectTarget: no warning for empty or unset targets', async function (assert) {
+      await runSharedTest(hostRoutingValidationTests, assert, {});
+    });
+
+    test('validateRedirectTarget: accepts realm-relative paths, including query strings', async function (assert) {
+      await runSharedTest(hostRoutingValidationTests, assert, {});
+    });
+
+    test('validateRedirectTarget: accepts external http(s) URLs', async function (assert) {
+      await runSharedTest(hostRoutingValidationTests, assert, {});
+    });
+
+    test('validateRedirectTarget: warns on non-http(s) schemes', async function (assert) {
+      await runSharedTest(hostRoutingValidationTests, assert, {});
+    });
+
+    test('validateRedirectTarget: warns on slash-less and protocol-relative targets', async function (assert) {
+      await runSharedTest(hostRoutingValidationTests, assert, {});
+    });
+  });
+
+  module('parseRedirectStatusCode', function () {
+    test('parseRedirectStatusCode: coerces supported codes, rejects everything else', async function (assert) {
+      await runSharedTest(hostRoutingValidationTests, assert, {});
+    });
+  });
 });

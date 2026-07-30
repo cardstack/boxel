@@ -1743,7 +1743,19 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
                   type: 'card',
                   attributes: {
                     cardInfo: { name: 'Routing Source Realm' },
-                    hostRoutingRules: [{ path: '/' }, { path: '/pricing' }],
+                    hostRoutingRules: [
+                      { path: '/' },
+                      { path: '/pricing' },
+                      // Redirect rules: a realm-relative target using
+                      // the default status code, and an external
+                      // target with an explicit permanent code.
+                      { path: '/tos', redirectTo: '/terms' },
+                      {
+                        path: '/external',
+                        redirectTo: 'https://example.com/landing',
+                        statusCode: 301,
+                      },
+                    ],
                   },
                   relationships: {
                     'hostRoutingRules.0.instance': {
@@ -1868,6 +1880,92 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           response.status,
           308,
           '/pricing/ is redirected for */* too',
+        );
+      });
+
+      test('a redirect rule with a realm-relative target answers the default 302, resolved against the realm mount', async function (assert) {
+        let response = await request
+          .get(`${publishedRealmPath}tos`)
+          .set('Host', publishedRealmHost)
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(
+          response.status,
+          302,
+          'redirect rule answers its (default) status code',
+        );
+        assert.strictEqual(
+          response.headers['location'],
+          `http://${publishedRealmHost}${publishedRealmPath}terms`,
+          'relative target resolves against the realm mount pathname',
+        );
+      });
+
+      test('a redirect rule fires from the trailing-slash form in one hop', async function (assert) {
+        let response = await request
+          .get(`${publishedRealmPath}tos/`)
+          .set('Host', publishedRealmHost)
+          .set('Accept', 'text/html');
+
+        // The declared redirect wins over trailing-slash canonicalization —
+        // a 308 to /tos first would cost the client a second round-trip.
+        assert.strictEqual(
+          response.status,
+          302,
+          'trailing-slash form redirects straight to the target, not via a canonicalizing 308',
+        );
+        assert.strictEqual(
+          response.headers['location'],
+          `http://${publishedRealmHost}${publishedRealmPath}terms`,
+          'same target as the bare form',
+        );
+      });
+
+      test('a redirect rule carries the request query string over to a target without its own', async function (assert) {
+        let response = await request
+          .get(`${publishedRealmPath}tos?utm_source=newsletter`)
+          .set('Host', publishedRealmHost)
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 302);
+        assert.strictEqual(
+          response.headers['location'],
+          `http://${publishedRealmHost}${publishedRealmPath}terms?utm_source=newsletter`,
+          'query string is preserved on the redirect target',
+        );
+      });
+
+      test('a redirect rule may target an external URL with an explicit status code', async function (assert) {
+        let response = await request
+          .get(`${publishedRealmPath}external`)
+          .set('Host', publishedRealmHost)
+          .set('Accept', '*/*');
+
+        assert.strictEqual(
+          response.status,
+          301,
+          'the authored status code is used',
+        );
+        assert.strictEqual(
+          response.headers['location'],
+          'https://example.com/landing',
+          'external target is emitted verbatim',
+        );
+      });
+
+      test('redirect rules are injected into the host config routing map', async function (assert) {
+        let response = await request
+          .get(`${publishedRealmPath}pricing`)
+          .set('Host', publishedRealmHost)
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200);
+        // The routing map rides the URL-encoded config meta tag; letters
+        // are not percent-encoded, so the discriminant field name is
+        // directly visible in the served HTML.
+        assert.true(
+          response.text.includes('redirectTo'),
+          'the injected hostRoutingMap carries the redirect rules',
         );
       });
 

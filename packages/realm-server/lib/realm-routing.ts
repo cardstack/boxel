@@ -1,7 +1,11 @@
 import { join } from 'path';
 import fsExtra from 'fs-extra';
 const { existsSync } = fsExtra;
-import type { DBAdapter, Realm } from '@cardstack/runtime-common';
+import type {
+  DBAdapter,
+  HostRoutingRule,
+  Realm,
+} from '@cardstack/runtime-common';
 import {
   executableExtensions,
   fetchRealmPermissions,
@@ -99,10 +103,12 @@ export async function findOrMountRealm(
 // under: the realm mount pathname joined with the rule's declared path
 // (so the realm-root rule '/' keeps its trailing slash, while a sub-path
 // rule like '/pricing' has none). Callers redirect to it when the request
-// arrived under a different form.
+// arrived under a different form. The rule is the serve/redirect union
+// from the realm's routing map — a redirect rule is never served, so its
+// canonicalPathname is only meaningful for serve rules.
 export type MatchedHostRoutingRule = {
   realm: Realm;
-  rule: { path: string; id: string };
+  rule: HostRoutingRule;
   canonicalPathname: string;
 };
 

@@ -35,6 +35,14 @@ interface PublishedRealmMetadata {
   currentCardUrlString: string | undefined;
 }
 
+// The host-scoped form of a routing rule as the realm-server injects it
+// into the config meta tag: every path (and any realm-relative redirect
+// target) is already prefixed with the realm's mount pathname, so a
+// redirect target can be handed straight to a location change.
+export type HostScopedRoutingRule =
+  | { path: string; id: string }
+  | { path: string; redirectTo: string; statusCode: number };
+
 export default class HostModeService extends Service {
   @service declare hostModeStateService: HostModeStateService;
   @service declare operatorModeStateService: OperatorModeStateService;
@@ -123,12 +131,15 @@ export default class HostModeService extends Service {
   // hostRoutingRules — so the first-render decision in the index route
   // is synchronous and the field is part of the typed config surface
   // rather than a window global.
-  get hostRoutingMap(): { path: string; id: string }[] {
+  get hostRoutingMap(): HostScopedRoutingRule[] {
     let map = (config as { hostRoutingMap?: unknown }).hostRoutingMap;
-    return Array.isArray(map) ? (map as { path: string; id: string }[]) : [];
+    return Array.isArray(map) ? (map as HostScopedRoutingRule[]) : [];
   }
 
-  // Returns the target card id if `path` matches a routing rule, else null.
+  // Returns the routing rule matching `path`, else null. A serve rule
+  // carries the target card `id` to render; a redirect rule carries the
+  // `redirectTo` target the SPA should navigate to instead of rendering
+  // anything (see `redirectTo` below).
   // `path` is the URL pathname on the host (what Ember's `/*path` catch-all
   // route delivers — e.g. `<user>/<realm>/whitepaper` for a request to
   // `https://host/<user>/<realm>/whitepaper`); a leading slash is added if
@@ -143,13 +154,24 @@ export default class HostModeService extends Service {
   // trailing slashes, preserves the root `/`) before comparing, so
   // `/realm` ↔ `/realm/` resolve and the client agrees with how the server
   // map builder and the editor normalize.
-  resolveRoutedPath(path: string): string | null {
+  resolveRoutedPath(path: string): HostScopedRoutingRule | null {
     let normalized = path.startsWith('/') ? path : `/${path}`;
     let canonical = normalizeRoutingPath(normalized);
     let rule = this.hostRoutingMap.find(
       (r) => normalizeRoutingPath(r.path) === canonical,
     );
-    return rule ? rule.id : null;
+    return rule ?? null;
+  }
+
+  // SPA-side counterpart of the server's HTTP redirect for a redirect
+  // routing rule: a full-page navigation to matched paths gets the 3xx
+  // from serve-index, but an in-app transition never leaves the SPA, so
+  // the index route calls this instead. `replace` mirrors an HTTP
+  // redirect, which leaves no history entry for the redirecting URL.
+  // Goes through ember-window-mock's `window` so tests can intercept the
+  // navigation.
+  redirectTo(target: string) {
+    window.location.replace(target);
   }
 
   get currentCardId() {

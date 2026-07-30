@@ -1,6 +1,8 @@
 import {
   findDuplicateRoutingPaths,
   normalizeRoutingPath,
+  parseRedirectStatusCode,
+  validateRedirectTarget,
   validateRoutingPath,
 } from '../host-routing-validation.ts';
 import type { SharedTests } from '../helpers/index.ts';
@@ -8,6 +10,10 @@ import type { SharedTests } from '../helpers/index.ts';
 const INVALID_CHARS_MSG =
   'Path may only contain letters, numbers, /, -, _, ., ~, or %XX-encoded characters';
 const MISSING_SLASH_MSG = 'Path must start with /';
+const INVALID_TARGET_MSG =
+  'Redirect target must be a path starting with / or a full http(s) URL';
+const PROTOCOL_RELATIVE_MSG =
+  'Redirect target must start with a single /; use a full http(s) URL for an external target';
 
 const tests: SharedTests<unknown> = Object.freeze({
   'validateRoutingPath: no warning for empty or whitespace paths': async (
@@ -190,6 +196,82 @@ const tests: SharedTests<unknown> = Object.freeze({
       assert.strictEqual(normalizeRoutingPath('/a/b//'), '/a/b');
       assert.strictEqual(normalizeRoutingPath('/'), '/');
       assert.strictEqual(normalizeRoutingPath('//'), '/');
+    },
+
+  'validateRedirectTarget: no warning for empty or unset targets': async (
+    assert,
+  ) => {
+    assert.strictEqual(validateRedirectTarget(null), undefined);
+    assert.strictEqual(validateRedirectTarget(undefined), undefined);
+    assert.strictEqual(validateRedirectTarget(''), undefined);
+    assert.strictEqual(validateRedirectTarget('   '), undefined);
+  },
+
+  'validateRedirectTarget: accepts realm-relative paths, including query strings':
+    async (assert) => {
+      assert.strictEqual(validateRedirectTarget('/terms'), undefined);
+      assert.strictEqual(validateRedirectTarget('/blog/2024/post'), undefined);
+      assert.strictEqual(validateRedirectTarget('/terms?ref=tos'), undefined);
+      assert.strictEqual(validateRedirectTarget('  /terms  '), undefined);
+      assert.strictEqual(validateRedirectTarget('/'), undefined);
+    },
+
+  'validateRedirectTarget: accepts external http(s) URLs': async (assert) => {
+    assert.strictEqual(
+      validateRedirectTarget('https://example.com/page'),
+      undefined,
+    );
+    assert.strictEqual(validateRedirectTarget('http://example.com'), undefined);
+    assert.strictEqual(
+      validateRedirectTarget('https://example.com/page?x=1#frag'),
+      undefined,
+    );
+  },
+
+  'validateRedirectTarget: warns on non-http(s) schemes': async (assert) => {
+    assert.strictEqual(
+      validateRedirectTarget('javascript:alert(1)'),
+      INVALID_TARGET_MSG,
+    );
+    assert.strictEqual(
+      validateRedirectTarget('data:text/html,hi'),
+      INVALID_TARGET_MSG,
+    );
+    assert.strictEqual(
+      validateRedirectTarget('mailto:someone@example.com'),
+      INVALID_TARGET_MSG,
+    );
+  },
+
+  'validateRedirectTarget: warns on slash-less and protocol-relative targets':
+    async (assert) => {
+      assert.strictEqual(validateRedirectTarget('terms'), INVALID_TARGET_MSG);
+      assert.strictEqual(
+        validateRedirectTarget('example.com/terms'),
+        INVALID_TARGET_MSG,
+      );
+      // '//example.com/x' would otherwise resolve as the realm path
+      // '/example.com/x' (leading slashes collapse), which is unlikely to
+      // be what the author meant — steer them to a full URL.
+      assert.strictEqual(
+        validateRedirectTarget('//example.com/x'),
+        PROTOCOL_RELATIVE_MSG,
+      );
+    },
+
+  'parseRedirectStatusCode: coerces supported codes, rejects everything else':
+    async (assert) => {
+      assert.strictEqual(parseRedirectStatusCode(301), 301);
+      assert.strictEqual(parseRedirectStatusCode(302), 302);
+      assert.strictEqual(parseRedirectStatusCode(308), 308);
+      assert.strictEqual(parseRedirectStatusCode('301'), 301);
+      assert.strictEqual(parseRedirectStatusCode(' 308 '), 308);
+      assert.strictEqual(parseRedirectStatusCode(307), undefined);
+      assert.strictEqual(parseRedirectStatusCode(200), undefined);
+      assert.strictEqual(parseRedirectStatusCode('perm'), undefined);
+      assert.strictEqual(parseRedirectStatusCode(''), undefined);
+      assert.strictEqual(parseRedirectStatusCode(null), undefined);
+      assert.strictEqual(parseRedirectStatusCode(undefined), undefined);
     },
 });
 

@@ -339,6 +339,71 @@ module(
       }
     });
 
+    test('a rule with a redirect target renders the redirect editor', async function (assert) {
+      await renderRealmConfigEdit([
+        { path: '/tos', redirectTo: '/terms', statusCode: 301 },
+      ]);
+
+      assert
+        .dom(
+          '[data-test-routing-rule-kind] [data-test-boxel-radio-option-id="redirect"] input[type="radio"]',
+        )
+        .isChecked('the kind toggle reflects the stored redirect');
+      assert
+        .dom('[data-test-redirect-input]')
+        .hasValue('/terms', 'the stored target is shown');
+      assert
+        .dom('[data-test-status-code-select]')
+        .containsText('301', 'the stored status code is selected');
+      assert
+        .dom('[data-test-add-new="instance"]')
+        .doesNotExist('the card chooser is not shown for a redirect rule');
+    });
+
+    test('switching a rule to a redirect swaps the target editor and validates the target', async function (assert) {
+      await renderRealmConfigEdit([{ path: '/docs' }]);
+
+      assert
+        .dom('[data-test-redirect-input]')
+        .doesNotExist('a card rule shows no redirect editor');
+
+      await click(
+        '[data-test-routing-rule-kind] [data-test-boxel-radio-option-id="redirect"] input[type="radio"]',
+      );
+      assert.dom('[data-test-redirect-input]').exists();
+      assert
+        .dom('[data-test-add-new="instance"]')
+        .doesNotExist('the card chooser is replaced by the redirect editor');
+
+      await fillIn('[data-test-redirect-input]', 'terms');
+      assert
+        .dom('[data-test-redirect-warning]')
+        .containsText(
+          'Redirect target must be a path starting with / or a full http(s) URL',
+          'a slash-less target warns',
+        );
+
+      await fillIn('[data-test-redirect-input]', 'https://example.com/terms');
+      assert
+        .dom('[data-test-redirect-warning]')
+        .doesNotExist('an external http(s) URL is allowed');
+
+      await fillIn('[data-test-redirect-input]', '/terms');
+      assert
+        .dom('[data-test-redirect-warning]')
+        .doesNotExist('a realm-relative path is allowed');
+
+      await click(
+        '[data-test-routing-rule-kind] [data-test-boxel-radio-option-id="card"] input[type="radio"]',
+      );
+      assert
+        .dom('[data-test-redirect-input]')
+        .doesNotExist('switching back to card removes the redirect editor');
+      assert
+        .dom('[data-test-add-new="instance"]')
+        .exists('switching back to card restores the chooser');
+    });
+
     test('typing into the path input always stores a leading slash', async function (assert) {
       await renderRealmConfigEdit([{}]);
 

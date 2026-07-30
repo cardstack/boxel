@@ -15,7 +15,11 @@ import { resolveRealmsForFederatedRequest } from '../lib/realm-routing.ts';
 // a relative reference (the recommended form, portable across realm URL
 // changes), one is cross-realm — dropped by the same-realm guard — and
 // one is authored with a trailing slash, which must be normalized to its
-// slash-free form so it matches request paths.
+// slash-free form so it matches request paths. The redirect rules
+// cover: a realm-relative target with the default status, an external
+// target with an explicit status, an invalid (non-http) target —
+// dropped — and a rule carrying both a redirect and an instance, where
+// the redirect wins.
 function makeRoutingFixture(): Record<
   string,
   string | LooseSingleCardDocument
@@ -53,6 +57,14 @@ function makeRoutingFixture(): Record<
             { path: '/rel' },
             { path: '/foreign' },
             { path: '/trailing/' },
+            { path: '/tos', redirectTo: '/terms' },
+            {
+              path: '/blog',
+              redirectTo: 'https://blog.example.com/',
+              statusCode: 301,
+            },
+            { path: '/bad-redirect', redirectTo: 'javascript:alert(1)' },
+            { path: '/ambiguous', redirectTo: '/elsewhere' },
           ],
         },
         relationships: {
@@ -70,6 +82,11 @@ function makeRoutingFixture(): Record<
           // Authored with a trailing slash: the map must normalize the
           // path to '/trailing' so it matches slash-stripped request paths.
           'hostRoutingRules.2.instance': {
+            links: { self: './white-paper' },
+          },
+          // Carries BOTH a redirect and an instance (only reachable by
+          // hand-editing realm.json): the redirect must win.
+          'hostRoutingRules.6.instance': {
             links: { self: './white-paper' },
           },
         },
@@ -110,8 +127,15 @@ module(basename(import.meta.filename), function () {
         [
           { path: '/rel', id: `${realmURL.href}white-paper` },
           { path: '/trailing', id: `${realmURL.href}white-paper` },
+          { path: '/tos', redirectTo: '/terms', statusCode: 302 },
+          {
+            path: '/blog',
+            redirectTo: 'https://blog.example.com/',
+            statusCode: 301,
+          },
+          { path: '/ambiguous', redirectTo: '/elsewhere', statusCode: 302 },
         ],
-        'relative reference resolved against the realm root; cross-realm rule filtered; trailing-slash rule normalized to /trailing',
+        'relative reference resolved against the realm root; cross-realm rule filtered; trailing-slash rule normalized to /trailing; redirect rules surface with their (default) status; the invalid javascript: target is dropped; a rule with both targets resolves as a redirect',
       );
     });
 
