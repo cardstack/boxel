@@ -323,16 +323,25 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   protected renderContextBlocksPersistence() {
-    // Block ALL persistence while an active prerender render is in progress,
-    // regardless of which store instance. A write during a render deadlocks the
-    // from-scratch index (the render holds the sole worker while the write takes
-    // the realm write lock and awaits a reindex that needs that worker). The
-    // deadlocking writes come from the regular StoreService (isRenderStore=false)
-    // used in the prerender — not the render store — so the old `isRenderStore &&`
-    // term let them through. __boxelRenderContext is set only by card-prerender
-    // around each render (never in the live app), so this blocks exactly the
-    // render window and nothing else.
-    return Boolean((globalThis as any).__boxelRenderContext);
+    // In the dedicated prerender app (marked by the render route), block ALL
+    // persistence on EVERY store: a write from the prerender deadlocks the
+    // from-scratch index (the render holds the sole worker while the write
+    // takes the realm write lock and awaits a reindex that needs that worker),
+    // and the deadlocking writes come from the regular StoreService — not the
+    // render store — so an `isRenderStore` term cannot catch them.
+    //
+    // Everywhere else (notably host tests, which run in-browser index renders
+    // alongside an interactive app whose saves must keep working), only the
+    // render store during an active render is blocked. Gating the interactive
+    // store on __boxelRenderContext alone breaks it: card-prerender sets that
+    // global around every test-realm index render, silently dropping app saves
+    // that coincide with one.
+    if ((globalThis as any).__boxelPrerenderApp) {
+      return true;
+    }
+    return (
+      this.isRenderStore && Boolean((globalThis as any).__boxelRenderContext)
+    );
   }
 
   // used for tests only!
