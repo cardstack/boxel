@@ -1090,6 +1090,7 @@ export {
   isRetryableStatus,
   DEFAULT_TRANSIENT_RETRY_DELAYS_MS,
 } from './loader.ts';
+export type { ModuleEvaluator, ModuleRegistration } from './loader.ts';
 export {
   cardTypeDisplayName,
   cardTypeIcon,

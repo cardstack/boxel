@@ -1,3 +1,4 @@
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import { provide, consume } from 'ember-provide-consume-context';
@@ -18,6 +19,8 @@ import {
 } from '@cardstack/runtime-common';
 
 import HeadFormatPreview from '@cardstack/host/components/head-format-preview';
+import RealmSandboxCard from '@cardstack/host/components/realm-sandbox-card';
+import type RealmSandboxService from '@cardstack/host/services/realm-sandbox';
 
 import type {
   BaseDef,
@@ -38,6 +41,7 @@ interface Signature {
 }
 
 export default class CardRenderer extends Component<Signature> {
+  @service declare private realmSandbox: RealmSandboxService;
   @consume(GetCardContextName) declare private getCard: getCard;
   @consume(GetCardsContextName) declare private getCards: getCards;
   @consume(GetCardCollectionContextName)
@@ -61,7 +65,9 @@ export default class CardRenderer extends Component<Signature> {
   }
 
   <template>
-    {{#if (eq @format 'head')}}
+    {{#if this.useRealmSandbox}}
+      <RealmSandboxCard @card={{@card}} ...attributes />
+    {{else if (eq @format 'head')}}
       <HeadFormatPreview
         @renderedCard={{this.renderedCard}}
         @cardURL={{this.cardURL}}
@@ -80,5 +86,9 @@ export default class CardRenderer extends Component<Signature> {
       this.args.field,
       this.args.codeRef ? { componentCodeRef: this.args.codeRef } : undefined,
     );
+  }
+
+  get useRealmSandbox() {
+    return this.realmSandbox.isSecurityProbe(this.args.card, this.args.format);
   }
 }
