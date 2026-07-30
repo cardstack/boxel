@@ -106,6 +106,40 @@ module('Unit | lib | client-error-report', function () {
         7,
         9,
       ],
+      // A function name holds whatever `Function.name` holds, and that routinely
+      // includes spaces. Gecko and JSC put the name before the `@`, so the space
+      // lands in the half a marker test would need to keep free of prose — which
+      // is why which lines are frames is decided for the stack, not per line.
+      [
+        'bound compute@https://realm.example/my-realm/person.gts:12:34',
+        'bound compute',
+        'https://realm.example/my-realm/person.gts',
+        12,
+        34,
+      ],
+      [
+        'get title@https://realm.example/my-realm/person.gts:12:34',
+        'get title',
+        'https://realm.example/my-realm/person.gts',
+        12,
+        34,
+      ],
+      // The only frame a top-level module throw produces on JSC.
+      [
+        'module code@https://realm.example/my-realm/person.gts:12:34',
+        'module code',
+        'https://realm.example/my-realm/person.gts',
+        12,
+        34,
+      ],
+      // A bare location, no name and no delimiter at all.
+      [
+        'https://realm.example/my-realm/person.gts:12:34',
+        '',
+        'https://realm.example/my-realm/person.gts',
+        12,
+        34,
+      ],
     ];
 
     shapes.forEach(([frame, fn, url, line, col]) => {
@@ -166,7 +200,16 @@ module('Unit | lib | client-error-report', function () {
 
     test('is bounded by frame count, keeping the top', function (assert) {
       let lines = reportOf('deep', frames(40)).stack.split('\n');
-      assert.strictEqual(lines.length, 17, '16 frames, plus the message');
+      assert.strictEqual(
+        lines.length,
+        18,
+        '16 frames, the message above them, and a marker for the cut tail',
+      );
+      assert.strictEqual(
+        lines[lines.length - 1],
+        '…',
+        'a cut stack says so, so a short one is not read as a whole one',
+      );
       assert.strictEqual(lines[0], 'Error: deep');
       assert.strictEqual(
         lines[1],
@@ -278,6 +321,53 @@ module('Unit | lib | client-error-report', function () {
       ]);
       assert.true(report.top_frame_function.length <= 300);
       assert.true(report.source_url.length <= 300);
+    });
+
+    test('an untruncated stack carries no marker', function (assert) {
+      assert.notOk(
+        reportOf('short', frames(2)).stack.includes('…'),
+        'the marker means something was cut, so it appears only then',
+      );
+    });
+
+    test('a stack the engine wrote without a message gets the whole budget', function (assert) {
+      // Gecko and JSC include no message line, so every line is a frame. Reading
+      // that as "no frames, all header" would spend the message's budget on it and
+      // cut the stack to a fraction of what it is allowed.
+      let error = new Error('boom');
+      error.stack = Array.from(
+        { length: 30 },
+        (_, i) =>
+          `fn ${i}@https://realm.example/my-realm/person.gts:${i + 1}:1`,
+      ).join('\n');
+      let report = reportFromRejectionEvent(rejectionEvent(error));
+      let lines = report.stack.split('\n');
+      assert.strictEqual(lines.length, 17, '16 frames plus the cut marker');
+      assert.strictEqual(
+        report.top_frame_function,
+        'fn 0',
+        'and the throw site is the first of them',
+      );
+    });
+
+    test('an oversized message cannot hide a space-named throw site', function (assert) {
+      // The combination that a per-line marker test loses: the throw site is a
+      // Gecko frame whose name holds a space, so it would be classified as part of
+      // the message — and then the message's budget decides whether the throw site
+      // survives at all.
+      let error = new Error('x'.repeat(600));
+      error.stack = [
+        `Error: ${'x'.repeat(600)}`,
+        'bound compute@https://realm.example/my-realm/person.gts:11:1',
+        'caller@https://realm.example/my-realm/card.gts:22:2',
+      ].join('\n');
+      let report = reportFromRejectionEvent(rejectionEvent(error));
+      assert.true(
+        report.stack.includes('bound compute@'),
+        'the throw site is still in the stack',
+      );
+      assert.strictEqual(report.top_frame_function, 'bound compute');
+      assert.strictEqual(report.line, 11, 'not the caller below it');
     });
 
     test('a stack of frames with no message keeps them all', function (assert) {

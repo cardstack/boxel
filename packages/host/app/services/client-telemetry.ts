@@ -410,6 +410,11 @@ export default class ClientTelemetryService
 
   resetState(): void {
     this.#flush('reset');
+    // Whatever the flush could not take goes no further. The beacon envelope
+    // stamps matrix_user_id when it sends, not when an event is recorded, so a
+    // remainder held across a logout would transmit under the next account — one
+    // person's error text and stack under another person's id.
+    this.#buffer = [];
     this.#matrixUserId = null;
     this.stop();
   }
@@ -728,6 +733,14 @@ export default class ClientTelemetryService
 
   // ── Uncaught errors ──────────────────────────────────────────────────────
   #onWindowError(event: Event): void {
+    // Only an ErrorEvent describes a throw. A failed subresource dispatches a
+    // plain Event at its element, and those reach a window listener only in the
+    // capture phase — so registering without `capture` is what keeps a broken
+    // image out of this channel, and this check is what keeps it out if that ever
+    // changes. Reporting one would beacon a message of "undefined".
+    if (!(event instanceof ErrorEvent)) {
+      return;
+    }
     this.#reportError(() => reportFromErrorEvent(event));
   }
 

@@ -2345,7 +2345,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "description": "What is breaking, worst first. message_key is the message with the parts that vary per occurrence \u2014 instance ids, uuids, hashes \u2014 collapsed to `*`, so the same failure against a different card is one row rather than one row per card; the rule is narrow, so a short or digit-free id (\u2026/Person/abc) does stay its own row. A key longer than its budget ends in a digest of the message, so two long messages differing only at the end stay distinct. The verbatim message and the full stack are on the raw line below. The throwing function makes a row actionable: it names the code that failed. Occurrences above events means the error is looping \u2014 with one exception, which the detail panel below settles: an event whose folded_signatures is nonzero stands for several distinct errors, so its occurrences are a group total rather than one error repeating.",
+            "description": "What is breaking, worst first. message_key is the message with the parts that vary per occurrence \u2014 instance ids, uuids, hashes \u2014 collapsed to `*`, so the same failure against a different card is one row rather than one row per card; the rule is narrow, so a short or digit-free id (\u2026/Person/abc) does stay its own row. A key longer than its budget ends in a digest of the message, so two long messages differing only at the end stay distinct. The verbatim message and the full stack are on the raw line below. The throwing function makes a row actionable: it names the code that failed. Occurrences above events means the error is looping \u2014 unless \"distinct errors folded\" is nonzero, in which case the row is the shared slot a spent window folds distinct errors onto: its occurrences are a group total, and its message and throwing function are only whichever error opened the slot.",
             "fieldConfig": {
               "defaults": {
                 "color": {
@@ -2408,7 +2408,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "topk(200, sum by (message_key, kind, top_frame_function) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"client-error\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__range])))",
+                "expr": "topk(200, sum by (message_key, kind, top_frame_function, folded_signatures) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"client-error\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__range])))",
                 "queryType": "instant",
                 "refId": "A"
               },
@@ -2418,7 +2418,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "topk(200, sum by (message_key, kind, top_frame_function) (sum_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"client-error\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap dedup_count [$__range])))",
+                "expr": "topk(200, sum by (message_key, kind, top_frame_function, folded_signatures) (sum_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"client-error\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap dedup_count [$__range])))",
                 "queryType": "instant",
                 "refId": "B"
               }
@@ -2447,14 +2447,16 @@
                     "Value #B": "occurrences",
                     "message_key": "error",
                     "kind": "kind",
-                    "top_frame_function": "throwing function"
+                    "top_frame_function": "throwing function",
+                    "folded_signatures": "distinct errors folded"
                   },
                   "indexByName": {
                     "message_key": 0,
                     "kind": 1,
                     "top_frame_function": 2,
                     "Value #A": 3,
-                    "Value #B": 4
+                    "Value #B": 4,
+                    "folded_signatures": 5
                   }
                 }
               }
@@ -2465,7 +2467,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "description": "Which accounts are hitting errors, and what broke for them \u2014 the pivot for \"a user says the app broke\". Copy a Matrix User into the User variable to scope the whole board to that account, then read the raw lines below for the stack. A single event with a high occurrence count is one error looping in that tab, not many separate faults.",
+            "description": "Which accounts are hitting errors, and what broke for them \u2014 the pivot for \"a user says the app broke\". Copy a Matrix User into the User variable to scope the whole board to that account, then read the raw lines below for the stack. A single event with a high occurrence count is one error looping in that tab \u2014 unless \"distinct errors folded\" is nonzero, which marks the shared slot a spent window folds distinct errors onto, where the occurrences are a group total and the named error is only a sample of the group.",
             "fieldConfig": {
               "defaults": {
                 "color": {
@@ -2528,7 +2530,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "topk(200, sum by (matrix_user_id, message_key) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"client-error\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__range])))",
+                "expr": "topk(200, sum by (matrix_user_id, message_key, folded_signatures) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"client-error\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__range])))",
                 "queryType": "instant",
                 "refId": "A"
               },
@@ -2538,7 +2540,7 @@
                   "uid": "loki"
                 },
                 "editorMode": "code",
-                "expr": "topk(200, sum by (matrix_user_id, message_key) (sum_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"client-error\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap dedup_count [$__range])))",
+                "expr": "topk(200, sum by (matrix_user_id, message_key, folded_signatures) (sum_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"client-error\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap dedup_count [$__range])))",
                 "queryType": "instant",
                 "refId": "B"
               }
@@ -2566,13 +2568,15 @@
                     "Value #A": "events",
                     "Value #B": "occurrences",
                     "matrix_user_id": "Matrix User",
-                    "message_key": "error"
+                    "message_key": "error",
+                    "folded_signatures": "distinct errors folded"
                   },
                   "indexByName": {
                     "matrix_user_id": 0,
                     "message_key": 1,
                     "Value #A": 2,
-                    "Value #B": 3
+                    "Value #B": 3,
+                    "folded_signatures": 4
                   }
                 }
               }

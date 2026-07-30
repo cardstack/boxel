@@ -310,8 +310,12 @@ module('Integration | Service | client-telemetry', function (hooks) {
       "the throw's own frames are carried, trimmed but otherwise verbatim",
     );
     assert.true(
+      e.top_frame_function.length > 0,
+      'the throwing function is named',
+    );
+    assert.true(
       e.stack.includes(e.top_frame_function),
-      'the scalar top frame is lifted out of the captured stack',
+      'and it is lifted out of the captured stack',
     );
   });
 

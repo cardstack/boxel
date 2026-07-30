@@ -180,32 +180,29 @@ function boundStack(stack: string | undefined): string {
   if (lines.length === 0) {
     return '';
   }
-  // Everything above the first frame is the message the engine opened the stack
-  // with, and a message is unbounded — an error carrying a response body or a
-  // serialized document runs to thousands of characters, across as many lines as
-  // it likes. Separating it lets it be bounded without competing with the frames.
-  //
-  // That separation is a guess, though, and it has to be: a message can be shaped
-  // exactly like a frame, down to a trailing `url:line:col`, and then it lands in
-  // `frames` instead of the header. So the budget does not rest on getting the
-  // split right — every retained line is capped, which is what actually
-  // guarantees no single line can spend the whole allowance and starve the rest.
-  let firstFrame = lines.findIndex((line) => frameAt(line) !== undefined);
-  let header = firstFrame === -1 ? lines : lines.slice(0, firstFrame);
-  let frames = (
-    firstFrame === -1
-      ? []
-      : lines.slice(firstFrame, firstFrame + MAX_ERROR_STACK_LINES)
-  ).map((frame) => truncate(frame, MAX_ERROR_STACK_LINE_CHARS));
+  // The message the engine opened with is unbounded — an error carrying a response
+  // body or a serialized document runs to thousands of characters, across as many
+  // lines as it likes — so it is bounded separately rather than competing with the
+  // frames for one allowance.
+  let { header, frames: all } = splitStack(lines);
+  let frames = all
+    .slice(0, MAX_ERROR_STACK_LINES)
+    .map((frame) => truncate(frame, MAX_ERROR_STACK_LINE_CHARS));
+  let dropped = all.length - frames.length;
   let head = header.length
     ? truncate(header.join('\n'), MAX_ERROR_STACK_LINE_CHARS)
     : '';
-  let assemble = (count: number) =>
-    (head ? [head, ...frames.slice(0, count)] : frames.slice(0, count)).join(
-      '\n',
-    );
-  // Keep two lines even when one would fit: if the split guessed wrong, the first
-  // line is the message and the throw site is the one below it.
+  let assemble = (count: number) => {
+    let kept = [...(head ? [head] : []), ...frames.slice(0, count)];
+    // Say when the tail was cut, so a short stack cannot be misread as a whole
+    // one — whether it ran out of lines or out of characters.
+    if (dropped > 0 || count < frames.length) {
+      kept.push('…');
+    }
+    return kept.join('\n');
+  };
+  // Keep two lines even when one would fit: a message shaped exactly like a frame
+  // lands among them, and then the throw site is the line below it.
   let floor = Math.min(frames.length, head ? 1 : 2);
   let kept = frames.length;
   let out = assemble(kept);
@@ -215,6 +212,28 @@ function boundStack(stack: string | undefined): string {
     out = assemble(kept);
   }
   return truncate(out, MAX_ERROR_STACK_CHARS);
+}
+
+// Which lines are frames is a property of the whole stack, not of each line on its
+// own. V8 opens with the message and marks every frame with `at`; Gecko and JSC
+// mark none and include no message line at all, so their stacks begin at frame 0.
+//
+// Deciding per line instead forces a test that separates a frame from prose, and
+// there isn't one: a `name@location` frame carries whatever `Function.name` holds,
+// and that routinely includes spaces — `bound compute`, `get title`, and JSC's own
+// `global code` / `module code` / `eval code`. Any per-line rule strict enough to
+// reject a prose message also rejects those, which loses the throw site: it lands
+// in the header, where it is the message's budget that decides whether it survives
+// at all.
+function splitStack(lines: string[]): { header: string[]; frames: string[] } {
+  let firstV8Frame = lines.findIndex((line) => V8_FRAME_PREFIX_RE.test(line));
+  if (firstV8Frame !== -1) {
+    return {
+      header: lines.slice(0, firstV8Frame),
+      frames: lines.slice(firstV8Frame),
+    };
+  }
+  return { header: [], frames: lines };
 }
 
 interface StackFrame {
@@ -265,7 +284,7 @@ function parseStackFrame(candidate: string): StackFrame | undefined {
   }
   let [, url, line, col] = match;
   return {
-    raw: candidate,
+    raw: truncate(candidate, MAX_ERROR_FRAME_FIELD_CHARS),
     functionName: truncate(functionName.trim(), MAX_ERROR_FRAME_FIELD_CHARS),
     url: truncate(url, MAX_ERROR_FRAME_FIELD_CHARS),
     line: Number(line),
@@ -274,42 +293,19 @@ function parseStackFrame(candidate: string): StackFrame | undefined {
 }
 
 const V8_FRAME_PREFIX_RE = /^at\s+/;
-// `name@location`, with an empty name for an anonymous frame. Neither part holds
-// whitespace, so the whole line holds none.
-const SPIDERMONKEY_FRAME_RE = /^[^@\s]*@\S+$/;
 
-// Every engine marks its frames: V8 prefixes each with `at`, SpiderMonkey and
-// JSC join the function name to the location with `@` (and write a bare `@` for
-// an anonymous one). V8 also opens the stack with the message, which carries no
-// such marker — and a message can otherwise be shaped exactly like a frame, so
-// the marker is what tells the two apart rather than position alone.
-//
-// The `@` form is matched as a shape, not as a bare character: a function name
-// holds no whitespace and neither does a location, so `name@location` has none at
-// all. Testing for the character alone would accept any message that happens to
-// name a scoped module (`@cardstack/…`) or an account (`@user:server`) — and one
-// of those ending in a parseable `url:line:col` would then be read as the throw
-// site, reporting where the message pointed instead of where the error came from.
-function isFrameLine(candidate: string): boolean {
-  let trimmed = candidate.trim();
-  return (
-    V8_FRAME_PREFIX_RE.test(trimmed) || SPIDERMONKEY_FRAME_RE.test(trimmed)
-  );
-}
-
-// One line read as a frame, or undefined if it isn't one. Both tests matter and
-// neither is sufficient alone: the marker rejects a message that merely happens
-// to be frame-shaped, and requiring a parseable `:line:col` rejects a marked line
-// that names no location.
-function frameAt(line: string): StackFrame | undefined {
-  return isFrameLine(line) ? parseStackFrame(line) : undefined;
-}
-
-// The topmost frame that carries a location.
+// The topmost frame that carries a location — read from the stack's frame region,
+// so the throw site and the retained stack can never disagree about which lines
+// were frames.
 function topStackFrame(stack: string): StackFrame {
-  let lines = stack.split('\n');
-  for (let candidate of lines) {
-    let frame = frameAt(candidate);
+  let { frames } = splitStack(
+    stack
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean),
+  );
+  for (let candidate of frames) {
+    let frame = parseStackFrame(candidate);
     if (frame) {
       return frame;
     }
