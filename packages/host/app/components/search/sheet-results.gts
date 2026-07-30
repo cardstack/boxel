@@ -239,8 +239,17 @@ export default class SheetResults extends Component<Signature> {
     this.args.pagination.showMore(sectionId, totalCount);
   }
 
-  @action isSectionCollapsed(sectionId: string): boolean {
-    return this.args.pagination.isCollapsed(sectionId);
+  @action isSectionCollapsed(section: SearchSheetSection): boolean {
+    // A pasted URL is an explicit ask for that one card. A focused
+    // ("show only") realm section — including the one seeded when the
+    // chooser is scoped to a consuming realm — must not hide it: during a
+    // URL paste the realm query sections aren't rendered at all, so
+    // collapsing the URL section would leave the result count with
+    // nothing visible under it.
+    if (section.type === 'url') {
+      return false;
+    }
+    return this.args.pagination.isCollapsed(section.sid);
   }
 
   <template>
@@ -294,7 +303,7 @@ export default class SheetResults extends Component<Signature> {
           @variant={{@variant}}
           @handleSelect={{@handleSelect}}
           @isFocused={{eq @pagination.focusedSection section.sid}}
-          @isCollapsed={{this.isSectionCollapsed section.sid}}
+          @isCollapsed={{this.isSectionCollapsed section}}
           @onFocusSection={{this.onFocusSection}}
           @getDisplayedCount={{this.getDisplayedCount}}
           @onShowMore={{this.onShowMore}}
