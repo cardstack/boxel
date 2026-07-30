@@ -2,6 +2,8 @@ import { action } from '@ember/object';
 
 import Component from '@glimmer/component';
 
+import { modifier } from 'ember-modifier';
+
 import { not } from '@cardstack/boxel-ui/helpers';
 
 import HostModeBreadcrumbItem from './breadcrumb-item';
@@ -13,6 +15,19 @@ interface Signature {
     close?: (cardId: string) => void;
   };
 }
+
+// The current-page crumb is always the rightmost one. When the trail
+// overflows the pill and scrolls, keep it in view instead of leaving it
+// stranded off-screen behind a hidden scrollbar — both on mount (a
+// deep-linked stack can already overflow) and whenever the trail changes.
+let scrollToCurrentCrumb = modifier(
+  (element: HTMLElement, [cardCount]: [number]) => {
+    if (cardCount === 0) {
+      return;
+    }
+    element.scrollLeft = element.scrollWidth;
+  },
+);
 
 export default class HostModeBreadcrumbs extends Component<Signature> {
   private get cardIds() {
@@ -72,7 +87,7 @@ export default class HostModeBreadcrumbs extends Component<Signature> {
       ...attributes
     >
       {{#if this.hasCards}}
-        <ol class='list'>
+        <ol class='list' {{scrollToCurrentCrumb this.cardIds.length}}>
           {{#each this.cardIds key='@identity' as |cardId index|}}
             <li class='item'>
               <HostModeBreadcrumbItem
