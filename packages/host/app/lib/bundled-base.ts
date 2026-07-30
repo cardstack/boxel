@@ -19,15 +19,20 @@
 // into the host's initial bundle through the same vite/embroider pipeline
 // as host app code.
 
-import type { Loader } from '@cardstack/runtime-common/loader';
+import type { VirtualNetwork } from '@cardstack/runtime-common';
 
 import BASE_MODULES from './bundled-base-modules';
 
 const GLOB_PREFIX = '../../../base/';
 
-export function shimBundledBase(loader: Loader) {
+// Registers on the virtual network (not per loader) so that every loader
+// sharing the network serves the bundled modules — including loaders
+// constructed outside the loader service (test-realm adapters, in-browser
+// indexing). Must run after the network's `@cardstack/base/` realm mapping
+// is registered, since shim identifiers resolve at registration time.
+export function shimBundledBase(virtualNetwork: VirtualNetwork) {
   for (let [path, module] of Object.entries(BASE_MODULES)) {
     let name = path.slice(GLOB_PREFIX.length).replace(/\.(gts|ts)$/, '');
-    loader.shimModule(`@cardstack/base/${name}`, module);
+    virtualNetwork.shimModule(`@cardstack/base/${name}`, module);
   }
 }

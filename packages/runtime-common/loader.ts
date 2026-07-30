@@ -861,9 +861,16 @@ export class Loader {
     init?: RequestInit,
   ): Promise<MaybeCachedResponse> => {
     try {
-      let shimmedModule = this.moduleShims.get(
-        this.asRequest(urlOrRequest, init).url,
-      );
+      let shimmedModule =
+        this.moduleShims.get(this.asRequest(urlOrRequest, init).url) ??
+        // Modules shimmed on the virtual network (e.g. base modules
+        // compiled into the host bundle) are served to every loader
+        // sharing that network, including loaders constructed outside the
+        // host's loader service. This is a module-fetch path, so a shim
+        // registered under a realm URL can't shadow a card-instance GET.
+        (await this.virtualNetwork?.getShimmedModule(
+          this.asRequest(urlOrRequest, init).url,
+        ));
       if (shimmedModule) {
         let response = new Response();
         (response as any)[Symbol.for('shimmed-module')] = shimmedModule;

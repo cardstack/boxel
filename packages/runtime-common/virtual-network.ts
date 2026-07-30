@@ -109,6 +109,15 @@ export class VirtualNetwork {
     this.packageShimHandler.shimAsyncModule(descriptor);
   }
 
+  // Lets a Loader serve a module shimmed on this network (under any URL,
+  // not just the fake packages origin) without a network fetch. Only the
+  // module-fetch path may call this: shims can be registered under realm
+  // URLs that also serve card instances, and only the caller knows the
+  // request is for a module rather than an instance document.
+  getShimmedModule(url: string): Promise<ModuleLike | undefined> {
+    return this.packageShimHandler.lookupModule(url);
+  }
+
   addURLMapping(from: URL, to: URL) {
     this.urlMappings.push([from.href, to.href]);
     // unresolveURL chases through urlMappings (via resolveURLMapping), so a new

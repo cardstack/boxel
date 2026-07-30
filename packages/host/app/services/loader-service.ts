@@ -18,7 +18,6 @@ import {
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import config from '@cardstack/host/config/environment';
-import { shimBundledBase } from '@cardstack/host/lib/bundled-base';
 import { clearKnownFileMetaUrls } from '@cardstack/host/lib/known-file-meta-urls';
 
 import { authErrorEventMiddleware } from '../utils/auth-error-guard';
@@ -199,10 +198,6 @@ export default class LoaderService extends Service {
         ),
       virtualNetwork: this.network.virtualNetwork,
     });
-    // Base-realm modules ship inside the host bundle; register them so
-    // this loader (and every clone descended from it) serves them without
-    // fetching from the base realm.
-    shimBundledBase(loader);
     return this.trackCurrent(loader);
   }
 

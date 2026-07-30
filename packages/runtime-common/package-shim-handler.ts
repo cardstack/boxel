@@ -506,6 +506,16 @@ export class PackageShimHandler {
     }
   }
 
+  // Module lookup for callers outside the fetch pipeline (the Loader's
+  // module-fetch path asks the virtual network for shims registered here
+  // before going to the network). Unlike `handle`, this is not restricted
+  // to the fake packages origin: the caller vouches that the URL is a
+  // module request, so a shim registered under a realm URL can be served
+  // without risking shadowing a card-instance GET of the same URL.
+  async lookupModule(url: string): Promise<ModuleLike | undefined> {
+    return (await this.getModule(url)) ?? (await this.getModuleByPrefix(url));
+  }
+
   private async getModule(url: string): Promise<ModuleLike | undefined> {
     let key = trimModuleIdentifier(url);
     let resolver = this.moduleIds.get(key);
