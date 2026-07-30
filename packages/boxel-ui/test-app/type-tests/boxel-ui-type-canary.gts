@@ -1,4 +1,7 @@
-// Type-checking canary for @cardstack/boxel-ui. Never imported at runtime.
+// Type-checking canary for @cardstack/boxel-ui. Never imported at runtime:
+// it lives outside tests/ because tests/index.html eagerly globs every
+// tests/ module into the runtime test bundle, and this file only exists to
+// be type-checked (type-tests/ is in the tsconfig `include`).
 //
 // Broken declaration re-exports once silently degraded every boxel-ui symbol
 // to `any` under skipLibCheck, so the type check passed while checking
