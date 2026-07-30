@@ -14,6 +14,7 @@ import type {
 import { logger, prerenderHtmlReconcile, rri } from '@cardstack/runtime-common';
 
 import { createPrerenderHttpServer } from '../prerender/prerender-app.ts';
+import { prerenderRenderTimeoutMs } from '../prerender/prerender-constants.ts';
 import { createRemotePrerenderer } from '../prerender/remote-prerenderer.ts';
 import {
   closeServer,
@@ -62,17 +63,30 @@ import {
 // is the proof that a genuinely pathological render produces exactly the
 // row shape those lanes consume.
 
-const badRealmURL = 'http://127.0.0.1:4472/wedged/';
-const healthyRealmURL = 'http://127.0.0.1:4473/steady/';
+// Routed through testPort() like the dedicated prerender port so
+// environment-mode runs (parallel test processes with per-environment port
+// offsets) don't collide binding the fixture realms' servers.
+const badRealmURL = `http://127.0.0.1:${testPort(4472)}/wedged/`;
+const healthyRealmURL = `http://127.0.0.1:${testPort(4473)}/steady/`;
 const prerenderPort = testPort(4474);
 const prerenderServerURL = `http://127.0.0.1:${prerenderPort}`;
 
 // The budget that bounds a never-settling visit: the prerender client
 // aborts its request at this timeout. It must comfortably cover a healthy
-// render (the fixture realms' boot renders flow through the same client)
-// while staying far below the server's own per-step render timeout, so the
-// client abort — not the server timeout — is what ends the wedged visit.
-const PRERENDER_CLIENT_TIMEOUT_MS = 15_000;
+// render — including the fixture build's cold-start renders (tab launch +
+// host app load on a loaded CI machine), which flow through the same
+// client and would poison the cached fixture template if one aborted —
+// while staying below the server's own per-step render timeout, so the
+// client abort, not the server timeout, is what ends the wedged visit.
+const PRERENDER_CLIENT_TIMEOUT_MS = 25_000;
+if (PRERENDER_CLIENT_TIMEOUT_MS >= prerenderRenderTimeoutMs) {
+  throw new Error(
+    `PRERENDER_CLIENT_TIMEOUT_MS (${PRERENDER_CLIENT_TIMEOUT_MS}) must stay below ` +
+      `the server render timeout (${prerenderRenderTimeoutMs}); otherwise the wedged ` +
+      `visit ends via the server's in-band render-timeout error instead of the ` +
+      `client abort this test exercises`,
+  );
+}
 
 // How long the fixture card pegs the tab's main thread once told to block.
 // Far past the client's request budget so the render genuinely cannot
@@ -295,9 +309,12 @@ module(basename(import.meta.filename), function (hooks) {
       timeout: 120_000,
     });
     let elapsedMs = Date.now() - started;
+    // Finishing under the server's per-step render timeout is what proves
+    // the client abort did the bounding: the in-band render-timeout path
+    // cannot complete faster than that timeout.
     assert.true(
-      elapsedMs < 60_000,
-      `the visit failed within the client's request budget (${elapsedMs}ms) — bounded by the abort, not by multi-minute server burns`,
+      elapsedMs < prerenderRenderTimeoutMs,
+      `the visit failed within the client's request budget (${elapsedMs}ms < ${prerenderRenderTimeoutMs}ms)`,
     );
 
     // ── a real error row is persisted, in the retry lane's shape ───────
