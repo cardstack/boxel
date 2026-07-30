@@ -1,7 +1,8 @@
-import { module, test } from 'qunit';
-import { render } from '@ember/test-helpers';
-import { setupRenderingTest } from 'test-app/tests/helpers';
 import { formatAge } from '@cardstack/boxel-ui/helpers';
+import { render } from '@ember/test-helpers';
+import { module, test } from 'qunit';
+
+import { setupRenderingTest } from '../../helpers';
 
 module('Integration | helpers | formatAge', function (hooks) {
   setupRenderingTest(hooks);

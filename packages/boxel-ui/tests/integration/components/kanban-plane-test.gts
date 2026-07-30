@@ -1,13 +1,14 @@
-import { module, test } from 'qunit';
-import { click, render } from '@ember/test-helpers';
-import { tracked } from '@glimmer/tracking';
-import { on } from '@ember/modifier';
-import { setupRenderingTest } from 'test-app/tests/helpers';
 import {
-  KanbanPlane,
   type KanbanColumnConfig,
   type KanbanPlacement,
+  KanbanPlane,
 } from '@cardstack/boxel-ui/components';
+import { on } from '@ember/modifier';
+import { click, render } from '@ember/test-helpers';
+import { tracked } from '@glimmer/tracking';
+import { module, test } from 'qunit';
+
+import { setupRenderingTest } from '../../helpers';
 
 module('Integration | Component | kanban-plane', function (hooks) {
   setupRenderingTest(hooks);
@@ -38,9 +39,9 @@ module('Integration | Component | kanban-plane', function (hooks) {
         { index: 2, columnId: 'doing', sortOrder: 2 },
       ];
 
-      onToggleCollapsed = (column: KanbanColumnConfig): void => {
+      onToggleCollapsed = (column: KanbanColumnConfig | null): void => {
         this.columns = this.columns.map((c) =>
-          c.key === column.key ? { ...c, collapsed: !c.collapsed } : c,
+          c.key === column?.key ? { ...c, collapsed: !c.collapsed } : c,
         );
       };
     }
@@ -114,9 +115,9 @@ module('Integration | Component | kanban-plane', function (hooks) {
         { index: 0, columnId: 'doing', sortOrder: 1 },
       ];
 
-      onToggleCollapsed = (column: KanbanColumnConfig): void => {
+      onToggleCollapsed = (column: KanbanColumnConfig | null): void => {
         this.columns = this.columns.map((c) =>
-          c.key === column.key ? { ...c, collapsed: !c.collapsed } : c,
+          c.key === column?.key ? { ...c, collapsed: !c.collapsed } : c,
         );
       };
 

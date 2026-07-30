@@ -1,9 +1,8 @@
-import { module, test } from 'qunit';
-
 import {
   detectColorFormat,
   rgbaToFormatString,
 } from '@cardstack/boxel-ui/helpers';
+import { module, test } from 'qunit';
 
 module('Unit | color tools helper', function () {
   test('format helper returns a hex string for hex format', function (assert) {

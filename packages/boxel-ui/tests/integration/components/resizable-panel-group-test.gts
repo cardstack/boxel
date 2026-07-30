@@ -1,13 +1,13 @@
-import { module, test } from 'qunit';
-import { setupRenderingTest } from 'ember-qunit';
-import type { RenderingTestContext } from '@ember/test-helpers';
-import { find, doubleClick, render } from '@ember/test-helpers';
-import { htmlSafe } from '@ember/template';
 import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
-import { not } from '@cardstack/boxel-ui/helpers';
-import { tracked } from '@glimmer/tracking';
-import { triggerEvent } from '@ember/test-helpers';
 import type { Orientation } from '@cardstack/boxel-ui/components/resizable-panel-group/utils/types';
+import { not } from '@cardstack/boxel-ui/helpers';
+import { htmlSafe } from '@ember/template';
+import type { RenderingTestContext } from '@ember/test-helpers';
+import { doubleClick, find, render } from '@ember/test-helpers';
+import { triggerEvent } from '@ember/test-helpers';
+import { tracked } from '@glimmer/tracking';
+import { setupRenderingTest } from 'ember-qunit';
+import { module, test } from 'qunit';
 
 const RESIZE_HANDLE_WIDTH = 8;
 const PANEL_INDEX_1_MIN_SIZE = 15;
@@ -23,13 +23,13 @@ class PanelProperties {
   showResizeHandle?: boolean;
   constructor(
     panelArgs: {
-      defaultSize?: number;
-      minSize?: number;
-      maxSize?: number;
       collapsible?: boolean;
+      defaultSize?: number;
+      isHidden?: boolean;
+      maxSize?: number;
+      minSize?: number;
       outerContainerStyle?: string;
       showResizeHandle?: boolean;
-      isHidden?: boolean;
     } = {},
     testArgs: {
       outerContainerStyle?: string;
@@ -81,11 +81,11 @@ let moveResizePanelHandle = async function ({
   hitAreaMargin = 0,
   moveWithSeparator = false, // Use the separator parent element of the handle to move
 }: {
-  panelIndex: number;
-  orientation: string;
-  moveDelta: number;
   hitAreaMargin?: number;
+  moveDelta: number;
   moveWithSeparator?: boolean;
+  orientation: string;
+  panelIndex: number;
 }) {
   let groupEl = document.querySelector('[data-boxel-panel-group]');
   if (!groupEl) {
@@ -94,7 +94,7 @@ let moveResizePanelHandle = async function ({
   let resizePanelHandles = document.querySelectorAll(
     `[data-boxel-panel-resize-handle-id]`,
   );
-  let resizeHandleId = resizePanelHandles[panelIndex].getAttribute(
+  let resizeHandleId = resizePanelHandles[panelIndex]!.getAttribute(
     'data-boxel-panel-resize-handle-id',
   );
   if (!resizeHandleId) {
@@ -105,7 +105,7 @@ let moveResizePanelHandle = async function ({
   let groupSizeInPixels =
     orientation === 'horizontal' ? groupRect.width : groupRect.height;
   let resizeHandleRect =
-    resizePanelHandles[panelIndex].children[0]!.getBoundingClientRect();
+    resizePanelHandles[panelIndex]!.children[0]!.getBoundingClientRect();
   let moveDeltaInPixels = (groupSizeInPixels * moveDelta) / 100;
 
   let elementToMove = find(
@@ -163,8 +163,8 @@ let assertPanels = function ({
   for (let index = 0; index < panelSizesInPixels.length; index++) {
     assert.deepEqual(
       orientation === 'horizontal'
-        ? computedStyles[index].width
-        : computedStyles[index].height,
+        ? computedStyles[index]!.width
+        : computedStyles[index]!.height,
       panelSizesInPixels[index],
     );
   }
@@ -349,7 +349,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
       });
 
       test<MyTestContext>(`it can lay out panels with a defined minSize and ${orientationProperties.orientation} orientation`, async function (assert) {
-        this.renderController.panels[0].minSize = 40;
+        this.renderController.panels[0]!.minSize = 40;
         let containerSize = 300 + RESIZE_HANDLE_WIDTH;
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: ${containerSize}px;
@@ -425,8 +425,8 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
       });
 
       test<MyTestContext>(`it can lay out panels with a defined minSize, not collapsible, and ${orientationProperties.orientation} orientation`, async function (assert) {
-        this.renderController.panels[0].minSize = 40;
-        this.renderController.panels[0].collapsible = false;
+        this.renderController.panels[0]!.minSize = 40;
+        this.renderController.panels[0]!.collapsible = false;
         let containerSize = 300 + RESIZE_HANDLE_WIDTH;
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: ${containerSize}px;
@@ -480,7 +480,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
       });
 
       test<MyTestContext>(`it can lay out panels with a defined maxSize and ${orientationProperties.orientation} orientation`, async function (assert) {
-        this.renderController.panels[0].maxSize = 80;
+        this.renderController.panels[0]!.maxSize = 80;
         let containerSize = 300 + RESIZE_HANDLE_WIDTH;
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: ${containerSize}px;
@@ -553,7 +553,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
           panelSizesInPixels: ['210px', '90px'],
         });
 
-        this.renderController.panels[1].isHidden = true;
+        this.renderController.panels[1]!.isHidden = true;
         await waitForRerender();
         assertPanels({
           assert,

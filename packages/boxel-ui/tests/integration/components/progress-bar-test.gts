@@ -1,8 +1,8 @@
+import { ProgressBar } from '@cardstack/boxel-ui/components';
 import { render } from '@ember/test-helpers';
 import { module, test } from 'qunit';
-import { setupRenderingTest } from 'test-app/tests/helpers';
 
-import { ProgressBar } from '@cardstack/boxel-ui/components';
+import { setupRenderingTest } from '../../helpers';
 
 module('Integration | Component | progress-bar', function (hooks) {
   setupRenderingTest(hooks);

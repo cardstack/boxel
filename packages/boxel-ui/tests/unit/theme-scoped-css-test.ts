@@ -1,6 +1,5 @@
-import { module, test } from 'qunit';
-
 import { themeScope, themeScopedCss } from '@cardstack/boxel-ui/helpers';
+import { module, test } from 'qunit';
 
 const SCOPE = 'ember123';
 const SELECTOR = `[data-boxel-theme-scope="${SCOPE}"]`;

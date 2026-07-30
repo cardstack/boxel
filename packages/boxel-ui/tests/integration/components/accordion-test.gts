@@ -1,8 +1,9 @@
-import { click, render } from '@ember/test-helpers';
-import { module, test } from 'qunit';
-import { setupRenderingTest } from 'test-app/tests/helpers';
-import { tracked } from '@glimmer/tracking';
 import { Accordion } from '@cardstack/boxel-ui/components';
+import { click, render } from '@ember/test-helpers';
+import { tracked } from '@glimmer/tracking';
+import { module, test } from 'qunit';
+
+import { setupRenderingTest } from '../../helpers';
 
 class State {
   @tracked isOpen = false;

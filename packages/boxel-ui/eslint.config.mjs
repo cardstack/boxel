@@ -20,6 +20,7 @@ import prettier from 'eslint-config-prettier';
 import ember from 'eslint-plugin-ember/recommended';
 import importPlugin from 'eslint-plugin-import';
 import n from 'eslint-plugin-n';
+import qunitDom from 'eslint-plugin-qunit-dom';
 import simpleImportSort from 'eslint-plugin-simple-import-sort';
 import typescriptSortKeys from 'eslint-plugin-typescript-sort-keys';
 import globals from 'globals';
@@ -43,6 +44,7 @@ export default defineConfig([
     'declarations/',
     'coverage/',
     'blueprints/*/files/',
+    'dist-tests/',
     '!**/.*',
   ]),
   js.configs.recommended,
@@ -163,11 +165,27 @@ export default defineConfig([
       'ember/template-no-let-reference': 'off',
     },
   },
+  {
+    files: ['tests/**/*'],
+    plugins: {
+      'qunit-dom': qunitDom,
+    },
+    rules: {
+      ...qunitDom.configs.recommended.rules,
+      '@cardstack/boxel/no-raf-for-state': 'off',
+    },
+  },
+
   /**
    * CJS node files
    */
   {
-    files: ['**/*.cjs', '.template-lintrc.js'],
+    files: [
+      '**/*.cjs',
+      '.template-lintrc.js',
+      'ember-cli-build.js',
+      'config/environment.js',
+    ],
     plugins: {
       n,
     },

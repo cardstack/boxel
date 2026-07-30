@@ -1,13 +1,13 @@
-import { module, test } from 'qunit';
-import { setupRenderingTest } from 'test-app/tests/helpers';
-import { fillIn, render, triggerEvent } from '@ember/test-helpers';
-
 import { PhoneInput } from '@cardstack/boxel-ui/components';
 import type {
-  NormalizePhoneFormatResult,
   NormalizedPhoneNumberFormat,
+  NormalizePhoneFormatResult,
   PhoneFormatValidationError,
 } from '@cardstack/boxel-ui/helpers/validate-phone-format';
+import { fillIn, render, triggerEvent } from '@ember/test-helpers';
+import { module, test } from 'qunit';
+
+import { setupRenderingTest } from '../../helpers';
 
 type Validation = NormalizePhoneFormatResult | null | undefined;
 
@@ -150,7 +150,9 @@ module('Integration | Component | phone-input', function (hooks) {
 
   test('it requires a value when marked as required', async function (assert) {
     let value: string | null = null;
-    const set = (newValue: string) => (value = newValue);
+    const set = (newValue: string | null) => {
+      value = newValue;
+    };
 
     await render(
       <template>

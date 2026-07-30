@@ -1,5 +1,4 @@
-import { module, test } from 'qunit';
-import { setupRenderingTest } from 'test-app/tests/helpers';
+import { BoxelInput } from '@cardstack/boxel-ui/components';
 import {
   click,
   fillIn,
@@ -8,8 +7,10 @@ import {
   settled,
   typeIn,
 } from '@ember/test-helpers';
-import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { tracked } from '@glimmer/tracking';
+import { module, test } from 'qunit';
+
+import { setupRenderingTest } from '../../helpers';
 
 module('Integration | Component | input', function (hooks) {
   setupRenderingTest(hooks);

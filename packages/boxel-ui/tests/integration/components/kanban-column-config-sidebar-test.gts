@@ -1,4 +1,7 @@
-import { module, test } from 'qunit';
+import {
+  type KanbanColumnConfig,
+  KanbanColumnConfigSidebar,
+} from '@cardstack/boxel-ui/components';
 import {
   click,
   fillIn,
@@ -7,13 +10,11 @@ import {
   triggerEvent,
   typeIn,
 } from '@ember/test-helpers';
-import { setupRenderingTest } from 'test-app/tests/helpers';
 import { tracked } from '@glimmer/tracking';
+import { module, test } from 'qunit';
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
-import {
-  KanbanColumnConfigSidebar,
-  type KanbanColumnConfig,
-} from '@cardstack/boxel-ui/components';
+
+import { setupRenderingTest } from '../../helpers';
 
 function makeColumns(): TrackedArray<KanbanColumnConfig> {
   return new TrackedArray([
@@ -45,10 +46,14 @@ function makeColumns(): TrackedArray<KanbanColumnConfig> {
 }
 
 const onLabelChange = (col: KanbanColumnConfig | null, val: string): void => {
-  if (col) col['label'] = val;
+  if (col) {
+    col['label'] = val;
+  }
 };
 const onColorChange = (col: KanbanColumnConfig | null, val: string): void => {
-  if (col) col['color'] = val;
+  if (col) {
+    col['color'] = val;
+  }
 };
 const onWipLimitChange = (
   col: KanbanColumnConfig | null,
@@ -60,7 +65,9 @@ const onWipLimitChange = (
   }
 };
 const onToggleCollapsed = (col: KanbanColumnConfig | null): void => {
-  if (col) col['collapsed'] = !col.collapsed;
+  if (col) {
+    col['collapsed'] = !col.collapsed;
+  }
 };
 
 module(

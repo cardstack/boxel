@@ -1,7 +1,8 @@
+import { Button } from '@cardstack/boxel-ui/components';
 import { render } from '@ember/test-helpers';
 import { module, test } from 'qunit';
-import { setupRenderingTest } from 'test-app/tests/helpers';
-import { Button } from '@cardstack/boxel-ui/components';
+
+import { setupRenderingTest } from '../../helpers';
 
 module('Integration | Component | button', function (hooks) {
   setupRenderingTest(hooks);

@@ -32,7 +32,7 @@
       "@cardstack/boxel-ui": ["./src"],
       "@cardstack/boxel-ui/*": ["./src/*"]
     },
-    "types": ["@cardstack/local-types"]
+    "types": ["@cardstack/local-types", "@types/qunit"]
   },
-  "include": ["src/**/*", "unpublished-development-types/**/*"]
+  "include": ["src/**/*", "tests/**/*", "unpublished-development-types/**/*"]
 }

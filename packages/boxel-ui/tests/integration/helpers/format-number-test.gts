@@ -1,8 +1,9 @@
-import { module, test } from 'qunit';
-import { render } from '@ember/test-helpers';
-import { setupRenderingTest } from 'test-app/tests/helpers';
 import { formatNumber } from '@cardstack/boxel-ui/helpers';
 import { array } from '@ember/helper';
+import { render } from '@ember/test-helpers';
+import { module, test } from 'qunit';
+
+import { setupRenderingTest } from '../../helpers';
 
 module('Integration | helpers | formatNumber', function (hooks) {
   setupRenderingTest(hooks);

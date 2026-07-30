@@ -2,7 +2,7 @@
  * This babel config is only used when building dist/ for publishing.
  *
  * Workspace consumers compile the .gts source themselves (see
- * package.json#exports); babel.config.json remains their reference config.
+ * package.json#exports); the vite dev/test pipeline uses babel.config.mjs.
  */
 module.exports = {
   plugins: [

@@ -1,10 +1,11 @@
+import {
+  type BrokenLinkErrorDoc,
+  BrokenLinkTemplate,
+} from '@cardstack/boxel-ui/components';
 import { click, render } from '@ember/test-helpers';
 import { module, test } from 'qunit';
-import { setupRenderingTest } from 'test-app/tests/helpers';
-import {
-  BrokenLinkTemplate,
-  type BrokenLinkErrorDoc,
-} from '@cardstack/boxel-ui/components';
+
+import { setupRenderingTest } from '../../helpers';
 
 const BROKEN_URL = 'https://example.com/realm/Author/exploded-card-id';
 

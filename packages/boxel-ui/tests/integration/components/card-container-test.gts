@@ -1,8 +1,8 @@
+import { CardContainer } from '@cardstack/boxel-ui/components';
 import { render } from '@ember/test-helpers';
 import { module, test } from 'qunit';
-import { setupRenderingTest } from 'test-app/tests/helpers';
 
-import { CardContainer } from '@cardstack/boxel-ui/components';
+import { setupRenderingTest } from '../../helpers';
 
 const OUTER_THEME = `:root {
   --primary: #112233;

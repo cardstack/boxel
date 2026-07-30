@@ -1,6 +1,5 @@
-import { module, test } from 'qunit';
-
 import { coalesce } from '@cardstack/boxel-ui/helpers';
+import { module, test } from 'qunit';
 
 module('Unit | helpers | coalesce', function () {
   test('returns the first argument when it is a non-null string', function (assert) {
