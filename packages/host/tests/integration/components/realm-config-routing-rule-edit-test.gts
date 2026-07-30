@@ -167,6 +167,50 @@ module(
         .doesNotExist('cross-realm candidates are excluded by the lock');
     });
 
+    test('pasting a full card URL from the consuming realm shows the result', async function (assert) {
+      await renderRealmConfigEdit([{ path: '/docs' }]);
+
+      await click('[data-test-add-new="instance"]');
+      await waitFor('[data-test-card-chooser-modal]');
+
+      // Paste the full URL of a card that lives in the consuming realm —
+      // exactly the card the locked chooser is scoped to.
+      await fillIn(
+        '[data-test-card-chooser-modal] [data-test-search-field]',
+        `${testRealmURL}Pet/mango`,
+      );
+
+      // The URL-paste result section renders once the card resolves.
+      await waitFor(
+        '[data-test-card-chooser-modal] [data-section-sid^="url:"]',
+      );
+
+      // The chooser opens with the consuming realm's section focused
+      // ("show only"), which collapses every other section — but a pasted
+      // URL is an explicit ask, so its section must not be collapsed
+      // (collapse hides the result tile via display: none while the
+      // summary still reports "1 result").
+      assert
+        .dom('[data-test-card-chooser-modal] [data-section-sid^="url:"]')
+        .doesNotHaveClass(
+          'search-result-block--collapsed',
+          'the URL-paste section is not collapsed by the seeded realm focus',
+        );
+      assert
+        .dom(
+          '[data-test-card-chooser-modal] [data-section-sid^="url:"] [data-test-item-button]',
+        )
+        .isVisible('the pasted card result tile is visible');
+
+      // The visible tile is actually usable: selecting it enables Go.
+      await click(
+        '[data-test-card-chooser-modal] [data-section-sid^="url:"] [data-test-item-button]',
+      );
+      assert
+        .dom('[data-test-card-chooser-go-button]')
+        .isNotDisabled('the pasted card can be chosen');
+    });
+
     test('renders a per-rule warning when a path is malformed', async function (assert) {
       await renderRealmConfigEdit([
         { path: 'docs' }, // missing leading slash
