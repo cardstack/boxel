@@ -42,10 +42,9 @@ A new workspace is seeded with exactly two files, `realm.json` and
 Home, Library, and Activity views. Replace that adoption to put your own card
 on the workspace root instead.
 
-Workspaces created before that became the default adopt `CardsGrid`, and some
-also carry a separate `cards-grid.json` instance at the root. Both still work —
-`CardsGrid` remains available — so don't treat either as something to clean up
-unless you're deliberately migrating.
+Some workspaces adopt `CardsGrid` as their root card, and some also carry a separate
+`cards-grid.json` instance at the root. Both shapes are supported — `CardsGrid`
+remains available — so treat either as valid unless you're deliberately migrating.
 
 ## Module Paths in JSON (CRITICAL)
 
