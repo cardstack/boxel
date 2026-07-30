@@ -257,6 +257,11 @@ export default class MatrixService extends Service {
   #clientReadyDeferred = new Deferred<void>();
   #matrixSDK: ExtendedMatrixSDK | undefined;
   #eventBindings: [EmittedEvents, (...arg: any[]) => void][] | undefined;
+  // Whether the realm-server `realms-list-updated` subscription has been wired.
+  // The subscription lives on RealmServerService and survives logout (see
+  // RealmServerService.resetState), so it is wired once per app lifetime and is
+  // deliberately not cleared by resetState().
+  #realmsListUpdatedSubscribed = false;
   currentUserEventReadReceipts: TrackedMap<string, { readAt: Date }> =
     new TrackedMap();
 
@@ -288,16 +293,6 @@ export default class MatrixService extends Service {
     // never double-reset by the participant registry.
     this.setLoggerLevelFromEnvironment();
     this.setAgentId();
-    // The realm server pushes this to the owner's session room whenever their
-    // set of accessible realms changes server-side (create/delete/archive/
-    // unarchive) — including from another tab, the CLI, or an AI agent. Re-derive
-    // the list so a session viewing the workspace chooser updates live. Wired
-    // once here (subscriptions are app-scoped and survive logout; see
-    // RealmServerService.resetState) rather than per session start.
-    this.realmServer.subscribeEvent(
-      REALMS_LIST_UPDATED_EVENT_TYPE,
-      this.refreshRealmsList.bind(this),
-    );
     this.#ready = this.loadState.perform();
     registerDestructor(this, () => this.teardownClient());
   }
@@ -1026,6 +1021,7 @@ export default class MatrixService extends Service {
       this.realmServer.setClient(this.client);
       if (isTesting()) console.warn('[start-phase] realmServer.login');
       await this.realmServer.login(registrationToken);
+      this.subscribeToRealmsListUpdatesOnce();
       this.saveAuth(auth);
       this.bindEventListeners();
 
@@ -1357,6 +1353,26 @@ export default class MatrixService extends Service {
           );
         }
       }),
+    );
+  }
+
+  // Wire the realm-server `realms-list-updated` push exactly once per app
+  // lifetime. The realm server emits it to the owner's session room whenever
+  // their set of accessible realms changes server-side (create/delete/archive/
+  // unarchive) — including from another tab, the CLI, or an AI agent — so a
+  // session viewing the workspace chooser updates live. Wired from the
+  // post-login path rather than the constructor so merely constructing this
+  // service never forces the lazy RealmServerService to instantiate (and fire
+  // its boot fetches). The subscription lives on RealmServerService and
+  // survives logout, hence the once guard.
+  private subscribeToRealmsListUpdatesOnce() {
+    if (this.#realmsListUpdatedSubscribed) {
+      return;
+    }
+    this.#realmsListUpdatedSubscribed = true;
+    this.realmServer.subscribeEvent(
+      REALMS_LIST_UPDATED_EVENT_TYPE,
+      this.refreshRealmsList.bind(this),
     );
   }
 
