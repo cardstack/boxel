@@ -148,6 +148,11 @@ This is markdown content.`,
     let result = await captureFileExtractResult('ready');
     assert.strictEqual(result.status, 'ready');
     assert.strictEqual(result.searchDoc?.format, 'binary', 'detects binary');
+    assert.strictEqual(
+      result.searchDoc?.triangleCount,
+      3,
+      'extracts binary triangle count',
+    );
     assert.strictEqual(result.searchDoc?.name, 'binary.stl');
     assert.ok(
       String(result.searchDoc?.contentType).includes('stl'),
@@ -167,6 +172,11 @@ This is markdown content.`,
     let result = await captureFileExtractResult('ready');
     assert.strictEqual(result.status, 'ready');
     assert.strictEqual(result.searchDoc?.format, 'ascii', 'detects ascii');
+    assert.strictEqual(
+      result.searchDoc?.solidName,
+      'cube',
+      'extracts ascii solid name',
+    );
     assert.strictEqual(result.searchDoc?.name, 'ascii.stl');
   });
 
@@ -209,6 +219,11 @@ This is markdown content.`,
       body?.data?.attributes?.format,
       'binary',
       'file meta includes stl format',
+    );
+    assert.strictEqual(
+      body?.data?.attributes?.triangleCount,
+      3,
+      'file meta includes triangle count',
     );
     assert.deepEqual(
       body?.data?.meta?.adoptsFrom,

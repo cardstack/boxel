@@ -3,6 +3,7 @@ import CubeIcon from '@cardstack/boxel-icons/cube';
 import {
   BaseDefComponent,
   Component,
+  NumberField,
   StringField,
   contains,
   field,
@@ -13,7 +14,8 @@ import {
   type ByteStream,
   type SerializedFile,
 } from './file-api';
-import { STL_SNIFF_BYTES, extractStlFormat } from './stl-meta-extractor';
+import { STL_SNIFF_BYTES, extractStlMetadata } from './stl-meta-extractor';
+import ThreeModelViewer from './three-model-viewer';
 
 function getExtension(url: string): string {
   try {
@@ -54,42 +56,38 @@ class Isolated extends Component<typeof StlDef> {
 
   <template>
     <article class='stl-isolated' data-test-stl-isolated>
-      <div class='stl-isolated__icon'>
-        <CubeIcon width='100%' height='100%' />
-      </div>
       <header class='stl-isolated__title'>{{this.title}}</header>
       {{#if this.formatLabel}}
         <p class='stl-isolated__format' data-test-stl-format>
           {{this.formatLabel}}
         </p>
       {{/if}}
+      <ThreeModelViewer
+        @url={{@model.url}}
+        @fileType='stl'
+        @name={{this.title}}
+      />
     </article>
     <style scoped>
       .stl-isolated {
         display: flex;
         flex-direction: column;
-        align-items: center;
         gap: var(--boxel-sp-xs);
         padding: var(--boxel-sp-lg);
-        text-align: center;
-      }
-
-      .stl-isolated__icon {
-        width: 96px;
-        height: 96px;
-        color: var(--boxel-600);
       }
 
       .stl-isolated__title {
         color: var(--boxel-900);
         font-weight: 600;
         font-size: var(--boxel-font-size-lg);
+        text-align: center;
       }
 
       .stl-isolated__format {
         color: var(--boxel-600);
         font-size: var(--boxel-font-sm);
         margin: 0;
+        text-align: center;
       }
     </style>
   </template>
@@ -294,6 +292,11 @@ export class StlDef extends FileDef {
   static validExtensions = new Set(['.stl']);
 
   @field format = contains(StringField);
+  // Cheap, header-only facts. `triangleCount` is only known for binary STL (the
+  // header's uint32); ASCII leaves it unset and the viewer fills it in.
+  // `solidName` is the ASCII `solid <name>` label; binary STL has none.
+  @field triangleCount = contains(NumberField);
+  @field solidName = contains(StringField);
 
   static isolated: BaseDefComponent = Isolated;
   static embedded: BaseDefComponent = Embedded;
@@ -305,7 +308,13 @@ export class StlDef extends FileDef {
     url: string,
     getStream: () => Promise<ByteStream>,
     options: { contentHash?: string; contentSize?: number } = {},
-  ): Promise<SerializedFile<{ format: string }>> {
+  ): Promise<
+    SerializedFile<{
+      format: string;
+      triangleCount?: number;
+      solidName?: string;
+    }>
+  > {
     let extension = getExtension(url);
     if (!this.validExtensions.has(extension)) {
       throw new FileContentMismatchError(
@@ -316,11 +325,16 @@ export class StlDef extends FileDef {
     let base = await super.extractAttributes(url, getStream, options);
     let bytes = await readFirstBytes(await getStream(), STL_SNIFF_BYTES);
     let contentSize = base.contentSize ?? bytes.byteLength;
-    let { format } = extractStlFormat(bytes, contentSize);
+    let { format, triangleCount, solidName } = extractStlMetadata(
+      bytes,
+      contentSize,
+    );
 
     return {
       ...base,
       format,
+      triangleCount,
+      solidName,
     };
   }
 }

@@ -1,10 +1,13 @@
 // StlDef is a FileDef subclass for `.stl` 3D-print meshes. These tests exercise
 // the real base modules loaded through the realm loader:
 //
-//   1. `extractStlFormat` classifies binary vs ASCII from the first bytes plus
-//      the file size, and rejects non-STL bytes with FileContentMismatchError.
-//   2. `StlDef.extractAttributes` stamps the `format` field, inherits the base
+//   1. `extractStlMetadata` classifies binary vs ASCII from the first bytes plus
+//      the file size, pulls the cheap header facts (binary triangle count, ASCII
+//      solid name), and rejects non-STL bytes with FileContentMismatchError.
+//   2. `StlDef.extractAttributes` stamps the tier-1 fields and inherits the base
 //      name/contentType/size, and guards the file extension.
+
+import { render } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -60,53 +63,62 @@ module('Integration | stl file def', function (hooks) {
 
   async function loadBase() {
     let { StlDef } = await loader.import<any>('@cardstack/base/stl-file-def');
-    let { extractStlFormat } = await loader.import<any>(
+    let { extractStlMetadata } = await loader.import<any>(
       '@cardstack/base/stl-meta-extractor',
     );
     let { FileContentMismatchError } = await loader.import<any>(
       '@cardstack/base/file-api',
     );
-    return { StlDef, extractStlFormat, FileContentMismatchError };
+    return { StlDef, extractStlMetadata, FileContentMismatchError };
   }
 
-  test('extractStlFormat classifies a size-consistent binary STL', async function (assert) {
-    let { extractStlFormat } = await loadBase();
-    let bytes = binaryStl(1);
-    let { format } = extractStlFormat(bytes, bytes.length);
-    assert.strictEqual(format, 'binary');
+  test('extractStlMetadata reads binary encoding and triangle count', async function (assert) {
+    let { extractStlMetadata } = await loadBase();
+    let bytes = binaryStl(3);
+    let meta = extractStlMetadata(bytes, bytes.length);
+    assert.strictEqual(meta.format, 'binary');
+    assert.strictEqual(meta.triangleCount, 3, 'binary count from the header');
+    assert.strictEqual(meta.solidName, undefined, 'binary has no solid name');
   });
 
-  test('extractStlFormat classifies an ASCII "solid" STL', async function (assert) {
-    let { extractStlFormat } = await loadBase();
+  test('extractStlMetadata reads ASCII encoding and solid name', async function (assert) {
+    let { extractStlMetadata } = await loadBase();
     let bytes = new TextEncoder().encode(ASCII_STL);
-    let { format } = extractStlFormat(bytes, bytes.length);
-    assert.strictEqual(format, 'ascii');
+    let meta = extractStlMetadata(bytes, bytes.length);
+    assert.strictEqual(meta.format, 'ascii');
+    assert.strictEqual(meta.solidName, 'cube', 'name from the solid line');
+    assert.strictEqual(
+      meta.triangleCount,
+      undefined,
+      'ASCII count is left for the viewer, not scanned on the index path',
+    );
   });
 
-  test('extractStlFormat rejects non-STL bytes', async function (assert) {
-    let { extractStlFormat, FileContentMismatchError } = await loadBase();
+  test('extractStlMetadata rejects non-STL bytes', async function (assert) {
+    let { extractStlMetadata, FileContentMismatchError } = await loadBase();
     let bytes = new TextEncoder().encode('this is not an stl file');
     assert.throws(
-      () => extractStlFormat(bytes, bytes.length),
+      () => extractStlMetadata(bytes, bytes.length),
       FileContentMismatchError,
     );
   });
 
-  test('extractStlFormat does not misread ASCII whose size accidentally lacks a binary match', async function (assert) {
-    let { extractStlFormat } = await loadBase();
-    // Leading whitespace before `solid` still classifies as ASCII.
+  test('extractStlMetadata classifies whitespace-led ASCII and captures its name', async function (assert) {
+    let { extractStlMetadata } = await loadBase();
     let bytes = new TextEncoder().encode('   \n  solid part\nendsolid part\n');
-    let { format } = extractStlFormat(bytes, bytes.length);
-    assert.strictEqual(format, 'ascii');
+    let meta = extractStlMetadata(bytes, bytes.length);
+    assert.strictEqual(meta.format, 'ascii');
+    assert.strictEqual(meta.solidName, 'part');
   });
 
-  test('StlDef.extractAttributes stamps format and inherits base fields (binary)', async function (assert) {
+  test('StlDef.extractAttributes stamps tier-1 fields and inherits base (binary)', async function (assert) {
     let { StlDef } = await loadBase();
     let bytes = binaryStl(2);
     let url = `${testRealmURL}models/widget.stl`;
     let attrs = await StlDef.extractAttributes(url, streamOf(bytes), {});
 
     assert.strictEqual(attrs.format, 'binary', 'binary encoding detected');
+    assert.strictEqual(attrs.triangleCount, 2, 'binary triangle count stamped');
     assert.strictEqual(attrs.name, 'widget.stl', 'inherits base name');
     assert.strictEqual(attrs.url, url, 'inherits url');
     assert.strictEqual(
@@ -116,12 +128,13 @@ module('Integration | stl file def', function (hooks) {
     );
   });
 
-  test('StlDef.extractAttributes detects ASCII encoding', async function (assert) {
+  test('StlDef.extractAttributes detects ASCII encoding and solid name', async function (assert) {
     let { StlDef } = await loadBase();
     let bytes = new TextEncoder().encode(ASCII_STL);
     let url = `${testRealmURL}models/cube.stl`;
     let attrs = await StlDef.extractAttributes(url, streamOf(bytes), {});
     assert.strictEqual(attrs.format, 'ascii');
+    assert.strictEqual(attrs.solidName, 'cube');
   });
 
   test('StlDef.extractAttributes rejects a non-.stl extension', async function (assert) {
@@ -132,5 +145,21 @@ module('Integration | stl file def', function (hooks) {
       StlDef.extractAttributes(url, streamOf(bytes), {}),
       FileContentMismatchError,
     );
+  });
+
+  // With no file url there is nothing to render — the viewer shows its
+  // source-unavailable fallback and never mounts a canvas host or triggers the
+  // CDN three.js load. (Real WebGL rendering is verified out-of-band, since it
+  // needs a browser with a GPU/SwiftShader.)
+  test('ThreeModelViewer shows a fallback when no url is provided', async function (assert) {
+    let mod = await loader.import<any>('@cardstack/base/three-model-viewer');
+    let Viewer = mod.default;
+    await render(
+      <template><Viewer @fileType='stl' @name='model.stl' /></template>,
+    );
+    assert
+      .dom('[data-test-three-fallback]')
+      .exists('renders source-unavailable without a url');
+    assert.dom('[data-test-three-canvas]').doesNotExist();
   });
 });
