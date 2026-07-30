@@ -7,7 +7,6 @@ import { isTesting } from '@embroider/macros';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
-  hasExecutableExtension,
   X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
   type FetcherMiddlewareHandler,
   type LooseCardResource,
@@ -20,6 +19,18 @@ import {
   type ClientErrorKind,
   type ErrorReport,
 } from '@cardstack/host/lib/client-error-report';
+import {
+  now,
+  isDocumentHidden,
+  byteLength,
+  supportedEntryTypes,
+  nextTick,
+  isRenderContext,
+} from '@cardstack/host/lib/client-telemetry-env';
+import {
+  normalizeEndpoint,
+  codeRefURL,
+} from '@cardstack/host/lib/client-telemetry-labels';
 
 import type MatrixService from './matrix-service';
 import type OperatorModeStateService from './operator-mode-state-service';
@@ -278,28 +289,6 @@ interface LoafEntry {
 interface ProfilerSample {
   sample_ms: number;
   frames: string[];
-}
-
-function now(): number {
-  return typeof performance !== 'undefined' &&
-    typeof performance.now === 'function'
-    ? performance.now()
-    : Date.now();
-}
-
-function isDocumentHidden(): boolean {
-  return (
-    typeof document !== 'undefined' && document.visibilityState === 'hidden'
-  );
-}
-
-// UTF-8 byte length, matching the realm-server's TextEncoder-based size check.
-function byteLength(s: string): number {
-  try {
-    return new TextEncoder().encode(s).length;
-  } catch {
-    return s.length;
-  }
 }
 
 export default class ClientTelemetryService
@@ -1375,87 +1364,8 @@ export function createServerRequestTimingMiddleware(
   };
 }
 
-// Normalize a realm-server URL to a low-cardinality endpoint label: bare
-// underscore-endpoints (`_search`, `_catalog-realms`) collapse to the endpoint
-// name; everything else (card / source / file requests) collapses to
-// `<METHOD> <kind>` (e.g. "GET card").
-function normalizeEndpoint(rawUrl: string, method: string): string {
-  let pathname: string;
-  try {
-    pathname = new URL(rawUrl).pathname;
-  } catch {
-    pathname = rawUrl;
-  }
-  let segments = pathname.split('/').filter(Boolean);
-  let endpointSegment = segments.find((s) => s.startsWith('_'));
-  if (endpointSegment) {
-    return endpointSegment;
-  }
-  let last = segments[segments.length - 1] ?? '';
-  let kind: string;
-  if (last.endsWith('.json')) {
-    kind = 'file-meta';
-  } else if (hasExecutableExtension(last)) {
-    kind = 'source';
-  } else if (last.includes('.')) {
-    kind = 'file';
-  } else {
-    kind = 'card';
-  }
-  return `${method} ${kind}`;
-}
-
-// A CodeRef is usually `{ module, name }`; other shapes (fieldOf / ancestorOf)
-// have no direct name, so we surface null there.
-// A card type as an address, not a bare class name: the module the type lives
-// in with the export name as the final segment (<moduleURL>/<ExportName>), so
-// a dashboard row says where the code is. A relative module specifier is
-// resolved against the instance's own id; a scoped one (@cardstack/base/...)
-// is already canonical and passes through.
-function codeRefURL(
-  adoptsFrom: unknown,
-  instanceId: string | undefined,
-): string | null {
-  if (
-    !adoptsFrom ||
-    typeof adoptsFrom !== 'object' ||
-    typeof (adoptsFrom as { name?: unknown }).name !== 'string' ||
-    typeof (adoptsFrom as { module?: unknown }).module !== 'string'
-  ) {
-    return null;
-  }
-  let { module, name } = adoptsFrom as { module: string; name: string };
-  if (module.startsWith('.') && instanceId) {
-    try {
-      module = new URL(module, instanceId).href;
-    } catch {
-      // keep the relative spelling rather than dropping the event
-    }
-  }
-  return `${module}/${name}`;
-}
-
 // The shared dedup slot for errors past a window's event budget.
 const OVERFLOW_ERROR_KEY = 'overflow';
-
-function isRenderContext(): boolean {
-  return Boolean(
-    (globalThis as { __boxelRenderContext?: unknown }).__boxelRenderContext,
-  );
-}
-
-function supportedEntryTypes(): readonly string[] {
-  let ctor = PerformanceObserver as unknown as {
-    supportedEntryTypes?: readonly string[];
-  };
-  return ctor.supportedEntryTypes ?? [];
-}
-
-// A short macrotask tick used to fold a settling tail into the card-load
-// window measurement (the difference between loading_ms and settle_ms).
-function nextTick(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 0));
-}
 
 declare module '@ember/service' {
   interface Registry {
