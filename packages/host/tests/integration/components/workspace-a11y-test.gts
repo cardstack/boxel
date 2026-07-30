@@ -31,6 +31,7 @@ import {
 } from '../../helpers';
 import {
   CardDef,
+  CardInfoField,
   StringField,
   contains,
   field,
@@ -261,7 +262,13 @@ module(
         realmURL: testRealmURL,
         contents: {
           'book.gts': { Book },
-          'books/1.json': new Book({ title: 'Mango' }),
+          // The search filters on `cardTitle`, which CardDef computes from
+          // `cardInfo.name` — a subclass's own `title` field is unrelated to it
+          // and would leave this card searchable only as "Untitled Book".
+          'books/1.json': new Book({
+            title: 'Mango',
+            cardInfo: new CardInfoField({ name: 'Mango' }),
+          }),
           // A Workspace saved in the realm so it carries a realmURL, which is
           // the realm `runSearch` scopes its query to.
           'space.json': new Workspace({}),
