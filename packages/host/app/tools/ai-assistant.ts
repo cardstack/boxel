@@ -53,26 +53,41 @@ export default class UseAiAssistantTool extends HostBaseTool<
     let openRoomPromise = this.maybeOpenRoom(input, roomId);
     let loadSkillsPromise = this.maybeLoadSkillCards(input, roomId);
     let attachedCardsPromise = this.ensureAttachedCardsLoaded(input);
+    let openCardsPromise = this.maybeGetOpenCards(input);
     let setActiveLLMPromise = this.maybeSetActiveLLM(input, roomId);
     let setLLMModePromise = this.maybeSetLLMMode(input, roomId);
     await Promise.all([
       openRoomPromise,
       loadSkillsPromise,
       attachedCardsPromise,
+      openCardsPromise,
       setActiveLLMPromise,
       setLLMModePromise,
     ]);
 
     // Only send message if prompt is provided
     if (input.prompt && input.prompt.trim() !== '') {
+      let openCards = await openCardsPromise;
+      let attachedCards = new Set([
+        ...(await attachedCardsPromise),
+        ...openCards,
+      ]);
+      let openCardIds = Array.from(
+        new Set([
+          ...(input.openCardIds ?? []),
+          ...openCards
+            .map((c) => c.id)
+            .filter((id): id is NonNullable<typeof id> => Boolean(id)),
+        ]),
+      );
       let sendMessageCommand = new SendAiAssistantMessageTool(this.toolContext);
       let sendMessageResult = await sendMessageCommand.execute({
         roomId,
         prompt: input.prompt,
         clientGeneratedId: input.clientGeneratedId,
-        attachedCards: [...(await attachedCardsPromise)],
+        attachedCards: [...attachedCards],
         attachedFileIdentifiers: input.attachedFileIdentifiers,
-        openCardIds: input.openCardIds,
+        openCardIds: openCardIds.length ? openCardIds : input.openCardIds,
         realmIdentifier: this.operatorModeStateService.realmURL,
         requireCommandCall: input.requireCommandCall,
       });
@@ -144,6 +159,15 @@ export default class UseAiAssistantTool extends HostBaseTool<
       roomId,
       skillCardIdsToActivate: [...skillCardIds],
     });
+  }
+
+  async maybeGetOpenCards(
+    input: BaseToolModule.UseAiAssistantInput,
+  ): Promise<CardAPI.CardDef[]> {
+    if (!input.attachOpenCards) {
+      return [];
+    }
+    return (await this.operatorModeStateService.getOpenCards.perform()) ?? [];
   }
 
   async ensureAttachedCardsLoaded(

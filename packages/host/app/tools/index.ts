@@ -4,7 +4,6 @@ import * as AddFieldToCardDefinitionToolModule from './add-field-to-card-definit
 import * as UseAiAssistantToolModule from './ai-assistant';
 import * as ApplyMarkdownEditToolModule from './apply-markdown-edit';
 import * as ApplySearchReplaceBlockToolModule from './apply-search-replace-block';
-import * as AskAiToolModule from './ask-ai';
 import * as AuthedFetchToolModule from './authed-fetch';
 import * as CreateListingPRRequestToolModule from './bot-requests/create-listing-pr-request';
 import * as SendBotTriggerEventToolModule from './bot-requests/send-bot-trigger-event';
@@ -118,7 +117,6 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
     'add-field-to-card-definition',
     AddFieldToCardDefinitionToolModule,
   );
-  shimHostToolModule(virtualNetwork, 'ask-ai', AskAiToolModule);
   shimHostToolModule(virtualNetwork, 'authed-fetch', AuthedFetchToolModule);
   shimHostToolModule(
     virtualNetwork,
@@ -463,7 +461,6 @@ export const HostToolClasses: (typeof HostBaseTool<any, any>)[] = [
   AddFieldToCardDefinitionToolModule.default,
   ApplySearchReplaceBlockToolModule.default,
   ApplyMarkdownEditToolModule.default,
-  AskAiToolModule.default,
   CopyCardAsMarkdownToolModule.default,
   CopyCardToRealmModule.default,
   CopyCardToStackToolModule.default,
