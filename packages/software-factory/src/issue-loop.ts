@@ -1371,13 +1371,16 @@ export async function runIssueLoop(
       let turnBudget =
         issue.issueType === 'bootstrap'
           ? modelPolicy?.bootstrap
-          : issue.issueType === 'analysis' || issue.issueType === 'design'
-            ? undefined // research/taste turns inherit the flagship session
-            : iteration >= 2
-              ? modelPolicy?.fix
-              : issue.issueType === 'hardening'
-                ? modelPolicy?.harden
-                : modelPolicy?.build;
+          : issue.issueType === 'analysis'
+            ? undefined // research turn inherits the flagship session
+            : issue.issueType === 'design'
+              ? modelPolicy?.design // design-foundation: same budget as the
+              : // per-issue design turn (unset = inherit flagship)
+                iteration >= 2
+                ? modelPolicy?.fix
+                : issue.issueType === 'hardening'
+                  ? modelPolicy?.harden
+                  : modelPolicy?.build;
       if (turnBudget) {
         context.modelBudget = turnBudget;
         log.info(

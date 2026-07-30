@@ -794,6 +794,26 @@ module('factory-entrypoint > buildModelPolicy bootstrap budget', function () {
     assert.deepEqual(buildModelPolicy({})?.fix, { effort: 'medium' });
   });
 
+  test('design turns are unbudgeted by default (inherit the session flagship)', function (assert) {
+    assert.strictEqual(buildModelPolicy({})?.design, undefined);
+  });
+
+  test('--design-model budgets both design turn types', function (assert) {
+    let policy = buildModelPolicy({ designModel: 'claude-sonnet-5' });
+    assert.deepEqual(policy?.design, {
+      model: 'claude-sonnet-5',
+      effort: 'medium',
+    });
+  });
+
+  test('design-model inherit with an effort budgets effort only', function (assert) {
+    let policy = buildModelPolicy({
+      designModel: 'inherit',
+      designEffort: 'high',
+    });
+    assert.deepEqual(policy?.design, { effort: 'high' });
+  });
+
   test('hardening turns default to claude-sonnet-5 at medium', function (assert) {
     assert.deepEqual(buildModelPolicy({})?.harden, {
       model: 'claude-sonnet-5',

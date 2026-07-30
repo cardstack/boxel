@@ -146,6 +146,15 @@ export interface FactoryEntrypointOptions {
   /** Effort for phase-split build turns. Default `medium`. */
   buildEffort?: string;
   /**
+   * Model for the design turns (per-issue design + design foundation).
+   * Unset = inherit the session flagship (taste turns). Set e.g.
+   * `claude-sonnet-5` to run the whole factory on a cheaper flagship;
+   * `inherit` is an explicit no-op. Applies to both design turn types.
+   */
+  designModel?: string;
+  /** Effort for the design turns when --design-model is set. Default `medium`. */
+  designEffort?: string;
+  /**
    * Model for the bootstrap turn (planning + tracker-card writing).
    * Defaults to `claude-sonnet-5` — the turn's output is mostly
    * mechanical JSON; pass `inherit` to keep the session flagship.
@@ -323,6 +332,12 @@ export function getFactoryEntrypointUsage(): string {
     '                              so downgrading is an explicit experiment). `inherit` is a no-op.',
     '  --review-effort <effort>    Effort for the review turn when --review-model is set',
     '                              (low|medium|high|xhigh|max). Default medium.',
+    '  --design-model <model>      Model for the design turns (per-issue design + design',
+    '                              foundation). Default: inherit the session flagship — taste',
+    '                              turns. Set e.g. claude-sonnet-5 to run the whole factory on',
+    '                              a cheaper flagship. `inherit` is a no-op.',
+    '  --design-effort <effort>    Effort for the design turns when --design-model is set',
+    '                              (low|medium|high|xhigh|max). Default medium.',
     '  --to-phase <phase>           Run the lifecycle through this phase (inclusive):',
     '                              design | implementation | hardening | polishing.',
     '                              Default implementation. Later-phase issues stay on the',
@@ -436,6 +451,12 @@ export function parseFactoryEntrypointArgs(
           type: 'string',
         },
         'build-effort': {
+          type: 'string',
+        },
+        'design-model': {
+          type: 'string',
+        },
+        'design-effort': {
           type: 'string',
         },
         'monitor-level': {
@@ -565,6 +586,14 @@ export function parseFactoryEntrypointArgs(
       typeof parsed.values['build-effort'] === 'string'
         ? parsed.values['build-effort']
         : undefined,
+    designModel:
+      typeof parsed.values['design-model'] === 'string'
+        ? parsed.values['design-model']
+        : undefined,
+    designEffort:
+      typeof parsed.values['design-effort'] === 'string'
+        ? parsed.values['design-effort']
+        : undefined,
     monitorLevel: parseMonitorLevel(parsed.values['monitor-level']),
   };
 }
@@ -646,6 +675,8 @@ export function buildModelPolicy(options: {
   reviewEffort?: string;
   bootstrapModel?: string;
   bootstrapEffort?: string;
+  designModel?: string;
+  designEffort?: string;
 }):
   | {
       bootstrap?: TurnBudget;
@@ -716,11 +747,23 @@ export function buildModelPolicy(options: {
     effort: normalizeEffort(options.bootstrapEffort, 'medium'),
   };
 
+  // Design + design-foundation turns are taste work and inherit the
+  // session flagship by default (unbudgeted). `--design-model` opts into
+  // a specific model — e.g. running the whole factory on a cheaper
+  // flagship — and applies to BOTH the per-issue design turn and the
+  // design-foundation turn. `inherit` is an explicit no-op.
+  let designModel =
+    options.designModel === 'inherit' ? undefined : options.designModel;
+  if (designModel !== undefined || options.designEffort !== undefined) {
+    policy.design = {
+      ...(designModel ? { model: designModel } : {}),
+      effort: normalizeEffort(options.designEffort, 'medium'),
+    };
+  }
+
   // Phase-split build turns: LARGE output (the .gts emissions) — the one
   // turn type where a family switch beats the cache re-ingest cost, so
-  // the default IS a switch (claude-sonnet-5 @ medium). DESIGN keeps the
-  // session flagship (taste turn) unless a future --design-* flag says
-  // otherwise.
+  // the default IS a switch (claude-sonnet-5 @ medium).
   if (options.phaseSplit === true) {
     let buildModel =
       options.buildModel === 'inherit'
