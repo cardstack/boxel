@@ -2783,6 +2783,16 @@ export default class StoreService extends Service implements StoreInterface {
     idOrInstance: string | CardDef,
     opts?: { isImmediate?: true },
   ) {
+    // The render/index store renders read-only and must never persist. A save
+    // here would deadlock the from-scratch index: the render holds the sole
+    // worker while the write takes the realm write lock and awaits a reindex
+    // that needs that worker. (Canonicalizing card.id to RRI can make a
+    // freshly-deserialized instance look dirty — a field resolved against the
+    // RRI base differs from its on-disk URL form — which is what surfaces this
+    // otherwise-latent write on the index path.)
+    if (this.isRenderStore) {
+      return;
+    }
     let instance: CardDef | undefined;
     if (typeof idOrInstance === 'string') {
       let maybeInstance = this.peek(idOrInstance);
