@@ -224,11 +224,14 @@ Use CSS custom-property inheritance — values pass through `display: contents` 
 .swm-stagger :deep(.containsMany-item:nth-child(2)) { --stagger-d: 160ms; }
 /* …etc, or use :nth-child(n+8) to cap the cascade */
 
+.swm-stagger {
+  --stagger-d: 0ms;   /* base value — items past the stagger cap animate immediately */
+}
 .swm-stagger :deep(.field-component-card) {
   opacity: 0;
   transform: translateY(12px);
   animation: rise 600ms cubic-bezier(0.2, 0.7, 0, 1) forwards;
-  animation-delay: var(--stagger-d, 0ms);
+  animation-delay: var(--stagger-d);
 }
 ```
 
@@ -505,10 +508,41 @@ When you write `:deep(.boxel-card-container) { background: var(--paper); }`, the
 If you set `--radius: 0` on the parent's theme, then in a `:deep()` override write `border-radius: 0`, you have two sources of truth. When the theme later changes to `--radius: 4px`, the `:deep()` block still says `0`. Prefer:
 
 ```css
+.prg-listings-grid {
+  --child-radius: var(--radius, 0);   /* one declaration: theme wins, sharp fallback */
+}
 .prg-listings-grid :deep(.boxel-card-container) {
-  border-radius: var(--radius, 0);   /* respects theme, falls back to sharp */
+  border-radius: var(--child-radius);
 }
 ```
+
+### Embedded MarkdownDef — tune the bounded preview with custom properties
+
+The base `MarkdownDef` embedded format (`packages/base/markdown-file-def.gts`) renders a **bounded preview**: the content is clamped to a max height with a bottom fade mask, so a long document doesn't blow out the embedding card's layout. It exposes two custom properties for tuning that box:
+
+| Property | Default | What it controls |
+|---|---|---|
+| `--markdown-embedded-max-height` | `200px` | The clamp height of the preview |
+| `--markdown-embedded-mask` | a bottom fade | The fade-out mask applied at the clamp edge |
+
+Set them on **any ancestor of the embedded render** — they inherit across the embed boundary into the framework's markup:
+
+```css
+/* Taller bounded preview — still clamped + faded, just more of it visible */
+.doc-panel {
+  --markdown-embedded-max-height: 480px;
+}
+
+/* Full, unbounded content — you MUST clear both, together */
+.doc-panel {
+  --markdown-embedded-max-height: none;
+  --markdown-embedded-mask: none;
+}
+```
+
+Clearing only the height leaves the fade mask painting over the tail of the content; clearing only the mask leaves the height clamp cutting it off. For unbounded display, set both to `none`.
+
+**Why custom properties are the mechanism.** This embedded render is framework-driven — the host, not your template, instantiates the `MarkdownDef`'s embedded component. It takes no component args (`@maxHeight=…`), because the embedding context never calls the component; it only supplies the surrounding DOM. An **inherited custom property is the lever that crosses that boundary** — it rides the CSS cascade down into the framework's markup.
 
 ## Quick-reference cheat sheet
 
@@ -524,6 +558,8 @@ If you set `--radius: 0` on the parent's theme, then in a `:deep()` override wri
 | Let images bleed past corners | `:deep(.field-component-card.embedded-format) { overflow: visible; }` |
 | Target by format | `:deep([data-boxel-card-format="embedded"]) { ... }` |
 | Kill chrome entirely (atom) | `<@fields.X @format='atom' @displayContainer={{false}} />` |
+| Taller embedded MarkdownDef preview | set `--markdown-embedded-max-height: 480px` on an ancestor |
+| Full, unbounded embedded MarkdownDef | set `--markdown-embedded-max-height: none` AND `--markdown-embedded-mask: none` on an ancestor |
 | Atom visible on dark background | `@displayContainer={{false}}`, OR `:deep(.field-component-card.atom-format) { background: transparent; box-shadow: none; }` |
 | Atom baseline-align with prose | `:deep(.field-component-card.atom-format) { vertical-align: baseline; }` |
 | Atom padding match parent's chip | `:deep(.field-component-card.atom-format) { padding: 0; }` |
@@ -577,13 +613,17 @@ Everything above is how the PARENT overrides the host's chrome. The contract has
 
 ### Per format — what's safe and what isn't on the outermost element
 
+`CardContainer` — which wraps every card render, not just field embeds — already applies the theme's `background-color`, `color`, `font-family` (the theme's `--font-sans`, falling back to the Boxel sans stack), and body `font-size` on its root; templates inherit all of them for free. Don't declare any of these on the root unless you're deviating: `font-family` only when the whole card should use something other than `--font-sans` (such as `--font-serif`); `background-color`/`color` only when a pairing other than the theme's main background/foreground is preferred. `fitted` and `embedded` card templates MAY make that switch (e.g. `background-color: var(--card); color: var(--card-foreground)`); `isolated` and CardDef `edit` templates keep the theme's pair.
+
 | Format | OK on outermost | NOT OK on outermost (host/parent owns) |
 |---|---|---|
-| `isolated` | `color`, `font-family`, inner padding, inner grid/flex layout, `min-height` for content | `border-radius`, `border`, `box-shadow`, opaque `background`, `overflow` |
-| `embedded` | same as isolated | same — plus do NOT set `width`/`height`/`max-width` |
-| `fitted` | `color`, `font-family`, inner padding, inner grid template, inner gap | `border-radius`, `border`, `box-shadow`, `background`, `width`, `height`, `min-height`, `max-height`, `overflow`, `container-type`, `container-name` (the host sets these) |
+| `isolated` | inner padding, inner grid/flex layout, `min-height` for content | `border-radius`, `border`, `box-shadow`, `overflow`, background/foreground overrides (use the theme's) |
+| `embedded` | same as isolated — plus MAY use a different background/foreground pairing from the theme (e.g. `--card` + `--card-foreground`) | `border-radius`, `border`, `box-shadow`, `overflow`, `width`/`height`/`max-width` |
+| `fitted` | a background/foreground pairing different from the theme's (e.g. `--card` + `--card-foreground`), inner padding, inner grid template, inner gap | `border-radius`, `border`, `box-shadow`, `width`, `height`, `min-height`, `max-height`, `container-type`, `container-name` (the host sets these) |
 | `atom` | inline content only (text node, small inline icon) | `padding` (host provides), `border`, `border-radius`, `background`, any `display` other than inline-by-default |
-| `edit` | form field spacing, internal stack/grid layout | outer chrome same as embedded |
+| `edit` | form field spacing, internal stack/grid layout | outer chrome same as isolated (keep the theme's background/foreground) |
+
+**Compound-field templates are the exception to the edit/embedded rows:** a FieldDef's `embedded` and `edit` templates render nested *inside* a card surface, so they may choose a different background/foreground combo to distinguish themselves from the surrounding card — `--card` + `--card-foreground` is the usual choice.
 
 ### When your design genuinely demands a specific outer treatment
 
@@ -613,8 +653,8 @@ The single most common symptom in agent-generated cards is rounded-corner embedd
 
 Before any `static isolated|embedded|fitted|atom|edit = class { ... }` is considered complete:
 
-1. Does the outermost element have `border-radius`, `border`, `box-shadow`, or opaque `background`? If yes — move that decision to the Theme card, or remove it.
-2. For `fitted`: does the outermost element set `width`, `height`, `min/max-height`, `overflow`, `container-type`, or `container-name`? If yes — remove. The host sets these on `.field-component-card.fitted-format`.
+1. Does the outermost element have `border-radius`, `border`, or `box-shadow`? If yes — move that decision to the Theme card, or remove it. For `isolated` and CardDef `edit`, also don't override the theme's background/foreground; `fitted` and `embedded` may use a different pairing (e.g. `--card` + `--card-foreground`).
+2. For `fitted`: does the outermost element set `width`, `height`, `min/max-height`, `container-type`, or `container-name`? If yes — remove. The host sets these on `.field-component-card.fitted-format`. (`background-color` paired with `color` is fine on a fitted root — boxel-ui's `FittedCard` sets both.)
 3. For `atom`: is the outermost element doing anything more than inline text + maybe one inline icon? If yes — restructure. Atoms are inline content, not chips. (Chips are the parent's job; see `@displayContainer={{false}}` recipes.)
 4. Open the card both standalone (in the stack) and embedded inside another card. Does it look right in BOTH contexts? If only one, the child is decorating the outer.
 

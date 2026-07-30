@@ -81,7 +81,7 @@ Do not install or download the CLI without approval when network access is restr
 
 ## Token Translation Rules
 
-- Before assigning semantic tokens, apply `references/shadcn-boxel-token-mapping.md`; Boxel UI consumes these as component contracts, not raw brand swatches.
+- Before assigning semantic tokens, apply `shadcn-boxel-token-mapping.md`; Boxel UI consumes these as component contracts, not raw brand swatches.
 - Prefer semantic Boxel variables for UI consumption: `--background`, `--foreground`, `--card`, `--card-foreground`, `--primary`, `--primary-foreground`, `--secondary`, `--secondary-foreground`, `--accent`, `--accent-foreground`, `--muted`, `--muted-foreground`, `--border`, `--ring`, `--font-sans`, `--radius`, `--spacing`.
 - Map `colors.primary` to `functionalPalette.primary` and usually `rootVariables.primary`, but only as a high-emphasis action surface or indicator. Do not map it to ordinary text.
 - Map `colors.secondary` to `functionalPalette.secondary` and usually `rootVariables.secondary`.

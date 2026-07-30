@@ -320,6 +320,14 @@ function incomingClearsLastModified(args: unknown): boolean {
   return isObjectLike(args) && args.clearLastModified === true;
 }
 
+// A publish sets this on its from-scratch args so the prerender-html job the
+// pass spawns runs co-equal with indexing (the publish blocks on that HTML)
+// rather than one tier below. Absent on every other index path. Read loosely
+// so a job enqueued before this field existed reads as false.
+function argsAwaitedByPublish(args: unknown): boolean {
+  return isObjectLike(args) && args.awaitedByPublish === true;
+}
+
 registerQueueJobDefinition({
   jobType: 'incremental-index',
   coalesce: chooseIncrementalCoalesceDecision,
@@ -383,6 +391,10 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
           spawningJobId: jobInfo?.jobId ?? null,
           spawningPriority: jobInfo?.priority ?? systemInitiatedPriority,
           timeoutSec: FROM_SCRATCH_JOB_TIMEOUT_SEC,
+          // A publish awaits this HTML, so its render is on the publish's
+          // critical path and runs co-equal with indexing (see
+          // prerenderHtmlPriority). Only the publish flow sets this.
+          awaitedByPublish: argsAwaitedByPublish(args),
           // From-scratch: the prerender job runs the realm-wide module
           // pre-warm sweep before its format renders.
           preWarm: true,

@@ -121,6 +121,32 @@ TypeError: Cannot read properties of null (reading 'manager')
 
 …sometimes wrapped as `"Render binding desync"` in the indexer's error_doc with the TypeError buried in `additionalErrors[0]`. The error does NOT name the offending block-param or tag, and the same message can come from many other causes (any path where Glimmer is asked to invoke a `null` component reference). Treat the message as a hint to look for this footgun, *not* as proof of it — but the easiest way not to chase the message is to not write the footgun in the first place.
 
+#### ⚠️ Decorators inside inline component-class assignments
+
+Glint (ember-tsc) type checking does not support decorators (`@tracked`, etc.) on fields inside an inline class expression assigned to a static property. The pattern works at runtime, but fails type checking with "Decorators are not valid here". Declare the component class separately:
+
+```gts
+// ❌ WRONG — "Decorators are not valid here"
+export class StickyNote extends CardDef {
+  static isolated = class Isolated extends Component<typeof StickyNote> {
+    @tracked editMode = false;  // glint error!
+    <template>...</template>
+  };
+}
+
+// ✅ CORRECT — declare the class outside the assignment
+class Isolated extends Component<typeof StickyNote> {
+  @tracked editMode = false;
+  <template>...</template>
+}
+
+export class StickyNote extends CardDef {
+  static isolated = Isolated;
+}
+```
+
+Note: `@field` decorators on `CardDef`/`FieldDef` classes work fine — this restriction only applies to component classes using `@tracked` or similar decorators.
+
 ### Accessing @fields by Index: The Bridge Pattern
 
 **Use Case:** You need to use `@model` data to find specific items in a `containsMany` or `linksToMany` collection, then render those items using their field templates for proper delegated rendering.
@@ -315,8 +341,6 @@ Your templates must handle:
   </div>
 {{/if}}
 ```
-
-**Remember:** When implementing templates via SEARCH/REPLACE, include tracking markers ⁿ for style blocks
 
 ### Real-World Example: Shopping List with Featured Items
 

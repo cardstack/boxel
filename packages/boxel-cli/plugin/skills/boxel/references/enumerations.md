@@ -200,7 +200,7 @@ export class Task extends CardDef {
   @field taskName = contains(StringField);
   @field priority = contains(PriorityField);
   
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function(this: Task) {
       return this.taskName ?? 'Untitled Task';
     }

@@ -35,7 +35,7 @@ import {
   type KanbanColumnConfig,
   type KanbanPlacement,
 } from '@cardstack/boxel-ui/components';
-import { cn, cssVar, eq, MenuItem } from '@cardstack/boxel-ui/helpers';
+import { bool, cn, cssVar, eq, MenuItem } from '@cardstack/boxel-ui/helpers';
 
 import BookOpen from '@cardstack/boxel-icons/book-open';
 import CheckboxIcon from '@cardstack/boxel-icons/checkbox';
@@ -3160,7 +3160,6 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
                       <ContextButton
                         @icon={{ListFilter}}
                         @label='Group by'
-                        @variant='secondary'
                         {{bindings}}
                       />
                     </:trigger>
@@ -3532,7 +3531,7 @@ class IssueTrackerEdit extends Component<typeof IssueTracker> {
               </FieldContainer>
               <FieldContainer @label='Hide Empty Columns' @vertical={{true}}>
                 <Switch
-                  @isEnabled={{@model.hideEmptyColumns}}
+                  @isEnabled={{bool @model.hideEmptyColumns}}
                   @onChange={{this.toggleHideEmptyColumns}}
                   @label='Hide empty columns'
                 />

@@ -31,8 +31,12 @@ interface Signature {
     // A cards-only chooser: the type picker offers card types only (file types
     // are hidden so one can't be selected against the card scope).
     cardsOnly?: boolean;
+    // Seed the sort from a restored value (the search sheet passes its
+    // persisted sort); defaults to the first option otherwise.
+    initialActiveSort?: SortOption;
     onRealmChange?: (selectedRealms: URL[]) => void;
     onTypeChange?: (selectedTypes: ResolvedCodeRef[]) => void;
+    onSortChange?: (option: SortOption) => void;
   };
   Blocks: {
     default: [
@@ -56,7 +60,8 @@ export default class SearchPanel extends Component<Signature> {
 
   @tracked private selectedRealms: URL[] =
     this.args.initialSelectedRealms ?? [];
-  @tracked private activeSort: SortOption = SORT_OPTIONS[0];
+  @tracked private activeSort: SortOption =
+    this.args.initialActiveSort ?? SORT_OPTIONS[0];
 
   private typeSummaries = getTypeSummaries(this, getOwner(this)!, () => ({
     realmURLs: this.selectedRealmURLs,
@@ -128,6 +133,7 @@ export default class SearchPanel extends Component<Signature> {
   @action
   private onSortChange(option: SortOption) {
     this.activeSort = option;
+    this.args.onSortChange?.(option);
   }
 
   @action

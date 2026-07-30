@@ -7,19 +7,19 @@ boxel:
     - codeRef:
         module: '@cardstack/boxel-host/tools/invalidate-realm-identifiers'
         name: default
-        requiresApproval: false
+      requiresApproval: false
     - codeRef:
         module: '@cardstack/boxel-host/tools/reindex-realm'
         name: default
-        requiresApproval: false
+      requiresApproval: false
     - codeRef:
         module: '@cardstack/boxel-host/tools/full-reindex-realm'
         name: default
-        requiresApproval: false
+      requiresApproval: false
     - codeRef:
         module: '@cardstack/boxel-host/tools/cancel-indexing-job'
         name: default
-        requiresApproval: false
+      requiresApproval: false
 ---
 
 # Indexing Operations

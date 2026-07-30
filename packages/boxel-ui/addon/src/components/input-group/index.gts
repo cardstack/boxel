@@ -30,7 +30,7 @@ export interface Signature {
   Args: {
     autocomplete?: string;
     disabled?: boolean;
-    errorMessage?: string;
+    errorMessage?: string | null;
     helperText?: string;
     id?: string;
     inputmode?: string;
@@ -45,7 +45,7 @@ export interface Signature {
     state?: InputValidationState;
     type?: InputType;
     validIcon?: Icon;
-    value?: string;
+    value?: string | null;
   };
   Blocks: {
     after: [AccessoriesBlockArg, InputGroupBlockArg];

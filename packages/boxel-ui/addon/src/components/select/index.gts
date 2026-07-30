@@ -33,7 +33,9 @@ interface Signature<ItemT = any> {
   Element: HTMLElement;
 }
 
-export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
+export default class BoxelSelect<ItemT = any> extends Component<
+  Signature<ItemT>
+> {
   private themeObserver?: MutationObserver | null = null;
   private selectId = `boxel-select-${guidFor(this)}`;
 

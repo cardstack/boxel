@@ -7,7 +7,7 @@ import {
   type FittedFormatId,
   fittedFormatById,
   fittedFormatIds,
-} from '../../helpers.ts';
+} from '../../helpers.gts';
 import CardContainer from '../card-container/index.gts';
 import GridContainer from '../grid-container/index.gts';
 import FittedCardContainer from './index.gts';

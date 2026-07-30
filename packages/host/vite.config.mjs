@@ -302,12 +302,18 @@ export default defineConfig(({ mode }) => ({
     cors: true,
     headers: {
       'Cache-Control': 'no-store',
+      'Document-Policy': 'js-profiling',
     },
     ...(envHostname ? { allowedHosts: [envHostname] } : {}),
     ...(_devHttps ? { https: _devHttps } : {}),
   },
   server: {
     ...(_devHttps ? { https: _devHttps } : {}),
+    // Permit the JS Self-Profiling API in dev so client-telemetry's Tier-2
+    // wedge stack sampling works when running the host from Vite locally.
+    headers: {
+      'Document-Policy': 'js-profiling',
+    },
     // Pre-warm the dep optimizer at server boot so the prerender's first
     // `/_standby` navigation doesn't race a cold Vite optimize. The host
     // transitive graph is ~1000 packages, and a cold optimize routinely

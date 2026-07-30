@@ -1,7 +1,7 @@
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 
-import { cssVar } from '../../helpers.ts';
+import { cssVar } from '../../helpers.gts';
 
 interface Signature {
   Args: {

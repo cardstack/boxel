@@ -14,7 +14,7 @@ import { Button } from '@cardstack/boxel-ui/components';
 export class TopicCard extends CardDef {
   static displayName = 'Topic';
 
-  @field title = contains(StringField);
+  @field cardTitle = contains(StringField);
   @field summary = contains(StringField);
 
   static isolated = class extends Component<typeof TopicCard> {
@@ -40,7 +40,7 @@ export class TopicCard extends CardDef {
 
     <template>
       <article class='topic'>
-        <h2>{{@model.title}}</h2>
+        <h2>{{@model.cardTitle}}</h2>
         <p>{{@model.summary}}</p>
         <Button {{on 'click' this.askAssistant}}>Ask AI to explain</Button>
       </article>

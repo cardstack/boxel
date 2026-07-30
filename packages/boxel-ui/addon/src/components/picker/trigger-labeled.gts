@@ -4,7 +4,7 @@ import Component from '@glimmer/component';
 import type { ComponentLike } from '@glint/template';
 import type { Select } from 'ember-power-select/components/power-select';
 
-import { cn } from '../../helpers.ts';
+import { cn } from '../../helpers.gts';
 import { not } from '../../helpers/truth-helpers.ts';
 import CaretDown from '../../icons/caret-down.gts';
 import Pill from '../pill/index.gts';

@@ -23,6 +23,8 @@ import {
 import AdornContext from '@cardstack/host/components/adorn/adorn-context';
 import type { RealmFilter } from '@cardstack/host/components/realm-picker';
 import type { TypeFilter } from '@cardstack/host/components/type-picker';
+import persistScrollPosition from '@cardstack/host/modifiers/persist-scroll-position';
+import type { SearchEntriesResource } from '@cardstack/host/resources/search-entries';
 import type NetworkService from '@cardstack/host/services/network';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentCards from '@cardstack/host/services/recent-cards-service';
@@ -131,6 +133,29 @@ interface Signature {
     activeSort: SortOption;
     onSortChange: (sort: SortOption) => void;
     initialFocusedSection?: string | null;
+    // -- Optional controlled state --
+    //
+    // The search sheet drives view / pagination / scroll / results from its
+    // session-scoped service so they survive the sheet's close/reopen; it passes
+    // that state in through these args. The card choosers pass none of them and
+    // fall back to their own component-local, ephemeral state. This component
+    // itself knows nothing about the sheet or its service — it's controlled when
+    // the arg is present, uncontrolled when it isn't.
+    //
+    // A caller-owned search resource to render for the main results (whose
+    // subscriptions and re-runs outlive this component). When absent the
+    // component owns its own resource, driven by the derived `mainSearchQuery`.
+    mainSearchResource?: SearchEntriesResource;
+    // The active grid/strip view id, plus a callback for changes. When both are
+    // present the view is controlled by the caller; otherwise it's local.
+    viewId?: string;
+    onViewIdChange?: (id: string) => void;
+    // A caller-owned pagination instance to use in place of the local one.
+    pagination?: SectionPagination;
+    // The restored results-list scroll offset, plus a callback that records the
+    // live offset. Passing `onScrollTopChange` opts into scroll persistence.
+    scrollTop?: number;
+    onScrollTopChange?: (scrollTop: number) => void;
     // When true, search-result tiles render the Adorn visual treatment
     // (teal hover type-label tab + teal selection chip).
     adorn?: boolean;
@@ -158,8 +183,18 @@ export default class PanelContent extends Component<Signature> {
   @service('recent-cards-service')
   declare private recentCardsService: RecentCards;
 
-  @tracked activeViewId = 'grid';
-  pagination = new SectionPagination(this.args.initialFocusedSection);
+  @tracked private _localActiveViewId = 'grid';
+  #localPagination = new SectionPagination(this.args.initialFocusedSection);
+
+  // View + pagination are controlled by the caller when it supplies them (the
+  // search sheet, so they survive its close/reopen); otherwise component-local.
+  get activeViewId() {
+    return this.args.viewId ?? this._localActiveViewId;
+  }
+
+  get pagination(): SectionPagination {
+    return this.args.pagination ?? this.#localPagination;
+  }
 
   @consume(GetCardContextName) declare private getCard: getCard;
 
@@ -368,7 +403,11 @@ export default class PanelContent extends Component<Signature> {
 
   @action
   onChangeView(id: string) {
-    this.activeViewId = id;
+    if (this.args.onViewIdChange) {
+      this.args.onViewIdChange(id);
+    } else {
+      this._localActiveViewId = id;
+    }
   }
 
   @action
@@ -382,6 +421,7 @@ export default class PanelContent extends Component<Signature> {
         focusedSectionSid=this.pagination.focusedSection
         sectionSelector='[data-section-sid]'
       }}
+      {{persistScrollPosition scrollTop=@scrollTop onChange=@onScrollTopChange}}
       class={{cn
         'search-sheet-content'
         compact=@isCompact
@@ -401,8 +441,14 @@ export default class PanelContent extends Component<Signature> {
             live-search resource and re-runs only through its `@query` thunk.
             `<SheetResults>` derives the sections / count / multiselect from the
             yielded results — no parallel search resource. }}
+        {{! When the caller supplies a resource (the search sheet's
+            service-owned one) the main results render it, so they survive the
+            sheet's close/reopen and stay subscribed while closed. Otherwise (the
+            card choosers) the component owns its own resource, driven by the
+            derived query. }}
         <SearchResults
-          @query={{this.mainSearchQuery}}
+          @query={{unless @mainSearchResource this.mainSearchQuery}}
+          @resource={{@mainSearchResource}}
           @mode='none'
           as |mainResults|
         >
@@ -470,7 +516,17 @@ export default class PanelContent extends Component<Signature> {
            existing scrollbar gutter. */
         padding-block: var(--boxel-sp-xs);
         padding-inline: var(--boxel-sp-xs) var(--boxel-sp);
-        transition: opacity calc(var(--boxel-transition) / 4);
+        transition: opacity var(--boxel-transition);
+      }
+      /* While persistScrollPosition is still working a saved offset toward
+         sticking (content laying out, the sheet's open transition running),
+         hide the list so its clamped-to-top intermediate states never paint;
+         removing the tag fades the results in already at the right offset.
+         The transition: none here keeps the hide itself instant — only the
+         reveal animates. */
+      .search-sheet-content[data-scroll-restore-pending] {
+        opacity: 0;
+        transition: none;
       }
       .search-sheet-content.compact {
         flex-direction: row;

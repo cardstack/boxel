@@ -19,6 +19,7 @@ import {
   registerMatrixUser,
 } from './helpers/matrix-auth.ts';
 import { runCommand } from './helpers/run-command.ts';
+import { playwrightBrowsersEnv } from './helpers/preflight-env.ts';
 
 const bootstrapTargetDir = resolve(
   process.cwd(),
@@ -118,6 +119,7 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
         env: {
           ...process.env,
           HOME: tempProfileHome,
+          ...playwrightBrowsersEnv,
         },
         timeoutMs: 120_000,
       },

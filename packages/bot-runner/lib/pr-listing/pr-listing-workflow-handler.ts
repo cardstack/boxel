@@ -4,11 +4,7 @@ import {
   type RunCommandResponse,
 } from '@cardstack/runtime-common';
 import { isBinaryFilename } from '@cardstack/runtime-common/infer-content-type';
-import {
-  runLintOnSubmissionFiles,
-  type LintOutcome,
-  type SubmissionFile,
-} from '@cardstack/runtime-common/lint/submission-lint';
+import type { LintOutcome, SubmissionFile } from './lint-submission-files.ts';
 import {
   CreateListingPRHandler,
   type BotTriggerEventContent,
@@ -62,6 +58,7 @@ interface WorkflowContext {
   // hands it a synthesized event with that shape.
   syntheticCreateEvent: BotTriggerEventContent;
   existingPrCardUrl: string | null;
+  isRetry: boolean;
 }
 
 class StepError extends Error {
@@ -78,7 +75,7 @@ export interface PrListingWorkflowHandlerDeps {
   submissionBotUserId: string;
   enqueueRunCommand: EnqueueRunCommandFn;
   githubClient: GitHubClient;
-  lintSubmissionFiles?: LintSubmissionFilesFn;
+  lintSubmissionFiles: LintSubmissionFilesFn;
 }
 
 // Inline orchestrator for the listing-PR workflow. Workaround until
@@ -94,8 +91,7 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
     this.submissionBotUserId = deps.submissionBotUserId;
     this.enqueueRunCommand = deps.enqueueRunCommand;
     this.createListingPRHandler = new CreateListingPRHandler(deps.githubClient);
-    this.lintSubmissionFiles =
-      deps.lintSubmissionFiles ?? runLintOnSubmissionFiles;
+    this.lintSubmissionFiles = deps.lintSubmissionFiles;
   }
 
   matches(eventContent: BotTriggerEventContent): boolean {
@@ -165,6 +161,7 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
         input: { ...(input as Record<string, unknown>), branchName },
       },
       existingPrCardUrl: null,
+      isRetry: false,
     };
   }
 
@@ -241,6 +238,7 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
         },
       },
       existingPrCardUrl,
+      isRetry: true,
     };
   }
 
@@ -248,6 +246,9 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
 
   private async runWorkflow(ctx: WorkflowContext): Promise<RunCommandResponse> {
     try {
+      if (ctx.isRetry) {
+        await this.clearStaleWorkflowError(ctx);
+      }
       let prCardData = ctx.existingPrCardUrl
         ? await runStep('create-pr-card', () => this.loadExistingPrCard(ctx))
         : await this.runFreshPrCardFlow(ctx);
@@ -269,9 +270,11 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
       'collect-files',
       () => this.collectFiles(ctx),
     );
-    await runStep('lint', () => this.applyLintSkip(ctx, totalCount));
+    let lintedFiles = await runStep('lint', () =>
+      this.applyLint(ctx, textFiles),
+    );
     let { prCardResult, prCardUrl } = await runStep('create-pr-card', () =>
-      this.createPrCard(ctx, textFiles, totalCount),
+      this.createPrCard(ctx, lintedFiles, totalCount),
     );
     await runStep('create-pr-card', () =>
       this.linkPrCardOnWorkflow(ctx, prCardUrl),
@@ -313,20 +316,61 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
     return { textFiles, binaryFiles, totalCount: allFiles.length };
   }
 
-  private async applyLintSkip(
+  // Lint runs as `lint-source` worker jobs; unfixable errors block the PR.
+  // Returns the (possibly autofixed) files that should land on the PrCard.
+  private async applyLint(
     ctx: WorkflowContext,
-    fileCount: number,
-  ): Promise<void> {
-    // TEMP: lint step skipped while we investigate OOM in staging/prod.
-    // To restore, replace this method body with the original lint logic
-    // (preserved in git history at commit 2a94b3538d).
-    log.info('pr-listing-create: lint skipped (temporary)', { fileCount });
-    void this.lintSubmissionFiles;
-    if (ctx.workflowCardUrl) {
-      await this.patchWorkflowCard(ctx, {
-        attributes: { lintStatus: 'passed', lintFixedCount: 0 },
+    textFiles: FileContent[],
+  ): Promise<FileContent[]> {
+    // Drop any prior run's findings as this one starts: every terminal state
+    // below writes the findings it produced, so leftovers would contradict it.
+    await this.patchWorkflowCard(ctx, {
+      attributes: { lintStatus: 'in-progress', lintErrors: [] },
+    });
+    log.info('pr-listing-create: linting files', {
+      fileCount: textFiles.length,
+    });
+
+    let outcome: LintOutcome;
+    try {
+      outcome = await this.lintSubmissionFiles(textFiles, {
+        roomId: ctx.roomId,
+        listingId: ctx.listingId,
       });
+    } catch (lintError: any) {
+      let message = lintError?.message ?? 'lint runner crashed';
+      log.error('pr-listing-create: lint runner crashed', { error: message });
+      await this.patchWorkflowCard(ctx, {
+        attributes: { lintStatus: 'failed', lintErrors: [message] },
+      });
+      throw new Error(message, { cause: lintError });
     }
+
+    if (!outcome.passed) {
+      log.error('pr-listing-create: lint found unfixable errors', {
+        errorCount: outcome.lintErrors.length,
+      });
+      await this.patchWorkflowCard(ctx, {
+        attributes: { lintStatus: 'failed', lintErrors: outcome.lintErrors },
+      });
+      // The individual errors are already persisted in lintErrors above;
+      // keep the thrown message short so prCreationError doesn't repeat them.
+      throw new Error(
+        `Lint failed with ${outcome.lintErrors.length} unfixable error(s)`,
+      );
+    }
+
+    log.info('pr-listing-create: lint passed', {
+      fixedFileCount: outcome.fixedFileCount,
+    });
+    await this.patchWorkflowCard(ctx, {
+      attributes: {
+        lintStatus: 'passed',
+        lintErrors: [],
+        lintFixedCount: outcome.fixedFileCount,
+      },
+    });
+    return outcome.fixedFileCount > 0 ? outcome.fixedFiles : textFiles;
   }
 
   private async createPrCard(
@@ -377,7 +421,7 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
       runAs: this.submissionBotUserId,
       realmURL: ctx.submissionRealm,
       command: FETCH_CARD_JSON_COMMAND,
-      commandInput: { url: ctx.existingPrCardUrl },
+      commandInput: { cardIdentifier: ctx.existingPrCardUrl },
     });
     requireReady(result, 'fetch-card-json (existing PrCard)');
 
@@ -441,6 +485,21 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
         prCard: { links: { self: prCardUrl } },
       },
     });
+  }
+
+  // Retry reuses a card still carrying the previous attempt's failure; clear
+  // it up front so an active attempt doesn't display a stale error. Cosmetic
+  // only — a patch failure must not abort the retry.
+  private async clearStaleWorkflowError(ctx: WorkflowContext): Promise<void> {
+    try {
+      await this.patchWorkflowCard(ctx, {
+        attributes: { prCreationError: null, failedStep: null },
+      });
+    } catch (patchError: any) {
+      log.warn('pr-listing-retry: failed to clear stale workflow error', {
+        patchError: patchError?.message ?? patchError,
+      });
+    }
   }
 
   private async clearWorkflowError(
@@ -548,7 +607,7 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
       runAs: opts.runAs,
       realmURL: opts.realmURL,
       command: FETCH_CARD_JSON_COMMAND,
-      commandInput: { url: opts.cardId },
+      commandInput: { cardIdentifier: opts.cardId },
     });
     requireReady(result, 'fetch-card-json');
     return extractFetchedDocument(result.cardResultString);

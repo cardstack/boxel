@@ -262,7 +262,7 @@
           "type": "loki",
           "uid": "loki"
         },
-        "description": "Concurrent users right now: count of distinct Matrix users seen on the Synapse Sliding Sync endpoint within a rolling 5-minute window, evaluated across the dashboard time range. Big number is the latest 5-minute count; sparkline shows how the active-user count moved over the range. Sourced from Synapse access logs via Loki — matches `Processed request` lines hitting the MSC3575 Sliding Sync path (`simplified_msc3575/sync`) and extracts the `@user:server` token from the log prefix. Path is on the unstable MSC3575 namespace and may shift when sliding-sync stabilises upstream.",
+        "description": "Users with the app open right now: distinct Matrix accounts that emitted a client performance event within a rolling 5-minute window, evaluated across the dashboard time range. Big number is the latest 5-minute count; sparkline shows how it moved over the range. Counted from the browser telemetry the app itself emits: a client-perf beacon carries the account id from its authenticated session token, so this is people with Boxel open rather than Matrix accounts that happen to be syncing (the AI bot syncs too, and never loads the app). Counted per account, so one person with several tabs open counts once — the Host App Client Performance board breaks the same window down per session.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -271,8 +271,8 @@
             "decimals": 0,
             "links": [
               {
-                "title": "Open Users dashboard",
-                "url": "/d/boxelusers0001?${__url_time_range}",
+                "title": "Open Host App Client Performance dashboard",
+                "url": "/d/boxel-client-perf/client-performance?${__url_time_range}",
                 "targetBlank": false
               }
             ],
@@ -319,8 +319,8 @@
         "id": 30,
         "links": [
           {
-            "title": "Open Users dashboard",
-            "url": "/d/boxelusers0001?${__url_time_range}",
+            "title": "Open Host App Client Performance dashboard",
+            "url": "/d/boxel-client-perf/client-performance?${__url_time_range}",
             "targetBlank": false,
             "type": "link",
             "icon": "external link"
@@ -348,7 +348,8 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "count(count by (user) (count_over_time({service=\"synapse\"} |= \"Processed request\" |= \"simplified_msc3575/sync\" | regexp `\\{(?P<user>@[^}]+:[^}]+)\\}` [5m]))) or vector(0)",
+            "editorMode": "code",
+            "expr": "count(count by (matrix_user_id) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | matrix_user_id!=\"\" [5m]))) or vector(0)",
             "queryType": "range",
             "legendFormat": "Concurrent Users",
             "refId": "A"
@@ -362,7 +363,7 @@
           "type": "loki",
           "uid": "loki"
         },
-        "description": "Matrix user IDs seen on the Synapse Sliding Sync endpoint within the last 5 minutes. Click a user to open the Users dashboard focused on them.",
+        "description": "Matrix accounts with the app open in the last 5 minutes, and how many sessions (browser tabs) each has. Counted from the browser telemetry the app itself emits: a client-perf beacon carries the account id from its authenticated session token, so this is people with Boxel open rather than Matrix accounts that happen to be syncing (the AI bot syncs too, and never loads the app). Click a user to open the Host App Client Performance board scoped to that account.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -392,7 +393,7 @@
             {
               "matcher": {
                 "id": "byName",
-                "options": "user"
+                "options": "matrix_user_id"
               },
               "properties": [
                 {
@@ -410,11 +411,23 @@
                   "id": "links",
                   "value": [
                     {
-                      "title": "Open in Users dashboard",
-                      "url": "/d/boxelusers0001?${__url_time_range}&var-matrix_user_id=${__value.text:percentencode}",
+                      "title": "Open in Host App Client Performance dashboard",
+                      "url": "/d/boxel-client-perf/client-performance?${__url_time_range}&var-matrix_user_id=${__value.text:percentencode}",
                       "targetBlank": false
                     }
                   ]
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "sessions"
+              },
+              "properties": [
+                {
+                  "id": "custom.width",
+                  "value": 90
                 }
               ]
             }
@@ -437,11 +450,11 @@
             ],
             "show": false
           },
-          "showHeader": false,
+          "showHeader": true,
           "sortBy": [
             {
-              "desc": false,
-              "displayName": "Matrix User"
+              "desc": true,
+              "displayName": "sessions"
             }
           ]
         },
@@ -452,9 +465,10 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "sum by (user) (count_over_time({service=\"synapse\"} |= \"Processed request\" |= \"simplified_msc3575/sync\" | regexp `\\{(?P<user>@[^}]+:[^}]+)\\}` [5m]))",
+            "editorMode": "code",
+            "expr": "count by (matrix_user_id) (count by (matrix_user_id, session_id) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | matrix_user_id!=\"\" [5m])))",
             "queryType": "instant",
-            "legendFormat": "{{user}}",
+            "legendFormat": "{{matrix_user_id}}",
             "refId": "A"
           }
         ],
@@ -467,10 +481,14 @@
             }
           },
           {
-            "id": "filterFieldsByName",
+            "id": "organize",
             "options": {
-              "include": {
-                "pattern": "^user$"
+              "excludeByName": {
+                "Time": true
+              },
+              "renameByName": {
+                "Value #A": "sessions",
+                "Value": "sessions"
               }
             }
           }

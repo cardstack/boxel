@@ -324,18 +324,20 @@ export interface RenderTimeoutDiagnostics {
   // Whether this render landed on a tab that was already bound to its
   // affinity. `true` = warm tab, fast launch + cached BrowserContext
   // fetches. `false` = a freshly spawned or commandeered tab — pays
-  // the cold-start cost. Triage signal: a slow render with
-  // `tabReused=false` is a cold-start tax (look at `tabStartupMs`);
-  // with `tabReused=true` it's a real render-side stall.
+  // the cold-start cost. Triage signal: with `tabReused=true` a slow
+  // render is a real render-side stall. With `false` it's a cold start,
+  // and `tabProbeMs` says which kind: near-zero means the affinity simply
+  // had no warm tab (a cold-start tax — look at `tabStartupMs`), while a
+  // multi-second value means there WAS a warm tab and the liveness probe
+  // retired it, so this render paid for someone else's wedge.
   tabReused?: boolean;
   // Total wall time spent in `PagePool.getPage` before render work
-  // began. The three `waits` sub-fields below each cover a specific
-  // await; `launchMs` is measured around the full method and so is
-  // typically >= `semaphoreMs + tabQueueMs + tabStartupMs` — the
-  // residual is synchronous bookkeeping (affinity reassignment,
-  // LRU touch, standby top-up kickoff) that doesn't fall into any
-  // of the three buckets. For triage the sub-field breakdown is
-  // what matters: which *await* dominated launch time.
+  // began. The `waits` sub-fields below each cover a specific await;
+  // `launchMs` is measured around the full method and so is typically
+  // >= their sum — the residual is synchronous bookkeeping (affinity
+  // reassignment, LRU touch, standby top-up kickoff) that doesn't fall
+  // into any bucket. For triage the sub-field breakdown is what
+  // matters: which *await* dominated launch time.
   launchMs?: number;
   waits?: {
     semaphoreMs?: number;
@@ -348,6 +350,13 @@ export interface RenderTimeoutDiagnostics {
     admissionMs?: number;
     tabQueueMs?: number;
     tabStartupMs?: number;
+    // Wall time spent probing warm tabs for main-thread liveness before
+    // reuse. Around a millisecond on a healthy tab; a multi-second value
+    // means a tab failed the probe and was retired, so this render paid
+    // the probe budget plus a replacement tab instead of stalling on a
+    // wedged one. Reported apart from `tabQueueMs` so a retired-tab swap
+    // isn't read as warm-tab serialization.
+    tabProbeMs?: number;
   };
   // Elapsed between render start and the timeout. If ~= timeoutMs the
   // render itself stalled; if << timeoutMs the launch dominated.

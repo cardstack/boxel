@@ -93,6 +93,60 @@ export async function findOrMountRealm(
   return await reconciler.lookupOrMount(rows[0].url);
 }
 
+// A host routing rule matched against a concrete request URL, together
+// with the realm it belongs to and that realm's canonical form of the
+// path. `canonicalPathname` is the single URL the rule should be served
+// under: the realm mount pathname joined with the rule's declared path
+// (so the realm-root rule '/' keeps its trailing slash, while a sub-path
+// rule like '/pricing' has none). Callers redirect to it when the request
+// arrived under a different form.
+export type MatchedHostRoutingRule = {
+  realm: Realm;
+  rule: { path: string; id: string };
+  canonicalPathname: string;
+};
+
+// Resolve a request URL against the routed realm's host routing rules.
+// Trailing-slash-insensitive: `RealmPaths.local` strips trailing slashes,
+// so '/pricing' and '/pricing/' both match a rule declared as '/pricing'.
+// Returns undefined when the realm has no routing rules or the path
+// matches none. Used both to decide whether a bare routed path is
+// servable (rather than falling through to the module resolver) and to
+// canonicalize the request URL.
+export async function matchHostRoutingRule(
+  requestURL: URL,
+  deps: RealmRoutingDeps,
+): Promise<MatchedHostRoutingRule | undefined> {
+  let realm = await findOrMountRealm(requestURL, deps);
+  if (!realm) {
+    return undefined;
+  }
+  let routingMap = await realm.getHostRoutingMap();
+  if (routingMap.length === 0) {
+    return undefined;
+  }
+  let realmURL = new URL(realm.url);
+  realmURL.protocol = requestURL.protocol;
+  let realmPaths = new RealmPaths(realmURL);
+  let pathInRealm: string;
+  try {
+    pathInRealm = '/' + realmPaths.local(requestURL);
+  } catch {
+    // local() throws when the request is not within the realm; treat as
+    // no match rather than surfacing the error on the hot HTML path.
+    return undefined;
+  }
+  let rule = routingMap.find((r) => r.path === pathInRealm);
+  if (!rule) {
+    return undefined;
+  }
+  return {
+    realm,
+    rule,
+    canonicalPathname: realmURL.pathname + rule.path.replace(/^\//, ''),
+  };
+}
+
 export async function getPublishedRealmInfo(
   requestURL: URL,
   deps: RealmRoutingDeps,

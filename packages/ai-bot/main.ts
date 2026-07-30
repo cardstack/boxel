@@ -468,7 +468,7 @@ Common issues are:
               ? JSON.parse(event.getContent().data)
               : event.getContent().data;
           const agentId = contentData.context?.agentId;
-          // Route to-device streaming previews (see APP_BOXEL_STREAMING_MODE
+          // Route to-device streaming previews (see AI_BOT_STREAMING_MODE
           // handling in Responder) at the device that composed the prompt for
           // this turn. A continuation triggered by a tool / code-patch result
           // carries no device id, so fall back to the most recent stamped

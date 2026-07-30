@@ -435,6 +435,66 @@ module('Unit | index-writer', function (hooks) {
     ]);
   });
 
+  test('invalidations reach dependents whose rows exist only in the production index', async function (assert) {
+    // A production row without a working counterpart is a reachable state:
+    // the working table is a staging area that only gains a row once a visit
+    // writes one in this deployment's lifetime — an index imported from a
+    // dump that carries only the production tables, or rows staged under a
+    // since-changed schema. The dependency fan-out must find such dependents
+    // or a module edit leaves their indexed computed values stale until each
+    // file is touched individually.
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_generation: 1 }],
+      {
+        working: [],
+        production: [
+          {
+            url: `${testRealmURL}1.json`,
+            file_alias: `${testRealmURL}1.json`,
+            type: 'instance',
+            generation: 1,
+            realm_url: testRealmURL,
+            deps: [`${testRealmURL}person`],
+          },
+          // Transitive: discoverable only through 1.json's production row.
+          {
+            url: `${testRealmURL}2.json`,
+            file_alias: `${testRealmURL}2.json`,
+            type: 'instance',
+            generation: 1,
+            realm_url: testRealmURL,
+            deps: [`${testRealmURL}1.json`],
+          },
+          // A promoted tombstone is a deleted file — it stays out of the
+          // fan-out.
+          {
+            url: `${testRealmURL}3.json`,
+            file_alias: `${testRealmURL}3.json`,
+            type: 'instance',
+            generation: 1,
+            realm_url: testRealmURL,
+            is_deleted: true,
+            deps: [`${testRealmURL}person`],
+          },
+        ],
+      },
+      { prerenderedHtml: false },
+    );
+
+    let batch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
+    await batch.invalidate([new URL(`${testRealmURL}person.gts`)]);
+
+    assert.deepEqual(batch.invalidations.sort(), [
+      `${testRealmURL}1.json`,
+      `${testRealmURL}2.json`,
+      `${testRealmURL}person.gts`,
+    ]);
+  });
+
   test("invalidations don't cross realm boundaries", async function (assert) {
     await setupIndex(
       adapter,

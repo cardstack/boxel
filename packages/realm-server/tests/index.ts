@@ -111,6 +111,11 @@ if (testModules) {
   }
 }
 
+const qunitFilter = process.env.QUNIT_FILTER?.trim();
+if (qunitFilter) {
+  QUnit.config.filter = qunitFilter;
+}
+
 // Cleanup here ensures lingering servers/prerenderers/queues don't keep the
 // Node event loop alive after tests finish — and equivalently, don't leave
 // hardcoded test ports (4444-4471, etc.) bound after a test is aborted by
@@ -226,6 +231,7 @@ const ALL_TEST_FILES: string[] = [
   './atomic-batch-indexing-test',
   './atomic-endpoints-test',
   './auth-client-test',
+  './await-realm-index-settled-test',
   './billing-test',
   './card-dependencies-endpoint-test',
   './card-endpoints-test',
@@ -234,6 +240,7 @@ const ALL_TEST_FILES: string[] = [
   './cpu-profiler-affinity-gate-test',
   './definition-lookup-test',
   './searchable-parity-diff-test',
+  './migrate-index-to-workspace-test',
   './file-watcher-events-test',
   './full-index-on-startup-test',
   './full-reindex-test',
@@ -241,6 +248,8 @@ const ALL_TEST_FILES: string[] = [
   './indexing-test',
   './lazy-mount-test',
   './listener-dispatcher-test',
+  './liveness-verdict-test',
+  './liveness-responder-test',
   './module-cache-race-test',
   './module-syntax-test',
   './network-inflight-tracker-test',
@@ -263,6 +272,8 @@ const ALL_TEST_FILES: string[] = [
   './page-pool-eviction-recovery-test',
   './page-pool-standby-refill-test',
   './page-pool-cert-verifier-retry-test',
+  './page-pool-lease-revalidation-test',
+  './page-pool-unresponsive-tab-test',
   './prerender-deadlock-test',
   './runtime-exception-capture-test',
   './clamp-serialized-error-test',
@@ -292,6 +303,7 @@ const ALL_TEST_FILES: string[] = [
   './pg-adapter-subscribe-test',
   './module-cache-coordination-test',
   './realm-endpoints/archived-seal-test',
+  './realm-endpoints/readiness-check-test',
   './realm-endpoints/directory-test',
   './realm-endpoints/indexing-errors-test',
   './realm-endpoints/info-test',
@@ -339,6 +351,7 @@ const ALL_TEST_FILES: string[] = [
   './boxel-domain-availability-test',
   './get-boxel-claimed-domain-test',
   './claim-boxel-domain-test',
+  './client-telemetry-test',
   './realm-identifiers-test',
   './bfm-card-references-test',
   './package-shim-handler-test',

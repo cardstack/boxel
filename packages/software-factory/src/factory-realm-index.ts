@@ -42,10 +42,10 @@ export function inferRealmDashboardModuleUrl(targetRealm: string): string {
 
 /**
  * Set the realm's index page to a `RealmDashboard` instance, overwriting
- * the default `CardsGrid` index that `create-realm` seeded.
+ * the default index that `create-realm` seeded.
  *
- * Writes two files: a sibling `cards-grid.json` holding the `CardsGrid`
- * instance (the same empty grid `create-realm` would have made), and
+ * Writes two files: a sibling `cards-grid.json` holding a `CardsGrid`
+ * instance (an empty grid), and
  * `index.json` adopting `RealmDashboard` with its `cardsGrid` link
  * pointing at that instance — so the dashboard's catalog tab shows the
  * realm's cards. The `board` link is left for the bootstrap agent to wire

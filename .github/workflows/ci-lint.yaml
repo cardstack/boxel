@@ -52,6 +52,17 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/boxel-ui/addon
+      - name: Lint Host
+        # Runs BEFORE Build Boxel UI so host type-checks against the Boxel UI
+        # source, exactly as local development does (declarations/ is never
+        # built locally). This also guards against declaration-emit
+        # regressions: an unresolvable import inside a .d.ts is silently
+        # suppressed under skipLibCheck and degrades every Boxel UI symbol to
+        # `any`, turning the host type check into a no-op (see boxel-ui's
+        # bin/fix-declaration-extensions.mjs).
+        if: ${{ !cancelled() }}
+        run: pnpm run lint
+        working-directory: packages/host
       - name: Build Boxel UI
         # To faciliate linting of projects that depend on Boxel UI
         if: ${{ !cancelled() }}
@@ -61,10 +72,6 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/boxel-ui/test-app
-      - name: Lint Host
-        if: ${{ !cancelled() }}
-        run: pnpm run lint
-        working-directory: packages/host
       - name: Lint Matrix
         if: ${{ !cancelled() }}
         run: pnpm run lint

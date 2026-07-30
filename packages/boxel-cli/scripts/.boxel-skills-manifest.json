@@ -1,5 +1,5 @@
 {
-  "version": "v0.0.28",
+  "version": "v0.0.30",
   "skills": [
     "boxel",
     "boxel-create-edit-cards",
@@ -9,9 +9,13 @@
     "boxel-flavored-markdown",
     "boxel-markdown-format",
     "boxel-patterns",
+    "boxel-skill-authoring",
     "boxel-theme-development",
+    "boxel-ui-component-discovery",
     "boxel-ui-guidelines",
+    "boxel-workspace-cardinal-rules",
     "catalog-listing",
+    "ember-best-practices",
     "glossary.md",
     "source-code-editing"
   ],
@@ -31,7 +35,6 @@
     "boxel-search-cards.md",
     "boxel-submit-listing.md",
     "boxel-sync-workspace.md",
-    "distill-from-boxel-skills.md",
     "distill-learnings.md"
   ]
 }

@@ -36,6 +36,7 @@ import {
   type ArtifactKeyParts,
 } from './artifact-sink.ts';
 import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel.ts';
+import { probePageResponsive } from './page-responsiveness.ts';
 
 import type { CDPSession, Page } from 'puppeteer';
 
@@ -55,8 +56,11 @@ let activeRenderCount = 0;
 // the window must be long enough for V8 to accrue a meaningful delta
 // but short enough not to materially extend the already-timed-out call.
 const CPU_SAMPLE_WINDOW_MS = 750;
-// Budget for the main-thread responsiveness probe. If a trivial
-// `page.evaluate` can't return inside this, the JS thread is wedged.
+// Budget for the timeout path's main-thread responsiveness probe. If a
+// trivial `page.evaluate` can't return inside this, the JS thread is
+// wedged — which is also the condition under which the in-page
+// `__boxelRenderDiagnostics` hook goes dark, so the answer decides
+// whether the richer in-page captures below are attempted at all.
 const RESPONSIVENESS_PROBE_MS = 2000;
 // How long the timeout-path CPU sampler runs. At the timeout cap a
 // wedged render is still spinning, so a short window of out-of-process
@@ -1330,31 +1334,6 @@ export async function captureScreenshot(
   return { base64, width: dims.width, height: dims.height };
 }
 
-// Best-effort main-thread responsiveness probe. Races a trivial
-// `page.evaluate` against a short timer: if the evaluate can't even
-// return `true` within the budget, the page's JS thread is wedged
-// (a runaway sync loop or a never-settling render), which is exactly
-// the condition where the in-page `__boxelRenderDiagnostics` hook also
-// goes dark. Never throws — resolves to a boolean.
-async function probeMainThreadResponsive(page: Page): Promise<boolean> {
-  // Clear the loser timer so a fast `evaluate` doesn't leave a pending
-  // timeout holding the event loop for the rest of the probe window.
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      page
-        .evaluate(() => true)
-        .then(() => true)
-        .catch(() => false),
-      new Promise<boolean>((r) => {
-        timer = setTimeout(() => r(false), RESPONSIVENESS_PROBE_MS);
-      }),
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 // Best-effort CPU / heap capture via the CDP `Performance` domain. Runs
 // out-of-process, so it works even when the page's JS thread is pegged
 // and `page.evaluate` would block. Samples `Performance.getMetrics`
@@ -1716,7 +1695,9 @@ export async function withTimeout<T>(
     } = {};
     if (!page.isClosed()) {
       try {
-        mainThreadResponsive = await probeMainThreadResponsive(page);
+        mainThreadResponsive = (
+          await probePageResponsive(page, RESPONSIVENESS_PROBE_MS)
+        ).responsive;
       } catch {
         mainThreadResponsive = null;
       }

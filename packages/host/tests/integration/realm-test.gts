@@ -79,6 +79,30 @@ module('Integration | realm', function (hooks) {
     return result;
   }
 
+  // Readiness gates on the realm's index jobs, which live in a `jobs` table
+  // that exists only server-side — the browser realm's SQLite schema has no
+  // such table, and it needs none, being a single process whose in-process
+  // gates already see all of its own indexing. Querying for it here would
+  // throw rather than answer, so this pins the guard that keeps the query
+  // server-side.
+  test('realm can serve readiness checks without a server-side job queue', async function (assert) {
+    let { realm } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {},
+    });
+
+    let response = await handle(
+      realm,
+      new Request(`${testRealmURL}_readiness-check`, {
+        headers: {
+          Accept: 'application/vnd.api+json',
+        },
+      }),
+    );
+
+    assert.strictEqual(response.status, 200, 'reports ready');
+  });
+
   test('realm can serve GET card requests', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
@@ -801,7 +825,7 @@ module('Integration | realm', function (hooks) {
             realmURL: testRealmURL,
           },
           links: {
-            self: `../dir/owner`,
+            self: `./owner`,
           },
         },
       ],
@@ -1324,7 +1348,7 @@ module('Integration | realm', function (hooks) {
         {
           type: 'card',
           id: `${testRealmURL}dir/friend`,
-          links: { self: `./dir/friend` },
+          links: { self: `./friend` },
           attributes: {
             cardDescription: 'Person',
             email: null,
@@ -1352,7 +1376,7 @@ module('Integration | realm', function (hooks) {
         {
           type: 'card',
           id: `${testRealmURL}dir/van-gogh`,
-          links: { self: `./dir/van-gogh` },
+          links: { self: `./van-gogh` },
           attributes: {
             firstName: 'Van Gogh',
             cardTitle: 'Van Gogh',
@@ -3310,10 +3334,14 @@ module('Integration | realm', function (hooks) {
         `${mountedRealmURL}spreadsheet/Spreadsheet/${spreadsheet1Id}`,
     );
     assert.ok(included, 'linked spreadsheet card is included');
+    // The included card's module is relativized against its own id
+    // (spreadsheet/Spreadsheet/spreadsheet-1), not the primary document
+    // (index). `../spreadsheet` resolves to spreadsheet/spreadsheet from the
+    // card's own directory; the consumer resolves it against the same id.
     assert.strictEqual(
       included?.meta?.adoptsFrom?.module,
-      './spreadsheet/spreadsheet',
-      'adoptsFrom.module has the correct path',
+      '../spreadsheet',
+      'included adoptsFrom.module is relative to the resource own id',
     );
   });
 

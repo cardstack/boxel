@@ -2,9 +2,16 @@
 
 Linting is part of the core Boxel code workflow. Every `.gts` change needs a real lint result before it is reported as done.
 
-## In the AI assistant (no shell) — use `checkCorrectness`
+**Which context are you in?** Two execution contexts run this workflow, and they use different lint transports:
 
-The CLI sections below assume a shell. In the AI assistant there is no shell, so **do not** try to run `npx boxel file lint`. After every applied code patch the assistant automatically issues a `checkCorrectness` command against each patched file (and each affected card instance). It runs the same server-side ESLint + `ember-template-lint` gate and returns the result inline as a card with `correct` (boolean), `errors` (string array), and `warnings` (string array). Clean means `correct: true` with an empty `errors` array — the same bar as `No lint issues found` / `messages: []` below.
+- **Shell contexts** (Claude Code, a terminal, CI, any agent with Bash): use the `npx boxel` CLI commands below. This is what CLAUDE.md and `boxel/SKILL.md` Cardinal Rule 9 refer to.
+- **The in-app Boxel AI assistant** (no shell): use `checkCorrectness` (next section). The CLI commands are unavailable there — do not attempt them.
+
+Both transports hit the same server-side lint gate; only the invocation differs.
+
+## In the in-app Boxel AI assistant (no shell) — use `checkCorrectness`
+
+The CLI sections below assume a shell. In the in-app assistant there is no shell, so **do not** try to run `npx boxel file lint`. After every applied code patch the assistant automatically issues a `checkCorrectness` command against each patched file (and each affected card instance). It runs the same server-side ESLint + `ember-template-lint` gate and returns the result inline as a card with `correct` (boolean), `errors` (string array), and `warnings` (string array). Clean means `correct: true` with an empty `errors` array — the same bar as `No lint issues found` / `messages: []` below.
 
 The auto-fix loop is bounded (currently 3 attempts per target). Aim to emit clean code on the first pass rather than leaning on the retries — the recurring first-pass offenders (unused/duplicated imports, concatenated inline `style`, unlabeled inputs) are in the `SKILL.md` common-mistakes list. Everything under "What Lint Does NOT Catch" and "Completion Gate" applies to `checkCorrectness` too; the CLI-specific setup and command syntax do not.
 
@@ -12,10 +19,10 @@ The auto-fix loop is bounded (currently 3 attempts per target). Aim to emit clea
 
 Use `@cardstack/boxel-cli` 0.2.0 or newer. Do not use a locally checked-out CLI unless the task is to debug CLI source.
 
-**One-time setup per workspace.** This repo doesn't ship a `package.json` (it's a skills repo, not a Node project). Install the CLI as a local dep once so `npx boxel` resolves cleanly:
+**One-time setup per workspace.** A card workspace typically has no `package.json` of its own. Install the CLI as a local dep once, in the directory you run Boxel card work from, so `npx boxel` resolves cleanly:
 
 ```sh
-cd /path/to/boxel-workspaces
+# run from the root of the workspace directory you do card work in:
 npm install @cardstack/boxel-cli@latest
 ```
 
@@ -67,8 +74,8 @@ Do not treat transport success or `ok: true` as clean by itself. The lint endpoi
 
 ## What Does Not Count
 
-- `npx boxel check <file>` does not count. It reports sync state and can miss compile/lint failures.
-- `_search-prerendered` does not replace lint. It is a server render check for supported formats.
+- The current monorepo CLI has no `npx boxel check`. It was a legacy standalone sync-state command; use `npx boxel file lint` / `npx boxel lint`.
+- `_search-prerendered` does not replace lint. It is a server render check for supported formats. A direct `/_search-prerendered` probe is deployment-specific and, where exposed, uses HTTP `QUERY` rather than `GET` — for a server-side render check, prefer `npx boxel search --json` and inspect the returned HTML relationships, then open the card in the app to exercise `isolated`.
 - Opening the card in the app does not replace lint. It exercises runtime rendering, especially isolated format.
 
 ## What Lint Does NOT Catch

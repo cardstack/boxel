@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 
 // Compares per-module memory deltas from a CI run against a committed baseline.
-// Exits 0 on pass/warn, exits 1 on hard failure (>2x baseline or +50MB absolute).
+// Exits 0 on pass/warn, exits 1 on hard failure — when a module's delta clears
+// its recent ceiling by more than the larger of +50MB, 100% of the baseline, or
+// the module's own observed run-to-run swing.
 //
 // Usage: node check-memory-baseline.mjs <reports-dir> <baseline-json>
 //
@@ -72,6 +74,24 @@ const baselineCeiling = (entry) => {
   return entry?.delta_mb;
 };
 
+// The peak-to-peak spread of the recent window (max sample − min sample). This
+// is the module's own demonstrated run-to-run noise: a module whose post-GC
+// boundary delta swings because the settle-GC drains a large transient on some
+// runs but not others will show a wide spread even with no leak. The hard gate
+// folds this spread into its threshold so a value inside the module's already-
+// exhibited swing can't block the build — an all-negative window like
+// [-73, -74, -8, -19, -120] spans 112MB, so a one-off +54 reading is noise, not
+// a regression, even though it clears the (floored-at-zero) ceiling by >50MB.
+// Modules with a tight window (spread < the absolute hard threshold) are
+// unaffected. Zero for a single-value baseline that carries no sample window,
+// leaving the absolute/relative thresholds to govern on their own.
+const baselineSpread = (entry) => {
+  if (Array.isArray(entry?.samples) && entry.samples.length > 1) {
+    return Math.max(...entry.samples) - Math.min(...entry.samples);
+  }
+  return 0;
+};
+
 const fmtSamples = (entry) =>
   Array.isArray(entry?.samples) && entry.samples.length > 0
     ? `[${entry.samples.map((s) => s.toFixed(1)).join(', ')}]`
@@ -115,9 +135,18 @@ for (const [mod, data] of Object.entries(current)) {
     SOFT_ABSOLUTE_MB,
     effectiveBase * SOFT_RELATIVE,
   );
+  // The hard threshold also absorbs the module's demonstrated peak-to-peak
+  // noise. When a module's recent window is entirely negative, its mean baseline
+  // and its ceiling both floor to zero, so the +50MB absolute term alone would
+  // block any single reading over 50MB — even from a module that routinely
+  // swings by >100MB and merely landed positive this run. Sizing the threshold
+  // to the observed swing means a run has to clear the recent ceiling by more
+  // than the module's own run-to-run range before it blocks; tighter-window
+  // modules fall back to the absolute/relative terms.
   const hardThreshold = Math.max(
     HARD_ABSOLUTE_MB,
     effectiveBase * HARD_RELATIVE,
+    baselineSpread(base),
   );
 
   const pct =
@@ -167,7 +196,7 @@ const baselineHeader =
 
 if (failures.length > 0) {
   lines.push(
-    `### Failures (>${HARD_RELATIVE * 100}% increase or +${HARD_ABSOLUTE_MB}MB)\n`,
+    `### Failures (over recent ceiling by >${HARD_ABSOLUTE_MB}MB, >${HARD_RELATIVE * 100}%, or the observed swing)\n`,
   );
   lines.push(
     `| Module | ${baselineHeader} | Current | Change | Recent samples |`,

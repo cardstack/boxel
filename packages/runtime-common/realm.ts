@@ -1,4 +1,8 @@
 import { Deferred } from './deferred.ts';
+import {
+  awaitRealmIndexSettled,
+  indexingConcurrencyGroup,
+} from './jobs/indexing.ts';
 import { awaitPublishedHtmlReady } from './jobs/prerender-html.ts';
 import type { RealmVisibility } from './realm-visibility.ts';
 import type { SearchOpts } from './search-utils.ts';
@@ -44,6 +48,7 @@ import {
   HtmlResourceType,
 } from './resource-types.ts';
 import { normalizeRelationships } from './relationship-utils.ts';
+import { normalizeRoutingPath } from './host-routing-validation.ts';
 import type { LocalPath } from './paths.ts';
 import { RealmPaths, ensureTrailingSlash, join } from './paths.ts';
 import type ms from 'ms';
@@ -226,9 +231,10 @@ export type RealmInfo = {
   publishable: boolean | null;
   lastPublishedAt: string | Record<string, string> | null;
   // Opt-in to producing the full prerendered isolated HTML for the
-  // realm's default CardsGrid index card. When undefined / null /
-  // false the host's render route substitutes a small boilerplate
-  // placeholder instead and skips the (expensive) isolated render.
+  // realm's default index card (CardsGrid or Workspace). When
+  // undefined / null / false the host's render route substitutes a
+  // small boilerplate placeholder instead and skips the (expensive)
+  // isolated render.
   // The lever is primarily set by the publish handler on the
   // published realm snapshot so anonymous-visitor SSR injection has
   // real content; unpublished realms typically have nothing reading
@@ -1181,6 +1187,26 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ) {
+    // Report not-ready as a 503 with a retry hint rather than a false 200: a
+    // poller keeps waiting, and a single-shot caller sees the failure instead
+    // of treating the work it is waiting on as complete. `X-Boxel-Not-Ready`
+    // names which stage is outstanding — the two have different causes and
+    // different remedies, and the poll loops that consume this discard the
+    // body, so the header is the only place an operator can read it from.
+    let notReady = (stage: 'index' | 'prerender-html') =>
+      createResponse({
+        body: null,
+        init: {
+          headers: {
+            'content-type': 'text/html',
+            'Retry-After': '1',
+            'X-Boxel-Not-Ready': stage,
+          },
+          status: 503,
+        },
+        requestContext,
+      });
+
     await this.#startedUp.promise;
     // #startedUp is a one-time gate that resolves after the first start()'s
     // from-scratch index. On a republish the realm is already mounted with a
@@ -1191,6 +1217,25 @@ export class Realm {
     let inflight = this.indexing();
     if (inflight) {
       await inflight;
+    }
+
+    // Both gates above read per-process state: they see only the indexing this
+    // instance itself started. Behind a load balancer fronting several
+    // realm-server replicas, a poll can land on a replica that did not handle
+    // the publish or create — it finds the realm mounted with nothing in
+    // flight and answers ready while the other replica's index is still
+    // running. A republish is the sharp case: the realm already has index
+    // rows, so #startup skips its from-scratch pass and #startedUp resolves
+    // without reflecting the swapped files. Every replica reads the same job
+    // rows, so the realm's index lane holding no outstanding work is the same
+    // answer everywhere. A realm with no server-side queue has no such lane and
+    // reports settled without a query.
+    if (!(await awaitRealmIndexSettled(this.#dbAdapter, this.url))) {
+      // The lane never drained within budget — a job queued behind a long
+      // backlog, or one whose worker died and has yet to be reaped. Keep the
+      // caller polling instead of reporting a realm ready whose index is
+      // knowably behind its source.
+      return notReady('index');
     }
 
     // Opt-in: also await the published HTML being live for the current
@@ -1206,18 +1251,8 @@ export class Realm {
       let htmlReady = await awaitPublishedHtmlReady(this.#dbAdapter, this.url);
       if (!htmlReady) {
         // The current generation's HTML never became live within budget (a
-        // stuck/failed render, or a queue backlog longer than the wait). Report
-        // not-ready rather than a false 200 so a poller keeps waiting and a
-        // single-shot caller sees the failure instead of treating the publish
-        // as complete on an unrendered realm.
-        return createResponse({
-          body: null,
-          init: {
-            headers: { 'content-type': 'text/html', 'Retry-After': '1' },
-            status: 503,
-          },
-          requestContext,
-        });
+        // stuck/failed render, or a queue backlog longer than the wait).
+        return notReady('prerender-html');
       }
     }
 
@@ -1338,12 +1373,12 @@ export class Realm {
     if (cancelPending) {
       await cancelAllJobsInConcurrencyGroup(
         this.#dbAdapter,
-        `indexing:${this.url}`,
+        indexingConcurrencyGroup(this.url),
       );
     } else {
       await cancelRunningJobsInConcurrencyGroup(
         this.#dbAdapter,
-        `indexing:${this.url}`,
+        indexingConcurrencyGroup(this.url),
       );
     }
 
@@ -1601,7 +1636,10 @@ export class Realm {
     await this.#startedUp.promise;
   }
 
-  async fullIndex(priority?: number, opts?: { clearLastModified?: boolean }) {
+  async fullIndex(
+    priority?: number,
+    opts?: { clearLastModified?: boolean; awaitedByPublish?: boolean },
+  ) {
     // Clear the realmInfo cache before re-indexing so cards rendered
     // during this pass read /realm.json from the now-populated index
     // rather than a stale "Unnamed Workspace" cached during an earlier
@@ -1612,7 +1650,10 @@ export class Realm {
     this.invalidateCachedRealmInfo();
     let { completed } = this.#realmIndexUpdater.publishFullIndex(
       priority ?? systemInitiatedPriority,
-      { clearLastModified: opts?.clearLastModified },
+      {
+        clearLastModified: opts?.clearLastModified,
+        awaitedByPublish: opts?.awaitedByPublish,
+      },
     );
     await completed;
     // The from-scratch swap has landed in boxel_index: drop searchCards
@@ -4471,13 +4512,18 @@ export class Realm {
       typeof searchDoc.contentSize === 'number'
         ? searchDoc.contentSize
         : undefined;
-    // Only hit the DB when the indexed searchDoc is missing a value.
-    let persistedMeta =
-      (searchHash === undefined || searchSize === undefined) && this.#dbAdapter
-        ? await getContentMeta(this.#dbAdapter, this.url, localPath)
-        : { contentHash: undefined, contentSize: undefined };
-    let contentHash = searchHash ?? persistedMeta.contentHash;
-    let contentSize = searchSize ?? persistedMeta.contentSize;
+    // `realm_file_meta` is written in the same critical section as the file's
+    // bytes, so it is authoritative for content-derived values. It is
+    // preferred over the indexed values, which lag one batch promotion behind:
+    // a render inside the batch that re-indexes this file reads the pre-swap
+    // production row, so a card linking the file sees the file's index row at
+    // its previous contentHash/contentSize. The indexed values remain as
+    // fallbacks for files whose bytes were never hashed at write time.
+    let persistedMeta = this.#dbAdapter
+      ? await getContentMeta(this.#dbAdapter, this.url, localPath)
+      : { contentHash: undefined, contentSize: undefined };
+    let contentHash = persistedMeta.contentHash ?? searchHash;
+    let contentSize = persistedMeta.contentSize ?? searchSize;
     let adoptsFrom =
       codeRefFromInternalKey(fileEntry.types?.[0]) ??
       (isCodeRef(fileEntry.resource?.meta?.adoptsFrom)
@@ -4493,8 +4539,11 @@ export class Realm {
         resourceAttributes.contentType ??
         searchDoc.contentType ??
         inferredContentType,
-      contentHash: resourceAttributes.contentHash ?? contentHash,
-      contentSize: resourceAttributes.contentSize ?? contentSize,
+      // The persisted write-time values win over the indexed resource's for
+      // the same staleness reason as above; the resource's extract-computed
+      // values cover files that predate write-time hashing.
+      contentHash: contentHash ?? resourceAttributes.contentHash,
+      contentSize: contentSize ?? resourceAttributes.contentSize,
       lastModified: fileEntry.lastModified ?? unixTime(Date.now()),
       createdAt: createdAt ?? unixTime(Date.now()),
     };
@@ -6807,6 +6856,15 @@ export class Realm {
         let path = (rule as Record<string, unknown>).path;
         let instance = (rule as Record<string, unknown>).instance;
         if (typeof path !== 'string') return [];
+        // Normalize a rule authored with a trailing slash ('/pricing/') to
+        // its canonical slash-free form ('/pricing'). Request paths are
+        // matched slash-insensitively (RealmPaths.local strips trailing
+        // slashes), so an un-normalized '/pricing/' rule would never match;
+        // normalizing here also feeds the correct canonical form to the
+        // serve-index redirect and the client-side routing map. Shared with
+        // the editor's duplicate detection so a '/pricing' + '/pricing/'
+        // collision is flagged there. The realm-root rule '/' is preserved.
+        let normalizedPath = normalizeRoutingPath(path);
         if (!instance || typeof instance !== 'object') return [];
         let id = (instance as Record<string, unknown>).id;
         if (typeof id !== 'string') return [];
@@ -6828,11 +6886,11 @@ export class Realm {
         // are handled correctly.
         if (!this.paths.inRealm(idURL)) {
           this.#log.warn(
-            `dropping host routing rule for path "${path}" — target ${id} is outside this realm`,
+            `dropping host routing rule for path "${normalizedPath}" — target ${id} is outside this realm`,
           );
           return [];
         }
-        return [{ path, id }];
+        return [{ path: normalizedPath, id }];
       });
       return (this.#cachedHostRoutingMap = map);
     } catch (e) {

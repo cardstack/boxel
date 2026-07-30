@@ -262,10 +262,10 @@ export class Prerenderer {
         // instead of racing a background close at the pool ceiling
         // (which reads as "no standby available" and needlessly
         // routes that visit through the browser-restart recovery
-        // lane). That guarantee is scoped to visits arriving after
-        // this disposal: a waiter already holding the tab-queue
-        // lease when the cancel lands still receives the doomed
-        // page, since the lease handoff carries no revalidation.
+        // lane). A waiter that received the tab-queue lease in the
+        // window between release and this disposal is covered too:
+        // PagePool revalidates the lease after acquire and re-selects
+        // a live page rather than handing back the doomed one.
         // The shared BrowserContext is retained so the next visit
         // reuses the warm HTTP cache rather than paying the cold
         // module-source waterfall.
@@ -996,6 +996,7 @@ export class Prerenderer {
           // log entirely so grep-able lines all describe real load.
           return;
         }
+        let swaps = this.#pagePool.getUnresponsiveTabSwaps();
         let perAffinity = snap.affinities
           .map((a) => {
             let q = a.byQueue;
@@ -1032,7 +1033,15 @@ export class Prerenderer {
               a.tabQueuedByPriority,
               a.admissionQueuedByPriority,
             );
-            return `${a.affinityKey}(tabs=${a.tabCount}, pending=${a.pendingTotal}, max=${a.maxPending}${queueDetail}${admissionDetail}${priorityDetail})`;
+            // Cumulative count of warm tabs this affinity has had retired
+            // for failing the reuse responsiveness probe. Printed only
+            // once it's non-zero, so its presence on a line is itself the
+            // signal that this realm renders content that leaves the JS
+            // thread busy after a visit ends.
+            let swapCount = swaps[a.affinityKey] ?? 0;
+            let swapDetail =
+              swapCount > 0 ? `, unresponsiveSwaps=${swapCount}` : '';
+            return `${a.affinityKey}(tabs=${a.tabCount}, pending=${a.pendingTotal}, max=${a.maxPending}${queueDetail}${admissionDetail}${priorityDetail}${swapDetail})`;
           })
           .join(' ');
         log.info(

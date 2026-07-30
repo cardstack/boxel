@@ -5,6 +5,7 @@ import {
   logout,
   createRoom,
   getRoomId,
+  openAiAssistant,
   openRoom,
   assertMessages,
   sendMessage,
@@ -61,7 +62,10 @@ test.describe('Skills', () => {
   const serverIndexUrl = new URL(appURL).origin;
 
   test(`it can attach skill cards and toggle activation`, async ({ page }) => {
-    await login(page, firstUser.username, firstUser.password, { url: appURL });
+    await login(page, firstUser.username, firstUser.password, {
+      url: appURL,
+      openAiAssistant: true,
+    });
     await getRoomId(page);
     await expect(page.locator('[data-test-new-session]')).toHaveCount(1);
     await expect(page.locator('[data-test-skill-menu]')).toHaveCount(1);
@@ -141,7 +145,10 @@ test.describe('Skills', () => {
   test.skip('it will attach code editing skills in code mode by default', async ({
     page,
   }) => {
-    await login(page, firstUser.username, firstUser.password, { url: appURL });
+    await login(page, firstUser.username, firstUser.password, {
+      url: appURL,
+      openAiAssistant: true,
+    });
     await page.locator(`[data-test-room-settled]`).waitFor();
 
     await page.locator('[data-test-submode-switcher] button').click();
@@ -168,7 +175,10 @@ test.describe('Skills', () => {
   test(`room skills state does not leak when switching rooms`, async ({
     page,
   }) => {
-    await login(page, firstUser.username, firstUser.password, { url: appURL });
+    await login(page, firstUser.username, firstUser.password, {
+      url: appURL,
+      openAiAssistant: true,
+    });
     let room1 = await getRoomId(page);
 
     await attachSkill(page, skillCard1, true);
@@ -221,7 +231,10 @@ test.describe('Skills', () => {
   });
 
   test(`can attach more skills during chat`, async ({ page }) => {
-    await login(page, firstUser.username, firstUser.password, { url: appURL });
+    await login(page, firstUser.username, firstUser.password, {
+      url: appURL,
+      openAiAssistant: true,
+    });
     let room1 = await getRoomId(page);
     await attachSkill(page, skillCard2, true);
     await sendMessage(page, room1, 'Message 1');
@@ -238,7 +251,10 @@ test.describe('Skills', () => {
   });
 
   test(`can disable all skills`, async ({ page }) => {
-    await login(page, firstUser.username, firstUser.password, { url: appURL });
+    await login(page, firstUser.username, firstUser.password, {
+      url: appURL,
+      openAiAssistant: true,
+    });
     let room1 = await getRoomId(page);
     await attachSkill(page, skillCard1, true);
     await attachSkill(page, skillCard2);
@@ -281,7 +297,10 @@ test.describe('Skills', () => {
   });
 
   test(`previously disabled skills can be enabled`, async ({ page }) => {
-    await login(page, firstUser.username, firstUser.password, { url: appURL });
+    await login(page, firstUser.username, firstUser.password, {
+      url: appURL,
+      openAiAssistant: true,
+    });
     let room1 = await getRoomId(page);
     await attachSkill(page, skillCard1, true);
     await attachSkill(page, skillCard2);
@@ -313,7 +332,10 @@ test.describe('Skills', () => {
   test(`skills are persisted per room and do not leak between different users`, async ({
     page,
   }) => {
-    await login(page, firstUser.username, firstUser.password, { url: appURL });
+    await login(page, firstUser.username, firstUser.password, {
+      url: appURL,
+      openAiAssistant: true,
+    });
     let room1 = await getRoomId(page);
     await attachSkill(page, skillCard1, true);
     await attachSkill(page, skillCard2);
@@ -331,6 +353,7 @@ test.describe('Skills', () => {
     await logout(page);
     await login(page, secondUser.username, secondUser.password, {
       url: appURL,
+      openAiAssistant: true,
     });
     await getRoomId(page);
     await expect(page.locator('[data-test-active-skills-count]')).toContainText(
@@ -342,7 +365,10 @@ test.describe('Skills', () => {
     );
 
     await logout(page);
-    await login(page, firstUser.username, firstUser.password, { url: appURL });
+    await login(page, firstUser.username, firstUser.password, {
+      url: appURL,
+      openAiAssistant: true,
+    });
     await openRoom(page, room1);
     await expect(page.locator('[data-test-active-skills-count]')).toContainText(
       '2 Skills',
@@ -361,10 +387,15 @@ test.describe('Skills', () => {
     await createRealm(page, realmName);
     const realmURL = new URL(`${username}/${realmName}/`, serverIndexUrl).href;
     await page.goto(realmURL);
+    await openAiAssistant(page);
     await showAllCards(page);
 
-    // create a skill card
-    await page.locator('[data-test-create-new-card-button]').click();
+    // create a skill card — open the chooser via the index-agnostic
+    // operator-mode "New" button rather than the CardsGrid-only + button.
+    await page.locator('[data-test-new-file-button]').click();
+    await page
+      .locator('[data-test-boxel-menu-item-text="Choose a card type..."]')
+      .click();
     await page.locator('[data-test-search-field]').fill('Skill');
     await page
       .locator(
@@ -423,8 +454,10 @@ test.describe('Skills', () => {
       )
       .waitFor();
 
-    // Update the uploaded skill card
-    await page.locator('[data-test-filter-list-item="Skill"]').click();
+    // Update the uploaded skill card — reach the realm's card grid (CardsGrid's
+    // "All Cards" or the Workspace Library) and open the skill directly by its
+    // id, rather than the CardsGrid-only "Skill" type filter.
+    await showAllCards(page);
     await page.locator(`[data-cards-grid-item="${skillCard}"]`).click();
     await page.locator('[data-test-edit-button]').click();
     await page
@@ -445,7 +478,7 @@ test.describe('Skills', () => {
     ).toHaveText(
       'Here is an updated command you might find useful: * switch-submode: use this with "code" to go to code mode and "interact" to go to interact mode.',
     );
-    await page.locator('[data-test-open-ai-assistant]').click();
+    await openAiAssistant(page);
     await expect(
       page.locator('[data-test-field="instructions"] .content'),
     ).toHaveText(

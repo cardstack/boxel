@@ -1,5 +1,6 @@
 import { hash } from '@ember/helper';
 import { get } from '@ember/object';
+import { guidFor } from '@ember/object/internals';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 
@@ -9,7 +10,7 @@ import Item from './item.gts';
 
 export interface Signature {
   Args: {
-    checkedId?: string;
+    checkedId?: string | null;
     disabled?: boolean;
     errorMessage?: string;
     groupDescription: string;
@@ -18,7 +19,7 @@ export interface Signature {
     invalid?: boolean;
     items: any[];
     keyName?: string;
-    name: string;
+    name?: string;
     orientation?: string;
     radioBackgroundColor?: string;
     radioBorderColor?: string;
@@ -45,6 +46,10 @@ export default class RadioInput extends Component<Signature> {
 
   get checkedKey() {
     return this.args.keyName || 'id';
+  }
+
+  get name() {
+    return this.args.name ?? guidFor(this);
   }
 
   <template>
@@ -120,7 +125,7 @@ export default class RadioInput extends Component<Signature> {
               component=(component
                 Item
                 id=item.id
-                name=@name
+                name=this.name
                 disabled=@disabled
                 checked=(if
                   @checkedId (eq @checkedId (get item this.checkedKey))

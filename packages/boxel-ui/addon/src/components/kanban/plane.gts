@@ -4,7 +4,7 @@ import { registerDestructor } from '@ember/destroyable';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 
-import type { FittedFormatId } from '../../helpers.ts';
+import type { FittedFormatId } from '../../helpers.gts';
 import { type KanbanDragManagerArgs, KanbanDragManager } from './drag.gts';
 import { type KanbanColumnConfig, type KanbanPlacement } from './engine.ts';
 import { KanbanPlaneInner } from './plane-inner.gts';

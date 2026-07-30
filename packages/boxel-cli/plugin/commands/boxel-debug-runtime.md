@@ -46,5 +46,5 @@ boxel:
 
 ## Failure Recovery
 
-- Can't reproduce → ask the user for exact reproduction steps. Boxel runtime errors often surface differently for different ages of edit-tracking state.
+- Can't reproduce → ask the user for exact reproduction steps.
 - Loop detected (same commands repeating) → STOP and tell the user. Don't barrel forward.

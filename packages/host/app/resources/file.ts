@@ -417,6 +417,7 @@ class _FileResource extends Resource<Args> {
           this.loaderService.resetLoader({
             clearFetchCache: true,
             reason: 'file-resource-external-invalidation',
+            codeChange: true,
           });
         }
         this.read.perform({ force: true });
@@ -448,8 +449,21 @@ class _FileResource extends Resource<Args> {
           clientRequestId: opts?.clientRequestId,
         },
       );
+      // A rendered card only picks up new code when the store re-establishes
+      // it: a card resource reads the store, not the loader, so flushing the
+      // loader alone leaves an open preview on the superseded class. The
+      // realm's index event drives a second, later pass, but waiting for it
+      // would hold the preview stale until indexing completes — and gating
+      // this pass on the store's realm subscription would withhold it exactly
+      // when a preview is on screen, since an open playground is itself what
+      // subscribes the realm. The moduleWasLoaded gate is the one that
+      // belongs here: a write to a module nothing imported has no rendered
+      // consumers to refresh.
       if (moduleWasLoaded) {
-        this.store.refreshReferencesForCodeChange('file write');
+        this.store.refreshReferencesForCodeChange('file write', {
+          triggerModule: this._url,
+          realm: state.realmURL,
+        });
       }
       if (this.innerState.state === 'not-found') {
         // TODO think about the "unauthorized" scenario

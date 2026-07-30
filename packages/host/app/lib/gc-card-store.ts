@@ -186,8 +186,18 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   // ones piling up in a fan-out.
   #cardDocStartedAt: Map<string, number> = new Map();
   #fileMetaStartedAt: Map<string, number> = new Map();
-  // Bounded "top-slowest" history of completed doc loads.
-  #recentCardDocLoads: Array<{ url: string; ms: number }> = [];
+  // Bounded "top-slowest" history of completed doc loads. Card-doc entries
+  // carry the load outcome so a consumer (client-telemetry's card-load event)
+  // can flag which of the slowest loads resolved to a card error rather than a
+  // card instance.
+  #recentCardDocLoads: Array<{
+    url: string;
+    ms: number;
+    outcome: 'ok' | 'error';
+    // Load generation at completion, so a consumer can scope entries to a window
+    // (e.g. client-telemetry's per-card-load slowest-loads list).
+    generation: number;
+  }> = [];
   #recentFileMetaLoads: Array<{ url: string; ms: number }> = [];
   static #MAX_DIAGNOSTIC_HISTORY = 20;
 
@@ -383,8 +393,12 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     if (!opts?.untracked) {
       this.trackLoad(promise);
     }
+    // Assume failure until the load resolves to a non-error document; a
+    // rejected promise leaves this 'error' for the diagnostic history.
+    let outcome: 'ok' | 'error' = 'error';
     try {
       let doc = await promise;
+      outcome = isCardError(doc) ? 'error' : 'ok';
       // Cache successful documents only: an error result may be transient
       // (an auth hiccup, a fetch failure), and the broken-link degradation
       // path stays live rather than pinned for the job. The generation check
@@ -407,6 +421,8 @@ export default class CardStoreWithGarbageCollection implements CardStore {
         this.#recordDiagnosticHistory(this.#recentCardDocLoads, {
           url,
           ms: Date.now() - startedAt,
+          outcome,
+          generation: this.#loadGeneration,
         });
       }
     }
@@ -494,7 +510,12 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     }
     return out;
   }
-  recentCardDocLoads(): Array<{ url: string; ms: number }> {
+  recentCardDocLoads(): Array<{
+    url: string;
+    ms: number;
+    outcome: 'ok' | 'error';
+    generation: number;
+  }> {
     return [...this.#recentCardDocLoads];
   }
   recentFileMetaLoads(): Array<{ url: string; ms: number }> {

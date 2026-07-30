@@ -35,6 +35,7 @@ import {
   matrixURL,
   waitUntil,
 } from './helpers/index.ts';
+import { indexingConcurrencyGroup } from '@cardstack/runtime-common/jobs/indexing';
 import { settlePrerenderHtmlJobs } from './helpers/indexing.ts';
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
 
@@ -530,7 +531,7 @@ module(basename(import.meta.filename), function () {
         );
       });
 
-      test('publishing a realm with the default CardsGrid index writes includePrerenderedDefaultRealmIndex into the published realm.json', async function (assert) {
+      test('publishing a realm with the default Workspace index writes includePrerenderedDefaultRealmIndex into the published realm.json', async function (assert) {
         let response = await request
           .post('/_publish-realm')
           .set('Accept', 'application/vnd.api+json')
@@ -546,7 +547,7 @@ module(basename(import.meta.filename), function () {
             JSON.stringify({
               sourceRealmURL: sourceRealmUrlString,
               publishedRealmURL:
-                'http://testuser.localhost:4445/cards-grid-default/',
+                'http://testuser.localhost:4445/workspace-default/',
             }),
           );
         assert.strictEqual(response.status, 202, 'HTTP 202 status');
@@ -574,12 +575,12 @@ module(basename(import.meta.filename), function () {
         );
       });
 
-      test('publishing a realm whose index.json is not a CardsGrid leaves the published realm.json untouched', async function (assert) {
+      test('publishing a realm whose index.json is a bespoke card leaves the published realm.json untouched', async function (assert) {
         let sourceRealmPath = new URL(sourceRealmUrlString).pathname;
 
-        // Replace the source realm's default CardsGrid index with a
-        // bespoke CardDef-adopting index so the publish handler should
-        // NOT set the opt-in flag.
+        // Replace the source realm's default index with a bespoke
+        // CardDef-adopting index (neither CardsGrid nor Workspace) so the
+        // publish handler should NOT set the opt-in flag.
         let customIndexResponse = await request
           .post(`${sourceRealmPath}index.json`)
           .set('Accept', 'application/vnd.card+source')
@@ -600,7 +601,7 @@ module(basename(import.meta.filename), function () {
         assert.strictEqual(
           customIndexResponse.status,
           204,
-          'custom non-CardsGrid index.json can be written',
+          'bespoke non-default index.json can be written',
         );
 
         let response = await request
@@ -642,7 +643,79 @@ module(basename(import.meta.filename), function () {
           publishedRealmConfig?.data?.attributes
             ?.includePrerenderedDefaultRealmIndex,
           true,
-          'published realm.json does NOT carry includePrerenderedDefaultRealmIndex when the source index is a non-CardsGrid card',
+          'published realm.json does NOT carry includePrerenderedDefaultRealmIndex when the source index is a bespoke, non-default card',
+        );
+      });
+
+      test('publishing a realm whose index adopts the legacy CardsGrid card writes includePrerenderedDefaultRealmIndex into the published realm.json', async function (assert) {
+        let sourceRealmPath = new URL(sourceRealmUrlString).pathname;
+
+        // Workspace is the default index now, so point this realm's index at
+        // the legacy CardsGrid card explicitly — it is still recognized as a
+        // default index alongside Workspace.
+        let cardsGridIndexResponse = await request
+          .post(`${sourceRealmPath}index.json`)
+          .set('Accept', 'application/vnd.card+source')
+          .send(
+            JSON.stringify({
+              data: {
+                type: 'card',
+                attributes: {},
+                meta: {
+                  adoptsFrom: {
+                    module: '@cardstack/base/cards-grid',
+                    name: 'CardsGrid',
+                  },
+                },
+              },
+            }),
+          );
+        assert.strictEqual(
+          cardsGridIndexResponse.status,
+          204,
+          'CardsGrid index.json can be written',
+        );
+
+        let response = await request
+          .post('/_publish-realm')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .set(
+            'Authorization',
+            `Bearer ${createRealmServerJWT(
+              { user: ownerUserId, sessionRoom: 'session-room-test' },
+              realmSecretSeed,
+            )}`,
+          )
+          .send(
+            JSON.stringify({
+              sourceRealmURL: sourceRealmUrlString,
+              publishedRealmURL:
+                'http://testuser.localhost:4445/cards-grid-legacy/',
+            }),
+          );
+        assert.strictEqual(response.status, 202, 'HTTP 202 status');
+
+        let publishedRealmId = response.body.data.id;
+        let publishedDir = join(dir.name, 'realm_server_3', '_published');
+        let publishedRealmConfigPath = join(
+          publishedDir,
+          publishedRealmId,
+          'realm.json',
+        );
+        assert.ok(
+          existsSync(publishedRealmConfigPath),
+          'published realm.json exists on disk',
+        );
+        let publishedRealmConfig = readJsonSync(publishedRealmConfigPath) as {
+          data?: {
+            attributes?: { includePrerenderedDefaultRealmIndex?: boolean };
+          };
+        };
+        assert.true(
+          publishedRealmConfig?.data?.attributes
+            ?.includePrerenderedDefaultRealmIndex,
+          'published realm.json carries includePrerenderedDefaultRealmIndex: true for a CardsGrid index',
         );
       });
 
@@ -1399,6 +1472,134 @@ module(basename(import.meta.filename), function () {
         assert.false(
           await publishedSearchDocMatches(initialName),
           'published index no longer references the initial sentinel once readiness reports ready',
+        );
+      });
+
+      // The in-process readiness gates only see indexing this instance
+      // started. In a deployment with several realm-server replicas behind one
+      // load balancer, a readiness poll can be routed to a replica that did
+      // not handle the publish: it finds the realm mounted, with index rows
+      // and nothing in flight locally, so both in-process gates fall straight
+      // through. The realm's index lane in the shared `jobs` table is what
+      // every replica reads the same, so readiness has to gate on that too.
+      //
+      // A job row with a live reservation is exactly the state a peer
+      // replica's in-progress index leaves behind, and it also parks the job
+      // against this process's own workers (they skip any concurrency group
+      // holding a valid reservation), making the wait deterministic.
+      test('readiness does not report ready while another replica holds an index job for the realm', async function (assert) {
+        let publishedRealmURL = 'http://testuser.localhost:4445/test-realm/';
+        let publishedRealmHost = new URL(publishedRealmURL).host;
+        let publishedRealmPath = new URL(publishedRealmURL).pathname;
+        let readinessRequest = () =>
+          request
+            .get(`${publishedRealmPath}_readiness-check`)
+            .set('Host', publishedRealmHost)
+            .set('Accept', 'application/vnd.api+json');
+
+        let publishResponse = await request
+          .post('/_publish-realm')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .set(
+            'Authorization',
+            `Bearer ${createRealmServerJWT(
+              { user: ownerUserId, sessionRoom: 'session-room-test' },
+              realmSecretSeed,
+            )}`,
+          )
+          .send(
+            JSON.stringify({
+              sourceRealmURL: sourceRealmUrlString,
+              publishedRealmURL,
+            }),
+          );
+        assert.strictEqual(publishResponse.status, 202, 'publish accepted');
+        await testRealmServer.testingOnlyReconcile();
+
+        // Baseline: let the publish settle so readiness passes on its own.
+        // Everything asserted below is therefore attributable to the parked
+        // job rather than to leftover work from the publish.
+        await waitUntil(
+          async () =>
+            (await readinessRequest()).status === 200 ? true : undefined,
+          {
+            timeout: 30_000,
+            interval: 250,
+            timeoutMessage:
+              'readiness never reported ready for the freshly published realm',
+          },
+        );
+
+        let [{ id: parkedJobId }] = (await dbAdapter.execute(
+          `INSERT INTO jobs (job_type, concurrency_group, timeout, priority, args)
+             VALUES ('from-scratch-index', $1, 3600, 10, $2)
+             RETURNING id`,
+          {
+            bind: [
+              indexingConcurrencyGroup(publishedRealmURL),
+              JSON.stringify({ realmURL: publishedRealmURL }),
+            ],
+          },
+        )) as { id: number }[];
+        await dbAdapter.execute(
+          `INSERT INTO job_reservations (job_id, locked_until, worker_id)
+             VALUES ($1, NOW() + interval '5 minutes', 'peer-replica-worker')`,
+          { bind: [parkedJobId] },
+        );
+
+        // Keep only the status, not the supertest response object — an
+        // assertion that dumps one produces hundreds of lines of socket state.
+        let readinessStatus: number | undefined;
+        let readinessError: string | undefined;
+        let readiness = readinessRequest().then(
+          (response) => {
+            readinessStatus = response.status;
+          },
+          (error: unknown) => {
+            readinessError =
+              error instanceof Error ? error.message : `${error}`;
+          },
+        );
+
+        // This replica has nothing left to wait on locally — the realm is
+        // mounted, indexed, and idle here — so the request would land in
+        // single-digit milliseconds on the in-process gates alone. A second of
+        // silence is two orders of magnitude past that.
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        assert.strictEqual(
+          readinessStatus,
+          undefined,
+          'readiness is still waiting while the peer replica holds the index job',
+        );
+        assert.strictEqual(
+          readinessError,
+          undefined,
+          'readiness has not errored while waiting',
+        );
+
+        // Finish the job the way pg-queue does — close the reservation, mark
+        // the row resolved, then signal — and readiness should let go.
+        await dbAdapter.execute(
+          `UPDATE job_reservations SET completed_at = NOW(), completion_reason = 'completed' WHERE job_id = $1`,
+          { bind: [parkedJobId] },
+        );
+        await dbAdapter.execute(
+          `UPDATE jobs SET status = 'resolved', finished_at = NOW(), result = '{}'::jsonb WHERE id = $1`,
+          { bind: [parkedJobId] },
+        );
+        await dbAdapter.execute(`NOTIFY jobs_finished`);
+
+        await readiness;
+        assert.strictEqual(
+          readinessError,
+          undefined,
+          'readiness resolved without erroring once the index job finished',
+        );
+        assert.strictEqual(
+          readinessStatus,
+          200,
+          'readiness reports ready once the realm has no outstanding index job',
         );
       });
 
