@@ -7,13 +7,30 @@ import { isTesting } from '@embroider/macros';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
-  hasExecutableExtension,
   X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
   type FetcherMiddlewareHandler,
   type LooseCardResource,
 } from '@cardstack/runtime-common';
 
 import config from '@cardstack/host/config/environment';
+import {
+  reportFromErrorEvent,
+  reportFromRejectionEvent,
+  type ClientErrorKind,
+  type ErrorReport,
+} from '@cardstack/host/lib/client-error-report';
+import {
+  now,
+  isDocumentHidden,
+  byteLength,
+  supportedEntryTypes,
+  nextTick,
+  isRenderContext,
+} from '@cardstack/host/lib/client-telemetry-env';
+import {
+  normalizeEndpoint,
+  codeRefURL,
+} from '@cardstack/host/lib/client-telemetry-labels';
 
 import type MatrixService from './matrix-service';
 import type OperatorModeStateService from './operator-mode-state-service';
@@ -149,6 +166,47 @@ export interface KeepaliveEvent extends BaseEvent {
   max_gap_ms: number;
 }
 
+export interface ClientErrorEvent extends BaseEvent {
+  event_type: 'client-error';
+  // Which channel surfaced the failure: a `window` error event (an uncaught
+  // throw) or an unhandled promise rejection.
+  kind: ClientErrorKind;
+  message: string;
+  // Low-cardinality grouping key: the message with the parts that vary per
+  // occurrence — instance ids, uuids, hashes — collapsed to `*`. The dashboard
+  // groups by this so one logical error is one row; `message` keeps the
+  // verbatim text of the occurrence that opened the event.
+  message_key: string;
+  // The throw's own stack, newline-separated. The message the engine opens it
+  // with is bounded separately from the frames, and frames are dropped from the
+  // deep end, so the throw site survives the bound in every case where the
+  // engine gave one. Read from the raw line — `| json` extracts it whole and it
+  // is the field a diagnosis actually needs. Empty only when the throw carried
+  // no error object to take a stack from.
+  stack: string;
+  // Scalar grouping key for where errors come from, mirroring the wedge event's
+  // field of the same name. Empty when the stack names no function.
+  top_frame_function: string;
+  // Where it threw. Taken from the error event when it provides a location, and
+  // otherwise parsed out of the stack's first frame, so a rejection — which
+  // carries no location of its own — reports one too.
+  source_url: string;
+  line: number;
+  col: number;
+  // How many occurrences of this error this single event accounts for. A render
+  // loop throwing the same error hundreds of times reports one event with a
+  // count, so a storm cannot flood the flush budget; sum the field for the true
+  // occurrence count.
+  dedup_count: number;
+  // 0 on an ordinary event, where dedup_count counts occurrences of the one
+  // error this event describes. Nonzero on the shared slot a window falls back
+  // to once its event budget is spent: the count then spans that many *distinct*
+  // errors, of which the message and stack here are only a sample. Without this,
+  // a folded group reads identically to a genuine loop.
+  folded_signatures: number;
+  realm: TelemetryRealm;
+}
+
 export type TelemetryEvent =
   | ServerRequestEvent
   | DeserializeEvent
@@ -156,7 +214,8 @@ export type TelemetryEvent =
   | WedgeEvent
   | RebuildEvent
   | RealmEvent
-  | KeepaliveEvent;
+  | KeepaliveEvent
+  | ClientErrorEvent;
 
 // Distributive omit of `ts` — callers hand us the event minus its timestamp,
 // which the service stamps as it enters the ring buffer.
@@ -194,6 +253,22 @@ const MAX_EVENTS_PER_FLUSH = 400;
 const MAX_FLUSH_BODY_BYTES = 60 * 1024;
 const MAX_LOADED_IDS = 50;
 const MAX_SLOWEST_LOADS = 10;
+// Error events emitted per flush window. Past this many distinct errors in one
+// window, further ones fold into a single event whose count covers the group, so
+// a storm of *distinct* errors is bounded like a storm of identical ones: a
+// window costs at most this many of the ring buffer's 400 slots, leaving the
+// other signal types their capacity. The bound is on emissions per window, not a
+// hard cap on buffered error events — a buffer already at capacity evicts the
+// slot an event is tracked by, and the next occurrence then starts a new event —
+// so a saturated window can run somewhat over this before the buffer drains.
+// A saturated window is ~29KB of ASCII against MAX_FLUSH_BODY_BYTES, which the
+// flush's byte-aware chunking absorbs; a multi-byte-heavy stack costs more per
+// character and simply chunks into more requests.
+const MAX_ERROR_EVENTS_PER_FLUSH = 12;
+// How many distinct signatures the shared slot will name. A storm of distinct
+// errors is exactly when the slot is in use, so the identity set that counts them
+// needs a ceiling; past it, folded_signatures is a floor rather than a total.
+const MAX_FOLDED_SIGNATURES = 500;
 const MAX_LOAF_SCRIPTS = 10;
 const MAX_PROFILER_STACKS = 12;
 const MAX_PROFILER_FRAMES = 32;
@@ -214,28 +289,6 @@ interface LoafEntry {
 interface ProfilerSample {
   sample_ms: number;
   frames: string[];
-}
-
-function now(): number {
-  return typeof performance !== 'undefined' &&
-    typeof performance.now === 'function'
-    ? performance.now()
-    : Date.now();
-}
-
-function isDocumentHidden(): boolean {
-  return (
-    typeof document !== 'undefined' && document.visibilityState === 'hidden'
-  );
-}
-
-// UTF-8 byte length, matching the realm-server's TextEncoder-based size check.
-function byteLength(s: string): number {
-  try {
-    return new TextEncoder().encode(s).length;
-  } catch {
-    return s.length;
-  }
 }
 
 export default class ClientTelemetryService
@@ -268,6 +321,8 @@ export default class ClientTelemetryService
   #profilerSampled: boolean | undefined;
   #visibilityHandler: (() => void) | undefined;
   #pagehideHandler: (() => void) | undefined;
+  #errorHandler: ((event: Event) => void) | undefined;
+  #rejectionHandler: ((event: Event) => void) | undefined;
 
   // Flush gating.
   #lastKeepaliveAt = now();
@@ -283,6 +338,16 @@ export default class ClientTelemetryService
   #lastLoadGeneration = 0;
   #cardLoadWindowOpen = false;
 
+  // Error dedup: signature → the still-buffered event counting its occurrences.
+  #errorDedup = new Map<string, ClientErrorEvent>();
+  // Which distinct signatures the shared overflow slot currently stands for.
+  // Counting them needs identity, not a tally: every occurrence past the budget
+  // increments the slot's dedup_count, and only the ones never seen before make
+  // it a wider group. Bounded, and cleared with the slot at each flush.
+  #foldedSignatures = new Set<string>();
+  #errorEventsSinceFlush = 0;
+  #reportingError = false;
+
   constructor(owner: Owner) {
     super(owner);
     this.session.register(this);
@@ -294,8 +359,14 @@ export default class ClientTelemetryService
   // timer / observer / listener. Safe to call more than once (the service's
   // own destructor and the instance initializer both invoke it).
   teardown(): void {
-    this.#flush('teardown');
-    this.stop();
+    // Release even if the final flush throws: the listeners and timers hold this
+    // service, and through it the owner, so leaking them on the way out would
+    // pin the whole application instance.
+    try {
+      this.#flush('teardown');
+    } finally {
+      this.stop();
+    }
   }
 
   // Whether the instrument is currently armed. Hooks read this to stay a
@@ -317,6 +388,11 @@ export default class ClientTelemetryService
   drainBufferForTest(): TelemetryEvent[] {
     let events = this.#buffer;
     this.#buffer = [];
+    // Draining is a buffer-clearing path like the others, so the dedup slots go
+    // with it. Otherwise a test that drains past the window's event budget and
+    // then reports one more error would see it fold into the shared slot, hiding
+    // exactly the behavior such a test is written to check.
+    this.#forgetErrorEvents(events);
     return events;
   }
 
@@ -327,9 +403,18 @@ export default class ClientTelemetryService
   }
 
   resetState(): void {
-    this.#flush('reset');
-    this.#matrixUserId = null;
-    this.stop();
+    // Whatever the flush could not take goes no further — and that has to hold
+    // even if the flush throws, which serializing a buffered event can. The
+    // beacon envelope stamps matrix_user_id when it sends, not when an event is
+    // recorded, so a remainder held across a logout would transmit under the next
+    // account: one person's error text and stack under another person's id.
+    try {
+      this.#flush('reset');
+    } finally {
+      this.#buffer = [];
+      this.#matrixUserId = null;
+      this.stop();
+    }
   }
 
   // ── Public emit API ────────────────────────────────────────────────────
@@ -498,13 +583,16 @@ export default class ClientTelemetryService
     this.#longtaskHistory = [];
     this.#profilerSamples = [];
     this.#cardLoadWindowOpen = false;
+    this.#errorDedup.clear();
+    this.#foldedSignatures.clear();
+    this.#errorEventsSinceFlush = 0;
   }
 
   #isAllowed(): boolean {
-    // Never instrument a prerender tab — the render path is hot and headless.
-    if (
-      (globalThis as { __boxelRenderContext?: unknown }).__boxelRenderContext
-    ) {
+    // Never instrument a prerender tab — the render path is hot and headless,
+    // and a render that throws is an expected indexing outcome rather than a
+    // client fault.
+    if (isRenderContext()) {
       return false;
     }
     // Off under tests unless a test opts in explicitly.
@@ -600,6 +688,7 @@ export default class ClientTelemetryService
       body = this.#buildBody(chunk);
     }
     this.#buffer.splice(0, chunk.length);
+    this.#closeErrorWindow(chunk);
     try {
       // Raw fetch (not authedFetch) so the telemetry POST is neither timed by
       // our own middleware nor rewritten by the auth stack. keepalive lets the
@@ -636,8 +725,124 @@ export default class ClientTelemetryService
   #push(evt: TelemetryEvent): void {
     this.#buffer.push(evt);
     if (this.#buffer.length > MAX_BUFFERED_EVENTS) {
-      this.#buffer.splice(0, this.#buffer.length - MAX_BUFFERED_EVENTS);
+      // Evicting the oldest events drops error events the dedup slots point at,
+      // so the slots go with them: a slot naming an event nobody will send would
+      // silently absorb occurrences that never reach the wire.
+      this.#forgetErrorEvents(
+        this.#buffer.splice(0, this.#buffer.length - MAX_BUFFERED_EVENTS),
+      );
     }
+  }
+
+  // The dedup map holds exactly the error events still in the buffer, which is
+  // what makes a hit on it mean "still unsent". Maintaining that here — at the
+  // three places events leave the buffer — is what lets #reportError trust a map
+  // lookup instead of scanning the buffer on every occurrence, and keeps the
+  // window's event count from drifting above what is really outstanding.
+  #forgetErrorEvents(departed: TelemetryEvent[]): void {
+    if (this.#errorDedup.size > 0 && departed.length > 0) {
+      let gone = new Set(departed);
+      for (let [key, evt] of this.#errorDedup) {
+        if (gone.has(evt)) {
+          this.#errorDedup.delete(key);
+        }
+      }
+    }
+    this.#errorEventsSinceFlush = this.#errorDedup.size;
+  }
+
+  // ── Uncaught errors ──────────────────────────────────────────────────────
+  #onWindowError(event: Event): void {
+    // Only an ErrorEvent describes a throw. A failed subresource dispatches a
+    // plain Event at its element, and those reach a window listener only in the
+    // capture phase — so registering without `capture` is what keeps a broken
+    // image out of this channel, and this check is what keeps it out if that ever
+    // changes. Reporting one would beacon a message of "undefined".
+    if (!(event instanceof ErrorEvent)) {
+      return;
+    }
+    this.#reportError(() => reportFromErrorEvent(event));
+  }
+
+  #onUnhandledRejection(event: Event): void {
+    this.#reportError(() => reportFromRejectionEvent(event));
+  }
+
+  #reportError(buildReport: () => ErrorReport): void {
+    // The render-context check is repeated here rather than left to arm-time
+    // gating so the guarantee is local to this path: a render that throws never
+    // beacons, however the instrument came to be armed — including a live tab
+    // that navigates onto a render-surface route, where it armed legitimately
+    // at boot and the route then sets the flag.
+    if (!this.#started || this.#reportingError || isRenderContext()) {
+      return;
+    }
+    // A throw from inside this handler would itself dispatch `error` and recurse.
+    this.#reportingError = true;
+    try {
+      let { signature, ...fields } = buildReport();
+      let key = signature;
+      let folded = 0;
+      // A hit means the event is still buffered, since the map is pruned wherever
+      // events leave. Counting a repeat on it costs no extra event: the flush
+      // serializes the buffer at send time, after this mutation.
+      let pending = this.#errorDedup.get(signature);
+      if (pending) {
+        pending.dedup_count++;
+        return;
+      }
+      if (this.#errorEventsSinceFlush >= MAX_ERROR_EVENTS_PER_FLUSH - 1) {
+        // Budget spent. Distinct errors past this point share one slot, so the
+        // event's message is a representative sample of the group and its
+        // dedup_count covers all of it — a storm of distinct errors stays as
+        // bounded as a storm of identical ones.
+        let overflow = this.#errorDedup.get(OVERFLOW_ERROR_KEY);
+        if (overflow) {
+          overflow.dedup_count++;
+          if (
+            !this.#foldedSignatures.has(signature) &&
+            this.#foldedSignatures.size < MAX_FOLDED_SIGNATURES
+          ) {
+            this.#foldedSignatures.add(signature);
+            overflow.folded_signatures = this.#foldedSignatures.size;
+          }
+          return;
+        }
+        key = OVERFLOW_ERROR_KEY;
+        this.#foldedSignatures.clear();
+        this.#foldedSignatures.add(signature);
+        folded = 1;
+      }
+      let evt: ClientErrorEvent = {
+        event_type: 'client-error',
+        ts: Date.now(),
+        ...fields,
+        dedup_count: 1,
+        folded_signatures: folded,
+        realm: this.#currentCardContext().realm,
+      };
+      this.#push(evt);
+      this.#errorDedup.set(key, evt);
+      this.#errorEventsSinceFlush++;
+    } catch (e) {
+      console.error('client-telemetry error report failed', e);
+    } finally {
+      this.#reportingError = false;
+    }
+  }
+
+  // A transmission opens a new error window: an event that has been sent can no
+  // longer absorb a repeat, so its dedup slot goes. What survives is exactly the
+  // error events still buffered, which is also what the next window's budget has
+  // to account for.
+  #closeErrorWindow(sent: TelemetryEvent[]): void {
+    // The shared slot goes unconditionally, even while still buffered: it is the
+    // one slot that mixes unrelated errors, so letting it span windows would
+    // keep folding new ones onto a message and a timestamp from an older window.
+    // A window boundary always starts a fresh group.
+    this.#errorDedup.delete(OVERFLOW_ERROR_KEY);
+    this.#foldedSignatures.clear();
+    this.#forgetErrorEvents(sent);
   }
 
   // ── Heartbeat: wedge detection + card-load windows ─────────────────────
@@ -1099,8 +1304,15 @@ export default class ClientTelemetryService
         this.#lastLoadGeneration = this.#safeLoadGeneration();
       }
     };
+    this.#errorHandler = (event: Event) => this.#onWindowError(event);
+    this.#rejectionHandler = (event: Event) =>
+      this.#onUnhandledRejection(event);
     window.addEventListener('pagehide', this.#pagehideHandler);
     window.addEventListener('visibilitychange', this.#visibilityHandler);
+    // Passive observers of what broke: neither handler consumes the event, so
+    // the browser's own reporting (and anything else listening) is unaffected.
+    window.addEventListener('error', this.#errorHandler);
+    window.addEventListener('unhandledrejection', this.#rejectionHandler);
   }
 
   #detachLifecycleListeners(): void {
@@ -1115,6 +1327,14 @@ export default class ClientTelemetryService
       window.removeEventListener('visibilitychange', this.#visibilityHandler);
       this.#visibilityHandler = undefined;
     }
+    if (this.#errorHandler) {
+      window.removeEventListener('error', this.#errorHandler);
+      this.#errorHandler = undefined;
+    }
+    if (this.#rejectionHandler) {
+      window.removeEventListener('unhandledrejection', this.#rejectionHandler);
+      this.#rejectionHandler = undefined;
+    }
   }
 }
 
@@ -1128,9 +1348,7 @@ export function createServerRequestTimingMiddleware(
   owner: Owner,
 ): FetcherMiddlewareHandler {
   return async (req, next) => {
-    if (
-      (globalThis as { __boxelRenderContext?: unknown }).__boxelRenderContext
-    ) {
+    if (isRenderContext()) {
       return next(req);
     }
     // A late-settling fetch can run against a torn-down owner (common in tests);
@@ -1173,78 +1391,8 @@ export function createServerRequestTimingMiddleware(
   };
 }
 
-// Normalize a realm-server URL to a low-cardinality endpoint label: bare
-// underscore-endpoints (`_search`, `_catalog-realms`) collapse to the endpoint
-// name; everything else (card / source / file requests) collapses to
-// `<METHOD> <kind>` (e.g. "GET card").
-function normalizeEndpoint(rawUrl: string, method: string): string {
-  let pathname: string;
-  try {
-    pathname = new URL(rawUrl).pathname;
-  } catch {
-    pathname = rawUrl;
-  }
-  let segments = pathname.split('/').filter(Boolean);
-  let endpointSegment = segments.find((s) => s.startsWith('_'));
-  if (endpointSegment) {
-    return endpointSegment;
-  }
-  let last = segments[segments.length - 1] ?? '';
-  let kind: string;
-  if (last.endsWith('.json')) {
-    kind = 'file-meta';
-  } else if (hasExecutableExtension(last)) {
-    kind = 'source';
-  } else if (last.includes('.')) {
-    kind = 'file';
-  } else {
-    kind = 'card';
-  }
-  return `${method} ${kind}`;
-}
-
-// A CodeRef is usually `{ module, name }`; other shapes (fieldOf / ancestorOf)
-// have no direct name, so we surface null there.
-// A card type as an address, not a bare class name: the module the type lives
-// in with the export name as the final segment (<moduleURL>/<ExportName>), so
-// a dashboard row says where the code is. A relative module specifier is
-// resolved against the instance's own id; a scoped one (@cardstack/base/...)
-// is already canonical and passes through.
-function codeRefURL(
-  adoptsFrom: unknown,
-  instanceId: string | undefined,
-): string | null {
-  if (
-    !adoptsFrom ||
-    typeof adoptsFrom !== 'object' ||
-    typeof (adoptsFrom as { name?: unknown }).name !== 'string' ||
-    typeof (adoptsFrom as { module?: unknown }).module !== 'string'
-  ) {
-    return null;
-  }
-  let { module, name } = adoptsFrom as { module: string; name: string };
-  if (module.startsWith('.') && instanceId) {
-    try {
-      module = new URL(module, instanceId).href;
-    } catch {
-      // keep the relative spelling rather than dropping the event
-    }
-  }
-  return `${module}/${name}`;
-}
-
-function supportedEntryTypes(): readonly string[] {
-  let ctor = PerformanceObserver as unknown as {
-    supportedEntryTypes?: readonly string[];
-  };
-  return ctor.supportedEntryTypes ?? [];
-}
-
-// A short macrotask tick used to fold a settling tail into the card-load
-// window measurement (the difference between loading_ms and settle_ms).
-function nextTick(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 0));
-}
+// The shared dedup slot for errors past a window's event budget.
+const OVERFLOW_ERROR_KEY = 'overflow';
 
 declare module '@ember/service' {
   interface Registry {

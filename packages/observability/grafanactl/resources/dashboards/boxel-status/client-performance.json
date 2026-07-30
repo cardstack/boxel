@@ -92,7 +92,7 @@
         },
         "gridPos": {
           "h": 4,
-          "w": 8,
+          "w": 6,
           "x": 0,
           "y": 4
         },
@@ -163,8 +163,8 @@
         },
         "gridPos": {
           "h": 4,
-          "w": 8,
-          "x": 8,
+          "w": 6,
+          "x": 6,
           "y": 4
         },
         "id": 5,
@@ -230,8 +230,8 @@
         },
         "gridPos": {
           "h": 4,
-          "w": 8,
-          "x": 16,
+          "w": 6,
+          "x": 12,
           "y": 4
         },
         "id": 6,
@@ -264,6 +264,73 @@
           }
         ],
         "title": "Rebuilds (5m)",
+        "type": "stat",
+        "interval": "1m"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Uncaught exceptions and unhandled promise rejections reported by browser tabs within the last 5 minutes of the selected time range \u2014 the number is the latest 5-minute count, the sparkline is how errors were distributed across the range. This counts events, not occurrences: a tab throwing the same error in a loop reports one event carrying a dedup_count, so read the client-error row for the true volume.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                },
+                {
+                  "color": "red",
+                  "value": 1
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 18,
+          "y": 4
+        },
+        "id": 99,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "center",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"client-error\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [5m])) or vector(0)",
+            "queryType": "range",
+            "refId": "A",
+            "interval": "1m"
+          }
+        ],
+        "title": "Errors (5m)",
         "type": "stat",
         "interval": "1m"
       },
@@ -490,6 +557,17 @@
             "queryType": "range",
             "refId": "D",
             "legendFormat": "card-load"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"client-error\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__interval]))",
+            "queryType": "range",
+            "refId": "E",
+            "legendFormat": "client-error"
           }
         ],
         "title": "Signal event rate (events / interval)",
@@ -2134,6 +2212,426 @@
           "x": 0,
           "y": 57
         },
+        "id": 94,
+        "panels": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "Left axis: client-error events per interval, split by kind \u2014 error is an uncaught throw, unhandledrejection is a promise nobody caught. Right axis: occurrences, the summed dedup_count. The two diverge under a storm: a render loop throwing the same error hundreds of times reports one event per interval with a large count, so a flat event line over a climbing occurrence line is a loop, not a quiet period. One caveat when reading occurrences: past a per-window event budget, distinct errors fold onto one event whose folded_signatures is nonzero, and that event\u2019s count spans a group rather than one repeated error.",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisLabel": "errors",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 10,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    }
+                  ]
+                },
+                "unit": "short"
+              },
+              "overrides": [
+                {
+                  "matcher": {
+                    "id": "byName",
+                    "options": "occurrences"
+                  },
+                  "properties": [
+                    {
+                      "id": "custom.axisPlacement",
+                      "value": "right"
+                    },
+                    {
+                      "id": "custom.lineStyle",
+                      "value": {
+                        "dash": [
+                          10,
+                          10
+                        ],
+                        "fill": "dash"
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            "gridPos": {
+              "h": 8,
+              "w": 24,
+              "x": 0,
+              "y": 58
+            },
+            "id": 95,
+            "options": {
+              "legend": {
+                "calcs": [
+                  "mean",
+                  "max"
+                ],
+                "displayMode": "table",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "desc"
+              }
+            },
+            "pluginVersion": "12.4.3",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "sum by (kind) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"client-error\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__interval]))",
+                "queryType": "range",
+                "refId": "A",
+                "legendFormat": "errors ({{kind}})"
+              },
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "sum(sum_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"client-error\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap dedup_count [$__interval]))",
+                "queryType": "range",
+                "refId": "B",
+                "legendFormat": "occurrences"
+              }
+            ],
+            "title": "client-error rate & occurrences",
+            "type": "timeseries"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "What is breaking, worst first. message_key is the message with the parts that vary per occurrence \u2014 instance ids, uuids, hashes \u2014 collapsed to `*`, so the same failure against a different card is one row rather than one row per card; the rule is narrow, so a short or digit-free id (\u2026/Person/abc) does stay its own row. A key longer than its budget ends in a digest of the message, so two long messages differing only at the end stay distinct. The verbatim message and the full stack are on the raw line below. The throwing function makes a row actionable: it names the code that failed. Occurrences above events means the error is looping \u2014 unless \"distinct errors folded\" is nonzero, in which case the row is the shared slot a spent window folds distinct errors onto: its occurrences are a group total, and its message and throwing function are only whichever error opened the slot.",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "custom": {
+                  "align": "auto",
+                  "cellOptions": {
+                    "type": "auto"
+                  },
+                  "filterable": true,
+                  "inspect": false
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green"
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                }
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 9,
+              "w": 12,
+              "x": 0,
+              "y": 66
+            },
+            "id": 96,
+            "options": {
+              "cellHeight": "sm",
+              "footer": {
+                "countRows": false,
+                "fields": "",
+                "reducer": [
+                  "sum"
+                ],
+                "show": false
+              },
+              "showHeader": true,
+              "sortBy": [
+                {
+                  "desc": true,
+                  "displayName": "occurrences"
+                }
+              ]
+            },
+            "pluginVersion": "12.4.3",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "topk(200, sum by (message_key, kind, top_frame_function, folded_signatures) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"client-error\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__range])))",
+                "queryType": "instant",
+                "refId": "A"
+              },
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "topk(200, sum by (message_key, kind, top_frame_function, folded_signatures) (sum_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"client-error\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap dedup_count [$__range])))",
+                "queryType": "instant",
+                "refId": "B"
+              }
+            ],
+            "title": "Top errors by message",
+            "type": "table",
+            "transformations": [
+              {
+                "id": "labelsToFields",
+                "options": {
+                  "mode": "columns"
+                }
+              },
+              {
+                "id": "merge",
+                "options": {}
+              },
+              {
+                "id": "organize",
+                "options": {
+                  "excludeByName": {
+                    "Time": true
+                  },
+                  "renameByName": {
+                    "Value #A": "events",
+                    "Value #B": "occurrences",
+                    "message_key": "error",
+                    "kind": "kind",
+                    "top_frame_function": "throwing function",
+                    "folded_signatures": "distinct errors folded"
+                  },
+                  "indexByName": {
+                    "message_key": 0,
+                    "kind": 1,
+                    "top_frame_function": 2,
+                    "Value #A": 3,
+                    "Value #B": 4,
+                    "folded_signatures": 5
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "Which accounts are hitting errors, and what broke for them \u2014 the pivot for \"a user says the app broke\". Copy a Matrix User into the User variable to scope the whole board to that account, then read the raw lines below for the stack. A single event with a high occurrence count is one error looping in that tab \u2014 unless \"distinct errors folded\" is nonzero, which marks the shared slot a spent window folds distinct errors onto, where the occurrences are a group total and the named error is only a sample of the group.",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "custom": {
+                  "align": "auto",
+                  "cellOptions": {
+                    "type": "auto"
+                  },
+                  "filterable": true,
+                  "inspect": false
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green"
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                }
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 9,
+              "w": 12,
+              "x": 12,
+              "y": 66
+            },
+            "id": 97,
+            "options": {
+              "cellHeight": "sm",
+              "footer": {
+                "countRows": false,
+                "fields": "",
+                "reducer": [
+                  "sum"
+                ],
+                "show": false
+              },
+              "showHeader": true,
+              "sortBy": [
+                {
+                  "desc": true,
+                  "displayName": "occurrences"
+                }
+              ]
+            },
+            "pluginVersion": "12.4.3",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "topk(200, sum by (matrix_user_id, message_key, folded_signatures) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"client-error\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" [$__range])))",
+                "queryType": "instant",
+                "refId": "A"
+              },
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "topk(200, sum by (matrix_user_id, message_key, folded_signatures) (sum_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"client-error\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\" | unwrap dedup_count [$__range])))",
+                "queryType": "instant",
+                "refId": "B"
+              }
+            ],
+            "title": "Errors by user",
+            "type": "table",
+            "transformations": [
+              {
+                "id": "labelsToFields",
+                "options": {
+                  "mode": "columns"
+                }
+              },
+              {
+                "id": "merge",
+                "options": {}
+              },
+              {
+                "id": "organize",
+                "options": {
+                  "excludeByName": {
+                    "Time": true
+                  },
+                  "renameByName": {
+                    "Value #A": "events",
+                    "Value #B": "occurrences",
+                    "matrix_user_id": "Matrix User",
+                    "message_key": "error",
+                    "folded_signatures": "distinct errors folded"
+                  },
+                  "indexByName": {
+                    "matrix_user_id": 0,
+                    "message_key": 1,
+                    "Value #A": 2,
+                    "Value #B": 3,
+                    "folded_signatures": 4
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "Raw client-error lines, newest first. Expand a line to read the stack \u2014 an aggregation cannot show it, and it is what names the code that threw. The message the engine writes above the frames is bounded separately from them, and lines are kept from the top down, so the throw site is the first frame and a deep stack loses its tail; a `\u2026` marks any value that was cut. An empty stack means the throw carried nothing to take one from: a cross-origin script error, a promise rejected with something that is not an Error, or a reason that is error-shaped but has no stack. This is also where folded_signatures is readable: nonzero means the line stands for that many distinct errors and its message is only a sample of them.",
+            "gridPos": {
+              "h": 12,
+              "w": 24,
+              "x": 0,
+              "y": 75
+            },
+            "id": 98,
+            "options": {
+              "dedupStrategy": "none",
+              "enableLogDetails": true,
+              "prettifyLogMessage": false,
+              "showCommonLabels": false,
+              "showLabels": false,
+              "showTime": true,
+              "sortOrder": "Descending",
+              "wrapLogMessage": true
+            },
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "{service=\"realm-server\", env=\"$env\"} |= \"boxel:client-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:client-perf\" | event_type=\"client-error\" | matrix_user_id=~\"$matrix_user_id\" | session_id=~\".*${session_id}.*\"",
+                "queryType": "range",
+                "refId": "A"
+              }
+            ],
+            "title": "client-error detail (message + stack)",
+            "type": "logs"
+          }
+        ],
+        "title": "client-error (uncaught exceptions & unhandled rejections)",
+        "type": "row"
+      },
+      {
+        "collapsed": true,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 59
+        },
         "id": 28,
         "panels": [
           {
@@ -2210,7 +2708,7 @@
               "h": 8,
               "w": 12,
               "x": 0,
-              "y": 58
+              "y": 60
             },
             "id": 26,
             "options": {
@@ -2295,7 +2793,7 @@
               "h": 8,
               "w": 12,
               "x": 12,
-              "y": 58
+              "y": 60
             },
             "id": 27,
             "options": {
@@ -2382,7 +2880,7 @@
           "h": 1,
           "w": 24,
           "x": 0,
-          "y": 59
+          "y": 61
         },
         "id": 32,
         "panels": [
@@ -2443,7 +2941,7 @@
               "h": 8,
               "w": 8,
               "x": 0,
-              "y": 60
+              "y": 62
             },
             "id": 29,
             "options": {
@@ -2546,7 +3044,7 @@
               "h": 8,
               "w": 8,
               "x": 8,
-              "y": 60
+              "y": 62
             },
             "id": 30,
             "options": {
@@ -2638,7 +3136,7 @@
               "h": 8,
               "w": 8,
               "x": 16,
-              "y": 60
+              "y": 62
             },
             "id": 31,
             "options": {
@@ -2694,7 +3192,7 @@
           "h": 1,
           "w": 24,
           "x": 0,
-          "y": 61
+          "y": 63
         },
         "id": 34,
         "panels": [
@@ -2755,7 +3253,7 @@
               "h": 8,
               "w": 24,
               "x": 0,
-              "y": 62
+              "y": 64
             },
             "id": 33,
             "options": {
@@ -2811,7 +3309,7 @@
           "h": 1,
           "w": 24,
           "x": 0,
-          "y": 63
+          "y": 65
         },
         "id": 37,
         "panels": [
@@ -2825,7 +3323,7 @@
               "h": 12,
               "w": 24,
               "x": 0,
-              "y": 64
+              "y": 66
             },
             "id": 35,
             "options": {
@@ -2863,7 +3361,7 @@
               "h": 12,
               "w": 24,
               "x": 0,
-              "y": 76
+              "y": 78
             },
             "id": 36,
             "options": {
@@ -2901,7 +3399,7 @@
           "h": 1,
           "w": 24,
           "x": 0,
-          "y": 65
+          "y": 67
         },
         "id": 40,
         "title": "By user \u2014 who is hitting issues",
@@ -2946,7 +3444,7 @@
               "h": 9,
               "w": 8,
               "x": 0,
-              "y": 66
+              "y": 68
             },
             "id": 41,
             "options": {
@@ -3066,7 +3564,7 @@
               "h": 9,
               "w": 8,
               "x": 8,
-              "y": 66
+              "y": 68
             },
             "id": 42,
             "options": {
@@ -3174,7 +3672,7 @@
               "h": 9,
               "w": 8,
               "x": 16,
-              "y": 66
+              "y": 68
             },
             "id": 43,
             "options": {

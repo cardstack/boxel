@@ -6,6 +6,7 @@ import { restartableTask } from 'ember-concurrency';
 
 import { Button } from '@cardstack/boxel-ui/components';
 
+import { truncate } from '@cardstack/host/lib/truncate';
 import OpenAiAssistantRoomTool from '@cardstack/host/tools/open-ai-assistant-room';
 import SendAiAssistantMessageTool from '@cardstack/host/tools/send-ai-assistant-message';
 
@@ -52,13 +53,6 @@ const AI_ADDITIONAL_ERRORS_LIMIT = 50;
 const AI_PROMPT_TOTAL_MAX_CHARS = 48 * 1024;
 const AI_TRUNCATION_SUFFIX = ' …[truncated]';
 
-function truncateForAi(s: string | undefined, max: number): string | undefined {
-  if (s == null) return s;
-  if (s.length <= max) return s;
-  let body = Math.max(0, max - AI_TRUNCATION_SUFFIX.length);
-  return s.slice(0, body) + AI_TRUNCATION_SUFFIX;
-}
-
 export default class SendErrorToAIAssistant extends Component<Signature> {
   @service declare private matrixService: MatrixService;
   @service declare private aiAssistantPanelService: AiAssistantPanelService;
@@ -68,10 +62,15 @@ export default class SendErrorToAIAssistant extends Component<Signature> {
     let { error, errorType } = this.args;
     let prefix = errorType === 'syntax' ? 'Syntax Error' : 'Card Error';
     let message =
-      truncateForAi(error.message, AI_TOP_LEVEL_MESSAGE_MAX_CHARS) ?? '';
-    let truncatedStack = truncateForAi(
+      truncate(
+        error.message,
+        AI_TOP_LEVEL_MESSAGE_MAX_CHARS,
+        AI_TRUNCATION_SUFFIX,
+      ) ?? '';
+    let truncatedStack = truncate(
       error.stack,
       AI_TOP_LEVEL_STACK_MAX_CHARS,
+      AI_TRUNCATION_SUFFIX,
     );
     let stack = truncatedStack ? `\n\nStack trace:\n${truncatedStack}` : '';
 
@@ -98,14 +97,16 @@ export default class SendErrorToAIAssistant extends Component<Signature> {
       let shown = entries.slice(0, AI_ADDITIONAL_ERRORS_LIMIT);
       let parts = shown.map((e, i) => {
         let title = e?.title ?? `Error ${i + 1}`;
-        let truncatedMessage = truncateForAi(
+        let truncatedMessage = truncate(
           e?.message,
           AI_ADDITIONAL_ERROR_MESSAGE_MAX_CHARS,
+          AI_TRUNCATION_SUFFIX,
         );
         let body = truncatedMessage ? `\n${truncatedMessage}` : '';
-        let entryStack = truncateForAi(
+        let entryStack = truncate(
           e?.stack,
           AI_ADDITIONAL_ERROR_STACK_MAX_CHARS,
+          AI_TRUNCATION_SUFFIX,
         );
         let stackPart = entryStack ? `\nStack:\n${entryStack}` : '';
         return `--- ${title} ---${body}${stackPart}`;
@@ -123,7 +124,10 @@ export default class SendErrorToAIAssistant extends Component<Signature> {
     // each at the per-entry max), still well over Matrix's typical 65 KB
     // event ceiling. Cap the whole string here so a pathological doc
     // can't make Fix-with-AI fail to send.
-    return truncateForAi(assembled, AI_PROMPT_TOTAL_MAX_CHARS) ?? assembled;
+    return (
+      truncate(assembled, AI_PROMPT_TOTAL_MAX_CHARS, AI_TRUNCATION_SUFFIX) ??
+      assembled
+    );
   }
 
   get toolContext() {
