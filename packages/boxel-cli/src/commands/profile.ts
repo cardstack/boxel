@@ -7,6 +7,7 @@ import {
   getUsernameFromMatrixId,
 } from '../lib/profile-manager.ts';
 import { prompt, promptPassword } from '../lib/prompt.ts';
+import { SsoNotSupportedError, ssoLogin } from '../lib/sso-login.ts';
 import {
   FG_GREEN,
   FG_YELLOW,
@@ -24,6 +25,9 @@ export interface ProfileCommandOptions {
   name?: string;
   matrixUrl?: string;
   realmServerUrl?: string;
+  // Commander sets this to false for `--no-browser`. Undefined means the
+  // default: sign in through the browser when the homeserver supports it.
+  browser?: boolean;
 }
 
 interface EnvironmentDefaults {
@@ -155,7 +159,11 @@ export async function profileCommand(
           realmServerUrl ?? envDefaults?.realmServerUrl,
         );
       } else {
-        await addProfile(manager, resolveBoxelEnvironment());
+        await addProfile(
+          manager,
+          resolveBoxelEnvironment(),
+          options?.browser !== false,
+        );
       }
       break;
     }
@@ -290,9 +298,116 @@ async function promptEnvironmentMenu(): Promise<{
   return { ...MENU_ENVIRONMENTS.staging };
 }
 
+// Returns false when the user declined to replace an existing profile.
+async function confirmOverwrite(
+  manager: ProfileManager,
+  matrixId: string,
+): Promise<boolean> {
+  if (!manager.getProfile(matrixId)) {
+    return true;
+  }
+  console.log(`\n${FG_YELLOW}Profile ${matrixId} already exists.${RESET}`);
+  const overwrite = await prompt('Overwrite? [y/N]: ');
+  if (overwrite.toLowerCase() !== 'y') {
+    console.log('Cancelled.');
+    return false;
+  }
+  return true;
+}
+
+async function promptDisplayName(matrixId: string): Promise<string> {
+  const defaultDisplayName = `${getUsernameFromMatrixId(matrixId)} \u00b7 ${getDomainFromMatrixId(matrixId)}`;
+  const displayNameInput = await prompt(
+    `Display name [${defaultDisplayName}]: `,
+  );
+  return displayNameInput || defaultDisplayName;
+}
+
+// `usePassword` is distinct from `cancelled`: the first means this homeserver
+// can't do browser sign-in and the caller should ask for a password instead,
+// the second means the user chose to stop and nothing more should be asked.
+type AddProfileOutcome =
+  | { status: 'added'; matrixId: string }
+  | { status: 'cancelled' }
+  | { status: 'usePassword' };
+
+// Browser sign-in. The Matrix ID comes back from the homeserver, so unlike the
+// password path there is nothing to ask for up front.
+async function addProfileViaBrowser(
+  manager: ProfileManager,
+  matrixUrl: string,
+  realmServerUrl: string,
+): Promise<AddProfileOutcome> {
+  let auth;
+  try {
+    auth = await ssoLogin({ matrixUrl });
+  } catch (err) {
+    if (err instanceof SsoNotSupportedError) {
+      console.log(`${DIM}${err.message}${RESET}`);
+      console.log(`${DIM}Falling back to password sign-in.${RESET}`);
+      return { status: 'usePassword' };
+    }
+    throw err;
+  }
+
+  if (!(await confirmOverwrite(manager, auth.userId))) {
+    return { status: 'cancelled' };
+  }
+
+  const displayName = await promptDisplayName(auth.userId);
+  await manager.addProfileWithAuth(
+    auth.userId,
+    auth,
+    displayName,
+    realmServerUrl,
+  );
+  return { status: 'added', matrixId: auth.userId };
+}
+
+async function addProfileViaPassword(
+  manager: ProfileManager,
+  domain: string,
+  matrixUrl: string,
+  realmServerUrl: string,
+): Promise<AddProfileOutcome> {
+  console.log(`\nEnter your Boxel username (without @ or domain)`);
+  console.log(`${DIM}Example: ctse, aallen90${RESET}`);
+  const username = await prompt('Username: ');
+
+  if (!username) {
+    console.error(`${FG_RED}Error:${RESET} Username is required.`);
+    process.exit(1);
+  }
+
+  const matrixId = `@${username}:${domain}`;
+
+  if (!(await confirmOverwrite(manager, matrixId))) {
+    return { status: 'cancelled' };
+  }
+
+  const password = await promptPassword('Password: ');
+
+  if (!password) {
+    console.error(`${FG_RED}Error:${RESET} Password is required.`);
+    process.exit(1);
+  }
+
+  const displayName = await promptDisplayName(matrixId);
+
+  await manager.addProfile(
+    matrixId,
+    password,
+    displayName,
+    matrixUrl,
+    realmServerUrl,
+  );
+  return { status: 'added', matrixId };
+}
+
 async function addProfile(
   manager: ProfileManager,
   envDefaults?: EnvironmentDefaults | null,
+  useBrowser = true,
 ): Promise<void> {
   console.log(`\n${BOLD}Add New Profile${RESET}\n`);
 
@@ -314,46 +429,24 @@ async function addProfile(
     defaultRealmUrl = menuResult.realmServerUrl;
   }
 
-  console.log(`\nEnter your Boxel username (without @ or domain)`);
-  console.log(`${DIM}Example: ctse, aallen90${RESET}`);
-  const username = await prompt('Username: ');
+  let outcome: AddProfileOutcome = useBrowser
+    ? await addProfileViaBrowser(manager, defaultMatrixUrl, defaultRealmUrl)
+    : { status: 'usePassword' };
 
-  if (!username) {
-    console.error(`${FG_RED}Error:${RESET} Username is required.`);
-    process.exit(1);
+  if (outcome.status === 'usePassword') {
+    outcome = await addProfileViaPassword(
+      manager,
+      domain,
+      defaultMatrixUrl,
+      defaultRealmUrl,
+    );
   }
 
-  const matrixId = `@${username}:${domain}`;
-
-  if (manager.getProfile(matrixId)) {
-    console.log(`\n${FG_YELLOW}Profile ${matrixId} already exists.${RESET}`);
-    const overwrite = await prompt('Overwrite? [y/N]: ');
-    if (overwrite.toLowerCase() !== 'y') {
-      console.log('Cancelled.');
-      return;
-    }
+  if (outcome.status !== 'added') {
+    return;
   }
 
-  const password = await promptPassword('Password: ');
-
-  if (!password) {
-    console.error(`${FG_RED}Error:${RESET} Password is required.`);
-    process.exit(1);
-  }
-
-  const defaultDisplayName = `${username} \u00b7 ${domain}`;
-  const displayNameInput = await prompt(
-    `Display name [${defaultDisplayName}]: `,
-  );
-  const displayName = displayNameInput || defaultDisplayName;
-
-  await manager.addProfile(
-    matrixId,
-    password,
-    displayName,
-    defaultMatrixUrl,
-    defaultRealmUrl,
-  );
+  const matrixId = outcome.matrixId;
 
   console.log(
     `\n${FG_GREEN}\u2713${RESET} Profile created: ${formatProfileBadge(matrixId)}`,

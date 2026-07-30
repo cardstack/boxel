@@ -54,9 +54,20 @@ export function buildBoxelProgram(version: string): Command {
       '-r, --realm-server-url <url>',
       'Realm server URL (for add command with non-standard domains)',
     )
+    .option(
+      '--no-browser',
+      'Sign in with a username and password instead of opening a browser (for add command)',
+    )
     .addHelpText(
       'after',
       `
+Sign-in (for 'add'):
+  Interactive 'boxel profile add' opens your browser to sign in, and falls
+  back to a username and password when the homeserver offers no SSO provider.
+  Use --no-browser to go straight to password sign-in. Supplying -u with a
+  password (or BOXEL_PASSWORD) stays fully non-interactive and never opens a
+  browser, which is the path to use in CI.
+
 Environment variables (for 'add'):
   BOXEL_PASSWORD       Password; preferred over -p to avoid shell history.
   BOXEL_ENVIRONMENT    An env-mode slug (e.g. a branch name), interpreted
@@ -75,6 +86,7 @@ Environment variables (for 'add'):
           name?: string;
           matrixUrl?: string;
           realmServerUrl?: string;
+          browser?: boolean;
         },
       ) => {
         if (options?.password) {
