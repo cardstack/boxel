@@ -2315,21 +2315,24 @@ export default class StoreService extends Service implements StoreInterface {
       return;
     }
     if (isCardInstance(instance)) {
-      // TEMP DIRTY-PROBE (CS-11450): in the render/index store, name the field
-      // whose change flags a freshly-loaded instance dirty (the spurious
-      // RRI-spelling re-set we're hunting). Log-only.
-      if (this.isRenderStore) {
-        let repr: string;
-        try {
-          repr = isCardInstance(value)
-            ? `card:${(value as any).id}`
-            : (JSON.stringify(value)?.slice(0, 200) ?? String(value));
-        } catch {
-          repr = String(value);
+      // TEMP DIRTY-PROBE (CS-11450): name the field whose change flags a
+      // freshly-loaded instance dirty, on ANY store. Rate-limited, log-only.
+      {
+        let __n = ((globalThis as any).__dpN =
+          ((globalThis as any).__dpN ?? 0) + 1);
+        if (__n <= 40) {
+          let repr: string;
+          try {
+            repr = isCardInstance(value)
+              ? `card:${(value as any).id}`
+              : (JSON.stringify(value)?.slice(0, 160) ?? String(value));
+          } catch {
+            repr = String(value);
+          }
+          console.warn(
+            `[DIRTY-PROBE] n=${__n} id=${(instance as any).id} renderStore=${this.isRenderStore} field=${fieldName} value=${repr}`,
+          );
         }
-        console.warn(
-          `[DIRTY-PROBE] id=${(instance as any).id} field=${fieldName} value=${repr}`,
-        );
       }
       this._instanceMutationVersion++;
       let autoSaveState = this.initOrGetAutoSaveState(instance);
@@ -2989,14 +2992,18 @@ export default class StoreService extends Service implements StoreInterface {
     instance: CardDef,
     opts?: PersistOptions,
   ): Promise<CardDef | CardErrorJSONAPI> {
-    // TEMP PERSIST-PROBE (CS-11450): name the caller of every residual persist
-    // from the render/index store (the writes that deadlock the index). Log-only
-    // — does NOT block, so behavior is unchanged. The stack identifies whether
-    // it's the auto-save drain, createFromSerialized-then-persist, or saveInstance.
-    if (this.isRenderStore) {
-      console.warn(
-        `[PERSIST-PROBE] render-store persist id=${(instance as any).id} local=${instance[localIdSymbol]}\n${(new Error().stack ?? '').split('\n').slice(2, 8).join('\n')}`,
-      );
+    // TEMP PERSIST-PROBE (CS-11450): name the source of every persist — store
+    // type + render-context + caller stack — regardless of isRenderStore, since
+    // the deadlocking writes turned out NOT to come from the render store.
+    // Rate-limited, log-only (does NOT block, so behavior is unchanged).
+    {
+      let __n = ((globalThis as any).__ppN =
+        ((globalThis as any).__ppN ?? 0) + 1);
+      if (__n <= 40) {
+        console.warn(
+          `[PERSIST-PROBE] n=${__n} id=${(instance as any).id} renderStore=${this.isRenderStore} renderCtx=${Boolean((globalThis as any).__boxelRenderContext)}\n${(new Error().stack ?? '').split('\n').slice(2, 9).join('\n')}`,
+        );
+      }
     }
     return await this.withTestWaiters(async () => {
       let isNew = !instance.id;
