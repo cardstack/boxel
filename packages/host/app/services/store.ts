@@ -323,9 +323,14 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   protected renderContextBlocksPersistence() {
-    return (
-      this.isRenderStore && Boolean((globalThis as any).__boxelRenderContext)
-    );
+    // The render/index store must never persist — for its whole lifetime, not
+    // only during the active render window. Gating on __boxelRenderContext
+    // (which card-prerender sets around each render and deletes after) left a
+    // gap: a write issued between renders during a from-scratch index slips
+    // through and deadlocks the index (the render holds the sole worker while
+    // the write takes the realm write lock and awaits a reindex that needs that
+    // worker). What matters is that this is a render store, so block on that.
+    return this.isRenderStore;
   }
 
   // used for tests only!
@@ -2969,17 +2974,6 @@ export default class StoreService extends Service implements StoreInterface {
     instance: CardDef,
     opts?: PersistOptions,
   ): Promise<CardDef | CardErrorJSONAPI> {
-    // The render/index store renders read-only and must never persist. This is
-    // the single wire-write chokepoint for both the auto-save and explicit-save
-    // paths, so gating it here closes the timing gap in
-    // renderContextBlocksPersistence() (which also requires __boxelRenderContext
-    // and so leaks a write whenever that global is momentarily unset mid-index).
-    // A persist here deadlocks the from-scratch index: the render holds the sole
-    // worker while the write takes the realm write lock and awaits a reindex
-    // that needs that worker.
-    if (this.isRenderStore) {
-      return instance;
-    }
     return await this.withTestWaiters(async () => {
       let isNew = !instance.id;
       let inflightMutation = this.inflightCardMutations.get(
