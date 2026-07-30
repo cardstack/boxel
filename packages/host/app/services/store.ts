@@ -323,9 +323,16 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   protected renderContextBlocksPersistence() {
-    return (
-      this.isRenderStore && Boolean((globalThis as any).__boxelRenderContext)
-    );
+    // Block ALL persistence while an active prerender render is in progress,
+    // regardless of which store instance. A write during a render deadlocks the
+    // from-scratch index (the render holds the sole worker while the write takes
+    // the realm write lock and awaits a reindex that needs that worker). The
+    // deadlocking writes come from the regular StoreService (isRenderStore=false)
+    // used in the prerender — not the render store — so the old `isRenderStore &&`
+    // term let them through. __boxelRenderContext is set only by card-prerender
+    // around each render (never in the live app), so this blocks exactly the
+    // render window and nothing else.
+    return Boolean((globalThis as any).__boxelRenderContext);
   }
 
   // used for tests only!
