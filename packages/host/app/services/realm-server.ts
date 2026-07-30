@@ -859,9 +859,25 @@ export default class RealmServerService extends Service {
 
     let realmServerEvent = JSON.parse(event.content.body) as RealmServerEvent;
     let subscribers = this.eventSubscribers.get(realmServerEvent.eventType);
-    subscribers?.forEach(async (subscriber) => {
-      await subscriber(realmServerEvent.data);
-    });
+    // Await the subscribers so callers that `await handleEvent(...)` observe the
+    // subscriber work as complete — a `forEach(async ...)` returns before any
+    // subscriber settles. Each subscriber is isolated so one that rejects is
+    // logged rather than failing its siblings or the event-processing caller,
+    // preserving the best-effort dispatch this always had.
+    if (subscribers) {
+      await Promise.all(
+        subscribers.map(async (subscriber) => {
+          try {
+            await subscriber(realmServerEvent.data);
+          } catch (err) {
+            console.error(
+              `realm-server event subscriber for ${realmServerEvent.eventType} failed`,
+              err,
+            );
+          }
+        }),
+      );
+    }
   }
 
   subscribeEvent(eventType: string, subscriber: RealmServerEventSubscriber) {
