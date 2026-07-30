@@ -1,6 +1,6 @@
 import { rri } from '../realm-identifiers.ts';
 import { hasExecutableExtension, trimExecutableExtension } from '../index.ts';
-import { urlNamesFile } from '../file-def-code-ref.ts';
+import { segmentNamesFile } from '../file-def-code-ref.ts';
 import type { VirtualNetwork } from '../virtual-network.ts';
 import { canonicalURL, type CanonicalURLMemo } from './dependency-url.ts';
 
@@ -27,16 +27,23 @@ type NamedResource = 'file' | 'instance' | 'either';
 // — including successful ones, via the index-backed dependency-error scan — so
 // the registry walk must stay off that path. Ordering is free: the registry
 // and executable tests can only match a segment that has a dot.
-function namedResource(url: URL): NamedResource {
-  let pathname = url.pathname;
-  let lastSegment = pathname.slice(pathname.lastIndexOf('/') + 1);
+//
+// String-based for the same reason: `path` may be a pathname or a whole
+// canonical href — any query and hash must already be stripped — so the
+// per-dep loop never constructs a URL.
+function namedResourceForPath(path: string): NamedResource {
+  let lastSegment = path.slice(path.lastIndexOf('/') + 1);
   if (!lastSegment.includes('.')) {
     return 'instance';
   }
-  if (urlNamesFile(url) || hasExecutableExtension(pathname)) {
+  if (segmentNamesFile(lastSegment) || hasExecutableExtension(path)) {
     return 'file';
   }
   return 'either';
+}
+
+function namedResource(url: URL): NamedResource {
+  return namedResourceForPath(url.pathname);
 }
 
 export function normalizeStoredDependency(
@@ -109,23 +116,39 @@ export function relationshipDependencyForms(
 // cache instead. Everything else is admitted, undecidable dotted names
 // included: a dep naming no row reads as a miss, so admitting one costs a
 // lookup rather than correctness.
+// String-only on the same per-visit-per-dep grounds as `namedResourceForPath`.
+// Both callers hand this `normalizeStoredDependency` output — a canonical href
+// (already a parsed URL's `.href`, query and hash stripped) or a prefix form
+// the memoized `toURLHref` converts to one — so parsing through `new URL`
+// would only re-derive the same string. The realm gate keeps that safe for
+// any other input too: a string that isn't a canonical URL fails `startsWith`
+// and is rejected, exactly as URL-parsing would reject it. The query/hash
+// strip is belt-and-braces for direct callers, at two indexOf calls.
 export function canTraverseRelationshipDependency(
   dep: string,
   realmURL: URL,
   virtualNetwork: VirtualNetwork,
 ): boolean {
-  try {
-    let resolved = virtualNetwork.isRegisteredPrefix(dep)
-      ? virtualNetwork.toURL(dep).href
-      : dep;
-    let parsed = new URL(resolved);
-    if (!parsed.href.startsWith(realmURL.href)) {
+  let resolved = dep;
+  if (virtualNetwork.isRegisteredPrefix(dep)) {
+    try {
+      resolved = virtualNetwork.toURLHref(dep);
+    } catch (_err) {
       return false;
     }
-    return namedResource(parsed) !== 'instance';
-  } catch (_err) {
+  }
+  if (!resolved.startsWith(realmURL.href)) {
     return false;
   }
+  let hashIdx = resolved.indexOf('#');
+  if (hashIdx !== -1) {
+    resolved = resolved.slice(0, hashIdx);
+  }
+  let searchIdx = resolved.indexOf('?');
+  if (searchIdx !== -1) {
+    resolved = resolved.slice(0, searchIdx);
+  }
+  return namedResourceForPath(resolved) !== 'instance';
 }
 
 export function normalizeDependencyForLookup(

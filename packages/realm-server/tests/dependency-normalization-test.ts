@@ -23,6 +23,9 @@ function makeStubNetwork(): VirtualNetwork {
     toURL(reference: string) {
       return new URL(reference.slice(prefix.length), realmURL);
     },
+    toURLHref(reference: string) {
+      return new URL(reference.slice(prefix.length), realmURL).href;
+    },
     resolveURL(reference: string, base: URL | string | undefined) {
       return new URL(reference, base ?? undefined);
     },
@@ -168,6 +171,36 @@ module(basename(import.meta.filename), function () {
           realmURL,
           makeStubNetwork(),
         ),
+      );
+    });
+
+    test('rejects a dep that is not a URL at all', function (assert) {
+      let network = makeStubNetwork();
+      for (let dep of ['not a url', './relative/person.json', '']) {
+        assert.false(
+          canTraverseRelationshipDependency(dep, realmURL, network),
+          JSON.stringify(dep),
+        );
+      }
+    });
+
+    test('classifies by the path alone when a query or hash is present', function (assert) {
+      let network = makeStubNetwork();
+      assert.true(
+        canTraverseRelationshipDependency(
+          'http://test/realm/logo.png?cache=1',
+          realmURL,
+          network,
+        ),
+        'query string does not hide the file extension',
+      );
+      assert.false(
+        canTraverseRelationshipDependency(
+          'http://test/realm/person?v=1.2',
+          realmURL,
+          network,
+        ),
+        'a dotted query string does not make an instance id look dotted',
       );
     });
   });
