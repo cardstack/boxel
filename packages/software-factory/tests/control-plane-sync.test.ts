@@ -46,6 +46,8 @@ async function makeWorkspace(): Promise<string> {
 
 test('isControlPath classifies tracker, run-log, and product paths', () => {
   assert.equal(isControlPath('Issues/seed.json'), true);
+  // Board "+ New" writes hand-added tickets to singular `Issue/<uuid>`.
+  assert.equal(isControlPath('Issue/ce7e3b79-0f84.json'), true);
   assert.equal(isControlPath('Knowledge Articles/how-to.json'), true);
   assert.equal(isControlPath('Runs/boxel-wardrobe.json'), true);
   assert.equal(isControlPath('run-log.gts'), true);
@@ -54,6 +56,8 @@ test('isControlPath classifies tracker, run-log, and product paths', () => {
   assert.equal(isControlPath('design/garment-isolated.png'), false);
   // Prefix similarity must not leak: `IssuesArchive/` is not `Issues/`.
   assert.equal(isControlPath('IssuesArchive/x.json'), false);
+  // `Issues/` must not be swallowed by the singular `Issue` entry.
+  assert.equal(isControlPath('Issues/nested/deep.json'), true);
 });
 
 test('sync pushes only changed control files (hash-gated raw writes)', async () => {

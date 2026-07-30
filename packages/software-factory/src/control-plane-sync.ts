@@ -54,6 +54,12 @@ const log = logger('control-plane-sync');
  */
 export const CONTROL_DIRS = [
   'Issues',
+  // Singular `Issue/` is where the board's "+ New" button writes a
+  // hand-added ticket (`Issue/<uuid>.json`) — the factory's own seeds use
+  // `Issues/<slug>`. Both are control-plane issues; without this a
+  // board-created ticket is found in the index by type but never mirrored
+  // into the workspace, so the loop picks it and then can't read it.
+  'Issue',
   'Projects',
   'Boards',
   'Knowledge Articles',
