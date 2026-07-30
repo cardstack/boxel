@@ -687,7 +687,7 @@ export async function awaitPortRelease(
   );
 }
 
-function trackServer(server: Server): Server {
+export function trackServer(server: Server): Server {
   trackedServers.add(server);
   server.once('close', () => trackedServers.delete(server));
   return server;

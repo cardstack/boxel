@@ -266,6 +266,7 @@ const ALL_TEST_FILES: string[] = [
   './prerender-affinity-activity-test',
   './prerender-batch-ownership-test',
   './prerender-cancellation-test',
+  './prerender-never-settles-test',
   './async-semaphore-test',
   './page-pool-expansion-test',
   './page-pool-priority-test',
