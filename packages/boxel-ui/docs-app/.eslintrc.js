@@ -1,7 +1,9 @@
 'use strict';
 
 const MISSING_INVOKABLES_CONFIG = require('../../runtime-common/etc/eslint/missing-invokables-config');
-const { DATA_TEST_SELECTORS } = require('../../../eslint/data-test-selectors.cjs');
+const {
+  DATA_TEST_SELECTORS,
+} = require('../../../eslint/data-test-selectors.cjs');
 
 module.exports = {
   root: true,
