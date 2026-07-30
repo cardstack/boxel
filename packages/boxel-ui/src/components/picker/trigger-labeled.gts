@@ -20,24 +20,26 @@ export interface TriggerLabeledSignature {
       maxSelectedDisplay?: number;
     };
     placeholder?: string;
-    select: Select;
+    select: Select<PickerOption, true>;
     selectedItemComponent?: ComponentLike<PickerSelectedItemSignature>;
   };
   Blocks: {
-    default: [PickerOption, Select];
+    default: [PickerOption, Select<PickerOption, true>];
   };
   Element: HTMLElement;
 }
 
-type ExtendedSelect = Select & {
+type ExtendedSelect = Select<PickerOption, true> & {
   actions: {
     remove: (item: PickerOption) => void;
-  } & Select['actions'];
+  } & Select<PickerOption, true>['actions'];
 };
 
 export default class PickerLabeledTrigger extends Component<TriggerLabeledSignature> {
   get showPlaceholder() {
-    return this.args.placeholder && this.args.select.selected.length === 0;
+    return (
+      this.args.placeholder && (this.args.select.selected ?? []).length === 0
+    );
   }
 
   get label() {
@@ -49,7 +51,7 @@ export default class PickerLabeledTrigger extends Component<TriggerLabeledSignat
   }
 
   get displayedItems() {
-    const selected = this.args.select.selected;
+    const selected = this.args.select.selected ?? [];
     if (
       !this.maxSelectedDisplay ||
       selected.length <= this.maxSelectedDisplay
@@ -60,7 +62,7 @@ export default class PickerLabeledTrigger extends Component<TriggerLabeledSignat
   }
 
   get remainingCount() {
-    const selected = this.args.select.selected;
+    const selected = this.args.select.selected ?? [];
     if (
       !this.maxSelectedDisplay ||
       selected.length <= this.maxSelectedDisplay
@@ -75,12 +77,11 @@ export default class PickerLabeledTrigger extends Component<TriggerLabeledSignat
   }
 
   @action
-  removeItem(item: any, event?: Event) {
+  removeItem(item: PickerOption, event?: Event) {
     event?.stopPropagation();
-    const newSelected = this.args.select.selected.filter(
-      (i: any) => i !== item,
+    const newSelected = (this.args.select.selected ?? []).filter(
+      (i) => i !== item,
     );
-    this.args.select.selected = [...newSelected];
     this.args.select.actions.select(newSelected);
   }
 

@@ -54,7 +54,7 @@ export default class BoxelSelectUsage extends Component {
     return this.items.map((item) => item.name);
   }
 
-  @tracked selectedItem: Country | null = null;
+  @tracked selectedItem: Country | undefined;
   @tracked selectedItem2: SortOption | undefined = this.items2[0];
   @tracked placeholder = 'Select Item';
   @tracked verticalPosition = 'auto' as const;
@@ -101,11 +101,11 @@ export default class BoxelSelectUsage extends Component {
   @cssVariable({ cssClassName: 'header-freestyle-container' })
   declare boxelDropdownFocusBorderColor: CSSVariableInfo;
 
-  @action onSelectItem(item: Country | null): void {
+  @action onSelectItem(item: Country | undefined): void {
     this.selectedItem = item;
   }
 
-  @action onSelectItem2(item: SortOption): void {
+  @action onSelectItem2(item: SortOption | undefined): void {
     this.selectedItem2 = item;
   }
 

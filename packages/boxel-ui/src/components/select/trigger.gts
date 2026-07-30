@@ -5,15 +5,18 @@ import { cn } from '../../helpers.gts';
 import { not } from '../../helpers/truth-helpers.ts';
 import CaretDown from '../../icons/caret-down.gts';
 
-export interface TriggerSignature {
+export interface TriggerSignature<
+  ItemT = unknown,
+  IsMultiple extends boolean = boolean,
+> {
   Args: {
     invertIcon?: boolean;
     placeholder?: string;
-    select: Select;
+    select: Select<ItemT, IsMultiple>;
     selectedItemComponent?: any;
   };
   Blocks: {
-    default: [Select['selected'], Select];
+    default: [Select<ItemT, IsMultiple>['selected'], Select<ItemT, IsMultiple>];
     icon: [];
   };
   Element: HTMLElement;
@@ -21,12 +24,19 @@ export interface TriggerSignature {
 
 // This component is used to provide a consistent boxel style to trigger components
 // Abstain from using this component with many data customizations
-export class BoxelTriggerWrapper extends Component<TriggerSignature> {
+export class BoxelTriggerWrapper<
+  ItemT = unknown,
+  IsMultiple extends boolean = boolean,
+> extends Component<TriggerSignature<ItemT, IsMultiple>> {
   get showPlaceholder() {
+    if (!this.args.placeholder) {
+      return false;
+    }
+    const selected = this.args.select?.selected;
     return (
-      this.args.placeholder &&
-      (this.args.select?.selected === undefined || //undefined check is for single-select
-        this.args.select?.selected.length === 0) //length check is for multi-select
+      selected === undefined ||
+      selected === null ||
+      (Array.isArray(selected) && selected.length === 0)
     );
   }
   <template>

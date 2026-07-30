@@ -11,14 +11,37 @@ import { action } from '@ember/object';
 import { guidFor } from '@ember/object/internals';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
+import type { ComponentLike } from '@glint/template';
 import PowerSelect, {
   type PowerSelectArgs,
 } from 'ember-power-select/components/power-select';
+import type { PowerSelectBeforeOptionsSignature } from 'ember-power-select/components/power-select/before-options';
 import BeforeOptions from 'ember-power-select/components/power-select/before-options';
 import PowerSelectOptions from 'ember-power-select/components/power-select/options';
+import type { PowerSelectTriggerSignature } from 'ember-power-select/components/power-select/trigger';
+import type { Option } from 'ember-power-select/types';
 
 import cn from '../../helpers/cn.ts';
 import { BoxelSelectDefaultTrigger } from './trigger.gts';
+
+// glint cannot match curried/generic components against power-select's
+// expected component-type unions; these shapes are structurally compatible
+// (exercised by the test suite), so pin them to the expected member types.
+function toTriggerComponent(
+  component: unknown,
+): ComponentLike<PowerSelectTriggerSignature<any, any, false>> {
+  return component as ComponentLike<
+    PowerSelectTriggerSignature<any, any, false>
+  >;
+}
+
+function toBeforeOptionsComponent(
+  component: unknown,
+): ComponentLike<PowerSelectBeforeOptionsSignature<any, any, false>> {
+  return component as ComponentLike<
+    PowerSelectBeforeOptionsSignature<any, any, false>
+  >;
+}
 
 export interface BoxelSelectArgs<ItemT> extends PowerSelectArgs<ItemT> {
   options: ItemT[];
@@ -28,7 +51,7 @@ export interface BoxelSelectArgs<ItemT> extends PowerSelectArgs<ItemT> {
 interface Signature<ItemT = any> {
   Args: BoxelSelectArgs<ItemT>;
   Blocks: {
-    default: [ItemT];
+    default: [Option<ItemT>];
   };
   Element: HTMLElement;
 }
@@ -146,10 +169,10 @@ export default class BoxelSelect<ItemT = any> extends Component<
   @action
   onClose(
     select: Parameters<NonNullable<Signature<ItemT>['Args']['onClose']>>[0],
-    event: Event,
+    event?: Event,
   ) {
     this.stopObservingTheme();
-    this.args.onClose?.(select, event);
+    return this.args.onClose?.(select, event);
   }
 
   private detectAndSetThemeColors() {
@@ -247,10 +270,12 @@ export default class BoxelSelect<ItemT = any> extends Component<
       @triggerComponent={{if
         @triggerComponent
         @triggerComponent
-        (component
-          BoxelSelectDefaultTrigger
-          invertIcon=(eq @verticalPosition 'above')
-          variant=@variant
+        (toTriggerComponent
+          (component
+            BoxelSelectDefaultTrigger
+            invertIcon=(eq @verticalPosition 'above')
+            variant=@variant
+          )
         )
       }}
       @disabled={{@disabled}}
@@ -259,7 +284,7 @@ export default class BoxelSelect<ItemT = any> extends Component<
       @beforeOptionsComponent={{if
         @beforeOptionsComponent
         @beforeOptionsComponent
-        (component BeforeOptions autofocus=false)
+        (toBeforeOptionsComponent (component BeforeOptions autofocus=false))
       }}
       @afterOptionsComponent={{@afterOptionsComponent}}
       @optionsComponent={{if
