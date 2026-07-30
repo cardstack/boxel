@@ -1301,6 +1301,10 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       'First message with card',
     );
     await click('[data-test-send-message-btn]');
+    // Wait out each send before clicking the next: while a send pipeline is
+    // in flight the send button is a no-op, so a premature click would drop
+    // the message instead of queueing it.
+    await waitForRoomMessages(roomId, 1);
 
     // Send second message with the same card
     await fillIn(
@@ -1389,6 +1393,10 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       'First message with file',
     );
     await click('[data-test-send-message-btn]');
+    // Wait out each send before clicking the next: while a send pipeline is
+    // in flight the send button is a no-op, so a premature click would drop
+    // the message instead of queueing it.
+    await waitForRoomMessages(roomId, 1);
 
     // Send second message with the same file
     await fillIn(
@@ -1443,7 +1451,6 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       'Third message with modified file',
     );
     await click('[data-test-send-message-btn]');
-    await waitFor('[data-test-message-idx="2"]');
 
     // Get the third message event
     messageEvents = await waitForRoomMessages(roomId, 3);

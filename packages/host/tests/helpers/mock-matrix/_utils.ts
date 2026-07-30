@@ -28,10 +28,10 @@ export class MockUtils {
   // events for the room, then return them. Sending a message renders an
   // optimistic bubble at click-time while the pre-send pipeline (context
   // summary, card/file serialization, media uploads) continues past
-  // `settled()` — those legs run outside any test waiter, and only the final
-  // sendEvent dispatch is waiter-tracked via the room mutex. DOM-based waits
-  // therefore prove nothing about server-side delivery; assertions on
-  // `getRoomEvents` must wait on the server state itself.
+  // `settled()` — those legs run outside any test waiter; only the mutex
+  // dispatches (the sendEvent and room-state legs) are waiter-tracked.
+  // DOM-based waits therefore prove nothing about server-side delivery;
+  // assertions on `getRoomEvents` must wait on the server state itself.
   waitForRoomMessages = async (roomId: string, count: number) => {
     let messages = () =>
       this.getRoomEvents(roomId).filter((e) => e.type === 'm.room.message');
