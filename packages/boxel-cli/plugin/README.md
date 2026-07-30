@@ -1,6 +1,6 @@
-# `boxel-cli` Claude Code plugin
+# `boxel-cli` agent plugin
 
-Claude Code skills for working with Boxel realms via [`@cardstack/boxel-cli`](https://www.npmjs.com/package/@cardstack/boxel-cli).
+Agent skills for working with Boxel realms via [`@cardstack/boxel-cli`](https://www.npmjs.com/package/@cardstack/boxel-cli). Packaged for both Claude Code (`.claude-plugin/`) and OpenAI Codex (`.codex-plugin/`); the two manifests share the same `skills/` directory.
 
 ## Prerequisites
 
@@ -20,22 +20,45 @@ The plugin documents commands in `@cardstack/boxel-cli >= 0.0.1`. Newer plugin v
 
 ## Install
 
-### External users (marketplace)
+### Claude Code
 
 ```text
 /plugin marketplace add cardstack/boxel
 /plugin install boxel-cli
 ```
 
-### Internal / development (`--plugin-dir`)
-
-From a checkout of `cardstack/boxel`:
+For internal development, from a checkout of `cardstack/boxel`:
 
 ```bash
 claude --plugin-dir packages/boxel-cli/plugin
 ```
 
 `/reload-plugins` picks up local edits without restarting Claude Code.
+
+### OpenAI Codex
+
+Codex discovers the plugin through the marketplace manifest at
+`.agents/plugins/marketplace.json` in the repo root:
+
+```text
+/plugin marketplace add cardstack/boxel
+/plugin install boxel-cli@cardstack-boxel
+```
+
+Skills are invoked with the `$` prefix (`$boxel`, `$realm-sync`, …) or picked
+up implicitly by description match. The workflow commands under `commands/`
+are Claude Code-only; Codex plugins have no commands slot.
+
+Without installing the plugin, a checkout also works directly: Codex reads
+skills from `~/.agents/skills` (or a project's `.agents/skills`), expecting
+`<name>/SKILL.md` one level down, so symlink each skill:
+
+```bash
+mkdir -p ~/.agents/skills
+for d in /path/to/boxel/packages/boxel-cli/plugin/skills/*/; do
+  ln -sf "$d" ~/.agents/skills/
+done
+```
 
 ## What you get
 

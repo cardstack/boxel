@@ -1,0 +1,16 @@
+{
+  "name": "cardstack-boxel",
+  "interface": {
+    "displayName": "Cardstack Boxel"
+  },
+  "plugins": [
+    {
+      "name": "boxel-cli",
+      "source": {
+        "source": "local",
+        "path": "./packages/boxel-cli/plugin"
+      },
+      "description": "Skills for working with Boxel realms via @cardstack/boxel-cli."
+    }
+  ]
+}

@@ -167,14 +167,19 @@ jobs:
             echo "package.json → $NEXT_NPM"
           fi
           if [ -n "$NEXT_PLUGIN" ]; then
-            node -e '
-              const fs = require("fs");
-              const p = "packages/boxel-cli/plugin/.claude-plugin/plugin.json";
-              const j = JSON.parse(fs.readFileSync(p, "utf8"));
-              j.version = process.env.NEXT_PLUGIN;
-              fs.writeFileSync(p, JSON.stringify(j, null, 2) + "\n");
-            '
-            echo "plugin.json → $NEXT_PLUGIN"
+            # The Claude and Codex manifests version together; build:plugin
+            # syncs the rest of the Codex manifest from the Claude one.
+            for p in packages/boxel-cli/plugin/.claude-plugin/plugin.json \
+                     packages/boxel-cli/plugin/.codex-plugin/plugin.json; do
+              PLUGIN_MANIFEST="$p" node -e '
+                const fs = require("fs");
+                const p = process.env.PLUGIN_MANIFEST;
+                const j = JSON.parse(fs.readFileSync(p, "utf8"));
+                j.version = process.env.NEXT_PLUGIN;
+                fs.writeFileSync(p, JSON.stringify(j, null, 2) + "\n");
+              '
+              echo "$p → $NEXT_PLUGIN"
+            done
           fi
 
       - name: Generate release notes
@@ -231,6 +236,7 @@ jobs:
           set -euo pipefail
           git add packages/boxel-cli/package.json \
                   packages/boxel-cli/plugin/.claude-plugin/plugin.json \
+                  packages/boxel-cli/plugin/.codex-plugin/plugin.json \
                   packages/boxel-cli/plugin/skills \
                   packages/boxel-cli/plugin/commands \
                   packages/boxel-cli/plugin/README.md \

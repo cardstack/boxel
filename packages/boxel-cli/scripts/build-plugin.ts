@@ -1,6 +1,8 @@
 /**
  * Generate the `<!-- generated:commands -->` synopsis blocks in the plugin's
- * SKILL.md files from the Commander program. Run via `pnpm build:plugin`.
+ * SKILL.md files from the Commander program, and sync the Codex plugin
+ * manifest (`.codex-plugin/plugin.json`) from the Claude Code one. Run via
+ * `pnpm build:plugin`.
  *
  * CI runs this and `git diff --exit-code` to fail PRs whose CLI changes
  * weren't reflected in the plugin. The "synopsis-bump coupling" check (see
@@ -8,11 +10,17 @@
  * whenever a generated block changes.
  */
 import type { Command, Option } from 'commander';
-import { readFileSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 import { buildBoxelProgram } from '../src/build-program.ts';
 
 const PLUGIN_DIR = resolve(import.meta.dirname, '..', 'plugin');
+const CLAUDE_MANIFEST_PATH = resolve(
+  PLUGIN_DIR,
+  '.claude-plugin',
+  'plugin.json',
+);
+const CODEX_MANIFEST_PATH = resolve(PLUGIN_DIR, '.codex-plugin', 'plugin.json');
 
 interface SkillSpec {
   /** Skill folder name under plugin/skills/ */
@@ -174,6 +182,36 @@ function rewriteSkillFile(skill: string, body: string): boolean {
   return true;
 }
 
+/**
+ * Derive `.codex-plugin/plugin.json` from `.claude-plugin/plugin.json` so the
+ * two manifests can't drift: name/version/metadata come from the Claude
+ * manifest (which the publish workflow bumps in both files), while the
+ * description and `skills` pointer are Codex-specific. Codex plugins have no
+ * commands slot, so `plugin/commands/` is Claude-only; the workflow commands
+ * ship to Codex only once they become skills upstream.
+ */
+function syncCodexManifest(): boolean {
+  const claude = JSON.parse(readFileSync(CLAUDE_MANIFEST_PATH, 'utf8'));
+  const codex = {
+    name: claude.name,
+    version: claude.version,
+    description: claude.description.replace(/^Claude Code skills/, 'Skills'),
+    skills: './skills/',
+    author: claude.author,
+    homepage: claude.homepage,
+    repository: claude.repository,
+    license: claude.license,
+  };
+  const next = JSON.stringify(codex, null, 2) + '\n';
+  const prior = existsSync(CODEX_MANIFEST_PATH)
+    ? readFileSync(CODEX_MANIFEST_PATH, 'utf8')
+    : null;
+  if (next === prior) return false;
+  mkdirSync(resolve(PLUGIN_DIR, '.codex-plugin'), { recursive: true });
+  writeFileSync(CODEX_MANIFEST_PATH, next);
+  return true;
+}
+
 function main(): void {
   const program = buildBoxelProgram('0.0.0');
   let changed = 0;
@@ -183,6 +221,10 @@ function main(): void {
       changed++;
       console.log(`updated plugin/skills/${spec.skill}/SKILL.md`);
     }
+  }
+  if (syncCodexManifest()) {
+    changed++;
+    console.log('updated plugin/.codex-plugin/plugin.json');
   }
   console.log(
     changed === 0
