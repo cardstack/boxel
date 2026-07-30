@@ -24,19 +24,7 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 
-/** Control-plane and infra dirs that never hold product instances. */
-const EXCLUDED_DIRS = new Set([
-  'Issues',
-  'Projects',
-  'Boards',
-  'Knowledge Articles',
-  'Spec',
-  'Validations',
-  'Runs',
-  'RunLogEntries',
-  'design',
-  'design-history',
-]);
+import { isNonProductPath } from './product-paths.ts';
 
 export async function discoverRecentInstanceCardPaths(
   workspaceDir: string,
@@ -52,7 +40,7 @@ export async function discoverRecentInstanceCardPaths(
   for (let entry of entries) {
     if (!entry.isDirectory()) continue;
     if (entry.name.startsWith('.')) continue;
-    if (EXCLUDED_DIRS.has(entry.name)) continue;
+    if (isNonProductPath(entry.name)) continue;
     let dirPath = join(workspaceDir, entry.name);
     let files;
     try {

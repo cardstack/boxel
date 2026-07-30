@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdir, writeFile, rm, mkdtemp } from 'node:fs/promises';
+import { writeFile, rm, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -18,19 +18,24 @@ const MANIFEST = new Set([
   'bot-requests/openrouter-image',
 ]);
 
-test('findHostImportViolations flags legacy commands/ imports with the rename fix', () => {
+test('a known tool under the legacy commands/ alias is valid (the shim registers both)', () => {
   let source = `
 import GetCardTypeSchemaCommand from '@cardstack/boxel-host/commands/get-card-type-schema';
 import { restartable } from 'ember-concurrency';
 `;
+  assert.deepEqual(findHostImportViolations(source, MANIFEST), []);
+});
+
+test('an unknown name under commands/ is a violation with a near-match', () => {
+  let source = `
+import Cmd from '@cardstack/boxel-host/commands/card-type-schema';
+`;
   let violations = findHostImportViolations(source, MANIFEST);
   assert.equal(violations.length, 1);
-  assert.equal(
-    violations[0].specifier,
-    '@cardstack/boxel-host/commands/get-card-type-schema',
+  assert.match(
+    violations[0].suggestion ?? '',
+    /did you mean '@cardstack\/boxel-host\/tools\/get-card-type-schema'/,
   );
-  assert.match(violations[0].suggestion ?? '', /renamed commands\/ to tools\//);
-  assert.match(violations[0].suggestion ?? '', /tools\/get-card-type-schema/);
 });
 
 test('findHostImportViolations flags unknown tools with a near-match suggestion', () => {
@@ -60,33 +65,45 @@ import ImageGen from '@cardstack/boxel-host/tools/bot-requests/openrouter-image'
   assert.deepEqual(findHostImportViolations(source, MANIFEST), []);
 });
 
-test('deriveHostToolImports walks the tools tree recursively', async () => {
+test('deriveHostToolImports reads the shim registry, flat names included', async () => {
   let dir = await mkdtemp(join(tmpdir(), 'host-tools-'));
   try {
-    await writeFile(join(dir, 'copy-card.ts'), 'export default class {}');
-    await mkdir(join(dir, 'bot-requests'));
+    // Mirrors the real registry: a file in a subdirectory registers
+    // under a FLAT name; only registered names resolve at runtime.
+    let registry = join(dir, 'index.ts');
     await writeFile(
-      join(dir, 'bot-requests', 'image.ts'),
-      'export default class {}',
+      registry,
+      `
+import * as CopyCardModule from './copy-card';
+import * as ImageModule from './bot-requests/openrouter-image';
+export function shimHostTools(virtualNetwork: VirtualNetwork) {
+  shimHostToolModule(virtualNetwork, 'copy-card', CopyCardModule);
+  shimHostToolModule(
+    virtualNetwork,
+    'openrouter-image',
+    ImageModule,
+  );
+}
+`,
     );
-    await writeFile(join(dir, 'README.md'), 'not a module');
-    let names = await deriveHostToolImports(dir);
-    assert.deepEqual(names, ['bot-requests/image', 'copy-card']);
+    let names = await deriveHostToolImports(registry);
+    assert.deepEqual(names, ['copy-card', 'openrouter-image']);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
 });
 
-test('deriveHostToolImports returns undefined for a missing dir (gate disabled)', async () => {
-  let names = await deriveHostToolImports('/no/such/host/tools');
+test('deriveHostToolImports returns undefined for a missing registry (gate disabled)', async () => {
+  let names = await deriveHostToolImports('/no/such/host/tools/index.ts');
   assert.equal(names, undefined);
 });
 
-test('buildHostToolsSkill lists every module and states the rename', () => {
+test('buildHostToolsSkill lists every module and names tools/ as canonical', () => {
   let skill = buildHostToolsSkill(['copy-card', 'get-card']);
   assert.equal(skill.name, 'host-tools-import-manifest');
   assert.match(skill.content, /@cardstack\/boxel-host\/tools\/copy-card/);
-  assert.match(skill.content, /commands\/.*NO LONGER EXISTS/s);
+  assert.match(skill.content, /`tools\/` is canonical/);
+  assert.match(skill.content, /legacy alias/);
 });
 
 test('ImportsValidationStep fails workspace .gts with phantom imports', async () => {
@@ -94,7 +111,7 @@ test('ImportsValidationStep fails workspace .gts with phantom imports', async ()
   try {
     await writeFile(
       join(workspaceDir, 'wardrobe-ai.gts'),
-      `import Cmd from '@cardstack/boxel-host/commands/one-shot-llm-request';`,
+      `import Cmd from '@cardstack/boxel-host/tools/one-shot-llm-requests';`,
     );
     await writeFile(
       join(workspaceDir, 'garment.gts'),

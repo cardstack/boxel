@@ -14,50 +14,53 @@
  * it — at validation time, in-process, before anything reaches a browser.
  */
 
-import { readdir } from 'node:fs/promises';
-import { join, relative, resolve, sep } from 'node:path';
+import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 
 import type { ResolvedSkill } from './factory-agent/types.ts';
 import { logger } from './logger.ts';
 
 const log = logger('host-import-manifest');
 
-/** Default host tools source directory, relative to the factory package. */
-export function defaultHostToolsDir(packageRoot: string): string {
-  return resolve(packageRoot, '../host/app/tools');
+/**
+ * Default host tools shim registry, relative to the factory package.
+ * The REGISTRY — not the file tree — is the authoritative contract: a
+ * module resolves at runtime only under the name `shimHostTools`
+ * registers it with, which is flat even for files in subdirectories
+ * (`bot-requests/create-listing-pr-request.ts` registers as
+ * `create-listing-pr-request`).
+ */
+export function defaultHostToolsRegistry(packageRoot: string): string {
+  return resolve(packageRoot, '../host/app/tools/index.ts');
 }
+
+const SHIM_REGISTRATION_RE =
+  /shimHostToolModule\(\s*virtualNetwork,\s*'([^']+)'/g;
 
 /**
  * Derive the list of valid `@cardstack/boxel-host/tools/<name>` module
- * names from the host build's source tree. Recursive; nested entries
- * come back as `subdir/name`. Returns undefined when the directory is
- * unreadable (factory deployed without the host checkout) — callers
- * degrade to no gate rather than failing the run.
+ * names from the host's shim registry source. Returns undefined when
+ * the registry is unreadable (factory deployed without the host
+ * checkout) — callers degrade to no gate rather than failing the run.
  */
 export async function deriveHostToolImports(
-  hostToolsDir: string,
+  hostToolsRegistryPath: string,
 ): Promise<string[] | undefined> {
   try {
-    let entries = await readdir(hostToolsDir, {
-      recursive: true,
-      withFileTypes: true,
-    });
-    let names: string[] = [];
-    for (let entry of entries) {
-      if (!entry.isFile() || !entry.name.endsWith('.ts')) continue;
-      let abs = join(entry.parentPath, entry.name);
-      let rel = relative(hostToolsDir, abs)
-        .split(sep)
-        .join('/')
-        .replace(/\.ts$/, '');
-      names.push(rel);
+    let source = await readFile(hostToolsRegistryPath, 'utf8');
+    let names = [...source.matchAll(SHIM_REGISTRATION_RE)].map((m) => m[1]);
+    if (names.length === 0) {
+      log.warn(
+        `No shim registrations found in ${hostToolsRegistryPath} — import gate disabled`,
+      );
+      return undefined;
     }
     names.sort();
     log.info(`Derived host-tools manifest: ${names.length} modules`);
     return names;
   } catch (error) {
     log.warn(
-      `Could not derive host-tools manifest from ${hostToolsDir}: ${String(error)} — import gate disabled`,
+      `Could not derive host-tools manifest from ${hostToolsRegistryPath}: ${String(error)} — import gate disabled`,
     );
     return undefined;
   }
@@ -76,9 +79,10 @@ export function buildHostToolsSkill(names: string[]): ResolvedSkill {
       '# Host tool imports (generated from the host build — authoritative)',
       '',
       'Host commands are imported from `@cardstack/boxel-host/tools/<name>`.',
-      'The `@cardstack/boxel-host/commands/...` path NO LONGER EXISTS — the',
-      'directory was renamed to `tools/`. Any import not in the list below',
-      'fails validation before your code reaches the realm.',
+      'Always write `tools/` — the older `@cardstack/boxel-host/commands/<name>`',
+      'spelling still resolves as a legacy alias, but `tools/` is canonical.',
+      'Any import whose NAME is not in the list below fails validation',
+      'before your code reaches the realm.',
       '',
       'Valid module names:',
       '',
@@ -116,13 +120,20 @@ export function findHostImportViolations(
     let specifier = match[1];
     let subpath = specifier.slice('@cardstack/boxel-host/'.length);
     if (subpath.startsWith('commands/')) {
+      // The host's shim registry deliberately keeps `commands/<name>` as
+      // a legacy alias for every registered tool, so a known name here
+      // resolves at runtime and is NOT a violation — the injected skill
+      // steers new code toward the canonical `tools/` spelling instead.
       let name = subpath.slice('commands/'.length);
-      violations.push({
-        specifier,
-        suggestion: manifest.has(name)
-          ? `the host renamed commands/ to tools/ — use '@cardstack/boxel-host/tools/${name}'`
-          : `the commands/ directory no longer exists (renamed to tools/), and no tool named '${name}' exists either — check the host-tools-import-manifest skill for the valid list`,
-      });
+      if (!manifest.has(name)) {
+        let near = closestManifestEntry(name, manifest);
+        violations.push({
+          specifier,
+          suggestion: near
+            ? `no host tool named '${name}' — did you mean '@cardstack/boxel-host/tools/${near}'?`
+            : `no host tool named '${name}' — check the host-tools-import-manifest skill for the valid list`,
+        });
+      }
       continue;
     }
     if (subpath.startsWith('tools/')) {

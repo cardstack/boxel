@@ -581,6 +581,33 @@ module('issue-scheduler > local issue overlay', function () {
     assert.strictEqual(scheduler.pickNextIssue()?.id, 'harden-impl');
   });
 
+  test('refreshIssueState updates the overlay — a blocked local issue is not re-picked', async function (assert) {
+    let store = new MockIssueStore([
+      makeIssue({ id: 'impl', status: 'done', order: 1 }),
+    ]);
+    let scheduler = new IssueScheduler(store);
+    await scheduler.loadIssues();
+    scheduler.addLocalIssues([
+      makeIssue({ id: 'harden-impl', status: 'backlog', order: 2 }),
+    ]);
+
+    // The turn ends blocked: the store (workspace-file fallback in
+    // production) reports the new status; the index still lags.
+    store.issues.push(
+      makeIssue({ id: 'harden-impl', status: 'blocked', order: 2 }),
+    );
+    await scheduler.refreshIssueState(
+      makeIssue({ id: 'harden-impl', status: 'in_progress', order: 2 }),
+    );
+    store.issues = store.issues.filter((i) => i.id !== 'harden-impl');
+
+    await scheduler.loadIssues();
+    assert.false(
+      scheduler.hasUnblockedIssues(),
+      'the overlay carries blocked, not the registration snapshot',
+    );
+  });
+
   test('local issues survive loadIssues until the index catches up', async function (assert) {
     let store = new MockIssueStore([
       makeIssue({ id: 'impl', status: 'done', order: 1 }),

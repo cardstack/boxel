@@ -169,6 +169,14 @@ export class IssueScheduler {
     if (idx >= 0) {
       this.issues[idx] = refreshed;
     }
+    // Keep the local overlay current too: loadIssues re-pushes overlay
+    // entries while the index lags, and re-pushing the REGISTRATION
+    // snapshot would resurrect a stale status — a locally-registered
+    // issue that ended `blocked` would look `backlog` again and be
+    // re-picked every cycle until the index catches up.
+    if (this.localIssues.has(issue.id)) {
+      this.localIssues.set(issue.id, refreshed);
+    }
 
     return refreshed;
   }

@@ -38,7 +38,7 @@ import {
   ensureControlPlaneIgnoreFile,
 } from './control-plane-sync.ts';
 import {
-  defaultHostToolsDir,
+  defaultHostToolsRegistry,
   deriveHostToolImports,
 } from './host-import-manifest.ts';
 import { retryWithPoll } from './retry-with-poll.ts';
@@ -275,7 +275,7 @@ export async function runFactoryIssueLoop(
     'manifest',
     'host-imports',
     undefined,
-    () => deriveHostToolImports(defaultHostToolsDir(PACKAGE_ROOT)),
+    () => deriveHostToolImports(defaultHostToolsRegistry(PACKAGE_ROOT)),
   );
   let contextBuilder = new ContextBuilder({
     skillResolver: new DefaultSkillResolver(),

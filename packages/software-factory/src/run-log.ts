@@ -26,6 +26,7 @@ import { dirname, join } from 'node:path';
 
 import { isControlPath } from './control-plane-sync.ts';
 import { logger } from './logger.ts';
+import { isNonProductPath } from './product-paths.ts';
 
 const log = logger('run-log');
 
@@ -929,8 +930,6 @@ export function createRunLogStreamHandler(opts: {
    */
   instanceCardPaths: () => string[];
 } {
-  const EXCLUDED_INSTANCE_DIRS =
-    /^(Issues|Projects|Boards|Knowledge(?: |%20)Articles|Spec|Validations|Runs|RunLogEntries|design|design-history|\.factory-scratch)\//;
   let sawDesign = false;
   let seenGtsWrites = new Set<string>();
   let lastCheckFailAt = new Map<string, number>();
@@ -1013,7 +1012,7 @@ export function createRunLogStreamHandler(opts: {
           tool === 'Write' &&
           normalized.endsWith('.json') &&
           normalized.includes('/') &&
-          !EXCLUDED_INSTANCE_DIRS.test(normalized)
+          !isNonProductPath(normalized)
         ) {
           let cardPath = normalized.replace(/\.json$/, '');
           if (!instancePaths.includes(cardPath)) {
@@ -1130,8 +1129,6 @@ export function cardPathsFromToolCalls(
   toolCalls: { tool: string; args: Record<string, unknown>; result: unknown }[],
   limit = 3,
 ): string[] {
-  const EXCLUDED =
-    /^(Issues|Projects|Boards|Knowledge(?: |%20)Articles|Spec|Validations|Runs|RunLogEntries|design|design-history|\.factory-scratch)\//;
   let paths: string[] = [];
   for (let call of toolCalls) {
     if (call.tool !== 'Write') continue;
@@ -1142,7 +1139,7 @@ export function cardPathsFromToolCalls(
       '',
     );
     if (!normalized.endsWith('.json')) continue;
-    if (EXCLUDED.test(normalized)) continue;
+    if (isNonProductPath(normalized)) continue;
     if (!normalized.includes('/')) continue; // instances live in <Type>/<id>.json
     let cardPath = normalized.replace(/\.json$/, '');
     if (!paths.includes(cardPath)) {
