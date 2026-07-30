@@ -1,8 +1,8 @@
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
-import setBodyClass from 'ember-set-body-class/helpers/set-body-class';
 
 import cssVar from '../../helpers/css-var.ts';
+import setBodyClass from '../../helpers/set-body-class.ts';
 import { eq } from '../../helpers/truth-helpers.ts';
 
 interface Signature {
