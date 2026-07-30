@@ -211,6 +211,47 @@ module(
         .isNotDisabled('the pasted card can be chosen');
     });
 
+    test('pasting a card URL from outside the consuming realm offers no result', async function (assert) {
+      await renderRealmConfigEdit([{ path: '/docs' }]);
+
+      await click('[data-test-add-new="instance"]');
+      await waitFor('[data-test-card-chooser-modal]');
+
+      // A real card, but in the base realm — outside the consuming realm
+      // the chooser is locked to. The chooser's hard scope applies to
+      // pasted URLs too: revealing this card would let Go return a
+      // cross-realm selection.
+      await fillIn(
+        '[data-test-card-chooser-modal] [data-test-search-field]',
+        `${baseRealm.url}types/card`,
+      );
+
+      await waitFor(
+        '[data-test-card-chooser-modal] [data-test-search-sheet-empty]',
+        { timeout: 10000 },
+      );
+      assert
+        .dom('[data-test-card-chooser-modal] [data-section-sid^="url:"]')
+        .doesNotExist(
+          'no URL-paste section is offered for an out-of-scope card',
+        );
+      assert
+        .dom('[data-test-card-chooser-modal] [data-test-search-sheet-empty]')
+        .containsText(
+          'is not in the realms this chooser is limited to',
+          'the empty state explains the card is out of scope, not missing',
+        );
+      assert
+        .dom('[data-test-card-chooser-modal] [data-test-search-label]')
+        .containsText('0 results', 'the summary does not count the card');
+      assert
+        .dom('[data-test-card-chooser-modal] [data-test-item-button]')
+        .doesNotExist('there is no tile to select');
+      assert
+        .dom('[data-test-card-chooser-go-button]')
+        .isDisabled('a cross-realm card cannot be returned by the chooser');
+    });
+
     test('renders a per-rule warning when a path is malformed', async function (assert) {
       await renderRealmConfigEdit([
         { path: 'docs' }, // missing leading slash
