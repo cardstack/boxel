@@ -63,9 +63,10 @@ import {
 // is the proof that a genuinely pathological render produces exactly the
 // row shape those lanes consume.
 
-// Routed through testPort() like the dedicated prerender port so
-// environment-mode runs (parallel test processes with per-environment port
-// offsets) don't collide binding the fixture realms' servers.
+// Routed through testPort() like the dedicated prerender port: only one
+// realm-server test process ever runs on a machine, but environment-mode
+// shifts every test port by a per-environment offset so parallel
+// environments sharing a host don't collide.
 const badRealmURL = `http://127.0.0.1:${testPort(4472)}/wedged/`;
 const healthyRealmURL = `http://127.0.0.1:${testPort(4473)}/steady/`;
 const prerenderPort = testPort(4474);
