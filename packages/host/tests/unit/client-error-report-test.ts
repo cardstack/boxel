@@ -216,6 +216,70 @@ module('Unit | lib | client-error-report', function () {
       });
     });
 
+    // A message can be shaped exactly like a frame, down to a trailing
+    // `url:line:col`, so which lines are the message is a guess. These are the
+    // shapes that fool it, and they must still yield the real throw site — both
+    // the frames in the stack and the location fields derived from them.
+    let disguised: Array<[string, string]> = [
+      [
+        'a scoped module and a trailing location',
+        `cannot load @cardstack/boxel-ui: ${'x'.repeat(3000)} (https://realm.example/my-realm/other.gts:14:3)`,
+      ],
+      [
+        'an account and a trailing location',
+        `@user:localhost denied: ${'x'.repeat(3000)} (https://realm.example/my-realm/other.gts:14:3)`,
+      ],
+      [
+        'a bare trailing location',
+        `cannot load @cardstack/x: ${'x'.repeat(3000)} https://realm.example/other.gts:14:3`,
+      ],
+    ];
+
+    disguised.forEach(([label, message]) => {
+      test(`a message with ${label} does not displace the frames`, function (assert) {
+        let report = reportOf(message, frames(3));
+        assert.strictEqual(
+          report.stack.split('\n').filter((l) => l.startsWith('at frame'))
+            .length,
+          3,
+          'every frame survives',
+        );
+        assert.strictEqual(
+          report.top_frame_function,
+          'frame0',
+          'and the throw site is the frame, not the message',
+        );
+        assert.strictEqual(
+          report.line,
+          1,
+          'the location comes from the frame too',
+        );
+      });
+    });
+
+    test('one enormous frame still leaves room for the next', function (assert) {
+      // Capping each line is what guarantees this: no single line can spend the
+      // whole budget, whichever line it is.
+      let report = reportOf('x', [
+        `    at huge (https://realm.example/${'d'.repeat(3000)}.js:1:1)`,
+        '    at real (https://realm.example/my-realm/real.gts:2:2)',
+      ]);
+      assert.true(report.stack.length <= 2000);
+      assert.true(
+        report.stack.split('\n').length >= 2,
+        'the frame below the enormous one survives',
+      );
+    });
+
+    test('a frame contributes bounded fields', function (assert) {
+      // They land in dashboard labels, so an unbounded value there is a 3KB label.
+      let report = reportOf('x', [
+        `    at ${'f'.repeat(900)} (https://realm.example/${'u'.repeat(900)}.js:1:1)`,
+      ]);
+      assert.true(report.top_frame_function.length <= 300);
+      assert.true(report.source_url.length <= 300);
+    });
+
     test('a stack of frames with no message keeps them all', function (assert) {
       // SpiderMonkey and JSC write no message line, so there is no header.
       let error = new Error('firefox shaped');
@@ -343,6 +407,37 @@ module('Unit | lib | client-error-report', function () {
       assert.notOk(report.message_key.includes('\n'));
       assert.true(
         reportOf('z'.repeat(400), frames(1)).message_key.length <= 160,
+      );
+    });
+
+    test('coalesces repeats of an error whose stack names no frame', function (assert) {
+      // `at Array.forEach (<anonymous>)` parses no location, so the signature has
+      // no throw site to include. Falling back to the stack's raw first line
+      // would put the un-normalized message back in — carrying the very ids the
+      // key exists to collapse — and repeats would stop coalescing.
+      let stack = [
+        '    at Array.forEach (<anonymous>)',
+        '    at new Promise (<anonymous>)',
+      ];
+      let one = reportOf('cannot render Person/abc1234', stack);
+      let two = reportOf('cannot render Person/xyz9876', stack);
+      assert.strictEqual(one.message_key, two.message_key, 'one key');
+      assert.strictEqual(
+        one.signature,
+        two.signature,
+        'and one signature, so the repeats coalesce',
+      );
+    });
+
+    test('normalizing is bounded, so message length cannot cost the main thread', function (assert) {
+      // Message content is entirely data-controlled and the id scan is
+      // superlinear over a long hyphenated run, which would otherwise be paid
+      // once per occurrence inside the error handler.
+      let start = performance.now();
+      reportOf('a-'.repeat(32000), frames(1));
+      assert.true(
+        performance.now() - start < 200,
+        'a 64KB hyphenated message keys in well under the wedge threshold',
       );
     });
 

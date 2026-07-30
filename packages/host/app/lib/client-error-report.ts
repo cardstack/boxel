@@ -15,12 +15,22 @@
 const MAX_ERROR_MESSAGE_CHARS = 300;
 // Shorter than the message: this one is read as a grouping key in a table cell.
 const MAX_ERROR_MESSAGE_KEY_CHARS = 160;
-// Frames, not lines: the message above them is bounded separately.
-const MAX_ERROR_STACK_FRAMES = 16;
+// How much of a message the key's normalization reads. Collapsing ids scans for
+// them, and message content is entirely data-controlled, so an unbounded scan is
+// unbounded work inside an error handler. Past this, content is invisible to the
+// key: two messages that differ only beyond it group together.
+const MAX_ERROR_MESSAGE_KEY_SOURCE_CHARS = 4_000;
+// Lines taken from the stack once the message above them is set aside.
+const MAX_ERROR_STACK_LINES = 16;
 const MAX_ERROR_STACK_CHARS = 2_000;
-// The message the engine opens a stack with is not a frame and has to leave room
-// for the frames below it.
-const MAX_ERROR_STACK_HEADER_CHARS = 500;
+// No single line may spend the whole stack budget, or one long line starves every
+// other. Both the message the engine opens with and any one frame are capped —
+// the message is not always separable from the frames by inspection, so the cap
+// is what guarantees a frame survives either way.
+const MAX_ERROR_STACK_LINE_CHARS = 500;
+// A frame's parts land in dashboard labels, so they are bounded too — generously,
+// since a real url with a bundler prefix and escapes is long.
+const MAX_ERROR_FRAME_FIELD_CHARS = 300;
 
 export type ClientErrorKind = 'error' | 'unhandledrejection';
 
@@ -154,9 +164,11 @@ function truncate(value: string, max: number): string {
   return value.length > max ? `${value.slice(0, max - 1)}…` : value;
 }
 
-// The stack as the engine gave it, bounded. Frames are taken from the top so the
-// throw site always survives; the deep tail — the least informative end — is what
-// gets dropped, first by frame count and then to fit the character budget.
+// The stack as the engine gave it, bounded. Lines are taken from the top so the
+// throw site survives; the deep tail — the least informative end — is what gets
+// dropped, first by line count and then to fit the character budget. The count
+// bounds lines rather than parsed frames: a real stack carries lines no parse
+// claims (`at new Promise (<anonymous>)`), and they occupy slots like any other.
 function boundStack(stack: string | undefined): string {
   if (typeof stack !== 'string' || stack.length === 0) {
     return '';
@@ -169,28 +181,36 @@ function boundStack(stack: string | undefined): string {
     return '';
   }
   // Everything above the first frame is the message the engine opened the stack
-  // with. It is not a frame, it is unbounded — an error carrying a response body
-  // or a serialized document runs to thousands of characters — and it can span
-  // lines. So it is bounded on its own rather than competing with the frames for
-  // one allowance: otherwise it takes the whole budget, dropping deep frames
-  // does not help, and every frame is discarded, losing what the stack is for.
+  // with, and a message is unbounded — an error carrying a response body or a
+  // serialized document runs to thousands of characters, across as many lines as
+  // it likes. Separating it lets it be bounded without competing with the frames.
+  //
+  // That separation is a guess, though, and it has to be: a message can be shaped
+  // exactly like a frame, down to a trailing `url:line:col`, and then it lands in
+  // `frames` instead of the header. So the budget does not rest on getting the
+  // split right — every retained line is capped, which is what actually
+  // guarantees no single line can spend the whole allowance and starve the rest.
   let firstFrame = lines.findIndex((line) => frameAt(line) !== undefined);
   let header = firstFrame === -1 ? lines : lines.slice(0, firstFrame);
-  let frames =
+  let frames = (
     firstFrame === -1
       ? []
-      : lines.slice(firstFrame, firstFrame + MAX_ERROR_STACK_FRAMES);
+      : lines.slice(firstFrame, firstFrame + MAX_ERROR_STACK_LINES)
+  ).map((frame) => truncate(frame, MAX_ERROR_STACK_LINE_CHARS));
   let head = header.length
-    ? truncate(header.join('\n'), MAX_ERROR_STACK_HEADER_CHARS)
+    ? truncate(header.join('\n'), MAX_ERROR_STACK_LINE_CHARS)
     : '';
   let assemble = (count: number) =>
     (head ? [head, ...frames.slice(0, count)] : frames.slice(0, count)).join(
       '\n',
     );
+  // Keep two lines even when one would fit: if the split guessed wrong, the first
+  // line is the message and the throw site is the one below it.
+  let floor = Math.min(frames.length, head ? 1 : 2);
   let kept = frames.length;
   let out = assemble(kept);
-  // Then drop frames from the deep end — the least informative ones — to fit.
-  while (out.length > MAX_ERROR_STACK_CHARS && kept > 1) {
+  // Then drop from the deep end — the least informative lines — to fit.
+  while (out.length > MAX_ERROR_STACK_CHARS && kept > floor) {
     kept--;
     out = assemble(kept);
   }
@@ -246,30 +266,41 @@ function parseStackFrame(candidate: string): StackFrame | undefined {
   let [, url, line, col] = match;
   return {
     raw: candidate,
-    functionName: functionName.trim(),
-    url,
+    functionName: truncate(functionName.trim(), MAX_ERROR_FRAME_FIELD_CHARS),
+    url: truncate(url, MAX_ERROR_FRAME_FIELD_CHARS),
     line: Number(line),
     col: Number(col),
   };
 }
 
 const V8_FRAME_PREFIX_RE = /^at\s+/;
+// `name@location`, with an empty name for an anonymous frame. Neither part holds
+// whitespace, so the whole line holds none.
+const SPIDERMONKEY_FRAME_RE = /^[^@\s]*@\S+$/;
 
 // Every engine marks its frames: V8 prefixes each with `at`, SpiderMonkey and
 // JSC join the function name to the location with `@` (and write a bare `@` for
 // an anonymous one). V8 also opens the stack with the message, which carries no
 // such marker — and a message can otherwise be shaped exactly like a frame, so
 // the marker is what tells the two apart rather than position alone.
+//
+// The `@` form is matched as a shape, not as a bare character: a function name
+// holds no whitespace and neither does a location, so `name@location` has none at
+// all. Testing for the character alone would accept any message that happens to
+// name a scoped module (`@cardstack/…`) or an account (`@user:server`) — and one
+// of those ending in a parseable `url:line:col` would then be read as the throw
+// site, reporting where the message pointed instead of where the error came from.
 function isFrameLine(candidate: string): boolean {
   let trimmed = candidate.trim();
-  return V8_FRAME_PREFIX_RE.test(trimmed) || trimmed.includes('@');
+  return (
+    V8_FRAME_PREFIX_RE.test(trimmed) || SPIDERMONKEY_FRAME_RE.test(trimmed)
+  );
 }
 
 // One line read as a frame, or undefined if it isn't one. Both tests matter and
 // neither is sufficient alone: the marker rejects a message that merely happens
-// to be frame-shaped, and requiring a parseable `:line:col` rejects a message
-// that merely mentions a scoped module (`@cardstack/…`) or a user id — which the
-// marker alone accepts, since it looks for a bare `@`.
+// to be frame-shaped, and requiring a parseable `:line:col` rejects a marked line
+// that names no location.
 function frameAt(line: string): StackFrame | undefined {
   return isFrameLine(line) ? parseStackFrame(line) : undefined;
 }
@@ -284,7 +315,11 @@ function topStackFrame(stack: string): StackFrame {
     }
   }
   return {
-    raw: lines[0] ?? '',
+    // Deliberately empty rather than the first line: `raw` identifies the throw
+    // site for coalescing, and a stack with no frame identifies none. Feeding the
+    // message in here instead would defeat the normalization `message_key` does,
+    // since the raw text carries the very ids that key collapses.
+    raw: '',
     functionName: '',
     url: '',
     line: 0,
@@ -306,6 +341,7 @@ function topStackFrame(stack: string): StackFrame {
 // a dashboard table cell, where a multi-line value breaks the row.
 function errorMessageKey(message: string): string {
   let normalized = message
+    .slice(0, MAX_ERROR_MESSAGE_KEY_SOURCE_CHARS)
     .replace(/\b(?=[\w-]{4,}\b)[\w-]*\d[\w-]*\b/g, '*')
     .replace(/\*(?:[\s/.:_-]*\*)+/g, '*')
     .replace(/\s+/g, ' ')

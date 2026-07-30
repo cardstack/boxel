@@ -417,16 +417,51 @@ module('Integration | Service | client-telemetry', function (hooks) {
     // so: otherwise it reads exactly like one error that looped that many times.
     let folded = errors.filter((e) => e.folded_signatures > 0);
     assert.strictEqual(folded.length, 1, 'exactly one event is a folded group');
-    assert.strictEqual(
-      folded[0].folded_signatures,
-      30 - (errors.length - 1),
-      'and it says how many distinct errors it stands for',
-    );
     assert.true(
       errors
         .filter((e) => e.folded_signatures === 0)
         .every((e) => e.dedup_count === 1),
       'an unfolded event counts occurrences of its own error only',
+    );
+  });
+
+  test('a folded group counts distinct errors, not occurrences', function (assert) {
+    let svc = telemetry();
+    svc.enableForTest();
+    svc.drainBufferForTest();
+
+    // The distinguishing case: many occurrences of *few* distinct errors past the
+    // budget. With equal counts — 30 errors thrown once each — occurrences and
+    // signatures are the same number by construction, so that input cannot tell
+    // a folded group from one error looping, which is the whole reason the field
+    // exists.
+    for (let i = 0; i < 11; i++) {
+      dispatchUncaught(errorWithStack(`filler ${i}`, frames(2)));
+    }
+    let folding = [0, 1, 2, 3].map((i) =>
+      errorWithStack(`folded distinct ${i}`, frames(2)),
+    );
+    for (let round = 0; round < 25; round++) {
+      folding.forEach((error) => dispatchUncaught(error));
+    }
+
+    let errors = clientErrors(svc);
+    let folded = errors.filter((e) => e.folded_signatures > 0);
+    assert.strictEqual(folded.length, 1, 'one shared slot');
+    assert.strictEqual(
+      folded[0].dedup_count,
+      100,
+      'its dedup_count is every occurrence it absorbed',
+    );
+    assert.strictEqual(
+      folded[0].folded_signatures,
+      4,
+      'while folded_signatures is the four distinct errors behind them',
+    );
+    assert.notStrictEqual(
+      folded[0].folded_signatures,
+      folded[0].dedup_count,
+      'the two must be able to differ, or the field says nothing',
     );
   });
 

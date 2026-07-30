@@ -17,6 +17,7 @@ import config from '@cardstack/host/config/environment';
 import {
   reportFromErrorEvent,
   reportFromRejectionEvent,
+  type ClientErrorKind,
   type ErrorReport,
 } from '@cardstack/host/lib/client-error-report';
 
@@ -158,7 +159,7 @@ export interface ClientErrorEvent extends BaseEvent {
   event_type: 'client-error';
   // Which channel surfaced the failure: a `window` error event (an uncaught
   // throw) or an unhandled promise rejection.
-  kind: 'error' | 'unhandledrejection';
+  kind: ClientErrorKind;
   message: string;
   // Low-cardinality grouping key: the message with the parts that vary per
   // occurrence — instance ids, uuids, hashes — collapsed to `*`. The dashboard
@@ -253,6 +254,10 @@ const MAX_SLOWEST_LOADS = 10;
 // flush's byte-aware chunking absorbs; a multi-byte-heavy stack costs more per
 // character and simply chunks into more requests.
 const MAX_ERROR_EVENTS_PER_FLUSH = 12;
+// How many distinct signatures the shared slot will name. A storm of distinct
+// errors is exactly when the slot is in use, so the identity set that counts them
+// needs a ceiling; past it, folded_signatures is a floor rather than a total.
+const MAX_FOLDED_SIGNATURES = 500;
 const MAX_LOAF_SCRIPTS = 10;
 const MAX_PROFILER_STACKS = 12;
 const MAX_PROFILER_FRAMES = 32;
@@ -346,6 +351,11 @@ export default class ClientTelemetryService
 
   // Error dedup: signature → the still-buffered event counting its occurrences.
   #errorDedup = new Map<string, ClientErrorEvent>();
+  // Which distinct signatures the shared overflow slot currently stands for.
+  // Counting them needs identity, not a tally: every occurrence past the budget
+  // increments the slot's dedup_count, and only the ones never seen before make
+  // it a wider group. Bounded, and cleared with the slot at each flush.
+  #foldedSignatures = new Set<string>();
   #errorEventsSinceFlush = 0;
   #reportingError = false;
 
@@ -571,6 +581,7 @@ export default class ClientTelemetryService
     this.#profilerSamples = [];
     this.#cardLoadWindowOpen = false;
     this.#errorDedup.clear();
+    this.#foldedSignatures.clear();
     this.#errorEventsSinceFlush = 0;
   }
 
@@ -717,14 +728,14 @@ export default class ClientTelemetryService
 
   // ── Uncaught errors ──────────────────────────────────────────────────────
   #onWindowError(event: Event): void {
-    this.#reportError(reportFromErrorEvent(event));
+    this.#reportError(() => reportFromErrorEvent(event));
   }
 
   #onUnhandledRejection(event: Event): void {
-    this.#reportError(reportFromRejectionEvent(event));
+    this.#reportError(() => reportFromRejectionEvent(event));
   }
 
-  #reportError(report: ErrorReport): void {
+  #reportError(buildReport: () => ErrorReport): void {
     // The render-context check is repeated here rather than left to arm-time
     // gating so the guarantee is local to this path: a render that throws never
     // beacons, however the instrument came to be armed — including a live tab
@@ -736,7 +747,7 @@ export default class ClientTelemetryService
     // A throw from inside this handler would itself dispatch `error` and recurse.
     this.#reportingError = true;
     try {
-      let { signature, ...fields } = report;
+      let { signature, ...fields } = buildReport();
       let key = signature;
       let folded = 0;
       let pending = this.#errorDedup.get(signature);
@@ -754,10 +765,18 @@ export default class ClientTelemetryService
         let overflow = this.#errorDedup.get(OVERFLOW_ERROR_KEY);
         if (overflow && this.#buffer.includes(overflow)) {
           overflow.dedup_count++;
-          overflow.folded_signatures++;
+          if (
+            !this.#foldedSignatures.has(signature) &&
+            this.#foldedSignatures.size < MAX_FOLDED_SIGNATURES
+          ) {
+            this.#foldedSignatures.add(signature);
+            overflow.folded_signatures = this.#foldedSignatures.size;
+          }
           return;
         }
         key = OVERFLOW_ERROR_KEY;
+        this.#foldedSignatures.clear();
+        this.#foldedSignatures.add(signature);
         folded = 1;
       }
       let evt: ClientErrorEvent = {
@@ -793,6 +812,7 @@ export default class ClientTelemetryService
     // keep folding new ones onto a message and a timestamp from an older window.
     // A window boundary always starts a fresh group.
     this.#errorDedup.delete(OVERFLOW_ERROR_KEY);
+    this.#foldedSignatures.clear();
     this.#errorEventsSinceFlush = this.#errorDedup.size;
   }
 

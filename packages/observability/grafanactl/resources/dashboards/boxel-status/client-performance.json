@@ -2345,7 +2345,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "description": "What is breaking, worst first. message_key is the message with the parts that vary per occurrence \u2014 instance ids, uuids, hashes \u2014 collapsed to `*`, so the same failure against a different card is one row rather than one row per card; the rule is narrow, so a short or digit-free id (\u2026/Person/abc) does stay its own row. A key longer than its budget ends in a digest of the whole message, so two long messages differing only at the end stay distinct. The verbatim message and the full stack are on the raw line below. The throwing function makes a row actionable: it names the code that failed. Occurrences above events means the error is looping \u2014 unless folded_signatures on that line is nonzero, in which case the row is a folded group and its message is only a sample.",
+            "description": "What is breaking, worst first. message_key is the message with the parts that vary per occurrence \u2014 instance ids, uuids, hashes \u2014 collapsed to `*`, so the same failure against a different card is one row rather than one row per card; the rule is narrow, so a short or digit-free id (\u2026/Person/abc) does stay its own row. A key longer than its budget ends in a digest of the message, so two long messages differing only at the end stay distinct. The verbatim message and the full stack are on the raw line below. The throwing function makes a row actionable: it names the code that failed. Occurrences above events means the error is looping \u2014 with one exception, which the detail panel below settles: an event whose folded_signatures is nonzero stands for several distinct errors, so its occurrences are a group total rather than one error repeating.",
             "fieldConfig": {
               "defaults": {
                 "color": {
@@ -2583,7 +2583,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "description": "Raw client-error lines, newest first. Expand a line to read the stack \u2014 an aggregation cannot show it, and it is what names the code that threw. The message the engine writes above the frames is bounded separately from them, and frames are kept from the top down, so the throw site is the first frame and a deep stack loses its tail; a `\u2026` marks any value that was cut. An empty stack means the throw carried nothing to take one from: a cross-origin script error, or a promise rejected with something that is not an Error. A frame in a card module is a blob url, minted per tab and per rebuild, so it resolves to nothing later \u2014 there, top_frame_function is the durable handle.",
+            "description": "Raw client-error lines, newest first. Expand a line to read the stack \u2014 an aggregation cannot show it, and it is what names the code that threw. The message the engine writes above the frames is bounded separately from them, and lines are kept from the top down, so the throw site is the first frame and a deep stack loses its tail; a `\u2026` marks any value that was cut. An empty stack means the throw carried nothing to take one from: a cross-origin script error, a promise rejected with something that is not an Error, or a reason that is error-shaped but has no stack. This is also where folded_signatures is readable: nonzero means the line stands for that many distinct errors and its message is only a sample of them.",
             "gridPos": {
               "h": 12,
               "w": 24,
