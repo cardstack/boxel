@@ -106,6 +106,42 @@ export type RequestHandler = (req: Request) => Promise<Response | null>;
 
 type Fetch = typeof fetch;
 
+export interface ModuleRegistration {
+  dependencyList: string[];
+  implementation: Function;
+}
+
+// The default loader evaluates AMD registration code in its own JavaScript
+// realm. Sandboxed consumers provide an evaluator that performs this step in
+// an SES Compartment while preserving the loader's fetch, dependency, module
+// identity, caching, and invalidation behavior.
+export type ModuleEvaluator = (
+  source: string,
+  moduleIdentifier: string,
+) => ModuleRegistration;
+
+function evaluateModuleInCurrentRealm(
+  source: string,
+  moduleIdentifier: string,
+): ModuleRegistration {
+  let registration: ModuleRegistration | undefined;
+  let define = (_mid: string, dependencyList: string[], impl: Function) => {
+    registration = { dependencyList, implementation: impl };
+  };
+  // `define` is consumed lexically by the direct eval below.
+  void define;
+
+  // This is deliberately the only direct-eval site in Loader. Production card
+  // sandboxes replace it through ModuleEvaluator; trusted host/server loaders
+  // retain today's behavior.
+  eval(source);
+
+  if (!registration) {
+    throw new Error(`Module ${moduleIdentifier} did not register itself`);
+  }
+  return registration;
+}
+
 // Transient upstream statuses that we briefly retry on module-source fetches
 // (e.g. nginx returning 502/503/504 while the single-writer realm server is
 // momentarily stalled under reindex load — see CS-10820). Kept private so
@@ -224,6 +260,7 @@ export class Loader {
   // host injects a sleep that goes through the native (unblocked)
   // setTimeout so the retry actually fires.
   private retrySleep: ((ms: number) => Promise<void>) | undefined;
+  private moduleEvaluator: ModuleEvaluator;
 
   constructor(
     fetch: Fetch,
@@ -231,6 +268,7 @@ export class Loader {
     options?: {
       retrySleep?: (ms: number) => Promise<void>;
       virtualNetwork?: VirtualNetwork;
+      moduleEvaluator?: ModuleEvaluator;
     },
   ) {
     this.fetchImplementation = fetch;
@@ -238,6 +276,8 @@ export class Loader {
       resolveImport ?? ((moduleIdentifier) => moduleIdentifier);
     this.retrySleep = options?.retrySleep;
     this.virtualNetwork = options?.virtualNetwork;
+    this.moduleEvaluator =
+      options?.moduleEvaluator ?? evaluateModuleInCurrentRealm;
     // Module caches are keyed by canonical RRI form (see moduleCacheKey), whose
     // relationship to a real URL is only stable between realm-mapping changes.
     // Discard the RRI-keyed caches whenever a mapping is added or removed so an
@@ -266,6 +306,7 @@ export class Loader {
     let clone = new Loader(loader.fetchImplementation, loader.resolveImport, {
       retrySleep: loader.retrySleep,
       virtualNetwork: loader.virtualNetwork,
+      moduleEvaluator: loader.moduleEvaluator,
     });
     for (let [moduleIdentifier, module] of loader.moduleShims) {
       clone.shimModule(moduleIdentifier, module);
@@ -1052,45 +1093,47 @@ export class Loader {
       throw exception;
     }
 
-    type DefineFunc = ((
-      mid: string,
-      depList: string[],
-      impl: Function,
-    ) => void) & {
-      dependencyList: UnregisteredDep[];
-      implementation: Function;
-    };
-
-    // this local is here for the evals to see. We're sticking the
-    // dependencyList and implementation onto the function itself because that's
-    // a convenient way to ensure that build tools like Rollup don't optimize it
-    // away. Rollup violates the JS spec by removing a local that's visible to `eval`.
-    let define = ((_mid: string, depList: string[], impl: Function) => {
-      define.dependencyList = depList.map((depId) => {
-        if (depId === 'exports') {
-          return { type: 'exports' };
-        } else if (depId === '__import_meta__') {
-          return { type: '__import_meta__' };
-        } else {
-          return {
-            type: 'dep',
-            moduleURL: new URL(
-              this.resolveImport(depId),
-              new URL(moduleIdentifier),
-            ),
-          };
-        }
-      });
-      define.implementation = impl;
-    }) as DefineFunc;
-
     try {
-      // Append `sourceURL` so stack traces from inside the eval-ed AMD
-      // module name the original module URL instead of `<anonymous>`.
-      // Strip any CR/LF from the identifier so a maliciously-crafted
-      // module URL can't terminate the comment and inject extra source
-      // text into the eval-ed program.
-      eval(src + '\n//# sourceURL=' + moduleIdentifier.replace(/[\r\n]/g, ''));
+      // Append `sourceURL` so stack traces from inside the evaluated AMD module
+      // name the original module URL instead of `<anonymous>`. Strip CR/LF so
+      // a maliciously-crafted module URL cannot terminate the comment.
+      let source =
+        src + '\n//# sourceURL=' + moduleIdentifier.replace(/[\r\n]/g, '');
+      let registration = this.moduleEvaluator(source, moduleIdentifier);
+      if (
+        !Array.isArray(registration.dependencyList) ||
+        typeof registration.implementation !== 'function'
+      ) {
+        throw new Error(
+          `Module evaluator returned an invalid registration for ${moduleIdentifier}`,
+        );
+      }
+      let dependencyList: UnregisteredDep[] = registration.dependencyList.map(
+        (depId): UnregisteredDep => {
+          if (depId === 'exports') {
+            return { type: 'exports' };
+          } else if (depId === '__import_meta__') {
+            return { type: '__import_meta__' };
+          } else {
+            return {
+              type: 'dep',
+              moduleURL: new URL(
+                this.resolveImport(depId),
+                new URL(moduleIdentifier),
+              ),
+            };
+          }
+        },
+      );
+      let registeredModule: RegisteredModule = {
+        state: 'registered',
+        dependencyList,
+        implementation: registration.implementation,
+      };
+
+      this.setModule(moduleIdentifier, registeredModule);
+      module.deferred.fulfill();
+      this.prefetchDependencies(registeredModule.dependencyList);
     } catch (exception) {
       this.setModule(moduleIdentifier, {
         state: 'broken',
@@ -1100,16 +1143,6 @@ export class Loader {
       module.deferred.fulfill();
       throw exception;
     }
-
-    let registeredModule: RegisteredModule = {
-      state: 'registered',
-      dependencyList: define.dependencyList,
-      implementation: define.implementation,
-    };
-
-    this.setModule(moduleIdentifier, registeredModule);
-    module.deferred.fulfill();
-    this.prefetchDependencies(registeredModule.dependencyList);
   }
 
   private evaluate<T>(moduleIdentifier: string, module: EvaluatableModule): T {

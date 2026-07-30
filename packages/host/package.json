@@ -194,6 +194,7 @@
   "dependencies": {
     "ember-modify-based-class-resource": "catalog:",
     "reactiveweb": "catalog:",
+    "ses": "2.2.0",
     "unique-names-generator": "^4.7.1"
   },
   "engines": {
