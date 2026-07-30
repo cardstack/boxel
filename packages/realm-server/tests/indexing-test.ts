@@ -3348,6 +3348,10 @@ module(basename(import.meta.filename), function () {
             deps,
           )})`,
         );
+        assert.notOk(
+          deps.includes(`${testRealm}hello.test`),
+          'the dotted target is recorded at its row URL rather than its bare id',
+        );
 
         let beforeInvalidation = await indexedAtFor(
           `${testRealm}dotted-consumer.json`,

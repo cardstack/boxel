@@ -84,7 +84,24 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(
         forms('http://test/realm/report.pdf', network),
         ['http://test/realm/report.pdf', 'http://test/realm/report.pdf.json'],
-        'a file outside the FileDef registry keeps its own URL',
+        'a file the FileDef registry does not name keeps its own URL alongside the card-id form',
+      );
+      assert.deepEqual(
+        forms('http://test/realm/.gitignore', network),
+        ['http://test/realm/.gitignore', 'http://test/realm/.gitignore.json'],
+        'a leading dot is a name, not an extension, so it settles nothing either',
+      );
+    });
+
+    test('reads a registered extension as a file however it is cased', function (assert) {
+      let network = makeStubNetwork();
+      assert.deepEqual(forms('http://test/realm/LOGO.PNG', network), [
+        'http://test/realm/LOGO.PNG',
+      ]);
+      assert.deepEqual(
+        forms('http://test/realm/types.d.ts', network),
+        ['http://test/realm/types.d.ts'],
+        'a declaration file is a file, not a card id',
       );
     });
 

@@ -79,8 +79,10 @@ function normalizeModuleURL(url: string): string | undefined {
 // legitimately contain dots (a `ModelConfiguration/claude-sonnet-4.6`
 // instance, a `hello.test` instance). Reading such a dot as an extension would
 // leave the dep at a URL no index row carries, so changing the instance would
-// never invalidate this consumer. Files are tracked through `trackFile`, so an
-// instance reference here is never a file path.
+// never invalidate this consumer. Two conventions make the suffix sufficient on
+// its own: files are tracked through `trackFile`, so an instance reference here
+// is never a file path, and a card id never ends in `.json` — that suffix
+// belongs to the row, not to the id.
 function normalizeInstanceURL(url: string): string | undefined {
   let canonical = canonicalURL(url);
   if (!canonical) {

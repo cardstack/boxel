@@ -20,6 +20,10 @@ function isExtensionlessPath(url: URL): boolean {
 // beside the `hello.test.gts` module, a `ModelConfiguration/claude-sonnet-4.6`
 // instance) as readily as a file whose extension is outside the FileDef
 // registry (a `report.pdf` attachment), so those come back as 'either'.
+//
+// `.json` is itself a registered extension, which is what leaves a dep already
+// in an instance's stored form alone. The one id shape that reads wrong is a
+// card id ending in `.json`, whose row is at `<id>.json.json`.
 type NamedResource = 'file' | 'instance' | 'either';
 
 function namedResource(url: URL): NamedResource {
@@ -93,11 +97,12 @@ export function relationshipDependencyForms(
 }
 
 // Traversal follows a dep to the index row named by that exact URL, so it takes
-// every dep that could name one. An extensionless dep never does: it is a module
-// reference in node-resolution form, whose errors reach a consumer through the
-// definition cache instead. A dep that turns out to name no row is read as a
-// miss and traversal stops there, so admitting one costs a lookup — which is why
-// the ambiguous dotted names `namedResource` won't classify are admitted here.
+// every dep that could name one. A dep reading as a bare instance id never
+// does — no row is keyed on that form — and such a dep is a module reference in
+// node-resolution form, whose errors reach a consumer through the definition
+// cache instead. Everything else is admitted, undecidable dotted names
+// included: a dep naming no row reads as a miss, so admitting one costs a
+// lookup rather than correctness.
 export function canTraverseRelationshipDependency(
   dep: string,
   realmURL: URL,
@@ -111,7 +116,7 @@ export function canTraverseRelationshipDependency(
     if (!parsed.href.startsWith(realmURL.href)) {
       return false;
     }
-    return !isExtensionlessPath(parsed);
+    return namedResource(parsed) !== 'instance';
   } catch (_err) {
     return false;
   }
