@@ -41,7 +41,7 @@ function hostStartupLooksLikePortContention(logs: string): boolean {
 }
 
 function boxelUIIsUsable(hostPackageDir: string): boolean {
-  let boxelUIDir = join(hostPackageDir, '..', 'boxel-ui', 'addon');
+  let boxelUIDir = join(hostPackageDir, '..', 'boxel-ui');
   return existsSync(join(boxelUIDir, 'declarations', 'components.d.ts'));
 }
 
@@ -56,7 +56,7 @@ function ensureBoxelUIReady(hostPackageDir: string): void {
     return;
   }
 
-  let boxelUIAddonDir = join(hostPackageDir, '..', 'boxel-ui', 'addon');
+  let boxelUIAddonDir = join(hostPackageDir, '..', 'boxel-ui');
 
   // boxel-ui's type build imports icon components from boxel-icons, so
   // boxel-icons must be fully built (including its declarations) first. This

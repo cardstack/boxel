@@ -530,9 +530,9 @@ const VENDORS: Vendor[] = [
     filter: skipMonorepoArtifacts,
   },
   {
-    // Drop `addon/src/styles/` (1.5MB of `.woff2` + CSS).
+    // Drop `src/styles/` (1.5MB of `.woff2` + CSS).
     name: 'boxel-ui',
-    from: join(MONOREPO_PACKAGES, 'boxel-ui', 'addon', 'src'),
+    from: join(MONOREPO_PACKAGES, 'boxel-ui', 'src'),
     to: join(PACKAGE_ROOT, 'bundled-types', 'boxel-ui'),
     filter: boxelUiFilter,
   },
@@ -580,7 +580,7 @@ function hostAppFilter(src: string): boolean {
 
 function boxelUiFilter(src: string): boolean {
   if (!skipMonorepoArtifacts(src)) return false;
-  let uiRoot = join(MONOREPO_PACKAGES, 'boxel-ui', 'addon', 'src');
+  let uiRoot = join(MONOREPO_PACKAGES, 'boxel-ui', 'src');
   let rel = src.slice(uiRoot.length + 1);
   if (rel === '') return true;
   if (rel.startsWith('styles/') || rel === 'styles') return false;
