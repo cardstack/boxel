@@ -35,7 +35,7 @@ export default function formatList(
         type: type === 'unit' ? 'conjunction' : type,
       });
       return listFormatter.format(items);
-    } catch (error) {
+    } catch {
       // Fall back to manual formatting if Intl.ListFormat fails
     }
   }

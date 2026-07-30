@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "1.0.0",
+  "projectName": "@cardstack/boxel-ui",
+  "packages": [
+    {
+      "name": "@ember/addon-blueprint",
+      "version": "0.18.0",
+      "blueprints": [
+        {
+          "name": "@ember/addon-blueprint",
+          "isBaseBlueprint": true,
+          "options": ["--pnpm", "--typescript"]
+        }
+      ]
+    }
+  ]
+}

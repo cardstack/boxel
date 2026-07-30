@@ -71,21 +71,29 @@ const flags = {
 
 function argValue(argv, name) {
   const i = argv.indexOf(name);
-  if (i < 0 || i + 1 >= argv.length) return null;
+  if (i < 0 || i + 1 >= argv.length) {
+    return null;
+  }
   return argv[i + 1];
 }
 
 function log(...m) {
-  if (!flags.quiet) console.log(...m);
+  if (!flags.quiet) {
+    console.log(...m);
+  }
 }
 
 function listComponents() {
   const entries = fs.readdirSync(COMPONENTS_DIR, { withFileTypes: true });
   const components = [];
   for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
+    if (!entry.isDirectory()) {
+      continue;
+    }
     const usagePath = path.join(COMPONENTS_DIR, entry.name, 'usage.gts');
-    if (!fs.existsSync(usagePath)) continue;
+    if (!fs.existsSync(usagePath)) {
+      continue;
+    }
     components.push({ slug: entry.name, usagePath });
   }
   return components.sort((a, b) => a.slug.localeCompare(b.slug));
@@ -105,7 +113,9 @@ function toPascalCase(slug) {
 function extractPrimaryUsageBlock(source) {
   const re = /<FreestyleUsage\b([\s\S]*?)>([\s\S]*?)<\/FreestyleUsage>/;
   const m = source.match(re);
-  if (!m) return null;
+  if (!m) {
+    return null;
+  }
   return { openAttrs: m[1], body: m[2] };
 }
 
@@ -115,25 +125,37 @@ function extractStringAttr(text, name) {
     `@${name}=(?:'((?:[^'\\\\]|\\\\.)*)'|"((?:[^"\\\\]|\\\\.)*)")`,
   );
   const m = text.match(re);
-  if (!m) return null;
+  if (!m) {
+    return null;
+  }
   return (m[1] ?? m[2]).replace(/\\'/g, "'").replace(/\\"/g, '"');
 }
 
 function hasBoolAttr(text, name) {
   // @name={{true}} or @name (presence)
-  if (new RegExp(`@${name}=\\{\\{true\\}\\}`).test(text)) return true;
+  if (new RegExp(`@${name}=\\{\\{true\\}\\}`).test(text)) {
+    return true;
+  }
   return false;
 }
 
 function extractDefaultValue(text) {
   // @defaultValue='foo' | @defaultValue="foo" | @defaultValue={{true}} | @defaultValue={{this.x}}
   const s = extractStringAttr(text, 'defaultValue');
-  if (s !== null) return s;
+  if (s !== null) {
+    return s;
+  }
   const m = text.match(/@defaultValue=\{\{([^}]+)\}\}/);
-  if (!m) return null;
+  if (!m) {
+    return null;
+  }
   const raw = m[1].trim();
-  if (raw === 'true') return true;
-  if (raw === 'false') return false;
+  if (raw === 'true') {
+    return true;
+  }
+  if (raw === 'false') {
+    return false;
+  }
   // Identifier or member expression (e.g., "this.defaultType") — render as code.
   return `\`${raw}\``;
 }
@@ -152,7 +174,9 @@ function extractOptions(text, source) {
     return opts;
   }
   const refMatch = text.match(/@options=\{\{([^}]+)\}\}/);
-  if (!refMatch) return null;
+  if (!refMatch) {
+    return null;
+  }
   let ref = refMatch[1].trim();
   // Strip leading `this.` so we can look up the class-field declaration.
   ref = ref.replace(/^this\./, '');
@@ -170,7 +194,9 @@ function extractOptions(text, source) {
       while ((v = valRe.exec(m[1])) !== null) {
         opts.push(v[1] ?? v[2]);
       }
-      if (opts.length) return opts;
+      if (opts.length) {
+        return opts;
+      }
     }
   }
   // Fall back to a labelled reference so the reader at least knows the
@@ -188,7 +214,9 @@ function extractNamedBlock(body, blockName) {
 }
 
 function parseArgs(apiBlock, source) {
-  if (!apiBlock) return [];
+  if (!apiBlock) {
+    return [];
+  }
   const re = /<Args\.(\w+)([\s\S]*?)\/>/g;
   const args = [];
   let m;
@@ -196,7 +224,9 @@ function parseArgs(apiBlock, source) {
     const kind = m[1];
     const attrs = m[2];
     const name = extractStringAttr(attrs, 'name');
-    if (!name && kind !== 'Yield') continue;
+    if (!name && kind !== 'Yield') {
+      continue;
+    }
     args.push({
       kind,
       name: name ?? '(yield)',
@@ -211,14 +241,18 @@ function parseArgs(apiBlock, source) {
 }
 
 function parseCssVars(cssBlock) {
-  if (!cssBlock) return [];
+  if (!cssBlock) {
+    return [];
+  }
   const re = /<Css\.Basic([\s\S]*?)\/>/g;
   const vars = [];
   let m;
   while ((m = re.exec(cssBlock)) !== null) {
     const attrs = m[1];
     const name = extractStringAttr(attrs, 'name');
-    if (!name) continue;
+    if (!name) {
+      continue;
+    }
     vars.push({
       name,
       type: extractStringAttr(attrs, 'type'),
@@ -231,7 +265,9 @@ function parseCssVars(cssBlock) {
 // Strip Glimmer/HTML markup from a description block to plain prose.
 // Keeps <code>...</code> as `...` (markdown inline code).
 function htmlToPlainText(html) {
-  if (!html) return '';
+  if (!html) {
+    return '';
+  }
   return html
     .replace(/<code>([\s\S]*?)<\/code>/g, '`$1`')
     .replace(/<[^>]+>/g, ' ')
@@ -250,12 +286,16 @@ function htmlToPlainText(html) {
 // rather than prose. Those flatten badly to plain text and duplicate the API
 // table, so we skip them in the readMe.
 function isStructuralDescription(html) {
-  if (!html) return false;
+  if (!html) {
+    return false;
+  }
   return /<(table|tbody|thead|tr|td|ul|ol|li)\b/i.test(html);
 }
 
 function trimExample(exampleBlock) {
-  if (!exampleBlock) return '';
+  if (!exampleBlock) {
+    return '';
+  }
   // Strip leading/trailing whitespace lines but preserve internal indentation.
   return exampleBlock.replace(/^[ \t]*\n+/, '').replace(/\n+[ \t]*$/, '');
 }
@@ -287,9 +327,13 @@ function dedent(text) {
   const indents = lines
     .filter((l) => l.trim().length > 0)
     .map((l) => l.match(/^[ \t]*/)[0].length);
-  if (!indents.length) return text;
+  if (!indents.length) {
+    return text;
+  }
   const min = Math.min(...indents);
-  if (min === 0) return text;
+  if (min === 0) {
+    return text;
+  }
   return lines.map((l) => l.slice(min)).join('\n');
 }
 
@@ -311,24 +355,36 @@ function argTypeLabel(arg) {
 }
 
 function argRequirednessLabel(arg) {
-  if (arg.required) return 'required';
+  if (arg.required) {
+    return 'required';
+  }
   return 'optional';
 }
 
 function defaultValueLabel(v) {
-  if (v === null || v === undefined) return '—';
-  if (v === true) return '`true`';
-  if (v === false) return '`false`';
+  if (v === null || v === undefined) {
+    return '—';
+  }
+  if (v === true) {
+    return '`true`';
+  }
+  if (v === false) {
+    return '`false`';
+  }
   if (typeof v === 'string') {
     // Already escaped/coded?
-    if (v.startsWith('`') && v.endsWith('`')) return v;
+    if (v.startsWith('`') && v.endsWith('`')) {
+      return v;
+    }
     return `\`${v}\``;
   }
   return String(v);
 }
 
 function buildApiTable(args) {
-  if (!args.length) return '_No documented arguments._';
+  if (!args.length) {
+    return '_No documented arguments._';
+  }
   let table = '| Arg | Type | Required | Default | Description |\n';
   table += '| --- | --- | --- | --- | --- |\n';
   for (const arg of args) {
@@ -345,7 +401,9 @@ function buildApiTable(args) {
 }
 
 function buildCssTable(vars) {
-  if (!vars.length) return '_No documented CSS variables._';
+  if (!vars.length) {
+    return '_No documented CSS variables._';
+  }
   let table = '| Variable | Type | Description |\n';
   table += '| --- | --- | --- |\n';
   for (const v of vars) {
@@ -368,14 +426,18 @@ function synthesizeCardDescription({
   //   3. Generic placeholder — flagged for follow-up.
   if (topDescription) {
     const lower = topDescription.toLowerCase();
-    if (lower.includes(componentName.toLowerCase())) return topDescription;
+    if (lower.includes(componentName.toLowerCase())) {
+      return topDescription;
+    }
     return `${componentName} — ${topDescription}`;
   }
   if (descriptionText && !hasStructuralDescription) {
     const firstSentence = descriptionText.split(/(?<=[.!?])\s+/)[0]?.trim();
     if (firstSentence && firstSentence.length > 3) {
       const lower = firstSentence.toLowerCase();
-      if (lower.includes(componentName.toLowerCase())) return firstSentence;
+      if (lower.includes(componentName.toLowerCase())) {
+        return firstSentence;
+      }
       return `${componentName} — ${firstSentence}`;
     }
   }
@@ -550,7 +612,9 @@ function main() {
   );
   const errors = results.filter((r) => r.error);
   if (errors.length) {
-    for (const e of errors) console.error(`! ${e.slug}: ${e.error}`);
+    for (const e of errors) {
+      console.error(`! ${e.slug}: ${e.error}`);
+    }
     process.exit(2);
   }
 

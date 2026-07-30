@@ -1,0 +1,26 @@
+/**
+ * This tsconfig is only used for emitting the published type declarations
+ * (driven by addon.declarations() in rollup.config.mjs).
+ *
+ * For the local dev experience, see tsconfig.json.
+ */
+{
+  "extends": "./tsconfig.json",
+  "include": ["src/**/*", "unpublished-development-types/**/*"],
+  "compilerOptions": {
+    "declaration": true,
+    "declarationDir": "declarations",
+    "emitDeclarationOnly": true,
+    "noEmit": false,
+
+    /**
+      https://www.typescriptlang.org/tsconfig#rootDir
+      "Default: The longest common path of all non-declaration input files."
+
+      Because we want our declarations' structure to match our rollup output,
+      this "rootDir" must match the "srcDir" in rollup.config.mjs. This way,
+      package.json#exports can map imports to files on disk with one pattern.
+    */
+    "rootDir": "./src"
+  }
+}
