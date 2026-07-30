@@ -42,7 +42,7 @@
  *                                   acceptance suites). Used to back
  *                                   `@cardstack/host/tests/*` imports
  *                                   in agent `.test.gts` files.
- * - `bundled-types/boxel-ui/`    — `packages/boxel-ui/addon/src/*`
+ * - `bundled-types/boxel-ui/`    — `packages/boxel-ui/src/*`
  *                                   minus `styles/` (1.5MB of fonts +
  *                                   CSS irrelevant to type-checking).
  * - `bundled-types/local-types/` — `packages/local-types/*.d.ts`

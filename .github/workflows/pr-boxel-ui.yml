@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "packages/boxel-ui/**"
+      - "packages/boxel-ui-test-app/**"
       - "packages/boxel-icons/**"
       - ".github/workflows/pr-boxel-ui.yml"
       - "package.json"
@@ -34,6 +35,7 @@ jobs:
         with:
           files: |
             packages/boxel-ui/**
+            packages/boxel-ui-test-app/**
             packages/boxel-icons/**
 
   deploy-ui-preview-staging:

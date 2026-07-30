@@ -2,18 +2,18 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
-// Hash every file under packages/boxel-ui/addon/dist (skip source maps) so
+// Hash every file under packages/boxel-ui/dist (skip source maps) so
 // the realm-server can detect cross-deploy boxel-ui changes and trigger a
 // full reindex of cards' prerendered HTML. Same algorithm as the prior
 // webpack plugin (lib/build/package-dist-checksums.js, deleted in the
 // vite migration) so an existing /persistent/boxel-ui-checksum.txt on
 // EFS stays comparable across the cutover.
 function calculateBoxelUIChecksum(baseDir) {
-  const distPath = path.resolve(baseDir, '../boxel-ui/addon/dist');
+  const distPath = path.resolve(baseDir, '../boxel-ui/dist');
 
   if (!fs.existsSync(distPath)) {
     console.warn(
-      '⚠️  Boxel-UI dist directory not found. Run "pnpm build" in packages/boxel-ui/addon first.',
+      '⚠️  Boxel-UI dist directory not found. Run "pnpm build" in packages/boxel-ui first.',
     );
     return null;
   }

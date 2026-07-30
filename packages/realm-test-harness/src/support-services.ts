@@ -47,7 +47,7 @@ function boxelUIIsUsable(hostPackageDir: string): boolean {
 
 /**
  * Ensure boxel-ui dist artifacts exist for the host package. Tries in order:
- *   1. The current worktree's boxel-ui/addon/dist
+ *   1. The current worktree's boxel-ui/dist
  *   2. Symlink from the root repo's built boxel-ui dist (fast, avoids rebuild)
  *   3. Build boxel-ui in the current worktree (slow but always works)
  */
