@@ -2305,12 +2305,32 @@ export default class StoreService extends Service implements StoreInterface {
     });
   });
 
-  private onInstanceUpdated = (instance: BaseDef, fieldName: string) => {
+  private onInstanceUpdated = (
+    instance: BaseDef,
+    fieldName: string,
+    value?: any,
+  ) => {
     if (fieldName === 'id') {
       // id updates are internal and do not trigger autosaves
       return;
     }
     if (isCardInstance(instance)) {
+      // TEMP DIRTY-PROBE (CS-11450): in the render/index store, name the field
+      // whose change flags a freshly-loaded instance dirty (the spurious
+      // RRI-spelling re-set we're hunting). Log-only.
+      if (this.isRenderStore) {
+        let repr: string;
+        try {
+          repr = isCardInstance(value)
+            ? `card:${(value as any).id}`
+            : (JSON.stringify(value)?.slice(0, 200) ?? String(value));
+        } catch {
+          repr = String(value);
+        }
+        console.warn(
+          `[DIRTY-PROBE] id=${(instance as any).id} field=${fieldName} value=${repr}`,
+        );
+      }
       this._instanceMutationVersion++;
       let autoSaveState = this.initOrGetAutoSaveState(instance);
       autoSaveState.hasUnsavedChanges = true;
@@ -2969,6 +2989,15 @@ export default class StoreService extends Service implements StoreInterface {
     instance: CardDef,
     opts?: PersistOptions,
   ): Promise<CardDef | CardErrorJSONAPI> {
+    // TEMP PERSIST-PROBE (CS-11450): name the caller of every residual persist
+    // from the render/index store (the writes that deadlock the index). Log-only
+    // — does NOT block, so behavior is unchanged. The stack identifies whether
+    // it's the auto-save drain, createFromSerialized-then-persist, or saveInstance.
+    if (this.isRenderStore) {
+      console.warn(
+        `[PERSIST-PROBE] render-store persist id=${(instance as any).id} local=${instance[localIdSymbol]}\n${(new Error().stack ?? '').split('\n').slice(2, 8).join('\n')}`,
+      );
+    }
     return await this.withTestWaiters(async () => {
       let isNew = !instance.id;
       let inflightMutation = this.inflightCardMutations.get(
