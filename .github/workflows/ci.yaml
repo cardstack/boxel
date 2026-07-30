@@ -103,7 +103,7 @@ jobs:
               - *shared
               - 'packages/boxel-icons/**'
               - 'packages/boxel-ui/**'
-              - 'packages/boxel-ui-test-app/**'
+              - 'packages/boxel-ui/docs-app/**'
             matrix:
               - *shared
               - 'packages/base/**'
@@ -344,7 +344,7 @@ jobs:
         working-directory: packages/boxel-ui
       - name: Run docs app test suite
         run: pnpm test
-        working-directory: packages/boxel-ui-test-app
+        working-directory: packages/boxel-ui/docs-app
 
   boxel-ui-raw-icon-changes-only:
     name: Boxel UI ensure raw icon changes only

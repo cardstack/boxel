@@ -2,6 +2,8 @@
 
 module.exports = {
   extends: ['recommended', '@cardstack/template-lint:recommended'],
+  // the nested docs app is its own package with its own config
+  ignore: ['docs-app/**'],
   plugins: ['../template-lint/plugin'],
   rules: {
     'no-pointer-down-event-binding': false,

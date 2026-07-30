@@ -1515,7 +1515,7 @@ importers:
         specifier: ^8.0.10
         version: 8.0.16(@types/node@25.9.3)(terser@5.48.0)(yaml@2.9.0)
 
-  packages/boxel-ui-test-app:
+  packages/boxel-ui/docs-app:
     dependencies:
       ember-basic-dropdown:
         specifier: 8.0.4
@@ -1538,16 +1538,16 @@ importers:
         version: 7.29.7(@babel/core@7.29.7)
       '@cardstack/boxel-icons':
         specifier: workspace:*
-        version: link:../boxel-icons
+        version: link:../../boxel-icons
       '@cardstack/boxel-ui':
         specifier: workspace:*
-        version: link:../boxel-ui
+        version: link:..
       '@cardstack/eslint-plugin-boxel':
         specifier: workspace:*
-        version: link:../eslint-plugin-boxel
+        version: link:../../eslint-plugin-boxel
       '@cardstack/local-types':
         specifier: workspace:*
-        version: link:../local-types
+        version: link:../../local-types
       '@ember/optional-features':
         specifier: ^2.0.0
         version: 2.3.0

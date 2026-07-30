@@ -72,7 +72,7 @@ jobs:
       - name: Lint Boxel UI Test App
         if: ${{ !cancelled() }}
         run: pnpm run lint
-        working-directory: packages/boxel-ui-test-app
+        working-directory: packages/boxel-ui/docs-app
       - name: Lint Matrix
         if: ${{ !cancelled() }}
         run: pnpm run lint

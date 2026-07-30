@@ -20,7 +20,7 @@ For a quickstart, see [here](./QUICKSTART.md)
 
 `packages/boxel-ui` is the UI components Ember addon
 
-`packages/boxel-ui-test-app` is the test suite and component explorer for boxel-ui, deployed at [boxel-ui.stack.cards](https://boxel-ui.stack.cards)
+`packages/boxel-ui/docs-app` is the test suite and component explorer for boxel-ui, deployed at [boxel-ui.stack.cards](https://boxel-ui.stack.cards)
 
 `packages/matrix` is the docker container for running the matrix server: synapse, as well as tests that involve running a matrix client.
 
@@ -525,7 +525,7 @@ Matrix requires an SMTP server in order to send emails. In order to facilitate t
 
 There is a ember-freestyle component explorer available to assist with development. In order to run the freestyle app:
 
-1. `cd packages/boxel-ui-test-app`
+1. `cd packages/boxel-ui/docs-app`
 2. `pnpm start`
 3. Visit http://localhost:4220/ in your browser
 
@@ -652,7 +652,7 @@ To run the `packages/realm-server/` workspace tests start:
 
 ### Boxel UI
 
-1. `cd packages/boxel-ui-test-app`
+1. `cd packages/boxel-ui/docs-app`
 2. `pnpm test` (or `pnpm start` and visit http://localhost:4220/tests to run tests in the browser)
 
 ### Matrix tests

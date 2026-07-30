@@ -44,6 +44,7 @@ export default defineConfig([
     'declarations/',
     'coverage/',
     'blueprints/*/files/',
+    'docs-app/',
     'dist-tests/',
     '!**/.*',
   ]),
