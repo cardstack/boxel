@@ -2,12 +2,10 @@ import 'ember-power-select/styles';
 
 import Component from '@glimmer/component';
 import type { ComponentLike } from '@glint/template';
-import type {
-  PowerSelectArgs,
-  Select,
-} from 'ember-power-select/components/power-select';
+import type { PowerSelectArgs } from 'ember-power-select/components/power-select';
 import PowerSelect from 'ember-power-select/components/power-select';
 import BeforeOptions from 'ember-power-select/components/power-select/before-options';
+import type { Select } from 'ember-power-select/types';
 
 import { cn, not } from '../../helpers.gts';
 import { BoxelAfterOptionsComponent } from './after-options.gts';
@@ -18,7 +16,10 @@ import BoxelMultiSelectDefaultTrigger, {
   type TriggerComponentSignature,
 } from './trigger.gts';
 
-export interface BoxelMultiSelectArgs<ItemT> extends PowerSelectArgs {
+export interface BoxelMultiSelectArgs<ItemT> extends PowerSelectArgs<
+  ItemT,
+  true
+> {
   afterOptionsComponent?: ComponentLike<any>;
   ariaLabel?: string;
   beforeOptionsComponent?: ComponentLike<any>;

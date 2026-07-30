@@ -20,7 +20,7 @@ import PowerSelectOptions from 'ember-power-select/components/power-select/optio
 import cn from '../../helpers/cn.ts';
 import { BoxelSelectDefaultTrigger } from './trigger.gts';
 
-export interface BoxelSelectArgs<ItemT> extends PowerSelectArgs {
+export interface BoxelSelectArgs<ItemT> extends PowerSelectArgs<ItemT> {
   options: ItemT[];
   variant?: 'primary' | 'secondary' | 'muted' | 'destructive' | 'default';
 }

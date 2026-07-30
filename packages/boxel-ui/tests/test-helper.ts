@@ -10,6 +10,7 @@ import {
   setRunOptions,
   setupConsoleLogger,
 } from 'ember-a11y-testing/test-support';
+import { setConfig as setBasicDropdownConfig } from 'ember-basic-dropdown/config';
 import { setupEmberOnerrorValidation, start as qunitStart } from 'ember-qunit';
 import EmberApp from 'ember-strict-application-resolver';
 import * as QUnit from 'qunit';
@@ -45,6 +46,12 @@ class TestApp extends EmberApp {
 Router.map(function () {});
 
 export function start() {
+  // ember-basic-dropdown 9 has no boot-time initializer; without this its
+  // content teleports to a destination element that doesn't exist and
+  // silently renders nothing. Point it inside the test root so scoped DOM
+  // helpers can see dropdown content.
+  setBasicDropdownConfig({ destination: 'ember-testing' });
+
   setApplication(
     TestApp.create({
       autoboot: false,
