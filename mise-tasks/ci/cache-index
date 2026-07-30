@@ -5,6 +5,7 @@
 set -euo pipefail
 
 export PATH="./node_modules/.bin:$PATH"
+REPO_ROOT="$(cd "../.." && pwd)"
 
 READY_PATH="_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
 # Strip whichever scheme is in front; realm-server speaks HTTPS+HTTP/2 in
@@ -23,6 +24,30 @@ for realm in base catalog skills submissions experiments openrouter software-fac
   READINESS_URLS="${READINESS_URLS:+${READINESS_URLS}|}${REALM_READY_SCHEME}://${REALM_HOST}/${realm}/${READY_PATH}"
 done
 READINESS_URLS="${READINESS_URLS}|${MATRIX_URL_VAL}|http://localhost:5001|${ICONS_URL}|${HOST_URL}"
+
+# Give the realms whose rows this snapshot is imported from a content-derived
+# mtime before anything indexes them, so the mtimes baked into the dump
+# describe the content rather than when this runner happened to clone it. A
+# consumer that normalizes the same way sees matching mtimes for every file
+# it hasn't changed, and its boot index skips them. Without this the dump
+# records checkout times that exist nowhere else and every consumer
+# re-indexes the whole realm. See scripts/normalize-realm-mtimes.mjs.
+#
+# Scoped to base, skills and openrouter — the realms a test stack boots
+# without one of the SKIP_* flags switching it off, so the ones a consumer
+# reconciles against its own checkout. A consumer has to normalize exactly
+# this set: a realm normalized on only one side matches nothing and
+# re-indexes wholesale. The other realms indexed below still land in the
+# dump; they just carry this runner's checkout mtimes.
+#
+# skills:setup first because the skills realm is a separate clone that isn't
+# on disk yet in this job; it no-ops if the content is already present, and
+# start:development below would otherwise be the one to fetch it — after
+# this point.
+echo "Normalizing realm file mtimes..."
+pnpm --dir=../skills-realm skills:setup
+node "$REPO_ROOT/scripts/normalize-realm-mtimes.mjs" \
+  ../base ../skills-realm/contents ../openrouter-realm
 
 echo "Starting services..."
 SKIP_BOXEL_HOMEPAGE=true \
