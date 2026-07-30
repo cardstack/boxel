@@ -15,6 +15,7 @@ import config from '@cardstack/host/config/environment';
 
 import { shimExternals } from '../lib/externals';
 import { authErrorEventMiddleware } from '../utils/auth-error-guard';
+import { scheduleNativeTimeout } from '../utils/render-timer-stub';
 
 import { createServerRequestTimingMiddleware } from './client-telemetry';
 
@@ -63,7 +64,13 @@ export default class NetworkService extends Service {
   }
 
   private makeVirtualNetwork() {
-    let virtualNetwork = new VirtualNetwork(globalThis.fetch);
+    let virtualNetwork = new VirtualNetwork(globalThis.fetch, {
+      // Native (un-stubbed) timer so the fetch retry path's stall diagnostic
+      // and header-timeout still fire during prerender, where render-timer-stub
+      // disables the global setTimeout. Outside prerender this is the global
+      // setTimeout, so behavior is unchanged.
+      scheduleFetchTimer: (callback, ms) => scheduleNativeTimeout(callback, ms),
+    });
     let resolvedBaseRealmURL = new URL(
       withTrailingSlash(config.resolvedBaseRealmURL),
     );

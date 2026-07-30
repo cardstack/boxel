@@ -73,13 +73,24 @@ export class VirtualNetwork {
 
   constructor(
     nativeFetch = createEnvironmentAwareFetch(),
-    opts?: { fetchHeaderTimeoutMs?: number },
+    opts?: {
+      fetchHeaderTimeoutMs?: number;
+      // A timer scheduler for the fetch retry path. Defaults to the global
+      // setTimeout; the host passes a NATIVE (un-stubbed) scheduler so the
+      // fetch-stall diagnostic and header-timeout still fire during prerender,
+      // where render-timer-stub disables the global setTimeout.
+      scheduleFetchTimer?: (callback: () => void, ms: number) => unknown;
+    },
   ) {
     this.nativeFetch = nativeFetch;
     this.fetchHeaderTimeoutMs =
       opts?.fetchHeaderTimeoutMs ?? defaultFetchHeaderTimeoutMs;
+    this.scheduleFetchTimer =
+      opts?.scheduleFetchTimer ?? ((callback, ms) => setTimeout(callback, ms));
     this.mount(this.packageShimHandler.handle);
   }
+
+  private scheduleFetchTimer: (callback: () => void, ms: number) => unknown;
 
   // Subscribe to realm-mapping changes; returns an unsubscribe function.
   onMappingChange(listener: () => void): () => void {
@@ -568,6 +579,7 @@ export class VirtualNetwork {
     return withRetries(
       new URL(request.url),
       this.fetchHeaderTimeoutMs,
+      this.scheduleFetchTimer,
       (attemptSignal?: AbortSignal) => {
         // Each attempt gets its own abort signal (see withRetries) so that a
         // fetch aborted for stalling on one attempt doesn't poison the next.
@@ -779,10 +791,21 @@ export function shouldRetryFetch(url: URL): boolean {
 async function withRetries(
   url: URL,
   timeoutMs: number,
+  scheduleTimer: (callback: () => void, ms: number) => unknown,
   fetchFn: (attemptSignal?: AbortSignal) => ReturnType<typeof globalThis.fetch>,
 ) {
   let attempt = 0;
   for (;;) {
+    // TEMP diagnostic (CS-11450): a render-triggered fetch that stalls without
+    // response headers hangs the prerender (the header-timeout below is gated
+    // off outside the test suite). Log the stalling url via the injected timer
+    // — native in the prerender, where the global setTimeout is stubbed — so
+    // the stuck request is named instead of hanging silently to the shard cap.
+    let stallTimer = scheduleTimer(() => {
+      console.warn(
+        `[FETCH-STALL] no response headers for ${url.href} after ${timeoutMs}ms (attempt #${attempt + 1})`,
+      );
+    }, timeoutMs);
     // For a retryable fetch in the browser test suite, bound how long this
     // attempt may wait for response headers. A stall where the headers never
     // arrive would otherwise leave the fetch neither resolved nor rejected,
@@ -792,10 +815,10 @@ async function withRetries(
     // response's body stream is never aborted (withRetries only awaits the
     // response's headers, not its body).
     let controller: AbortController | undefined;
-    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    let timeoutId: unknown;
     if (shouldTimeoutRetryableFetch(url)) {
       controller = new AbortController();
-      timeoutId = setTimeout(() => {
+      timeoutId = scheduleTimer(() => {
         let timeoutError = new Error(
           `fetch for ${url.href} exceeded ${timeoutMs}ms without response headers`,
         );
@@ -833,10 +856,13 @@ async function withRetries(
           err?.message ?? String(err)
         }) retry attempt #${attempt} in ${attempt * backOffMs}ms`,
       );
-      await new Promise((r) => setTimeout(r, attempt * backOffMs));
+      await new Promise((r) =>
+        scheduleTimer(() => r(undefined), attempt * backOffMs),
+      );
     } finally {
+      clearTimeout(stallTimer as Parameters<typeof clearTimeout>[0]);
       if (timeoutId !== undefined) {
-        clearTimeout(timeoutId);
+        clearTimeout(timeoutId as Parameters<typeof clearTimeout>[0]);
       }
     }
   }
