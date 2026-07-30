@@ -14,7 +14,7 @@ import {
   type Field,
   type CardContext,
   type LinkableDefConstructor,
-  CreateCardFn,
+  type CreateCardFn,
   isFileDef,
 } from './card-api';
 import {

@@ -922,6 +922,9 @@ importers:
       concurrently:
         specifier: 'catalog:'
         version: 8.2.2
+      date-fns:
+        specifier: 'catalog:'
+        version: 2.30.0
       ember-cli-htmlbars:
         specifier: ^6.3.0
         version: 6.3.0

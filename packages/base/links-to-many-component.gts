@@ -11,8 +11,8 @@ import {
   type FieldDef,
   type Format,
   type LinkableDefConstructor,
-  CreateCardFn,
-  CardCrudFunctions,
+  type CreateCardFn,
+  type CardCrudFunctions,
   isFileDef,
   brokenLinkFormat,
 } from './card-api';
@@ -22,7 +22,7 @@ import {
 } from './field-support';
 import { rawArrayValues } from './watched-array';
 import {
-  BoxComponentSignature,
+  type BoxComponentSignature,
   CardCrudFunctionsConsumer,
   DefaultFormatsConsumer,
   PermissionsConsumer,
@@ -49,7 +49,7 @@ import {
   type ResolvedCodeRef,
   uuidv4,
   CardCrudFunctionsContextName,
-  CardErrorJSONAPI,
+  type CardErrorJSONAPI,
   cardTypeName,
 } from '@cardstack/runtime-common';
 import {

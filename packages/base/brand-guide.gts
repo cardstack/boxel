@@ -31,7 +31,7 @@ import {
   buildCssVariableName,
   sanitizeHtmlSafe,
   eq,
-  CssVariableEntry,
+  type CssVariableEntry,
 } from '@cardstack/boxel-ui/helpers';
 
 import { cardTypeDisplayName } from '@cardstack/runtime-common';

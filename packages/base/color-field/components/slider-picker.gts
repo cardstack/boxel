@@ -10,8 +10,8 @@ import type Owner from '@ember/owner';
 import type { ColorFieldSignature } from '../util/color-field-signature';
 import {
   parseCssColor,
-  SliderColorFormat,
-  SliderVariantConfiguration,
+  type SliderColorFormat,
+  type SliderVariantConfiguration,
 } from '../util/color-utils';
 import {
   detectColorFormat,

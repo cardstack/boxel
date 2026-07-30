@@ -25,7 +25,7 @@ import {
   subscribeToRealm,
   codeRefFromInternalKey,
   type Query,
-  CardErrorJSONAPI,
+  type CardErrorJSONAPI,
 } from '@cardstack/runtime-common';
 
 import CardsGridLayout, {

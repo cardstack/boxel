@@ -1,7 +1,7 @@
 import { byteStreamToUint8Array } from '@cardstack/runtime-common';
 import TextFileIcon from '@cardstack/boxel-icons/file-text';
 import {
-  BaseDefComponent,
+  type BaseDefComponent,
   Component,
   StringField,
   contains,

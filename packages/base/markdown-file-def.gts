@@ -11,7 +11,7 @@ import {
 } from '@cardstack/runtime-common';
 import MarkdownIcon from '@cardstack/boxel-icons/align-box-left-middle';
 import {
-  BaseDefComponent,
+  type BaseDefComponent,
   CardDef,
   Component,
   StringField,

@@ -46,7 +46,7 @@ import {
   type Query,
   type Filter,
   type CodeRef,
-  CardErrorJSONAPI,
+  type CardErrorJSONAPI,
 } from '@cardstack/runtime-common';
 
 import CardsGridLayout, {

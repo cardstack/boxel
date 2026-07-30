@@ -2,7 +2,7 @@ import { byteStreamToUint8Array } from '@cardstack/runtime-common';
 import { htmlSafe } from '@ember/template';
 import FileCodeIcon from '@cardstack/boxel-icons/file-code';
 import {
-  BaseDefComponent,
+  type BaseDefComponent,
   Component,
   StringField,
   contains,
