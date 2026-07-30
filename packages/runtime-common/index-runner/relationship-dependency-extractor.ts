@@ -6,7 +6,7 @@ import {
 } from '../index.ts';
 import type { VirtualNetwork } from '../virtual-network.ts';
 import { canonicalURL, type CanonicalURLMemo } from './dependency-url.ts';
-import { normalizeRelationshipDependency } from './dependency-normalization.ts';
+import { relationshipDependencyForms } from './dependency-normalization.ts';
 
 export type RelationshipSource =
   | Pick<CardResource, 'relationships'>
@@ -79,15 +79,15 @@ export class RelationshipDependencyExtractor {
       this.#canonicalURLMemo,
     );
     selfUrls.add(canonicalSelf);
-    selfUrls.add(
-      normalizeRelationshipDependency(
-        canonicalSelf,
-        relativeTo,
-        this.#realmURL,
-        this.#virtualNetwork,
-        this.#canonicalURLMemo,
-      ),
-    );
+    for (let form of relationshipDependencyForms(
+      canonicalSelf,
+      relativeTo,
+      this.#realmURL,
+      this.#virtualNetwork,
+      this.#canonicalURLMemo,
+    )) {
+      selfUrls.add(form);
+    }
     if (canonicalSelf.endsWith('.json')) {
       selfUrls.add(canonicalSelf.replace(/\.json$/, ''));
     } else {
@@ -113,15 +113,16 @@ export class RelationshipDependencyExtractor {
 
       let maybeId = (value as { id?: unknown }).id;
       if (typeof maybeId === 'string') {
-        let normalized = normalizeRelationshipDependency(
+        for (let form of relationshipDependencyForms(
           maybeId,
           relativeTo,
           this.#realmURL,
           this.#virtualNetwork,
           this.#canonicalURLMemo,
-        );
-        if (normalized && !selfUrls.has(normalized)) {
-          deps.add(normalized);
+        )) {
+          if (form && !selfUrls.has(form)) {
+            deps.add(form);
+          }
         }
       }
 
@@ -191,28 +192,30 @@ export class RelationshipDependencyExtractor {
       relativeTo.href,
       this.#virtualNetwork,
     )) {
-      let normalized = normalizeRelationshipDependency(
+      for (let form of relationshipDependencyForms(
         id,
         relativeTo,
         this.#realmURL,
         this.#virtualNetwork,
         this.#canonicalURLMemo,
-      );
-      if (normalized) {
-        deps.add(normalized);
+      )) {
+        if (form) {
+          deps.add(form);
+        }
       }
     }
     let selfLink = relationship.links?.self;
     if (typeof selfLink === 'string' && selfLink.length > 0) {
-      let normalized = normalizeRelationshipDependency(
+      for (let form of relationshipDependencyForms(
         selfLink,
         relativeTo,
         this.#realmURL,
         this.#virtualNetwork,
         this.#canonicalURLMemo,
-      );
-      if (normalized) {
-        deps.add(normalized);
+      )) {
+        if (form) {
+          deps.add(form);
+        }
       }
     }
   }
