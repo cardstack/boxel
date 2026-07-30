@@ -59,7 +59,14 @@ export function relationshipDependencyForms(
     try {
       let parsed = new URL(resolved);
       if (parsed.href.startsWith(realmURL.href)) {
-        return formsFor(canonical, `${canonical}.json`, namedResource(parsed));
+        let named = namedResource(parsed);
+        if (named === 'file') {
+          return [canonical];
+        }
+        let instanceForm = `${canonical}.json`;
+        return named === 'instance'
+          ? [instanceForm]
+          : [canonical, instanceForm];
       }
     } catch (_err) {
       // fall through
@@ -68,33 +75,20 @@ export function relationshipDependencyForms(
   }
   try {
     let normalized = new URL(canonical);
-    if (normalized.href.startsWith(realmURL.href)) {
-      let instance = new URL(normalized.href);
-      instance.pathname = `${instance.pathname}.json`;
-      return formsFor(
-        normalized.href,
-        instance.href,
-        namedResource(normalized),
-      );
+    if (!normalized.href.startsWith(realmURL.href)) {
+      return [normalized.href];
     }
-    return [normalized.href];
+    let named = namedResource(normalized);
+    if (named === 'file') {
+      return [normalized.href];
+    }
+    let fileForm = normalized.href;
+    normalized.pathname = `${normalized.pathname}.json`;
+    return named === 'instance'
+      ? [normalized.href]
+      : [fileForm, normalized.href];
   } catch (_err) {
     return [canonical];
-  }
-}
-
-function formsFor(
-  fileForm: string,
-  instanceForm: string,
-  named: NamedResource,
-): string[] {
-  switch (named) {
-    case 'file':
-      return [fileForm];
-    case 'instance':
-      return [instanceForm];
-    case 'either':
-      return [fileForm, instanceForm];
   }
 }
 

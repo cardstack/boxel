@@ -120,7 +120,7 @@ export class RelationshipDependencyExtractor {
           this.#virtualNetwork,
           this.#canonicalURLMemo,
         )) {
-          if (form && !selfUrls.has(form)) {
+          if (!selfUrls.has(form)) {
             deps.add(form);
           }
         }
@@ -199,9 +199,7 @@ export class RelationshipDependencyExtractor {
         this.#virtualNetwork,
         this.#canonicalURLMemo,
       )) {
-        if (form) {
-          deps.add(form);
-        }
+        deps.add(form);
       }
     }
     let selfLink = relationship.links?.self;
@@ -213,9 +211,7 @@ export class RelationshipDependencyExtractor {
         this.#virtualNetwork,
         this.#canonicalURLMemo,
       )) {
-        if (form) {
-          deps.add(form);
-        }
+        deps.add(form);
       }
     }
   }
