@@ -4,11 +4,6 @@ import { urlNamesFile } from '../file-def-code-ref.ts';
 import type { VirtualNetwork } from '../virtual-network.ts';
 import { canonicalURL, type CanonicalURLMemo } from './dependency-url.ts';
 
-function isExtensionlessPath(url: URL): boolean {
-  let lastSegment = url.pathname.split('/').pop() ?? '';
-  return !lastSegment.includes('.');
-}
-
 // Which resource a dependency URL names: a card instance, whose index row lives
 // at `<id>.json`, or a file, whose row lives at the file's own URL. A known
 // extension — one a file link resolves a FileDef subtype through, or an
@@ -26,11 +21,22 @@ function isExtensionlessPath(url: URL): boolean {
 // card id ending in `.json`, whose row is at `<id>.json.json`.
 type NamedResource = 'file' | 'instance' | 'either';
 
+// The dotless test runs first: it alone settles the dominant case (module deps
+// are stored with their executable extension stripped, so most deps are
+// dotless), and this classifier sits on the per-dep loop of every index visit
+// — including successful ones, via the index-backed dependency-error scan — so
+// the registry walk must stay off that path. Ordering is free: the registry
+// and executable tests can only match a segment that has a dot.
 function namedResource(url: URL): NamedResource {
-  if (urlNamesFile(url) || hasExecutableExtension(url.pathname)) {
+  let pathname = url.pathname;
+  let lastSegment = pathname.slice(pathname.lastIndexOf('/') + 1);
+  if (!lastSegment.includes('.')) {
+    return 'instance';
+  }
+  if (urlNamesFile(url) || hasExecutableExtension(pathname)) {
     return 'file';
   }
-  return isExtensionlessPath(url) ? 'instance' : 'either';
+  return 'either';
 }
 
 export function normalizeStoredDependency(
