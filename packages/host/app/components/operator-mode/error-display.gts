@@ -15,6 +15,7 @@ import {
   Warning,
 } from '@cardstack/boxel-ui/icons';
 
+import { truncate } from '@cardstack/host/lib/truncate';
 import type ErrorDisplayService from '@cardstack/host/services/error-display';
 import type { DisplayedErrorProvider } from '@cardstack/host/services/error-display';
 import type ToolService from '@cardstack/host/services/tool-service';
@@ -74,13 +75,6 @@ const CONTEXT_STACK_MAX_CHARS = 4 * 1024;
 const CONTEXT_MESSAGE_MAX_CHARS = 2 * 1024;
 
 const TRUNCATION_SUFFIX = ' …[truncated]';
-
-function truncate(s: string | undefined, max: number): string | undefined {
-  if (s == null) return s;
-  if (s.length <= max) return s;
-  let body = Math.max(0, max - TRUNCATION_SUFFIX.length);
-  return s.slice(0, body) + TRUNCATION_SUFFIX;
-}
 
 export default class ErrorDisplay
   extends Component<Signature>
@@ -167,8 +161,8 @@ export default class ErrorDisplay
     let raw = this.args.additionalErrors;
     if (!raw || raw.length === 0) return undefined;
     let entries = raw.slice(0, entryLimit).map((e) => ({
-      message: truncate(e?.message, messageMax),
-      stack: truncate(e?.stack, stackMax),
+      message: truncate(e?.message, messageMax, TRUNCATION_SUFFIX),
+      stack: truncate(e?.stack, stackMax, TRUNCATION_SUFFIX),
       status: e?.status,
       title: e?.title,
     }));
@@ -213,8 +207,16 @@ export default class ErrorDisplay
   getError(): BoxelErrorForContext {
     return {
       message:
-        truncate(this.args.message ?? '', CONTEXT_MESSAGE_MAX_CHARS) ?? '',
-      stack: truncate(this.args.stack, CONTEXT_STACK_MAX_CHARS),
+        truncate(
+          this.args.message ?? '',
+          CONTEXT_MESSAGE_MAX_CHARS,
+          TRUNCATION_SUFFIX,
+        ) ?? '',
+      stack: truncate(
+        this.args.stack,
+        CONTEXT_STACK_MAX_CHARS,
+        TRUNCATION_SUFFIX,
+      ),
       additionalErrors: this.contextAdditionalErrors,
       diagnostics: this.args.diagnostics,
       sourceUrl: this.args.fileToAttach?.sourceUrl,

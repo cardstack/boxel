@@ -8,6 +8,8 @@
 // Both return the same shape, including a `signature` the instrument coalesces
 // repeats by.
 
+import { truncate } from '@cardstack/host/lib/truncate';
+
 // Bounds. The stack is the payload an error event exists to carry — a message
 // says the app broke, the stack says where — so it gets the generous budget and
 // the message is what yields: eight frames does not clear the framework frames
@@ -156,12 +158,6 @@ function stringifyReason(reason: unknown): string {
   } catch {
     return '';
   }
-}
-
-// Cut to a budget, marking the cut so a truncated value doesn't read as the
-// whole one. The marker is counted, so the result never exceeds the budget.
-function truncate(value: string, max: number): string {
-  return value.length > max ? `${value.slice(0, max - 1)}…` : value;
 }
 
 // The stack as the engine gave it, bounded. Lines are taken from the top so the

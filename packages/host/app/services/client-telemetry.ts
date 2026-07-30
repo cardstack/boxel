@@ -388,6 +388,11 @@ export default class ClientTelemetryService
   drainBufferForTest(): TelemetryEvent[] {
     let events = this.#buffer;
     this.#buffer = [];
+    // Draining is a buffer-clearing path like the others, so the dedup slots go
+    // with it. Otherwise a test that drains past the window's event budget and
+    // then reports one more error would see it fold into the shared slot, hiding
+    // exactly the behavior such a test is written to check.
+    this.#forgetErrorEvents(events);
     return events;
   }
 
@@ -398,14 +403,18 @@ export default class ClientTelemetryService
   }
 
   resetState(): void {
-    this.#flush('reset');
-    // Whatever the flush could not take goes no further. The beacon envelope
-    // stamps matrix_user_id when it sends, not when an event is recorded, so a
-    // remainder held across a logout would transmit under the next account — one
-    // person's error text and stack under another person's id.
-    this.#buffer = [];
-    this.#matrixUserId = null;
-    this.stop();
+    // Whatever the flush could not take goes no further — and that has to hold
+    // even if the flush throws, which serializing a buffered event can. The
+    // beacon envelope stamps matrix_user_id when it sends, not when an event is
+    // recorded, so a remainder held across a logout would transmit under the next
+    // account: one person's error text and stack under another person's id.
+    try {
+      this.#flush('reset');
+    } finally {
+      this.#buffer = [];
+      this.#matrixUserId = null;
+      this.stop();
+    }
   }
 
   // ── Public emit API ────────────────────────────────────────────────────
@@ -679,7 +688,7 @@ export default class ClientTelemetryService
       body = this.#buildBody(chunk);
     }
     this.#buffer.splice(0, chunk.length);
-    this.#pruneErrorDedup();
+    this.#closeErrorWindow(chunk);
     try {
       // Raw fetch (not authedFetch) so the telemetry POST is neither timed by
       // our own middleware nor rewritten by the auth stack. keepalive lets the
@@ -716,8 +725,30 @@ export default class ClientTelemetryService
   #push(evt: TelemetryEvent): void {
     this.#buffer.push(evt);
     if (this.#buffer.length > MAX_BUFFERED_EVENTS) {
-      this.#buffer.splice(0, this.#buffer.length - MAX_BUFFERED_EVENTS);
+      // Evicting the oldest events drops error events the dedup slots point at,
+      // so the slots go with them: a slot naming an event nobody will send would
+      // silently absorb occurrences that never reach the wire.
+      this.#forgetErrorEvents(
+        this.#buffer.splice(0, this.#buffer.length - MAX_BUFFERED_EVENTS),
+      );
     }
+  }
+
+  // The dedup map holds exactly the error events still in the buffer, which is
+  // what makes a hit on it mean "still unsent". Maintaining that here — at the
+  // three places events leave the buffer — is what lets #reportError trust a map
+  // lookup instead of scanning the buffer on every occurrence, and keeps the
+  // window's event count from drifting above what is really outstanding.
+  #forgetErrorEvents(departed: TelemetryEvent[]): void {
+    if (this.#errorDedup.size > 0 && departed.length > 0) {
+      let gone = new Set(departed);
+      for (let [key, evt] of this.#errorDedup) {
+        if (gone.has(evt)) {
+          this.#errorDedup.delete(key);
+        }
+      }
+    }
+    this.#errorEventsSinceFlush = this.#errorDedup.size;
   }
 
   // ── Uncaught errors ──────────────────────────────────────────────────────
@@ -752,10 +783,11 @@ export default class ClientTelemetryService
       let { signature, ...fields } = buildReport();
       let key = signature;
       let folded = 0;
+      // A hit means the event is still buffered, since the map is pruned wherever
+      // events leave. Counting a repeat on it costs no extra event: the flush
+      // serializes the buffer at send time, after this mutation.
       let pending = this.#errorDedup.get(signature);
-      // Counting a repeat on a still-buffered event costs no extra event: the
-      // flush serializes the buffer at send time, after this mutation.
-      if (pending && this.#buffer.includes(pending)) {
+      if (pending) {
         pending.dedup_count++;
         return;
       }
@@ -765,7 +797,7 @@ export default class ClientTelemetryService
         // dedup_count covers all of it — a storm of distinct errors stays as
         // bounded as a storm of identical ones.
         let overflow = this.#errorDedup.get(OVERFLOW_ERROR_KEY);
-        if (overflow && this.#buffer.includes(overflow)) {
+        if (overflow) {
           overflow.dedup_count++;
           if (
             !this.#foldedSignatures.has(signature) &&
@@ -803,19 +835,14 @@ export default class ClientTelemetryService
   // longer absorb a repeat, so its dedup slot goes. What survives is exactly the
   // error events still buffered, which is also what the next window's budget has
   // to account for.
-  #pruneErrorDedup(): void {
-    for (let [key, evt] of this.#errorDedup) {
-      if (!this.#buffer.includes(evt)) {
-        this.#errorDedup.delete(key);
-      }
-    }
+  #closeErrorWindow(sent: TelemetryEvent[]): void {
     // The shared slot goes unconditionally, even while still buffered: it is the
     // one slot that mixes unrelated errors, so letting it span windows would
     // keep folding new ones onto a message and a timestamp from an older window.
     // A window boundary always starts a fresh group.
     this.#errorDedup.delete(OVERFLOW_ERROR_KEY);
     this.#foldedSignatures.clear();
-    this.#errorEventsSinceFlush = this.#errorDedup.size;
+    this.#forgetErrorEvents(sent);
   }
 
   // ── Heartbeat: wedge detection + card-load windows ─────────────────────
