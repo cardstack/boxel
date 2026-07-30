@@ -323,14 +323,9 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   protected renderContextBlocksPersistence() {
-    // The render/index store must never persist — for its whole lifetime, not
-    // only during the active render window. Gating on __boxelRenderContext
-    // (which card-prerender sets around each render and deletes after) left a
-    // gap: a write issued between renders during a from-scratch index slips
-    // through and deadlocks the index (the render holds the sole worker while
-    // the write takes the realm write lock and awaits a reindex that needs that
-    // worker). What matters is that this is a render store, so block on that.
-    return this.isRenderStore;
+    return (
+      this.isRenderStore && Boolean((globalThis as any).__boxelRenderContext)
+    );
   }
 
   // used for tests only!
