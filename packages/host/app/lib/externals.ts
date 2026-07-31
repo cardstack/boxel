@@ -199,6 +199,10 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
     resolve: () => import('yaml'),
   });
   virtualNetwork.shimAsyncModule({
+    id: 'fflate',
+    resolve: () => import('fflate'),
+  });
+  virtualNetwork.shimAsyncModule({
     id: '@cardstack/runtime-common/marked-sync',
     resolve: () => import('@cardstack/runtime-common/marked-sync'),
   });

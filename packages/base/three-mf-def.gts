@@ -125,7 +125,9 @@ function parseThreeMf(
       modelDocuments.flatMap(({ root }) =>
         Array.from(root.attributes)
           .filter((attribute) => attribute.name.startsWith('xmlns:'))
-          .map((attribute) => `${attribute.name.slice(6)} · ${attribute.value}`),
+          .map(
+            (attribute) => `${attribute.name.slice(6)} · ${attribute.value}`,
+          ),
       ),
     ),
   );
@@ -273,7 +275,8 @@ export class ThreeMfPrintPartField extends FieldDef {
     <template>
       <div class='part'>
         <span>{{if @model.name @model.name 'Unnamed part'}}</span>
-        {{#if @model.extruder}}<small>Extruder {{@model.extruder}}</small>{{/if}}
+        {{#if @model.extruder}}<small>Extruder
+            {{@model.extruder}}</small>{{/if}}
         {{#if @model.faceCount}}<small>{{@model.faceCount}} faces</small>{{/if}}
       </div>
       <style scoped>
@@ -332,23 +335,47 @@ export class ThreeMfMetadataField extends FieldDef {
   static embedded = class Embedded extends Component<
     typeof ThreeMfMetadataField
   > {
+    get materialList() {
+      return (this.args.model?.materialNames ?? []).join(', ');
+    }
     <template>
       <dl class='three-mf-meta'>
-        {{#if @model.unit}}<div><dt>Units</dt><dd>{{@model.unit}}</dd></div>{{/if}}
-        {{#if @model.sizeX}}<div><dt>Bounds</dt><dd>{{@model.sizeX}} × {{@model.sizeY}} × {{@model.sizeZ}} {{@model.unit}}</dd></div>{{/if}}
-        {{#if @model.objectCount}}<div><dt>Objects</dt><dd>{{@model.objectCount}}</dd></div>{{/if}}
-        {{#if @model.buildItemCount}}<div><dt>Build items</dt><dd>{{@model.buildItemCount}}</dd></div>{{/if}}
-        {{#if @model.textureCount}}<div><dt>Textures</dt><dd>{{@model.textureCount}}</dd></div>{{/if}}
-        {{#if @model.designer}}<div><dt>Designer</dt><dd>{{@model.designer}}</dd></div>{{/if}}
-        {{#if @model.licenseTerms}}<div><dt>License</dt><dd>{{@model.licenseTerms}}</dd></div>{{/if}}
-        {{#if @model.bambuStudioVersion}}<div><dt>Bambu 3MF</dt><dd>{{@model.bambuStudioVersion}}</dd></div>{{/if}}
-        {{#if @model.plateCount}}<div><dt>Plates</dt><dd>{{@model.plateCount}}</dd></div>{{/if}}
-        {{#if @model.printPartCount}}<div><dt>Print parts</dt><dd>{{@model.printPartCount}}</dd></div>{{/if}}
-        {{#if @model.extruderCount}}<div><dt>Extruders</dt><dd>{{@model.extruderCount}}</dd></div>{{/if}}
-        {{#if @model.materialNames.length}}<div><dt>Materials</dt><dd>{{@model.materialNames}}</dd></div>{{/if}}
-        {{#if @model.modelPart}}<div><dt>Model part</dt><dd class='mono'>{{@model.modelPart}}</dd></div>{{/if}}
+        {{#if @model.unit}}<div><dt>Units</dt><dd
+            >{{@model.unit}}</dd></div>{{/if}}
+        {{#if @model.sizeX}}<div><dt>Bounds</dt><dd>{{@model.sizeX}}
+              ×
+              {{@model.sizeY}}
+              ×
+              {{@model.sizeZ}}
+              {{@model.unit}}</dd></div>{{/if}}
+        {{#if @model.objectCount}}<div><dt>Objects</dt><dd
+            >{{@model.objectCount}}</dd></div>{{/if}}
+        {{#if @model.buildItemCount}}<div><dt>Build items</dt><dd
+            >{{@model.buildItemCount}}</dd></div>{{/if}}
+        {{#if @model.textureCount}}<div><dt>Textures</dt><dd
+            >{{@model.textureCount}}</dd></div>{{/if}}
+        {{#if @model.designer}}<div><dt>Designer</dt><dd
+            >{{@model.designer}}</dd></div>{{/if}}
+        {{#if @model.licenseTerms}}<div><dt>License</dt><dd
+            >{{@model.licenseTerms}}</dd></div>{{/if}}
+        {{#if @model.bambuStudioVersion}}<div><dt>Bambu 3MF</dt><dd
+            >{{@model.bambuStudioVersion}}</dd></div>{{/if}}
+        {{#if @model.plateCount}}<div><dt>Plates</dt><dd
+            >{{@model.plateCount}}</dd></div>{{/if}}
+        {{#if @model.printPartCount}}<div><dt>Print parts</dt><dd
+            >{{@model.printPartCount}}</dd></div>{{/if}}
+        {{#if @model.extruderCount}}<div><dt>Extruders</dt><dd
+            >{{@model.extruderCount}}</dd></div>{{/if}}
+        {{#if @model.materialNames.length}}<div><dt>Materials</dt><dd
+            >{{this.materialList}}</dd></div>{{/if}}
+        {{#if @model.modelPart}}<div><dt>Model part</dt><dd
+              class='mono'
+            >{{@model.modelPart}}</dd></div>{{/if}}
         {{#if @model.printParts.length}}
-          <div class='parts'><dt>Configured parts</dt><dd>{{#each @fields.printParts as |Part|}}<Part />{{/each}}</dd></div>
+          <div class='parts'><dt>Configured parts</dt><dd>{{#each
+                @fields.printParts
+                as |Part|
+              }}<Part />{{/each}}</dd></div>
         {{/if}}
       </dl>
       <style scoped>
@@ -384,20 +411,35 @@ export class ThreeMfMetadataField extends FieldDef {
   };
 }
 
-class ThreeMfIsolated extends GlimmerComponent<{ Args: { model: ThreeMfDef } }> {
+class ThreeMfIsolated extends GlimmerComponent<{
+  Args: { model: ThreeMfDef };
+}> {
   <template>
     <section class='three-mf-isolated'>
       <ModelIsolatedBody @model={{@model}} />
       {{#if @model.threeMfMetadata}}
         <dl class='three-mf-facts'>
-          {{#if @model.threeMfMetadata.unit}}<div><dt>Units</dt><dd>{{@model.threeMfMetadata.unit}}</dd></div>{{/if}}
-          {{#if @model.threeMfMetadata.sizeX}}<div><dt>Bounds</dt><dd>{{@model.threeMfMetadata.sizeX}} × {{@model.threeMfMetadata.sizeY}} × {{@model.threeMfMetadata.sizeZ}} {{@model.threeMfMetadata.unit}}</dd></div>{{/if}}
-          {{#if @model.threeMfMetadata.objectCount}}<div><dt>Objects</dt><dd>{{@model.threeMfMetadata.objectCount}}</dd></div>{{/if}}
-          {{#if @model.threeMfMetadata.plateCount}}<div><dt>Plates</dt><dd>{{@model.threeMfMetadata.plateCount}}</dd></div>{{/if}}
-          {{#if @model.threeMfMetadata.printPartCount}}<div><dt>Print parts</dt><dd>{{@model.threeMfMetadata.printPartCount}}</dd></div>{{/if}}
-          {{#if @model.threeMfMetadata.extruderCount}}<div><dt>Extruders</dt><dd>{{@model.threeMfMetadata.extruderCount}}</dd></div>{{/if}}
-          {{#if @model.threeMfMetadata.designer}}<div><dt>Designer</dt><dd>{{@model.threeMfMetadata.designer}}</dd></div>{{/if}}
-          {{#if @model.threeMfMetadata.application}}<div><dt>Application</dt><dd>{{@model.threeMfMetadata.application}}</dd></div>{{/if}}
+          {{#if @model.threeMfMetadata.unit}}<div><dt>Units</dt><dd
+              >{{@model.threeMfMetadata.unit}}</dd></div>{{/if}}
+          {{#if @model.threeMfMetadata.sizeX}}<div><dt>Bounds</dt><dd
+              >{{@model.threeMfMetadata.sizeX}}
+                ×
+                {{@model.threeMfMetadata.sizeY}}
+                ×
+                {{@model.threeMfMetadata.sizeZ}}
+                {{@model.threeMfMetadata.unit}}</dd></div>{{/if}}
+          {{#if @model.threeMfMetadata.objectCount}}<div><dt>Objects</dt><dd
+              >{{@model.threeMfMetadata.objectCount}}</dd></div>{{/if}}
+          {{#if @model.threeMfMetadata.plateCount}}<div><dt>Plates</dt><dd
+              >{{@model.threeMfMetadata.plateCount}}</dd></div>{{/if}}
+          {{#if @model.threeMfMetadata.printPartCount}}<div><dt>Print parts</dt><dd
+              >{{@model.threeMfMetadata.printPartCount}}</dd></div>{{/if}}
+          {{#if @model.threeMfMetadata.extruderCount}}<div><dt>Extruders</dt><dd
+              >{{@model.threeMfMetadata.extruderCount}}</dd></div>{{/if}}
+          {{#if @model.threeMfMetadata.designer}}<div><dt>Designer</dt><dd
+              >{{@model.threeMfMetadata.designer}}</dd></div>{{/if}}
+          {{#if @model.threeMfMetadata.application}}<div><dt>Application</dt><dd
+              >{{@model.threeMfMetadata.application}}</dd></div>{{/if}}
         </dl>
       {{/if}}
     </section>
@@ -477,9 +519,7 @@ export class ThreeMfDef extends ModelDef {
       ) as ArrayBuffer,
     );
     if (!parsed) {
-      throw new FileContentMismatchError(
-        'File is not a parseable 3MF package',
-      );
+      throw new FileContentMismatchError('File is not a parseable 3MF package');
     }
     return { ...base, ...parsed };
   }

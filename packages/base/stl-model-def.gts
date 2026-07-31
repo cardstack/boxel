@@ -110,10 +110,14 @@ function parseStl(
     }
   } else {
     let text = new TextDecoder().decode(bytes);
-    if (!/\bfacet\s+normal\b/i.test(text) || !/\bvertex\s+[-+\d.]/i.test(text)) {
+    if (
+      !/\bfacet\s+normal\b/i.test(text) ||
+      !/\bvertex\s+[-+\d.]/i.test(text)
+    ) {
       return undefined;
     }
-    solidName = text.match(/^\s*solid(?:\s+([^\r\n]+))?/i)?.[1]?.trim() || undefined;
+    solidName =
+      text.match(/^\s*solid(?:\s+([^\r\n]+))?/i)?.[1]?.trim() || undefined;
     let normalPattern =
       /\bfacet\s+normal\s+([-+\d.eE]+)\s+([-+\d.eE]+)\s+([-+\d.eE]+)/gi;
     for (let match; (match = normalPattern.exec(text)); ) {
@@ -126,13 +130,16 @@ function parseStl(
         normalCount++;
       }
     }
-    let vertexPattern = /\bvertex\s+([-+\d.eE]+)\s+([-+\d.eE]+)\s+([-+\d.eE]+)/gi;
+    let vertexPattern =
+      /\bvertex\s+([-+\d.eE]+)\s+([-+\d.eE]+)\s+([-+\d.eE]+)/gi;
     for (let match; (match = vertexPattern.exec(text)); ) {
       vertices.push([Number(match[1]), Number(match[2]), Number(match[3])]);
     }
   }
 
-  let finiteVertices = vertices.filter((vertex) => vertex.every(Number.isFinite));
+  let finiteVertices = vertices.filter((vertex) =>
+    vertex.every(Number.isFinite),
+  );
   if (!facetCount || finiteVertices.length < 3) {
     return undefined;
   }
@@ -201,13 +208,28 @@ export class StlMetadataField extends FieldDef {
   static embedded = class Embedded extends Component<typeof StlMetadataField> {
     <template>
       <dl class='stl-meta'>
-        {{#if @model.encoding}}<div><dt>Encoding</dt><dd>{{@model.encoding}}</dd></div>{{/if}}
-        {{#if @model.solidName}}<div><dt>Solid</dt><dd>{{@model.solidName}}</dd></div>{{/if}}
-        {{#if @model.facetCount}}<div><dt>Facets</dt><dd>{{@model.facetCount}}</dd></div>{{/if}}
-        {{#if @model.normalCount}}<div><dt>Normals</dt><dd>{{@model.normalCount}}</dd></div>{{/if}}
-        <div><dt>Color data</dt><dd>{{if @model.hasColorData 'Present' 'None'}}</dd></div>
-        {{#if @model.sizeX}}<div><dt>Extents</dt><dd class='mono'>{{@model.sizeX}} × {{@model.sizeY}} × {{@model.sizeZ}}</dd></div>{{/if}}
-        {{#if @model.degenerateFacetCount}}<div><dt>Degenerate</dt><dd>{{@model.degenerateFacetCount}}</dd></div>{{/if}}
+        {{#if @model.encoding}}<div><dt>Encoding</dt><dd
+            >{{@model.encoding}}</dd></div>{{/if}}
+        {{#if @model.solidName}}<div><dt>Solid</dt><dd
+            >{{@model.solidName}}</dd></div>{{/if}}
+        {{#if @model.facetCount}}<div><dt>Facets</dt><dd
+            >{{@model.facetCount}}</dd></div>{{/if}}
+        {{#if @model.normalCount}}<div><dt>Normals</dt><dd
+            >{{@model.normalCount}}</dd></div>{{/if}}
+        <div><dt>Color data</dt><dd>{{if
+              @model.hasColorData
+              'Present'
+              'None'
+            }}</dd></div>
+        {{#if @model.sizeX}}<div><dt>Extents</dt><dd
+              class='mono'
+            >{{@model.sizeX}}
+              ×
+              {{@model.sizeY}}
+              ×
+              {{@model.sizeZ}}</dd></div>{{/if}}
+        {{#if @model.degenerateFacetCount}}<div><dt>Degenerate</dt><dd
+            >{{@model.degenerateFacetCount}}</dd></div>{{/if}}
       </dl>
       <style scoped>
         .stl-meta {
@@ -244,12 +266,27 @@ class StlIsolated extends GlimmerComponent<{ Args: { model: StlDef } }> {
       <ModelIsolatedBody @model={{@model}} />
       {{#if @model.stlMetadata}}
         <dl class='stl-facts'>
-          {{#if @model.stlMetadata.encoding}}<div><dt>Encoding</dt><dd>{{@model.stlMetadata.encoding}}</dd></div>{{/if}}
-          {{#if @model.stlMetadata.solidName}}<div><dt>Solid</dt><dd>{{@model.stlMetadata.solidName}}</dd></div>{{/if}}
-          {{#if @model.stlMetadata.facetCount}}<div><dt>Facets</dt><dd>{{@model.stlMetadata.facetCount}}</dd></div>{{/if}}
-          <div><dt>Color data</dt><dd>{{if @model.stlMetadata.hasColorData 'Present' 'None'}}</dd></div>
-          {{#if @model.stlMetadata.sizeX}}<div><dt>Extents</dt><dd class='mono'>{{@model.stlMetadata.sizeX}} × {{@model.stlMetadata.sizeY}} × {{@model.stlMetadata.sizeZ}}</dd></div>{{/if}}
-          {{#if @model.stlMetadata.degenerateFacetCount}}<div><dt>Degenerate</dt><dd>{{@model.stlMetadata.degenerateFacetCount}}</dd></div>{{/if}}
+          {{#if @model.stlMetadata.encoding}}<div><dt>Encoding</dt><dd
+              >{{@model.stlMetadata.encoding}}</dd></div>{{/if}}
+          {{#if @model.stlMetadata.solidName}}<div><dt>Solid</dt><dd
+              >{{@model.stlMetadata.solidName}}</dd></div>{{/if}}
+          {{#if @model.stlMetadata.facetCount}}<div><dt>Facets</dt><dd
+              >{{@model.stlMetadata.facetCount}}</dd></div>{{/if}}
+          <div><dt>Color data</dt><dd>{{if
+                @model.stlMetadata.hasColorData
+                'Present'
+                'None'
+              }}</dd></div>
+          {{#if @model.stlMetadata.sizeX}}<div><dt>Extents</dt><dd
+                class='mono'
+              >{{@model.stlMetadata.sizeX}}
+                ×
+                {{@model.stlMetadata.sizeY}}
+                ×
+                {{@model.stlMetadata.sizeZ}}</dd></div>{{/if}}
+          {{#if @model.stlMetadata.degenerateFacetCount}}<div><dt
+              >Degenerate</dt><dd
+              >{{@model.stlMetadata.degenerateFacetCount}}</dd></div>{{/if}}
         </dl>
       {{/if}}
     </section>
@@ -307,7 +344,9 @@ export class StlDef extends ModelDef {
     url: string,
     getStream: () => Promise<ByteStream>,
     options: { contentHash?: string; contentSize?: number } = {},
-  ): Promise<SerializedFile<{ model3d: Model3dData; stlMetadata: StlMetadata }>> {
+  ): Promise<
+    SerializedFile<{ model3d: Model3dData; stlMetadata: StlMetadata }>
+  > {
     let extension = getExtension(url);
     if (extension !== '.stl') {
       throw new FileContentMismatchError(

@@ -143,11 +143,16 @@ class ModelSceneRail extends GlimmerComponent<{
   <template>
     <dl class='model-scene'>
       {{#if @model.name}}<div><dt>File</dt><dd>{{@model.name}}</dd></div>{{/if}}
-      {{#if @model.model3d.triangles}}<div><dt>Triangles</dt><dd>{{@model.model3d.triangles}}</dd></div>{{/if}}
-      {{#if @model.model3d.vertices}}<div><dt>Vertices</dt><dd>{{@model.model3d.vertices}}</dd></div>{{/if}}
-      {{#if @model.model3d.meshes}}<div><dt>Meshes</dt><dd>{{@model.model3d.meshes}}</dd></div>{{/if}}
-      {{#if @model.model3d.materials}}<div><dt>Materials</dt><dd>{{@model.model3d.materials}}</dd></div>{{/if}}
-      {{#if @model.model3d.generator}}<div><dt>Generator</dt><dd>{{@model.model3d.generator}}</dd></div>{{/if}}
+      {{#if @model.model3d.triangles}}<div><dt>Triangles</dt><dd
+          >{{@model.model3d.triangles}}</dd></div>{{/if}}
+      {{#if @model.model3d.vertices}}<div><dt>Vertices</dt><dd
+          >{{@model.model3d.vertices}}</dd></div>{{/if}}
+      {{#if @model.model3d.meshes}}<div><dt>Meshes</dt><dd
+          >{{@model.model3d.meshes}}</dd></div>{{/if}}
+      {{#if @model.model3d.materials}}<div><dt>Materials</dt><dd
+          >{{@model.model3d.materials}}</dd></div>{{/if}}
+      {{#if @model.model3d.generator}}<div><dt>Generator</dt><dd
+          >{{@model.model3d.generator}}</dd></div>{{/if}}
     </dl>
     <style scoped>
       .model-scene {
@@ -202,7 +207,9 @@ export class ModelIsolatedBody extends GlimmerComponent<{
   </template>
 }
 
-class ModelAtomTemplate extends GlimmerComponent<{ Args: { model: ModelDef } }> {
+class ModelAtomTemplate extends GlimmerComponent<{
+  Args: { model: ModelDef };
+}> {
   <template>
     <span class='model-atom'>
       <File3dIcon width='16' height='16' />
