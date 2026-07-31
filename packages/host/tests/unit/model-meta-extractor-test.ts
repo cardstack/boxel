@@ -1,4 +1,4 @@
-import { silhouettePath } from '@cardstack/base/model-file-def';
+import { silhouettePath } from '@cardstack/base/model-silhouette';
 import { parseStl } from '@cardstack/base/stl-meta-extractor';
 import { parseThreeMf } from '@cardstack/base/three-mf-meta-extractor';
 import { zipSync, strToU8 } from 'fflate';
