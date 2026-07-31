@@ -81,7 +81,7 @@
     "@embroider/addon-dev": "^8.0.0",
     "@embroider/config-meta-loader": "^1.0.0",
     "@embroider/core": "^4.4.7",
-    "@embroider/macros": "^1.20.1",
+    "@embroider/macros": "^1.20.5",
     "@embroider/vite": "^1.7.2",
     "@eslint/js": "^9.17.0",
     "@glimmer/component": "catalog:",
