@@ -1,0 +1,41 @@
+#!/bin/bash
+#MISE description="Seed this environment's index tables from the cached CI index"
+#MISE dir="packages/realm-server"
+
+set -euo pipefail
+
+export PATH="./node_modules/.bin:$PATH"
+REPO_ROOT="$(cd "../.." && pwd)"
+
+# Brings the database up to the point where scripts/import-cached-index.sh can
+# load a snapshot into it: Postgres running, the per-environment database
+# created, migrations applied. All three are idempotent — the service stack
+# runs them again on its own way up (start:pg, infra:ensure-db, main.ts
+# --migrateDB).
+#
+# This is a separate step from starting the services on purpose. The import
+# downloads and replays a large dump, and anything that runs before
+# `start-server-and-test` delays every service it launches — including
+# Synapse, which the caller's `register-realm-users` step waits on with a
+# fixed budget. Keeping the import in its own step means the services start
+# promptly once it is done, and its cost shows up as its own line in the CI
+# timing rather than hiding inside service startup.
+./scripts/start-pg.sh
+echo "Waiting for Postgres to accept connections…"
+until docker exec boxel-pg pg_isready -U postgres >/dev/null 2>&1; do sleep 1; done
+"$REPO_ROOT/scripts/ensure-branch-db.sh"
+pnpm migrate
+
+# Ask for the host-scoped snapshot: a test stack serves base, skills and
+# openrouter, and the full snapshot's other realms are a few hundred MB this
+# job would download and replay for rows it never reads. The import falls back
+# to the full snapshot when the scoped one is missing or expired.
+export INDEX_CACHE_ARTIFACT="${INDEX_CACHE_ARTIFACT:-boxel-index-cache-host}"
+
+# A cache miss is not a failure: the realms simply index from scratch, which
+# is what they did before this task existed.
+if "$REPO_ROOT/scripts/import-cached-index.sh"; then
+  echo "[ci:import-index] index cache imported — the boot index will reconcile only what this checkout changed"
+else
+  echo "[ci:import-index] no index cache available — realms will index from scratch"
+fi
