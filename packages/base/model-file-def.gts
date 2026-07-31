@@ -167,7 +167,10 @@ function disposeObject(root: any) {
 // pure-JS + silhouette. Any failure (no WebGL, offline, blocked CDN, unparseable
 // geometry) is caught and leaves the silhouette placeholder in place.
 const renderModel = modifier(
-  (element: HTMLElement, [component, url]: [ModelViewer, string]) => {
+  (
+    element: HTMLElement,
+    [component, url, lazy]: [ModelViewer, string, boolean],
+  ) => {
     if (!url) {
       return;
     }
@@ -182,6 +185,9 @@ const renderModel = modifier(
     let frameModel: ((resetDirection?: boolean) => void) | undefined;
     let isThreeMf = /\.3mf(?:$|[?#])/i.test(url);
     let isStl = /\.stl(?:$|[?#])/i.test(url);
+    // Fitted (lazy) tiles render a static model — no orbit controls, and they
+    // must not swallow the grid's scroll/drag.
+    let interactive = !lazy;
 
     let resize = () => {
       if (!renderer || !camera) {
@@ -207,183 +213,215 @@ const renderModel = modifier(
       frameId = requestAnimationFrame(tick);
     };
 
-    component.setLoading();
-    void (async () => {
-      try {
-        let [THREE, controlsModule, loaderModule, response] = await Promise.all(
-          [
-            // @ts-expect-error Pinned browser ESM import; the Boxel loader resolves https:// at runtime
-            import('https://esm.sh/three@0.160.0'),
-            // @ts-expect-error Pinned browser ESM import; the Boxel loader resolves https:// at runtime
-            import('https://esm.sh/three@0.160.0/examples/jsm/controls/OrbitControls.js'),
-            isThreeMf
-              ? // @ts-expect-error Pinned browser ESM import; 3MFLoader brings its own fflate dependency
-                import('https://esm.sh/three@0.160.0/examples/jsm/loaders/3MFLoader.js')
-              : isStl
-                ? // @ts-expect-error Pinned browser ESM import; STLLoader handles ASCII and binary STL
-                  import('https://esm.sh/three@0.160.0/examples/jsm/loaders/STLLoader.js')
-                : // @ts-expect-error Pinned browser ESM import; the Boxel loader resolves https:// at runtime
-                  import('https://esm.sh/three@0.160.0/examples/jsm/loaders/GLTFLoader.js'),
-            // No `credentials: 'include'` — that makes a credentialed CORS
-            // request, illegal against the realm's wildcard
-            // `Access-Control-Allow-Origin`. The host auth service worker
-            // injects the realm `Authorization` header on this GET (same path
-            // that lets <img src> load realm images).
-            fetch(url, { signal: controller.signal }),
-          ],
-        );
-        if (!response.ok) {
-          throw new Error(`Model fetch failed with HTTP ${response.status}`);
-        }
-        let bytes = await response.arrayBuffer();
-        if (cancelled) {
-          return;
-        }
-        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-        scene = new THREE.Scene();
-        camera = new THREE.PerspectiveCamera(38, 1, 0.01, 100);
-        controls = new controlsModule.OrbitControls(
-          camera,
-          renderer.domElement,
-        );
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-        renderer.outputColorSpace = THREE.SRGBColorSpace;
-        renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        renderer.toneMappingExposure = 1.05;
-        renderer.domElement.setAttribute('aria-label', component.label);
-        renderer.domElement.setAttribute('role', 'img');
-        element.appendChild(renderer.domElement);
-        scene.add(new THREE.HemisphereLight(0xffffff, 0x697080, 2.1));
-        let key = new THREE.DirectionalLight(0xffffff, 2.4);
-        key.position.set(3, 5, 4);
-        scene.add(key);
-        let fill = new THREE.DirectionalLight(0xaec6ff, 1.1);
-        fill.position.set(-4, 1, -2);
-        scene.add(fill);
-        controls.enableDamping = true;
-        controls.dampingFactor = 0.07;
-        controls.enablePan = false;
-        controls.autoRotate = false;
-        resize();
-        tick();
-
-        let installModel = (root: any) => {
+    let started = false;
+    let start = () => {
+      if (started || cancelled) {
+        return;
+      }
+      started = true;
+      component.setLoading();
+      void (async () => {
+        try {
+          let [THREE, controlsModule, loaderModule, response] =
+            await Promise.all([
+              // @ts-expect-error Pinned browser ESM import; the Boxel loader resolves https:// at runtime
+              import('https://esm.sh/three@0.160.0'),
+              // @ts-expect-error Pinned browser ESM import; the Boxel loader resolves https:// at runtime
+              import('https://esm.sh/three@0.160.0/examples/jsm/controls/OrbitControls.js'),
+              isThreeMf
+                ? // @ts-expect-error Pinned browser ESM import; 3MFLoader brings its own fflate dependency
+                  import('https://esm.sh/three@0.160.0/examples/jsm/loaders/3MFLoader.js')
+                : isStl
+                  ? // @ts-expect-error Pinned browser ESM import; STLLoader handles ASCII and binary STL
+                    import('https://esm.sh/three@0.160.0/examples/jsm/loaders/STLLoader.js')
+                  : // @ts-expect-error Pinned browser ESM import; the Boxel loader resolves https:// at runtime
+                    import('https://esm.sh/three@0.160.0/examples/jsm/loaders/GLTFLoader.js'),
+              // No `credentials: 'include'` — that makes a credentialed CORS
+              // request, illegal against the realm's wildcard
+              // `Access-Control-Allow-Origin`. The host auth service worker
+              // injects the realm `Authorization` header on this GET (same path
+              // that lets <img src> load realm images).
+              fetch(url, { signal: controller.signal }),
+            ]);
+          if (!response.ok) {
+            throw new Error(`Model fetch failed with HTTP ${response.status}`);
+          }
+          let bytes = await response.arrayBuffer();
           if (cancelled) {
-            disposeObject(root);
             return;
           }
-          modelRoot = root;
-          modelRoot.updateMatrixWorld(true);
-          let bounds = new THREE.Box3().setFromObject(modelRoot);
-          if (bounds.isEmpty()) {
-            throw new Error('Model contains no renderable geometry');
-          }
-          scene.add(modelRoot);
-          let size = bounds.getSize(new THREE.Vector3());
-          let center = bounds.getCenter(new THREE.Vector3());
-          frameModel = (resetDirection = false) => {
-            let verticalFov = THREE.MathUtils.degToRad(camera.fov);
-            let horizontalFov =
-              2 * Math.atan(Math.tan(verticalFov / 2) * camera.aspect);
-            let heightDistance = size.y / (2 * Math.tan(verticalFov / 2));
-            let widthDistance = size.x / (2 * Math.tan(horizontalFov / 2));
-            let distance =
-              Math.max(heightDistance, widthDistance, 0.001) * 1.2 + size.z;
-            let isFlatPrint =
-              size.z < Math.max(0.001, Math.min(size.x, size.y) * 0.35);
-            let defaultDirection = isFlatPrint
-              ? new THREE.Vector3(0.08, -0.14, 1).normalize()
-              : new THREE.Vector3(0.72, 0.52, 1).normalize();
-            let direction = resetDirection
-              ? defaultDirection
-              : new THREE.Vector3()
-                  .subVectors(camera.position, controls.target)
-                  .normalize();
-            if (
-              !Number.isFinite(direction.lengthSq()) ||
-              direction.lengthSq() === 0
-            ) {
-              direction.copy(defaultDirection);
-            }
-            controls.target.copy(center);
-            camera.position
-              .copy(center)
-              .add(direction.multiplyScalar(distance));
-            camera.near = Math.max(0.001, distance / 1000);
-            camera.far = Math.max(distance * 10, size.length() * 12, 100);
-            camera.updateProjectionMatrix();
-            controls.minDistance = Math.max(0.001, distance * 0.18);
-            controls.maxDistance = Math.max(distance * 6, size.length() * 8);
-            controls.update();
-          };
-          frameModel(true);
-          renderer.render(scene, camera);
-          component.setReady();
-        };
+          renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+          scene = new THREE.Scene();
+          camera = new THREE.PerspectiveCamera(38, 1, 0.01, 100);
+          controls = new controlsModule.OrbitControls(
+            camera,
+            renderer.domElement,
+          );
+          renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+          renderer.outputColorSpace = THREE.SRGBColorSpace;
+          renderer.toneMapping = THREE.ACESFilmicToneMapping;
+          renderer.toneMappingExposure = 1.05;
+          renderer.domElement.setAttribute('aria-label', component.label);
+          renderer.domElement.setAttribute('role', 'img');
+          element.appendChild(renderer.domElement);
+          scene.add(new THREE.HemisphereLight(0xffffff, 0x697080, 2.1));
+          let key = new THREE.DirectionalLight(0xffffff, 2.4);
+          key.position.set(3, 5, 4);
+          scene.add(key);
+          let fill = new THREE.DirectionalLight(0xaec6ff, 1.1);
+          fill.position.set(-4, 1, -2);
+          scene.add(fill);
+          controls.enableDamping = true;
+          controls.dampingFactor = 0.07;
+          controls.enablePan = false;
+          controls.enableRotate = interactive;
+          controls.enableZoom = interactive;
+          controls.enabled = interactive;
+          controls.autoRotate = false;
+          resize();
+          tick();
 
-        if (isThreeMf) {
-          let loader = new loaderModule.ThreeMFLoader();
-          installModel(loader.parse(bytes));
-        } else if (isStl) {
-          let loader = new loaderModule.STLLoader();
-          let geometry = loader.parse(bytes);
-          geometry.computeVertexNormals();
-          let hasColors = Boolean(
-            (geometry as any).hasColors || geometry.getAttribute('color'),
-          );
-          let alpha = Number((geometry as any).alpha ?? 1);
-          let material = new THREE.MeshStandardMaterial({
-            color: hasColors ? 0xffffff : 0xb9c0cb,
-            vertexColors: hasColors,
-            roughness: 0.62,
-            metalness: 0.08,
-            opacity: alpha,
-            transparent: alpha < 1,
-            side: THREE.DoubleSide,
-          });
-          let mesh = new THREE.Mesh(geometry, material);
-          mesh.rotation.x = -Math.PI / 2;
-          installModel(mesh);
-        } else {
-          let loader = new loaderModule.GLTFLoader();
-          loader.parse(
-            bytes,
-            '',
-            (gltf: any) => installModel(gltf.scene),
-            (error: unknown) => component.setError(error),
-          );
+          let installModel = (root: any) => {
+            if (cancelled) {
+              disposeObject(root);
+              return;
+            }
+            modelRoot = root;
+            modelRoot.updateMatrixWorld(true);
+            let bounds = new THREE.Box3().setFromObject(modelRoot);
+            if (bounds.isEmpty()) {
+              throw new Error('Model contains no renderable geometry');
+            }
+            scene.add(modelRoot);
+            let size = bounds.getSize(new THREE.Vector3());
+            let center = bounds.getCenter(new THREE.Vector3());
+            frameModel = (resetDirection = false) => {
+              let verticalFov = THREE.MathUtils.degToRad(camera.fov);
+              let horizontalFov =
+                2 * Math.atan(Math.tan(verticalFov / 2) * camera.aspect);
+              let heightDistance = size.y / (2 * Math.tan(verticalFov / 2));
+              let widthDistance = size.x / (2 * Math.tan(horizontalFov / 2));
+              let distance =
+                Math.max(heightDistance, widthDistance, 0.001) * 1.2 + size.z;
+              let isFlatPrint =
+                size.z < Math.max(0.001, Math.min(size.x, size.y) * 0.35);
+              let defaultDirection = isFlatPrint
+                ? new THREE.Vector3(0.08, -0.14, 1).normalize()
+                : new THREE.Vector3(0.72, 0.52, 1).normalize();
+              let direction = resetDirection
+                ? defaultDirection
+                : new THREE.Vector3()
+                    .subVectors(camera.position, controls.target)
+                    .normalize();
+              if (
+                !Number.isFinite(direction.lengthSq()) ||
+                direction.lengthSq() === 0
+              ) {
+                direction.copy(defaultDirection);
+              }
+              controls.target.copy(center);
+              camera.position
+                .copy(center)
+                .add(direction.multiplyScalar(distance));
+              camera.near = Math.max(0.001, distance / 1000);
+              camera.far = Math.max(distance * 10, size.length() * 12, 100);
+              camera.updateProjectionMatrix();
+              controls.minDistance = Math.max(0.001, distance * 0.18);
+              controls.maxDistance = Math.max(distance * 6, size.length() * 8);
+              controls.update();
+            };
+            frameModel(true);
+            renderer.render(scene, camera);
+            component.setReady();
+          };
+
+          if (isThreeMf) {
+            let loader = new loaderModule.ThreeMFLoader();
+            installModel(loader.parse(bytes));
+          } else if (isStl) {
+            let loader = new loaderModule.STLLoader();
+            let geometry = loader.parse(bytes);
+            geometry.computeVertexNormals();
+            let hasColors = Boolean(
+              (geometry as any).hasColors || geometry.getAttribute('color'),
+            );
+            let alpha = Number((geometry as any).alpha ?? 1);
+            let material = new THREE.MeshStandardMaterial({
+              color: hasColors ? 0xffffff : 0xb9c0cb,
+              vertexColors: hasColors,
+              roughness: 0.62,
+              metalness: 0.08,
+              opacity: alpha,
+              transparent: alpha < 1,
+              side: THREE.DoubleSide,
+            });
+            let mesh = new THREE.Mesh(geometry, material);
+            mesh.rotation.x = -Math.PI / 2;
+            installModel(mesh);
+          } else {
+            let loader = new loaderModule.GLTFLoader();
+            loader.parse(
+              bytes,
+              '',
+              (gltf: any) => installModel(gltf.scene),
+              (error: unknown) => component.setError(error),
+            );
+          }
+        } catch (error) {
+          if (!cancelled) {
+            component.setError(error);
+          }
         }
-      } catch (error) {
-        if (!cancelled) {
-          component.setError(error);
+      })();
+    };
+
+    // In `lazy` mode (fitted collection tiles) only boot the WebGL engine once
+    // the tile is actually on-screen, so a grid of many models doesn't exhaust
+    // the browser's WebGL context budget. Off-screen tiles keep the silhouette.
+    let io: IntersectionObserver | undefined;
+    if (lazy) {
+      io = new IntersectionObserver((entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          io?.disconnect();
+          start();
         }
-      }
-    })();
+      });
+      io.observe(element);
+    } else {
+      start();
+    }
 
     let stop = (event: Event) => event.stopPropagation();
     let resetView = (event: Event) => {
       event.stopPropagation();
       frameModel?.(true);
     };
-    for (let eventName of ['pointerdown', 'pointerup', 'click', 'wheel']) {
-      element.addEventListener(eventName, stop);
+    // Only trap gestures for an interactive (isolated/embedded) viewer. Fitted
+    // tiles stay pass-through so the enclosing grid scrolls normally.
+    if (interactive) {
+      for (let eventName of ['pointerdown', 'pointerup', 'click', 'wheel']) {
+        element.addEventListener(eventName, stop);
+      }
+      element.addEventListener('dblclick', resetView);
     }
-    element.addEventListener('dblclick', resetView);
 
     return () => {
       cancelled = true;
       controller.abort();
       cancelAnimationFrame(frameId);
+      io?.disconnect();
       observer.disconnect();
       controls?.dispose?.();
       disposeObject(modelRoot);
       renderer?.dispose?.();
       renderer?.forceContextLoss?.();
       renderer?.domElement?.remove();
-      for (let eventName of ['pointerdown', 'pointerup', 'click', 'wheel']) {
-        element.removeEventListener(eventName, stop);
+      if (interactive) {
+        for (let eventName of ['pointerdown', 'pointerup', 'click', 'wheel']) {
+          element.removeEventListener(eventName, stop);
+        }
+        element.removeEventListener('dblclick', resetView);
       }
-      element.removeEventListener('dblclick', resetView);
     };
   },
 );
@@ -392,7 +430,7 @@ const renderModel = modifier(
 // (ModelPreview) shows until the scene paints and remains as the fallback if
 // WebGL/the CDN engine is unavailable (e.g. during prerender).
 export class ModelViewer extends GlimmerComponent<{
-  Args: { model: ModelDef };
+  Args: { model: ModelDef; lazy?: boolean };
   Element: HTMLElement;
 }> {
   @tracked state: 'loading' | 'ready' | 'error' = 'loading';
@@ -400,11 +438,17 @@ export class ModelViewer extends GlimmerComponent<{
   get url() {
     return this.args.model.url;
   }
+  get lazy() {
+    return this.args.lazy ?? false;
+  }
   get label() {
     return `Interactive 3D preview of ${this.args.model.name ?? 'model'}`;
   }
   get isReady() {
     return this.state === 'ready';
+  }
+  get showHint() {
+    return this.isReady && !this.lazy;
   }
   setLoading = () => {
     this.state = 'loading';
@@ -419,14 +463,17 @@ export class ModelViewer extends GlimmerComponent<{
   <template>
     <div class='model-viewer' ...attributes>
       {{#if this.url}}
-        <div class='model-viewer__host' {{renderModel this this.url}}></div>
+        <div
+          class='model-viewer__host'
+          {{renderModel this this.url this.lazy}}
+        ></div>
       {{/if}}
       {{#unless this.isReady}}
         <div class='model-viewer__placeholder'>
           <ModelPreview @model={{@model}} />
         </div>
       {{/unless}}
-      {{#if this.isReady}}
+      {{#if this.showHint}}
         <div class='model-viewer__hint'>Drag to orbit · scroll to zoom</div>
       {{/if}}
     </div>
@@ -676,14 +723,15 @@ class ModelAtomTemplate extends GlimmerComponent<{
   </template>
 }
 
-// Fitted is the collection-tile budget format: silhouette only, never mounts a
-// WebGL engine.
+// Fitted is the collection-tile format. It mounts the live viewer in `lazy`
+// mode: the silhouette shows until the tile scrolls on-screen, then the WebGL
+// engine boots (and, during prerender/indexing, the silhouette simply stays).
 class ModelFittedTemplate extends GlimmerComponent<{
   Args: { model: ModelDef };
 }> {
   <template>
     <div class='model-fitted'>
-      <ModelPreview @model={{@model}} />
+      <ModelViewer @model={{@model}} @lazy={{true}} />
     </div>
     <style scoped>
       .model-fitted {
