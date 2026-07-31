@@ -136,14 +136,21 @@ const unmatched = [];
 let attributedTime = 0;
 
 for (const [moduleName, time] of timeByModule) {
-  // Prefer an exact quoted/backticked occurrence of the title; fall back to
-  // a bare substring match, which catches titles that are a static prefix
-  // of a longer (partially dynamic) module() argument.
-  const quoted = testFiles.filter(({ source }) =>
-    ["'", '"', '`'].some((q) => source.includes(`${q}${moduleName}`)),
+  // Prefer an exact quoted/backticked occurrence of the full title; then a
+  // bare opening-delimiter match (which catches titles that are a static
+  // prefix of a longer, partially dynamic module() argument); then a plain
+  // substring. The exact tier stops "Integration | realm" from also matching
+  // "Integration | realm indexing" and splitting realm-test's time onto it.
+  const exact = testFiles.filter(({ source }) =>
+    ["'", '"', '`'].some((q) => source.includes(`${q}${moduleName}${q}`)),
   );
-  const candidates = quoted.length
-    ? quoted
+  const prefix = exact.length
+    ? exact
+    : testFiles.filter(({ source }) =>
+        ["'", '"', '`'].some((q) => source.includes(`${q}${moduleName}`)),
+      );
+  const candidates = prefix.length
+    ? prefix
     : testFiles.filter(({ source }) => source.includes(moduleName));
 
   if (candidates.length === 0) {
