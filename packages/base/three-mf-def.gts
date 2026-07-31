@@ -415,56 +415,69 @@ class ThreeMfIsolated extends GlimmerComponent<{
   Args: { model: ThreeMfDef };
 }> {
   <template>
-    <section class='three-mf-isolated'>
-      <ModelIsolatedBody @model={{@model}} />
+    <ModelIsolatedBody @model={{@model}}>
       {{#if @model.threeMfMetadata}}
-        <dl class='three-mf-facts'>
-          {{#if @model.threeMfMetadata.unit}}<div><dt>Units</dt><dd
-              >{{@model.threeMfMetadata.unit}}</dd></div>{{/if}}
-          {{#if @model.threeMfMetadata.sizeX}}<div><dt>Bounds</dt><dd
-              >{{@model.threeMfMetadata.sizeX}}
-                ×
-                {{@model.threeMfMetadata.sizeY}}
-                ×
-                {{@model.threeMfMetadata.sizeZ}}
-                {{@model.threeMfMetadata.unit}}</dd></div>{{/if}}
-          {{#if @model.threeMfMetadata.objectCount}}<div><dt>Objects</dt><dd
-              >{{@model.threeMfMetadata.objectCount}}</dd></div>{{/if}}
-          {{#if @model.threeMfMetadata.plateCount}}<div><dt>Plates</dt><dd
-              >{{@model.threeMfMetadata.plateCount}}</dd></div>{{/if}}
-          {{#if @model.threeMfMetadata.printPartCount}}<div><dt>Print parts</dt><dd
-              >{{@model.threeMfMetadata.printPartCount}}</dd></div>{{/if}}
-          {{#if @model.threeMfMetadata.extruderCount}}<div><dt>Extruders</dt><dd
-              >{{@model.threeMfMetadata.extruderCount}}</dd></div>{{/if}}
-          {{#if @model.threeMfMetadata.designer}}<div><dt>Designer</dt><dd
-              >{{@model.threeMfMetadata.designer}}</dd></div>{{/if}}
-          {{#if @model.threeMfMetadata.application}}<div><dt>Application</dt><dd
-              >{{@model.threeMfMetadata.application}}</dd></div>{{/if}}
-        </dl>
+        <section class='insp-group'>
+          <h2 class='insp-head'>3MF package</h2>
+          <dl class='insp-rows'>
+            {{#if @model.threeMfMetadata.unit}}<div><dt>Units</dt><dd
+                >{{@model.threeMfMetadata.unit}}</dd></div>{{/if}}
+            {{#if @model.threeMfMetadata.sizeX}}<div><dt>Bounds</dt><dd
+                >{{@model.threeMfMetadata.sizeX}}
+                  ×
+                  {{@model.threeMfMetadata.sizeY}}
+                  ×
+                  {{@model.threeMfMetadata.sizeZ}}
+                  {{@model.threeMfMetadata.unit}}</dd></div>{{/if}}
+            {{#if @model.threeMfMetadata.objectCount}}<div><dt>Objects</dt><dd
+                >{{@model.threeMfMetadata.objectCount}}</dd></div>{{/if}}
+            {{#if @model.threeMfMetadata.plateCount}}<div><dt>Plates</dt><dd
+                >{{@model.threeMfMetadata.plateCount}}</dd></div>{{/if}}
+            {{#if @model.threeMfMetadata.printPartCount}}<div><dt>Print parts</dt><dd
+                >{{@model.threeMfMetadata.printPartCount}}</dd></div>{{/if}}
+            {{#if @model.threeMfMetadata.extruderCount}}<div><dt
+                >Extruders</dt><dd
+                >{{@model.threeMfMetadata.extruderCount}}</dd></div>{{/if}}
+            {{#if @model.threeMfMetadata.designer}}<div><dt>Designer</dt><dd
+                >{{@model.threeMfMetadata.designer}}</dd></div>{{/if}}
+            {{#if @model.threeMfMetadata.application}}<div><dt
+                >Application</dt><dd
+                >{{@model.threeMfMetadata.application}}</dd></div>{{/if}}
+          </dl>
+        </section>
       {{/if}}
-    </section>
+    </ModelIsolatedBody>
     <style scoped>
-      .three-mf-isolated {
+      .insp-group {
         display: grid;
-        gap: var(--boxel-sp);
-        padding: var(--boxel-sp);
+        gap: 0.5rem;
       }
-      .three-mf-facts {
+      .insp-head {
+        margin: 0;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--muted-foreground);
+      }
+      .insp-rows {
         margin: 0;
         display: grid;
-        gap: 5px;
+        gap: 0.3125rem;
       }
-      .three-mf-facts div {
+      .insp-rows div {
         display: grid;
-        grid-template-columns: 88px minmax(0, 1fr);
-        gap: 10px;
+        grid-template-columns: 5.5rem minmax(0, 1fr);
+        gap: 0.625rem;
       }
-      dt {
-        color: var(--boxel-450);
-        font: 0.5625rem var(--boxel-monospace-font-family, monospace);
+      .insp-rows dt {
+        color: var(--muted-foreground);
+        font-family: var(--font-mono, var(--boxel-monospace-font-family));
+        font-size: 0.5625rem;
         text-transform: uppercase;
+        letter-spacing: 0.04em;
       }
-      dd {
+      .insp-rows dd {
         min-width: 0;
         margin: 0;
         overflow-wrap: anywhere;

@@ -12,6 +12,10 @@ import {
 } from './card-api';
 import NumberField from './number';
 
+// Extracted to a module const: a regex literal inline in a `.gts` (with `/`
+// inside a character class) can confuse the content-tag template lexer.
+const EXTENSION_RE = new RegExp('\\.[^/.]+$');
+
 // Generic scene facts shared by every 3D model format (STL, 3MF, and later
 // GLB/glTF). Format-specific facts (STL facet counts, 3MF print parts) live on
 // the leaf's own metadata FieldDef, not here.
@@ -432,6 +436,11 @@ export class ModelViewer extends GlimmerComponent<{
         width: 100%;
         height: 100%;
         overflow: hidden;
+        background: radial-gradient(
+          120% 100% at 50% 12%,
+          var(--card),
+          var(--muted)
+        );
       }
       .model-viewer__host {
         position: absolute;
@@ -456,86 +465,179 @@ export class ModelViewer extends GlimmerComponent<{
       }
       .model-viewer__hint {
         position: absolute;
-        bottom: var(--boxel-sp-xs);
-        left: 50%;
-        transform: translateX(-50%);
-        padding: 2px 8px;
-        border-radius: 100px;
-        font: 0.5625rem var(--boxel-monospace-font-family, monospace);
-        color: var(--boxel-450);
-        background: var(--boxel-100);
+        right: 0.5rem;
+        bottom: 0.5rem;
+        padding: 0.25rem 0.4375rem;
+        border-radius: 0.1875rem;
+        font-family: var(--font-mono, var(--boxel-monospace-font-family));
+        font-size: 0.5625rem;
+        letter-spacing: 0.04em;
+        color: var(--muted-foreground);
+        background: color-mix(in srgb, var(--card) 84%, transparent);
         pointer-events: none;
       }
     </style>
   </template>
 }
 
-// Generic 3D scene facts rail, styled like the handoff realm's inspector rail.
-class ModelSceneRail extends GlimmerComponent<{
+// Full isolated work surface, mirroring the handoff realm: a header bar
+// (icon + name + extension pill) over a two-column body — a bordered live-viewer
+// stage on the left and a property inspector on the right. The leaf isolated
+// templates render this and pass their format-specific metadata group into the
+// inspector via the default block.
+export class ModelIsolatedBody extends GlimmerComponent<{
   Args: { model: ModelDef };
+  Blocks: { default: [] };
 }> {
+  get name() {
+    return this.args.model.name ?? '';
+  }
+  get baseName() {
+    return this.name.replace(EXTENSION_RE, '') || this.name;
+  }
+  get extension() {
+    let parts = this.name.split('.');
+    return parts.length > 1 ? (parts.pop() ?? '') : '';
+  }
+
   <template>
-    <dl class='model-scene'>
-      {{#if @model.name}}<div><dt>File</dt><dd>{{@model.name}}</dd></div>{{/if}}
-      {{#if @model.model3d.triangles}}<div><dt>Triangles</dt><dd
-          >{{@model.model3d.triangles}}</dd></div>{{/if}}
-      {{#if @model.model3d.vertices}}<div><dt>Vertices</dt><dd
-          >{{@model.model3d.vertices}}</dd></div>{{/if}}
-      {{#if @model.model3d.meshes}}<div><dt>Meshes</dt><dd
-          >{{@model.model3d.meshes}}</dd></div>{{/if}}
-      {{#if @model.model3d.materials}}<div><dt>Materials</dt><dd
-          >{{@model.model3d.materials}}</dd></div>{{/if}}
-      {{#if @model.model3d.generator}}<div><dt>Generator</dt><dd
-          >{{@model.model3d.generator}}</dd></div>{{/if}}
-    </dl>
+    <article class='iso'>
+      <header class='iso-bar'>
+        <File3dIcon
+          class='iso-icon'
+          width='19'
+          height='19'
+          aria-hidden='true'
+        />
+        <h1 class='iso-name'>{{this.baseName}}</h1>
+        {{#if this.extension}}
+          <span class='ext-pill'>.{{this.extension}}</span>
+        {{/if}}
+      </header>
+
+      <div class='iso-cols'>
+        <section class='iso-stage-region' aria-label='Preview'>
+          <div class='iso-stage'>
+            <ModelViewer @model={{@model}} />
+          </div>
+        </section>
+
+        <aside class='inspector'>
+          <section class='insp-group'>
+            <h2 class='insp-head'>3D model</h2>
+            <dl class='insp-rows'>
+              {{#if @model.model3d.triangles}}<div><dt>Triangles</dt><dd
+                  >{{@model.model3d.triangles}}</dd></div>{{/if}}
+              {{#if @model.model3d.vertices}}<div><dt>Vertices</dt><dd
+                  >{{@model.model3d.vertices}}</dd></div>{{/if}}
+              {{#if @model.model3d.meshes}}<div><dt>Meshes</dt><dd
+                  >{{@model.model3d.meshes}}</dd></div>{{/if}}
+              {{#if @model.model3d.materials}}<div><dt>Materials</dt><dd
+                  >{{@model.model3d.materials}}</dd></div>{{/if}}
+              {{#if @model.model3d.generator}}<div><dt>Generator</dt><dd
+                  >{{@model.model3d.generator}}</dd></div>{{/if}}
+            </dl>
+          </section>
+          {{yield}}
+        </aside>
+      </div>
+    </article>
     <style scoped>
-      .model-scene {
+      .iso {
+        padding: var(--boxel-sp-lg);
+        color: var(--foreground);
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        container-type: inline-size;
+      }
+      .iso-bar {
+        display: flex;
+        align-items: center;
+        gap: 0.625rem;
+        min-width: 0;
+        flex-wrap: wrap;
+      }
+      .iso-icon {
+        flex-shrink: 0;
+      }
+      .iso-name {
+        margin: 0;
+        font-size: 1.125rem;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .ext-pill {
+        flex-shrink: 0;
+        font-family: var(--font-mono, var(--boxel-monospace-font-family));
+        font-size: 0.6875rem;
+        font-weight: 700;
+        letter-spacing: 0.03em;
+        color: var(--background);
+        background: var(--foreground);
+        padding: 0.1875rem 0.5rem;
+        border-radius: 0.25rem;
+      }
+      .iso-cols {
+        display: grid;
+        grid-template-columns: minmax(0, 1.5fr) minmax(17.5rem, 1fr);
+        gap: 1.25rem;
+        align-items: start;
+      }
+      @container (max-width: 47.5rem) {
+        .iso-cols {
+          grid-template-columns: minmax(0, 1fr);
+        }
+      }
+      .iso-stage {
+        position: relative;
+        height: 23.75rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius, var(--boxel-border-radius));
+        overflow: hidden;
+      }
+      .inspector {
+        display: grid;
+        gap: 1rem;
+        min-width: 0;
+      }
+      .insp-group {
+        display: grid;
+        gap: 0.5rem;
+      }
+      .insp-head {
+        margin: 0;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--muted-foreground);
+      }
+      .insp-rows {
         margin: 0;
         display: grid;
-        gap: 5px;
+        gap: 0.3125rem;
       }
-      .model-scene div {
+      .insp-rows div {
         display: grid;
-        grid-template-columns: 88px minmax(0, 1fr);
-        gap: 10px;
+        grid-template-columns: 5.5rem minmax(0, 1fr);
+        gap: 0.625rem;
       }
-      dt {
-        color: var(--boxel-450);
-        font: 0.5625rem var(--boxel-monospace-font-family, monospace);
+      .insp-rows dt {
+        color: var(--muted-foreground);
+        font-family: var(--font-mono, var(--boxel-monospace-font-family));
+        font-size: 0.5625rem;
         text-transform: uppercase;
+        letter-spacing: 0.04em;
       }
-      dd {
+      .insp-rows dd {
         min-width: 0;
         margin: 0;
         overflow-wrap: anywhere;
-      }
-    </style>
-  </template>
-}
-
-// Base isolated body (live viewer hero + scene rail). Leaf isolated templates
-// render this, then append their format-specific metadata rail after it.
-export class ModelIsolatedBody extends GlimmerComponent<{
-  Args: { model: ModelDef };
-}> {
-  <template>
-    <div class='model-isolated-body'>
-      <div class='model-isolated-body__hero'>
-        <ModelViewer @model={{@model}} />
-      </div>
-      <ModelSceneRail @model={{@model}} />
-    </div>
-    <style scoped>
-      .model-isolated-body {
-        display: grid;
-        gap: var(--boxel-sp);
-      }
-      .model-isolated-body__hero {
-        position: relative;
-        aspect-ratio: 4 / 3;
-        background: var(--boxel-100);
-        border-radius: var(--boxel-border-radius);
-        overflow: hidden;
       }
     </style>
   </template>
@@ -608,14 +710,14 @@ class ModelEmbeddedTemplate extends GlimmerComponent<{
       .model-embedded__hero {
         position: relative;
         aspect-ratio: 4 / 3;
-        background: var(--boxel-100);
-        border-radius: var(--boxel-border-radius);
+        background: var(--muted);
+        border-radius: var(--radius, var(--boxel-border-radius));
         overflow: hidden;
       }
       .model-embedded__caption {
         display: flex;
         align-items: baseline;
-        gap: 10px;
+        gap: 0.625rem;
         min-width: 0;
       }
       .model-embedded__name {
@@ -625,8 +727,9 @@ class ModelEmbeddedTemplate extends GlimmerComponent<{
         white-space: nowrap;
       }
       .model-embedded__caption small {
-        color: var(--boxel-450);
-        font: 0.5625rem var(--boxel-monospace-font-family, monospace);
+        color: var(--muted-foreground);
+        font-family: var(--font-mono, var(--boxel-monospace-font-family));
+        font-size: 0.5625rem;
       }
     </style>
   </template>
@@ -635,16 +738,7 @@ class ModelEmbeddedTemplate extends GlimmerComponent<{
 class ModelIsolatedTemplate extends GlimmerComponent<{
   Args: { model: ModelDef };
 }> {
-  <template>
-    <section class='model-isolated'>
-      <ModelIsolatedBody @model={{@model}} />
-    </section>
-    <style scoped>
-      .model-isolated {
-        padding: var(--boxel-sp);
-      }
-    </style>
-  </template>
+  <template><ModelIsolatedBody @model={{@model}} /></template>
 }
 
 // Base FileDef subclass for 3D model formats. Owns the shared scene metadata,

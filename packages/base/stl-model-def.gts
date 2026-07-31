@@ -262,62 +262,71 @@ export class StlMetadataField extends FieldDef {
 
 class StlIsolated extends GlimmerComponent<{ Args: { model: StlDef } }> {
   <template>
-    <section class='stl-isolated'>
-      <ModelIsolatedBody @model={{@model}} />
+    <ModelIsolatedBody @model={{@model}}>
       {{#if @model.stlMetadata}}
-        <dl class='stl-facts'>
-          {{#if @model.stlMetadata.encoding}}<div><dt>Encoding</dt><dd
-              >{{@model.stlMetadata.encoding}}</dd></div>{{/if}}
-          {{#if @model.stlMetadata.solidName}}<div><dt>Solid</dt><dd
-              >{{@model.stlMetadata.solidName}}</dd></div>{{/if}}
-          {{#if @model.stlMetadata.facetCount}}<div><dt>Facets</dt><dd
-              >{{@model.stlMetadata.facetCount}}</dd></div>{{/if}}
-          <div><dt>Color data</dt><dd>{{if
-                @model.stlMetadata.hasColorData
-                'Present'
-                'None'
-              }}</dd></div>
-          {{#if @model.stlMetadata.sizeX}}<div><dt>Extents</dt><dd
-                class='mono'
-              >{{@model.stlMetadata.sizeX}}
-                ×
-                {{@model.stlMetadata.sizeY}}
-                ×
-                {{@model.stlMetadata.sizeZ}}</dd></div>{{/if}}
-          {{#if @model.stlMetadata.degenerateFacetCount}}<div><dt
-              >Degenerate</dt><dd
-              >{{@model.stlMetadata.degenerateFacetCount}}</dd></div>{{/if}}
-        </dl>
+        <section class='insp-group'>
+          <h2 class='insp-head'>STL mesh</h2>
+          <dl class='insp-rows'>
+            {{#if @model.stlMetadata.encoding}}<div><dt>Encoding</dt><dd
+                >{{@model.stlMetadata.encoding}}</dd></div>{{/if}}
+            {{#if @model.stlMetadata.solidName}}<div><dt>Solid</dt><dd
+                >{{@model.stlMetadata.solidName}}</dd></div>{{/if}}
+            {{#if @model.stlMetadata.facetCount}}<div><dt>Facets</dt><dd
+                >{{@model.stlMetadata.facetCount}}</dd></div>{{/if}}
+            {{#if @model.stlMetadata.normalCount}}<div><dt>Normals</dt><dd
+                >{{@model.stlMetadata.normalCount}}</dd></div>{{/if}}
+            <div><dt>Color data</dt><dd>{{if
+                  @model.stlMetadata.hasColorData
+                  'Present'
+                  'None'
+                }}</dd></div>
+            {{#if @model.stlMetadata.sizeX}}<div><dt>Extents</dt><dd
+                >{{@model.stlMetadata.sizeX}}
+                  ×
+                  {{@model.stlMetadata.sizeY}}
+                  ×
+                  {{@model.stlMetadata.sizeZ}}</dd></div>{{/if}}
+            {{#if @model.stlMetadata.degenerateFacetCount}}<div><dt
+                >Degenerate</dt><dd
+                >{{@model.stlMetadata.degenerateFacetCount}}</dd></div>{{/if}}
+          </dl>
+        </section>
       {{/if}}
-    </section>
+    </ModelIsolatedBody>
     <style scoped>
-      .stl-isolated {
+      .insp-group {
         display: grid;
-        gap: var(--boxel-sp);
-        padding: var(--boxel-sp);
+        gap: 0.5rem;
       }
-      .stl-facts {
+      .insp-head {
+        margin: 0;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--muted-foreground);
+      }
+      .insp-rows {
         margin: 0;
         display: grid;
-        gap: 5px;
+        gap: 0.3125rem;
       }
-      .stl-facts div {
+      .insp-rows div {
         display: grid;
-        grid-template-columns: 88px minmax(0, 1fr);
-        gap: 10px;
+        grid-template-columns: 5.5rem minmax(0, 1fr);
+        gap: 0.625rem;
       }
-      dt {
-        color: var(--boxel-450);
-        font: 0.5625rem var(--boxel-monospace-font-family, monospace);
+      .insp-rows dt {
+        color: var(--muted-foreground);
+        font-family: var(--font-mono, var(--boxel-monospace-font-family));
+        font-size: 0.5625rem;
         text-transform: uppercase;
+        letter-spacing: 0.04em;
       }
-      dd {
+      .insp-rows dd {
         min-width: 0;
         margin: 0;
         overflow-wrap: anywhere;
-      }
-      .mono {
-        font-family: var(--boxel-monospace-font-family, monospace);
       }
     </style>
   </template>
