@@ -54,6 +54,7 @@ import {
 } from '../factory-tool-builder.ts';
 import { deriveCatalogRealmUrl } from '../factory-catalog-realm.ts';
 import { logger } from '../logger.ts';
+import { startSpan } from '../run-trace.ts';
 import {
   assembleBootstrapPrompt,
   assembleImplementPrompt,
@@ -390,7 +391,12 @@ export class OpencodeFactoryAgent implements LoopAgent {
           body: {
             model: {
               providerID: FACTORY_PROVIDER_ID,
-              modelID: this.config.model,
+              // Per-turn budget override from the orchestrator's policy —
+              // any OpenRouter model id works here (e.g. `openai/gpt-5.2`,
+              // `moonshotai/kimi-k2`). `effort` has no opencode per-prompt
+              // equivalent yet, so only the model half of the budget
+              // applies on this backend.
+              modelID: context.modelBudget?.model ?? this.config.model,
             },
             system: systemPrompt,
             // Trim opencode's default tool catalog to only what the
@@ -478,8 +484,53 @@ export class OpencodeFactoryAgent implements LoopAgent {
 
   private buildPrompt(context: AgentContext): string {
     let issueType = (context.issue as Record<string, unknown>).issueType;
+    if (context.primeTurn === true) {
+      return this.promptLoader.load('prime', {
+        project: context.project,
+        knowledge: context.knowledge,
+      });
+    }
+    // Acceptance dispatch must precede the issue-type branches: the review
+    // turn reuses the issue context, and falling through to the implement
+    // prompt would let the "reviewer" edit product files that runReviewGate
+    // then syncs — with a missing verdict defaulting to approval.
+    if (context.acceptanceTurn) {
+      return this.promptLoader.load('acceptance-walkthrough', {
+        issue: context.issue,
+        project: context.project?.id?.startsWith('http')
+          ? context.project
+          : undefined,
+        darkfactoryModuleUrl: requireDarkfactoryModuleUrl(context),
+        renderSummary: context.acceptanceTurn.renderSummary,
+        screenshots: context.acceptanceTurn.screenshots,
+        failedCaptures:
+          context.acceptanceTurn.failedCaptures.length > 0
+            ? context.acceptanceTurn.failedCaptures
+            : undefined,
+      });
+    }
+    if (issueType === 'design') {
+      return this.promptLoader.load('issue-design-foundation', {
+        issue: context.issue,
+        project: context.project,
+        knowledge: context.knowledge,
+      });
+    }
+    if (issueType === 'analysis') {
+      return this.promptLoader.load('issue-analysis', {
+        issue: context.issue,
+        darkfactoryModuleUrl: requireDarkfactoryModuleUrl(context),
+      });
+    }
     if (issueType === 'bootstrap' && context.briefUrl) {
       return assembleBootstrapPrompt({ context, loader: this.promptLoader });
+    }
+    if (issueType === 'hardening' && !context.validationContext) {
+      return this.promptLoader.load('issue-harden', {
+        issue: context.issue,
+        project: context.project,
+        knowledge: context.knowledge,
+      });
     }
     if (context.validationContext) {
       return assembleIteratePrompt({
@@ -570,9 +621,14 @@ async function startFactoryMcpServer(
     let typedArgs = (args ?? {}) as Record<string, unknown>;
     let start = Date.now();
     let result: unknown;
+    let endToolSpan = startSpan('tool', name);
     try {
       result = await tool.execute(typedArgs);
+      endToolSpan({
+        ok: !(result && typeof result === 'object' && 'error' in result),
+      });
     } catch (error) {
+      endToolSpan({ ok: false });
       result = {
         error: error instanceof Error ? error.message : String(error),
       };
