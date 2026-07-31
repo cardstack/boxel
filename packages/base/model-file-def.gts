@@ -1,4 +1,6 @@
 import GlimmerComponent from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
+import { modifier } from 'ember-modifier';
 import File3dIcon from '@cardstack/boxel-icons/file-3d';
 import {
   BaseDefComponent,
@@ -26,8 +28,8 @@ export class Model3DInfoField extends FieldDef {
 // Deterministic, prerender-safe silhouette. Returns an SVG path `d` string (no
 // angle-bracket markup, so it is content-tag safe) describing the 12 edges of a
 // box whose proportions match the model's bounding-box extents. The template
-// draws it as real <svg>/<path> elements. This is the whole preview until the
-// shaded-PNG job (CS-12401) populates `thumbnailUrl`.
+// draws it as real <svg>/<path> elements. Used by fitted, and as the
+// loading/fallback placeholder behind the live viewer in embedded/isolated.
 export function silhouettePath(x = 1, y = 1, z = 1): string {
   let max = Math.max(x, y, z, 1e-6);
   let w = x / max;
@@ -76,9 +78,9 @@ export function silhouettePath(x = 1, y = 1, z = 1): string {
     .join(' ');
 }
 
-// Shared hero: the generated PNG (`thumbnailUrl`, populated by CS-12401) when
-// present, otherwise the SVG silhouette. Kept as a standalone component so both
-// the base and the leaf isolated templates reuse it without duplication.
+// Shared preview: the generated PNG (`thumbnailUrl`, populated by CS-12401)
+// when present, otherwise the SVG silhouette. Used directly by fitted and as
+// the placeholder behind the live WebGL viewer.
 export class ModelPreview extends GlimmerComponent<{
   Args: { model: ModelDef };
   Element: HTMLElement;
@@ -136,6 +138,333 @@ export class ModelPreview extends GlimmerComponent<{
   </template>
 }
 
+// Release GPU resources held by a loaded model when the card leaves the DOM.
+function disposeObject(root: any) {
+  root?.traverse?.((node: any) => {
+    node.geometry?.dispose?.();
+    let materials = Array.isArray(node.material)
+      ? node.material
+      : [node.material];
+    for (let material of materials.filter(Boolean)) {
+      for (let value of Object.values(material)) {
+        if ((value as any)?.isTexture) {
+          (value as any).dispose();
+        }
+      }
+      material.dispose?.();
+    }
+  });
+}
+
+// Authenticated fetch of the file bytes + a Three.js orbit scene, loaded from a
+// CDN (esm.run/esm.sh) only at client render time — the sanctioned Boxel card
+// pattern for external libraries (the loader resolves https:// specifiers). The
+// engine is never imported during extraction/indexing, so the prerender stays
+// pure-JS + silhouette. Any failure (no WebGL, offline, blocked CDN, unparseable
+// geometry) is caught and leaves the silhouette placeholder in place.
+const renderModel = modifier(
+  (element: HTMLElement, [component, url]: [ModelViewer, string]) => {
+    if (!url) {
+      return;
+    }
+    let cancelled = false;
+    let frameId = 0;
+    let controller = new AbortController();
+    let renderer: any;
+    let scene: any;
+    let camera: any;
+    let controls: any;
+    let modelRoot: any;
+    let frameModel: ((resetDirection?: boolean) => void) | undefined;
+    let isThreeMf = /\.3mf(?:$|[?#])/i.test(url);
+    let isStl = /\.stl(?:$|[?#])/i.test(url);
+
+    let resize = () => {
+      if (!renderer || !camera) {
+        return;
+      }
+      let width = Math.max(1, element.clientWidth);
+      let height = Math.max(1, element.clientHeight);
+      renderer.setSize(width, height, false);
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      frameModel?.(false);
+    };
+    let observer = new ResizeObserver(resize);
+    observer.observe(element);
+
+    let tick = () => {
+      if (cancelled || !renderer || !scene || !camera) {
+        return;
+      }
+      controls.update();
+      renderer.render(scene, camera);
+      // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- WebGL paint loop owns no Ember state
+      frameId = requestAnimationFrame(tick);
+    };
+
+    component.setLoading();
+    void (async () => {
+      try {
+        let [THREE, controlsModule, loaderModule, response] = await Promise.all(
+          [
+            // @ts-expect-error Pinned browser ESM import; the Boxel loader resolves https:// at runtime
+            import('https://esm.sh/three@0.160.0'),
+            // @ts-expect-error Pinned browser ESM import; the Boxel loader resolves https:// at runtime
+            import('https://esm.sh/three@0.160.0/examples/jsm/controls/OrbitControls.js'),
+            isThreeMf
+              ? // @ts-expect-error Pinned browser ESM import; 3MFLoader brings its own fflate dependency
+                import('https://esm.sh/three@0.160.0/examples/jsm/loaders/3MFLoader.js')
+              : isStl
+                ? // @ts-expect-error Pinned browser ESM import; STLLoader handles ASCII and binary STL
+                  import('https://esm.sh/three@0.160.0/examples/jsm/loaders/STLLoader.js')
+                : // @ts-expect-error Pinned browser ESM import; the Boxel loader resolves https:// at runtime
+                  import('https://esm.sh/three@0.160.0/examples/jsm/loaders/GLTFLoader.js'),
+            fetch(url, { credentials: 'include', signal: controller.signal }),
+          ],
+        );
+        if (!response.ok) {
+          throw new Error(`Model fetch failed with HTTP ${response.status}`);
+        }
+        let bytes = await response.arrayBuffer();
+        if (cancelled) {
+          return;
+        }
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        scene = new THREE.Scene();
+        camera = new THREE.PerspectiveCamera(38, 1, 0.01, 100);
+        controls = new controlsModule.OrbitControls(
+          camera,
+          renderer.domElement,
+        );
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+        renderer.outputColorSpace = THREE.SRGBColorSpace;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.05;
+        renderer.domElement.setAttribute('aria-label', component.label);
+        renderer.domElement.setAttribute('role', 'img');
+        element.appendChild(renderer.domElement);
+        scene.add(new THREE.HemisphereLight(0xffffff, 0x697080, 2.1));
+        let key = new THREE.DirectionalLight(0xffffff, 2.4);
+        key.position.set(3, 5, 4);
+        scene.add(key);
+        let fill = new THREE.DirectionalLight(0xaec6ff, 1.1);
+        fill.position.set(-4, 1, -2);
+        scene.add(fill);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.07;
+        controls.enablePan = false;
+        controls.autoRotate = false;
+        resize();
+        tick();
+
+        let installModel = (root: any) => {
+          if (cancelled) {
+            disposeObject(root);
+            return;
+          }
+          modelRoot = root;
+          modelRoot.updateMatrixWorld(true);
+          let bounds = new THREE.Box3().setFromObject(modelRoot);
+          if (bounds.isEmpty()) {
+            throw new Error('Model contains no renderable geometry');
+          }
+          scene.add(modelRoot);
+          let size = bounds.getSize(new THREE.Vector3());
+          let center = bounds.getCenter(new THREE.Vector3());
+          frameModel = (resetDirection = false) => {
+            let verticalFov = THREE.MathUtils.degToRad(camera.fov);
+            let horizontalFov =
+              2 * Math.atan(Math.tan(verticalFov / 2) * camera.aspect);
+            let heightDistance = size.y / (2 * Math.tan(verticalFov / 2));
+            let widthDistance = size.x / (2 * Math.tan(horizontalFov / 2));
+            let distance =
+              Math.max(heightDistance, widthDistance, 0.001) * 1.2 + size.z;
+            let isFlatPrint =
+              size.z < Math.max(0.001, Math.min(size.x, size.y) * 0.35);
+            let defaultDirection = isFlatPrint
+              ? new THREE.Vector3(0.08, -0.14, 1).normalize()
+              : new THREE.Vector3(0.72, 0.52, 1).normalize();
+            let direction = resetDirection
+              ? defaultDirection
+              : new THREE.Vector3()
+                  .subVectors(camera.position, controls.target)
+                  .normalize();
+            if (
+              !Number.isFinite(direction.lengthSq()) ||
+              direction.lengthSq() === 0
+            ) {
+              direction.copy(defaultDirection);
+            }
+            controls.target.copy(center);
+            camera.position
+              .copy(center)
+              .add(direction.multiplyScalar(distance));
+            camera.near = Math.max(0.001, distance / 1000);
+            camera.far = Math.max(distance * 10, size.length() * 12, 100);
+            camera.updateProjectionMatrix();
+            controls.minDistance = Math.max(0.001, distance * 0.18);
+            controls.maxDistance = Math.max(distance * 6, size.length() * 8);
+            controls.update();
+          };
+          frameModel(true);
+          renderer.render(scene, camera);
+          component.setReady();
+        };
+
+        if (isThreeMf) {
+          let loader = new loaderModule.ThreeMFLoader();
+          installModel(loader.parse(bytes));
+        } else if (isStl) {
+          let loader = new loaderModule.STLLoader();
+          let geometry = loader.parse(bytes);
+          geometry.computeVertexNormals();
+          let hasColors = Boolean(
+            (geometry as any).hasColors || geometry.getAttribute('color'),
+          );
+          let alpha = Number((geometry as any).alpha ?? 1);
+          let material = new THREE.MeshStandardMaterial({
+            color: hasColors ? 0xffffff : 0xb9c0cb,
+            vertexColors: hasColors,
+            roughness: 0.62,
+            metalness: 0.08,
+            opacity: alpha,
+            transparent: alpha < 1,
+            side: THREE.DoubleSide,
+          });
+          let mesh = new THREE.Mesh(geometry, material);
+          mesh.rotation.x = -Math.PI / 2;
+          installModel(mesh);
+        } else {
+          let loader = new loaderModule.GLTFLoader();
+          loader.parse(
+            bytes,
+            '',
+            (gltf: any) => installModel(gltf.scene),
+            (error: unknown) => component.setError(error),
+          );
+        }
+      } catch (error) {
+        if (!cancelled) {
+          component.setError(error);
+        }
+      }
+    })();
+
+    let stop = (event: Event) => event.stopPropagation();
+    let resetView = (event: Event) => {
+      event.stopPropagation();
+      frameModel?.(true);
+    };
+    for (let eventName of ['pointerdown', 'pointerup', 'click', 'wheel']) {
+      element.addEventListener(eventName, stop);
+    }
+    element.addEventListener('dblclick', resetView);
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+      cancelAnimationFrame(frameId);
+      observer.disconnect();
+      controls?.dispose?.();
+      disposeObject(modelRoot);
+      renderer?.dispose?.();
+      renderer?.forceContextLoss?.();
+      renderer?.domElement?.remove();
+      for (let eventName of ['pointerdown', 'pointerup', 'click', 'wheel']) {
+        element.removeEventListener(eventName, stop);
+      }
+      element.removeEventListener('dblclick', resetView);
+    };
+  },
+);
+
+// Live WebGL orbit viewer used by embedded + isolated. The silhouette
+// (ModelPreview) shows until the scene paints and remains as the fallback if
+// WebGL/the CDN engine is unavailable (e.g. during prerender).
+export class ModelViewer extends GlimmerComponent<{
+  Args: { model: ModelDef };
+  Element: HTMLElement;
+}> {
+  @tracked state: 'loading' | 'ready' | 'error' = 'loading';
+
+  get url() {
+    return this.args.model.url;
+  }
+  get label() {
+    return `Interactive 3D preview of ${this.args.model.name ?? 'model'}`;
+  }
+  get isReady() {
+    return this.state === 'ready';
+  }
+  setLoading = () => {
+    this.state = 'loading';
+  };
+  setReady = () => {
+    this.state = 'ready';
+  };
+  setError = (_error: unknown) => {
+    this.state = 'error';
+  };
+
+  <template>
+    <div class='model-viewer' ...attributes>
+      {{#if this.url}}
+        <div class='model-viewer__host' {{renderModel this this.url}}></div>
+      {{/if}}
+      {{#unless this.isReady}}
+        <div class='model-viewer__placeholder'>
+          <ModelPreview @model={{@model}} />
+        </div>
+      {{/unless}}
+      {{#if this.isReady}}
+        <div class='model-viewer__hint'>Drag to orbit · scroll to zoom</div>
+      {{/if}}
+    </div>
+    <style scoped>
+      .model-viewer {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+      }
+      .model-viewer__host {
+        position: absolute;
+        inset: 0;
+      }
+      .model-viewer__host :deep(canvas) {
+        display: block;
+        width: 100%;
+        height: 100%;
+        cursor: grab;
+        touch-action: none;
+      }
+      .model-viewer__host :deep(canvas:active) {
+        cursor: grabbing;
+      }
+      .model-viewer__placeholder {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        pointer-events: none;
+      }
+      .model-viewer__hint {
+        position: absolute;
+        bottom: var(--boxel-sp-xs);
+        left: 50%;
+        transform: translateX(-50%);
+        padding: 2px 8px;
+        border-radius: 100px;
+        font: 0.5625rem var(--boxel-monospace-font-family, monospace);
+        color: var(--boxel-450);
+        background: var(--boxel-100);
+        pointer-events: none;
+      }
+    </style>
+  </template>
+}
+
 // Generic 3D scene facts rail, styled like the handoff realm's inspector rail.
 class ModelSceneRail extends GlimmerComponent<{
   Args: { model: ModelDef };
@@ -179,15 +508,15 @@ class ModelSceneRail extends GlimmerComponent<{
   </template>
 }
 
-// Base isolated body (hero + scene rail). Leaf isolated templates render this,
-// then append their format-specific metadata rail after it.
+// Base isolated body (live viewer hero + scene rail). Leaf isolated templates
+// render this, then append their format-specific metadata rail after it.
 export class ModelIsolatedBody extends GlimmerComponent<{
   Args: { model: ModelDef };
 }> {
   <template>
     <div class='model-isolated-body'>
       <div class='model-isolated-body__hero'>
-        <ModelPreview @model={{@model}} />
+        <ModelViewer @model={{@model}} />
       </div>
       <ModelSceneRail @model={{@model}} />
     </div>
@@ -197,11 +526,11 @@ export class ModelIsolatedBody extends GlimmerComponent<{
         gap: var(--boxel-sp);
       }
       .model-isolated-body__hero {
+        position: relative;
         aspect-ratio: 4 / 3;
         background: var(--boxel-100);
         border-radius: var(--boxel-border-radius);
-        display: grid;
-        place-items: center;
+        overflow: hidden;
       }
     </style>
   </template>
@@ -231,6 +560,8 @@ class ModelAtomTemplate extends GlimmerComponent<{
   </template>
 }
 
+// Fitted is the collection-tile budget format: silhouette only, never mounts a
+// WebGL engine.
 class ModelFittedTemplate extends GlimmerComponent<{
   Args: { model: ModelDef };
 }> {
@@ -254,7 +585,7 @@ class ModelEmbeddedTemplate extends GlimmerComponent<{
   <template>
     <figure class='model-embedded'>
       <div class='model-embedded__hero'>
-        <ModelPreview @model={{@model}} />
+        <ModelViewer @model={{@model}} />
       </div>
       <figcaption class='model-embedded__caption'>
         <span class='model-embedded__name'>{{@model.name}}</span>
@@ -270,11 +601,11 @@ class ModelEmbeddedTemplate extends GlimmerComponent<{
         gap: var(--boxel-sp-xs);
       }
       .model-embedded__hero {
+        position: relative;
         aspect-ratio: 4 / 3;
         background: var(--boxel-100);
         border-radius: var(--boxel-border-radius);
-        display: grid;
-        place-items: center;
+        overflow: hidden;
       }
       .model-embedded__caption {
         display: flex;
@@ -322,8 +653,7 @@ export class ModelDef extends FileDef {
   @field model3d = contains(Model3DInfoField);
 
   // Convention path for a generated raster preview, populated by CS-12401
-  // (shaded-PNG job). Empty in this PR, so the templates render the SVG
-  // silhouette. When set, the templates render <img src={{thumbnailUrl}}>.
+  // (shaded-PNG job). Empty in this PR, so fitted renders the SVG silhouette.
   @field thumbnailUrl = contains(StringField);
 
   // Bounding-box extents used to draw the silhouette. Leaves override this to
