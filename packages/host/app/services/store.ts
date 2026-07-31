@@ -3171,7 +3171,10 @@ export default class StoreService extends Service implements StoreInterface {
       try {
         newDef = await loadCardDef(incomingDoc.data.meta.adoptsFrom, {
           loader: this.loaderService.loader,
-          relativeTo: new URL(instance.id),
+          // `instance.id` is canonical RRI for a mapped realm, which `new URL`
+          // cannot parse; `toURL` resolves an RRI to its real URL and passes a
+          // URL-form id through unchanged.
+          relativeTo: this.network.virtualNetwork.toURL(instance.id),
         });
       } catch (err: any) {
         // `loadCardDef` throws a 404 CardError when the resolved module lacks
