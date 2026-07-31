@@ -53,10 +53,12 @@ import {
   internalKeyFor,
   isCardInstance,
   resolveFileDefCodeRef,
+  rri,
   stringifyErrorForLog,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
 import { DEFAULT_FALLBACK_MODELS } from '@cardstack/runtime-common/matrix-constants';
+import type { Query } from '@cardstack/runtime-common/query';
 
 import ENV from '@cardstack/host/config/environment';
 import type { FileUploadState } from '@cardstack/host/lib/file-upload-state';
@@ -81,6 +83,7 @@ import type StoreService from '@cardstack/host/services/store';
 import type ToolService from '@cardstack/host/services/tool-service';
 import UpdateRoomSkillsTool from '@cardstack/host/tools/update-room-skills';
 import { FileDefAttributesExtractor } from '@cardstack/host/utils/file-def-attributes-extractor';
+import { modelCostTierLabel } from '@cardstack/host/utils/model-cost';
 
 import { errorJsonApiToErrorEntry } from '../../lib/window-error-handler';
 import AiAssistantActionBar from '../ai-assistant/action-bar';
@@ -1110,6 +1113,19 @@ export default class Room extends Component<Signature> {
   }
 
   private get llmsForSelectMenu(): LLMOption[] {
+    this.ensureModelCostTiersLoaded();
+    let costTierByModelId = this.modelCostTierByModelId;
+    return this.baseLlmOptions.map((option) => ({
+      ...option,
+      costTierLabel: costTierByModelId.get(option.modelId),
+    }));
+  }
+
+  // The pickable models, before cost tiers are attached. Single source of
+  // truth for both the rendered options and the cost-tier lookup's model-id
+  // set, so the two can't drift apart.
+  @cached
+  private get baseLlmOptions(): LLMOption[] {
     // Read from the system card if available
     let systemCard = this.matrixService.systemCard;
     if (systemCard?.modelConfigurations) {
@@ -1158,6 +1174,103 @@ export default class Room extends Component<Signature> {
       name: fallbackById.get(id)?.displayName ?? id,
     }));
   }
+
+  // The distinct OpenRouter model ids that can appear in the picker.
+  @cached
+  private get pickerModelIds(): string[] {
+    return [...new Set(this.baseLlmOptions.map((option) => option.modelId))];
+  }
+
+  // Cost tier ($…$$$$ / Free) per model id, populated by `loadModelCostTiers`.
+  @tracked private modelCostTierByModelId: Map<string, string> = new Map();
+  // Content key of the last load (realm + sorted model ids). Deliberately a
+  // plain field, not tracked: it gates the load without being part of the
+  // reactive graph.
+  private lastModelCostTierKey = '';
+
+  // Kicks a cost-tier load whenever the pickable model set changes. Keyed on
+  // model-id *content* (not array identity), so the live matrix churn behind
+  // `pickerModelIds` — new `usedLLMs` array each sync — can't retrigger it.
+  // Called during render (from `llmsForSelectMenu`), so nothing on the
+  // synchronous path here may write tracked state: when there is nothing to
+  // load (realm unconfigured, no models) we return without performing the
+  // task, and the task body itself only writes after its await.
+  private ensureModelCostTiersLoaded() {
+    let modelIds = this.pickerModelIds;
+    let realmURL = ENV.resolvedOpenRouterRealmURL;
+    let key =
+      realmURL && modelIds.length > 0
+        ? `${realmURL}::${[...modelIds].sort().join('|')}`
+        : '';
+    if (key === this.lastModelCostTierKey) {
+      return;
+    }
+    this.lastModelCostTierKey = key;
+    if (!key) {
+      return;
+    }
+    this.loadModelCostTiers.perform(modelIds, realmURL!, key);
+  }
+
+  // Looks up the cost tier for each pickable model by matching its `modelId`
+  // against the OpenRouter model catalog. The pricing lives only on
+  // `OpenRouterModel` cards (correlated to a model configuration by the
+  // `modelId` string, not a link), so we search that realm and derive the tier
+  // client-side. Degrades to an empty map when the OpenRouter realm is
+  // unconfigured, unreachable, or a model has no matching catalog card — the
+  // badge is cosmetic and must never surface an error.
+  //
+  // This is a task rather than a `trackedFunction`/resource on purpose:
+  // `store.search` hydrates cards (mutating tracked store state) and the tier
+  // derivation reads those cards' fields, so a reactive body would
+  // self-invalidate into an endless re-run and never settle. The task runs the
+  // search + field reads off the render's reactive path and only writes the
+  // tracked map the picker reads.
+  private loadModelCostTiers = restartableTask(
+    async (modelIds: string[], realmURL: string, key: string) => {
+      let tiers = new Map<string, string>();
+      try {
+        let query: Query = {
+          filter: {
+            on: {
+              module: rri(new URL('openrouter-model', realmURL).href),
+              name: 'OpenRouterModel',
+            },
+            in: { modelId: modelIds },
+          },
+        };
+        let instances = await this.store.search(query, [realmURL]);
+        for (let instance of instances) {
+          let model = instance as unknown as {
+            modelId?: string;
+            pricing?: { prompt?: string; completion?: string };
+          };
+          if (!model.modelId) {
+            continue;
+          }
+          let label = modelCostTierLabel(
+            model.pricing?.prompt,
+            model.pricing?.completion,
+          );
+          if (label) {
+            tiers.set(model.modelId, label);
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to load model cost tiers', e);
+        // Keep whatever map we already have and clear the gate key (if no
+        // newer load has claimed it) so a later render retries. Skipping the
+        // tracked-map write matters: writing it would invalidate the picker
+        // and re-render straight back into a retry loop while the catalog
+        // realm is down.
+        if (this.lastModelCostTierKey === key) {
+          this.lastModelCostTierKey = '';
+        }
+        return;
+      }
+      this.modelCostTierByModelId = tiers;
+    },
+  );
 
   private get systemCardId(): string | undefined {
     return this.matrixService.systemCard?.id;

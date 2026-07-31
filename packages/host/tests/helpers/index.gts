@@ -996,7 +996,7 @@ export function setupOnSave(hooks: NestedHooks) {
   });
 }
 
-interface RealmContents {
+export interface RealmContents {
   [key: string]:
     | CardDef
     | FieldDef
