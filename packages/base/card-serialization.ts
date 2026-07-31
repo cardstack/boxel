@@ -5,7 +5,6 @@ import type {
   CardResource,
   CardResourceMeta,
   FileMetaResource,
-  Loader,
   LooseCardResource,
   LooseFileMetaResource,
   LooseSingleCardDocument,
@@ -25,6 +24,7 @@ import { isEqual, merge } from 'lodash-es';
 import {
   assertIsSerializerName,
   CardResourceType,
+  Loader,
   fieldSerializer,
   FileMetaResourceType,
   getSerializer,
