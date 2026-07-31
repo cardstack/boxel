@@ -117,3 +117,99 @@ gzip /tmp/boxel-index-cache.sql
 
 echo "Index cache created at /tmp/boxel-index-cache.sql.gz"
 ls -lh /tmp/boxel-index-cache.sql.gz
+
+# A second, smaller snapshot carrying only the realms a host test shard
+# actually serves. Every shard pays the download and the replay of whatever it
+# imports, and the realms left out here are the instance-heavy ones (catalog,
+# experiments, software-factory, submissions) — the shard neither mounts nor
+# queries them, so their rows are pure cost. Same table set and same COPY
+# format as the full snapshot above, so a consumer replays either one
+# unchanged.
+#
+# pg_dump takes no row filter, so the blocks are assembled here: a
+# `COPY public.<table> (<cols>) FROM stdin;` header, the matching
+# `COPY (SELECT <cols> …) TO STDOUT` body, and a `\.` terminator. Header and
+# SELECT share one generated column list so their order cannot drift, and
+# `-q` keeps psql from printing a command tag into the middle of the data.
+HOST_CACHE_REALMS=(base skills openrouter)
+HOST_DUMP=/tmp/boxel-index-cache-host.sql
+
+echo "Dumping host-scoped index cache for realms: ${HOST_CACHE_REALMS[*]}"
+
+# A realm's indexed `realm_url` is not reliably its serving URL: the base
+# realm registers under its canonical `https://cardstack.com/base/`, while
+# skills and openrouter carry the serving origin. Reconstructing either form
+# from REALM_BASE_URL gets base wrong. Read the realm_urls the index actually
+# holds and keep the ones whose path is a realm we want, so the filter follows
+# whatever the indexer wrote.
+REALM_URLS_RAW=$(docker exec boxel-pg psql -U postgres -d boxel -tAc \
+  "SELECT DISTINCT realm_url FROM boxel_index")
+
+# Each scoped realm must contribute at least one realm_url. Matching nothing
+# would still produce a structurally valid dump — empty COPY blocks, which the
+# verify step accepts because it checks for the block rather than its contents
+# — and would send every consumer back to indexing from scratch with nothing
+# to show it had happened. Fail here instead, while the cause is still legible.
+HOST_REALM_URLS=""
+for realm in "${HOST_CACHE_REALMS[@]}"; do
+  matched=0
+  while IFS= read -r realm_url; do
+    [ -z "$realm_url" ] && continue
+    case "$realm_url" in
+      */"${realm}"/) ;;
+      *) continue ;;
+    esac
+    # These go into SQL as literals. A quote in a realm URL is not a thing
+    # that happens, and if it ever did, stopping beats emitting broken SQL.
+    case "$realm_url" in
+      *"'"*)
+        echo "::error title=Host index cache::realm_url ${realm_url} contains a quote and cannot be used as a SQL literal."
+        exit 1
+        ;;
+    esac
+    HOST_REALM_URLS+="${HOST_REALM_URLS:+, }'${realm_url}'"
+    matched=$((matched + 1))
+    echo "  ${realm}: ${realm_url}"
+  done <<EOF
+${REALM_URLS_RAW}
+EOF
+  if [ "$matched" -eq 0 ]; then
+    echo "::error title=Host index cache empty::No indexed realm_url ends in '/${realm}/'. Either the realm did not index in this job, or the realm_url form changed — compare against the mount paths in mise-tasks/services/realm-server."
+    exit 1
+  fi
+done
+
+{
+  # The client settings pg_dump puts at the head of a data-only dump, so this
+  # file replays under the same ones as the full snapshot.
+  echo "SET statement_timeout = 0;"
+  echo "SET client_encoding = 'UTF8';"
+  echo "SET standard_conforming_strings = on;"
+  echo "SET check_function_bodies = false;"
+  echo "SET client_min_messages = warning;"
+  echo
+  for t in "${CACHE_TABLES[@]}"; do
+    cols=$(docker exec boxel-pg psql -U postgres -d boxel -tAc \
+      "SELECT string_agg(quote_ident(column_name), ', ' ORDER BY ordinal_position)
+         FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = '${t}'")
+    if [ -z "$cols" ]; then
+      echo "::error title=Host index cache incomplete::Table '${t}' has no columns in information_schema — it was likely renamed or removed by a migration. Update CACHE_TABLES here and the TRUNCATE list in scripts/import-cached-index.sh." >&2
+      exit 1
+    fi
+    echo "COPY public.${t} (${cols}) FROM stdin;"
+    docker exec boxel-pg psql -U postgres -d boxel -q --no-psqlrc \
+      -c "COPY (SELECT ${cols} FROM ${t} WHERE realm_url IN (${HOST_REALM_URLS})) TO STDOUT"
+    echo '\.'
+    echo
+  done
+} > "$HOST_DUMP"
+
+# Same table list as the full snapshot, written alongside the host dump so the
+# verify step can be pointed at this one explicitly.
+printf '%s\n' "${CACHE_TABLES[@]}" > /tmp/boxel-index-cache-host.tables
+
+gzip "$HOST_DUMP"
+
+echo "Host-scoped index cache created at ${HOST_DUMP}.gz"
+ls -lh "${HOST_DUMP}.gz"
