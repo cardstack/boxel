@@ -1,29 +1,16 @@
 import { describe, it, expect } from 'vitest';
 
 import {
-  GOOGLE_IDP_ID,
-  SsoNotSupportedError,
   SsoTimeoutError,
-  buildSsoRedirectUrl,
+  browserLogin,
+  buildCliAuthUrl,
   redeemLoginToken,
-  selectSsoIdp,
-  ssoLogin,
   startLoopbackCallback,
-  supportsTokenLogin,
-  type LoginFlow,
 } from '../../src/lib/sso-login.ts';
 
 const MATRIX_URL = 'https://matrix.example.com';
-
-// What a Synapse configured like staging/production advertises.
-const FULL_FLOWS: LoginFlow[] = [
-  {
-    type: 'm.login.sso',
-    identity_providers: [{ id: GOOGLE_IDP_ID, name: 'Google' }],
-  },
-  { type: 'm.login.token' },
-  { type: 'm.login.password' },
-];
+const HOST_URL = 'https://host.example.com/';
+const USER_ID = '@example-user:example.com';
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -32,83 +19,115 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-describe('selectSsoIdp', () => {
-  it('prefers the provider the web app uses', () => {
-    expect(selectSsoIdp(FULL_FLOWS)).toBe(GOOGLE_IDP_ID);
-  });
+function formBody(fields: Record<string, string>): string {
+  return new URLSearchParams(fields).toString();
+}
 
-  it('falls back to the only provider a homeserver offers', () => {
-    const flows: LoginFlow[] = [
-      { type: 'm.login.sso', identity_providers: [{ id: 'oidc-okta' }] },
-    ];
-    expect(selectSsoIdp(flows)).toBe('oidc-okta');
-  });
-
-  it('returns undefined when the provider list is empty, so the un-suffixed redirect is used', () => {
-    expect(selectSsoIdp([{ type: 'm.login.sso' }])).toBeUndefined();
-  });
-
-  it('returns undefined when there is no SSO flow at all', () => {
-    expect(selectSsoIdp([{ type: 'm.login.password' }])).toBeUndefined();
-  });
-});
-
-describe('supportsTokenLogin', () => {
-  it('is true when the homeserver can redeem a login token', () => {
-    expect(supportsTokenLogin(FULL_FLOWS)).toBe(true);
-  });
-
-  it('is false without m.login.token', () => {
-    expect(supportsTokenLogin([{ type: 'm.login.sso' }])).toBe(false);
-  });
-});
-
-describe('buildSsoRedirectUrl', () => {
-  it('targets the provider-specific redirect endpoint', () => {
+describe('buildCliAuthUrl', () => {
+  it('targets the host app authorization page with the loopback redirect', () => {
     const url = new URL(
-      buildSsoRedirectUrl(
-        MATRIX_URL,
-        'http://127.0.0.1:1234/callback?state=abc',
-        GOOGLE_IDP_ID,
-      ),
+      buildCliAuthUrl(HOST_URL, 'http://127.0.0.1:1234/callback?state=abc'),
     );
-    expect(url.pathname).toBe(
-      `/_matrix/client/v3/login/sso/redirect/${GOOGLE_IDP_ID}`,
-    );
-    expect(url.searchParams.get('redirectUrl')).toBe(
+    expect(url.origin).toBe('https://host.example.com');
+    expect(url.pathname).toBe('/cli-auth');
+    expect(url.searchParams.get('redirect')).toBe(
       'http://127.0.0.1:1234/callback?state=abc',
     );
   });
 
-  it('omits the provider segment when none was selected', () => {
+  it('tolerates a host URL without a trailing slash', () => {
     const url = new URL(
-      buildSsoRedirectUrl(MATRIX_URL, 'http://127.0.0.1:1234/callback'),
+      buildCliAuthUrl('https://host.example.com', 'http://127.0.0.1:1/cb'),
     );
-    expect(url.pathname).toBe('/_matrix/client/v3/login/sso/redirect');
+    expect(url.pathname).toBe('/cli-auth');
   });
 });
 
 describe('startLoopbackCallback', () => {
-  it('binds loopback and resolves the token the browser delivers', async () => {
+  it('binds loopback and resolves a login token the browser delivers', async () => {
     const callback = await startLoopbackCallback();
     const redirect = new URL(callback.redirectUrl);
 
     expect(redirect.hostname).toBe('127.0.0.1');
     expect(redirect.searchParams.get('state')).toBeTruthy();
 
-    const pending = callback.waitForToken();
+    const pending = callback.waitForResult();
     redirect.searchParams.set('loginToken', 'syt_token');
     const response = await fetch(redirect.href);
 
     expect(response.status).toBe(200);
-    await expect(pending).resolves.toBe('syt_token');
+    await expect(pending).resolves.toEqual({
+      kind: 'loginToken',
+      loginToken: 'syt_token',
+    });
   });
 
-  it('rejects a callback whose state does not match', async () => {
+  it('accepts a session POSTed by the authorization page', async () => {
+    const callback = await startLoopbackCallback();
+    const state = new URL(callback.redirectUrl).searchParams.get('state')!;
+    const pending = callback.waitForResult();
+
+    const response = await fetch(callback.redirectUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: formBody({
+        state,
+        access_token: 'access',
+        device_id: 'DEVICE',
+        user_id: USER_ID,
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(pending).resolves.toEqual({
+      kind: 'session',
+      session: {
+        accessToken: 'access',
+        deviceId: 'DEVICE',
+        userId: USER_ID,
+      },
+    });
+  });
+
+  it('rejects a POSTed session whose state does not match', async () => {
     const callback = await startLoopbackCallback({ state: 'expected-state' });
-    // Assert on the promise before triggering it, so the rejection always has a
-    // handler attached and never surfaces as an unhandled rejection.
-    const settled = expect(callback.waitForToken()).rejects.toThrow(/state/i);
+    const settled = expect(callback.waitForResult()).rejects.toThrow(/state/i);
+
+    const response = await fetch(callback.redirectUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: formBody({
+        state: 'wrong-state',
+        access_token: 'access',
+        device_id: 'DEVICE',
+        user_id: USER_ID,
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    await settled;
+  });
+
+  it('rejects a POSTed session that is missing fields', async () => {
+    const callback = await startLoopbackCallback();
+    const state = new URL(callback.redirectUrl).searchParams.get('state')!;
+    const settled = expect(callback.waitForResult()).rejects.toThrow(
+      /access_token, device_id, or user_id/,
+    );
+
+    const response = await fetch(callback.redirectUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: formBody({ state, access_token: 'access' }),
+    });
+
+    expect(response.status).toBe(400);
+    await settled;
+  });
+
+  it('rejects a redirect whose state does not match', async () => {
+    const callback = await startLoopbackCallback({ state: 'expected-state' });
+    const settled = expect(callback.waitForResult()).rejects.toThrow(/state/i);
 
     const forged = new URL(callback.redirectUrl);
     forged.searchParams.set('state', 'wrong-state');
@@ -121,7 +140,7 @@ describe('startLoopbackCallback', () => {
 
   it('rejects when the homeserver comes back without a token', async () => {
     const callback = await startLoopbackCallback();
-    const settled = expect(callback.waitForToken()).rejects.toThrow(
+    const settled = expect(callback.waitForResult()).rejects.toThrow(
       /access_denied/,
     );
 
@@ -133,17 +152,15 @@ describe('startLoopbackCallback', () => {
     await settled;
   });
 
-  it('times out when the user never finishes', async () => {
+  it('times out when the user never finishes, and names the escape hatch', async () => {
     const callback = await startLoopbackCallback({ timeoutMs: 20 });
-    await expect(callback.waitForToken()).rejects.toBeInstanceOf(
-      SsoTimeoutError,
-    );
+    await expect(callback.waitForResult()).rejects.toThrow(/--no-browser/);
   });
 
   it('stops listening once the flow settles', async () => {
     const callback = await startLoopbackCallback({ timeoutMs: 20 });
     const { redirectUrl } = callback;
-    await expect(callback.waitForToken()).rejects.toBeInstanceOf(
+    await expect(callback.waitForResult()).rejects.toBeInstanceOf(
       SsoTimeoutError,
     );
     await expect(fetch(redirectUrl)).rejects.toThrow();
@@ -163,14 +180,14 @@ describe('redeemLoginToken', () => {
       return jsonResponse({
         access_token: 'access',
         device_id: 'DEVICE',
-        user_id: '@example-user:example.com',
+        user_id: USER_ID,
       });
     }) as unknown as typeof fetch);
 
     expect(auth).toEqual({
       accessToken: 'access',
       deviceId: 'DEVICE',
-      userId: '@example-user:example.com',
+      userId: USER_ID,
       matrixUrl: MATRIX_URL,
     });
   });
@@ -186,101 +203,156 @@ describe('redeemLoginToken', () => {
   });
 });
 
-describe('ssoLogin', () => {
-  // Stands in for Synapse: serves login flows, redeems the token, and (via
-  // openBrowserFn) performs the redirect back to the loopback listener the way
-  // a real browser would.
-  function fakeHomeserver(flows: LoginFlow[] = FULL_FLOWS) {
-    const fetchFn = (async (url: string | URL, init?: RequestInit) => {
+describe('browserLogin', () => {
+  // Stands in for the homeserver: redeems a login token, and answers the
+  // whoami check the password branch runs against a POSTed session.
+  function homeserver(overrides?: { whoamiStatus?: number; whoami?: string }) {
+    return (async (url: string | URL, init?: RequestInit) => {
       const href = typeof url === 'string' ? url : url.href;
-      if (href.endsWith('/_matrix/client/v3/login') && !init) {
-        return jsonResponse({ flows });
+      if (href.endsWith('/_matrix/client/v3/account/whoami')) {
+        return jsonResponse(
+          { user_id: overrides?.whoami ?? USER_ID },
+          overrides?.whoamiStatus ?? 200,
+        );
       }
-      if (href.endsWith('/_matrix/client/v3/login')) {
+      if (
+        href.endsWith('/_matrix/client/v3/login') &&
+        init?.method === 'POST'
+      ) {
         return jsonResponse({
-          access_token: 'access',
+          access_token: 'redeemed',
           device_id: 'DEVICE',
-          user_id: '@example-user:example.com',
+          user_id: USER_ID,
         });
       }
       throw new Error(`unexpected request to ${href}`);
     }) as unknown as typeof fetch;
-
-    const openBrowserFn = async (ssoUrl: string) => {
-      const redirectUrl = new URL(
-        new URL(ssoUrl).searchParams.get('redirectUrl')!,
-      );
-      redirectUrl.searchParams.set('loginToken', 'syt_from_browser');
-      await fetch(redirectUrl.href);
-      return true;
-    };
-
-    return { fetchFn, openBrowserFn };
   }
 
-  it('completes the round trip and returns a session', async () => {
-    const { fetchFn, openBrowserFn } = fakeHomeserver();
+  // Pulls the loopback target back out of the authorization URL and finishes
+  // the flow the way the page would.
+  function loopbackFrom(authUrl: string): URL {
+    return new URL(new URL(authUrl).searchParams.get('redirect')!);
+  }
 
-    const auth = await ssoLogin({
+  it('redeems the single-use token the SSO branch returns', async () => {
+    const auth = await browserLogin({
       matrixUrl: MATRIX_URL,
-      fetchFn,
-      openBrowserFn,
+      hostUrl: HOST_URL,
+      fetchFn: homeserver(),
       log: () => {},
+      openBrowserFn: async (authUrl) => {
+        const target = loopbackFrom(authUrl);
+        target.searchParams.set('loginToken', 'syt_from_sso');
+        await fetch(target.href);
+        return true;
+      },
     });
 
-    expect(auth.userId).toBe('@example-user:example.com');
-    expect(auth.accessToken).toBe('access');
-    expect(auth.matrixUrl).toBe(MATRIX_URL);
+    expect(auth).toEqual({
+      accessToken: 'redeemed',
+      deviceId: 'DEVICE',
+      userId: USER_ID,
+      matrixUrl: MATRIX_URL,
+    });
   });
 
-  it('still prints a URL when no browser could be launched', async () => {
-    const { fetchFn, openBrowserFn } = fakeHomeserver();
-    const logged: string[] = [];
-
-    await ssoLogin({
+  it('takes the session the password branch POSTs, once whoami agrees', async () => {
+    const auth = await browserLogin({
       matrixUrl: MATRIX_URL,
-      fetchFn,
-      openBrowserFn: async (url) => {
-        await openBrowserFn(url);
+      hostUrl: HOST_URL,
+      fetchFn: homeserver(),
+      log: () => {},
+      openBrowserFn: async (authUrl) => {
+        const target = loopbackFrom(authUrl);
+        await fetch(target.href, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: formBody({
+            state: target.searchParams.get('state')!,
+            access_token: 'from-password',
+            device_id: 'DEVICE',
+            user_id: USER_ID,
+          }),
+        });
+        return true;
+      },
+    });
+
+    expect(auth).toEqual({
+      accessToken: 'from-password',
+      deviceId: 'DEVICE',
+      userId: USER_ID,
+      matrixUrl: MATRIX_URL,
+    });
+  });
+
+  it('refuses a session the homeserver does not recognize', async () => {
+    await expect(
+      browserLogin({
+        matrixUrl: MATRIX_URL,
+        hostUrl: HOST_URL,
+        fetchFn: homeserver({ whoamiStatus: 401 }),
+        log: () => {},
+        openBrowserFn: async (authUrl) => {
+          const target = loopbackFrom(authUrl);
+          await fetch(target.href, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: formBody({
+              state: target.searchParams.get('state')!,
+              access_token: 'stale',
+              device_id: 'DEVICE',
+              user_id: USER_ID,
+            }),
+          });
+          return true;
+        },
+      }),
+    ).rejects.toThrow(/does not recognize/);
+  });
+
+  it('refuses a session whose user disagrees with whoami', async () => {
+    await expect(
+      browserLogin({
+        matrixUrl: MATRIX_URL,
+        hostUrl: HOST_URL,
+        fetchFn: homeserver({ whoami: '@someone-else:example.com' }),
+        log: () => {},
+        openBrowserFn: async (authUrl) => {
+          const target = loopbackFrom(authUrl);
+          await fetch(target.href, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: formBody({
+              state: target.searchParams.get('state')!,
+              access_token: 'mismatched',
+              device_id: 'DEVICE',
+              user_id: USER_ID,
+            }),
+          });
+          return true;
+        },
+      }),
+    ).rejects.toThrow(/someone-else/);
+  });
+
+  it('prints a URL when no browser could be launched', async () => {
+    const logged: string[] = [];
+    await browserLogin({
+      matrixUrl: MATRIX_URL,
+      hostUrl: HOST_URL,
+      fetchFn: homeserver(),
+      log: (message) => logged.push(message),
+      openBrowserFn: async (authUrl) => {
+        const target = loopbackFrom(authUrl);
+        target.searchParams.set('loginToken', 'syt_from_sso');
+        await fetch(target.href);
         return false;
       },
-      log: (message) => logged.push(message),
     });
 
     expect(logged.join('\n')).toMatch(/Open this URL in your browser/);
-  });
-
-  it('refuses a homeserver with no SSO provider', async () => {
-    const { openBrowserFn } = fakeHomeserver();
-    const { fetchFn } = fakeHomeserver([
-      { type: 'm.login.password' },
-      { type: 'm.login.token' },
-    ]);
-
-    await expect(
-      ssoLogin({
-        matrixUrl: MATRIX_URL,
-        fetchFn,
-        openBrowserFn,
-        log: () => {},
-      }),
-    ).rejects.toBeInstanceOf(SsoNotSupportedError);
-  });
-
-  it('refuses a homeserver that cannot redeem the token it would issue', async () => {
-    const { openBrowserFn } = fakeHomeserver();
-    const { fetchFn } = fakeHomeserver([
-      { type: 'm.login.sso', identity_providers: [{ id: GOOGLE_IDP_ID }] },
-      { type: 'm.login.password' },
-    ]);
-
-    await expect(
-      ssoLogin({
-        matrixUrl: MATRIX_URL,
-        fetchFn,
-        openBrowserFn,
-        log: () => {},
-      }),
-    ).rejects.toThrow(/m\.login\.token/);
+    expect(logged.join('\n')).toContain('/cli-auth');
   });
 });

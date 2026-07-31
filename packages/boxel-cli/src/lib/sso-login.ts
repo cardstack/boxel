@@ -1,31 +1,15 @@
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { createServer } from 'node:http';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
+
+import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 import type { MatrixAuth } from './auth.ts';
 
-// The identity provider the host app's login screen uses. Synapse prefixes
-// configured `idp_id: google` with `oidc-`, so this is what the homeserver
-// advertises in its login flows.
-export const GOOGLE_IDP_ID = 'oidc-google';
-
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
 const CALLBACK_PATH = '/callback';
-
-export interface LoginFlow {
-  type: string;
-  identity_providers?: { id: string; name?: string }[];
-}
-
-// The homeserver can't complete a browser login: it offers no SSO provider, or
-// no `m.login.token` to redeem the result with. Callers fall back to password.
-export class SsoNotSupportedError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'SsoNotSupportedError';
-  }
-}
 
 // The user never finished in the browser (or never got there).
 export class SsoTimeoutError extends Error {
@@ -33,61 +17,6 @@ export class SsoTimeoutError extends Error {
     super(message);
     this.name = 'SsoTimeoutError';
   }
-}
-
-export async function fetchLoginFlows(
-  matrixUrl: string,
-  fetchFn: typeof fetch = fetch,
-): Promise<LoginFlow[]> {
-  const response = await fetchFn(
-    new URL('_matrix/client/v3/login', matrixUrl).href,
-  );
-  if (!response.ok) {
-    throw new Error(
-      `Could not read login flows from ${matrixUrl}: ${response.status}`,
-    );
-  }
-  const json = (await response.json()) as { flows?: LoginFlow[] };
-  return Array.isArray(json.flows) ? json.flows : [];
-}
-
-// Redeeming the browser's single-use token needs `m.login.token`; without it
-// an SSO round trip would succeed and then have nowhere to land.
-export function supportsTokenLogin(flows: LoginFlow[]): boolean {
-  return flows.some((flow) => flow.type === 'm.login.token');
-}
-
-// Prefer the provider the web app uses so CLI and browser sessions land on the
-// same account, but don't require it — a homeserver with a single non-Google
-// provider is still perfectly usable.
-export function selectSsoIdp(
-  flows: LoginFlow[],
-  preferredIdpId: string = GOOGLE_IDP_ID,
-): string | undefined {
-  const ssoFlow = flows.find((flow) => flow.type === 'm.login.sso');
-  if (!ssoFlow) {
-    return undefined;
-  }
-  const providers = ssoFlow.identity_providers ?? [];
-  if (providers.some((p) => p.id === preferredIdpId)) {
-    return preferredIdpId;
-  }
-  // No providers listed means the homeserver has exactly one SSO path and
-  // exposes it through the un-suffixed redirect endpoint.
-  return providers[0]?.id;
-}
-
-export function buildSsoRedirectUrl(
-  matrixUrl: string,
-  redirectUrl: string,
-  idpId?: string,
-): string {
-  const path = idpId
-    ? `_matrix/client/v3/login/sso/redirect/${encodeURIComponent(idpId)}`
-    : '_matrix/client/v3/login/sso/redirect';
-  const url = new URL(path, matrixUrl);
-  url.searchParams.set('redirectUrl', redirectUrl);
-  return url.href;
 }
 
 function successPage(): string {
@@ -109,13 +38,43 @@ function errorPage(message: string): string {
 </body></html>`;
 }
 
+// A session the authorizing page logged in for and handed over directly, as
+// opposed to a single-use token this process still has to redeem.
+export interface PostedSession {
+  accessToken: string;
+  deviceId: string;
+  userId: string;
+}
+
+// The two ways a browser can finish the flow: Synapse redirecting back with a
+// single-use token (the SSO branch), or the authorizing page POSTing a session
+// it already obtained (the password branch).
+export type LoopbackResult =
+  | { kind: 'loginToken'; loginToken: string }
+  | { kind: 'session'; session: PostedSession };
+
 export interface LoopbackCallback {
-  // Where Synapse should send the browser back to. Carries the state nonce, so
-  // it must be handed to `buildSsoRedirectUrl` verbatim.
+  // Where the browser should come back to. Carries the state nonce, so it must
+  // be passed on verbatim.
   redirectUrl: string;
   port: number;
-  waitForToken(): Promise<string>;
+  waitForResult(): Promise<LoopbackResult>;
   close(): void;
+}
+
+const MAX_CALLBACK_BODY_BYTES = 8 * 1024;
+
+async function readBody(req: IncomingMessage): Promise<string> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += (chunk as Buffer).length;
+    if (size > MAX_CALLBACK_BODY_BYTES) {
+      throw new Error('callback body too large');
+    }
+    chunks.push(chunk as Buffer);
+  }
+  return Buffer.concat(chunks).toString('utf8');
 }
 
 // Binds 127.0.0.1 on an ephemeral port. Bound before the browser opens so the
@@ -127,49 +86,94 @@ export async function startLoopbackCallback(opts?: {
   const state = opts?.state ?? randomBytes(16).toString('hex');
   const timeoutMs = opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
-  let resolveToken: (token: string) => void;
-  let rejectToken: (err: Error) => void;
-  const tokenPromise = new Promise<string>((resolve, reject) => {
-    resolveToken = resolve;
-    rejectToken = reject;
+  let resolveResult: (result: LoopbackResult) => void;
+  let rejectResult: (err: Error) => void;
+  const resultPromise = new Promise<LoopbackResult>((resolve, reject) => {
+    resolveResult = resolve;
+    rejectResult = reject;
   });
-  // The callback can arrive before anyone awaits `waitForToken`, and a bare
+  // The callback can arrive before anyone awaits `waitForResult`, and a bare
   // rejection there would surface as an unhandled rejection. Marking it handled
-  // is safe: `waitForToken` races this same promise and still sees the error.
-  tokenPromise.catch(() => {});
+  // is safe: `waitForResult` races this same promise and still sees the error.
+  resultPromise.catch(() => {});
+
+  const fail = (res: ServerResponse, shown: string, thrown: string) => {
+    res.writeHead(400, { 'Content-Type': 'text/html' });
+    res.end(errorPage(shown));
+    rejectResult(new Error(thrown));
+  };
 
   const server = createServer((req, res) => {
-    const requestUrl = new URL(req.url ?? '/', 'http://127.0.0.1');
-    if (requestUrl.pathname !== CALLBACK_PATH) {
-      res.writeHead(404).end();
-      return;
-    }
+    void (async () => {
+      const requestUrl = new URL(req.url ?? '/', 'http://127.0.0.1');
+      if (requestUrl.pathname !== CALLBACK_PATH) {
+        res.writeHead(404).end();
+        return;
+      }
 
-    // A browser on this machine can reach any loopback port, so the nonce is
-    // what distinguishes Synapse's redirect from anything else that happens to
-    // knock on this port mid-login.
-    if (requestUrl.searchParams.get('state') !== state) {
-      res.writeHead(400, { 'Content-Type': 'text/html' });
-      res.end(errorPage('This sign-in request was not recognized.'));
-      rejectToken(
-        new Error('SSO callback did not carry the expected state value'),
-      );
-      return;
-    }
+      // The password branch POSTs a session it already obtained; the SSO branch
+      // arrives as Synapse's redirect. Both carry the nonce.
+      let posted: URLSearchParams | undefined;
+      if (req.method === 'POST') {
+        try {
+          posted = new URLSearchParams(await readBody(req));
+        } catch (err: any) {
+          fail(res, 'That sign-in response was not readable.', err.message);
+          return;
+        }
+      }
 
-    const loginToken = requestUrl.searchParams.get('loginToken');
-    if (!loginToken) {
-      const reason =
-        requestUrl.searchParams.get('error') ?? 'no login token was returned';
-      res.writeHead(400, { 'Content-Type': 'text/html' });
-      res.end(errorPage('The homeserver did not return a login token.'));
-      rejectToken(new Error(`SSO sign-in did not complete: ${reason}`));
-      return;
-    }
+      // A browser on this machine can reach any loopback port, so the nonce is
+      // what distinguishes this sign-in from anything else that happens to
+      // knock on the port mid-flow.
+      const seenState =
+        posted?.get('state') ?? requestUrl.searchParams.get('state');
+      if (seenState !== state) {
+        fail(
+          res,
+          'This sign-in request was not recognized.',
+          'callback did not carry the expected state value',
+        );
+        return;
+      }
 
-    res.writeHead(200, { 'Content-Type': 'text/html' });
-    res.end(successPage());
-    resolveToken(loginToken);
+      if (posted) {
+        const accessToken = posted.get('access_token');
+        const deviceId = posted.get('device_id');
+        const userId = posted.get('user_id');
+        if (!accessToken || !deviceId || !userId) {
+          fail(
+            res,
+            'That sign-in did not include a complete session.',
+            'callback POST was missing access_token, device_id, or user_id',
+          );
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end(successPage());
+        resolveResult({
+          kind: 'session',
+          session: { accessToken, deviceId, userId },
+        });
+        return;
+      }
+
+      const loginToken = requestUrl.searchParams.get('loginToken');
+      if (!loginToken) {
+        const reason =
+          requestUrl.searchParams.get('error') ?? 'no login token was returned';
+        fail(
+          res,
+          'The homeserver did not return a login token.',
+          `sign-in did not complete: ${reason}`,
+        );
+        return;
+      }
+
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(successPage());
+      resolveResult({ kind: 'loginToken', loginToken });
+    })();
   });
 
   await new Promise<void>((resolve, reject) => {
@@ -193,15 +197,17 @@ export async function startLoopbackCallback(opts?: {
     redirectUrl,
     port,
     close,
-    waitForToken: () =>
+    waitForResult: () =>
       Promise.race([
-        tokenPromise,
-        new Promise<string>((_resolve, reject) => {
+        resultPromise,
+        new Promise<LoopbackResult>((_resolve, reject) => {
           timer = setTimeout(
             () =>
               reject(
                 new SsoTimeoutError(
-                  `Timed out after ${Math.round(timeoutMs / 1000)}s waiting for the browser sign-in to complete.`,
+                  `Timed out after ${Math.round(timeoutMs / 1000)}s waiting for ` +
+                    'the browser sign-in to complete. Re-run with --no-browser ' +
+                    'to sign in with a username and password instead.',
                 ),
               ),
             timeoutMs,
@@ -273,9 +279,49 @@ export function openBrowser(url: string): Promise<boolean> {
   });
 }
 
-export interface SsoLoginOptions {
+export const CLI_AUTH_PATH = 'cli-auth';
+
+// The host app's authorization page, which offers the same sign-in choices as
+// the web login: a password form and a Google button.
+export function buildCliAuthUrl(hostUrl: string, redirectUrl: string): string {
+  const url = new URL(CLI_AUTH_PATH, ensureTrailingSlash(hostUrl));
+  url.searchParams.set('redirect', redirectUrl);
+  return url.href;
+}
+
+// The page is paired with one homeserver, so a session it returns should be
+// valid on the homeserver this profile is being created against. Checking it
+// here turns a host/homeserver mismatch into a clear message instead of a
+// confusing failure later, when realm tokens are first requested.
+async function verifySession(
+  matrixUrl: string,
+  session: PostedSession,
+  fetchFn: typeof fetch,
+): Promise<void> {
+  const response = await fetchFn(
+    new URL('_matrix/client/v3/account/whoami', matrixUrl).href,
+    { headers: { Authorization: `Bearer ${session.accessToken}` } },
+  );
+  if (!response.ok) {
+    throw new Error(
+      `The browser returned a session that ${matrixUrl} does not recognize ` +
+        `(${response.status}). Check that the host app and homeserver belong ` +
+        'to the same environment.',
+    );
+  }
+  const who = (await response.json()) as { user_id?: string };
+  if (who.user_id !== session.userId) {
+    throw new Error(
+      `The browser returned a session for ${who.user_id ?? 'an unknown user'} ` +
+        `but reported ${session.userId}.`,
+    );
+  }
+}
+
+export interface BrowserLoginOptions {
   matrixUrl: string;
-  idpId?: string;
+  // Origin of the host app serving the authorization page.
+  hostUrl: string;
   timeoutMs?: number;
   fetchFn?: typeof fetch;
   openBrowserFn?: (url: string) => Promise<boolean>;
@@ -283,47 +329,40 @@ export interface SsoLoginOptions {
   log?: (message: string) => void;
 }
 
-// Full browser sign-in: discover the provider, listen on loopback, send the
-// user to Synapse, then trade the returned single-use token for a session.
-export async function ssoLogin(options: SsoLoginOptions): Promise<MatrixAuth> {
+// Sign in through the browser. The authorization page decides how the user
+// authenticates, so this ends one of two ways: Google sends the browser back
+// through Synapse with a single-use token to redeem, or the page signs in with
+// a password and hands over the resulting session directly.
+export async function browserLogin(
+  options: BrowserLoginOptions,
+): Promise<MatrixAuth> {
   const {
     matrixUrl,
-    idpId: requestedIdpId,
+    hostUrl,
     timeoutMs,
     fetchFn = fetch,
     openBrowserFn = openBrowser,
     log = console.log,
   } = options;
 
-  const flows = await fetchLoginFlows(matrixUrl, fetchFn);
-  const idpId = selectSsoIdp(flows, requestedIdpId ?? GOOGLE_IDP_ID);
-  const ssoFlow = flows.some((flow) => flow.type === 'm.login.sso');
-
-  if (!ssoFlow) {
-    throw new SsoNotSupportedError(
-      `${matrixUrl} does not offer browser sign-in (no m.login.sso flow).`,
-    );
-  }
-  if (!supportsTokenLogin(flows)) {
-    throw new SsoNotSupportedError(
-      `${matrixUrl} offers browser sign-in but not m.login.token, so the CLI cannot complete it.`,
-    );
-  }
-
   const callback = await startLoopbackCallback({ timeoutMs });
   try {
-    const ssoUrl = buildSsoRedirectUrl(matrixUrl, callback.redirectUrl, idpId);
-    const opened = await openBrowserFn(ssoUrl);
+    const authUrl = buildCliAuthUrl(hostUrl, callback.redirectUrl);
+    const opened = await openBrowserFn(authUrl);
     if (opened) {
       log('Opening your browser to sign in...');
-      log(`If it didn't open, visit:\n  ${ssoUrl}`);
+      log(`If it didn't open, visit:\n  ${authUrl}`);
     } else {
-      log(`Open this URL in your browser to sign in:\n  ${ssoUrl}`);
+      log(`Open this URL in your browser to sign in:\n  ${authUrl}`);
     }
     log('Waiting for you to finish signing in...');
 
-    const loginToken = await callback.waitForToken();
-    return await redeemLoginToken(matrixUrl, loginToken, fetchFn);
+    const result = await callback.waitForResult();
+    if (result.kind === 'loginToken') {
+      return await redeemLoginToken(matrixUrl, result.loginToken, fetchFn);
+    }
+    await verifySession(matrixUrl, result.session, fetchFn);
+    return { ...result.session, matrixUrl };
   } finally {
     callback.close();
   }

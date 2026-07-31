@@ -56,17 +56,21 @@ export function buildBoxelProgram(version: string): Command {
     )
     .option(
       '--no-browser',
-      'Sign in with a username and password instead of opening a browser (for add command)',
+      'Sign in with a username and password in the terminal instead of opening a browser (for add command)',
+    )
+    .option(
+      '--host-url <url>',
+      'Host app URL serving the browser sign-in page (for add command with non-standard domains)',
     )
     .addHelpText(
       'after',
       `
 Sign-in (for 'add'):
-  Interactive 'boxel profile add' opens your browser to sign in, and falls
-  back to a username and password when the homeserver offers no SSO provider.
-  Use --no-browser to go straight to password sign-in. Supplying -u with a
-  password (or BOXEL_PASSWORD) stays fully non-interactive and never opens a
-  browser, which is the path to use in CI.
+  Interactive 'boxel profile add' opens your browser to the Boxel sign-in
+  page, which offers both a username/password form and Google. Use
+  --no-browser to sign in with a username and password in the terminal
+  instead. Supplying -u with a password (or BOXEL_PASSWORD) stays fully
+  non-interactive and never opens a browser, which is the path to use in CI.
 
 Environment variables (for 'add'):
   BOXEL_PASSWORD       Password; preferred over -p to avoid shell history.
@@ -87,6 +91,7 @@ Environment variables (for 'add'):
           matrixUrl?: string;
           realmServerUrl?: string;
           browser?: boolean;
+          hostUrl?: string;
         },
       ) => {
         if (options?.password) {

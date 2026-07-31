@@ -7,7 +7,7 @@ import {
   getUsernameFromMatrixId,
 } from '../lib/profile-manager.ts';
 import { prompt, promptPassword } from '../lib/prompt.ts';
-import { SsoNotSupportedError, ssoLogin } from '../lib/sso-login.ts';
+import { SsoTimeoutError, browserLogin } from '../lib/sso-login.ts';
 import {
   FG_GREEN,
   FG_YELLOW,
@@ -26,14 +26,19 @@ export interface ProfileCommandOptions {
   matrixUrl?: string;
   realmServerUrl?: string;
   // Commander sets this to false for `--no-browser`. Undefined means the
-  // default: sign in through the browser when the homeserver supports it.
+  // default: sign in through the browser.
   browser?: boolean;
+  hostUrl?: string;
 }
 
 interface EnvironmentDefaults {
   domain: string;
   matrixUrl: string;
   realmServerUrl: string;
+  // Origin of the host app, which serves the browser sign-in page. Production
+  // shares an origin with the realm server; staging does not, so this can't be
+  // derived from realmServerUrl.
+  hostUrl: string;
 }
 
 const MENU_ENVIRONMENTS: Record<
@@ -44,16 +49,19 @@ const MENU_ENVIRONMENTS: Record<
     domain: 'stack.cards',
     matrixUrl: 'https://matrix-staging.stack.cards',
     realmServerUrl: 'https://realms-staging.stack.cards/',
+    hostUrl: 'https://boxel-host-staging.stack.cards/',
   },
   production: {
     domain: 'boxel.ai',
     matrixUrl: 'https://matrix.boxel.ai',
     realmServerUrl: 'https://app.boxel.ai/',
+    hostUrl: 'https://app.boxel.ai/',
   },
   local: {
     domain: 'localhost',
     matrixUrl: 'http://localhost:8008',
     realmServerUrl: 'https://localhost:4201/',
+    hostUrl: 'http://localhost:4200/',
   },
 };
 
@@ -109,6 +117,7 @@ export function resolveBoxelEnvironment(): EnvironmentDefaults | null {
     domain: `${slug}.localhost`,
     matrixUrl: `https://matrix.${slug}.localhost`,
     realmServerUrl: `https://realm-server.${slug}.localhost/`,
+    hostUrl: `https://host.${slug}.localhost/`,
   };
 }
 
@@ -163,6 +172,9 @@ export async function profileCommand(
           manager,
           resolveBoxelEnvironment(),
           options?.browser !== false,
+          options?.hostUrl
+            ? validateUrl(options.hostUrl, '--host-url')
+            : undefined,
         );
       }
       break;
@@ -249,11 +261,7 @@ async function listProfiles(manager: ProfileManager): Promise<void> {
   }
 }
 
-async function promptEnvironmentMenu(): Promise<{
-  domain: string;
-  matrixUrl: string;
-  realmServerUrl: string;
-}> {
+async function promptEnvironmentMenu(): Promise<EnvironmentDefaults> {
   console.log(`Which environment?`);
   console.log(`  ${FG_CYAN}1${RESET}) Staging (realms-staging.stack.cards)`);
   console.log(`  ${FG_MAGENTA}2${RESET}) Production (app.boxel.ai)`);
@@ -275,6 +283,12 @@ async function promptEnvironmentMenu(): Promise<{
       process.exit(1);
     }
     const realmServerUrl = validateUrl(realmServerUrlInput, 'Realm server URL');
+    // The host app commonly shares an origin with the realm server, so offer
+    // that as the default rather than making it a required fourth URL.
+    const hostUrlInput = await prompt(`Host app URL [${realmServerUrl}]: `);
+    const hostUrl = hostUrlInput
+      ? validateUrl(hostUrlInput, 'Host app URL')
+      : realmServerUrl;
     // matrixUrl is already validated by validateUrl above, so new URL won't
     // throw — the hostname fallback is just for the unlikely edge case of
     // a parseable URL with empty hostname (e.g. "http:///path").
@@ -286,6 +300,7 @@ async function promptEnvironmentMenu(): Promise<{
       domain: domainInput || defaultDomain,
       matrixUrl,
       realmServerUrl,
+      hostUrl,
     };
   }
 
@@ -323,31 +338,45 @@ async function promptDisplayName(matrixId: string): Promise<string> {
   return displayNameInput || defaultDisplayName;
 }
 
-// `usePassword` is distinct from `cancelled`: the first means this homeserver
-// can't do browser sign-in and the caller should ask for a password instead,
-// the second means the user chose to stop and nothing more should be asked.
+// `usePassword` is distinct from `cancelled`: the first means the browser path
+// couldn't finish and the caller should ask for a password instead, the second
+// means the user chose to stop and nothing more should be asked.
 type AddProfileOutcome =
   | { status: 'added'; matrixId: string }
   | { status: 'cancelled' }
   | { status: 'usePassword' };
 
-// Browser sign-in. The Matrix ID comes back from the homeserver, so unlike the
-// password path there is nothing to ask for up front.
+// Browser sign-in. The authorization page offers both a password form and a
+// Google button, and reports back whichever account the user signed in as — so
+// unlike the terminal password path there is nothing to ask for up front.
 async function addProfileViaBrowser(
   manager: ProfileManager,
   matrixUrl: string,
+  hostUrl: string,
   realmServerUrl: string,
 ): Promise<AddProfileOutcome> {
   let auth;
   try {
-    auth = await ssoLogin({ matrixUrl });
+    auth = await browserLogin({ matrixUrl, hostUrl });
   } catch (err) {
-    if (err instanceof SsoNotSupportedError) {
-      console.log(`${DIM}${err.message}${RESET}`);
-      console.log(`${DIM}Falling back to password sign-in.${RESET}`);
+    if (err instanceof SsoTimeoutError) {
+      console.log(`\n${FG_YELLOW}${err.message}${RESET}`);
       return { status: 'usePassword' };
     }
     throw err;
+  }
+
+  // The page can sign in as an account other than the one the user expected —
+  // a Google identity whose verified email matches no existing account gets a
+  // brand-new one. Naming it before anything is written makes that visible
+  // rather than silent.
+  console.log(
+    `\n${FG_GREEN}✓${RESET} Signed in as ${formatProfileBadge(auth.userId)}`,
+  );
+  const proceed = await prompt('Save this profile? [Y/n]: ');
+  if (proceed.toLowerCase() === 'n') {
+    console.log('Cancelled.');
+    return { status: 'cancelled' };
   }
 
   if (!(await confirmOverwrite(manager, auth.userId))) {
@@ -408,12 +437,14 @@ async function addProfile(
   manager: ProfileManager,
   envDefaults?: EnvironmentDefaults | null,
   useBrowser = true,
+  hostUrlOverride?: string,
 ): Promise<void> {
   console.log(`\n${BOLD}Add New Profile${RESET}\n`);
 
   let domain: string;
   let defaultMatrixUrl: string;
   let defaultRealmUrl: string;
+  let defaultHostUrl: string;
 
   if (envDefaults) {
     console.log(
@@ -422,15 +453,22 @@ async function addProfile(
     domain = envDefaults.domain;
     defaultMatrixUrl = envDefaults.matrixUrl;
     defaultRealmUrl = envDefaults.realmServerUrl;
+    defaultHostUrl = envDefaults.hostUrl;
   } else {
     const menuResult = await promptEnvironmentMenu();
     domain = menuResult.domain;
     defaultMatrixUrl = menuResult.matrixUrl;
     defaultRealmUrl = menuResult.realmServerUrl;
+    defaultHostUrl = menuResult.hostUrl;
   }
 
   let outcome: AddProfileOutcome = useBrowser
-    ? await addProfileViaBrowser(manager, defaultMatrixUrl, defaultRealmUrl)
+    ? await addProfileViaBrowser(
+        manager,
+        defaultMatrixUrl,
+        hostUrlOverride ?? defaultHostUrl,
+        defaultRealmUrl,
+      )
     : { status: 'usePassword' };
 
   if (outcome.status === 'usePassword') {
