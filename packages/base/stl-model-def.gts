@@ -1,6 +1,7 @@
 import GlimmerComponent from '@glimmer/component';
 import File3dIcon from '@cardstack/boxel-icons/file-3d';
 import { byteStreamToUint8Array } from '@cardstack/runtime-common';
+import { DEFAULT_FILE_SIZE_LIMIT_BYTES } from '@cardstack/runtime-common/constants';
 import {
   BaseDefComponent,
   Component,
@@ -16,180 +17,15 @@ import {
   type ByteStream,
   type SerializedFile,
 } from './file-api';
-import { ModelDef, ModelIsolatedBody } from './model-file-def';
-
-interface StlMetadata {
-  encoding: string;
-  solidName?: string;
-  binaryHeader?: string;
-  facetCount: number;
-  normalCount: number;
-  degenerateFacetCount: number;
-  hasColorData: boolean;
-  sizeX: number;
-  sizeY: number;
-  sizeZ: number;
-}
-
-interface Model3dData {
-  meshes: number;
-  materials: number;
-  vertices: number;
-  triangles: number;
-  generator?: string;
-}
-
-function getExtension(url: string): string {
-  try {
-    let parsed = new URL(url);
-    let name = parsed.pathname.split('/').pop() ?? '';
-    let dot = name.lastIndexOf('.');
-    return dot === -1 ? '' : name.slice(dot).toLowerCase();
-  } catch {
-    let dot = url.lastIndexOf('.');
-    return dot === -1 ? '' : url.slice(dot).toLowerCase();
-  }
-}
-
-// Bounded STL parser. Pure JS (DataView/TextDecoder) so it runs identically in
-// the browser, the indexer, and the prerender pass. Ported from the handoff
-// realm's metadata-extractor. Produces both the generic scene facts (model3d)
-// and STL-specific diagnostics (stlMetadata).
-function parseStl(
-  buf: ArrayBuffer,
-): { model3d: Model3dData; stlMetadata: StlMetadata } | undefined {
-  let bytes = new Uint8Array(buf);
-  let view = new DataView(buf);
-  let declaredBinaryFacets = bytes.length >= 84 ? view.getUint32(80, true) : 0;
-  let expectedBinarySize = 84 + declaredBinaryFacets * 50;
-  let isBinary = declaredBinaryFacets > 0 && expectedBinarySize <= bytes.length;
-  let vertices: number[][] = [];
-  let normalCount = 0;
-  let facetCount = 0;
-  let hasColorData = false;
-  let solidName: string | undefined;
-  let binaryHeader: string | undefined;
-
-  if (isBinary) {
-    binaryHeader =
-      new TextDecoder('latin1')
-        .decode(bytes.subarray(0, 80))
-        .split('')
-        .map((character) =>
-          character.charCodeAt(0) < 32 || character.charCodeAt(0) > 126
-            ? ' '
-            : character,
-        )
-        .join('')
-        .trim() || undefined;
-    hasColorData = /COLOR=/i.test(binaryHeader ?? '');
-    facetCount = Math.min(
-      declaredBinaryFacets,
-      Math.floor((bytes.length - 84) / 50),
-    );
-    for (let facet = 0; facet < facetCount; facet++) {
-      let offset = 84 + facet * 50;
-      let nx = view.getFloat32(offset, true);
-      let ny = view.getFloat32(offset + 4, true);
-      let nz = view.getFloat32(offset + 8, true);
-      if (
-        Number.isFinite(nx + ny + nz) &&
-        Math.abs(nx) + Math.abs(ny) + Math.abs(nz) > 1e-12
-      ) {
-        normalCount++;
-      }
-      for (let vertex = 0; vertex < 3; vertex++) {
-        let p = offset + 12 + vertex * 12;
-        vertices.push([
-          view.getFloat32(p, true),
-          view.getFloat32(p + 4, true),
-          view.getFloat32(p + 8, true),
-        ]);
-      }
-      hasColorData ||= view.getUint16(offset + 48, true) !== 0;
-    }
-  } else {
-    let text = new TextDecoder().decode(bytes);
-    if (
-      !/\bfacet\s+normal\b/i.test(text) ||
-      !/\bvertex\s+[-+\d.]/i.test(text)
-    ) {
-      return undefined;
-    }
-    solidName =
-      text.match(/^\s*solid(?:\s+([^\r\n]+))?/i)?.[1]?.trim() || undefined;
-    let normalPattern =
-      /\bfacet\s+normal\s+([-+\d.eE]+)\s+([-+\d.eE]+)\s+([-+\d.eE]+)/gi;
-    for (let match; (match = normalPattern.exec(text)); ) {
-      facetCount++;
-      let magnitude =
-        Math.abs(Number(match[1])) +
-        Math.abs(Number(match[2])) +
-        Math.abs(Number(match[3]));
-      if (Number.isFinite(magnitude) && magnitude > 1e-12) {
-        normalCount++;
-      }
-    }
-    let vertexPattern =
-      /\bvertex\s+([-+\d.eE]+)\s+([-+\d.eE]+)\s+([-+\d.eE]+)/gi;
-    for (let match; (match = vertexPattern.exec(text)); ) {
-      vertices.push([Number(match[1]), Number(match[2]), Number(match[3])]);
-    }
-  }
-
-  let finiteVertices = vertices.filter((vertex) =>
-    vertex.every(Number.isFinite),
-  );
-  if (!facetCount || finiteVertices.length < 3) {
-    return undefined;
-  }
-  let mins = [Infinity, Infinity, Infinity];
-  let maxs = [-Infinity, -Infinity, -Infinity];
-  for (let vertex of finiteVertices) {
-    for (let axis = 0; axis < 3; axis++) {
-      mins[axis] = Math.min(mins[axis], vertex[axis]);
-      maxs[axis] = Math.max(maxs[axis], vertex[axis]);
-    }
-  }
-  let degenerateFacetCount = 0;
-  for (let i = 0; i + 2 < finiteVertices.length; i += 3) {
-    let a = finiteVertices[i];
-    let b = finiteVertices[i + 1];
-    let c = finiteVertices[i + 2];
-    let ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
-    let ac = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
-    let cross = [
-      ab[1] * ac[2] - ab[2] * ac[1],
-      ab[2] * ac[0] - ab[0] * ac[2],
-      ab[0] * ac[1] - ab[1] * ac[0],
-    ];
-    if (cross[0] ** 2 + cross[1] ** 2 + cross[2] ** 2 < 1e-20) {
-      degenerateFacetCount++;
-    }
-  }
-  let round = (value: number) => Math.round(value * 1_000_000) / 1_000_000;
-  return {
-    model3d: {
-      meshes: 1,
-      materials: hasColorData ? 1 : 0,
-      vertices: finiteVertices.length,
-      triangles: facetCount,
-      generator: solidName ?? binaryHeader,
-    },
-    stlMetadata: {
-      encoding: isBinary ? 'binary' : 'ASCII',
-      solidName,
-      binaryHeader,
-      facetCount,
-      normalCount,
-      degenerateFacetCount,
-      hasColorData,
-      sizeX: round(maxs[0] - mins[0]),
-      sizeY: round(maxs[1] - mins[1]),
-      sizeZ: round(maxs[2] - mins[2]),
-    },
-  };
-}
+import {
+  ModelDef,
+  ModelIsolatedBody,
+  ModelInspectorSection,
+  getExtension,
+  type Model3dData,
+  type ModelInspectorRow,
+} from './model-file-def';
+import { parseStl, type StlMetadata } from './stl-meta-extractor';
 
 export class StlMetadataField extends FieldDef {
   static displayName = 'STL Mesh Metadata';
@@ -261,81 +97,46 @@ export class StlMetadataField extends FieldDef {
 }
 
 class StlIsolated extends GlimmerComponent<{ Args: { model: StlDef } }> {
+  get stlRows(): ModelInspectorRow[] {
+    let s = this.args.model.stlMetadata;
+    let rows: ModelInspectorRow[] = [];
+    if (!s) {
+      return rows;
+    }
+    if (s.encoding) {
+      rows.push({ term: 'Encoding', detail: s.encoding });
+    }
+    if (s.solidName) {
+      rows.push({ term: 'Solid', detail: s.solidName });
+    }
+    if (s.facetCount) {
+      rows.push({ term: 'Facets', detail: s.facetCount });
+    }
+    if (s.normalCount) {
+      rows.push({ term: 'Normals', detail: s.normalCount });
+    }
+    rows.push({
+      term: 'Color data',
+      detail: s.hasColorData ? 'Present' : 'None',
+    });
+    if (s.sizeX) {
+      rows.push({
+        term: 'Extents',
+        detail: `${s.sizeX} × ${s.sizeY} × ${s.sizeZ}`,
+      });
+    }
+    if (s.degenerateFacetCount) {
+      rows.push({ term: 'Degenerate', detail: s.degenerateFacetCount });
+    }
+    return rows;
+  }
+
   <template>
     <ModelIsolatedBody @model={{@model}}>
       {{#if @model.stlMetadata}}
-        <section class='insp-group'>
-          <h2 class='insp-head'>STL mesh</h2>
-          <dl class='insp-rows'>
-            {{#if @model.stlMetadata.encoding}}<div><dt>Encoding</dt><dd
-                >{{@model.stlMetadata.encoding}}</dd></div>{{/if}}
-            {{#if @model.stlMetadata.solidName}}<div><dt>Solid</dt><dd
-                >{{@model.stlMetadata.solidName}}</dd></div>{{/if}}
-            {{#if @model.stlMetadata.facetCount}}<div><dt>Facets</dt><dd
-                >{{@model.stlMetadata.facetCount}}</dd></div>{{/if}}
-            {{#if @model.stlMetadata.normalCount}}<div><dt>Normals</dt><dd
-                >{{@model.stlMetadata.normalCount}}</dd></div>{{/if}}
-            <div><dt>Color data</dt><dd>{{if
-                  @model.stlMetadata.hasColorData
-                  'Present'
-                  'None'
-                }}</dd></div>
-            {{#if @model.stlMetadata.sizeX}}<div><dt>Extents</dt><dd
-                >{{@model.stlMetadata.sizeX}}
-                  ×
-                  {{@model.stlMetadata.sizeY}}
-                  ×
-                  {{@model.stlMetadata.sizeZ}}</dd></div>{{/if}}
-            {{#if @model.stlMetadata.degenerateFacetCount}}<div><dt
-                >Degenerate</dt><dd
-                >{{@model.stlMetadata.degenerateFacetCount}}</dd></div>{{/if}}
-          </dl>
-        </section>
+        <ModelInspectorSection @heading='STL mesh' @rows={{this.stlRows}} />
       {{/if}}
     </ModelIsolatedBody>
-    <style scoped>
-      .insp-group {
-        margin-top: 0.875rem;
-      }
-      .insp-head {
-        margin: 0 0 0.25rem;
-        font-family: var(--font-mono, var(--boxel-monospace-font-family));
-        font-size: 0.5625rem;
-        font-weight: 700;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        color: var(--muted-foreground);
-      }
-      .insp-rows {
-        margin: 0;
-        display: flex;
-        flex-direction: column;
-      }
-      .insp-rows div {
-        display: grid;
-        grid-template-columns: 5.75rem minmax(0, 1fr);
-        gap: 0.625rem;
-        align-items: baseline;
-        padding: 0.3125rem 0;
-        border-top: 1px solid var(--border);
-      }
-      .insp-rows div:first-child {
-        border-top: 0;
-      }
-      .insp-rows dt {
-        color: var(--muted-foreground);
-        font-family: var(--font-mono, var(--boxel-monospace-font-family));
-        font-size: 0.59375rem;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-      }
-      .insp-rows dd {
-        min-width: 0;
-        margin: 0;
-        font-size: 0.75rem;
-        overflow-wrap: anywhere;
-      }
-    </style>
   </template>
 }
 
@@ -359,9 +160,19 @@ export class StlDef extends ModelDef {
   static async extractAttributes(
     url: string,
     getStream: () => Promise<ByteStream>,
-    options: { contentHash?: string; contentSize?: number } = {},
+    options: {
+      contentHash?: string;
+      contentSize?: number;
+      // Backstop bound on the bytes we're willing to parse at index time,
+      // threaded from the host; defaults to the realm's standard file-size
+      // limit (`DEFAULT_FILE_SIZE_LIMIT_BYTES`), the same ceiling the write
+      // path enforces, so the two can't drift.
+      fileSizeLimitBytes?: number;
+    } = {},
   ): Promise<
-    SerializedFile<{ model3d: Model3dData; stlMetadata: StlMetadata }>
+    // `model3d`/`stlMetadata` are optional: over the size cap we skip the parse
+    // and return only the base file attributes (see below).
+    SerializedFile<Partial<{ model3d: Model3dData; stlMetadata: StlMetadata }>>
   > {
     let extension = getExtension(url);
     if (extension !== '.stl') {
@@ -378,6 +189,18 @@ export class StlDef extends ModelDef {
 
     let base = await super.extractAttributes(url, memoizedStream, options);
     let bytes = await memoizedStream();
+    // Over the size cap, skip the parse but keep the StlDef type — the file
+    // still renders via the live client-side viewer (which parses its own
+    // geometry); it just has empty inspector panels and a generic silhouette.
+    // Do NOT throw FileContentMismatchError here: that would demote the file to
+    // a plain FileDef and lose the 3D card entirely.
+    let sizeCap = options.fileSizeLimitBytes ?? DEFAULT_FILE_SIZE_LIMIT_BYTES;
+    if (bytes.byteLength > sizeCap) {
+      console.warn(
+        `[StlDef] skipping metadata extraction for ${url}: ${bytes.byteLength} bytes exceeds cap ${sizeCap}`,
+      );
+      return { ...base };
+    }
     let parsed = parseStl(
       bytes.buffer.slice(
         bytes.byteOffset,

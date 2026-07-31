@@ -16,6 +16,38 @@ import NumberField from './number';
 // inside a character class) can confuse the content-tag template lexer.
 const EXTENSION_RE = new RegExp('\\.[^/.]+$');
 
+// Generic scene facts a leaf's `extractAttributes` produces from the file
+// bytes, shared by every 3D model format (STL, 3MF, …). Mirrors the fields on
+// `Model3DInfoField`.
+export interface Model3dData {
+  meshes: number;
+  materials: number;
+  // Vertex records **as stored in the file**, NOT unique positions — the two
+  // formats store geometry differently, so this counts what the format carries:
+  // STL is triangle soup (≈ 3 × triangles, no shared vertices); 3MF stores
+  // indexed `<vertex>` elements (unique). Don't compare the number across
+  // formats as if it were the same quantity.
+  vertices: number;
+  triangles: number;
+  generator?: string;
+}
+
+// Lowercased file extension (including the leading dot) from a URL, e.g.
+// `.stl`. Shared by the leaf `extractAttributes` methods to reject a file whose
+// bytes don't match its extension. Falls back to a plain string scan when the
+// value isn't a parseable URL.
+export function getExtension(url: string): string {
+  try {
+    let parsed = new URL(url);
+    let name = parsed.pathname.split('/').pop() ?? '';
+    let dot = name.lastIndexOf('.');
+    return dot === -1 ? '' : name.slice(dot).toLowerCase();
+  } catch {
+    let dot = url.lastIndexOf('.');
+    return dot === -1 ? '' : url.slice(dot).toLowerCase();
+  }
+}
+
 // Generic scene facts shared by every 3D model format (STL, 3MF, and later
 // GLB/glTF). Format-specific facts (STL facet counts, 3MF print parts) live on
 // the leaf's own metadata FieldDef, not here.
@@ -24,6 +56,8 @@ export class Model3DInfoField extends FieldDef {
   static icon = File3dIcon;
   @field meshes = contains(NumberField);
   @field materials = contains(NumberField);
+  // See `Model3dData.vertices`: vertex records as the format stores them, not
+  // unique positions — not comparable across formats.
   @field vertices = contains(NumberField);
   @field triangles = contains(NumberField);
   @field generator = contains(StringField);
@@ -527,6 +561,74 @@ export class ModelViewer extends GlimmerComponent<{
   </template>
 }
 
+export interface ModelInspectorRow {
+  term: string;
+  detail: string | number;
+}
+
+// One titled group of term/detail rows in the isolated inspector. Owns the row
+// markup AND its scoped styles, so the three isolated templates (the shared 3D
+// facts here plus each leaf's format-specific group) don't each re-declare the
+// same ~40 lines of CSS. glimmer scoped-css scopes to the component that authors
+// the markup and can't be shared through a yielded block — so to share the
+// styles the section has to own the markup, which means it's data-driven
+// (`@rows`) rather than a wrapper around a yielded block. Callers build the rows
+// array, omitting values they don't want to show.
+export class ModelInspectorSection extends GlimmerComponent<{
+  Args: { heading: string; rows: ModelInspectorRow[] };
+}> {
+  <template>
+    <section class='insp-group'>
+      <h2 class='insp-head'>{{@heading}}</h2>
+      <dl class='insp-rows'>
+        {{#each @rows as |row|}}
+          <div><dt>{{row.term}}</dt><dd>{{row.detail}}</dd></div>
+        {{/each}}
+      </dl>
+    </section>
+    <style scoped>
+      .insp-head {
+        margin: 0 0 0.25rem;
+        font-family: var(--font-mono, var(--boxel-monospace-font-family));
+        font-size: 0.5625rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--muted-foreground);
+      }
+      .insp-rows {
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      .insp-rows div {
+        display: grid;
+        grid-template-columns: 5.75rem minmax(0, 1fr);
+        gap: 0.625rem;
+        align-items: baseline;
+        padding: 0.3125rem 0;
+        border-top: 1px solid var(--border);
+      }
+      .insp-rows div:first-child {
+        border-top: 0;
+      }
+      .insp-rows dt {
+        color: var(--muted-foreground);
+        font-family: var(--font-mono, var(--boxel-monospace-font-family));
+        font-size: 0.59375rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .insp-rows dd {
+        min-width: 0;
+        margin: 0;
+        font-size: 0.75rem;
+        overflow-wrap: anywhere;
+      }
+    </style>
+  </template>
+}
+
 // Full isolated work surface, mirroring the handoff realm: a header bar
 // (icon + name + extension pill) over a two-column body — a bordered live-viewer
 // stage on the left and a property inspector on the right. The leaf isolated
@@ -545,6 +647,27 @@ export class ModelIsolatedBody extends GlimmerComponent<{
   get extension() {
     let parts = this.name.split('.');
     return parts.length > 1 ? (parts.pop() ?? '') : '';
+  }
+
+  get modelRows(): ModelInspectorRow[] {
+    let m = this.args.model.model3d;
+    let rows: ModelInspectorRow[] = [];
+    if (m?.triangles) {
+      rows.push({ term: 'Triangles', detail: m.triangles });
+    }
+    if (m?.vertices) {
+      rows.push({ term: 'Vertices', detail: m.vertices });
+    }
+    if (m?.meshes) {
+      rows.push({ term: 'Meshes', detail: m.meshes });
+    }
+    if (m?.materials) {
+      rows.push({ term: 'Materials', detail: m.materials });
+    }
+    if (m?.generator) {
+      rows.push({ term: 'Generator', detail: m.generator });
+    }
+    return rows;
   }
 
   <template>
@@ -570,21 +693,7 @@ export class ModelIsolatedBody extends GlimmerComponent<{
         </section>
 
         <aside class='inspector'>
-          <section class='insp-group'>
-            <h2 class='insp-head'>3D model</h2>
-            <dl class='insp-rows'>
-              {{#if @model.model3d.triangles}}<div><dt>Triangles</dt><dd
-                  >{{@model.model3d.triangles}}</dd></div>{{/if}}
-              {{#if @model.model3d.vertices}}<div><dt>Vertices</dt><dd
-                  >{{@model.model3d.vertices}}</dd></div>{{/if}}
-              {{#if @model.model3d.meshes}}<div><dt>Meshes</dt><dd
-                  >{{@model.model3d.meshes}}</dd></div>{{/if}}
-              {{#if @model.model3d.materials}}<div><dt>Materials</dt><dd
-                  >{{@model.model3d.materials}}</dd></div>{{/if}}
-              {{#if @model.model3d.generator}}<div><dt>Generator</dt><dd
-                  >{{@model.model3d.generator}}</dd></div>{{/if}}
-            </dl>
-          </section>
+          <ModelInspectorSection @heading='3D model' @rows={{this.modelRows}} />
           {{yield}}
         </aside>
       </div>
@@ -653,47 +762,13 @@ export class ModelIsolatedBody extends GlimmerComponent<{
         border-radius: var(--radius, var(--boxel-border-radius));
         background: var(--card);
         padding: 0.875rem 1rem;
-      }
-      .insp-group + .insp-group {
-        margin-top: 0.875rem;
-      }
-      .insp-head {
-        margin: 0 0 0.25rem;
-        font-family: var(--font-mono, var(--boxel-monospace-font-family));
-        font-size: 0.5625rem;
-        font-weight: 700;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        color: var(--muted-foreground);
-      }
-      .insp-rows {
-        margin: 0;
+        /* Uniform spacing between inspector groups (the shared 3D-model group
+           plus each leaf's yielded ModelInspectorSection) — replaces the old
+           per-group margin, which can't reach across component boundaries once
+           each group is its own scoped-css component. */
         display: flex;
         flex-direction: column;
-      }
-      .insp-rows div {
-        display: grid;
-        grid-template-columns: 5.75rem minmax(0, 1fr);
-        gap: 0.625rem;
-        align-items: baseline;
-        padding: 0.3125rem 0;
-        border-top: 1px solid var(--border);
-      }
-      .insp-rows div:first-child {
-        border-top: 0;
-      }
-      .insp-rows dt {
-        color: var(--muted-foreground);
-        font-family: var(--font-mono, var(--boxel-monospace-font-family));
-        font-size: 0.59375rem;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-      }
-      .insp-rows dd {
-        min-width: 0;
-        margin: 0;
-        font-size: 0.75rem;
-        overflow-wrap: anywhere;
+        gap: 0.875rem;
       }
     </style>
   </template>

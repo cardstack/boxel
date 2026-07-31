@@ -1,7 +1,7 @@
 import GlimmerComponent from '@glimmer/component';
-import { unzipSync, strFromU8 } from 'fflate';
 import PrinterIcon from '@cardstack/boxel-icons/printer';
 import { byteStreamToUint8Array } from '@cardstack/runtime-common';
+import { DEFAULT_FILE_SIZE_LIMIT_BYTES } from '@cardstack/runtime-common/constants';
 import {
   BaseDefComponent,
   Component,
@@ -18,250 +18,15 @@ import {
   type ByteStream,
   type SerializedFile,
 } from './file-api';
-import { ModelDef, ModelIsolatedBody } from './model-file-def';
-
-interface ThreeMfPrintPartData {
-  name?: string;
-  extruder?: number;
-  faceCount?: number;
-}
-
-interface ThreeMfMetadata {
-  unit?: string;
-  language?: string;
-  modelPart?: string;
-  sizeX?: number;
-  sizeY?: number;
-  sizeZ?: number;
-  packageEntryCount?: number;
-  objectCount?: number;
-  buildItemCount?: number;
-  componentCount?: number;
-  textureCount?: number;
-  materialResourceCount?: number;
-  extensionCount?: number;
-  extensions?: string[];
-  title?: string;
-  designer?: string;
-  application?: string;
-  bambuStudioVersion?: string;
-  creationDate?: string;
-  licenseTerms?: string;
-  description?: string;
-  plateCount?: number;
-  printPartCount?: number;
-  configuredFaceCount?: number;
-  extruderCount?: number;
-  materialNames?: string[];
-  materialColors?: string[];
-  printParts?: ThreeMfPrintPartData[];
-}
-
-interface Model3dData {
-  meshes: number;
-  materials: number;
-  vertices: number;
-  triangles: number;
-  generator?: string;
-}
-
-function getExtension(url: string): string {
-  try {
-    let parsed = new URL(url);
-    let name = parsed.pathname.split('/').pop() ?? '';
-    let dot = name.lastIndexOf('.');
-    return dot === -1 ? '' : name.slice(dot).toLowerCase();
-  } catch {
-    let dot = url.lastIndexOf('.');
-    return dot === -1 ? '' : url.slice(dot).toLowerCase();
-  }
-}
-
-// Bounded 3MF (OPC ZIP) parser. Unzips the package, parses the model part(s)
-// and the optional slicer config, and returns the generic scene facts plus the
-// 3MF-specific package metadata. Uses `fflate` (bundled dependency, not a CDN
-// import) and the runtime `DOMParser` (available in the host/prerender
-// Chromium). Ported from the handoff realm's metadata-extractor.
-function parseThreeMf(
-  buf: ArrayBuffer,
-): { model3d: Model3dData; threeMfMetadata: ThreeMfMetadata } | undefined {
-  let files = unzipSync(new Uint8Array(buf)) as Record<string, Uint8Array>;
-  let modelPart = Object.keys(files).find(
-    (path) => /(?:^|\/)3dmodel\.model$/i.test(path) || /\.model$/i.test(path),
-  );
-  if (!modelPart) {
-    return undefined;
-  }
-  let modelDocuments = Object.entries(files)
-    .filter(([path]) => /\.model$/i.test(path))
-    .map(([path, bytes]) => {
-      let document = new DOMParser().parseFromString(
-        strFromU8(bytes),
-        'application/xml',
-      );
-      if (document.getElementsByTagName('parsererror').length) {
-        throw new FileContentMismatchError(
-          `3MF model XML is malformed: ${path}`,
-        );
-      }
-      return { path, document, root: document.documentElement };
-    });
-  let primary =
-    modelDocuments.find(({ path }) => path === modelPart) ?? modelDocuments[0];
-  let root = primary.root;
-  let elements = (name: string) =>
-    modelDocuments.flatMap(({ document }) =>
-      Array.from(document.getElementsByTagNameNS('*', name)),
-    );
-  let metadata = new Map<string, string>();
-  for (let element of elements('metadata')) {
-    let key = element.getAttribute('name');
-    if (key) {
-      metadata.set(key.toLowerCase(), element.textContent?.trim() ?? '');
-    }
-  }
-  let extensions = Array.from(
-    new Set(
-      modelDocuments.flatMap(({ root }) =>
-        Array.from(root.attributes)
-          .filter((attribute) => attribute.name.startsWith('xmlns:'))
-          .map(
-            (attribute) => `${attribute.name.slice(6)} · ${attribute.value}`,
-          ),
-      ),
-    ),
-  );
-  let materialResourceCount = [
-    'basematerials',
-    'colorgroup',
-    'texture2dgroup',
-    'compositematerials',
-    'multiproperties',
-  ].reduce((total, name) => total + elements(name).length, 0);
-  let materialBases = elements('base');
-  let materialNames = materialBases
-    .map((element) => element.getAttribute('name'))
-    .filter((value): value is string => Boolean(value));
-  let materialColors = materialBases
-    .map((element) => element.getAttribute('displaycolor'))
-    .filter((value): value is string => Boolean(value));
-  let vertices = elements('vertex')
-    .map((element) =>
-      ['x', 'y', 'z'].map((axis) => Number(element.getAttribute(axis))),
-    )
-    .filter((vertex) => vertex.every(Number.isFinite));
-  let mins = [Infinity, Infinity, Infinity];
-  let maxs = [-Infinity, -Infinity, -Infinity];
-  for (let vertex of vertices) {
-    for (let axis = 0; axis < 3; axis++) {
-      mins[axis] = Math.min(mins[axis], vertex[axis]);
-      maxs[axis] = Math.max(maxs[axis], vertex[axis]);
-    }
-  }
-  let dimension = (axis: number) =>
-    vertices.length
-      ? Math.round((maxs[axis] - mins[axis]) * 1_000_000) / 1_000_000
-      : undefined;
-  let configPath = Object.keys(files).find((path) =>
-    /(?:^|\/)model_settings\.config$/i.test(path),
-  );
-  let configuredParts: ThreeMfPrintPartData[] = [];
-  let plateCount = 0;
-  let configuredFaceCount = 0;
-  let extruders = new Set<number>();
-  if (configPath) {
-    let config = new DOMParser().parseFromString(
-      strFromU8(files[configPath]),
-      'application/xml',
-    );
-    if (!config.getElementsByTagName('parsererror').length) {
-      plateCount = config.getElementsByTagName('plate').length;
-      for (let part of Array.from(config.getElementsByTagName('part'))) {
-        let values = new Map<string, string>();
-        for (let child of Array.from(part.children)) {
-          if (child.localName === 'metadata') {
-            let key = child.getAttribute('key');
-            if (key) {
-              values.set(key, child.getAttribute('value') ?? '');
-            }
-          }
-        }
-        let meshStat = Array.from(part.children).find(
-          (child) => child.localName === 'mesh_stat',
-        );
-        let faceCount = Number(meshStat?.getAttribute('face_count') ?? 0);
-        let extruder = Number(values.get('extruder') ?? 0);
-        if (extruder > 0) {
-          extruders.add(extruder);
-        }
-        configuredFaceCount += Number.isFinite(faceCount) ? faceCount : 0;
-        configuredParts.push({
-          name:
-            values.get('name') ||
-            `Part ${part.getAttribute('id') ?? configuredParts.length + 1}`,
-          extruder: extruder || undefined,
-          faceCount: faceCount || undefined,
-        });
-      }
-    }
-  }
-  if (!configuredParts.length) {
-    for (let object of elements('object')) {
-      let triangleCount = object.getElementsByTagNameNS('*', 'triangle').length;
-      if (triangleCount) {
-        configuredParts.push({
-          name:
-            object.getAttribute('name') ||
-            `Object ${object.getAttribute('id') ?? configuredParts.length + 1}`,
-          faceCount: triangleCount,
-        });
-      }
-    }
-  }
-  let application =
-    metadata.get('application') ??
-    metadata.get('producer') ??
-    metadata.get('generator');
-  return {
-    model3d: {
-      meshes: elements('mesh').length,
-      materials: materialResourceCount,
-      vertices: elements('vertex').length,
-      triangles: elements('triangle').length,
-      generator: application ?? metadata.get('designer'),
-    },
-    threeMfMetadata: {
-      unit: root.getAttribute('unit') ?? 'millimeter',
-      language: root.getAttribute('xml:lang') ?? undefined,
-      modelPart,
-      sizeX: dimension(0),
-      sizeY: dimension(1),
-      sizeZ: dimension(2),
-      packageEntryCount: Object.keys(files).length,
-      objectCount: elements('object').length,
-      buildItemCount: elements('item').length,
-      componentCount: elements('component').length,
-      textureCount: elements('texture2d').length,
-      materialResourceCount,
-      extensionCount: extensions.length,
-      extensions,
-      title: metadata.get('title'),
-      designer: metadata.get('designer'),
-      application,
-      bambuStudioVersion: metadata.get('bambustudio:3mfversion'),
-      creationDate: metadata.get('creationdate'),
-      licenseTerms: metadata.get('licenseterms'),
-      description: metadata.get('description'),
-      plateCount: plateCount || undefined,
-      printPartCount: configuredParts.length || undefined,
-      configuredFaceCount: configuredFaceCount || undefined,
-      extruderCount: extruders.size || undefined,
-      materialNames,
-      materialColors,
-      printParts: configuredParts,
-    },
-  };
-}
+import {
+  ModelDef,
+  ModelIsolatedBody,
+  ModelInspectorSection,
+  getExtension,
+  type Model3dData,
+  type ModelInspectorRow,
+} from './model-file-def';
+import { parseThreeMf, type ThreeMfMetadata } from './three-mf-meta-extractor';
 
 export class ThreeMfPrintPartField extends FieldDef {
   static displayName = '3MF Print Part';
@@ -414,82 +179,51 @@ export class ThreeMfMetadataField extends FieldDef {
 class ThreeMfIsolated extends GlimmerComponent<{
   Args: { model: ThreeMfDef };
 }> {
+  get threeMfRows(): ModelInspectorRow[] {
+    let t = this.args.model.threeMfMetadata;
+    let rows: ModelInspectorRow[] = [];
+    if (!t) {
+      return rows;
+    }
+    if (t.unit) {
+      rows.push({ term: 'Units', detail: t.unit });
+    }
+    if (t.sizeX) {
+      rows.push({
+        term: 'Bounds',
+        detail: `${t.sizeX} × ${t.sizeY} × ${t.sizeZ} ${t.unit}`,
+      });
+    }
+    if (t.objectCount) {
+      rows.push({ term: 'Objects', detail: t.objectCount });
+    }
+    if (t.plateCount) {
+      rows.push({ term: 'Plates', detail: t.plateCount });
+    }
+    if (t.printPartCount) {
+      rows.push({ term: 'Print parts', detail: t.printPartCount });
+    }
+    if (t.extruderCount) {
+      rows.push({ term: 'Extruders', detail: t.extruderCount });
+    }
+    if (t.designer) {
+      rows.push({ term: 'Designer', detail: t.designer });
+    }
+    if (t.application) {
+      rows.push({ term: 'Application', detail: t.application });
+    }
+    return rows;
+  }
+
   <template>
     <ModelIsolatedBody @model={{@model}}>
       {{#if @model.threeMfMetadata}}
-        <section class='insp-group'>
-          <h2 class='insp-head'>3MF package</h2>
-          <dl class='insp-rows'>
-            {{#if @model.threeMfMetadata.unit}}<div><dt>Units</dt><dd
-                >{{@model.threeMfMetadata.unit}}</dd></div>{{/if}}
-            {{#if @model.threeMfMetadata.sizeX}}<div><dt>Bounds</dt><dd
-                >{{@model.threeMfMetadata.sizeX}}
-                  ×
-                  {{@model.threeMfMetadata.sizeY}}
-                  ×
-                  {{@model.threeMfMetadata.sizeZ}}
-                  {{@model.threeMfMetadata.unit}}</dd></div>{{/if}}
-            {{#if @model.threeMfMetadata.objectCount}}<div><dt>Objects</dt><dd
-                >{{@model.threeMfMetadata.objectCount}}</dd></div>{{/if}}
-            {{#if @model.threeMfMetadata.plateCount}}<div><dt>Plates</dt><dd
-                >{{@model.threeMfMetadata.plateCount}}</dd></div>{{/if}}
-            {{#if @model.threeMfMetadata.printPartCount}}<div><dt>Print parts</dt><dd
-                >{{@model.threeMfMetadata.printPartCount}}</dd></div>{{/if}}
-            {{#if @model.threeMfMetadata.extruderCount}}<div><dt
-                >Extruders</dt><dd
-                >{{@model.threeMfMetadata.extruderCount}}</dd></div>{{/if}}
-            {{#if @model.threeMfMetadata.designer}}<div><dt>Designer</dt><dd
-                >{{@model.threeMfMetadata.designer}}</dd></div>{{/if}}
-            {{#if @model.threeMfMetadata.application}}<div><dt
-                >Application</dt><dd
-                >{{@model.threeMfMetadata.application}}</dd></div>{{/if}}
-          </dl>
-        </section>
+        <ModelInspectorSection
+          @heading='3MF package'
+          @rows={{this.threeMfRows}}
+        />
       {{/if}}
     </ModelIsolatedBody>
-    <style scoped>
-      .insp-group {
-        margin-top: 0.875rem;
-      }
-      .insp-head {
-        margin: 0 0 0.25rem;
-        font-family: var(--font-mono, var(--boxel-monospace-font-family));
-        font-size: 0.5625rem;
-        font-weight: 700;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        color: var(--muted-foreground);
-      }
-      .insp-rows {
-        margin: 0;
-        display: flex;
-        flex-direction: column;
-      }
-      .insp-rows div {
-        display: grid;
-        grid-template-columns: 5.75rem minmax(0, 1fr);
-        gap: 0.625rem;
-        align-items: baseline;
-        padding: 0.3125rem 0;
-        border-top: 1px solid var(--border);
-      }
-      .insp-rows div:first-child {
-        border-top: 0;
-      }
-      .insp-rows dt {
-        color: var(--muted-foreground);
-        font-family: var(--font-mono, var(--boxel-monospace-font-family));
-        font-size: 0.59375rem;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-      }
-      .insp-rows dd {
-        min-width: 0;
-        margin: 0;
-        font-size: 0.75rem;
-        overflow-wrap: anywhere;
-      }
-    </style>
   </template>
 }
 
@@ -513,9 +247,21 @@ export class ThreeMfDef extends ModelDef {
   static async extractAttributes(
     url: string,
     getStream: () => Promise<ByteStream>,
-    options: { contentHash?: string; contentSize?: number } = {},
+    options: {
+      contentHash?: string;
+      contentSize?: number;
+      // Backstop bound on the bytes we're willing to parse at index time,
+      // threaded from the host; defaults to the realm's standard file-size
+      // limit (`DEFAULT_FILE_SIZE_LIMIT_BYTES`), the same ceiling the write
+      // path enforces, so the two can't drift.
+      fileSizeLimitBytes?: number;
+    } = {},
   ): Promise<
-    SerializedFile<{ model3d: Model3dData; threeMfMetadata: ThreeMfMetadata }>
+    // `model3d`/`threeMfMetadata` are optional: over the size cap we skip the
+    // parse and return only the base file attributes (see below).
+    SerializedFile<
+      Partial<{ model3d: Model3dData; threeMfMetadata: ThreeMfMetadata }>
+    >
   > {
     let extension = getExtension(url);
     if (extension !== '.3mf') {
@@ -532,6 +278,18 @@ export class ThreeMfDef extends ModelDef {
 
     let base = await super.extractAttributes(url, memoizedStream, options);
     let bytes = await memoizedStream();
+    // Over the size cap, skip the parse but keep the ThreeMfDef type — the file
+    // still renders via the live client-side viewer (which parses its own
+    // geometry); it just has empty inspector panels and a generic silhouette.
+    // Do NOT throw FileContentMismatchError here: that would demote the file to
+    // a plain FileDef and lose the 3D card entirely.
+    let sizeCap = options.fileSizeLimitBytes ?? DEFAULT_FILE_SIZE_LIMIT_BYTES;
+    if (bytes.byteLength > sizeCap) {
+      console.warn(
+        `[ThreeMfDef] skipping metadata extraction for ${url}: ${bytes.byteLength} bytes exceeds cap ${sizeCap}`,
+      );
+      return { ...base };
+    }
     let parsed = parseThreeMf(
       bytes.buffer.slice(
         bytes.byteOffset,
