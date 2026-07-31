@@ -577,6 +577,14 @@ export default class RealmServerService extends Service {
     return [...this.archivedRealmsList];
   }
 
+  // Whether the archived-realms list has been fetched (i.e. the owner has
+  // expanded the "Archived" section at least once). Lets callers refresh that
+  // list only when it's actually being shown, rather than paying the fetch for
+  // an owner who never opened it.
+  get isArchivedRealmsFetched(): boolean {
+    return this.archivedRealmsFetched;
+  }
+
   @cached
   get availableRealmIndexCardIds() {
     return this.availableRealmIdentifiers.map((url) => `${url}index`);

@@ -1386,6 +1386,15 @@ export default class MatrixService extends Service {
   // already delivers such changes (see the AccountData listener), so they are
   // left to that path. Best-effort: a push must never crash the app, so
   // assembly failures are logged and the current list is left intact.
+  //
+  // The archived list is a separate list on RealmServerService fed by a
+  // different endpoint (`_archived-realms`) that `_realm-auth` never touches, so
+  // re-deriving the active list alone would leave "Archived" stale: an
+  // out-of-band archive wouldn't appear there, and an out-of-band unarchive
+  // would leave the realm showing in both sections. Since one generic signal
+  // serves all four mutations, refresh the archived list here too — but only
+  // when it's already been fetched, so an owner who never opened "Archived"
+  // doesn't pay the fetch.
   private async refreshRealmsList() {
     if (!this.trustedRealmServersAuthoritative) {
       return;
@@ -1396,6 +1405,9 @@ export default class MatrixService extends Service {
         return;
       }
       await this.applyTrustedRealmServersAccountData(realmServers);
+      if (this.realmServer.isArchivedRealmsFetched) {
+        await this.realmServer.fetchArchivedRealms({ force: true });
+      }
     } catch (err) {
       console.error(
         'Failed to refresh realms list after realms-list-updated event',

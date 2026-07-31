@@ -15,6 +15,7 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import {
   testRealmURL,
+  setRealmArchived,
   setupAuthEndpoints,
   setupIntegrationTestRealm,
   setupLocalIndexing,
@@ -105,6 +106,111 @@ module(
       assert.ok(
         realmServer.userRealmIdentifiers.includes(ri(testRealmURL)),
         'the already-loaded realm is retained',
+      );
+    });
+
+    // The event also has to keep the separate Archived section honest, since
+    // one generic signal serves all four mutations. `_realm-auth` (the active
+    // list) excludes archived realms, so an out-of-band archive would leave a
+    // stale Archived section without the refresh reaching that second list.
+    test('an out-of-band archive moves the realm from Your Workspaces into an already-open Archived section', async function (assert) {
+      let realmServer = getService('realm-server') as RealmServerService;
+
+      // An owned realm the trusted server advertises as active.
+      setupAuthEndpoints({
+        [outOfBandRealmURL]: ['read', 'write', 'realm-owner'],
+      });
+      await fireRealmsListUpdated(realmServer);
+      assert.ok(
+        realmServer.userRealmIdentifiers.includes(ri(outOfBandRealmURL)),
+        'the realm is active before archiving',
+      );
+
+      // The owner has opened the Archived section (empty so far).
+      await realmServer.fetchArchivedRealms();
+      assert.strictEqual(
+        realmServer.archivedRealms.length,
+        0,
+        'the Archived section is empty before archiving',
+      );
+
+      // Out-of-band archive: the trusted server drops it from `_realm-auth` and
+      // begins surfacing it from `_archived-realms`.
+      setRealmArchived(outOfBandRealmURL, true);
+
+      await fireRealmsListUpdated(realmServer);
+
+      assert.notOk(
+        realmServer.userRealmIdentifiers.includes(ri(outOfBandRealmURL)),
+        'the realm leaves Your Workspaces after the archive event',
+      );
+      assert.ok(
+        realmServer.archivedRealms.some((r) => r.url === outOfBandRealmURL),
+        'the realm appears in the already-open Archived section without a reload',
+      );
+    });
+
+    test('an out-of-band unarchive restores the realm to Your Workspaces and clears it from an already-open Archived section', async function (assert) {
+      let realmServer = getService('realm-server') as RealmServerService;
+
+      // An owned realm that starts archived: absent from `_realm-auth`, present
+      // in `_archived-realms`.
+      setupAuthEndpoints({
+        [outOfBandRealmURL]: ['read', 'write', 'realm-owner'],
+      });
+      setRealmArchived(outOfBandRealmURL, true);
+      await fireRealmsListUpdated(realmServer);
+      assert.notOk(
+        realmServer.userRealmIdentifiers.includes(ri(outOfBandRealmURL)),
+        'the archived realm is absent from Your Workspaces to start',
+      );
+
+      // The owner has opened the Archived section and sees it there.
+      await realmServer.fetchArchivedRealms();
+      assert.ok(
+        realmServer.archivedRealms.some((r) => r.url === outOfBandRealmURL),
+        'the realm is in the Archived section to start',
+      );
+
+      // Out-of-band unarchive.
+      setRealmArchived(outOfBandRealmURL, false);
+
+      await fireRealmsListUpdated(realmServer);
+
+      assert.ok(
+        realmServer.userRealmIdentifiers.includes(ri(outOfBandRealmURL)),
+        'the realm returns to Your Workspaces after the unarchive event',
+      );
+      assert.notOk(
+        realmServer.archivedRealms.some((r) => r.url === outOfBandRealmURL),
+        'the realm is cleared from the Archived section — not left showing in both',
+      );
+    });
+
+    // The archived refresh is guarded: an owner who never opened the Archived
+    // section must not pay its fetch on every list-changed push.
+    test('an out-of-band archive does not fetch the Archived section when it was never opened', async function (assert) {
+      let realmServer = getService('realm-server') as RealmServerService;
+
+      setupAuthEndpoints({
+        [outOfBandRealmURL]: ['read', 'write', 'realm-owner'],
+      });
+      await fireRealmsListUpdated(realmServer);
+      assert.notOk(
+        realmServer.isArchivedRealmsFetched,
+        'the Archived section is unfetched to start',
+      );
+
+      setRealmArchived(outOfBandRealmURL, true);
+      await fireRealmsListUpdated(realmServer);
+
+      assert.notOk(
+        realmServer.userRealmIdentifiers.includes(ri(outOfBandRealmURL)),
+        'the realm still leaves Your Workspaces',
+      );
+      assert.notOk(
+        realmServer.isArchivedRealmsFetched,
+        'the Archived section stays unfetched — the owner never opened it',
       );
     });
   },

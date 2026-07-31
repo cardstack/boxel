@@ -74,9 +74,11 @@ export default function handleArchiveRealm({
       await setContextResponse(ctxt, response);
 
       // Tell the owner's other sessions their realm list changed so a session
-      // viewing the workspace chooser moves the realm into Archived without a
-      // reload. Best-effort: the realm is already archived, so a failed notify
-      // must not turn a successful archive into an error.
+      // viewing the workspace chooser drops the realm from Your Workspaces —
+      // and, if that session already has the Archived section open, moves it
+      // into Archived — without a reload. Best-effort: the realm is already
+      // archived, so a failed notify must not turn a successful archive into an
+      // error.
       try {
         await sendEvent(ownerUserId, REALMS_LIST_UPDATED_EVENT_TYPE);
       } catch (error) {

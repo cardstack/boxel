@@ -81,9 +81,10 @@ export default function handleUnarchiveRealm({
       await setContextResponse(ctxt, response);
 
       // Tell the owner's other sessions their realm list changed so a session
-      // viewing the workspace chooser restores the realm to Your Workspaces
-      // without a reload. Best-effort: the realm is already restored, so a
-      // failed notify must not turn a successful unarchive into an error.
+      // viewing the workspace chooser restores the realm to Your Workspaces —
+      // and drops it from the Archived section if that session already has it
+      // open — without a reload. Best-effort: the realm is already restored, so
+      // a failed notify must not turn a successful unarchive into an error.
       try {
         await sendEvent(ownerUserId, REALMS_LIST_UPDATED_EVENT_TYPE);
       } catch (error) {
