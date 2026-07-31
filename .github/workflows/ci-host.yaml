@@ -583,7 +583,16 @@ jobs:
           # raw notFound when the host store does a direct GET) point at
           # the same race; match both. A second shard pass typically lands
           # after the race resolves.
-          RETRY_PATTERN='ChunkLoadError|Failed to fetch dynamically imported module|NetworkError when attempting to fetch resource|unable to fetch https://icons\.[^:]+: fetch failed|cross-realm fetch failed for https://realm-test\.[^/]+|Could not find https://realm-test\.[^/"]+'
+          # The `Global error: Uncaught TypeError: Failed to fetch` form is a
+          # test-harness startup race: base card components (workspace,
+          # cards-grid) fire a `_types` fetch against the mock test realm the
+          # moment they render, and with base modules compiled into the host
+          # bundle that render can land before the test-realm service worker
+          # is intercepting — the fetch escapes to the real network and the
+          # rejection surfaces as a Global error. The race is rare per shard,
+          # so a second pass lands; the durable fix is queuing test-realm
+          # fetches in the harness until realm registration completes.
+          RETRY_PATTERN='ChunkLoadError|Failed to fetch dynamically imported module|NetworkError when attempting to fetch resource|unable to fetch https://icons\.[^:]+: fetch failed|cross-realm fetch failed for https://realm-test\.[^/]+|Could not find https://realm-test\.[^/"]+|Global error: Uncaught TypeError: Failed to fetch'
           if [ $exit_code -ne 0 ] && grep -Eq "$RETRY_PATTERN" /tmp/test-output.log; then
             echo ""
             echo "::warning::Transient chunk-fetch failure detected — retrying shard ${{ matrix.shardIndex }}"
