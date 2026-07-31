@@ -125,16 +125,46 @@ jobs:
           #   indexed and prerendered.
           # packages/boxel-ui: baked into prerendered card HTML — the
           #   deployed post-deploy reindex keys on a boxel-ui checksum for
-          #   this same reason.
+          #   this same reason (lib/boxel-ui-change-checker.ts).
           # packages/postgres: schema of the dumped tables.
           # package.json / pnpm-lock.yaml: a dependency change can alter
           #   render or index output.
+          #
+          # The host render path gets the same treatment. `prerendered_html`
+          # rows are produced by rendering cards through the host bundle, and a
+          # card this PR did not touch keeps its cached row — so a change to
+          # the code that emits that HTML would leave tests reading markup
+          # built by main's host, and a rendering regression could pass. The
+          # test to apply when adding a path here: does this file shape the
+          # HTML the prerenderer writes? Client-side consumers of that HTML
+          # (renderable-search-entries, markdown rendering) do not qualify —
+          # they read it, and they read freshly rendered HTML the same way.
+          #
+          # Deliberately not all of packages/host: it is this workflow's main
+          # path trigger, so that would return nearly every run to
+          # from-scratch indexing. Ordinary host UI — operator mode, the AI
+          # assistant, code submode — never appears in a card's prerendered
+          # HTML, which is why the deployed equivalent keys on boxel-ui rather
+          # than on host-bundle identity.
           use_cache=true
           while IFS= read -r file; do
             case "$file" in
               packages/realm-server/*|packages/runtime-common/*|packages/postgres/*|packages/boxel-ui/*|package.json|pnpm-lock.yaml)
                 use_cache=false
                 echo "Index-behavior change detected: $file"
+                break
+                ;;
+              packages/host/app/components/card-prerender.gts |\
+              packages/host/app/components/card-renderer.gts |\
+              packages/host/app/lib/isolated-render.gts |\
+              packages/host/app/lib/prerender-* |\
+              packages/host/app/routes/render.ts |\
+              packages/host/app/routes/render/* |\
+              packages/host/app/services/render-* |\
+              packages/host/app/templates/render.gts |\
+              packages/host/app/utils/render-*)
+                use_cache=false
+                echo "Host render-path change detected: $file"
                 break
                 ;;
             esac
