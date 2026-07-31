@@ -580,6 +580,7 @@ function mergeVisitDiagnostics(
       'admissionMs',
       'tabQueueMs',
       'tabStartupMs',
+      'tabProbeMs',
     ] as const) {
       let total = sum(index.waits?.[key], html.waits?.[key]);
       if (total !== undefined) {

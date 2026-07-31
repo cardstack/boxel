@@ -14,7 +14,7 @@ interface InputSignature {
     placeholder?: string;
     readonly?: boolean;
     required?: boolean;
-    value?: string;
+    value?: string | null;
   };
   Blocks: Record<string, never>;
   Element: HTMLInputElement;
@@ -38,7 +38,7 @@ export const Input: TemplateOnlyComponent<InputSignature> = <template>
 interface TextareaSignature {
   Args: {
     placeholder?: string;
-    value?: string;
+    value?: string | null;
   };
   Blocks: Record<string, never>;
   Element: HTMLTextAreaElement;

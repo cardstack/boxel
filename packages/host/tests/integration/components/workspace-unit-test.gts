@@ -77,6 +77,67 @@ module('Integration | Card | workspace | pure functions', function (hooks) {
     });
   });
 
+  module('progressMilestone', function () {
+    test('holds steady between milestones', function (assert) {
+      // The point of the quantising: a meter creeping 26 -> 49 must not change
+      // the announced text, or the status region interrupts on every tick.
+      assert.strictEqual(ws.progressMilestone(26), 25);
+      assert.strictEqual(ws.progressMilestone(49), 25);
+    });
+
+    test('advances on crossing each quarter', function (assert) {
+      assert.strictEqual(ws.progressMilestone(0), 0);
+      assert.strictEqual(ws.progressMilestone(25), 25);
+      assert.strictEqual(ws.progressMilestone(50), 50);
+      assert.strictEqual(ws.progressMilestone(75), 75);
+      assert.strictEqual(ws.progressMilestone(100), 100);
+    });
+
+    test('clamps a negative percentage to zero', function (assert) {
+      assert.strictEqual(ws.progressMilestone(-5), 0);
+    });
+  });
+
+  module('describeSearchResults', function () {
+    test('names a genuine settled zero as no matches', function (assert) {
+      // Reached only on settle, so an empty result here is a real "no matches",
+      // not the debounce window or a dismissed dropdown (those never call it).
+      assert.strictEqual(ws.describeSearchResults(0, 0), 'No matching cards');
+    });
+
+    test('counts the shown results, singular and plural', function (assert) {
+      assert.strictEqual(ws.describeSearchResults(1, 1), '1 result');
+      assert.strictEqual(ws.describeSearchResults(3, 3), '3 results');
+    });
+
+    test('reports the shown-of-total split when the list is capped', function (assert) {
+      assert.strictEqual(
+        ws.describeSearchResults(8, 40),
+        'Showing 8 of 40 results',
+      );
+    });
+  });
+
+  module('searchHotkeyLabel', function () {
+    test('spells the Frame hotkey the way the platform does', function (assert) {
+      // Matches on `Mac`, as codemirror-editor.gts's own mod-key label does.
+      // Desktop-class Safari on an iPad also reports MacIntel, so the platforms
+      // that actually have a ⌘ key to press are covered.
+      assert.strictEqual(ws.searchHotkeyLabel('MacIntel'), '⌘K', 'macOS');
+      assert.strictEqual(ws.searchHotkeyLabel('Win32'), 'Ctrl+K', 'Windows');
+      assert.strictEqual(
+        ws.searchHotkeyLabel('Linux x86_64'),
+        'Ctrl+K',
+        'Linux',
+      );
+    });
+
+    test('falls back to Ctrl when the platform is unknown', function (assert) {
+      // What a prerender pass sees: no navigator, so the label is built from ''.
+      assert.strictEqual(ws.searchHotkeyLabel(''), 'Ctrl+K');
+    });
+  });
+
   module('classifyActivityVerb', function () {
     const created = 1_000_000;
 
@@ -102,6 +163,38 @@ module('Integration | Card | workspace | pure functions', function (hooks) {
       assert.strictEqual(
         ws.classifyActivityVerb(created, undefined),
         'Updated',
+      );
+    });
+  });
+
+  module('activityVerbFor', function () {
+    const created = 1_000_000;
+
+    test('a RemixCard is a first-class "Remixed" event regardless of timing', function (assert) {
+      // The remix verb wins even when the save timing would otherwise read as a
+      // fresh "Created" — the RemixCard instance IS the record of the clone.
+      assert.strictEqual(
+        ws.activityVerbFor('Remix', created + 60_000, created),
+        'Remixed',
+      );
+      assert.strictEqual(
+        ws.activityVerbFor('Remix', created + 300_000, created),
+        'Remixed',
+      );
+    });
+
+    test('a non-remix card falls back to the Created/Updated timing rule', function (assert) {
+      assert.strictEqual(
+        ws.activityVerbFor('Note', created + 60_000, created),
+        'Created',
+      );
+      assert.strictEqual(
+        ws.activityVerbFor('Note', created + 300_000, created),
+        'Updated',
+      );
+      assert.strictEqual(
+        ws.activityVerbFor(undefined, created + 60_000, created),
+        'Created',
       );
     });
   });

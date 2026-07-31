@@ -354,7 +354,8 @@ export class TaskPlanner extends GlimmerComponent<TaskPlannerArgs> {
     );
   }
 
-  getComponent(cardOrField: BaseDef) {
+  getComponent(item: DndItem) {
+    let cardOrField = item as BaseDef;
     return cardOrField.constructor.getComponent(cardOrField);
   }
 

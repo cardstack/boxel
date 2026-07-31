@@ -337,7 +337,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
           {{on 'click' @add}}
           data-test-add-new={{@field.name}}
         >
-          <IconPlus class='icon' width='12px' height='12px' alt='plus' />
+          <IconPlus class='icon' width='12px' height='12px' role='presentation' />
           Add
           {{getPlural @field.card.displayName}}
         </Button>
@@ -513,7 +513,7 @@ class LinksToManyCompactEditor extends GlimmerComponent<LinksToManyCompactEditor
         {{on 'click' @add}}
         data-test-add-new={{@field.name}}
       >
-        <IconPlus class='icon' width='12px' height='12px' alt='plus' />
+        <IconPlus class='icon' width='12px' height='12px' role='presentation' />
         Add
         {{@field.card.displayName}}
       </Button>

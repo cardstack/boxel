@@ -476,6 +476,7 @@ export default class PanelContent extends Component<Signature> {
                 @resolvedCard={{this.resolvedCard}}
                 @isCardResourceLoaded={{this.isCardResourceLoaded}}
                 @realms={{this.realms}}
+                @realmsLocked={{@realmFilter.locked}}
                 @baseFilter={{@baseFilter}}
                 @offerToCreate={{@offerToCreate}}
                 @recentCardBareIds={{this.recentCardBareIds}}

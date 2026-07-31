@@ -63,14 +63,9 @@ class ConnectComponent extends Component<ConnectComponentSignature> {
     {{#if this.storageAccess}}
       {{#if this.matrixService.isLoggedIn}}
         <section class='session-container'>
-          <BoxelIcon
-            name='connect'
-            width='18'
-            height='18'
-            class='connect-icon'
-          />
+          <BoxelIcon width='18' height='18' class='connect-icon' />
           <Avatar
-            @isReady={{this.matrixService.profile.loaded}}
+            @isReady={{this.matrixService.profile.isLoaded}}
             @userId={{this.matrixService.userId}}
             @displayName={{this.matrixService.profile.displayName}}
           />
@@ -135,7 +130,7 @@ interface ConnectButtonSignature {
 
 const ConnectButton: TemplateOnlyComponent<ConnectButtonSignature> = <template>
   <BoxelButton class='connect' data-test-connect ...attributes>
-    <BoxelIcon name='connect' width='16' height='16' class='connect-icon' />
+    <BoxelIcon width='16' height='16' class='connect-icon' />
     Connect
   </BoxelButton>
 

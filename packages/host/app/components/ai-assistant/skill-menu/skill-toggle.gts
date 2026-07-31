@@ -63,19 +63,23 @@ export default class SkillToggle extends Component<SkillToggleSignature> {
   // Title for either skill source: `cardTitle` for a Skill card; for a skill
   // markdown file, the title indexed from its first heading, falling back to
   // the frontmatter name slug only when the file has no heading.
-  private get displayTitle(): string | undefined {
-    let card = this.card as
-      | {
-          cardTitle?: string;
-          title?: string;
-          name?: string;
-          frontmatter?: { name?: string };
-        }
-      | undefined;
+  private get displayTitle(): string {
+    let card = this.card as {
+      cardTitle?: string;
+      title?: string;
+      name?: string;
+      frontmatter?: { name?: string };
+    };
     if (!card) {
-      return undefined;
+      return 'Untitled Skill';
     }
-    return card.cardTitle ?? card.title ?? card.frontmatter?.name ?? card.name;
+    return (
+      card.cardTitle ??
+      card.title ??
+      card.frontmatter?.name ??
+      card.name ??
+      'Untitled Skill'
+    );
   }
 
   private get isCreating() {
@@ -172,7 +176,7 @@ export default class SkillToggle extends Component<SkillToggleSignature> {
           </Pill>
           <Switch
             class='toggle'
-            @isEnabled={{@isEnabled}}
+            @isEnabled={{Boolean @isEnabled}}
             @onChange={{@onToggle}}
             @label={{this.displayTitle}}
             data-test-skill-toggle='{{@cardId}}-{{if @isEnabled "on" "off"}}'

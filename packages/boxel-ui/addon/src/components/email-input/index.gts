@@ -22,7 +22,7 @@ interface Signature {
     required?: boolean;
     value: string | null;
   };
-  Element: HTMLElement;
+  Element: HTMLInputElement;
 }
 
 const DEFAULT_FALLBACK_MESSAGE = 'Enter a valid email address';

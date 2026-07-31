@@ -62,12 +62,14 @@ const commandRequestStorageKeyPrefix = 'boxel-command-request:';
 // operators can tell "waited for the render semaphore" (saturation) apart
 // from "waited for the per-affinity file-admission cap" apart from
 // "waited for an affinity tab" (warm-tab serialization) apart from
-// "warmed a new tab". All four arrive tagged on every prerender response.
+// "warmed a new tab" apart from "probed a warm tab for liveness". All five
+// arrive tagged on every prerender response.
 export type LaunchWaits = {
   semaphoreMs: number;
   admissionMs: number;
   tabQueueMs: number;
   tabStartupMs: number;
+  tabProbeMs: number;
 };
 
 export type Timings = {

@@ -26,7 +26,7 @@ export default function formatOrdinal(
 
     // Get locale-specific formatting
     return formatOrdinalByLocale(n, locale, rule);
-  } catch (error) {
+  } catch {
     // Fallback to English if locale is not supported
     return formatEnglishOrdinal(n);
   }

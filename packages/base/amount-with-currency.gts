@@ -1,5 +1,7 @@
-import NumberField from './number';
+import NumberField, { deserializeForUI, serializeForUI } from './number';
 import { FieldDef, field, contains, Component } from './card-api';
+import { NumberSerializer } from '@cardstack/runtime-common';
+import { TextInputValidator } from './text-input-validator';
 import CurrencyField from './currency';
 import { action } from '@ember/object';
 import { BoxelInputGroup } from '@cardstack/boxel-ui/components';
@@ -28,12 +30,22 @@ class Edit extends Component<typeof AmountWithCurrency> {
   }
 
   @action
-  setAmount(val: number) {
+  setAmount(val: number | null | undefined) {
     let newModel = new AmountWithCurrency();
-    newModel.amount = val;
+    if (val != null) {
+      newModel.amount = val;
+    }
     newModel.currency.code = newModel.currency.code || 'USD';
     this.args.set(newModel);
   }
+
+  textInputValidator: TextInputValidator<number> = new TextInputValidator(
+    () => this.args.model.amount ?? null,
+    (val) => this.setAmount(val),
+    deserializeForUI,
+    serializeForUI,
+    NumberSerializer.validate,
+  );
 
   @action
   setCurrency(val: CurrencyField) {
@@ -47,9 +59,10 @@ class Edit extends Component<typeof AmountWithCurrency> {
     <BoxelInputGroup
       @id={{this.id}}
       @placeholder='0.00'
-      @value={{@model.amount}}
-      @invalid={{false}}
-      @onInput={{this.setAmount}}
+      @value={{this.textInputValidator.asString}}
+      @state={{if this.textInputValidator.isInvalid 'invalid' 'none'}}
+      @errorMessage={{this.textInputValidator.errorMessage}}
+      @onInput={{this.textInputValidator.onInput}}
       @autocomplete='off'
       @inputmode='decimal'
       class='input-selectable-currency-amount'

@@ -12,6 +12,7 @@ import {
   type CopyResult,
 } from './index.ts';
 import {
+  indexingConcurrencyGroup,
   INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
   makeIncrementalArgsWithCallerMetadata,
   mapIncrementalDoneResult,
@@ -265,7 +266,7 @@ export class RealmIndexUpdater {
       let clientRequestId = opts?.clientRequestId ?? null;
       job = await this.#queue.publish<IncrementalDoneResult>({
         jobType: 'incremental-index',
-        concurrencyGroup: `indexing:${this.#realm.url}`,
+        concurrencyGroup: indexingConcurrencyGroup(this.#realm.url),
         timeout: INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
         priority: userInitiatedPriority,
         args: makeIncrementalArgsWithCallerMetadata(args, clientRequestId),
@@ -347,7 +348,7 @@ export class RealmIndexUpdater {
       };
       let job = await this.#queue.publish<CopyResult>({
         jobType: 'copy-index',
-        concurrencyGroup: `indexing:${this.#realm.url}`,
+        concurrencyGroup: indexingConcurrencyGroup(this.#realm.url),
         timeout: 4 * 60,
         priority: userInitiatedPriority,
         args,

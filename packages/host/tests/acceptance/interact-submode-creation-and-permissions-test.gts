@@ -11,7 +11,7 @@ import { triggerEvent } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import window from 'ember-window-mock';
-import { module, skip, test } from 'qunit';
+import { module, test } from 'qunit';
 
 import type { SingleCardDocument } from '@cardstack/runtime-common';
 import { Deferred, isLocalId } from '@cardstack/runtime-common';
@@ -1001,40 +1001,6 @@ module(
         assert.dom('[data-test-highlights-layout]').exists();
         assert.dom('[data-test-section-header]').exists({ count: 3 });
         assert.dom('[data-test-community-link]').exists({ count: 4 });
-      });
-
-      skip('sends typed prompt to ask ai when creating app', async function (assert) {
-        await visitOperatorMode({
-          stacks: [[{ id: `${personalRealmURL}index`, format: 'isolated' }]],
-          selectAllCardsFilter: false,
-        });
-
-        await click('[data-test-boxel-button][title="About Me"]');
-        let typedPrompt =
-          'Design a travel planner dashboard that tracks itineraries, bookings, and budgets';
-
-        await fillIn(
-          '[data-test-card="@cardstack/base/ai-app-generator"] textarea',
-          typedPrompt,
-        );
-        assert
-          .dom('[data-test-card="@cardstack/base/ai-app-generator"] textarea')
-          .hasValue(typedPrompt);
-
-        await click('[data-test-create-this-for-me]');
-        await waitFor('[data-test-message-idx="0"] [data-test-attached-card]');
-        assertMessages(assert, [
-          {
-            from: 'testuser',
-            message: typedPrompt,
-            cards: [
-              {
-                id: `${personalRealmURL}index`,
-                cardTitle: 'Test Personal Workspace',
-              },
-            ],
-          },
-        ]);
       });
     });
   },

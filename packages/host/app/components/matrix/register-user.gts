@@ -134,7 +134,7 @@ export default class RegisterUser extends Component<Signature> {
             data-test-username-field
             id='boxel-register-username'
             @name='username'
-            autocomplete='username'
+            @autocomplete='username'
             @state={{this.usernameInputState}}
             @value={{this.username}}
             @placeholder='Your username'

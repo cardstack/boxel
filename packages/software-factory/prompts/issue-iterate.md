@@ -54,7 +54,10 @@ All validation steps passed.
 Fix the validation failures shown above. You have the same tools available. You can:
 
 - Use **`Read`** / **`Glob`** to inspect the current state of your implementation
-- Use **`Write`** or **`Edit`** to update implementation or test files
+- Use **`Edit`** to fix the failing lines — surgical search/replace on the
+  smallest span, never a whole-file re-`Write` (re-emitting a full `.gts`
+  costs 1–2 minutes of generation; an `Edit` costs seconds). Reach for
+  **`Write`** only when more than half the file is changing
 - Use **`Bash`** + `boxel search` to check what cards exist in the realm
 - If a lint violation is in your code, fix the code to pass lint
 - If the test expectation is wrong, fix the test

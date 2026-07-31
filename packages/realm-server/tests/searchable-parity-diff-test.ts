@@ -1,6 +1,8 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 
+import { basename } from 'path';
+
 import { diffDoc, isShallowLink, shallowIds } from '@cardstack/runtime-common';
 
 // Unit coverage for the parity comparison logic shared by the realm-scale
@@ -10,7 +12,7 @@ import { diffDoc, isShallowLink, shallowIds } from '@cardstack/runtime-common';
 // --ignore-shallow-links) treats the store-driven omit-vs-keep-`{id}` difference
 // as equivalent — at any nesting depth — while still catching a CHANGED
 // reference or any real contained-data delta.
-module('Unit | searchable-parity-diff', function () {
+module(basename(import.meta.filename), function () {
   module('isShallowLink', function () {
     test('null / a bare { id } / an array of bare { id } are shallow', function (assert) {
       assert.true(isShallowLink(null), 'null');

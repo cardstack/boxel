@@ -82,8 +82,12 @@ export default class PickerSelectedItem extends Component<PickerSelectedItemSign
   }
 
   get displayRemoveButton() {
-    if (this.args.option.type === 'select-all') return false;
-    if (this.args.select.disabled) return false;
+    if (this.args.option.type === 'select-all') {
+      return false;
+    }
+    if (this.args.select.disabled) {
+      return false;
+    }
     return true;
   }
 

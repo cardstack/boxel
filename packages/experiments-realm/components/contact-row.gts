@@ -21,7 +21,7 @@ export class ContactRow extends GlimmerComponent<ContactRowArgs> {
     <EntityDisplayWithThumbnail @title={{@name}}>
       <:thumbnail>
         <Avatar
-          @userID={{@userID}}
+          @userId={{@userID}}
           @displayName={{@name}}
           @thumbnailURL={{@thumbnailURL}}
           @isReady={{true}}

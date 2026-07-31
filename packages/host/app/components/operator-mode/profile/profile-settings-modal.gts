@@ -60,7 +60,6 @@ export default class ProfileSettingsModal extends Component<Signature> {
                 data-test-display-name-field
                 @value={{this.matrixService.profile.displayName}}
                 @onInput={{this.setDisplayName}}
-                @valid={{this.isDisplayNameValid}}
                 @errorMessage={{if
                   (not this.isDisplayNameValid)
                   'Name is required'
@@ -272,10 +271,10 @@ export default class ProfileSettingsModal extends Component<Signature> {
   }
 
   private get hasPasswordError() {
-    return (
+    return Boolean(
       this.currentPasswordError ||
       this.newPasswordError ||
-      this.confirmPasswordError
+      this.confirmPasswordError,
     );
   }
 

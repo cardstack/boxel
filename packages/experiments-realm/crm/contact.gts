@@ -463,7 +463,7 @@ class AtomTemplate extends Component<typeof Contact> {
       <EntityDisplayWithThumbnail @title={{this.label}} @underline={{true}}>
         <:thumbnail>
           <Avatar
-            @userID={{@model.id}}
+            @userId={{@model.id}}
             @displayName={{@model.name}}
             @thumbnailURL={{@model.cardThumbnailURL}}
             @isReady={{true}}

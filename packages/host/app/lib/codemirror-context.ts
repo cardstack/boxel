@@ -48,6 +48,7 @@ import {
   type BfmRefFormat,
   type BfmRefRange,
   bfmRefFormatAndSize,
+  bfmResolvedEmbedStyle,
   extractBfmRefRanges,
   parseBfmSizeSpec,
 } from '@cardstack/runtime-common/bfm-card-references';
@@ -62,9 +63,10 @@ export interface CardWidgetTarget {
   // 'card' refs (`:card[URL]`) resolve to CardDef instances; 'file' refs
   // (`:file[URL]`) resolve to FileDef instances.
   refType: 'card' | 'file';
-  // Inline sizing (`width`/`height`, plus `overflow: hidden` for fitted) derived
-  // from the directive's size specifier. Undefined for non-fitted formats.
-  // Mirrors the style the saved/preview markdown renderers apply.
+  // Inline sizing derived from the directive's format — fitted dimensions plus
+  // `overflow: hidden`, or the shared non-atom footprint from
+  // `bfmResolvedEmbedStyle`. Undefined for atom and block embedded. Mirrors
+  // the style the saved/preview markdown renderers apply.
   style?: string;
 }
 
@@ -941,14 +943,10 @@ function createCardTargetNotifier(
                 el.getAttribute('data-boxel-bfm-height') ?? undefined,
                 kind === 'inline' ? 'atom' : 'embedded',
               );
-              // Fitted slots carry the width/height plus `overflow: hidden` so
-              // the resolved instance occupies the requested footprint.
-              let style =
-                format === 'fitted'
-                  ? sizeStyle
-                    ? `${sizeStyle}; overflow: hidden`
-                    : 'overflow: hidden'
-                  : undefined;
+              // Non-atom slots carry a footprint so the resolved instance
+              // occupies a definite box instead of collapsing. Same helper as
+              // the saved/preview renderers so footprints stay in lockstep.
+              let style = bfmResolvedEmbedStyle(format, kind, sizeStyle);
               targets.push({
                 element: el as HTMLElement,
                 cardId,

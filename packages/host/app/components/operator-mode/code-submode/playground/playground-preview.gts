@@ -1,5 +1,4 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-import { get } from '@ember/helper';
 
 import { CardContainer, CardHeader } from '@cardstack/boxel-ui/components';
 import type { MenuItem } from '@cardstack/boxel-ui/helpers';
@@ -37,6 +36,10 @@ interface Signature {
     onFinishEditing?: () => void;
   };
 }
+function fileDefName(card: CardDef | FieldDef | FileDef) {
+  return (card as FileDef).name;
+}
+
 const PlaygroundPreview: TemplateOnlyComponent<Signature> = <template>
   {{#if (or (eq @format 'isolated') (eq @format 'edit'))}}
     <CardContainer
@@ -54,7 +57,7 @@ const PlaygroundPreview: TemplateOnlyComponent<Signature> = <template>
           @cardTitle={{if
             (isCardInstance @card)
             @card.cardTitle
-            (if @isFileDef (get @card 'name') undefined)
+            (if @isFileDef (fileDefName @card) undefined)
           }}
           @realmInfo={{@realmInfo}}
           @onEdit={{@onEdit}}

@@ -11,7 +11,7 @@ import { isTesting } from '@embroider/macros';
 import { tracked } from '@glimmer/tracking';
 
 import { formatDistanceToNow } from 'date-fns';
-import { keepLatestTask, task } from 'ember-concurrency';
+import { keepLatestTask, task, didCancel } from 'ember-concurrency';
 
 import { cloneDeep } from 'lodash-es';
 import { isEqual } from 'lodash-es';
@@ -426,11 +426,52 @@ export default class StoreService extends Service implements StoreInterface {
     this.store = this.createCardStore();
   }
 
-  refreshReferencesForCodeChange(reason?: string) {
+  refreshReferencesForCodeChange(
+    reason?: string,
+    opts?: { triggerModule?: string; realm?: string },
+  ) {
     let reasonSuffix = reason ? ` (${reason})` : '';
     storeLogger.debug(`resetting store for code change${reasonSuffix}`);
+    let telemetry = this.#clientTelemetry();
+    let start = telemetry?.isEnabled ? performance.now() : undefined;
     this.store.reset();
-    this.reestablishReferences.perform();
+    let refetch = this.reestablishReferences.perform();
+    if (telemetry?.isEnabled && start !== undefined) {
+      let triggerModules = opts?.triggerModule ? [opts.triggerModule] : [];
+      // A code-mode save re-establishes the graph without waiting for the
+      // realm's index event, so this pass is otherwise invisible on the
+      // dashboard — a session editing a module in a realm the store holds no
+      // instances from does all of its rebuilding here.
+      let report = (cardsReloaded: number) =>
+        telemetry.recordEvent({
+          event_type: 'rebuild',
+          rebuild_source: 'write',
+          realm: opts?.realm ?? null,
+          duration_ms: Math.round(performance.now() - start),
+          trigger_modules: triggerModules,
+          trigger_module: triggerModules[0] ?? '',
+          modules_refetched: 0,
+          cards_reloaded: cardsReloaded,
+          coalesced_events: 0,
+        });
+      refetch.then(
+        (cardsReloaded) => report(cardsReloaded ?? 0),
+        (e) => {
+          // A cancelled re-establishment (the owner tearing down mid-flight)
+          // is not a rebuild worth reporting — but a genuine failure is a
+          // rebuild the tab paid for, and the one most worth seeing. Reporting
+          // it must not also swallow it: reading a task instance's promise
+          // marks its errors handled, which mutes ember-concurrency's
+          // uncaught-error reporting, so the rethrow restores the surface as
+          // an unhandled rejection.
+          if (didCancel(e)) {
+            return;
+          }
+          report(0);
+          throw e;
+        },
+      );
+    }
   }
 
   // Notify-on-delete for callers that hold a card by direct JS reference rather
@@ -1882,6 +1923,15 @@ export default class StoreService extends Service implements StoreInterface {
 
     let telemetry = this.#clientTelemetry();
     let processingStart = telemetry?.isEnabled ? performance.now() : undefined;
+    // The raw event, minus its invalidation list — that list is tracked
+    // separately (bounded) as invalidated_ids, and can be large.
+    let eventArgs = () => {
+      let { invalidations: _invalidations, ...rest } = event as unknown as {
+        invalidations?: unknown;
+        [key: string]: unknown;
+      };
+      return rest;
+    };
 
     if (event.indexType === 'full') {
       // A full reindex carries no per-file invalidation list; report it as a
@@ -1895,6 +1945,7 @@ export default class StoreService extends Service implements StoreInterface {
         reloads_triggered: 0,
         own_write: false,
         processing_ms: 0,
+        event_args: eventArgs(),
       });
       return;
     }
@@ -1910,14 +1961,22 @@ export default class StoreService extends Service implements StoreInterface {
     // The invalidation triggers a rebuild when it touches an already-loaded
     // executable module: the loader must be flushed so the updated code is
     // picked up before the open card graph re-runs. Net-new modules that were
-    // never loaded don't need one. Once a rebuild is in flight, fold every
-    // further executable invalidation into it regardless of `isModuleLoaded` —
-    // the freshly reset loader reports those modules as not-loaded, so the
-    // probe alone would drop a mid-burst code change.
+    // never loaded don't need one. `isModuleLoaded` alone can't answer that,
+    // because a loader the code change already flushed carries no loaded
+    // modules and so reports every module as net-new. Two flushes beat this
+    // event to the punch: a rebuild already in flight (fold every further
+    // executable invalidation into it), and the flush a local write or an open
+    // editor performed for this very module the moment it was rewritten.
     let executableInvalidations = invalidations.filter(hasExecutableExtension);
+    let alreadyFlushed = new Set(
+      executableInvalidations.filter((i) =>
+        this.loaderService.wasModuleFlushedForCodeChange(i),
+      ),
+    );
     let needsRebuild =
       executableInvalidations.length > 0 &&
       (this.rebuildForCodeChange.isRunning ||
+        alreadyFlushed.size > 0 ||
         executableInvalidations.some((i) =>
           this.loaderService.loader.isModuleLoaded(i),
         ));
@@ -1932,7 +1991,11 @@ export default class StoreService extends Service implements StoreInterface {
       // touch reactivity: an isolated change triggers a single reset and
       // re-render.
       if (telemetry?.isEnabled) {
-        this.#accumulatePendingRebuild(event.realmURL, executableInvalidations);
+        this.#accumulatePendingRebuild(
+          event.realmURL,
+          executableInvalidations,
+          alreadyFlushed,
+        );
       }
       this.rebuildForCodeChange.perform();
       // The rebuild subsumes the per-invalidation reloads below: store.reset
@@ -1956,6 +2019,7 @@ export default class StoreService extends Service implements StoreInterface {
           processingStart !== undefined
             ? Math.round(performance.now() - processingStart)
             : 0,
+        event_args: eventArgs(),
       });
     }
   };
@@ -2148,7 +2212,11 @@ export default class StoreService extends Service implements StoreInterface {
       }
     | undefined = undefined;
 
-  #accumulatePendingRebuild(realm: string, executableInvalidations: string[]) {
+  #accumulatePendingRebuild(
+    realm: string,
+    executableInvalidations: string[],
+    alreadyFlushed: Set<string>,
+  ) {
     let pending = (this.#pendingRebuild ??= {
       realm,
       triggerModules: new Set<string>(),
@@ -2161,7 +2229,12 @@ export default class StoreService extends Service implements StoreInterface {
     pending.events++;
     for (let module of executableInvalidations) {
       pending.triggerModules.add(module);
-      if (this.loaderService.loader.isModuleLoaded(module)) {
+      // A module the code change already flushed was loaded and the rebuild
+      // will re-fetch it, even though the flushed loader no longer reports it.
+      if (
+        alreadyFlushed.has(module) ||
+        this.loaderService.loader.isModuleLoaded(module)
+      ) {
         pending.modulesRefetched.add(module);
       }
     }
@@ -2182,22 +2255,35 @@ export default class StoreService extends Service implements StoreInterface {
     let rebuildStart =
       telemetry?.isEnabled && pending ? performance.now() : undefined;
 
+    // When this reset actually replaces the loader — it is debounce-eligible,
+    // so it may not — it also drops the flush records that armed this rebuild:
+    // a plain replacement supersedes them. Records that outlive a debounced
+    // reset cost at most one extra rebuild later, whose own reset drops them.
+    // A code-change flush landing *during* the re-fetch below writes fresh
+    // records against the new loader, so the invalidation still to come for
+    // that write finds them.
     this.loaderService.resetLoader();
     this.store.reset();
-    let cardsReloaded = await this.reestablishReferences.perform();
-
-    if (telemetry?.isEnabled && pending && rebuildStart !== undefined) {
-      let triggerModules = [...pending.triggerModules].slice(0, 20);
-      telemetry.recordEvent({
-        event_type: 'rebuild',
-        realm: pending.realm,
-        duration_ms: Math.round(performance.now() - rebuildStart),
-        trigger_modules: triggerModules,
-        trigger_module: triggerModules[0] ?? '',
-        modules_refetched: pending.modulesRefetched.size,
-        cards_reloaded: cardsReloaded ?? 0,
-        coalesced_events: pending.events,
-      });
+    let cardsReloaded: number | undefined;
+    try {
+      cardsReloaded = await this.reestablishReferences.perform();
+    } finally {
+      // A rebuild that failed partway is still a rebuild the tab paid for, and
+      // the one most worth seeing on the dashboard.
+      if (telemetry?.isEnabled && pending && rebuildStart !== undefined) {
+        let triggerModules = [...pending.triggerModules].slice(0, 20);
+        telemetry.recordEvent({
+          event_type: 'rebuild',
+          rebuild_source: 'realm-event',
+          realm: pending.realm,
+          duration_ms: Math.round(performance.now() - rebuildStart),
+          trigger_modules: triggerModules,
+          trigger_module: triggerModules[0] ?? '',
+          modules_refetched: pending.modulesRefetched.size,
+          cards_reloaded: cardsReloaded ?? 0,
+          coalesced_events: pending.events,
+        });
+      }
     }
   });
 

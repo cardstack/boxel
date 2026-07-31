@@ -82,10 +82,13 @@ export function isFileDefCodeRef(
   return false;
 }
 
-function extensionOf(url: URL): string {
-  let name = url.pathname.split('/').pop() ?? '';
+function extensionOfName(name: string): string {
   let dot = name.lastIndexOf('.');
   return dot <= 0 ? '' : name.slice(dot).toLowerCase();
+}
+
+function extensionOf(url: URL): string {
+  return extensionOfName(url.pathname.split('/').pop() ?? '');
 }
 
 // Whether a URL names a file rather than a card, judged by a known FileDef
@@ -96,6 +99,13 @@ function extensionOf(url: URL): string {
 // file extensions count.
 export function urlNamesFile(url: URL): boolean {
   return extensionOf(url) in FILEDEF_CODE_REF_BY_EXTENSION;
+}
+
+// Last-path-segment form of `urlNamesFile`, for callers that already hold the
+// segment as a string — the index runner's per-dep classifier stays off URL
+// construction entirely.
+export function segmentNamesFile(name: string): boolean {
+  return extensionOfName(name) in FILEDEF_CODE_REF_BY_EXTENSION;
 }
 
 export function resolveFileDefCodeRef(

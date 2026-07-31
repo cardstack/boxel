@@ -12,7 +12,7 @@ interface Signature {
     headerBackgroundColor?: string;
     headerTitle?: string;
     setActiveTab: (tabId: string) => void;
-    tabs: Array<{
+    tabs?: Array<{
       displayName: string;
       tabId: string;
     }>;

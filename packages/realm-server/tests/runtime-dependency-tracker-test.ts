@@ -207,6 +207,50 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('records instance deps at their .json URL, dotted card ids included', async function (assert) {
+    beginRuntimeDependencyTrackingSession({
+      sessionKey: 'dotted-instance-ids',
+      rootURL: 'https://example.com/root.json',
+      rootKind: 'instance',
+    });
+
+    await withRuntimeDependencyTrackingContext(
+      {
+        mode: 'non-query',
+        source: 'test:dotted-instance-ids',
+        consumer: 'https://example.com/root.json',
+        consumerKind: 'instance',
+      },
+      async () => {
+        trackRuntimeInstanceDependency('https://example.com/hello.test');
+        trackRuntimeInstanceDependency(
+          'https://example.com/ModelConfiguration/claude-sonnet-4.6',
+        );
+        trackRuntimeInstanceDependency('https://example.com/already.json');
+      },
+    );
+
+    let snapshot = snapshotRuntimeDependencies({ excludeQueryOnly: true });
+    assert.true(
+      snapshot.deps.includes('https://example.com/hello.test.json'),
+      'a dotted card id gets the .json suffix its index row carries',
+    );
+    assert.true(
+      snapshot.deps.includes(
+        'https://example.com/ModelConfiguration/claude-sonnet-4.6.json',
+      ),
+      'a card id whose last segment ends in digits after a dot is not read as a file',
+    );
+    assert.true(
+      snapshot.deps.includes('https://example.com/already.json'),
+      'a reference already in .json form is recorded as-is',
+    );
+    assert.notOk(
+      snapshot.deps.includes('https://example.com/already.json.json'),
+      '.json is not appended twice',
+    );
+  });
+
   test('excludes file root across extensionless and .json aliases', async function (assert) {
     beginRuntimeDependencyTrackingSession({
       sessionKey: 'file-root-alias-exclusion',

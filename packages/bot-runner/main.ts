@@ -7,7 +7,6 @@ import * as Sentry from '@sentry/node';
 import { onMembershipEvent } from './lib/membership-handler.ts';
 import { onTimelineEvent } from './lib/timeline-handler.ts';
 import { createGitHubClientFromEnv } from './lib/github.ts';
-import { cleanupOrphanedSubmissionTemps } from '@cardstack/runtime-common/lint/submission-lint';
 
 const log = logger('bot-runner');
 const startTime = Date.now();
@@ -33,8 +32,6 @@ const botPassword = process.env.SUBMISSION_BOT_PASSWORD || 'password';
   }
 
   log.info(`logged in as ${auth.user_id}`);
-
-  await cleanupOrphanedSubmissionTemps();
 
   let dbAdapter = new PgAdapter();
   let queuePublisher = new PgQueuePublisher(dbAdapter);

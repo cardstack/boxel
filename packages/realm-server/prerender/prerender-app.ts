@@ -502,7 +502,7 @@ export function buildPrerenderApp(options: {
         let poolFlagSuffix =
           poolFlags.length > 0 ? ` flags=[${poolFlags}]` : '';
         log.info(
-          '%s %s requestId=%s priority=%d total=%dms launch=%dms (semaphore=%dms, tabQueue=%dms, tabStartup=%dms) render=%dms pageId=%s affinityType=%s affinityValue=%s%s',
+          '%s %s requestId=%s priority=%d total=%dms launch=%dms (semaphore=%dms, tabQueue=%dms, tabStartup=%dms, tabProbe=%dms) render=%dms pageId=%s affinityType=%s affinityValue=%s%s',
           options.infoLabel,
           parsed.logTarget,
           requestId,
@@ -512,6 +512,7 @@ export function buildPrerenderApp(options: {
           timings.waits.semaphoreMs,
           timings.waits.tabQueueMs,
           timings.waits.tabStartupMs,
+          timings.waits.tabProbeMs,
           timings.renderMs,
           pool.pageId,
           pool.affinityType,
@@ -857,7 +858,7 @@ export function buildPrerenderApp(options: {
         .join(', ');
       let poolFlagSuffix = poolFlags.length > 0 ? ` flags=[${poolFlags}]` : '';
       log.info(
-        'visit prerendered %s requestId=%s priority=%d total=%dms launch=%dms (semaphore=%dms, tabQueue=%dms, tabStartup=%dms) render=%dms pageId=%s affinityType=%s affinityValue=%s%s',
+        'visit prerendered %s requestId=%s priority=%d total=%dms launch=%dms (semaphore=%dms, tabQueue=%dms, tabStartup=%dms, tabProbe=%dms) render=%dms pageId=%s affinityType=%s affinityValue=%s%s',
         url,
         requestId,
         priority ?? 0,
@@ -866,6 +867,7 @@ export function buildPrerenderApp(options: {
         timings.waits.semaphoreMs,
         timings.waits.tabQueueMs,
         timings.waits.tabStartupMs,
+        timings.waits.tabProbeMs,
         timings.renderMs,
         pool.pageId,
         pool.affinityType,

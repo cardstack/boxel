@@ -312,16 +312,15 @@ class Isolated extends Component<typeof UpdateRoomSkillsExample> {
       {{/unless}}
 
       <div class='form-grid'>
-        <FieldContainer
-          @label='Skills realm base URL (optional)'
-          @hint='Used to expand relative skill identifiers such as "boxel-environment".'
-        >
+        <FieldContainer @label='Skills realm base URL (optional)'>
           <input
             type='text'
             value={{this.skillsRealmURL}}
             placeholder='https://example.com/skills/'
             {{on 'input' this.updateSkillsRealmURL}}
           />
+          <p class='hint'>Used to expand relative skill identifiers such as
+            "boxel-environment".</p>
         </FieldContainer>
 
         <FieldContainer @label='Room ID'>
@@ -333,28 +332,24 @@ class Isolated extends Component<typeof UpdateRoomSkillsExample> {
           />
         </FieldContainer>
 
-        <FieldContainer
-          @label='Activate these skills'
-          @hint='Comma or newline separated list.'
-        >
+        <FieldContainer @label='Activate these skills'>
           <textarea
             rows='3'
             value={{@model.manualActivationTargets}}
             placeholder='boxel-environment, catalog-listing'
             {{on 'input' (fn this.updateManualList 'activate')}}
           ></textarea>
+          <p class='hint'>Comma or newline separated list.</p>
         </FieldContainer>
 
-        <FieldContainer
-          @label='Disable these skills'
-          @hint='Comma or newline separated list.'
-        >
+        <FieldContainer @label='Disable these skills'>
           <textarea
             rows='3'
             value={{@model.manualDeactivationTargets}}
             placeholder='source-code-editing'
             {{on 'input' (fn this.updateManualList 'deactivate')}}
           ></textarea>
+          <p class='hint'>Comma or newline separated list.</p>
         </FieldContainer>
       </div>
 
@@ -448,7 +443,7 @@ class Isolated extends Component<typeof UpdateRoomSkillsExample> {
 
       <Button
         class='apply-button'
-        @appearance='primary'
+        @kind='primary'
         disabled={{this.isApplyDisabled}}
         {{on 'click' this.applySkills}}
       >
@@ -480,6 +475,12 @@ class Isolated extends Component<typeof UpdateRoomSkillsExample> {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
         gap: var(--boxel-sp-lg);
+      }
+
+      .hint {
+        margin: var(--boxel-sp-xxs) 0 0;
+        color: var(--boxel-600);
+        font: var(--boxel-font-xs);
       }
 
       input,

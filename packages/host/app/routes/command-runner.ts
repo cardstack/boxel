@@ -15,6 +15,7 @@ import type {
 import {
   ToolContextStamp,
   getClass,
+  isCardInstance,
   parseBoxelHostCommandSpecifier,
   rri,
 } from '@cardstack/runtime-common';
@@ -24,6 +25,7 @@ import { registerBoxelTransitionTo } from '../utils/register-boxel-transition';
 import type CardService from '../services/card-service';
 import type LoaderService from '../services/loader-service';
 import type RealmService from '../services/realm';
+import type StoreService from '../services/store';
 import type { CardDef, CardDefConstructor } from '@cardstack/base/card-api';
 
 const commandRequestStorageKeyPrefix = 'boxel-command-request:';
@@ -78,6 +80,7 @@ export default class CommandRunnerRoute extends Route<CommandRunnerModel> {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   @service declare realm: RealmService;
+  @service declare store: StoreService;
 
   async beforeModel() {
     registerBoxelTransitionTo(this.router, this);
@@ -140,7 +143,11 @@ export default class CommandRunnerRoute extends Route<CommandRunnerModel> {
       let toolInstance = new ToolConstructor(this.toolContext);
       let resultCard: CardDef | undefined;
       if (toolInput) {
-        resultCard = await toolInstance.execute(toolInput);
+        let InputType = await toolInstance.getInputType();
+        let resolvedInput = InputType
+          ? await this.#resolveLinkedInputs(InputType, toolInput)
+          : toolInput;
+        resultCard = await toolInstance.execute(resolvedInput);
       } else {
         resultCard = await toolInstance.execute();
       }
@@ -161,6 +168,53 @@ export default class CommandRunnerRoute extends Route<CommandRunnerModel> {
       model.error = error instanceof Error ? error : new Error(String(error));
       model.status = 'error';
     }
+  }
+
+  // The stored input arrives as raw JSON (e.g. from `run-command --input`), so
+  // a `linksTo`/`linksToMany` field is expressed as a card ID string (or array
+  // of them) rather than a card instance. `Tool.execute` assigns each value
+  // straight onto its field via `new InputType(...)`, which can't turn an ID
+  // into a card — so we resolve those IDs to instances here first, matching how
+  // `LinksTo.deserialize` resolves a relationship through the store.
+  async #resolveLinkedInputs(
+    InputType: CardDefConstructor,
+    toolInput: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    let cardApi = await this.cardService.getAPI();
+    let fields = cardApi.getFields(InputType, {
+      usedLinksToFieldsOnly: false,
+      includeComputeds: false,
+    });
+    let resolved: Record<string, unknown> = { ...toolInput };
+    for (let [fieldName, value] of Object.entries(toolInput)) {
+      let field = fields[fieldName];
+      if (!field) {
+        continue;
+      }
+      if (field.fieldType === 'linksTo' && typeof value === 'string') {
+        resolved[fieldName] = await this.#resolveCardId(value, fieldName);
+      } else if (
+        field.fieldType === 'linksToMany' &&
+        Array.isArray(value) &&
+        value.every((entry) => typeof entry === 'string')
+      ) {
+        resolved[fieldName] = await Promise.all(
+          (value as string[]).map((id) => this.#resolveCardId(id, fieldName)),
+        );
+      }
+    }
+    return resolved;
+  }
+
+  async #resolveCardId(id: string, fieldName: string): Promise<CardDef> {
+    let instance = await this.store.get(id);
+    if (!instance || !isCardInstance<CardDef>(instance)) {
+      let detail = instance ? ` (${instance.status}: ${instance.message})` : '';
+      throw new Error(
+        `Could not resolve card "${id}" for input field "${fieldName}"${detail}`,
+      );
+    }
+    return instance;
   }
 
   #consumeStoredCommandRequest(

@@ -3,7 +3,7 @@ import { on } from '@ember/modifier';
 import ExternalLink from '@cardstack/boxel-icons/external-link';
 
 import { Button, Pill } from '@cardstack/boxel-ui/components';
-import { cn, eq } from '@cardstack/boxel-ui/helpers';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 import { FieldDef, field, contains, linksTo, Component } from './card-api';
 import enumField from './enum';
@@ -86,10 +86,10 @@ export class SkillReference extends FieldDef {
             </h4>
             <Pill
               class='skill-ref-mode boxel-ellipsize'
-              @variant={{cn
-                primary=(eq @model.inclusionMode 'full')
-                accent=(eq @model.inclusionMode 'essential')
-                muted=(eq @model.inclusionMode 'link-only')
+              @variant={{if
+                (eq @model.inclusionMode 'full')
+                'primary'
+                (if (eq @model.inclusionMode 'essential') 'accent' 'muted')
               }}
             >
               {{if

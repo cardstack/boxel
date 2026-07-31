@@ -6765,6 +6765,7 @@ module(basename(import.meta.filename), function () {
                 admissionMs: 0,
                 tabQueueMs: 0,
                 tabStartupMs: 0,
+                tabProbeMs: 0,
               },
             },
             pool: {
@@ -6871,6 +6872,7 @@ module(basename(import.meta.filename), function () {
                 admissionMs: 0,
                 tabQueueMs: 0,
                 tabStartupMs: 0,
+                tabProbeMs: 0,
               },
             },
             pool: {
@@ -6986,6 +6988,7 @@ module(basename(import.meta.filename), function () {
                 admissionMs: 0,
                 tabQueueMs: 0,
                 tabStartupMs: 0,
+                tabProbeMs: 0,
               },
             },
             pool: {

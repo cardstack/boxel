@@ -9,8 +9,8 @@ import NumberField from 'https://cardstack.com/base/number';
 import TextAreaField from 'https://cardstack.com/base/text-area';
 import { formatDateTime } from '@cardstack/boxel-ui/helpers';
 
-// Exercises the common template shapes: the positional
-// `formatDateTime` helper call, and direct interpolation of
+// Exercises the common template shapes: a `formatDateTime` helper call
+// with its `format` named arg, and direct interpolation of
 // `contains(NumberField)` / `contains(TextAreaField)` values.
 export class Event extends CardDef {
   static displayName = 'Event';
@@ -19,7 +19,7 @@ export class Event extends CardDef {
   @field notes = contains(TextAreaField);
   static isolated = class extends Component<typeof Event> {
     <template>
-      <time>{{formatDateTime @model.when 'MMM D'}}</time>
+      <time>{{formatDateTime @model.when format='MMM D'}}</time>
       <span>{{@model.capacity}}</span>
       <p>{{@model.notes}}</p>
     </template>

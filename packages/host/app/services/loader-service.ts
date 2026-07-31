@@ -39,6 +39,21 @@ export default class LoaderService extends Service {
   @tracked public loader = this.makeInstance();
   private resetTime: number | undefined;
 
+  // Modules flushed from the loader because their own source changed. A flush
+  // replaces the loader with one that carries no loaded modules, so anything
+  // deciding "was this module loaded?" after the flush reads a code change to a
+  // live module as a net-new module. The realm index event for that same change
+  // always lands after the flush that a local write or an open editor already
+  // performed, so the store's rebuild decision has to survive it. The records
+  // ride the loader's own lifecycle: a code-change flush adds what the
+  // discarded loader held, and any other replacement drops them all — the
+  // rebuild that answers the invalidation performs exactly such a replacement
+  // on entry, so a record lives from the flush that wrote it to the rebuild
+  // that supersedes it. A session boundary drops them too, so a write whose
+  // index event never arrived (a logout, a failed indexing pass) cannot leave
+  // a record for the next session, which has its own idea of what it loaded.
+  private flushedForCodeChange = new Set<string>();
+
   constructor(owner: Owner) {
     super(owner);
     this.session.register(this);
@@ -65,7 +80,44 @@ export default class LoaderService extends Service {
     previous?.dispose();
   }
 
-  public resetLoader(options?: { clearFetchCache?: boolean; reason?: string }) {
+  // Whether this module was among those a code change flushed out of the
+  // loader. Callers pair this with `loader.isModuleLoaded` — the module counts
+  // as loaded if it is loaded now, or was loaded in a loader a code change
+  // discarded. Read-only: the records are dropped wholesale when the loader is
+  // next replaced for any other reason, not consumed one by one.
+  public wasModuleFlushedForCodeChange(moduleIdentifier: string): boolean {
+    let key = this.loader?.moduleKey(moduleIdentifier);
+    return key ? this.flushedForCodeChange.has(key) : false;
+  }
+
+  // Called whenever the loader is actually replaced. A code-change flush makes
+  // every module the outgoing loader held invisible — not just the one being
+  // written — so record the whole set, keyed the way the loader keys module
+  // identity, and accumulate across back-to-back flushes so an earlier write's
+  // record survives until its invalidation arrives. Any other replacement
+  // supersedes the records: the new loader (a rebuild's reset, a clean-loader
+  // request) is the fresh baseline the next flush snapshots from.
+  private recordLoaderReplacement(
+    previous: Loader | undefined,
+    codeChange: boolean | undefined,
+  ) {
+    if (codeChange) {
+      for (let key of previous?.loadedModuleKeys ?? []) {
+        this.flushedForCodeChange.add(key);
+      }
+    } else {
+      this.flushedForCodeChange.clear();
+    }
+  }
+
+  public resetLoader(options?: {
+    clearFetchCache?: boolean;
+    reason?: string;
+    // Set when this flush is for a module whose own source changed. The realm
+    // index event for that write lands afterwards, by which point the replaced
+    // loader reports nothing as loaded.
+    codeChange?: boolean;
+  }) {
     // clearFetchCache requests must never be debounced--the caller is
     // signalling that cached responses are stale (e.g. a module was
     // rewritten). Skipping this would cause re-indexing to use the old
@@ -74,6 +126,7 @@ export default class LoaderService extends Service {
       this.resetTime = Date.now();
       log.debug(`resetting loader (clearFetchCache, ${options.reason ?? ''})`);
       clearFetchCache();
+      this.recordLoaderReplacement(this.loader, options.codeChange);
       this.loader?.dispose();
       this.loader = this.makeInstance();
       return;
@@ -90,6 +143,7 @@ export default class LoaderService extends Service {
       // by default we keep the fetch cache so we can take advantage of HTTP
       // caching when rebuilding the loader state
       let previous = this.loader;
+      this.recordLoaderReplacement(previous, options?.codeChange);
       if (previous) {
         this.loader = Loader.cloneLoader(previous);
         previous.dispose();
@@ -97,6 +151,9 @@ export default class LoaderService extends Service {
         this.loader = this.makeInstance();
       }
     }
+    // A debounced call returns without replacing the loader, so nothing was
+    // flushed: no records are written, and none are dropped — the live loader
+    // still answers for itself.
   }
 
   private makeInstance() {
@@ -145,6 +202,7 @@ export default class LoaderService extends Service {
   private clearSessionCaches() {
     // This clears cached module fetches and scoped styles at session/test
     // boundaries so private realm assets do not leak across owners.
+    this.flushedForCodeChange.clear();
     clearFetchCache();
     clearInjectedScopedCSS();
     clearKnownFileMetaUrls();

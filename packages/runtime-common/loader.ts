@@ -474,6 +474,29 @@ export class Loader {
     }
   }
 
+  // The key this loader files a module identifier under, resolved the way
+  // `isModuleLoaded` resolves it. A caller that has to answer "was this module
+  // loaded?" about a loader that no longer exists can compare a snapshot of
+  // `loadedModuleKeys` against this. Returns undefined for an identifier that
+  // does not resolve to a URL, which is never a key any loader holds.
+  moduleKey(moduleIdentifier: string): string | undefined {
+    try {
+      return this.moduleCacheKey(
+        new URL(this.resolveImport(moduleIdentifier)).href,
+      );
+    } catch (e) {
+      if (e instanceof TypeError) {
+        return undefined;
+      }
+      throw e;
+    }
+  }
+
+  // Every module this loader has loaded, in the key form `moduleKey` returns.
+  get loadedModuleKeys(): string[] {
+    return [...this.modules.keys()];
+  }
+
   // Synchronous sibling of `getConsumedModules` limited to modules already
   // known to this loader. Output is in the same canonical identifier form:
   // realm-prefix (RRI) spelling where a prefix mapping is registered,

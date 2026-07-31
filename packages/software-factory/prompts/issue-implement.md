@@ -54,13 +54,78 @@ You previously invoked the following tools. Use these results to inform your imp
 
 # Instructions
 
-Implement this issue in this order:
+You are building a **user-facing card**. A card is judged by how it looks and
+reads in its formats, and by how cleanly other cards can compose with it —
+not by ceremony. Work design-first, in this order:
 
-1. Use **`Read`** / **`Glob`** to inspect existing workspace state. If (and only if) you need to query the **target realm** for cards already in it, shell out via `Bash` to `boxel search` / `boxel read-transpiled` with `--realm <target-realm-url>`. Do not list or query any other realm; the skills are authoritative for patterns.
-2. Call **`Write`** to create or update card definitions (`.gts`) in the workspace.
-3. Call **`Write`** to create QUnit test files (`.test.gts`) co-located with card definitions — write tests BEFORE any sample instances or catalog specs. **Wrap every test in a QUnit `module(...)` block named after the card or feature under test** (e.g., `module('StickyNote', function (hooks) { ... test(...) ... })`). The TestRun card groups results by module name, so tests left at the top level all collapse into a single "default" bucket and become hard to read.
-4. Call **`Write`** to create at least one sample card instance (`.json`) in the workspace.
-5. Call **`Write`** to create a Catalog Spec card in the `Spec/` folder for the top-level card (adoptsFrom `https://cardstack.com/base/spec#Spec`), linking sample instances via `linkedExamples`.
-6. Call **`signal_done`** (factory MCP tool) when all implementation and test files have been written.
+**Live-blog as you go.** The operator watches this run on a live run-log
+card. Call `post_update` at every meaningful moment — kicking off a design,
+what a critique round found (name the defects), a decision and its tradeoff,
+starting to translate the mockup to code, recovering from a failed check.
+First person, concrete, 1–3 sentences, social-media energy. This commentary
+channel is as important as the artifacts: it steers orchestration during the
+run and is the record after it. Never work silently for more than a few
+minutes.
 
-The validation pipeline runs tests automatically after `signal_done` — write tests, then signal done, and the orchestrator handles the rest. Do NOT set the issue status to "done" yourself — the orchestrator manages issue status transitions based on validation results. **Calling `signal_done` without having actually written the required files is a failure.**
+## 1. Ground yourself (context before code)
+
+- `Read` / `Glob` the workspace; `Bash` + `boxel search --realm <target-realm-url>` for cards already in the target realm.
+- Call `list_skills`, then `read_skill` the skills this issue actually touches
+  (design, fitted formats, theming, file fields, queries — whatever applies).
+  Read precedent: if a similar card exists in the workspace, read its `.gts`.
+
+## 2. DESIGN — HTML mockup before any schema
+
+- Write `design/<card-slug>.html`: **ONE page** — a plain HTML+CSS mockup of
+  the card with **hard-coded, realistic sample copy** (real names, real
+  numbers — never lorem ipsum). Put every surface on that one page, labeled:
+  the isolated view (mobile width; add a wide variant section if the card
+  prefers wide format), the fitted tiles (badge / strip / card), and an
+  embedded list row. One file, one screenshot, one crit pass covers
+  everything — do NOT write a separate HTML file per surface.
+- Call `screenshot_html({ path: "design/<card-slug>.html" })`, then `Read`
+  the returned PNG and **critique it**: name concrete defects (hierarchy,
+  wrapping, spacing, color, copy) against the design language in the
+  Knowledge section. Revise the HTML and re-screenshot. Do at least one
+  full crit-and-revise pass; stop when you would show it to a designer.
+
+## 3. BUILD — translate the accepted mockup
+
+- Write the card definition (`.gts`) with `isolated`, `embedded`, AND
+  `fitted` templates that reproduce the accepted mockup. Design decisions
+  were made in step 2 — this is a translation task. Use theme CSS variables
+  (`var(--*)`) rather than hard-coded colors where a theme exists.
+- Fields are an API other cards compose with: name them for consumers,
+  and prefer FieldDefs for shapes that will recur.
+- Write at least one sample card instance (`.json`) using the SAME sample
+  data as the mockup.
+- Write a Catalog Spec card (`Spec/<card-slug>.json`, adoptsFrom
+  `https://cardstack.com/base/spec#Spec`) linking the sample instances via
+  `linkedExamples`, with its catalog-facing `title` and one-sentence
+  `description` attributes populated (never left empty).
+
+## 4. VERIFY
+
+- `run_lint({ path })` each file you wrote; then `run_parse()`,
+  `run_evaluate()`, and `run_instantiate()` for the whole realm.
+- Fix what they report. **Do NOT write any `.test.gts` files** — tests
+  belong to a separate hardening phase that runs later; this loop ships
+  zero tests by design.
+
+## 5. Done
+
+- Call `signal_done` (factory MCP tool). The orchestrator validates
+  parse/lint/eval/instantiate automatically. Do NOT set the issue status
+  yourself. Calling `signal_done` without the design artifacts, the card,
+  an instance, and a Spec is a failure.
+
+## After you finish (render gate)
+
+The orchestrator will screenshot the cards you shipped (real host
+renders) and a verifier agent will judge every acceptance criterion
+against the PIXELS — a criterion only passes on a visible, working
+affordance. "The command class exists" fails. So: every capability the
+issue promises must be reachable through something the user can SEE
+(a button, a populated list, a rendered value), and your sample
+instances must make each surface render with real content, never an
+empty state.

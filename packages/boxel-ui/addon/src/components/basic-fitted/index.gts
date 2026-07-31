@@ -8,7 +8,7 @@ interface Signature {
     description?: string;
     iconComponent?: Icon;
     isEmpty?: boolean;
-    primary: string;
+    primary?: string;
     secondary?: string;
     thumbnailURL?: string;
   };

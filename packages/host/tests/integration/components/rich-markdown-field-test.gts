@@ -502,6 +502,133 @@ module('Integration | RichMarkdownField', function (hooks) {
       .doesNotExist('no unresolved Pill remains after card resolves (block)');
   });
 
+  test('every card format renders in both inline and block placement (saved MarkdownTemplate path)', async function (assert) {
+    // CS-12320: the resolved-render matrix. Each format × placement must render
+    // the referenced card in the requested format — not collapse (isolated) or
+    // fall back. Exercises the saved MarkdownTemplate render path (not the
+    // CodeMirror compose preview).
+    class Pet extends CardDef {
+      static displayName = 'Pet';
+      @field name = contains(StringField);
+      @field cardTitle = contains(StringField, {
+        computeVia: function (this: Pet) {
+          return this.name;
+        },
+      });
+      static atom = class Atom extends Component<typeof this> {
+        <template>
+          <span data-test-pet-atom>{{@model.name}}</span>
+        </template>
+      };
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <div data-test-pet-embedded>{{@model.name}}</div>
+        </template>
+      };
+      static fitted = class Fitted extends Component<typeof this> {
+        <template>
+          <div data-test-pet-fitted>{{@model.name}}</div>
+        </template>
+      };
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <div data-test-pet-isolated>{{@model.name}}</div>
+        </template>
+      };
+    }
+
+    class ArticleCard extends CardDef {
+      @field body = contains(RichMarkdownField);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template><@fields.body /></template>
+      };
+    }
+
+    let url = `${testRealmURL}Pet/mango`;
+    let content = [
+      `:card[${url} | atom]`,
+      `:card[${url} | embedded]`,
+      `:card[${url} | fitted w:200 h:150]`,
+      `:card[${url} | isolated]`,
+      `::card[${url} | atom]`,
+      `::card[${url} | embedded]`,
+      `::card[${url} | fitted w:200 h:150]`,
+      `::card[${url} | isolated]`,
+    ].join('\n\n');
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'pet.gts': { Pet },
+        'article.gts': { ArticleCard },
+        'Pet/mango.json': {
+          data: {
+            attributes: { name: 'Mango', cardTitle: 'Mango' },
+            meta: { adoptsFrom: { module: '../pet', name: 'Pet' } },
+          },
+        },
+        'article-1.json': {
+          data: {
+            attributes: { body: { content } },
+            meta: { adoptsFrom: { module: './article', name: 'ArticleCard' } },
+          },
+        },
+      },
+    });
+
+    let store = getService('store');
+    let article = (await store.get(`${testRealmURL}article-1`)) as BaseDef;
+    await store.loaded();
+
+    await renderCard(loader, article, 'isolated');
+    await waitFor('[data-test-pet-isolated]', { timeout: 10_000 });
+
+    let inline = '[data-test-markdown-bfm-inline-card]';
+    let block = '[data-test-markdown-bfm-block-card]';
+    for (let [placement, wrapper] of [
+      ['inline', inline],
+      ['block', block],
+    ] as const) {
+      for (let format of ['atom', 'embedded', 'fitted', 'isolated'] as const) {
+        assert
+          .dom(`${wrapper} [data-test-pet-${format}]`)
+          .exists(`${format} card renders in ${placement} placement`);
+      }
+    }
+
+    // The bug this ticket fixes: isolated (and inline embedded) collapse
+    // without a definite footprint. Spot-check that the shared footprint
+    // reached the resolved slot.
+    assert
+      .dom(`${inline}:has([data-test-pet-isolated])`)
+      .hasAttribute(
+        'style',
+        /width: 24rem/,
+        'inline isolated slot carries the shared footprint',
+      );
+    assert
+      .dom(`${block}:has([data-test-pet-isolated])`)
+      .hasAttribute(
+        'style',
+        /min-height: 18\.75rem/,
+        'block isolated slot carries a growable min-height',
+      );
+    assert
+      .dom(`${inline}:has([data-test-pet-embedded])`)
+      .hasAttribute(
+        'style',
+        /width: 16rem/,
+        'inline embedded slot carries the shared footprint',
+      );
+
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-inline]')
+      .doesNotExist('no unresolved inline placeholders remain');
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-block]')
+      .doesNotExist('no unresolved block placeholders remain');
+  });
+
   test('compose preview resolves a relative card ref against a prefix-form base', async function (assert) {
     // Regression guard for the compose/edit path: when the realm is
     // prefix-mapped the editor's reference base is a prefix-form RRI, and a

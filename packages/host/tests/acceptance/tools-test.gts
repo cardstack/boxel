@@ -380,6 +380,30 @@ module('Acceptance | Tools tests', function (hooks) {
         </template>
       };
     }
+    class LinkEchoInput extends CardDef {
+      @field pet = linksTo(Pet);
+      @field friends = linksToMany(Pet);
+    }
+
+    class LinkEchoCommand extends Command<
+      typeof LinkEchoInput,
+      typeof GreetingCard
+    > {
+      static displayName = 'LinkEchoCommand';
+      async getInputType() {
+        return LinkEchoInput;
+      }
+      protected async run(input: LinkEchoInput): Promise<GreetingCard> {
+        let petName = input.pet?.name ?? 'none';
+        let friendNames = (input.friends ?? [])
+          .map((friend) => friend.name)
+          .join(', ');
+        return new GreetingCard({
+          message: `pet=${petName}; friends=${friendNames}`,
+        });
+      }
+    }
+
     let mangoPet = new Pet({ name: 'Mango' });
 
     await setupAcceptanceTestRealm({
@@ -420,6 +444,10 @@ module('Acceptance | Tools tests', function (hooks) {
         'command-runner-hello-command.ts': {
           GreetingCard,
           default: HelloCommand,
+        },
+        'link-echo-command.ts': {
+          LinkEchoInput,
+          default: LinkEchoCommand,
         },
         'search-and-open-card-command.ts': {
           default: SearchAndOpenCardCommand,
@@ -579,6 +607,45 @@ module('Acceptance | Tools tests', function (hooks) {
 
       await waitFor('[data-prerender][data-prerender-status="error"]');
       assert.dom('[data-prerender-error]').includesText('Boom!');
+      assert.dom('[data-test-command-runner-greeting]').doesNotExist();
+    });
+
+    test('resolves linksTo and linksToMany inputs specified by card id', async function (assert) {
+      let requestId = 'command-runner-test-linksto';
+      let nonce = '3';
+      setCommandRunnerRequest(
+        requestId,
+        nonce,
+        `${testRealmURL}link-echo-command/default`,
+        {
+          pet: `${testRealmURL}Pet/ringo`,
+          friends: [`${testRealmURL}Pet/mango`, `${testRealmURL}Pet/vangogh`],
+        },
+      );
+      await visit(`/command-runner/${requestId}/${nonce}`);
+
+      await waitFor('[data-prerender][data-prerender-status="ready"]');
+      assert
+        .dom('[data-test-command-runner-greeting]')
+        .includesText('pet=Ringo');
+      assert
+        .dom('[data-test-command-runner-greeting]')
+        .includesText('friends=Mango, Van Gogh');
+    });
+
+    test('captures an error when a linksTo input id cannot be resolved', async function (assert) {
+      let requestId = 'command-runner-test-linksto-missing';
+      let nonce = '4';
+      setCommandRunnerRequest(
+        requestId,
+        nonce,
+        `${testRealmURL}link-echo-command/default`,
+        { pet: `${testRealmURL}Pet/does-not-exist` },
+      );
+      await visit(`/command-runner/${requestId}/${nonce}`);
+
+      await waitFor('[data-prerender][data-prerender-status="error"]');
+      assert.dom('[data-prerender-error]').includesText('Pet/does-not-exist');
       assert.dom('[data-test-command-runner-greeting]').doesNotExist();
     });
   });

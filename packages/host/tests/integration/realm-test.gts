@@ -79,6 +79,30 @@ module('Integration | realm', function (hooks) {
     return result;
   }
 
+  // Readiness gates on the realm's index jobs, which live in a `jobs` table
+  // that exists only server-side — the browser realm's SQLite schema has no
+  // such table, and it needs none, being a single process whose in-process
+  // gates already see all of its own indexing. Querying for it here would
+  // throw rather than answer, so this pins the guard that keeps the query
+  // server-side.
+  test('realm can serve readiness checks without a server-side job queue', async function (assert) {
+    let { realm } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {},
+    });
+
+    let response = await handle(
+      realm,
+      new Request(`${testRealmURL}_readiness-check`, {
+        headers: {
+          Accept: 'application/vnd.api+json',
+        },
+      }),
+    );
+
+    assert.strictEqual(response.status, 200, 'reports ready');
+  });
+
   test('realm can serve GET card requests', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,

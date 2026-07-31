@@ -420,7 +420,7 @@ export default class PublishRealmModal extends Component<Signature> {
     if (this.customSubdomainAvailability?.available) {
       return 'valid';
     }
-    return null;
+    return undefined;
   }
 
   get isClaimCustomSubdomainDisabled() {

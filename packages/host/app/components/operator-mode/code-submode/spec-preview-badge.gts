@@ -24,7 +24,6 @@ const SpecPreviewBadge: TemplateOnlyComponent<SpecPreviewBadgeSignature> =
       {{#if @showCreateSpec}}
         <BoxelButton
           class='create-spec-button'
-          @icon='plus'
           @kind='primary'
           @size='extra-small'
           @loading={{@isCreateSpecInstanceRunning}}

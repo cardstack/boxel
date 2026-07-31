@@ -284,13 +284,13 @@ export function getBoxComponent(
     return isThemeCard(cardDef) ? cardDef.id : cardDef?.cardTheme?.id;
   }
 
-  function getCssImports(card?: CardDef) {
+  function getCssImports(card?: CardDef): string[] | undefined {
     // for cards like Theme card and its descendants, directly use the `cssImports` field;
     // for all other cards, get imports via the Theme card linked from cardInfo
     if (card && 'cssImports' in card) {
       let field = getField(card, 'cssImports');
       if (field?.card?.name === 'CssImportField') {
-        return card.cssImports;
+        return card.cssImports as string[] | undefined;
       }
     }
     return card?.cardTheme?.cssImports;

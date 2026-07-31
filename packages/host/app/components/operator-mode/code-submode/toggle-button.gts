@@ -11,7 +11,7 @@ interface ToggleButtonSignature {
     disabled?: boolean;
     isActive: boolean;
   };
-  Element: typeof Button.Element;
+  Element: HTMLButtonElement | HTMLAnchorElement;
   Blocks: {
     default: [];
     annotation: [];

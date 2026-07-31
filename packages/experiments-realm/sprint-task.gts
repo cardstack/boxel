@@ -172,7 +172,6 @@ class TaskIsolated extends Component<typeof SprintTask> {
           <ProgressRadial
             @value={{this.progress}}
             @max={{100}}
-            @variant='circular'
             class='task-progress-radial'
           />
           {{#if this.hasProgress}}
@@ -180,7 +179,6 @@ class TaskIsolated extends Component<typeof SprintTask> {
               @value={{this.progress}}
               @max={{100}}
               @label={{this.progressLabel}}
-              @variant='horizontal'
               class='task-progress-bar'
             />
           {{/if}}

@@ -4,6 +4,7 @@ import { htmlSafe } from '@ember/template';
 import { type CardOrFieldTypeIcon } from '@cardstack/base/card-api';
 import ImageIcon from '@cardstack/boxel-icons/image';
 import { FilterList } from '@cardstack/boxel-ui/components';
+import type { Filter } from '@cardstack/boxel-ui/components';
 import { element } from '@cardstack/boxel-ui/helpers';
 import type { Query, ResolvedCodeRef } from '@cardstack/runtime-common';
 import type { SortOption } from './sort';
@@ -120,6 +121,10 @@ export const TitleGroup: TemplateOnlyComponent<TitleGroupSignature> = <template>
 </template>;
 
 export class Layout extends GlimmerComponent<LayoutSignature> {
+  private onFilterChange = (filter: Filter) => {
+    this.args.onFilterChange(filter as LayoutFilter);
+  };
+
   <template>
     <section class='layout' ...attributes>
       <aside class='sidebar'>
@@ -128,7 +133,7 @@ export class Layout extends GlimmerComponent<LayoutSignature> {
           class='sidebar-filters'
           @filters={{@filters}}
           @activeFilter={{@activeFilter}}
-          @onChanged={{@onFilterChange}}
+          @onChanged={{this.onFilterChange}}
         />
       </aside>
       <section class='content'>

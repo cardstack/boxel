@@ -157,7 +157,17 @@ SELECT
   percentile_cont(0.95) WITHIN GROUP (ORDER BY (diagnostics->'waits'->>'tabQueueMs')::int) AS p95_tabq_ms,
   max((diagnostics->'waits'->>'tabQueueMs')::int) AS max_tabq_ms,
   percentile_cont(0.95) WITHIN GROUP (ORDER BY (diagnostics->'waits'->>'semaphoreMs')::int) AS p95_sem_ms,
-  max((diagnostics->'waits'->>'semaphoreMs')::int) AS max_sem_ms
+  max((diagnostics->'waits'->>'semaphoreMs')::int) AS max_sem_ms,
+  -- Warm-tab liveness probes. Reported apart from tabQueueMs so a retired
+  -- wedged tab doesn't inflate the tab-queue percentiles the envelope is
+  -- sized from. A p95 near zero with a non-zero max is the healthy shape
+  -- (~1 ms per reuse, occasional retirement); a p95 at
+  -- PRERENDER_TAB_HEALTH_PROBE_MS means tabs are being retired routinely,
+  -- which is a content problem on specific realms rather than a sizing one
+  -- — chase it with the indexing-diagnostics skill, not by adding tabs.
+  -- COALESCE because not every row carries the key.
+  percentile_cont(0.95) WITHIN GROUP (ORDER BY COALESCE((diagnostics->'waits'->>'tabProbeMs')::int, 0)) AS p95_probe_ms,
+  max(COALESCE((diagnostics->'waits'->>'tabProbeMs')::int, 0)) AS max_probe_ms
 FROM boxel_index
 WHERE diagnostics IS NOT NULL
   AND diagnostics ? 'totalElapsedMs'

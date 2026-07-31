@@ -13,6 +13,7 @@ import { modifier } from 'ember-modifier';
 import { Velcro } from 'ember-velcro';
 
 import type { ResizeHandle } from '@cardstack/boxel-ui/components';
+
 import {
   ContextButton,
   LoadingIndicator,
@@ -40,6 +41,7 @@ import NewSessionButton from './new-session-button';
 import type MatrixService from '../../services/matrix-service';
 import type { MonacoSDK } from '../../services/monaco-service';
 import type MonacoService from '../../services/monaco-service';
+import type { WithBoundArgs } from '@glint/template';
 
 const { matrixServerName } = ENV;
 export const aiBotUserId = `@${aiBotUsername}:${matrixServerName}`;
@@ -48,7 +50,10 @@ interface Signature {
   Element: HTMLDivElement;
   Args: {
     onClose: () => void;
-    resizeHandle: ResizeHandle;
+    resizeHandle: WithBoundArgs<
+      typeof ResizeHandle,
+      'groupId' | 'orientation' | 'registerResizeHandle'
+    >;
     selectedCardRef?: ResolvedCodeRef;
   };
 }

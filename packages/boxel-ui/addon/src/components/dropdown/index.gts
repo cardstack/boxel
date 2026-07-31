@@ -51,9 +51,10 @@ interface Signature {
         Args: {
           Positional: unknown[];
         };
-        // note: should only be used with Button, but HTMLAnchorElement is included so that the
-        // trigger bindings can be applied to BoxelButton without glint error
-        Element: HTMLButtonElement | HTMLAnchorElement;
+        // note: the trigger should be an interactive element (Button or a
+        // component like Pill that renders one), but that isn't expressible
+        // here, so any element is accepted
+        Element: HTMLElement;
       }>,
     ];
   };
@@ -81,7 +82,9 @@ class BoxelDropdown extends Component<Signature> {
   }
 
   private syncCustomProps() {
-    if (!this.dropdownEl || !this.dropdownContainer) return;
+    if (!this.dropdownEl || !this.dropdownContainer) {
+      return;
+    }
     const cs = getComputedStyle(this.dropdownEl);
 
     const themeVars = [
@@ -108,7 +111,9 @@ class BoxelDropdown extends Component<Signature> {
   }
 
   private detectAndSetThemeColors() {
-    if (!this.dropdownEl || !this.dropdownContainer) return;
+    if (!this.dropdownEl || !this.dropdownContainer) {
+      return;
+    }
 
     const cs = getComputedStyle(this.dropdownEl);
     const hasBackground = cs.getPropertyValue('--background').trim() !== '';
@@ -156,7 +161,9 @@ class BoxelDropdown extends Component<Signature> {
   }
 
   private startObservingTheme() {
-    if (!this.dropdownEl) return;
+    if (!this.dropdownEl) {
+      return;
+    }
 
     this.syncCustomProps();
     this.detectAndSetThemeColors();

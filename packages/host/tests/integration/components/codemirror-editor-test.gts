@@ -515,14 +515,45 @@ module('Integration | codemirror-context', function (hooks) {
     }
   });
 
-  test('block isolated embed threads isolated format with no size style', async function (assert) {
+  test('block isolated embed threads isolated format with a growable footprint', async function (assert) {
     let { targets, destroy } = await collectTargets(
       '::card[https://example.com/cards/1 | isolated]',
     );
     try {
       let target = targets.find((t) => t.kind === 'block');
       assert.strictEqual(target?.format, 'isolated', 'format is isolated');
-      assert.notOk(target?.style, 'isolated embed has no inline size style');
+      // CS-12320: block isolated gets a growable min-height so it does not
+      // collapse (its default template lays out at height: 100%).
+      assert.strictEqual(
+        target?.style,
+        'min-height: 18.75rem',
+        'isolated embed carries a growable min-height footprint',
+      );
+    } finally {
+      destroy();
+    }
+  });
+
+  test('inline isolated / embedded embeds carry a definite footprint', async function (assert) {
+    // CS-12320: inline isolated/embedded collapse without a definite width +
+    // height (the default template lays out at 100% inside a shrink-wrapping
+    // inline-block wrapper).
+    let { targets, destroy } = await collectTargets(
+      ':card[https://example.com/cards/1 | isolated] and :card[https://example.com/cards/2 | embedded]',
+    );
+    try {
+      let isolated = targets.find((t) => t.format === 'isolated');
+      assert.strictEqual(
+        isolated?.style,
+        'width: 24rem; height: 18.75rem; overflow: hidden',
+        'inline isolated carries the shared footprint',
+      );
+      let embedded = targets.find((t) => t.format === 'embedded');
+      assert.strictEqual(
+        embedded?.style,
+        'width: 16rem; height: 9.375rem; overflow: hidden',
+        'inline embedded carries the shared footprint',
+      );
     } finally {
       destroy();
     }
@@ -573,7 +604,12 @@ module('Integration | codemirror-context', function (hooks) {
         (t) => t.refType === 'file' && t.format === 'isolated',
       );
       assert.ok(isolated, 'isolated file target is present');
-      assert.notOk(isolated?.style, 'isolated file target has no size style');
+      // CS-12320: block isolated gets a growable min-height footprint.
+      assert.strictEqual(
+        isolated?.style,
+        'min-height: 18.75rem',
+        'isolated file target carries a growable min-height footprint',
+      );
     } finally {
       destroy();
     }

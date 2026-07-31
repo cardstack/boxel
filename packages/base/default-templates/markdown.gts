@@ -10,6 +10,7 @@ import LinkOffIcon from '@cardstack/boxel-icons/link-off';
 
 import {
   bfmRefFormatAndSize,
+  bfmResolvedEmbedStyle,
   buildWaiter,
   cardTypeName,
   fileNameFromUrl,
@@ -271,14 +272,18 @@ export default class MarkDownTemplate extends GlimmerComponent<{
           let format: CardSlotFormat = derived.format;
           let sizeStyle: string | undefined = derived.sizeStyle;
 
-          // Fitted slots carry an inline width/height plus `overflow: hidden`
-          // so the resolved instance occupies the requested footprint.
-          let resolvedStyle: ReturnType<typeof htmlSafe> | undefined;
-          if (format === 'fitted') {
-            resolvedStyle = htmlSafe(
-              sizeStyle ? `${sizeStyle}; overflow: hidden` : 'overflow: hidden',
-            );
-          }
+          // Non-atom slots carry a footprint so the instance occupies a
+          // definite box instead of collapsing (isolated/inline-embedded
+          // default templates lay out at 100%). Fitted uses its requested
+          // dimensions; embedded/isolated get shared defaults. The same style
+          // goes on the loading shimmer and broken-link box so the layout
+          // doesn't jump as the slot transitions between states, and the same
+          // helper drives the other render surfaces so footprints stay in
+          // lockstep.
+          let styleRaw = bfmResolvedEmbedStyle(format, kind, sizeStyle);
+          let style: ReturnType<typeof htmlSafe> | undefined = styleRaw
+            ? htmlSafe(styleRaw)
+            : undefined;
 
           let resolvedUrl = resolveUrl(rawUrl, baseUrl);
 
@@ -294,7 +299,7 @@ export default class MarkDownTemplate extends GlimmerComponent<{
               state: 'resolved',
               format,
               instance,
-              style: resolvedStyle,
+              style,
             });
             continue;
           }
@@ -303,7 +308,6 @@ export default class MarkDownTemplate extends GlimmerComponent<{
           // linked instances have settled (showFallback), then fall back to the
           // broken-link box. Skipping the broken state on the first modifier
           // run avoids flashing it for refs that will soon resolve.
-          let style = sizeStyle ? htmlSafe(sizeStyle) : undefined;
           if (!showFallback) {
             slots.push({
               element: el,
@@ -990,8 +994,9 @@ export default class MarkDownTemplate extends GlimmerComponent<{
 
         /* Placeholder footprint shared by loading + broken states. The
            default block sizes approximate the eventual card so the layout does
-           not jump when the card resolves; explicit fitted dimensions arrive
-           as an inline style that overrides these. */
+           not jump when the card resolves; the slot's shared inline footprint
+           (fitted dimensions, inline embedded/isolated defaults, block
+           isolated min-height) overrides these when present. */
         .markdown-bfm-loading--embedded,
         .markdown-bfm-broken--embedded {
           width: 100%;

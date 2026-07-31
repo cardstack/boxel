@@ -102,6 +102,12 @@ module.exports = function (environment) {
   const ENV = {
     modulePrefix: '@cardstack/host',
     environment,
+    // The deployed environment (staging / production / local), distinct from
+    // `environment` above — that is the Ember build mode, which is 'production'
+    // for any minified deploy regardless of where it runs. The realm-server
+    // overwrites this at serve time from its REALM_SENTRY_ENVIRONMENT; the
+    // default covers local dev where the host isn't served through it.
+    hostedEnvironment: 'local',
     rootURL: '/',
     locationType: 'history',
     EmberENV: {

@@ -15,6 +15,7 @@ import {
   Warning,
 } from '@cardstack/boxel-ui/icons';
 
+import { truncate } from '@cardstack/host/lib/truncate';
 import type ErrorDisplayService from '@cardstack/host/services/error-display';
 import type { DisplayedErrorProvider } from '@cardstack/host/services/error-display';
 import type ToolService from '@cardstack/host/services/tool-service';
@@ -74,13 +75,6 @@ const CONTEXT_STACK_MAX_CHARS = 4 * 1024;
 const CONTEXT_MESSAGE_MAX_CHARS = 2 * 1024;
 
 const TRUNCATION_SUFFIX = ' …[truncated]';
-
-function truncate(s: string | undefined, max: number): string | undefined {
-  if (s == null) return s;
-  if (s.length <= max) return s;
-  let body = Math.max(0, max - TRUNCATION_SUFFIX.length);
-  return s.slice(0, body) + TRUNCATION_SUFFIX;
-}
 
 export default class ErrorDisplay
   extends Component<Signature>
@@ -167,8 +161,8 @@ export default class ErrorDisplay
     let raw = this.args.additionalErrors;
     if (!raw || raw.length === 0) return undefined;
     let entries = raw.slice(0, entryLimit).map((e) => ({
-      message: truncate(e?.message, messageMax),
-      stack: truncate(e?.stack, stackMax),
+      message: truncate(e?.message, messageMax, TRUNCATION_SUFFIX),
+      stack: truncate(e?.stack, stackMax, TRUNCATION_SUFFIX),
       status: e?.status,
       title: e?.title,
     }));
@@ -213,8 +207,16 @@ export default class ErrorDisplay
   getError(): BoxelErrorForContext {
     return {
       message:
-        truncate(this.args.message ?? '', CONTEXT_MESSAGE_MAX_CHARS) ?? '',
-      stack: truncate(this.args.stack, CONTEXT_STACK_MAX_CHARS),
+        truncate(
+          this.args.message ?? '',
+          CONTEXT_MESSAGE_MAX_CHARS,
+          TRUNCATION_SUFFIX,
+        ) ?? '',
+      stack: truncate(
+        this.args.stack,
+        CONTEXT_STACK_MAX_CHARS,
+        TRUNCATION_SUFFIX,
+      ),
       additionalErrors: this.contextAdditionalErrors,
       diagnostics: this.args.diagnostics,
       sourceUrl: this.args.fileToAttach?.sourceUrl,
@@ -253,8 +255,10 @@ export default class ErrorDisplay
           totalElapsedMs?: number;
           waits?: {
             semaphoreMs?: number;
+            admissionMs?: number;
             tabQueueMs?: number;
             tabStartupMs?: number;
+            tabProbeMs?: number;
           };
           renderStage?: string;
           stageAgeMs?: number;
@@ -268,15 +272,27 @@ export default class ErrorDisplay
     }
     if (typeof d.launchMs === 'number') {
       let waits = d.waits;
-      if (
-        waits &&
-        (typeof waits.semaphoreMs === 'number' ||
-          typeof waits.tabQueueMs === 'number' ||
-          typeof waits.tabStartupMs === 'number')
-      ) {
-        parts.push(
-          `launch=${d.launchMs}ms (semaphore=${waits.semaphoreMs ?? 0}ms, tabQueue=${waits.tabQueueMs ?? 0}ms, tabStartup=${waits.tabStartupMs ?? 0}ms)`,
-        );
+      // Every bucket the pool reports, so the line accounts for launch time
+      // rather than leaving a slice of it unexplained: admission is
+      // per-realm backpressure and tabProbe is the liveness check that can
+      // retire a warm tab and force a cold start. Buckets the payload
+      // doesn't carry are omitted rather than shown as `0`: a diagnostic
+      // that omits a bucket isn't claiming the wait was zero.
+      let waitKeys = [
+        'semaphoreMs',
+        'admissionMs',
+        'tabQueueMs',
+        'tabStartupMs',
+        'tabProbeMs',
+      ] as const;
+      let present = waits
+        ? waitKeys.filter((k) => typeof waits[k] === 'number')
+        : [];
+      if (waits && present.length > 0) {
+        let breakdown = present
+          .map((k) => `${k.replace(/Ms$/, '')}=${waits[k]}ms`)
+          .join(', ');
+        parts.push(`launch=${d.launchMs}ms (${breakdown})`);
       } else {
         parts.push(`launch=${d.launchMs}ms`);
       }
@@ -323,7 +339,7 @@ export default class ErrorDisplay
         <CopyButton
           @textToCopy={{this.errorText}}
           @width='16px'
-          @heigth='16px'
+          @height='16px'
         />
         <Button
           class='toggle-details-button'

@@ -14,11 +14,11 @@ import {
 interface Signature {
   Args: {
     collapsible?: boolean | undefined;
-    defaultSize?: number | undefined;
+    defaultSize?: number | null;
     groupId: string;
     maxSize?: number | undefined;
     //In percentage
-    minSize?: number | undefined;
+    minSize?: number | null;
     orientation: Orientation;
     registerPanel: (panel: Panel) => GetPanelStyle;
     unregisterPanel: (panel: Panel) => void;
@@ -74,8 +74,8 @@ export default class Panel extends Component<Signature> {
     return {
       collapsible:
         this.args.collapsible == undefined ? true : this.args.collapsible,
-      defaultSize: this.args.defaultSize,
-      minSize: this.args.minSize,
+      defaultSize: this.args.defaultSize ?? undefined,
+      minSize: this.args.minSize ?? undefined,
       maxSize: this.args.maxSize,
     };
   }

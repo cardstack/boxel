@@ -1,6 +1,6 @@
 import { tracked } from '@glimmer/tracking';
 import { DndColumn } from '@cardstack/boxel-ui/components';
-import { CardDef } from '@cardstack/base/card-api';
+import type { CardDef } from '@cardstack/base/card-api';
 
 import { Resource } from 'ember-modify-based-class-resource';
 
@@ -34,10 +34,9 @@ class KanbanResource extends Resource<Args> {
 
       if (currentColumn) {
         // Maintain order of existing cards and append new ones
-        let existingCardIds = new Set(
-          currentColumn.cards.map((card: CardDef) => card.id),
-        );
-        let existingCards = currentColumn.cards.filter((card: CardDef) =>
+        let currentCards = currentColumn.cards as CardDef[];
+        let existingCardIds = new Set(currentCards.map((card) => card.id));
+        let existingCards = currentCards.filter((card) =>
           cardsForStatus.some((c) => c.id === card.id),
         );
         let newCards = cardsForStatus.filter(

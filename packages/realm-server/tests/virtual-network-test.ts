@@ -122,6 +122,75 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('unresolveURL memo is invalidated when a realm mapping is added', function (assert) {
+      let virtualNetwork = new VirtualNetwork();
+      let url = 'https://localhost:4201/skills/Skill/foo';
+      // No matching prefix yet: the url is returned unchanged, and that
+      // passthrough is memoized.
+      assert.strictEqual(
+        virtualNetwork.unresolveURL(url),
+        url,
+        'with no matching prefix the url is returned as-is',
+      );
+      virtualNetwork.addRealmMapping(
+        '@cardstack/skills/',
+        'https://localhost:4201/skills/',
+      );
+      assert.strictEqual(
+        virtualNetwork.unresolveURL(url),
+        '@cardstack/skills/Skill/foo',
+        'the newly-added prefix takes effect instead of the cached passthrough',
+      );
+    });
+
+    test('unresolveURL memo is invalidated when a realm mapping is removed', function (assert) {
+      let virtualNetwork = new VirtualNetwork();
+      virtualNetwork.addRealmMapping(
+        '@cardstack/skills/',
+        'https://localhost:4201/skills/',
+      );
+      let url = 'https://localhost:4201/skills/Skill/foo';
+      assert.strictEqual(
+        virtualNetwork.unresolveURL(url),
+        '@cardstack/skills/Skill/foo',
+        'a mapped url unresolves to its RRI form',
+      );
+      virtualNetwork.removeRealmMapping('@cardstack/skills/');
+      assert.strictEqual(
+        virtualNetwork.unresolveURL(url),
+        url,
+        'removing the prefix drops the cached RRI and returns the url as-is',
+      );
+    });
+
+    test('unresolveURL memo is invalidated when a URL mapping is added', function (assert) {
+      let virtualNetwork = new VirtualNetwork();
+      virtualNetwork.addRealmMapping(
+        '@cardstack/base/',
+        'http://localhost:4201/base/',
+      );
+      let virtualURL = 'https://cardstack.com/base/card-api';
+      // The real target is registered, but the virtual alias has no URL
+      // mapping yet, so it cannot be chased to the real form and passes
+      // through unchanged (and is memoized as such).
+      assert.strictEqual(
+        virtualNetwork.unresolveURL(virtualURL),
+        virtualURL,
+        'without a URL mapping the virtual alias is returned as-is',
+      );
+      virtualNetwork.addURLMapping(
+        new URL('https://cardstack.com/base/'),
+        new URL('http://localhost:4201/base/'),
+      );
+      // unresolveURL chases urlMappings, so the new mapping must invalidate
+      // the memo and let the virtual alias resolve to its RRI form.
+      assert.strictEqual(
+        virtualNetwork.unresolveURL(virtualURL),
+        '@cardstack/base/card-api',
+        'the virtual alias now chases through the URL mapping to its RRI form',
+      );
+    });
+
     test('resolveURL: root-relative ref joins against the mapped URL of a prefix-form base', function (assert) {
       let virtualNetwork = new VirtualNetwork();
       virtualNetwork.addRealmMapping(

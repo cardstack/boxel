@@ -49,6 +49,7 @@ export default class NewSessionSettings extends Component<Signature> {
           @icon='close'
           @variant='ghost'
           @size='small'
+          @label='close new session options'
           class='new-session-settings-close-button'
           data-test-new-session-settings-close-button
           {{on 'click' @onClose}}

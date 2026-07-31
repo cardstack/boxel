@@ -4,6 +4,7 @@ import {
   FROM_SCRATCH_JOB_TIMEOUT_SEC,
   type FromScratchResult,
 } from '../tasks/indexer.ts';
+import { indexingConcurrencyGroup } from './indexing.ts';
 
 interface EnqueueReindexRealmJobOptions {
   clearLastModified?: boolean;
@@ -41,7 +42,7 @@ export async function enqueueReindexRealmJob(
   }
   let job = await queue.publish<FromScratchResult>({
     jobType: 'from-scratch-index',
-    concurrencyGroup: `indexing:${realmUrl}`,
+    concurrencyGroup: indexingConcurrencyGroup(realmUrl),
     timeout: FROM_SCRATCH_JOB_TIMEOUT_SEC,
     priority,
     args,
