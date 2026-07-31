@@ -34,6 +34,7 @@ const required = [
   'as-materialize',
   'pascalcase-fallback',
   'jq-keywords-guard',
+  'authorization-kernel',
 ];
 for (const r of required) {
   ok(

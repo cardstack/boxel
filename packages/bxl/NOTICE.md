@@ -1,8 +1,7 @@
 # Third-Party Notices
 
 `@cardstack/bxl` contains code derived from or bundled from the following
-open-source projects, each used under the MIT License. The full license text
-for each is reproduced below.
+open-source projects under the licenses noted for each project.
 
 Our own code in `src/bxl/` is licensed under MIT (see [LICENSE](./LICENSE)).
 The derivations in `src/jqtools/` and `src/formulajs/`, and the bundled
@@ -134,6 +133,28 @@ LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
+
+## 4. OpenFGA recursive userset resolver
+
+- Project: `openfga/openfga`
+- Version basis: commit **2c19e265fc73858fc0a5468fc517dc3bbf727e94**
+- Upstream: <https://github.com/openfga/openfga>
+- License: Apache License 2.0
+- License text: [`LICENSES/Apache-2.0.txt`](./LICENSES/Apache-2.0.txt)
+- Copyright: OpenFGA Authors
+
+**File adapted:** `src/authorization/openfga-recursive.ts`.
+
+**Functions adapted:** `processUsersetMessage` and
+`breadthFirstRecursiveMatch` from
+`internal/graph/recursive_resolver.go`.
+
+**Our changes:** synchronous TypeScript port for BXL's immutable in-memory
+tuple index. Go channels, storage iterators, goroutines, cancellation, and the
+worker pool are replaced by deterministic breadth levels and `Set` instances;
+visited-userset pruning and allow short-circuiting are retained. The port is
+used only for directly assignable recursive usersets; richer rewrite algebra
+continues through BXL's general synchronous resolver.
 
 ## Reporting attribution issues
 

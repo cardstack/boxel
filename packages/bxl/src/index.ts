@@ -75,6 +75,7 @@ import {
 } from './bxl/sql/index.js';
 import {
   BXL_AGGREGATE_CALLS,
+  BXL_AUTHORIZATION_CALLS,
   BXL_CONTROL_OR_SIDE_EFFECT_CALLS,
   BXL_DERIVE_DENIED_CALLS,
   BXL_ERROR_MASKING_CALLS,
@@ -184,11 +185,14 @@ export const BXL_BUILD_INFO = {
     'as-materialize',       // §11a
     'pascalcase-fallback',  // §12
     'jq-keywords-guard',    // §13
+    'authorization-kernel',
+    'bxl-authorization',
   ] as const,
 };
 
 export {
   BXL_AGGREGATE_CALLS,
+  BXL_AUTHORIZATION_CALLS,
   BXL_CONTROL_OR_SIDE_EFFECT_CALLS,
   BXL_DERIVE_DENIED_CALLS,
   BXL_ERROR_MASKING_CALLS,
@@ -259,6 +263,55 @@ export type {
   BxlProfileFunctionSafety,
   BxlSafeResult,
 };
+
+export {
+  BXL_AUTHORIZATION_IR_SCHEMA,
+  BXL_AUTHORIZATION_SCHEMA,
+  OPENFGA_RECURSIVE_PORT_INFO,
+  compileAuthorizationGraph,
+  prepareBxlAuthorizationSafe,
+  prepareAuthorizationGraphSafe,
+} from './authorization/index.js';
+export type {
+  AuthorizationCheckRequest,
+  AuthorizationCheckResult,
+  AuthorizationErrorKind,
+  AuthorizationErrorRecord,
+  AuthorizationListObjectsRequest,
+  AuthorizationListObjectsResult,
+  AuthorizationListUsersRequest,
+  AuthorizationListUsersResult,
+  AuthorizationSafeResult,
+  BxlAuthorizationReason,
+  BxlAuthorizationCheckRequest,
+  BxlAuthorizationCheckResult,
+  BxlAuthorizationListCapabilitiesRequest,
+  BxlAuthorizationListCapabilitiesResult,
+  BxlAuthorizationListResourcesRequest,
+  BxlAuthorizationListResourcesResult,
+  BxlAuthorizationListPartiesRequest,
+  BxlAuthorizationListPartiesResult,
+  BxlAuthorizationCapability,
+  BxlAuthorizationPolicyData,
+  BxlAuthorizationResource,
+  BxlAuthorizationDocument,
+  BxlAuthorizationLink,
+  BxlAuthorizationParty,
+  BxlAuthorizationRefusal,
+  BxlAuthorizationScope,
+  BxlAuthorizationSeatAssignment,
+  BxlAuthorizationSeat,
+  BxlAuthorizationSnapshot,
+  BxlAuthorizationTraceEvent,
+  AuthorizationGraphCondition,
+  AuthorizationGraphModel,
+  AuthorizationGraphRelation,
+  AuthorizationGraphRelationDefinition,
+  PreparedAuthorizationGraph,
+  PreparedBxlAuthorization,
+  RelationshipTuple,
+  SubjectTypeReference,
+} from './authorization/index.js';
 
 /**
  * Shared options for the BXL surface. Every entry-point function

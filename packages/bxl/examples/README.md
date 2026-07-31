@@ -27,6 +27,8 @@ value, and diagnostics. Docs reference cases by `id`.
 - `contexts.ts`      — formulas, constraints, transforms, workflow gates
 - `realm-collaboration-examples.ts` — real gateway admission, transition,
   event, clock, and decision-test cases from the collaboration realm
+- `authorization/` — runnable generalized coordination and software-release
+  capability policies using the public `bxl-authorization/1` API
 - `excel-paste.ts`   — `=`, `<>`, `^`, `&`, formula coverage
 - `pred-filter.ts`   — `[* .pred]`, `[#N]`, ranges, implicit iteration
 
