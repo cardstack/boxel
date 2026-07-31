@@ -5006,29 +5006,40 @@ class FallbackCardStore implements CardStore {
     return vn ? vn.unresolveURL(id) : id;
   }
 
-  getCard(id: string) {
+  // Mirror the host stores' bucket-key fold: every spelling of the same
+  // resource — canonical RRI, virtual/url-mapped alias, real URL — lands on
+  // one key, so a lookup by a card's canonical id finds an instance that was
+  // inserted under its raw URL form (and vice versa). Without this, a repeated
+  // or cyclic relationship misses the already-hydrated instance and reloads a
+  // duplicate instead of terminating at the identity map. Ids that don't
+  // resolve (local ids, or no VirtualNetwork available) key as-is.
+  #storeKey(id: string): string {
     id = id.replace(/\.json$/, '');
-    return this.#instances.get(id);
+    try {
+      let vn = myLoader().getVirtualNetwork();
+      return vn ? vn.toRealURLHref(id) : id;
+    } catch {
+      return id;
+    }
+  }
+
+  getCard(id: string) {
+    return this.#instances.get(this.#storeKey(id));
   }
   getFileMeta(id: string) {
-    id = id.replace(/\.json$/, '');
-    return this.#fileMetaInstances.get(id);
+    return this.#fileMetaInstances.get(this.#storeKey(id));
   }
   setCard(id: string, instance: CardDef) {
-    id = id.replace(/\.json$/, '');
-    return this.#instances.set(id, instance);
+    return this.#instances.set(this.#storeKey(id), instance);
   }
   setFileMeta(id: string, instance: FileDef) {
-    id = id.replace(/\.json$/, '');
-    return this.#fileMetaInstances.set(id, instance);
+    return this.#fileMetaInstances.set(this.#storeKey(id), instance);
   }
   setCardNonTracked(id: string, instance: CardDef) {
-    id = id.replace(/\.json$/, '');
-    return this.#instances.set(id, instance);
+    return this.#instances.set(this.#storeKey(id), instance);
   }
   setFileMetaNonTracked(id: string, instance: FileDef) {
-    id = id.replace(/\.json$/, '');
-    return this.#fileMetaInstances.set(id, instance);
+    return this.#fileMetaInstances.set(this.#storeKey(id), instance);
   }
   makeTracked(_id: string) {}
   trackLoad(load: Promise<unknown>) {
