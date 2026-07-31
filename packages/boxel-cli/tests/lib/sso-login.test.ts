@@ -163,14 +163,14 @@ describe('redeemLoginToken', () => {
       return jsonResponse({
         access_token: 'access',
         device_id: 'DEVICE',
-        user_id: '@luke:example.com',
+        user_id: '@example-user:example.com',
       });
     }) as unknown as typeof fetch);
 
     expect(auth).toEqual({
       accessToken: 'access',
       deviceId: 'DEVICE',
-      userId: '@luke:example.com',
+      userId: '@example-user:example.com',
       matrixUrl: MATRIX_URL,
     });
   });
@@ -200,7 +200,7 @@ describe('ssoLogin', () => {
         return jsonResponse({
           access_token: 'access',
           device_id: 'DEVICE',
-          user_id: '@luke:example.com',
+          user_id: '@example-user:example.com',
         });
       }
       throw new Error(`unexpected request to ${href}`);
@@ -228,7 +228,7 @@ describe('ssoLogin', () => {
       log: () => {},
     });
 
-    expect(auth.userId).toBe('@luke:example.com');
+    expect(auth.userId).toBe('@example-user:example.com');
     expect(auth.accessToken).toBe('access');
     expect(auth.matrixUrl).toBe(MATRIX_URL);
   });
