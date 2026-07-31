@@ -220,7 +220,12 @@ const renderModel = modifier(
                   import('https://esm.sh/three@0.160.0/examples/jsm/loaders/STLLoader.js')
                 : // @ts-expect-error Pinned browser ESM import; the Boxel loader resolves https:// at runtime
                   import('https://esm.sh/three@0.160.0/examples/jsm/loaders/GLTFLoader.js'),
-            fetch(url, { credentials: 'include', signal: controller.signal }),
+            // No `credentials: 'include'` — that makes a credentialed CORS
+            // request, illegal against the realm's wildcard
+            // `Access-Control-Allow-Origin`. The host auth service worker
+            // injects the realm `Authorization` header on this GET (same path
+            // that lets <img src> load realm images).
+            fetch(url, { signal: controller.signal }),
           ],
         );
         if (!response.ok) {
