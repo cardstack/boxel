@@ -1,4 +1,5 @@
 import { registerDestructor } from '@ember/destroyable';
+import { scheduleOnce } from '@ember/runloop';
 import { service } from '@ember/service';
 import { isTesting } from '@embroider/macros';
 
@@ -16,6 +17,7 @@ interface Signature {
     Named: {
       content: string;
       contentChanged: (text: string) => void;
+      contentChanging?: (text: string) => void;
       initialCursorPosition?: MonacoSDK.Position;
       onCursorPositionChange?: (position: MonacoSDK.Position) => void;
       onSetup?: (editor: MonacoSDK.editor.IStandaloneCodeEditor) => void;
@@ -44,6 +46,8 @@ export default class Monaco extends Modifier<Signature> {
   private waiterManager = createMonacoWaiterManager();
   private onDispose: (() => void) | undefined;
   private disposables: MonacoSDK.IDisposable[] = [];
+  private contentChanging: ((text: string) => void) | undefined;
+  private isApplyingExternalContent = false;
   @service declare private monacoService: MonacoService;
 
   modify(
@@ -53,6 +57,7 @@ export default class Monaco extends Modifier<Signature> {
       content,
       language,
       contentChanged,
+      contentChanging,
       initialCursorPosition,
       onCursorPositionChange,
       onSetup,
@@ -62,6 +67,7 @@ export default class Monaco extends Modifier<Signature> {
       editorDisplayOptions,
     }: Signature['Args']['Named'],
   ) {
+    this.contentChanging = contentChanging;
     if (this.editor && this.model) {
       if (language && language !== this.lastLanguage) {
         monacoSDK.editor.setModelLanguage(this.model, language);
@@ -74,7 +80,13 @@ export default class Monaco extends Modifier<Signature> {
           this.lastModified + this.monacoService.serverEchoDebounceMs
       ) {
         this.lastContent = content;
-        this.model.setValue(content);
+        this.isApplyingExternalContent = true;
+        try {
+          this.model.setValue(content);
+        } finally {
+          this.isApplyingExternalContent = false;
+        }
+        this.publishCurrentBufferAfterRender();
       }
       if (readOnly !== this.lastReadOnly) {
         this.editor.updateOptions({ readOnly });
@@ -89,6 +101,7 @@ export default class Monaco extends Modifier<Signature> {
         editorDisplayOptions,
         monacoSDK,
         contentChanged,
+        contentChanging,
         onCursorPositionChange,
         onSetup,
       });
@@ -173,11 +186,24 @@ export default class Monaco extends Modifier<Signature> {
     });
 
     this.model = this.editor.getModel()!;
+    // Give the preview its initial in-memory buffer too. Without this, a
+    // private Code-mode Loader can retain the previous file's draft until the
+    // first keypress after navigation. This must land after the current render
+    // transaction so it does not mutate tracked preview state while
+    // CardRenderer is consuming that state.
+    this.publishCurrentBufferAfterRender();
 
     this.disposables.push(
-      this.model.onDidChangeContent(() =>
-        this.onContentChanged.perform(contentChanged),
-      ),
+      this.model.onDidChangeContent(() => {
+        if (this.model) {
+          if (this.isApplyingExternalContent) {
+            this.publishCurrentBufferAfterRender();
+          } else {
+            this.contentChanging?.(this.model.getValue());
+          }
+        }
+        this.onContentChanged.perform(contentChanged);
+      }),
       this.editor.onDidChangeCursorSelection((event) => {
         if (
           this.editor &&
@@ -194,6 +220,16 @@ export default class Monaco extends Modifier<Signature> {
       }),
     );
   }
+
+  private publishCurrentBufferAfterRender() {
+    scheduleOnce('afterRender', this, this.publishCurrentBuffer);
+  }
+
+  private publishCurrentBuffer = () => {
+    if (this.model) {
+      this.contentChanging?.(this.model.getValue());
+    }
+  };
 
   private onContentChanged = restartableTask(
     async (contentChanged: (text: string) => void) => {

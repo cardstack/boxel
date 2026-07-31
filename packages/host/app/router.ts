@@ -11,6 +11,9 @@ Router.map(function () {
   this.route('realm-isolation-spike', {
     path: '/_realm-isolation-spike',
   });
+  this.route('realm-sandbox-frame', {
+    path: '/_realm-sandbox-frame',
+  });
   this.route('render', { path: '/render/:id/:nonce/:options' }, function () {
     this.route('html', { path: '/html/:format/:ancestor_level' });
     this.route('icon');

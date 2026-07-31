@@ -27,7 +27,7 @@ export default class NetworkService extends Service {
   @service declare realm: RealmService;
   @service declare session: SessionService;
 
-  virtualNetwork = this.makeVirtualNetwork();
+  virtualNetwork = this.makeVirtualNetwork(globalThis.fetch);
 
   constructor(owner: Owner) {
     super(owner);
@@ -62,8 +62,12 @@ export default class NetworkService extends Service {
     return this.virtualNetwork.mount.bind(this.virtualNetwork);
   }
 
-  private makeVirtualNetwork() {
-    let virtualNetwork = new VirtualNetwork(globalThis.fetch);
+  createVirtualNetwork(fetch: typeof globalThis.fetch) {
+    return this.makeVirtualNetwork(fetch);
+  }
+
+  private makeVirtualNetwork(fetch: typeof globalThis.fetch) {
+    let virtualNetwork = new VirtualNetwork(fetch);
     let resolvedBaseRealmURL = new URL(
       withTrailingSlash(config.resolvedBaseRealmURL),
     );
@@ -119,7 +123,7 @@ export default class NetworkService extends Service {
   }
 
   resetState = () => {
-    this.virtualNetwork = this.makeVirtualNetwork();
+    this.virtualNetwork = this.makeVirtualNetwork(globalThis.fetch);
   };
 }
 

@@ -89,7 +89,7 @@ export default class CardService extends Service {
   }
 
   async getAPI(): Promise<typeof CardAPI> {
-    let loader = this.loaderService.loader;
+    let loader = this.loaderService.baseLoader;
     if (!this.loaderToCardAPILoadingCache.has(loader)) {
       let apiPromise = loader.import<typeof CardAPI>(
         '@cardstack/base/card-api',
@@ -101,7 +101,7 @@ export default class CardService extends Service {
   }
 
   async getSearchable(): Promise<typeof Searchable> {
-    let loader = this.loaderService.loader;
+    let loader = this.loaderService.baseLoader;
     if (!this.loaderToSearchableLoadingCache.has(loader)) {
       let searchablePromise = loader.import<typeof Searchable>(
         '@cardstack/base/searchable',
@@ -289,10 +289,7 @@ export default class CardService extends Service {
       }
       this.subscriber?.(url, content);
 
-      if (
-        options?.resetLoader &&
-        this.loaderService.loader.isModuleLoaded(url.href)
-      ) {
+      if (options?.resetLoader && this.loaderService.isModuleLoaded(url.href)) {
         this.loaderService.resetLoader({
           reason: 'source-write',
           codeChange: true,

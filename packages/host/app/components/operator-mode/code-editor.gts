@@ -68,6 +68,7 @@ interface Signature {
     saveSourceOnClose: (url: URL, content: string) => void;
     selectDeclaration: (declaration: ModuleDeclaration) => void;
     onFileSave: (status: 'started' | 'finished') => void;
+    onContentChange?: (url: string, content: string) => void;
     onSetup: (
       updateCursorByName: (name: string, fieldName?: string) => void,
     ) => void;
@@ -353,6 +354,12 @@ export default class CodeEditor extends Component<Signature> {
     this.hasUnsavedSourceChanges = false;
     this.hasSavedUnsavedSourceOnClose = false;
   });
+
+  private contentChanging = (content: string) => {
+    if (isReady(this.args.file)) {
+      this.args.onContentChange?.(this.args.file.url, content);
+    }
+  };
 
   private canSyncWithStore(content: string): boolean {
     if (!isReady(this.args.file) || !this.args.file.url.endsWith('.json')) {
@@ -645,6 +652,7 @@ export default class CodeEditor extends Component<Signature> {
             {{monacoModifier
               content=this.readyFile.content
               contentChanged=(perform this.contentChangedTask)
+              contentChanging=this.contentChanging
               monacoSDK=this.monacoSDK
               language=this.language
               initialCursorPosition=this.initialMonacoCursorPosition

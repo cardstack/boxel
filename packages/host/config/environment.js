@@ -167,6 +167,16 @@ module.exports = function (environment) {
     // a realm whose config card has hostRoutingRules; empty otherwise.
     hostRoutingMap: [],
     realmServerURL: process.env.REALM_SERVER_DOMAIN || defaults.realmServerURL,
+    realmSandboxIframeOrigin:
+      process.env.REALM_SANDBOX_IFRAME_ORIGIN || undefined,
+    // Explicit opt-out from SES for reviewed realm code. Each listed realm
+    // still receives its own ordinary Loader; this list grants execution
+    // trust, not access to the host application's module cache.
+    trustedCardRealmURLs: (process.env.TRUSTED_CARD_REALM_URLS ?? '')
+      .split(',')
+      .map((url) => url.trim())
+      .filter(Boolean)
+      .map((url) => (url.endsWith('/') ? url : `${url}/`)),
     resolvedBaseRealmURL:
       process.env.RESOLVED_BASE_REALM_URL || defaults.baseRealmURL,
     resolvedCatalogRealmURL: skipCatalog

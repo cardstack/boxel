@@ -412,7 +412,7 @@ class _FileResource extends Resource<Args> {
         // a .gts whose realm has no loaded instance relies on this path.
         if (
           hasExecutableExtension(normalizedURL) &&
-          this.loaderService.loader.isModuleLoaded(normalizedURL)
+          this.loaderService.isModuleLoaded(normalizedURL)
         ) {
           this.loaderService.resetLoader({
             clearFetchCache: true,
@@ -438,8 +438,7 @@ class _FileResource extends Resource<Args> {
       // Capture before saveSource which may call resetLoader(), replacing
       // the loader with a fresh clone that has no loaded modules.
       let moduleWasLoaded =
-        opts?.flushLoader &&
-        this.loaderService.loader.isModuleLoaded(this._url);
+        opts?.flushLoader && this.loaderService.isModuleLoaded(this._url);
       let response = await this.cardService.saveSource(
         new URL(this._url),
         content,

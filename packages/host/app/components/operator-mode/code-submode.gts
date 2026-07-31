@@ -47,8 +47,11 @@ import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analy
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import CodeSubmodeEditorIndicator from '@cardstack/host/components/operator-mode/code-submode/editor-indicator';
 import ModuleInspector from '@cardstack/host/components/operator-mode/code-submode/module-inspector';
-
 import consumeContext from '@cardstack/host/helpers/consume-context';
+import CodePreviewSandbox, {
+  CodePreviewSandboxContextName,
+} from '@cardstack/host/lib/code-preview-sandbox';
+
 import type { FileResource } from '@cardstack/host/resources/file';
 import type {
   ModuleDeclaration,
@@ -61,6 +64,7 @@ import type { FileView } from '@cardstack/host/services/operator-mode-state-serv
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
 import type RealmService from '@cardstack/host/services/realm';
+import type RealmSandboxService from '@cardstack/host/services/realm-sandbox';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
@@ -151,6 +155,7 @@ export default class CodeSubmode extends Component<Signature> {
   @service declare private playgroundPanelService: PlaygroundPanelService;
   @service declare private recentFilesService: RecentFilesService;
   @service declare private realm: RealmService;
+  @service declare private realmSandbox: RealmSandboxService;
   @service declare private specPanelService: SpecPanelService;
   @service declare private store: StoreService;
 
@@ -169,6 +174,13 @@ export default class CodeSubmode extends Component<Signature> {
     | undefined;
 
   private createFileModal: CreateFileModal | undefined;
+  private codePreviewSandbox = new CodePreviewSandbox();
+
+  @provide(CodePreviewSandboxContextName)
+  // @ts-ignore consumed by CardRenderer descendants in the Code preview
+  private get codePreviewSandboxContext() {
+    return this.codePreviewSandbox;
+  }
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -215,6 +227,7 @@ export default class CodeSubmode extends Component<Signature> {
     registerDestructor(this, () => {
       this.operatorModeStateService.unsubscribeFromOpenFileStateChanges(this);
       this.codeSemanticsService.clearOnModuleEditCallback(this.onModuleEdit);
+      this.realmSandbox.releaseCodePreviewSandbox(this.codePreviewSandbox);
     });
   }
 
@@ -387,6 +400,11 @@ export default class CodeSubmode extends Component<Signature> {
   @action
   private onSourceFileSave(status: 'started' | 'finished') {
     this.sourceFileIsSaving = status === 'started';
+  }
+
+  @action
+  private updateCodePreview(sourceURL: string, source: string) {
+    this.codePreviewSandbox.update(sourceURL, source);
   }
 
   @action
@@ -862,6 +880,7 @@ export default class CodeSubmode extends Component<Signature> {
                       @saveSourceOnClose={{@saveSourceOnClose}}
                       @selectDeclaration={{this.selectDeclaration}}
                       @onFileSave={{this.onSourceFileSave}}
+                      @onContentChange={{this.updateCodePreview}}
                       @onWriteError={{this.onWriteError}}
                       @onSetup={{this.setupCodeEditor}}
                       @isReadOnly={{this.isReadOnly}}

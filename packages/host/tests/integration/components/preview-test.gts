@@ -1,3 +1,4 @@
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Service from '@ember/service';
 import { click, waitFor } from '@ember/test-helpers';
@@ -7,15 +8,22 @@ import { tracked } from '@glimmer/tracking';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
+import { ri, rri } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
+import RealmSandboxRender from '@cardstack/host/components/realm-sandbox-render';
+import { getOpaqueRealmCardState } from '@cardstack/host/lib/realm-sandbox-boundary';
 
 import { percySnapshot, testRealmURL } from '../../helpers';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
-import type { Format } from '@cardstack/base/card-api';
+import type {
+  BaseDefComponent,
+  Format,
+  ViewCardFn,
+} from '@cardstack/base/card-api';
 
 let cardApi: typeof import('@cardstack/base/card-api');
 let string: typeof import('@cardstack/base/string');
@@ -55,6 +63,238 @@ module('Integration | preview', function (hooks) {
     );
     await waitFor('[data-test-firstName]'); // we need to wait for the card instance to load
     assert.dom('[data-test-firstName]').hasText('Mango');
+  });
+
+  test('trusts Base and Catalog Realm types and sandboxes user realm types', function (assert) {
+    let sandbox = getService('realm-sandbox');
+    let loaderService = getService('loader-service');
+
+    assert.false(
+      sandbox.shouldUseOpaqueCard({
+        module: rri('https://cardstack.com/base/card-api'),
+        name: 'CardDef',
+      }),
+      'Base Realm definitions stay on the trusted host runtime',
+    );
+    assert.false(
+      sandbox.shouldUseOpaqueCard({
+        module: rri('@cardstack/catalog/fields/workflow'),
+        name: 'WorkflowField',
+      }),
+      'Catalog Realm definitions stay on the trusted host runtime',
+    );
+    assert.true(
+      sandbox.shouldUseOpaqueCard({
+        module: rri(`${testRealmURL}article-card`),
+        name: 'ArticleCard',
+      }),
+      'ordinary realm definitions become opaque sandbox records',
+    );
+
+    let catalogRef = {
+      module: rri('@cardstack/catalog/fields/workflow'),
+      name: 'WorkflowField',
+    };
+    let catalogLoader = sandbox.loaderForTrustedCard(catalogRef);
+    assert.notStrictEqual(
+      loaderService.baseLoader,
+      loaderService.loader,
+      'Base has a loader separate from the host authored-module loader',
+    );
+    assert.strictEqual(
+      sandbox.loaderForTrustedCard({
+        module: rri('https://cardstack.com/base/card-api'),
+        name: 'CardDef',
+      }),
+      loaderService.baseLoader,
+      'Base cards use the app-wide Base loader',
+    );
+    assert.strictEqual(
+      sandbox.loaderForTrustedCard(catalogRef),
+      catalogLoader,
+      'trusted realm cards reuse one loader for their realm',
+    );
+    assert.notStrictEqual(
+      catalogLoader,
+      loaderService.baseLoader,
+      'a non-Base trusted realm does not evaluate into the Base loader',
+    );
+  });
+
+  test('deserializes a regular realm card without importing its type into the host', async function (assert) {
+    let moduleURL = `${testRealmURL}authoritative-sandbox-card`;
+    let id = `${testRealmURL}authoritative-sandbox-instance`;
+    let resource = {
+      id: rri(id),
+      type: 'card' as const,
+      attributes: {
+        title: 'Opaque until the compartment renders it',
+        count: 3,
+      },
+      meta: {
+        adoptsFrom: {
+          module: rri(moduleURL),
+          name: 'AuthoritativeSandboxCard',
+        },
+        realmURL: ri(testRealmURL),
+      },
+    };
+    let doc = { data: resource };
+
+    assert.false(loader.isModuleLoaded(moduleURL));
+    let card = await getService('store').__dangerousCreateFromSerialized(
+      resource,
+      doc,
+      new URL(id),
+    );
+
+    assert.false(
+      loader.isModuleLoaded(moduleURL),
+      'Store did not evaluate the realm module in the host Loader',
+    );
+    assert.strictEqual(
+      (card as unknown as { title: string }).title,
+      resource.attributes.title,
+    );
+    let snapshot = getOpaqueRealmCardState(card)?.snapshot;
+    assert.deepEqual(
+      Object.fromEntries(Object.entries(snapshot ?? {})),
+      {
+        id: rri(id),
+        title: resource.attributes.title,
+        count: 3,
+      },
+      'the enumerable opaque snapshot remains plain card data',
+    );
+    assert.strictEqual(
+      (snapshot?.constructor as { displayName?: string }).displayName,
+      'AuthoritativeSandboxCard',
+      'templates receive inert constructor presentation metadata',
+    );
+    assert.false(
+      Object.keys(snapshot ?? {}).includes('constructor'),
+      'constructor metadata does not enter JSON-only compartment args',
+    );
+  });
+
+  test('renders an inert compartment template with trusted scoped styles', async function (assert) {
+    let { CardDef } = cardApi;
+    class TestCard extends CardDef {}
+    class InertTemplate extends GlimmerComponent<{
+      Args: { model: { title: string } };
+    }> {
+      readonly trustedHostTemplate = true;
+
+      <template>
+        <p class='sandbox-style-proof' data-test-sandbox-style-proof>
+          {{@model.title}}
+        </p>
+      </template>
+    }
+    let card = new TestCard({});
+    let sandbox = {
+      component: InertTemplate as unknown as BaseDefComponent,
+      model: { title: 'Compartment template' },
+      fields: {},
+      styles: ['.sandbox-style-proof { color: rgb(1 2 3); }'],
+      principal: testRealmURL,
+      theme: {
+        css: ':root { --background: #f7f8fa; --foreground: #16161a; }',
+        id: `${testRealmURL}Theme/editorial`,
+        scope: `${testRealmURL}Theme/editorial-test-scope`,
+      },
+    };
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <RealmSandboxRender
+            @card={{card}}
+            @format='fitted'
+            @sandbox={{sandbox}}
+          />
+        </template>
+      },
+    );
+
+    assert
+      .dom('[data-test-sandbox-style-proof]')
+      .hasText('Compartment template');
+    assert
+      .dom('style')
+      .includesText('.sandbox-style-proof { color: rgb(1 2 3); }');
+    assert
+      .dom('.realm-sandbox-render')
+      .hasClass('boxel-card-container--themed')
+      .hasAttribute(
+        'data-boxel-theme-scope',
+        `${testRealmURL}Theme/editorial-test-scope`,
+      );
+    let containerStyle = getComputedStyle(
+      document.querySelector('.realm-sandbox-render')!,
+    );
+    assert.strictEqual(containerStyle.containerName, 'fitted-card');
+    assert.strictEqual(containerStyle.containerType, 'size');
+    assert.strictEqual(containerStyle.minHeight, '40px');
+    assert.strictEqual(containerStyle.maxHeight, '600px');
+    assert.strictEqual(containerStyle.overflow, 'hidden');
+    assert
+      .dom('[data-boxel-theme-style]')
+      .includesText('--background: #f7f8fa');
+  });
+
+  test('routes sandbox navigation through a realm-relative viewCard capability', async function (assert) {
+    let { CardDef } = cardApi;
+    class TestCard extends CardDef {}
+    class InertNavigation extends GlimmerComponent<{
+      Args: {
+        viewCard: (
+          target: Parameters<ViewCardFn>[0],
+          format?: Parameters<ViewCardFn>[1],
+          optionsOrEvent?: Parameters<ViewCardFn>[2] | Event,
+        ) => void;
+      };
+    }> {
+      target = 'Article/one' as Parameters<ViewCardFn>[0];
+
+      <template>
+        <button
+          type='button'
+          data-test-sandbox-view-card
+          {{on 'click' (fn @viewCard this.target 'isolated')}}
+        >
+          Open card
+        </button>
+      </template>
+    }
+    let card = new TestCard({});
+    let sandbox = {
+      component: InertNavigation as unknown as BaseDefComponent,
+      model: {},
+      fields: {},
+      styles: [],
+      principal: testRealmURL,
+    };
+    let calls: Array<Parameters<ViewCardFn>> = [];
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        viewCard: ViewCardFn = (...args) => calls.push(args);
+
+        <template>
+          <RealmSandboxRender
+            @card={{card}}
+            @sandbox={{sandbox}}
+            @viewCard={{this.viewCard}}
+          />
+        </template>
+      },
+    );
+
+    await click('[data-test-sandbox-view-card]');
+    assert.strictEqual(calls.length, 1);
+    assert.strictEqual(calls[0]?.[0], rri(`${testRealmURL}Article/one`));
+    assert.strictEqual(calls[0]?.[1], 'isolated');
   });
 
   test('renders head meta tags preview for a card head format', async function (assert) {

@@ -1,4 +1,4 @@
-import { executableExtensions } from './index.ts';
+import { executableExtensions } from './executable-extensions.ts';
 
 export type RuntimeDependencyNodeKind = 'module' | 'instance' | 'file';
 export type RuntimeDependencyContextMode = 'query' | 'non-query';
