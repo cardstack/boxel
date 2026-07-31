@@ -1,3 +1,4 @@
+import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 
 import Component from '@glimmer/component';
@@ -42,31 +43,32 @@ export default class HostModeBreadcrumbs extends Component<Signature> {
     return index === this.cardIds.length - 1;
   };
 
-  private cardsAboveCard(cardId: string) {
-    let cardIndex = this.cardIds.indexOf(cardId);
-
-    if (cardIndex < 0) {
+  // Crumbs are located by index rather than card id: the same card can
+  // appear more than once in the trail, so an id lookup could close the
+  // wrong cards.
+  private cardsAboveIndex(index: number) {
+    if (index < 0) {
       return [] as string[];
     }
 
-    return this.cardIds.slice(cardIndex + 1, this.cardIds.length);
+    return this.cardIds.slice(index + 1, this.cardIds.length);
   }
 
-  private canNavigate = (cardId: string) => {
+  private canNavigate = (index: number) => {
     if (!this.args.close) {
       return false;
     }
 
-    return this.cardsAboveCard(cardId).length > 0;
+    return this.cardsAboveIndex(index).length > 0;
   };
 
   @action
-  private handleBreadcrumbClick(cardId: string) {
+  private handleBreadcrumbClick(index: number) {
     if (!this.args.close) {
       return;
     }
 
-    let cardsToClose = this.cardsAboveCard(cardId);
+    let cardsToClose = this.cardsAboveIndex(index);
 
     if (cardsToClose.length === 0) {
       return;
@@ -92,9 +94,9 @@ export default class HostModeBreadcrumbs extends Component<Signature> {
             <li class='item'>
               <HostModeBreadcrumbItem
                 @cardId={{cardId}}
-                @disabled={{not (this.canNavigate cardId)}}
+                @disabled={{not (this.canNavigate index)}}
                 @isCurrent={{this.isLast index}}
-                @onClick={{this.handleBreadcrumbClick}}
+                @onClick={{fn this.handleBreadcrumbClick index}}
               />
               {{#unless (this.isLast index)}}
                 <span class='separator' aria-hidden='true'>

@@ -17,7 +17,7 @@ interface Signature {
     cardId: string;
     disabled?: boolean;
     isCurrent?: boolean;
-    onClick?: (cardId: string) => void;
+    onClick?: () => void;
   };
 }
 
@@ -139,9 +139,7 @@ export default class HostModeBreadcrumbItem extends Component<Signature> {
       return;
     }
 
-    if (this.args.onClick) {
-      this.args.onClick(this.args.cardId);
-    }
+    this.args.onClick?.();
   }
 
   <template>
