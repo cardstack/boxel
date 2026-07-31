@@ -320,17 +320,25 @@ class RoutingRuleEdit extends Component<typeof RoutingRuleField> {
       .instance-cell {
         min-width: 0;
       }
+      /* The target cell shares a 1fr track with the path input and the
+         card can render quite narrow (operator-mode stack item), so the
+         status picker stacks BELOW the target input rather than beside
+         it — side-by-side, their combined minimum width overflows the
+         rule container. min-width: 0 (cell and input) lets the track
+         shrink the URL input instead of pushing the row wider. */
       .redirect-cell {
         display: grid;
-        grid-template-columns: 1fr auto;
-        gap: var(--boxel-sp-xs);
+        gap: var(--boxel-sp-xxs);
         min-width: 0;
       }
       .redirect-cell :deep(input) {
         font-family: var(--boxel-font-family-mono, monospace);
+        min-width: 0;
       }
       .status-code-cell {
+        justify-self: start;
         min-width: 9rem;
+        max-width: 100%;
       }
       .path-warning {
         font-size: var(--boxel-font-size-xs);
