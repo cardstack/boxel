@@ -1802,11 +1802,19 @@ export default class StoreService extends Service implements StoreInterface {
     dependencyTrackingContext?: RuntimeDependencyTrackingContext,
   ): Promise<T> {
     let api = await this.cardService.getAPI();
-    if (this.realmSandbox.shouldUseOpaqueCard(resource.meta?.adoptsFrom)) {
+    if (
+      !this.isRenderStore &&
+      this.realmSandbox.shouldUseOpaqueCard(resource.meta?.adoptsFrom)
+    ) {
+      // Match card-api's normal deserializer identity behavior. A no-cache
+      // reload may materialize a fresh opaque facade, but one remote URL must
+      // keep one local identity or the Store correctly rejects the duplicate.
+      let existing = resource.id ? this.store.getCard(resource.id) : undefined;
       return await this.realmSandbox.createOpaqueCard<T>(
         resource,
         relativeTo,
         doc,
+        existing?.[localIdSymbol],
       );
     }
     let shouldStubTimers =

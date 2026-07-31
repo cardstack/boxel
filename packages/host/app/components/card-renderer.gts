@@ -3,6 +3,7 @@ import Component from '@glimmer/component';
 
 import { provide, consume } from 'ember-provide-consume-context';
 
+import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
@@ -99,6 +100,14 @@ export default class CardRenderer extends Component<Signature> {
         @viewCard={{this.viewCard}}
         ...attributes
       />
+    {{else if this.sandboxRenderLoading}}
+      <div
+        class='realm-sandbox-loading'
+        data-card-sandbox-loading
+        ...attributes
+      >
+        <LoadingIndicator />
+      </div>
     {{else}}
       <this.renderedCard
         @displayContainer={{@displayContainer}}
@@ -110,6 +119,7 @@ export default class CardRenderer extends Component<Signature> {
         hidden
         data-card-sandbox-diagnostics
         data-card-sandbox-tier={{this.sandboxMetrics.executionTier}}
+        data-card-sandbox-reason={{this.sandboxMetrics.executionReason}}
         data-card-sandbox-render-requests={{this.sandboxMetrics.renderRequests}}
         data-card-sandboxed={{this.sandboxMetrics.sandboxedCards}}
         data-card-sandbox-fallbacks={{this.sandboxMetrics.fallbackCards}}
@@ -132,6 +142,15 @@ export default class CardRenderer extends Component<Signature> {
         data-card-sandbox-compartment-errors={{this.sandboxCompartmentErrors}}
       ></span>
     {{/if}}
+
+    <style scoped>
+      .realm-sandbox-loading {
+        display: grid;
+        place-items: center;
+        width: 100%;
+        min-height: 10rem;
+      }
+    </style>
   </template>
 
   get renderedCard() {
@@ -147,6 +166,10 @@ export default class CardRenderer extends Component<Signature> {
       useBaseTemplate: this.useTrustedBaseTemplate,
       codePreviewSandbox: this.codePreviewSandbox,
     });
+  }
+
+  get sandboxRenderLoading() {
+    return this.realmSandbox.isRenderLoading(this.args.card, this.args.format);
   }
 
   get iframeSandboxRender() {

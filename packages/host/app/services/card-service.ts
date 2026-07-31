@@ -18,6 +18,8 @@ import type { AtomicOperation } from '@cardstack/runtime-common/atomic-document'
 import { createAtomicDocument } from '@cardstack/runtime-common/atomic-document';
 import { validateWriteSize } from '@cardstack/runtime-common/write-size-validation';
 
+import { serializeOpaqueRealmCard } from '@cardstack/host/lib/realm-sandbox-boundary';
+
 import LimitedSet from '../lib/limited-set';
 
 import type EnvironmentService from './environment-service';
@@ -234,10 +236,13 @@ export default class CardService extends Service {
     card: CardDef,
     opts?: SerializeOpts & { withIncluded?: true },
   ): Promise<LooseSingleCardDocument> {
-    let api = await this.getAPI();
-    let serialized = api.serializeCard(card, {
-      ...opts,
-    });
+    let serialized = serializeOpaqueRealmCard(card);
+    if (!serialized) {
+      let api = await this.getAPI();
+      serialized = api.serializeCard(card, {
+        ...opts,
+      });
+    }
     if (!opts?.withIncluded) {
       delete serialized.included;
     }

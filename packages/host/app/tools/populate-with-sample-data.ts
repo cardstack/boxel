@@ -1,12 +1,10 @@
 import { service } from '@ember/service';
 
-import {
-  ensureExtension,
-  identifyCard,
-  moduleFrom,
-} from '@cardstack/runtime-common';
+import { ensureExtension, moduleFrom } from '@cardstack/runtime-common';
 
 import { isBaseInstance, realmURL } from '@cardstack/runtime-common/constants';
+
+import { identifyRealmCard } from '@cardstack/host/lib/realm-sandbox-boundary';
 
 import HostBaseTool from '../lib/host-base-tool';
 
@@ -42,7 +40,7 @@ export default class PopulateWithSampleDataTool extends HostBaseTool<
   }
 
   protected getAttachedFileURLs(card: CardDef) {
-    const codeRef = identifyCard(card.constructor);
+    const codeRef = identifyRealmCard(card);
     let cardModuleURL = codeRef
       ? ensureExtension(moduleFrom(codeRef), { default: '.gts' })
       : undefined;

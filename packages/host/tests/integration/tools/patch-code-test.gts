@@ -153,7 +153,7 @@ export class Task extends CardDef {
   });
 
   test('uses the open file resource when the target file is open', async function (assert) {
-    assert.expect(7);
+    assert.expect(8);
 
     let toolService = getService('tool-service');
     let patchCodeCommand = new PatchCodeTool(toolService.toolContext);
@@ -202,6 +202,15 @@ ${REPLACE_MARKER}`;
         fileIdentifier: fileUrl,
         codeBlocks: [codeBlock],
       });
+      let chainedCodeBlock = `${SEARCH_MARKER}
+      <p>High Priority</p>
+${SEPARATOR_MARKER}
+      <p>Critical Priority</p>
+${REPLACE_MARKER}`;
+      await patchCodeCommand.execute({
+        fileIdentifier: fileUrl,
+        codeBlocks: [chainedCodeBlock],
+      });
       let maybeLatestResource = operatorModeStateService.openFile?.current;
       assert.ok(maybeLatestResource, 'open file resource still exists');
       assert.ok(
@@ -213,13 +222,21 @@ ${REPLACE_MARKER}`;
         latestResource.writing,
         'write is initiated on the open file resource',
       );
+      assert.ok(
+        latestResource.content.includes('Critical Priority'),
+        'a second streamed block composes onto the staged first block',
+      );
       deferredSave.fulfill();
       await latestResource.writing;
       assert.ok(
-        latestResource.content.includes('High Priority'),
+        latestResource.content.includes('Critical Priority'),
         'patched content is reflected in the open file resource',
       );
-      assert.strictEqual(saveCalls, 1, 'save source is invoked exactly once');
+      assert.strictEqual(
+        saveCalls,
+        2,
+        'each completed streamed block starts one realm save',
+      );
     } finally {
       cardService.saveSource = originalSaveSource;
       operatorModeStateService.restore({ stacks: [[]] });

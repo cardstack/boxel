@@ -2,11 +2,12 @@ import { service } from '@ember/service';
 
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
 import {
-  identifyCard,
   internalKeyFor,
   isCardErrorJSONAPI,
   rri,
 } from '@cardstack/runtime-common';
+
+import { identifyRealmCard } from '@cardstack/host/lib/realm-sandbox-boundary';
 
 import HostBaseTool from '../lib/host-base-tool';
 
@@ -58,9 +59,7 @@ export default class ShowCardTool extends HostBaseTool<
       return await this.loadCard(input.cardId);
     } else if (operatorModeStateService.state?.submode === 'code') {
       let cardInstance = await this.loadCard(input.cardId);
-      let cardDefRef = identifyCard(
-        cardInstance.constructor as typeof CardDef,
-      ) as ResolvedCodeRef;
+      let cardDefRef = identifyRealmCard(cardInstance) as ResolvedCodeRef;
       if (!cardDefRef) {
         throw new Error(`Card definition for ${input.cardId} not found.`);
       }

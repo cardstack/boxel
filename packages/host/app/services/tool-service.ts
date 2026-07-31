@@ -46,6 +46,7 @@ import type RealmServerService from './realm-server';
 import type SessionService from './session';
 import type StoreService from './store';
 import type { CodeData } from '../lib/formatted-message/utils';
+import type { Message } from '../lib/matrix-classes/message';
 import type MessageCodePatchResult from '../lib/matrix-classes/message-code-patch-result';
 import type MessageTool from '../lib/matrix-classes/message-tool';
 import type { RoomResource } from '../resources/room';
@@ -116,6 +117,7 @@ export default class ToolService extends Service {
   // resource to fold the event's finalized content into its Message.
   private toolFinalizationRetries = new Map<string, number>();
   private codePatchProcessingEventQueue: string[] = [];
+  private codePatchProcessingByMessage = new Map<string, Promise<void>>();
   private flushToolProcessingQueue: Promise<void> | undefined;
   private flushCodePatchProcessingQueue: Promise<void> | undefined;
 
@@ -140,6 +142,7 @@ export default class ToolService extends Service {
     this.toolProcessingEventQueue = [];
     this.toolFinalizationRetries.clear();
     this.codePatchProcessingEventQueue = [];
+    this.codePatchProcessingByMessage.clear();
     this.flushToolProcessingQueue = undefined;
     this.flushCodePatchProcessingQueue = undefined;
   }
@@ -630,59 +633,88 @@ export default class ToolService extends Service {
           }
           continue;
         }
-        if (message.agentId !== this.matrixService.agentId) {
-          // This code patch was sent by another agent, so we will not auto-execute it
-          continue;
-        }
-
-        // Get the LLM mode that was active when this message was created
-        let activeModeAtMessageTime = roomResource.getActiveLLMModeForMessage(
-          message.eventId,
-        );
-        // Only auto-apply if in 'act' mode
-        if (activeModeAtMessageTime !== 'act') {
-          let llmModeEvents = roomResource.llmModeEvents;
-          if (
-            isTesting() &&
-            llmModeEvents.some((e) => (e as any).content?.mode === 'act')
-          ) {
-            // The room has used 'act' mode, so a non-'act' resolution here is
-            // worth recording: it pins the message against every mode
-            // transition — the data needed to explain an auto-apply that
-            // didn't fire.
-            console.log(
-              `[code-patch-autoapply] event ${eventId} resolved to LLM mode "${activeModeAtMessageTime}" at message timestamp ${message.created.getTime()}; mode transitions: ${JSON.stringify(
-                llmModeEvents.map((e) => ({
-                  ts: e.origin_server_ts,
-                  mode: (e as any).content?.mode,
-                })),
-              )}`,
-            );
-          }
-          continue;
-        }
-
-        // Auto-apply all ready code patches from this message
-        if (message.htmlParts) {
-          let readyCodePatches = this.getReadyCodePatches(message.htmlParts);
-          let uniqueFiles = new Set(
-            readyCodePatches.map((patch) => patch.fileUrl),
-          );
-
-          if (readyCodePatches.length > 0 || uniqueFiles.size > 0) {
-            // This is an "accept all" operation - multiple patches OR patches across multiple files
-            this.acceptingAllRoomIds.add(roomId!);
-            try {
-              await this.executeReadyCodePatches(roomId!, message.htmlParts);
-            } finally {
-              this.acceptingAllRoomIds.delete(roomId!);
-            }
-          }
-        }
+        await this.processCodePatchesForMessage(roomId!, message);
       }
       finishedProcessingCodePatches!();
     } finally {
       toolProcessingWaiter.endAsync(waiterToken);
+    }
+  }
+
+  // Streaming responses can expose a complete search/replace block before the
+  // message itself is finished. Serialize work per message so every newly
+  // completed block is claimed once, in order, while later accumulated chunks
+  // can still contribute additional blocks.
+  processCodePatchesForMessage(
+    roomId: string,
+    message: Message,
+  ): Promise<void> {
+    let key = `${roomId}|${message.eventId}`;
+    let previous = this.codePatchProcessingByMessage.get(key);
+    let processing = (previous ?? Promise.resolve())
+      .catch(() => undefined)
+      .then(() => this.applyReadyCodePatchesForMessage(roomId, message));
+    this.codePatchProcessingByMessage.set(key, processing);
+    void processing.then(
+      () => {
+        if (this.codePatchProcessingByMessage.get(key) === processing) {
+          this.codePatchProcessingByMessage.delete(key);
+        }
+      },
+      () => {
+        if (this.codePatchProcessingByMessage.get(key) === processing) {
+          this.codePatchProcessingByMessage.delete(key);
+        }
+      },
+    );
+    return processing;
+  }
+
+  private async applyReadyCodePatchesForMessage(
+    roomId: string,
+    message: Message,
+  ) {
+    let roomResource = this.matrixService.roomResources.get(roomId);
+    if (!roomResource || message.agentId !== this.matrixService.agentId) {
+      // A code patch from a different agent never inherits this client's Act
+      // authority.
+      return;
+    }
+
+    let activeModeAtMessageTime = roomResource.getActiveLLMModeForMessage(
+      message.eventId,
+    );
+    if (activeModeAtMessageTime !== 'act') {
+      let llmModeEvents = roomResource.llmModeEvents;
+      if (
+        isTesting() &&
+        llmModeEvents.some((e) => (e as any).content?.mode === 'act')
+      ) {
+        console.log(
+          `[code-patch-autoapply] event ${message.eventId} resolved to LLM mode "${activeModeAtMessageTime}" at message timestamp ${message.created.getTime()}; mode transitions: ${JSON.stringify(
+            llmModeEvents.map((e) => ({
+              ts: e.origin_server_ts,
+              mode: (e as any).content?.mode,
+            })),
+          )}`,
+        );
+      }
+      return;
+    }
+
+    if (!message.htmlParts) {
+      return;
+    }
+    let readyCodePatches = this.getReadyCodePatches(message.htmlParts);
+    if (readyCodePatches.length === 0) {
+      return;
+    }
+
+    this.acceptingAllRoomIds.add(roomId);
+    try {
+      await this.executeReadyCodePatches(roomId, message.htmlParts);
+    } finally {
+      this.acceptingAllRoomIds.delete(roomId);
     }
   }
 

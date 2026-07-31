@@ -39,4 +39,42 @@ module('Unit | code preview sandbox', function () {
     first.deactivate();
     assert.false(first.active, 'teardown revokes the preview source');
   });
+
+  test('publishes source and revision as one immutable generation', function (assert) {
+    let sandbox = new CodePreviewSandbox();
+
+    sandbox.update('https://realm.example/card.gts', 'VERSION ONE');
+    let first = sandbox.draft!;
+    sandbox.update('https://realm.example/card.gts', 'VERSION TWO');
+    let second = sandbox.draft!;
+
+    assert.true(Object.isFrozen(first));
+    assert.deepEqual(first, {
+      sourceURL: 'https://realm.example/card.gts',
+      source: 'VERSION ONE',
+      revision: 1,
+    });
+    assert.deepEqual(second, {
+      sourceURL: 'https://realm.example/card.gts',
+      source: 'VERSION TWO',
+      revision: 2,
+    });
+    assert.notStrictEqual(first, second);
+  });
+
+  test('every code preview keeps one dedicated iframe tier across generations', function (assert) {
+    let sandbox = new CodePreviewSandbox();
+
+    sandbox.update(
+      'https://realm.example/card.gts',
+      "const canvas = document.createElement('canvas');",
+    );
+    sandbox.update(
+      'https://realm.example/card.gts',
+      "export const message = 'ordinary SES card';",
+    );
+    assert.strictEqual(sandbox.revision, 2);
+    assert.strictEqual(sandbox.sandboxTier, 'iframe');
+    assert.strictEqual(sandbox.sandboxReason, 'code-preview-dedicated-iframe');
+  });
 });

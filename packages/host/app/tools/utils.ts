@@ -9,15 +9,11 @@ import {
   type ToolRequest,
 } from '@cardstack/runtime-common';
 
-import {
-  basicMappings,
-  generateJsonSchemaForCardType,
-  getPatchTool,
-} from '@cardstack/runtime-common/helpers/ai';
+import { getPatchTool } from '@cardstack/runtime-common/helpers/ai';
 
 import GetEventsFromRoomTool from './get-events-from-room';
 
-import type LoaderService from '../services/loader-service';
+import type CardTypeService from '../services/card-type-service';
 import type MessageService from '../services/message-service';
 import type { CardDef } from '@cardstack/base/card-api';
 import type * as CardAPI from '@cardstack/base/card-api';
@@ -124,16 +120,11 @@ export async function addPatchTools(
   cardAPI: typeof CardAPI,
 ): Promise<Tool[]> {
   let results: Tool[] = [];
-  let loader = (
-    getOwner(toolContext)!.lookup('service:loader-service') as LoaderService
-  ).loader;
-  let mappings = await basicMappings(loader);
+  let cardTypeService = getOwner(toolContext)!.lookup(
+    'service:card-type-service',
+  ) as CardTypeService;
   for (const patchableCard of patchableCards) {
-    let patchSpec = generateJsonSchemaForCardType(
-      patchableCard.constructor as typeof CardDef,
-      cardAPI,
-      mappings,
-    );
+    let patchSpec = await cardTypeService.patchSchema(patchableCard, cardAPI);
     results.push(getPatchTool(patchableCard.id, patchSpec));
   }
   return results;

@@ -1,16 +1,16 @@
 import { service } from '@ember/service';
 
 import type { ToolContext } from '@cardstack/runtime-common';
-import {
-  type AttributesSchema,
-  type CardSchema,
-  type ObjectSchema,
-  type RelationshipsSchema,
-  generateJsonSchemaForCardType,
+import type {
+  AttributesSchema,
+  CardSchema,
+  ObjectSchema,
+  RelationshipsSchema,
 } from '@cardstack/runtime-common/helpers/ai';
 
 import HostBaseTool from '../lib/host-base-tool';
 
+import type CardTypeService from '../services/card-type-service';
 import type StoreService from '../services/store';
 import type ToolService from '../services/tool-service';
 import type { CardDef } from '@cardstack/base/card-api';
@@ -26,6 +26,7 @@ export default class PatchCardInstanceTool extends HostBaseTool<
 > {
   @service declare private store: StoreService;
   @service declare private toolService: ToolService;
+  @service declare private cardTypeService: CardTypeService;
 
   description = `Propose a patch to an existing card instance to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. If a relationship field value is removed, set the self property of the specific item to null. When editing a relationship array, display the full array in the patch code. Ensure the description explains what change you are making. Do NOT leave out the cardId or patch fields or this tool will not work.`;
   static actionVerb = 'Update Card';
@@ -76,7 +77,7 @@ export default class PatchCardInstanceTool extends HostBaseTool<
     mappings: Map<typeof CardAPI.FieldDef, AttributesSchema>,
   ): Promise<CardSchema> {
     let cardTypeToPatch = this.configuration!.cardType;
-    let cardTypeToPatchSchema = generateJsonSchemaForCardType(
+    let cardTypeToPatchSchema = await this.cardTypeService.patchSchema(
       cardTypeToPatch,
       cardApi,
       mappings,

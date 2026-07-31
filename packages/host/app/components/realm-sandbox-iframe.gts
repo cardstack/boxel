@@ -4,7 +4,10 @@ import { tracked } from '@glimmer/tracking';
 
 import { modifier } from 'ember-modifier';
 
-import { CardContainer } from '@cardstack/boxel-ui/components';
+import {
+  CardContainer,
+  LoadingIndicator,
+} from '@cardstack/boxel-ui/components';
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
 
 import {
@@ -43,6 +46,10 @@ export default class RealmSandboxIframe extends Component<Signature> {
 
   get displayContainer() {
     return this.args.displayContainer !== false;
+  }
+
+  get isLoading() {
+    return this.status === 'loading';
   }
 
   connectFrame = modifier((element: HTMLIFrameElement) => {
@@ -182,6 +189,11 @@ export default class RealmSandboxIframe extends Component<Signature> {
       data-boxel-card-format={{this.format}}
       ...attributes
     >
+      {{#if this.isLoading}}
+        <div class='iframe-loading' data-card-sandbox-loading>
+          <LoadingIndicator />
+        </div>
+      {{/if}}
       <iframe
         {{this.connectFrame}}
         {{this.syncDraft
@@ -198,10 +210,20 @@ export default class RealmSandboxIframe extends Component<Signature> {
 
     <style scoped>
       .realm-sandbox-iframe {
+        position: relative;
         display: block;
         width: 100%;
         min-height: 2.5rem;
         overflow: hidden;
+      }
+      .iframe-loading {
+        position: absolute;
+        z-index: 1;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        min-height: 2.5rem;
+        background-color: white;
       }
       iframe {
         display: block;

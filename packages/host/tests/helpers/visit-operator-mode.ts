@@ -8,6 +8,7 @@ export default async function visitOperatorMode({
   stacks,
   submode,
   codePath,
+  codeSelection,
   fileView,
   openDirs,
   aiAssistantOpen,
@@ -24,6 +25,7 @@ export default async function visitOperatorMode({
       : false,
     aiAssistantOpen: aiAssistantOpen ?? false,
     ...(codePath ? { codePath } : {}),
+    ...(codeSelection ? { codeSelection } : {}),
     ...(fileView ? { fileView } : {}),
     ...(openDirs ? { openDirs } : {}),
     ...(moduleInspector ? { moduleInspector } : {}),
@@ -33,7 +35,8 @@ export default async function visitOperatorMode({
 
   let operatorModeStateParam = stringify(operatorModeState)!;
 
-  await visit(
-    `/?&operatorModeState=${encodeURIComponent(operatorModeStateParam)}`,
-  );
+  let query = new URLSearchParams({
+    operatorModeState: operatorModeStateParam,
+  });
+  await visit(`/?${query}`);
 }

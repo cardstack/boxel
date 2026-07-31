@@ -149,6 +149,18 @@ export default class PatchCodeTool extends HostBaseTool<
   }
 
   private async getFileInfo(fileUrl: string): Promise<FileInfo> {
+    let openFileResource = this.operatorModeStateService.openFile?.current;
+    if (
+      isReady(openFileResource) &&
+      new URL(openFileResource.url).href === new URL(fileUrl).href
+    ) {
+      let content = openFileResource.content;
+      return {
+        exists: true,
+        hasContent: content.trim() !== '',
+        content,
+      };
+    }
     let getSourceResult = await this.cardService.getSource(rri(fileUrl));
     let exists = getSourceResult.status !== 404;
     let content = exists ? getSourceResult.content : '';

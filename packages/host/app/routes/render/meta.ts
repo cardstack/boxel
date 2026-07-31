@@ -25,6 +25,8 @@ import {
   type RenderError,
 } from '@cardstack/runtime-common';
 
+import { getOpaqueRealmCardTypeState } from '@cardstack/host/lib/realm-sandbox-boundary';
+
 import type CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type NetworkService from '@cardstack/host/services/network';
@@ -268,7 +270,7 @@ export default class RenderMetaRoute extends Route<Model> {
     try {
       let serializeStart = performance.now();
       let vn = this.network.virtualNetwork;
-      serialized = api.serializeCard(instance, {
+      serialized = (await this.cardService.serializeCard(instance, {
         includeComputeds: true,
         // A query-backed field is resolved live and the index can't invalidate
         // it, so its serialized value would always be stale — and deep-
@@ -283,7 +285,7 @@ export default class RenderMetaRoute extends Route<Model> {
             vn.toURL(instance.id),
             instance[realmURL],
           ),
-      }) as SingleCardDocument;
+      })) as SingleCardDocument;
       serializeMs = performance.now() - serializeStart;
       // Emulate the on-disk file serialization: a card file holds only the
       // card's own resource — relationship slots keep their `links` but drop
@@ -305,9 +307,14 @@ export default class RenderMetaRoute extends Route<Model> {
     }
 
     let Klass = getClass(instance);
-
-    let types = getTypes(Klass);
-    let displayNames = getDisplayNames(Klass);
+    let opaqueType = getOpaqueRealmCardTypeState(instance);
+    // A sandboxed instance deliberately has an inert constructor. Its exact
+    // type and display name cross through the explicit metadata record rather
+    // than being rediscovered by walking executable prototypes.
+    let types = opaqueType ? [opaqueType.typeRef] : getTypes(Klass);
+    let displayNames = opaqueType
+      ? [opaqueType.displayName]
+      : getDisplayNames(Klass);
     // Add a "pseudo field" to the search doc for the card type. We use the
     // "_" prefix to make a decent attempt to not pollute the userland
     // namespace for cards

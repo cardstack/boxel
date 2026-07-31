@@ -18,12 +18,14 @@ import {
   type RealmResourceIdentifier,
   SupportedMimeType,
   decodeScopedCSSRequest,
+  localId as localIdSymbol,
   realmURL as realmURLSymbol,
   rri,
 } from '@cardstack/runtime-common';
 
 import config from '@cardstack/host/config/environment';
 import type CodePreviewSandbox from '@cardstack/host/lib/code-preview-sandbox';
+import type { CodePreviewDraft } from '@cardstack/host/lib/code-preview-sandbox';
 import RealmCompartmentModuleRuntime, {
   sandboxRealmURLArgument,
   type SandboxCardFieldMetadata,
@@ -43,6 +45,7 @@ import {
 import RealmIsolationWorkerRuntime from '@cardstack/host/lib/realm-isolation-worker-runtime';
 import {
   getOpaqueRealmCardState,
+  opaqueRealmCardTypeState,
   opaqueRealmCardState,
   type OpaqueRealmCardState,
   type OpaqueRealmCardTheme,
@@ -53,8 +56,12 @@ import {
   isCatalogRealmModule,
   isTrustedHostRealmModule,
   isTrustedSandboxImport,
-  trustedSandboxImportConfiguration,
 } from '@cardstack/host/lib/realm-sandbox-import-policy';
+import {
+  classifyCardSourceForSandbox,
+  type CardRenderSandboxTier,
+  type CardSourceSandboxClassification,
+} from '@cardstack/host/lib/realm-sandbox-source-policy';
 import RealmWorkerCompartmentModuleRuntime from '@cardstack/host/lib/realm-worker-compartment-module-runtime';
 import type CardService from '@cardstack/host/services/card-service';
 import type NetworkService from '@cardstack/host/services/network';
@@ -102,6 +109,7 @@ export interface RealmIframeFetchResult {
 export interface RealmSandboxMetrics {
   enabled: boolean;
   executionTier: 'compartment' | 'worker' | 'iframe';
+  executionReason: string;
   renderRequests: number;
   sandboxedCards: number;
   fallbackCards: number;
@@ -130,6 +138,7 @@ interface InertTemplate {
 interface CodePreviewRuntimeEntry {
   runtime: RealmCompartmentModuleRuntime;
   revision: number;
+  draft?: CodePreviewDraft;
   pending: Promise<void>;
 }
 
@@ -182,7 +191,16 @@ export default class RealmSandboxService extends Service {
     RealmWorkerCompartmentModuleRuntime
   >();
   private compartmentTemplates = new Map<string, InertTemplate>();
+  private moduleClassifications = new Map<
+    string,
+    CardSourceSandboxClassification
+  >();
+  private moduleDependencies = new Map<string, string[]>();
   private compartmentLoads = new Map<string, Promise<void>>();
+  private compartmentLoadingByCard = new WeakMap<
+    BaseDef,
+    Map<string, number>
+  >();
   private compartmentRenderedCards = new WeakSet<object>();
   private opaqueCardTypes = new Map<string, typeof BaseDef>();
   private trustedFieldTypesByOpaqueType = new Map<
@@ -218,6 +236,7 @@ export default class RealmSandboxService extends Service {
   private metrics: RealmSandboxMetrics = {
     enabled: true,
     executionTier: 'compartment',
+    executionReason: 'default-user-card',
     renderRequests: 0,
     sandboxedCards: 0,
     fallbackCards: 0,
@@ -350,12 +369,17 @@ export default class RealmSandboxService extends Service {
     resource: LooseCardResource,
     relativeTo: RealmResourceIdentifier | URL | undefined,
     document?: Pick<LooseSingleCardDocument, 'included'>,
+    existingLocalId?: string,
   ): Promise<T> {
     let typeRef = resource.meta?.adoptsFrom;
     if (!typeRef || !isResolvedCodeRef(typeRef)) {
       throw new Error('Sandboxed card has no resolvable adoptsFrom');
     }
-    let relativeURL = this.relativeURL(relativeTo, resource.id);
+    let relativeURL = this.relativeURL(
+      relativeTo,
+      resource.id,
+      String(typeRef.module),
+    );
     let moduleIdentifier = new URL(
       this.network.resolveImport(String(typeRef.module)),
       relativeURL,
@@ -389,6 +413,8 @@ export default class RealmSandboxService extends Service {
       let hasCustomIsolatedTemplate =
         metadata?.hasCustomIsolatedTemplate === true;
       let prefersWideFormat = metadata?.prefersWideFormat === true;
+      fieldMetadata = metadata?.fields ?? {};
+      trustedFieldTypes = await this.resolveTrustedFieldTypes(fieldMetadata);
       OpaqueCard = class OpaqueRealmCard extends api.CardDef {
         static displayName = displayName;
         static headerColor = headerColor;
@@ -407,14 +433,23 @@ export default class RealmSandboxService extends Service {
           return state ? new URL(state.principal) : undefined;
         }
       };
+      Object.defineProperty(OpaqueCard, opaqueRealmCardTypeState, {
+        configurable: false,
+        enumerable: false,
+        value: Object.freeze({
+          typeRef: resolvedTypeRef,
+          displayName,
+          fields: Object.freeze({ ...fieldMetadata }),
+          hasCustomEditTemplate,
+          hasCustomIsolatedTemplate,
+          headerColor,
+          prefersWideFormat,
+        }),
+      });
       let icon = await this.resolveTrustedIcon(metadata?.icon);
       if (icon) {
         Object.defineProperty(OpaqueCard, 'icon', { value: icon });
       }
-      trustedFieldTypes = await this.resolveTrustedFieldTypes(
-        metadata?.fields ?? {},
-      );
-      fieldMetadata = metadata?.fields ?? {};
       this.opaqueCardTypes.set(key, OpaqueCard);
       this.trustedFieldTypesByOpaqueType.set(key, trustedFieldTypes);
       this.fieldMetadataByOpaqueType.set(key, fieldMetadata);
@@ -435,6 +470,7 @@ export default class RealmSandboxService extends Service {
     let theme = await this.themeFor(resource, relativeURL, document);
     let card = new (OpaqueCard as typeof api.CardDef)({
       id: resource.id ? rri(resource.id) : undefined,
+      ...(existingLocalId ? { [localIdSymbol]: existingLocalId } : {}),
     }) as unknown as T;
     let state: OpaqueRealmCardState = {
       typeRef: resolvedTypeRef,
@@ -497,6 +533,12 @@ export default class RealmSandboxService extends Service {
       // for non-base realm types.
       return undefined;
     }
+    if (
+      this.sandboxDecisionFor(card, options.codePreviewSandbox).tier ===
+      'iframe'
+    ) {
+      return undefined;
+    }
     this.metrics.renderRequests++;
     let principal = opaqueState.principal;
     let useBaseTemplate =
@@ -541,6 +583,14 @@ export default class RealmSandboxService extends Service {
     };
   }
 
+  isRenderLoading(card: BaseDef, format: Format | undefined): boolean {
+    this.compartmentRevision;
+    let effectiveFormat = format ?? 'isolated';
+    return (
+      (this.compartmentLoadingByCard.get(card)?.get(effectiveFormat) ?? 0) > 0
+    );
+  }
+
   iframeRenderFor(
     card: BaseDef,
     format: Format | undefined,
@@ -551,8 +601,9 @@ export default class RealmSandboxService extends Service {
       codePreviewSandbox?: CodePreviewSandbox;
     } = {},
   ): RealmIframeSandboxRender | undefined {
+    let decision = this.sandboxDecisionFor(card, options.codePreviewSandbox);
     if (
-      this.sandboxExecutionTier() !== 'iframe' ||
+      decision.tier !== 'iframe' ||
       this.isIframeSandboxChild() ||
       !this.isSupportedFormat(format)
     ) {
@@ -569,7 +620,6 @@ export default class RealmSandboxService extends Service {
     url.searchParams.set('cardURL', cardID);
     url.searchParams.set('format', effectiveFormat);
     url.searchParams.set('parentOrigin', globalThis.location.origin);
-    url.searchParams.set('cardSandboxTier', 'iframe-child');
     if (options.field) {
       url.searchParams.set('fieldName', options.field.name);
     }
@@ -582,6 +632,7 @@ export default class RealmSandboxService extends Service {
       options.displayContainer === false ? 'false' : 'true',
     );
     this.metrics.executionTier = 'iframe';
+    this.metrics.executionReason = decision.reason;
     return {
       cardID,
       document: state.document,
@@ -669,9 +720,7 @@ export default class RealmSandboxService extends Service {
         Boolean(targetOrigin) &&
         globalThis.location.origin === targetOrigin &&
         globalThis.self !== globalThis.top &&
-        new URL(globalThis.location.href).searchParams.get(
-          'cardSandboxTier',
-        ) === 'iframe-child'
+        new URL(globalThis.location.href).pathname === '/_realm-sandbox-frame'
       );
     } catch {
       return false;
@@ -928,14 +977,19 @@ export default class RealmSandboxService extends Service {
     }
     let entry = runtimes.get(principal);
     if (!entry) {
-      entry = {
-        runtime: this.createCompartmentRuntime(
-          principal,
-          this.fetchCompartmentModuleForCodePreview(codePreviewSandbox),
+      let newEntry = {} as CodePreviewRuntimeEntry;
+      newEntry.runtime = this.createCompartmentRuntime(
+        principal,
+        this.fetchCompartmentModuleForCodePreview(
+          codePreviewSandbox,
+          () => newEntry.draft,
         ),
+      );
+      Object.assign(newEntry, {
         revision: -1,
         pending: Promise.resolve(),
-      };
+      });
+      entry = newEntry;
       runtimes.set(principal, entry);
       this.metrics.activeCodePreviewLoaders++;
     }
@@ -944,18 +998,20 @@ export default class RealmSandboxService extends Service {
 
   private fetchCompartmentModuleForCodePreview(
     codePreviewSandbox: CodePreviewSandbox,
+    currentDraft: () => CodePreviewDraft | undefined,
   ): typeof globalThis.fetch {
     return async (input: RequestInfo | URL, init?: RequestInit) => {
       let request = new Request(input, init);
+      let draft = currentDraft();
       if (
         codePreviewSandbox.active &&
-        codePreviewSandbox.sourceURL &&
-        codePreviewSandbox.source != null &&
-        this.sameModuleURL(request.url, codePreviewSandbox.sourceURL)
+        draft &&
+        this.sameModuleURL(request.url, draft.sourceURL)
       ) {
+        await this.recordModuleSourceClassification(request.url, draft.source);
         // This response is never put into the global response cache: it has no
         // ETag or realm header and belongs only to this preview Loader.
-        return new Response(codePreviewSandbox.source, {
+        return new Response(draft.source, {
           status: 200,
           headers: { 'content-type': SupportedMimeType.CardSource },
         });
@@ -1002,21 +1058,6 @@ export default class RealmSandboxService extends Service {
     }
   }
 
-  private workerCompartmentRuntimeFor(principal: string) {
-    let runtime = this.workerCompartmentRuntimes.get(principal);
-    if (!runtime) {
-      runtime = new RealmWorkerCompartmentModuleRuntime(
-        principal,
-        this.fetchCompartmentModule,
-        trustedSandboxImportConfiguration(),
-      );
-      this.workerCompartmentRuntimes.set(principal, runtime);
-      this.metrics.activeWorkerCompartments =
-        this.workerCompartmentRuntimes.size;
-    }
-    return runtime;
-  }
-
   private cardModuleRuntimeFor(
     principal: string,
     codePreviewSandbox?: CodePreviewSandbox,
@@ -1027,28 +1068,71 @@ export default class RealmSandboxService extends Service {
     if (codePreviewSandbox) {
       return this.compartmentRuntimeFor(principal, codePreviewSandbox);
     }
-    return this.sandboxExecutionTier() === 'worker'
-      ? this.workerCompartmentRuntimeFor(principal)
-      : this.compartmentRuntimeFor(principal);
+    return this.compartmentRuntimeFor(principal);
   }
 
-  private sandboxExecutionTier(): 'compartment' | 'worker' | 'iframe' {
-    try {
-      let requested = new URL(globalThis.location.href).searchParams.get(
-        'cardSandboxTier',
-      );
-      let tier: 'compartment' | 'worker' | 'iframe' =
-        requested === 'worker'
-          ? 'worker'
-          : requested === 'iframe'
-            ? 'iframe'
-            : 'compartment';
-      this.metrics.executionTier = tier;
-      return tier;
-    } catch {
-      this.metrics.executionTier = 'compartment';
-      return 'compartment';
+  private sandboxDecisionFor(
+    card: BaseDef,
+    codePreviewSandbox?: CodePreviewSandbox,
+  ): { tier: CardRenderSandboxTier; reason: string } {
+    if (codePreviewSandbox) {
+      let decision = {
+        tier: codePreviewSandbox.sandboxTier,
+        reason: codePreviewSandbox.sandboxReason,
+      };
+      this.metrics.executionTier = decision.tier;
+      this.metrics.executionReason = decision.reason;
+      return decision;
     }
+    let state = getOpaqueRealmCardState(card);
+    let ref = state?.typeRef;
+    if (!state || !ref || !('module' in ref)) {
+      return { tier: 'compartment', reason: 'default-user-card' };
+    }
+    let moduleIdentifier: string;
+    try {
+      moduleIdentifier = new URL(
+        this.network.resolveImport(String(ref.module)),
+        state.principal,
+      ).href;
+    } catch {
+      return { tier: 'compartment', reason: 'default-user-card' };
+    }
+    let decision = this.moduleSandboxDecision(moduleIdentifier, new Set());
+    this.metrics.executionTier = decision.tier;
+    this.metrics.executionReason = decision.reason;
+    return decision;
+  }
+
+  private moduleSandboxDecision(
+    moduleIdentifier: string,
+    visited: Set<string>,
+  ): { tier: CardRenderSandboxTier; reason: string } {
+    if (visited.has(moduleIdentifier)) {
+      return { tier: 'compartment', reason: 'default-user-card' };
+    }
+    visited.add(moduleIdentifier);
+    let classification = this.moduleClassifications.get(moduleIdentifier);
+    if (classification?.tier === 'iframe') {
+      return {
+        tier: 'iframe',
+        reason: classification.reason,
+      };
+    }
+    for (let dependency of this.moduleDependencies.get(moduleIdentifier) ??
+      []) {
+      let dependencyDecision = this.moduleSandboxDecision(dependency, visited);
+      if (dependencyDecision.tier === 'iframe') {
+        return {
+          tier: 'iframe',
+          reason: `dependency:${dependencyDecision.reason}`,
+        };
+      }
+    }
+    return {
+      tier: 'compartment',
+      reason: classification?.reason ?? 'default-user-card',
+    };
   }
 
   private async loadCardTypeMetadata(
@@ -1291,7 +1375,7 @@ export default class RealmSandboxService extends Service {
     } catch {
       return undefined;
     }
-    let tier = codePreviewSandbox ? 'compartment' : this.sandboxExecutionTier();
+    let tier = 'compartment';
     let snapshot = getOpaqueRealmCardState(card)?.snapshot ?? {};
     let snapshotKey =
       tier === 'worker' ? `|${this.workerSnapshotKey(snapshot)}` : '';
@@ -1309,8 +1393,10 @@ export default class RealmSandboxService extends Service {
     }
     if (!this.compartmentLoads.has(key)) {
       this.metrics.compartmentTemplateCacheMisses++;
+      this.updateCompartmentLoading(card, format, 1);
       let load = this.loadCompartmentTemplate(
         key,
+        card,
         principal,
         moduleIdentifier,
         String(ref.name),
@@ -1318,7 +1404,7 @@ export default class RealmSandboxService extends Service {
         snapshot,
         codePreviewSandbox,
         previewSlot,
-        codePreviewSandbox?.revision,
+        codePreviewSandbox?.draft,
       );
       this.compartmentLoads.set(key, load);
     }
@@ -1327,6 +1413,7 @@ export default class RealmSandboxService extends Service {
 
   private async loadCompartmentTemplate(
     key: string,
+    card: BaseDef,
     principal: string,
     moduleIdentifier: string,
     exportName: string,
@@ -1334,11 +1421,17 @@ export default class RealmSandboxService extends Service {
     model: Record<string, unknown>,
     codePreviewSandbox?: CodePreviewSandbox,
     previewSlot?: string,
-    expectedRevision?: number,
+    expectedDraft?: CodePreviewDraft,
   ) {
     let started = performance.now();
     try {
-      if (codePreviewSandbox && expectedRevision != null) {
+      if (codePreviewSandbox) {
+        // CodeSubmode provides the first Monaco snapshot immediately after the
+        // editor model mounts. Do not start a competing remote evaluation in
+        // the short render pass before that snapshot exists.
+        if (!expectedDraft) {
+          return;
+        }
         let entry = this.codePreviewRuntimeEntryFor(
           principal,
           codePreviewSandbox,
@@ -1348,15 +1441,14 @@ export default class RealmSandboxService extends Service {
           .then(async () => {
             if (
               !codePreviewSandbox.active ||
-              codePreviewSandbox.revision !== expectedRevision
+              codePreviewSandbox.draft !== expectedDraft
             ) {
               return;
             }
-            if (entry.revision !== expectedRevision) {
-              if (codePreviewSandbox.sourceURL) {
-                entry.runtime.invalidateModule(codePreviewSandbox.sourceURL);
-              }
-              entry.revision = expectedRevision;
+            if (entry.revision !== expectedDraft.revision) {
+              entry.draft = expectedDraft;
+              entry.runtime.invalidateModule(expectedDraft.sourceURL);
+              entry.revision = expectedDraft.revision;
             }
             await this.evaluateAndInstallCompartmentTemplate(
               key,
@@ -1367,7 +1459,7 @@ export default class RealmSandboxService extends Service {
               model,
               codePreviewSandbox,
               previewSlot,
-              expectedRevision,
+              expectedDraft,
             );
           });
         entry.pending = evaluate;
@@ -1385,11 +1477,33 @@ export default class RealmSandboxService extends Service {
     } catch (error) {
       this.recordCompartmentError(error);
     } finally {
+      this.updateCompartmentLoading(card, format, -1);
       if (codePreviewSandbox) {
         this.compartmentLoads.delete(key);
       }
       this.metrics.compartmentEvaluationTimeMs += performance.now() - started;
       next(this, this.bumpCompartmentRevision);
+    }
+  }
+
+  private updateCompartmentLoading(
+    card: BaseDef,
+    format: string,
+    delta: 1 | -1,
+  ) {
+    let formats = this.compartmentLoadingByCard.get(card);
+    if (!formats) {
+      if (delta < 0) {
+        return;
+      }
+      formats = new Map();
+      this.compartmentLoadingByCard.set(card, formats);
+    }
+    let count = Math.max(0, (formats.get(format) ?? 0) + delta);
+    if (count === 0) {
+      formats.delete(format);
+    } else {
+      formats.set(format, count);
     }
   }
 
@@ -1402,7 +1516,7 @@ export default class RealmSandboxService extends Service {
     model: Record<string, unknown>,
     codePreviewSandbox?: CodePreviewSandbox,
     previewSlot?: string,
-    expectedRevision?: number,
+    expectedDraft?: CodePreviewDraft,
   ) {
     let runtime = this.cardModuleRuntimeFor(principal, codePreviewSandbox);
     let bundle =
@@ -1420,8 +1534,7 @@ export default class RealmSandboxService extends Service {
     }
     if (
       codePreviewSandbox &&
-      (!codePreviewSandbox.active ||
-        codePreviewSandbox.revision !== expectedRevision)
+      (!codePreviewSandbox.active || codePreviewSandbox.draft !== expectedDraft)
     ) {
       return;
     }
@@ -1465,8 +1578,46 @@ export default class RealmSandboxService extends Service {
         statusText: 'Realm boundary mismatch',
       });
     }
+    await this.recordModuleSourceClassification(
+      response.url || request.url,
+      await response.clone().text(),
+    );
     return response;
   };
+
+  private async recordModuleSourceClassification(
+    moduleIdentifier: string,
+    source: string,
+  ) {
+    let classification = await classifyCardSourceForSandbox(source);
+    this.moduleClassifications.set(moduleIdentifier, classification);
+    let dependencies: string[] = [];
+    for (let specifier of classification.imports) {
+      if (isTrustedSandboxImport(specifier)) {
+        continue;
+      }
+      try {
+        dependencies.push(
+          new URL(this.network.resolveImport(specifier), moduleIdentifier).href,
+        );
+      } catch {
+        // The compartment loader will reject an unresolved bare specifier.
+        // Keeping it out of the graph preserves the more restrictive SES
+        // failure instead of silently escalating authority.
+      }
+    }
+    this.moduleDependencies.set(moduleIdentifier, dependencies);
+    for (let preview of this.activeCodePreviews) {
+      if (!preview.sourceURL) {
+        continue;
+      }
+      // Code previews deliberately stay in their dedicated iframe even when
+      // the source would be eligible for the ordinary Interact-mode SES tier.
+      // Changing tier here would replace the live preview boundary while the
+      // user types.
+      preview.applySandboxDecision('iframe', 'code-preview-dedicated-iframe');
+    }
+  }
 
   private bumpCompartmentRevision() {
     this.compartmentRevision++;
@@ -1731,10 +1882,16 @@ export default class RealmSandboxService extends Service {
   private relativeURL(
     relativeTo: RealmResourceIdentifier | URL | undefined,
     id: string | undefined,
+    adoptsFromModule: string,
   ): URL {
     let value = relativeTo ?? id;
     if (!value) {
-      throw new Error('Sandboxed card has no URL for resolving adoptsFrom');
+      let resolvedModule = this.network.resolveImport(adoptsFromModule);
+      try {
+        return new URL(resolvedModule);
+      } catch {
+        throw new Error('Sandboxed card has no URL for resolving adoptsFrom');
+      }
     }
     if (value instanceof URL) {
       return value;

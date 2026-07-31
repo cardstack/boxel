@@ -49,16 +49,27 @@ Realm server / Matrix / external service proxy
 
 Two cards may therefore share a DOM visually without sharing a JavaScript
 global or browser ambient authority. The default compatibility tier still uses
-a main-thread SES compartment. An opt-in untrusted tier now runs the same card
-module evaluator in a Web Worker as well, adding a separate browser global and
-a termination boundary without giving the worker ownership of the DOM.
+a main-thread SES compartment. Worker execution remains available for commands
+and non-DOM programs, adding a separate browser global and a termination
+boundary without pretending that a worker can own Ember's DOM.
 
-DOM-heavy cards need a different renderer tier. `cardSandboxTier=iframe`
-delegates the ordinary `CardRenderer` operation to a separately originated,
-sandboxed iframe. The card and its `FieldDef` do not know about the iframe or
-`MessageChannel`; they receive the same arguments and use the same templates as
-an ordinary render. This tier is intended for existing cards that require a
-real document, canvas, WebGL, Three.js, media, or imperative modifiers.
+DOM-heavy cards use a different renderer tier. A host-owned static source
+classifier delegates the ordinary `CardRenderer` operation to a separately
+originated, sandboxed iframe when imports or executable source require a real
+document, canvas, WebGL, Three.js, media, or imperative browser APIs. The card
+and its `FieldDef` do not know about the iframe or `MessageChannel`; they receive
+the same arguments and use the same templates as an ordinary render.
+
+The tier is not a query parameter or card declaration. `cardSandboxTier` was
+removed from public route/controller state, so changing a URL cannot raise or
+lower a card's authority. Base/Catalog/configured trust still comes from host
+configuration. User source is classified by the host after GTS template bodies
+are masked and ESM imports are parsed with `es-module-lexer`. Known browser
+renderer families (including Three.js, Babylon, Cesium, Mapbox, Pixi, and p5)
+and executable references to DOM/browser globals select the iframe; ordinary
+GTS stays in the per-principal SES compartment. Comments, strings, and template
+copy cannot trigger the broader renderer. Malformed streaming drafts keep the
+previous classification and last good render.
 
 ## Iframe DOM renderer tier
 
@@ -107,11 +118,11 @@ export. The browser decides actual renderer-process placement; the security
 contract is the separate origin, iframe sandbox flags, credentialless child,
 and capability-only connection—not a promise about a particular OS process.
 
-## Web Worker execution tier
+## Web Worker command tier
 
-Append `cardSandboxTier=worker` to an ordinary Interact URL to select the
-worker tier for user-realm cards. This does not disable the always-on sandbox;
-it changes where the SES compartment and evaluated module cache live:
+The worker tier is selected by the host for command/non-DOM execution, not by a
+URL and not for an Ember card render. It changes where the SES compartment and
+evaluated module cache live:
 
 ```text
 unchanged realm GTS source
@@ -475,7 +486,7 @@ The audit found these host/card-runtime dependencies:
 | `@context.cardComponentModifier`                               | trusted presentation modifier from the surrounding operator context                                                       | tunneled for card selection/opening overlays                                                                                                                                |
 | `@context.markdownEmbedChooser`                                | trusted operator UI capability                                                                                            | tunneled for Base edit/markdown UI                                                                                                                                          |
 | `@cardstack/runtime-common`                                    | explicit pure-function facade (`codeRef`, `searchEntryWireQueryFromQuery`) plus inert `realmURL` identity                 | tunneled; the package namespace is not exposed wholesale                                                                                                                    |
-| authored component actions and modifiers                       | operation handles invoked back inside the compartment                                                                     | not yet implemented                                                                                                                                                         |
+| authored component actions and modifiers                       | action handles plus allowlisted host modifiers that return JSON only                                                      | actions and `safeModifier` implemented; `observe-size`, `focus`, and `scroll-into-view` never expose an Element; arbitrary `ember-modifier` code selects the iframe         |
 | `viewCard`                                                     | host capability handle accepting realm-relative targets only, resolved and checked against the current principal          | implemented for same-realm navigation; absolute URLs, schemes, and parent traversal fail closed                                                                             |
 | `createCard`, `editCard`, `saveCard`, and `set`                | host capability handles checked against the current principal and card                                                    | not yet implemented (`set` is currently a no-op)                                                                                                                            |
 | `linksTo` / `linksToMany` values                               | permission-checked opaque relationship projections; trusted host hydration re-enters `CardRenderer` for card/file targets | implemented for relationship fields whose declared target resolves to a trusted Base/Catalog type; same-realm target-type metadata still needs an inert code-ref descriptor |
@@ -870,6 +881,208 @@ Production work should add:
 
 The core rule should remain: **card code receives capabilities, never ambient
 credentials or ambient host authority**.
+
+## Code-mode instant reload
+
+Code-mode preview does not need Vite's file watcher, WebSocket protocol, or an
+`@vite/client` inside card code. Realm source is already an in-memory stream
+from Monaco, not a filesystem event. The useful Vite HMR mechanics are instead
+implemented at the card-loader boundary:
+
+- Every mounted code preview owns a `CodePreviewSandbox` revision stream.
+- A Monaco buffer change publishes immediately, before the existing debounced
+  realm write.
+- Editable code-mode previews always use one dedicated iframe. The child keeps
+  its document, `MessageChannel`, and detached loader mounted, invalidates the
+  affected graph, and renders only the newest revision. Ordinary Interact-mode
+  cards still use the realm SES compartment unless their runtime requirements
+  select the iframe tier.
+- Updates are serialized and stale revisions are ignored. A compile failure
+  reports against the draft while the last good card/template stays mounted.
+- Base-realm source remains trusted and read-only, so it does not participate
+  in editable per-preview reload.
+
+This follows the load-bearing shape in Vite's module graph and HMR runtime
+(`moduleGraph.ts`, `hmr.ts`, `client.ts`, and `evaluatedModules.ts`) without
+copying its transport. The comparison was made against the local Vite checkout
+at `/Users/chris/Projects/vite`, not from remembered behavior.
+
+The explicit acceptance boundary is therefore:
+
+```text
+Monaco keystroke
+  -> revisioned open-file buffer
+  -> one private CodePreviewSandbox
+  -> iframe MessageChannel invalidation
+  -> last-good-render swap
+  -> debounced/policy-checked realm persistence
+```
+
+## Hosted iframe origin requirement
+
+The current iframe renderer is operational on localhost only. The runtime is
+not hard-coded to localhost—it accepts `REALM_SANDBOX_IFRAME_ORIGIN`—but a
+hosted deployment must provision and route that origin before enabling the
+iframe tier.
+
+The renderer must use a separate **site**, not merely another subdomain of the
+host application. Use these terms consistently in the target architecture:
+
+- **SES card runtime**: realm-scoped card and FieldDef behavior;
+- **iframe renderer**: approved external DOM, canvas, WebGL, media, chart, or
+  diagram implementations;
+- **command worker**: process-isolated command execution with no DOM.
+
+The current compatibility spike can execute a whole card inside its iframe.
+That is not the intended final responsibility split: authored card and field
+behavior should remain in the realm SES runtime, and CardRenderer should
+delegate only the approved renderer operation without exposing the iframe or
+MessageChannel API to authored code.
+
+The strongest production shape combines an opaque iframe origin with a fresh,
+cryptographically random hostname for every renderer lifetime:
+
+```text
+Host UI:          https://app.boxel.ai
+Bootstrap URL:    https://<128-bit-random>.renderer.boxelusercontent.com/v1/bootstrap.html
+Iframe origin:    opaque (omit `allow-same-origin` from the sandbox attribute)
+
+Staging host UI:  https://boxel-host-staging.stack.cards
+Bootstrap URL:    https://<128-bit-random>.renderer.boxelusercontent.dev/v1/bootstrap.html
+Iframe origin:    opaque (omit `allow-same-origin` from the sandbox attribute)
+```
+
+If operating a separate staging registrable domain is impractical, use
+`<random>.renderer-staging.boxelusercontent.com`, while preserving the same
+cookie-free edge policy. Wildcard DNS and certificates for
+`*.renderer.boxelusercontent.com` and `*.renderer.boxelusercontent.dev` make
+per-instance origins operationally manageable.
+
+Do not use `sandbox.boxel.ai` for the production boundary. A sibling subdomain
+is cross-origin, but it is still same-site for cookies and other browser
+policies. A separate registrable domain prevents host site cookies from being
+ambiently attached to renderer requests.
+
+An opaque-origin frame can still load a normal document and run DOM-dependent
+libraries such as Three.js. The host transfers a fresh `MessagePort` after
+checking `event.source`; the child checks the exact parent origin. The one
+bootstrap `window.postMessage` handshake may need `targetOrigin: '*'` because
+an opaque origin serializes as `null`, but the nonce and source-window check
+must bind that handshake to the newly created iframe. All authority-bearing
+messages then travel only over the private port.
+
+Generate the hostname in trusted host code. Do not derive it from or expose a
+realm name, user ID, card ID, or sequential number, and do not allow card
+source or a URL parameter to select it. Do not reuse the hostname after its
+iframe is destroyed. The unique hostname is defense in depth for opaque frames
+and becomes an essential origin-storage boundary if a reviewed dependency
+truly requires `allow-same-origin`:
+
+```text
+https://<128-bit-random>.renderer.boxelusercontent.com/v1/bootstrap.html
+```
+
+Distinct instance origins isolate DOM access, localStorage, IndexedDB, service
+workers, and other origin-scoped state between renderer instances. They remain
+same-site when they share `boxelusercontent.com`, so the renderer
+infrastructure must still prohibit parent-domain cookies rather than relying
+only on origin separation.
+
+The current spike still uses `allow-same-origin` with one configured renderer
+origin. `credentialless` prevents ambient credentials from entering the frame,
+but that alone is not the final cross-realm origin boundary. Before enabling
+the iframe tier in a hosted environment, replace the single configured origin
+with a trusted per-instance origin allocator and prefer opaque origins.
+
+The hosted renderer origin must:
+
+- serve only the sandbox bootstrap and static assets, never the privileged
+  host application or authenticated realm endpoints;
+- set no authentication cookies and reject any unexpected cookies;
+- have its edge strip incoming `Cookie` and outgoing `Set-Cookie` headers and
+  never vary cached bootstrap responses by cookies;
+- receive realm reads, writes, commands, and AI access only through the
+  validated `MessageChannel` capability broker;
+- use a restrictive CSP (`default-src 'none'`) with narrowly enumerated script,
+  style, image, font, and connect sources required by the selected tier;
+- deny direct CORS access from the opaque serialized origin `null`; realm and
+  asset access must go through the host capability broker;
+- validate the exact parent origin during bootstrap; reserve `*`, if required
+  by an opaque-origin handshake, for transferring the nonce-bound private port
+  and never use it for authority-bearing capability messages;
+- give each channel a random one-time session ID, protocol version, monotonic
+  message sequence, payload-size limit, and update-rate limit;
+- retain iframe `sandbox` restrictions and add permissions through a minimal
+  `allow` policy only when a card capability explicitly requires them;
+- keep credentials and private card data out of renderer query strings,
+  fragments, and paths;
+- close the MessagePort, revoke capabilities, and retire the instance hostname
+  when the rendered card or field is destroyed;
+- be protected from DNS takeover and never share deploy credentials or storage
+  with the host origin.
+
+The host CSP must restrict `frame-src` to the environment's renderer wildcard.
+The renderer response must restrict `frame-ancestors` to the exact production
+or staging Boxel host and deny direct networking with `connect-src 'none'` by
+default. Cards may select an approved renderer identifier such as `three`; they
+must never select an arbitrary script or asset URL.
+
+### Hosted renderer rollout plan
+
+1. Provision separate renderer DNS, certificates, edge configuration, and
+   deployment credentials for production and staging.
+2. Replace `REALM_SANDBOX_IFRAME_ORIGIN`'s single-origin behavior with a trusted
+   per-instance origin allocator using 128 bits of cryptographic randomness.
+3. Publish only a versioned, integrity-pinned renderer bootstrap; do not serve
+   the host app, realm APIs, redirects, arbitrary uploaded HTML, or login flows
+   from the renderer site.
+4. Remove `allow-same-origin` by default and update the bootstrap handshake for
+   an opaque child: bind the initial port transfer to `event.source`, a fresh
+   nonce, and the exact expected parent origin.
+5. Define schemas and limits for renderer initialization, updates, asset reads,
+   resize events, and teardown. Transfer data, never host objects, callbacks,
+   credentials, stores, or DOM nodes.
+6. Route every renderer read or privileged operation through the host's
+   capability broker and realm authorization checks; keep renderer
+   `connect-src` denied.
+7. Add browser acceptance coverage proving two simultaneous renderer instances
+   cannot observe each other's DOM, storage, channels, realm data, or network
+   authority, including when `allow-same-origin` is enabled for an explicitly
+   reviewed renderer.
+
+Local development uses `https://localhost:4200` for the host and
+`https://127.0.0.1:4200` for the renderer. The mkcert leaf covers both names;
+the two loopback origins reach one Vite process without Docker.
+
+## Local staging sign-in invariant
+
+The development certificate and the data environment are independent. Trusting
+the local CA makes `https://localhost:4200` a secure browser context; it does
+not select staging Matrix or staging realms.
+
+When launching the host through mise, environment ordering matters. This form
+is wrong because `mise exec` can re-inject the local development service URLs
+after `staging.env` was sourced:
+
+```sh
+source packages/host/config/staging.env
+mise exec -- pnpm -C packages/host start
+```
+
+Use the checked-in host command, which applies staging after mise, clears
+Docker/Traefik environment mode, and prints the selected endpoints:
+
+```sh
+mise exec -- pnpm -C packages/host start:staging
+```
+
+The misleading symptom is a normal-looking Boxel sign-in form followed by
+“Sign in failed.” The decisive diagnostic is the Matrix login destination: a
+request to `http://localhost:8008/_matrix/client/v3/login` means the host is
+still configured for local Synapse; staging must use
+`https://matrix-staging.stack.cards`. The generated
+`@cardstack/host/config/environment` meta tag is a quick way to verify
+`matrixURL` and `realmServerURL` before testing credentials.
 
 ## Relevant implementation files
 

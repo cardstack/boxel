@@ -726,16 +726,32 @@ export default class CodeSubmode extends Component<Signature> {
     return state;
   });
 
+  private get realmWritability() {
+    if (!this.isReady) {
+      return 'pending';
+    }
+    return this.realm.writability(this.readyFile.url);
+  }
+
   get isReadOnly() {
     return (
-      !this.realm.canWrite(this.readyFile.url) ||
-      this.fileDefResource?.isLoading
+      this.realmWritability !== 'writable' || this.fileDefResource?.isLoading
+    );
+  }
+
+  private get showReadOnlyIndicator() {
+    return (
+      this.realmWritability === 'read-only' && !this.fileDefResource?.isLoading
     );
   }
 
   @provide(PermissionsContextName)
   get permissions() {
-    return this.realm.permissions(this.readyFile.url);
+    return this.realm.permissions(
+      this.isReady
+        ? this.readyFile.url
+        : (this.codePath?.href ?? this.realmURL),
+    );
   }
 
   get itemToDeleteId() {
@@ -872,7 +888,7 @@ export default class CodeSubmode extends Component<Signature> {
                 @minSize={{20}}
               >
                 <InnerContainer class='monaco-editor-panel'>
-                  {{#if this.isReady}}
+                  {{#if this.currentOpenFile}}
                     <CodeEditor
                       @file={{this.currentOpenFile}}
                       @moduleAnalysis={{this.moduleAnalysis}}
@@ -885,13 +901,14 @@ export default class CodeSubmode extends Component<Signature> {
                       @onSetup={{this.setupCodeEditor}}
                       @isReadOnly={{this.isReadOnly}}
                     />
-
-                    <CodeSubmodeEditorIndicator
-                      @isSaving={{this.isSaving}}
-                      @isReadOnly={{this.isReadOnly}}
-                      @errorMessage={{this.writeError}}
-                    />
-                  {{else if this.isLoading}}
+                    {{#if this.isReady}}
+                      <CodeSubmodeEditorIndicator
+                        @isSaving={{this.isSaving}}
+                        @isReadOnly={{this.showReadOnlyIndicator}}
+                        @errorMessage={{this.writeError}}
+                      />
+                    {{/if}}
+                  {{else}}
                     <LoadingIndicator
                       @color='var(--boxel-light)'
                       class='loading-indicator'

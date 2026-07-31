@@ -27,7 +27,6 @@ export default class RealmSandboxFrameRoute extends Route<RealmSandboxFrameModel
     componentModule: { refreshModel: true },
     componentName: { refreshModel: true },
     displayContainer: { refreshModel: true },
-    cardSandboxTier: { refreshModel: false },
   } as const;
 
   model(params: {

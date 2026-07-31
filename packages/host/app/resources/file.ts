@@ -5,7 +5,7 @@ import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
 import { parse } from 'date-fns';
-import { keepLatestTask, restartableTask } from 'ember-concurrency';
+import { enqueueTask, keepLatestTask } from 'ember-concurrency';
 import { Resource } from 'ember-modify-based-class-resource';
 
 import {
@@ -310,9 +310,26 @@ class _FileResource extends Resource<Args> {
           clientRequestId?: string;
         },
       ) {
+        let currentState = self.innerState;
+        if (currentState.state !== 'ready') {
+          return Promise.reject(
+            new Error(`Cannot write ${self._url} before it is ready`),
+          );
+        }
+        // Stage the new buffer synchronously. Monaco, the code-preview
+        // sandbox, and a following streamed patch block must all observe the
+        // same newest generation without waiting for the realm round trip.
+        // Writes are persisted in generation order below, so an older realm
+        // response can never land after and overwrite a newer streamed block.
+        let stagedState: Ready = {
+          ...currentState,
+          content,
+          size: utf8ByteLength(content),
+        };
+        self.updateState(stagedState);
         self.writing = self.writeTask
           .unlinked() // If the component which performs this task from within another task is destroyed, for example the "add field" modal, we want this task to continue running
-          .perform(this, content, opts);
+          .perform(stagedState, content, opts);
         return self.writing;
       },
     });
@@ -425,7 +442,7 @@ class _FileResource extends Resource<Args> {
     }
   };
 
-  writeTask = restartableTask(
+  writeTask = enqueueTask(
     async (
       state: Ready,
       content: string,

@@ -1,10 +1,13 @@
-import { render } from '@ember/test-helpers';
+import { render, settled } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
 import * as MonacoSDK from 'monaco-editor';
 import { module, test } from 'qunit';
 import { TrackedObject } from 'tracked-built-ins';
 
 import monaco from '@cardstack/host/modifiers/monaco';
+
+import type MonacoService from '@cardstack/host/services/monaco-service';
 
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -57,5 +60,45 @@ module('Integration | modifier | monaco', function (hooks) {
       [],
       'the ordinary write remains behind the existing debounce',
     );
+  });
+
+  test('a newly selected file replaces the model during the server echo debounce', async function (assert) {
+    let monacoService = getService('monaco-service') as MonacoService;
+    let originalDebounce = monacoService.serverEchoDebounceMs;
+    monacoService.serverEchoDebounceMs = 5_000;
+    let source = new TrackedObject({
+      content: 'first file',
+      identity: 'https://realm.example/first.gts',
+    });
+    let contentChanged = () => {};
+
+    try {
+      await render(
+        <template>
+          <div
+            {{monaco
+              content=source.content
+              contentIdentity=source.identity
+              contentChanged=contentChanged
+              monacoSDK=MonacoSDK
+            }}
+          ></div>
+        </template>,
+      );
+
+      let model = MonacoSDK.editor.getModels()[0]!;
+      model.setValue('unsaved first file');
+      source.content = 'second file';
+      source.identity = 'https://realm.example/second.gts';
+      await settled();
+
+      assert.strictEqual(
+        model.getValue(),
+        'second file',
+        'route navigation is not mistaken for a save echo',
+      );
+    } finally {
+      monacoService.serverEchoDebounceMs = originalDebounce;
+    }
   });
 });

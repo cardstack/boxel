@@ -29,7 +29,6 @@ import {
   cardTypeDisplayName,
   cardTypeIcon,
   codeRefWithAbsoluteIdentifier,
-  identifyCard,
   isCardInstance,
   isResolvedCodeRef,
   CardError,
@@ -47,6 +46,8 @@ import {
   type ResolvedCodeRef,
   type Filter,
 } from '@cardstack/runtime-common';
+
+import { identifyRealmCard } from '@cardstack/host/lib/realm-sandbox-boundary';
 
 import {
   detectStackItemTypeForTarget,
@@ -750,7 +751,7 @@ export default class InteractSubmode extends Component {
         (card) => !excludedCardIds.has(virtualNetwork.unresolveURL(card.id)),
       ) // filter out realm index cards
       .map((card) => {
-        let ref = identifyCard(card.constructor);
+        let ref = identifyRealmCard(card);
         let name = cardTypeDisplayName(card);
         if (isResolvedCodeRef(ref)) {
           if (items.find((item) => item.ref === ref && item.name === name)) {

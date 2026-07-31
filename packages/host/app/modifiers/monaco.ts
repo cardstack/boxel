@@ -16,6 +16,7 @@ interface Signature {
   Args: {
     Named: {
       content: string;
+      contentIdentity?: string;
       contentChanged: (text: string) => void;
       contentChanging?: (text: string) => void;
       initialCursorPosition?: MonacoSDK.Position;
@@ -40,6 +41,7 @@ export default class Monaco extends Modifier<Signature> {
   private editor: MonacoSDK.editor.IStandaloneCodeEditor | undefined;
   private lastLanguage: string | undefined;
   private lastContent: string | undefined;
+  private lastContentIdentity: string | undefined;
   private lastReadOnly: boolean | undefined;
   private lastModified = Date.now();
   private lastCursorPosition: MonacoSDK.Position | undefined;
@@ -55,6 +57,7 @@ export default class Monaco extends Modifier<Signature> {
     _positional: [],
     {
       content,
+      contentIdentity,
       language,
       contentChanged,
       contentChanging,
@@ -69,15 +72,19 @@ export default class Monaco extends Modifier<Signature> {
   ) {
     this.contentChanging = contentChanging;
     if (this.editor && this.model) {
+      let contentIdentityChanged = contentIdentity !== this.lastContentIdentity;
       if (language && language !== this.lastLanguage) {
         monacoSDK.editor.setModelLanguage(this.model, language);
       }
       if (
         content !== this.model.getValue() &&
-        // ignore realm event echoes of our own saves by not processing content changes
-        // within serverEchoDebounceMs of the last monaco change in memory
-        Date.now() >=
-          this.lastModified + this.monacoService.serverEchoDebounceMs
+        (contentIdentityChanged ||
+          // Ignore realm event echoes of our own saves by not processing
+          // content changes within serverEchoDebounceMs. A different file (or
+          // a file becoming ready) must bypass that guard so the persistent
+          // HMR editor never remains blank or shows the prior file.
+          Date.now() >=
+            this.lastModified + this.monacoService.serverEchoDebounceMs)
       ) {
         this.lastContent = content;
         this.isApplyingExternalContent = true;
@@ -106,6 +113,7 @@ export default class Monaco extends Modifier<Signature> {
         onSetup,
       });
     }
+    this.lastContentIdentity = contentIdentity;
     this.lastLanguage = language;
 
     if (initialCursorPosition != null) {

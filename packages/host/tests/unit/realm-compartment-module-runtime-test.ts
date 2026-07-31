@@ -524,6 +524,50 @@ module('Unit | realm compartment module runtime', function () {
     );
   });
 
+  test('represents the safe modifier as a trusted host capability', async function (assert) {
+    let moduleID = 'https://realm.example/cards/safe-modifier';
+    let source = await transpileJS(
+      `
+        import { CardDef, Component } from '@cardstack/base/card-api';
+        import { safeModifier } from '@cardstack/boxel-ui/modifiers';
+
+        export class MeasuredCard extends CardDef {
+          static isolated = class Isolated extends Component<typeof this> {
+            updateSize = (_size: { height: number; width: number }) => {};
+
+            <template>
+              <div {{safeModifier 'observe-size' this.updateSize}}></div>
+            </template>
+          };
+        }
+      `,
+      '/safe-modifier.gts',
+    );
+    let runtime = runtimeFor({ [moduleID]: source });
+
+    let bundle = await runtime.evaluateTemplate(
+      moduleID,
+      'MeasuredCard',
+      'isolated',
+    );
+    let descriptor = bundle.templates[bundle.root]!;
+
+    assert.deepEqual(
+      descriptor.scope.find(
+        (reference) =>
+          reference.kind === 'trusted-export' &&
+          reference.name === 'safeModifier',
+      ),
+      {
+        kind: 'trusted-export',
+        module: '@cardstack/boxel-ui/modifiers',
+        name: 'safeModifier',
+      },
+      'the modifier is rehydrated by trusted Ember outside the compartment',
+    );
+    assert.deepEqual(descriptor.instance.actions, ['updateSize']);
+  });
+
   test('can grant inert document event lifecycle methods without exposing the DOM', async function (assert) {
     let moduleID = 'https://realm.example/cards/document-lifecycle';
     let source = `

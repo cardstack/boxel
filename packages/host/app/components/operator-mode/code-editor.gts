@@ -15,6 +15,7 @@ import {
 } from 'ember-concurrency';
 
 import perform from 'ember-concurrency/helpers/perform';
+import { modifier } from 'ember-modifier';
 
 import { isEqual } from 'lodash-es';
 
@@ -127,12 +128,24 @@ export default class CodeEditor extends Component<Signature> {
     this.saveUnsavedSourceOnClose();
   };
 
-  private get isReady() {
-    return this.maybeMonacoSDK && isReady(this.args.file);
+  private get editorIsReady() {
+    return Boolean(this.maybeMonacoSDK);
   }
 
-  private get isLoading() {
-    return this.loadMonaco.isRunning || this.args.moduleAnalysis?.isLoading;
+  private get editorContent() {
+    return isReady(this.args.file) ? this.args.file.content : '';
+  }
+
+  private get editorContentIdentity() {
+    return isReady(this.args.file) ? this.args.file.url : undefined;
+  }
+
+  private get editorIsReadOnly() {
+    return this.args.isReadOnly || !isReady(this.args.file);
+  }
+
+  private get isBinaryFile() {
+    return isReady(this.args.file) && this.args.file.isBinary;
   }
 
   private get declarations() {
@@ -158,6 +171,24 @@ export default class CodeEditor extends Component<Signature> {
       `cannot access file contents ${this.codePath} before file is open`,
     );
   }
+
+  // CodeEditor intentionally stays mounted while file resources change so
+  // Monaco is not coupled to source, analysis, SES, or iframe latency. Save a
+  // pending buffer against the old URL before the modifier receives the new
+  // route, then let the existing Monaco model accept the next file's content.
+  private syncCodePath = modifier(
+    (_element: HTMLElement, [codePath]: [URL | null]) => {
+      if (this.codePath?.href === codePath?.href) {
+        return;
+      }
+      this.saveUnsavedSourceOnClose();
+      this.codePath = codePath;
+      this.hasUnsavedSourceChanges = false;
+      this.hasSavedUnsavedSourceOnClose = false;
+      this.formattingError = undefined;
+      this.updateFormatActionAvailability();
+    },
+  );
 
   @cached
   private get initialMonacoCursorPosition() {
@@ -526,9 +557,10 @@ export default class CodeEditor extends Component<Signature> {
   }
 
   private get language(): string | undefined {
-    if (this.codePath) {
+    let codePath = this.operatorModeStateService.state.codePath;
+    if (codePath) {
       const editorLanguages = this.monacoSDK.languages.getLanguages();
-      let extension = '.' + this.codePath.href.split('.').pop();
+      let extension = '.' + codePath.href.split('.').pop();
       let language = editorLanguages.find((lang) =>
         lang.extensions?.find((ext) => ext === extension),
       );
@@ -621,10 +653,13 @@ export default class CodeEditor extends Component<Signature> {
   }
 
   <template>
-    {{#if this.isReady}}
-      {{#if this.readyFile.isBinary}}
+    <div
+      class='code-editor-shell'
+      {{this.syncCodePath this.operatorModeStateService.state.codePath}}
+    >
+      {{#if this.isBinaryFile}}
         <BinaryFileInfo @readyFile={{this.readyFile}} />
-      {{else}}
+      {{else if this.editorIsReady}}
         <div class='monaco-wrapper'>
           {{#if this.isFormatting}}
             <div
@@ -650,7 +685,8 @@ export default class CodeEditor extends Component<Signature> {
             data-test-percy-hide
             data-monaco-container-operator-mode
             {{monacoModifier
-              content=this.readyFile.content
+              content=this.editorContent
+              contentIdentity=this.editorContentIdentity
               contentChanged=(perform this.contentChangedTask)
               contentChanging=this.contentChanging
               monacoSDK=this.monacoSDK
@@ -659,19 +695,23 @@ export default class CodeEditor extends Component<Signature> {
               onCursorPositionChange=this.onCursorPositionChange
               onSetup=this.setupFormatAction
               onDispose=this.onEditorDispose
-              readOnly=@isReadOnly
+              readOnly=this.editorIsReadOnly
               editorDisplayOptions=(hash lineNumbersMinChars=3 fontSize=12)
             }}
           ></div>
         </div>
+      {{else}}
+        <div class='loading'>
+          <LoadingIndicator />
+        </div>
       {{/if}}
-    {{else if this.isLoading}}
-      <div class='loading'>
-        <LoadingIndicator />
-      </div>
-    {{/if}}
+    </div>
 
     <style scoped>
+      .code-editor-shell {
+        height: 100%;
+        min-height: 0;
+      }
       .monaco-wrapper {
         position: relative;
         height: 100%;

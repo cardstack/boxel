@@ -83,6 +83,7 @@ import DeleteModal from './delete-modal';
 import OperatorModeOverlays from './operator-mode-overlays';
 
 import type CardService from '../../services/card-service';
+import type CardTypeService from '../../services/card-type-service';
 import type NetworkService from '../../services/network';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RealmService from '../../services/realm';
@@ -135,6 +136,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   declare private cardCrudFunctions: CardCrudFunctions;
 
   @service declare private cardService: CardService;
+  @service declare private cardTypeService: CardTypeService;
   @service declare private network: NetworkService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
@@ -731,11 +733,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
     if (!this.card) {
       return false;
     }
-    let { constructor } = this.card;
-    return Boolean(
-      constructor &&
-      'prefersWideFormat' in constructor &&
-      constructor.prefersWideFormat,
+    return (
+      this.cardTypeService.introspect(this.card)?.prefersWideFormat === true
     );
   }
 

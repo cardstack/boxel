@@ -58,6 +58,7 @@ class RealmSandboxFrame extends Component<Signature> {
   private pendingFetches = new Map<string, PendingFetch>();
   private loadingMessageTimer?: ReturnType<typeof setTimeout>;
   private document?: LooseSingleCardDocument;
+  private activeDraft?: RealmIframeSandboxDraft;
   private latestDraftRevision = -1;
   private pendingDraft = Promise.resolve();
 
@@ -169,6 +170,15 @@ class RealmSandboxFrame extends Component<Signature> {
 
   private brokerFetch = (input: RequestInfo | URL, init?: RequestInit) => {
     let request = input instanceof Request ? input : new Request(input, init);
+    let draft = this.activeDraft;
+    if (draft && this.sameModuleURL(request.url, draft.sourceURL)) {
+      return Promise.resolve(
+        new Response(draft.source, {
+          status: 200,
+          headers: { 'content-type': SupportedMimeType.CardSource },
+        }),
+      );
+    }
     let requestId = `iframe-fetch-${++this.fetchSequence}`;
     let result = new Promise<Response>((resolve, reject) => {
       this.pendingFetches.set(requestId, { resolve, reject });
@@ -192,6 +202,7 @@ class RealmSandboxFrame extends Component<Signature> {
     try {
       let loader = this.loaderService.createDetachedLoader(this.brokerFetch);
       this.loader = loader;
+      this.activeDraft = draft;
       let documentPromise = document
         ? Promise.resolve(document)
         : this.fetchCardDocument(loader);
@@ -264,6 +275,7 @@ class RealmSandboxFrame extends Component<Signature> {
         ) {
           return;
         }
+        this.activeDraft = draft;
         this.loader.invalidateModule(draft.sourceURL);
         try {
           await this.deserializeCard(this.loader, this.document);
@@ -302,6 +314,20 @@ class RealmSandboxFrame extends Component<Signature> {
       );
     }
     return (await response.json()) as LooseSingleCardDocument;
+  }
+
+  private sameModuleURL(left: string, right: string): boolean {
+    try {
+      let leftURL = new URL(left);
+      let rightURL = new URL(right);
+      leftURL.search = '';
+      leftURL.hash = '';
+      rightURL.search = '';
+      rightURL.hash = '';
+      return leftURL.href === rightURL.href;
+    } catch {
+      return false;
+    }
   }
 
   <template>

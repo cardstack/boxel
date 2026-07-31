@@ -22,7 +22,6 @@ import {
   cardTypeDisplayName,
   cardTypeIcon,
   getMenuItems,
-  identifyCard,
   isCardInstance,
   isFileDefInstance,
   isResolvedCodeRef,
@@ -40,6 +39,7 @@ import Overlays from '@cardstack/host/components/operator-mode/overlays';
 import ElementTracker, {
   type RenderedCardForOverlayActions,
 } from '@cardstack/host/resources/element-tracker';
+import type CardTypeService from '@cardstack/host/services/card-type-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import type RealmService from '@cardstack/host/services/realm';
@@ -72,6 +72,7 @@ interface Signature {
 export default class PreviewPanel extends Component<Signature> {
   @consume(CardContextName) declare private cardContext: CardContext;
   @service declare private toolService: ToolService;
+  @service declare private cardTypeService: CardTypeService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
 
@@ -127,7 +128,7 @@ export default class PreviewPanel extends Component<Signature> {
   };
 
   private editTemplate = () => {
-    const type = identifyCard(this.args.card.constructor as any);
+    const type = this.cardTypeService.introspect(this.args.card)?.typeRef;
     if (type && isResolvedCodeRef(type)) {
       const gtsFileUrl = type.module.endsWith('.gts')
         ? type.module
@@ -182,8 +183,9 @@ export default class PreviewPanel extends Component<Signature> {
       return fileDefFormats;
     }
     if (this.isCard) {
-      const ctor = (this.args.card as CardDef).constructor as typeof CardDef;
-      const hasCustomEdit = ctor.hasCustomEditTemplate;
+      const hasCustomEdit =
+        this.cardTypeService.introspect(this.args.card)
+          ?.hasCustomEditTemplate === true;
       // Insert 'form' (toggle standard view) right after 'edit' ONLY
       // when this card has a custom edit template. Note: a card that
       // shares the same component for edit and isolated (e.g.

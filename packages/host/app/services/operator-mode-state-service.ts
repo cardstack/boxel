@@ -25,7 +25,6 @@ import {
   isLocalId,
   localId as localIdSymbol,
   Deferred,
-  SupportedMimeType,
   internalKeyFor,
   realmURL as realmURLSymbol,
 } from '@cardstack/runtime-common';
@@ -841,14 +840,19 @@ export default class OperatorModeStateService extends Service {
       typeof codePath === 'string'
         ? this.network.virtualNetwork.toURL(codePath)
         : codePath;
-    let canonicalCodePath = await this.determineCanonicalCodePath(codePathURL);
-    this._state.codePath = canonicalCodePath;
+    // Selecting a file is a navigation concern. Commit it immediately so the
+    // host-owned editor can mount while the file request, module analysis, and
+    // sandbox preview proceed independently. Redirect canonicalization already
+    // happens in FileResource.onRedirect after the source request responds;
+    // a separate blocking HEAD here only put network latency in front of
+    // Monaco and duplicated that work.
+    this._state.codePath = codePathURL;
     this.updateOpenDirsForNestedPath();
     this.schedulePersist();
 
     moduleInspectorView =
       moduleInspectorView ??
-      this.moduleInspectorHistory[canonicalCodePath?.href ?? ''] ??
+      this.moduleInspectorHistory[codePathURL?.href ?? ''] ??
       DEFAULT_MODULE_INSPECTOR_VIEW;
 
     this.updateModuleInspectorView(moduleInspectorView);
@@ -866,28 +870,6 @@ export default class OperatorModeStateService extends Service {
         ModuleInspectorSelections,
         JSON.stringify(this.moduleInspectorHistory),
       );
-    }
-  }
-
-  private async determineCanonicalCodePath(codePath: URL | null) {
-    if (!codePath) {
-      return codePath;
-    }
-
-    let response;
-    try {
-      response = await this.network.authedFetch(codePath, {
-        method: 'HEAD',
-        headers: { Accept: SupportedMimeType.CardSource },
-      });
-
-      if (response.ok) {
-        return new URL(response.url);
-      }
-
-      return codePath;
-    } catch (_e) {
-      return codePath;
     }
   }
 

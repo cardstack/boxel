@@ -2991,12 +2991,11 @@ export default class MatrixService extends Service {
     }
 
     // Queue code patches for processing
-    if (
-      event.type === 'm.room.message' &&
-      event.content?.body &&
-      event.content?.isStreamingFinished
-    ) {
-      // Check if the message contains code patches by looking for search/replace blocks
+    if (event.type === 'm.room.message' && event.content?.body) {
+      // A complete edit block is an Act-mode boundary even while the rest of
+      // the response is still streaming. ToolService deduplicates already
+      // applying/applied block indexes, so later accumulated m.replace events
+      // can safely contribute the next completed block.
       let body = event.content.body as string;
       if (
         body.includes(SEARCH_MARKER) &&

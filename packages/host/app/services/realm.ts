@@ -91,6 +91,8 @@ export type EnhancedRealmInfo = RealmInfo & {
   isPublic: boolean;
 };
 
+export type RealmWritability = 'pending' | 'read-only' | 'writable';
+
 export interface PrivateDependencyReference {
   dependency: string;
   realmURL: string;
@@ -184,6 +186,10 @@ class RealmResource {
 
   get isLoggedIn() {
     return this.auth.type === 'logged-in';
+  }
+
+  get isLoginPending() {
+    return this.loggingIn !== undefined;
   }
 
   get url(): string {
@@ -998,6 +1004,36 @@ export default class RealmService extends Service {
 
   canWrite = (url: string): boolean => {
     return this.knownRealm(url)?.canWrite ?? false;
+  };
+
+  // Unlike canWrite(), this preserves the distinction between a settled
+  // read-only realm and the short discovery/login window where no decision is
+  // available yet. Fast code-mode navigation must not flash a read-only state
+  // merely because it now renders before realm authentication finishes.
+  writability = (url: string): RealmWritability => {
+    let resource = this.knownRealm(url);
+    if (!resource) {
+      // info() starts realm discovery and establishes the tracked dependency
+      // that will invalidate this answer when the realm becomes known.
+      this.info(url);
+      return 'pending';
+    }
+
+    // Consume tracked auth before inspecting the in-flight marker. Completing
+    // login updates auth and therefore invalidates consumers even though the
+    // shared login Promise itself is deliberately not tracked.
+    let canWrite = resource.canWrite;
+    if (resource.isLoginPending || !resource.info) {
+      if (!resource.info) {
+        resource
+          .fetchInfo()
+          .catch((error: unknown) =>
+            this.swallowBackgroundInfoError(url, 'fetchInfo', error),
+          );
+      }
+      return 'pending';
+    }
+    return canWrite ? 'writable' : 'read-only';
   };
 
   isRealmOwner = (url: string): boolean => {
