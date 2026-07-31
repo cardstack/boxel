@@ -57,6 +57,16 @@ let tracePath: string | undefined;
 let preInitBuffer: string[] = [];
 let disabled = false;
 let observer: ((record: Record<string, unknown>) => void) | undefined;
+/**
+ * Records emitted before anyone subscribed. The startup phase (brief load,
+ * realm bootstrap, workspace pulls) is over before the issue loop wires its
+ * observer, so without a replay those spans reach no consumer and a
+ * telemetry card reports zero startup time. Capped: a run that never
+ * subscribes must not accumulate its whole trace in memory.
+ */
+let replayBuffer: Record<string, unknown>[] = [];
+let everObserved = false;
+const MAX_REPLAY_RECORDS = 500;
 
 /**
  * Subscribe to every trace record (span close, event, and the init meta)
@@ -64,11 +74,19 @@ let observer: ((record: Record<string, unknown>) => void) | undefined;
  * into a live card without re-parsing the NDJSON file. At most one
  * observer; pass undefined to clear. The observer must never throw — a
  * failure there is swallowed so telemetry can't take down a run.
+ *
+ * The first subscriber is replayed every record emitted so far, so a
+ * consumer that attaches mid-run still sees the phases that preceded it.
  */
 export function setTraceObserver(
   fn: ((record: Record<string, unknown>) => void) | undefined,
 ): void {
   observer = fn;
+  if (!fn) return;
+  let replay = replayBuffer;
+  everObserved = true;
+  replayBuffer = [];
+  for (let record of replay) notifyObserver(record);
 }
 
 function notifyObserver(record: Record<string, unknown>): void {
@@ -82,6 +100,9 @@ function notifyObserver(record: Record<string, unknown>): void {
 
 function writeLine(record: Record<string, unknown>): void {
   if (disabled) return;
+  if (!observer && !everObserved && replayBuffer.length < MAX_REPLAY_RECORDS) {
+    replayBuffer.push(record);
+  }
   notifyObserver(record);
   let line = JSON.stringify(record);
   if (!tracePath) {
@@ -131,6 +152,13 @@ export function initRunTrace(opts: {
       ...cleanTags(opts.tags),
     };
     appendFileSync(tracePath, JSON.stringify(metaRecord) + '\n');
+    if (
+      !observer &&
+      !everObserved &&
+      replayBuffer.length < MAX_REPLAY_RECORDS
+    ) {
+      replayBuffer.push(metaRecord);
+    }
     notifyObserver(metaRecord);
     if (preInitBuffer.length > 0) {
       appendFileSync(tracePath, preInitBuffer.join('\n') + '\n');
@@ -200,5 +228,7 @@ export function resetRunTraceForTesting(): void {
   tracePath = undefined;
   observer = undefined;
   preInitBuffer = [];
+  replayBuffer = [];
+  everObserved = false;
   disabled = false;
 }

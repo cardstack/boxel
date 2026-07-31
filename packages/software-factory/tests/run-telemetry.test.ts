@@ -1,8 +1,13 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import {
   RunTelemetryAggregator,
+  RunTelemetryWriter,
   type RunTelemetryConfig,
 } from '../src/run-telemetry.ts';
 
@@ -74,7 +79,8 @@ module('run-telemetry > aggregator', function () {
     );
     assert.strictEqual(attrs.config.outcome, 'running');
     assert.strictEqual(attrs.config.endedAt, null);
-    // Wall clock ticks from startedAt while running.
+    // Wall clock runs from the earlier of the writer's construction and the
+    // first trace record — here the config, which predates this turn.
     assert.strictEqual(attrs.totals.wallClockSeconds, 560);
   });
 
@@ -231,26 +237,98 @@ module('run-telemetry > aggregator', function () {
 
   test('markFinished stamps the outcome, endedAt, and freezes wall clock', function (assert) {
     let a = agg();
-    a.consume({ c: 'run', n: 'issue-loop', t: 1_000_000, d: 2_100_000 });
+    // A startup span at the very beginning of the run: wall clock must cover
+    // it, since the card itemizes startup time inside the same total.
+    a.consume({ c: 'startup', n: 'load-brief', t: 1_002_000, d: 2_000 });
+    a.consume({ c: 'run', n: 'issue-loop', t: 1_100_000, d: 2_100_000 });
     a.markFinished('all_issues_done', 3_200_000);
     let attrs = a.toCardAttributes(9_999_999) as any;
     assert.strictEqual(attrs.config.outcome, 'completed');
     assert.strictEqual(
       attrs.totals.wallClockSeconds,
-      2100,
-      'uses the run span, not now',
+      2200,
+      'first record to endedAt, not the loop span and not now',
     );
+    assert.strictEqual(attrs.totals.startupSeconds, 2);
     assert.notStrictEqual(attrs.config.endedAt, null);
   });
 
-  test('turns of the same issue collapse into one issue summary with iteration count', function (assert) {
+  test('turns of the same issue collapse into one issue summary', function (assert) {
     let a = agg();
     a.consume({ c: 'inference', n: 'design', t: 1, d: 1000, issue: 'RT-1' });
     a.consume({ c: 'inference', n: 'build', t: 2, d: 1000, issue: 'RT-1' });
     a.consume({ c: 'inference', n: 'fix', t: 3, d: 1000, issue: 'RT-1' });
     let attrs = a.toCardAttributes() as any;
     assert.strictEqual(attrs.issues.length, 1);
-    assert.strictEqual(attrs.issues[0].iterationCount, 3);
+  });
+
+  test('iterations count inner-loop passes, not turns', function (assert) {
+    let a = agg();
+    // Phase-split iteration 1: design + build are one pass.
+    a.consume({
+      c: 'inference',
+      n: 'design',
+      t: 1,
+      d: 1000,
+      issue: 'Sticky Note',
+      issueId: 'SN-1',
+      iteration: 1,
+    });
+    a.consume({
+      c: 'inference',
+      n: 'build',
+      t: 2,
+      d: 1000,
+      issue: 'Sticky Note',
+      issueId: 'SN-1',
+      iteration: 1,
+    });
+    // The review turn carries no iteration tag at all.
+    a.consume({
+      c: 'inference',
+      n: 'review',
+      t: 3,
+      d: 1000,
+      issue: 'Sticky Note',
+      issueId: 'SN-1',
+    });
+    let attrs = a.toCardAttributes() as any;
+    assert.strictEqual(
+      attrs.issues[0].iterationCount,
+      1,
+      'three turns, one pass',
+    );
+
+    // A second pass after failed validation is a real second iteration.
+    a.consume({
+      c: 'inference',
+      n: 'fix',
+      t: 4,
+      d: 1000,
+      issue: 'Sticky Note',
+      issueId: 'SN-1',
+      iteration: 2,
+    });
+    assert.strictEqual(
+      (a.toCardAttributes() as any).issues[0].iterationCount,
+      2,
+    );
+  });
+
+  test('a ticket whose turns carry no iteration tag counts as one pass', function (assert) {
+    let a = agg();
+    a.consume({
+      c: 'inference',
+      n: 'bootstrap',
+      t: 1,
+      d: 1000,
+      issue: 'Process brief',
+      issueId: 'BOOT-1',
+    });
+    assert.strictEqual(
+      (a.toCardAttributes() as any).issues[0].iterationCount,
+      1,
+    );
   });
 
   test('a turn carries the board key its span was tagged with', function (assert) {
@@ -571,5 +649,94 @@ module('run-telemetry > aggregator', function () {
     let attrs = agg().toCardAttributes() as any;
     assert.strictEqual(attrs.cardInfo.name, 'Run telemetry — run-telemetry');
     assert.strictEqual(attrs.title, undefined, 'no dead top-level title');
+  });
+});
+
+module('run-telemetry > writer', function () {
+  interface Write {
+    path: string;
+    doc: any;
+  }
+
+  function writerHarness(
+    opts: { failWrites?: boolean; holdWrites?: boolean } = {},
+  ) {
+    let writes: Write[] = [];
+    let release: (() => void) | undefined;
+    let gate = opts.holdWrites
+      ? new Promise<void>((resolve) => {
+          release = resolve;
+        })
+      : Promise.resolve();
+    let writer = new RunTelemetryWriter({
+      workspaceDir: mkdtempSync(join(tmpdir(), 'rt-writer-')),
+      controlRealm: 'https://realms.example.test/user/rt-control/',
+      slug: 'sticky-note',
+      config: { ...CONFIG },
+      debounceMs: 5,
+      rawWriteFile: async (path, content) => {
+        await gate;
+        writes.push({
+          path,
+          doc: path.endsWith('.json') ? JSON.parse(content) : content,
+        });
+        return opts.failWrites
+          ? { ok: false, error: 'HTTP 403: forbidden' }
+          : { ok: true };
+      },
+    });
+    return { writer, writes, release: () => release?.() };
+  }
+
+  test('start publishes the CardDef to the realm, not just the workspace', async function (assert) {
+    let { writer, writes } = writerHarness();
+    await writer.start();
+    await writer.finish('all_issues_done');
+    assert.true(
+      writes.some((w) => w.path === 'run-telemetry.gts'),
+      'the definition is raw-written, so an immediate exit still renders',
+    );
+    let module = writes.find((w) => w.path === 'run-telemetry.gts');
+    assert.true(
+      String(module?.doc).includes('export class RunTelemetry extends CardDef'),
+      'and it carries the real card source',
+    );
+  });
+
+  test('finish is not lost when a write is already in flight', async function (assert) {
+    let { writer, writes, release } = writerHarness({ holdWrites: true });
+    let started = writer.start();
+    // finish() lands while start()'s write is still blocked on the gate.
+    let finished = writer.finish('all_issues_done');
+    release();
+    await Promise.all([started, finished]);
+
+    let instanceWrites = writes.filter((w) => w.path.endsWith('.json'));
+    assert.true(instanceWrites.length >= 1, 'the instance was written');
+    assert.strictEqual(
+      instanceWrites[instanceWrites.length - 1].doc.data.attributes.config
+        .outcome,
+      'completed',
+      'the settled outcome is the last thing written',
+    );
+  });
+
+  test('a rejected realm write is recorded, not swallowed', async function (assert) {
+    let { writer } = writerHarness({ failWrites: true });
+    await writer.start();
+    await writer.finish('all_issues_done');
+    assert.strictEqual(
+      writer.lastWriteError,
+      'HTTP 403: forbidden',
+      'client.write resolves {ok:false} rather than throwing, so the ' +
+        'writer has to inspect the result',
+    );
+  });
+
+  test('a successful write clears an earlier failure', async function (assert) {
+    let { writer } = writerHarness();
+    await writer.start();
+    await writer.finish('all_issues_done');
+    assert.strictEqual(writer.lastWriteError, undefined);
   });
 });

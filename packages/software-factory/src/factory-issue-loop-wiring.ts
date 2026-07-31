@@ -520,9 +520,8 @@ export async function runFactoryIssueLoop(
         factoryCommit: process.env.FACTORY_COMMIT ?? '',
         startedAtMs: Date.now(),
       },
-      rawWriteFile: async (relativePath, content) => {
-        await client.write(controlRealm, relativePath, content);
-      },
+      rawWriteFile: (relativePath, content) =>
+        client.write(controlRealm, relativePath, content),
     });
   }
 

@@ -47,6 +47,8 @@ function readCardSource(): string {
 interface TurnAttrs {
   issueId?: string;
   issueTitle?: string;
+  /** Inner-loop pass this turn belonged to; absent for meta turns. */
+  iteration?: number;
   turnType: string;
   model: string;
   effort: string;
@@ -199,6 +201,7 @@ export class RunTelemetryAggregator {
         turnType: string;
         issueId?: string;
         issueTitle?: string;
+        iteration?: number;
         model: string;
         effort: string;
         startedAtMs: number;
@@ -218,7 +221,8 @@ export class RunTelemetryAggregator {
   private syncSeconds = 0;
   private syncCallCount = 0;
   private startupSeconds = 0;
-  private finalWallClockSeconds: number | undefined;
+  /** Earliest span start seen in the trace; Infinity until the first one. */
+  private earliestRecordMs = Number.POSITIVE_INFINITY;
 
   constructor(config: RunTelemetryConfig) {
     this.config = config;
@@ -243,12 +247,21 @@ export class RunTelemetryAggregator {
     let d = typeof record.d === 'number' ? record.d : undefined;
     if (!c || !n) return;
 
+    // The writer is constructed after startup, so its own clock would start
+    // the run somewhere in the middle. The earliest record — replayed from
+    // the trace on subscribe — is the real beginning. `t` is already the
+    // span's start, so it needs no adjustment for `d`.
+    let t = num(record.t);
+    if (t > 0 && t < this.earliestRecordMs) this.earliestRecordMs = t;
+
     if (c === 'inference') {
       if (n === 'turn-start') {
         this.live = {
           turnType: str(record.turnType) ?? 'turn',
           issueId: str(record.issueId),
           issueTitle: str(record.issue),
+          iteration:
+            typeof record.iteration === 'number' ? record.iteration : undefined,
           model: str(record.model) ?? 'inherit',
           effort: str(record.effort) ?? 'inherit',
           startedAtMs: num(record.t) || Date.now(),
@@ -281,6 +294,8 @@ export class RunTelemetryAggregator {
       this.turns.push({
         issueId: str(record.issueId),
         issueTitle: str(record.issue),
+        iteration:
+          typeof record.iteration === 'number' ? record.iteration : undefined,
         turnType: n,
         model: str(record.model) ?? 'inherit',
         effort: str(record.effort) ?? 'inherit',
@@ -369,8 +384,10 @@ export class RunTelemetryAggregator {
       this.startupSeconds += d / 1000;
       return;
     }
-    if (c === 'run' && n === 'issue-loop' && d !== undefined) {
-      this.finalWallClockSeconds = Math.round(d / 1000);
+    if (c === 'run' && n === 'issue-loop') {
+      // The loop's own span no longer drives wall clock — the run started
+      // before it, at the first trace record. Consumed so it isn't mistaken
+      // for an unhandled record.
       return;
     }
     if (c === 'scheduler' && n === 'board') {
@@ -405,6 +422,7 @@ export class RunTelemetryAggregator {
           {
             issueId: this.live.issueId,
             issueTitle: this.live.issueTitle,
+            iteration: this.live.iteration,
             turnType: this.live.turnType,
             model: this.live.model,
             effort: this.live.effort,
@@ -420,9 +438,14 @@ export class RunTelemetryAggregator {
     let turns = [...this.turns, ...liveTurns];
     let issueSummaries = this.issueSummaries(turns);
 
-    let wallClockSeconds =
-      this.finalWallClockSeconds ??
-      Math.max(0, Math.round((nowMs - this.config.startedAtMs) / 1000));
+    // Wall clock spans the whole run, startup included: the issue-loop span
+    // covers only the loop, so using it would leave the startup phase the
+    // card itemizes outside the total it is measured against.
+    let startedAtMs = this.startedAtMs();
+    let wallClockSeconds = Math.max(
+      0,
+      Math.round(((this.endedAtMs ?? nowMs) - startedAtMs) / 1000),
+    );
 
     // Phase subtotals from closed-turn durations.
     let phaseSeconds = new Map<string, number>();
@@ -457,7 +480,7 @@ export class RunTelemetryAggregator {
         controlRealmUrl: this.config.controlRealmUrl,
         targetPhase: this.config.targetPhase,
         factoryCommit: this.config.factoryCommit,
-        startedAt: new Date(this.config.startedAtMs).toISOString(),
+        startedAt: new Date(startedAtMs).toISOString(),
         endedAt: this.endedAtMs ? new Date(this.endedAtMs).toISOString() : null,
         outcome: this.outcome,
       },
@@ -506,6 +529,17 @@ export class RunTelemetryAggregator {
       );
   }
 
+  /**
+   * When the run actually began. The writer is constructed inside the issue
+   * loop, well after the brief load and realm pulls, so its own timestamp
+   * would cut the startup phase out of the run.
+   */
+  private startedAtMs(): number {
+    return Number.isFinite(this.earliestRecordMs)
+      ? Math.min(this.earliestRecordMs, this.config.startedAtMs)
+      : this.config.startedAtMs;
+  }
+
   /** Machinery bucket for the ticket whose turn ran most recently. */
   private machineryForCurrentIssue(): IssueMachinery | undefined {
     let key = this.currentIssueKey;
@@ -528,6 +562,11 @@ export class RunTelemetryAggregator {
   private issueSummaries(turns: TurnAttrs[]): IssueSummaryAttrs[] {
     let byKey = new Map<string, IssueSummaryAttrs>();
     let liveKeys = new Set<string>();
+    // An iteration is one inner-loop pass, and a single pass can run several
+    // turns (design + build under phase-split, then review). Counting turns
+    // reported first-pass work as three iterations, which the card
+    // emphasizes as a struggling ticket.
+    let iterationsByKey = new Map<string, Set<number>>();
     for (let t of turns) {
       // Same key the card groups turns by: the board key when the turn
       // carried one, the title otherwise. Keying these two differently is
@@ -535,17 +574,22 @@ export class RunTelemetryAggregator {
       let key = t.issueId ?? t.issueTitle;
       if (!key) continue;
       if (t.durationSeconds === undefined) liveKeys.add(key);
-      let existing = byKey.get(key);
-      if (existing) {
-        existing.iterationCount += 1;
-        continue;
+      if (t.iteration !== undefined) {
+        let seen = iterationsByKey.get(key);
+        if (!seen) {
+          seen = new Set();
+          iterationsByKey.set(key, seen);
+        }
+        seen.add(t.iteration);
       }
+      let existing = byKey.get(key);
+      if (existing) continue;
       let m = this.machineryByIssue.get(key);
       byKey.set(key, {
         issueId: key,
         title: t.issueTitle ?? key,
         status: '',
-        iterationCount: 1,
+        iterationCount: 0,
         validationStepsRun: m?.validationStepsRun ?? 0,
         // No pipeline ran → not a pass. The card reads this as a verdict,
         // so defaulting it to true reported success that never happened.
@@ -556,10 +600,13 @@ export class RunTelemetryAggregator {
         syncCallCount: m?.syncCallCount ?? 0,
       });
     }
-    // Status last: a ticket is `running` if ANY of its turns is in flight,
-    // which the per-turn loop above cannot know until it has seen them all.
+    // Status and iteration count last: both depend on every turn of the
+    // ticket, which the per-turn loop above cannot know until it ends.
     for (let [key, summary] of byKey) {
       summary.status = this.statusFor(key, liveKeys.has(key));
+      // Meta turns (bootstrap, design foundation, review) carry no iteration
+      // tag; they are one pass by construction.
+      summary.iterationCount = iterationsByKey.get(key)?.size || 1;
     }
     return [...byKey.values()];
   }
@@ -596,8 +643,16 @@ export interface RunTelemetryWriterOptions {
   /** Run slug — the instance is `Runs/<slug>-telemetry.json`. */
   slug: string;
   config: RunTelemetryConfig;
-  /** Raw-write straight to the control realm (bypasses the atomic sync). */
-  rawWriteFile: (relativePath: string, content: string) => Promise<void>;
+  /**
+   * Raw-write straight to the control realm (bypasses the atomic sync).
+   * Returns the realm's result rather than throwing — `client.write`
+   * resolves `{ok: false}` for auth and HTTP failures, so a void-returning
+   * wrapper would report every failed upload as a success.
+   */
+  rawWriteFile: (
+    relativePath: string,
+    content: string,
+  ) => Promise<{ ok: boolean; error?: string }>;
   debounceMs?: number;
 }
 
@@ -608,6 +663,9 @@ export class RunTelemetryWriter {
   private debounceMs: number;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private flushing: Promise<void> | undefined;
+  /** A flush arrived mid-write; re-run once the active write settles. */
+  private pendingFlush = false;
+  private writeError: string | undefined;
   private started = false;
   private finished = false;
 
@@ -618,18 +676,32 @@ export class RunTelemetryWriter {
     this.debounceMs = opts.debounceMs ?? DEFAULT_DEBOUNCE_MS;
   }
 
-  /** Write the CardDef into the workspace and subscribe to the trace. */
+  /** Publish the CardDef and subscribe to the trace. */
   async start(): Promise<void> {
     if (this.started) return;
     this.started = true;
+    let source: string;
     let modulePath = join(this.opts.workspaceDir, CARD_MODULE_FILENAME);
     try {
-      await writeFile(modulePath, readCardSource(), 'utf8');
+      source = readCardSource();
+      await writeFile(modulePath, source, 'utf8');
     } catch (err) {
       log.warn(
         `Failed to write RunTelemetry CardDef — telemetry disabled: ${String(err)}`,
       );
       return;
+    }
+    // Raw-write the definition to the realm as well, not just the
+    // workspace. The workspace copy reaches the realm only on the next
+    // sync, and a run that exits immediately (empty board, everything
+    // blocked) never syncs — leaving an instance whose `adoptsFrom` points
+    // at a module the realm doesn't have, which cannot index or render.
+    let defWrite = await this.opts.rawWriteFile(CARD_MODULE_FILENAME, source);
+    if (!defWrite.ok) {
+      this.writeError = defWrite.error ?? 'unknown error';
+      log.warn(
+        `RunTelemetry CardDef raw-write failed: ${defWrite.error ?? 'unknown error'} — the card renders once a workspace sync lands it`,
+      );
     }
     setTraceObserver((record) => {
       this.agg.consume(record);
@@ -647,11 +719,17 @@ export class RunTelemetryWriter {
   }
 
   private async flush(): Promise<void> {
-    // Single-flight: coalesce concurrent flushes.
+    // Coalesce, but never drop: a flush that arrives while a write is in
+    // flight marks the aggregate dirty and re-runs afterwards. Returning
+    // early instead would discard the newer state — including `finish()`'s
+    // settled outcome, leaving a completed run displayed as running.
     if (this.flushing) {
+      this.pendingFlush = true;
       await this.flushing;
+      if (this.pendingFlush) await this.flush();
       return;
     }
+    this.pendingFlush = false;
     let doc = JSON.stringify(
       {
         data: {
@@ -667,8 +745,17 @@ export class RunTelemetryWriter {
     );
     this.flushing = this.opts
       .rawWriteFile(this.instanceRelPath, doc)
+      .then((result) => {
+        if (result.ok) {
+          this.writeError = undefined;
+          return;
+        }
+        this.writeError = result.error ?? 'unknown error';
+        log.warn(`Telemetry flush failed (non-fatal): ${this.writeError}`);
+      })
       .catch((err) => {
-        log.warn(`Telemetry flush failed (non-fatal): ${String(err)}`);
+        this.writeError = String(err);
+        log.warn(`Telemetry flush failed (non-fatal): ${this.writeError}`);
       })
       .finally(() => {
         this.flushing = undefined;
@@ -691,6 +778,15 @@ export class RunTelemetryWriter {
     }
     this.agg.markFinished(outcome, Date.now());
     await this.flush();
+  }
+
+  /**
+   * Why the most recent realm write failed, if it did. A telemetry failure
+   * never interrupts a run, so this is how a caller learns the card on the
+   * realm is stale rather than merely quiet.
+   */
+  get lastWriteError(): string | undefined {
+    return this.writeError;
   }
 
   /** Ensure the instance directory exists (control realm mirror). */

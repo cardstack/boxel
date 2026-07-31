@@ -8,6 +8,7 @@ const { module, test } = QUnit;
 import {
   initRunTrace,
   resetRunTraceForTesting,
+  setTraceObserver,
   startSpan,
   traceEvent,
   withSpan,
@@ -110,5 +111,58 @@ module('run-trace', function (hooks) {
     let lines = readTraceLines(workspaceDir);
     assert.strictEqual(lines[1].n, 'pipeline');
     assert.true(lines[1].error);
+  });
+});
+
+module('run-trace > observer replay', function (hooks) {
+  let workspaceDir: string;
+
+  hooks.beforeEach(function () {
+    resetRunTraceForTesting();
+    workspaceDir = mkdtempSync(join(tmpdir(), 'run-trace-replay-'));
+  });
+
+  hooks.afterEach(function () {
+    setTraceObserver(undefined);
+    resetRunTraceForTesting();
+    rmSync(workspaceDir, { recursive: true, force: true });
+  });
+
+  test('a late subscriber is replayed the records it missed', function (assert) {
+    // The startup phase is over before the issue loop wires its observer, so
+    // without replay a telemetry consumer never sees these spans at all.
+    // startSpan/end rather than withSpan: the latter closes its span in a
+    // microtask, which would not have run by the time we subscribe below.
+    startSpan('startup', 'load-brief')();
+    initRunTrace({ workspaceDir });
+    startSpan('startup', 'pull-target-realm')();
+
+    let seen: Record<string, unknown>[] = [];
+    setTraceObserver((record) => {
+      seen.push(record);
+    });
+
+    assert.deepEqual(
+      seen.map((r) => `${r.c}/${r.n}`),
+      ['startup/load-brief', 'run/meta', 'startup/pull-target-realm'],
+      'including the spans emitted before initRunTrace',
+    );
+
+    traceEvent('scheduler', 'load-issues', { count: 2 });
+    assert.strictEqual(
+      seen[seen.length - 1].n,
+      'load-issues',
+      'and live records keep arriving after the replay',
+    );
+  });
+
+  test('records are not replayed twice to a second subscriber', function (assert) {
+    startSpan('startup', 'load-brief')();
+    let first: Record<string, unknown>[] = [];
+    setTraceObserver((r) => first.push(r));
+    let second: Record<string, unknown>[] = [];
+    setTraceObserver((r) => second.push(r));
+    assert.strictEqual(first.length, 1);
+    assert.strictEqual(second.length, 0, 'the buffer is consumed once');
   });
 });
