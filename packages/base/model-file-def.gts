@@ -601,42 +601,51 @@ export class ModelIsolatedBody extends GlimmerComponent<{
         overflow: hidden;
       }
       .inspector {
-        display: grid;
-        gap: 1rem;
         min-width: 0;
+        border: 1px solid var(--border);
+        border-radius: var(--radius, var(--boxel-border-radius));
+        background: var(--card);
+        padding: 0.875rem 1rem;
       }
-      .insp-group {
-        display: grid;
-        gap: 0.5rem;
+      .insp-group + .insp-group {
+        margin-top: 0.875rem;
       }
       .insp-head {
-        margin: 0;
-        font-size: 0.75rem;
-        font-weight: 600;
+        margin: 0 0 0.25rem;
+        font-family: var(--font-mono, var(--boxel-monospace-font-family));
+        font-size: 0.5625rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
         text-transform: uppercase;
-        letter-spacing: 0.04em;
         color: var(--muted-foreground);
       }
       .insp-rows {
         margin: 0;
-        display: grid;
-        gap: 0.3125rem;
+        display: flex;
+        flex-direction: column;
       }
       .insp-rows div {
         display: grid;
-        grid-template-columns: 5.5rem minmax(0, 1fr);
+        grid-template-columns: 5.75rem minmax(0, 1fr);
         gap: 0.625rem;
+        align-items: baseline;
+        padding: 0.3125rem 0;
+        border-top: 1px solid var(--border);
+      }
+      .insp-rows div:first-child {
+        border-top: 0;
       }
       .insp-rows dt {
         color: var(--muted-foreground);
         font-family: var(--font-mono, var(--boxel-monospace-font-family));
-        font-size: 0.5625rem;
+        font-size: 0.59375rem;
         text-transform: uppercase;
         letter-spacing: 0.04em;
       }
       .insp-rows dd {
         min-width: 0;
         margin: 0;
+        font-size: 0.75rem;
         overflow-wrap: anywhere;
       }
     </style>
