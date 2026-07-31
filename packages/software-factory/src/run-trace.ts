@@ -54,9 +54,33 @@ export type TraceTags = Record<string, string | number | boolean | undefined>;
 let tracePath: string | undefined;
 let preInitBuffer: string[] = [];
 let disabled = false;
+let observer: ((record: Record<string, unknown>) => void) | undefined;
+
+/**
+ * Subscribe to every trace record (span close, event, and the init meta)
+ * as it is written. Used by the run-telemetry aggregator to fold spans
+ * into a live card without re-parsing the NDJSON file. At most one
+ * observer; pass undefined to clear. The observer must never throw — a
+ * failure there is swallowed so telemetry can't take down a run.
+ */
+export function setTraceObserver(
+  fn: ((record: Record<string, unknown>) => void) | undefined,
+): void {
+  observer = fn;
+}
+
+function notifyObserver(record: Record<string, unknown>): void {
+  if (!observer) return;
+  try {
+    observer(record);
+  } catch {
+    // Telemetry observer failure must not affect the run or the trace.
+  }
+}
 
 function writeLine(record: Record<string, unknown>): void {
   if (disabled) return;
+  notifyObserver(record);
   let line = JSON.stringify(record);
   if (!tracePath) {
     preInitBuffer.push(line);
@@ -96,17 +120,16 @@ export function initRunTrace(opts: {
     mkdirSync(dir, { recursive: true });
     let startedAt = new Date().toISOString().replace(/[:.]/g, '-');
     tracePath = join(dir, `run-${startedAt}.ndjson`);
-    appendFileSync(
-      tracePath,
-      JSON.stringify({
-        v: 1,
-        c: 'run',
-        n: 'meta',
-        t: Date.now(),
-        pid: process.pid,
-        ...cleanTags(opts.tags),
-      }) + '\n',
-    );
+    let metaRecord = {
+      v: 1,
+      c: 'run',
+      n: 'meta',
+      t: Date.now(),
+      pid: process.pid,
+      ...cleanTags(opts.tags),
+    };
+    appendFileSync(tracePath, JSON.stringify(metaRecord) + '\n');
+    notifyObserver(metaRecord);
     if (preInitBuffer.length > 0) {
       appendFileSync(tracePath, preInitBuffer.join('\n') + '\n');
       preInitBuffer = [];
@@ -173,6 +196,7 @@ export async function withSpan<T>(
 /** Test seam: reset module state so unit tests get isolated trace files. */
 export function resetRunTraceForTesting(): void {
   tracePath = undefined;
+  observer = undefined;
   preInitBuffer = [];
   disabled = false;
 }

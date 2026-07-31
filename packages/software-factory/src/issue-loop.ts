@@ -602,6 +602,17 @@ export async function runIssueLoop(
       });
     }
     let turnStartMs = Date.now();
+    // The trace only records a span on CLOSE, so a running turn is
+    // invisible to it. Emit an explicit start marker so the telemetry
+    // aggregator can render the in-flight turn as a live segment; the
+    // closing inference span below carries the duration and supersedes it.
+    traceEvent('inference', 'turn-start', {
+      turnType: info.turnType,
+      issue: info.issueTitle,
+      iteration: info.iteration,
+      model: context.modelBudget?.model ?? 'inherit',
+      effort: context.modelBudget?.effort ?? 'inherit',
+    });
     let endTurnSpan = startSpan('inference', info.turnType, {
       issue: info.issueTitle,
       iteration: info.iteration,

@@ -69,7 +69,7 @@ export const CONTROL_DIRS = [
 ] as const;
 
 /** Root-level files owned by the control plane (the run-log CardDef). */
-export const CONTROL_ROOT_FILES = ['run-log.gts'] as const;
+export const CONTROL_ROOT_FILES = ['run-log.gts', 'run-telemetry.gts'] as const;
 
 const IGNORE_MARKER = '# software-factory control-plane split';
 
