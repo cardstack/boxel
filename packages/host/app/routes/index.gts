@@ -76,12 +76,15 @@ export default class Card extends Route {
   // OperatorModeStateService.schedulePersist() is called (due to the fact we
   // care about the back button, see note at bottom). Because of that make sure
   // that there is as little async as possible in this model hook.
-  async model(params: {
-    authRedirect?: string;
-    cardPath?: string;
-    path: string;
-    operatorModeState: string;
-  }) {
+  async model(
+    params: {
+      authRedirect?: string;
+      cardPath?: string;
+      path: string;
+      operatorModeState: string;
+    },
+    transition: Transition,
+  ) {
     if (this.hostModeService.isActive) {
       let normalizedPath = params.path ?? '';
       // CS-10055: a routing rule in the realm config can map a bare path
@@ -89,12 +92,17 @@ export default class Card extends Route {
       // rule's target id directly; otherwise resolve the path as a card
       // URL under the host-mode origin. A redirect rule is never
       // rendered — navigate to its target instead, mirroring the 3xx
-      // the server answers for a full-page request to this path.
+      // the server answers for a full-page request to this path. The
+      // transition target's query params ride along so the two paths
+      // agree (`params` holds only the pathname).
       let routed = this.hostModeService.resolveRoutedPath(
         normalizedPath || '/',
       );
       if (routed && 'redirectTo' in routed) {
-        this.hostModeService.redirectTo(routed.redirectTo);
+        this.hostModeService.redirectTo(
+          routed.redirectTo,
+          transition.to?.queryParams,
+        );
         return;
       }
       let cardUrl =

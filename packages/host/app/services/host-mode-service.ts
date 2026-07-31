@@ -170,8 +170,23 @@ export default class HostModeService extends Service {
   // redirect, which leaves no history entry for the redirecting URL.
   // Goes through ember-window-mock's `window` so tests can intercept the
   // navigation.
-  redirectTo(target: string) {
-    window.location.replace(target);
+  //
+  // `queryParams` is the transition target's query (from
+  // `transition.to.queryParams`) — NOT `window.location.search`, which
+  // with HistoryLocation still shows the URL being navigated away from
+  // while the transition is in flight. Matching serve-index's semantics,
+  // it carries over only when the redirect target declares no query of
+  // its own.
+  redirectTo(target: string, queryParams?: Record<string, unknown>) {
+    let url = new URL(target, this.hostModeOrigin ?? window.location.origin);
+    if (!url.search && queryParams) {
+      for (let [key, value] of Object.entries(queryParams)) {
+        if (value != null) {
+          url.searchParams.set(key, String(value));
+        }
+      }
+    }
+    window.location.replace(url.href);
   }
 
   get currentCardId() {
