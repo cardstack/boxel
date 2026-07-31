@@ -189,15 +189,7 @@ class RoutingRuleEdit extends Component<typeof RoutingRuleField> {
 
   @action
   statusCodeLabel(code: number): string {
-    switch (code) {
-      case 301:
-        return '301 · permanent';
-      case 308:
-        return '308 · permanent, method-preserving';
-      case 302:
-      default:
-        return '302 · temporary';
-    }
+    return code === 301 ? '301 · permanent' : '302 · temporary';
   }
 
   // The chooser is locked to the consuming realm; pass it through
@@ -369,7 +361,7 @@ export class RoutingRuleField extends FieldDef {
 
   @field statusCode = contains(NumberField, {
     description:
-      'HTTP status for a redirect rule: 301, 302 (the default), or 308',
+      'HTTP status for a redirect rule: 301 (permanent) or 302 (temporary, the default)',
   });
 
   static atom = RoutingRuleAtom;

@@ -263,10 +263,13 @@ const tests: SharedTests<unknown> = Object.freeze({
     async (assert) => {
       assert.strictEqual(parseRedirectStatusCode(301), 301);
       assert.strictEqual(parseRedirectStatusCode(302), 302);
-      assert.strictEqual(parseRedirectStatusCode(308), 308);
       assert.strictEqual(parseRedirectStatusCode('301'), 301);
-      assert.strictEqual(parseRedirectStatusCode(' 308 '), 308);
+      assert.strictEqual(parseRedirectStatusCode(' 302 '), 302);
+      // The method-preserving codes are deliberately unsupported: routed
+      // paths only serve GET/HEAD, so 307/308 would behave identically
+      // to 302/301.
       assert.strictEqual(parseRedirectStatusCode(307), undefined);
+      assert.strictEqual(parseRedirectStatusCode(308), undefined);
       assert.strictEqual(parseRedirectStatusCode(200), undefined);
       assert.strictEqual(parseRedirectStatusCode('perm'), undefined);
       assert.strictEqual(parseRedirectStatusCode(''), undefined);

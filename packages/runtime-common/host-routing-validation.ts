@@ -7,13 +7,17 @@
 
 const VALID_PATH_PATTERN = /^\/(?:[A-Za-z0-9._~/-]|%[0-9A-Fa-f]{2})*$/;
 
-export const REDIRECT_STATUS_CODES = [301, 302, 308] as const;
+// Only 301/302 are offered: routed paths serve GET/HEAD page requests
+// exclusively (card mutations live on the JSON API, not these URLs), so
+// the method-preserving codes (307/308) would behave identically to
+// their plain counterparts and just clutter the choice.
+export const REDIRECT_STATUS_CODES = [301, 302] as const;
 export type RedirectStatusCode = (typeof REDIRECT_STATUS_CODES)[number];
 
 // Temporary (302) is the safe default: a realm config is hand-editable
-// and iterated on, and the permanent codes (301/308) are cached by
-// browsers with no practical way to roll back once a visitor has seen
-// one. Authors opt into permanence explicitly via `statusCode`.
+// and iterated on, and a permanent 301 is cached by browsers with no
+// practical way to roll back once a visitor has seen it. Authors opt
+// into permanence explicitly via `statusCode`.
 export const DEFAULT_REDIRECT_STATUS: RedirectStatusCode = 302;
 
 // A resolved routing rule maps a path within the realm either to a card
@@ -142,8 +146,8 @@ export function validateRedirectTarget(
 /**
  * Coerces an authored `statusCode` value to one of the supported
  * redirect codes. Accepts a number or a numeric string; anything else
- * (including unsupported codes like 307) returns `undefined` so the
- * caller can fall back to `DEFAULT_REDIRECT_STATUS`.
+ * (including unsupported codes like 307 or 308) returns `undefined` so
+ * the caller can fall back to `DEFAULT_REDIRECT_STATUS`.
  */
 export function parseRedirectStatusCode(
   value: unknown,
