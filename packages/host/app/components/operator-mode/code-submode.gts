@@ -49,6 +49,7 @@ import CodeSubmodeEditorIndicator from '@cardstack/host/components/operator-mode
 import ModuleInspector from '@cardstack/host/components/operator-mode/code-submode/module-inspector';
 
 import consumeContext from '@cardstack/host/helpers/consume-context';
+import { knownFileMetaUrls } from '@cardstack/host/lib/known-file-meta-urls';
 import type { FileResource } from '@cardstack/host/resources/file';
 import type {
   ModuleDeclaration,
@@ -646,9 +647,15 @@ export default class CodeSubmode extends Component<Signature> {
   };
 
   @action private async openSearchResultInEditor(cardId: string) {
-    let codePath = cardId.endsWith('.json')
-      ? rri(cardId)
-      : rri(`${cardId}.json`);
+    // A card instance's id is the URL without `.json`, so its source file is
+    // `<id>.json`. A file result's id is already the real file URL and must be
+    // opened as-is. Prerendered search delivers file rows HTML-only, so the
+    // file-meta resource may not be in the Store yet — consult the same
+    // `knownFileMetaUrls` registry the interact-mode click paths rely on.
+    let codePath =
+      knownFileMetaUrls.has(cardId) || cardId.endsWith('.json')
+        ? rri(cardId)
+        : rri(`${cardId}.json`);
     await this.operatorModeStateService.updateCodePath(codePath);
   }
 
