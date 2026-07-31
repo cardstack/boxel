@@ -77,7 +77,7 @@ export class VirtualNetwork {
       fetchHeaderTimeoutMs?: number;
       // A timer scheduler for the fetch retry path. Defaults to the global
       // setTimeout; the host passes a NATIVE (un-stubbed) scheduler so the
-      // fetch-stall diagnostic and header-timeout still fire during prerender,
+      // header-timeout abort and retry backoff still fire during prerender,
       // where render-timer-stub disables the global setTimeout.
       scheduleFetchTimer?: (callback: () => void, ms: number) => unknown;
     },
@@ -796,16 +796,6 @@ async function withRetries(
 ) {
   let attempt = 0;
   for (;;) {
-    // TEMP diagnostic (CS-11450): a render-triggered fetch that stalls without
-    // response headers hangs the prerender (the header-timeout below is gated
-    // off outside the test suite). Log the stalling url via the injected timer
-    // — native in the prerender, where the global setTimeout is stubbed — so
-    // the stuck request is named instead of hanging silently to the shard cap.
-    let stallTimer = scheduleTimer(() => {
-      console.warn(
-        `[FETCH-STALL] no response headers for ${url.href} after ${timeoutMs}ms (attempt #${attempt + 1})`,
-      );
-    }, timeoutMs);
     // For a retryable fetch in the browser test suite, bound how long this
     // attempt may wait for response headers. A stall where the headers never
     // arrive would otherwise leave the fetch neither resolved nor rejected,
@@ -860,7 +850,6 @@ async function withRetries(
         scheduleTimer(() => r(undefined), attempt * backOffMs),
       );
     } finally {
-      clearTimeout(stallTimer as Parameters<typeof clearTimeout>[0]);
       if (timeoutId !== undefined) {
         clearTimeout(timeoutId as Parameters<typeof clearTimeout>[0]);
       }

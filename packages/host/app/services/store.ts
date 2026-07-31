@@ -1643,46 +1643,6 @@ export default class StoreService extends Service implements StoreInterface {
     return a === b || this.peek(a) === this.peek(b);
   }
 
-  // TEMPORARY hang tripwire (CS-11450 instance-id canonicalization): converts a
-  // silent store-key-divergence hang into a fast, self-describing failure so CI
-  // pinpoints the divergent key instead of timing out the shard after ~75min.
-  // Remove once the keying is confirmed consistent.
-  async #awaitWithTripwire<T>(
-    promise: Promise<T>,
-    label: string,
-    key: string,
-  ): Promise<T> {
-    let settled = false;
-    promise.then(
-      () => (settled = true),
-      () => (settled = true),
-    );
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let tripwire = new Promise<never>((_resolve, reject) => {
-      timer = setTimeout(() => {
-        if (settled) {
-          return;
-        }
-        let diag =
-          `[HANG-TRIPWIRE] ${label} unsettled after 90s. ` +
-          `awaited key=${JSON.stringify(key)} ` +
-          `asURL(key)=${JSON.stringify(asURL(key, this.network.virtualNetwork))} ` +
-          `inflightGetCards=${JSON.stringify([...this.inflightGetCards.keys()])} ` +
-          `inflightCardLoads=${JSON.stringify([...this.inflightCardLoads.keys()])} ` +
-          `referenceCount=${JSON.stringify([...this.referenceCount.keys()])}`;
-        console.error(diag);
-        reject(new Error(diag));
-      }, 90_000);
-    });
-    try {
-      return await Promise.race([promise, tripwire]);
-    } finally {
-      if (timer) {
-        clearTimeout(timer);
-      }
-    }
-  }
-
   async waitForCardLoad(cardId: string): Promise<void> {
     let normalizedId = asURL(cardId, this.network.virtualNetwork);
     if (!normalizedId) {
@@ -1690,11 +1650,7 @@ export default class StoreService extends Service implements StoreInterface {
     }
     let inflightLoad = this.inflightCardLoads.get(normalizedId);
     if (inflightLoad) {
-      await this.#awaitWithTripwire(
-        inflightLoad.promise,
-        'waitForCardLoad',
-        normalizedId,
-      );
+      await inflightLoad.promise;
     }
   }
 
@@ -1763,13 +1719,9 @@ export default class StoreService extends Service implements StoreInterface {
         }
         let instanceOrError = this.peekError(url) ?? this.peek(url);
         if (!instanceOrError) {
-          instanceOrError = await this.#awaitWithTripwire(
-            this.getCardInstance({
-              idOrDoc: url,
-            }),
-            'wireUpNewReference:getCardInstance',
-            url,
-          );
+          instanceOrError = await this.getCardInstance({
+            idOrDoc: url,
+          });
           this.setIdentityContext(instanceOrError);
         }
         await this.startAutoSaving(instanceOrError);
@@ -2321,35 +2273,12 @@ export default class StoreService extends Service implements StoreInterface {
     });
   });
 
-  private onInstanceUpdated = (
-    instance: BaseDef,
-    fieldName: string,
-    value?: any,
-  ) => {
+  private onInstanceUpdated = (instance: BaseDef, fieldName: string) => {
     if (fieldName === 'id') {
       // id updates are internal and do not trigger autosaves
       return;
     }
     if (isCardInstance(instance)) {
-      // TEMP DIRTY-PROBE (CS-11450): name the field whose change flags a
-      // freshly-loaded instance dirty, on ANY store. Rate-limited, log-only.
-      {
-        let __n = ((globalThis as any).__dpN =
-          ((globalThis as any).__dpN ?? 0) + 1);
-        if (__n <= 40) {
-          let repr: string;
-          try {
-            repr = isCardInstance(value)
-              ? `card:${(value as any).id}`
-              : (JSON.stringify(value)?.slice(0, 160) ?? String(value));
-          } catch {
-            repr = String(value);
-          }
-          console.warn(
-            `[DIRTY-PROBE] n=${__n} id=${(instance as any).id} renderStore=${this.isRenderStore} field=${fieldName} value=${repr}`,
-          );
-        }
-      }
       this._instanceMutationVersion++;
       let autoSaveState = this.initOrGetAutoSaveState(instance);
       autoSaveState.hasUnsavedChanges = true;
@@ -3008,19 +2937,6 @@ export default class StoreService extends Service implements StoreInterface {
     instance: CardDef,
     opts?: PersistOptions,
   ): Promise<CardDef | CardErrorJSONAPI> {
-    // TEMP PERSIST-PROBE (CS-11450): name the source of every persist — store
-    // type + render-context + caller stack — regardless of isRenderStore, since
-    // the deadlocking writes turned out NOT to come from the render store.
-    // Rate-limited, log-only (does NOT block, so behavior is unchanged).
-    {
-      let __n = ((globalThis as any).__ppN =
-        ((globalThis as any).__ppN ?? 0) + 1);
-      if (__n <= 40) {
-        console.warn(
-          `[PERSIST-PROBE] n=${__n} id=${(instance as any).id} renderStore=${this.isRenderStore} renderCtx=${Boolean((globalThis as any).__boxelRenderContext)}\n${(new Error().stack ?? '').split('\n').slice(2, 9).join('\n')}`,
-        );
-      }
-    }
     return await this.withTestWaiters(async () => {
       let isNew = !instance.id;
       let inflightMutation = this.inflightCardMutations.get(
