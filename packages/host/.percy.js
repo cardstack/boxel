@@ -11,6 +11,16 @@ module.exports = {
    */
   discovery: {
     'disallowed-hostnames': ['fonts.googleapis.com', 'fonts.gstatic.com'],
+    /*
+     * The discovery browser is reused across a shard's snapshots, and
+     * Chrome's own HTTP cache satisfies repeat font requests without them
+     * ever reaching Percy's proxy — so only the shard's first snapshot got
+     * the woff2s attached, and every later snapshot rendered fallback text.
+     * Disabling the browser cache makes every request visible to the proxy,
+     * so each snapshot carries its full resource set. Percy's proxy-side
+     * response cache still prevents refetching from the test server.
+     */
+    'disable-cache': true,
   },
   snapshot: {
     widths: [1280],
