@@ -512,6 +512,7 @@ export async function runFactoryIssueLoop(
       controlRealm,
       slug: runSlug,
       config: {
+        runTitle: config.runTitle ?? runSlug,
         briefUrl: config.briefUrl,
         targetRealmUrl: targetRealm,
         controlRealmUrl: controlRealm,
@@ -571,9 +572,16 @@ export async function runFactoryIssueLoop(
     let result = await runIssueLoop(issueLoopConfig);
     await telemetry?.finish(result.outcome).catch(() => {});
     return result;
+  } catch (err) {
+    // The loop threw: that is a failure, distinct from a run that stopped
+    // with work still on the board.
+    await telemetry?.finish('failed').catch(() => {});
+    throw err;
   } finally {
     monitor?.stop();
     if (telemetry) {
+      // Backstop for paths that settled neither branch. finish() keeps the
+      // first outcome, so this never overwrites a real verdict.
       await telemetry.finish('stopped').catch(() => {});
     }
     // Some agents (notably `OpencodeFactoryAgent`) hold persistent

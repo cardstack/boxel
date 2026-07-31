@@ -64,16 +64,62 @@ interface EventAttrs {
   detail: string;
 }
 
+interface SkillContextAttrs {
+  name: string;
+  phase: string;
+  /** Turn types that carried it, in first-seen order: "design, build". */
+  turnTypes: string;
+  turnCount: number;
+  /** Peak context weight in characters (body + references). */
+  characters: number;
+  referenceCount: number;
+  /**
+   * How the skill reached the model: `injected` (a fresh session paid to
+   * send it), `inherited` (the turn forked a session that already carried
+   * it), or `mixed` when both happened within the phase.
+   */
+  delivery: string;
+}
+
+interface BoardIssueAttrs {
+  issueId: string;
+  title: string;
+  /** backlog | in_progress | blocked | review | done | running */
+  status: string;
+  /** False for a ticket the run has not taken a turn on yet. */
+  started: boolean;
+}
+
 interface IssueSummaryAttrs {
   issueId: string;
   title: string;
+  /** Board status, upgraded to `running` while a turn is in flight. */
+  status: string;
   iterationCount: number;
   validationStepsRun: number;
   validationPassed: boolean;
+  /** Machinery wall clock attributed to this ticket (seconds). */
+  validationSeconds: number;
+  renderGateSeconds: number;
+  syncSeconds: number;
+  syncCallCount: number;
+}
+
+/** Per-ticket machinery, attributed to whichever ticket's turn ran last. */
+interface IssueMachinery {
+  validationSeconds: number;
+  renderGateSeconds: number;
+  syncSeconds: number;
+  syncCallCount: number;
+  validationStepsRun: number;
+  /** Verdict of the ticket's most recent validation pipeline. */
+  validationPassed: boolean | undefined;
 }
 
 /** The run configuration the writer knows up front (not in the trace). */
 export interface RunTelemetryConfig {
+  /** Human-facing run name, used for the card's title. */
+  runTitle: string;
   briefUrl: string;
   targetRealmUrl: string;
   controlRealmUrl: string;
@@ -101,6 +147,26 @@ function turnTypePhase(turnType: string): string {
   return PHASE_OF_TURN[turnType] ?? 'implementation';
 }
 
+/**
+ * The card renders one of `running | completed | stopped | failed`; the issue
+ * loop speaks its own vocabulary. Translate rather than pass through, or the
+ * badge reads "All_issues_done" with no styling.
+ */
+const CARD_OUTCOME_OF_LOOP_OUTCOME: Record<string, string> = {
+  all_issues_done: 'completed',
+  // Work remains that this run could not start or finish — a stop, not a
+  // failure: nothing went wrong, the loop just ran out of eligible work.
+  no_unblocked_issues: 'stopped',
+  max_outer_cycles: 'stopped',
+};
+
+const CARD_OUTCOMES = ['running', 'completed', 'stopped', 'failed'];
+
+function cardOutcome(outcome: string): string {
+  if (CARD_OUTCOMES.includes(outcome)) return outcome;
+  return CARD_OUTCOME_OF_LOOP_OUTCOME[outcome] ?? 'stopped';
+}
+
 function num(v: unknown): number {
   return typeof v === 'number' && Number.isFinite(v) ? v : 0;
 }
@@ -113,9 +179,25 @@ export class RunTelemetryAggregator {
   private config: RunTelemetryConfig;
   private turns: TurnAttrs[] = [];
   private events: EventAttrs[] = [];
+  /** Keyed `"<phase> <skill name>"` — one row per skill per phase. */
+  private skillsInContext = new Map<
+    string,
+    SkillContextAttrs & { turnTypeSet: Set<string> }
+  >();
+  /**
+   * Machinery keyed the same way issue summaries are. Validation, render
+   * captures and syncs carry no ticket of their own in the trace, so they
+   * are attributed to the ticket whose turn most recently started — which
+   * is what the loop actually ran them for.
+   */
+  private machineryByIssue = new Map<string, IssueMachinery>();
+  private currentIssueKey: string | undefined;
+  /** Latest board snapshot, keyed the same way issue summaries are. */
+  private board = new Map<string, { title: string; status: string }>();
   private live:
     | {
         turnType: string;
+        issueId?: string;
         issueTitle?: string;
         model: string;
         effort: string;
@@ -142,8 +224,14 @@ export class RunTelemetryAggregator {
     this.config = config;
   }
 
+  /**
+   * Settle the run. First call wins: the loop reports its real outcome on
+   * the way out and the caller's cleanup path then reports a generic stop,
+   * so a later call must never overwrite a settled verdict.
+   */
   markFinished(outcome: string, endedAtMs: number): void {
-    this.outcome = outcome;
+    if (this.endedAtMs !== undefined) return;
+    this.outcome = cardOutcome(outcome);
     this.endedAtMs = endedAtMs;
     this.live = undefined;
   }
@@ -159,11 +247,14 @@ export class RunTelemetryAggregator {
       if (n === 'turn-start') {
         this.live = {
           turnType: str(record.turnType) ?? 'turn',
+          issueId: str(record.issueId),
           issueTitle: str(record.issue),
           model: str(record.model) ?? 'inherit',
           effort: str(record.effort) ?? 'inherit',
           startedAtMs: num(record.t) || Date.now(),
         };
+        this.currentIssueKey =
+          str(record.issueId) ?? str(record.issue) ?? this.currentIssueKey;
         return;
       }
       if (n === 'usage') {
@@ -188,6 +279,7 @@ export class RunTelemetryAggregator {
       if (d === undefined) return;
       let usage = this.pendingUsage ?? { out: 0, freshIn: 0, cacheRead: 0 };
       this.turns.push({
+        issueId: str(record.issueId),
         issueTitle: str(record.issue),
         turnType: n,
         model: str(record.model) ?? 'inherit',
@@ -200,23 +292,77 @@ export class RunTelemetryAggregator {
         compacted: this.nextCompacted,
       });
       this.inferenceSeconds += d / 1000;
+      this.currentIssueKey =
+        str(record.issueId) ?? str(record.issue) ?? this.currentIssueKey;
       this.pendingUsage = undefined;
       this.nextCompacted = false;
       if (this.live?.turnType === n) this.live = undefined;
       return;
     }
 
+    if (c === 'skills' && n === 'in-context') {
+      let name = str(record.skill);
+      if (!name) return;
+      let turnType = str(record.turnType) ?? 'turn';
+      let phase = turnTypePhase(turnType);
+      let key = `${phase} ${name}`;
+      let existing = this.skillsInContext.get(key);
+      if (!existing) {
+        existing = {
+          name,
+          phase,
+          turnTypes: turnType,
+          turnCount: 0,
+          characters: 0,
+          referenceCount: 0,
+          delivery: 'injected',
+          turnTypeSet: new Set(),
+        };
+        this.skillsInContext.set(key, existing);
+      }
+      existing.turnCount += 1;
+      existing.turnTypeSet.add(turnType);
+      existing.turnTypes = [...existing.turnTypeSet].join(', ');
+      let delivery = record.resumed === true ? 'inherited' : 'injected';
+      existing.delivery =
+        existing.turnCount === 1 || existing.delivery === delivery
+          ? delivery
+          : 'mixed';
+      // Peak, not sum: the same skill re-sent on the next turn is the same
+      // body. turnCount is what tells the reader how often it was resent.
+      existing.characters = Math.max(existing.characters, num(record.chars));
+      existing.referenceCount = Math.max(
+        existing.referenceCount,
+        num(record.refs),
+      );
+      return;
+    }
+
     if (c === 'validation' && n === 'pipeline' && d !== undefined) {
       this.validationSeconds += d / 1000;
+      let m = this.machineryForCurrentIssue();
+      if (m) {
+        m.validationSeconds += d / 1000;
+        m.validationStepsRun += num(record.steps);
+        // The latest pipeline is the ticket's standing verdict.
+        m.validationPassed = record.passed === true;
+      }
       return;
     }
     if (c === 'render-gate' && d !== undefined) {
       this.renderGateSeconds += d / 1000;
+      let m = this.machineryForCurrentIssue();
+      if (m) m.renderGateSeconds += d / 1000;
       return;
     }
     if (c === 'sync' && n === 'workspace' && d !== undefined) {
       this.syncSeconds += d / 1000;
       this.syncCallCount += 1;
+      let m = this.machineryForCurrentIssue();
+      if (m) {
+        m.syncSeconds += d / 1000;
+        m.syncCallCount += 1;
+      }
       return;
     }
     if (c === 'startup' && d !== undefined) {
@@ -227,6 +373,19 @@ export class RunTelemetryAggregator {
       this.finalWallClockSeconds = Math.round(d / 1000);
       return;
     }
+    if (c === 'scheduler' && n === 'board') {
+      // Board snapshots are state, not timeline events: pushing them into
+      // `events` would bury the real markers under one tick per issue per
+      // reload.
+      let key = str(record.issueId);
+      if (!key) return;
+      this.board.set(key, {
+        title: str(record.issue) ?? key,
+        status: str(record.status) ?? '',
+      });
+      return;
+    }
+
     if (c === 'scheduler') {
       this.events.push({
         timestamp: new Date(num(record.t) || Date.now()).toISOString(),
@@ -244,6 +403,7 @@ export class RunTelemetryAggregator {
     let liveTurns: TurnAttrs[] = this.live
       ? [
           {
+            issueId: this.live.issueId,
             issueTitle: this.live.issueTitle,
             turnType: this.live.turnType,
             model: this.live.model,
@@ -258,6 +418,7 @@ export class RunTelemetryAggregator {
         ]
       : [];
     let turns = [...this.turns, ...liveTurns];
+    let issueSummaries = this.issueSummaries(turns);
 
     let wallClockSeconds =
       this.finalWallClockSeconds ??
@@ -287,7 +448,9 @@ export class RunTelemetryAggregator {
     };
 
     return {
-      title: 'Run Telemetry',
+      // `title` on a CardDef is computed from cardInfo.name — writing it
+      // directly is a no-op that renders as "Untitled Run Telemetry".
+      cardInfo: { name: `Run telemetry — ${this.config.runTitle}` },
       config: {
         briefUrl: this.config.briefUrl,
         targetRealmUrl: this.config.targetRealmUrl,
@@ -305,28 +468,121 @@ export class RunTelemetryAggregator {
       })),
       turns,
       events: this.events,
-      issues: this.issueSummaries(),
+      // Includes the in-flight turn's ticket: the card counts issues from
+      // this list, and a ticket working right now is one the run started.
+      issues: issueSummaries,
+      // The whole board, so the card can show tickets the run has not
+      // reached yet — they produce no turns and appear nowhere else.
+      board: this.boardRows(
+        new Set(issueSummaries.map((summary) => summary.issueId)),
+      ),
+      skills: this.skillContextRows(),
     };
   }
 
-  private issueSummaries(): IssueSummaryAttrs[] {
-    let byTitle = new Map<string, IssueSummaryAttrs>();
-    for (let t of this.turns) {
-      if (!t.issueTitle) continue;
-      let existing = byTitle.get(t.issueTitle);
+  /**
+   * Skills that reached the model's context, one row per skill per phase,
+   * ordered by lifecycle phase then by weight within the phase.
+   */
+  private skillContextRows(): SkillContextAttrs[] {
+    let phaseOrder = [
+      'bootstrap',
+      'design',
+      'implementation',
+      'hardening',
+      'polishing',
+    ];
+    let rank = (phase: string) => {
+      let i = phaseOrder.indexOf(phase);
+      return i === -1 ? phaseOrder.length : i;
+    };
+    return [...this.skillsInContext.values()]
+      .map(({ turnTypeSet: _turnTypeSet, ...row }) => row)
+      .sort(
+        (a, b) =>
+          rank(a.phase) - rank(b.phase) ||
+          b.characters - a.characters ||
+          a.name.localeCompare(b.name),
+      );
+  }
+
+  /** Machinery bucket for the ticket whose turn ran most recently. */
+  private machineryForCurrentIssue(): IssueMachinery | undefined {
+    let key = this.currentIssueKey;
+    if (!key) return undefined; // pre-first-turn startup work
+    let m = this.machineryByIssue.get(key);
+    if (!m) {
+      m = {
+        validationSeconds: 0,
+        renderGateSeconds: 0,
+        syncSeconds: 0,
+        syncCallCount: 0,
+        validationStepsRun: 0,
+        validationPassed: undefined,
+      };
+      this.machineryByIssue.set(key, m);
+    }
+    return m;
+  }
+
+  private issueSummaries(turns: TurnAttrs[]): IssueSummaryAttrs[] {
+    let byKey = new Map<string, IssueSummaryAttrs>();
+    let liveKeys = new Set<string>();
+    for (let t of turns) {
+      // Same key the card groups turns by: the board key when the turn
+      // carried one, the title otherwise. Keying these two differently is
+      // what left every per-ticket row without its summary.
+      let key = t.issueId ?? t.issueTitle;
+      if (!key) continue;
+      if (t.durationSeconds === undefined) liveKeys.add(key);
+      let existing = byKey.get(key);
       if (existing) {
         existing.iterationCount += 1;
-      } else {
-        byTitle.set(t.issueTitle, {
-          issueId: t.issueTitle,
-          title: t.issueTitle,
-          iterationCount: 1,
-          validationStepsRun: 0,
-          validationPassed: true,
-        });
+        continue;
       }
+      let m = this.machineryByIssue.get(key);
+      byKey.set(key, {
+        issueId: key,
+        title: t.issueTitle ?? key,
+        status: '',
+        iterationCount: 1,
+        validationStepsRun: m?.validationStepsRun ?? 0,
+        // No pipeline ran → not a pass. The card reads this as a verdict,
+        // so defaulting it to true reported success that never happened.
+        validationPassed: m?.validationPassed === true,
+        validationSeconds: Math.round(m?.validationSeconds ?? 0),
+        renderGateSeconds: Math.round(m?.renderGateSeconds ?? 0),
+        syncSeconds: Math.round(m?.syncSeconds ?? 0),
+        syncCallCount: m?.syncCallCount ?? 0,
+      });
     }
-    return [...byTitle.values()];
+    // Status last: a ticket is `running` if ANY of its turns is in flight,
+    // which the per-turn loop above cannot know until it has seen them all.
+    for (let [key, summary] of byKey) {
+      summary.status = this.statusFor(key, liveKeys.has(key));
+    }
+    return [...byKey.values()];
+  }
+
+  /**
+   * A ticket's status. A turn in flight beats the board, which lags: the
+   * index still reads `backlog` for an issue the loop picked seconds ago.
+   * With no board snapshot at all (an older trace), a ticket that produced
+   * turns reports nothing rather than guessing at `done`.
+   */
+  private statusFor(key: string, hasLiveTurn: boolean): string {
+    if (hasLiveTurn) return 'running';
+    return this.board.get(key)?.status ?? '';
+  }
+
+  /** Every ticket the board has shown, including ones never worked on. */
+  private boardRows(started: Set<string>): BoardIssueAttrs[] {
+    return [...this.board.entries()].map(([issueId, entry]) => ({
+      issueId,
+      title: entry.title,
+      status: this.statusFor(issueId, false),
+      started: started.has(issueId),
+    }));
   }
 }
 
@@ -353,6 +609,7 @@ export class RunTelemetryWriter {
   private timer: ReturnType<typeof setTimeout> | undefined;
   private flushing: Promise<void> | undefined;
   private started = false;
+  private finished = false;
 
   constructor(opts: RunTelemetryWriterOptions) {
     this.opts = opts;
@@ -419,9 +676,14 @@ export class RunTelemetryWriter {
     await this.flushing;
   }
 
-  /** Final write with the settled outcome; unsubscribes from the trace. */
+  /**
+   * Final write with the settled outcome; unsubscribes from the trace.
+   * Idempotent — the first outcome sticks, so a caller's cleanup path can
+   * call this unconditionally without erasing the real verdict.
+   */
   async finish(outcome: string): Promise<void> {
-    if (!this.started) return;
+    if (!this.started || this.finished) return;
+    this.finished = true;
     setTraceObserver(undefined);
     if (this.timer) {
       clearTimeout(this.timer);

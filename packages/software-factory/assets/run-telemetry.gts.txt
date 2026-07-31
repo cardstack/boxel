@@ -1,6 +1,7 @@
 import { registerDestructor } from '@ember/destroyable';
 import { tracked } from '@glimmer/tracking';
 import { htmlSafe } from '@ember/template';
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import {
   CardDef,
   FieldDef,
@@ -151,13 +152,38 @@ export class EventField extends FieldDef {
   @field detail = contains(StringField);
 }
 
+export class SkillContextField extends FieldDef {
+  static displayName = 'Skill in context';
+  @field name = contains(StringField);
+  @field phase = contains(StringField); // bootstrap | design | implementation | hardening | polishing
+  @field turnTypes = contains(StringField); // "design, build"
+  @field turnCount = contains(NumberField);
+  @field characters = contains(NumberField); // peak weight: body + references
+  @field referenceCount = contains(NumberField);
+  @field delivery = contains(StringField); // injected | inherited | mixed
+}
+
+export class BoardIssueField extends FieldDef {
+  static displayName = 'Board issue';
+  @field issueId = contains(StringField);
+  @field title = contains(StringField);
+  @field status = contains(StringField); // backlog | in_progress | blocked | review | done | running
+  @field started = contains(BooleanField);
+}
+
 export class IssueSummaryField extends FieldDef {
   static displayName = 'Issue summary';
   @field issueId = contains(StringField);
   @field title = contains(StringField);
+  @field status = contains(StringField); // see BoardIssueField.status
   @field iterationCount = contains(NumberField);
   @field validationStepsRun = contains(NumberField);
   @field validationPassed = contains(BooleanField);
+  /* Machinery wall clock attributed to this ticket. */
+  @field validationSeconds = contains(NumberField);
+  @field renderGateSeconds = contains(NumberField);
+  @field syncSeconds = contains(NumberField);
+  @field syncCallCount = contains(NumberField);
 }
 
 /* =============================================================================
@@ -173,6 +199,286 @@ interface DerivedTurn {
   durationDisplay: string;
   narrowLabel: boolean; // true → print duration BELOW the segment instead of inside
 }
+
+/* One arc of a KPI donut. The circle is drawn with r = 15.9155 so its
+   circumference is ~100 — dash lengths are then percentages directly, no
+   per-slice trig. `offset` starts each arc where the previous one ended,
+   with 25 as the 12-o'clock origin. */
+interface DonutSlice {
+  label: string;
+  valueDisplay: string;
+  pctDisplay: string;
+  colorClass: string;
+  dash: string;
+  offset: string;
+}
+
+function buildDonut(
+  parts: { label: string; value: number; colorClass: string; valueDisplay: string }[],
+): DonutSlice[] {
+  let usable = parts.filter((p) => Number.isFinite(p.value) && p.value > 0);
+  let total = usable.reduce((sum, p) => sum + p.value, 0);
+  if (total <= 0) return [];
+  let cumulative = 0;
+  return usable.map((p) => {
+    let pct = (p.value / total) * 100;
+    let slice: DonutSlice = {
+      label: p.label,
+      valueDisplay: p.valueDisplay,
+      pctDisplay: `${Math.round(pct)}%`,
+      colorClass: p.colorClass,
+      dash: `${pct.toFixed(2)} ${(100 - pct).toFixed(2)}`,
+      offset: `${(125 - cumulative).toFixed(2)}`,
+    };
+    cumulative += pct;
+    return slice;
+  });
+}
+
+/* Ticket colors cycle through the data hues so each ticket owns one color
+   across the timeline, its legend entry, and the inference donut. */
+function ticketColorClass(index: number): string {
+  return `t${index % 5}`;
+}
+
+/* Ticket status → the pill's wording and color. The tracker's vocabulary
+   (backlog / in_progress / blocked / review / done) plus `running`, which
+   telemetry sets when a turn is in flight regardless of what the index
+   still says. An unknown or missing status renders no pill at all rather
+   than inventing one. */
+function statusPill(
+  status: string | null | undefined,
+): { label: string; className: string } | undefined {
+  switch (status) {
+    case 'running':
+      return { label: 'Running', className: 'rt-status--running' };
+    case 'in_progress':
+      return { label: 'In progress', className: 'rt-status--progress' };
+    case 'done':
+      return { label: 'Completed', className: 'rt-status--done' };
+    case 'backlog':
+      return { label: 'Backlog', className: 'rt-status--backlog' };
+    case 'blocked':
+      return { label: 'Blocked', className: 'rt-status--blocked' };
+    case 'review':
+      return { label: 'In review', className: 'rt-status--review' };
+    default:
+      return undefined;
+  }
+}
+
+/* How a skill reached the model: a fresh session pays to send it, a
+   forked/resumed one already carries it in its cached prefix. */
+function deliveryLabel(delivery: string | null | undefined): string {
+  switch (delivery) {
+    case 'inherited':
+      return 'Already in context';
+    case 'mixed':
+      return 'Loaded, then inherited';
+    default:
+      return 'Loaded into agent';
+  }
+}
+
+/* =============================================================================
+ * DonutTile — one KPI tile: headline number, a donut of its own composition,
+ * and a legend. Its own component (with its own scoped styles) because
+ * scoped CSS only reaches elements in the template that declares it; the
+ * isolated component's `.rt-kpi` rules would not apply here. The `--rt-*`
+ * custom properties still inherit down from `.rt`, so the palette is shared.
+ * The block content becomes the tile's footer line.
+ * ============================================================================= */
+
+const DonutTile: TemplateOnlyComponent<{
+  Args: {
+    eyebrow: string;
+    value: string | number;
+    /* Tint the headline number (used for the inference tile). */
+    lifted?: boolean;
+    slices: DonutSlice[];
+  };
+  Blocks: { default: [] };
+}> = <template>
+  <div class='tile'>
+    <div class='eyebrow'>{{@eyebrow}}</div>
+    <div class='body'>
+      <div class='figures'>
+        <div class='value {{if @lifted "value--lifted"}}'>{{@value}}</div>
+        <div class='foot'>{{yield}}</div>
+      </div>
+      {{#if @slices.length}}
+        <svg class='donut' viewBox='0 0 42 42' aria-hidden='true'>
+          {{! r = 15.9155 → circumference ≈ 100, so dash lengths are percents }}
+          <circle class='track' cx='21' cy='21' r='15.9155' />
+          {{#each @slices as |s|}}
+            <circle
+              class='arc hue--{{s.colorClass}}'
+              cx='21'
+              cy='21'
+              r='15.9155'
+              stroke-dasharray={{s.dash}}
+              stroke-dashoffset={{s.offset}}
+            ><title>{{s.label}} · {{s.valueDisplay}} · {{s.pctDisplay}}</title></circle>
+          {{/each}}
+        </svg>
+      {{/if}}
+    </div>
+    {{#if @slices.length}}
+      <div class='key'>
+        {{#each @slices as |s|}}
+          <span class='key-item'>
+            <span class='key-sq hue--{{s.colorClass}}'></span>
+            <span class='key-label'>{{s.label}}</span>
+            <span class='key-val'>{{s.valueDisplay}}</span>
+          </span>
+        {{/each}}
+      </div>
+    {{/if}}
+  </div>
+
+  <style scoped>
+    .tile {
+      background: var(--rt-surface, #fff);
+      border: 1px solid var(--rt-hairline, #e5e5e2);
+      border-radius: var(--rt-radius-lg, 10px);
+      padding: 18px 20px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-width: 0;
+    }
+    .eyebrow {
+      font-size: 10px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--rt-faint, #a3a3a0);
+    }
+    .body {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      /* The donut drops below the number rather than being overlapped by
+         it when the tile is too narrow for both. */
+      flex-wrap: wrap;
+    }
+    .figures {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      /* min-content, not 0: the headline number cannot wrap, so a 0 floor
+         lets flex squeeze the box under its own text, which then paints
+         over the donut. */
+      flex: 1 1 auto;
+      min-width: min-content;
+    }
+    .value {
+      font-size: 32px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1;
+      color: var(--rt-ink, #0a0a0a);
+      white-space: nowrap;
+    }
+    .value--lifted {
+      color: var(--rt-blue, #1e57b5);
+    }
+    .foot {
+      font-size: 12px;
+      color: var(--rt-muted, #737370);
+      line-height: 1.4;
+    }
+    .donut {
+      width: 54px;
+      height: 54px;
+      flex: 0 0 auto;
+    }
+    .track {
+      fill: none;
+      stroke: var(--rt-whisper, #f5f5f2);
+      stroke-width: 5;
+    }
+    .arc {
+      fill: none;
+      stroke-width: 5;
+    }
+    .key {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      font-size: 11px;
+      color: var(--rt-muted, #737370);
+    }
+    .key-item {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      min-width: 0;
+    }
+    .key-label {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .key-val {
+      margin-left: auto;
+      color: var(--rt-ink, #0a0a0a);
+      font-variant-numeric: tabular-nums;
+    }
+    .key-sq {
+      width: 7px;
+      height: 7px;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+    /* One hue map for both the arcs (stroke) and the legend chips
+       (background), so a slice and its key entry can never disagree. */
+    .hue--inference,
+    .hue--t1 {
+      stroke: var(--rt-blue, #1e57b5);
+      background: var(--rt-blue, #1e57b5);
+    }
+    .hue--machinery,
+    .hue--startup,
+    .hue--t4 {
+      stroke: var(--rt-slate, #64748b);
+      background: var(--rt-slate, #64748b);
+    }
+    .hue--unaccounted {
+      stroke: var(--rt-hairline, #e5e5e2);
+      background: var(--rt-hairline, #e5e5e2);
+    }
+    /* Clean turns are the good outcome, so an all-clean run reads as a
+       full green ring rather than an empty-looking gray one. */
+    .hue--clean {
+      stroke: var(--rt-green, #4d8b3d);
+      background: var(--rt-green, #4d8b3d);
+    }
+    .hue--validation,
+    .hue--t2 {
+      stroke: var(--rt-green, #4d8b3d);
+      background: var(--rt-green, #4d8b3d);
+    }
+    .hue--render,
+    .hue--compacted,
+    .hue--t3 {
+      stroke: var(--rt-pink, #c2185b);
+      background: var(--rt-pink, #c2185b);
+    }
+    .hue--sync,
+    .hue--t0 {
+      stroke: var(--rt-amber, #b7791f);
+      background: var(--rt-amber, #b7791f);
+    }
+    /* A tint, not the running blue itself: on the Total donut this sits next
+       to the inference blue, and the two solid blues were indistinguishable. */
+    .hue--live {
+      stroke: color-mix(in srgb, var(--rt-running, #2453ff) 40%, white);
+      background: color-mix(in srgb, var(--rt-running, #2453ff) 40%, white);
+    }
+  </style>
+</template>;
 
 /* =============================================================================
  * Isolated component — the big one.
@@ -212,6 +518,28 @@ class RunTelemetryIsolated extends Component<typeof RunTelemetry> {
   }
   get issues(): IssueSummaryField[] {
     return (this.args.model?.issues as IssueSummaryField[] | undefined) ?? [];
+  }
+  get skills(): SkillContextField[] {
+    return (this.args.model?.skills as SkillContextField[] | undefined) ?? [];
+  }
+  get board(): BoardIssueField[] {
+    return (this.args.model?.board as BoardIssueField[] | undefined) ?? [];
+  }
+
+  /* Tickets on the board the run has not taken a turn on yet — they own no
+     turns, so nothing else in the card would mention them. */
+  get notStartedTickets() {
+    return this.board
+      .filter((b) => !b.started)
+      .map((b) => ({
+        issueId: b.issueId ?? '',
+        title: b.title ?? '',
+        pill: statusPill(b.status),
+      }));
+  }
+
+  get hasNotStartedTickets(): boolean {
+    return this.notStartedTickets.length > 0;
   }
 
   get outcome(): string {
@@ -298,13 +626,21 @@ class RunTelemetryIsolated extends Component<typeof RunTelemetry> {
         after: ' elapsed on the wall clock.',
       };
     }
-    let allPassed = this.issues.every((i) => i.validationPassed);
+    // Only tickets that actually ran a validation pipeline have a verdict;
+    // reading "every issue completed" off a default would be a fabrication.
+    let validated = this.issues.filter((i) => (i.validationStepsRun ?? 0) > 0);
+    let after: string;
+    if (validated.length === 0) {
+      after = ' — no validation pipeline ran.';
+    } else if (validated.every((i) => i.validationPassed)) {
+      after = ` with all ${validated.length} validated ticket${validated.length === 1 ? '' : 's'} passing.`;
+    } else {
+      after = ' with mixed validation outcomes.';
+    }
     return {
       before: `${issues} issue${issues === 1 ? '' : 's'}, ${turns} agent turn${turns === 1 ? '' : 's'}, done in `,
       strong: fmtMMSS(this.totals?.wallClockSeconds),
-      after: allPassed
-        ? ' with every issue completed.'
-        : ' with mixed validation outcomes.',
+      after,
     };
   }
 
@@ -373,11 +709,16 @@ class RunTelemetryIsolated extends Component<typeof RunTelemetry> {
   get machineryDisplay(): string {
     return fmtMMSS(this.machinerySeconds);
   }
+  /* Short by design: the tile's donut key already itemizes validation /
+     render / sync / startup, and repeating it here made the tile so tall
+     that the row could not hold four columns. */
   get machineryFootText(): string {
     let t = this.totals;
     if (!t) return '';
     let syncCalls = t.syncCallCount ?? 0;
-    return `validation ${fmtMMSS(t.validationSeconds)} · render ${fmtMMSS(t.renderGateSeconds)} · sync ${fmtMMSS(t.syncSeconds)} (${syncCalls}) · startup ${fmtMMSS(t.startupSeconds)}`;
+    let wall = this.wallClockDisplaySeconds;
+    let share = wall ? `${Math.round((this.machinerySeconds / wall) * 100)}%` : '—';
+    return `${share} of wall clock · ${syncCalls} sync${syncCalls === 1 ? '' : 's'}`;
   }
 
   get compactionCount(): number {
@@ -387,6 +728,115 @@ class RunTelemetryIsolated extends Component<typeof RunTelemetry> {
     let n = this.compactionCount;
     if (n === 0) return 'no context-window overflows';
     return `${n} × ~17k fresh tokens re-ingested`;
+  }
+
+  /* --------------------------- KPI donuts ------------------------------ */
+
+  /* Wall clock split by where it went. The turn in flight gets its own
+     slice while the run is live — it is not "unaccounted", it is the thing
+     currently happening, and its elapsed time is the largest slice on a
+     mid-run card. What remains genuinely is unaccounted: orchestration
+     between spans (index settles, issue reads, run-log writes) that no
+     span covers, and folding it into the others would overstate them. */
+  get totalDonut(): DonutSlice[] {
+    let wall = this.wallClockDisplaySeconds;
+    let inference = this.totals?.inferenceSeconds ?? 0;
+    let machinery = this.machinerySeconds;
+    let live = this.issueGroupsForTimeline.reduce(
+      (sum, g) => sum + g.liveSeconds,
+      0,
+    );
+    let rest = Math.max(0, wall - inference - machinery - live);
+    return buildDonut([
+      {
+        label: 'Model inference',
+        value: inference,
+        colorClass: 'inference',
+        valueDisplay: fmtMMSS(inference),
+      },
+      {
+        label: 'Turn in flight',
+        value: live,
+        colorClass: 'live',
+        valueDisplay: fmtMMSS(live),
+      },
+      {
+        label: 'Machinery',
+        value: machinery,
+        colorClass: 'machinery',
+        valueDisplay: fmtMMSS(machinery),
+      },
+      {
+        label: 'Unaccounted',
+        value: rest,
+        colorClass: 'unaccounted',
+        valueDisplay: fmtMMSS(rest),
+      },
+    ]);
+  }
+
+  /* Inference split by ticket — the colors the timeline uses. Settled turns
+     only, so the slices add up to the number printed on the tile. */
+  get inferenceDonut(): DonutSlice[] {
+    return buildDonut(
+      this.issueGroupsForTimeline.map((g, i) => ({
+        label: g.label,
+        value: g.settledInferenceSeconds,
+        colorClass: ticketColorClass(i),
+        valueDisplay: fmtMMSS(g.settledInferenceSeconds),
+      })),
+    );
+  }
+
+  get machineryDonut(): DonutSlice[] {
+    let t = this.totals;
+    return buildDonut([
+      {
+        label: 'Validation',
+        value: t?.validationSeconds ?? 0,
+        colorClass: 'validation',
+        valueDisplay: fmtMMSS(t?.validationSeconds),
+      },
+      {
+        label: 'Render gate',
+        value: t?.renderGateSeconds ?? 0,
+        colorClass: 'render',
+        valueDisplay: fmtMMSS(t?.renderGateSeconds),
+      },
+      {
+        label: 'Sync',
+        value: t?.syncSeconds ?? 0,
+        colorClass: 'sync',
+        valueDisplay: fmtMMSS(t?.syncSeconds),
+      },
+      {
+        label: 'Startup',
+        value: t?.startupSeconds ?? 0,
+        colorClass: 'startup',
+        valueDisplay: fmtMMSS(t?.startupSeconds),
+      },
+    ]);
+  }
+
+  /* The compactions tile counts turns, so its donut shows what share of
+     turns paid a context-window re-ingest. */
+  get compactionDonut(): DonutSlice[] {
+    let compacted = this.compactionCount;
+    let clean = Math.max(0, this.turns.length - compacted);
+    return buildDonut([
+      {
+        label: 'Compacted',
+        value: compacted,
+        colorClass: 'compacted',
+        valueDisplay: `${compacted}`,
+      },
+      {
+        label: 'Clean',
+        value: clean,
+        colorClass: 'clean',
+        valueDisplay: `${clean}`,
+      },
+    ]);
   }
 
   /* --------------------------- Outcome badge --------------------------- */
@@ -437,20 +887,98 @@ class RunTelemetryIsolated extends Component<typeof RunTelemetry> {
     });
   }
 
-  /* Group derivedTurns by issueId, preserving first-appearance order. */
+  /* Group derivedTurns by ticket, preserving first-appearance order.
+     `label` is the grouping key: the board key when the turn carries one,
+     the issue title otherwise. Falling back to a single shared literal
+     would fold every ticket in the run into one band.
+
+     `weight` is the ticket's whole wall-clock cost — its turns plus the
+     validation / render / sync work the loop ran for it — so the timeline
+     and the per-ticket subtotals agree. */
   get issueGroupsForTimeline() {
-    let byId = new Map<string, { issueId: string; issueTitle: string; turns: DerivedTurn[]; weight: number }>();
+    let byLabel = new Map<
+      string,
+      {
+        label: string;
+        issueId: string;
+        issueTitle: string;
+        turns: DerivedTurn[];
+        summary: IssueSummaryField | undefined;
+        inferenceSeconds: number;
+        /* Settled turns only — comparable with totals.inferenceSeconds,
+           which never counts a turn that hasn't closed. */
+        settledInferenceSeconds: number;
+        liveSeconds: number;
+        machinerySeconds: number;
+        weight: number;
+        hasLive: boolean;
+      }
+    >();
     for (let dt of this.derivedTurns) {
-      let id = dt.turn.issueId ?? 'unknown';
-      let g = byId.get(id);
+      let id = dt.turn.issueId ?? '';
+      let title = dt.turn.issueTitle ?? '';
+      let label = id || title || 'unattributed';
+      let g = byLabel.get(label);
       if (!g) {
-        g = { issueId: id, issueTitle: dt.turn.issueTitle ?? id, turns: [], weight: 0 };
-        byId.set(id, g);
+        let summary = this.issues.find((i) => i.issueId === label);
+        let machinery =
+          (summary?.validationSeconds ?? 0) +
+          (summary?.renderGateSeconds ?? 0) +
+          (summary?.syncSeconds ?? 0);
+        g = {
+          label,
+          issueId: id,
+          issueTitle: title || label,
+          turns: [],
+          summary,
+          inferenceSeconds: 0,
+          settledInferenceSeconds: 0,
+          liveSeconds: 0,
+          machinerySeconds: machinery,
+          weight: machinery,
+          hasLive: false,
+        };
+        byLabel.set(label, g);
       }
       g.turns.push(dt);
+      g.inferenceSeconds += dt.durationSeconds;
       g.weight += dt.durationSeconds;
+      if (dt.isLive) {
+        g.hasLive = true;
+        g.liveSeconds += dt.durationSeconds;
+      } else {
+        g.settledInferenceSeconds += dt.durationSeconds;
+      }
     }
-    return Array.from(byId.values());
+    return Array.from(byLabel.values());
+  }
+
+  get timelineHint(): string {
+    let turns = this.turns.length;
+    let tickets = this.ticketSegments.length;
+    return `${turns} turn${turns === 1 ? '' : 's'} · ${tickets} ticket${tickets === 1 ? '' : 's'}`;
+  }
+
+  /* One timeline segment per ticket. Coloring by ticket rather than by turn
+     type is what makes the band readable: turn-type coloring repeated the
+     same hue for a ticket's design turn and another ticket's fix turn. */
+  get ticketSegments() {
+    let groups = this.issueGroupsForTimeline;
+    let total = groups.reduce((sum, g) => sum + g.weight, 0) || 1;
+    return groups.map((g, i) => {
+      let ratio = g.weight / total;
+      return {
+        label: g.label,
+        title: g.issueTitle,
+        pill: statusPill(g.summary?.status),
+        colorClass: g.hasLive ? 'live' : ticketColorClass(i),
+        weight: g.weight,
+        durationDisplay: fmtShortMMSS(g.weight),
+        narrowLabel: ratio < 0.06,
+        hasLive: g.hasLive,
+        tooltip: `${g.label} · ${g.issueTitle} · inference ${fmtMMSS(g.inferenceSeconds)} · machinery ${fmtMMSS(g.machinerySeconds)}`,
+      };
+    });
   }
 
   /* --------------------------- Axis marks ------------------------------ */
@@ -488,6 +1016,8 @@ class RunTelemetryIsolated extends Component<typeof RunTelemetry> {
           label: (ev.kind ?? '').replace(/-/g, ' '),
           detail: ev.detail ?? '',
           below: false as boolean,
+          // Labels at the extremes anchor inward so they aren't clipped.
+          edgeClass: pct < 6 ? 'rt-tl-event--start' : pct > 94 ? 'rt-tl-event--end' : '',
         };
       })
       .filter((x): x is NonNullable<typeof x> => x !== null)
@@ -516,44 +1046,113 @@ class RunTelemetryIsolated extends Component<typeof RunTelemetry> {
 
   get issueRows() {
     let totalRun = this.totals?.wallClockSeconds || this.wallClockDisplaySeconds || 1;
-    return this.issueGroupsForTimeline.map((g) => {
-      let issueSummary = this.issues.find((i) => i.issueId === g.issueId);
+    return this.issueGroupsForTimeline.map((g, index) => {
+      let issueSummary = g.summary;
       let iterationCount = issueSummary?.iterationCount ?? 1;
       let subtotalOutput = 0;
       let subtotalCache = 0;
-      let subtotalDuration = 0;
+      let subtotalFresh = 0;
+      let inferenceSeconds = 0;
       let hasLive = false;
       for (let dt of g.turns) {
         subtotalOutput += dt.turn.outputTokens ?? 0;
         subtotalCache += dt.turn.cacheReadTokens ?? 0;
+        subtotalFresh += dt.turn.freshInputTokens ?? 0;
         if (dt.isLive) hasLive = true;
-        else subtotalDuration += dt.turn.durationSeconds ?? 0;
+        else inferenceSeconds += dt.turn.durationSeconds ?? 0;
       }
+      let machinerySeconds = g.machinerySeconds;
+      let totalSeconds = inferenceSeconds + machinerySeconds;
       let shareText = this.isRunning
         ? hasLive
           ? 'running now'
-          : `${fmtPercent(subtotalDuration, totalRun)} of run so far`
-        : `${fmtPercent(subtotalDuration, totalRun)} of run`;
+          : `${fmtPercent(totalSeconds, totalRun)} of run so far`
+        : `${fmtPercent(totalSeconds, totalRun)} of run`;
 
+      let title = issueSummary?.title ?? g.issueTitle;
       return {
         issueId: g.issueId,
-        title: issueSummary?.title ?? g.issueTitle,
-        turnRows: g.turns.map((dt) => this.turnRowFor(dt)),
+        title,
+        pill: statusPill(issueSummary?.status),
+        colorClass: ticketColorClass(index),
+        // The board key prefixes the title only when the turns carried one.
+        heading: g.issueId && g.issueId !== title ? `${g.issueId} · ${title}` : title,
+        // Everything the factory did for this ticket, in order: the agent
+        // turns first, then the machinery those turns triggered.
+        activityRows: [
+          ...g.turns.map((dt) => this.turnRowFor(dt)),
+          ...this.mechanicsRowsFor(issueSummary),
+        ],
         subtotal: {
           turnCount: g.turns.length,
-          durationDisplay: fmtMMSS(subtotalDuration),
+          durationDisplay: fmtMMSS(totalSeconds),
           outputDisplay: fmtNumber(subtotalOutput),
           cacheDisplay: fmtNumber(subtotalCache),
+          hitRateDisplay: fmtHitRate(subtotalFresh, subtotalCache),
         },
-        subtotalDurationDisplay: fmtMMSS(subtotalDuration),
+        subtotalDurationDisplay: fmtMMSS(totalSeconds),
+        splitText: `${fmtMMSS(inferenceSeconds)} inference · ${fmtMMSS(machinerySeconds)} machinery`,
         shareText,
         hasLive,
         iterationCount,
         validationStepsRun: issueSummary?.validationStepsRun ?? 0,
         validationPassed: issueSummary?.validationPassed ?? false,
+        ranValidation: (issueSummary?.validationStepsRun ?? 0) > 0,
         emphasiseIterations: iterationCount > 2,
       };
     });
+  }
+
+  /* Non-inference work the loop did for one ticket. Rows appear only when
+     the phase actually ran, so an empty row never implies zero cost. */
+  mechanicsRowsFor(summary: IssueSummaryField | undefined) {
+    if (!summary) return [];
+    let steps = summary.validationStepsRun ?? 0;
+    let syncs = summary.syncCallCount ?? 0;
+    let rows: {
+      colorClass: string;
+      turnLabel: string;
+      compacted: boolean;
+      modelText: string;
+      durationDisplay: string;
+      outputDisplay: string;
+      cacheDisplay: string;
+      hitRateDisplay: string;
+      isLive: boolean;
+      isMechanics: boolean;
+    }[] = [];
+    let push = (label: string, detail: string, seconds: number | undefined) => {
+      rows.push({
+        colorClass: 'machinery',
+        turnLabel: label,
+        compacted: false,
+        modelText: detail,
+        durationDisplay: fmtMMSS(seconds),
+        outputDisplay: '—',
+        cacheDisplay: '—',
+        hitRateDisplay: '—',
+        isLive: false,
+        isMechanics: true,
+      });
+    };
+    if ((summary.validationSeconds ?? 0) > 0 || steps > 0) {
+      push(
+        'validation',
+        `${steps} step${steps === 1 ? '' : 's'} run`,
+        summary.validationSeconds,
+      );
+    }
+    if ((summary.renderGateSeconds ?? 0) > 0) {
+      push('render gate', 'card screenshots', summary.renderGateSeconds);
+    }
+    if ((summary.syncSeconds ?? 0) > 0 || syncs > 0) {
+      push(
+        'workspace sync',
+        `${syncs} push${syncs === 1 ? '' : 'es'}`,
+        summary.syncSeconds,
+      );
+    }
+    return rows;
   }
 
   turnRowFor(dt: DerivedTurn) {
@@ -565,10 +1164,8 @@ class RunTelemetryIsolated extends Component<typeof RunTelemetry> {
       ? `${dt.turn.turnType} · live`
       : dt.turn.turnType ?? '';
     return {
-      dt,
       colorClass: dt.colorClass,
       turnLabel,
-      turnType: dt.turn.turnType,
       compacted: !!dt.turn.compacted,
       modelText,
       durationDisplay: dt.isLive
@@ -576,27 +1173,40 @@ class RunTelemetryIsolated extends Component<typeof RunTelemetry> {
         : fmtMMSS(dt.turn.durationSeconds),
       outputDisplay: dt.isLive ? '—' : fmtNumber(dt.turn.outputTokens),
       cacheDisplay: dt.isLive ? '—' : fmtNumber(dt.turn.cacheReadTokens),
+      hitRateDisplay: dt.isLive
+        ? '—'
+        : fmtHitRate(dt.turn.freshInputTokens ?? 0, dt.turn.cacheReadTokens ?? 0),
       isLive: dt.isLive,
+      isMechanics: false,
     };
   }
 
   get grandTotal() {
     let output = 0;
     let cache = 0;
-    let duration = 0;
+    let fresh = 0;
+    let inference = 0;
     let liveTurns = 0;
     for (let t of this.turns) {
       output += t.outputTokens ?? 0;
       cache += t.cacheReadTokens ?? 0;
-      if (t.durationSeconds != null) duration += t.durationSeconds;
+      fresh += t.freshInputTokens ?? 0;
+      if (t.durationSeconds != null) inference += t.durationSeconds;
       else liveTurns += 1;
     }
+    // Machinery only counts once here: the per-ticket rows already show it,
+    // and the grand row must add up to the same number they do.
+    let machinery = this.issueGroupsForTimeline.reduce(
+      (sum, g) => sum + g.machinerySeconds,
+      0,
+    );
     return {
       turnCount: this.turns.length,
       issueCount: this.issues.length,
-      durationDisplay: fmtMMSS(duration),
+      durationDisplay: fmtMMSS(inference + machinery),
       outputDisplay: fmtNumber(output),
       cacheDisplay: fmtNumber(cache),
+      hitRateDisplay: fmtHitRate(fresh, cache),
       labelText: this.isRunning ? 'All issues · run so far' : 'All issues · run total',
       metaText: `${this.turns.length} turn${this.turns.length === 1 ? '' : 's'} · ${this.issues.length} issue${this.issues.length === 1 ? '' : 's'}`,
       hasLive: liveTurns > 0,
@@ -704,6 +1314,71 @@ class RunTelemetryIsolated extends Component<typeof RunTelemetry> {
       : `${this.visiblePhases.length} phase${this.visiblePhases.length === 1 ? '' : 's'} ran`;
   }
 
+  /* --------------------------- Skills in context ----------------------- */
+
+  /* One block per lifecycle phase, listing the skills the agent's context
+     carried during that phase. The writer already orders rows by phase then
+     by weight, so grouping preserves its order. */
+  get skillPhaseGroups() {
+    let byPhase = new Map<
+      string,
+      {
+        phase: string;
+        label: string;
+        colorClass: string;
+        characters: number;
+        rows: {
+          name: string;
+          turnTypes: string;
+          turnCountDisplay: string;
+          charactersDisplay: string;
+          referencesDisplay: string;
+          deliveryLabel: string;
+          deliveryClass: string;
+        }[];
+      }
+    >();
+    for (let s of this.skills) {
+      let phase = s.phase ?? '';
+      let g = byPhase.get(phase);
+      if (!g) {
+        g = {
+          phase,
+          label: capitalise(phase),
+          colorClass: phaseColorClass(phase),
+          characters: 0,
+          rows: [],
+        };
+        byPhase.set(phase, g);
+      }
+      let turns = s.turnCount ?? 0;
+      let refs = s.referenceCount ?? 0;
+      g.characters += s.characters ?? 0;
+      g.rows.push({
+        name: s.name ?? '',
+        turnTypes: s.turnTypes ?? '',
+        turnCountDisplay: `${turns} turn${turns === 1 ? '' : 's'}`,
+        charactersDisplay: fmtNumber(s.characters),
+        referencesDisplay: refs === 0 ? '—' : fmtNumber(refs),
+        deliveryLabel: deliveryLabel(s.delivery),
+        deliveryClass: `rt-tag--${s.delivery ?? 'injected'}`,
+      });
+    }
+    return Array.from(byPhase.values()).map((g) => ({
+      ...g,
+      subtotalDisplay: `${g.rows.length} skill${g.rows.length === 1 ? '' : 's'} · ${fmtNumber(g.characters)} chars`,
+    }));
+  }
+
+  get hasSkillRows(): boolean {
+    return this.skills.length > 0;
+  }
+
+  get skillSectionHint(): string {
+    let names = new Set(this.skills.map((s) => s.name ?? ''));
+    return `${names.size} distinct skill${names.size === 1 ? '' : 's'} across ${this.skillPhaseGroups.length} phase${this.skillPhaseGroups.length === 1 ? '' : 's'}`;
+  }
+
   /* --------------------------- Template -------------------------------- */
 
   <template>
@@ -741,46 +1416,49 @@ class RunTelemetryIsolated extends Component<typeof RunTelemetry> {
         </div>
       </div>
 
-      {{! -- Section 2: KPI row -------------------------------------- }}
+      {{! -- Section 2: KPI dashboard row ---------------------------- }}
       <div class='rt-kpi-row'>
-        <div class='rt-kpi'>
-          <div class='rt-eyebrow'>Total</div>
-          <div class='rt-kpi-value'>{{this.wallClockDisplay}}</div>
-          <div class='rt-kpi-foot'>
-            <span class='rt-badge {{this.outcomeBadgeClass}}'>
-              {{this.outcomeLabel}}
-            </span>
-          </div>
-        </div>
-        <div class='rt-kpi'>
-          <div class='rt-eyebrow'>Model inference</div>
-          <div class='rt-kpi-value rt-kpi-value--lifted'>{{this.inferenceDisplay}}</div>
-          <div class='rt-kpi-foot'>{{this.inferenceFootText}}</div>
-        </div>
-        <div class='rt-kpi'>
-          <div class='rt-eyebrow'>Everything else</div>
-          <div class='rt-kpi-value'>{{this.machineryDisplay}}</div>
-          <div class='rt-kpi-foot'>{{this.machineryFootText}}</div>
-        </div>
-        <div class='rt-kpi'>
-          <div class='rt-eyebrow'>Compactions</div>
-          <div class='rt-kpi-value'>{{this.compactionCount}}</div>
-          <div class='rt-kpi-foot'>{{this.compactionFootText}}</div>
-        </div>
+        <DonutTile
+          @eyebrow='Total'
+          @value={{this.wallClockDisplay}}
+          @slices={{this.totalDonut}}
+        >
+          <span class='rt-badge {{this.outcomeBadgeClass}}'>
+            {{this.outcomeLabel}}
+          </span>
+        </DonutTile>
+        <DonutTile
+          @eyebrow='Model inference'
+          @value={{this.inferenceDisplay}}
+          @lifted={{true}}
+          @slices={{this.inferenceDonut}}
+        >{{this.inferenceFootText}}</DonutTile>
+        <DonutTile
+          @eyebrow='Everything else'
+          @value={{this.machineryDisplay}}
+          @slices={{this.machineryDonut}}
+        >{{this.machineryFootText}}</DonutTile>
+        <DonutTile
+          @eyebrow='Compactions'
+          @value={{this.compactionCount}}
+          @slices={{this.compactionDonut}}
+        >{{this.compactionFootText}}</DonutTile>
       </div>
 
       {{! -- Section 3: Timeline ------------------------------------ }}
       <div class='rt-section'>
         <div class='rt-section-head'>
-          <div class='rt-eyebrow'>Timeline · {{this.turns.length}} turns · {{this.issues.length}}
-            issues</div>
-          <div class='rt-hint'>Widths proportional to wall-clock seconds</div>
+          <h2 class='rt-section-title'>Timeline<span
+              class='rt-section-meta'
+            >{{this.timelineHint}}</span></h2>
+          <div class='rt-hint'>One band per ticket · widths proportional to
+            wall-clock seconds</div>
         </div>
 
         <div class='rt-tl-groups'>
-          {{#each this.issueGroupsForTimeline as |g|}}
-            <div class='rt-tl-group' style={{htmlSafeFlex g.weight}}>
-              <div class='rt-tl-group-label'>{{g.issueId}}</div>
+          {{#each this.ticketSegments as |seg|}}
+            <div class='rt-tl-group' style={{htmlSafeFlex seg.weight}}>
+              <div class='rt-tl-group-label'>{{seg.label}}</div>
               <div class='rt-tl-group-rule'></div>
             </div>
           {{/each}}
@@ -788,22 +1466,25 @@ class RunTelemetryIsolated extends Component<typeof RunTelemetry> {
 
         <div class='rt-tl-track-wrap'>
           <div class='rt-tl-track'>
-            {{#each this.derivedTurns as |dt|}}
+            {{#each this.ticketSegments as |seg|}}
               <div
                 class='rt-tl-seg
-                  rt-tl-seg--{{dt.colorClass}}
-                  {{if dt.narrowLabel "rt-tl-seg--label-below"}}'
-                style={{htmlSafeFlex dt.durationSeconds}}
-                data-label={{dt.durationDisplay}}
+                  rt-tl-seg--{{seg.colorClass}}
+                  {{if seg.narrowLabel "rt-tl-seg--label-below"}}'
+                style={{htmlSafeFlex seg.weight}}
+                data-label={{seg.durationDisplay}}
+                title={{seg.tooltip}}
               >
-                {{dt.durationDisplay}}
+                {{seg.durationDisplay}}
               </div>
             {{/each}}
           </div>
 
           {{#each this.eventTicks as |ev|}}
             <div
-              class='rt-tl-event {{if ev.below "rt-tl-event--below"}}'
+              class='rt-tl-event
+                {{ev.edgeClass}}
+                {{if ev.below "rt-tl-event--below"}}'
               style={{htmlSafeLeft ev.leftPct}}
               data-kind={{ev.label}}
               title={{ev.detail}}
@@ -818,85 +1499,103 @@ class RunTelemetryIsolated extends Component<typeof RunTelemetry> {
         </div>
 
         <div class='rt-legend'>
-          <div class='rt-legend-item'><span
-              class='rt-legend-sq rt-tl-seg--bootstrap'
-            ></span>Bootstrap</div>
-          <div class='rt-legend-item'><span
-              class='rt-legend-sq rt-tl-seg--design'
-            ></span>Design &amp; fix (flagship)</div>
-          <div class='rt-legend-item'><span
-              class='rt-legend-sq rt-tl-seg--build'
-            ></span>Build (Sonnet)</div>
-          <div class='rt-legend-item'><span
-              class='rt-legend-sq rt-tl-seg--review'
-            ></span>Review &amp; harden</div>
-          {{#if this.isRunning}}
+          {{#each this.ticketSegments as |seg|}}
             <div class='rt-legend-item'><span
-                class='rt-legend-sq rt-tl-seg--live'
-              ></span>Live</div>
-          {{/if}}
+                class='rt-legend-sq rt-tl-seg--{{seg.colorClass}}'
+              ></span>{{seg.label}} · {{seg.title}}{{#if seg.pill}}<span
+                  class='rt-status {{seg.pill.className}}'
+                >{{seg.pill.label}}</span>{{/if}}</div>
+          {{/each}}
         </div>
+
+        {{#if this.hasNotStartedTickets}}
+          <div class='rt-notstarted'>
+            <span class='rt-notstarted-lead'>Not started</span>
+            {{#each this.notStartedTickets as |t|}}
+              <span class='rt-notstarted-item'>{{t.issueId}} ·
+                {{t.title}}{{#if t.pill}}<span
+                    class='rt-status {{t.pill.className}}'
+                  >{{t.pill.label}}</span>{{/if}}</span>
+            {{/each}}
+          </div>
+        {{/if}}
       </div>
 
       {{! -- Section 4: Per-ticket breakdown ------------------------- }}
       <div class='rt-section'>
         <div class='rt-section-head'>
-          <div class='rt-eyebrow'>Per-ticket breakdown · where the time went</div>
-          <div class='rt-hint'>All durations in mm:ss · numbers are model tokens</div>
+          <h2 class='rt-section-title'>Per-ticket breakdown<span
+              class='rt-section-meta'
+            >what the factory did</span></h2>
+          <div class='rt-hint'>Agent turns and the machinery they triggered ·
+            durations in mm:ss</div>
         </div>
 
         {{#each this.issueRows as |row|}}
           <div class='rt-issue'>
             <div class='rt-issue-head'>
-              <h3 class='rt-issue-title'>{{row.issueId}} · {{row.title}}</h3>
+              <h3 class='rt-issue-title'><span
+                  class='rt-skill-dot rt-tl-seg--{{row.colorClass}}'
+                ></span>{{row.heading}}{{#if row.pill}}<span
+                    class='rt-status {{row.pill.className}}'
+                  >{{row.pill.label}}</span>{{/if}}</h3>
               <div class='rt-issue-stat'>
                 <strong>{{row.subtotalDurationDisplay}}</strong>
+                ·
+                {{row.splitText}}
                 ·
                 {{row.shareText}}
               </div>
             </div>
 
-            <table class='rt-table'>
+            <table class='rt-table rt-table--activity'>
               <thead>
                 <tr>
-                  <th class='rt-col-turn'>Turn</th>
-                  <th class='rt-col-model'>Model</th>
+                  <th class='rt-col-turn'>Activity</th>
+                  <th class='rt-col-model'>Detail</th>
                   <th class='rt-col-num rt-col-dur'>Duration</th>
                   <th class='rt-col-num rt-col-out'>Output tokens</th>
                   <th class='rt-col-num rt-col-cache'>Cache read</th>
+                  <th class='rt-col-num rt-col-hit'>Hit rate</th>
                 </tr>
               </thead>
               <tbody>
-                {{#each row.turnRows as |trow|}}
-                  <tr>
+                {{#each row.activityRows as |arow|}}
+                  <tr class='{{if arow.isMechanics "rt-row--mechanics"}}'>
                     <td class='rt-turn-name'>
-                      <span class='rt-row-dot rt-tl-seg--{{trow.colorClass}}'></span>
-                      <span>{{trow.turnLabel}}</span>
-                      {{#if trow.compacted}}<em class='rt-compact-tag'>(compacted)</em>{{/if}}
+                      <span class='rt-row-dot rt-tl-seg--{{arow.colorClass}}'></span>
+                      <span>{{arow.turnLabel}}</span>
+                      {{#if arow.compacted}}<em class='rt-compact-tag'>(compacted)</em>{{/if}}
                     </td>
-                    <td>{{trow.modelText}}</td>
+                    <td>{{arow.modelText}}</td>
                     <td
                       class='rt-num
-                        {{if trow.isLive "rt-num--live"}}'
-                    >{{trow.durationDisplay}}</td>
+                        {{if arow.isLive "rt-num--live"}}'
+                    >{{arow.durationDisplay}}</td>
                     <td
                       class='rt-num
-                        {{if trow.isLive "rt-num--empty"}}'
-                    >{{trow.outputDisplay}}</td>
+                        {{if arow.isLive "rt-num--empty"}}'
+                    >{{arow.outputDisplay}}</td>
                     <td
                       class='rt-num
-                        {{if trow.isLive "rt-num--empty"}}'
-                    >{{trow.cacheDisplay}}</td>
+                        {{if arow.isLive "rt-num--empty"}}'
+                    >{{arow.cacheDisplay}}</td>
+                    <td
+                      class='rt-num
+                        {{if arow.isLive "rt-num--empty"}}'
+                    >{{arow.hitRateDisplay}}</td>
                   </tr>
                 {{/each}}
                 {{#unless row.hasLive}}
                   <tr class='rt-subtotal'>
                     <td>Subtotal</td>
                     <td>{{row.subtotal.turnCount}}
-                      turn{{if (isNotOne row.subtotal.turnCount) 's'}}</td>
+                      turn{{if (isNotOne row.subtotal.turnCount) 's'}}
+                      + machinery</td>
                     <td class='rt-num'>{{row.subtotal.durationDisplay}}</td>
                     <td class='rt-num'>{{row.subtotal.outputDisplay}}</td>
                     <td class='rt-num'>{{row.subtotal.cacheDisplay}}</td>
+                    <td class='rt-num'>{{row.subtotal.hitRateDisplay}}</td>
                   </tr>
                 {{/unless}}
               </tbody>
@@ -913,31 +1612,48 @@ class RunTelemetryIsolated extends Component<typeof RunTelemetry> {
                   iteration{{if (isNotOne row.iterationCount) 's'}}
                 {{/if}}
                 ·
-                {{row.validationStepsRun}}
-                validation steps run ·
-                <strong>{{if row.validationPassed 'passed' 'failed'}}</strong>
+                {{#if row.ranValidation}}
+                  {{row.validationStepsRun}}
+                  validation steps run ·
+                  <strong>{{if row.validationPassed 'passed' 'failed'}}</strong>
+                {{else}}
+                  no validation pipeline ran for this ticket
+                {{/if}}
               {{/if}}
             </div>
           </div>
         {{/each}}
 
-        <table class='rt-table rt-table--grand'>
-          <tbody>
-            <tr class='rt-total'>
-              <td class='rt-col-turn'>{{this.grandTotal.labelText}}</td>
-              <td class='rt-col-model'>{{this.grandTotal.metaText}}</td>
-              <td class='rt-col-num rt-col-dur'>{{this.grandTotal.durationDisplay}}</td>
-              <td class='rt-col-num rt-col-out'>{{this.grandTotal.outputDisplay}}</td>
-              <td class='rt-col-num rt-col-cache'>{{this.grandTotal.cacheDisplay}}</td>
-            </tr>
-          </tbody>
-        </table>
+        <div class='rt-grand-wrap'>
+          <table class='rt-table rt-table--grand'>
+            <tbody>
+              <tr class='rt-total'>
+                <td class='rt-col-turn'>{{this.grandTotal.labelText}}</td>
+                <td class='rt-col-model'>{{this.grandTotal.metaText}}</td>
+                <td
+                  class='rt-col-num rt-col-dur'
+                >{{this.grandTotal.durationDisplay}}</td>
+                <td
+                  class='rt-col-num rt-col-out'
+                >{{this.grandTotal.outputDisplay}}</td>
+                <td
+                  class='rt-col-num rt-col-cache'
+                >{{this.grandTotal.cacheDisplay}}</td>
+                <td
+                  class='rt-col-num rt-col-hit'
+                >{{this.grandTotal.hitRateDisplay}}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {{! -- Section 5: Token economics ----------------------------- }}
       <div class='rt-section'>
         <div class='rt-section-head'>
-          <div class='rt-eyebrow'>Token economics · where the tokens went</div>
+          <h2 class='rt-section-title'>Token economics<span
+              class='rt-section-meta'
+            >where the tokens went</span></h2>
           <div class='rt-hint'>Compacted turns are the hit-rate outliers</div>
         </div>
 
@@ -988,7 +1704,9 @@ class RunTelemetryIsolated extends Component<typeof RunTelemetry> {
       {{! -- Section 6: Phase subtotals ---------------------------- }}
       <div class='rt-section'>
         <div class='rt-section-head'>
-          <div class='rt-eyebrow'>Phase subtotals · {{this.phaseSectionHint}}</div>
+          <h2 class='rt-section-title'>Phase subtotals<span
+              class='rt-section-meta'
+            >{{this.phaseSectionHint}}</span></h2>
           <div class='rt-hint'>{{if
               this.isRunning
               'Current phase is accumulating'
@@ -1011,6 +1729,61 @@ class RunTelemetryIsolated extends Component<typeof RunTelemetry> {
             </div>
           {{/each}}
         </div>
+      </div>
+
+      {{! -- Section 7: Skills in context --------------------------- }}
+      <div class='rt-section'>
+        <div class='rt-section-head'>
+          <h2 class='rt-section-title'>Skills in context<span
+              class='rt-section-meta'
+            >{{this.skillSectionHint}}</span></h2>
+          <div class='rt-hint'>Characters are the peak body + references, re-sent
+            each turn</div>
+        </div>
+
+        {{#if this.hasSkillRows}}
+          {{#each this.skillPhaseGroups as |g|}}
+            <div class='rt-skill-group'>
+              <div class='rt-issue-head'>
+                <h3 class='rt-issue-title'><span
+                    class='rt-skill-dot rt-phase-fill--{{g.colorClass}}'
+                  ></span>{{g.label}}</h3>
+                <div class='rt-issue-stat'>{{g.subtotalDisplay}}</div>
+              </div>
+              <table class='rt-table rt-table--skills'>
+                <thead>
+                  <tr>
+                    <th class='rt-col-turn'>Skill</th>
+                    <th class='rt-col-model'>Carried by</th>
+                    <th class='rt-col-delivery'>Delivery</th>
+                    <th class='rt-col-num rt-col-turns'>Turns</th>
+                    <th class='rt-col-num rt-col-refs'>Refs</th>
+                    <th class='rt-col-num rt-col-chars'>Characters</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {{#each g.rows as |row|}}
+                    <tr>
+                      <td class='rt-turn-name'>{{row.name}}</td>
+                      <td>{{row.turnTypes}}</td>
+                      <td><span
+                          class='rt-tag {{row.deliveryClass}}'
+                        >{{row.deliveryLabel}}</span></td>
+                      <td class='rt-num'>{{row.turnCountDisplay}}</td>
+                      <td class='rt-num'>{{row.referencesDisplay}}</td>
+                      <td class='rt-num'>{{row.charactersDisplay}}</td>
+                    </tr>
+                  {{/each}}
+                </tbody>
+              </table>
+            </div>
+          {{/each}}
+        {{else}}
+          <div class='rt-empty-note'>
+            No turns have run yet. Each turn records the skills its context
+            carried.
+          </div>
+        {{/if}}
       </div>
     </div>
 
@@ -1139,9 +1912,13 @@ class RunTelemetryIsolated extends Component<typeof RunTelemetry> {
       }
 
       /* -- Section 2: KPI row -------------------------------------- */
+      /* Four tiles across need ~1320px. The isolated card usually renders
+         in a modal well under that, where four columns squeeze each tile to
+         ~190px — narrower than one headline number plus its donut. Wrapping
+         to 2×2 keeps both readable. */
       .rt-kpi-row {
         display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
         gap: var(--rt-space-lg);
       }
       .rt-kpi {
@@ -1174,13 +1951,35 @@ class RunTelemetryIsolated extends Component<typeof RunTelemetry> {
       .rt-section {
         display: flex;
         flex-direction: column;
-        gap: 12px;
+        gap: 16px;
       }
+      /* Sections carry a real heading with a rule under it: at eyebrow size
+         the titles read as captions on the block above them rather than as
+         the start of a new section. */
       .rt-section-head {
         display: flex;
         align-items: baseline;
         justify-content: space-between;
-        gap: 16px;
+        flex-wrap: wrap;
+        gap: 4px 16px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid var(--rt-hairline);
+      }
+      .rt-section-title {
+        font-size: 16px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        color: var(--rt-ink);
+        margin: 0;
+      }
+      .rt-section-meta {
+        font-size: 12px;
+        font-weight: 400;
+        color: var(--rt-muted);
+        margin-left: 10px;
+      }
+      .rt-section-meta::before {
+        content: '· ';
       }
 
       /* -- Section 3: Timeline ------------------------------------ */
@@ -1259,6 +2058,23 @@ class RunTelemetryIsolated extends Component<typeof RunTelemetry> {
       .rt-tl-seg--machinery {
         background: var(--rt-slate);
       }
+      /* Ticket hues — one per ticket, cycling. Same order as the KPI
+         donut's `hue--t*` map so a ticket keeps its color everywhere. */
+      .rt-tl-seg--t0 {
+        background: var(--rt-amber);
+      }
+      .rt-tl-seg--t1 {
+        background: var(--rt-blue);
+      }
+      .rt-tl-seg--t2 {
+        background: var(--rt-green);
+      }
+      .rt-tl-seg--t3 {
+        background: var(--rt-pink);
+      }
+      .rt-tl-seg--t4 {
+        background: var(--rt-slate);
+      }
       .rt-tl-seg--live {
         background: var(--rt-running);
         animation: rt-pulse 1.6s ease-in-out infinite;
@@ -1304,6 +2120,17 @@ class RunTelemetryIsolated extends Component<typeof RunTelemetry> {
         padding: 0 3px;
         white-space: nowrap;
       }
+      /* A tick at either end centers its label over the card's edge, where
+         it gets clipped. Anchor those labels inward instead. */
+      .rt-tl-event--start::after {
+        left: 0;
+        transform: none;
+      }
+      .rt-tl-event--end::after {
+        left: auto;
+        right: 0;
+        transform: none;
+      }
       .rt-tl-event--below {
         top: auto;
         bottom: 10px;
@@ -1345,18 +2172,25 @@ class RunTelemetryIsolated extends Component<typeof RunTelemetry> {
       }
 
       /* -- Section 4 & 5: Tables --------------------------------- */
+      /* Each ticket is its own bordered block. Without the border the foot
+         line of one ticket ran straight into the next ticket's heading, and
+         the whole section read as a single dense table. */
       .rt-issue {
         display: flex;
         flex-direction: column;
-        gap: 8px;
-        margin-bottom: 20px;
+        gap: 10px;
+        padding: 16px 18px 14px;
+        border: 1px solid var(--rt-hairline);
+        border-radius: var(--rt-radius-lg);
+        background: var(--rt-surface);
       }
       .rt-issue-head {
         display: flex;
         align-items: baseline;
         justify-content: space-between;
-        gap: 16px;
-        padding-bottom: 6px;
+        flex-wrap: wrap;
+        gap: 4px 16px;
+        padding-bottom: 4px;
       }
       .rt-issue-title {
         font-size: 14px;
@@ -1429,14 +2263,36 @@ class RunTelemetryIsolated extends Component<typeof RunTelemetry> {
         border-bottom: none;
         padding-top: 12px;
       }
+      /* The run total is its own block, padded like a ticket so its columns
+         line up with the per-ticket tables above it. */
+      .rt-grand-wrap {
+        padding: 4px 18px 0;
+      }
       .rt-table--grand {
-        margin-top: 4px;
+        margin-top: 0;
       }
       .rt-col-turn {
         width: 42%;
       }
       .rt-col-model {
         width: 18%;
+      }
+      /* Six-column tables: the shared widths above sum past 100% once a
+         sixth column joins, so each of those tables restates its own. */
+      .rt-table--activity .rt-col-turn {
+        width: 28%;
+      }
+      .rt-table--activity .rt-col-model {
+        width: 16%;
+      }
+      .rt-table--skills .rt-col-turn {
+        width: 26%;
+      }
+      .rt-table--skills .rt-col-model {
+        width: 16%;
+      }
+      .rt-table--skills .rt-col-refs {
+        width: 8%;
       }
       .rt-col-dur {
         width: 12%;
@@ -1551,6 +2407,125 @@ class RunTelemetryIsolated extends Component<typeof RunTelemetry> {
         text-align: right;
         font-size: 12px;
         color: var(--rt-muted);
+      }
+
+      /* -- Ticket status pills -------------------------------- */
+      .rt-status {
+        display: inline-block;
+        margin-left: 8px;
+        padding: 2px 7px;
+        border-radius: var(--rt-radius-sm);
+        font-size: 9px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        white-space: nowrap;
+        vertical-align: 1px;
+        color: white;
+        background: var(--rt-slate);
+      }
+      .rt-status--running {
+        background: var(--rt-running);
+        animation: rt-pulse 1.6s ease-in-out infinite;
+      }
+      .rt-status--progress {
+        background: var(--rt-blue);
+      }
+      .rt-status--done {
+        background: var(--rt-completed);
+      }
+      .rt-status--backlog {
+        background: var(--rt-whisper);
+        color: var(--rt-muted);
+      }
+      .rt-status--blocked {
+        background: var(--rt-failed);
+      }
+      .rt-status--review {
+        background: var(--rt-amber);
+      }
+
+      /* Board tickets this run has not reached. */
+      .rt-notstarted {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px 16px;
+        font-size: 12px;
+        color: var(--rt-muted);
+        padding-top: 8px;
+      }
+      .rt-notstarted-lead {
+        font-size: 10px;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--rt-faint);
+      }
+
+      /* Machinery rows read as supporting detail, not agent work. */
+      .rt-row--mechanics .rt-turn-name,
+      .rt-row--mechanics td {
+        color: var(--rt-muted);
+        font-style: italic;
+      }
+
+      /* -- Section 7: Skills in context ----------------------- */
+      .rt-col-delivery {
+        width: 20%;
+      }
+      .rt-tag {
+        display: inline-block;
+        padding: 2px 7px;
+        border-radius: var(--rt-radius-sm);
+        font-size: 10px;
+        font-weight: 500;
+        letter-spacing: 0.02em;
+        white-space: nowrap;
+        border: 1px solid var(--rt-hairline);
+        color: var(--rt-body);
+      }
+      /* Injected = this turn paid to send the skill; inherited = it rode
+         along in a forked session's cached prefix. */
+      .rt-tag--injected {
+        border-color: color-mix(in srgb, var(--rt-blue) 35%, transparent);
+        color: var(--rt-blue);
+      }
+      .rt-tag--inherited {
+        background: var(--rt-whisper);
+        color: var(--rt-muted);
+      }
+      .rt-tag--mixed {
+        border-color: color-mix(in srgb, var(--rt-amber) 40%, transparent);
+        color: var(--rt-amber);
+      }
+
+      /* Same bordered-block treatment as a ticket, so phases separate. */
+      .rt-skill-group {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 16px 18px 14px;
+        border: 1px solid var(--rt-hairline);
+        border-radius: var(--rt-radius-lg);
+        background: var(--rt-surface);
+      }
+      .rt-skill-dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 2px;
+        vertical-align: 1px;
+        margin-right: 8px;
+      }
+      .rt-col-turns {
+        width: 12%;
+      }
+      .rt-col-refs {
+        width: 10%;
+      }
+      .rt-col-chars {
+        width: 18%;
       }
 
       /* -- Outcome badge -------------------------------------- */
@@ -1752,13 +2727,21 @@ class RunTelemetryEmbedded extends Component<typeof RunTelemetry> {
         after: ' elapsed on the wall clock.',
       };
     }
-    let allPassed = this.issues.every((i) => i.validationPassed);
+    // Only tickets that actually ran a validation pipeline have a verdict;
+    // reading "every issue completed" off a default would be a fabrication.
+    let validated = this.issues.filter((i) => (i.validationStepsRun ?? 0) > 0);
+    let after: string;
+    if (validated.length === 0) {
+      after = ' — no validation pipeline ran.';
+    } else if (validated.every((i) => i.validationPassed)) {
+      after = ` with all ${validated.length} validated ticket${validated.length === 1 ? '' : 's'} passing.`;
+    } else {
+      after = ' with mixed validation outcomes.';
+    }
     return {
       before: `${issues} issue${issues === 1 ? '' : 's'}, ${turns} agent turn${turns === 1 ? '' : 's'}, done in `,
       strong: fmtMMSS(this.totals?.wallClockSeconds),
-      after: allPassed
-        ? ' with every issue completed.'
-        : ' with mixed validation outcomes.',
+      after,
     };
   }
 
@@ -2317,6 +3300,8 @@ export class RunTelemetry extends CardDef {
   @field turns = containsMany(TurnField);
   @field events = containsMany(EventField);
   @field issues = containsMany(IssueSummaryField);
+  @field board = containsMany(BoardIssueField);
+  @field skills = containsMany(SkillContextField);
 
   static isolated = RunTelemetryIsolated;
   static embedded = RunTelemetryEmbedded;

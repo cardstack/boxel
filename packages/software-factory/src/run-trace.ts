@@ -18,7 +18,9 @@
  *   run         whole issue-loop lifetime
  *   startup     realm bootstrap, brief load, workspace pulls
  *   seed        seed-issue creation
- *   skills      workspace materialization + per-issue skill resolution
+ *   skills      workspace materialization, per-issue skill resolution, and
+ *               one `in-context` event per skill per turn (what the turn
+ *               actually carried, post-budget)
  *   manifest    host-import manifest derivation
  *   scheduler   issue load/pick/index-settle polling
  *   context     agent context building
