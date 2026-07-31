@@ -49,6 +49,8 @@ const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
   '.m4v': { module: baseModule('mp4-video-def'), name: 'Mp4Def' },
   '.mov': { module: baseModule('mov-video-def'), name: 'MovDef' },
   '.webm': { module: baseModule('webm-video-def'), name: 'WebmDef' },
+  '.stl': { module: baseModule('stl-model-def'), name: 'StlDef' },
+  '.3mf': { module: baseModule('three-mf-def'), name: 'ThreeMfDef' },
   '.mismatch': {
     module: './filedef-mismatch' as RealmResourceIdentifier,
     name: 'FileDef',

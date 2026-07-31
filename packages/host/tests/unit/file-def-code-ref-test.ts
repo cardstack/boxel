@@ -59,6 +59,20 @@ module('Unit | isFileDefCodeRef', function (hooks) {
       ),
       'PngDef',
     );
+    assert.true(
+      isFileDefCodeRef(
+        { module: baseRRI('stl-model-def'), name: 'StlDef' },
+        virtualNetwork,
+      ),
+      'StlDef',
+    );
+    assert.true(
+      isFileDefCodeRef(
+        { module: baseRRI('three-mf-def'), name: 'ThreeMfDef' },
+        virtualNetwork,
+      ),
+      'ThreeMfDef',
+    );
   });
 
   test('rejects a non-FileDef card ref', function (assert) {
