@@ -1,5 +1,17 @@
 module.exports = {
   version: 2,
+  /*
+   * Card fixtures can declare fonts served by Google Fonts. Letting Percy's
+   * asset discovery fetch those per build makes snapshot rendering depend on
+   * a live third-party response — which woff2 subsets get captured can vary
+   * between builds of identical code, flipping text between the themed font
+   * and its fallback. Blocking the hostnames means those fonts are never
+   * captured, so every build deterministically renders the fixture's
+   * fallback stack (fonts Percy's renderer has locally, e.g. Georgia).
+   */
+  discovery: {
+    'disallowed-hostnames': ['fonts.googleapis.com', 'fonts.gstatic.com'],
+  },
   snapshot: {
     widths: [1280],
     percyCSS: `
