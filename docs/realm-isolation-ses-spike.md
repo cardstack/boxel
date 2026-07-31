@@ -18,10 +18,11 @@ SES is only one layer of the boundary. The important architectural decision is
 that card-authored JavaScript does not execute in the Ember page's global
 environment.
 
-Each active realm security principal gets:
+For the current compatibility checkpoint, each active realm security principal
+gets:
 
-1. Its own Web Worker and evaluated module loader.
-2. An Endo SES `Compartment` inside that worker.
+1. One Endo SES `Compartment` on the host application's main thread.
+2. One evaluated-module cache owned by that compartment.
 3. Card-instance capability handles chosen by the host.
 4. No direct `window`, `document`, `localStorage`, Matrix session, realm
    credentials, or API key.
@@ -31,13 +32,9 @@ ownership. A card returns plain, serializable render data; the host projects
 that data into the shared DOM using trusted Ember templates.
 
 ```text
-Card program in SES Compartment
+Card module in per-realm SES Compartment
         |
-        | capability request / render model
-        v
-Per-realm-principal Web Worker
-        |
-        | structured-clone messages
+        | serialized template descriptor / capability request
         v
 Trusted Ember host capability membrane
         |
@@ -51,7 +48,99 @@ Realm server / Matrix / external service proxy
 ```
 
 Two cards may therefore share a DOM visually without sharing a JavaScript
-global or browser ambient authority.
+global or browser ambient authority. The default compatibility tier still uses
+a main-thread SES compartment. An opt-in untrusted tier now runs the same card
+module evaluator in a Web Worker as well, adding a separate browser global and
+a termination boundary without giving the worker ownership of the DOM.
+
+DOM-heavy cards need a different renderer tier. `cardSandboxTier=iframe`
+delegates the ordinary `CardRenderer` operation to a separately originated,
+sandboxed iframe. The card and its `FieldDef` do not know about the iframe or
+`MessageChannel`; they receive the same arguments and use the same templates as
+an ordinary render. This tier is intended for existing cards that require a
+real document, canvas, WebGL, Three.js, media, or imperative modifiers.
+
+## Iframe DOM renderer tier
+
+The iframe is a `CardRenderer` transport variant, not a card-specific wrapper:
+
+```text
+parent CardRenderer(card, field, codeRef, format)
+  -> separate-origin sandboxed iframe
+  -> serialized current-card bootstrap + native MessageChannel capability port
+  -> parent-authenticated, read-only card/module fetch broker
+  -> renderer-local Loader + unchanged card deserialization
+  -> child CardRenderer(card, field, codeRef, format)
+  -> authored Ember template + DOM/WebGL behavior
+```
+
+The parent never transfers its Store, Loader, Matrix token, API keys, live card
+instance, DOM node, or Ember owner. The child receives only the already-loaded
+JSON:API document for the card it is rendering, avoiding a duplicate card read;
+older hot-reloaded records without that bootstrap fall back to fetching the
+document in parallel with Base API loading. Module HTTP GETs still travel over
+the private port. Boxel realm module reads use the parent's authenticated fetch
+path and the realm server's read permissions, including explicitly imported
+cross-realm modules. Public external dependencies remain credentialless.
+Mutation, query, command, and AI authority remain separate named capabilities
+rather than being smuggled through fetch.
+
+The child does not immediately paint transport copy. “Loading sandboxed card”
+appears only after three seconds and errors remain immediate. This avoids a
+loading-message flash for normal and cached renders while retaining feedback
+for genuinely slow module graphs. In the live Three.js SignMaker check, the
+message was not shown before the iframe reached its ready state.
+
+The same transport handles nested `FieldDef` rendering: the host sends only the
+field name and optional resolved component reference, and the child resolves
+that field from its locally deserialized card before invoking `CardRenderer`.
+
+Intrinsic size is also explicit. A renderer-owned height service observes the
+child render root, document, font readiness, mutations, and resizes, coalesces
+measurements after Ember render, and sends changed width/height values over the
+port. The parent clamps and applies the iframe height. Card and field code never
+receives a resize callback or a reference to the parent document.
+
+The current proof uses the unchanged Tribeca SignMaker card, including its
+Three.js canvas, OrbitControls, `three-bvh-csg`, JSZip, STL export, and 3MF
+export. The browser decides actual renderer-process placement; the security
+contract is the separate origin, iframe sandbox flags, credentialless child,
+and capability-only connection—not a promise about a particular OS process.
+
+## Web Worker execution tier
+
+Append `cardSandboxTier=worker` to an ordinary Interact URL to select the
+worker tier for user-realm cards. This does not disable the always-on sandbox;
+it changes where the SES compartment and evaluated module cache live:
+
+```text
+unchanged realm GTS source
+  -> authenticated host module-fetch broker
+  -> per-realm Web Worker
+  -> SES Compartment + evaluated module Loader
+  -> inert template descriptor + JSON presentation state
+  -> trusted Ember template reconstruction and DOM rendering
+```
+
+The worker has no `window`, `document`, `localStorage`, native `fetch`, or
+`XMLHttpRequest`. Module requests are RPC messages to the host. The host applies
+the same authenticated Boxel-realm response and declaring-realm checks used by
+the main-thread compartment before returning source text. Safe Base, Catalog,
+Boxel UI, icon, Ember helper, and runtime-common imports are passed into the
+worker as an explicit import policy and reconstructed as inert facades.
+
+Glimmer cannot synchronously await a worker RPC while reading a component
+getter. The first worker implementation therefore evaluates model-dependent
+presentation getters in the worker before rendering and replaces them with
+JSON state in the returned descriptor. That supports static and derived
+presentation from an unchanged card snapshot. Stateful actions, tracked
+updates, modifiers, tasks, and event-driven getter recomputation remain
+fail-closed until the async action/render protocol is explicit.
+
+The hidden `data-card-sandbox-diagnostics` element reports
+`data-card-sandbox-tier="worker"` and the active worker-compartment count, so a
+test can prove which evaluator produced the card rather than inferring it from
+the URL or visual output.
 
 ## Production compatibility invariant
 
@@ -72,34 +161,64 @@ surface. Changes belong in the card compiler/runtime and the host renderer:
    runtime compatibility defect to implement or diagnose, not a required
    source migration for the card author.
 
-This is a no-iframe design. Shadow DOM may still be useful for style scoping,
+The SES shared-DOM tier remains iframe-free. The iframe tier is an intentional
+compatibility boundary for cards whose existing behavior fundamentally needs a
+document or WebGL context. Shadow DOM may still be useful for style scoping,
 but it is not treated as an authority boundary.
 
-## Loader and worker topology
+## Compartment and loader topology
 
-The current host uses one `LoaderService.loader` for the application session.
-It caches modules from all visible realms in one host JavaScript environment
-and replaces that loader on session or code invalidation. That remains useful
-for trusted host modules, but it cannot be the evaluator for untrusted card
-modules.
+The host now separates official Base code from realm-authored module caches.
+`LoaderService.baseLoader` is one ordinary trusted Loader for the whole
+application session and owns every Base module, including the canonical
+`CardDef` and `FieldDef` class identities. The host's general-purpose loader
+and every ordinary trusted-realm loader delegate Base imports to that shared
+loader instead of evaluating Base again.
+
+An explicitly reviewed realm may opt out of SES by appearing in the
+comma-separated `TRUSTED_CARD_REALM_URLS` host configuration. It still does
+not enter the host or Base loader: all card types and instances from that
+realm share one ordinary loader keyed by realm URL. Catalog uses the same
+trusted-realm-loader path. Loader trust never comes from a card URL query
+parameter.
+
+```text
+Application session
+  +-- shared Base Loader
+  |     +-- Base card API, fields, templates (evaluated once)
+  +-- trusted realm A Loader
+  |     +-- realm A modules
+  |     +-- delegated references to shared Base exports
+  +-- trusted realm B Loader
+  |     +-- realm B modules
+  |     +-- delegated references to shared Base exports
+  +-- untrusted realm C SES/worker/iframe loader
+        +-- realm C modules under its selected boundary
+```
+
+Delegated module namespaces retain the identity of their source loader.
+Borrowing `BaseDef` into a realm loader therefore does not change
+`Loader.getLoaderFor(BaseDef)` and cannot create a second, subtly incompatible
+Base class graph. Session and code-cache resets dispose the Base, host, and
+trusted-realm loader graphs together.
 
 The sandbox runtime should use the following layers:
 
 ```text
 Host-wide immutable compile cache (keyed by source/content hash)
         |
-        +-- Realm principal A worker + SES compartment + module loader
+        +-- Realm principal A SES compartment + module loader/cache
         |       +-- Card type X evaluated once
         |       |       +-- instance X/1
         |       |       +-- instance X/2
         |       +-- Card type Y evaluated once
         |
-        +-- Realm principal B worker + SES compartment + module loader
+        +-- Realm principal B SES compartment + module loader/cache
                 +-- Card type X evaluated independently
                         +-- instance X/3
 ```
 
-The default lifecycle is **one worker and one evaluated module loader per
+The default lifecycle is **one compartment and one evaluated module loader per
 active realm security principal**, not one loader per card and not one loader
 per card type. A principal key includes at least:
 
@@ -115,27 +234,76 @@ transpilation artifacts may be shared by content hash because they contain no
 live objects or authority.
 
 Capabilities are bound to a card instance or invocation, not installed as a
-worker-global ambient `fetch`. This prevents a card without the AI grant from
+compartment-global ambient `fetch`. This prevents a card without the AI grant from
 borrowing a more privileged sibling's capability merely because both cards
-share a realm worker. If two cards in the same realm truly have incompatible
-principal-level policies, the principal key places them in separate sandbox
-loaders.
+share a realm compartment. If two cards in the same realm truly have
+incompatible principal-level policies, the principal key places them in
+separate sandbox loaders.
 
 The runtime should expose counters so loader growth and cache behavior are
 observable in development and tests:
 
-- active realm-principal workers and evaluated loaders;
+- active realm-principal compartments and evaluated loaders;
 - active card instances per loader;
 - evaluated card types and modules per loader;
 - compile-cache hits and misses;
-- module invalidations and worker restarts;
+- module invalidations and compartment replacements;
 - denied cross-realm imports and capability calls;
-- worker terminations caused by time, memory, or message budgets.
 
-Idle realm workers can be LRU-evicted once they have no mounted card instances.
-Code changes invalidate only affected principal loaders and dependent module
-graphs; session changes revoke and destroy every loader belonging to the old
-session.
+Idle realm compartments can be LRU-evicted once they have no mounted card
+instances. Code changes invalidate only affected principal loaders and
+dependent module graphs; session changes revoke and destroy every loader
+belonging to the old session.
+
+### Code mode preview loaders
+
+Code mode is deliberately more isolated than Interact mode. Every mounted
+Code preview owns a private sandbox runtime and evaluated module loader. It
+does not reuse the realm-principal loader used by Interact, another Code
+preview, or a second editor window. Closing the preview destroys that loader
+and its live module graph.
+
+Monaco reports user-authored changes synchronously from its model-change event.
+The initial buffer and programmatic file switches publish in Glimmer's
+`afterRender` queue so they cannot mutate tracked preview state during the
+render transaction. This path is separate from the existing debounced realm
+write, so typing updates the preview without waiting for autosave or changing
+what another browser session reads. The preview loader serves the current
+buffer only for its exact module URL, invalidates that module and its already
+known dependents, and retains unrelated dependencies in cache. Intermediate
+revisions are skipped when evaluation falls behind the editor. A syntax error
+keeps the last valid template visible and the next valid revision retries the
+same graph.
+
+The same authoring contract applies to both renderer transports:
+
+```text
+Monaco model change (immediate)
+        |
+        +-- SES/DOM preview
+        |     +-- private Code-preview Loader
+        |     +-- invalidate edited module + dependents
+        |     +-- reconstruct trusted render template
+        |
+        +-- iframe/DOM+WebGL preview
+              +-- MessageChannel draft revision
+              +-- private detached Loader in child document
+              +-- parent-brokered exact-buffer fetch
+              +-- invalidate edited module + dependents
+
+Monaco autosave (debounced) -> ordinary realm write
+```
+
+For the iframe tier, deserialization must receive the detached loader
+explicitly. Allowing `createFromSerialized` to discover Base's default loader
+would silently bypass the MessageChannel fetch broker, defeating both draft
+invalidation and the separate-origin authority boundary. The iframe remains a
+CardRenderer implementation detail; unchanged cards and fields do not know
+about the transport.
+
+The diagnostics surface reports `activeCodePreviewLoaders` plus the draft and
+applied iframe revision. This makes loader lifetime and hot-reload lag directly
+testable instead of inferred from a query parameter or visual output.
 
 ## Actual card topology
 
@@ -189,16 +357,315 @@ fetch-shaped capability and fails the exact AI-proxy allowlist before a network
 request is created. The card then turns red and renders the attempted payload
 and each allow/deny decision.
 
-This Interact integration is a vertical slice, not yet the universal GTS
-sandbox. The ordinary store still imports the probe's schema/type module in the
-host to deserialize the card, while its adversarial program and interaction run
-in SES. Completing the production invariant above still requires moving every
-realm module's initialization, getters, helpers, and actions into the
-per-principal loader and adapting arbitrary compiled GTS templates to the
-trusted render protocol. Existing cards should not need source changes when
-that runtime migration is complete.
+The probe's persisted JSON now follows the same opaque Store deserialization
+path as other non-base realm cards, so its schema/type module is not imported
+into the host. Its adversarial program still uses the older worker harness;
+ordinary card templates use the main-thread per-principal compartment described
+below.
 
-## Worker and SES setup
+## Authoritative existing-card experiment
+
+On this branch the sandbox is always active for ordinary non-base realm cards;
+there is no query-parameter escape hatch. `cardSandbox=ses` is accepted as an
+inert legacy URL parameter, but it no longer changes behavior.
+
+The Base and Catalog Realms are explicit trust roots. Base definitions use the
+single app-wide Base Loader; Catalog definitions use the Catalog realm's
+ordinary trusted-realm Loader, which delegates Base imports to that shared Base
+graph. Neither has an SES boundary. A user-authored realm card remains
+sandboxed unless its realm is explicitly configured as trusted, but may import
+Base and Catalog field modules through hardened compartment facades. Other card
+types are deserialized as opaque records and evaluated inside their owning
+realm-principal compartment.
+
+The sandbox import policy is centralized separately from host trust. Boxel
+Icons and Boxel UI are sandbox-safe presentation imports, but they do not make a
+user-authored card type host-trusted. Ember template plumbing remains an
+explicit, narrow shim. Bare package imports outside that policy fail closed.
+
+Realm module imports are permission-based rather than restricted to the
+principal's owning realm. Relative imports in the same realm and absolute
+imports from another realm use the current user's authenticated fetch path.
+Every successful module response must identify its owning realm with
+`X-Boxel-Realm-URL`, and the returned module URL must remain inside that
+declared realm. The realm server's 401/403 response is the authorization
+decision; the compartment cannot bypass it or make an ambient fetch. This lets
+a card reuse modules from any realm the user can read without merging the two
+realms' evaluated state or credentials.
+
+For example:
+
+<http://localhost:4200/ctse/ses-isolation-ms7jy87e-child/VideoCard/field-notes>
+
+This path requires no changes to the card source. For a compatible view it:
+
+1. fetches card JSON without importing the realm's `adoptsFrom` module;
+2. creates a host-owned opaque `CardDef` record containing only cloned JSON
+   attributes, relationship URLs, identity, and the resolved type reference;
+3. fetches the same compiled, extensionless realm module representation used
+   by the normal Loader;
+4. recursively loads the card's authorized module graph with Boxel's cycle- and
+   cache-aware Loader, while evaluating every untrusted module registration and
+   initialization only in the realm principal's SES `Compartment`;
+5. removes the ordinary Loader's `import.meta.loader` authority before module
+   code enters the compartment;
+6. captures the compiled GTS wire-format template, its lexical component/helper
+   scope, scoped styles, and the JSON-shaped component state contract;
+7. recreates root and child templates on host-owned inert component classes;
+8. evaluates user component getters in the compartment with JSON-only args and
+   returns JSON-only values to the inert host component;
+9. decodes compiled `.glimmer-scoped.css` imports as inert data, removes
+   network-bearing `@import` and `url()` values, and mounts the sanitized scoped
+   CSS from the trusted host renderer;
+10. projects allowlisted card-type presentation metadata (`displayName`,
+    `headerColor`, `icon`, `prefersWideFormat`, and custom-template flags) onto
+    the host-owned opaque type without transferring executable card objects;
+11. resolves `cardInfo.theme` with the user's authenticated realm access and
+    mounts its sanitized CSS variables through the trusted `CardContainer`
+    (using included card data first, then the indexed card endpoint, then the
+    realm-source JSON when a stale indexed Theme card returns an error);
+12. supplies the opaque plain-data snapshot and trusted primitive/list field
+    renderers instead of a live realm-authored card instance; and
+13. caches opaque host types, evaluated modules, field renderers, themes, and inert
+    templates by their appropriate realm/type/instance keys.
+
+Non-serializable values are omitted from the snapshot and counted. An
+unsupported template fails closed on the opaque card's trusted base template;
+the realm-authored component is never instantiated as a fallback. Hidden
+`[data-card-sandbox-diagnostics]` elements expose aggregate counters for render
+requests, sandboxed cards, fallbacks and reasons, omitted fields, active realm
+principals, template-cache hits/misses, and clone/snapshot timing.
+
+The focused Store test verifies that deserializing an ordinary realm card leaves
+its type module absent from the host Loader. This is now an authoritative
+read/render slice, not a shadow evaluation after host execution.
+
+The staging-backed `software-layer-matrix` workspace is the current realistic
+acceptance case. Its unchanged card imports a same-realm `PublicationNav`
+component, Boxel UI's `eq` helper, a Boxel icon, and Base fields. Its isolated
+component initializes a 590-item data structure and computes several getters.
+The normal Interact route renders through one compartment with no sandbox
+errors:
+
+<http://localhost:4200/ctse/software-layer-matrix/index>
+
+### Compatibility tunnel audit
+
+The A/B acceptance rule is that an unchanged card produces the same trusted
+host presentation while the local route still reports a sandbox render. The
+`DropLabProposal` comparison currently matches the ordinary staging route at a
+1,240 px wide layout, with the same theme scope, CSS variables, display name,
+and authored content. The local route reports one sandbox render; staging
+reports none.
+
+The audit found these host/card-runtime dependencies:
+
+| Surface                                                        | Boundary representation                                                                                                   | Current status                                                                                                                                                              |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `displayName`                                                  | bounded string                                                                                                            | tunneled                                                                                                                                                                    |
+| `prefersWideFormat`                                            | boolean                                                                                                                   | tunneled                                                                                                                                                                    |
+| `headerColor`                                                  | bounded, network-free CSS color string                                                                                    | tunneled                                                                                                                                                                    |
+| `icon`                                                         | trusted `{ module, export }` identity, resolved by host                                                                   | tunneled for allowlisted Base/Catalog/Boxel presentation modules                                                                                                            |
+| `hasCustomEditTemplate`, `hasCustomIsolatedTemplate`           | booleans derived inside the compartment                                                                                   | tunneled                                                                                                                                                                    |
+| `cardInfo.theme.cssVariables`                                  | authenticated relationship read, sanitized CSS text, host-computed scope                                                  | tunneled                                                                                                                                                                    |
+| `cardInfo.theme.cssImports`                                    | explicit allowlisted URL descriptors                                                                                      | not yet granted; arbitrary CSS imports are an outbound network capability                                                                                                   |
+| host-owned format wrapper                                      | trusted `CardContainer` classes and CSS for fitted, embedded, atom, edit, and isolated formats                            | tunneled, including fitted width/height limits and overflow, fitted/embedded container queries, atom display semantics, and the default edit background                     |
+| root card tracking                                             | trusted `cardComponentModifier` installed on the sandbox `CardContainer` with inert card id/format/field metadata         | tunneled; selection, overlay targeting, and card-element tracking do not require the realm card object                                                                      |
+| `@context.searchResultsComponent`                              | trusted host component consuming the existing scoped search providers                                                     | tunneled without exposing Store/getCard functions to compartment JS                                                                                                         |
+| `@context.cardComponentModifier`                               | trusted presentation modifier from the surrounding operator context                                                       | tunneled for card selection/opening overlays                                                                                                                                |
+| `@context.markdownEmbedChooser`                                | trusted operator UI capability                                                                                            | tunneled for Base edit/markdown UI                                                                                                                                          |
+| `@cardstack/runtime-common`                                    | explicit pure-function facade (`codeRef`, `searchEntryWireQueryFromQuery`) plus inert `realmURL` identity                 | tunneled; the package namespace is not exposed wholesale                                                                                                                    |
+| authored component actions and modifiers                       | operation handles invoked back inside the compartment                                                                     | not yet implemented                                                                                                                                                         |
+| `viewCard`                                                     | host capability handle accepting realm-relative targets only, resolved and checked against the current principal          | implemented for same-realm navigation; absolute URLs, schemes, and parent traversal fail closed                                                                             |
+| `createCard`, `editCard`, `saveCard`, and `set`                | host capability handles checked against the current principal and card                                                    | not yet implemented (`set` is currently a no-op)                                                                                                                            |
+| `linksTo` / `linksToMany` values                               | permission-checked opaque relationship projections; trusted host hydration re-enters `CardRenderer` for card/file targets | implemented for relationship fields whose declared target resolves to a trusted Base/Catalog type; same-realm target-type metadata still needs an inert code-ref descriptor |
+| `contains` fields backed by trusted Base/Catalog field types   | inert `{ kind, module, export }` field descriptor; host resolves the trusted type and honors an explicit child `@format`  | implemented for `contains` and `containsMany`, including `MarkdownField.embedded` delegation                                                                                |
+| computed card fields and instance methods                      | explicit compartment reads/invocations returning JSON                                                                     | component getters work; card getters and methods do not yet                                                                                                                 |
+| card menu extensions                                           | declarative menu descriptors plus compartment action handles                                                              | not yet implemented; executable `getMenuItems` methods cannot cross the boundary                                                                                            |
+| trusted Base default isolated/edit templates                   | host-selected trusted template with opaque model and field adapters                                                       | implemented; edit currently renders the standard template over the opaque projection, while mutation still requires a scoped `set` capability                               |
+| nested card rendering requested from trusted Base components   | host hydration/render capability that re-enters `CardRenderer` for the opaque child                                       | implemented for the relationship field bridge                                                                                                                               |
+| `@model.constructor` presentation access in authored templates | non-enumerable inert `{ displayName, icon }` descriptor on the host projection                                            | implemented without exposing an executable class; omitted from JSON args sent into the compartment                                                                          |
+
+The authored-template constructor dependency is now narrowed to an inert,
+non-enumerable descriptor containing only `displayName` and a trusted resolved
+`icon`. The executable opaque `CardDef` class is not exposed through
+`@model.constructor`, and the descriptor is omitted when args are JSON-cloned
+back into the compartment for getter evaluation.
+
+### Implicit API source audit
+
+The compatibility table is backed by a source scan, not only the current demo
+cards. On 2026-07-30 the local `stack.cards/ctse` corpus contained 583 `.gts`
+files. The following counts are files containing at least one use; generated
+copies and experiments are intentionally included because they represent the
+unchanged cards the runtime is expected to tolerate.
+
+| Implicit dependency               |   Files | Boundary implication                                                                              |
+| --------------------------------- | ------: | ------------------------------------------------------------------------------------------------- |
+| `static prefersWideFormat`        |     125 | inert type metadata; implemented                                                                  |
+| `static headerColor`              |       6 | bounded CSS value; implemented                                                                    |
+| custom `[getMenuItems]`           |       5 | declarative menu items plus revocable action handles; missing                                     |
+| `@context.searchResultsComponent` |      11 | trusted host rendering component over a scoped query; implemented                                 |
+| `@context.cardComponentModifier`  |       3 | trusted host modifier over inert ids; implemented in both authored templates and the root wrapper |
+| `@context.store`                  |       6 | realm-scoped read capability; raw Store must not cross                                            |
+| `@context.getCard`                |       3 | reactive, permission-checked read handle; missing                                                 |
+| `commandContext`                  |      18 | command construction/execution capability; missing                                                |
+| `{{on ...}}`                      |     105 | persistent component instance plus compartment action handle; missing                             |
+| `@tracked`                        |      94 | state must remain in the compartment and notify a host render subscription; missing               |
+| `@action`                         |      33 | method identity/binding plus compartment invocation; missing                                      |
+| `restartableTask(...)`            |      17 | cancellable async task scheduling and state projection; missing                                   |
+| direct `window` / `document`      | 29 / 37 | intentionally denied; replace legitimate lifecycle/measurement uses with trusted modifiers        |
+| direct `fetch(...)`               |      26 | intentionally denied; replace with destination- and operation-scoped fetch/command capabilities   |
+| `localStorage` / `sessionStorage` |   7 / 1 | intentionally denied; replace legitimate persistence with realm/card-scoped storage capabilities  |
+
+The ordinary `BaseDefComponent` invocation is itself an API surface. The host
+normally supplies all of these named arguments:
+
+```text
+cardOrField, model, fields, format, set, fieldName, context,
+configuration, createCard, viewCard, saveCard, editCard,
+canEdit, typeConstraint
+```
+
+The sandbox currently supplies `cardOrField`, an opaque `model`, field
+adapters, `format`, a no-op `set`, a presentation-only `context`, and a
+same-realm `viewCard`. `configuration`, `createCard`, `saveCard`, `editCard`,
+real `canEdit`, `typeConstraint`, and a mutation-capable `set` still need
+explicit descriptors or capability handles. This explains why a default edit
+template can render but is not yet writable.
+
+The module graph is another compatibility surface. The corpus imports trusted
+Base definitions and Boxel presentation modules heavily, but also imports
+`@glimmer/tracking`, `@ember/object`, `@ember/template`, `ember-modifier`,
+`ember-concurrency`, `tracked-built-ins`, Lodash, and host commands/tools. The
+current sandbox deliberately does not pass those packages through wholesale.
+Each must be classified as one of:
+
+1. an inert/pure facade;
+2. a trusted host presentation identity used only by the reconstructed
+   template;
+3. a compartment-owned state/runtime implementation; or
+4. a revocable host capability with explicit authority.
+
+Passing the host package namespace or a live Ember object is never the
+compatibility fallback.
+
+#### Skill-derived import contract
+
+The detailed findings and upstream distillation checklist live in
+[`realm-sandbox-skill-import-audit.md`](realm-sandbox-skill-import-audit.md).
+
+The shipped card-authoring skills are the closest thing Boxel currently has to
+a public runtime import manifest. In particular,
+`boxel-patterns/references/libraries.md` explicitly says which imports are
+available to authored `.gts` files, and the curated pattern examples show which
+ones are used in practice. A scan of the 53 checked-in `example.gts` files
+produced these file counts:
+
+| Import family                            | Example files | Sandbox interpretation                                                                                      |
+| ---------------------------------------- | ------------: | ----------------------------------------------------------------------------------------------------------- |
+| `https://cardstack.com/base/*`           |            48 | trusted Base schema/presentation identity; imported without granting the host loader or live Base instances |
+| `@cardstack/boxel-ui/*`                  |            18 | trusted host presentation identities reconstructed into template scope                                      |
+| `@cardstack/boxel-icons/*`               |             7 | trusted inert presentation identities                                                                       |
+| `@cardstack/runtime-common*`             |            14 | export-by-export facade; never the complete namespace                                                       |
+| `@cardstack/boxel-host/tools/*`          |            12 | revocable command capability required; raw command classes are not granted                                  |
+| `@glimmer/component`                     |             6 | compartment-owned component base; implemented                                                               |
+| `@glimmer/tracking`                      |            15 | compartment-owned state plus host rerender notification; missing                                            |
+| `@ember/helper`                          |             7 | trusted template identities; documented `array`, `concat`, `fn`, `get`, and `hash` are implemented          |
+| `@ember/modifier`                        |            18 | trusted `on` identity is available, but useful handlers still require action handles                        |
+| `@ember/object`                          |             9 | compartment-owned `action` binding; missing                                                                 |
+| `ember-modifier`                         |             6 | declarative host lifecycle/DOM adapter required; a realm callback must never receive the shared DOM node    |
+| `ember-concurrency`                      |             6 | compartment task scheduler, cancellation, state projection, and rerender protocol required                  |
+| `ember-resources`                        |             1 | compartment resource lifecycle protocol required                                                            |
+| `https://esm.run/*` / `https://esm.sh/*` |             5 | denied today; require a pinned/vetted module service rather than arbitrary browser fetch                    |
+
+The skill catalogue also teaches direct browser globals such as `AudioContext`,
+`document`, and modifier callbacks that receive elements. Those examples
+describe the unsandboxed runtime and are not evidence that the compartment
+should gain browser authority. Their legitimate behaviors need explicit audio,
+measurement, canvas, or lifecycle capabilities.
+
+The exact safe `@cardstack/runtime-common` facade is now
+`baseRRI`, `codeRef`, `getMenuItems`, `realmURL`, and
+`searchEntryWireQueryFromQuery`. All five are pure data transforms or inert
+symbols. `getMenuItems` lets a card module define the standard symbol
+without yet granting its returned closures to the host; menu extraction still
+needs declarative items and revocable action handles. APIs taught by the skills
+such as `getCard`, `getCards`, `getField`, `Command`, and planning/install
+helpers remain outside the facade until their authority and return values have
+boundary protocols.
+
+The scrub also found a stale skill API: several menu examples imported
+`getCardMenuItems` and `GetCardMenuItemParams`, while the current runtime
+exports `getMenuItems` and Base exports `GetMenuItemParams` from
+`base/menu-items`. The checked-in plugin skill tree is generated from the
+pinned `boxel-skills` repository, so that correction belongs in the upstream
+skill source rather than this branch's generated copy. This is why the skill
+corpus is evidence for the intended API, but must still be checked against
+source exports before it becomes an allowlist.
+
+Local and cross-realm relative imports stay on the ordinary module graph. They
+are readable only when the authenticated fetch succeeds and the response
+identifies a valid Boxel realm. Being readable does not upgrade a dependency
+to host authority: user-authored code from either realm executes under the
+importing realm principal's compartment, while trusted Base/Catalog and
+presentation packages are represented by the explicit facades above.
+
+The next compatibility implementation order follows the observed frequency
+and authority risk:
+
+1. persistent compartment component instances, action handles, and rerender
+   notifications (`{{on}}`, `@tracked`, `@action`);
+2. realm-scoped read/query handles (`getCard`, `getCards`, `getCardCollection`,
+   and the card-facing Store subset);
+3. permission-derived `canEdit` plus field-path `set` and save/edit/create
+   capabilities;
+4. command/tool handles and declarative menu extensions;
+5. lifecycle/measurement modifiers and vetted pure-library facades; and
+6. opt-in public CSS imports and other explicit outbound network surfaces.
+
+`interaction-lab/InteractionLab/lab` is the current representative fail-closed
+case for the first item. Its trusted Base fallback renders, while diagnostics
+report that `ember-modifier` is not an allowed realm module. Even if that
+import were admitted, the card also needs compartment-owned tracked state,
+method/action handles, and a lifecycle modifier before its authored interaction
+benches can honestly be considered compatible. The import error is therefore
+the first visible missing contract, not the whole contract.
+
+The rule behind the table is consistent: primitives and inert descriptors may
+cross from the compartment; components may cross only by trusted import
+identity; actions and data access cross only as host-owned capability handles.
+No realm-authored function, class, Ember owner, service, or live card instance
+is copied into the host.
+
+Compatibility is still incomplete and fails closed. Authored actions,
+mutation/edit persistence, same-realm relationship type descriptors, and
+package imports beyond the current safe facades do not yet receive host
+authority and may render the trusted fallback rather than the authored UI.
+Each feature must be expressed as an explicit compartment operation or host
+capability before it can work again; there is no security fallback to
+evaluating the realm module in the host.
+
+The `software-periodic-workspace/PeriodicTable/home` acceptance card exercises
+an especially important transition: 165 indexed fitted cards begin as inert
+prerendered HTML and hydrate to live sandboxed cards on interaction. The parity
+check compares both sides of that transition. Theme scope, semantic CSS
+variables, scoped component CSS, format, fitted container-query setup, and
+host context must remain identical; a difference in any one of them is a
+runtime boundary defect, not a card-source defect.
+
+## SES setup and the legacy worker harness
+
+The ordinary-card compatibility path described above runs its compartment on
+the main thread and does not construct a Web Worker. It imports `ses`, locks
+down the shared intrinsics, and creates a compartment endowed only with the
+decorator runtime needed by compiled card modules. Card API, Ember template,
+and primitive field imports are deny-by-default facades. Other imports fail
+unless the runtime explicitly grants them.
+
+The older dedicated security-probe harness still uses a worker. It is retained
+as a separate demonstration of CPU/message isolation, not as a requirement or
+dependency of the ordinary-card path.
 
 The worker imports `ses` and calls `lockdown()` before evaluating card code. It
 then creates a `Compartment` whose globals contain only hardened endowments:
@@ -214,6 +681,10 @@ cross the worker boundary using `postMessage`.
 Because the host does not endow browser globals, the spike confirms that
 `window`, `document`, and `localStorage` are `undefined`. The usual
 `Function(...)` escape does not reach the page global after SES lockdown.
+
+The focused host test additionally verifies that `fetch` and `XMLHttpRequest`
+are absent, a second render hits the compartment module cache, and an import
+from an ungranted realm is rejected.
 
 ## Realm-scoped data access
 
@@ -265,13 +736,14 @@ escapes field values. That keeps DOM authority out of the untrusted compartment
 while still letting each card decide what content and actions its view
 contains.
 
-The four definitions also contain native Boxel GTS templates so they behave as
-normal cards when opened in Boxel. Those native templates are not claimed to be
-SES-isolated: the current card loader executes a GTS card module in the host
-Ember runtime. The spike therefore uses the hardened render-model projection
-for the adversarial test. Safely executing arbitrary native card templates
-would require a constrained render protocol or a separate document boundary,
-not merely wrapping action code in a `Compartment`.
+The original editorial harness still uses its explicit render-model program for
+the adversarial demonstration. The newer ordinary-card path now evaluates an
+unchanged realm GTS module in the SES runtime and reconstructs its captured
+template in trusted Ember. In the worker tier, model-derived getters are
+materialized to JSON before reconstruction. This is broader than the original
+harness, but it is not yet the complete interactive render protocol: actions,
+tracked state, modifiers, tasks, and DOM-dependent behavior still need named
+asynchronous adapters.
 
 Each card has an independent View/Edit toggle:
 
@@ -382,8 +854,8 @@ Production work should add:
 - Runtime schemas and size limits for every message and render-model result.
 - Execution time, memory, message-rate, and recursion budgets, with worker
   termination on violation.
-- A sandbox compilation target and reviewed module-loading policy for ordinary
-  GTS card imports rather than evaluating one special source string.
+- Production provenance, invalidation, and integrity policy for ordinary GTS
+  module graphs, including explicit resolution for non-URL realm aliases.
 - Capability manifests tied to realm/card identity and server-issued
   permissions.
 - Revocation and lifecycle handling when a card, realm permission, or session
@@ -401,8 +873,24 @@ credentials or ambient host authority**.
 
 ## Relevant implementation files
 
+- `packages/host/app/components/realm-sandbox-iframe.gts` — parent-side
+  delegated renderer, sandbox attributes, MessageChannel lifecycle, fetch
+  broker, and intrinsic-height application.
+- `packages/host/app/templates/realm-sandbox-frame.gts` — credentialless child
+  renderer shell, port-backed Loader, unchanged card/FieldDef deserialization,
+  and nested `CardRenderer` invocation.
+- `packages/host/app/lib/realm-iframe-sandbox-protocol.ts` — typed bootstrap,
+  read-only fetch, ready, and resize messages.
+- `packages/host/app/lib/realm-iframe-height-service.ts` — renderer-owned
+  intrinsic sizing across Ember renders, DOM mutations, fonts, and resizes.
 - `packages/host/workers/realm-isolation-spike.ts` — worker startup, SES
   lockdown, compartment endowments, and message RPC.
+- `packages/host/workers/realm-compartment-module-runtime.ts` — ordinary card
+  module evaluation inside a worker-hosted SES compartment.
+- `packages/host/app/lib/realm-worker-compartment-module-runtime.ts` — host-side
+  worker lifecycle, RPC calls, and authenticated module-fetch broker.
+- `packages/host/app/lib/realm-worker-compartment-protocol.ts` — the
+  serializable worker call, result, and module-response protocol.
 - `packages/host/app/lib/realm-isolation-spike.ts` — realm guards, request
   sanitizers, card/program source, and shared types.
 - `packages/host/app/templates/realm-isolation-spike.gts` — worker

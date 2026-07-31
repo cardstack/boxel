@@ -8,6 +8,18 @@ export interface RealmSandboxCompartment {
   moduleEvaluator: ModuleEvaluator;
 }
 
+function escapeHtmlCommentTokensForSES(source: string): string {
+  // SES conservatively rejects the raw HTML-comment tokens anywhere in a
+  // script, including inside the serialized Glimmer template block emitted by
+  // Boxel's trusted transpiler. Escape one character in each token so normal
+  // JS strings, template strings, and regular expressions evaluate to the
+  // original value while SES never sees the ambiguous Annex B spelling. If a
+  // token somehow occurs as executable JS rather than generated literal data
+  // or a comment, the inserted hex escape is invalid in that position and the
+  // compartment still fails closed with a syntax error.
+  return source.split('<!--').join('<\\x21--').split('-->').join('--\\x3e');
+}
+
 export function createRealmSandboxCompartment(
   name: string,
   globals: Record<string, unknown>,
@@ -54,7 +66,7 @@ export function createRealmSandboxCompartment(
     activeModule = moduleIdentifier;
     activeRegistration = undefined;
     try {
-      compartment.evaluate(source);
+      compartment.evaluate(escapeHtmlCommentTokensForSES(source));
       if (!activeRegistration) {
         throw new Error(`Module ${moduleIdentifier} did not register itself`);
       }

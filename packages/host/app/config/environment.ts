@@ -35,6 +35,8 @@ export default config as {
   matrixServerName: string;
 
   realmServerURL: string;
+  realmSandboxIframeOrigin?: string;
+  trustedCardRealmURLs?: string[];
   resolvedBaseRealmURL: string;
   resolvedCatalogRealmURL: string | undefined;
   resolvedSkillsRealmURL: string;

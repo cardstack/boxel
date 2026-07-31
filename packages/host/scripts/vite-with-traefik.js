@@ -284,7 +284,15 @@ function startWithTraefik({ subcommand, defaultPort, label, nodeMemory }) {
         process.exit(1);
       });
     } else {
-      runVite({ subcommand, port: defaultPort, allHosts: false, nodeMemory });
+      // A configured iframe renderer uses a second loopback hostname as a
+      // distinct site. Bind all local interfaces so both localhost and
+      // 127.0.0.1 can reach this exact host build.
+      runVite({
+        subcommand,
+        port: defaultPort,
+        allHosts: !!process.env.REALM_SANDBOX_IFRAME_ORIGIN,
+        nodeMemory,
+      });
     }
     return;
   }

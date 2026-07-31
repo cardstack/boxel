@@ -1,7 +1,8 @@
 import { transpileAmd } from './amd-transpile/index.ts';
 import { Deferred } from './deferred.ts';
 import { cachedFetch, type MaybeCachedResponse } from './cached-fetch.ts';
-import { executableExtensions, logger } from './index.ts';
+import { executableExtensions } from './executable-extensions.ts';
+import { logger } from './log.ts';
 
 import {
   CardError,
@@ -261,6 +262,20 @@ export class Loader {
   // setTimeout so the retry actually fires.
   private retrySleep: ((ms: number) => Promise<void>) | undefined;
   private moduleEvaluator: ModuleEvaluator;
+  private moduleMeta: ((moduleIdentifier: string) => object) | undefined;
+  // A loader may borrow trusted module namespaces from another loader while
+  // retaining its own cache for authored modules. This is how the host keeps
+  // one Base module graph across realm-specific loaders without re-evaluating
+  // Base classes (and splitting CardDef/FieldDef identity) in every realm.
+  private moduleDelegate:
+    | ((moduleIdentifier: string) => Promise<
+        | {
+            module: Record<string, unknown>;
+            consumedModules?: Iterable<string>;
+          }
+        | undefined
+      >)
+    | undefined;
 
   constructor(
     fetch: Fetch,
@@ -269,6 +284,14 @@ export class Loader {
       retrySleep?: (ms: number) => Promise<void>;
       virtualNetwork?: VirtualNetwork;
       moduleEvaluator?: ModuleEvaluator;
+      moduleMeta?: (moduleIdentifier: string) => object;
+      moduleDelegate?: (moduleIdentifier: string) => Promise<
+        | {
+            module: Record<string, unknown>;
+            consumedModules?: Iterable<string>;
+          }
+        | undefined
+      >;
     },
   ) {
     this.fetchImplementation = fetch;
@@ -278,6 +301,8 @@ export class Loader {
     this.virtualNetwork = options?.virtualNetwork;
     this.moduleEvaluator =
       options?.moduleEvaluator ?? evaluateModuleInCurrentRealm;
+    this.moduleMeta = options?.moduleMeta;
+    this.moduleDelegate = options?.moduleDelegate;
     // Module caches are keyed by canonical RRI form (see moduleCacheKey), whose
     // relationship to a real URL is only stable between realm-mapping changes.
     // Discard the RRI-keyed caches whenever a mapping is added or removed so an
@@ -307,6 +332,8 @@ export class Loader {
       retrySleep: loader.retrySleep,
       virtualNetwork: loader.virtualNetwork,
       moduleEvaluator: loader.moduleEvaluator,
+      moduleMeta: loader.moduleMeta,
+      moduleDelegate: loader.moduleDelegate,
     });
     for (let [moduleIdentifier, module] of loader.moduleShims) {
       clone.shimModule(moduleIdentifier, module);
@@ -530,6 +557,71 @@ export class Loader {
         return undefined;
       }
       throw e;
+    }
+  }
+
+  // Remove a module and every already-known module that depends on it while
+  // preserving the rest of this Loader's graph. Code mode uses this to apply
+  // an unsaved editor buffer without throwing away the preview's trusted
+  // dependencies on every keystroke.
+  invalidateModule(moduleIdentifier: string): number {
+    let target = this.moduleKey(moduleIdentifier);
+    if (!target) {
+      return 0;
+    }
+
+    let invalidated = new Set([target]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (let [key, module] of this.modules) {
+        if (invalidated.has(key)) {
+          continue;
+        }
+        for (let dependency of this.directModuleDependencies(module)) {
+          let dependencyKey = this.moduleKey(dependency);
+          if (dependencyKey && invalidated.has(dependencyKey)) {
+            invalidated.add(key);
+            changed = true;
+            break;
+          }
+        }
+      }
+    }
+
+    let removed = 0;
+    for (let key of invalidated) {
+      if (this.modules.delete(key)) {
+        removed++;
+      }
+      this.moduleCanonicalURLs.delete(key);
+    }
+    this.knownDepsCache.clear();
+    return removed;
+  }
+
+  private directModuleDependencies(module: Module): string[] {
+    switch (module.state) {
+      case 'evaluated':
+      case 'preparing':
+      case 'broken':
+        return [...module.consumedModules];
+      case 'registered':
+        return module.dependencyList.flatMap((entry) =>
+          entry.type === 'dep' ? [entry.moduleURL.href] : [],
+        );
+      case 'registered-completing-deps':
+      case 'registered-with-deps':
+        return module.dependencies.flatMap((entry) =>
+          entry.type === 'dep' || entry.type === 'completing-dep'
+            ? [entry.moduleURL.href]
+            : [],
+        );
+      case 'fetching':
+        return [];
+      default:
+        assertNever(module);
+        return [];
     }
   }
 
@@ -1036,7 +1128,13 @@ export class Loader {
 
     let loaded:
       | { type: 'source'; source: string; url: string }
-      | { type: 'shimmed'; module: Record<string, unknown>; url: string };
+      | { type: 'shimmed'; module: Record<string, unknown>; url: string }
+      | {
+          type: 'delegated';
+          module: Record<string, unknown>;
+          url: string;
+          consumedModules: Set<string>;
+        };
 
     try {
       loaded = await this.load(moduleURL);
@@ -1067,13 +1165,20 @@ export class Loader {
       moduleIdentifier;
     this.setCanonicalModuleURL(moduleIdentifier, canonicalURL);
 
-    if (loaded.type === 'shimmed') {
-      this.captureIdentitiesOfModuleExports(loaded.module, moduleIdentifier);
+    if (loaded.type === 'shimmed' || loaded.type === 'delegated') {
+      // A delegated namespace already belongs to its source loader. Do not
+      // recapture its export identities here: Loader.getLoaderFor(BaseDef)
+      // must continue to point at the shared Base loader, not whichever realm
+      // happened to import Base most recently.
+      if (loaded.type === 'shimmed') {
+        this.captureIdentitiesOfModuleExports(loaded.module, moduleIdentifier);
+      }
 
       this.setModule(moduleIdentifier, {
         state: 'evaluated',
         moduleInstance: loaded.module,
-        consumedModules: new Set(),
+        consumedModules:
+          loaded.type === 'delegated' ? loaded.consumedModules : new Set(),
       });
       module.deferred.fulfill();
       return;
@@ -1174,12 +1279,17 @@ export class Loader {
           case 'exports':
             return privateModuleInstance;
           case '__import_meta__':
-            return {
-              url:
-                this.getCanonicalModuleURL(moduleIdentifier) ??
-                moduleIdentifier,
-              loader: this,
-            };
+            return this.moduleMeta
+              ? this.moduleMeta(
+                  this.getCanonicalModuleURL(moduleIdentifier) ??
+                    moduleIdentifier,
+                )
+              : {
+                  url:
+                    this.getCanonicalModuleURL(moduleIdentifier) ??
+                    moduleIdentifier,
+                  loader: this,
+                };
           case 'completing-dep':
           case 'dep': {
             let depModule = this.getModule(entry.moduleURL.href);
@@ -1238,12 +1348,25 @@ export class Loader {
     }
   }
 
-  private async load(
-    moduleURL: URL,
-  ): Promise<
+  private async load(moduleURL: URL): Promise<
     | { type: 'source'; source: string; url: string }
     | { type: 'shimmed'; module: Record<string, unknown>; url: string }
+    | {
+        type: 'delegated';
+        module: Record<string, unknown>;
+        url: string;
+        consumedModules: Set<string>;
+      }
   > {
+    let delegated = await this.moduleDelegate?.(moduleURL.href);
+    if (delegated) {
+      return {
+        type: 'delegated',
+        module: delegated.module,
+        url: moduleURL.href,
+        consumedModules: new Set(delegated.consumedModules),
+      };
+    }
     let response: MaybeCachedResponse;
     try {
       // Retry transient upstream 5xx responses (502/503/504) with short

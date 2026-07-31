@@ -124,6 +124,7 @@ import type MessageService from './message-service';
 import type NetworkService from './network';
 import type OperatorModeStateService from './operator-mode-state-service';
 import type RealmService from './realm';
+import type RealmSandboxService from './realm-sandbox';
 import type RealmServerService from './realm-server';
 import type SessionService from './session';
 import type ToolService from './tool-service';
@@ -237,6 +238,7 @@ export default class StoreService extends Service implements StoreInterface {
   @service declare private session: SessionService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realmServer: RealmServerService;
+  @service declare private realmSandbox: RealmSandboxService;
   private subscriptions: Map<string, { unsubscribe: () => void }> = new Map();
   private cardInvalidationSubscribers: Map<string, Set<() => void>> = new Map();
   private referenceCount: ReferenceCount = new Map();
@@ -1800,12 +1802,24 @@ export default class StoreService extends Service implements StoreInterface {
     dependencyTrackingContext?: RuntimeDependencyTrackingContext,
   ): Promise<T> {
     let api = await this.cardService.getAPI();
+    if (this.realmSandbox.shouldUseOpaqueCard(resource.meta?.adoptsFrom)) {
+      return await this.realmSandbox.createOpaqueCard<T>(
+        resource,
+        relativeTo,
+        doc,
+      );
+    }
     let shouldStubTimers =
       this.renderContextBlocksPersistence() && !isTesting();
+    let definitionLoader = this.realmSandbox.loaderForTrustedCard(
+      resource.meta?.adoptsFrom,
+      relativeTo,
+    );
     let performCreate = async () =>
       (await api.createFromSerialized(resource, doc, relativeTo, {
         store: this.store,
         dependencyTrackingContext,
+        loader: definitionLoader,
       })) as T;
     // Time the deserialize and report it (no-op when telemetry is disabled).
     let telemetry = this.#clientTelemetry();
@@ -1962,7 +1976,7 @@ export default class StoreService extends Service implements StoreInterface {
       (this.rebuildForCodeChange.isRunning ||
         alreadyFlushed.size > 0 ||
         executableInvalidations.some((i) =>
-          this.loaderService.loader.isModuleLoaded(i),
+          this.loaderService.isModuleLoaded(i),
         ));
 
     let reloadsTriggered = 0;
@@ -2217,7 +2231,7 @@ export default class StoreService extends Service implements StoreInterface {
       // will re-fetch it, even though the flushed loader no longer reports it.
       if (
         alreadyFlushed.has(module) ||
-        this.loaderService.loader.isModuleLoaded(module)
+        this.loaderService.isModuleLoaded(module)
       ) {
         pending.modulesRefetched.add(module);
       }

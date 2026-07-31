@@ -1,0 +1,210 @@
+import Component from '@glimmer/component';
+
+import Modifier from 'ember-modifier';
+
+import { consume } from 'ember-provide-consume-context';
+
+import { CardContainer } from '@cardstack/boxel-ui/components';
+import { cn, eq } from '@cardstack/boxel-ui/helpers';
+
+import { CardContextName, rri } from '@cardstack/runtime-common';
+
+import type RealmSandboxService from '@cardstack/host/services/realm-sandbox';
+
+import type {
+  BaseDef,
+  CardContext,
+  Field,
+  Format,
+  ViewCardFn,
+} from '@cardstack/base/card-api';
+
+const NoopCardComponentModifier = class extends Modifier<any> {
+  modify() {}
+} as NonNullable<CardContext['cardComponentModifier']>;
+
+type SandboxViewCardFn = (
+  target: Parameters<ViewCardFn>[0],
+  format?: Parameters<ViewCardFn>[1],
+  optionsOrEvent?: Parameters<ViewCardFn>[2] | Event,
+) => void;
+
+interface Signature {
+  Element: HTMLDivElement;
+  Args: {
+    card: BaseDef;
+    format?: Format;
+    sandbox: NonNullable<ReturnType<RealmSandboxService['renderFor']>>;
+    displayContainer?: boolean;
+    field?: Field;
+    viewCard?: ViewCardFn;
+  };
+}
+
+export default class RealmSandboxRender extends Component<Signature> {
+  @consume(CardContextName) declare private cardContext:
+    | CardContext
+    | undefined;
+
+  set = () => undefined;
+
+  get component() {
+    return this.args.sandbox.component;
+  }
+
+  get format() {
+    return this.args.format ?? 'isolated';
+  }
+
+  get displayContainer() {
+    return this.args.displayContainer !== false;
+  }
+
+  get cardID() {
+    return 'id' in this.args.card
+      ? (this.args.card.id as string | undefined)
+      : undefined;
+  }
+
+  get theme() {
+    return this.args.sandbox.theme;
+  }
+
+  get themeCss() {
+    return this.theme?.css;
+  }
+
+  get themeScope() {
+    return this.theme?.scope;
+  }
+
+  get context() {
+    let context = this.cardContext;
+    if (!context) {
+      return undefined;
+    }
+    // Template-only presentation capabilities cross this boundary explicitly.
+    // Data stores, card loaders, and command/tool authority stay on the host
+    // side; the search component consumes the host's already-scoped providers.
+    return {
+      searchResultsComponent: context.searchResultsComponent,
+      cardComponentModifier: context.cardComponentModifier,
+      markdownEmbedChooser: context.markdownEmbedChooser,
+      mode: context.mode,
+      submode: context.submode,
+    } as CardContext;
+  }
+
+  get cardComponentModifier(): NonNullable<
+    CardContext['cardComponentModifier']
+  > {
+    return this.cardContext?.cardComponentModifier ?? NoopCardComponentModifier;
+  }
+
+  viewCard: SandboxViewCardFn = (
+    target,
+    format = 'isolated',
+    optionsOrEvent,
+  ) => {
+    if (!this.args.viewCard || typeof target !== 'string') {
+      return;
+    }
+    if (
+      target.startsWith('/') ||
+      target.includes(':') ||
+      target.split('/').includes('..')
+    ) {
+      return;
+    }
+    let cardURL = new URL(target, this.args.sandbox.principal);
+    if (!cardURL.href.startsWith(this.args.sandbox.principal)) {
+      return;
+    }
+    let options = optionsOrEvent instanceof Event ? undefined : optionsOrEvent;
+    this.args.viewCard(rri(cardURL.href), format, options);
+  };
+
+  <template>
+    {{#each @sandbox.styles as |css|}}
+      {{! template-lint-disable require-scoped-style }}
+      <style>
+        {{css}}
+      </style>
+      {{! template-lint-enable require-scoped-style }}
+    {{/each}}
+    <CardContainer
+      @displayBoundaries={{this.displayContainer}}
+      @isThemed={{if this.theme true false}}
+      @themeCss={{this.themeCss}}
+      @themeScope={{this.themeScope}}
+      class={{cn
+        'realm-sandbox-render'
+        'field-component-card'
+        (if (eq this.format 'isolated') 'isolated-format')
+        (if (eq this.format 'embedded') 'embedded-format')
+        (if (eq this.format 'fitted') 'fitted-format')
+        (if (eq this.format 'atom') 'atom-format')
+        (if
+          this.displayContainer
+          'display-container-true'
+          'display-container-false'
+        )
+      }}
+      data-boxel-card-id={{this.cardID}}
+      data-boxel-card-format={{this.format}}
+      {{this.cardComponentModifier
+        cardId=this.cardID
+        format=this.format
+        fieldType=@field.fieldType
+        fieldName=@field.name
+      }}
+      ...attributes
+    >
+      {{! @glint-ignore The inert template receives only the sandbox-safe subset of the ordinary card component signature. }}
+      <this.component
+        @cardOrField={{@card.constructor}}
+        @model={{@sandbox.model}}
+        @fields={{@sandbox.fields}}
+        @context={{this.context}}
+        @format={{this.format}}
+        @set={{this.set}}
+        @viewCard={{this.viewCard}}
+      />
+    </CardContainer>
+
+    <style scoped>
+      .realm-sandbox-render.isolated-format {
+        height: 100%;
+      }
+      .realm-sandbox-render.fitted-format {
+        width: 100%;
+        height: 100%;
+        min-height: 40px;
+        max-height: 600px;
+        container-name: fitted-card;
+        container-type: size;
+        overflow: hidden;
+      }
+      .realm-sandbox-render.embedded-format {
+        container-name: embedded-card;
+        container-type: inline-size;
+        overflow: hidden;
+      }
+      .realm-sandbox-render.atom-format.display-container-false {
+        display: contents;
+      }
+      .realm-sandbox-render.atom-format.display-container-true {
+        display: inline-block;
+        width: auto;
+        height: auto;
+        padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
+      }
+      .realm-sandbox-render.atom-format > :deep(*) {
+        vertical-align: middle;
+      }
+      .realm-sandbox-render.edit-format:has(.default-card-template.edit) {
+        background-color: var(--muted, var(--boxel-100));
+      }
+    </style>
+  </template>
+}

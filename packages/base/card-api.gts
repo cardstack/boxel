@@ -4127,6 +4127,11 @@ export async function createFromSerialized<T extends BaseDefConstructor>(
   opts?: DeserializeOpts & {
     store?: CardStore;
     dependencyTrackingContext?: RuntimeDependencyTrackingContext;
+    // The Card API itself is shared from the app-wide Base loader, while the
+    // card definition may belong to a realm-specific loader. Supplying the
+    // definition loader keeps authored modules in that realm's cache without
+    // re-evaluating Base for every realm.
+    loader?: Loader;
   },
 ): Promise<BaseInstanceType<T>> {
   let store = opts?.store ?? new FallbackCardStore();
@@ -4140,11 +4145,12 @@ export async function createFromSerialized<T extends BaseDefConstructor>(
     consumerKind: isFileMetaResource(resource) ? 'file' : 'instance',
   });
   let context = opts?.dependencyTrackingContext ?? defaultContext;
+  let definitionLoader = opts?.loader ?? myLoader();
   let {
     meta: { adoptsFrom },
   } = resource;
   let card: typeof BaseDef | undefined = await loadCardDef(adoptsFrom, {
-    loader: myLoader(),
+    loader: definitionLoader,
     relativeTo,
     dependencyTrackingContext: context,
   });
@@ -4255,13 +4261,15 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
   resource: LooseCardResource;
   doc: LooseSingleCardDocument | CardDocument;
   store: CardStore;
-  opts?: DeserializeOpts;
+  opts?: DeserializeOpts & { loader?: Loader };
 }): Promise<BaseInstanceType<T>> {
   // because our store uses a tracked map for its identity map all the assembly
   // work that we are doing to deserialize the instance below is "live". so we
   // add the actual instance silently in a non-tracked way and only track it at
   // the very end.
   let card = Reflect.getPrototypeOf(instance)!.constructor as T;
+  let definitionLoader =
+    opts?.loader ?? Loader.getLoaderFor(card) ?? myLoader();
   if (resource.id != null) {
     if (isFileMetaResource(resource) || isFileDef(card)) {
       store.setFileMetaNonTracked(resource.id, instance as FileDef);
@@ -4372,7 +4380,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
       return false;
     }
     let override = await loadCardDef(overrideMeta.adoptsFrom, {
-      loader: myLoader(),
+      loader: definitionLoader,
       // A field override's module ref is relative to this resource's own id, the
       // same rule as adoptsFrom; instanceRelativeTo already resolves to the
       // instance's own id when saved, with resource.id as the fallback.

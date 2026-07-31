@@ -12,6 +12,9 @@ export default class IndexController extends Controller {
     'clientSecret',
     'card',
     'cardPath',
+    // Runtime-owned renderer variant. Authored cards and fields do not inspect
+    // this value; CardRenderer chooses the corresponding sandbox transport.
+    'cardSandboxTier',
     'debug', // temporary debug param for debugging AI assistant code patches
   ];
 
@@ -21,5 +24,6 @@ export default class IndexController extends Controller {
   @tracked operatorModeState: string | null = null;
   @tracked sid: string | null = null;
   @tracked clientSecret: string | null = null;
+  @tracked cardSandboxTier: string | null = null;
   @tracked debug = false;
 }
