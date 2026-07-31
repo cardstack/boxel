@@ -7,9 +7,13 @@ This directory holds the v0.1 documentation set.
 | `syntax-reference.md`       | Canonical public BXL syntax                    |
 | `syntax-modes.md`           | Boxel `computeVia`, `jq`, and `fx` call-site modes |
 | `profiles.md`               | Execution profile contracts and use cases      |
+| `authorization.md`          | BXL Authorization guide: Resources, Parties, Seats, Capabilities, BXL rules, APIs, and domain patterns |
+| `authorization-kernel-ir.md` | Internal `bxl-authorization-ir/1` compatibility IR and graph-kernel reference |
+| `../src/authorization/README.md` | Authorization evaluator architecture, integration lifecycle, upstream provenance, and test gates |
 | `predicate-sql.md`           | Predicate-profile SQL compiler contract        |
 | `query-then-process.md`      | Retrieval first, BXL post-query processing     |
 | `realm-collaboration-use-cases.md` | Real gateway policies, state transitions, ledgers, and audit findings |
+| `openfga-synchronous-kernel-port-plan.md` | Implemented BXL-native authorization kernel, conformance evidence, APIs, and security boundary |
 | `function-dispatch-hardening-proposal.md` | Excel/jq function-name collision dispatch proposal |
 | `grammar.ebnf`              | Formal grammar (matches implementation)        |
 | `sandbox.md`                | Sandbox contract, blocked builtins, budgets    |

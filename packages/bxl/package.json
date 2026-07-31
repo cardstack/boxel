@@ -68,6 +68,8 @@
   "files": [
     "dist",
     "docs",
+    "LICENSES",
+    "src/authorization/README.md",
     "README.md",
     "CHANGELOG.md",
     "LICENSE",
@@ -84,10 +86,17 @@
     "perf:build": "node scripts/perf-browser.mjs",
     "perf:browser": "node scripts/perf-browser.mjs --serve",
     "demo:realm-collaboration": "node scripts/perf-browser.mjs --serve --corpus",
+    "demo:authorization": "node scripts/perf-browser.mjs --serve --authorization",
+    "demo:authorization-conformance": "node scripts/perf-browser.mjs --serve --authorization-conformance",
+    "example:authorization": "node scripts/run-ts-entry.mjs examples/authorization/run.ts",
     "perf:computed": "node scripts/run-ts-entry.mjs scripts/bench-boxel-computed.ts",
+    "bench:authorization": "node scripts/run-ts-entry.mjs scripts/bench-authorization.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src tests examples",
     "test": "node scripts/run-tests.mjs",
+    "test:authorization:conformance": "node scripts/run-ts-entry.mjs scripts/run-authorization-conformance.ts",
+    "test:authorization:performance": "node scripts/run-ts-entry.mjs tests/unit/authorization-performance-cli.ts",
+    "fixtures:authorization:verify": "node scripts/run-ts-entry.mjs scripts/verify-authorization-fixtures.ts",
     "test:smoke": "node scripts/run-ts-entry.mjs tests/smoke/bxl-smoke.ts",
     "test:boxel": "node scripts/run-tests.mjs tests/boxel",
     "test:computed-equivalence": "node scripts/run-ts-entry.mjs scripts/verify-boxel-computed-equivalence.ts",
@@ -102,6 +111,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
+    "@openfga/syntax-transformer": "0.2.0",
     "@types/node": "^20.11.0",
     "esbuild": "^0.20.0",
     "eslint": "^9.0.0",
@@ -109,7 +119,8 @@
     "tsx": "^4.7.0",
     "typedoc": "^0.25.0",
     "typescript": "^5.4.0",
-    "typescript-eslint": "^8.59.0"
+    "typescript-eslint": "^8.59.0",
+    "yaml": "^2.9.0"
   },
   "dependencies": {
     "bessel": "^1.0.2",
