@@ -53,6 +53,7 @@ import {
   internalKeyFor,
   isCardInstance,
   resolveFileDefCodeRef,
+  stringifyErrorForLog,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
 import { DEFAULT_FALLBACK_MODELS } from '@cardstack/runtime-common/matrix-constants';
@@ -1722,7 +1723,14 @@ export default class Room extends Component<Signature> {
           context,
         );
       } catch (e) {
-        console.error(e);
+        // Console sinks stringify a thrown plain object as "[object Object]",
+        // which hides the actual failure; serialize it so the reason survives
+        // into captured browser logs.
+        console.error(
+          `message send pipeline threw (clientGeneratedId=${clientGeneratedId}): ${stringifyErrorForLog(
+            e,
+          )}`,
+        );
 
         // Inverse delivery race: client.sendEvent may have already handed the
         // event to matrix (status === 'sent') before a downstream throw escaped
