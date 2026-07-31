@@ -162,7 +162,7 @@ export function createRoutes(args: CreateRoutesArgs) {
   router.post(
     '/_create-realm',
     jwtMiddleware(args.realmSecretSeed),
-    handleCreateRealmRequest(createRealmDeps),
+    handleCreateRealmRequest(createRealmDeps, args.sendEvent),
   );
   router.delete(
     '/_delete-realm',
