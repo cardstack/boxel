@@ -1,5 +1,6 @@
 import { deepStrictEqual, ok, strictEqual, throws } from 'node:assert';
 import {
+  BXL_FUNCTION_SAFETY_CATEGORIES,
   assertValidBxlProfile,
   categoryForBxlFunction,
   bxlToStorageExpression,
@@ -110,7 +111,7 @@ function expectProfileIssue(
   return program;
 }
 
-const boundedProfiles: BxlProfile[] = ['policy', 'predicate', 'derive'];
+const boundedProfiles: BxlProfile[] = ['policy', 'authorization', 'predicate', 'derive'];
 const boundedProfileCases = [
   {
     expression: 'def triple(x): x * 3; triple(2)',
@@ -156,7 +157,7 @@ for (const profile of boundedProfiles) {
 
 // reduce / foreach are banned in `policy` and `predicate` only — `derive`
 // allows them as ergonomic fold primitives for record-local aggregation.
-const loopBoundedProfiles: BxlProfile[] = ['policy', 'predicate'];
+const loopBoundedProfiles: BxlProfile[] = ['policy', 'authorization', 'predicate'];
 const loopCases = [
   'reduce .lineItems[] as $item (0; . + $item.lineTotal)',
   'foreach .lineItems[] as $item (0; . + $item.lineTotal; .)',
@@ -200,6 +201,26 @@ expectProfileIssue('debug', 'policy', 'policy-call-banned', {
   readableSyntax: false,
   messageIncludes: 'control/side-effect calls',
 });
+expectProfileIssue('direct()', 'policy', 'policy-call-banned', {
+  messageIncludes: 'request-time authorization decisions',
+});
+strictEqual(
+  parseBxlAst(
+    'except(direct() or userset("editor") or userset_from("parent"; "viewer"); userset("blocked"))',
+    { profile: 'authorization' },
+  ).profileIssues.length,
+  0,
+  'authorization profile adds the compiler-only OpenFGA graph vocabulary to policy',
+);
+expectProfileIssue('SUM([1, 2, 3]) > 0', 'authorization', 'authorization-aggregate-banned', {
+  messageIncludes: 'relationship-graph composition',
+});
+expectProfileIssue(
+  'auth_check(.model; .tuples; .request)',
+  'authorization',
+  'authorization-call-banned',
+  { messageIncludes: 'cannot recursively invoke the authorization kernel' },
+);
 expectProfileIssue('words(Description) > 10', 'predicate', 'predicate-call-banned', {
   messageIncludes: 'query-time boolean predicate',
 });
@@ -365,6 +386,23 @@ deepStrictEqual(
   },
   'function safety registry allows bounded scalar lazy calls in policy',
 );
+deepStrictEqual(
+  classifyBxlProfileFunction('authorization', 'direct'),
+  {
+    safety: 'allow',
+    normalizedName: 'DIRECT',
+    category: 'authorization',
+  },
+  'function safety registry allows graph forms only in the authorization profile',
+);
+for (const name of BXL_FUNCTION_SAFETY_CATEGORIES.keys()) {
+  if (classifyBxlProfileFunction('policy', name).safety !== 'deny') {
+    ok(
+      classifyBxlProfileFunction('authorization', name).safety !== 'deny',
+      `authorization remains a superset of policy for ${name}`,
+    );
+  }
+}
 deepStrictEqual(
   classifyBxlProfileFunction('policy', 'isEmail'),
   {

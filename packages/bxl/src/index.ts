@@ -75,6 +75,8 @@ import {
 } from './bxl/sql/index.js';
 import {
   BXL_AGGREGATE_CALLS,
+  BXL_AUTHORIZATION_CALLS,
+  BXL_AUTHORIZATION_GRAPH_CALLS,
   BXL_CONTROL_OR_SIDE_EFFECT_CALLS,
   BXL_DERIVE_DENIED_CALLS,
   BXL_ERROR_MASKING_CALLS,
@@ -184,11 +186,15 @@ export const BXL_BUILD_INFO = {
     'as-materialize',       // §11a
     'pascalcase-fallback',  // §12
     'jq-keywords-guard',    // §13
+    'authorization-kernel',
+    'boxel-policy-v2',
   ] as const,
 };
 
 export {
   BXL_AGGREGATE_CALLS,
+  BXL_AUTHORIZATION_CALLS,
+  BXL_AUTHORIZATION_GRAPH_CALLS,
   BXL_CONTROL_OR_SIDE_EFFECT_CALLS,
   BXL_DERIVE_DENIED_CALLS,
   BXL_ERROR_MASKING_CALLS,
@@ -259,6 +265,52 @@ export type {
   BxlProfileFunctionSafety,
   BxlSafeResult,
 };
+
+export {
+  BOXEL_POLICY_SCHEMA,
+  OPENFGA_RECURSIVE_PORT_INFO,
+  compileAuthorizationModel,
+  prepareBoxelPolicySafe,
+  prepareAuthorizationModelSafe,
+} from './authorization/index.js';
+export type {
+  AuthorizationCheckRequest,
+  AuthorizationCheckResult,
+  AuthorizationErrorKind,
+  AuthorizationErrorRecord,
+  AuthorizationListObjectsRequest,
+  AuthorizationListObjectsResult,
+  AuthorizationListUsersRequest,
+  AuthorizationListUsersResult,
+  AuthorizationSafeResult,
+  BoxelAuthorizationReason,
+  BoxelAuthorizeRequest,
+  BoxelAuthorizeResult,
+  BoxelListCardsRequest,
+  BoxelListCardsResult,
+  BoxelListPartiesRequest,
+  BoxelListPartiesResult,
+  BoxelPolicyCapabilityDefinition,
+  BoxelPolicyCardDataSnapshot,
+  BoxelPolicyCardSnapshot,
+  BoxelPolicyDocument,
+  BoxelPolicyLinkDefinition,
+  BoxelPolicyPartySnapshot,
+  BoxelPolicyRefusal,
+  BoxelPolicyScopeDefinition,
+  BoxelPolicySeatAssignment,
+  BoxelPolicySeatDefinition,
+  BoxelPolicySnapshot,
+  BoxelPolicyTraceEvent,
+  BxlAuthorizationCondition,
+  BxlAuthorizationModel,
+  BxlAuthorizationRelation,
+  BxlAuthorizationRelationDefinition,
+  PreparedAuthorizationModel,
+  PreparedBoxelPolicy,
+  RelationshipTuple,
+  SubjectTypeReference,
+} from './authorization/index.js';
 
 /**
  * Shared options for the BXL surface. Every entry-point function

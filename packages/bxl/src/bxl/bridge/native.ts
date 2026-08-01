@@ -773,6 +773,41 @@ export function prepareNativeJqForRuntime(
   return prepareNativeProgram(program, options, false);
 }
 
+/**
+ * Prepare an already-parsed jq expression. This is an internal bridge for
+ * compilers that split one source program into independently evaluated IR
+ * leaves without serializing those leaves back to source text.
+ */
+export function prepareNativeJqExpression(
+  expression: ExpressionAst,
+  options: NativeDialectOptions = {},
+): PreparedNativeJq {
+  const parsed: ParsedNativeProgram = {
+    tokens: [],
+    ast: { type: 'root', expr: expression },
+    source: '<prepared BXL expression>',
+    compiledSource: '<prepared BXL expression>',
+    readableWarnings: [],
+  };
+  const registry = resolveBuiltinRegistry(
+    options.libraries ?? DEFAULT_BUILTIN_LIBRARIES,
+  );
+  parsed.compiledScalar = annotateNativeProgramForRuntime(parsed.ast, registry);
+  const deps = extractNativeJqDepsFromAst(parsed.ast);
+  return {
+    ...parsed,
+    deps,
+    run(input: unknown, runOptions: PreparedNativeRunOptions = {}) {
+      return runParsedNativeProgram(
+        parsed,
+        input,
+        registry,
+        runOptions.runtimeLimits ?? options.runtimeLimits,
+      );
+    },
+  };
+}
+
 function prepareNativeProgram(
   program: string,
   options: NativeDialectOptions,

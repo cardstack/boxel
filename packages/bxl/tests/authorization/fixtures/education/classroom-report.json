@@ -1,0 +1,180 @@
+{
+  "provenance": {
+    "generalized": true,
+    "source": "Generalized from education-realm report authorization patterns",
+    "boundary": "Authorization returns capability decisions; the report renderer owns projection and redaction"
+  },
+  "document": {
+    "schema": "boxel-policy/2",
+    "card": "../Policy/classroom-report-access",
+    "scopes": [
+      {
+        "name": "ClassroomReport",
+        "adoptsFrom": "../reports/ClassroomReport",
+        "seats": [
+          { "name": "Administrator", "from": "Policy.Administrators" },
+          { "name": "LeadTeacher", "from": "Policy.LeadTeachers" },
+          { "name": "Instructor", "from": "Policy.Instructors" },
+          { "name": "ServiceProvider", "from": "Policy.ServiceProviders" },
+          { "name": "Staff", "from": "Policy.StaffMembers" }
+        ],
+        "capabilities": [
+          {
+            "name": "ViewClassroom",
+            "where": "Seat.Administrator or Seat.LeadTeacher or Seat.Instructor or Seat.ServiceProvider or Seat.Staff"
+          },
+          {
+            "name": "ViewAttendance",
+            "where": "Seat.Administrator or Seat.LeadTeacher or Seat.Instructor or Seat.ServiceProvider or Seat.Staff"
+          }
+        ]
+      },
+      {
+        "name": "StudentReportAccess",
+        "adoptsFrom": "../reports/StudentReportAccess",
+        "seats": [
+          { "name": "Administrator", "from": "Policy.Administrators" },
+          { "name": "LeadTeacher", "from": "Policy.LeadTeachers" },
+          { "name": "Instructor", "from": "Policy.Instructors" },
+          { "name": "ServiceProvider", "from": "Policy.ServiceProviders" },
+          { "name": "Staff", "from": "Policy.StaffMembers" },
+          { "name": "Provider", "from": "Card.Provider" }
+        ],
+        "capabilities": [
+          {
+            "name": "ViewStudentNote",
+            "where": "Seat.Administrator or Seat.LeadTeacher or Seat.Instructor or (Seat.Provider and Seat.ServiceProvider)"
+          },
+          {
+            "name": "ViewStudentInternalNote",
+            "where": "Seat.LeadTeacher or Seat.Instructor or (Seat.Provider and Seat.ServiceProvider)"
+          }
+        ]
+      }
+    ]
+  },
+  "snapshot": {
+    "policy": {
+      "card": "../Policy/classroom-report-access",
+      "data": { "status": "enacted", "version": 2 },
+      "links": {
+        "administrators": ["../Staff/administrator"],
+        "leadTeachers": ["../Staff/lead-teacher"],
+        "instructors": ["../Staff/instructor"],
+        "serviceProviders": ["../Staff/provider"],
+        "staffMembers": ["../Staff/general"]
+      }
+    },
+    "cards": [
+      {
+        "card": "../ClassroomReport/current-week",
+        "adoptsFrom": "../reports/ClassroomReport"
+      },
+      {
+        "card": "../StudentReportAccess/student-a",
+        "adoptsFrom": "../reports/StudentReportAccess",
+        "links": { "provider": "../Group/student-a-providers" }
+      },
+      {
+        "card": "../StudentReportAccess/student-b",
+        "adoptsFrom": "../reports/StudentReportAccess",
+        "links": { "provider": "../Group/student-b-providers" }
+      },
+      {
+        "card": "../StudentReportAccess/student-c",
+        "adoptsFrom": "../reports/StudentReportAccess",
+        "links": { "provider": "../Group/student-c-providers" }
+      }
+    ],
+    "parties": [
+      { "party": "../Staff/administrator" },
+      { "party": "../Staff/lead-teacher" },
+      { "party": "../Staff/instructor" },
+      { "party": "../Staff/provider" },
+      { "party": "../Staff/general" },
+      { "party": "../Staff/other-provider" },
+      {
+        "party": "../Group/related-services",
+        "members": ["../Staff/provider"]
+      },
+      {
+        "party": "../Group/student-a-providers",
+        "members": ["../Group/related-services"]
+      },
+      {
+        "party": "../Group/student-b-providers",
+        "members": ["../Staff/provider"]
+      },
+      {
+        "party": "../Group/student-c-providers",
+        "members": ["../Staff/other-provider"]
+      }
+    ],
+    "members": [
+      "../Staff/administrator",
+      "../Staff/lead-teacher",
+      "../Staff/instructor",
+      "../Staff/provider",
+      "../Staff/general",
+      "../Staff/other-provider"
+    ]
+  },
+  "checks": [
+    { "party": "../Staff/administrator", "capability": "ViewClassroom", "card": "../ClassroomReport/current-week", "allowed": true },
+    { "party": "../Staff/administrator", "capability": "ViewAttendance", "card": "../ClassroomReport/current-week", "allowed": true },
+    { "party": "../Staff/administrator", "capability": "ViewStudentNote", "card": "../StudentReportAccess/student-a", "allowed": true },
+    { "party": "../Staff/administrator", "capability": "ViewStudentInternalNote", "card": "../StudentReportAccess/student-a", "allowed": false },
+    { "party": "../Staff/administrator", "capability": "ViewStudentNote", "card": "../StudentReportAccess/student-b", "allowed": true },
+    { "party": "../Staff/administrator", "capability": "ViewStudentInternalNote", "card": "../StudentReportAccess/student-b", "allowed": false },
+    { "party": "../Staff/administrator", "capability": "ViewStudentNote", "card": "../StudentReportAccess/student-c", "allowed": true },
+    { "party": "../Staff/administrator", "capability": "ViewStudentInternalNote", "card": "../StudentReportAccess/student-c", "allowed": false },
+
+    { "party": "../Staff/lead-teacher", "capability": "ViewClassroom", "card": "../ClassroomReport/current-week", "allowed": true },
+    { "party": "../Staff/lead-teacher", "capability": "ViewAttendance", "card": "../ClassroomReport/current-week", "allowed": true },
+    { "party": "../Staff/lead-teacher", "capability": "ViewStudentNote", "card": "../StudentReportAccess/student-a", "allowed": true },
+    { "party": "../Staff/lead-teacher", "capability": "ViewStudentInternalNote", "card": "../StudentReportAccess/student-a", "allowed": true },
+    { "party": "../Staff/lead-teacher", "capability": "ViewStudentNote", "card": "../StudentReportAccess/student-b", "allowed": true },
+    { "party": "../Staff/lead-teacher", "capability": "ViewStudentInternalNote", "card": "../StudentReportAccess/student-b", "allowed": true },
+    { "party": "../Staff/lead-teacher", "capability": "ViewStudentNote", "card": "../StudentReportAccess/student-c", "allowed": true },
+    { "party": "../Staff/lead-teacher", "capability": "ViewStudentInternalNote", "card": "../StudentReportAccess/student-c", "allowed": true },
+
+    { "party": "../Staff/instructor", "capability": "ViewClassroom", "card": "../ClassroomReport/current-week", "allowed": true },
+    { "party": "../Staff/instructor", "capability": "ViewAttendance", "card": "../ClassroomReport/current-week", "allowed": true },
+    { "party": "../Staff/instructor", "capability": "ViewStudentNote", "card": "../StudentReportAccess/student-a", "allowed": true },
+    { "party": "../Staff/instructor", "capability": "ViewStudentInternalNote", "card": "../StudentReportAccess/student-a", "allowed": true },
+    { "party": "../Staff/instructor", "capability": "ViewStudentNote", "card": "../StudentReportAccess/student-b", "allowed": true },
+    { "party": "../Staff/instructor", "capability": "ViewStudentInternalNote", "card": "../StudentReportAccess/student-b", "allowed": true },
+    { "party": "../Staff/instructor", "capability": "ViewStudentNote", "card": "../StudentReportAccess/student-c", "allowed": true },
+    { "party": "../Staff/instructor", "capability": "ViewStudentInternalNote", "card": "../StudentReportAccess/student-c", "allowed": true },
+
+    { "party": "../Staff/provider", "capability": "ViewClassroom", "card": "../ClassroomReport/current-week", "allowed": true },
+    { "party": "../Staff/provider", "capability": "ViewAttendance", "card": "../ClassroomReport/current-week", "allowed": true },
+    { "party": "../Staff/provider", "capability": "ViewStudentNote", "card": "../StudentReportAccess/student-a", "allowed": true },
+    { "party": "../Staff/provider", "capability": "ViewStudentInternalNote", "card": "../StudentReportAccess/student-a", "allowed": true },
+    { "party": "../Staff/provider", "capability": "ViewStudentNote", "card": "../StudentReportAccess/student-b", "allowed": true },
+    { "party": "../Staff/provider", "capability": "ViewStudentInternalNote", "card": "../StudentReportAccess/student-b", "allowed": true },
+    { "party": "../Staff/provider", "capability": "ViewStudentNote", "card": "../StudentReportAccess/student-c", "allowed": false },
+    { "party": "../Staff/provider", "capability": "ViewStudentInternalNote", "card": "../StudentReportAccess/student-c", "allowed": false },
+
+    { "party": "../Staff/general", "capability": "ViewClassroom", "card": "../ClassroomReport/current-week", "allowed": true },
+    { "party": "../Staff/general", "capability": "ViewAttendance", "card": "../ClassroomReport/current-week", "allowed": true },
+    { "party": "../Staff/general", "capability": "ViewStudentNote", "card": "../StudentReportAccess/student-a", "allowed": false },
+    { "party": "../Staff/general", "capability": "ViewStudentInternalNote", "card": "../StudentReportAccess/student-a", "allowed": false },
+    { "party": "../Staff/general", "capability": "ViewStudentNote", "card": "../StudentReportAccess/student-b", "allowed": false },
+    { "party": "../Staff/general", "capability": "ViewStudentInternalNote", "card": "../StudentReportAccess/student-b", "allowed": false },
+    { "party": "../Staff/general", "capability": "ViewStudentNote", "card": "../StudentReportAccess/student-c", "allowed": false },
+    { "party": "../Staff/general", "capability": "ViewStudentInternalNote", "card": "../StudentReportAccess/student-c", "allowed": false }
+  ],
+  "capabilityLists": [
+    { "party": "../Staff/administrator", "card": "../ClassroomReport/current-week", "capabilities": ["ViewAttendance", "ViewClassroom"] },
+    { "party": "../Staff/administrator", "card": "../StudentReportAccess/student-a", "capabilities": ["ViewStudentNote"] },
+    { "party": "../Staff/lead-teacher", "card": "../StudentReportAccess/student-a", "capabilities": ["ViewStudentInternalNote", "ViewStudentNote"] },
+    { "party": "../Staff/instructor", "card": "../StudentReportAccess/student-c", "capabilities": ["ViewStudentInternalNote", "ViewStudentNote"] },
+    { "party": "../Staff/provider", "card": "../ClassroomReport/current-week", "capabilities": ["ViewAttendance", "ViewClassroom"] },
+    { "party": "../Staff/provider", "card": "../StudentReportAccess/student-a", "capabilities": ["ViewStudentInternalNote", "ViewStudentNote"] },
+    { "party": "../Staff/provider", "card": "../StudentReportAccess/student-b", "capabilities": ["ViewStudentInternalNote", "ViewStudentNote"] },
+    { "party": "../Staff/provider", "card": "../StudentReportAccess/student-c", "capabilities": [] },
+    { "party": "../Staff/general", "card": "../ClassroomReport/current-week", "capabilities": ["ViewAttendance", "ViewClassroom"] },
+    { "party": "../Staff/general", "card": "../StudentReportAccess/student-a", "capabilities": [] }
+  ]
+}

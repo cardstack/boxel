@@ -11,6 +11,7 @@ export type BxlProfileFunctionSafety =
 
 export type BxlFunctionSafetyCategory =
   | 'aggregate'
+  | 'authorization'
   | 'boundedScalar'
   | 'controlOrSideEffect'
   | 'errorMasking'
@@ -108,6 +109,26 @@ export const BXL_AGGREGATE_CALLS = names([
   'XNPV',
   'XNPV_BY',
   'Z_TEST',
+]);
+
+export const BXL_AUTHORIZATION_CALLS = names([
+  'auth_check',
+  'auth_check_result',
+  'auth_list_objects',
+  'auth_list_users',
+]);
+
+/**
+ * Compiler-only relationship graph forms. These are valid only while an
+ * authorization model is being lowered to the closed graph IR; they are not
+ * ordinary jq runtime functions.
+ */
+export const BXL_AUTHORIZATION_GRAPH_CALLS = names([
+  'direct',
+  'except',
+  'userset',
+  'userset_from',
+  'via',
 ]);
 
 export const BXL_BOUNDED_SCALAR_CALLS = names([
@@ -308,6 +329,8 @@ export const BXL_FUNCTION_SAFETY_CATEGORIES: ReadonlyMap<
   BxlFunctionSafetyCategory
 > = new Map([
   ...[...BXL_AGGREGATE_CALLS].map((name) => [name, 'aggregate'] as const),
+  ...[...BXL_AUTHORIZATION_CALLS].map((name) => [name, 'authorization'] as const),
+  ...[...BXL_AUTHORIZATION_GRAPH_CALLS].map((name) => [name, 'authorization'] as const),
   ...[...BXL_BOUNDED_SCALAR_CALLS].map((name) => [name, 'boundedScalar'] as const),
   ...[...BXL_ERROR_MASKING_CALLS].map((name) => [name, 'errorMasking'] as const),
   ...[...BXL_VOLATILE_CALLS].map((name) => [name, 'volatile'] as const),
@@ -318,6 +341,19 @@ export const BXL_FUNCTION_SAFETY_CATEGORIES: ReadonlyMap<
 
 const POLICY_DENIED_CALLS = new Set([
   ...BXL_AGGREGATE_CALLS,
+  ...BXL_AUTHORIZATION_CALLS,
+  ...BXL_AUTHORIZATION_GRAPH_CALLS,
+  ...BXL_ERROR_MASKING_CALLS,
+  ...BXL_VOLATILE_CALLS,
+  ...BXL_CONTROL_OR_SIDE_EFFECT_CALLS,
+  ...BXL_METADATA_CALLS,
+]);
+
+const AUTHORIZATION_DENIED_CALLS = new Set([
+  ...BXL_AGGREGATE_CALLS,
+  // An authorization rewrite may use graph forms, but it must not recursively
+  // invoke the public authorization runtime adapters.
+  ...BXL_AUTHORIZATION_CALLS,
   ...BXL_ERROR_MASKING_CALLS,
   ...BXL_VOLATILE_CALLS,
   ...BXL_CONTROL_OR_SIDE_EFFECT_CALLS,
@@ -332,10 +368,22 @@ export const BXL_PROFILE_FUNCTION_POLICIES: Record<
     deniedCalls: POLICY_DENIED_CALLS,
     denyMessageByCategory: {
       aggregate: 'aggregate calls can pull work across collections',
+      authorization: 'authorization conditions cannot recursively invoke the authorization kernel',
       controlOrSideEffect: 'control/side-effect calls are not request-time authorization predicates',
       errorMasking: 'error-masking calls can hide fail-closed authorization errors',
       metadata: 'runtime metadata calls are not authorization predicates',
       volatile: 'volatile calls are not stable request-time authorization predicates',
+    },
+  },
+  authorization: {
+    deniedCalls: AUTHORIZATION_DENIED_CALLS,
+    denyMessageByCategory: {
+      aggregate: 'aggregate calls can pull work across collections',
+      authorization: 'authorization rewrites cannot recursively invoke the authorization kernel',
+      controlOrSideEffect: 'control/side-effect calls are not relationship-graph predicates',
+      errorMasking: 'error-masking calls can hide fail-closed authorization errors',
+      metadata: 'runtime metadata calls are not relationship-graph predicates',
+      volatile: 'volatile calls are not stable relationship-graph predicates',
     },
   },
   predicate: {

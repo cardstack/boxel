@@ -1,0 +1,247 @@
+{
+  "provenance": {
+    "generalized": true,
+    "source": "Generalized from realm coordination command and mutation patterns",
+    "boundary": "Authorization answers only whether a party may invoke a capability on a card"
+  },
+  "document": {
+    "schema": "boxel-policy/2",
+    "card": "../Policy/coordination-capabilities",
+    "scopes": [
+      {
+        "name": "AttendanceLedger",
+        "adoptsFrom": "../attendance/AttendanceLedger",
+        "seats": [
+          { "name": "Kiosk" },
+          { "name": "Admin" }
+        ],
+        "capabilities": [
+          { "name": "RecordPunch", "where": "Seat.Kiosk" },
+          { "name": "AmendRecord", "where": "Seat.Admin" },
+          { "name": "RecordOfflineDay", "where": "Seat.Admin" },
+          { "name": "RevokePolicy", "where": "Seat.Admin" }
+        ]
+      },
+      {
+        "name": "TurnGame",
+        "adoptsFrom": "../games/TurnGame",
+        "seats": [
+          { "name": "Player" },
+          { "name": "RealmOwner" }
+        ],
+        "capabilities": [
+          { "name": "MakeMove", "where": "Seat.Player" },
+          { "name": "Resign", "where": "Seat.Player" },
+          { "name": "AdminPause", "where": "Seat.RealmOwner" }
+        ]
+      },
+      {
+        "name": "ConnectedApp",
+        "adoptsFrom": "../apps/ConnectedApp",
+        "seats": [
+          { "name": "Owner", "from": "Card.Owner" },
+          { "name": "App", "from": "Card.AppPrincipal" }
+        ],
+        "capabilities": [
+          { "name": "GrantApp", "where": "Seat.Owner" },
+          { "name": "RevokeApp", "where": "Seat.Owner" },
+          { "name": "PerformAppAction", "where": "Seat.App" }
+        ]
+      },
+      {
+        "name": "JudgingContest",
+        "adoptsFrom": "../judging/JudgingContest",
+        "seats": [
+          { "name": "Judge" },
+          { "name": "Chair" }
+        ],
+        "capabilities": [
+          { "name": "SubmitScore", "where": "Seat.Judge" },
+          { "name": "DeclareWinner", "where": "Seat.Chair" },
+          { "name": "EditCitation", "where": "Seat.Chair" }
+        ]
+      }
+    ]
+  },
+  "snapshot": {
+    "policy": {
+      "card": "../Policy/coordination-capabilities",
+      "data": { "name": "Coordination capability policy" }
+    },
+    "cards": [
+      {
+        "card": "../AttendanceLedger/main",
+        "adoptsFrom": "../attendance/AttendanceLedger",
+        "data": { "name": "Main attendance ledger" }
+      },
+      {
+        "card": "../AttendanceLedger/satellite",
+        "adoptsFrom": "../attendance/AttendanceLedger",
+        "data": { "name": "Satellite attendance ledger" }
+      },
+      {
+        "card": "../TurnGame/match-1",
+        "adoptsFrom": "../games/TurnGame",
+        "data": { "name": "Match 1" }
+      },
+      {
+        "card": "../TurnGame/match-2",
+        "adoptsFrom": "../games/TurnGame",
+        "data": { "name": "Match 2" }
+      },
+      {
+        "card": "../ConnectedApp/fulfillment-bot",
+        "adoptsFrom": "../apps/ConnectedApp",
+        "data": { "name": "Fulfillment bot" },
+        "links": {
+          "owner": "../Person/store-owner",
+          "appPrincipal": "../Service/fulfillment-bot"
+        }
+      },
+      {
+        "card": "../ConnectedApp/analytics-bot",
+        "adoptsFrom": "../apps/ConnectedApp",
+        "data": { "name": "Analytics bot" },
+        "links": {
+          "owner": "../Person/analytics-owner",
+          "appPrincipal": "../Service/analytics-bot"
+        }
+      },
+      {
+        "card": "../JudgingContest/spring-2026",
+        "adoptsFrom": "../judging/JudgingContest",
+        "data": { "name": "Spring 2026 judging" }
+      },
+      {
+        "card": "../JudgingContest/fall-2026",
+        "adoptsFrom": "../judging/JudgingContest",
+        "data": { "name": "Fall 2026 judging" }
+      }
+    ],
+    "parties": [
+      { "party": "../Device/front-desk-1", "data": { "name": "Front desk kiosk" } },
+      { "party": "../Person/attendance-admin", "data": { "name": "Attendance admin" } },
+      { "party": "../Person/player-x", "data": { "name": "Player X" } },
+      { "party": "../Person/player-o", "data": { "name": "Player O" } },
+      { "party": "../Person/player-two", "data": { "name": "Match 2 player" } },
+      { "party": "../Person/spectator", "data": { "name": "Spectator" } },
+      { "party": "../Person/realm-owner", "data": { "name": "Realm owner" } },
+      { "party": "../Person/store-owner", "data": { "name": "Store owner" } },
+      { "party": "../Person/analytics-owner", "data": { "name": "Analytics owner" } },
+      { "party": "../Service/fulfillment-bot", "data": { "name": "Fulfillment bot" } },
+      { "party": "../Service/analytics-bot", "data": { "name": "Analytics bot" } },
+      { "party": "../Person/judge-a", "data": { "name": "Judge A" } },
+      { "party": "../Person/judge-b", "data": { "name": "Judge B" } },
+      { "party": "../Person/fall-judge", "data": { "name": "Fall judge" } },
+      { "party": "../Person/judging-chair", "data": { "name": "Judging chair" } },
+      {
+        "party": "../Team/spring-judges",
+        "data": { "name": "Spring judges" },
+        "members": ["../Person/judge-a", "../Person/judge-b"]
+      }
+    ],
+    "members": [
+      "../Person/attendance-admin",
+      "../Person/player-x",
+      "../Person/player-o",
+      "../Person/player-two",
+      "../Person/spectator",
+      "../Person/realm-owner",
+      "../Person/store-owner",
+      "../Person/analytics-owner",
+      "../Person/judge-a",
+      "../Person/judge-b",
+      "../Person/fall-judge",
+      "../Person/judging-chair"
+    ],
+    "seats": [
+      {
+        "scope": "../AttendanceLedger/main",
+        "seat": "Kiosk",
+        "holders": ["../Device/front-desk-1"]
+      },
+      {
+        "scope": "../AttendanceLedger/main",
+        "seat": "Admin",
+        "holders": ["../Person/attendance-admin"]
+      },
+      {
+        "scope": "../TurnGame/match-1",
+        "seat": "Player",
+        "holders": ["../Person/player-x", "../Person/player-o"]
+      },
+      {
+        "scope": "../TurnGame/match-1",
+        "seat": "RealmOwner",
+        "holders": ["../Person/realm-owner"]
+      },
+      {
+        "scope": "../TurnGame/match-2",
+        "seat": "Player",
+        "holders": ["../Person/player-two"]
+      },
+      {
+        "scope": "../JudgingContest/spring-2026",
+        "seat": "Judge",
+        "holders": ["../Team/spring-judges"]
+      },
+      {
+        "scope": "../JudgingContest/spring-2026",
+        "seat": "Chair",
+        "holders": ["../Person/judging-chair"]
+      },
+      {
+        "scope": "../JudgingContest/fall-2026",
+        "seat": "Judge",
+        "holders": ["../Person/fall-judge"]
+      }
+    ]
+  },
+  "checks": [
+    { "domain": "attendance", "party": "../Device/front-desk-1", "capability": "RecordPunch", "card": "../AttendanceLedger/main", "allowed": true },
+    { "domain": "attendance", "party": "../Device/front-desk-1", "capability": "AmendRecord", "card": "../AttendanceLedger/main", "allowed": false },
+    { "domain": "attendance", "party": "../Person/attendance-admin", "capability": "AmendRecord", "card": "../AttendanceLedger/main", "allowed": true },
+    { "domain": "attendance", "party": "../Person/attendance-admin", "capability": "RecordOfflineDay", "card": "../AttendanceLedger/main", "allowed": true },
+    { "domain": "attendance", "party": "../Person/attendance-admin", "capability": "RevokePolicy", "card": "../AttendanceLedger/main", "allowed": true },
+    { "domain": "attendance", "party": "../Person/attendance-admin", "capability": "RecordPunch", "card": "../AttendanceLedger/main", "allowed": false },
+    { "domain": "attendance", "party": "../Person/spectator", "capability": "RecordPunch", "card": "../AttendanceLedger/main", "allowed": false },
+    { "domain": "attendance", "party": "../Person/attendance-admin", "capability": "AmendRecord", "card": "../AttendanceLedger/satellite", "allowed": false },
+
+    { "domain": "turn-game", "party": "../Person/player-x", "capability": "MakeMove", "card": "../TurnGame/match-1", "allowed": true },
+    { "domain": "turn-game", "party": "../Person/player-o", "capability": "MakeMove", "card": "../TurnGame/match-1", "allowed": true },
+    { "domain": "turn-game", "party": "../Person/spectator", "capability": "MakeMove", "card": "../TurnGame/match-1", "allowed": false },
+    { "domain": "turn-game", "party": "../Person/player-x", "capability": "Resign", "card": "../TurnGame/match-1", "allowed": true },
+    { "domain": "turn-game", "party": "../Person/player-x", "capability": "AdminPause", "card": "../TurnGame/match-1", "allowed": false },
+    { "domain": "turn-game", "party": "../Person/realm-owner", "capability": "AdminPause", "card": "../TurnGame/match-1", "allowed": true },
+    { "domain": "turn-game", "party": "../Person/player-x", "capability": "MakeMove", "card": "../TurnGame/match-2", "allowed": false },
+    { "domain": "turn-game", "party": "../Person/player-two", "capability": "MakeMove", "card": "../TurnGame/match-2", "allowed": true },
+
+    { "domain": "connected-app", "party": "../Person/store-owner", "capability": "GrantApp", "card": "../ConnectedApp/fulfillment-bot", "allowed": true },
+    { "domain": "connected-app", "party": "../Person/store-owner", "capability": "RevokeApp", "card": "../ConnectedApp/fulfillment-bot", "allowed": true },
+    { "domain": "connected-app", "party": "../Person/store-owner", "capability": "PerformAppAction", "card": "../ConnectedApp/fulfillment-bot", "allowed": false },
+    { "domain": "connected-app", "party": "../Service/fulfillment-bot", "capability": "PerformAppAction", "card": "../ConnectedApp/fulfillment-bot", "allowed": true },
+    { "domain": "connected-app", "party": "../Service/fulfillment-bot", "capability": "GrantApp", "card": "../ConnectedApp/fulfillment-bot", "allowed": false },
+    { "domain": "connected-app", "party": "../Service/fulfillment-bot", "capability": "PerformAppAction", "card": "../ConnectedApp/analytics-bot", "allowed": false },
+    { "domain": "connected-app", "party": "../Person/analytics-owner", "capability": "GrantApp", "card": "../ConnectedApp/analytics-bot", "allowed": true },
+    { "domain": "connected-app", "party": "../Service/analytics-bot", "capability": "PerformAppAction", "card": "../ConnectedApp/analytics-bot", "allowed": true },
+
+    { "domain": "judging", "party": "../Person/judge-a", "capability": "SubmitScore", "card": "../JudgingContest/spring-2026", "allowed": true },
+    { "domain": "judging", "party": "../Person/judge-b", "capability": "SubmitScore", "card": "../JudgingContest/spring-2026", "allowed": true },
+    { "domain": "judging", "party": "../Person/judging-chair", "capability": "SubmitScore", "card": "../JudgingContest/spring-2026", "allowed": false },
+    { "domain": "judging", "party": "../Person/judging-chair", "capability": "DeclareWinner", "card": "../JudgingContest/spring-2026", "allowed": true },
+    { "domain": "judging", "party": "../Person/judging-chair", "capability": "EditCitation", "card": "../JudgingContest/spring-2026", "allowed": true },
+    { "domain": "judging", "party": "../Person/judge-a", "capability": "DeclareWinner", "card": "../JudgingContest/spring-2026", "allowed": false },
+    { "domain": "judging", "party": "../Person/judge-a", "capability": "SubmitScore", "card": "../JudgingContest/fall-2026", "allowed": false },
+    { "domain": "judging", "party": "../Person/fall-judge", "capability": "SubmitScore", "card": "../JudgingContest/fall-2026", "allowed": true }
+  ],
+  "capabilityLists": [
+    { "domain": "attendance", "party": "../Device/front-desk-1", "card": "../AttendanceLedger/main", "capabilities": ["RecordPunch"] },
+    { "domain": "attendance", "party": "../Person/attendance-admin", "card": "../AttendanceLedger/main", "capabilities": ["AmendRecord", "RecordOfflineDay", "RevokePolicy"] },
+    { "domain": "turn-game", "party": "../Person/player-x", "card": "../TurnGame/match-1", "capabilities": ["MakeMove", "Resign"] },
+    { "domain": "turn-game", "party": "../Person/spectator", "card": "../TurnGame/match-1", "capabilities": [] },
+    { "domain": "connected-app", "party": "../Person/store-owner", "card": "../ConnectedApp/fulfillment-bot", "capabilities": ["GrantApp", "RevokeApp"] },
+    { "domain": "connected-app", "party": "../Service/fulfillment-bot", "card": "../ConnectedApp/fulfillment-bot", "capabilities": ["PerformAppAction"] },
+    { "domain": "judging", "party": "../Person/judge-a", "card": "../JudgingContest/spring-2026", "capabilities": ["SubmitScore"] },
+    { "domain": "judging", "party": "../Person/judging-chair", "card": "../JudgingContest/spring-2026", "capabilities": ["DeclareWinner", "EditCitation"] }
+  ]
+}

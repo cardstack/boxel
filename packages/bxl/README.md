@@ -570,6 +570,7 @@ Profiles are the practical answer. BXL stays one language and one AST, but hosts
 | --- | --- | --- | --- |
 | `compute` | Full browser/local value computation | formulas, transforms, UI validation, query transforms | Preserves the current BXL contract: readable jq plus Excel helpers and validator.js functions, including lazy extensions on async runtime paths. |
 | `policy` | Bounded request-time authorization | write gates, field redaction decisions | Keeps request checks deterministic and fail-closed; allows bounded scalar helpers but rejects aggregate and collection-scanning calls. |
+| `authorization` | Bounded relationship-graph authorization | OpenFGA-semantic rewrites, Boxel capability rules | Extends `policy` only with compiler-lowered graph forms such as `direct`, `userset`, `userset_from`, and `except`. |
 | `predicate` | Query-time boolean filtering | row-level read filters, search constraints | Requires a query-shaped boolean predicate; rejects transforms, runtime-only helpers, validator.js functions, and non-lowerable FormulaJS calls unless a host explicitly lowers them. |
 | `derive` | Headless write/index-time computation | `computeVia`, denormalized fields, search facets | Allows deterministic record-local Excel/jq computation, including lazy extensions and aggregation, while rejecting request context and volatile runtime behavior. |
 
@@ -636,6 +637,13 @@ import {
   bxlToJq,          // strip BXL sugar, emit pure jq
   jqToBxl,          // upgrade jq source to readable BXL
 
+  // Boxel Policy — Card · Party · Seat · Capability authoring
+  prepareBoxelPolicySafe,
+
+  // Low-level compatibility IR and semantic-conformance adapter
+  compileAuthorizationModel,
+  prepareAuthorizationModelSafe,
+
   // Boxel realm authoring — factory + tagged templates that read well
   // inside @field decorators (see "Authoring inside Boxel" below)
   expression,       // factory: returns a function bound to `this` (the card)
@@ -658,6 +666,18 @@ Every function takes an optional `{ schema, runtimeLimits }` options object. Sub
 ```
 
 Full API reference in [`docs/api.md`](./docs/api.md).
+
+New authorization code should use `prepareBoxelPolicySafe` with the
+`boxel-policy/2` document and snapshot described in
+[`docs/authorization.md`](./docs/authorization.md). Card URLs remain card
+references; Boxel relationships populate links and seats; capability rules use
+ordinary BXL such as `Seat.Kiosk`, `Seat.Player`, or
+`Seat.Owner or Seat.Admin`. Nested Party groups are expanded implicitly from
+userset-valued relationship tuples, following Zanzibar semantics. The prepared
+policy exposes `authorize`,
+`listCards`, `listParties`, and `listCapabilities`. The older
+`bxl-authorization/1` model is the private compatibility IR documented in
+[`docs/authorization-kernel-ir.md`](./docs/authorization-kernel-ir.md).
 
 `runtime-bare` is intentionally a capability subset, not a second spelling of the full runtime. Calls such as `AND(...)`, `ROUND(...)`, or `DATE(...)` report that the spreadsheet formula library is absent and point to `@cardstack/bxl/runtime`. jq collection operators such as `map`, `select`, array `+`, and pipes remain available.
 
@@ -758,6 +778,8 @@ One-shot pipes too: `echo '{"n":42}' | bxl eval 'n * 2'` prints `84`.
 - [`docs/grammar.ebnf`](./docs/grammar.ebnf) — formal grammar
 - [`docs/sandbox.md`](./docs/sandbox.md) — sandbox contract and threat model
 - [`docs/profiles.md`](./docs/profiles.md) — profile contracts for restricted execution surfaces
+- [`docs/authorization.md`](./docs/authorization.md) — relationship authorization from first principles, with synchronous APIs, domain models, and security boundaries
+- [`src/authorization/README.md`](./src/authorization/README.md) — runtime architecture, Boxel integration lifecycle, OpenFGA/Zanzibar provenance, and merge gates
 - [`docs/realm-collaboration-use-cases.md`](./docs/realm-collaboration-use-cases.md) — real gateway admission, transition, event, clock, and ledger patterns
 - [`docs/excel-compatibility.md`](./docs/excel-compatibility.md) — what pasted Excel formulas support
 - [`docs/formulas.md`](./docs/formulas.md) — Excel helper matrix (implemented, BXL-only, via jq, won't add)

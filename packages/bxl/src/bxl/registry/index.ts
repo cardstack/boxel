@@ -19,6 +19,7 @@ import {
 } from '../../jqtools/evaluate/filters/registry.js';
 import { formulaContribJqFilters } from '../bridge/formula-contrib-jq.js';
 import { formulaContribNativeFilters } from '../bridge/formula-contrib-native.js';
+import { authorizationLibrary } from './authorization.js';
 
 export const formulaLibrary: BuiltinLibrary = {
   jq: formulaContribJqFilters,
@@ -27,11 +28,13 @@ export const formulaLibrary: BuiltinLibrary = {
 
 export const BXL_REGISTRY: Record<string, BuiltinLibrary> = {
   ...CORE_REGISTRY,
+  authorization: authorizationLibrary,
   formula: formulaLibrary,
 };
 
 export type BuiltinLibraryName =
   | 'core'
+  | 'authorization'
   | 'formula'
   | 'formula-statistical'
   | 'formula-bessel'

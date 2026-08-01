@@ -28,6 +28,7 @@ import { classifyBxlProfileFunction } from '../profiles/function-safety.js';
 export type BxlProfile =
   | 'compute'
   | 'policy'
+  | 'authorization'
   | 'predicate'
   | 'derive';
 
@@ -323,8 +324,11 @@ export function validateBxlAst(
       validateSandboxProfileNode(node, options.profile, issues);
     }
 
-    if (options.profile === 'policy') {
-      validatePolicyNode(node, issues);
+    if (
+      options.profile === 'policy' ||
+      options.profile === 'authorization'
+    ) {
+      validatePolicyNode(node, options.profile, issues);
     }
 
     if (options.profile === 'predicate') {
@@ -455,19 +459,23 @@ function validateSandboxProfileNode(
   }
 }
 
-function validatePolicyNode(node: BxlAstNode, issues: BxlProfileIssue[]) {
+function validatePolicyNode(
+  node: BxlAstNode,
+  profile: 'policy' | 'authorization',
+  issues: BxlProfileIssue[],
+) {
   if (node.type !== 'call') {
     return;
   }
 
-  const decision = classifyBxlProfileFunction('policy', node.name);
+  const decision = classifyBxlProfileFunction(profile, node.name);
   if (decision.safety === 'deny') {
     issues.push({
       code: decision.category === 'aggregate'
-        ? 'policy-aggregate-banned'
-        : 'policy-call-banned',
+        ? `${profile}-aggregate-banned`
+        : `${profile}-call-banned`,
       severity: 'error',
-      message: `Profile.policy is for bounded request-time authorization decisions and does not allow call ${node.name}${decision.message ? `: ${decision.message}` : ''}.`,
+      message: `${profileMessagePrefix(profile)} does not allow call ${node.name}${decision.message ? `: ${decision.message}` : ''}.`,
       nodeType: node.type,
     });
   }
@@ -604,6 +612,8 @@ function profileMessagePrefix(profile: BxlProfile): string {
       return 'Profile.compute';
     case 'policy':
       return 'Profile.policy is for bounded request-time authorization decisions and';
+    case 'authorization':
+      return 'Profile.authorization extends Profile.policy with bounded relationship-graph composition and';
     case 'predicate':
       return 'Profile.predicate must compile to a query-time boolean predicate and';
     case 'derive':

@@ -3,7 +3,7 @@
 BXL has one syntax and one semantic AST. A profile is not a second language; it is a validation contract for a specific execution surface. The profile exists so authors get parser-time errors when an expression asks for more power than that surface can safely provide.
 
 ```ts
-type BxlProfile = 'compute' | 'policy' | 'predicate' | 'derive';
+type BxlProfile = 'compute' | 'policy' | 'authorization' | 'predicate' | 'derive';
 ```
 
 Use `compileBxl(expression, { target: 'ast', profile })` or `parseBxlAst(expression, { profile })` to collect `profileIssues`. Use `assertValidBxlProfile(ast, { profile })` when a caller should reject invalid expressions.
@@ -159,6 +159,36 @@ NPV(0.1, [100, 200]) > 0
 
 Invalid because `NPV` scans a collection of cash flows, so it is classified as
 an aggregate call for request-time authorization.
+
+## `authorization`
+
+`authorization` is a strict superset of `policy` for compiling relationship
+authorization models. It carries every bounded, deterministic, fail-closed
+restriction from `policy` and adds only the compiler-recognized graph forms
+needed to express OpenFGA semantics:
+
+```bxl
+except(
+  direct() or userset("editor") or userset_from("parent"; "viewer");
+  userset("blocked")
+)
+```
+
+The added forms are `direct`, `userset`, `userset_from`, and `except`. Boxel
+Policy authoring also accepts `via`, which is validated and translated to
+`userset_from` before graph compilation. These are not ordinary runtime jq
+functions: the authorization compiler validates literal graph targets and
+lowers them to a closed, bounded intermediate representation.
+
+Use `authorization` for relationship rewrites and Boxel capability rules. Keep
+tuple conditions and ordinary request-time gates on `policy`; that profile
+rejects graph forms. The runtime adapters `auth_check`, `auth_check_result`,
+`auth_list_objects`, and `auth_list_users` are also rejected in
+`authorization`, preventing a rewrite from recursively invoking the kernel.
+
+All other `policy` restrictions continue to apply, including the bans on
+aggregates, volatility, error masking, side effects, user-defined helpers,
+explicit loops, and recursive descent.
 
 ## `predicate`
 
