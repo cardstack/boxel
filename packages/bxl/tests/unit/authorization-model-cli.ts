@@ -1,11 +1,11 @@
 import { deepStrictEqual, strictEqual } from 'node:assert';
 import {
-  prepareAuthorizationModelSafe,
-  type BxlAuthorizationModel,
+  prepareAuthorizationGraphSafe,
+  type AuthorizationGraphModel,
 } from '../../src/authorization/index.js';
 
-const model: BxlAuthorizationModel = {
-  schema: 'bxl-authorization/1',
+const model: AuthorizationGraphModel = {
+  schema: 'bxl-authorization-ir/1',
   types: {
     party: {},
     team: {
@@ -35,7 +35,7 @@ const model: BxlAuthorizationModel = {
   },
 };
 
-const prepared = prepareAuthorizationModelSafe(model, [
+const prepared = prepareAuthorizationGraphSafe(model, [
   {
     subject: 'party:alice',
     relation: 'owner',
@@ -66,8 +66,8 @@ deepStrictEqual(
   ['workflow:6'],
 );
 
-const mixedPredicate = prepareAuthorizationModelSafe({
-  schema: 'bxl-authorization/1',
+const mixedPredicate = prepareAuthorizationGraphSafe({
+  schema: 'bxl-authorization-ir/1',
   types: {
     user: {},
     document: {
@@ -140,8 +140,8 @@ if (mixedPredicate.ok) {
   if (inactiveUsers.ok) deepStrictEqual(inactiveUsers.value.users, []);
 }
 
-const dynamicUserset = prepareAuthorizationModelSafe({
-  schema: 'bxl-authorization/1',
+const dynamicUserset = prepareAuthorizationGraphSafe({
+  schema: 'bxl-authorization-ir/1',
   types: {
     user: {},
     document: {
@@ -153,8 +153,8 @@ const dynamicUserset = prepareAuthorizationModelSafe({
 strictEqual(dynamicUserset.ok, false);
 if (!dynamicUserset.ok) strictEqual(dynamicUserset.error.kind, 'invalid-expression');
 
-const unknownRelation = prepareAuthorizationModelSafe({
-  schema: 'bxl-authorization/1',
+const unknownRelation = prepareAuthorizationGraphSafe({
+  schema: 'bxl-authorization-ir/1',
   types: {
     user: {},
     document: {
@@ -165,7 +165,7 @@ const unknownRelation = prepareAuthorizationModelSafe({
 strictEqual(unknownRelation.ok, false);
 if (!unknownRelation.ok) strictEqual(unknownRelation.error.kind, 'unknown-relation');
 
-const invalidTuple = prepareAuthorizationModelSafe(model, [
+const invalidTuple = prepareAuthorizationGraphSafe(model, [
   {
     subject: 'team:operations',
     relation: 'owner',

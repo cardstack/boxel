@@ -5,8 +5,8 @@ import {
   type EntityReference,
   type SubjectReference,
 } from './identifiers.js';
-import type { CompiledAuthorizationModel } from './ir.js';
-import type { RelationshipTuple } from './model.js';
+import type { CompiledAuthorizationGraph } from './ir.js';
+import type { RelationshipTuple } from './graph-model.js';
 
 export interface IndexedRelationshipTuple extends RelationshipTuple {
   parsedSubject: SubjectReference;
@@ -46,7 +46,7 @@ function subjectMatchesConstraint(
 }
 
 export function buildAuthorizationTupleIndex(
-  model: CompiledAuthorizationModel,
+  model: CompiledAuthorizationGraph,
   tuples: readonly RelationshipTuple[],
   options: AuthorizationTupleIndexOptions = {},
 ): AuthorizationTupleIndex {

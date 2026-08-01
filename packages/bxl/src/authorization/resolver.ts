@@ -7,9 +7,9 @@ import {
 } from './identifiers.js';
 import type {
   AuthorizationRelationExpression,
-  CompiledAuthorizationModel,
+  CompiledAuthorizationGraph,
 } from './ir.js';
-import type { RelationshipTuple } from './model.js';
+import type { RelationshipTuple } from './graph-model.js';
 import {
   breadthFirstRecursiveMatchSync,
   OPENFGA_RECURSIVE_PORT_INFO,
@@ -225,7 +225,7 @@ function directTupleMatchesSubject(
 }
 
 function tupleConditionOutcome(
-  model: CompiledAuthorizationModel,
+  model: CompiledAuthorizationGraph,
   tuple: IndexedRelationshipTuple,
   state: ResolutionState,
 ): ResolutionOutcome {
@@ -255,7 +255,7 @@ function tupleConditionOutcome(
 }
 
 function resolveOpenFgaRecursiveUsersets(
-  model: CompiledAuthorizationModel,
+  model: CompiledAuthorizationGraph,
   initialUsersets: readonly string[],
   state: ResolutionState,
   visited: ReadonlySet<string>,
@@ -367,7 +367,7 @@ function resolveOpenFgaRecursiveUsersets(
 }
 
 function resolveDirect(
-  model: CompiledAuthorizationModel,
+  model: CompiledAuthorizationGraph,
   object: EntityReference,
   relation: string,
   state: ResolutionState,
@@ -435,7 +435,7 @@ function resolveDirect(
 }
 
 function resolveTupleToUserset(
-  model: CompiledAuthorizationModel,
+  model: CompiledAuthorizationGraph,
   expression: Extract<AuthorizationRelationExpression, { kind: 'tupleToUserset' }>,
   object: EntityReference,
   state: ResolutionState,
@@ -477,7 +477,7 @@ function resolveTupleToUserset(
 }
 
 function resolveExpression(
-  model: CompiledAuthorizationModel,
+  model: CompiledAuthorizationGraph,
   expression: AuthorizationRelationExpression,
   object: EntityReference,
   relation: string,
@@ -579,7 +579,7 @@ function resolveExpression(
 }
 
 function resolveRelation(
-  model: CompiledAuthorizationModel,
+  model: CompiledAuthorizationGraph,
   object: EntityReference,
   relation: string,
   state: ResolutionState,
@@ -638,7 +638,7 @@ function resolveRelation(
 }
 
 export function checkAuthorization(
-  model: CompiledAuthorizationModel,
+  model: CompiledAuthorizationGraph,
   stored: AuthorizationTupleIndex,
   request: AuthorizationCheckRequest,
 ): AuthorizationSafeResult<AuthorizationCheckResult> {

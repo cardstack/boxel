@@ -1,9 +1,9 @@
 import { deepStrictEqual, strictEqual } from 'node:assert';
 import {
   classifyBxlProfileFunction,
-  prepareAuthorizationModelSafe,
+  prepareAuthorizationGraphSafe,
   prepareNativeJq,
-  type BxlAuthorizationModel,
+  type AuthorizationGraphModel,
   type RelationshipTuple,
 } from '../../src/index.js';
 
@@ -28,8 +28,8 @@ strictEqual(
   'authorization rewrites can use relationship-graph calls',
 );
 
-const model: BxlAuthorizationModel = {
-  schema: 'bxl-authorization/1',
+const model: AuthorizationGraphModel = {
+  schema: 'bxl-authorization-ir/1',
   types: {
     user: {},
     group: {
@@ -61,7 +61,7 @@ const tuples: RelationshipTuple[] = [
   { subject: 'user:member', relation: 'member', object: 'group:staff' },
 ];
 
-const prepared = prepareAuthorizationModelSafe(model, tuples);
+const prepared = prepareAuthorizationGraphSafe(model, tuples);
 strictEqual(prepared.ok, true);
 if (!prepared.ok) throw new Error(prepared.error.message);
 

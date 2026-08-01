@@ -41,6 +41,13 @@ for (const file of files) {
     false,
     `${file} must not contain source realm URLs or workstation paths`,
   );
+  strictEqual(
+    /tribeca|classroom|student|teacher|instructor|service.?provider|education|attendance|kiosk/i.test(
+      source,
+    ),
+    false,
+    `${file} must not contain vocabulary from the removed realm-derived fixture`,
+  );
 }
 
 console.log(

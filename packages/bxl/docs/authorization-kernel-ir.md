@@ -1,16 +1,16 @@
 # Authorization kernel compatibility IR
 
-> **Internal surface.** This document describes `bxl-authorization/1`, the
+> **Internal surface.** This document describes `bxl-authorization-ir/1`, the
 > compatibility representation used by the graph kernel and pinned semantic
 > fixtures. Application authors should use
-> [`boxel-policy/2`](./authorization.md), Card links, Parties, Seats,
-> Capabilities, and `prepareBoxelPolicySafe`. The encoded identifiers, tuples,
+> [`bxl-authorization/1`](./authorization.md), Resource links, Parties, Seats,
+> Capabilities, and `prepareBxlAuthorizationSafe`. The encoded identifiers, tuples,
 > and userset functions below are not the Boxel authoring language.
 
 BXL Authorization is a synchronous relationship-based authorization extension
 for BXL. It answers questions such as:
 
-- Can the lead teacher manage the roster for Classroom A?
+- Can a maintainer merge changes in Repository A?
 - Which patient records may Dr. Rivera read?
 - Who may change the pricing assumptions on this insurance policy?
 - Which flight plans may this dispatcher edit?
@@ -20,7 +20,7 @@ module, subprocess, clock, network lookup, or asynchronous adapter in the
 decision path.
 
 OpenFGA matters here only because its test corpus supplied a mature semantic
-specification. New production code uses the Boxel Policy v2 surface; this
+specification. New production code uses the public BXL Authorization surface; this
 low-level model remains available for compatibility, debugging, and semantic
 conformance. BXL does not accept OpenFGA DSL or CEL at runtime.
 
@@ -31,18 +31,18 @@ with five nouns.
 
 | Noun | Meaning | Example |
 | --- | --- | --- |
-| Subject | The person, service, or group asking | `staff_member:lead-teacher` |
-| Object | The thing being protected | `classroom:classroom-a` |
-| Relation | A stored relationship that may be assigned | `lead_teacher` |
-| Permission | A rule computed from relations and other permissions | `can_manage_roster` |
-| Tuple | One stored subject–relation–object fact | A staff member is a lead teacher of Classroom A |
+| Subject | The person, service, or group asking | `user:maintainer` |
+| Object | The thing being protected | `repository:repository-a` |
+| Relation | A stored relationship that may be assigned | `maintainer` |
+| Permission | A rule computed from relations and other permissions | `can_merge` |
+| Tuple | One stored subject–relation–object fact | A user is a maintainer of Repository A |
 
 A **check** asks one complete question:
 
 ```text
-subject:  staff_member:lead-teacher
-relation: can_manage_roster
-object:   classroom:classroom-a
+subject:  user:maintainer
+relation: can_merge
+object:   repository:repository-a
 ```
 
 The answer is `allow` or `deny`, plus optional work metrics and an explanation
@@ -50,32 +50,32 @@ trace.
 
 The distinction between relations and permissions is important:
 
-- A relation is authored data. You may store a tuple saying a staff member is a
-  `lead_teacher`.
-- A permission is a rule. You do not store a tuple saying that staff member has
-  `can_manage_roster`; the kernel derives that answer from the model.
+- A relation is authored data. You may store a tuple saying a user is a
+  `maintainer`.
+- A permission is a rule. You do not store a tuple saying that user has
+  `can_merge`; the kernel derives that answer from the model.
 
 ## Read a model in English
 
-This model fragment uses a generalized classroom example:
+This model fragment uses a generalized repository example:
 
 ```ts
-const model: BxlAuthorizationModel = {
-  schema: 'bxl-authorization/1',
+const model: AuthorizationGraphModel = {
+  schema: 'bxl-authorization-ir/1',
   types: {
-    staff_member: {},
-    classroom: {
+    user: {},
+    repository: {
       relations: {
-        administrator: ['staff_member'],
-        lead_teacher: ['staff_member'],
-        instructor: ['staff_member'],
-        service_provider: ['staff_member'],
+        administrator: ['user'],
+        maintainer: ['user'],
+        reviewer: ['user'],
+        security_reviewer: ['user'],
       },
       permissions: {
-        teacher: 'userset("lead_teacher") or userset("instructor")',
-        can_view_roster: 'userset("teacher") or userset("administrator")',
-        can_manage_roster: 'userset("lead_teacher") or userset("administrator")',
-        can_publish_update: 'userset("teacher")',
+        contributor: 'userset("maintainer") or userset("reviewer")',
+        can_view_repository: 'userset("contributor") or userset("administrator")',
+        can_merge: 'userset("maintainer") or userset("administrator")',
+        can_publish_release: 'userset("contributor")',
       },
     },
   },
@@ -84,14 +84,14 @@ const model: BxlAuthorizationModel = {
 
 In English:
 
-- `administrator: ['staff_member']` means a staff member may be directly
-  assigned as a classroom administrator.
-- `lead_teacher: ['staff_member']` means a staff member may be directly
-  assigned as a lead teacher.
-- `teacher` means anyone who is a lead teacher **or** instructor.
-- `can_view_roster` means any teacher or administrator.
-- `can_manage_roster` is narrower: only a lead teacher or administrator.
-- `can_publish_update` includes teachers but not administrators merely because
+- `administrator: ['user']` means a user may be directly
+  assigned as a repository administrator.
+- `maintainer: ['user']` means a user may be directly
+  assigned as a maintainer.
+- `contributor` means anyone who is a maintainer **or** reviewer.
+- `can_view_repository` means any contributor or administrator.
+- `can_merge` is narrower: only a maintainer or administrator.
+- `can_publish_release` includes contributors but not administrators merely because
   they are administrators.
 
 That last point is deliberate. Authorization should express the domain rule,
@@ -103,32 +103,32 @@ The corresponding tuples are plain data:
 ```ts
 const tuples: RelationshipTuple[] = [
   {
-    subject: 'staff_member:StaffMember/administrator',
+    subject: 'user:User/administrator',
     relation: 'administrator',
-    object: 'classroom:Classroom/classroom-a',
+    object: 'repository:Repository/repository-a',
   },
   {
-    subject: 'staff_member:StaffMember/lead-teacher',
-    relation: 'lead_teacher',
-    object: 'classroom:Classroom/classroom-a',
+    subject: 'user:User/maintainer',
+    relation: 'maintainer',
+    object: 'repository:Repository/repository-a',
   },
   {
-    subject: 'staff_member:StaffMember/instructor',
-    relation: 'instructor',
-    object: 'classroom:Classroom/classroom-a',
+    subject: 'user:User/reviewer',
+    relation: 'reviewer',
+    object: 'repository:Repository/repository-a',
   },
   {
-    subject: 'staff_member:StaffMember/provider',
-    relation: 'service_provider',
-    object: 'classroom:Classroom/classroom-a',
+    subject: 'user:User/security-reviewer',
+    relation: 'security_reviewer',
+    object: 'repository:Repository/repository-a',
   },
 ];
 ```
 
 Identifiers use `type:id`. A subject may also be:
 
-- a userset such as `group:faculty#member`, meaning every member of the faculty
-  group;
+- a userset such as `group:release-reviewers#member`, meaning every member of
+  the release-reviewers group;
 - a typed wildcard such as `user:*`, meaning every concrete user unless a rule
   subtracts some of them.
 
@@ -168,7 +168,7 @@ detected and bounded by the kernel instead of becoming general-purpose BXL
 recursion.
 
 Userset recursion is implicit in the graph, following Zanzibar and OpenFGA.
-When a direct relation tuple names a userset such as `group:student-a-providers#member`,
+When a direct relation tuple names a userset such as `group:change-a-reviewers#member`,
 the resolver expands that userset and continues through any nested userset
 tuples. The synchronous TypeScript port of OpenFGA's
 `breadthFirstRecursiveMatch` traversal handles that expansion. Policy authors
@@ -187,13 +187,13 @@ Prepare the model once, then reuse it for many requests:
 
 ```ts
 import {
-  prepareAuthorizationModelSafe,
-  type BxlAuthorizationModel,
+  prepareAuthorizationGraphSafe,
+  type AuthorizationGraphModel,
   type RelationshipTuple,
 } from '@cardstack/bxl';
 
-const model: BxlAuthorizationModel = {
-  schema: 'bxl-authorization/1',
+const model: AuthorizationGraphModel = {
+  schema: 'bxl-authorization-ir/1',
   types: {
     user: {},
     group: {
@@ -222,7 +222,7 @@ const tuples: RelationshipTuple[] = [
   { subject: 'user:mallory', relation: 'blocked', object: 'document:budget' },
 ];
 
-const prepared = prepareAuthorizationModelSafe(model, tuples);
+const prepared = prepareAuthorizationGraphSafe(model, tuples);
 if (!prepared.ok) {
   throw new Error(`${prepared.error.kind}: ${prepared.error.message}`);
 }
@@ -257,7 +257,7 @@ the error, but an enforcement caller should deny.
 
 ## What preparation does
 
-`prepareAuthorizationModelSafe(model, tuples)` is the boundary between model
+`prepareAuthorizationGraphSafe(model, tuples)` is the boundary between model
 setup and request-time work.
 
 Preparation performs:
@@ -274,7 +274,7 @@ Request-time methods perform no I/O and return synchronously:
 ```mermaid
 flowchart LR
   A["Authenticated caller"] --> B["Pinned model + protected tuples"]
-  B --> C["prepareAuthorizationModelSafe"]
+  B --> C["prepareAuthorizationGraphSafe"]
   C --> D["Compiled graph IR + tuple indexes"]
   D --> E["check / checkMany / listObjects / listUsers"]
   E --> F{"Safe result"}
@@ -355,8 +355,8 @@ from a known network.
 Conditions are BXL expressions over `.context`:
 
 ```ts
-const conditionalModel: BxlAuthorizationModel = {
-  schema: 'bxl-authorization/1',
+const conditionalModel: AuthorizationGraphModel = {
+  schema: 'bxl-authorization-ir/1',
   conditions: {
     approved_emergency: {
       expression: '.context.breakGlass == true and present(.context.ticketId)',
@@ -524,9 +524,9 @@ These solve related but different problems.
 | Question | Best tool |
 | --- | --- |
 | Is Alice an editor directly or through a group? | Authorization graph |
-| Does a classroom instructor inherit roster-view permission? | Authorization graph |
+| Does a repository reviewer inherit repository-view permission? | Authorization graph |
 | Is the bid above the current bid and before the deadline? | BXL `policy` expression over a trusted request envelope |
-| Which fields should a student, faculty member, or anonymous visitor see? | BXL projection/view expression after authorization |
+| Which fields should an account owner, auditor, or anonymous visitor see? | BXL projection/view expression after authorization |
 | May this write change only the `preferredName` field? | BXL `policy` expression over old/new values |
 | Which records match a bounded indexed search predicate? | BXL `predicate` profile or host query language |
 
@@ -538,53 +538,53 @@ A common application flow combines them:
 3. A BXL view expression projects only the fields that audience may receive.
 4. The host performs the read or write atomically and records the decision.
 
-The Realm Policy Lab in `examples/policy-mediation-examples.ts` demonstrates
-steps 2 and 3 for anonymous, student, faculty, registrar, and projection-worker
-audiences. The authorization kernel supplies the reusable relationship layer
-that can choose those audiences.
+The authorization examples demonstrate the reusable relationship layer in
+step 1. Projection, mutation validation, and atomic persistence remain host
+responsibilities and are intentionally outside this kernel.
 
 ## Domain patterns
 
 The following examples use domains already represented by BXL's committed
 example corpus. They are modeling sketches, not universal policy rulings.
 
-### Education: classroom, student, and service-provider access
+### Software release governance
 
-The Classroom 6 fixture intentionally distinguishes broad classroom staff from
-a service provider assigned to individual students.
+The synthetic release-governance fixture distinguishes organization-wide
+release roles from a security reviewer assigned to individual change requests.
 
 ```ts
-student: {
+change_request: {
   relations: {
-    classroom: ['classroom'],
-    provider: ['staff_member'],
+    repository: ['repository'],
+    review_team: ['group#member'],
   },
   permissions: {
-    viewer: 'userset_from("classroom"; "can_view_student") or userset("provider")',
-    editor: 'userset_from("classroom"; "can_manage_roster")',
+    viewer: 'userset_from("repository"; "can_view_repository") or userset("review_team")',
+    security_reviewer: 'userset("review_team")',
+    merger: 'userset_from("repository"; "can_merge")',
   },
 }
 ```
 
 In English:
 
-- A teacher who may view the classroom's students may view students linked to
-  that classroom.
-- A service provider may view only a student with a direct `provider` tuple.
-- Managing the roster is inherited from the classroom's narrower
-  `can_manage_roster` permission.
+- A repository contributor may view change requests linked to that repository.
+- A security reviewer may review only a change request whose `review_team`
+  userset contains that reviewer.
+- Merge authority is inherited from the repository's narrower `can_merge`
+  permission.
 
-This prevents the tempting but incorrect rule “all classroom staff may view
-the entire roster.”
+This prevents the tempting but incorrect rule “every security reviewer may
+review every change.”
 
 Common checks:
 
 | Question | Subject | Permission | Object |
 | --- | --- | --- | --- |
-| May a lead teacher manage the roster? | staff member | `can_manage_roster` | classroom |
-| May a provider view this assigned student? | staff member | `viewer` | student |
-| May an instructor publish the morning update? | staff member | `publisher` | feed entry |
-| May an administrator view the weekly report? | staff member | `viewer` | report |
+| May a maintainer merge this change? | user | `merger` | change request |
+| May an assigned reviewer inspect security findings? | user | `security_reviewer` | change request |
+| May a release manager approve a release? | user | `approver` | release |
+| May a contributor view the release dashboard? | user | `viewer` | dashboard |
 
 ### Hospital: care teams, patient self-access, and break glass
 
@@ -690,30 +690,30 @@ This avoids encoding room membership repeatedly in every bid, chat, move, or
 trivia expression. It also avoids asking the relationship graph to act like a
 state machine.
 
-### Student directory and mediated records
+### Customer accounts and mediated records
 
-The Realm Policy Lab shows why “may read the record” is not always the final
-question. Anonymous visitors, students, faculty, and registrars may receive
-different projections of the same canonical student record.
+Authorization is often only the first question. Anonymous visitors, account
+owners, support agents, and auditors may receive different projections of the
+same canonical account record after the host has authorized access.
 
 Use the graph to select the audience:
 
 ```text
-student:me is owner of student_record:me
-group:faculty#member is faculty_viewer of student_record:me
-user:registrar is registrar of student_record:me
+user:me is owner of account:me
+group:support#member is support_viewer of account:me
+user:auditor is auditor of account:me
 ```
 
 Then use a BXL view expression to remove or derive fields:
 
 ```jq
 {
-  type: "directory-student",
+  type: "account-summary",
   id: .record.id,
   attributes: {
-    displayName: (.record.attributes.preferredName // .record.attributes.fullName),
-    program: .record.attributes.program,
-    year: .record.attributes.year
+    displayName: .record.attributes.displayName,
+    plan: .record.attributes.plan,
+    status: .record.attributes.status
   }
 }
 ```
@@ -804,7 +804,7 @@ BXL execution model without porting its production syntax.
 
 Production additions:
 
-- `src/authorization/model.ts` — `bxl-authorization/1` model and tuple types;
+- `src/authorization/graph-model.ts` — `bxl-authorization-ir/1` model and tuple types;
 - `src/authorization/compiler.ts` — BXL expressions to relationship-graph IR;
 - `src/authorization/tuple-index.ts` — validated tuple indexes;
 - `src/authorization/resolver.ts` — bounded Check with cycle detection, metrics,
@@ -820,9 +820,10 @@ Test and learning surfaces:
 - a pinned upstream OpenFGA semantic corpus;
 - a test-only OpenFGA DSL/CEL-to-BXL importer;
 - zero-skip conformance accounting;
-- the real Classroom 6 fixture and 28-check regression test;
+- a synthetic software-release fixture with decision and capability-list
+  regression tests;
 - a Node benchmark;
-- a dark, high-contrast Classroom authorization playground;
+- a dark, high-contrast authorization playground;
 - a browser conformance observatory that shows upstream YAML, OpenFGA DSL, the
   translated BXL model, all test names, results, and end-to-end timing.
 
@@ -880,7 +881,7 @@ It separates cold model preparation from warm Check, CheckMany, ListObjects,
 and ListUsers work. Treat benchmark output as a local comparison, not a service
 latency promise.
 
-Run the real Classroom 6 browser playground:
+Run the generalized authorization browser playground:
 
 ```sh
 npm run demo:authorization
@@ -902,8 +903,8 @@ Prefer these patterns:
 
 - Name relations after stable domain relationships: `owner`, `attending`,
   `assigned_underwriter`, `dispatcher`, `member`.
-- Name permissions after capabilities: `can_read`, `can_manage_roster`,
-  `can_edit_pricing`, `can_publish_update`.
+- Name permissions after capabilities: `can_read`, `can_merge`,
+  `can_edit_pricing`, `can_publish_release`.
 - Model reusable groups as userset subjects such as `team:claims#member`.
 - Keep request-local business state in BXL policy expressions, not relationship
   tuples.
@@ -955,9 +956,6 @@ paths.
 
 - [`profiles.md`](./profiles.md) explains the bounded `policy`, `predicate`,
   `derive`, and `compute` execution contracts.
-- [`boxel-realm-policy-mediation.md`](./boxel-realm-policy-mediation.md)
-  explains audience-specific views, field mediation, writes, commands, and
-  protected aggregates around authorization.
 - [`realm-collaboration-use-cases.md`](./realm-collaboration-use-cases.md)
   shows stateful gateway policies and durable event patterns.
 - [`openfga-synchronous-kernel-port-plan.md`](./openfga-synchronous-kernel-port-plan.md)

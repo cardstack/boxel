@@ -1,10 +1,10 @@
-import { compileAuthorizationModel } from './compiler.js';
+import { compileAuthorizationGraph } from './compiler.js';
 import {
   toAuthorizationErrorRecord,
   type AuthorizationSafeResult,
 } from './errors.js';
-import type { CompiledAuthorizationModel } from './ir.js';
-import type { BxlAuthorizationModel, RelationshipTuple } from './model.js';
+import type { CompiledAuthorizationGraph } from './ir.js';
+import type { AuthorizationGraphModel, RelationshipTuple } from './graph-model.js';
 import {
   checkAuthorization,
   type AuthorizationCheckRequest,
@@ -24,8 +24,8 @@ import {
   type AuthorizationTupleIndex,
 } from './tuple-index.js';
 
-export interface PreparedAuthorizationModel {
-  model: CompiledAuthorizationModel;
+export interface PreparedAuthorizationGraph {
+  model: CompiledAuthorizationGraph;
   tupleIndex: AuthorizationTupleIndex;
   check(request: AuthorizationCheckRequest): AuthorizationSafeResult<AuthorizationCheckResult>;
   checkMany(
@@ -39,16 +39,16 @@ export interface PreparedAuthorizationModel {
   ): AuthorizationSafeResult<AuthorizationListUsersResult>;
 }
 
-export interface PrepareAuthorizationModelOptions
+export interface PrepareAuthorizationGraphOptions
   extends AuthorizationTupleIndexOptions {}
 
-export function prepareAuthorizationModelSafe(
-  model: BxlAuthorizationModel,
+export function prepareAuthorizationGraphSafe(
+  model: AuthorizationGraphModel,
   tuples: readonly RelationshipTuple[] = [],
-  options: PrepareAuthorizationModelOptions = {},
-): AuthorizationSafeResult<PreparedAuthorizationModel> {
+  options: PrepareAuthorizationGraphOptions = {},
+): AuthorizationSafeResult<PreparedAuthorizationGraph> {
   try {
-    const compiled = compileAuthorizationModel(model);
+    const compiled = compileAuthorizationGraph(model);
     const tupleIndex = buildAuthorizationTupleIndex(compiled, tuples, options);
     return {
       ok: true,
@@ -74,13 +74,13 @@ export function prepareAuthorizationModelSafe(
   }
 }
 
-export { compileAuthorizationModel } from './compiler.js';
-export * from './boxel-policy.js';
+export { compileAuthorizationGraph } from './compiler.js';
+export * from './bxl-authorization.js';
 export * from './errors.js';
 export * from './enumerate.js';
 export * from './identifiers.js';
 export * from './ir.js';
-export * from './model.js';
+export * from './graph-model.js';
 export * from './openfga-recursive.js';
 export * from './resolver.js';
 export * from './tuple-index.js';

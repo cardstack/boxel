@@ -1,19 +1,18 @@
 import { deepStrictEqual, strictEqual } from 'node:assert';
 import {
-  prepareBoxelPolicySafe,
-  type BoxelPolicyDocument,
-  type BoxelPolicySnapshot,
+  prepareBxlAuthorizationSafe,
+  type BxlAuthorizationDocument,
+  type BxlAuthorizationSnapshot,
 } from '../../src/authorization/index.js';
 
-const document: BoxelPolicyDocument = {
-  schema: 'boxel-policy/2',
-  card: '../Policy/example',
+const document: BxlAuthorizationDocument = {
+  schema: 'bxl-authorization/1',
+  id: 'example',
   scopes: [
     {
       name: 'Project',
-      adoptsFrom: '../projects/Project',
       seats: [
-        { name: 'Owner', from: 'Card.Owner' },
+        { name: 'Owner', from: 'Resource.Owner' },
         { name: 'Administrator', from: 'Policy.Administrators' },
       ],
       capabilities: [
@@ -25,14 +24,13 @@ const document: BoxelPolicyDocument = {
     },
     {
       name: 'Task',
-      adoptsFrom: '../tasks/Task',
-      links: [{ name: 'Project', to: '../projects/Project' }],
+      links: [{ name: 'Project', to: 'Project' }],
       seats: [{ name: 'Contributor' }, { name: 'Suspended' }],
       capabilities: [
         { name: 'Contribute', where: 'Seat.Contributor' },
         {
           name: 'Edit',
-          where: 'via(Card.Project; Capability.View) or Capability.Contribute',
+          where: 'via(Resource.Project; Capability.View) or Capability.Contribute',
         },
         { name: 'PublicPreview', where: 'Party.Anyone' },
         { name: 'MemberPreview', where: 'Party.Member' },
@@ -52,20 +50,20 @@ const document: BoxelPolicyDocument = {
   ],
 };
 
-const snapshot: BoxelPolicySnapshot = {
+const snapshot: BxlAuthorizationSnapshot = {
   policy: {
-    card: '../Policy/example',
+    id: 'example',
     links: { administrators: ['../Person/administrator'] },
   },
-  cards: [
+  resources: [
     {
-      card: '../Project/alpha',
-      adoptsFrom: '../projects/Project',
+      resource: '../Project/alpha',
+      type: 'Project',
       links: { owner: '../Person/owner' },
     },
     {
-      card: '../Task/one',
-      adoptsFrom: '../tasks/Task',
+      resource: '../Task/one',
+      type: 'Task',
       links: { project: '../Project/alpha' },
     },
   ],
@@ -82,19 +80,19 @@ const snapshot: BoxelPolicySnapshot = {
   guests: ['../Person/guest'],
   seats: [
     {
-      scope: '../Task/one',
+      resource: '../Task/one',
       seat: 'Contributor',
       holders: ['../Person/contributor', '../Person/suspended-contributor'],
     },
     {
-      scope: '../Task/one',
+      resource: '../Task/one',
       seat: 'Suspended',
       holders: ['../Person/suspended-contributor'],
     },
   ],
 };
 
-const prepared = prepareBoxelPolicySafe(document, snapshot);
+const prepared = prepareBxlAuthorizationSafe(document, snapshot);
 strictEqual(prepared.ok, true);
 if (!prepared.ok) throw new Error(prepared.error.message);
 
@@ -114,17 +112,17 @@ const expected = [
   ['../Person/suspended-contributor', 'Publish', '../Task/one', false],
 ] as const;
 
-for (const [party, capability, card, allowed] of expected) {
-  const result = prepared.value.authorize({ party, capability, card, trace: true });
-  strictEqual(result.ok, true, `${party} ${capability} ${card}`);
+for (const [party, capability, resource, allowed] of expected) {
+  const result = prepared.value.checkCapability({ party, capability, resource, trace: true });
+  strictEqual(result.ok, true, `${party} ${capability} ${resource}`);
   if (!result.ok) continue;
-  strictEqual(result.value.allowed, allowed, `${party} ${capability} ${card}`);
+  strictEqual(result.value.allowed, allowed, `${party} ${capability} ${resource}`);
 }
 
-const refused = prepared.value.authorize({
+const refused = prepared.value.checkCapability({
   party: '../Person/suspended-contributor',
   capability: 'Publish',
-  card: '../Task/one',
+  resource: '../Task/one',
 });
 strictEqual(refused.ok, true);
 if (refused.ok) {
@@ -138,7 +136,7 @@ if (refused.ok) {
 
 const listed = prepared.value.listCapabilities({
   party: '../Person/suspended-contributor',
-  card: '../Task/one',
+  resource: '../Task/one',
 });
 strictEqual(listed.ok, true);
 if (listed.ok) {
@@ -149,24 +147,23 @@ if (listed.ok) {
   ]);
 }
 
-const invalidDocument: BoxelPolicyDocument = {
+const invalidDocument: BxlAuthorizationDocument = {
   ...document,
   scopes: [
     {
       name: 'Invalid',
-      adoptsFrom: '../invalid/Invalid',
       capabilities: [{ name: 'View', where: 'Seat.Missing' }],
     },
   ],
 };
-const invalidSnapshot: BoxelPolicySnapshot = {
-  cards: [{ card: '../Invalid/one', adoptsFrom: '../invalid/Invalid' }],
+const invalidSnapshot: BxlAuthorizationSnapshot = {
+  resources: [{ resource: '../Invalid/one', type: 'Invalid' }],
   parties: [{ party: '../Person/one' }],
 };
-const invalid = prepareBoxelPolicySafe(invalidDocument, invalidSnapshot);
+const invalid = prepareBxlAuthorizationSafe(invalidDocument, invalidSnapshot);
 strictEqual(invalid.ok, false);
 if (!invalid.ok) strictEqual(invalid.error.kind, 'unknown-relation');
 
 console.log(
-  'Boxel Policy syntax: Seat, Capability, Party audiences, via, refusal precedence, enumeration, and validation passed',
+  'BXL Authorization syntax: Seat, Capability, Party audiences, via, refusal precedence, enumeration, and validation passed',
 );

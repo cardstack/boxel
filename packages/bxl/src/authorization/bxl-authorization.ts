@@ -3,185 +3,183 @@ import { parseNativeJq } from '../bxl/bridge/native.js';
 import type { ExpressionAst } from '../jqtools/parser/AST.js';
 import { AuthorizationError, toAuthorizationErrorRecord, type AuthorizationSafeResult } from './errors.js';
 import type { AuthorizationRuntimeLimits, AuthorizationTraceEvent } from './resolver.js';
-import { prepareAuthorizationModelSafe, type PreparedAuthorizationModel } from './index.js';
+import { prepareAuthorizationGraphSafe, type PreparedAuthorizationGraph } from './index.js';
 import type {
-  BxlAuthorizationModel,
+  AuthorizationGraphModel,
   RelationshipTuple,
-} from './model.js';
+} from './graph-model.js';
 
-export const BOXEL_POLICY_SCHEMA = 'boxel-policy/2' as const;
+export const BXL_AUTHORIZATION_SCHEMA = 'bxl-authorization/1' as const;
 
-export interface BoxelPolicyLinkDefinition {
-  /** Stable UpperCamelCase handle used as `Card.Handle`. */
+export interface BxlAuthorizationLink {
+  /** Stable UpperCamelCase handle used as `Resource.Handle`. */
   name: string;
-  /** `adoptsFrom` URL of the linked card type. */
+  /** Stable UpperCamelCase name of the linked authorization type. */
   to: string;
   displayName?: string;
 }
 
-export interface BoxelPolicySeatDefinition {
+export interface BxlAuthorizationSeat {
   /** Stable UpperCamelCase handle used as `Seat.Handle`. */
   name: string;
   displayName?: string;
-  /** Optional Boxel relationship source such as `Card.Operator`. */
+  /** Optional relationship source such as `Resource.Operator`. */
   from?: string;
 }
 
-export interface BoxelPolicyRefusal {
+export interface BxlAuthorizationRefusal {
   when: string;
   because: string;
 }
 
-export interface BoxelPolicyCapabilityDefinition {
+export interface BxlAuthorizationCapability {
   /** Stable UpperCamelCase handle used as `Capability.Handle`. */
   name: string;
   displayName?: string;
   /** Positive BXL eligibility expression. */
   where: string;
   /** Explicit deny clauses, evaluated after `where`. */
-  refuse?: string | readonly BoxelPolicyRefusal[];
+  refuse?: string | readonly BxlAuthorizationRefusal[];
 }
 
-export interface BoxelPolicyScopeDefinition {
-  /** Stable UpperCamelCase handle for diagnostics and tooling. */
+export interface BxlAuthorizationScope {
+  /** Stable UpperCamelCase authorization type name. */
   name: string;
-  /** Canonical CardDef URL. This replaces an authorization `type`. */
-  adoptsFrom: string;
-  links?: readonly BoxelPolicyLinkDefinition[];
-  seats?: readonly BoxelPolicySeatDefinition[];
-  capabilities: readonly BoxelPolicyCapabilityDefinition[];
+  links?: readonly BxlAuthorizationLink[];
+  seats?: readonly BxlAuthorizationSeat[];
+  capabilities: readonly BxlAuthorizationCapability[];
 }
 
-export interface BoxelPolicyDocument {
-  schema: typeof BOXEL_POLICY_SCHEMA;
-  /** Optional URL of the Policy card that owns this definition. */
-  card?: string;
-  scopes: readonly BoxelPolicyScopeDefinition[];
+export interface BxlAuthorizationDocument {
+  schema: typeof BXL_AUTHORIZATION_SCHEMA;
+  /** Optional stable identifier for this authorization document. */
+  id?: string;
+  scopes: readonly BxlAuthorizationScope[];
 }
 
-export interface BoxelPolicyCardSnapshot {
-  /** Canonical or realm-relative card URL. */
-  card: string;
-  /** Canonical CardDef URL. */
-  adoptsFrom: string;
-  /** Ordinary card values made available as `Card`. */
+export interface BxlAuthorizationResource {
+  /** Stable identifier for the protected resource. */
+  resource: string;
+  /** Stable authorization type name matching a document scope. */
+  type: string;
+  /** Ordinary resource values made available as `Resource`. */
   data?: Readonly<Record<string, unknown>>;
-  /** Loaded Boxel relationships, keyed by camelCase field name. */
+  /** Loaded resource relationships, keyed by camelCase field name. */
   links?: Readonly<Record<string, string | readonly string[] | undefined>>;
 }
 
-export interface BoxelPolicyPartySnapshot {
-  /** Canonical or realm-relative Party card URL. */
+export interface BxlAuthorizationParty {
+  /** Stable identifier for the party. */
   party: string;
   data?: Readonly<Record<string, unknown>>;
-  /** Nested Party membership. A team seated in a policy seats its members. */
+  /** Nested Party membership. A seated team also seats its members. */
   members?: readonly string[];
 }
 
-export interface BoxelPolicyCardDataSnapshot {
-  card: string;
+export interface BxlAuthorizationPolicyData {
+  id?: string;
   data?: Readonly<Record<string, unknown>>;
   links?: Readonly<Record<string, string | readonly string[] | undefined>>;
 }
 
-export interface BoxelPolicySeatAssignment {
-  scope: string;
+export interface BxlAuthorizationSeatAssignment {
+  resource: string;
   seat: string;
   holders: readonly string[];
 }
 
-export interface BoxelPolicySnapshot {
-  policy?: BoxelPolicyCardDataSnapshot;
-  cards: readonly BoxelPolicyCardSnapshot[];
-  parties: readonly BoxelPolicyPartySnapshot[];
-  seats?: readonly BoxelPolicySeatAssignment[];
+export interface BxlAuthorizationSnapshot {
+  policy?: BxlAuthorizationPolicyData;
+  resources: readonly BxlAuthorizationResource[];
+  parties: readonly BxlAuthorizationParty[];
+  seats?: readonly BxlAuthorizationSeatAssignment[];
   /** Realm members available through `Party.Member`. */
   members?: readonly string[];
-  /** Non-members admitted by the policy, available through `Party.Guest`. */
+  /** Non-members admitted by the authorization document, available through `Party.Guest`. */
   guests?: readonly string[];
 }
 
-export interface BoxelAuthorizeRequest {
+export interface BxlAuthorizationCheckRequest {
   party: string;
   capability: string;
-  card: string;
+  resource: string;
   input?: Readonly<Record<string, unknown>>;
-  /** The host supplies time explicitly; the policy runtime never reads a clock. */
+  /** The host supplies time explicitly; the evaluator never reads a clock. */
   now?: unknown;
   trace?: boolean;
   limits?: AuthorizationRuntimeLimits;
 }
 
-export interface BoxelPolicyTraceEvent {
+export interface BxlAuthorizationTraceEvent {
   depth: number;
   operation: string;
   party: string;
   capability: string;
-  card: string;
+  resource: string;
   outcome: 'allow' | 'deny' | 'error';
   detail?: string;
 }
 
-export interface BoxelAuthorizationReason {
+export interface BxlAuthorizationReason {
   kind: 'capability' | 'refusal';
   message: string;
 }
 
-export interface BoxelAuthorizeResult {
+export interface BxlAuthorizationCheckResult {
   allowed: boolean;
   decision: 'allow' | 'refuse';
-  because: readonly BoxelAuthorizationReason[];
+  because: readonly BxlAuthorizationReason[];
   metrics: { steps: number; tupleReads: number; maxDepth: number };
-  trace: readonly BoxelPolicyTraceEvent[];
+  trace: readonly BxlAuthorizationTraceEvent[];
 }
 
-interface BoxelEnumerationRequest {
+interface BxlAuthorizationEnumerationRequest {
   input?: Readonly<Record<string, unknown>>;
   now?: unknown;
   limits?: AuthorizationRuntimeLimits;
 }
 
-export interface BoxelListCardsRequest extends BoxelEnumerationRequest {
+export interface BxlAuthorizationListResourcesRequest extends BxlAuthorizationEnumerationRequest {
   party: string;
   capability: string;
-  adoptsFrom?: string;
+  type?: string;
 }
 
-export interface BoxelListCardsResult {
-  cards: readonly string[];
+export interface BxlAuthorizationListResourcesResult {
+  resources: readonly string[];
   metrics: { steps: number; tupleReads: number; maxDepth: number };
 }
 
-export interface BoxelListPartiesRequest extends BoxelEnumerationRequest {
-  card: string;
+export interface BxlAuthorizationListPartiesRequest extends BxlAuthorizationEnumerationRequest {
+  resource: string;
   capability: string;
 }
 
-export interface BoxelListPartiesResult {
+export interface BxlAuthorizationListPartiesResult {
   parties: readonly string[];
   metrics: { steps: number; tupleReads: number; maxDepth: number };
 }
 
-export interface BoxelListCapabilitiesRequest extends BoxelEnumerationRequest {
+export interface BxlAuthorizationListCapabilitiesRequest extends BxlAuthorizationEnumerationRequest {
   party: string;
-  card: string;
+  resource: string;
 }
 
-export interface BoxelListCapabilitiesResult {
+export interface BxlAuthorizationListCapabilitiesResult {
   capabilities: readonly string[];
   metrics: { steps: number; tupleReads: number; maxDepth: number };
 }
 
-export interface PreparedBoxelPolicy {
-  authorize(request: BoxelAuthorizeRequest): AuthorizationSafeResult<BoxelAuthorizeResult>;
-  authorizeMany(
-    requests: readonly BoxelAuthorizeRequest[],
-  ): readonly AuthorizationSafeResult<BoxelAuthorizeResult>[];
-  listCards(request: BoxelListCardsRequest): AuthorizationSafeResult<BoxelListCardsResult>;
-  listParties(request: BoxelListPartiesRequest): AuthorizationSafeResult<BoxelListPartiesResult>;
+export interface PreparedBxlAuthorization {
+  checkCapability(request: BxlAuthorizationCheckRequest): AuthorizationSafeResult<BxlAuthorizationCheckResult>;
+  checkCapabilities(
+    requests: readonly BxlAuthorizationCheckRequest[],
+  ): readonly AuthorizationSafeResult<BxlAuthorizationCheckResult>[];
+  listResources(request: BxlAuthorizationListResourcesRequest): AuthorizationSafeResult<BxlAuthorizationListResourcesResult>;
+  listParties(request: BxlAuthorizationListPartiesRequest): AuthorizationSafeResult<BxlAuthorizationListPartiesResult>;
   listCapabilities(
-    request: BoxelListCapabilitiesRequest,
-  ): AuthorizationSafeResult<BoxelListCapabilitiesResult>;
+    request: BxlAuthorizationListCapabilitiesRequest,
+  ): AuthorizationSafeResult<BxlAuthorizationListCapabilitiesResult>;
 }
 
 const HANDLE = /^[A-Z][A-Za-z0-9]*$/;
@@ -222,7 +220,7 @@ function uniqueByHandle<T extends { name: string }>(
 
 function encoded(value: string): string {
   if (value.trim() === '') {
-    throw new AuthorizationError('invalid-identifier', 'Card references cannot be empty.');
+    throw new AuthorizationError('invalid-identifier', 'Resource references cannot be empty.');
   }
   return encodeURIComponent(value);
 }
@@ -241,11 +239,11 @@ function pathOf(node: ExpressionAst): readonly string[] | undefined {
 }
 
 interface ScopeCompilation {
-  definition: BoxelPolicyScopeDefinition;
+  definition: BxlAuthorizationScope;
   internalType: string;
-  links: Map<string, BoxelPolicyLinkDefinition>;
-  seats: Map<string, BoxelPolicySeatDefinition>;
-  capabilities: Map<string, BoxelPolicyCapabilityDefinition>;
+  links: Map<string, BxlAuthorizationLink>;
+  seats: Map<string, BxlAuthorizationSeat>;
+  capabilities: Map<string, BxlAuthorizationCapability>;
 }
 
 function visitExpression(
@@ -275,7 +273,7 @@ function compilePolicyExpression(
   try {
     program = parseBxlAst(source, { profile: 'authorization' });
   } catch (cause) {
-    throw new AuthorizationError('invalid-expression', 'Could not parse Boxel policy expression.', {
+    throw new AuthorizationError('invalid-expression', 'Could not parse BXL authorization expression.', {
       path,
       cause,
     });
@@ -290,7 +288,7 @@ function compilePolicyExpression(
   }
   const parsed = parseNativeJq(program.canonicalSource, { readableSyntax: false });
   if (!parsed.ast.expr) {
-    throw new AuthorizationError('invalid-expression', 'Boxel policy expression is empty.', {
+    throw new AuthorizationError('invalid-expression', 'BXL authorization expression is empty.', {
       path,
     });
   }
@@ -329,16 +327,16 @@ function compilePolicyExpression(
       if (node.args.length !== 2) {
         throw new AuthorizationError(
           'invalid-expression',
-          'via() requires two BXL arguments separated by `;`: a Card link and a Capability.',
+          'via() requires two BXL arguments separated by `;`: a Resource link and a Capability.',
           { path },
         );
       }
       const linkPath = pathOf(node.args[0]!);
       const capabilityPath = pathOf(node.args[1]!);
-      if (linkPath?.length !== 2 || linkPath[0] !== 'card') {
+      if (linkPath?.length !== 2 || linkPath[0] !== 'resource') {
         throw new AuthorizationError(
           'invalid-expression',
-          'The first via() argument must be a declared Card link such as Card.Parent.',
+          'The first via() argument must be a declared Resource link such as Resource.Parent.',
           { path },
         );
       }
@@ -351,17 +349,15 @@ function compilePolicyExpression(
       }
       const link = owner.links.get(linkPath[1]!);
       if (!link) {
-        throw new AuthorizationError('unknown-relation', `Unknown Card link Card.${linkPath[1]}.`, {
+        throw new AuthorizationError('unknown-relation', `Unknown Resource link Resource.${linkPath[1]}.`, {
           path,
         });
       }
-      const target = [...scopesByName.values()].find(
-        (candidate) => candidate.definition.adoptsFrom === link.to,
-      );
+      const target = scopesByName.get(handle(link.to, `${path}.via.to`));
       if (!target?.capabilities.has(capabilityPath[1]!)) {
         throw new AuthorizationError(
           'unknown-relation',
-          `Card.${linkPath[1]} does not lead to a scope with Capability.${capabilityPath[1]}.`,
+          `Resource.${linkPath[1]} does not lead to a scope with Capability.${capabilityPath[1]}.`,
           { path },
         );
       }
@@ -372,7 +368,7 @@ function compilePolicyExpression(
 
   let translated = program.canonicalSource;
   translated = translated.replace(
-    /via\(\.card\.([A-Za-z_][A-Za-z0-9_]*);\s*\.capability\.([A-Za-z_][A-Za-z0-9_]*)\)/g,
+    /via\(\.resource\.([A-Za-z_][A-Za-z0-9_]*);\s*\.capability\.([A-Za-z_][A-Za-z0-9_]*)\)/g,
     (_match, link: string, capability: string) =>
       `userset_from(${JSON.stringify(link)}; ${JSON.stringify(capability)})`,
   );
@@ -393,8 +389,8 @@ function compilePolicyExpression(
 }
 
 function refusalDefinitions(
-  capability: BoxelPolicyCapabilityDefinition,
-): readonly BoxelPolicyRefusal[] {
+  capability: BxlAuthorizationCapability,
+): readonly BxlAuthorizationRefusal[] {
   if (!capability.refuse) return [];
   if (typeof capability.refuse === 'string') {
     return [{ when: capability.refuse, because: `Refused by ${capability.displayName ?? capability.name}.` }];
@@ -415,7 +411,7 @@ function enumerationLimit(
   if (!Number.isSafeInteger(resolved) || resolved <= 0) {
     throw new AuthorizationError(
       'invalid-model',
-      `Boxel policy runtime limit ${name} must be a positive safe integer.`,
+      `BXL authorization evaluation limit ${name} must be a positive safe integer.`,
       { path: `limits.${name}` },
     );
   }
@@ -431,28 +427,28 @@ function addMetrics(
   target.maxDepth = Math.max(target.maxDepth, source.maxDepth);
 }
 
-interface CompiledNativePolicy {
-  runtime: PreparedAuthorizationModel;
-  scopesByAdoptsFrom: Map<string, ScopeCompilation>;
-  cardsByRef: Map<string, BoxelPolicyCardSnapshot>;
-  partiesByRef: Map<string, BoxelPolicyPartySnapshot>;
-  objectToCard: Map<string, string>;
+interface CompiledBxlAuthorization {
+  runtime: PreparedAuthorizationGraph;
+  scopesByType: Map<string, ScopeCompilation>;
+  resourcesByRef: Map<string, BxlAuthorizationResource>;
+  partiesByRef: Map<string, BxlAuthorizationParty>;
+  objectToResource: Map<string, string>;
   relationLabels: Map<string, string>;
   refusalRelations: Map<string, readonly { relation: string; because: string }[]>;
   contextBase: Readonly<Record<string, unknown>>;
 }
 
-function sourceField(source: string, path: string): { root: 'card' | 'policy'; field: string } {
-  const match = /^(Card|Policy)\.([A-Z][A-Za-z0-9]*)$/.exec(source);
+function sourceField(source: string, path: string): { root: 'resource' | 'policy'; field: string } {
+  const match = /^(Resource|Policy)\.([A-Z][A-Za-z0-9]*)$/.exec(source);
   if (!match) {
     throw new AuthorizationError(
       'invalid-expression',
-      `${path} must be a direct Boxel relationship path such as Card.Operator or Policy.Owners.`,
+      `${path} must be a direct relationship path such as Resource.Operator or Policy.Owners.`,
       { path },
     );
   }
   return {
-    root: match[1]!.toLowerCase() as 'card' | 'policy',
+    root: match[1]!.toLowerCase() as 'resource' | 'policy',
     field: handle(match[2]!, path),
   };
 }
@@ -462,30 +458,29 @@ function asLinks(value: string | readonly string[] | undefined): readonly string
   return typeof value === 'string' ? [value] : value;
 }
 
-function compileNativePolicy(
-  document: BoxelPolicyDocument,
-  snapshot: BoxelPolicySnapshot,
-): CompiledNativePolicy {
-  if (!document || document.schema !== BOXEL_POLICY_SCHEMA) {
+function compileBxlAuthorization(
+  document: BxlAuthorizationDocument,
+  snapshot: BxlAuthorizationSnapshot,
+): CompiledBxlAuthorization {
+  if (!document || document.schema !== BXL_AUTHORIZATION_SCHEMA) {
     throw new AuthorizationError(
       'invalid-model',
-      `Boxel policy schema must be ${BOXEL_POLICY_SCHEMA}.`,
+      `BXL authorization schema must be ${BXL_AUTHORIZATION_SCHEMA}.`,
       { path: 'schema' },
     );
   }
   if (!Array.isArray(document.scopes) || document.scopes.length === 0) {
-    throw new AuthorizationError('invalid-model', 'A Boxel policy must declare at least one scope.', {
+    throw new AuthorizationError('invalid-model', 'A BXL authorization must declare at least one scope.', {
       path: 'scopes',
     });
   }
 
   const scopesByName = new Map<string, ScopeCompilation>();
-  const scopesByAdoptsFrom = new Map<string, ScopeCompilation>();
   for (let index = 0; index < document.scopes.length; index++) {
     const definition = document.scopes[index]!;
     const name = handle(definition.name, `scopes[${index}].name`);
-    if (scopesByName.has(name) || scopesByAdoptsFrom.has(definition.adoptsFrom)) {
-      throw new AuthorizationError('invalid-model', `Duplicate policy scope ${definition.name}.`, {
+    if (scopesByName.has(name)) {
+      throw new AuthorizationError('invalid-model', `Duplicate authorization scope ${definition.name}.`, {
         path: `scopes[${index}]`,
       });
     }
@@ -499,25 +494,27 @@ function compileNativePolicy(
         `scopes[${index}].capabilities`,
       ),
     };
+    for (let linkIndex = 0; linkIndex < (definition.links?.length ?? 0); linkIndex++) {
+      handle(definition.links![linkIndex]!.to, `scopes[${index}].links[${linkIndex}].to`);
+    }
     for (const key of compilation.links.keys()) {
       if (compilation.seats.has(key) || compilation.capabilities.has(key)) {
-        throw new AuthorizationError('invalid-model', `Policy handle ${key} is ambiguous.`, {
+        throw new AuthorizationError('invalid-model', `Authorization handle ${key} is ambiguous.`, {
           path: `scopes[${index}]`,
         });
       }
     }
     for (const key of compilation.seats.keys()) {
       if (compilation.capabilities.has(key)) {
-        throw new AuthorizationError('invalid-model', `Policy handle ${key} is ambiguous.`, {
+        throw new AuthorizationError('invalid-model', `Authorization handle ${key} is ambiguous.`, {
           path: `scopes[${index}]`,
         });
       }
     }
     scopesByName.set(name, compilation);
-    scopesByAdoptsFrom.set(definition.adoptsFrom, compilation);
   }
 
-  const types: Record<string, import('./model.js').BxlAuthorizationType> = {
+  const types: Record<string, import('./graph-model.js').AuthorizationGraphType> = {
     party: {
       relations: {
         member: { subjects: ['party', 'party#member'], rewrite: 'direct()' },
@@ -528,18 +525,18 @@ function compileNativePolicy(
   const refusalRelations = new Map<string, readonly { relation: string; because: string }[]>();
 
   for (const scope of scopesByName.values()) {
-    const relations: Record<string, import('./model.js').BxlAuthorizationRelationDefinition> = {
+    const relations: Record<string, import('./graph-model.js').AuthorizationGraphRelationDefinition> = {
       __party_anyone: ['party:*'],
       __party_member: ['party', 'party#member'],
       __party_guest: ['party', 'party#member'],
     };
     const permissions: Record<string, string> = {};
     for (const [name, link] of scope.links) {
-      const target = scopesByAdoptsFrom.get(link.to);
+      const target = scopesByName.get(handle(link.to, `scopes.${scope.definition.name}.links.${link.name}.to`));
       if (!target) {
         throw new AuthorizationError(
           'unknown-type',
-          `Card link ${scope.definition.name}.${link.name} targets undeclared CardDef ${link.to}.`,
+          `Resource link ${scope.definition.name}.${link.name} targets undeclared authorization type ${link.to}.`,
         );
       }
       relations[name] = [target.internalType];
@@ -583,29 +580,32 @@ function compileNativePolicy(
     types[scope.internalType] = { relations, permissions };
   }
 
-  const model: BxlAuthorizationModel = {
-    schema: 'bxl-authorization/1',
+  const model: AuthorizationGraphModel = {
+    schema: 'bxl-authorization-ir/1',
     types,
   };
-  const cardsByRef = new Map<string, BoxelPolicyCardSnapshot>();
-  const objectToCard = new Map<string, string>();
-  for (const card of snapshot.cards) {
-    if (cardsByRef.has(card.card)) {
-      throw new AuthorizationError('invalid-model', `Duplicate card snapshot ${card.card}.`);
+  const resourcesByRef = new Map<string, BxlAuthorizationResource>();
+  const objectToResource = new Map<string, string>();
+  for (const resource of snapshot.resources) {
+    if (resourcesByRef.has(resource.resource)) {
+      throw new AuthorizationError('invalid-model', `Duplicate resource snapshot ${resource.resource}.`);
     }
-    const scope = scopesByAdoptsFrom.get(card.adoptsFrom);
+    const scope = scopesByName.get(handle(resource.type, `resources.${resource.resource}.type`));
     if (!scope) {
       throw new AuthorizationError(
         'unknown-type',
-        `Card ${card.card} adopts undeclared CardDef ${card.adoptsFrom}.`,
+        `Resource ${resource.resource} has undeclared authorization type ${resource.type}.`,
       );
     }
-    cardsByRef.set(card.card, card);
-    objectToCard.set(internalObject(scope.internalType, card.card), card.card);
+    resourcesByRef.set(resource.resource, resource);
+    objectToResource.set(
+      internalObject(scope.internalType, resource.resource),
+      resource.resource,
+    );
   }
 
-  const partiesByRef = new Map<string, BoxelPolicyPartySnapshot>();
-  const ensureParty = (party: string): BoxelPolicyPartySnapshot => {
+  const partiesByRef = new Map<string, BxlAuthorizationParty>();
+  const ensureParty = (party: string): BxlAuthorizationParty => {
     const existing = partiesByRef.get(party);
     if (existing) return existing;
     const created = { party };
@@ -639,30 +639,34 @@ function compileNativePolicy(
     }
   }
 
-  for (const card of snapshot.cards) {
-    const scope = scopesByAdoptsFrom.get(card.adoptsFrom)!;
-    const object = internalObject(scope.internalType, card.card);
-    tuples.push({ subject: 'party:*', relation: '__party_anyone', object });
+  for (const sourceResource of snapshot.resources) {
+    const scope = scopesByName.get(
+      handle(sourceResource.type, `resources.${sourceResource.resource}.type`),
+    )!;
+    const internal = internalObject(scope.internalType, sourceResource.resource);
+    tuples.push({ subject: 'party:*', relation: '__party_anyone', object: internal });
     for (const party of snapshot.members ?? []) {
-      tuples.push({ subject: partySubject(party), relation: '__party_member', object });
+      tuples.push({ subject: partySubject(party), relation: '__party_member', object: internal });
     }
     for (const party of snapshot.guests ?? []) {
-      tuples.push({ subject: partySubject(party), relation: '__party_guest', object });
+      tuples.push({ subject: partySubject(party), relation: '__party_guest', object: internal });
     }
     for (const [name, link] of scope.links) {
-      for (const targetRef of asLinks(card.links?.[name])) {
-        const targetCard = cardsByRef.get(targetRef);
-        const targetScope = targetCard && scopesByAdoptsFrom.get(targetCard.adoptsFrom);
-        if (!targetCard || !targetScope || targetCard.adoptsFrom !== link.to) {
+      for (const targetRef of asLinks(sourceResource.links?.[name])) {
+        const targetResource = resourcesByRef.get(targetRef);
+        const targetScope =
+          targetResource &&
+          scopesByName.get(handle(targetResource.type, `resources.${targetRef}.type`));
+        if (!targetResource || !targetScope || targetScope.definition.name !== link.to) {
           throw new AuthorizationError(
             'invalid-model',
-            `Card.${link.name} on ${card.card} points to ${targetRef}, which is absent or has the wrong CardDef.`,
+            `Resource.${link.name} on ${sourceResource.resource} points to ${targetRef}, which is absent or has the wrong authorization type.`,
           );
         }
         tuples.push({
           subject: internalObject(targetScope.internalType, targetRef),
           relation: name,
-          object,
+          object: internal,
         });
       }
     }
@@ -672,50 +676,58 @@ function compileNativePolicy(
         seat.from,
         `scopes.${scope.definition.name}.seats.${seat.name}.from`,
       );
-      const links = source.root === 'card' ? card.links : snapshot.policy?.links;
+      const links =
+        source.root === 'resource' ? sourceResource.links : snapshot.policy?.links;
       for (const holder of asLinks(links?.[source.field])) {
-        tuples.push({ subject: partySubject(holder), relation: name, object });
+        tuples.push({ subject: partySubject(holder), relation: name, object: internal });
       }
     }
   }
 
   for (const assignment of snapshot.seats ?? []) {
-    const card = cardsByRef.get(assignment.scope);
-    if (!card) {
-      throw new AuthorizationError('invalid-identifier', `Unknown seat scope ${assignment.scope}.`);
+    const resource = resourcesByRef.get(assignment.resource);
+    if (!resource) {
+      throw new AuthorizationError(
+        'invalid-identifier',
+        `Unknown seat resource ${assignment.resource}.`,
+      );
     }
-    const scope = scopesByAdoptsFrom.get(card.adoptsFrom)!;
+    const scope = scopesByName.get(
+      handle(resource.type, `resources.${resource.resource}.type`),
+    )!;
     const name = handle(assignment.seat, 'seats[].seat');
     if (!scope.seats.has(name)) {
       throw new AuthorizationError(
         'unknown-relation',
-        `Scope ${assignment.scope} does not declare Seat.${assignment.seat}.`,
+        `Resource ${assignment.resource} does not declare Seat.${assignment.seat}.`,
       );
     }
     for (const holder of assignment.holders) {
       tuples.push({
         subject: partySubject(holder),
         relation: name,
-        object: internalObject(scope.internalType, assignment.scope),
+        object: internalObject(scope.internalType, assignment.resource),
       });
     }
   }
 
-  const prepared = prepareAuthorizationModelSafe(model, tuples);
+  const prepared = prepareAuthorizationGraphSafe(model, tuples);
   if (!prepared.ok) {
     throw new AuthorizationError(prepared.error.kind, prepared.error.message, {
       path: prepared.error.path,
     });
   }
 
-  const cards: Record<string, unknown> = {};
-  for (const card of snapshot.cards) {
-    const scope = scopesByAdoptsFrom.get(card.adoptsFrom)!;
-    cards[internalObject(scope.internalType, card.card)] = {
-      id: card.card,
-      adoptsFrom: card.adoptsFrom,
-      ...(card.data ?? {}),
-      ...(card.links ?? {}),
+  const resources: Record<string, unknown> = {};
+  for (const resource of snapshot.resources) {
+    const scope = scopesByName.get(
+      handle(resource.type, `resources.${resource.resource}.type`),
+    )!;
+    resources[internalObject(scope.internalType, resource.resource)] = {
+      id: resource.resource,
+      type: resource.type,
+      ...(resource.data ?? {}),
+      ...(resource.links ?? {}),
     };
   }
   const parties: Record<string, unknown> = {};
@@ -727,11 +739,11 @@ function compileNativePolicy(
     };
   }
   const contextBase = {
-    __boxelPolicy: {
-      cards,
+    __bxlAuthorization: {
+      resources,
       parties,
       policy: {
-        id: snapshot.policy?.card ?? document.card,
+        id: snapshot.policy?.id ?? document.id,
         ...(snapshot.policy?.data ?? {}),
         ...(snapshot.policy?.links ?? {}),
       },
@@ -740,10 +752,10 @@ function compileNativePolicy(
 
   return {
     runtime: prepared.value,
-    scopesByAdoptsFrom,
-    cardsByRef,
+    scopesByType: scopesByName,
+    resourcesByRef,
     partiesByRef,
-    objectToCard,
+    objectToResource,
     relationLabels,
     refusalRelations,
     contextBase,
@@ -751,8 +763,8 @@ function compileNativePolicy(
 }
 
 function requestContext(
-  compiled: CompiledNativePolicy,
-  request: BoxelEnumerationRequest,
+  compiled: CompiledBxlAuthorization,
+  request: BxlAuthorizationEnumerationRequest,
 ): Readonly<Record<string, unknown>> {
   return {
     ...compiled.contextBase,
@@ -762,28 +774,30 @@ function requestContext(
 }
 
 function resolveRequest(
-  compiled: CompiledNativePolicy,
-  request: { party: string; capability: string; card: string },
+  compiled: CompiledBxlAuthorization,
+  request: { party: string; capability: string; resource: string },
 ): { subject: string; relation: string; object: string; scope: ScopeCompilation } {
-  const card = compiled.cardsByRef.get(request.card);
-  if (!card) {
-    throw new AuthorizationError('invalid-identifier', `Unknown policy card ${request.card}.`, {
-      path: 'request.card',
+  const resource = compiled.resourcesByRef.get(request.resource);
+  if (!resource) {
+    throw new AuthorizationError('invalid-identifier', `Unknown authorization resource ${request.resource}.`, {
+      path: 'request.resource',
     });
   }
-  const scope = compiled.scopesByAdoptsFrom.get(card.adoptsFrom)!;
+  const scope = compiled.scopesByType.get(
+    handle(resource.type, `resources.${resource.resource}.type`),
+  )!;
   const relation = handle(request.capability, 'request.capability');
   if (!scope.capabilities.has(relation)) {
     throw new AuthorizationError(
       'unknown-relation',
-      `${request.card} does not declare Capability.${request.capability}.`,
+      `${request.resource} does not declare Capability.${request.capability}.`,
       { path: 'request.capability' },
     );
   }
   return {
     subject: internalParty(request.party),
     relation,
-    object: internalObject(scope.internalType, request.card),
+    object: internalObject(scope.internalType, request.resource),
     scope,
   };
 }
@@ -795,13 +809,13 @@ function decodeParty(value: string): string {
   return separator === -1 ? value : decodeURIComponent(entity.slice(separator + 1));
 }
 
-function decodeTraceCard(
-  compiled: CompiledNativePolicy,
+function decodeTraceResource(
+  compiled: CompiledBxlAuthorization,
   value: string,
 ): string {
-  const card = compiled.objectToCard.get(value);
-  if (card) {
-    return card;
+  const resource = compiled.objectToResource.get(value);
+  if (resource) {
+    return resource;
   }
   return value.startsWith('party:')
     ? decodeURIComponent(value.slice('party:'.length))
@@ -809,9 +823,9 @@ function decodeTraceCard(
 }
 
 function translateTrace(
-  compiled: CompiledNativePolicy,
+  compiled: CompiledBxlAuthorization,
   trace: readonly AuthorizationTraceEvent[],
-): BoxelPolicyTraceEvent[] {
+): BxlAuthorizationTraceEvent[] {
   return trace.map((event) => {
     const separator = event.object.indexOf(':');
     const type = separator === -1 ? '' : event.object.slice(0, separator);
@@ -822,17 +836,17 @@ function translateTrace(
       operation: event.operation,
       party: decodeParty(event.subject),
       capability,
-      card: decodeTraceCard(compiled, event.object),
+      resource: decodeTraceResource(compiled, event.object),
       outcome: event.outcome,
       ...(event.detail ? { detail: event.detail } : {}),
     };
   });
 }
 
-function authorizeCompiled(
-  compiled: CompiledNativePolicy,
-  request: BoxelAuthorizeRequest,
-): AuthorizationSafeResult<BoxelAuthorizeResult> {
+function checkCapabilityCompiled(
+  compiled: CompiledBxlAuthorization,
+  request: BxlAuthorizationCheckRequest,
+): AuthorizationSafeResult<BxlAuthorizationCheckResult> {
   try {
     const resolved = resolveRequest(compiled, request);
     const context = requestContext(compiled, request);
@@ -845,7 +859,7 @@ function authorizeCompiled(
       ...(request.limits ? { limits: request.limits } : {}),
     });
     if (!result.ok) return result;
-    const because: BoxelAuthorizationReason[] = [];
+    const because: BxlAuthorizationReason[] = [];
     if (result.value.allowed) {
       const label =
         compiled.relationLabels.get(`${resolved.scope.internalType}\0${resolved.relation}`) ??
@@ -882,27 +896,27 @@ function authorizeCompiled(
   }
 }
 
-export function prepareBoxelPolicySafe(
-  document: BoxelPolicyDocument,
-  snapshot: BoxelPolicySnapshot,
-): AuthorizationSafeResult<PreparedBoxelPolicy> {
+export function prepareBxlAuthorizationSafe(
+  document: BxlAuthorizationDocument,
+  snapshot: BxlAuthorizationSnapshot,
+): AuthorizationSafeResult<PreparedBxlAuthorization> {
   try {
-    const compiled = compileNativePolicy(document, snapshot);
+    const compiled = compileBxlAuthorization(document, snapshot);
     return {
       ok: true,
       value: {
-        authorize(request) {
-          return authorizeCompiled(compiled, request);
+        checkCapability(request) {
+          return checkCapabilityCompiled(compiled, request);
         },
-        authorizeMany(requests) {
-          return requests.map((request) => authorizeCompiled(compiled, request));
+        checkCapabilities(requests) {
+          return requests.map((request) => checkCapabilityCompiled(compiled, request));
         },
-        listCards(request) {
+        listResources(request) {
           try {
             const result: string[] = [];
             const total = metrics();
-            const candidates = [...compiled.cardsByRef.values()].filter(
-              (card) => !request.adoptsFrom || card.adoptsFrom === request.adoptsFrom,
+            const candidates = [...compiled.resourcesByRef.values()].filter(
+              (resource) => !request.type || resource.type === request.type,
             );
             const maxCandidates = enumerationLimit(
               request.limits?.maxCandidates,
@@ -917,14 +931,14 @@ export function prepareBoxelPolicySafe(
             if (candidates.length > maxCandidates) {
               throw new AuthorizationError(
                 'evaluation-limit-exceeded',
-                `Boxel policy enumeration exceeded maximum candidates ${maxCandidates}.`,
+                `BXL authorization enumeration exceeded maximum candidates ${maxCandidates}.`,
               );
             }
-            for (const card of candidates) {
-              const decision = authorizeCompiled(compiled, {
+            for (const resource of candidates) {
+              const decision = checkCapabilityCompiled(compiled, {
                 party: request.party,
                 capability: request.capability,
-                card: card.card,
+                resource: resource.resource,
                 input: request.input,
                 now: request.now,
                 limits: request.limits,
@@ -934,15 +948,15 @@ export function prepareBoxelPolicySafe(
                 return decision;
               }
               addMetrics(total, decision.value.metrics);
-              if (decision.value.allowed) result.push(card.card);
+              if (decision.value.allowed) result.push(resource.resource);
               if (result.length > maxResults) {
                 throw new AuthorizationError(
                   'evaluation-limit-exceeded',
-                  `Boxel policy enumeration exceeded maximum results ${maxResults}.`,
+                  `BXL authorization enumeration exceeded maximum results ${maxResults}.`,
                 );
               }
             }
-            return { ok: true, value: { cards: result.sort(), metrics: total } };
+            return { ok: true, value: { resources: result.sort(), metrics: total } };
           } catch (error) {
             return { ok: false, error: toAuthorizationErrorRecord(error) };
           }
@@ -965,14 +979,14 @@ export function prepareBoxelPolicySafe(
             if (candidates.length > maxCandidates) {
               throw new AuthorizationError(
                 'evaluation-limit-exceeded',
-                `Boxel policy enumeration exceeded maximum candidates ${maxCandidates}.`,
+                `BXL authorization enumeration exceeded maximum candidates ${maxCandidates}.`,
               );
             }
             for (const party of candidates) {
-              const decision = authorizeCompiled(compiled, {
+              const decision = checkCapabilityCompiled(compiled, {
                 party,
                 capability: request.capability,
-                card: request.card,
+                resource: request.resource,
                 input: request.input,
                 now: request.now,
                 limits: request.limits,
@@ -983,7 +997,7 @@ export function prepareBoxelPolicySafe(
               if (result.length > maxResults) {
                 throw new AuthorizationError(
                   'evaluation-limit-exceeded',
-                  `Boxel policy enumeration exceeded maximum results ${maxResults}.`,
+                  `BXL authorization enumeration exceeded maximum results ${maxResults}.`,
                 );
               }
             }
@@ -994,15 +1008,17 @@ export function prepareBoxelPolicySafe(
         },
         listCapabilities(request) {
           try {
-            const card = compiled.cardsByRef.get(request.card);
-            if (!card) {
+            const resource = compiled.resourcesByRef.get(request.resource);
+            if (!resource) {
               throw new AuthorizationError(
                 'invalid-identifier',
-                `Unknown policy card ${request.card}.`,
-                { path: 'request.card' },
+                `Unknown authorization resource ${request.resource}.`,
+                { path: 'request.resource' },
               );
             }
-            const scope = compiled.scopesByAdoptsFrom.get(card.adoptsFrom)!;
+            const scope = compiled.scopesByType.get(
+              handle(resource.type, `resources.${resource.resource}.type`),
+            )!;
             const candidates = [...scope.definition.capabilities];
             const maxCandidates = enumerationLimit(
               request.limits?.maxCandidates,
@@ -1017,17 +1033,17 @@ export function prepareBoxelPolicySafe(
             if (candidates.length > maxCandidates) {
               throw new AuthorizationError(
                 'evaluation-limit-exceeded',
-                `Boxel policy enumeration exceeded maximum candidates ${maxCandidates}.`,
+                `BXL authorization enumeration exceeded maximum candidates ${maxCandidates}.`,
               );
             }
 
             const result: string[] = [];
             const total = metrics();
             for (const capability of candidates) {
-              const decision = authorizeCompiled(compiled, {
+              const decision = checkCapabilityCompiled(compiled, {
                 party: request.party,
                 capability: capability.name,
-                card: request.card,
+                resource: request.resource,
                 input: request.input,
                 now: request.now,
                 limits: request.limits,
@@ -1038,7 +1054,7 @@ export function prepareBoxelPolicySafe(
               if (result.length > maxResults) {
                 throw new AuthorizationError(
                   'evaluation-limit-exceeded',
-                  `Boxel policy enumeration exceeded maximum results ${maxResults}.`,
+                  `BXL authorization enumeration exceeded maximum results ${maxResults}.`,
                 );
               }
             }

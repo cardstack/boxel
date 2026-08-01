@@ -1,9 +1,9 @@
 import { transformer } from '@openfga/syntax-transformer';
 import { parse } from 'yaml';
 import {
-  prepareAuthorizationModelSafe,
-  type BxlAuthorizationModel,
-  type BxlAuthorizationRelationDefinition,
+  prepareAuthorizationGraphSafe,
+  type AuthorizationGraphModel,
+  type AuthorizationGraphRelationDefinition,
   type RelationshipTuple,
   type SubjectTypeReference,
 } from '../../../src/authorization/index.js';
@@ -214,7 +214,7 @@ function translateCelFixtureExpression(
   return translated;
 }
 
-export function convertOpenFgaDslToBxlModel(dsl: string): BxlAuthorizationModel {
+export function convertOpenFgaDslToBxlModel(dsl: string): AuthorizationGraphModel {
   const upstream = transformer.transformDSLToJSONObject(dsl) as unknown as JsonRecord;
   const definitions = upstream.type_definitions;
   if (!Array.isArray(definitions)) throw new Error('type_definitions must be an array');
@@ -222,11 +222,11 @@ export function convertOpenFgaDslToBxlModel(dsl: string): BxlAuthorizationModel 
   const types: Record<
     string,
     {
-      relations: Record<string, BxlAuthorizationRelationDefinition>;
+      relations: Record<string, AuthorizationGraphRelationDefinition>;
       permissions: Record<string, string>;
     }
   > = {};
-  const conditions: NonNullable<BxlAuthorizationModel['conditions']> = {};
+  const conditions: NonNullable<AuthorizationGraphModel['conditions']> = {};
 
   const upstreamConditions = record(upstream.conditions ?? {}, 'conditions');
   for (const [name, rawCondition] of Object.entries(upstreamConditions)) {
@@ -260,7 +260,7 @@ export function convertOpenFgaDslToBxlModel(dsl: string): BxlAuthorizationModel 
       ? {}
       : record(metadata.relations, `type_definitions[${typeIndex}].metadata.relations`);
     const converted = {
-      relations: {} as Record<string, BxlAuthorizationRelationDefinition>,
+      relations: {} as Record<string, AuthorizationGraphRelationDefinition>,
       permissions: {} as Record<string, string>,
     };
 
@@ -294,7 +294,7 @@ export function convertOpenFgaDslToBxlModel(dsl: string): BxlAuthorizationModel 
   }
 
   return {
-    schema: 'bxl-authorization/1',
+    schema: 'bxl-authorization-ir/1',
     types,
     ...(Object.keys(conditions).length === 0 ? {} : { conditions }),
   };
@@ -389,7 +389,7 @@ export function runOpenFgaConformanceFixtures(
         report.check.discovered += assertions.length;
         report.listObjects.discovered += listObjectsAssertions.length;
         report.listUsers.discovered += listUsersAssertions.length;
-        let model: BxlAuthorizationModel;
+        let model: AuthorizationGraphModel;
         try {
           model = convertOpenFgaDslToBxlModel(stage.model);
         } catch (error) {
@@ -407,7 +407,7 @@ export function runOpenFgaConformanceFixtures(
           continue;
         }
 
-        const prepared = prepareAuthorizationModelSafe(model, storedTuples, {
+        const prepared = prepareAuthorizationGraphSafe(model, storedTuples, {
           invalidTuplePolicy: 'ignore',
         });
         if (!prepared.ok) {

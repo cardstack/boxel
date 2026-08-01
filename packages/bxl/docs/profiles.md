@@ -174,13 +174,14 @@ except(
 )
 ```
 
-The added forms are `direct`, `userset`, `userset_from`, and `except`. Boxel
-Policy authoring also accepts `via`, which is validated and translated to
+The added forms are `direct`, `userset`, `userset_from`, and `except`. BXL
+Authorization authoring also accepts `via`, which is validated and translated to
 `userset_from` before graph compilation. These are not ordinary runtime jq
 functions: the authorization compiler validates literal graph targets and
 lowers them to a closed, bounded intermediate representation.
 
-Use `authorization` for relationship rewrites and Boxel capability rules. Keep
+Use `authorization` for relationship rewrites and BXL authorization capability
+rules. Keep
 tuple conditions and ordinary request-time gates on `policy`; that profile
 rejects graph forms. The runtime adapters `auth_check`, `auth_check_result`,
 `auth_list_objects`, and `auth_list_users` are also rejected in

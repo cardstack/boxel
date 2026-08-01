@@ -1,22 +1,22 @@
 import { performance } from 'node:perf_hooks';
 import { readFileSync } from 'node:fs';
 import {
-  prepareBoxelPolicySafe,
-  type BoxelAuthorizeRequest,
-  type BoxelPolicyDocument,
-  type BoxelPolicySnapshot,
+  prepareBxlAuthorizationSafe,
+  type BxlAuthorizationCheckRequest,
+  type BxlAuthorizationDocument,
+  type BxlAuthorizationSnapshot,
 } from '../src/authorization/index.js';
 
 interface CapabilityFixture {
-  document: BoxelPolicyDocument;
-  snapshot: BoxelPolicySnapshot;
-  checks: Array<BoxelAuthorizeRequest & { domain: string; allowed: boolean }>;
+  document: BxlAuthorizationDocument;
+  snapshot: BxlAuthorizationSnapshot;
+  checks: Array<BxlAuthorizationCheckRequest & { domain: string; allowed: boolean }>;
 }
 
-interface EducationFixture {
-  document: BoxelPolicyDocument;
-  snapshot: BoxelPolicySnapshot;
-  checks: Array<BoxelAuthorizeRequest & { allowed: boolean }>;
+interface ReleaseGovernanceFixture {
+  document: BxlAuthorizationDocument;
+  snapshot: BxlAuthorizationSnapshot;
+  checks: Array<BxlAuthorizationCheckRequest & { allowed: boolean }>;
 }
 
 const fixture = JSON.parse(
@@ -28,15 +28,15 @@ const fixture = JSON.parse(
     'utf8',
   ),
 ) as CapabilityFixture;
-const educationFixture = JSON.parse(
+const releaseGovernanceFixture = JSON.parse(
   readFileSync(
     new URL(
-      '../tests/authorization/fixtures/education/classroom-report.json',
+      '../tests/authorization/fixtures/software-release/release-governance.json',
       import.meta.url,
     ),
     'utf8',
   ),
-) as EducationFixture;
+) as ReleaseGovernanceFixture;
 
 function benchmark(name: string, iterations: number, operation: () => void): void {
   for (let index = 0; index < Math.min(iterations, 100); index++) operation();
@@ -49,72 +49,78 @@ function benchmark(name: string, iterations: number, operation: () => void): voi
   );
 }
 
-const prepared = prepareBoxelPolicySafe(fixture.document, fixture.snapshot);
+const prepared = prepareBxlAuthorizationSafe(fixture.document, fixture.snapshot);
 if (!prepared.ok) throw new Error(prepared.error.message);
 const checks = fixture.checks.map(
   ({ allowed: _allowed, domain: _domain, ...request }) => request,
 );
-const educationPrepared = prepareBoxelPolicySafe(
-  educationFixture.document,
-  educationFixture.snapshot,
+const releaseGovernancePrepared = prepareBxlAuthorizationSafe(
+  releaseGovernanceFixture.document,
+  releaseGovernanceFixture.snapshot,
 );
-if (!educationPrepared.ok) throw new Error(educationPrepared.error.message);
-const educationChecks = educationFixture.checks.map(
+if (!releaseGovernancePrepared.ok) {
+  throw new Error(releaseGovernancePrepared.error.message);
+}
+const releaseGovernanceChecks = releaseGovernanceFixture.checks.map(
   ({ allowed: _allowed, ...request }) => request,
 );
 
 benchmark('cold prepare', 1_000, () => {
-  const result = prepareBoxelPolicySafe(fixture.document, fixture.snapshot);
+  const result = prepareBxlAuthorizationSafe(fixture.document, fixture.snapshot);
   if (!result.ok) throw new Error(result.error.message);
 });
 
-benchmark('warm authorize', 20_000, () => {
-  const result = prepared.value.authorize(checks[0]!);
+benchmark('warm checkCapability', 20_000, () => {
+  const result = prepared.value.checkCapability(checks[0]!);
   if (!result.ok) throw new Error(result.error.message);
 });
 
-benchmark('warm authorizeMany(32)', 2_000, () => {
-  const results = prepared.value.authorizeMany(checks);
+benchmark('warm checkCapabilities(32)', 2_000, () => {
+  const results = prepared.value.checkCapabilities(checks);
   if (results.some((result) => !result.ok)) throw new Error('checkMany failed');
 });
 
-benchmark('warm authorizeMany(40)', 2_000, () => {
-  const results = educationPrepared.value.authorizeMany(educationChecks);
-  if (results.some((result) => !result.ok)) throw new Error('education checkMany failed');
+benchmark('warm checkCapabilities(40)', 2_000, () => {
+  const results = releaseGovernancePrepared.value.checkCapabilities(
+    releaseGovernanceChecks,
+  );
+  if (results.some((result) => !result.ok)) {
+    throw new Error('release-governance checkMany failed');
+  }
 });
 
-benchmark('nested userset authorize', 20_000, () => {
-  const result = educationPrepared.value.authorize({
-    party: '../Staff/provider',
-    capability: 'ViewStudentInternalNote',
-    card: '../StudentReportAccess/student-a',
+benchmark('nested userset check', 20_000, () => {
+  const result = releaseGovernancePrepared.value.checkCapability({
+    party: '../Person/security-reviewer',
+    capability: 'ReviewSecurity',
+    resource: '../ChangeRequest/change-a',
   });
   if (!result.ok || !result.value.allowed) {
     throw new Error('nested userset decision failed');
   }
 });
 
-benchmark('warm ListCards', 2_000, () => {
-  const result = prepared.value.listCards({
+benchmark('warm ListResources', 2_000, () => {
+  const result = prepared.value.listResources({
     party: '../Person/player-x',
     capability: 'MakeMove',
-    adoptsFrom: '../games/TurnGame',
+    type: 'TurnGame',
   });
   if (!result.ok) throw new Error(result.error.message);
 });
 
 benchmark('warm ListParties', 2_000, () => {
   const result = prepared.value.listParties({
-    card: '../AttendanceLedger/main',
-    capability: 'RecordPunch',
+    resource: '../InventoryLedger/main',
+    capability: 'RecordScan',
   });
   if (!result.ok) throw new Error(result.error.message);
 });
 
 benchmark('warm ListCapabilities', 2_000, () => {
   const result = prepared.value.listCapabilities({
-    party: '../Person/attendance-admin',
-    card: '../AttendanceLedger/main',
+    party: '../Person/inventory-supervisor',
+    resource: '../InventoryLedger/main',
   });
   if (!result.ok) throw new Error(result.error.message);
 });

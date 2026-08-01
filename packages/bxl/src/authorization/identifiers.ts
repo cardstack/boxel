@@ -1,5 +1,5 @@
 import { AuthorizationError } from './errors.js';
-import type { SubjectTypeReference } from './model.js';
+import type { SubjectTypeReference } from './graph-model.js';
 
 const TYPE_OR_RELATION = /^[A-Za-z0-9_][A-Za-z0-9_-]*$/;
 

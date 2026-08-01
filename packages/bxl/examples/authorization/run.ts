@@ -1,16 +1,16 @@
 import { readFileSync } from 'node:fs';
 import {
-  prepareBoxelPolicySafe,
-  type BoxelAuthorizeRequest,
-  type BoxelPolicyDocument,
-  type BoxelPolicySnapshot,
+  prepareBxlAuthorizationSafe,
+  type BxlAuthorizationCheckRequest,
+  type BxlAuthorizationDocument,
+  type BxlAuthorizationSnapshot,
 } from '../../src/authorization/index.js';
 
 interface Fixture {
   provenance: { generalized: boolean; source: string; boundary: string };
-  document: BoxelPolicyDocument;
-  snapshot: BoxelPolicySnapshot;
-  checks: Array<BoxelAuthorizeRequest & { allowed: boolean; domain?: string }>;
+  document: BxlAuthorizationDocument;
+  snapshot: BxlAuthorizationSnapshot;
+  checks: Array<BxlAuthorizationCheckRequest & { allowed: boolean; domain?: string }>;
 }
 
 function load(relative: string): Fixture {
@@ -23,7 +23,7 @@ function run(name: string, fixture: Fixture): void {
   if (!fixture.provenance.generalized) {
     throw new Error(`${name} fixture must be generalized`);
   }
-  const prepared = prepareBoxelPolicySafe(fixture.document, fixture.snapshot);
+  const prepared = prepareBxlAuthorizationSafe(fixture.document, fixture.snapshot);
   if (!prepared.ok) throw new Error(prepared.error.message);
 
   let allowed = 0;
@@ -34,11 +34,11 @@ function run(name: string, fixture: Fixture): void {
       domain: _domain,
       ...request
     } = expected;
-    const result = prepared.value.authorize(request);
+    const result = prepared.value.checkCapability(request);
     if (!result.ok) throw new Error(result.error.message);
     if (result.value.allowed !== expectedAllowed) {
       throw new Error(
-        `${name}: ${request.party} ${request.capability} ${request.card} ` +
+        `${name}: ${request.party} ${request.capability} ${request.resource} ` +
           `expected ${expectedAllowed ? 'allow' : 'refuse'}`,
       );
     }
@@ -58,6 +58,8 @@ run(
   ),
 );
 run(
-  'education-report',
-  load('../../tests/authorization/fixtures/education/classroom-report.json'),
+  'software-release',
+  load(
+    '../../tests/authorization/fixtures/software-release/release-governance.json',
+  ),
 );

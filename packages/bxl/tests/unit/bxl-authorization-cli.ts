@@ -1,13 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { deepStrictEqual, strictEqual } from 'node:assert';
 import {
-  prepareBoxelPolicySafe,
-  type BoxelAuthorizeRequest,
-  type BoxelPolicyDocument,
-  type BoxelPolicySnapshot,
+  prepareBxlAuthorizationSafe,
+  type BxlAuthorizationCheckRequest,
+  type BxlAuthorizationDocument,
+  type BxlAuthorizationSnapshot,
 } from '../../src/authorization/index.js';
 
-interface CapabilityCheck extends BoxelAuthorizeRequest {
+interface CapabilityCheck extends BxlAuthorizationCheckRequest {
   domain: string;
   allowed: boolean;
 }
@@ -15,7 +15,7 @@ interface CapabilityCheck extends BoxelAuthorizeRequest {
 interface CapabilityListExpectation {
   domain: string;
   party: string;
-  card: string;
+  resource: string;
   capabilities: string[];
 }
 
@@ -28,27 +28,27 @@ const fixture = JSON.parse(
     'utf8',
   ),
 ) as {
-  document: BoxelPolicyDocument;
-  snapshot: BoxelPolicySnapshot;
+  document: BxlAuthorizationDocument;
+  snapshot: BxlAuthorizationSnapshot;
   checks: CapabilityCheck[];
   capabilityLists: CapabilityListExpectation[];
 };
 
-const prepared = prepareBoxelPolicySafe(fixture.document, fixture.snapshot);
+const prepared = prepareBxlAuthorizationSafe(fixture.document, fixture.snapshot);
 strictEqual(prepared.ok, true);
 if (!prepared.ok) throw new Error(prepared.error.message);
-const policy = prepared.value;
+const authorization = prepared.value;
 
 strictEqual(fixture.checks.length, 32);
 const domains = new Set(fixture.checks.map((check) => check.domain));
 deepStrictEqual([...domains].sort(), [
-  'attendance',
   'connected-app',
+  'inventory',
   'judging',
   'turn-game',
 ]);
 
-const decisions = policy.authorizeMany(
+const decisions = authorization.checkCapabilities(
   fixture.checks.map(({ allowed: _allowed, domain: _domain, ...request }) => ({
     ...request,
     trace: true,
@@ -58,7 +58,7 @@ let decodedUsersetTraceFound = false;
 for (let index = 0; index < decisions.length; index++) {
   const decision = decisions[index]!;
   const expected = fixture.checks[index]!;
-  const label = `${expected.domain}: ${expected.party} ${expected.capability} ${expected.card}`;
+  const label = `${expected.domain}: ${expected.party} ${expected.capability} ${expected.resource}`;
   strictEqual(decision.ok, true, label);
   if (!decision.ok) continue;
   strictEqual(decision.value.allowed, expected.allowed, label);
@@ -66,7 +66,7 @@ for (let index = 0; index < decisions.length; index++) {
   strictEqual(decision.value.metrics.steps > 0, true, label);
   strictEqual(decision.value.trace.length > 0, true, label);
   strictEqual(
-    decision.value.trace.every((event) => !event.card.startsWith('scope_')),
+    decision.value.trace.every((event) => !event.resource.startsWith('scope_')),
     true,
     label,
   );
@@ -76,89 +76,89 @@ for (let index = 0; index < decisions.length; index++) {
     label,
   );
   strictEqual(
-    decision.value.trace.every((event) => !event.card.startsWith('party:')),
+    decision.value.trace.every((event) => !event.resource.startsWith('party:')),
     true,
     label,
   );
   decodedUsersetTraceFound ||= decision.value.trace.some(
-    (event) => event.card === '../Team/spring-judges',
+    (event) => event.resource === '../Team/spring-judges',
   );
 }
-strictEqual(decodedUsersetTraceFound, true, 'userset trace card is realm-native');
+strictEqual(decodedUsersetTraceFound, true, 'userset trace exposes the original resource identifier');
 
 for (const expectation of fixture.capabilityLists) {
-  const listed = policy.listCapabilities({
+  const listed = authorization.listCapabilities({
     party: expectation.party,
-    card: expectation.card,
+    resource: expectation.resource,
   });
   strictEqual(listed.ok, true, `${expectation.domain}: listCapabilities`);
   if (!listed.ok) continue;
   deepStrictEqual(
     listed.value.capabilities,
     expectation.capabilities,
-    `${expectation.domain}: ${expectation.party} on ${expectation.card}`,
+    `${expectation.domain}: ${expectation.party} on ${expectation.resource}`,
   );
 
-  const card = fixture.snapshot.cards.find(
-    (candidate) => candidate.card === expectation.card,
+  const resource = fixture.snapshot.resources.find(
+    (candidate) => candidate.resource === expectation.resource,
   )!;
-  const scope = fixture.document.scopes.find(
-    (candidate) => candidate.adoptsFrom === card.adoptsFrom,
-  )!;
+  const scope = fixture.document.scopes.find((candidate) => candidate.name === resource.type)!;
   for (const capability of scope.capabilities) {
-    const checked = policy.authorize({
+    const checked = authorization.checkCapability({
       party: expectation.party,
       capability: capability.name,
-      card: expectation.card,
+      resource: expectation.resource,
     });
     strictEqual(checked.ok, true);
     if (!checked.ok) continue;
     strictEqual(
       listed.value.capabilities.includes(capability.name),
       checked.value.allowed,
-      `listCapabilities parity: ${expectation.party} ${capability.name} ${expectation.card}`,
+      `listCapabilities parity: ${expectation.party} ${capability.name} ${expectation.resource}`,
     );
   }
 }
 
-const playerGames = policy.listCards({
+const playerGames = authorization.listResources({
   party: '../Person/player-x',
   capability: 'MakeMove',
-  adoptsFrom: '../games/TurnGame',
+  type: 'TurnGame',
 });
 strictEqual(playerGames.ok, true);
 if (playerGames.ok) {
-  deepStrictEqual(playerGames.value.cards, ['../TurnGame/match-1']);
+  deepStrictEqual(playerGames.value.resources, ['../TurnGame/match-1']);
 }
 
-const attendanceKiosks = policy.listParties({
-  card: '../AttendanceLedger/main',
-  capability: 'RecordPunch',
+const inventoryScanners = authorization.listParties({
+  resource: '../InventoryLedger/main',
+  capability: 'RecordScan',
 });
-strictEqual(attendanceKiosks.ok, true);
-if (attendanceKiosks.ok) {
-  deepStrictEqual(attendanceKiosks.value.parties, ['../Device/front-desk-1']);
+strictEqual(inventoryScanners.ok, true);
+if (inventoryScanners.ok) {
+  deepStrictEqual(inventoryScanners.value.parties, [
+    '../Device/loading-dock-scanner',
+  ]);
 }
 
-const nestedJudge = policy.authorize({
+const nestedJudge = authorization.checkCapability({
   party: '../Person/judge-a',
   capability: 'SubmitScore',
-  card: '../JudgingContest/spring-2026',
+  resource: '../JudgingContest/spring-2026',
 });
 strictEqual(nestedJudge.ok, true);
 if (nestedJudge.ok) strictEqual(nestedJudge.value.allowed, true);
 
-const appTargetIsolation = policy.authorize({
+const appTargetIsolation = authorization.checkCapability({
   party: '../Service/fulfillment-bot',
   capability: 'PerformAppAction',
-  card: '../ConnectedApp/analytics-bot',
+  resource: '../ConnectedApp/analytics-bot',
 });
 strictEqual(appTargetIsolation.ok, true);
 if (appTargetIsolation.ok) strictEqual(appTargetIsolation.value.allowed, false);
 
-const invalidEnumerationLimit = policy.listCapabilities({
+const invalidEnumerationLimit = authorization.listCapabilities({
   party: '../Person/player-x',
-  card: '../TurnGame/match-1',
+  resource: '../TurnGame/match-1',
   limits: { maxCandidates: Number.NaN },
 });
 strictEqual(invalidEnumerationLimit.ok, false);
@@ -166,15 +166,15 @@ if (!invalidEnumerationLimit.ok) {
   strictEqual(invalidEnumerationLimit.error.kind, 'invalid-model');
 }
 
-const unknownCard = policy.listCapabilities({
+const unknownObject = authorization.listCapabilities({
   party: '../Person/player-x',
-  card: '../TurnGame/missing',
+  resource: '../TurnGame/missing',
 });
-strictEqual(unknownCard.ok, false);
-if (!unknownCard.ok) {
-  strictEqual(unknownCard.error.kind, 'invalid-identifier');
+strictEqual(unknownObject.ok, false);
+if (!unknownObject.ok) {
+  strictEqual(unknownObject.error.kind, 'invalid-identifier');
 }
 
 console.log(
-  'Boxel Policy v2: 32 generalized coordination decisions across attendance, turn games, connected apps, and judging passed',
+  'BXL Authorization: 32 generalized coordination decisions across inventory, turn games, connected apps, and judging passed',
 );

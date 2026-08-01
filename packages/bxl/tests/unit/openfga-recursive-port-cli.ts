@@ -1,16 +1,16 @@
 import { deepStrictEqual, strictEqual } from 'node:assert';
 import {
   OPENFGA_RECURSIVE_PORT_INFO,
-  prepareAuthorizationModelSafe,
-  prepareBoxelPolicySafe,
-  type BxlAuthorizationModel,
-  type BoxelPolicyDocument,
-  type BoxelPolicySnapshot,
+  prepareAuthorizationGraphSafe,
+  prepareBxlAuthorizationSafe,
+  type AuthorizationGraphModel,
+  type BxlAuthorizationDocument,
+  type BxlAuthorizationSnapshot,
   type RelationshipTuple,
 } from '../../src/index.js';
 
-const model: BxlAuthorizationModel = {
-  schema: 'bxl-authorization/1',
+const model: AuthorizationGraphModel = {
+  schema: 'bxl-authorization-ir/1',
   types: {
     user: {},
     group: {
@@ -18,37 +18,37 @@ const model: BxlAuthorizationModel = {
         member: ['user', 'group#member'],
       },
     },
-    student_access: {
+    change_request: {
       relations: {
-        provider: ['group#member'],
+        reviewer: ['group#member'],
       },
       permissions: {
-        view_student_classroom: 'userset("provider")',
+        review_security: 'userset("reviewer")',
       },
     },
   },
 };
 
 const tuples: RelationshipTuple[] = [
-  // Provider A belongs to a team, the team belongs to Student A's provider group, and
-  // that provider-group userset holds the student-scoped provider relation.
-  { subject: 'user:provider-a', relation: 'member', object: 'group:related-services' },
+  // Reviewer A belongs to a security team, that team belongs to Change A's
+  // review group, and the group userset holds the change-scoped relation.
+  { subject: 'user:reviewer-a', relation: 'member', object: 'group:product-security' },
   {
-    subject: 'group:related-services#member',
+    subject: 'group:product-security#member',
     relation: 'member',
-    object: 'group:student-a-providers',
+    object: 'group:change-a-reviewers',
   },
   {
-    subject: 'group:student-a-providers#member',
-    relation: 'provider',
-    object: 'student_access:student-a',
+    subject: 'group:change-a-reviewers#member',
+    relation: 'reviewer',
+    object: 'change_request:change-a',
   },
 
-  { subject: 'user:provider-b', relation: 'member', object: 'group:student-b-providers' },
+  { subject: 'user:reviewer-b', relation: 'member', object: 'group:change-b-reviewers' },
   {
-    subject: 'group:student-b-providers#member',
-    relation: 'provider',
-    object: 'student_access:student-b',
+    subject: 'group:change-b-reviewers#member',
+    relation: 'reviewer',
+    object: 'change_request:change-b',
   },
 
   // A deliberately cyclic userset proves visited-userset pruning terminates.
@@ -56,34 +56,34 @@ const tuples: RelationshipTuple[] = [
   { subject: 'group:cycle-a#member', relation: 'member', object: 'group:cycle-b' },
   {
     subject: 'group:cycle-a#member',
-    relation: 'provider',
-    object: 'student_access:cycle-classroom',
+    relation: 'reviewer',
+    object: 'change_request:cycle-change',
   },
 ];
 
-const prepared = prepareAuthorizationModelSafe(model, tuples);
+const prepared = prepareAuthorizationGraphSafe(model, tuples);
 strictEqual(prepared.ok, true);
 if (!prepared.ok) throw new Error(prepared.error.message);
 
 const check = (subject: string, object: string) =>
   prepared.value.check({
     subject,
-    relation: 'view_student_classroom',
+    relation: 'review_security',
     object,
     trace: true,
   });
 
-const providerAStudentA = check('user:provider-a', 'student_access:student-a');
-strictEqual(providerAStudentA.ok, true);
-if (!providerAStudentA.ok) throw new Error(providerAStudentA.error.message);
-strictEqual(providerAStudentA.value.allowed, true);
-strictEqual(providerAStudentA.value.metrics.maxDepth, 3);
-const recursiveTrace = providerAStudentA.value.trace.filter(
+const reviewerAChangeA = check('user:reviewer-a', 'change_request:change-a');
+strictEqual(reviewerAChangeA.ok, true);
+if (!reviewerAChangeA.ok) throw new Error(reviewerAChangeA.error.message);
+strictEqual(reviewerAChangeA.value.allowed, true);
+strictEqual(reviewerAChangeA.value.metrics.maxDepth, 3);
+const recursiveTrace = reviewerAChangeA.value.trace.filter(
   (event) => event.operation === 'openfga-recursive-userset',
 );
 deepStrictEqual(
   recursiveTrace.map((event) => `${event.object}#${event.relation}`),
-  ['group:related-services#member', 'group:student-a-providers#member'],
+  ['group:product-security#member', 'group:change-a-reviewers#member'],
 );
 strictEqual(
   recursiveTrace.every((event) =>
@@ -92,15 +92,15 @@ strictEqual(
   true,
 );
 
-const providerAStudentB = check('user:provider-a', 'student_access:student-b');
-strictEqual(providerAStudentB.ok, true);
-if (providerAStudentB.ok) strictEqual(providerAStudentB.value.allowed, false);
+const reviewerAChangeB = check('user:reviewer-a', 'change_request:change-b');
+strictEqual(reviewerAChangeB.ok, true);
+if (reviewerAChangeB.ok) strictEqual(reviewerAChangeB.value.allowed, false);
 
-const providerBStudentB = check('user:provider-b', 'student_access:student-b');
-strictEqual(providerBStudentB.ok, true);
-if (providerBStudentB.ok) strictEqual(providerBStudentB.value.allowed, true);
+const reviewerBChangeB = check('user:reviewer-b', 'change_request:change-b');
+strictEqual(reviewerBChangeB.ok, true);
+if (reviewerBChangeB.ok) strictEqual(reviewerBChangeB.value.allowed, true);
 
-const cyclic = check('user:nobody', 'student_access:cycle-classroom');
+const cyclic = check('user:nobody', 'change_request:cycle-change');
 strictEqual(cyclic.ok, true);
 if (!cyclic.ok) throw new Error(cyclic.error.message);
 strictEqual(cyclic.value.allowed, false);
@@ -110,9 +110,9 @@ strictEqual(
 );
 
 const depthLimited = prepared.value.check({
-  subject: 'user:provider-a',
-  relation: 'view_student_classroom',
-  object: 'student_access:student-a',
+  subject: 'user:reviewer-a',
+  relation: 'review_security',
+  object: 'change_request:change-a',
   limits: { maxDepth: 2 },
 });
 strictEqual(depthLimited.ok, false);
@@ -130,64 +130,63 @@ deepStrictEqual(OPENFGA_RECURSIVE_PORT_INFO.upstreamFunctions, [
 ]);
 strictEqual(OPENFGA_RECURSIVE_PORT_INFO.execution, 'synchronous-in-memory');
 
-const boxelDocument: BoxelPolicyDocument = {
-  schema: 'boxel-policy/2',
+const bxlDocument: BxlAuthorizationDocument = {
+  schema: 'bxl-authorization/1',
   scopes: [
     {
-      name: 'StudentClassroomAccess',
-      adoptsFrom: '../StudentClassroomAccess',
-      seats: [{ name: 'Provider', from: 'Card.Provider' }],
+      name: 'ChangeReviewAccess',
+      seats: [{ name: 'ReviewTeam', from: 'Resource.ReviewTeam' }],
       capabilities: [
         {
-          name: 'ViewStudentClassroom',
-          where: 'Seat.Provider',
+          name: 'ReviewSecurity',
+          where: 'Seat.ReviewTeam',
         },
       ],
     },
   ],
 };
 
-const boxelSnapshot: BoxelPolicySnapshot = {
-  cards: [
+const bxlSnapshot: BxlAuthorizationSnapshot = {
+  resources: [
     {
-      card: '../StudentAccess/student-a',
-      adoptsFrom: '../StudentClassroomAccess',
-      links: { provider: '../Group/student-a-providers' },
+      resource: '../ChangeRequest/change-a',
+      type: 'ChangeReviewAccess',
+      links: { reviewTeam: '../Group/change-a-reviewers' },
     },
   ],
   parties: [
-    { party: '../Staff/provider-a' },
-    { party: '../Group/related-services', members: ['../Staff/provider-a'] },
+    { party: '../Person/reviewer-a' },
+    { party: '../Group/product-security', members: ['../Person/reviewer-a'] },
     {
-      party: '../Group/student-a-providers',
-      members: ['../Group/related-services'],
+      party: '../Group/change-a-reviewers',
+      members: ['../Group/product-security'],
     },
   ],
 };
 
 strictEqual(
-  boxelDocument.scopes[0]!.capabilities[0]!.where,
-  'Seat.Provider',
-  'the Boxel policy names the relationship without embedding traversal syntax',
+  bxlDocument.scopes[0]!.capabilities[0]!.where,
+  'Seat.ReviewTeam',
+  'the BXL authorization names the relationship without embedding traversal syntax',
 );
-const preparedBoxel = prepareBoxelPolicySafe(boxelDocument, boxelSnapshot);
-strictEqual(preparedBoxel.ok, true);
-if (!preparedBoxel.ok) throw new Error(preparedBoxel.error.message);
-const boxelDecision = preparedBoxel.value.authorize({
-  party: '../Staff/provider-a',
-  capability: 'ViewStudentClassroom',
-  card: '../StudentAccess/student-a',
+const preparedBxl = prepareBxlAuthorizationSafe(bxlDocument, bxlSnapshot);
+strictEqual(preparedBxl.ok, true);
+if (!preparedBxl.ok) throw new Error(preparedBxl.error.message);
+const bxlDecision = preparedBxl.value.checkCapability({
+  party: '../Person/reviewer-a',
+  capability: 'ReviewSecurity',
+  resource: '../ChangeRequest/change-a',
   trace: true,
 });
-strictEqual(boxelDecision.ok, true);
-if (!boxelDecision.ok) throw new Error(boxelDecision.error.message);
-strictEqual(boxelDecision.value.allowed, true);
+strictEqual(bxlDecision.ok, true);
+if (!bxlDecision.ok) throw new Error(bxlDecision.error.message);
+strictEqual(bxlDecision.value.allowed, true);
 strictEqual(
-  boxelDecision.value.trace.some(
+  bxlDecision.value.trace.some(
     (event) => event.operation === 'openfga-recursive-userset',
   ),
   true,
-  'a userset-valued Provider relationship invokes the synchronous recursive port',
+  'a userset-valued ReviewTeam relationship invokes the synchronous recursive port',
 );
 
 console.log(

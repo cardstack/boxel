@@ -27,11 +27,8 @@ value, and diagnostics. Docs reference cases by `id`.
 - `contexts.ts`      — formulas, constraints, transforms, workflow gates
 - `realm-collaboration-examples.ts` — real gateway admission, transition,
   event, clock, and decision-test cases from the collaboration realm
-- `policy-mediation-examples.ts` — synthetic student records, anonymous and
-  group audiences, protected search aggregates, mediated writes/commands, and
-  projection-view parity for the Realm Policy Lab
-- `authorization/` — runnable generalized coordination and education-report
-  capability policies using the public `boxel-policy/2` API
+- `authorization/` — runnable generalized coordination and software-release
+  capability policies using the public `bxl-authorization/1` API
 - `excel-paste.ts`   — `=`, `<>`, `^`, `&`, formula coverage
 - `pred-filter.ts`   — `[* .pred]`, `[#N]`, ranges, implicit iteration
 

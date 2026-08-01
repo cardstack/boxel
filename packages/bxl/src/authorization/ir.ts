@@ -42,8 +42,8 @@ export interface CompiledAuthorizationType {
   relations: ReadonlyMap<string, CompiledAuthorizationRelation>;
 }
 
-export interface CompiledAuthorizationModel {
-  schema: 'bxl-authorization/1';
+export interface CompiledAuthorizationGraph {
+  schema: 'bxl-authorization-ir/1';
   types: ReadonlyMap<string, CompiledAuthorizationType>;
   conditions: ReadonlyMap<string, CompiledAuthorizationCondition>;
 }

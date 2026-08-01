@@ -570,7 +570,7 @@ Profiles are the practical answer. BXL stays one language and one AST, but hosts
 | --- | --- | --- | --- |
 | `compute` | Full browser/local value computation | formulas, transforms, UI validation, query transforms | Preserves the current BXL contract: readable jq plus Excel helpers and validator.js functions, including lazy extensions on async runtime paths. |
 | `policy` | Bounded request-time authorization | write gates, field redaction decisions | Keeps request checks deterministic and fail-closed; allows bounded scalar helpers but rejects aggregate and collection-scanning calls. |
-| `authorization` | Bounded relationship-graph authorization | OpenFGA-semantic rewrites, Boxel capability rules | Extends `policy` only with compiler-lowered graph forms such as `direct`, `userset`, `userset_from`, and `except`. |
+| `authorization` | Bounded relationship-graph authorization | OpenFGA-semantic rewrites, BXL authorization capability rules | Extends `policy` only with compiler-lowered graph forms such as `direct`, `userset`, `userset_from`, and `except`. |
 | `predicate` | Query-time boolean filtering | row-level read filters, search constraints | Requires a query-shaped boolean predicate; rejects transforms, runtime-only helpers, validator.js functions, and non-lowerable FormulaJS calls unless a host explicitly lowers them. |
 | `derive` | Headless write/index-time computation | `computeVia`, denormalized fields, search facets | Allows deterministic record-local Excel/jq computation, including lazy extensions and aggregation, while rejecting request context and volatile runtime behavior. |
 
@@ -611,13 +611,91 @@ This is how BXL avoids becoming "one language that does too much." The language 
 
 ---
 
-## Built on three open-source foundations
+## Authorization: who may do what?
+
+BXL includes a synchronous, host-neutral, decision-only authorization kernel. It
+answers one deliberately small question:
+
+> May this Party invoke this Capability on this Resource?
+
+That maps application abilities—commands and mutations such as
+`PerformAppAction`, `MakeMove`, `GrantApp`, or `Publish`—onto
+relationship-backed capabilities.
+The kernel returns allow or refuse. The host still validates command input,
+applies mutations, chooses field projections, records receipts, and performs
+external effects.
+
+BXL Authorization uses four nouns:
+
+| Noun | Meaning |
+| --- | --- |
+| Resource | The concrete thing on which an operation would be invoked. |
+| Party | A person, device, service, team, or other actor. |
+| Seat | A relationship-backed role the Party occupies for that Resource. |
+| Capability | A named command or mutation the Party may invoke. |
+
+Policy rules are ordinary bounded BXL expressions:
+
+```bxl
+Seat.Owner or Seat.Admin
+(Seat.Judge and Seat.PanelMember) or Seat.Chair
+via(Resource.Project; Capability.Edit)
+```
+
+The public document format is `bxl-authorization/1`. Prepare a document and a finite
+relationship snapshot once, then reuse the result for synchronous decisions
+and symmetric enumeration:
+
+```ts
+import { prepareBxlAuthorizationSafe } from '@cardstack/bxl';
+
+const prepared = prepareBxlAuthorizationSafe(document, snapshot);
+if (!prepared.ok) throw new Error(prepared.error.message);
+
+const decision = prepared.value.checkCapability({
+  party: 'service:fulfillment-bot',
+  capability: 'PerformAppAction',
+  resource: 'connected-app:fulfillment-bot',
+});
+
+const capabilities = prepared.value.listCapabilities({
+  party: 'service:fulfillment-bot',
+  resource: 'connected-app:fulfillment-bot',
+});
+```
+
+Resource links can delegate capabilities with `via(...)`. Seats may be held by
+nested Party groups; the kernel expands those usersets synchronously, so the
+authored rule remains `Seat.PanelMember` rather than exposing a recursion
+function. Changing the relationship snapshot changes the resulting decisions
+the next time the immutable policy is prepared.
+
+The relationship algebra follows the Zanzibar family and is tested against a
+pinned [OpenFGA](https://openfga.dev/) semantic corpus: 1,227 Check,
+ListObjects, and ListUsers assertions pass with zero skipped or unsupported
+cases. The production engine is BXL-native synchronous TypeScript. It does not
+ship an OpenFGA server, WASM runtime, DSL parser, CEL runtime, storage adapter,
+or network client.
+
+Start with [`docs/authorization.md`](./docs/authorization.md), run the
+generalized examples with `npm run example:authorization`, or open the browser
+harness with `npm run demo:authorization`. Runtime architecture, OpenFGA source
+citations, licensing, and merge gates are in
+[`src/authorization/README.md`](./src/authorization/README.md).
+
+---
+
+## Built on open-source foundations
 
 BXL is a thin, opinionated layer on proven foundations.
 
 - **[jq-tools](https://github.com/alexxander/jq-tools)** (MIT) — the complete jq interpreter in TypeScript. Lives in `src/jqtools/` — tokenizer, parser, evaluator, filter registry. We've added deterministic ordering and a budget-aware runtime state.
 - **[Formula.js](https://github.com/formulajs/formulajs)** (MIT) — Excel formulas in JavaScript. Curated subset in `src/formulajs/`, narrowed to the 300+ helpers that make sense on JSON. Cell-grid and regression array families stay out; statistical, Bessel, financial, and heavier engineering families are lazy async extensions (see `docs/formulas.md`).
 - **[validator.js](https://github.com/validatorjs/validator.js)** (MIT) — string validator functions. BXL imports it lazily and keeps the upstream function names and option shapes where they make sense for boolean validation.
+- **[OpenFGA](https://github.com/openfga/openfga)** (Apache-2.0) — the
+  authorization conformance reference. BXL pins its semantic test corpus and
+  adapts the recursive userset resolver from a cited commit; OpenFGA is not the
+  production execution engine.
 
 Our own work — the readable-syntax compiler, linter, formatter, sandbox, and registry — lives in `src/bxl/`. Full attribution in [NOTICE.md](./NOTICE.md).
 
@@ -637,12 +715,12 @@ import {
   bxlToJq,          // strip BXL sugar, emit pure jq
   jqToBxl,          // upgrade jq source to readable BXL
 
-  // Boxel Policy — Card · Party · Seat · Capability authoring
-  prepareBoxelPolicySafe,
+  // BXL Authorization — Resource · Party · Seat · Capability authoring
+  prepareBxlAuthorizationSafe,
 
   // Low-level compatibility IR and semantic-conformance adapter
-  compileAuthorizationModel,
-  prepareAuthorizationModelSafe,
+  compileAuthorizationGraph,
+  prepareAuthorizationGraphSafe,
 
   // Boxel realm authoring — factory + tagged templates that read well
   // inside @field decorators (see "Authoring inside Boxel" below)
@@ -667,16 +745,10 @@ Every function takes an optional `{ schema, runtimeLimits }` options object. Sub
 
 Full API reference in [`docs/api.md`](./docs/api.md).
 
-New authorization code should use `prepareBoxelPolicySafe` with the
-`boxel-policy/2` document and snapshot described in
-[`docs/authorization.md`](./docs/authorization.md). Card URLs remain card
-references; Boxel relationships populate links and seats; capability rules use
-ordinary BXL such as `Seat.Kiosk`, `Seat.Player`, or
-`Seat.Owner or Seat.Admin`. Nested Party groups are expanded implicitly from
-userset-valued relationship tuples, following Zanzibar semantics. The prepared
-policy exposes `authorize`,
-`listCards`, `listParties`, and `listCapabilities`. The older
-`bxl-authorization/1` model is the private compatibility IR documented in
+New authorization code should use `prepareBxlAuthorizationSafe` and the
+`bxl-authorization/1` model described in the dedicated
+[authorization section](#authorization-who-may-do-what). The older
+`bxl-authorization-ir/1` model is the private compatibility IR documented in
 [`docs/authorization-kernel-ir.md`](./docs/authorization-kernel-ir.md).
 
 `runtime-bare` is intentionally a capability subset, not a second spelling of the full runtime. Calls such as `AND(...)`, `ROUND(...)`, or `DATE(...)` report that the spreadsheet formula library is absent and point to `@cardstack/bxl/runtime`. jq collection operators such as `map`, `select`, array `+`, and pipes remain available.

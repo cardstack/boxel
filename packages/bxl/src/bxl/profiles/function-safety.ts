@@ -118,11 +118,7 @@ export const BXL_AUTHORIZATION_CALLS = names([
   'auth_list_users',
 ]);
 
-/**
- * Compiler-only relationship graph forms. These are valid only while an
- * authorization model is being lowered to the closed graph IR; they are not
- * ordinary jq runtime functions.
- */
+/** Compiler-only relationship graph forms lowered to authorization IR. */
 export const BXL_AUTHORIZATION_GRAPH_CALLS = names([
   'direct',
   'except',
@@ -351,7 +347,7 @@ const POLICY_DENIED_CALLS = new Set([
 
 const AUTHORIZATION_DENIED_CALLS = new Set([
   ...BXL_AGGREGATE_CALLS,
-  // An authorization rewrite may use graph forms, but it must not recursively
+  // Graph rewrites may traverse the compiled graph, but cannot recursively
   // invoke the public authorization runtime adapters.
   ...BXL_AUTHORIZATION_CALLS,
   ...BXL_ERROR_MASKING_CALLS,

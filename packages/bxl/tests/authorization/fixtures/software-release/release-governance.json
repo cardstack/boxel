@@ -1,0 +1,181 @@
+{
+  "provenance": {
+    "generalized": true,
+    "source": "Synthetic software-release governance scenario",
+    "boundary": "Authorization returns capability decisions; the release service owns validation and execution"
+  },
+  "document": {
+    "schema": "bxl-authorization/1",
+    "id": "release-governance",
+    "scopes": [
+      {
+        "name": "ReleaseDashboard",
+        "seats": [
+          { "name": "Administrator", "from": "Policy.Administrators" },
+          { "name": "ReleaseManager", "from": "Policy.ReleaseManagers" },
+          { "name": "Maintainer", "from": "Policy.Maintainers" },
+          { "name": "SecurityReviewer", "from": "Policy.SecurityReviewers" },
+          { "name": "Contributor", "from": "Policy.Contributors" }
+        ],
+        "capabilities": [
+          {
+            "name": "ViewDashboard",
+            "where": "Seat.Administrator or Seat.ReleaseManager or Seat.Maintainer or Seat.SecurityReviewer or Seat.Contributor"
+          },
+          {
+            "name": "ViewPipeline",
+            "where": "Seat.Administrator or Seat.ReleaseManager or Seat.Maintainer or Seat.SecurityReviewer or Seat.Contributor"
+          }
+        ]
+      },
+      {
+        "name": "ChangeRequest",
+        "seats": [
+          { "name": "Administrator", "from": "Policy.Administrators" },
+          { "name": "ReleaseManager", "from": "Policy.ReleaseManagers" },
+          { "name": "Maintainer", "from": "Policy.Maintainers" },
+          { "name": "SecurityReviewer", "from": "Policy.SecurityReviewers" },
+          { "name": "Contributor", "from": "Policy.Contributors" },
+          { "name": "ReviewTeam", "from": "Resource.ReviewTeam" }
+        ],
+        "capabilities": [
+          {
+            "name": "ViewChange",
+            "where": "Seat.Administrator or Seat.ReleaseManager or Seat.Maintainer or Seat.Contributor or (Seat.ReviewTeam and Seat.SecurityReviewer)"
+          },
+          { "name": "ApproveRelease", "where": "Seat.ReleaseManager" },
+          { "name": "MergeChange", "where": "Seat.Maintainer" },
+          {
+            "name": "ReviewSecurity",
+            "where": "Seat.ReviewTeam and Seat.SecurityReviewer"
+          },
+          { "name": "RevokeApproval", "where": "Seat.Administrator" }
+        ]
+      }
+    ]
+  },
+  "snapshot": {
+    "policy": {
+      "id": "release-governance",
+      "data": { "status": "active", "version": 1 },
+      "links": {
+        "administrators": ["../Person/administrator"],
+        "releaseManagers": ["../Person/release-manager"],
+        "maintainers": ["../Person/maintainer"],
+        "securityReviewers": ["../Person/security-reviewer"],
+        "contributors": ["../Person/contributor"]
+      }
+    },
+    "resources": [
+      {
+        "resource": "../ReleaseDashboard/current",
+        "type": "ReleaseDashboard"
+      },
+      {
+        "resource": "../ChangeRequest/change-a",
+        "type": "ChangeRequest",
+        "links": { "reviewTeam": "../Team/change-a-reviewers" }
+      },
+      {
+        "resource": "../ChangeRequest/change-b",
+        "type": "ChangeRequest",
+        "links": { "reviewTeam": "../Team/change-b-reviewers" }
+      },
+      {
+        "resource": "../ChangeRequest/change-c",
+        "type": "ChangeRequest",
+        "links": { "reviewTeam": "../Team/change-c-reviewers" }
+      }
+    ],
+    "parties": [
+      { "party": "../Person/administrator" },
+      { "party": "../Person/release-manager" },
+      { "party": "../Person/maintainer" },
+      { "party": "../Person/security-reviewer" },
+      { "party": "../Person/contributor" },
+      { "party": "../Person/other-reviewer" },
+      {
+        "party": "../Team/product-security",
+        "members": ["../Person/security-reviewer"]
+      },
+      {
+        "party": "../Team/change-a-reviewers",
+        "members": ["../Team/product-security"]
+      },
+      {
+        "party": "../Team/change-b-reviewers",
+        "members": ["../Person/security-reviewer"]
+      },
+      {
+        "party": "../Team/change-c-reviewers",
+        "members": ["../Person/other-reviewer"]
+      }
+    ],
+    "members": [
+      "../Person/administrator",
+      "../Person/release-manager",
+      "../Person/maintainer",
+      "../Person/security-reviewer",
+      "../Person/contributor",
+      "../Person/other-reviewer"
+    ]
+  },
+  "checks": [
+    { "party": "../Person/administrator", "capability": "ViewDashboard", "resource": "../ReleaseDashboard/current", "allowed": true },
+    { "party": "../Person/administrator", "capability": "ViewPipeline", "resource": "../ReleaseDashboard/current", "allowed": true },
+    { "party": "../Person/administrator", "capability": "RevokeApproval", "resource": "../ChangeRequest/change-a", "allowed": true },
+    { "party": "../Person/administrator", "capability": "ReviewSecurity", "resource": "../ChangeRequest/change-a", "allowed": false },
+    { "party": "../Person/administrator", "capability": "RevokeApproval", "resource": "../ChangeRequest/change-b", "allowed": true },
+    { "party": "../Person/administrator", "capability": "ReviewSecurity", "resource": "../ChangeRequest/change-b", "allowed": false },
+    { "party": "../Person/administrator", "capability": "RevokeApproval", "resource": "../ChangeRequest/change-c", "allowed": true },
+    { "party": "../Person/administrator", "capability": "ReviewSecurity", "resource": "../ChangeRequest/change-c", "allowed": false },
+
+    { "party": "../Person/release-manager", "capability": "ViewDashboard", "resource": "../ReleaseDashboard/current", "allowed": true },
+    { "party": "../Person/release-manager", "capability": "ViewPipeline", "resource": "../ReleaseDashboard/current", "allowed": true },
+    { "party": "../Person/release-manager", "capability": "ApproveRelease", "resource": "../ChangeRequest/change-a", "allowed": true },
+    { "party": "../Person/release-manager", "capability": "MergeChange", "resource": "../ChangeRequest/change-a", "allowed": false },
+    { "party": "../Person/release-manager", "capability": "ApproveRelease", "resource": "../ChangeRequest/change-b", "allowed": true },
+    { "party": "../Person/release-manager", "capability": "MergeChange", "resource": "../ChangeRequest/change-b", "allowed": false },
+    { "party": "../Person/release-manager", "capability": "ApproveRelease", "resource": "../ChangeRequest/change-c", "allowed": true },
+    { "party": "../Person/release-manager", "capability": "MergeChange", "resource": "../ChangeRequest/change-c", "allowed": false },
+
+    { "party": "../Person/maintainer", "capability": "ViewDashboard", "resource": "../ReleaseDashboard/current", "allowed": true },
+    { "party": "../Person/maintainer", "capability": "ViewPipeline", "resource": "../ReleaseDashboard/current", "allowed": true },
+    { "party": "../Person/maintainer", "capability": "MergeChange", "resource": "../ChangeRequest/change-a", "allowed": true },
+    { "party": "../Person/maintainer", "capability": "ApproveRelease", "resource": "../ChangeRequest/change-a", "allowed": false },
+    { "party": "../Person/maintainer", "capability": "MergeChange", "resource": "../ChangeRequest/change-b", "allowed": true },
+    { "party": "../Person/maintainer", "capability": "ApproveRelease", "resource": "../ChangeRequest/change-b", "allowed": false },
+    { "party": "../Person/maintainer", "capability": "MergeChange", "resource": "../ChangeRequest/change-c", "allowed": true },
+    { "party": "../Person/maintainer", "capability": "ApproveRelease", "resource": "../ChangeRequest/change-c", "allowed": false },
+
+    { "party": "../Person/security-reviewer", "capability": "ViewDashboard", "resource": "../ReleaseDashboard/current", "allowed": true },
+    { "party": "../Person/security-reviewer", "capability": "ViewPipeline", "resource": "../ReleaseDashboard/current", "allowed": true },
+    { "party": "../Person/security-reviewer", "capability": "ViewChange", "resource": "../ChangeRequest/change-a", "allowed": true },
+    { "party": "../Person/security-reviewer", "capability": "ReviewSecurity", "resource": "../ChangeRequest/change-a", "allowed": true },
+    { "party": "../Person/security-reviewer", "capability": "ViewChange", "resource": "../ChangeRequest/change-b", "allowed": true },
+    { "party": "../Person/security-reviewer", "capability": "ReviewSecurity", "resource": "../ChangeRequest/change-b", "allowed": true },
+    { "party": "../Person/security-reviewer", "capability": "ViewChange", "resource": "../ChangeRequest/change-c", "allowed": false },
+    { "party": "../Person/security-reviewer", "capability": "ReviewSecurity", "resource": "../ChangeRequest/change-c", "allowed": false },
+
+    { "party": "../Person/contributor", "capability": "ViewDashboard", "resource": "../ReleaseDashboard/current", "allowed": true },
+    { "party": "../Person/contributor", "capability": "ViewPipeline", "resource": "../ReleaseDashboard/current", "allowed": true },
+    { "party": "../Person/contributor", "capability": "ViewChange", "resource": "../ChangeRequest/change-a", "allowed": true },
+    { "party": "../Person/contributor", "capability": "ReviewSecurity", "resource": "../ChangeRequest/change-a", "allowed": false },
+    { "party": "../Person/contributor", "capability": "ViewChange", "resource": "../ChangeRequest/change-b", "allowed": true },
+    { "party": "../Person/contributor", "capability": "ReviewSecurity", "resource": "../ChangeRequest/change-b", "allowed": false },
+    { "party": "../Person/contributor", "capability": "ViewChange", "resource": "../ChangeRequest/change-c", "allowed": true },
+    { "party": "../Person/contributor", "capability": "ReviewSecurity", "resource": "../ChangeRequest/change-c", "allowed": false }
+  ],
+  "capabilityLists": [
+    { "party": "../Person/administrator", "resource": "../ReleaseDashboard/current", "capabilities": ["ViewDashboard", "ViewPipeline"] },
+    { "party": "../Person/administrator", "resource": "../ChangeRequest/change-a", "capabilities": ["RevokeApproval", "ViewChange"] },
+    { "party": "../Person/release-manager", "resource": "../ChangeRequest/change-a", "capabilities": ["ApproveRelease", "ViewChange"] },
+    { "party": "../Person/maintainer", "resource": "../ChangeRequest/change-c", "capabilities": ["MergeChange", "ViewChange"] },
+    { "party": "../Person/security-reviewer", "resource": "../ReleaseDashboard/current", "capabilities": ["ViewDashboard", "ViewPipeline"] },
+    { "party": "../Person/security-reviewer", "resource": "../ChangeRequest/change-a", "capabilities": ["ReviewSecurity", "ViewChange"] },
+    { "party": "../Person/security-reviewer", "resource": "../ChangeRequest/change-b", "capabilities": ["ReviewSecurity", "ViewChange"] },
+    { "party": "../Person/security-reviewer", "resource": "../ChangeRequest/change-c", "capabilities": [] },
+    { "party": "../Person/contributor", "resource": "../ReleaseDashboard/current", "capabilities": ["ViewDashboard", "ViewPipeline"] },
+    { "party": "../Person/contributor", "resource": "../ChangeRequest/change-a", "capabilities": ["ViewChange"] }
+  ]
+}

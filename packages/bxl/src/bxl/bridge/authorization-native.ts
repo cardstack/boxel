@@ -3,12 +3,12 @@ import {
   wrapBareNativeFilters,
 } from '../../jqtools/evaluate/filters/lib/nativeFilter.js';
 import {
-  prepareAuthorizationModelSafe,
+  prepareAuthorizationGraphSafe,
   type AuthorizationCheckRequest,
   type AuthorizationListObjectsRequest,
   type AuthorizationListUsersRequest,
   type AuthorizationSafeResult,
-  type BxlAuthorizationModel,
+  type AuthorizationGraphModel,
   type RelationshipTuple,
 } from '../../authorization/index.js';
 import type { AuthorizationErrorRecord } from '../../authorization/errors.js';
@@ -63,7 +63,7 @@ function authorizationInput(
 ):
   | {
       ok: true;
-      model: BxlAuthorizationModel;
+      model: AuthorizationGraphModel;
       tuples: RelationshipTuple[];
     }
   | { ok: false; error: AuthorizationErrorRecord } {
@@ -75,7 +75,7 @@ function authorizationInput(
   }
   return {
     ok: true,
-    model: model as BxlAuthorizationModel,
+    model: model as AuthorizationGraphModel,
     tuples: tuples as RelationshipTuple[],
   };
 }
@@ -86,7 +86,7 @@ function authorizationOperation<T>(
   operation: (
     prepared: NonNullable<
       Extract<
-        ReturnType<typeof prepareAuthorizationModelSafe>,
+        ReturnType<typeof prepareAuthorizationGraphSafe>,
         { ok: true }
       >['value']
     >,
@@ -94,7 +94,7 @@ function authorizationOperation<T>(
 ): AuthorizationSafeResult<T> {
   const input = authorizationInput(model, tuples);
   if (!input.ok) return input;
-  const prepared = prepareAuthorizationModelSafe(input.model, input.tuples);
+  const prepared = prepareAuthorizationGraphSafe(input.model, input.tuples);
   if (!prepared.ok) return prepared;
   return operation(prepared.value);
 }

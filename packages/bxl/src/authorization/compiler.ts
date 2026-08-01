@@ -12,17 +12,17 @@ import {
 } from './identifiers.js';
 import type {
   AuthorizationRelationExpression,
-  CompiledAuthorizationModel,
+  CompiledAuthorizationGraph,
   CompiledAuthorizationRelation,
   CompiledAuthorizationType,
 } from './ir.js';
 import {
-  BXL_AUTHORIZATION_SCHEMA,
-  type BxlAuthorizationRelation,
-  type BxlAuthorizationModel,
-  type BxlAuthorizationRelationDefinition,
+  BXL_AUTHORIZATION_IR_SCHEMA,
+  type AuthorizationGraphRelation,
+  type AuthorizationGraphModel,
+  type AuthorizationGraphRelationDefinition,
   type SubjectTypeReference,
-} from './model.js';
+} from './graph-model.js';
 
 const GRAPH_CALLS = new Set(['direct', 'userset', 'userset_from', 'except']);
 
@@ -148,25 +148,25 @@ function lowerAuthorizationExpression(
   return {
     kind: 'predicate',
     evaluate(input) {
-      const nativeContext = input.context.__boxelPolicy;
+      const nativeContext = input.context.__bxlAuthorization;
       const boxel =
         nativeContext && typeof nativeContext === 'object'
           ? (nativeContext as {
-              cards?: Readonly<Record<string, unknown>>;
+              resources?: Readonly<Record<string, unknown>>;
               parties?: Readonly<Record<string, unknown>>;
               policy?: unknown;
             })
           : undefined;
-      // Compatibility models continue to receive the original
-      // { context, subject, object, relation } envelope. Boxel Policy v2
+      // Graph-level callers continue to receive the original
+      // { context, subject, object, relation } envelope. BXL Authorization
       // additionally projects the current recursive graph node into the
-      // native Card · Input · Party · Now · Policy BXL envelope. Looking the
-      // card up by `input.object.canonical` is important: a via() traversal
-      // must evaluate Card fields on the linked card, not on the request root.
+      // native Resource · Input · Party · Now · Policy BXL envelope. Looking the
+      // resource up by `input.object.canonical` is important: a via() traversal
+      // must evaluate Resource fields on the linked resource, not on the request root.
       const evaluationInput = boxel
         ? {
             ...input,
-            card: boxel.cards?.[input.object.canonical],
+            resource: boxel.resources?.[input.object.canonical],
             input: input.context.input ?? {},
             party: boxel.parties?.[input.subject.canonical],
             now: input.context.now,
@@ -189,12 +189,12 @@ function lowerAuthorizationExpression(
 }
 
 function normalizedRelation(
-  definition: BxlAuthorizationRelationDefinition,
+  definition: AuthorizationGraphRelationDefinition,
 ): { subjects: readonly SubjectTypeReference[]; rewrite: string } {
   if (Array.isArray(definition)) {
     return { subjects: definition, rewrite: 'direct()' };
   }
-  const relation = definition as BxlAuthorizationRelation;
+  const relation = definition as AuthorizationGraphRelation;
   const subjects = relation.subjects ?? [];
   const rewrite = relation.rewrite ?? (subjects.length > 0 ? 'direct()' : '');
   return { subjects, rewrite };
@@ -203,12 +203,12 @@ function normalizedRelation(
 function compileRelation(
   typeName: string,
   name: string,
-  definition: BxlAuthorizationRelationDefinition | string,
+  definition: AuthorizationGraphRelationDefinition | string,
   assignable: boolean,
 ): CompiledAuthorizationRelation {
   const path = `types.${typeName}.${assignable ? 'relations' : 'permissions'}.${name}`;
   const normalized = assignable
-    ? normalizedRelation(definition as BxlAuthorizationRelationDefinition)
+    ? normalizedRelation(definition as AuthorizationGraphRelationDefinition)
     : { subjects: [] as readonly SubjectTypeReference[], rewrite: definition as string };
 
   if (normalized.rewrite.trim() === '') {
@@ -290,7 +290,7 @@ function containsKind(
 }
 
 function validateExpressionReferences(
-  model: CompiledAuthorizationModel,
+  model: CompiledAuthorizationGraph,
   ownerType: CompiledAuthorizationType,
   ownerRelation: CompiledAuthorizationRelation,
   expression: AuthorizationRelationExpression,
@@ -346,13 +346,13 @@ function validateExpressionReferences(
   }
 }
 
-export function compileAuthorizationModel(
-  input: BxlAuthorizationModel,
-): CompiledAuthorizationModel {
-  if (!input || typeof input !== 'object' || input.schema !== BXL_AUTHORIZATION_SCHEMA) {
+export function compileAuthorizationGraph(
+  input: AuthorizationGraphModel,
+): CompiledAuthorizationGraph {
+  if (!input || typeof input !== 'object' || input.schema !== BXL_AUTHORIZATION_IR_SCHEMA) {
     throw new AuthorizationError(
       'invalid-model',
-      `Authorization model schema must be ${BXL_AUTHORIZATION_SCHEMA}.`,
+      `Authorization model schema must be ${BXL_AUTHORIZATION_IR_SCHEMA}.`,
       { path: 'schema' },
     );
   }
@@ -395,8 +395,8 @@ export function compileAuthorizationModel(
     types.set(typeName, { name: typeName, relations });
   }
 
-  const compiled: CompiledAuthorizationModel = {
-    schema: BXL_AUTHORIZATION_SCHEMA,
+  const compiled: CompiledAuthorizationGraph = {
+    schema: BXL_AUTHORIZATION_IR_SCHEMA,
     types,
     conditions,
   };

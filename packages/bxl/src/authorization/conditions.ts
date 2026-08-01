@@ -2,7 +2,7 @@ import { parseBxlAst } from '../bxl/ast/index.js';
 import { prepareNativeJq } from '../bxl/bridge/native.js';
 import { AuthorizationError } from './errors.js';
 import type { CompiledAuthorizationCondition } from './ir.js';
-import type { BxlAuthorizationCondition } from './model.js';
+import type { AuthorizationGraphCondition } from './graph-model.js';
 
 function validParameter(value: unknown, type: string): boolean {
   switch (type) {
@@ -29,7 +29,7 @@ function validParameter(value: unknown, type: string): boolean {
 
 export function compileAuthorizationCondition(
   name: string,
-  definition: BxlAuthorizationCondition,
+  definition: AuthorizationGraphCondition,
   path: string,
 ): CompiledAuthorizationCondition {
   const program = parseBxlAst(definition.expression, { profile: 'policy' });

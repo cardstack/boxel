@@ -15,9 +15,11 @@ strictEqual(
   result.stdout,
 );
 strictEqual(
-  result.stdout.includes('education-report: 40 decisions'),
+  result.stdout.includes('software-release: 40 decisions'),
   true,
   result.stdout,
 );
 
-console.log('Authorization examples: generalized coordination and education runners passed');
+console.log(
+  'Authorization examples: generalized coordination and software-release runners passed',
+);

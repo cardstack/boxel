@@ -1,7 +1,7 @@
 import { strictEqual } from 'node:assert';
 import {
-  prepareAuthorizationModelSafe,
-  type BxlAuthorizationModel,
+  prepareAuthorizationGraphSafe,
+  type AuthorizationGraphModel,
 } from '../../src/authorization/index.js';
 import { ipv4InCidr } from '../../src/bxl/bridge/authorization-native.js';
 
@@ -10,8 +10,8 @@ strictEqual(ipv4InCidr('192.168.1.1', '192.168.0.0/24'), false);
 strictEqual(ipv4InCidr('10.0.0.1', '0.0.0.0/0'), true);
 strictEqual(ipv4InCidr('not-an-ip', '192.168.0.0/24'), false);
 
-const model: BxlAuthorizationModel = {
-  schema: 'bxl-authorization/1',
+const model: AuthorizationGraphModel = {
+  schema: 'bxl-authorization-ir/1',
   conditions: {
     below_limit: {
       expression: '.context.x < .context.limit',
@@ -37,7 +37,7 @@ const model: BxlAuthorizationModel = {
   },
 };
 
-const prepared = prepareAuthorizationModelSafe(model, [
+const prepared = prepareAuthorizationGraphSafe(model, [
   {
     subject: 'user:alice',
     relation: 'viewer',
@@ -94,7 +94,7 @@ const network = prepared.value.check({
 strictEqual(network.ok, true);
 if (network.ok) strictEqual(network.value.allowed, true);
 
-const invalidFacet = prepareAuthorizationModelSafe(model, [
+const invalidFacet = prepareAuthorizationGraphSafe(model, [
   {
     subject: 'user:alice',
     relation: 'viewer',

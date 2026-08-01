@@ -1,9 +1,9 @@
-# Boxel Policy authorization
+# BXL Authorization
 
-Boxel Policy is BXL's synchronous capability-authorization surface for
-Cardstack and Boxel applications. It answers one question:
+BXL Authorization is BXL's synchronous, host-neutral capability evaluator. It
+answers one question:
 
-> May this Party invoke this Capability on this Card?
+> May this Party invoke this Capability on this Resource?
 
 That is the complete execution boundary. A yes does not mean that the command
 will succeed. The command system remains responsible for input validation,
@@ -16,14 +16,14 @@ still rejects a request because it is another player's turn.
 
 | Noun | Meaning |
 | --- | --- |
-| Card | The concrete card on which the operation would be invoked. |
+| Resource | The concrete resource on which the operation would be invoked. |
 | Party | A person, device, service, team, or other actor. |
-| Seat | A relationship-backed role the Party occupies for that Card. |
+| Seat | A relationship-backed role the Party occupies for that Resource. |
 | Capability | A named command or mutation the Party may invoke. |
 
 Capabilities should normally match semantic commands:
 
-- RecordPunch
+- RecordScan
 - MakeMove
 - SubmitAnswer
 - GrantApp
@@ -41,48 +41,48 @@ Prepare one immutable policy document and one finite relationship snapshot:
 
 ~~~ts
 import {
-  prepareBoxelPolicySafe,
-  type BoxelPolicyDocument,
-  type BoxelPolicySnapshot,
+  prepareBxlAuthorizationSafe,
+  type BxlAuthorizationDocument,
+  type BxlAuthorizationSnapshot,
 } from '@cardstack/bxl';
 
-const prepared = prepareBoxelPolicySafe(document, snapshot);
+const prepared = prepareBxlAuthorizationSafe(document, snapshot);
 if (!prepared.ok) throw new Error(prepared.error.message);
 
-const policy = prepared.value;
+const authorization = prepared.value;
 ~~~
 
-The prepared policy exposes four synchronous queries:
+The prepared evaluator exposes four synchronous queries:
 
 ~~~ts
-policy.authorize({ party, capability, card });
-policy.listCards({ party, capability });
-policy.listParties({ card, capability });
-policy.listCapabilities({ party, card });
+authorization.checkCapability({ party, capability, resource });
+authorization.listResources({ party, capability });
+authorization.listParties({ resource, capability });
+authorization.listCapabilities({ party, resource });
 ~~~
 
-The enumeration APIs are symmetric with authorize. A capability appears in
-listCapabilities exactly when authorize returns yes for the same Party,
-Capability, and Card.
+The enumeration APIs are symmetric with `checkCapability`. A capability appears in
+`listCapabilities` exactly when `checkCapability` returns yes for the same Party,
+Capability, and Resource.
 
-## `boxel-policy/2` syntax reference
+## `bxl-authorization/1` syntax reference
 
-A public policy document contains one or more CardDef scopes. Names are stable
-UpperCamelCase handles; put spaces and other presentation text in
-`displayName`.
+A public authorization document contains one or more named types. The scope's
+`name` is its stable UpperCamelCase authorization type; it is not a host type
+or module path. The host maps each loaded resource to one of these types when it
+builds the snapshot. Put presentation text in `displayName`.
 
 ~~~ts
-interface BoxelPolicyDocument {
-  schema: 'boxel-policy/2';
-  card?: string;
+interface BxlAuthorizationDocument {
+  schema: 'bxl-authorization/1';
+  id?: string;
   scopes: Array<{
     name: string;
-    adoptsFrom: string;
     links?: Array<{ name: string; to: string; displayName?: string }>;
     seats?: Array<{
       name: string;
       displayName?: string;
-      from?: `Card.${string}` | `Policy.${string}`;
+      from?: `Resource.${string}` | `Policy.${string}`;
     }>;
     capabilities: Array<{
       name: string;
@@ -101,20 +101,20 @@ authorization vocabulary is deliberately small:
 
 | Form | Meaning |
 | --- | --- |
-| `Seat.Operator` | The Party occupies this relationship-backed seat on the target Card. |
+| `Seat.Operator` | The Party occupies this relationship-backed seat on the target Resource. |
 | `Capability.View` | Reuse another capability in the same scope. |
 | `Party.Anyone` | Any concrete Party identifier, matching Zanzibar-style typed-wildcard semantics. |
 | `Party.Member` | A Party present in `snapshot.members`. |
 | `Party.Guest` | A Party present in `snapshot.guests`. |
-| `via(Card.Parent; Capability.View)` | Follow a declared Card link and evaluate the target scope's capability. |
+| `via(Resource.Parent; Capability.View)` | Follow a declared Resource link and evaluate the target scope's capability. |
 | `a and b`, `a or b`, `(a)` | Ordinary BXL boolean composition. |
 
 Examples:
 
 ~~~bxl
 Seat.Owner or Seat.Admin
-(Seat.Provider and Seat.ServiceProvider) or Seat.LeadTeacher
-via(Card.Project; Capability.Edit)
+(Seat.ReviewTeam and Seat.SecurityReviewer) or Seat.ReleaseManager
+via(Resource.Project; Capability.Edit)
 Party.Member and Seat.Contributor
 ~~~
 
@@ -135,30 +135,30 @@ and win after eligibility succeeds:
 ~~~
 
 Do not put traversal functions in authored policy. A rule is
-`Seat.Provider`, not `recursiveUserset(Seat.Provider)`. If the Provider seat is
-held by a Party group, the snapshot's nested `members` relationships carry the
-userset graph and the kernel expands it synchronously.
+`Seat.ReviewTeam`, not `recursiveUserset(Seat.ReviewTeam)`. If the ReviewTeam
+seat is held by a Party group, the snapshot's nested `members` relationships
+carry the userset graph and the kernel expands it synchronously.
 
-## Attendance example
+## Inventory example
 
-The attendance gateway needs to distinguish a kiosk from an administrator:
+An inventory service needs to distinguish a loading-dock scanner from a
+supervisor:
 
 ~~~ts
-const document: BoxelPolicyDocument = {
-  schema: 'boxel-policy/2',
-  card: '../Policy/attendance-capabilities',
+const document: BxlAuthorizationDocument = {
+  schema: 'bxl-authorization/1',
+  id: 'inventory-capabilities',
   scopes: [
     {
-      name: 'AttendanceLedger',
-      adoptsFrom: '../attendance/AttendanceLedger',
+      name: 'InventoryLedger',
       seats: [
-        { name: 'Kiosk' },
+        { name: 'Scanner' },
         { name: 'Admin' },
       ],
       capabilities: [
-        { name: 'RecordPunch', where: 'Seat.Kiosk' },
-        { name: 'AmendRecord', where: 'Seat.Admin' },
-        { name: 'RecordOfflineDay', where: 'Seat.Admin' },
+        { name: 'RecordScan', where: 'Seat.Scanner' },
+        { name: 'AmendEntry', where: 'Seat.Admin' },
+        { name: 'RecordOfflineBatch', where: 'Seat.Admin' },
         { name: 'RevokePolicy', where: 'Seat.Admin' },
       ],
     },
@@ -166,103 +166,103 @@ const document: BoxelPolicyDocument = {
 };
 ~~~
 
-The host loads the concrete cards, parties, and seat assignments:
+The host loads the concrete resources, parties, and seat assignments:
 
 ~~~ts
-const snapshot: BoxelPolicySnapshot = {
-  cards: [
+const snapshot: BxlAuthorizationSnapshot = {
+  resources: [
     {
-      card: '../AttendanceLedger/main',
-      adoptsFrom: '../attendance/AttendanceLedger',
+      resource: 'inventory-ledger:main',
+      type: 'InventoryLedger',
     },
   ],
   parties: [
-    { party: '../Device/front-desk-1' },
-    { party: '../Person/attendance-admin' },
+    { party: 'device:loading-dock-scanner' },
+    { party: 'person:inventory-supervisor' },
   ],
   seats: [
     {
-      scope: '../AttendanceLedger/main',
-      seat: 'Kiosk',
-      holders: ['../Device/front-desk-1'],
+      resource: 'inventory-ledger:main',
+      seat: 'Scanner',
+      holders: ['device:loading-dock-scanner'],
     },
     {
-      scope: '../AttendanceLedger/main',
+      resource: 'inventory-ledger:main',
       seat: 'Admin',
-      holders: ['../Person/attendance-admin'],
+      holders: ['person:inventory-supervisor'],
     },
   ],
 };
 ~~~
 
-The kiosk can invoke RecordPunch but not AmendRecord:
+The scanner can invoke RecordScan but not AmendEntry:
 
 ~~~ts
-policy.authorize({
-  party: '../Device/front-desk-1',
-  capability: 'RecordPunch',
-  card: '../AttendanceLedger/main',
+authorization.checkCapability({
+  party: 'device:loading-dock-scanner',
+  capability: 'RecordScan',
+  resource: 'inventory-ledger:main',
 });
 // allowed: true
 
-policy.authorize({
-  party: '../Device/front-desk-1',
-  capability: 'AmendRecord',
-  card: '../AttendanceLedger/main',
+authorization.checkCapability({
+  party: 'device:loading-dock-scanner',
+  capability: 'AmendEntry',
+  resource: 'inventory-ledger:main',
 });
 // allowed: false
 ~~~
 
-The authorization layer does not inspect whether the kiosk is enabled, the
-staff member exists, or the cooldown elapsed. Those are command rules evaluated
+The authorization layer does not inspect whether the scanner is online, the
+shipment exists, or the batch is closed. Those are command rules evaluated
 after authorization succeeds.
 
 ## Nested groups and Zanzibar-style usersets
 
 A seat holder can be a Party group whose members include other Party groups.
-For example, Student A's Provider seat can point to that student's provider
-group, which contains a related-services team, which contains the individual
-provider. The capability rule remains about the relationship:
+For example, Change A's ReviewTeam seat can point to a change-specific review
+team, which contains a product-security team, which contains the individual
+reviewer. The capability rule remains about the relationship:
 
 ~~~ts
 capabilities: [
   {
-    name: 'ViewStudentClassroom',
-    where: 'Seat.Provider',
+    name: 'ReviewSecurity',
+    where: 'Seat.ReviewTeam and Seat.SecurityReviewer',
   },
 ],
 ~~~
 
 Recursion lives in the relationship tuples, not in the policy syntax. A
-Provider assignment to a Party userset such as StudentAProviders#Member tells the
-kernel to expand that membership relation. If the group contains another group
-userset, expansion continues synchronously and within the configured bounds.
+ReviewTeam assignment to a Party userset such as ChangeAReviewers#Member tells
+the kernel to expand that membership relation. If the group contains another
+group userset, expansion continues synchronously and within the configured bounds.
 This follows the Zanzibar/OpenFGA model: policy authors declare relations while
-the authorization engine owns graph traversal. The result remains only allow
+the BXL evaluator owns graph traversal. The result remains only allow
 or refuse; command execution and mutation logic remain outside authorization.
 
-Keep the assignment scoped to the governed card. If Student A's access card points
-to Student A's provider group, membership in that group grants access to that
-student's classroom only. It does not grant access to Student B's access card, whose Provider
-seat points to a different group.
+Keep the assignment scoped to the governed resource. If Change A points to Change
+A's review team, membership in that team grants review authority on Change A
+only. It does not grant authority on Change C, whose ReviewTeam seat points to
+a different group.
 
 ## Relationship-sourced seats
 
-A seat can come from the governed Card:
+A seat can come from the governed Resource:
 
 ~~~ts
 {
   name: 'Owner',
-  from: 'Card.Owner',
+  from: 'Resource.Owner',
 }
 ~~~
 
-If a ConnectedApp card contains:
+If a ConnectedApp resource contains:
 
 ~~~ts
 links: {
-  owner: '../Person/store-owner',
-  appPrincipal: '../Service/fulfillment-bot',
+  owner: 'person:store-owner',
+  appPrincipal: 'service:fulfillment-bot',
 }
 ~~~
 
@@ -270,8 +270,8 @@ then these declarations bind the human owner and service principal:
 
 ~~~ts
 seats: [
-  { name: 'Owner', from: 'Card.Owner' },
-  { name: 'App', from: 'Card.AppPrincipal' },
+  { name: 'Owner', from: 'Resource.Owner' },
+  { name: 'App', from: 'Resource.AppPrincipal' },
 ],
 capabilities: [
   { name: 'GrantApp', where: 'Seat.Owner' },
@@ -285,7 +285,7 @@ owner can grant or revoke the app but does not automatically act as the app.
 
 Policy relationships may also populate a seat with Policy.Field. Explicit seat
 assignments remain useful when the relationship is episodic rather than a
-permanent field on the CardDef.
+permanent relationship on the resource.
 
 ## Nested parties
 
@@ -293,40 +293,40 @@ A team can occupy a seat:
 
 ~~~ts
 parties: [
-  { party: '../Person/judge-a' },
-  { party: '../Person/judge-b' },
+  { party: 'person:judge-a' },
+  { party: 'person:judge-b' },
   {
-    party: '../Team/spring-judges',
+    party: 'team:spring-judges',
     members: [
-      '../Person/judge-a',
-      '../Person/judge-b',
+      'person:judge-a',
+      'person:judge-b',
     ],
   },
 ],
 seats: [
   {
-    scope: '../JudgingContest/spring-2026',
+    resource: 'judging-contest:spring-2026',
     seat: 'Judge',
-    holders: ['../Team/spring-judges'],
+    holders: ['team:spring-judges'],
   },
 ],
 ~~~
 
 Both members inherit SubmitScore when the capability is Seat.Judge. Membership
-is cycle-safe and bounded by the same authorization runtime limits as every
+is cycle-safe and bounded by the same authorization evaluation limits as every
 other traversal.
 
 ## Target isolation
 
-Every decision includes the target Card. Authority on one instance does not
-apply automatically to another instance of the same CardDef.
+Every decision includes the target Resource. Authority on one instance does not
+apply automatically to another resource of the same authorization type.
 
 Examples covered by the native suite:
 
 - a player in Match 1 cannot make a move in Match 2;
 - the fulfillment service cannot act as the analytics service;
 - a Spring judge cannot submit a score to the Fall contest;
-- an attendance administrator assigned to the main ledger has no authority on
+- an inventory supervisor assigned to the main ledger has no authority on
   an unassigned satellite ledger.
 
 This is why an authorization result must not be treated as a permanent token.
@@ -339,15 +339,15 @@ Use listCapabilities to build command surfaces without duplicating policy
 logic:
 
 ~~~ts
-const result = policy.listCapabilities({
-  party: '../Person/attendance-admin',
-  card: '../AttendanceLedger/main',
+const result = authorization.listCapabilities({
+  party: 'person:inventory-supervisor',
+  resource: 'inventory-ledger:main',
 });
 
 if (!result.ok) throw new Error(result.error.message);
 
 result.value.capabilities;
-// ['AmendRecord', 'RecordOfflineDay', 'RevokePolicy']
+// ['AmendEntry', 'RecordOfflineBatch', 'RevokePolicy']
 ~~~
 
 The API applies maxCandidates and maxResults limits. It reports accumulated
@@ -358,8 +358,8 @@ steps, tuple reads, and maximum recursion depth.
 Before evaluation, the trusted host must:
 
 1. authenticate the Party;
-2. resolve the target Card and its CardDef;
-3. load the finite set of required Party, seat, membership, and Card links;
+2. resolve the target Resource and map it to a declared authorization type;
+3. load the finite set of required Party, seat, membership, and Resource links;
 4. select the current policy or relationship epoch;
 5. pass explicit runtime limits.
 
@@ -371,17 +371,24 @@ After a yes, another system must:
 4. write state and receipts;
 5. trigger external effects through its normal effect mechanism.
 
-Boxel Policy performs no I/O and does not execute the command.
+BXL Authorization performs no I/O and does not execute the command.
+
+### Boxel is a host adapter
+
+BXL does not import Card APIs, resolve CardDefs, or interpret realm URLs. A
+Boxel host may use a card URL as an opaque resource identifier and map a CardDef
+to a policy type while constructing the snapshot. That mapping is application
+integration code and is not part of this evaluator or its document syntax.
 
 ## Failure behavior
 
 Preparation or evaluation fails closed for:
 
-- unknown cards;
+- unknown resources;
 - unknown capabilities;
-- invalid Party or Card identifiers;
+- invalid Party or Resource identifiers;
 - ambiguous or invalid policy handles;
-- a Card whose CardDef has no matching scope;
+- a Resource whose authorization type has no matching scope;
 - malformed relationship sources;
 - cycles or work exceeding configured limits.
 
@@ -392,25 +399,24 @@ allowed value is false. A malformed model or request is an error result.
 
 The generalized coordination fixture contains 32 decisions across:
 
-- staff attendance;
+- inventory scanning;
 - turn games;
 - connected applications;
 - judging.
 
 It also verifies listCapabilities parity, nested team membership, target
-isolation, relationship-sourced seats, ListCards, and ListParties.
+isolation, relationship-sourced seats, ListResources, and ListParties.
 
-The generalized education fixture adds 40 classroom-report decisions and 10
-capability-list expectations. It covers policy-sourced membership, a
-Staff-only room view, administrator internal-note refusal, nested and direct
-provider groups, cross-student isolation, and re-preparing a snapshot after a
-membership edit.
+The synthetic software-release fixture adds 40 decisions and 10 capability-list
+expectations. It covers policy-sourced membership, distinct release-manager and
+maintainer authority, nested and direct review teams, cross-change isolation,
+and re-preparing a snapshot after a membership edit.
 
 Run it with:
 
 ~~~sh
-node scripts/run-ts-entry.mjs tests/unit/boxel-policy-cli.ts
-node scripts/run-ts-entry.mjs tests/unit/education-policy-cli.ts
+node scripts/run-ts-entry.mjs tests/unit/bxl-authorization-cli.ts
+node scripts/run-ts-entry.mjs tests/unit/release-governance-policy-cli.ts
 ~~~
 
 The private graph kernel separately runs the pinned OpenFGA semantic corpus:
@@ -420,7 +426,7 @@ npm run test:authorization:conformance
 ~~~
 
 That corpus remains a semantic kernel test. OpenFGA syntax and identifiers are
-not part of the Boxel Policy authoring API.
+not part of the BXL Authorization authoring API.
 
 Run the non-SLO performance regression gate and the descriptive benchmark with:
 

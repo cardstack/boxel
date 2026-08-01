@@ -2,16 +2,16 @@ import { readFileSync } from 'node:fs';
 import { strictEqual } from 'node:assert';
 import { performance } from 'node:perf_hooks';
 import {
-  prepareBoxelPolicySafe,
-  type BoxelAuthorizeRequest,
-  type BoxelPolicyDocument,
-  type BoxelPolicySnapshot,
+  prepareBxlAuthorizationSafe,
+  type BxlAuthorizationCheckRequest,
+  type BxlAuthorizationDocument,
+  type BxlAuthorizationSnapshot,
 } from '../../src/authorization/index.js';
 
 interface Fixture {
-  document: BoxelPolicyDocument;
-  snapshot: BoxelPolicySnapshot;
-  checks: Array<BoxelAuthorizeRequest & { allowed: boolean }>;
+  document: BxlAuthorizationDocument;
+  snapshot: BxlAuthorizationSnapshot;
+  checks: Array<BxlAuthorizationCheckRequest & { allowed: boolean }>;
 }
 
 function load(relative: string): Fixture {
@@ -38,13 +38,13 @@ function assertBudget(name: string, actual: number, budget: number): void {
 const coordination = load(
   '../authorization/fixtures/realm-collaboration/capability-scenarios.json',
 );
-const education = load(
-  '../authorization/fixtures/education/classroom-report.json',
+const releaseGovernance = load(
+  '../authorization/fixtures/software-release/release-governance.json',
 );
 const multiplier = Number(process.env.BXL_AUTH_PERF_BUDGET_MULTIPLIER ?? '1');
 strictEqual(Number.isFinite(multiplier) && multiplier > 0, true);
 
-const preparedCoordination = prepareBoxelPolicySafe(
+const preparedCoordination = prepareBxlAuthorizationSafe(
   coordination.document,
   coordination.snapshot,
 );
@@ -52,46 +52,50 @@ strictEqual(preparedCoordination.ok, true);
 if (!preparedCoordination.ok) {
   throw new Error(preparedCoordination.error.message);
 }
-const preparedEducation = prepareBoxelPolicySafe(
-  education.document,
-  education.snapshot,
+const preparedReleaseGovernance = prepareBxlAuthorizationSafe(
+  releaseGovernance.document,
+  releaseGovernance.snapshot,
 );
-strictEqual(preparedEducation.ok, true);
-if (!preparedEducation.ok) throw new Error(preparedEducation.error.message);
+strictEqual(preparedReleaseGovernance.ok, true);
+if (!preparedReleaseGovernance.ok) {
+  throw new Error(preparedReleaseGovernance.error.message);
+}
 
 const coordinationRequests = coordination.checks.map(
   ({ allowed: _allowed, ...request }) => request,
 );
-const nestedProviderRequest: BoxelAuthorizeRequest = {
-  party: '../Staff/provider',
-  capability: 'ViewStudentInternalNote',
-  card: '../StudentReportAccess/student-a',
+const nestedReviewTeamRequest: BxlAuthorizationCheckRequest = {
+  party: '../Person/security-reviewer',
+  capability: 'ReviewSecurity',
+  resource: '../ChangeRequest/change-a',
 };
 
 const metrics = {
   coldPrepareMs: measure(200, () => {
-    const result = prepareBoxelPolicySafe(
+    const result = prepareBxlAuthorizationSafe(
       coordination.document,
       coordination.snapshot,
     );
     if (!result.ok) throw new Error(result.error.message);
   }),
-  warmAuthorizeMs: measure(20_000, () => {
-    const result = preparedCoordination.value.authorize(
+  warmCheckCapabilityMs: measure(20_000, () => {
+    const result = preparedCoordination.value.checkCapability(
       coordinationRequests[0]!,
     );
     if (!result.ok) throw new Error(result.error.message);
   }),
   batch32Ms: measure(1_000, () => {
-    const results = preparedCoordination.value.authorizeMany(
+    const results = preparedCoordination.value.checkCapabilities(
       coordinationRequests,
     );
     if (results.some((result) => !result.ok)) {
-      throw new Error('authorizeMany failed');
+      throw new Error('checkCapabilities failed');
     }
   }),
-  nestedUsersetMs: measure(10_000, () => {
-    const result = preparedEducation.value.authorize(nestedProviderRequest);
+  nestedUsersetCheckMs: measure(10_000, () => {
+    const result = preparedReleaseGovernance.value.checkCapability(
+      nestedReviewTeamRequest,
+    );
     if (!result.ok || !result.value.allowed) {
       throw new Error('nested userset decision failed');
     }
@@ -102,13 +106,13 @@ const metrics = {
 // They sit well above the checked-in benchmark baseline so a noisy shared
 // runner does not fail while still catching accidental algorithmic blow-ups.
 assertBudget('cold prepare', metrics.coldPrepareMs, 50 * multiplier);
-assertBudget('warm authorize', metrics.warmAuthorizeMs, 2 * multiplier);
-assertBudget('authorizeMany(32)', metrics.batch32Ms, 10 * multiplier);
-assertBudget('nested userset authorize', metrics.nestedUsersetMs, 2 * multiplier);
+assertBudget('warm checkCapability', metrics.warmCheckCapabilityMs, 2 * multiplier);
+assertBudget('checkCapabilities(32)', metrics.batch32Ms, 10 * multiplier);
+assertBudget('nested userset check', metrics.nestedUsersetCheckMs, 2 * multiplier);
 
 console.log(
   `Authorization performance gate: prepare=${metrics.coldPrepareMs.toFixed(4)} ms/op ` +
-    `authorize=${metrics.warmAuthorizeMs.toFixed(4)} ms/op ` +
+    `check=${metrics.warmCheckCapabilityMs.toFixed(4)} ms/op ` +
     `batch32=${metrics.batch32Ms.toFixed(4)} ms/op ` +
-    `nested=${metrics.nestedUsersetMs.toFixed(4)} ms/op`,
+    `nested=${metrics.nestedUsersetCheckMs.toFixed(4)} ms/op`,
 );

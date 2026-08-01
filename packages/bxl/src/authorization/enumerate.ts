@@ -7,9 +7,9 @@ import {
 } from './identifiers.js';
 import type {
   AuthorizationRelationExpression,
-  CompiledAuthorizationModel,
+  CompiledAuthorizationGraph,
 } from './ir.js';
-import type { RelationshipTuple } from './model.js';
+import type { RelationshipTuple } from './graph-model.js';
 import {
   checkAuthorization,
   type AuthorizationCheckMetrics,
@@ -68,7 +68,7 @@ function sorted(values: Iterable<string>): string[] {
 }
 
 function contextualIndex(
-  model: CompiledAuthorizationModel,
+  model: CompiledAuthorizationGraph,
   tuples: readonly RelationshipTuple[] | undefined,
 ): AuthorizationTupleIndex | undefined {
   return tuples && tuples.length > 0
@@ -77,7 +77,7 @@ function contextualIndex(
 }
 
 function assertKnownSubject(
-  model: CompiledAuthorizationModel,
+  model: CompiledAuthorizationGraph,
   value: string,
 ): void {
   const subject = parseSubjectReference(value, 'request.subject');
@@ -108,7 +108,7 @@ function tuplesFor(
 }
 
 function tupleConditionAllows(
-  model: CompiledAuthorizationModel,
+  model: CompiledAuthorizationGraph,
   tuple: import('./tuple-index.js').IndexedRelationshipTuple,
   context: Readonly<Record<string, unknown>>,
 ): boolean {
@@ -124,7 +124,7 @@ function tupleConditionAllows(
 }
 
 interface UsersetExpansionState {
-  model: CompiledAuthorizationModel;
+  model: CompiledAuthorizationGraph;
   stored: AuthorizationTupleIndex;
   contextual?: AuthorizationTupleIndex;
   context: Readonly<Record<string, unknown>>;
@@ -566,7 +566,7 @@ function expandUsersetRelation(
 }
 
 export function listAuthorizationObjects(
-  model: CompiledAuthorizationModel,
+  model: CompiledAuthorizationGraph,
   stored: AuthorizationTupleIndex,
   request: AuthorizationListObjectsRequest,
 ): AuthorizationSafeResult<AuthorizationListObjectsResult> {
@@ -650,7 +650,7 @@ export function listAuthorizationObjects(
 }
 
 export function listAuthorizationUsers(
-  model: CompiledAuthorizationModel,
+  model: CompiledAuthorizationGraph,
   stored: AuthorizationTupleIndex,
   request: AuthorizationListUsersRequest,
 ): AuthorizationSafeResult<AuthorizationListUsersResult> {

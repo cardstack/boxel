@@ -4,8 +4,8 @@ This tree drives the BXL-native synchronous authorization kernel against a
 pinned OpenFGA semantic-conformance corpus.
 
 The compatibility claim is semantic, not syntactic. Application authors use
-the `boxel-policy/2` Card · Party · Seat · Capability dialect and ordinary BXL
-predicates. The compiler lowers it to the private `bxl-authorization/1` graph
+the `bxl-authorization/1` Resource · Party · Seat · Capability dialect and ordinary BXL
+predicates. The compiler lowers it to the private `bxl-authorization-ir/1` graph
 IR. OpenFGA DSL and CEL appear only in upstream fixtures and test-only
 conversion tooling.
 
@@ -38,30 +38,31 @@ npm run test:authorization:conformance
 ```
 
 The OpenFGA transformer and YAML parser are development-only test tooling.
-The public production entry point is `prepareBoxelPolicySafe`. The low-level
-`bxl-authorization/1` entry remains available for compatibility and kernel
-testing, but is not the Boxel authoring surface.
+The public production entry point is `prepareBxlAuthorizationSafe`. The low-level
+`bxl-authorization-ir/1` entry remains available for compatibility and kernel
+testing, but is not the public BXL authoring surface.
 
-Run the Boxel-native Realm Collaboration command-capability, target-isolation,
+Run the host-neutral coordination command-capability, target-isolation,
 nested-team, and enumeration tests with:
 
 ```sh
-node scripts/run-ts-entry.mjs tests/unit/boxel-policy-cli.ts
+node scripts/run-ts-entry.mjs tests/unit/bxl-authorization-cli.ts
 ```
 
 The checked-in fixture is generalized: it preserves coordination behaviors
 without source realm URLs, organization names, or copied identities.
 
-Run the generalized education-report backport with:
+Run the synthetic software-release governance fixture with:
 
 ```sh
-node scripts/run-ts-entry.mjs tests/unit/education-policy-cli.ts
+node scripts/run-ts-entry.mjs tests/unit/release-governance-policy-cli.ts
 ```
 
 It executes 40 decisions and 10 capability-list expectations across
-administrator, instructional, assigned-provider, unassigned-provider, and
-general-staff boundaries. It also proves nested userset traversal remains
-student-scoped and that re-preparing after a membership edit changes access.
+administrator, release-manager, maintainer, assigned-reviewer,
+unassigned-reviewer, and contributor boundaries. It also proves nested userset
+traversal remains change-scoped and that re-preparing after a membership edit
+changes access.
 
 Run the broad, non-SLO performance regression gate with:
 
@@ -74,7 +75,7 @@ has deliberately generous budgets for shared CI; it detects algorithmic
 blow-ups rather than promising production latency.
 
 For the yes/no capability boundary, API walkthrough, host responsibilities,
-and Realm Collaboration examples, see
+and generalized coordination examples, see
 [`docs/authorization.md`](../../docs/authorization.md).
 The runtime architecture and OpenFGA/Zanzibar citations are in
 [`src/authorization/README.md`](../../src/authorization/README.md).

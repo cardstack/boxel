@@ -16,7 +16,8 @@ versions may change syntax behavior until `1.0.0`. See
 - **Authorization execution profile.** Relationship rewrites now use an
   explicit `authorization` profile: a strict superset of `policy` that adds
   only the compiler-lowered OpenFGA graph forms (`direct`, `userset`,
-  `userset_from`, and `except`) and Boxel's authoring-time `via` form. Plain
+  `userset_from`, and `except`) and BXL Authorization's authoring-time `via`
+  form. Plain
   policy expressions and tuple conditions reject graph traversal, while
   authorization rewrites reject recursive authorization-kernel calls.
 
