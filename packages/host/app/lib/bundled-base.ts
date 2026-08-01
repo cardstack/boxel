@@ -19,7 +19,7 @@
 // into the host's initial bundle through the same vite/embroider pipeline
 // as host app code.
 
-import { baseRealm, type VirtualNetwork } from '@cardstack/runtime-common';
+import type { VirtualNetwork } from '@cardstack/runtime-common';
 
 import BASE_MODULES from './bundled-base-modules';
 
@@ -31,18 +31,21 @@ const GLOB_PREFIX = '../../../base/';
 // indexing). Must run after the network's `@cardstack/base/` realm mapping
 // is registered, since shim identifiers resolve at registration time.
 //
-// Each module registers under both identifier forms a loader can fetch it
-// by. The RRI form resolves to the configured base realm URL at
-// registration; the canonical `https://cardstack.com/base/` form passes
-// through `resolveImport` unchanged (URL→URL mapping happens at the
-// network's fetch boundary, which module shim lookup precedes), so it
-// needs its own registration — a canonical-form import that misses the
-// shim falls through to a network fetch that evaluates a second copy of
-// the module, splitting def identity.
+// Known gap: only the RRI-resolved identifier form is registered. An
+// import that names a base module by its canonical
+// `https://cardstack.com/base/` URL misses the shim (resolveImport passes
+// URL-form identifiers through unchanged; URL→URL mapping happens at the
+// network's fetch boundary, which shim lookup precedes) and falls through
+// to a network fetch that evaluates a second copy of the module.
+// Registering the canonical form as a second shim entry is NOT the fix:
+// loaders capture export identities under whichever identifier form they
+// fetched, so dual registration makes a def's identified module URL
+// depend on import order. The durable fix is normalizing the identifier
+// through the network's URL mappings in the loader's module-fetch path so
+// both forms converge on one module state.
 export function shimBundledBase(virtualNetwork: VirtualNetwork) {
   for (let [path, module] of Object.entries(BASE_MODULES)) {
     let name = path.slice(GLOB_PREFIX.length).replace(/\.(gts|ts)$/, '');
     virtualNetwork.shimModule(`@cardstack/base/${name}`, module);
-    virtualNetwork.shimModule(`${baseRealm.url}${name}`, module);
   }
 }
