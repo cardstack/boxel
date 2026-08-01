@@ -19,7 +19,7 @@
 // into the host's initial bundle through the same vite/embroider pipeline
 // as host app code.
 
-import type { VirtualNetwork } from '@cardstack/runtime-common';
+import { baseRealm, type VirtualNetwork } from '@cardstack/runtime-common';
 
 import BASE_MODULES from './bundled-base-modules';
 
@@ -30,9 +30,19 @@ const GLOB_PREFIX = '../../../base/';
 // constructed outside the loader service (test-realm adapters, in-browser
 // indexing). Must run after the network's `@cardstack/base/` realm mapping
 // is registered, since shim identifiers resolve at registration time.
+//
+// Each module registers under both identifier forms a loader can fetch it
+// by. The RRI form resolves to the configured base realm URL at
+// registration; the canonical `https://cardstack.com/base/` form passes
+// through `resolveImport` unchanged (URL→URL mapping happens at the
+// network's fetch boundary, which module shim lookup precedes), so it
+// needs its own registration — a canonical-form import that misses the
+// shim falls through to a network fetch that evaluates a second copy of
+// the module, splitting def identity.
 export function shimBundledBase(virtualNetwork: VirtualNetwork) {
   for (let [path, module] of Object.entries(BASE_MODULES)) {
     let name = path.slice(GLOB_PREFIX.length).replace(/\.(gts|ts)$/, '');
     virtualNetwork.shimModule(`@cardstack/base/${name}`, module);
+    virtualNetwork.shimModule(`${baseRealm.url}${name}`, module);
   }
 }
