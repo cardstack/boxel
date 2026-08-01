@@ -271,7 +271,7 @@ function compilePolicyExpression(
 ): string {
   let program;
   try {
-    program = parseBxlAst(source, { profile: 'policy' });
+    program = parseBxlAst(source, { profile: 'authorization' });
   } catch (cause) {
     throw new AuthorizationError('invalid-expression', 'Could not parse BXL authorization expression.', {
       path,

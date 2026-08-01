@@ -174,8 +174,10 @@ tuples. The synchronous TypeScript port of OpenFGA's
 `breadthFirstRecursiveMatch` traversal handles that expansion. Policy authors
 name the relationship; they do not select a traversal algorithm.
 
-Ordinary bounded BXL predicates may be used as leaf rules, and tuple conditions
-use the `policy` execution profile. Volatile, side-effecting, error-masking,
+Ordinary bounded BXL predicates may be used as leaf rules. Graph rewrites use
+the `authorization` execution profile; tuple conditions use the narrower
+`policy` profile and therefore cannot invoke graph forms. Volatile,
+side-effecting, error-masking,
 unbounded, and collection-scanning expressions are rejected before requests
 run.
 
@@ -261,7 +263,7 @@ setup and request-time work.
 Preparation performs:
 
 1. Schema and identifier validation.
-2. BXL parsing with the bounded `policy` profile.
+2. BXL parsing with the bounded `authorization` profile.
 3. Graph-call lowering to authorization IR.
 4. Relation, permission, and type-edge validation.
 5. Condition compilation and parameter validation.

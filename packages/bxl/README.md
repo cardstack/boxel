@@ -570,6 +570,7 @@ Profiles are the practical answer. BXL stays one language and one AST, but hosts
 | --- | --- | --- | --- |
 | `compute` | Full browser/local value computation | formulas, transforms, UI validation, query transforms | Preserves the current BXL contract: readable jq plus Excel helpers and validator.js functions, including lazy extensions on async runtime paths. |
 | `policy` | Bounded request-time authorization | write gates, field redaction decisions | Keeps request checks deterministic and fail-closed; allows bounded scalar helpers but rejects aggregate and collection-scanning calls. |
+| `authorization` | Bounded relationship-graph authorization | OpenFGA-semantic rewrites, BXL authorization capability rules | Extends `policy` only with compiler-lowered graph forms such as `direct`, `userset`, `userset_from`, and `except`. |
 | `predicate` | Query-time boolean filtering | row-level read filters, search constraints | Requires a query-shaped boolean predicate; rejects transforms, runtime-only helpers, validator.js functions, and non-lowerable FormulaJS calls unless a host explicitly lowers them. |
 | `derive` | Headless write/index-time computation | `computeVia`, denormalized fields, search facets | Allows deterministic record-local Excel/jq computation, including lazy extensions and aggregation, while rejecting request context and volatile runtime behavior. |
 

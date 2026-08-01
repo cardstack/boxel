@@ -94,7 +94,9 @@ interface BxlAuthorizationDocument {
 }
 ~~~
 
-The `where` and `refuse.when` strings use the BXL policy profile. The public
+The `where` and `refuse.when` strings use the BXL `authorization` profile, a
+strict superset of `policy` that adds only compiler-lowered relationship-graph
+forms. The public
 authorization vocabulary is deliberately small:
 
 | Form | Meaning |

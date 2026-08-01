@@ -17,6 +17,16 @@ strictEqual(
   'deny',
   'tuple conditions cannot recursively call the authorization kernel',
 );
+strictEqual(
+  classifyBxlProfileFunction('authorization', 'auth_check').safety,
+  'deny',
+  'authorization rewrites cannot recursively call the authorization kernel',
+);
+strictEqual(
+  classifyBxlProfileFunction('authorization', 'userset').safety,
+  'allow',
+  'authorization rewrites can use relationship-graph calls',
+);
 
 const model: AuthorizationGraphModel = {
   schema: 'bxl-authorization-ir/1',

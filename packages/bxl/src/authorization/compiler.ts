@@ -221,7 +221,7 @@ function compileRelation(
 
   let program;
   try {
-    program = parseBxlAst(normalized.rewrite, { profile: 'policy' });
+    program = parseBxlAst(normalized.rewrite, { profile: 'authorization' });
   } catch (cause) {
     throw new AuthorizationError('invalid-expression', 'Could not parse authorization expression.', {
       path,

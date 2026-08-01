@@ -41,7 +41,8 @@ BXL imports from both `src/jqtools/` and `src/formulajs/`. The reverse is
   zero-based index warnings, first-match predicate warnings, Excel-equality
   preference, deprecated row shortcut, etc.
 - **`ast/index.ts`** — semantic AST projection over canonical BXL/jq plus
-  profile validators (`compute`, `policy`, `predicate`, `derive`).
+  profile validators (`compute`, `policy`, `authorization`, `predicate`,
+  `derive`).
 - **`registry/index.ts`** — `BXL_REGISTRY` (core + formula), public
   `resolveBuiltinRegistry`.
 - **`bridge/native.ts`** — `runNativeJq`, `parseNativeJq`, `tokenizeNativeJq`.

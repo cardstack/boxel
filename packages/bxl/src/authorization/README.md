@@ -44,7 +44,8 @@ advanced integration, but they are not the recommended BXL authorization dialect
 ## How BXL is used
 
 The adapter compiles each capability's BXL `where` expression into the graph
-IR during preparation. The policy profile accepts relationship primitives and
+IR during preparation. The authorization profile extends the policy profile
+with compiler-lowered relationship primitives and
 ordinary boolean composition:
 
 ```bxl
