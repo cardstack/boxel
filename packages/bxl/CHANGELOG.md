@@ -11,6 +11,16 @@ versions may change syntax behavior until `1.0.0`. See
 
 ## [Unreleased]
 
+## [0.3.1] — 2026-08-02
+
+### Fixed
+
+- **Readable selectors over primitive Card fields.** Primitive array items now
+  retain an explicit empty item scope, so natural selectors such as
+  `del(Tag[. = "obsolete"])` and their explicit bulk form
+  `del(Tag[* . = "obsolete"])` lower to jq predicates on `.` for full Card
+  schemas as well as field-root schemas.
+
 ## [0.3.0] — 2026-08-02
 
 ### Added
