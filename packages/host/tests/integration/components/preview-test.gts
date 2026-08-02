@@ -220,7 +220,7 @@ module('Integration | preview', function (hooks) {
       .dom('[data-test-sandbox-style-proof]')
       .hasText('Compartment template');
     assert
-      .dom('style')
+      .dom(document.head.querySelector('[data-realm-sandbox-stylesheet]'))
       .includesText('.sandbox-style-proof { color: rgb(1 2 3); }');
     assert
       .dom('.realm-sandbox-render')

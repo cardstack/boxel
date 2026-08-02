@@ -22,11 +22,11 @@ import { Loader } from '@cardstack/runtime-common/loader';
 
 import { FieldPathParser } from '@cardstack/host/lib/field-path-parser';
 import {
-  getOpaqueRealmCardTypeState,
   identifyRealmCard,
   type OpaqueRealmCardFieldMetadata,
 } from '@cardstack/host/lib/realm-sandbox-boundary';
 import type CardService from '@cardstack/host/services/card-service';
+import type RealmSandboxService from '@cardstack/host/services/realm-sandbox';
 
 import type { ValidateFieldPathResult } from '../lib/field-path-parser';
 import type LoaderService from '../services/loader-service';
@@ -80,6 +80,7 @@ export default class CardTypeService extends Service {
   @service declare private cardService: CardService;
   @service declare private network: NetworkService;
   @service declare private loaderService: LoaderService;
+  @service declare private realmSandbox: RealmSandboxService;
   @service declare private session: SessionService;
 
   private typeCache: Map<string, Type> = new Map();
@@ -104,7 +105,7 @@ export default class CardTypeService extends Service {
   introspect(
     cardOrDefinition: BaseDef | typeof BaseDef,
   ): CardDefinitionIntrospection | undefined {
-    let opaque = getOpaqueRealmCardTypeState(cardOrDefinition);
+    let opaque = this.realmSandbox.introspectOpaqueCardType(cardOrDefinition);
     let definition = this.definitionFor(cardOrDefinition);
     let typeRef = identifyRealmCard(cardOrDefinition);
     if (!definition || !typeRef) {
@@ -162,7 +163,7 @@ export default class CardTypeService extends Service {
     if (!definition) {
       throw new Error('cannot generate schema without a card definition');
     }
-    let opaque = getOpaqueRealmCardTypeState(definition);
+    let opaque = this.realmSandbox.introspectOpaqueCardType(definition);
     let loader =
       (opaque ? undefined : Loader.getLoaderFor(definition)) ??
       this.loaderService.loader;
@@ -238,7 +239,7 @@ export default class CardTypeService extends Service {
     cardApi: typeof CardAPI,
     loader: Loader,
   ): Promise<{ definition: typeof BaseDef; cardApi: typeof CardAPI }> {
-    let opaque = getOpaqueRealmCardTypeState(definition);
+    let opaque = this.realmSandbox.introspectOpaqueCardType(definition);
     if (!opaque) {
       return { definition, cardApi };
     }
@@ -287,7 +288,7 @@ export default class CardTypeService extends Service {
     loader: Loader,
     stack: (typeof BaseDef)[] = [],
   ): Promise<Type | CodeRefType> {
-    let opaqueType = getOpaqueRealmCardTypeState(card);
+    let opaqueType = this.realmSandbox.introspectOpaqueCardType(card);
     let maybeRef = identifyRealmCard(card);
     if (!maybeRef) {
       throw new Error(`cannot identify card ${card.name}`);

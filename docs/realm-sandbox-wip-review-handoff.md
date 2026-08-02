@@ -12,12 +12,14 @@ F-21, F-23, and F-24 remain explicit follow-ups. Hosted iframe deployment,
 hostile-CSS confinement, and server-side availability isolation remain
 production gates and must not be represented as complete.
 
-Current local verification: Host build passes; runtime-common lint and Host
-JavaScript/template lint pass; 53 focused browser assertions pass. Host
-typecheck is unchanged at the ten documented baseline failures. The
-`sandbox live reload` acceptance group cannot initialize without the Base realm
-at `https://localhost:4201`; the preserved failure log shows fetch failures
-during Store setup, before sandbox assertions run.
+Current local verification: Host build passes; runtime-common, realm-server,
+and Host JavaScript/template lint pass. The seven-row `sandbox live reload`
+acceptance group and the focused loader, acknowledgement, SES, iframe,
+preview, patch-code, and invalidation suites pass. Host typecheck reaches only
+seven `Array.at` target-library errors that are also present on `origin/main`.
+A separate new-card-definition acceptance row remains unverified because the
+local Base prerender manager timed out before the test reached a product
+assertion; that result is recorded as an environment risk, not a pass.
 
 ## Assignment
 
@@ -180,16 +182,17 @@ The checkpoint has already established the following:
 - Runtime-common lint passes.
 - Realm-server lint passes.
 - Host JavaScript and template lint pass.
-- Host typecheck currently reports ten documented failures: seven existing
-  `Array.at` target-library errors and three existing AI call-signature errors.
-- The pre-commit hook additionally reports parser errors in four Base files and
-  four experiments-realm files touched by delegated-render migrations. Treat
-  these eight errors as real checkpoint defects that must be diagnosed before
-  the review branch is pushed.
+- Host typecheck currently reports seven existing `Array.at` target-library
+  errors. The one changed test containing `.at(-1)` is unchanged from
+  `origin/main`; the other six affected files are outside this branch's diff.
+- The Base and experiments-realm parser errors reported by the earlier
+  checkpoint were subsequently addressed. They are no longer part of the
+  current lint/typecheck result, but package lint must still be rerun after any
+  further edits.
 - Focused unit tests for runtime registry, SES runtime, preview generation and
   caching, URL policy, lifecycle, loader invalidation, iframe protocol, styles,
   source cache, file-tree caching/invalidation, and import errors have passed.
-- The six-test `sandbox live reload` acceptance group has passed.
+- The seven-test `sandbox live reload` acceptance group has passed.
 - The existing-test audit found no broad deletion or weakening of the old Host
   suite, apart from an intentional Act-mode behavior change documented in the
   audit.

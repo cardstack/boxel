@@ -28,12 +28,14 @@ security hardening.
 
 ## Current branch size
 
-Relative to local `main`, the consolidated working tree currently changes 141
-tracked files with approximately 16,595 insertions and 929 deletions. The
-working directory contains 144 changed paths when untracked tests, production
-helpers, and diligence documents are included. Compared with the starting
-point for this pass, spike removal and consolidation removed roughly 6,600
-net inserted lines and 36 changed paths.
+Relative to `origin/main`, the consolidated working tree currently changes 171
+tracked files with approximately 23,927 insertions and 937 deletions. This
+includes the latest review-response implementation and its tests; the last
+checkpoint commit by itself accounts for approximately 23,647 insertions and
+936 deletions. Compared with the starting point for this pass, spike removal
+and consolidation still removed roughly 6,600 net inserted lines and 36
+changed paths, but the branch remains substantially too broad for one
+undifferentiated review.
 
 This is too broad to review as one undifferentiated sandbox change.
 
@@ -245,9 +247,11 @@ requiring Accept` when Act-mode product behavior changed from approval to
 
 - A fresh host development build completed successfully after the structural
   extraction and again after the URL-policy move.
-- Host JavaScript and template lint pass. Host type checking reaches only ten
-  pre-existing failures outside this consolidation: seven `Array.at` target-lib
-  failures and three AI-message call-signature failures.
+- Host JavaScript and template lint pass. Host type checking reaches only seven
+  `Array.at` target-library failures. The one failure in a changed test is
+  byte-for-byte present on `origin/main`; the other six affected files are not
+  changed by this branch. The three AI-message call-signature failures recorded
+  at the earlier checkpoint are gone.
 - `runtime-common` JavaScript/type lint and `realm-server` JavaScript/type lint
   pass.
 - Boxel UI addon and test-app JavaScript/template/type lint pass, and the test
@@ -269,7 +273,7 @@ requiring Accept` when Act-mode product behavior changed from approval to
   - filtered file-tree query cache (1 test);
   - incremental file-tree invalidation (4 tests); and
   - import-resource error preservation (1 test).
-- The six-test `sandbox live reload` group now passes together. The original
+- The seven-test `sandbox live reload` group now passes together. The original
   Reload Card failure was a real acknowledgement-test gap: the preceding
   broken-source recovery proved an optimistic local render but ended before
   the repair had autosaved, indexed, and been acknowledged. That could leave
@@ -286,6 +290,34 @@ requiring Accept` when Act-mode product behavior changed from approval to
   iframe HMR, warm-format, and compile/runtime recovery paths pass.
 - `git diff --check` passes and the retained-test audit found no focused or
   skipped tests.
+
+### Review-response continuation (2026-08-02)
+
+- Card-type metadata and template compilation now share one serialized
+  preview-runtime generation queue. Queue bookkeeping always settles, while
+  the initiating caller still receives and displays compiler or evaluation
+  failures. This prevents an earlier rejected generation from poisoning later
+  edits without turning an error into a silent success.
+- Code-preview metadata publication is explicit, reactive, diff-aware, and
+  guarded by draft identity. Initial hydration is not treated as volatile;
+  Monaco, AI, and out-of-band source mutations are.
+- Store acknowledgement now partitions a mixed index event. The exact locally
+  committed source is treated as an acknowledgement and does not replace its
+  mounted opaque card instance, while sibling invalidations still refresh
+  searches, file trees, and dependent non-acknowledged records.
+- Synthetic module-fetch errors no longer place multiline compiler output in
+  `Response.statusText`. The status text is normalized and bounded, while the
+  response body retains the complete diagnostic.
+- The latest focused verification passes: seven sandbox live-reload acceptance
+  rows, three acknowledgement unit tests, the multiline loader diagnostic
+  regression, 28 realm-sandbox tests, 14 Code-preview sandbox tests, 11 preview
+  integration tests, 11 patch-code tests, five custom-evaluator tests, two
+  targeted-invalidation tests, and two iframe-protocol tests.
+- A focused new-card-definition acceptance run did not reach its product
+  assertion because the local Base realm returned HTTP 500 after its prerender
+  manager request timed out at 120 seconds. The test realm indexed successfully.
+  This is recorded as an environment/prerender CI risk, not counted as a
+  product pass or rewritten into a weaker test.
 
 ### Proposed review and commit sequence
 
@@ -342,6 +374,8 @@ are distilled; it currently names files removed from this production branch.
    out-of-band patch, invalid-source recovery, height, and Reload Card.
 5. Complete a long cross-realm navigation/memory run. Unit tests prove idle
    eviction semantics, but they do not prove app-lifetime heap stability.
-6. Split/rebuild the history according to the sequence above before requesting
-   human review. The current 141-file aggregate is still too broad even though
+6. Re-run the focused new-card-definition row with a healthy Base prerender
+   service and verify that it reaches its original assertions.
+7. Split/rebuild the history according to the sequence above before requesting
+   human review. The current 171-file aggregate is still too broad even though
    the code and test surface is substantially cleaner.

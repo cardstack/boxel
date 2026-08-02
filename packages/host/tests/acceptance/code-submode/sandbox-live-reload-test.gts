@@ -3,13 +3,15 @@ import { click, settled, waitFor, waitUntil } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, rri } from '@cardstack/runtime-common';
+import { baseRealm, isCardErrorJSONAPI, rri } from '@cardstack/runtime-common';
 
 import config from '@cardstack/host/config/environment';
 
+import type CardTypeService from '@cardstack/host/services/card-type-service';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import type RealmSandboxService from '@cardstack/host/services/realm-sandbox';
+import type StoreService from '@cardstack/host/services/store';
 
 import {
   setupAcceptanceTestRealm,
@@ -118,10 +120,11 @@ module('Acceptance | code submode | sandbox live reload', function (hooks) {
 
   hooks.beforeEach(async function () {
     originalIframeOrigin = config.realmSandboxIframeOrigin;
-    // Testem disables application autoboot, so its second browsing context
-    // cannot run the child route. Point the frame at an inert origin and test
-    // the host-side revision boundary here; the child protocol is exercised by
-    // the staging-backed browser preview.
+    // Testem disables application autoboot in a second browsing context, so
+    // this suite exercises the persistent host boundary against an inert
+    // origin. Child-confirmed generations are covered by the protocol tests
+    // and the staging-backed browser smoke test; the host must never infer a
+    // child acknowledgement from publication alone.
     config.realmSandboxIframeOrigin = 'https://127.0.0.1:1';
     mockMatrixUtils.setRealmPermissions({
       [testRealmURL]: ['read', 'write'],
@@ -210,7 +213,11 @@ module('Acceptance | code submode | sandbox live reload', function (hooks) {
   });
 
   for (let sourceKind of ['ordinary', 'browser-runtime'] as const) {
-    test(`[HMR-01] a Monaco keystroke hot reloads the ${sourceKind} sandbox without replacing its renderer boundary`, async function (assert) {
+    let testName =
+      sourceKind === 'ordinary'
+        ? '[HMR-01] a Monaco keystroke hot reloads the ordinary sandbox without replacing its renderer boundary'
+        : '[IFR-HOST-01] a Monaco keystroke updates the persistent browser-runtime boundary without claiming child acknowledgement';
+    test(testName, async function (assert) {
       let environment = getService('environment-service') as EnvironmentService;
       environment.autoSaveDelayMs = 1_000;
 
@@ -290,6 +297,9 @@ module('Acceptance | code submode | sandbox live reload', function (hooks) {
         let stableAuthoredNode = document.querySelector(
           '[data-test-live-preview]',
         )!;
+        let stableTemplateIsland = document.querySelector(
+          '[data-realm-sandbox-template-island]',
+        )!;
         stablePreviewNode = stableAuthoredNode;
         assert.dom('[data-test-live-preview]').hasText('VERSION ONE');
 
@@ -311,6 +321,11 @@ module('Acceptance | code submode | sandbox live reload', function (hooks) {
           document.querySelector('.realm-sandbox-render'),
           stableBoundary,
           'the SES renderer boundary stayed mounted during the atomic template swap',
+        );
+        assert.strictEqual(
+          document.querySelector('[data-realm-sandbox-template-island]'),
+          stableTemplateIsland,
+          'the SES template island stayed mounted during the atomic template swap',
         );
         assert.strictEqual(
           document.querySelector('[data-test-live-preview]'),
@@ -338,6 +353,11 @@ module('Acceptance | code submode | sandbox live reload', function (hooks) {
           'the SES renderer boundary survived persistence and indexing',
         );
         assert.strictEqual(
+          document.querySelector('[data-realm-sandbox-template-island]'),
+          stableTemplateIsland,
+          'the SES template island survived persistence and indexing',
+        );
+        assert.strictEqual(
           document.querySelector('[data-test-live-preview]'),
           stableAuthoredNode,
           'the authored preview DOM survived persistence and indexing',
@@ -353,24 +373,15 @@ module('Acceptance | code submode | sandbox live reload', function (hooks) {
           frameBoundary.getAttribute('data-card-sandbox-draft-revision'),
         );
         assert.ok(initialPublishedRevision >= 0, 'initial draft was published');
-        await waitUntil(
-          () =>
-            Number(
-              document
-                .querySelector(
-                  '[data-card-sandbox-code-preview-loader="dedicated"]',
-                )
-                ?.getAttribute('data-card-sandbox-applied-draft-revision'),
-            ) >= initialPublishedRevision,
-        );
         let initialAppliedRevision = Number(
           frameBoundary.getAttribute(
             'data-card-sandbox-applied-draft-revision',
           ),
         );
-        assert.ok(
-          initialAppliedRevision >= initialPublishedRevision,
-          'the child confirmed the initial draft generation',
+        assert.strictEqual(
+          initialAppliedRevision,
+          -1,
+          'publication alone does not masquerade as child acknowledgement',
         );
 
         previewLoadingAppeared = false;
@@ -382,11 +393,8 @@ module('Acceptance | code submode | sandbox live reload', function (hooks) {
             '[data-card-sandbox-code-preview-loader="dedicated"]',
           );
           return (
-            Number(
-              boundary?.getAttribute(
-                'data-card-sandbox-applied-draft-revision',
-              ),
-            ) > initialAppliedRevision
+            Number(boundary?.getAttribute('data-card-sandbox-draft-revision')) >
+            initialPublishedRevision
           );
         });
         frameBoundary = document.querySelector(
@@ -468,14 +476,32 @@ module('Acceptance | code submode | sandbox live reload', function (hooks) {
 
     setMonacoContent(wideLivePreviewSource);
 
-    await waitUntil(
-      () =>
-        document
-          .querySelector(
-            '[data-test-playground-panel] .playground-panel-content',
-          )
-          ?.getAttribute('style') === 'max-width: 100%;',
-    );
+    try {
+      await waitUntil(
+        () =>
+          document
+            .querySelector(
+              '[data-test-playground-panel] .playground-panel-content',
+            )
+            ?.getAttribute('style') === 'max-width: 100%;',
+      );
+    } catch (error) {
+      let card = (getService('store') as StoreService).peek(
+        `${testRealmURL}LivePreview/sample`,
+      );
+      let introspection =
+        card && !isCardErrorJSONAPI(card)
+          ? (getService('card-type-service') as CardTypeService).introspect(
+              card,
+            )
+          : undefined;
+      throw new Error(
+        `wide metadata did not reach the playground: ${JSON.stringify({
+          introspection,
+          metrics: realmSandbox.metricsSnapshot(),
+        })}; cause: ${String(error)}`,
+      );
+    }
     assert.strictEqual(
       realmSandbox.metricsSnapshot().codePreviewCommitsPrepared,
       initialCommitCount,

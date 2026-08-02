@@ -7,6 +7,7 @@ import CodePreviewSandbox, {
 } from '@cardstack/host/lib/code-preview-sandbox';
 
 import type RealmSandboxService from '@cardstack/host/services/realm-sandbox';
+import type StoreService from '@cardstack/host/services/store';
 
 module('Unit | realm sandbox acknowledgement', function (hooks) {
   setupTest(hooks);
@@ -16,8 +17,7 @@ module('Unit | realm sandbox acknowledgement', function (hooks) {
     let sourceURL = 'https://realm.example/article.gts';
     let source = 'export class Article {}';
     let sandbox = new CodePreviewSandbox();
-    sandbox.update(sourceURL, source);
-    service.publishVolatileModuleSource(sourceURL, source);
+    service.publishCodePreviewSource(sandbox, sourceURL, source);
     let commit = service.prepareVolatileModuleCommit(
       sourceURL,
       source,
@@ -41,6 +41,18 @@ module('Unit | realm sandbox acknowledgement', function (hooks) {
         sibling,
       ]),
       'the mixed event must continue through Store for its sibling resource',
+    );
+    let store = getService('store') as StoreService;
+    assert.false(
+      store.isCodePreviewCommitAcknowledgement({
+        eventName: 'index',
+        indexType: 'incremental',
+        invalidations: [sourceURL, sibling],
+        clientRequestId: commit!.clientRequestId,
+        generation: 1,
+        realmURL: 'https://realm.example/',
+      }),
+      'live projections process the sibling instead of swallowing the mixed event',
     );
     service.releaseCodePreviewSandbox(sandbox);
   });
@@ -85,8 +97,7 @@ module('Unit | realm sandbox acknowledgement', function (hooks) {
     let sourceURL = 'https://realm.example/article.gts';
     let source = 'export class Article { static title = "local"; }';
     let sandbox = new CodePreviewSandbox();
-    sandbox.update(sourceURL, source);
-    volatileModules.publish(sourceURL, source);
+    service.publishCodePreviewSource(sandbox, sourceURL, source);
     now = 1_200;
 
     let commit = service.prepareVolatileModuleCommit(

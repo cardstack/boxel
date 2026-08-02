@@ -455,4 +455,16 @@ module('Unit | loader', function (hooks) {
       name: 'StringField',
     });
   });
+
+  test('multiline fetch failures produce a valid synthetic response', async function (assert) {
+    let failedLoader = new Loader(async () => {
+      throw new Error('compiler failed on line 2\nexpected an identifier');
+    });
+
+    await assert.rejects(
+      failedLoader.import('https://example.test/broken.gts'),
+      /compiler failed on line 2/,
+      'the original compiler error is surfaced instead of a Response constructor error',
+    );
+  });
 });

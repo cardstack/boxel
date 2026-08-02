@@ -33,13 +33,15 @@ working tree now contains the following response to that review:
   series without being required to close it. F-22, the unrelated GPT-5.6 Luna
   model-list change and its tests, has been removed from this branch response
   so it can ship independently.
-- **Verification:** the Host build succeeds; runtime-common lint and Host
-  JavaScript/template lint succeed; 53 focused browser assertions covering the
-  loader, SES runtime, import policy, iframe broker, CSS boundary,
-  acknowledgement state, and preview lifecycle pass. Host typecheck contains
-  only the ten pre-existing failures recorded below. The six-test live-reload
-  acceptance group still requires the local Base realm on port 4201; without
-  it, the runner fails during Store setup before reaching a sandbox assertion.
+- **Verification:** the Host build succeeds; runtime-common, realm-server, and
+  Host JavaScript/template lint succeed. The latest focused run includes seven
+  passing sandbox live-reload acceptance rows plus passing loader, SES runtime,
+  import-policy, iframe-protocol, CSS-boundary, acknowledgement, preview,
+  patch-code, and invalidation suites. Host typecheck contains only seven
+  `Array.at` target-library failures that are also present on `origin/main`.
+  A separate new-card-definition row remains unverified because the local Base
+  prerender manager timed out before the test reached a product assertion; it
+  is not counted as passing.
 
 This response does **not** make hosted iframe isolation production-ready. A
 dedicated hosted origin with CSP/origin validation remains a deployment gate,

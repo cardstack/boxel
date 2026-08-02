@@ -2029,6 +2029,7 @@ export default class StoreService extends Service implements StoreInterface {
           processingStart !== undefined
             ? Math.round(performance.now() - processingStart)
             : 0,
+        event_args: eventArgs(),
       });
       return;
     }
@@ -2119,6 +2120,7 @@ export default class StoreService extends Service implements StoreInterface {
       reloadsTriggered = this.#reloadInvalidatedInstances(
         event,
         remainingInvalidations,
+        acknowledgedInvalidations,
       );
     }
 
@@ -2146,6 +2148,7 @@ export default class StoreService extends Service implements StoreInterface {
   #reloadInvalidatedInstances(
     event: IncrementalIndexEventContent,
     invalidations: string[],
+    acknowledgedModules: Set<string> = new Set(),
   ): number {
     let reloadsTriggered = 0;
     for (let invalidation of invalidations) {
@@ -2169,6 +2172,29 @@ export default class StoreService extends Service implements StoreInterface {
       let instance = this.peekError(invalidation) ?? this.peek(invalidation);
       if (instance) {
         if (isCardInstance(instance)) {
+          // A source write invalidates every instance that adopts that module,
+          // even though their JSON data did not change. The volatile sandbox
+          // has already adopted the new program and its opaque facade is the
+          // stable data identity for the mounted preview. Reloading that
+          // facade would cross back through loadCardDef, rebuild the inert
+          // instance, and visibly remount the preview after autosave. Keep
+          // processing unrelated sibling invalidations, but treat dependent
+          // opaque instances as part of the source acknowledgement.
+          let isAcknowledgedDependent = false;
+          for (let moduleURL of acknowledgedModules) {
+            if (
+              this.realmSandbox.isOpaqueCardDefinedByModule(instance, moduleURL)
+            ) {
+              isAcknowledgedDependent = true;
+              break;
+            }
+          }
+          if (isAcknowledgedDependent) {
+            realmEventsLogger.debug(
+              `acknowledging dependent opaque card ${invalidation} without reloading`,
+            );
+            continue;
+          }
           // The invalidation id is the canonical remote id for this card. When
           // the server has just assigned a remote id to a locally-created
           // instance, this event is the first the store hears of it: the

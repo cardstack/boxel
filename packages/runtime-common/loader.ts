@@ -1027,9 +1027,22 @@ export class Loader {
         stringifyErrorForLog(err),
       );
 
+      // Response status text is an HTTP reason phrase, not an arbitrary error
+      // channel. In particular, browsers reject CR/LF and other control
+      // characters here. Compiler errors routinely contain multiple lines, so
+      // keep their full text in the response body and expose only a bounded,
+      // single-line summary as statusText.
+      let statusText = Array.from(String(detail), (character) => {
+        let codePoint = character.codePointAt(0)!;
+        return codePoint <= 0x1f || codePoint === 0x7f ? ' ' : character;
+      })
+        .join('')
+        .replace(/ +/g, ' ')
+        .trim()
+        .slice(0, 200);
       let synthetic = new Response(`fetch failed for ${url}: ${detail}`, {
         status: 500,
-        statusText: detail.slice(0, 200) || 'fetch failed',
+        statusText: statusText || 'fetch failed',
       });
       return synthetic;
     }

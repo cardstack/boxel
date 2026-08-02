@@ -280,6 +280,12 @@ export default class CodePreviewSandbox {
     revision: 0,
   };
   private canonicalRefreshDeferred = false;
+  // Opening Code mode seeds a canonical draft so it can render immediately,
+  // but that read must not itself open an HMR lease. Keep mutation intent on
+  // the immutable draft object so a later save can distinguish an authored
+  // generation from initial editor hydration, even after the time-based
+  // volatile registry lease has expired.
+  private volatileDraft?: CodePreviewDraft;
   private draftClassifications = new WeakMap<
     CodePreviewDraft,
     Promise<CardSourceSandboxClassification>
@@ -297,8 +303,11 @@ export default class CodePreviewSandbox {
     return this.draft?.revision ?? 0;
   }
 
-  update(sourceURL: string, source: string) {
+  update(sourceURL: string, source: string, volatile = false) {
     if (this.sourceURL === sourceURL && this.source === source) {
+      if (volatile && this.draft) {
+        this.volatileDraft = this.draft;
+      }
       return;
     }
     let changedModule =
@@ -310,6 +319,7 @@ export default class CodePreviewSandbox {
       revision: this.revision + 1,
     });
     this.draft = draft;
+    this.volatileDraft = volatile ? draft : undefined;
     this.generationState = {
       phase: 'draft',
       revision: draft.revision,
@@ -501,6 +511,12 @@ export default class CodePreviewSandbox {
       this.draft != null &&
       sameCodePreviewModuleURL(this.draft.sourceURL, sourceURL) &&
       this.draft.source === source
+    );
+  }
+
+  matchesVolatileDraft(sourceURL: string, source: string) {
+    return (
+      this.matchesDraft(sourceURL, source) && this.volatileDraft === this.draft
     );
   }
 

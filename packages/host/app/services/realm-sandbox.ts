@@ -193,6 +193,48 @@ function sameStyles(left: readonly string[], right: readonly string[]) {
   );
 }
 
+function sameStrings(left: readonly string[], right: readonly string[]) {
+  return (
+    left.length === right.length &&
+    left.every((value, index) => value === right[index])
+  );
+}
+
+function sameFieldMetadata(
+  left: Record<string, SandboxCardFieldMetadata>,
+  right: Record<string, SandboxCardFieldMetadata>,
+) {
+  let leftNames = Object.keys(left);
+  let rightNames = Object.keys(right);
+  return (
+    leftNames.length === rightNames.length &&
+    leftNames.every((name) => {
+      let leftField = left[name];
+      let rightField = right[name];
+      return (
+        leftField?.kind === rightField?.kind &&
+        leftField?.type.module === rightField?.type.module &&
+        leftField?.type.name === rightField?.type.name
+      );
+    })
+  );
+}
+
+function sameFieldTypes(
+  left: Record<string, typeof BaseDef> | undefined,
+  right: Record<string, typeof BaseDef>,
+) {
+  if (!left) {
+    return Object.keys(right).length === 0;
+  }
+  let leftNames = Object.keys(left);
+  let rightNames = Object.keys(right);
+  return (
+    leftNames.length === rightNames.length &&
+    leftNames.every((name) => left[name] === right[name])
+  );
+}
+
 interface PendingCodePreviewTemplate {
   codePreviewSandbox: CodePreviewSandbox;
   draft: CodePreviewDraft;
@@ -1615,6 +1657,40 @@ export default class RealmSandboxService extends Service {
     return entry;
   }
 
+  private async queueCodePreviewRuntimeOperation<T>(
+    principal: string,
+    codePreviewSandbox: CodePreviewSandbox,
+    expectedDraft: CodePreviewDraft,
+    operation: (runtime: RealmCompartmentModuleRuntime) => Promise<T>,
+  ): Promise<T | undefined> {
+    let entry = this.codePreviewRuntimeEntryFor(principal, codePreviewSandbox);
+    let result = entry.pending
+      .catch(() => undefined)
+      .then(async () => {
+        if (
+          !codePreviewSandbox.active ||
+          codePreviewSandbox.draft !== expectedDraft
+        ) {
+          return undefined;
+        }
+        if (entry.revision !== expectedDraft.revision) {
+          entry.draft = expectedDraft;
+          entry.runtime.invalidateModule(expectedDraft.sourceURL);
+          entry.revision = expectedDraft.revision;
+        }
+        return await operation(entry.runtime);
+      });
+    // `result` belongs to this operation's caller, which reports compile or
+    // metadata failures through the normal preview error surface. The queue
+    // tail is coordination state only and must never become a second,
+    // unobserved rejecting promise.
+    entry.pending = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return await result;
+  }
+
   private fetchCompartmentModuleForCodePreview(
     codePreviewSandbox: CodePreviewSandbox,
     currentDraft: () => CodePreviewDraft | undefined,
@@ -1672,6 +1748,14 @@ export default class RealmSandboxService extends Service {
     // is commonly extensionless. Using a stricter comparison makes revision N
     // evaluate saved source and appear only after revision N + 1.
     return sameCodePreviewModuleURL(left, right);
+  }
+
+  isOpaqueCardDefinedByModule(card: BaseDef, moduleURL: string): boolean {
+    let ref = getOpaqueRealmCardState(card)?.typeRef;
+    if (!ref || !('module' in ref)) {
+      return false;
+    }
+    return sameCodePreviewModuleURL(String(ref.module), moduleURL);
   }
 
   releaseCodePreviewSandbox(codePreviewSandbox: CodePreviewSandbox) {
@@ -1802,10 +1886,11 @@ export default class RealmSandboxService extends Service {
       preview = new CodePreviewSandbox();
       this.interactiveCodePreviews.set(key, preview);
     }
-    this.seedCodePreviewSource(
+    this.setCodePreviewSource(
       preview,
       generation.sourceURL,
       generation.source,
+      true,
     );
     return preview;
   }
@@ -1874,7 +1959,7 @@ export default class RealmSandboxService extends Service {
     source: string,
   ) {
     let generation = this.volatileModules.publish(sourceURL, source);
-    this.seedCodePreviewSource(codePreviewSandbox, sourceURL, source);
+    this.setCodePreviewSource(codePreviewSandbox, sourceURL, source, true);
     void this.refreshOpaqueTypeMetadataForModule(sourceURL, codePreviewSandbox);
     return generation;
   }
@@ -1884,11 +1969,20 @@ export default class RealmSandboxService extends Service {
     sourceURL: string,
     source: string,
   ) {
+    this.setCodePreviewSource(codePreviewSandbox, sourceURL, source, false);
+  }
+
+  private setCodePreviewSource(
+    codePreviewSandbox: CodePreviewSandbox,
+    sourceURL: string,
+    source: string,
+    volatile: boolean,
+  ) {
     let previousKey = codePreviewSandbox.sourceURL
       ? codePreviewModuleKey(codePreviewSandbox.sourceURL)
       : undefined;
     this.activeCodePreviews.add(codePreviewSandbox);
-    codePreviewSandbox.update(sourceURL, source);
+    codePreviewSandbox.update(sourceURL, source, volatile);
     if (previousKey && previousKey !== codePreviewModuleKey(sourceURL)) {
       this.clearExternalVolatilityIfUnused(previousKey);
     }
@@ -1910,7 +2004,7 @@ export default class RealmSandboxService extends Service {
         preview.sourceURL &&
         sameCodePreviewModuleURL(preview.sourceURL, sourceURL)
       ) {
-        preview.update(sourceURL, source);
+        preview.update(sourceURL, source, true);
         void this.classifyCodePreviewSource(preview);
         metadataPreview ??= preview;
       }
@@ -2087,7 +2181,7 @@ export default class RealmSandboxService extends Service {
         preview.sourceURL &&
         sameCodePreviewModuleURL(preview.sourceURL, sourceURL)
       ) {
-        preview.update(sourceURL, source);
+        preview.update(sourceURL, source, true);
         void this.classifyCodePreviewSource(preview);
       }
     }
@@ -2150,7 +2244,7 @@ export default class RealmSandboxService extends Service {
   ): PreparedCodePreviewCommit | undefined {
     if (
       (saveType !== 'editor' && saveType !== 'editor-with-instance') ||
-      !codePreviewSandbox.matchesDraft(sourceURL, source)
+      !codePreviewSandbox.matchesVolatileDraft(sourceURL, source)
     ) {
       return undefined;
     }
@@ -2181,11 +2275,11 @@ export default class RealmSandboxService extends Service {
     let sandboxes = new Set(
       candidateSandboxes ??
         [...this.activeCodePreviews].filter((preview) =>
-          preview.matchesDraft(sourceURL, source),
+          preview.matchesVolatileDraft(sourceURL, source),
         ),
     );
     for (let sandbox of sandboxes) {
-      if (!sandbox.matchesDraft(sourceURL, source)) {
+      if (!sandbox.matchesVolatileDraft(sourceURL, source)) {
         sandboxes.delete(sandbox);
       }
     }
@@ -2444,6 +2538,16 @@ export default class RealmSandboxService extends Service {
     codePreviewSandbox?: CodePreviewSandbox,
   ): Promise<SandboxCardTypeMetadata | undefined> {
     try {
+      let expectedDraft = codePreviewSandbox?.draft;
+      if (codePreviewSandbox && expectedDraft) {
+        return await this.queueCodePreviewRuntimeOperation(
+          principal,
+          codePreviewSandbox,
+          expectedDraft,
+          (runtime) =>
+            runtime.evaluateCardTypeMetadata(moduleIdentifier, exportName),
+        );
+      }
       return await this.compartmentRuntimeFor(
         principal,
         codePreviewSandbox,
@@ -2465,6 +2569,7 @@ export default class RealmSandboxService extends Service {
       return;
     }
     let changed = false;
+    let fieldComponentsChanged = false;
     for (let key of typeKeys) {
       let typeState = this.opaqueTypeStates.get(key);
       if (!typeState || !isResolvedCodeRef(typeState.typeRef)) {
@@ -2493,26 +2598,60 @@ export default class RealmSandboxService extends Service {
       }
       let fields = metadata.fields ?? {};
       let trustedFieldTypes = await this.resolveTrustedFieldTypes(fields);
-      typeState.displayName =
-        metadata.displayName ?? String(typeState.typeRef.name);
-      typeState.fields = Object.freeze({ ...fields });
-      typeState.hasCustomEditTemplate = metadata.hasCustomEditTemplate === true;
-      typeState.hasCustomIsolatedTemplate =
-        metadata.hasCustomIsolatedTemplate === true;
-      typeState.authoredTemplateFormats = metadata.authoredTemplateFormats;
-      typeState.headerColor = this.safeHeaderColor(metadata.headerColor);
-      typeState.prefersWideFormat = metadata.prefersWideFormat === true;
-      typeState.icon =
+      let nextIcon =
         (await this.resolveTrustedIcon(metadata.icon)) ?? typeState.icon;
+      // Trusted field/icon resolution is asynchronous too. Do not publish an
+      // older generation after a newer draft became authoritative while those
+      // imports were in flight.
+      if (codePreviewSandbox && codePreviewSandbox.draft !== expectedDraft) {
+        return;
+      }
+      let nextDisplayName =
+        metadata.displayName ?? String(typeState.typeRef.name);
+      let nextHasCustomEditTemplate = metadata.hasCustomEditTemplate === true;
+      let nextHasCustomIsolatedTemplate =
+        metadata.hasCustomIsolatedTemplate === true;
+      let nextHeaderColor = this.safeHeaderColor(metadata.headerColor);
+      let nextPrefersWideFormat = metadata.prefersWideFormat === true;
+      let previousFieldMetadata = this.fieldMetadataByOpaqueType.get(key) ?? {};
+      let previousFieldTypes = this.trustedFieldTypesByOpaqueType.get(key);
+      let fieldsChanged =
+        !sameFieldMetadata(previousFieldMetadata, fields) ||
+        !sameFieldTypes(previousFieldTypes, trustedFieldTypes);
+      let presentationChanged =
+        typeState.displayName !== nextDisplayName ||
+        typeState.hasCustomEditTemplate !== nextHasCustomEditTemplate ||
+        typeState.hasCustomIsolatedTemplate !== nextHasCustomIsolatedTemplate ||
+        !sameStrings(
+          typeState.authoredTemplateFormats ?? [],
+          metadata.authoredTemplateFormats ?? [],
+        ) ||
+        typeState.headerColor !== nextHeaderColor ||
+        typeState.prefersWideFormat !== nextPrefersWideFormat ||
+        typeState.icon !== nextIcon;
+      if (!fieldsChanged && !presentationChanged) {
+        continue;
+      }
+      typeState.displayName = nextDisplayName;
+      typeState.fields = Object.freeze({ ...fields });
+      typeState.hasCustomEditTemplate = nextHasCustomEditTemplate;
+      typeState.hasCustomIsolatedTemplate = nextHasCustomIsolatedTemplate;
+      typeState.authoredTemplateFormats = metadata.authoredTemplateFormats;
+      typeState.headerColor = nextHeaderColor;
+      typeState.prefersWideFormat = nextPrefersWideFormat;
+      typeState.icon = nextIcon;
       this.trustedFieldTypesByOpaqueType.set(key, trustedFieldTypes);
       this.fieldMetadataByOpaqueType.set(key, fields);
       changed = true;
+      fieldComponentsChanged ||= fieldsChanged;
     }
     if (changed) {
       // Field component wrappers capture their FieldDef and relationship kind.
       // Replace the weak cache so the next tracked render reconstructs only
       // the cards that are still live.
-      this.opaqueFieldComponents = new WeakMap();
+      if (fieldComponentsChanged) {
+        this.opaqueFieldComponents = new WeakMap();
+      }
       this.opaqueMetadataRevisionFor(moduleKey).bump();
     }
   }
@@ -2846,24 +2985,11 @@ export default class RealmSandboxService extends Service {
           expectedDraft,
           () => codePreviewSandbox.markEvaluating(expectedDraft),
         );
-        let entry = this.codePreviewRuntimeEntryFor(
+        await this.queueCodePreviewRuntimeOperation(
           principal,
           codePreviewSandbox,
-        );
-        let evaluate = entry.pending
-          .catch(() => undefined)
-          .then(async () => {
-            if (
-              !codePreviewSandbox.active ||
-              codePreviewSandbox.draft !== expectedDraft
-            ) {
-              return;
-            }
-            if (entry.revision !== expectedDraft.revision) {
-              entry.draft = expectedDraft;
-              entry.runtime.invalidateModule(expectedDraft.sourceURL);
-              entry.revision = expectedDraft.revision;
-            }
+          expectedDraft,
+          async () => {
             await this.evaluateAndInstallCompartmentTemplate(
               key,
               card,
@@ -2876,9 +3002,8 @@ export default class RealmSandboxService extends Service {
               previewSlot,
               expectedDraft,
             );
-          });
-        entry.pending = evaluate;
-        await evaluate;
+          },
+        );
       } else {
         await this.evaluateAndInstallCompartmentTemplate(
           key,
@@ -3568,8 +3693,13 @@ export default class RealmSandboxService extends Service {
     return revision;
   }
 
-  private consumeOpaqueMetadataRevision(card: BaseDef) {
-    let typeState = getOpaqueRealmCardTypeState(card);
+  // Host schema and presentation UI must not reach through an opaque card's
+  // constructor and infer mutable CardDef state. This is the explicit,
+  // reactive boundary for the inert metadata that a sandbox publishes.
+  introspectOpaqueCardType(
+    value: BaseDef | typeof BaseDef,
+  ): Readonly<OpaqueRealmCardTypeState> | undefined {
+    let typeState = getOpaqueRealmCardTypeState(value);
     if (typeState && isResolvedCodeRef(typeState.typeRef)) {
       this.opaqueMetadataRevisionFor(
         codePreviewModuleKey(
@@ -3577,6 +3707,11 @@ export default class RealmSandboxService extends Service {
         ),
       ).consume();
     }
+    return typeState;
+  }
+
+  private consumeOpaqueMetadataRevision(card: BaseDef) {
+    this.introspectOpaqueCardType(card);
   }
 
   private syncOpaqueCardPresentation(
