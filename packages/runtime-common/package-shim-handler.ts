@@ -440,10 +440,25 @@ export class PackageShimHandler {
     return null;
   };
 
+  // Synchronously-shimmed modules in registration order. Loaders replay
+  // this inventory through their identity capture so that export
+  // identities don't depend on which shim a given loader happened to load
+  // first — loader-evaluated modules got that guarantee from
+  // dependency-first evaluation (a re-exporting module always evaluated
+  // after its source), but shims carry no dependency chain. Registration
+  // order therefore stands in for dependency order; registrars put
+  // declaring modules before their re-exporters.
+  private syncModules = new Map<string, ModuleLike>();
+
+  syncShimEntries(): ReadonlyMap<string, ModuleLike> {
+    return this.syncModules;
+  }
+
   shimModule(moduleIdentifier: string, module: ModuleLike) {
     moduleIdentifier = this.resolveImport(moduleIdentifier);
     let key = trimModuleIdentifier(moduleIdentifier);
     this.moduleIds.set(key, async () => module);
+    this.syncModules.set(key, module);
     this.rememberExports(key, module);
   }
 

@@ -43,9 +43,31 @@ const GLOB_PREFIX = '../../../base/';
 // depend on import order. The durable fix is normalizing the identifier
 // through the network's URL mappings in the loader's module-fetch path so
 // both forms converge on one module state.
+// Shim registration order doubles as identity-capture order (loaders
+// replay the network's shim inventory dependency-first — see the loader's
+// captureVirtualNetworkShimIdentities). The def classes that serialization
+// identifies are declared in card-api (several modules re-export them:
+// file-api, markdown, image-file-def) and cards-grid (re-exported by
+// index), so those two register ahead of the alphabetical remainder.
+const DECLARING_MODULES_FIRST = ['card-api', 'cards-grid'];
+
 export function shimBundledBase(virtualNetwork: VirtualNetwork) {
-  for (let [path, module] of Object.entries(BASE_MODULES)) {
-    let name = path.slice(GLOB_PREFIX.length).replace(/\.(gts|ts)$/, '');
+  let entries = Object.entries(BASE_MODULES)
+    .map(([path, module]) => ({
+      name: path.slice(GLOB_PREFIX.length).replace(/\.(gts|ts)$/, ''),
+      module,
+    }))
+    .sort((a, b) => {
+      let ai = DECLARING_MODULES_FIRST.indexOf(a.name);
+      let bi = DECLARING_MODULES_FIRST.indexOf(b.name);
+      if (ai !== bi) {
+        return (ai === -1 ? Infinity : ai) < (bi === -1 ? Infinity : bi)
+          ? -1
+          : 1;
+      }
+      return a.name < b.name ? -1 : 1;
+    });
+  for (let { name, module } of entries) {
     virtualNetwork.shimModule(`@cardstack/base/${name}`, module);
   }
 }

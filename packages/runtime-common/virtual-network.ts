@@ -118,6 +118,13 @@ export class VirtualNetwork {
     return this.packageShimHandler.lookupModule(url);
   }
 
+  // Registration-ordered inventory of synchronously-shimmed modules, for
+  // loaders to replay through identity capture (see the note on the
+  // handler's syncShimEntries).
+  syncShimEntries(): ReadonlyMap<string, ModuleLike> {
+    return this.packageShimHandler.syncShimEntries();
+  }
+
   addURLMapping(from: URL, to: URL) {
     this.urlMappings.push([from.href, to.href]);
     // unresolveURL chases through urlMappings (via resolveURLMapping), so a new

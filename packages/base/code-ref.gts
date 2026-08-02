@@ -9,6 +9,7 @@ import {
   CardURLContextName,
   fieldSerializer,
   CodeRefSerializer,
+  Loader,
 } from '@cardstack/runtime-common';
 import { not } from '@cardstack/boxel-ui/helpers';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
@@ -75,7 +76,14 @@ class EditView extends Component<typeof CodeRefField> {
         module = new URL(module, new URL(this.cardURL)).href;
       }
       try {
-        let code = (await import(module))[name];
+        // Load through the Loader rather than a bare dynamic import: the
+        // module is a runtime realm URL, which only a Loader can resolve
+        // (shims, realm mappings, authenticated fetch). Inside
+        // loader-evaluated modules the AMD transpile rewrites `import()`
+        // this way implicitly; compiled-in modules must do it explicitly.
+        let code = (await myLoader().import<Record<string, any>>(module))[
+          name
+        ];
         if (code) {
           this.validationState = 'valid';
           if (!opts?.checkOnly) {
@@ -89,6 +97,22 @@ class EditView extends Component<typeof CodeRefField> {
       }
     },
   );
+}
+
+function myLoader(): Loader {
+  // A Loader that evaluates this module injects `import.meta.loader`. When
+  // the module is compiled into the host bundle instead, the platform
+  // evaluates it and no loader is injected; the host publishes the loader
+  // bundled modules should use (see Loader.setForBundledModules).
+
+  // When type-checking realm-server, tsc sees this file and thinks it will
+  // be transpiled to CommonJS and so it complains about import.meta.
+  // @ts-ignore
+  let loader = (import.meta as any).loader ?? Loader.forBundledModules();
+  if (!loader) {
+    throw new Error('No Loader is available to this module');
+  }
+  return loader;
 }
 
 export default class CodeRefField extends FieldDef {
