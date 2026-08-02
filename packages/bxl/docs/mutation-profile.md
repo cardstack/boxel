@@ -11,6 +11,10 @@ the examples settle, not used to prematurely freeze it.
 For a human-first walkthrough of the candidate syntax, see
 [`mutation-language-guide.md`](./mutation-language-guide.md).
 
+For a corpus-driven comparison with XQuery Update, PostgreSQL JSONB,
+JSON:API Atomic Operations, and MongoDB—including proposed cross-Card batch
+mutation—see [`mutation-language-comparison.md`](./mutation-language-comparison.md).
+
 ## Purpose
 
 The mutation profile is BXL's data manipulation language for any schema-known
@@ -188,10 +192,10 @@ Version 1 should support this closed statement set:
 | `insert_at(collection; index; expression)` | Insert at a zero-based index. | one collection, one value |
 | `insert_before(anchor; expression)` | Insert before a stable array item. | exactly one anchor |
 | `insert_after(anchor; expression)` | Insert after a stable array item. | exactly one anchor |
-| `move_before(source; anchor)` | Move an item before another. | one source, one anchor |
-| `move_after(source; anchor)` | Move an item after another. | one source, one anchor |
-| `move_to_start(source; collection)` | Move an item to array start. | one source, one collection |
-| `move_to_end(source; collection)` | Move an item to array end. | one source, one collection |
+| `move_before(item; anchor)` | Move an item immediately before an anchor. | exactly one item, exactly one anchor |
+| `move_after(item; anchor)` | Move an item immediately after an anchor. | exactly one item, exactly one anchor |
+| `move_to_start(item; collection)` | Move an item to array start. | exactly one item, one collection |
+| `move_to_end(item; collection)` | Move an item to array end. | exactly one item, one collection |
 | `reorder_by(collection; key; order)` | Apply an exact key permutation. | one collection |
 | `assert(expression; message)` | Add a no-write precondition. | exactly one Boolean |
 
@@ -330,13 +334,13 @@ the Card model itself, without preconfiguring an identity system here.
 
 Move is a first-class intent. Its normative algorithm is:
 
-1. Resolve source and anchor against the pre-statement snapshot.
+1. Resolve the item and anchor against the pre-statement snapshot.
 2. Require distinct direct array items.
-3. Remove the source item.
+3. Remove the item being moved.
 4. Relocate the resolved anchor in the post-removal destination.
 5. Insert immediately before or after the anchor.
 
-For numeric positions, the index is interpreted after source removal. Moving
+For numeric positions, the index is interpreted after item removal. Moving
 across collections is permitted only when both fields are writable and the
 destination schema accepts the moved value.
 
@@ -381,8 +385,33 @@ Streaming statement commits should reject index-addressed edits to ordinary
 ordered collections because a concurrent insert can retarget them.
 
 Selectors are resolved against the current intermediate snapshot, so each
-statement observes prior statements. A source and anchor are each resolved
-once per statement.
+statement observes prior statements. A moved item and its anchor are each
+resolved once per statement. Neither has implicit first-match behavior: zero
+matches are stale and multiple matches are ambiguous.
+
+A descendant may identify the enclosing structural item. Readable BXL keeps
+the item being moved outermost:
+
+```bxl
+move_before(
+  Product[Variants[SKU = "COPY-03"]];
+  Product[ID = "featured"]
+)
+```
+
+This solidifies to an existential selector over the descendant collection:
+
+```bxl
+move_before(
+  .products[] | select(any(.variants[]; .sku == "COPY-03"));
+  .products[] | select(.id == "featured")
+)
+```
+
+Several matching Variants within one Product still select one Product.
+Several matching Products violate the move operand's exact-one cardinality.
+`Product[Variants[predicate]]` addresses the Product; a `Variant[predicate]`
+operand addresses the nested Variant itself.
 
 ## Mutation plan IR
 

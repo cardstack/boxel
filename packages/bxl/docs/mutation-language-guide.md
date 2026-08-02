@@ -191,6 +191,38 @@ move_before(
 );
 ```
 
+The first argument is the item being moved. The second is the positional
+anchor, so this reads “move summary immediately before round-one.” Both
+selectors must resolve to exactly one item. BXL does not silently choose the
+first match when an ID or another selector is duplicated.
+
+Sometimes the field that identifies an item lives deeper than the item you
+want to move. Keep the outer item as the operand and nest the identifying
+predicate inside it:
+
+```bxl
+move_before(
+  Product[Variants[SKU = "COPY-03"]];
+  Product[ID = "featured"]
+);
+```
+
+This moves the whole Product that contains a matching Variant. It does not
+move the Variant. The canonical jq-shaped selector makes that existential
+test explicit:
+
+```bxl
+move_before(
+  .products[] | select(any(.variants[]; .sku == "COPY-03"));
+  .products[] | select(.id == "featured")
+);
+```
+
+Nested matches are collapsed to an existence test for their outer item. Two
+matching Variants inside one Product still select one Product; two matching
+Products make the move ambiguous and reject it. To move a nested Variant
+instead, make `Variant[...]` the first operand.
+
 This is not implemented as “calculate a new array and replace the old one.”
 The plan records a move. A Yjs or Card Store adapter can perform the granular
 operation, authorization can see what moved, and undo can reverse it.
@@ -565,6 +597,11 @@ insert_after(Item[ID = $params.anchorId]; $params.item);
 move_before(
   Item[ID = $params.movingId];
   Item[ID = $params.anchorId]
+);
+# Select and move an enclosing item by a nested field
+move_before(
+  Product[Variants[SKU = $params.sku]];
+  Product[ID = $params.anchorId]
 );
 reorder_by(Item; ID; $params.order);
 

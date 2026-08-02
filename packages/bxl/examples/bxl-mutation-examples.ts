@@ -190,6 +190,7 @@ export const mutationSchemaFixtures = {
     field: {
       kind: 'containsMany',
       loadedAs: 'SectionField[]',
+      label: 'Section',
       itemFields: { id: { label: 'ID' }, title: { label: 'Title' } },
     },
   },
@@ -223,6 +224,7 @@ export const mutationSchemaFixtures = {
     field: {
       kind: 'linksToMany',
       loadedAs: 'CardDef[]',
+      label: 'Reviewer',
     },
   },
   'workspace-card': {
@@ -430,7 +432,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       { id: 'overview', title: 'Overview' },
       { id: 'summary', title: 'Summary' },
     ],
-    readableSource: 'insert_after(.[] | select(ID = "overview"); {id: "details", title: "Details"});',
+    readableSource: 'insert_after(Section[ID = "overview"]; {id: "details", title: "Details"});',
     source: 'insert_after(.[] | select(.id == "overview"); {id: "details", title: "Details"});',
     operations: [
       {
@@ -475,7 +477,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       { id: 'round-one', title: 'Round One' },
       { id: 'summary', title: 'Summary' },
     ],
-    readableSource: 'move_before(.[] | select(ID = "summary"); .[] | select(ID = "round-one"));',
+    readableSource: 'move_before(Section[ID = "summary"]; Section[ID = "round-one"]);',
     source: 'move_before(.[] | select(.id == "summary"); .[] | select(.id == "round-one"));',
     operations: [
       {
@@ -513,7 +515,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       { id: 'round-one', title: 'Round One' },
       { id: 'summary', title: 'Summary' },
     ],
-    readableSource: 'reorder_by(.; ID; ["summary", "overview", "round-one"]);',
+    readableSource: 'reorder_by(Section; ID; ["summary", "overview", "round-one"]);',
     source: 'reorder_by(.; .id; ["summary", "overview", "round-one"]);',
     operations: [
       {
@@ -804,7 +806,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       { id: 'card:ada', cardTitle: 'Ada' },
       { id: 'card:grace', cardTitle: 'Grace' },
     ],
-    readableSource: 'del(.[] | select(ID = "card:ada"));',
+    readableSource: 'del(Reviewer[ID = "card:ada"]);',
     source: 'del(.[] | select(.id == "card:ada"));',
     operations: [{ id: 'unrelate-ada', op: 'unrelate', target: { path: [] }, cardId: 'card:ada' }],
     outcome: 'accepted',
@@ -827,7 +829,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     schema: 'reviewers-relationship-field',
     execution: execution('move-relationship', reviewersTarget),
     before: [{ id: 'card:ada' }, { id: 'card:grace' }, { id: 'card:lin' }],
-    readableSource: 'move_before(.[] | select(ID = "card:grace"); .[] | select(ID = "card:ada"));',
+    readableSource: 'move_before(Reviewer[ID = "card:grace"]; Reviewer[ID = "card:ada"]);',
     source: 'move_before(.[] | select(.id == "card:grace"); .[] | select(.id == "card:ada"));',
     operations: [
       {
