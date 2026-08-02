@@ -15,7 +15,6 @@
     }
   },
   "dependencies": {
-    "@cardstack/bxl": "github:cardstack/bxl#eb9addc714e0111aa7bee5cf373a87cae11506e7",
     "@cardstack/runtime-common": "workspace:*",
     "diff": "catalog:",
     "minimatch": "^10.0.3",

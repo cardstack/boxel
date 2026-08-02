@@ -2570,9 +2570,6 @@ importers:
 
   packages/realm-runner:
     dependencies:
-      '@cardstack/bxl':
-        specifier: github:cardstack/bxl#eb9addc714e0111aa7bee5cf373a87cae11506e7
-        version: git+https://github.com/cardstack/bxl.git#eb9addc714e0111aa7bee5cf373a87cae11506e7
       '@cardstack/runtime-common':
         specifier: workspace:*
         version: link:../runtime-common
@@ -4257,12 +4254,6 @@ packages:
 
   '@braintree/sanitize-url@7.1.2':
     resolution: {integrity: sha512-jigsZK+sMF/cuiB7sERuo9V7N9jx+dhmHHnQyDSVdpZwVutaBu7WvNYqMDLSgFgfB30n452TP3vjDAvFC973mA==}
-
-  '@cardstack/bxl@git+https://github.com/cardstack/bxl.git#eb9addc714e0111aa7bee5cf373a87cae11506e7':
-    resolution: {commit: eb9addc714e0111aa7bee5cf373a87cae11506e7, repo: https://github.com/cardstack/bxl.git, type: git}
-    version: 0.3.0
-    engines: {node: '>=18.17'}
-    hasBin: true
 
   '@cardstack/logger@0.2.1':
     resolution: {integrity: sha512-xT8NWm9OYz15Qf7U/y9EQmCiGgZMTJaUbmyh/RxfMupmnBaM/KHMSI1iRuJa2mJ5crY5rcO3rzth+nVk34+jag==}
@@ -16932,12 +16923,6 @@ snapshots:
       '@babel/helper-validator-identifier': 7.29.7
 
   '@braintree/sanitize-url@7.1.2': {}
-
-  '@cardstack/bxl@git+https://github.com/cardstack/bxl.git#eb9addc714e0111aa7bee5cf373a87cae11506e7':
-    dependencies:
-      bessel: 1.0.2
-      jstat: 1.9.6
-      validator: 13.15.35
 
   '@cardstack/logger@0.2.1':
     dependencies:

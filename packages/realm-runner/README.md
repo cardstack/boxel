@@ -198,8 +198,10 @@ BXL is the jq-like transformation layer:
 return await realm.bxl.jq('.items | map(.price) | add', input);
 ```
 
-The package ships with a commit-pinned `@cardstack/bxl` runtime. `BXL_API` can
-override it with a local `dist/runtime-bare.js` build while developing BXL.
+The package ships with a vendored, commit-pinned `@cardstack/bxl/runtime-bare`
+bundle so Realm Server installs do not require credentials for the private BXL
+repository. `BXL_API` can override it with a local `dist/runtime-bare.js` build
+while developing BXL. See `vendor/README.md` for provenance and refresh steps.
 
 ## Full Realm and Realm-server API
 

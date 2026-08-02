@@ -1,35 +1,12 @@
-import { access } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
-
-import { RealmRunnerError } from './errors.js';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 async function loadBxlModule() {
   if (process.env.BXL_API) {
     return import(pathToFileURL(resolve(process.env.BXL_API)).href);
   }
 
-  try {
-    return await import('@cardstack/bxl/runtime-bare');
-  } catch (packageError) {
-    let here = dirname(fileURLToPath(import.meta.url));
-    let adjacent = resolve(here, '../../bxl/dist/runtime-bare.js');
-    try {
-      await access(adjacent);
-      return await import(pathToFileURL(adjacent).href);
-    } catch {
-      throw new RealmRunnerError(
-        'BXL_NOT_FOUND',
-        'Could not load @cardstack/bxl/runtime-bare. Build an adjacent BXL checkout or set BXL_API to dist/runtime-bare.js.',
-        {
-          cause:
-            packageError instanceof Error
-              ? packageError.message
-              : String(packageError),
-        },
-      );
-    }
-  }
+  return import('../vendor/bxl-runtime-bare.js');
 }
 
 export class BxlAdapter {
