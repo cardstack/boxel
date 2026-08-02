@@ -1,0 +1,28 @@
+{
+  "name": "@cardstack/realm-runner",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./types/index.d.ts",
+      "default": "./src/index.js"
+    },
+    "./core": {
+      "types": "./types/core.d.ts",
+      "default": "./src/core.js"
+    }
+  },
+  "dependencies": {
+    "@cardstack/bxl": "github:cardstack/bxl#eb9addc714e0111aa7bee5cf373a87cae11506e7",
+    "@cardstack/runtime-common": "workspace:*",
+    "diff": "catalog:",
+    "minimatch": "^10.0.3",
+    "quickjs-emscripten": "0.32.0"
+  },
+  "scripts": {
+    "test": "node --test",
+    "lint": "eslint ."
+  }
+}
