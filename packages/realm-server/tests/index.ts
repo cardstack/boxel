@@ -316,6 +316,7 @@ const ALL_TEST_FILES: string[] = [
   './realm-endpoints/cancel-indexing-job-test',
   './realm-endpoints/publishability-test',
   './realm-endpoints/reindex-test',
+  './realm-endpoints/realm-program-test',
   './realm-endpoints/search-test',
   './realm-endpoints/user-test',
   './server-endpoints/archive-realm-test',

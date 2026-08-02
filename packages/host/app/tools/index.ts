@@ -66,6 +66,7 @@ import * as ReadTextFileToolModule from './read-text-file';
 import * as RegisterBotToolModule from './register-bot';
 import * as ReindexRealmToolModule from './reindex-realm';
 import * as RetrySubmissionWorkflowToolModule from './retry-submission-workflow';
+import * as RunRealmScriptToolModule from './run-realm-script';
 import * as SanitizeModuleListToolModule from './sanitize-module-list';
 import * as SaveCardToolModule from './save-card';
 import * as ScreenshotCardToolModule from './screenshot-card';
@@ -267,6 +268,11 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
   shimHostToolModule(virtualNetwork, 'read-source', ReadSourceToolModule);
   shimHostToolModule(virtualNetwork, 'read-text-file', ReadTextFileToolModule);
   shimHostToolModule(virtualNetwork, 'reindex-realm', ReindexRealmToolModule);
+  shimHostToolModule(
+    virtualNetwork,
+    'run-realm-script',
+    RunRealmScriptToolModule,
+  );
   shimHostToolModule(virtualNetwork, 'register-bot', RegisterBotToolModule);
   shimHostToolModule(virtualNetwork, 'save-card', SaveCardToolModule);
   shimHostToolModule(virtualNetwork, 'serialize-card', SerializeCardToolModule);
@@ -516,6 +522,7 @@ export const HostToolClasses: (typeof HostBaseTool<any, any>)[] = [
   ReadTextFileToolModule.default,
   RegisterBotToolModule.default,
   ReindexRealmToolModule.default,
+  RunRealmScriptToolModule.default,
   SaveCardToolModule.default,
   SanitizeModuleListToolModule.default,
   StoreAddToolModule.default,

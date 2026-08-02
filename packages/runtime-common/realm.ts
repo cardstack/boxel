@@ -768,6 +768,48 @@ export interface MatrixConfig {
 
 export type RequestContext = { realm: Realm; permissions: RealmPermissions };
 
+export type RealmProgramMode = 'preview' | 'commit';
+
+export interface RealmNotebookInputReference {
+  cellId?: string;
+  executionId?: string;
+  pointer?: string;
+}
+
+export interface RealmNotebookRequest {
+  sessionId: string;
+  cellId: string;
+  persistence?: 'ephemeral' | 'realm';
+  ttlMs?: number;
+  inputs?: Record<string, RealmNotebookInputReference>;
+  force?: boolean;
+  runSaved?: boolean;
+}
+
+export interface RealmProgramActivity {
+  sequence: number;
+  timestamp: number;
+  source: 'runtime' | 'script';
+  status: 'running' | 'completed' | 'failed';
+  phase: string;
+  message: string;
+  operation?: string;
+  current?: number;
+  total?: number;
+}
+
+export interface RealmProgramExecutor {
+  execute(input: {
+    code?: string;
+    mode: RealmProgramMode;
+    realmURL: string;
+    authorization: string | null;
+    input?: unknown;
+    notebook?: RealmNotebookRequest;
+    onActivity?: (activity: RealmProgramActivity) => void | Promise<void>;
+  }): Promise<unknown>;
+}
+
 export class Realm {
   #startedUp = new Deferred<void>();
   #matrixClient: MatrixClient;
@@ -856,6 +898,7 @@ export class Realm {
   #transpileCoordinator?: PopulateCoordinator;
   #cardSizeLimitBytes: number;
   #fileSizeLimitBytes: number;
+  #realmProgramExecutor: RealmProgramExecutor | undefined;
 
   #publicEndpoints: RouteTable<true> = new Map([
     [
@@ -923,6 +966,7 @@ export class Realm {
       cardSizeLimitBytes,
       fileSizeLimitBytes,
       transpileCoordinator,
+      realmProgramExecutor,
     }: {
       url: string;
       adapter: RealmAdapter;
@@ -942,6 +986,9 @@ export class Realm {
       // in-memory deployments leave this undefined and the uncoordinated
       // CS-11029 in-process dedup is the only sharing layer.
       transpileCoordinator?: PopulateCoordinator;
+      // Optional portable QuickJS+BXL program engine. Injection keeps the
+      // Realm HTTP/auth boundary independent from the execution runtime.
+      realmProgramExecutor?: RealmProgramExecutor;
     },
     opts?: Options,
   ) {
@@ -966,6 +1013,7 @@ export class Realm {
       cardSizeLimitBytes ?? DEFAULT_CARD_SIZE_LIMIT_BYTES;
     this.#fileSizeLimitBytes =
       fileSizeLimitBytes ?? DEFAULT_FILE_SIZE_LIMIT_BYTES;
+    this.#realmProgramExecutor = realmProgramExecutor;
     this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
     this.#copiedFromRealm = opts?.copiedFromRealm;
     let owner: string | undefined;
@@ -1079,6 +1127,16 @@ export class Realm {
         '/_readiness-check',
         SupportedMimeType.RealmInfo,
         this.readinessCheck.bind(this),
+      )
+      .query(
+        '/_realm-program',
+        SupportedMimeType.JSON,
+        this.realmProgram.bind(this),
+      )
+      .post(
+        '/_realm-program',
+        SupportedMimeType.JSON,
+        this.realmProgram.bind(this),
       )
       .post(
         '/_atomic',
@@ -5914,6 +5972,199 @@ export class Realm {
       },
       requestContext,
     });
+  }
+
+  private async realmProgram(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let expectedMode: RealmProgramMode =
+      request.method === 'QUERY' ? 'preview' : 'commit';
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return createResponse({
+        body: JSON.stringify({
+          ok: false,
+          error: {
+            code: 'INVALID_ARGUMENT',
+            message: 'Realm Program request body must be valid JSON',
+          },
+        }),
+        init: {
+          status: 400,
+          headers: { 'content-type': SupportedMimeType.JSON },
+        },
+        requestContext,
+      });
+    }
+
+    let code =
+      body && typeof body === 'object' && 'code' in body
+        ? (body as { code?: unknown }).code
+        : undefined;
+    let mode =
+      body && typeof body === 'object' && 'mode' in body
+        ? (body as { mode?: unknown }).mode
+        : undefined;
+    let input =
+      body && typeof body === 'object' && 'input' in body
+        ? (body as { input?: unknown }).input
+        : undefined;
+    let notebook =
+      body && typeof body === 'object' && 'notebook' in body
+        ? (body as { notebook?: unknown }).notebook
+        : undefined;
+    let runSaved =
+      notebook &&
+      typeof notebook === 'object' &&
+      'runSaved' in notebook &&
+      (notebook as { runSaved?: unknown }).runSaved === true;
+    let invalidCode =
+      code !== undefined &&
+      (typeof code !== 'string' ||
+        code.trim().length === 0 ||
+        new TextEncoder().encode(code).byteLength > 256 * 1024);
+    if (
+      (!runSaved && code === undefined) ||
+      invalidCode ||
+      mode !== expectedMode
+    ) {
+      return createResponse({
+        body: JSON.stringify({
+          ok: false,
+          error: {
+            code: 'INVALID_ARGUMENT',
+            message:
+              `Realm Program requires non-empty code no larger than 256 KiB ` +
+              `(unless notebook.runSaved is true) ` +
+              `and mode "${expectedMode}" for HTTP ${request.method}`,
+          },
+        }),
+        init: {
+          status: 400,
+          headers: { 'content-type': SupportedMimeType.JSON },
+        },
+        requestContext,
+      });
+    }
+
+    if (!this.#realmProgramExecutor) {
+      return createResponse({
+        body: JSON.stringify({
+          ok: false,
+          error: {
+            code: 'REALM_PROGRAM_UNAVAILABLE',
+            message: 'Realm Program execution is not configured on this server',
+          },
+        }),
+        init: {
+          status: 501,
+          headers: { 'content-type': SupportedMimeType.JSON },
+        },
+        requestContext,
+      });
+    }
+
+    let executorInput: Parameters<RealmProgramExecutor['execute']>[0] = {
+      ...(code === undefined ? {} : { code: code as string }),
+      mode: expectedMode,
+      realmURL: this.url,
+      authorization: request.headers.get('Authorization'),
+      ...(input === undefined ? {} : { input }),
+      ...(notebook === undefined
+        ? {}
+        : { notebook: notebook as RealmNotebookRequest }),
+    };
+    let structuredRealmProgramError = (error: unknown) => {
+      let structuredError =
+        error && typeof error === 'object'
+          ? (error as { code?: unknown; message?: unknown; details?: unknown })
+          : undefined;
+      return {
+        code:
+          typeof structuredError?.code === 'string'
+            ? structuredError.code
+            : 'REALM_PROGRAM_ERROR',
+        message:
+          typeof structuredError?.message === 'string'
+            ? structuredError.message
+            : 'Realm Program failed',
+        ...(structuredError?.details === undefined
+          ? {}
+          : { details: structuredError.details }),
+      };
+    };
+
+    if (request.headers.get('X-Boxel-Realm-Program-Stream') === 'activity-v1') {
+      let encoder = new TextEncoder();
+      let cancelled = false;
+      let stream = new ReadableStream<Uint8Array>({
+        start: (controller) => {
+          let write = (event: unknown) => {
+            if (cancelled) return;
+            try {
+              controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
+            } catch {
+              cancelled = true;
+            }
+          };
+          void this.#realmProgramExecutor!.execute({
+            ...executorInput,
+            onActivity(activity) {
+              write({ type: 'activity', activity });
+            },
+          })
+            .then((result) => write({ type: 'result', result }))
+            .catch((error) => {
+              this.#log.error(`Realm Program execution failed`, error);
+              write({
+                type: 'error',
+                error: structuredRealmProgramError(error),
+              });
+            })
+            .finally(() => {
+              if (!cancelled) controller.close();
+            });
+        },
+        cancel: () => {
+          cancelled = true;
+        },
+      });
+      return createResponse({
+        body: stream,
+        init: {
+          headers: {
+            'content-type': 'application/x-ndjson',
+            'cache-control': 'no-store',
+          },
+        },
+        requestContext,
+      });
+    }
+
+    try {
+      let result = await this.#realmProgramExecutor.execute(executorInput);
+      return createResponse({
+        body: JSON.stringify(result),
+        init: { headers: { 'content-type': SupportedMimeType.JSON } },
+        requestContext,
+      });
+    } catch (error) {
+      this.#log.error(`Realm Program execution failed`, error);
+      return createResponse({
+        body: JSON.stringify({
+          ok: false,
+          error: structuredRealmProgramError(error),
+        }),
+        init: {
+          status: 500,
+          headers: { 'content-type': SupportedMimeType.JSON },
+        },
+        requestContext,
+      });
+    }
   }
 
   private async fetchCardTypeSummary(

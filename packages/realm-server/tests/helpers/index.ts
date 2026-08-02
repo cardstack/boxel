@@ -22,6 +22,7 @@ import type {
   CardResource,
   FileMetaResource,
   QueryResultsMeta,
+  RealmProgramExecutor,
 } from '@cardstack/runtime-common';
 import {
   Realm,
@@ -1181,6 +1182,7 @@ export async function createRealm({
   fileSizeLimitBytes,
   transpileCoordinator,
   fullIndexOnStartup,
+  realmProgramExecutor,
 }: {
   dir: string;
   definitionLookup: DefinitionLookup;
@@ -1209,6 +1211,7 @@ export async function createRealm({
   // Production sets this via `resolveFullIndexOnStartup`; tests opt in
   // explicitly because `createRealm` has no realm-registry row to read.
   fullIndexOnStartup?: true;
+  realmProgramExecutor?: RealmProgramExecutor;
   // if you are creating a realm  to test it directly without a server, you can
   // also specify `withWorker: true` to also include a worker with your realm
   withWorker?: true;
@@ -1278,6 +1281,7 @@ export async function createRealm({
           process.env.FILE_SIZE_LIMIT_BYTES ?? DEFAULT_FILE_SIZE_LIMIT_BYTES,
         ),
       transpileCoordinator,
+      realmProgramExecutor,
     },
     fullIndexOnStartup ? { fullIndexOnStartup: true as const } : undefined,
   );
@@ -1320,6 +1324,7 @@ export async function runTestRealmServer({
   enableFileWatcher = false,
   cardSizeLimitBytes,
   fileSizeLimitBytes,
+  realmProgramExecutor,
   domainsForPublishedRealms = {
     boxelSpace: 'localhost',
     boxelSite: 'localhost',
@@ -1340,6 +1345,7 @@ export async function runTestRealmServer({
   enableFileWatcher?: boolean;
   cardSizeLimitBytes?: number;
   fileSizeLimitBytes?: number;
+  realmProgramExecutor?: RealmProgramExecutor;
   domainsForPublishedRealms?: {
     boxelSpace?: string;
     boxelSite?: string;
@@ -1380,6 +1386,7 @@ export async function runTestRealmServer({
     definitionLookup,
     cardSizeLimitBytes,
     fileSizeLimitBytes,
+    realmProgramExecutor,
   });
 
   await testRealm.logInToMatrix();
@@ -2034,6 +2041,7 @@ type InternalPermissionedRealmSetupOptions = {
   published?: boolean;
   cardSizeLimitBytes?: number;
   fileSizeLimitBytes?: number;
+  realmProgramExecutor?: RealmProgramExecutor;
 };
 
 async function startPermissionedRealmFixture(
@@ -2050,6 +2058,7 @@ async function startPermissionedRealmFixture(
     published = false,
     cardSizeLimitBytes,
     fileSizeLimitBytes,
+    realmProgramExecutor,
   }: InternalPermissionedRealmSetupOptions,
 ): Promise<{
   testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
@@ -2116,6 +2125,7 @@ async function startPermissionedRealmFixture(
     enableFileWatcher: subscribeToRealmEvents,
     cardSizeLimitBytes,
     fileSizeLimitBytes,
+    realmProgramExecutor,
     prerenderer,
   });
 
@@ -2183,6 +2193,7 @@ export function setupPermissionedRealm(
     published = false,
     cardSizeLimitBytes,
     fileSizeLimitBytes,
+    realmProgramExecutor,
   }: {
     permissions: RealmPermissions;
     realmURL?: URL;
@@ -2209,6 +2220,7 @@ export function setupPermissionedRealm(
     published?: boolean;
     cardSizeLimitBytes?: number;
     fileSizeLimitBytes?: number;
+    realmProgramExecutor?: RealmProgramExecutor;
   },
 ) {
   let testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
@@ -2236,6 +2248,7 @@ export function setupPermissionedRealm(
         published,
         cardSizeLimitBytes,
         fileSizeLimitBytes,
+        realmProgramExecutor,
       });
       testRealmServer = server;
 

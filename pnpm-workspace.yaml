@@ -283,6 +283,7 @@ patchedDependencies:
   ember-source: patches/ember-source.patch
   object-inspect: patches/object-inspect.patch
 allowBuilds:
+  "@cardstack/bxl": true
   "@percy/core": true
   "@vscode/vsce-sign": true
   aws-sdk: true
