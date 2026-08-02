@@ -69,6 +69,26 @@ module('Unit | code preview sandbox', function () {
     assert.strictEqual(misses, 2, 'changed source creates a new entry');
   });
 
+  test('[SOAK-02] bounds source analyses across a long editing session', async function (assert) {
+    let cache = new CodePreviewAnalysisCache(
+      () => undefined,
+      () => undefined,
+    );
+
+    for (let revision = 0; revision < 256; revision++) {
+      await cache.classificationFor({
+        sourceURL: 'https://realm.example/card.gts',
+        source: `export const revision = ${revision};`,
+      });
+    }
+
+    assert.strictEqual(
+      cache.size,
+      64,
+      'source-hash analyses retain only the configured LRU window',
+    );
+  });
+
   test('compiles one immutable GTS draft into the Loader boundary format', async function (assert) {
     let compiled = await compileCodePreviewDraftSource({
       sourceURL: 'https://realm.example/live-preview.gts',

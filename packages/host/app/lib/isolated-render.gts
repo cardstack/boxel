@@ -26,6 +26,8 @@ export type IsolatedRenderArgs = Record<string, unknown>;
 
 type ActiveRender = {
   drop: object;
+  env: object;
+  rerender(options?: { alwaysRevalidate?: boolean }): void;
 };
 
 type RenderMode = 'client' | 'serialize' | 'rehydrate';
@@ -114,6 +116,35 @@ export function serializeWithArgs(
   args: IsolatedRenderArgs,
 ): void {
   renderWithMode('serialize', C, element, owner, args);
+}
+
+export function rerenderSerializedComponent(element: SimpleElement): void {
+  let activeRender = activeRenders.get(element);
+  if (activeRender) {
+    inTransaction(activeRender.env, () => activeRender.rerender());
+  }
+}
+
+// Glimmer's serialization builder intentionally exposes a SimpleDOM tree.
+// Trusted Base/catalog templates may use DOM-aware modifiers that require real
+// HTMLElements (computed-style readers are a common example). Those cards are
+// still valid prerenders, but they cannot participate in marker adoption. The
+// caller must derive `allowLiveDOM` from the card definition's trust policy;
+// realm-authored code must never reach the live fallback merely because its
+// serialization failed.
+export function prerenderWithArgs(
+  C: RenderableComponent,
+  element: SimpleElement,
+  owner: Owner,
+  args: IsolatedRenderArgs,
+  allowLiveDOM: boolean,
+): 'serialized' | 'rendered' {
+  if (allowLiveDOM) {
+    renderWithArgs(C, element, owner, args);
+    return 'rendered';
+  }
+  serializeWithArgs(C, element, owner, args);
+  return 'serialized';
 }
 
 export function rehydrate(

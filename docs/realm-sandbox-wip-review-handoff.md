@@ -4,22 +4,62 @@
 
 The independent review in
 [`realm-sandbox-wip-review-findings.md`](realm-sandbox-wip-review-findings.md)
-has now been applied to the working tree. F-1 through F-16 and F-18 through
-F-20 have concrete fixes and focused regression coverage. F-17 is reduced but
-not closed: volatile sources and error metrics are bounded, while the complete
-runtime/template/cache eviction policy still needs a long navigation soak.
-F-21, F-23, and F-24 remain explicit follow-ups. Hosted iframe deployment,
-hostile-CSS confinement, and server-side availability isolation remain
-production gates and must not be represented as complete.
+has now been applied to the working tree. F-1 through F-20 have concrete fixes
+and focused regression coverage. F-17's bounds and eviction are exercised by a
+4,096-principal Chrome lifecycle soak: forced-GC heap growth after warm-up is
+0.00 MiB and the run ends with zero runtimes, loads, templates, or stylesheets.
+F-21 and F-24 remain explicit follow-ups. F-23 is clarified in the findings:
+the mounted file-tree resource, rather than the session cache, owns filtered
+Realm-index subscriptions. Hosted iframe deployment, visual hostile-CSS paint
+containment, and server-side availability isolation remain production gates
+and must not be represented as complete. The shared-document selector,
+network, and global-rule CSS boundary is now structurally enforced.
 
-Current local verification: Host build passes; runtime-common, realm-server,
-and Host JavaScript/template lint pass. The seven-row `sandbox live reload`
-acceptance group and the focused loader, acknowledgement, SES, iframe,
-preview, patch-code, and invalidation suites pass. Host typecheck reaches only
-seven `Array.at` target-library errors that are also present on `origin/main`.
-A separate new-card-definition acceptance row remains unverified because the
-local Base prerender manager timed out before the test reached a product
-assertion; that result is recorded as an environment risk, not a pass.
+The latest compatibility pass also closes an implicit component-API gap found
+by the existing Host Mode suite. SES receives a write-only `viewCard` effect
+recorder, never the host callback; the host accepts URL/string/card-like
+targets only after same-realm validation. Component actions update the existing
+serialized Glimmer island in its renderer transaction, retaining authored DOM,
+hot-replacement markers, and component state across stack operations. The
+host-owned rerender capability is deliberately omitted from compartment args.
+URL and URLSearchParams values use safe prototypes so native instance
+constructor chains cannot recover host Blob-URL statics. Overlapping async
+component actions are serialized per instance so their effect records cannot
+be mixed; ordinary synchronous actions keep synchronous return behavior.
+
+Current local verification: the Host build passes in both development mode and
+the exact `BOXEL_ENVIRONMENT=ci SKIP_CATALOG=true` CI configuration;
+runtime-common, realm-server, Host JavaScript/template, Base,
+experiments-realm, and Boxel UI lint
+pass. The complete Boxel UI browser suite passes 408/408, including the safe
+modifier coverage. The seven-row `sandbox live reload` acceptance group and
+the focused loader, acknowledgement, SES, iframe, preview, patch-code, and
+invalidation suites pass. The latest compatibility groups pass 19/19 Host Mode,
+26/26 prerender HTML, 17/17 compartment protocol, 7/7 sandbox live reload,
+6/6 serialized-island behavior, and the cross-realm navigation rejection row.
+Host typecheck passes in an isolated detached checkout after the same Boxel
+Icons type-build prerequisite used by CI. The primary checkout reaches only
+seven `Array.at` target-library errors because TypeScript also discovers a
+parent `/Users/chris/Projects/node_modules/@types/node`; it reports no other
+diagnostics. Software Factory
+Node tests pass 591/592 locally; the sole failure is an unchanged IPv4/dual-
+stack port-allocation assertion whose behavior differs on macOS from the Linux
+CI runner. A separate new-card-definition acceptance row remains unverified
+because the local Base prerender manager timed out before the test reached a
+product assertion; an exact CI-mode stack retry was then blocked by local
+service bootstrap conflicts on worker/prerender ports 4210, 4211, and 4222.
+Neither result is counted as a product pass.
+The branch-specific AMD gate, AMD trip test, and realm performance gate pass.
+The latest successful `main` CI Lint run also confirms that Host typechecking
+runs and passes in GitHub with Node 24.17.0, pnpm 11.0.9, and TypeScript 5.9.3;
+that is the same pinned toolchain used here. The detached branch reproduction
+passes too, so the seven primary-checkout diagnostics are retained as a local
+module-resolution discrepancy instead of being silenced with unrelated source
+changes. The latest service-backed aggregate realm-sandbox run passes 29/29.
+A prior CI-namespace retry reported a global setup failure because its Base
+realm was unavailable; it did not reach a product assertion and is not counted
+as a test failure. The narrower runtime suite covering the final URL and
+action-isolation changes passes 17/17.
 
 ## Assignment
 
@@ -182,9 +222,10 @@ The checkpoint has already established the following:
 - Runtime-common lint passes.
 - Realm-server lint passes.
 - Host JavaScript and template lint pass.
-- Host typecheck currently reports seven existing `Array.at` target-library
-  errors. The one changed test containing `.at(-1)` is unchanged from
-  `origin/main`; the other six affected files are outside this branch's diff.
+- Host typecheck passes in an isolated checkout that matches GitHub module
+  resolution. The primary checkout reports seven `Array.at` target-library
+  errors only because it sees parent-directory Node types outside this repo;
+  the branch's changed files produce no additional diagnostics.
 - The Base and experiments-realm parser errors reported by the earlier
   checkpoint were subsequently addressed. They are no longer part of the
   current lint/typecheck result, but package lint must still be rerun after any
@@ -197,11 +238,16 @@ The checkpoint has already established the following:
   suite, apart from an intentional Act-mode behavior change documented in the
   audit.
 - Full Host CI has not been run for this checkpoint.
-- The Boxel UI safe-modifier browser test has not been verified in a reliable
-  local browser runner.
-- Long cross-realm navigation and memory-growth testing remains outstanding.
-- Hosted iframe security and hostile CSS confinement are unfinished and must
-  not be represented as production-complete.
+- The exact AMD performance gate, its synthetic failure-mode trip test, and the
+  realm performance gate pass locally.
+- The complete Boxel UI browser suite passes 408/408 locally, including the
+  safe-modifier row that was previously blocked by the browser runner.
+- The deterministic 4,096-principal cross-realm runtime/style soak passes with
+  0.00 MiB forced-GC heap growth after warm-up. A route-level UI/CDP retainer
+  soak covering real SES DOM and iframe ports remains outstanding.
+- Hosted iframe security and visual CSS paint/layout containment are unfinished
+  and must not be represented as production-complete. Selector, network, and
+  document-global CSS leakage now fails closed.
 
 If a known statement appears wrong, supply the contradicting command output or
 code path rather than repeating it as an unverified concern.
@@ -232,8 +278,9 @@ to make the tests run:
   change;
 - hosted iframe deployment and dedicated-origin provisioning — production
   security follow-up;
-- a parser-grade hostile CSS sanitizer/confinement design — production security
-  follow-up unless the current implementation makes an unsafe claim.
+- visual paint/layout containment for hostile scoped elements — production
+  security follow-up; parser-grade selector/network/global-rule validation is
+  now implemented in the core boundary.
 
 ## Suggested Verification
 

@@ -52,6 +52,7 @@ import {
 } from '@cardstack/host/lib/isolated-render';
 import RealmCompartmentModuleRuntime, {
   sandboxRealmURLArgument,
+  sandboxViewCardCapabilityArgument,
   type SandboxCardFieldMetadata,
   type SandboxCardTypeMetadata,
   type SandboxScopeReference,
@@ -344,6 +345,10 @@ export interface RealmSandboxMetrics {
   omittedFields: Record<string, number>;
   activeCompartments: number;
   activeCodePreviewLoaders: number;
+  activeCompartmentLoads: number;
+  cachedCompartmentTemplates: number;
+  cachedThemes: number;
+  codePreviewAnalysisCacheEntries: number;
   codePreviewCommitsPrepared: number;
   codePreviewAcknowledgementsRecognized: number;
   codePreviewAnalysisCacheHits: number;
@@ -404,7 +409,14 @@ const maxCachedThemes = 128;
 const maxCompartmentErrorKinds = 64;
 
 const networkBearingCSS =
-  /(?:@import\b|(?:url|src|image|(?:-webkit-)?image-set)\s*\()/i;
+  /(?:@import\b|(?:url|src|image|(?:-webkit-)?image-set|cross-fade|(?:-moz-)?element|paint)\s*\()/i;
+const documentGlobalCSS =
+  /@(?:font-face|font-feature-values|font-palette-values|property|counter-style|color-profile|page|viewport|(?:-moz-)?document|namespace|view-transition|position-try|scroll-timeline|custom-media|custom-selector)\b/i;
+const namedLayerCSS = /@layer\b(?!\s*\{)/i;
+
+interface CompartmentCSSPolicy {
+  requireScopedSelectors?: boolean;
+}
 
 function decodedCSSForPolicy(css: string): string {
   // CSS identifiers may use a 1-6 digit hex escape (with optional trailing
@@ -413,20 +425,181 @@ function decodedCSSForPolicy(css: string): string {
   // unchanged and is returned only after this validation succeeds.
   return css
     .replace(/\\([0-9a-f]{1,6})\s?/gi, (_match, hex: string) =>
-      String.fromCodePoint(Number.parseInt(hex, 16)),
+      String.fromCodePoint(Math.min(Number.parseInt(hex, 16), 0x10ffff)),
     )
-    .replace(/\\([^\r\n0-9a-f])/gi, '$1')
+    .replace(/\\([^\r\n\f0-9a-f])/gi, '$1')
+    .replace(/\\(?:\r\n|[\n\r\f])/g, '')
     .replace(/\/\*[\s\S]*?\*\//g, '');
+}
+
+function splitTopLevelCSSList(value: string): string[] {
+  let items: string[] = [];
+  let start = 0;
+  let parentheses = 0;
+  let brackets = 0;
+  let quote: string | undefined;
+  let escaped = false;
+
+  for (let index = 0; index < value.length; index++) {
+    let character = value[index];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (character === '\\') {
+      escaped = true;
+      continue;
+    }
+    if (quote) {
+      if (character === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+    if (character === '"' || character === "'") {
+      quote = character;
+    } else if (character === '(') {
+      parentheses++;
+    } else if (character === ')') {
+      parentheses = Math.max(0, parentheses - 1);
+    } else if (character === '[') {
+      brackets++;
+    } else if (character === ']') {
+      brackets = Math.max(0, brackets - 1);
+    } else if (character === ',' && parentheses === 0 && brackets === 0) {
+      items.push(value.slice(start, index));
+      start = index + 1;
+    }
+  }
+  items.push(value.slice(start));
+  return items;
+}
+
+function selectorTargetContainsTopLevelScope(selector: string): boolean {
+  let parentheses = 0;
+  let brackets = 0;
+  let quote: string | undefined;
+  let escaped = false;
+  let lastCompoundStart = 0;
+  let lastScopeAttribute = -1;
+
+  for (let index = 0; index < selector.length; index++) {
+    let character = selector[index];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (character === '\\') {
+      escaped = true;
+      continue;
+    }
+    if (quote) {
+      if (character === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+    if (character === '"' || character === "'") {
+      quote = character;
+    } else if (character === '(') {
+      parentheses++;
+    } else if (character === ')') {
+      parentheses = Math.max(0, parentheses - 1);
+    } else if (character === '[') {
+      brackets++;
+      if (parentheses !== 0 || brackets !== 1) {
+        continue;
+      }
+      let end = selector.indexOf(']', index + 1);
+      if (end === -1) {
+        return false;
+      }
+      let attribute = selector.slice(index + 1, end).trimStart();
+      if (attribute.toLowerCase().startsWith('data-scopedcss-')) {
+        lastScopeAttribute = index;
+      }
+      index = end;
+      brackets--;
+    } else if (
+      parentheses === 0 &&
+      brackets === 0 &&
+      (character === '>' ||
+        character === '+' ||
+        character === '~' ||
+        /\s/.test(character))
+    ) {
+      while (/\s/.test(selector[index + 1] ?? '')) {
+        index++;
+      }
+      lastCompoundStart = index + 1;
+    }
+  }
+  return lastScopeAttribute >= lastCompoundStart;
+}
+
+function validateParsedCompartmentRules(
+  rules: CSSRuleList,
+  policy: CompartmentCSSPolicy,
+): void {
+  for (let rule of rules) {
+    if (
+      policy.requireScopedSelectors &&
+      typeof CSSStyleRule !== 'undefined' &&
+      rule instanceof CSSStyleRule
+    ) {
+      let escapedSelector = splitTopLevelCSSList(rule.selectorText).find(
+        (selector) => !selectorTargetContainsTopLevelScope(selector),
+      );
+      if (escapedSelector) {
+        throw new Error(
+          `Sandbox stylesheet selector escaped its compiled scope: ${escapedSelector.trim()}`,
+        );
+      }
+    }
+
+    // Grouping rules such as @media, @supports, @container, @scope, and
+    // anonymous @layer expose nested cssRules. Keyframe steps do too, but they
+    // are declarations rather than document selectors and have already been
+    // given collision-resistant names by the scoped-CSS compiler.
+    if (
+      !(
+        typeof CSSKeyframesRule !== 'undefined' &&
+        rule instanceof CSSKeyframesRule
+      ) &&
+      'cssRules' in rule
+    ) {
+      validateParsedCompartmentRules(
+        (rule as CSSRule & { cssRules: CSSRuleList }).cssRules,
+        policy,
+      );
+    }
+  }
 }
 
 // Parse with the browser before inspecting. Raw regex replacement is not a
 // security boundary: CSS escapes, comments, and image-set() can spell network
 // requests without containing a literal `url(...)` substring. The detached
 // constructed sheet uses the same parser as the eventual document stylesheet
-// but cannot initiate fetches because it is never adopted.
-export function validateCompartmentCSS(css: string): string {
+// but cannot initiate fetches because it is never adopted. User-authored
+// template styles additionally have to retain their compiler-injected scope on
+// every selector. Theme CSS is validated for network access but is scoped by a
+// separate theme projection step, so it does not use that selector invariant.
+export function validateCompartmentCSS(
+  css: string,
+  policy: CompartmentCSSPolicy = {},
+): string {
   if (typeof CSSStyleSheet === 'undefined') {
     throw new Error('Sandbox CSS validation is unavailable');
+  }
+  let decoded = decodedCSSForPolicy(css);
+  if (networkBearingCSS.test(decoded)) {
+    throw new Error('Sandbox stylesheet contains a network-bearing value');
+  }
+  if (
+    policy.requireScopedSelectors &&
+    (documentGlobalCSS.test(decoded) || namedLayerCSS.test(decoded))
+  ) {
+    throw new Error('Sandbox stylesheet contains a document-global rule');
   }
   let parsed = new CSSStyleSheet();
   try {
@@ -436,12 +609,16 @@ export function validateCompartmentCSS(css: string): string {
     throw new Error(`Sandbox stylesheet could not be parsed${detail}`);
   }
   let normalized = [...parsed.cssRules].map((rule) => rule.cssText).join('\n');
-  if (
-    networkBearingCSS.test(decodedCSSForPolicy(css)) ||
-    networkBearingCSS.test(normalized)
-  ) {
+  if (networkBearingCSS.test(normalized)) {
     throw new Error('Sandbox stylesheet contains a network-bearing value');
   }
+  if (
+    policy.requireScopedSelectors &&
+    (documentGlobalCSS.test(normalized) || namedLayerCSS.test(normalized))
+  ) {
+    throw new Error('Sandbox stylesheet contains a document-global rule');
+  }
+  validateParsedCompartmentRules(parsed.cssRules, policy);
   return css;
 }
 
@@ -589,6 +766,10 @@ export default class RealmSandboxService extends Service {
     omittedFields: {},
     activeCompartments: 0,
     activeCodePreviewLoaders: 0,
+    activeCompartmentLoads: 0,
+    cachedCompartmentTemplates: 0,
+    cachedThemes: 0,
+    codePreviewAnalysisCacheEntries: 0,
     codePreviewCommitsPrepared: 0,
     codePreviewAcknowledgementsRecognized: 0,
     codePreviewAnalysisCacheHits: 0,
@@ -1417,6 +1598,10 @@ export default class RealmSandboxService extends Service {
     this.metricsRevision;
     return {
       ...this.metrics,
+      activeCompartmentLoads: this.compartmentLoads.size,
+      cachedCompartmentTemplates: this.compartmentTemplates.size,
+      cachedThemes: this.themes.size,
+      codePreviewAnalysisCacheEntries: this.codePreviewAnalyses.size,
       fallbackReasons: { ...this.metrics.fallbackReasons },
       omittedFields: { ...this.metrics.omittedFields },
       compartmentErrors: { ...this.metrics.compartmentErrors },
@@ -3427,7 +3612,7 @@ export default class RealmSandboxService extends Service {
         @tracked sandboxRevision = 0;
         sandboxInstanceHandle: string | undefined;
         sandboxState: Record<string, unknown> = {};
-        sandboxActions: Record<string, (...args: unknown[]) => void> = {};
+        sandboxActions: Record<string, (...args: unknown[]) => unknown> = {};
 
         constructor(owner: Owner, args: Record<string, unknown>) {
           super(owner, args);
@@ -3438,17 +3623,42 @@ export default class RealmSandboxService extends Service {
           this.sandboxInstanceHandle = live.handle;
           this.sandboxState = live.state;
           for (let action of live.actions) {
-            this.sandboxActions[action] = async (...actionArgs: unknown[]) => {
+            this.sandboxActions[action] = (...actionArgs: unknown[]) => {
               if (!this.sandboxInstanceHandle) {
                 return;
               }
-              let updated = await runtime.invokeComponentAction(
+              let result = runtime.invokeComponentAction(
                 this.sandboxInstanceHandle,
                 action,
                 actionArgs,
               );
-              this.sandboxState = updated.state;
-              this.sandboxRevision++;
+              let apply = (updated: Awaited<typeof result>): unknown => {
+                let stateChanged =
+                  JSON.stringify(this.sandboxState) !==
+                  JSON.stringify(updated.state);
+                this.sandboxState = updated.state;
+                for (let effect of updated.effects) {
+                  if (effect.type === 'view-card') {
+                    let viewCard = (this.args as Record<string, unknown>)
+                      .viewCard;
+                    if (typeof viewCard === 'function') {
+                      viewCard(effect.target, effect.format, effect.options);
+                    }
+                  }
+                }
+                if (stateChanged) {
+                  this.sandboxRevision++;
+                  let requestRender = (this.args as Record<string, unknown>)
+                    .requestRender;
+                  if (typeof requestRender === 'function') {
+                    requestRender();
+                  }
+                }
+                return updated.returnValue;
+              };
+              return result instanceof Promise
+                ? result.then(apply)
+                : apply(result);
             };
           }
         }
@@ -3569,7 +3779,9 @@ export default class RealmSandboxService extends Service {
 
   private loadCompartmentStyles(stylesheets: string[]): string[] {
     return stylesheets.map((stylesheet) =>
-      validateCompartmentCSS(decodeScopedCSSRequest(stylesheet).css),
+      validateCompartmentCSS(decodeScopedCSSRequest(stylesheet).css, {
+        requireScopedSelectors: true,
+      }),
     );
   }
 
@@ -3923,6 +4135,10 @@ function plainComponentArgs(value: unknown): Record<string, unknown> {
   }
   let result: Record<string, unknown> = {};
   for (let [name, item] of Object.entries(value)) {
+    if (name === 'viewCard' && typeof item === 'function') {
+      result[sandboxViewCardCapabilityArgument] = true;
+      continue;
+    }
     try {
       let json = JSON.stringify(item);
       if (json !== undefined) {

@@ -109,18 +109,32 @@ export default class RealmSandboxRender extends Component<Signature> {
     format = 'isolated',
     optionsOrEvent,
   ) => {
-    if (!this.args.viewCard || typeof target !== 'string') {
+    if (!this.args.viewCard) {
       return;
     }
+    let targetID =
+      target instanceof URL
+        ? target.href
+        : typeof target === 'string'
+          ? target
+          : target &&
+              typeof target === 'object' &&
+              'id' in target &&
+              typeof target.id === 'string'
+            ? target.id
+            : undefined;
+    if (!targetID) {
+      return;
+    }
+    let principal = new URL(this.args.sandbox.principal);
+    let cardURL = new URL(targetID, principal);
+    let principalPath = principal.pathname.endsWith('/')
+      ? principal.pathname
+      : `${principal.pathname}/`;
     if (
-      target.startsWith('/') ||
-      target.includes(':') ||
-      target.split('/').includes('..')
+      cardURL.origin !== principal.origin ||
+      !cardURL.pathname.startsWith(principalPath)
     ) {
-      return;
-    }
-    let cardURL = new URL(target, this.args.sandbox.principal);
-    if (!cardURL.href.startsWith(this.args.sandbox.principal)) {
       return;
     }
     let options = optionsOrEvent instanceof Event ? undefined : optionsOrEvent;

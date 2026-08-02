@@ -4,14 +4,19 @@ import type Owner from '@ember/owner';
 
 import { click, settled } from '@ember/test-helpers';
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
+import { modifier } from 'ember-modifier';
 import { module, test } from 'qunit';
 
 import RealmSandboxTemplateIsland from '@cardstack/host/components/realm-sandbox-template-island';
 import {
+  hasSerializedComponent,
+  prerenderWithArgs,
   rehydrateWithArgs,
   rehydrateReplacingActiveWithArgs,
   render,
+  rerenderSerializedComponent,
   serializeWithArgs,
   suspendSerializedComponent,
   teardown,
@@ -29,6 +34,23 @@ class TeardownProbe extends Component {
 
   <template>
     <div data-render-probe>probe</div>
+  </template>
+}
+
+const requireHTMLElement = modifier((element: Element) => {
+  if (
+    element.previousSibling?.nodeType === Node.COMMENT_NODE &&
+    element.previousSibling.nodeValue?.startsWith('%+b:')
+  ) {
+    throw new Error('this modifier does not support serialized boundaries');
+  }
+});
+
+class DOMModifierProbe extends Component {
+  requireHTMLElement = requireHTMLElement;
+
+  <template>
+    <div data-test-dom-modifier-probe {{this.requireHTMLElement}}>rendered</div>
   </template>
 }
 
@@ -50,6 +72,22 @@ class SecondHotTemplate extends Component {
   <template>
     <button type='button' data-hot-template {{on 'click' this.record}}>
       VERSION TWO
+    </button>
+  </template>
+}
+
+class ReactiveTemplate extends Component<{
+  Args: { requestRender: () => void };
+}> {
+  @tracked count = 0;
+  increment = () => {
+    this.count++;
+    this.args.requestRender();
+  };
+
+  <template>
+    <button type='button' data-reactive-template {{on 'click' this.increment}}>
+      {{this.count}}
     </button>
   </template>
 }
@@ -118,6 +156,62 @@ module('Unit | isolated-render', function (hooks) {
     }
   });
 
+  test('a trusted DOM-aware modifier can use a live prerender without hydration markers', function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      let mode = prerenderWithArgs(
+        DOMModifierProbe,
+        element as any,
+        this.owner,
+        {},
+        true,
+      );
+
+      assert.strictEqual(
+        mode,
+        'rendered',
+        'the incompatible serialization uses the live DOM builder',
+      );
+      assert.strictEqual(
+        element.querySelector('[data-test-dom-modifier-probe]')?.textContent,
+        'rendered',
+        'the live fallback renders the component',
+      );
+      assert.false(
+        hasSerializedComponent(element as any),
+        'the fallback is explicit and cannot be mistaken for hydratable DOM',
+      );
+    } finally {
+      teardown(element as any);
+      element.remove();
+    }
+  });
+
+  test('an untrusted DOM-aware modifier cannot fall back to live rendering', function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      assert.throws(
+        () =>
+          prerenderWithArgs(
+            DOMModifierProbe,
+            element as any,
+            this.owner,
+            {},
+            false,
+          ),
+        /does not support serialized boundaries/,
+        'serialization failure does not grant realm-authored code live DOM',
+      );
+    } finally {
+      teardown(element as any);
+      element.remove();
+    }
+  });
+
   test('a compatible replacement program adopts the serialized DOM identity', async function (assert) {
     let element = document.createElement('div');
     document.body.appendChild(element);
@@ -150,6 +244,32 @@ module('Unit | isolated-render', function (hooks) {
         interactions,
         ['second'],
         'the adopted element uses only the replacement behavior',
+      );
+    } finally {
+      teardown(element as any);
+      element.remove();
+    }
+  });
+
+  test('a client marker render can update without replacing its DOM', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      serializeWithArgs(ReactiveTemplate as any, element as any, this.owner, {
+        requestRender: () => rerenderSerializedComponent(element as any),
+      });
+      let button = element.querySelector<HTMLElement>(
+        '[data-reactive-template]',
+      );
+      assert.dom(button).hasText('0');
+
+      await click(button!);
+
+      assert.dom(button).hasText('1');
+      assert.true(
+        hasSerializedComponent(element as any),
+        'the live client render retains markers for a future replacement',
       );
     } finally {
       teardown(element as any);

@@ -55,4 +55,72 @@ module('Unit | Service | realm sandbox styles', function (hooks) {
       );
     }
   });
+
+  test('requires every shared-document selector to retain its compiled scope', function (assert) {
+    let scoped = '[data-scopedcss-card-template]';
+    let safe = `
+      ${scoped}, article${scoped}:is(.featured, .selected) { color: rebeccapurple; }
+      @media (min-width: 40rem) {
+        .summary${scoped} { display: grid; }
+      }
+      @keyframes pulse-card-template {
+        from { opacity: 0.5; }
+        to { opacity: 1; }
+      }
+    `;
+    assert.strictEqual(
+      validateCompartmentCSS(safe, { requireScopedSelectors: true }),
+      safe,
+      'scoped selector lists, nested rules, and compiled keyframes remain available',
+    );
+
+    for (let css of [
+      `body { color: transparent; }`,
+      `${scoped}, body { color: transparent; }`,
+      `@media (min-width: 1px) { body { color: transparent; } }`,
+      `${scoped} ~ * { visibility: hidden; }`,
+      `${scoped} body { visibility: hidden; }`,
+      `body:has(${scoped}) { visibility: hidden; }`,
+    ]) {
+      assert.throws(
+        () => validateCompartmentCSS(css, { requireScopedSelectors: true }),
+        /selector escaped its compiled scope/,
+        css,
+      );
+    }
+  });
+
+  test('rejects document-global registrations from compartment styles', function (assert) {
+    let scoped = '[data-scopedcss-card-template]';
+    for (let css of [
+      '@font-face { font-family: stolen; src: local(Arial); }',
+      '@property --host-color { syntax: "<color>"; inherits: true; initial-value: red; }',
+      '@counter-style host-counter { system: cyclic; symbols: x; }',
+      '@font-feature-values HostFont { @styleset { compact: 1; } }',
+      '@font-palette-values --host-palette { font-family: serif; }',
+      '@color-profile --host-profile { src: local; }',
+      '@page { margin: 0; }',
+      '@viewport { width: 1px; }',
+      '@scroll-timeline host-scroll { source: auto; }',
+      '@layer host-reset { body { color: transparent; } }',
+      '@layer host-reset, card;',
+      '@font\\-face { font-family: stolen; src: local(Arial); }',
+      '@lay\\65 r host-reset { body { color: transparent; } }',
+    ]) {
+      assert.throws(
+        () => validateCompartmentCSS(css, { requireScopedSelectors: true }),
+        /document-global rule/,
+        css,
+      );
+    }
+
+    let anonymousLayer = `@layer { .card${scoped} { color: teal; } }`;
+    assert.strictEqual(
+      validateCompartmentCSS(anonymousLayer, {
+        requireScopedSelectors: true,
+      }),
+      anonymousLayer,
+      'an anonymous layer containing only scoped rules has no reusable global name',
+    );
+  });
 });

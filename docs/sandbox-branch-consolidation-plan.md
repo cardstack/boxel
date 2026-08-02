@@ -29,7 +29,7 @@ security hardening.
 ## Current branch size
 
 Relative to `origin/main`, the consolidated working tree currently changes 171
-tracked files with approximately 23,927 insertions and 937 deletions. This
+tracked files with approximately 24,714 insertions and 937 deletions. This
 includes the latest review-response implementation and its tests; the last
 checkpoint commit by itself accounts for approximately 23,647 insertions and
 936 deletions. Compared with the starting point for this pass, spike removal
@@ -187,10 +187,12 @@ Before asking for merge:
 5. Manual staging-backed checks cover representative existing cards, rapid
    file navigation, format switching, Monaco edits, AI/out-of-band patches,
    invalid source recovery, iframe height, and explicit Reload Card.
-6. A long cross-realm navigation run checks runtime/cache eviction and browser
-   memory growth.
-7. Hosted iframe, CSS network, and server execution limitations remain called
-   out as follow-up security work rather than being described as solved.
+6. The automated 4,096-principal Chrome soak checks runtime/cache/style
+   eviction and forced-GC browser heap growth; a route-level SES/iframe CDP
+   retainer run remains part of manual diligence.
+7. Hosted iframe, CSS paint/layout, and server execution limitations remain
+   called out as follow-up security work. CSS selector, network, and global-
+   rule leakage is structurally rejected rather than described as pending.
 
 ## Diligence log
 
@@ -247,22 +249,28 @@ requiring Accept` when Act-mode product behavior changed from approval to
 
 - A fresh host development build completed successfully after the structural
   extraction and again after the URL-policy move.
-- Host JavaScript and template lint pass. Host type checking reaches only seven
-  `Array.at` target-library failures. The one failure in a changed test is
-  byte-for-byte present on `origin/main`; the other six affected files are not
-  changed by this branch. The three AI-message call-signature failures recorded
-  at the earlier checkpoint are gone.
+- Host JavaScript and template lint pass. Host type checking passes in a
+  detached `/tmp` checkout of this branch after the same Boxel Icons type-build
+  prerequisite used by CI. The primary checkout reports only seven `Array.at`
+  target-library failures because TypeScript also discovers parent-directory
+  Node types outside this repository; the branch's changed files produce no
+  additional diagnostics. The three AI-message call-signature failures
+  recorded at the earlier checkpoint are gone.
 - `runtime-common` JavaScript/type lint and `realm-server` JavaScript/type lint
   pass.
 - Boxel UI addon and test-app JavaScript/template/type lint pass, and the test
-  app production build succeeds. The focused `safe-modifier` browser test is
-  not claimed as passing locally: its separate Testem launcher failed to
-  connect Chrome within its configured 120-second window. Host browser tests
-  launch normally in the same environment, so this remains a runner-specific
-  verification gap for CI.
+  app production build succeeds. The complete Boxel UI browser suite now
+  passes 408/408 locally, including the focused `safe-modifier` coverage.
 - Focused host tests pass for:
   - principal-keyed runtime registry (3 tests);
-  - compartment module runtime (15 tests);
+  - compartment module runtime (17 tests), including safe URL globals,
+    synchronous method returns, serialized overlapping asynchronous actions,
+    and write-only `viewCard` effects;
+  - serialized render identity and transaction-safe updates (6 tests);
+  - Host Mode compatibility (19 tests), including state persistence and
+    same-realm navigation effects;
+  - prerender HTML compatibility (26 tests), including the trusted live-DOM
+    route and serialized user-realm route;
   - Code-preview sandbox generations and analysis cache (12 tests);
   - production realm URL policy (1 test);
   - runtime eviction and source-hash reuse (2 tests);
@@ -308,9 +316,9 @@ requiring Accept` when Act-mode product behavior changed from approval to
 - Synthetic module-fetch errors no longer place multiline compiler output in
   `Response.statusText`. The status text is normalized and bounded, while the
   response body retains the complete diagnostic.
-- The latest focused verification passes: seven sandbox live-reload acceptance
+- An earlier service-backed focused verification passed seven sandbox live-reload acceptance
   rows, three acknowledgement unit tests, the multiline loader diagnostic
-  regression, 28 realm-sandbox tests, 14 Code-preview sandbox tests, 11 preview
+  regression, 29 realm-sandbox tests, 14 Code-preview sandbox tests, 11 preview
   integration tests, 11 patch-code tests, five custom-evaluator tests, two
   targeted-invalidation tests, and two iframe-protocol tests.
 - A focused new-card-definition acceptance run did not reach its product
@@ -318,6 +326,21 @@ requiring Accept` when Act-mode product behavior changed from approval to
   manager request timed out at 120 seconds. The test realm indexed successfully.
   This is recorded as an environment/prerender CI risk, not counted as a
   product pass or rewritten into a weaker test.
+- The latest service-backed aggregate realm-sandbox run passes 29/29. A prior
+  CI-namespace retry failed global setup because its Base realm was unavailable;
+  that infrastructure result happened before a product assertion and is not
+  counted as a test failure. The narrower 17-row compartment suite covering
+  the final changes also passes.
+- The exact AMD performance gate and its synthetic trip test pass. The realm
+  performance gate also passes all three scenarios with current medians of
+  63.28 ms, 30.55 ms, and 38.62 ms, all comfortably below their enforced
+  thresholds.
+- The latest successful `main` CI Lint run executed Host `ember-tsc --noEmit`
+  with the same Node 24.17.0, pnpm 11.0.9, and TypeScript 5.9.3 toolchain and
+  passed. A detached checkout of this branch passes too. The seven diagnostics
+  seen only in the primary checkout are caused by parent `node_modules`
+  discovery, not a reason to alter seven unrelated files in this sandbox
+  series.
 
 ### Proposed review and commit sequence
 
@@ -362,20 +385,23 @@ are distilled; it currently names files removed from this production branch.
 
 ### Remaining merge gates
 
-1. Run the focused Boxel UI safe-modifier test in CI or a working test-app
-   browser runner.
-2. Run CI Host using the unchanged broad suite and triage with
+1. Run CI Host using the unchanged broad suite and triage with
    `pnpm ci:failures`; do not alter old assertions merely to make the branch
    green.
-3. Triage the background mock-Matrix retry and negative Store-reference logs
+2. Triage the background mock-Matrix retry and negative Store-reference logs
    visible between otherwise passing acceptance rows.
-4. Complete a staging-backed manual matrix: existing official card, user SES
+3. Complete a staging-backed manual matrix: existing official card, user SES
    card, iframe-required card, all formats, rapid navigation, Monaco edit,
    out-of-band patch, invalid-source recovery, height, and Reload Card.
-5. Complete a long cross-realm navigation/memory run. Unit tests prove idle
-   eviction semantics, but they do not prove app-lifetime heap stability.
-6. Re-run the focused new-card-definition row with a healthy Base prerender
+4. Complete the route-level cross-realm SES/iframe navigation and CDP retainer
+   run. The 4,096-principal Chrome lifecycle soak now proves bounded runtime,
+   load, template, stylesheet, analysis-cache, and forced-GC heap behavior, but
+   it does not mount real route DOM or iframe ports.
+5. Re-run the focused new-card-definition row with a healthy Base prerender
    service and verify that it reaches its original assertions.
+6. Run the Realm Server, Matrix, Software Factory browser, and sharded Host
+   suites in CI. Local Software Factory Node verification is 591/592; its sole
+   macOS dual-stack port-allocation failure is unchanged from `origin/main`.
 7. Split/rebuild the history according to the sequence above before requesting
    human review. The current 171-file aggregate is still too broad even though
    the code and test surface is substantially cleaner.

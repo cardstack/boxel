@@ -62,12 +62,15 @@ unrelated infrastructure or UX changes.
 
 ### Automated verification
 
-- [ ] Run `git diff --check` and confirm no `.only` or `.skip` was introduced.
-- [ ] Run lint in every modified package.
-- [ ] Run the focused Loader, SES runtime, opaque-boundary, iframe-protocol,
+- [x] Run `git diff --check` and confirm no `.only` or `.skip` was introduced.
+- [x] Run lint in every modified package. Host JavaScript and template lint
+      pass; the primary checkout's type run reaches only the seven documented
+      parent-`node_modules` `Array.at` diagnostics and the detached CI-shaped
+      checkout passes.
+- [x] Run the focused Loader, SES runtime, opaque-boundary, iframe-protocol,
       stylesheet, lifecycle, rehydration, generation-state, file-tree, new-file,
       and patch-flow tests from a freshly built host.
-- [ ] Get the Boxel UI safe-modifier browser test running in CI or a working
+- [x] Get the Boxel UI safe-modifier browser test running in CI or a working
       local test-app runner.
 - [ ] Push the review branch and run the full existing Host CI suite.
 - [ ] Triage CI with `pnpm ci:failures`; classify every failure as introduced,
@@ -103,15 +106,20 @@ unrelated infrastructure or UX changes.
 
 ### Lifetime and performance verification
 
-- [ ] Run a long cross-realm navigation session.
-- [ ] Record principal runtime count before, during, and after idle eviction.
-- [ ] Confirm settled compartment-load promises do not accumulate.
-- [ ] Confirm stylesheet registry entries return to their expected ref counts.
-- [ ] Confirm Code-preview analysis/source caches remain within their bounds.
+- [x] Run an automated 4,096-principal cross-realm lifecycle soak in Chrome.
+- [x] Record principal runtime count before, during, and after idle eviction.
+- [x] Confirm settled compartment-load promises do not accumulate.
+- [x] Confirm stylesheet registry entries return to their expected ref counts.
+- [x] Confirm Code-preview analysis/source caches remain within their bounds.
 - [ ] Compare file navigation, format switching, first render, and repeated HMR
       against `main` and deployed staging.
-- [ ] Investigate any growing heap, detached DOM nodes, retained iframe ports,
-      or render drops before merge.
+- [x] Measure forced-GC heap across the automated principal/runtime/style soak;
+      the current result is 0.00 MiB growth after warm-up, with zero remaining
+      runtimes, loads, templates, or sandbox stylesheets.
+- [ ] Run a long route-level UI session with SES and iframe cards and inspect
+      detached DOM nodes, retained iframe ports, and render drops. The
+      deterministic service soak does not substitute for a CDP retainer
+      snapshot of real mounted card navigation.
 
 ### Phase 2 completion signal
 
@@ -163,11 +171,13 @@ environment without its gate:
   parent/child origin checks, CSP/frame policy, and broker integration tests are
   deployed. A localhost iframe is a compatibility proof, not a production
   security boundary.
-- **CSS confinement gate:** do not claim that arbitrary authored CSS is
-  confined while policy depends on selector rewriting plus regex checks.
-  Before treating hostile CSS as supported, either ship parser-based validation
-  for network-bearing and global constructs or deliberately restrict/reject
-  those constructs with tests and documented product impact.
+- **CSS confinement gate:** shared-document SES styles now pass both decoded
+  raw-source checks and browser CSSOM validation. Every selector target must
+  retain its compiler scope; network-bearing values, document-global at-rules,
+  and named layers fail closed. This closes cross-card selector/network/global-
+  registration leakage. A separate paint/layout policy is still required
+  before claiming that hostile authored elements cannot visually overlay Host
+  chrome in every format.
 
 If the core change would enable either capability broadly in production, its
 corresponding gate moves from follow-up to pre-merge work.
@@ -194,11 +204,18 @@ corresponding gate moves from follow-up to pre-merge work.
 
 ### CSS confinement
 
-- [ ] Replace regex-only network checks with parsed CSS validation.
-- [ ] Define policy for `@import`, `url()`, fonts, images, cursor URLs, and
+- [x] Replace regex-only network checks with parsed CSS validation plus a
+      decoded-source preflight for grammar that CSSOM may discard.
+- [x] Define policy for `@import`, `url()`, fonts, images, cursor URLs, and
       source maps.
-- [ ] Define or reject global at-rules and other document-wide effects.
-- [ ] Add cross-card selector and network-exfiltration regression tests.
+- [x] Reject global at-rules and named cascade layers that survive selector
+      rewriting.
+- [x] Add cross-card selector, escaped-grammar, global-registration, and
+      network-exfiltration regression tests, including a real compiled GTS
+      stylesheet crossing the SES template boundary.
+- [ ] Define host-owned paint/layout containment for scoped elements that use
+      fixed positioning, transforms, filters, or oversized effects, without
+      regressing atom/embedded layout semantics.
 
 ### Availability and server execution
 

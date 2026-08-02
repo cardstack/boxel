@@ -26,6 +26,7 @@ import {
   serializeWithArgs,
   teardown,
 } from '@cardstack/host/lib/isolated-render';
+import { isTrustedRealmCardDefinition } from '@cardstack/host/lib/realm-sandbox-boundary';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 import type RenderStoreService from '@cardstack/host/services/render-store';
@@ -96,18 +97,24 @@ class RenderHtmlTemplate extends Component<Signature> {
 
   private serializeIsland = modifier(
     (element: HTMLElement, [model]: [Model]) => {
-      serializeWithArgs(CardIsland as any, element as any, getOwner(this)!, {
+      let args = {
         card: model.instance,
         format: model.format,
         getCard: this.getCard,
         getCards: this.getCards,
         getCardCollection: this.getCardCollection,
         context: this.context,
-      });
+      };
+      let owner = getOwner(this)!;
+      serializeWithArgs(CardIsland as any, element as any, owner, args);
 
       return () => teardown(element as any);
     },
   );
+
+  private get useTrustedDOMRenderer(): boolean {
+    return isTrustedRealmCardDefinition(this.args.model.instance);
+  }
 
   <template>
     {{! Whitespace-preserving container for markdown-format renders (CS-10781).
@@ -117,13 +124,36 @@ class RenderHtmlTemplate extends Component<Signature> {
         route-template whitespace does not leak into the captured markdown.
         Only applies when format === 'markdown'; other formats are unaffected. }}
     {{#if (eq @model.format 'isolated')}}
-      <div
-        data-boxel-card-island
-        data-boxel-card-island-protocol={{CARD_ISLAND_PROTOCOL_VERSION}}
-        data-boxel-card-format={{@model.format}}
-        data-boxel-card-url={{@model.instance.id}}
-        {{this.serializeIsland @model}}
-      ></div>
+      {{#if this.useTrustedDOMRenderer}}
+        {{! Trusted official templates render through the route's normal Glimmer
+            tree. Calling a nested live renderer from a modifier is re-entrant
+            and can put the prerender route into an unusable state. }}
+        <div
+          data-boxel-card-island
+          data-boxel-card-island-protocol={{CARD_ISLAND_PROTOCOL_VERSION}}
+          data-boxel-card-format={{@model.format}}
+          data-boxel-card-url={{@model.instance.id}}
+          data-boxel-card-island-serialization='rendered'
+        >
+          <CardIsland
+            @card={{@model.instance}}
+            @format={{@model.format}}
+            @getCard={{this.getCard}}
+            @getCards={{this.getCards}}
+            @getCardCollection={{this.getCardCollection}}
+            @context={{this.context}}
+          />
+        </div>
+      {{else}}
+        <div
+          data-boxel-card-island
+          data-boxel-card-island-protocol={{CARD_ISLAND_PROTOCOL_VERSION}}
+          data-boxel-card-format={{@model.format}}
+          data-boxel-card-url={{@model.instance.id}}
+          data-boxel-card-island-serialization='serialized'
+          {{this.serializeIsland @model}}
+        ></div>
+      {{/if}}
     {{else if (eq @model.format 'markdown')}}
       <div data-markdown-render-container class='markdown-render-container'>
         <@model.Component @format={{@model.format}} />

@@ -207,6 +207,10 @@ export class CodePreviewAnalysisCache {
     private maxEntries = 64,
   ) {}
 
+  get size(): number {
+    return this.analyses.size;
+  }
+
   classificationFor(
     draft: Pick<CodePreviewDraft, 'sourceURL' | 'source'>,
   ): Promise<CardSourceSandboxClassification> {

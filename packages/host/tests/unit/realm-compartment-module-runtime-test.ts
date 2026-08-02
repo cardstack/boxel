@@ -1,10 +1,12 @@
 import { module, test } from 'qunit';
 
+import { decodeScopedCSSRequest } from '@cardstack/runtime-common';
 import { transpileJS } from '@cardstack/runtime-common/transpile';
 
 import RealmCompartmentModuleRuntime, {
   sandboxRealmURLArgument,
 } from '@cardstack/host/lib/realm-compartment-module-runtime';
+import { validateCompartmentCSS } from '@cardstack/host/services/realm-sandbox';
 
 const MODULE_ID = 'https://realm.example/cards/article.js';
 const TEMPLATE_BLOCK = JSON.stringify([
@@ -65,6 +67,37 @@ module('Unit | realm compartment module runtime', function () {
       }
       if (import.meta.url !== ${JSON.stringify(MODULE_ID)}) {
         throw new Error('compartment import.meta.url is incorrect');
+      }
+      let parsedURL = new URL('./linked?mode=details', import.meta.url);
+      if (
+        parsedURL.href !== 'https://realm.example/cards/linked?mode=details' ||
+        !(parsedURL instanceof URL) ||
+        URL.canParse('not a URL') ||
+        URL.parse('not a URL') !== null
+      ) {
+        throw new Error('safe URL parsing globals are incorrect');
+      }
+      if (URL.createObjectURL !== undefined || URL.revokeObjectURL !== undefined) {
+        throw new Error('ambient Blob URL authority leaked into compartment');
+      }
+      if (
+        parsedURL.constructor !== URL ||
+        Object.getPrototypeOf(parsedURL).constructor !== URL ||
+        parsedURL.constructor.createObjectURL !== undefined ||
+        Object.getPrototypeOf(parsedURL).constructor.createObjectURL !== undefined
+      ) {
+        throw new Error('native URL constructor authority leaked through an instance');
+      }
+      let params = new URLSearchParams(parsedURL.search);
+      params.set('mode', 'history');
+      if (
+        !(params instanceof URLSearchParams) ||
+        params.toString() !== 'mode=history' ||
+        params.constructor !== URLSearchParams ||
+        Object.getPrototypeOf(params).constructor !== URLSearchParams ||
+        parsedURL.searchParams.constructor !== URLSearchParams
+      ) {
+        throw new Error('safe URLSearchParams global is incorrect');
       }
 
       export class ArticleCard extends CardDef {}
@@ -141,6 +174,8 @@ module('Unit | realm compartment module runtime', function () {
       localStorage: 'undefined',
       fetch: 'undefined',
       XMLHttpRequest: 'undefined',
+      URL: 'function',
+      URLSearchParams: 'function',
     });
   });
 
@@ -283,6 +318,11 @@ module('Unit | realm compartment module runtime', function () {
       ArticleCard.isolated = class Isolated extends Component {
         items = ['one', 'two'];
         increment = () => { this.items.push('three'); };
+        asyncIncrement = async () => {
+          await Promise.resolve();
+          this.items.push('four');
+        };
+        isCount = (expected) => this.items.length === expected;
         get count() { return this.items.length; }
         get label() { return this.args.label; }
       };
@@ -303,7 +343,11 @@ module('Unit | realm compartment module runtime', function () {
 
     assert.deepEqual(instance.state, { items: ['one', 'two'] });
     assert.deepEqual(instance.getters.sort(), ['count', 'label']);
-    assert.deepEqual(instance.actions, ['increment']);
+    assert.deepEqual(instance.actions, [
+      'asyncIncrement',
+      'increment',
+      'isCount',
+    ]);
     assert.strictEqual(
       runtime.readComponentProperty(instance.handle, 'count', {}),
       2,
@@ -323,10 +367,111 @@ module('Unit | realm compartment module runtime', function () {
       [],
     );
     assert.deepEqual(updated.state, { items: ['one', 'two', 'three'] });
-    assert.strictEqual(runtime.readComponentProperty(live.handle, 'count'), 3);
+    assert.true(
+      (await runtime.invokeComponentAction(live.handle, 'isCount', [3]))
+        .returnValue,
+      'a synchronous pure component method returns across the explicit boundary',
+    );
+    let asyncUpdated = await runtime.invokeComponentAction(
+      live.handle,
+      'asyncIncrement',
+      [],
+    );
+    assert.deepEqual(
+      asyncUpdated.state,
+      { items: ['one', 'two', 'three', 'four'] },
+      'an asynchronous component action settles before its state crosses the boundary',
+    );
+    assert.strictEqual(runtime.readComponentProperty(live.handle, 'count'), 4);
     assert.strictEqual(
       runtime.readComponentProperty(live.handle, 'label'),
       'persistent arg',
+    );
+  });
+
+  test('returns explicit viewCard effects without exposing the host callback', async function (assert) {
+    let moduleID = `${MODULE_ID}?view-card-effect`;
+    let source = `
+      import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+      import { setComponentTemplate } from '@ember/component';
+      import { createTemplateFactory } from '@ember/template-factory';
+      export class ArticleCard extends CardDef {}
+      ArticleCard.isolated = class Isolated extends Component {
+        openTarget = () => this.args.viewCard(
+          new URL('./target-card', import.meta.url),
+          'embedded',
+          { openCardInRightMostStack: true },
+        );
+        asyncOpenTarget = async (target) => {
+          await Promise.resolve();
+          this.args.viewCard(target, 'isolated');
+        };
+      };
+      setComponentTemplate(createTemplateFactory({
+        id: 'view-card-effect-isolated',
+        block: ${JSON.stringify(TEMPLATE_BLOCK)},
+        moduleName: ${JSON.stringify(moduleID)},
+        isStrictMode: true,
+      }), ArticleCard.isolated);
+    `;
+    let runtime = runtimeFor({ [moduleID]: source });
+    let bundle = await runtime.evaluateTemplate(
+      moduleID,
+      'ArticleCard',
+      'isolated',
+    );
+    let hostCallbackCalled = false;
+    let live = runtime.instantiateComponent(
+      bundle.templates[bundle.root]!.instance.handle,
+      { viewCard: () => (hostCallbackCalled = true) },
+    );
+    let updated = await runtime.invokeComponentAction(
+      live.handle,
+      'openTarget',
+      [],
+    );
+
+    assert.false(
+      hostCallbackCalled,
+      'the host callback itself never crosses the compartment boundary',
+    );
+    assert.deepEqual(updated.effects, [
+      {
+        type: 'view-card',
+        target: 'https://realm.example/cards/target-card',
+        format: 'embedded',
+        options: { openCardInRightMostStack: true },
+      },
+    ]);
+
+    let first = runtime.invokeComponentAction(live.handle, 'asyncOpenTarget', [
+      './first',
+    ]);
+    let second = runtime.invokeComponentAction(live.handle, 'asyncOpenTarget', [
+      './second',
+    ]);
+    let third = runtime.invokeComponentAction(live.handle, 'asyncOpenTarget', [
+      './third',
+    ]);
+    let [firstResult, secondResult, thirdResult] = await Promise.all([
+      first,
+      second,
+      third,
+    ]);
+    assert.deepEqual(
+      firstResult.effects.map((effect) => effect.target),
+      ['./first'],
+      'the first async invocation retains only its own effects',
+    );
+    assert.deepEqual(
+      secondResult.effects.map((effect) => effect.target),
+      ['./second'],
+      'an overlapping invocation waits for an isolated effect queue',
+    );
+    assert.deepEqual(
+      thirdResult.effects.map((effect) => effect.target),
+      ['./third'],
+      'each additional invocation chains behind the previous action tail',
     );
   });
 
@@ -529,6 +674,48 @@ module('Unit | realm compartment module runtime', function () {
     await assert.rejects(
       runtime.evaluateTemplate(moduleID, 'RetroCard', 'isolated'),
       /SES templates must use <style scoped>/,
+    );
+  });
+
+  test('rejects a scoped template that compiles a document-global rule', async function (assert) {
+    let moduleID = 'https://realm.example/cards/global-style';
+    let source = await transpileJS(
+      `
+        import { CardDef, Component } from '@cardstack/base/card-api';
+
+        export class GlobalCard extends CardDef {
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <article>Global card</article>
+              <style scoped>
+                @font-face {
+                  font-family: HostOverride;
+                  src: local(Arial);
+                }
+                article { font-family: HostOverride; }
+              </style>
+            </template>
+          };
+        }
+      `,
+      '/global-style.gts',
+    );
+    let runtime = runtimeFor({ [moduleID]: source });
+    let bundle = await runtime.evaluateTemplate(
+      moduleID,
+      'GlobalCard',
+      'isolated',
+    );
+    let descriptor = bundle.templates[bundle.root]!;
+    let compiledCSS = decodeScopedCSSRequest(descriptor.stylesheets[0]!).css;
+
+    assert.throws(
+      () =>
+        validateCompartmentCSS(compiledCSS, {
+          requireScopedSelectors: true,
+        }),
+      /document-global rule/,
+      'scoped selector rewriting does not localize global registrations, so the shared-document boundary rejects them',
     );
   });
 

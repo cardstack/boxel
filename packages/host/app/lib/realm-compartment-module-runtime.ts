@@ -37,6 +37,18 @@ export interface SandboxComponentInstanceDescriptor {
   actions: string[];
 }
 
+export interface SandboxComponentEffect {
+  type: 'view-card';
+  target: string;
+  format?: string;
+  options?: Record<string, unknown>;
+}
+
+export interface SandboxComponentActionResult extends SandboxComponentInstanceDescriptor {
+  effects: SandboxComponentEffect[];
+  returnValue?: unknown;
+}
+
 export interface SandboxTemplateBundle {
   root: string;
   templates: Record<string, SandboxTemplateDescriptor>;
@@ -69,6 +81,8 @@ export interface CompartmentAmbientReport {
   localStorage: string;
   fetch: string;
   XMLHttpRequest: string;
+  URL: string;
+  URLSearchParams: string;
 }
 
 interface TemplateFactoryDescriptor {
@@ -118,6 +132,8 @@ export interface RealmCompartmentRuntimeOptions {
 
 const lockdownMarker = Symbol.for('boxel.realm-compartment.lockdown');
 export const sandboxRealmURLArgument = '__boxelSandboxRealmURL';
+export const sandboxViewCardCapabilityArgument =
+  '__boxelSandboxHasViewCardCapability';
 
 function ensureLockdown() {
   let globals = globalThis as typeof globalThis & {
@@ -140,6 +156,113 @@ function ensureLockdown() {
   }
 }
 
+function safeURLGlobals(): Record<string, unknown> {
+  let HostURL = globalThis.URL;
+  let HostURLSearchParams = globalThis.URLSearchParams;
+  let sandboxURLs = new WeakSet<object>();
+  let sandboxURLSearchParams = new WeakSet<object>();
+
+  let wrapSearchParams = (value: URLSearchParams): URLSearchParams => {
+    Object.setPrototypeOf(value, SandboxURLSearchParams.prototype);
+    sandboxURLSearchParams.add(value);
+    return value;
+  };
+
+  let wrapURL = (value: URL): URL => {
+    Object.setPrototypeOf(value, SandboxURL.prototype);
+    sandboxURLs.add(value);
+    return value;
+  };
+
+  let copyPrototypeProperties = (
+    target: object,
+    source: object,
+    omitted: PropertyKey[],
+  ) => {
+    for (let key of Reflect.ownKeys(source)) {
+      if (omitted.includes(key)) {
+        continue;
+      }
+      let descriptor = Object.getOwnPropertyDescriptor(source, key);
+      if (descriptor) {
+        Object.defineProperty(target, key, descriptor);
+      }
+    }
+  };
+
+  function SandboxURL(input: string | URL, base?: string | URL) {
+    if (!new.target) {
+      throw new TypeError("URL constructor must be called with 'new'");
+    }
+    return wrapURL(new HostURL(input, base));
+  }
+
+  copyPrototypeProperties(SandboxURL.prototype, HostURL.prototype, [
+    'constructor',
+    'searchParams',
+  ]);
+  let hostSearchParamsGetter = Object.getOwnPropertyDescriptor(
+    HostURL.prototype,
+    'searchParams',
+  )?.get;
+  if (!hostSearchParamsGetter) {
+    throw new Error('URL.searchParams is unavailable');
+  }
+  Object.defineProperty(SandboxURL.prototype, 'searchParams', {
+    configurable: false,
+    enumerable: true,
+    get(this: URL) {
+      return wrapSearchParams(hostSearchParamsGetter.call(this));
+    },
+  });
+  Object.defineProperties(SandboxURL, {
+    canParse: {
+      value: (input: string | URL, base?: string | URL) =>
+        HostURL.canParse(input, base),
+    },
+    parse: {
+      value: (input: string | URL, base?: string | URL) =>
+        HostURL.canParse(input, base)
+          ? wrapURL(new HostURL(input, base))
+          : null,
+    },
+    [Symbol.hasInstance]: {
+      value: (value: unknown) =>
+        typeof value === 'object' && value !== null && sandboxURLs.has(value),
+    },
+  });
+
+  function SandboxURLSearchParams(
+    init?: string | string[][] | Record<string, string> | URLSearchParams,
+  ) {
+    if (!new.target) {
+      throw new TypeError(
+        "URLSearchParams constructor must be called with 'new'",
+      );
+    }
+    return wrapSearchParams(new HostURLSearchParams(init));
+  }
+  copyPrototypeProperties(
+    SandboxURLSearchParams.prototype,
+    HostURLSearchParams.prototype,
+    ['constructor'],
+  );
+  Object.defineProperty(SandboxURLSearchParams, Symbol.hasInstance, {
+    value: (value: unknown) =>
+      typeof value === 'object' &&
+      value !== null &&
+      sandboxURLSearchParams.has(value),
+  });
+
+  // Deliberately do not expose URL.createObjectURL/revokeObjectURL. Cards get
+  // URL parsing and mutable URLSearchParams values, not ambient Blob registries
+  // or any other host-global authority.
+  return {
+    URL: harden(SandboxURL),
+    URLSearchParams: harden(SandboxURLSearchParams),
+  };
+}
+
 export default class RealmCompartmentModuleRuntime {
   private templateByComponent = new WeakMap<object, CapturedTemplate>();
   private trustedExportByValue = new WeakMap<
@@ -158,6 +281,11 @@ export default class RealmCompartmentModuleRuntime {
     string,
     Record<string, unknown>
   >();
+  private componentEffectQueueByHandle = new Map<
+    string,
+    SandboxComponentEffect[]
+  >();
+  private componentActionTailByHandle = new Map<string, Promise<void>>();
   private nextComponentHandle = 0;
   private nextComponentInstanceHandle = 0;
   private moduleEvaluations = 0;
@@ -185,7 +313,10 @@ export default class RealmCompartmentModuleRuntime {
       throw new Error('Decorator runtime is unavailable for card evaluation');
     }
 
-    let globals: Record<string, unknown> = { dt7948: decoratorRuntime };
+    let globals: Record<string, unknown> = {
+      dt7948: decoratorRuntime,
+      ...safeURLGlobals(),
+    };
     if (options.documentFacade) {
       globals.document = options.documentFacade;
     }
@@ -205,7 +336,9 @@ export default class RealmCompartmentModuleRuntime {
         document: typeof document,
         localStorage: typeof localStorage,
         fetch: typeof fetch,
-        XMLHttpRequest: typeof XMLHttpRequest
+        XMLHttpRequest: typeof XMLHttpRequest,
+        URL: typeof URL,
+        URLSearchParams: typeof URLSearchParams
       })`) as CompartmentAmbientReport,
     );
 
@@ -337,6 +470,8 @@ export default class RealmCompartmentModuleRuntime {
     this.loader.dispose();
     this.componentByHandle.clear();
     this.componentInstanceByHandle.clear();
+    this.componentEffectQueueByHandle.clear();
+    this.componentActionTailByHandle.clear();
   }
 
   instantiateComponent(
@@ -347,20 +482,43 @@ export default class RealmCompartmentModuleRuntime {
     if (!component || typeof component !== 'function') {
       throw new Error(`Unknown sandbox component handle ${componentHandle}`);
     }
+    let effects: SandboxComponentEffect[] = [];
     let instance = new (component as new (
       owner: undefined,
       args: Record<string, unknown>,
-    ) => Record<string, unknown>)(undefined, this.componentArgs(args));
+    ) => Record<string, unknown>)(undefined, this.componentArgs(args, effects));
     let instanceHandle = `sandbox-instance-${this.nextComponentInstanceHandle++}`;
     this.componentInstanceByHandle.set(instanceHandle, instance);
+    effects.length = 0;
+    this.componentEffectQueueByHandle.set(instanceHandle, effects);
     return this.describeComponentInstance(instanceHandle, instance);
   }
 
-  async invokeComponentAction(
+  invokeComponentAction(
     instanceHandle: string,
     action: string,
     args: unknown[],
-  ): Promise<SandboxComponentInstanceDescriptor> {
+  ): SandboxComponentActionResult | Promise<SandboxComponentActionResult> {
+    let pending = this.componentActionTailByHandle.get(instanceHandle);
+    if (pending) {
+      let result = pending.then(() =>
+        this.invokeComponentActionNow(instanceHandle, action, args),
+      );
+      this.trackComponentAction(instanceHandle, result);
+      return result;
+    }
+    let result = this.invokeComponentActionNow(instanceHandle, action, args);
+    if (result instanceof Promise) {
+      this.trackComponentAction(instanceHandle, result);
+    }
+    return result;
+  }
+
+  private invokeComponentActionNow(
+    instanceHandle: string,
+    action: string,
+    args: unknown[],
+  ): SandboxComponentActionResult | Promise<SandboxComponentActionResult> {
     let instance = this.componentInstanceByHandle.get(instanceHandle);
     if (!instance) {
       throw new Error(`Unknown sandbox component instance ${instanceHandle}`);
@@ -369,13 +527,61 @@ export default class RealmCompartmentModuleRuntime {
     if (typeof handler !== 'function') {
       throw new Error(`Unknown sandbox component action ${action}`);
     }
+    let effects = this.componentEffectQueueByHandle.get(instanceHandle);
+    if (!effects) {
+      throw new Error(
+        `Missing sandbox component effect queue ${instanceHandle}`,
+      );
+    }
+    effects.length = 0;
     let safeArgs = this.cloneIntoCompartment(this.jsonClone(args));
-    await handler.apply(instance, safeArgs);
-    return this.describeComponentInstance(instanceHandle, instance);
+    let finish = (returnValue: unknown): SandboxComponentActionResult => {
+      let safeReturnValue: unknown;
+      if (returnValue !== undefined) {
+        try {
+          safeReturnValue = this.jsonClone(returnValue);
+        } catch {
+          // Executable or cyclic return values do not cross the boundary.
+        }
+      }
+      return harden({
+        ...this.describeComponentInstance(instanceHandle, instance),
+        effects: effects.splice(0),
+        ...(safeReturnValue !== undefined
+          ? { returnValue: safeReturnValue }
+          : {}),
+      });
+    };
+    let returnValue = handler.apply(instance, safeArgs);
+    if (
+      returnValue &&
+      typeof (returnValue as { then?: unknown }).then === 'function'
+    ) {
+      return Promise.resolve(returnValue).then(finish);
+    }
+    return finish(returnValue);
+  }
+
+  private trackComponentAction(
+    instanceHandle: string,
+    result: Promise<SandboxComponentActionResult>,
+  ): void {
+    let tail = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.componentActionTailByHandle.set(instanceHandle, tail);
+    void tail.finally(() => {
+      if (this.componentActionTailByHandle.get(instanceHandle) === tail) {
+        this.componentActionTailByHandle.delete(instanceHandle);
+      }
+    });
   }
 
   releaseComponentInstance(instanceHandle: string): void {
     this.componentInstanceByHandle.delete(instanceHandle);
+    this.componentEffectQueueByHandle.delete(instanceHandle);
+    this.componentActionTailByHandle.delete(instanceHandle);
   }
 
   readComponentProperty(
@@ -829,8 +1035,13 @@ export default class RealmCompartmentModuleRuntime {
 
   private componentArgs(
     args: Record<string, unknown>,
+    effects?: SandboxComponentEffect[],
   ): Record<string, unknown> {
+    let grantsViewCard =
+      typeof args.viewCard === 'function' ||
+      args[sandboxViewCardCapabilityArgument] === true;
     let clonedArgs = this.jsonClone(args);
+    delete clonedArgs[sandboxViewCardCapabilityArgument];
     let model = clonedArgs.model;
     let href: string | undefined;
     if (
@@ -845,6 +1056,47 @@ export default class RealmCompartmentModuleRuntime {
       string,
       unknown
     >;
+    if (grantsViewCard && effects) {
+      compartmentArgs.viewCard = harden(
+        (target: unknown, format?: unknown, options?: unknown): undefined => {
+          let targetID =
+            typeof target === 'string'
+              ? target
+              : typeof target === 'object' &&
+                  target !== null &&
+                  'href' in target &&
+                  typeof target.href === 'string'
+                ? target.href
+                : typeof target === 'object' &&
+                    target !== null &&
+                    'id' in target &&
+                    typeof target.id === 'string'
+                  ? target.id
+                  : undefined;
+          if (!targetID) {
+            return;
+          }
+          let safeOptions: unknown;
+          if (options !== undefined) {
+            try {
+              safeOptions = this.jsonClone(options);
+            } catch {
+              // Capability arguments are data-only. Invalid/cyclic option
+              // bags are omitted while the validated navigation target is
+              // still allowed to proceed.
+            }
+          }
+          effects.push({
+            type: 'view-card',
+            target: targetID,
+            ...(typeof format === 'string' ? { format } : {}),
+            ...(typeof safeOptions === 'object' && safeOptions !== null
+              ? { options: safeOptions as Record<string, unknown> }
+              : {}),
+          });
+        },
+      );
+    }
     let compartmentModel = compartmentArgs.model;
     if (
       href &&

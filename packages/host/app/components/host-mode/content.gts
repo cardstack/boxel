@@ -2,6 +2,7 @@ import Helper from '@ember/component/helper';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
+import { cached } from '@glimmer/tracking';
 
 import { provide } from 'ember-provide-consume-context';
 
@@ -83,6 +84,7 @@ export default class HostModeContent extends Component<Signature> {
   }
 
   @provide(CardCrudFunctionsContextName)
+  @cached
   // @ts-ignore "cardCrudFunctions" is declared but not used
   private get cardCrudFunctions(): Optional<CardCrudFunctions> {
     return {

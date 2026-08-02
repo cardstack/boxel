@@ -2,7 +2,9 @@ import type {
   CodeRef,
   LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
-import { identifyCard } from '@cardstack/runtime-common';
+import { identifyCard, moduleFrom } from '@cardstack/runtime-common';
+
+import { isTrustedHostRealmModule } from './realm-sandbox-import-policy';
 
 import type { BaseDef } from '@cardstack/base/card-api';
 
@@ -102,6 +104,13 @@ export function identifyRealmCard(
       ? value
       : (value as { constructor?: object } | undefined)?.constructor;
   return identifyCard(definition as typeof BaseDef | undefined);
+}
+
+export function isTrustedRealmCardDefinition(
+  value: object | undefined,
+): boolean {
+  let ref = identifyRealmCard(value);
+  return Boolean(ref && isTrustedHostRealmModule(moduleFrom(ref)));
 }
 
 export function serializeOpaqueRealmCard(

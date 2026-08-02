@@ -30,8 +30,9 @@ import CardIsland, {
 } from '@cardstack/host/components/card-island';
 import config from '@cardstack/host/config/environment';
 import { CARD_ISLAND_PROTOCOL_VERSION } from '@cardstack/host/lib/card-island-protocol';
+import { isTrustedRealmCardDefinition } from '@cardstack/host/lib/realm-sandbox-boundary';
 
-import { render, serializeWithArgs, teardown } from '../lib/isolated-render';
+import { render, prerenderWithArgs, teardown } from '../lib/isolated-render';
 
 import type CardService from './card-service';
 import type LoaderService from './loader-service';
@@ -230,24 +231,23 @@ export default class RenderService extends Service {
     waitForAsync?: () => Promise<void>,
   ): Promise<string> {
     let element = getIsolatedRenderElement(this.document);
-    try {
-      if (waitForAsync) {
-        for (let i = 0; i < MAX_ASYNC_RENDER_PASSES; i++) {
-          serializeWithArgs(
-            CardIsland as any,
-            element,
-            this.owner,
-            args as unknown as Record<string, unknown>,
-          );
-          await waitForAsync();
-        }
-      }
-      serializeWithArgs(
+    let renderIsland = (): 'serialized' | 'rendered' => {
+      return prerenderWithArgs(
         CardIsland as any,
         element,
         this.owner,
         args as unknown as Record<string, unknown>,
+        isTrustedRealmCardDefinition(args.card),
       );
+    };
+    try {
+      if (waitForAsync) {
+        for (let i = 0; i < MAX_ASYNC_RENDER_PASSES; i++) {
+          renderIsland();
+          await waitForAsync();
+        }
+      }
+      let serializationMode = renderIsland();
       let serializer = new Serializer(voidMap);
       let html = serializer.serialize(element);
       let captured = parseCardHtml(html, 'innerHTML');
@@ -255,7 +255,7 @@ export default class RenderService extends Service {
         'id' in args.card && typeof args.card.id === 'string'
           ? ` data-boxel-card-url="${escapeHtml(args.card.id)}"`
           : '';
-      return `<div data-boxel-card-island data-boxel-card-island-protocol="${CARD_ISLAND_PROTOCOL_VERSION}" data-boxel-card-format="${escapeHtml(args.format)}"${cardURL}>${captured}</div>`;
+      return `<div data-boxel-card-island data-boxel-card-island-protocol="${CARD_ISLAND_PROTOCOL_VERSION}" data-boxel-card-format="${escapeHtml(args.format)}" data-boxel-card-island-serialization="${serializationMode}"${cardURL}>${captured}</div>`;
     } finally {
       clearIsolatedRenderElement(element);
     }

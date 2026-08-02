@@ -254,7 +254,13 @@ module('Integration | preview', function (hooks) {
         ) => void;
       };
     }> {
-      target = 'Article/one' as Parameters<ViewCardFn>[0];
+      target = new URL(
+        'Article/one',
+        testRealmURL,
+      ) as Parameters<ViewCardFn>[0];
+      outsideTarget = new URL(
+        'https://other-realm.example/Article/two',
+      ) as Parameters<ViewCardFn>[0];
 
       <template>
         <button
@@ -263,6 +269,13 @@ module('Integration | preview', function (hooks) {
           {{on 'click' (fn @viewCard this.target 'isolated')}}
         >
           Open card
+        </button>
+        <button
+          type='button'
+          data-test-sandbox-view-card-outside-realm
+          {{on 'click' (fn @viewCard this.outsideTarget 'isolated')}}
+        >
+          Open outside-realm card
         </button>
       </template>
     }
@@ -294,6 +307,13 @@ module('Integration | preview', function (hooks) {
     assert.strictEqual(calls.length, 1);
     assert.strictEqual(calls[0]?.[0], rri(`${testRealmURL}Article/one`));
     assert.strictEqual(calls[0]?.[1], 'isolated');
+
+    await click('[data-test-sandbox-view-card-outside-realm]');
+    assert.strictEqual(
+      calls.length,
+      1,
+      'the host boundary rejects a cross-realm navigation effect',
+    );
   });
 
   test('renders head meta tags preview for a card head format', async function (assert) {

@@ -9,6 +9,7 @@ import {
   hasSerializedComponent,
   rehydrateWithArgs,
   rehydrateReplacingActiveWithArgs,
+  rerenderSerializedComponent,
   resumeSerializedComponent,
   serializeWithArgs,
   teardown,
@@ -53,6 +54,11 @@ export default class RealmSandboxTemplateIsland extends Modifier<ModifierSignatu
   private element?: HTMLDivElement;
   private component?: BaseDefComponent;
   private args?: IslandArgs;
+  private requestRender = () => {
+    if (this.element) {
+      rerenderSerializedComponent(this.element as any);
+    }
+  };
 
   constructor(owner: Owner, args: ArgsFor<ModifierSignature>) {
     super(owner, args);
@@ -77,7 +83,7 @@ export default class RealmSandboxTemplateIsland extends Modifier<ModifierSignatu
     }
 
     let owner = getOwner(this) as Owner;
-    let nextArgs = { ...args };
+    let nextArgs = { ...args, requestRender: this.requestRender };
     let resumedServerDOM = resumeSerializedComponent(element as any);
     let hasSerializedDOM =
       resumedServerDOM || hasSerializedComponent(element as any);
@@ -129,7 +135,12 @@ export default class RealmSandboxTemplateIsland extends Modifier<ModifierSignatu
 
     this.element = element;
     this.component = component;
-    this.args = nextArgs;
+    // Compare subsequent modifier invocations against only the public args.
+    // `requestRender` is a stable, host-owned capability added solely to the
+    // low-level render. Persisting it here would make every public invocation
+    // appear different and remount the compartment component after each state
+    // update.
+    this.args = args;
     schedule('afterRender', null, () => args.onRendered?.(component));
   }
 

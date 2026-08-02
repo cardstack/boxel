@@ -23,29 +23,73 @@ working tree now contains the following response to that review:
   consumers without replacing loader identities; local drafts win over stale
   external events; file writes capture their URL; stale in-flight fetches have
   an epoch guard; and cyclic dependency edges remain in the invalidation graph.
-- **Partially fixed:** F-17. Volatile full-source generations and sandbox error
-  metrics are bounded, and settled compartment loads are removed. The broader
-  app-lifetime runtime/template/theme/cache eviction policy still needs a long
-  cross-realm soak test before tuning TTL/LRU behavior.
-- **Intentionally deferred:** F-21, F-23, and F-24. Hidden format effects,
-  file-tree cache event ownership, and partial Glimmer transaction cleanup are
-  valid follow-ups, but changing them here would enlarge the security-boundary
-  series without being required to close it. F-22, the unrelated GPT-5.6 Luna
+- **Compatibility closure after the review:** sandbox components now receive a
+  write-only `viewCard` effect recorder instead of a host callback. The host
+  validates the returned target against the card's realm before dispatch. Safe
+  URL parsing is available inside SES without exposing Blob-URL authority,
+  including through native-instance prototype constructor chains.
+  Overlapping async actions are serialized per component instance so their
+  returned effects cannot be mixed. Stateful components rerender their existing serialized Glimmer island inside
+  the renderer transaction, preserving both authored DOM and replacement
+  markers. The island compares only public args, so its private rerender
+  capability cannot spuriously remount and reset component state.
+- **Fixed with bounded-lifecycle evidence:** F-17. Volatile full-source
+  generations, sandbox errors, source analyses, and themes are bounded;
+  settled compartment loads are removed; idle principal eviction removes its
+  runtime and template state. A 4,096-principal Chrome soak retains one mounted
+  runtime/style at each checkpoint and finishes with zero runtimes, loads,
+  templates, and stylesheets. Forced-GC heap growth after warm-up is 0.00 MiB.
+  A route-level SES/iframe CDP retainer soak remains useful product diligence,
+  but cache cardinality is no longer an unverified app-lifetime risk.
+- **Clarified:** F-23. The cache intentionally has no Realm subscription. Each
+  mounted `FileTreeFromIndex` resource owns one filtered subscription and
+  force-refreshes the shared cached query after a relevant incremental index
+  event; focused integration coverage verifies the invalidation filter. This
+  keeps the cache session-scoped without creating a second event owner.
+- **Intentionally deferred:** F-21 and F-24. Suspending effects in hidden
+  format islands and rolling back a partially-built Glimmer transaction need
+  framework-level designs; changing either here would enlarge the
+  security-boundary series without being required to close it. F-22, the
+  unrelated GPT-5.6 Luna
   model-list change and its tests, has been removed from this branch response
   so it can ship independently.
-- **Verification:** the Host build succeeds; runtime-common, realm-server, and
-  Host JavaScript/template lint succeed. The latest focused run includes seven
-  passing sandbox live-reload acceptance rows plus passing loader, SES runtime,
+- **Verification:** the Host build succeeds in development mode and in the
+  exact CI environment; runtime-common, realm-server, Host JavaScript/template,
+  Base, experiments-realm, and Boxel UI lint succeed. The complete Boxel UI browser
+  suite passes 408/408, including safe-modifier coverage. The latest focused
+  Host run includes seven passing sandbox live-reload acceptance rows, all 19
+  Host Mode rows, all 26 prerender-HTML rows, and passing loader, SES runtime,
   import-policy, iframe-protocol, CSS-boundary, acknowledgement, preview,
-  patch-code, and invalidation suites. Host typecheck contains only seven
-  `Array.at` target-library failures that are also present on `origin/main`.
-  A separate new-card-definition row remains unverified because the local Base
+  render-service, patch-code, and invalidation suites. The explicit component
+  protocol passes 17/17, serialized-island coverage passes 6/6, and the host
+  navigation boundary rejects cross-realm effects. Host typecheck passes in a
+  detached `/tmp` checkout of this branch after the same Boxel Icons type-build
+  prerequisite used by CI. In the primary checkout it reports seven
+  `Array.at` target-library failures because TypeScript also discovers
+  `/Users/chris/Projects/node_modules/@types/node`, outside the repository; no
+  other diagnostics are present. Software Factory Node tests pass 591/592
+  locally; the single macOS dual-stack failure is in unchanged code. A
+  separate new-card-definition row remains unverified because the local Base
   prerender manager timed out before the test reached a product assertion; it
   is not counted as passing.
+- The exact AMD performance gate and its synthetic trip test pass. The realm
+  performance gate passes all three scenarios. The latest successful `main`
+  CI Lint run confirms that Host `ember-tsc --noEmit` runs successfully in
+  GitHub using Node 24.17.0, pnpm 11.0.9, and TypeScript 5.9.3, the same pinned
+  toolchain used by this checkout. The isolated branch reproduction also
+  passes, so the seven primary-checkout diagnostics are recorded as parent
+  `node_modules` contamination rather than fixed by changing unrelated source.
+- The latest service-backed aggregate realm-sandbox run passes 29/29. A prior
+  CI-namespace retry failed global setup when its Base realm was unavailable;
+  that infrastructure result did not reach a product assertion and is not
+  counted as a test failure. The narrower compartment runtime suite that
+  covers the final URL and overlapping-action changes passes 17/17.
 
 This response does **not** make hosted iframe isolation production-ready. A
-dedicated hosted origin with CSP/origin validation remains a deployment gate,
-as do hostile-CSS confinement and a long-running memory/navigation soak.
+dedicated hosted origin with CSP/origin validation remains a deployment gate.
+Shared-document CSS now fails closed on unscoped targets, network grammar,
+document-global rules, and named layers; visual paint/layout confinement and a
+route-level SES/iframe retainer soak remain follow-ups.
 
 ## 1. Verdict
 
@@ -395,9 +439,12 @@ a sandbox-controlled key space.
 - **F-22.** Unrelated change in the diff: the GPT-5.6 Luna fallback model
   ([`matrix-constants.ts`](../packages/runtime-common/matrix-constants.ts) plus
   two test files) has nothing to do with sandboxing.
-- **F-23.** `file-tree-query-cache.ts:29-33` claims "realm index events refresh
-  the cached value in the background"; the service has no event subscription and
-  refresh depends entirely on callers passing `{force: true}`.
+- **F-23.** `file-tree-query-cache.ts:29-33` claimed "realm index events refresh
+  the cached value in the background" without naming the event owner. The
+  service intentionally has no subscription: `FileTreeFromIndex` owns the
+  filtered Realm subscription and calls `search.perform(true)`, which delegates
+  to `queryCache.load(..., { force: true })`. The service comment now states
+  this contract explicitly.
 - **F-24.** Partially-built Glimmer trees leak if `iterator.sync()` throws
   mid-transaction ([`isolated-render.gts:176-206`](../packages/host/app/lib/isolated-render.gts#L176))
   — never registered in `activeRenders`, so never destroyed. Leak, not
@@ -412,7 +459,7 @@ a sandbox-controlled key space.
 | F-3       | Card code can capture a broker port           | P0  | **Architecture proposal** (handshake binding)       |
 | F-4       | Ack swallows whole realm event                | P1  | **Fix now**                                         |
 | F-5       | Opaque type metadata never invalidated        | P1  | **Fix now**                                         |
-| F-6       | `image-set()` defeats CSS sanitizer           | P1  | **Architecture proposal** (parser-based)            |
+| F-6       | `image-set()` defeats CSS sanitizer           | P1  | **Fixed** (decoded preflight + CSSOM policy)        |
 | F-7       | Iframe envelope identity kills the channel    | P1  | **Fix now** (memoize) — confirm first               |
 | F-8       | Un-anchored trusted-realm prefixes            | P2  | **Fix now**                                         |
 | F-9       | Principal from instance metadata              | P2  | **Fix now**                                         |
@@ -423,11 +470,12 @@ a sandbox-controlled key space.
 | F-14      | External HMR clobbers unsaved draft           | P2  | **Change supported behavior** (decide precedence)   |
 | F-15      | `writeTask` URL race                          | P2  | **Fix now**                                         |
 | F-16      | No epoch guard vs in-flight fetch             | P2  | **Architecture proposal** (generation counter)      |
-| F-17      | Unbounded caches                              | P2  | **Follow-up** (gate: long-run memory test)          |
+| F-17      | Unbounded caches                              | P2  | **Fixed** (bounds, eviction, 4,096-realm soak)      |
 | F-18–F-24 | see above                                     | P3  | **Follow-up**                                       |
 
 Production gates that must hold regardless: the hosted-iframe gate (F-2, F-3)
-and the CSS-confinement gate (F-6), both already stated in the follow-up plan.
+and the remaining CSS paint/layout-containment gate, both stated in the
+follow-up plan. F-6's selector/network/global-rule escape is closed.
 
 ## 4. Proposed commit series
 
@@ -551,10 +599,10 @@ through the new boundary without author-visible edits. The real implications:
 
 **Must be avoided:**
 
-- Any claim that hostile CSS is fully confined. Known network-bearing CSS
-  grammar is rejected after browser parsing and escape decoding, but the
-  shared-document style architecture still needs a production confinement
-  design.
+- Any claim that hostile CSS cannot visually escape its card box. Selector,
+  network, and document-global effects are now structurally rejected, but
+  fixed positioning and oversized paint effects still need a host-owned
+  containment policy that preserves format layout.
 - Any claim of hosted-iframe security or dedicated-origin isolation. The
   broker is narrow now; localhost working is still not the hosted-origin claim.
 - Any claim of CPU/memory/availability isolation. Main-thread SES cannot
@@ -581,9 +629,9 @@ through the new boundary without author-visible edits. The real implications:
    the direct regression test for F-5 — and it is the edit authors make most
    often.
 
-Runners-up worth queueing: a long cross-realm navigation run with runtime,
-stylesheet, and template-cache counts before and after idle eviction (F-17);
-and a mixed displayed/non-displayed invalidation event asserting that the
+Runners-up worth queueing: a route-level SES/iframe retainer snapshot after the
+new 4,096-principal service soak; and a mixed displayed/non-displayed
+invalidation event asserting that the
 _non-acknowledged_ modules in the same event are still invalidated (F-4).
 
 ## 8. Recommendation
@@ -608,10 +656,12 @@ Sequence before requesting human review:
 5. Push and run full Host CI; triage with `pnpm ci:failures --branch <branch>
 --workflow "CI Host"`. The branch is not currently pushed, so no CI evidence
    exists for this checkpoint.
-6. Keep F-2, F-3, and F-6 as named production gates. The iframe tier must stay
+6. Keep F-2 and F-3 as named production gates. The iframe tier must stay
    disabled outside the supported local/test environment, and the staging
    launcher's same-server sandbox origin should be called out as a development
-   convenience, not an isolation claim.
+   convenience, not an isolation claim. Keep visual CSS paint containment as a
+   separate explicit follow-up; the shared-document selector/network boundary
+   itself now fails closed.
 
 ## Appendix: verification performed
 

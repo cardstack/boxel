@@ -5,6 +5,7 @@ import { rri, type ResolvedCodeRef } from '@cardstack/runtime-common';
 import {
   getOpaqueRealmCardTypeState,
   identifyRealmCard,
+  isTrustedRealmCardDefinition,
   opaqueRealmCardState,
   opaqueRealmCardTypeState,
   serializeOpaqueRealmCard,
@@ -39,6 +40,33 @@ module('Unit | realm sandbox boundary', function () {
       getOpaqueRealmCardTypeState(OpaqueRealmCard)?.typeRef,
       typeRef,
       'the same inert metadata is available to constructor-based host APIs',
+    );
+    assert.false(
+      isTrustedRealmCardDefinition(card),
+      'a realm-authored opaque definition is not trusted',
+    );
+  });
+
+  test('the prerender trust decision follows the definition module', function (assert) {
+    class TrustedOpaqueRealmCard {}
+    Object.defineProperty(TrustedOpaqueRealmCard, opaqueRealmCardTypeState, {
+      value: Object.freeze({
+        typeRef: {
+          module: '@cardstack/base/card-api',
+          name: 'CardDef',
+        } as ResolvedCodeRef,
+        displayName: 'Card',
+        fields: Object.freeze({}),
+        hasCustomEditTemplate: true,
+        hasCustomIsolatedTemplate: true,
+        headerColor: null,
+        prefersWideFormat: false,
+      }),
+    });
+
+    assert.true(
+      isTrustedRealmCardDefinition(new TrustedOpaqueRealmCard()),
+      'an opaque boundary does not hide a trusted Base definition',
     );
   });
 

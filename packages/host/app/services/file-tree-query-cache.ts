@@ -27,9 +27,12 @@ function canonicalJSON(value: unknown): string {
 
 // Filtered file pickers repeatedly ask the index for the same lean URL list.
 // Keep those lists for the authenticated session so opening a chooser can
-// render synchronously, then let realm index events refresh the cached value
-// in the background. The bound prevents a long cross-realm session from
-// retaining every ad-hoc filter an extension ever constructed.
+// render synchronously. Mounted FileTreeFromIndex resources own realm-event
+// subscriptions and force-refresh the shared entry after a relevant incremental
+// invalidation. Keeping subscriptions out of this session cache prevents both
+// a second event owner and refreshes for queries with no active consumer. The
+// bound prevents a long cross-realm session from retaining every ad-hoc filter
+// an extension ever constructed.
 export default class FileTreeQueryCacheService extends Service {
   @service declare private session: SessionService;
   @service declare private store: StoreService;
