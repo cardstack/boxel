@@ -788,6 +788,43 @@ module('Unit | realm compartment module runtime', function () {
     );
   });
 
+  test('rejects declarative top-layer escape attributes in SES templates', async function (assert) {
+    let moduleID = 'https://realm.example/cards/top-layer';
+    for (let [attribute, markup] of [
+      ['popover', '<aside popover="auto">Host overlay</aside>'],
+      [
+        'popovertarget',
+        '<button popovertarget="overlay">Open</button><aside id="overlay">Overlay</aside>',
+      ],
+      [
+        'commandfor',
+        '<button commandfor="overlay" command="show-modal">Open</button><dialog id="overlay">Overlay</dialog>',
+      ],
+    ]) {
+      let source = await transpileJS(
+        `
+          import { CardDef, Component } from '@cardstack/base/card-api';
+
+          export class TopLayerCard extends CardDef {
+            static isolated = class Isolated extends Component<typeof this> {
+              <template>${markup}</template>
+            };
+          }
+        `,
+        '/top-layer.gts',
+      );
+      await assert.rejects(
+        runtimeFor({ [moduleID]: source }).evaluateTemplate(
+          moduleID,
+          'TopLayerCard',
+          'isolated',
+        ),
+        new RegExp(`cannot use the ${attribute} attribute`),
+        `${attribute} cannot bypass the Host paint-containment boundary`,
+      );
+    }
+  });
+
   test('preserves HTML comments in compiled GTS templates under SES', async function (assert) {
     let moduleID = 'https://realm.example/cards/commented-template';
     let source = await transpileJS(

@@ -96,35 +96,6 @@ class RealmSandboxRelationshipContext extends Modifier<RelationshipContextSignat
   }
 }
 
-interface RetainRealmSandboxCardSignature {
-  Element: Element;
-  Args: { Positional: [card: BaseDef] };
-}
-
-class RetainRealmSandboxCard extends Modifier<RetainRealmSandboxCardSignature> {
-  @service declare private realmSandbox: RealmSandboxService;
-  private release?: () => void;
-  private card?: BaseDef;
-
-  constructor(owner: Owner, args: ArgsFor<RetainRealmSandboxCardSignature>) {
-    super(owner, args);
-    registerDestructor(this, () => this.release?.());
-  }
-
-  modify(
-    _element: Element,
-    [card]: PositionalArgs<RetainRealmSandboxCardSignature>,
-  ) {
-    if (this.card === card) {
-      return;
-    }
-    let previousRelease = this.release;
-    this.card = card;
-    this.release = this.realmSandbox.retainRealmCard(card);
-    previousRelease?.();
-  }
-}
-
 type SandboxViewCardFn = (
   target: Parameters<ViewCardFn>[0],
   format?: Parameters<ViewCardFn>[1],
@@ -299,7 +270,6 @@ export default class RealmSandboxRender extends Component<Signature> {
       data-test-card-format={{this.format}}
       data-test-field-component-card
       {{on 'click' this.navigate}}
-      {{RetainRealmSandboxCard @card}}
       {{this.cardComponentModifier
         cardId=this.cardID
         format=this.format
@@ -331,6 +301,7 @@ export default class RealmSandboxRender extends Component<Signature> {
           onError=@sandbox.onError
           onRendered=@sandbox.onRendered
           card=@card
+          principal=@sandbox.principal
           markerBacked=@sandbox.markerBacked
         }}
       ></div>

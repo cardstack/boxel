@@ -143,6 +143,29 @@ module('Unit | realm sandbox source policy', function () {
     assert.strictEqual(staticStyle.tier, 'compartment');
   });
 
+  test('declarative top-layer markup requires an isolated document', async function (assert) {
+    let source = `
+      import { CardDef, Component } from '@cardstack/base/card-api';
+      export class OverlayCard extends CardDef {
+        static isolated = class extends Component<typeof this> {
+          <template>
+            <button popovertarget="overlay">Open</button>
+            <aside id="overlay" popover="auto">Overlay</aside>
+          </template>
+        };
+      }
+    `;
+    let authored = await classifyCardSourceForSandbox(source);
+    assert.strictEqual(authored.tier, 'iframe', 'authored GTS selects iframe');
+    assert.deepEqual(authored.signals, ['top-layer-markup']);
+
+    let compiled = await classifyCardSourceForSandbox(
+      await transpileJS(source, '/top-layer.gts'),
+    );
+    assert.strictEqual(compiled.tier, 'iframe', 'compiled GTS selects iframe');
+    assert.deepEqual(compiled.signals, ['top-layer-markup']);
+  });
+
   test('comments and string literals do not grant a broader renderer', async function (assert) {
     let result = await classifyCardSourceForSandbox(`
       // document.createElement('canvas');

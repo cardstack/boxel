@@ -39,6 +39,7 @@ export default class RealmSandboxIframe extends Component<Signature> {
   @tracked private draftError?: string;
   private postToFrame?: (message: Record<string, unknown>) => void;
   private loaderMetricToken = {};
+  private connectionMetricToken = {};
 
   get format() {
     return this.args.format ?? 'isolated';
@@ -56,6 +57,7 @@ export default class RealmSandboxIframe extends Component<Signature> {
     // The target is required to be a distinct origin. credentialless prevents
     // accidental ambient-cookie authority from crossing into that origin.
     element.setAttribute('credentialless', '');
+    this.realmSandbox.registerIframeConnection(this.connectionMetricToken);
     if (this.args.sandbox.codePreviewID) {
       this.realmSandbox.registerIframeCodePreviewLoader(this.loaderMetricToken);
     }
@@ -152,6 +154,7 @@ export default class RealmSandboxIframe extends Component<Signature> {
       channel?.port1.removeEventListener('message', receive);
       channel?.port1.close();
       this.postToFrame = undefined;
+      this.realmSandbox.releaseIframeConnection(this.connectionMetricToken);
       this.realmSandbox.releaseIframeCodePreviewLoader(this.loaderMetricToken);
     };
   });

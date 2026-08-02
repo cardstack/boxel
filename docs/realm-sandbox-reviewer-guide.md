@@ -1228,10 +1228,13 @@ budgets require a Worker/process boundary or another execution architecture.
 Compartment styles are checked twice: a decoded-source preflight catches
 escaped fetch-bearing grammar that CSSOM might discard, then the browser parser
 verifies that every selector target retains its compiled scope and rejects
-network-bearing values, document-global registrations, and named layers. The
-host CardContainer supplies the visual boundary: layout/style/paint
-containment traps fixed and absolute descendants and clips authored paint,
-while an isolated stacking context contains blending and z-index.
+network-bearing values, document-global registrations, named layers, and
+view-transition naming. Compiled templates also reject declarative popover and
+dialog-command attributes because the browser top layer is outside ancestor
+paint containment. The host CardContainer supplies the visual boundary:
+layout/style/paint containment traps fixed and absolute descendants and clips
+authored paint, while an isolated stacking context contains blending and
+z-index.
 Atom cards deliberately retain a shrink-to-fit principal box so those
 guarantees are not lost through `display: contents`.
 

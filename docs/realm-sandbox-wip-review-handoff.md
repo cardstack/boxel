@@ -243,11 +243,14 @@ The checkpoint has already established the following:
 - The complete Boxel UI browser suite passes 408/408 locally, including the
   safe-modifier row that was previously blocked by the browser runner.
 - The deterministic 4,096-principal cross-realm runtime/style soak passes with
-  0.00 MiB forced-GC heap growth after warm-up. A route-level UI/CDP retainer
-  soak covering real SES DOM and iframe ports remains outstanding.
-- Hosted iframe security and visual CSS paint/layout containment are unfinished
-  and must not be represented as production-complete. Selector, network, and
-  document-global CSS leakage now fails closed.
+  0.00 MiB forced-GC heap growth after warm-up. A 32-navigation route-level
+  soak also passes while checking real SES DOM, iframe browsing contexts,
+  MessageChannel lifetimes, authored stylesheets, and runtime/template counts.
+- Hosted iframe security is unfinished and must not be represented as
+  production-complete. Shared-document CSS now fails closed on selector,
+  network, document-global, view-transition, and declarative top-layer escape
+  paths, and every SES format has a host-owned paint/layout boundary. This is
+  confinement, not CPU or memory isolation.
 
 If a known statement appears wrong, supply the contradicting command output or
 code path rather than repeating it as an unverified concern.
@@ -278,9 +281,9 @@ to make the tests run:
   change;
 - hosted iframe deployment and dedicated-origin provisioning — production
   security follow-up;
-- visual paint/layout containment for hostile scoped elements — production
-  security follow-up; parser-grade selector/network/global-rule validation is
-  now implemented in the core boundary.
+- arbitrary resource-bearing HTML and shared-main-thread resource exhaustion —
+  separate security follow-ups; parser-grade CSS validation, top-layer denial,
+  and visual paint/layout containment are implemented in the core boundary.
 
 ## Suggested Verification
 

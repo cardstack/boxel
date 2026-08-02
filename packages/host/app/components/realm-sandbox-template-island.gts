@@ -8,6 +8,8 @@ import Modifier from 'ember-modifier';
 
 import {
   hasSerializedComponent,
+  isInIsolatedRenderTransaction,
+  isWithinSerializedIsolatedRender,
   rehydrateWithArgs,
   rehydrateReplacingActiveWithArgs,
   renderWithArgs,
@@ -40,6 +42,7 @@ interface IslandArgs extends IsolatedRenderArgs {
   onError?: (error: unknown, component: BaseDefComponent) => void;
   onRendered?: (component: BaseDefComponent) => void;
   card: BaseDef;
+  principal: string;
   markerBacked: boolean;
 }
 
@@ -64,6 +67,15 @@ export default class RealmSandboxTemplateIsland extends Modifier<ModifierSignatu
   private args?: IslandArgs;
   private subscribedCard?: BaseDef;
   private unsubscribeFromData?: () => void;
+  private retainedCard?: BaseDef;
+  private releaseRuntime?: () => void;
+  private pending?: {
+    element: HTMLDivElement;
+    component: BaseDefComponent;
+    args: IslandArgs;
+    generation: number;
+  };
+  private generation = 0;
   private requestRender = () => {
     if (this.element) {
       rerenderSerializedComponent(this.element as any);
@@ -73,10 +85,14 @@ export default class RealmSandboxTemplateIsland extends Modifier<ModifierSignatu
   constructor(owner: Owner, args: ArgsFor<ModifierSignature>) {
     super(owner, args);
     registerDestructor(this, () => {
+      this.generation++;
+      this.pending = undefined;
       this.unsubscribeFromData?.();
+      this.releaseRuntime?.();
       if (this.element) {
         teardown(this.element as any);
       }
+      this.element = undefined;
     });
   }
 
@@ -85,6 +101,14 @@ export default class RealmSandboxTemplateIsland extends Modifier<ModifierSignatu
     [component]: [BaseDefComponent],
     args: IslandArgs,
   ) {
+    if (this.retainedCard !== args.card) {
+      let previousRelease = this.releaseRuntime;
+      this.retainedCard = args.card;
+      this.releaseRuntime = this.realmSandbox.retainRealmPrincipal(
+        args.principal,
+      );
+      previousRelease?.();
+    }
     if (this.subscribedCard !== args.card) {
       this.unsubscribeFromData?.();
       this.subscribedCard = args.card;
@@ -101,10 +125,56 @@ export default class RealmSandboxTemplateIsland extends Modifier<ModifierSignatu
       return;
     }
 
+    if (
+      this.pending?.element === element &&
+      this.pending.component === component &&
+      this.sameArgs(this.pending.args, args)
+    ) {
+      return;
+    }
+
+    this.generation++;
+    this.pending = {
+      element,
+      component,
+      args,
+      generation: this.generation,
+    };
+    // This modifier runs inside the host component's Glimmer transaction.
+    // Starting the isolated component's low-level transaction synchronously
+    // corrupts the shared tracking stack under route churn. Treat the island
+    // as an explicit nested render boundary and mount/adopt it only after the
+    // host transaction closes. A generation guard below ensures rapid route,
+    // format, and HMR changes never install obsolete work.
+    if (
+      isInIsolatedRenderTransaction() ||
+      isWithinSerializedIsolatedRender(element as any) ||
+      typeof HTMLElement === 'undefined' ||
+      !(element instanceof HTMLElement) ||
+      !element.isConnected
+    ) {
+      // SimpleDOM prerendering has no browser run loop capable of flushing an
+      // `afterRender` task. It already used this synchronous nested boundary
+      // safely before client attachment, and its markers are what let the
+      // deferred browser island adopt the exact server DOM later.
+      this.flushRender();
+    } else {
+      scheduleOnce('afterRender', this, this.flushRender);
+    }
+  }
+
+  private flushRender() {
+    let pending = this.pending;
+    if (!pending || pending.generation !== this.generation) {
+      return;
+    }
+    this.pending = undefined;
+    let { element, component, args } = pending;
+
     let owner = getOwner(this) as Owner;
     // `card` is a host-only subscription identity. Never pass the executable
     // opaque host object into the compartment component's argument surface.
-    let { card: _card, ...publicArgs } = args;
+    let { card: _card, principal: _principal, ...publicArgs } = args;
     let nextArgs = { ...publicArgs, requestRender: this.requestRender };
     let resumedServerDOM = resumeSerializedComponent(element as any);
     let hasSerializedDOM =

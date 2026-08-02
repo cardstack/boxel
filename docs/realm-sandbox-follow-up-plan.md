@@ -174,10 +174,12 @@ environment without its gate:
 - **CSS confinement gate:** shared-document SES styles now pass both decoded
   raw-source checks and browser CSSOM validation. Every selector target must
   retain its compiler scope; network-bearing values, document-global at-rules,
-  and named layers fail closed. This closes cross-card selector/network/global-
-  registration leakage. A separate paint/layout policy is still required
-  before claiming that hostile authored elements cannot visually overlay Host
-  chrome in every format.
+  named layers, view-transition names, and declarative top-layer entry points
+  fail closed. The host render slot is also a layout/style/paint containment
+  and isolated stacking context in every SES format, including atom. This
+  closes the supported shared-document CSS selector/network/global-registration
+  and visual-overlay paths. It does not provide CPU or memory isolation, and it
+  does not make arbitrary resource-bearing HTML markup a brokered capability.
 
 If the core change would enable either capability broadly in production, its
 corresponding gate moves from follow-up to pre-merge work.
@@ -210,6 +212,9 @@ corresponding gate moves from follow-up to pre-merge work.
       source maps.
 - [x] Reject global at-rules and named cascade layers that survive selector
       rewriting.
+- [x] Reject view-transition naming and declarative popover/dialog command
+      attributes, because browser top-layer rendering bypasses ancestor paint
+      containment.
 - [x] Add cross-card selector, escaped-grammar, global-registration, and
       network-exfiltration regression tests, including a real compiled GTS
       stylesheet crossing the SES template boundary.

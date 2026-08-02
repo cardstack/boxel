@@ -31,8 +31,14 @@ type ActiveRender = {
 };
 
 type RenderMode = 'client' | 'serialize' | 'rehydrate';
+let activeRenderMode: RenderMode | undefined;
+
+export function isInIsolatedRenderTransaction(): boolean {
+  return activeRenderMode !== undefined;
+}
 
 const activeRenders = new WeakMap<SimpleElement, ActiveRender>();
+const serializedRenderRoots = new WeakSet<SimpleElement>();
 type SimpleNode = NonNullable<SimpleElement['firstChild']>;
 const suspendedSerializedChildren = new WeakMap<SimpleElement, SimpleNode[]>();
 
@@ -41,6 +47,19 @@ export function hasSerializedComponent(element: SimpleElement): boolean {
     if (child.nodeType === 8 && child.nodeValue?.startsWith('%+b:')) {
       return true;
     }
+  }
+  return false;
+}
+
+export function isWithinSerializedIsolatedRender(
+  element: SimpleElement,
+): boolean {
+  let current: SimpleElement | null = element;
+  while (current) {
+    if (serializedRenderRoots.has(current)) {
+      return true;
+    }
+    current = current.parentNode as SimpleElement | null;
   }
   return false;
 }
@@ -197,6 +216,11 @@ function renderWithMode(
     teardown(element);
     removeChildren(element);
   }
+  if (mode === 'serialize') {
+    serializedRenderRoots.add(element);
+  } else {
+    serializedRenderRoots.delete(element);
+  }
 
   let {
     state: { owner: _owner, builder: _builder, context: _context },
@@ -205,22 +229,28 @@ function renderWithMode(
   let result: ActiveRender | undefined;
 
   try {
-    inTransaction(_context.env, () => {
-      let builder =
-        mode === 'serialize'
-          ? serializeBuilder
-          : mode === 'rehydrate'
-            ? rehydrationBuilder
-            : _builder;
-      let iterator = glimmerRenderComponent(
-        _context,
-        builder(_context.env, { element }),
-        _owner,
-        C,
-        args,
-      );
-      result = iterator.sync();
-    });
+    let previousRenderMode = activeRenderMode;
+    activeRenderMode = mode;
+    try {
+      inTransaction(_context.env, () => {
+        let builder =
+          mode === 'serialize'
+            ? serializeBuilder
+            : mode === 'rehydrate'
+              ? rehydrationBuilder
+              : _builder;
+        let iterator = glimmerRenderComponent(
+          _context,
+          builder(_context.env, { element }),
+          _owner,
+          C,
+          args,
+        );
+        result = iterator.sync();
+      });
+    } finally {
+      activeRenderMode = previousRenderMode;
+    }
   } catch (err: any) {
     resetTracking();
     let error = new CardError(
@@ -238,6 +268,7 @@ function renderWithMode(
 }
 
 export function teardown(element: SimpleElement): void {
+  serializedRenderRoots.delete(element);
   releaseActiveRender(element);
   removeChildren(element);
 }

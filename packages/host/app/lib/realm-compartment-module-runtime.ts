@@ -138,8 +138,15 @@ export const sandboxViewCardCapabilityArgument =
 
 const staticAttributeOpcodes = new Set([14, 24]);
 const dynamicAttributeOpcodes = new Set([15, 16, 22, 23]);
+const topLayerAttributeNames = new Set([
+  'command',
+  'commandfor',
+  'popover',
+  'popovertarget',
+  'popovertargetaction',
+]);
 
-function validateTemplateInlineStyles(
+function validateTemplateDOMPolicy(
   value: unknown,
   validateInlineStyle: ((style: string) => void) | undefined,
 ): void {
@@ -147,6 +154,20 @@ function validateTemplateInlineStyles(
     return;
   }
   let [opcode, name, attributeValue] = value;
+  if (
+    typeof name === 'string' &&
+    topLayerAttributeNames.has(name.toLowerCase()) &&
+    (staticAttributeOpcodes.has(Number(opcode)) ||
+      dynamicAttributeOpcodes.has(Number(opcode)))
+  ) {
+    // Popovers and command-invoked dialogs enter the browser top layer. That
+    // layer is intentionally outside ancestor paint/layout containment, so
+    // allowing these declarative attributes would let SES content cover Host
+    // chrome without ever receiving document or element capabilities.
+    throw new Error(
+      `SES templates cannot use the ${name} attribute because it can escape the card paint boundary`,
+    );
+  }
   let isStyleAttribute = name === 'style' || name === 5;
   if (isStyleAttribute && staticAttributeOpcodes.has(Number(opcode))) {
     if (typeof attributeValue !== 'string' || !validateInlineStyle) {
@@ -159,7 +180,7 @@ function validateTemplateInlineStyles(
     );
   }
   for (let entry of value) {
-    validateTemplateInlineStyles(entry, validateInlineStyle);
+    validateTemplateDOMPolicy(entry, validateInlineStyle);
   }
 }
 
@@ -521,7 +542,9 @@ export default class RealmCompartmentModuleRuntime {
   ): SandboxComponentInstanceDescriptor {
     let component = this.componentByHandle.get(componentHandle);
     if (!component || typeof component !== 'function') {
-      throw new Error(`Unknown sandbox component handle ${componentHandle}`);
+      throw new Error(
+        `Unknown sandbox component handle ${componentHandle} for principal ${this.principal}`,
+      );
     }
     let effects: SandboxComponentEffect[] = [];
     let instance = new (component as new (
@@ -968,7 +991,7 @@ export default class RealmCompartmentModuleRuntime {
         'SES templates must use <style scoped>; unscoped <style> would affect the shared host document',
       );
     }
-    validateTemplateInlineStyles(block, this.options.validateInlineStyle);
+    validateTemplateDOMPolicy(block, this.options.validateInlineStyle);
     let scope = descriptor.scope?.() ?? [];
     if (!Array.isArray(scope)) {
       throw new Error('Card template descriptor has an invalid scope');

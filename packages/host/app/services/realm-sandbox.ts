@@ -364,6 +364,7 @@ export interface RealmSandboxMetrics {
   fallbackReasons: Record<string, number>;
   omittedFields: Record<string, number>;
   activeCompartments: number;
+  activeIframeConnections: number;
   activeCodePreviewLoaders: number;
   activeCompartmentLoads: number;
   cachedCompartmentTemplates: number;
@@ -433,6 +434,12 @@ const networkBearingCSS =
 const documentGlobalCSS =
   /@(?:font-face|font-feature-values|font-palette-values|property|counter-style|color-profile|page|viewport|(?:-moz-)?document|namespace|view-transition|position-try|scroll-timeline|custom-media|custom-selector)\b/i;
 const namedLayerCSS = /@layer\b(?!\s*\{)/i;
+// View-transition snapshots are painted in the document top layer, outside
+// the card's paint-containment box. A sandbox card cannot start a transition
+// itself, but a Host transition would still capture a named authored element
+// and lift that snapshot above Host chrome. Keep that document-global naming
+// surface out of shared-document SES styles.
+const topLayerBearingCSS = /\bview-transition-(?:name|class)\s*:/i;
 
 interface CompartmentCSSPolicy {
   requireScopedSelectors?: boolean;
@@ -617,7 +624,9 @@ export function validateCompartmentCSS(
   }
   if (
     policy.requireScopedSelectors &&
-    (documentGlobalCSS.test(decoded) || namedLayerCSS.test(decoded))
+    (documentGlobalCSS.test(decoded) ||
+      namedLayerCSS.test(decoded) ||
+      topLayerBearingCSS.test(decoded))
   ) {
     throw new Error('Sandbox stylesheet contains a document-global rule');
   }
@@ -634,7 +643,9 @@ export function validateCompartmentCSS(
   }
   if (
     policy.requireScopedSelectors &&
-    (documentGlobalCSS.test(normalized) || namedLayerCSS.test(normalized))
+    (documentGlobalCSS.test(normalized) ||
+      namedLayerCSS.test(normalized) ||
+      topLayerBearingCSS.test(normalized))
   ) {
     throw new Error('Sandbox stylesheet contains a document-global rule');
   }
@@ -682,10 +693,11 @@ export default class RealmSandboxService extends Service {
   @service declare private cardService: CardService;
 
   private realmRuntimes = new RealmSandboxRuntimeRegistry(
-    (principal) =>
-      this.createCompartmentRuntime(principal, this.fetchCompartmentModule),
+    (principal) => this.createCanonicalCompartmentRuntime(principal),
     (principal) => this.onRealmRuntimeEvicted(principal),
   );
+  private canonicalRuntimeEpochs = new Map<string, number>();
+  private nextCanonicalRuntimeEpoch = 0;
   private codePreviewRuntimes = new WeakMap<
     CodePreviewSandbox,
     Map<string, CodePreviewRuntimeEntry>
@@ -707,6 +719,7 @@ export default class RealmSandboxService extends Service {
   private externalModuleInvalidationRevisions = new Map<string, number>();
   private externalModuleRefreshes = new Map<string, Promise<void>>();
   private activeIframeCodePreviewLoaders = new Set<object>();
+  private activeIframeConnections = new Set<object>();
   private codePreviewTemplates = new Map<string, InertTemplate>();
   private codePreviewTemplateKeys = new Map<string, string>();
   private pendingCodePreviewTemplates = new Map<
@@ -801,6 +814,7 @@ export default class RealmSandboxService extends Service {
     fallbackReasons: {},
     omittedFields: {},
     activeCompartments: 0,
+    activeIframeConnections: 0,
     activeCodePreviewLoaders: 0,
     activeCompartmentLoads: 0,
     cachedCompartmentTemplates: 0,
@@ -1549,7 +1563,11 @@ export default class RealmSandboxService extends Service {
       options.codeRef && isResolvedCodeRef(options.codeRef)
         ? `${String(options.codeRef.module)}#${String(options.codeRef.name)}`
         : '';
-    let envelopeKey = `${effectiveFormat}|${useBaseTemplate ? 'base' : 'sandbox'}|${componentRefKey}|${options.codePreviewSandbox?.id ?? 'canonical'}|reload:${reloadRevision}`;
+    let runtimeEpoch =
+      !useBaseTemplate && !options.codePreviewSandbox
+        ? (this.canonicalRuntimeEpochs.get(principal) ?? 0)
+        : 0;
+    let envelopeKey = `${effectiveFormat}|${useBaseTemplate ? 'base' : 'sandbox'}|${componentRefKey}|${options.codePreviewSandbox?.id ?? 'canonical'}|runtime:${runtimeEpoch}|reload:${reloadRevision}`;
     let envelopes = this.renderEnvelopes.get(card);
     if (!envelopes) {
       envelopes = new Map();
@@ -1932,6 +1950,19 @@ export default class RealmSandboxService extends Service {
     }
   }
 
+  registerIframeConnection(token: object) {
+    if (!this.activeIframeConnections.has(token)) {
+      this.activeIframeConnections.add(token);
+      this.metrics.activeIframeConnections = this.activeIframeConnections.size;
+    }
+  }
+
+  releaseIframeConnection(token: object) {
+    if (this.activeIframeConnections.delete(token)) {
+      this.metrics.activeIframeConnections = this.activeIframeConnections.size;
+    }
+  }
+
   releaseIframeCodePreviewLoader(token: object) {
     if (this.activeIframeCodePreviewLoaders.delete(token)) {
       this.metrics.activeCodePreviewLoaders--;
@@ -2078,6 +2109,18 @@ export default class RealmSandboxService extends Service {
     });
   }
 
+  private createCanonicalCompartmentRuntime(principal: string) {
+    let runtime = this.createCompartmentRuntime(
+      principal,
+      this.fetchCompartmentModule,
+    );
+    this.canonicalRuntimeEpochs.set(
+      principal,
+      ++this.nextCanonicalRuntimeEpoch,
+    );
+    return runtime;
+  }
+
   private compartmentRuntimeFor(
     principal: string,
     codePreviewSandbox?: CodePreviewSandbox,
@@ -2096,6 +2139,10 @@ export default class RealmSandboxService extends Service {
     if (!principal) {
       return () => undefined;
     }
+    return this.retainRealmPrincipal(principal);
+  }
+
+  retainRealmPrincipal(principal: string): () => void {
     return this.realmRuntimes.retain(principal);
   }
 
@@ -2114,6 +2161,15 @@ export default class RealmSandboxService extends Service {
       this.compartmentTemplates.delete(key);
       this.compartmentLoads.delete(key);
       this.compartmentFailures.delete(key);
+      let evictedRevision = this.compartmentTemplateRevisions.get(key);
+      if (evictedRevision) {
+        // Existing consumers track this exact cell. Wake them before dropping
+        // it so a later navigation cannot keep a component proxy whose SES
+        // runtime has been destroyed. A subsequent evaluation receives a new
+        // per-template cell; unrelated realms and trusted loaders stay
+        // immune.
+        this.scheduleCompartmentRevision(evictedRevision);
+      }
       this.compartmentTemplateRevisions.delete(key);
       for (let templateKeys of this.canonicalTemplateKeysByModule.values()) {
         templateKeys.delete(key);
@@ -2125,6 +2181,7 @@ export default class RealmSandboxService extends Service {
       }
     }
     this.principals.delete(principal);
+    this.canonicalRuntimeEpochs.delete(principal);
     this.metrics.activePrincipals = this.principals.size;
     this.metrics.activeCompartments = this.realmRuntimes.size;
   }
@@ -4655,6 +4712,8 @@ export default class RealmSandboxService extends Service {
     this.metrics.activeCodePreviewLoaders -=
       this.activeIframeCodePreviewLoaders.size;
     this.activeIframeCodePreviewLoaders.clear();
+    this.activeIframeConnections.clear();
+    this.metrics.activeIframeConnections = 0;
   }
 }
 

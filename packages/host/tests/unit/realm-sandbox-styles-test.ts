@@ -124,8 +124,11 @@ module('Unit | Service | realm sandbox styles', function (hooks) {
       '@scroll-timeline host-scroll { source: auto; }',
       '@layer host-reset { body { color: transparent; } }',
       '@layer host-reset, card;',
+      `${scoped} { view-transition-name: host-overlay; }`,
+      `${scoped} { view-transition-class: host-overlay; }`,
       '@font\\-face { font-family: stolen; src: local(Arial); }',
       '@lay\\65 r host-reset { body { color: transparent; } }',
+      `${scoped} { view\\-transition-name: host-overlay; }`,
     ]) {
       assert.throws(
         () => validateCompartmentCSS(css, { requireScopedSelectors: true }),

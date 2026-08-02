@@ -88,8 +88,11 @@ working tree now contains the following response to that review:
 This response does **not** make hosted iframe isolation production-ready. A
 dedicated hosted origin with CSP/origin validation remains a deployment gate.
 Shared-document CSS now fails closed on unscoped targets, network grammar,
-document-global rules, and named layers; visual paint/layout confinement and a
-route-level SES/iframe retainer soak remain follow-ups.
+document-global rules, named layers, view-transition naming, and declarative
+top-layer entry points. Host-owned paint/layout containment is active in every
+SES format. A 32-navigation route-level SES/iframe soak now verifies that
+departed runtimes, stylesheets, iframe browsing contexts, and MessageChannels
+are released.
 
 ## 1. Verdict
 
@@ -473,9 +476,12 @@ a sandbox-controlled key space.
 | F-17      | Unbounded caches                              | P2  | **Fixed** (bounds, eviction, 4,096-realm soak)      |
 | F-18–F-24 | see above                                     | P3  | **Follow-up**                                       |
 
-Production gates that must hold regardless: the hosted-iframe gate (F-2, F-3)
-and the remaining CSS paint/layout-containment gate, both stated in the
-follow-up plan. F-6's selector/network/global-rule escape is closed.
+Production gates that must hold regardless include the hosted-iframe gate
+(F-2, F-3), stated in the follow-up plan. F-6's selector/network/global-rule
+escape and the supported SES visual-overlay paths are closed by structural CSS
+validation, top-layer denial, and a host-owned containment box. Main-thread
+resource exhaustion and arbitrary resource-bearing HTML remain separate
+threats rather than CSS-confinement claims.
 
 ## 4. Proposed commit series
 
@@ -599,10 +605,11 @@ through the new boundary without author-visible edits. The real implications:
 
 **Must be avoided:**
 
-- Any claim that hostile CSS cannot visually escape its card box. Selector,
-  network, and document-global effects are now structurally rejected, but
-  fixed positioning and oversized paint effects still need a host-owned
-  containment policy that preserves format layout.
+- Any claim that CSS confinement provides availability isolation. Selector,
+  network, document-global, and browser top-layer escape paths are
+  structurally rejected, while the host-owned containment box traps fixed
+  positioning and oversized paint. Expensive animation, filters, and layout
+  can still consume the shared main thread.
 - Any claim of hosted-iframe security or dedicated-origin isolation. The
   broker is narrow now; localhost working is still not the hosted-origin claim.
 - Any claim of CPU/memory/availability isolation. Main-thread SES cannot

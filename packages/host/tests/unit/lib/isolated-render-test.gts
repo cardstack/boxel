@@ -115,6 +115,7 @@ class NestedSandboxIsland extends Component<{
         set=this.set
         viewCard=this.viewCard
         card=this.card
+        principal='http://test-realm/unit/'
         markerBacked=true
       }}
     ></div>

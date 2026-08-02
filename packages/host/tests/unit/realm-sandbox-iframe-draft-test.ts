@@ -27,6 +27,24 @@ module('Unit | realm sandbox iframe draft', function (hooks) {
     assert.strictEqual(service.metricsSnapshot().activeCodePreviewLoaders, 0);
   });
 
+  test('counts iframe MessageChannel lifetimes idempotently', function (assert) {
+    let service = getService('realm-sandbox') as RealmSandboxService;
+    let token = {};
+
+    assert.strictEqual(service.metricsSnapshot().activeIframeConnections, 0);
+    service.registerIframeConnection(token);
+    service.registerIframeConnection(token);
+    assert.strictEqual(
+      service.metricsSnapshot().activeIframeConnections,
+      1,
+      'modifier revalidation does not double-count the MessageChannel',
+    );
+
+    service.releaseIframeConnection(token);
+    service.releaseIframeConnection(token);
+    assert.strictEqual(service.metricsSnapshot().activeIframeConnections, 0);
+  });
+
   test('serves the private Monaco buffer only for its exact module URL', async function (assert) {
     let sandbox = {
       rootModuleURL: 'https://realm.example/cards/article.gts',

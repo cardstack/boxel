@@ -24,6 +24,16 @@ const compiledLiteralStyleElement =
   /\[\s*10\s*,\s*(?:["']style["']|\\["']style\\["'])\s*\]/i;
 const compiledDynamicInlineStyleAttribute =
   /\[\s*(?:15|16|22|23)\s*,\s*(?:5|\\*["']style\\*["'])\s*,/i;
+const topLayerAttributeName =
+  '(?:command|commandfor|popover|popovertarget|popovertargetaction)';
+const authoredTopLayerAttribute = new RegExp(
+  `\\s${topLayerAttributeName}(?=\\s|=|/?>)`,
+  'i',
+);
+const compiledTopLayerAttribute = new RegExp(
+  `\\[\\s*(?:14|15|16|22|23|24)\\s*,\\s*\\\\?["']${topLayerAttributeName}\\\\?["']\\s*,`,
+  'i',
+);
 
 // Source classification describes what the module needs. The requested card
 // format separately limits where it may run. Compact and non-DOM formats must
@@ -92,13 +102,18 @@ let lexerReady = Promise.resolve(init);
 function analyzeEmbeddedTemplates(source: string): {
   javascript: string;
   hasDynamicInlineStyle: boolean;
+  hasTopLayerAttribute: boolean;
   hasUnscopedStyle: boolean;
 } {
   let characters = Array.from(source);
   let hasDynamicInlineStyle = false;
+  let hasTopLayerAttribute = false;
   let hasUnscopedStyle = false;
   for (let match of new ContentTag.Preprocessor().parse(source)) {
     hasDynamicInlineStyle ||= /\sstyle\s*=\s*{{/i.test(match.contents);
+    for (let tag of match.contents.matchAll(/<[^>]+>/g)) {
+      hasTopLayerAttribute ||= authoredTopLayerAttribute.test(tag[0]);
+    }
     let styleTags = match.contents.matchAll(/<style(?=[\s>])([^>]*)>/gi);
     for (let styleTag of styleTags) {
       let attributes = styleTag[1] ?? '';
@@ -120,6 +135,7 @@ function analyzeEmbeddedTemplates(source: string): {
   return {
     javascript: characters.join(''),
     hasDynamicInlineStyle,
+    hasTopLayerAttribute,
     hasUnscopedStyle,
   };
 }
@@ -231,10 +247,12 @@ export async function classifyCardSourceForSandbox(
 ): Promise<CardSourceSandboxClassification> {
   let javascript: string;
   let dynamicInlineStyle = compiledDynamicInlineStyleAttribute.test(source);
+  let topLayerAttribute = compiledTopLayerAttribute.test(source);
   let unscopedStyle = hasCompiledUnscopedStyle(source);
   try {
     let templateAnalysis = analyzeEmbeddedTemplates(source);
     dynamicInlineStyle ||= templateAnalysis.hasDynamicInlineStyle;
+    topLayerAttribute ||= templateAnalysis.hasTopLayerAttribute;
     unscopedStyle ||= templateAnalysis.hasUnscopedStyle;
     javascript = templateAnalysis.javascript;
   } catch {
@@ -274,6 +292,7 @@ export async function classifyCardSourceForSandbox(
       ...importSignals,
       ...globalSignals,
       ...(dynamicInlineStyle ? ['dynamic-inline-style'] : []),
+      ...(topLayerAttribute ? ['top-layer-markup'] : []),
       ...(unscopedStyle ? ['unscoped-style'] : []),
     ]),
   ];
