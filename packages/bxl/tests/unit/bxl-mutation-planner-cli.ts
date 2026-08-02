@@ -156,6 +156,57 @@ for (const fixture of accepted) {
   );
 }
 
+// A primitive containsMany field on a Card has no child-field schema, but its
+// values still have an item scope represented by `.`. This is deliberately a
+// card-shaped regression: field-root fixtures synthesize an item schema and
+// did not expose the live updateCard failure.
+const primitiveArrayCardSchema: BxlMutationSchema = {
+  fields: [{
+    key: 'tags',
+    label: 'Tag',
+    kind: 'array',
+    fieldType: 'containsMany',
+  }],
+};
+const primitiveExactPlan = prepareBxlMutation('del(Tag[. = "obsolete"]);', {
+  schema: primitiveArrayCardSchema,
+  targetKind: 'card',
+  syntax: 'readable',
+}).plan({ tags: ['customer', 'obsolete', 'urgent'] }, {
+  programId: 'primitive-array:exact',
+});
+deepStrictEqual(
+  primitiveExactPlan.output,
+  { tags: ['customer', 'urgent'] },
+  'readable primitive selector deletes one value from a card field',
+);
+deepStrictEqual(
+  primitiveExactPlan.intents,
+  [{ op: 'delete', path: ['tags', 1], before: 'obsolete' }],
+  'readable primitive selector plans the concrete card-field item path',
+);
+
+const primitiveBulkPlan = prepareBxlMutation('del(Tag[* . = "obsolete"]);', {
+  schema: primitiveArrayCardSchema,
+  targetKind: 'card',
+  syntax: 'readable',
+}).plan({ tags: ['obsolete', 'customer', 'obsolete'] }, {
+  programId: 'primitive-array:bulk',
+});
+deepStrictEqual(
+  primitiveBulkPlan.output,
+  { tags: ['customer'] },
+  'readable primitive bulk selector deletes every matching card-field value',
+);
+deepStrictEqual(
+  primitiveBulkPlan.intents,
+  [
+    { op: 'delete', path: ['tags', 2], before: 'obsolete' },
+    { op: 'delete', path: ['tags', 0], before: 'obsolete' },
+  ],
+  'readable primitive bulk selector plans descending concrete paths',
+);
+
 const rejectedPlannerCases = bxlMutationExamples.filter(
   (fixture) =>
     fixture.outcome === 'rejected' &&

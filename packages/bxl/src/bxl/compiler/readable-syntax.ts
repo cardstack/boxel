@@ -736,9 +736,15 @@ function childScope(field: ReadableField): ReadableSchema | undefined {
   return undefined;
 }
 
+const EMPTY_READABLE_SCHEMA: ReadableSchema = { fields: [] };
+
 function itemScope(field: ReadableField): ReadableSchema | undefined {
   if (field.kind === 'array' || field.item) {
-    return field.item ?? (field.fields ? { fields: field.fields } : undefined);
+    // Primitive arrays still have an item scope: the current item is `.` even
+    // though it exposes no readable child fields. Keeping that scope explicit
+    // lets selectors such as `Tag[. = "obsolete"]` take the same predicate
+    // lowering path as selectors over compound items.
+    return field.item ?? (field.fields ? { fields: field.fields } : EMPTY_READABLE_SCHEMA);
   }
   return undefined;
 }
