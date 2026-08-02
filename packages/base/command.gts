@@ -627,18 +627,6 @@ export class ExecuteAtomicOperationsResult extends CardDef {
   @field results = containsMany(JsonField);
 }
 
-export class RunRealmScriptInput extends CardDef {
-  @field realmIdentifier = contains(StringField);
-  @field code = contains(StringField);
-  @field mode = contains(StringField);
-  @field input = contains(JsonField);
-  @field notebook = contains(JsonField);
-}
-
-export class RunRealmScriptResult extends CardDef {
-  @field output = contains(JsonField);
-}
-
 // A publish destination for a realm. 'type' is 'subdirectory' (a Boxel Space
 // under the user's space domain, where 'name' is the realm-name path segment)
 // or 'custom' (a claimed custom domain, where 'name' is the full hostname).

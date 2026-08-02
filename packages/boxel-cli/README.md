@@ -33,33 +33,6 @@ boxel --help
 boxel --version
 ```
 
-### Realm Scripts and notebooks
-
-Run a one-shot Realm Script:
-
-```bash
-boxel realm script --realm @cardstack/my-workspace/ \
-  --code 'return await realm.help();'
-```
-
-The command streams sanitized activity to `stderr` while preserving the final
-JSON result on `stdout`. Use `await realm.activity('Phase description')` for
-semantic checkpoints and `--no-activity` to request the legacy single-response
-transport.
-
-Notebook cells add `--session` and `--cell`; `--saved` reuses saved source,
-`--rerun` creates a new revision, and `--input-ref` binds immutable output from
-an earlier cell. Use `--persistence realm` for encrypted durable storage.
-
-```bash
-boxel realm script --realm @cardstack/my-workspace/ \
-  --file search.js --session research --cell search
-
-boxel realm script --realm @cardstack/my-workspace/ \
-  --file grep.js --session research --cell grep \
-  --input-ref 'candidates=cell:search#/result/value/candidates'
-```
-
 ### Environment variables
 
 These are read by `boxel profile add`:
