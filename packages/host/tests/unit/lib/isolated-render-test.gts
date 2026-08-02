@@ -24,6 +24,8 @@ import {
 
 import { setupRenderingTest } from '../../helpers/setup';
 
+import type { BaseDef } from '@cardstack/base/card-api';
+
 let destroyCount = 0;
 
 class TeardownProbe extends Component {
@@ -95,6 +97,7 @@ class ReactiveTemplate extends Component<{
 class NestedSandboxIsland extends Component<{
   Args: { component: typeof FirstHotTemplate };
 }> {
+  card = {} as BaseDef;
   set = () => undefined;
   viewCard = () => undefined;
   context = undefined;
@@ -111,6 +114,8 @@ class NestedSandboxIsland extends Component<{
         format='isolated'
         set=this.set
         viewCard=this.viewCard
+        card=this.card
+        markerBacked=true
       }}
     ></div>
   </template>

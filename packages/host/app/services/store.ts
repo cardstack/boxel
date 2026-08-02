@@ -1086,7 +1086,11 @@ export default class StoreService extends Service implements StoreInterface {
       doc.data.meta = merge(doc.data.meta, patch.meta);
     }
     let api = await this.cardService.getAPI();
-    await api.updateFromSerialized(instance, doc, this.store);
+    if (
+      !(await this.realmSandbox.updateOpaqueCardFromDocument(instance, doc))
+    ) {
+      await api.updateFromSerialized(instance, doc, this.store);
+    }
     let shouldPersist = !opts?.doNotPersist;
     let shouldAwaitPersist = shouldPersist && !opts?.doNotWaitForPersist;
     let persistedResult: CardDef | CardErrorJSONAPI | undefined = instance;

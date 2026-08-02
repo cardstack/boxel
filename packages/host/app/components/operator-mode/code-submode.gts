@@ -663,8 +663,11 @@ export default class CodeSubmode extends Component<Signature> {
             createdFile.source,
           );
         }
-        await this.operatorModeStateService.updateCodePath(createdFile.url);
+        // updateCodePath commits navigation immediately. That can destroy and
+        // cancel this component-owned task before the next statement runs, so
+        // establish the intended edit destination first.
         this.setCardPreviewFormat('edit');
+        await this.operatorModeStateService.updateCodePath(createdFile.url);
       }
     },
   );

@@ -1,20 +1,141 @@
+import { getOwner } from '@ember/application';
+import { registerDestructor } from '@ember/destroyable';
+import type Owner from '@ember/owner';
+import { scheduleOnce } from '@ember/runloop';
 import Component from '@glimmer/component';
 
+import Modifier from 'ember-modifier';
+import { consume, provide } from 'ember-provide-consume-context';
+
+import { and, eq } from '@cardstack/boxel-ui/helpers';
+
+import {
+  CardContextName,
+  GetCardContextName,
+  PermissionsContextName,
+  type Permissions,
+  type getCard,
+} from '@cardstack/runtime-common';
+
 import HydratableCard from '@cardstack/host/components/search/hydratable-card';
+import { renderWithArgs, teardown } from '@cardstack/host/lib/isolated-render';
 import type { SandboxCardFieldMetadata } from '@cardstack/host/lib/realm-compartment-module-runtime';
+import type { RealmSandboxRelationshipContext } from '@cardstack/host/services/realm-sandbox';
 
 import type {
   BaseDef,
   BaseDefComponent,
+  CardContext,
   Format,
 } from '@cardstack/base/card-api';
+import type { ArgsFor } from 'ember-modifier';
+
+type RelationshipResourceType = 'card' | 'file-meta';
+
+class HostRelationshipCard extends Component<{
+  Args: {
+    cardId: string;
+    format: Format;
+    resourceType: RelationshipResourceType;
+    relationshipContext: RealmSandboxRelationshipContext;
+  };
+}> {
+  @provide(GetCardContextName)
+  // @ts-ignore consumed by HydratableCard
+  private get getCard(): getCard {
+    return this.args.relationshipContext.getCard;
+  }
+
+  @provide(CardContextName)
+  // @ts-ignore consumed by HydratableCard/CardRenderer
+  private get cardContext(): CardContext | undefined {
+    return this.args.relationshipContext.cardContext;
+  }
+
+  <template>
+    <HydratableCard
+      @cardId={{@cardId}}
+      @format={{@format}}
+      @mode='none'
+      @overlays={{true}}
+      @type={{@resourceType}}
+    />
+  </template>
+}
+
+interface DeferredRelationshipSignature {
+  Element: HTMLDivElement;
+  Args: {
+    Named: {
+      cardId: string;
+      format: Format;
+      resourceType: RelationshipResourceType;
+      relationshipContext: RealmSandboxRelationshipContext;
+    };
+  };
+}
+
+// A delegated relationship renderer is host-owned, but invoking it while the
+// SES component's low-level Glimmer transaction is still open corrupts the
+// host tracking stack. Mount it as a separate host render on `afterRender`.
+// This is an explicit presentation portal: only identity, format, and resource
+// kind cross it; Store and loader authority remain inside HydratableCard.
+class DeferredRelationshipCard extends Modifier<DeferredRelationshipSignature> {
+  private element?: HTMLDivElement;
+  private args?: DeferredRelationshipSignature['Args']['Named'];
+
+  constructor(owner: Owner, args: ArgsFor<DeferredRelationshipSignature>) {
+    super(owner, args);
+    registerDestructor(this, () => {
+      if (this.element) {
+        teardown(this.element as any);
+      }
+    });
+  }
+
+  modify(
+    element: HTMLDivElement,
+    _positional: never[],
+    args: DeferredRelationshipSignature['Args']['Named'],
+  ) {
+    this.element = element;
+    this.args = args;
+    scheduleOnce('afterRender', this, this.renderCard);
+  }
+
+  private renderCard() {
+    if (!this.element || !this.args) {
+      return;
+    }
+    renderWithArgs(
+      HostRelationshipCard as any,
+      this.element as any,
+      getOwner(this) as Owner,
+      this.args,
+    );
+  }
+}
+
+class SandboxPermissionsConsumer extends Component<{
+  Blocks: { default: [boolean] };
+}> {
+  @consume(PermissionsContextName) declare permissions: Permissions | undefined;
+
+  get canWrite() {
+    return this.permissions?.canWrite === true;
+  }
+
+  <template>{{yield this.canWrite}}</template>
+}
 
 export default function realmSandboxFieldComponent(
-  snapshot: Record<string, unknown>,
+  snapshot: () => Record<string, unknown>,
   fieldName: string,
   trustedFieldType?: typeof BaseDef,
   containingFormat: Format = 'isolated',
   fieldKind: SandboxCardFieldMetadata['kind'] = 'contains',
+  setField?: (fieldName: string, value: unknown) => void,
+  getRelationshipContext?: () => RealmSandboxRelationshipContext | undefined,
 ): BaseDefComponent {
   if (fieldKind === 'linksTo' || fieldKind === 'linksToMany') {
     let defaultFormat: Format;
@@ -42,7 +163,7 @@ export default function realmSandboxFieldComponent(
       }
 
       get entries() {
-        let value = snapshot[fieldName];
+        let value = snapshot()[fieldName];
         let values = Array.isArray(value) ? value : [value];
         return values.flatMap((item) => {
           if (typeof item === 'string') {
@@ -57,15 +178,23 @@ export default function realmSandboxFieldComponent(
         });
       }
 
+      get relationshipContext() {
+        return getRelationshipContext?.();
+      }
+
       <template>
         {{#each this.entries as |entry|}}
-          <HydratableCard
-            @cardId={{entry.id}}
-            @format={{this.format}}
-            @mode='none'
-            @overlays={{true}}
-            @type={{resourceType}}
-          />
+          {{#if this.relationshipContext}}
+            <div
+              class='realm-sandbox-delegated-relationship'
+              {{DeferredRelationshipCard
+                cardId=entry.id
+                format=this.format
+                resourceType=resourceType
+                relationshipContext=this.relationshipContext
+              }}
+            ></div>
+          {{/if}}
         {{/each}}
       </template>
     } as unknown as BaseDefComponent;
@@ -94,12 +223,12 @@ export default function realmSandboxFieldComponent(
       readonly fieldType = fieldType;
       readonly fields = {};
       readonly fieldName = fieldName;
-      readonly set = () => undefined;
+      readonly set = (value: unknown) => setField?.(fieldName, value);
       readonly isMany =
         fieldKind === 'containsMany' || fieldKind === 'linksToMany';
 
       get value() {
-        return snapshot[fieldName];
+        return snapshot()[fieldName];
       }
 
       get format() {
@@ -117,42 +246,44 @@ export default function realmSandboxFieldComponent(
       }
 
       <template>
-        {{#if this.component}}
-          {{#if this.values}}
-            <div class='containsMany-field'>
-              {{#each this.values as |value|}}
-                {{! @glint-ignore Trusted field templates receive only the inert, read-only subset of the ordinary field component signature. }}
-                <this.component
-                  @cardOrField={{this.fieldType}}
-                  @model={{value}}
-                  @fields={{this.fields}}
-                  @format={{this.format}}
-                  @set={{this.set}}
-                  @fieldName={{this.fieldName}}
-                  @canEdit={{false}}
-                />
-              {{/each}}
-            </div>
-          {{else}}
-            {{! @glint-ignore Trusted field templates receive only the inert, read-only subset of the ordinary field component signature. }}
-            <this.component
-              @cardOrField={{this.fieldType}}
-              @model={{this.value}}
-              @fields={{this.fields}}
-              @format={{this.format}}
-              @set={{this.set}}
-              @fieldName={{this.fieldName}}
-              @canEdit={{false}}
-            />
+        <SandboxPermissionsConsumer as |canWrite|>
+          {{#if this.component}}
+            {{#if this.values}}
+              <div class='containsMany-field'>
+                {{#each this.values as |value|}}
+                  {{! @glint-ignore Trusted field templates receive only the inert subset of the ordinary field component signature. }}
+                  <this.component
+                    @cardOrField={{this.fieldType}}
+                    @model={{value}}
+                    @fields={{this.fields}}
+                    @format={{this.format}}
+                    @set={{this.set}}
+                    @fieldName={{this.fieldName}}
+                    @canEdit={{and canWrite (eq this.format 'edit')}}
+                  />
+                {{/each}}
+              </div>
+            {{else}}
+              {{! @glint-ignore Trusted field templates receive only the inert subset of the ordinary field component signature. }}
+              <this.component
+                @cardOrField={{this.fieldType}}
+                @model={{this.value}}
+                @fields={{this.fields}}
+                @format={{this.format}}
+                @set={{this.set}}
+                @fieldName={{this.fieldName}}
+                @canEdit={{and canWrite (eq this.format 'edit')}}
+              />
+            {{/if}}
           {{/if}}
-        {{/if}}
+        </SandboxPermissionsConsumer>
       </template>
     } as unknown as BaseDefComponent;
   }
 
   return class RealmSandboxFieldValue extends Component {
     get value() {
-      return snapshot[fieldName];
+      return snapshot()[fieldName];
     }
 
     get values() {

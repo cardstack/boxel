@@ -197,6 +197,7 @@ module('Integration | preview', function (hooks) {
       fields: {},
       styles: ['.sandbox-style-proof { color: rgb(1 2 3); }'],
       principal: testRealmURL,
+      markerBacked: false,
       theme: {
         css: ':root { --background: #f7f8fa; --foreground: #16161a; }',
         id: `${testRealmURL}Theme/editorial`,
@@ -237,6 +238,16 @@ module('Integration | preview', function (hooks) {
     assert.strictEqual(containerStyle.minHeight, '40px');
     assert.strictEqual(containerStyle.maxHeight, '600px');
     assert.strictEqual(containerStyle.overflow, 'hidden');
+    assert.strictEqual(
+      containerStyle.contain,
+      'content',
+      'the host box traps positioned descendants and clips authored paint',
+    );
+    assert.strictEqual(
+      containerStyle.isolation,
+      'isolate',
+      'authored blending and z-index stay in the card stacking context',
+    );
     assert
       .dom('[data-boxel-theme-style]')
       .includesText('--background: #f7f8fa');
@@ -286,6 +297,7 @@ module('Integration | preview', function (hooks) {
       fields: {},
       styles: [],
       principal: testRealmURL,
+      markerBacked: false,
     };
     let calls: Array<Parameters<ViewCardFn>> = [];
 

@@ -246,7 +246,7 @@ export default class CardService extends Service {
     card: CardDef,
     opts?: SerializeOpts & { withIncluded?: true },
   ): Promise<LooseSingleCardDocument> {
-    let serialized = serializeOpaqueRealmCard(card);
+    let serialized = serializeOpaqueRealmCard(card, opts);
     if (!serialized) {
       let api = await this.getAPI();
       serialized = api.serializeCard(card, {

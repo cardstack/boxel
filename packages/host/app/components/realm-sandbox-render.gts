@@ -1,3 +1,6 @@
+import { registerDestructor } from '@ember/destroyable';
+import type Owner from '@ember/owner';
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { cached } from '@glimmer/tracking';
 
@@ -8,7 +11,12 @@ import { consume } from 'ember-provide-consume-context';
 import { CardContainer } from '@cardstack/boxel-ui/components';
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
 
-import { CardContextName, rri } from '@cardstack/runtime-common';
+import {
+  CardContextName,
+  GetCardContextName,
+  rri,
+  type getCard,
+} from '@cardstack/runtime-common';
 
 import RealmSandboxTemplateIsland from '@cardstack/host/components/realm-sandbox-template-island';
 import RealmSandboxStyles from '@cardstack/host/modifiers/realm-sandbox-styles';
@@ -21,10 +29,44 @@ import type {
   Format,
   ViewCardFn,
 } from '@cardstack/base/card-api';
+import type { ArgsFor, NamedArgs, PositionalArgs } from 'ember-modifier';
 
 const NoopCardComponentModifier = class extends Modifier<any> {
   modify() {}
 } as NonNullable<CardContext['cardComponentModifier']>;
+
+interface RelationshipContextSignature {
+  Element: Element;
+  Args: {
+    Named: {
+      card: BaseDef;
+      getCard: getCard;
+      cardContext?: CardContext;
+    };
+  };
+}
+
+class RealmSandboxRelationshipContext extends Modifier<RelationshipContextSignature> {
+  @service declare private realmSandbox: RealmSandboxService;
+  private unregister?: () => void;
+
+  constructor(owner: Owner, args: ArgsFor<RelationshipContextSignature>) {
+    super(owner, args);
+    registerDestructor(this, () => this.unregister?.());
+  }
+
+  modify(
+    _element: Element,
+    _positional: PositionalArgs<RelationshipContextSignature>,
+    named: NamedArgs<RelationshipContextSignature>,
+  ) {
+    this.unregister?.();
+    this.unregister = this.realmSandbox.registerRelationshipContext(
+      named.card,
+      { getCard: named.getCard, cardContext: named.cardContext },
+    );
+  }
+}
 
 type SandboxViewCardFn = (
   target: Parameters<ViewCardFn>[0],
@@ -48,6 +90,7 @@ export default class RealmSandboxRender extends Component<Signature> {
   @consume(CardContextName) declare private cardContext:
     | CardContext
     | undefined;
+  @consume(GetCardContextName) declare private getCard: getCard;
 
   set = () => undefined;
 
@@ -181,6 +224,11 @@ export default class RealmSandboxRender extends Component<Signature> {
       <div
         class='realm-sandbox-template-island'
         data-realm-sandbox-template-island
+        {{RealmSandboxRelationshipContext
+          card=@card
+          getCard=this.getCard
+          cardContext=this.cardContext
+        }}
         {{RealmSandboxStyles @sandbox.styles}}
         {{RealmSandboxTemplateIsland
           this.component
@@ -193,11 +241,25 @@ export default class RealmSandboxRender extends Component<Signature> {
           viewCard=this.viewCard
           onError=@sandbox.onError
           onRendered=@sandbox.onRendered
+          card=@card
+          markerBacked=@sandbox.markerBacked
         }}
       ></div>
     </CardContainer>
 
     <style scoped>
+      .realm-sandbox-render {
+        /* The shared-document SES tier needs a host-owned paint boundary in
+           addition to compiled selector scoping. Layout containment makes
+           this box the containing block for fixed/absolute descendants, paint
+           containment clips unusual visual effects as well as ordinary
+           overflow, and isolation prevents blending and z-index effects from
+           escaping into Host chrome. */
+        /* `content` is the CSS shorthand for layout + style + paint without
+           size containment, so intrinsic card sizing remains available. */
+        contain: content;
+        isolation: isolate;
+      }
       .realm-sandbox-render.isolated-format {
         height: 100%;
       }
@@ -216,7 +278,12 @@ export default class RealmSandboxRender extends Component<Signature> {
         overflow: hidden;
       }
       .realm-sandbox-render.atom-format.display-container-false {
-        display: contents;
+        /* A display:contents element has no principal box, so containment and
+           the CardContainer clip cannot apply. Preserve atom flow without the
+           decorated boundary by using an unpadded shrink-to-fit box. */
+        display: inline-block;
+        width: auto;
+        height: auto;
       }
       .realm-sandbox-render.atom-format.display-container-true {
         display: inline-block;

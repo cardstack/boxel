@@ -1,8 +1,16 @@
 import type {
   CodeRef,
+  LooseCardResource,
+  LooseFileMetaResource,
   LooseSingleCardDocument,
+  Relationship,
 } from '@cardstack/runtime-common';
-import { identifyCard, moduleFrom } from '@cardstack/runtime-common';
+import {
+  identifyCard,
+  moduleFrom,
+  resolveRRIReference,
+  rri,
+} from '@cardstack/runtime-common';
 
 import { isTrustedHostRealmModule } from './realm-sandbox-import-policy';
 
@@ -56,6 +64,7 @@ export interface OpaqueRealmCardState {
   document: LooseSingleCardDocument;
   snapshot: Record<string, unknown>;
   presentation: OpaqueRealmCardPresentation;
+  setField?: (fieldName: string, value: unknown) => void;
 }
 
 export interface OpaqueRealmCard {
@@ -115,6 +124,7 @@ export function isTrustedRealmCardDefinition(
 
 export function serializeOpaqueRealmCard(
   value: BaseDef,
+  opts?: { useAbsoluteURL?: boolean },
 ): LooseSingleCardDocument | undefined {
   let state = getOpaqueRealmCardState(value);
   if (!state) {
@@ -143,5 +153,66 @@ export function serializeOpaqueRealmCard(
   // value as a remote resource id turns a create into a PATCH and conflicts
   // with the realm-assigned URL. Existing cards already carry their canonical
   // URL in state.document.data.id.
+  if (opts?.useAbsoluteURL) {
+    absolutizeOpaqueDocumentReferences(document);
+  }
   return document;
+}
+
+function absolutizeOpaqueDocumentReferences(
+  document: LooseSingleCardDocument,
+): void {
+  let rootBase = document.data.id;
+  for (let resource of [document.data, ...(document.included ?? [])]) {
+    let resourceBase = resource.id ?? rootBase;
+    resource.meta.adoptsFrom = absolutizeCodeRef(
+      resource.meta.adoptsFrom,
+      resourceBase,
+    );
+    absolutizeRelationships(resource, resourceBase);
+  }
+}
+
+function absolutizeCodeRef(ref: CodeRef, base: string | undefined): CodeRef {
+  if ('type' in ref) {
+    return {
+      ...ref,
+      card: absolutizeCodeRef(ref.card, base),
+    };
+  }
+  return {
+    ...ref,
+    module: rri(
+      ref.module.startsWith('@')
+        ? ref.module
+        : absoluteReference(ref.module, base),
+    ),
+  };
+}
+
+function absolutizeRelationships(
+  resource: LooseCardResource | LooseFileMetaResource,
+  base: string | undefined,
+): void {
+  for (let value of Object.values(resource.relationships ?? {})) {
+    let relationships = Array.isArray(value) ? value : [value];
+    for (let relationship of relationships as Relationship[]) {
+      let self = relationship.links?.self;
+      if (typeof self === 'string') {
+        relationship.links!.self = absoluteReference(self, base);
+      }
+    }
+  }
+}
+
+function absoluteReference(reference: string, base: string | undefined) {
+  if (reference.startsWith('@') || /^[a-z][a-z0-9+.-]*:/i.test(reference)) {
+    return reference;
+  }
+  if (!base) {
+    throw new Error(
+      'Cannot serialize sandboxed card with absolute references without a source URL',
+    );
+  }
+  return resolveRRIReference(reference, rri(base));
 }

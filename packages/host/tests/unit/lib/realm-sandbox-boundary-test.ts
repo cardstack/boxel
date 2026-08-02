@@ -156,6 +156,97 @@ module('Unit | realm sandbox boundary', function () {
     );
   });
 
+  test('host copy serialization makes opaque references absolute', function (assert) {
+    let card = {} as BaseDef;
+    Object.defineProperty(card, opaqueRealmCardState, {
+      value: {
+        typeRef: {
+          module: 'https://realm.example/article',
+          name: 'Article',
+        } as ResolvedCodeRef,
+        principal: 'https://realm.example/',
+        document: {
+          data: {
+            type: 'card',
+            id: 'https://realm.example/Article/one',
+            relationships: {
+              author: {
+                links: { self: '../Author/two' },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../article',
+                name: 'Article',
+              } as ResolvedCodeRef,
+            },
+          },
+        },
+        snapshot: {},
+        presentation: {
+          headerColor: null,
+          prefersWideFormat: false,
+        },
+      },
+    });
+
+    assert.deepEqual(serializeOpaqueRealmCard(card, { useAbsoluteURL: true }), {
+      data: {
+        type: 'card',
+        id: 'https://realm.example/Article/one',
+        relationships: {
+          author: {
+            links: { self: 'https://realm.example/Author/two' },
+          },
+        },
+        meta: {
+          adoptsFrom: {
+            module: rri('https://realm.example/article'),
+            name: 'Article',
+          },
+        },
+      },
+    });
+  });
+
+  test('an id-less copied opaque card keeps already-absolute references', function (assert) {
+    let card = {} as BaseDef;
+    Object.defineProperty(card, opaqueRealmCardState, {
+      value: {
+        typeRef: {
+          module: 'https://realm.example/article',
+          name: 'Article',
+        } as ResolvedCodeRef,
+        principal: 'https://target.example/',
+        document: {
+          data: {
+            type: 'card',
+            meta: {
+              adoptsFrom: {
+                module: 'https://realm.example/article',
+                name: 'Article',
+              } as ResolvedCodeRef,
+            },
+          },
+        },
+        snapshot: {},
+        presentation: {
+          headerColor: null,
+          prefersWideFormat: false,
+        },
+      },
+    });
+
+    assert.deepEqual(
+      serializeOpaqueRealmCard(card, { useAbsoluteURL: true })?.data.meta
+        .adoptsFrom,
+      {
+        module: rri('https://realm.example/article'),
+        name: 'Article',
+      },
+    );
+  });
+
   test('host persistence fails closed for a non-serializable edited field', function (assert) {
     let card = {
       title: () => 'host capability',

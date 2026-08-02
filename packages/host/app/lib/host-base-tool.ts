@@ -19,7 +19,13 @@ export default abstract class HostBaseTool<
   @service declare protected loaderService: LoaderService;
 
   protected loadToolModule(): Promise<typeof BaseToolModule> {
-    return this.loaderService.loader.import<typeof BaseToolModule>(
+    // Tool input/result card types belong to the same canonical Base graph as
+    // the opaque records that cross a realm sandbox boundary. Loading command
+    // types through the legacy host loader can produce a second CardDef
+    // identity, causing otherwise valid opaque cards to fail linksTo(CardDef)
+    // validation before the host tool gets a chance to serialize them through
+    // the explicit boundary adapter.
+    return this.loaderService.baseLoader.import<typeof BaseToolModule>(
       '@cardstack/base/command',
     );
   }

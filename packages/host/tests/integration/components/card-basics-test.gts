@@ -334,6 +334,15 @@ module('Integration | card-basics', function (hooks) {
       );
     });
 
+    test('"instanceOf()" accepts an unregistered native subclass', function (assert) {
+      class OpaqueCard extends CardDef {}
+
+      assert.true(
+        instanceOf(new OpaqueCard(), CardDef),
+        'a host-owned adapter does not need to invent a module identity',
+      );
+    });
+
     test('"instanceOf()" returns true when instance adopts from the provided card class', async function (assert) {
       class Foo extends CardDef {}
       class Bar extends Foo {}

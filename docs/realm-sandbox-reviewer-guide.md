@@ -1223,15 +1223,21 @@ A Compartment limits authority, but user code still runs on the browser's main
 thread. An infinite loop or extreme allocation can freeze the app. CPU/memory
 budgets require a Worker/process boundary or another execution architecture.
 
-### CSS is not fully confined yet
+### Shared-document CSS has structural and visual host boundaries
 
-Selector scoping and rejection of surviving unscoped style blocks protect the
-host presentation from ordinary leakage. Regex/network checks are not a
-complete CSS parser or network firewall, and global at-rules require more
-work. Sensitive values must never be placed in CSS-readable host state.
-Arbitrary hostile CSS must not be described as confined until parser-based
-validation exists or network-bearing/global constructs are explicitly rejected
-with tests.
+Compartment styles are checked twice: a decoded-source preflight catches
+escaped fetch-bearing grammar that CSSOM might discard, then the browser parser
+verifies that every selector target retains its compiled scope and rejects
+network-bearing values, document-global registrations, and named layers. The
+host CardContainer supplies the visual boundary: layout/style/paint
+containment traps fixed and absolute descendants and clips authored paint,
+while an isolated stacking context contains blending and z-index.
+Atom cards deliberately retain a shrink-to-fit principal box so those
+guarantees are not lost through `display: contents`.
+
+This is CSS confinement, not availability isolation: expensive animations,
+filters, or pathological layout can still consume the shared main thread.
+Sensitive authority must never be encoded into DOM/CSS-readable host state.
 
 ### Hosted iframe isolation needs deployment work
 

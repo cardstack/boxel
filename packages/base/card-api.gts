@@ -422,6 +422,14 @@ const inflightLinkLoads = initSharedState(
 );
 
 export function instanceOf(instance: BaseDef, clazz: typeof BaseDef): boolean {
+  // Dynamically constructed host adapters (for example an opaque sandbox
+  // record) can be a genuine JavaScript subclass without having an exported
+  // module identity of their own. Honor that native relationship first. The
+  // code-ref walk below remains necessary for equivalent definitions loaded
+  // through different Loader graphs, where `instanceof` is false.
+  if (instance instanceof (clazz as any)) {
+    return true;
+  }
   let instanceClazz: typeof BaseDef | null = instance.constructor;
   let codeRefInstance: CodeRef | undefined;
   let codeRefClazz = identifyCard(clazz);
@@ -4641,6 +4649,27 @@ function setField(instance: BaseDef, field: Field, value: any) {
   let deserialized = getDataBucket(instance);
   deserialized.set(field.name, value);
   notifySubscribers(instance, field.name, value);
+  notifyCardTracking(instance);
+}
+
+// Host boundaries sometimes materialize an inert CardDef whose schema lives
+// outside this JavaScript realm. Such a card intentionally has no executable
+// field descriptors, but trusted Base edit templates still need the same
+// mutation notification contract as an ordinary CardDef. Keep that bridge
+// explicit and narrow: callers name one field and provide one value; no Store,
+// loader, or realm authority crosses the boundary.
+export function setCardFieldValue(
+  instance: BaseDef,
+  fieldName: string,
+  value: unknown,
+): void {
+  let field = getField(instance, fieldName);
+  if (field) {
+    (instance as unknown as Record<string, unknown>)[fieldName] = value;
+    return;
+  }
+  (instance as unknown as Record<string, unknown>)[fieldName] = value;
+  notifySubscribers(instance, fieldName, value);
   notifyCardTracking(instance);
 }
 

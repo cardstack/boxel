@@ -213,9 +213,12 @@ corresponding gate moves from follow-up to pre-merge work.
 - [x] Add cross-card selector, escaped-grammar, global-registration, and
       network-exfiltration regression tests, including a real compiled GTS
       stylesheet crossing the SES template boundary.
-- [ ] Define host-owned paint/layout containment for scoped elements that use
-      fixed positioning, transforms, filters, or oversized effects, without
-      regressing atom/embedded layout semantics.
+- [x] Define a host-owned paint/layout boundary for shared-document SES cards:
+      every sandbox CardContainer is a layout/style/paint containment and
+      isolated stacking context, so oversized and unusual paint is clipped,
+      and atom cards retain a shrink-to-fit principal box so the boundary is
+      not defeated by `display: contents`. Compiled-selector, network, and
+      global-registration validation remain independently fail-closed.
 
 ### Availability and server execution
 
