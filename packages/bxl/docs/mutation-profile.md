@@ -1,6 +1,12 @@
 # BXL Mutation Profile
 
-Status: proposed contract for `Profile.mutation`
+Status: proposed, example-led contract for `Profile.mutation`
+
+The pre-grammar design corpus is
+[`examples/bxl-mutation-examples.ts`](../examples/bxl-mutation-examples.ts).
+Its accepted and rejected cases are the current source of truth for candidate
+surface syntax. Grammar and AST work should be derived from that corpus after
+the examples settle, not used to prematurely freeze it.
 
 ## Purpose
 
@@ -40,6 +46,13 @@ snapshot + mutation source + parameters
 
 A trusted host separately authorizes and commits the plan through CardDef and
 FieldDef setters, relationship APIs, and the host's transaction mechanism.
+
+The input snapshot is the **loaded Card or Field model exposed by the Card
+Store**, not the raw JSON:API card resource document. A relationship field is
+therefore observed as a loaded Card or array of loaded Cards. Storage details
+such as `relationships["entryPoints.0"].links.self` are not addressable BXL
+paths. Only the commit adapter translates relationship intents to that
+serialization.
 
 ## Why a profile is needed
 
@@ -96,9 +109,12 @@ interface BxlMutationExecution {
   };
   baseRevision?: string;
   schemaVersion?: string;
+  /** Stable principal supplied by the trusted host. */
+  actor?: string;
   delivery?: 'complete' | 'streaming';
   transaction?: 'atomic' | 'statement';
   parameters?: Readonly<Record<string, JsonValue>>;
+  returning?: ReadonlyArray<'old' | 'new' | 'changes' | 'affected' | 'paths'>;
 }
 ```
 
@@ -129,9 +145,12 @@ Version 1 should support this closed statement set:
 | `location = expression` | Set/upsert a schema-permitted location. | exactly one target |
 | `location \|= expression` | Transform an existing value. | exactly one target |
 | `replace(location; expression)` | Replace an existing value. | exactly one target |
+| `copy_to(source; destination)` | Deep-copy one loaded value to another writable field. | one source, one destination |
 | `del(location)` | Delete an existing member or item. | exactly one target |
 | `update_all(location; expression)` | Explicit bulk update. | one or more targets |
 | `delete_all(location)` | Explicit bulk delete. | one or more targets |
+| `add_to_set(collection; expression)` | Add a value if absent from a schema-declared set collection. | one collection, zero or one write |
+| `remove_from_set(collection; expression)` | Remove a value from a schema-declared set collection. | one collection, exactly one value |
 | `prepend(collection; expression)` | Insert at array start. | one collection, one value |
 | `append(collection; expression)` | Insert at array end. | one collection, one value |
 | `insert_at(collection; index; expression)` | Insert at a zero-based index. | one collection, one value |
@@ -193,7 +212,10 @@ type BxlMutationOperation =
   | ({ id: string; op: 'set'; target: StructuredTarget } & OperationValue)
   | { id: string; op: 'update'; target: StructuredTarget; expression: string }
   | ({ id: string; op: 'replace'; target: StructuredTarget } & OperationValue)
+  | { id: string; op: 'copy'; from: StructuredTarget; target: StructuredTarget }
   | { id: string; op: 'delete'; target: StructuredTarget }
+  | ({ id: string; op: 'add-to-set'; target: StructuredTarget } & OperationValue)
+  | ({ id: string; op: 'remove-from-set'; target: StructuredTarget } & OperationValue)
   | ({ id: string; op: 'insert'; into: StructuredTarget; position: StructuredPosition } & OperationValue)
   | { id: string; op: 'move'; target: StructuredTarget; into: StructuredTarget; position: StructuredPosition }
   | { id: string; op: 'reorder'; target: StructuredTarget; key: JqPath; order: JsonScalar[] }
@@ -228,11 +250,12 @@ the same intent. For example, these are semantically identical:
 The conformance suite should compare their canonical plans, not only their
 final output snapshots.
 
-These primitives are structurally complete for one JSON-shaped target: set and
+The core primitives are structurally complete for one loaded target: set and
 delete cover objects, replace covers scalar and compound values, and
-insert/delete/move/reorder cover ordered collections. Explicit relationship
-operations cover graph edges. Additional helpers are ergonomics, not new
-mutation power.
+insert/delete/move/reorder cover ordered collections. Copy and set operations
+retain useful author intent even though their final state could be expressed
+with lower-level set/delete operations. Explicit structured relationship
+operations cover graph edges.
 
 ### Set, update, and replace
 
@@ -350,6 +373,9 @@ interface BxlMutationStatementResult {
 type BxlMutationIntent =
   | { op: 'set'; path: JqPath; before?: JsonValue; after: JsonValue }
   | { op: 'delete'; path: JqPath; before: JsonValue }
+  | { op: 'copy'; from: JqPath; path: JqPath }
+  | { op: 'add-to-set'; collection: JqPath; value: JsonValue }
+  | { op: 'remove-from-set'; collection: JqPath; value: JsonValue }
   | { op: 'insert'; collection: JqPath; index: number; value: JsonValue }
   | { op: 'move'; from: JqPath; toCollection: JqPath; toIndex: number }
   | { op: 'reorder'; collection: JqPath; keys: JsonScalar[] }
@@ -361,30 +387,58 @@ highlighting. Intent kinds are necessary for granular Yjs/CRDT operations and
 correct undo. Implementations must not collapse array intent to a single
 whole-array `set` merely because the output snapshot differs.
 
+Copy and set-collection operations likewise remain explicit in the plan for
+audit, authorization, idempotent no-op reporting, and adapters that support
+granular operations. Copy is deep by value and never aliases two loaded
+fields.
+
 The IR is shape-generic. It contains paths, values, collection operations, and
 relationship edges—not domain-specific Card or Field classes. Schema adapters
 provide the type information needed to plan and commit a particular model.
 
-## Relationships are edges, not JSON subtrees
+## Relationships are loaded Cards and commit as edges
 
-A Card mutation projection must not expose expanded related Cards as writable
-contained JSON. Relationship fields are typed edges represented by canonical
-Card references. Version 1 should provide explicit relationship statements:
+A Card mutation projection must not expose JSON:API relationship records or
+expanded related Cards as writable contained JSON. A `linksTo` field evaluates
+to a loaded Card (or no Card), and a `linksToMany` field evaluates to an ordered
+array of loaded Cards. Reading fields such as `.reviewers[].id` is allowed;
+mutating through a linked Card such as `.reviewers[].name = ...` is not.
+
+`card(id)` asks the Card Store to resolve and type-check a Card for assignment.
+Ordinary collection syntax operates on the loaded relationship field:
 
 ```bxl
-relate(.author; card("https://example.com/people/ada"));
-unrelate(.reviewers[] | select(.id == "https://example.com/people/grace"));
-insert_relation_after(
+// linksTo
+.author = card("https://example.com/people/ada");
+
+// linksToMany append and removal
+append(.reviewers; card("https://example.com/people/grace"));
+del(.reviewers[] | select(.id == "https://example.com/people/grace"));
+
+// The same positional vocabulary used by contained collections
+move_before(
   .reviewers[] | select(.id == "https://example.com/people/ada");
-  card("https://example.com/people/grace")
+  .reviewers[] | select(.id == "https://example.com/people/grace")
 );
 ```
 
-The schema determines whether a relationship is singular, plural, or ordered.
-The compiler lowers these statements to relationship intents; the host commits
-them through relationship APIs. A mutation may not traverse through a
-relationship and mutate the related Card. That requires a separate target and
-authorization decision.
+The schema determines whether a selected location is contained data,
+`linksTo`, or `linksToMany`. It therefore lowers assignment, append, delete,
+insert, and move to relationship intents when the target field is a
+relationship. Structured tool-call operations keep explicit `relate`,
+`unrelate`, and `move-relation` operation names because this makes their JSON
+Schema and authorization intent unambiguous.
+
+This surface matches how real Card code works: it reads a `linksToMany` as a
+Card array and assigns a new Card array. It intentionally hides the persistence
+representation, where a field may serialize as `entryPoints.0`,
+`entryPoints.1`, and so on under `relationships`. BXL never asks an LLM to
+construct or renumber those keys.
+
+A mutation may not traverse through a relationship and mutate the related
+Card. That requires a separate target and authorization decision. A
+query-backed `linksToMany` has derived membership and is read-only; callers
+must mutate the source Cards or fields that determine its query instead.
 
 ```ts
 type BxlRelationshipIntent =
@@ -625,7 +679,7 @@ only one happy path:
 | Insert | start/end/index/before/after, empty array, invalid index, single-value cardinality |
 | Move | forward/backward, start/end, source-is-anchor, cross-array type validation, concurrent anchor drift |
 | Reorder | exact permutation, missing/extra/duplicate keys, primitive arrays, unchanged order no-op |
-| Relationships | singular/plural, duplicate edge, unlink missing edge, ordered edge move, no related-Card traversal |
+| Relationships | loaded linksTo/linksToMany projection, Card Store resolution, singular/plural, duplicate edge, unlink missing edge, ordered edge move, query-backed read-only membership, no related-Card traversal, no raw JSON:API paths |
 | Safety | forbidden constructs, prototype paths, limits, output cardinality, unknown functions |
 | Audit | stable canonical hash, concrete intents, redaction, inverse plan, resulting revision |
 
@@ -636,17 +690,21 @@ boundary does not change its parsed statements.
 
 ## Implementation sequence
 
-1. Add `mutation` to `BxlProfile` and implement AST-based source validation.
-2. Add a real incremental statement parser with canonical source and spans.
-3. Lower assignment and structural helpers to a closed mutation-plan IR.
-4. Implement the pure planner/evaluator and conformance tests.
-5. Define a host-neutral commit-adapter interface and an in-memory reference
+1. Expand and review the accepted/rejected example corpus until syntax,
+   normalized plans, loaded Card semantics, and error behavior are coherent.
+2. Derive the mutation AST and grammar from the accepted corpus.
+3. Add `mutation` to `BxlProfile` and implement AST-based source validation.
+4. Add a real incremental statement parser with canonical source and spans.
+5. Lower assignment and structural helpers to a closed mutation-plan IR.
+6. Implement the pure planner/evaluator and conformance tests.
+7. Define a host-neutral commit-adapter interface and an in-memory reference
    adapter.
-6. Port both the Scrabble structured tool-call flow and textual statement flow
+8. Port both the Scrabble structured tool-call flow and textual statement flow
    to the package API and verify byte-boundary streaming plus canonical-plan
    equivalence and granular move/reorder intent.
-7. Add the Boxel CardDef/FieldDef/Yjs adapter in the Boxel integration layer.
-8. Add relationship intents, authorization integration, and audit records.
+9. Add the Boxel CardDef/FieldDef/Card Store/Yjs adapter in the Boxel
+   integration layer.
+10. Add relationship intents, authorization integration, and audit records.
 
 The profile should not ship as supported merely because assignment nodes pass
 AST validation. Source validation, plan lowering, result cardinality, and the

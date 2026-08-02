@@ -89,6 +89,7 @@
     "demo:authorization": "node scripts/perf-browser.mjs --serve --authorization",
     "demo:authorization-conformance": "node scripts/perf-browser.mjs --serve --authorization-conformance",
     "example:authorization": "node scripts/run-ts-entry.mjs examples/authorization/run.ts",
+    "example:mutation": "node scripts/run-ts-entry.mjs tests/unit/bxl-mutation-fixtures-cli.ts",
     "perf:computed": "node scripts/run-ts-entry.mjs scripts/bench-boxel-computed.ts",
     "bench:authorization": "node scripts/run-ts-entry.mjs scripts/bench-authorization.ts",
     "typecheck": "tsc --noEmit",
