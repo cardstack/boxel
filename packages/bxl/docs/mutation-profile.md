@@ -8,6 +8,9 @@ Its accepted and rejected cases are the current source of truth for candidate
 surface syntax. Grammar and AST work should be derived from that corpus after
 the examples settle, not used to prematurely freeze it.
 
+For a human-first walkthrough of the candidate syntax, see
+[`mutation-language-guide.md`](./mutation-language-guide.md).
+
 ## Purpose
 
 The mutation profile is BXL's data manipulation language for any schema-known
