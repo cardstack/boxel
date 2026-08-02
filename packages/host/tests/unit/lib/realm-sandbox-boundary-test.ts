@@ -209,6 +209,83 @@ module('Unit | realm sandbox boundary', function () {
     });
   });
 
+  test('host persistence keeps nested linked cards in JSON:API relationships', function (assert) {
+    let linkedTheme = {
+      id: 'https://realm.example/Theme/starry-night',
+      hostCapability: () => 'must not cross the JSON boundary',
+    };
+    let card = {
+      cardInfo: {
+        name: 'Edited title',
+        theme: linkedTheme,
+      },
+    } as unknown as BaseDef;
+    Object.defineProperty(card, opaqueRealmCardState, {
+      value: {
+        typeRef: {
+          module: 'https://realm.example/article',
+          name: 'Article',
+        } as ResolvedCodeRef,
+        principal: 'https://realm.example/',
+        document: {
+          data: {
+            type: 'card',
+            id: 'https://realm.example/Article/one',
+            attributes: {
+              cardInfo: {
+                name: 'Original title',
+              },
+            },
+            relationships: {
+              'cardInfo.theme': {
+                links: { self: '../Theme/starry-night' },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'https://realm.example/article',
+                name: 'Article',
+              } as ResolvedCodeRef,
+            },
+          },
+        },
+        snapshot: {
+          cardInfo: {
+            name: 'Original title',
+            theme: linkedTheme,
+          },
+        },
+        presentation: {
+          headerColor: null,
+          prefersWideFormat: false,
+        },
+      },
+    });
+
+    assert.deepEqual(serializeOpaqueRealmCard(card), {
+      data: {
+        type: 'card',
+        id: 'https://realm.example/Article/one',
+        attributes: {
+          cardInfo: {
+            name: 'Edited title',
+          },
+        },
+        relationships: {
+          'cardInfo.theme': {
+            links: { self: '../Theme/starry-night' },
+          },
+        },
+        meta: {
+          adoptsFrom: {
+            module: rri('https://realm.example/article'),
+            name: 'Article',
+          },
+        },
+      },
+    });
+  });
+
   test('an id-less copied opaque card keeps already-absolute references', function (assert) {
     let card = {} as BaseDef;
     Object.defineProperty(card, opaqueRealmCardState, {

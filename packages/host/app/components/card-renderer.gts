@@ -71,6 +71,7 @@ export default class CardRenderer extends Component<Signature> {
     sandbox: RealmSandboxRenderEnvelope;
     format: Format;
   }> = [];
+  private recentSandboxCard?: BaseDef;
 
   @provide(DefaultFormatsContextName)
   // @ts-ignore "defaultFormat is declared but not used"
@@ -197,6 +198,17 @@ export default class CardRenderer extends Component<Signature> {
   }
 
   get sandboxRenderSlots() {
+    if (this.recentSandboxCard !== this.args.card) {
+      // The two-slot cache accelerates format switches for one card program.
+      // A type-changing adoptsFrom edit replaces the opaque Store record; an
+      // island belonging to that previous record is neither a reusable format
+      // nor valid preview DOM, so evict it synchronously with the identity
+      // change.
+      // eslint-disable-next-line ember/no-side-effects
+      this.recentSandboxCard = this.args.card;
+      // eslint-disable-next-line ember/no-side-effects
+      this.recentSandboxRenders = [];
+    }
     let active = this.sandboxRender;
     if (!active) {
       return this.codePreviewSandbox

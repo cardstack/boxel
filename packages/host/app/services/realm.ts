@@ -1071,7 +1071,13 @@ export default class RealmService extends Service {
         return self.canRead(url);
       },
       get canWrite() {
-        return self.canWrite(url);
+        // Field components consume this object independently from Code
+        // mode's editor chrome. Use the same stabilized decision as the
+        // editor so a session reset/re-auth window cannot briefly disable an
+        // already writable form while Monaco remains editable. The realm
+        // server is still authoritative for every write; once login settles,
+        // a revoked permission becomes read-only here as well.
+        return self.writability(url) === 'writable';
       },
     };
   };

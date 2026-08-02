@@ -14,8 +14,10 @@ import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import {
   CardContextName,
   GetCardContextName,
+  PermissionsContextName,
   rri,
   type getCard,
+  type Permissions,
 } from '@cardstack/runtime-common';
 
 import RealmSandboxTemplateIsland from '@cardstack/host/components/realm-sandbox-template-island';
@@ -42,13 +44,22 @@ interface RelationshipContextSignature {
       card: BaseDef;
       getCard: getCard;
       cardContext?: CardContext;
+      canWrite: () => boolean;
     };
   };
 }
 
+type RealmSandboxRelationshipContextValue = {
+  getCard: getCard;
+  cardContext?: CardContext;
+  canWrite: () => boolean;
+};
+
 class RealmSandboxRelationshipContext extends Modifier<RelationshipContextSignature> {
   @service declare private realmSandbox: RealmSandboxService;
   private unregister?: () => void;
+  private card?: BaseDef;
+  private context?: RealmSandboxRelationshipContextValue;
 
   constructor(owner: Owner, args: ArgsFor<RelationshipContextSignature>) {
     super(owner, args);
@@ -60,10 +71,22 @@ class RealmSandboxRelationshipContext extends Modifier<RelationshipContextSignat
     _positional: PositionalArgs<RelationshipContextSignature>,
     named: NamedArgs<RelationshipContextSignature>,
   ) {
+    if (this.card === named.card && this.context) {
+      this.context.getCard = named.getCard;
+      this.context.cardContext = named.cardContext;
+      this.context.canWrite = named.canWrite;
+      return;
+    }
     this.unregister?.();
+    this.card = named.card;
+    this.context = {
+      getCard: named.getCard,
+      cardContext: named.cardContext,
+      canWrite: named.canWrite,
+    };
     this.unregister = this.realmSandbox.registerRelationshipContext(
       named.card,
-      { getCard: named.getCard, cardContext: named.cardContext },
+      this.context,
     );
   }
 }
@@ -91,6 +114,13 @@ export default class RealmSandboxRender extends Component<Signature> {
     | CardContext
     | undefined;
   @consume(GetCardContextName) declare private getCard: getCard;
+  @consume(PermissionsContextName) declare private permissions:
+    | Permissions
+    | undefined;
+
+  // Permissions are a host capability, not ambient sandbox state. Keep the
+  // function stable while allowing the host provider's answer to change.
+  readonly canWrite = () => this.permissions?.canWrite === true;
 
   set = () => undefined;
 
@@ -228,6 +258,7 @@ export default class RealmSandboxRender extends Component<Signature> {
           card=@card
           getCard=this.getCard
           cardContext=this.cardContext
+          canWrite=this.canWrite
         }}
         {{RealmSandboxStyles @sandbox.styles}}
         {{RealmSandboxTemplateIsland

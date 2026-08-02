@@ -4662,9 +4662,26 @@ export function setCardFieldValue(
   instance: BaseDef,
   fieldName: string,
   value: unknown,
+  opts: { notify?: boolean } = {},
 ): void {
+  if (opts.notify === false) {
+    (instance as unknown as Record<string, unknown>)[fieldName] = value;
+    notifyCardTracking(instance);
+    return;
+  }
   let field = getField(instance, fieldName);
   if (field) {
+    // Opaque host records deliberately install inert own data properties over
+    // inherited Base fields. In that case an ordinary assignment cannot reach
+    // the prototype field setter, so preserve the explicit boundary's normal
+    // mutation notification contract here.
+    let ownDescriptor = Object.getOwnPropertyDescriptor(instance, fieldName);
+    if (ownDescriptor && 'value' in ownDescriptor) {
+      (instance as unknown as Record<string, unknown>)[fieldName] = value;
+      notifySubscribers(instance, fieldName, value);
+      notifyCardTracking(instance);
+      return;
+    }
     (instance as unknown as Record<string, unknown>)[fieldName] = value;
     return;
   }

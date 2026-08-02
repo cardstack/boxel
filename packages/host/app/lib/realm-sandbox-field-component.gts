@@ -1,19 +1,25 @@
 import { getOwner } from '@ember/application';
 import { registerDestructor } from '@ember/destroyable';
+import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import { scheduleOnce } from '@ember/runloop';
 import Component from '@glimmer/component';
 
+import { restartableTask } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
-import { consume, provide } from 'ember-provide-consume-context';
+import { provide } from 'ember-provide-consume-context';
 
+import { Button, IconButton } from '@cardstack/boxel-ui/components';
 import { and, eq } from '@cardstack/boxel-ui/helpers';
+import { IconMinusCircle } from '@cardstack/boxel-ui/icons';
 
 import {
+  baseCardRef,
   CardContextName,
+  chooseCard,
   GetCardContextName,
-  PermissionsContextName,
-  type Permissions,
+  identifyCard,
+  isCardInstance,
   type getCard,
 } from '@cardstack/runtime-common';
 
@@ -116,18 +122,6 @@ class DeferredRelationshipCard extends Modifier<DeferredRelationshipSignature> {
   }
 }
 
-class SandboxPermissionsConsumer extends Component<{
-  Blocks: { default: [boolean] };
-}> {
-  @consume(PermissionsContextName) declare permissions: Permissions | undefined;
-
-  get canWrite() {
-    return this.permissions?.canWrite === true;
-  }
-
-  <template>{{yield this.canWrite}}</template>
-}
-
 export default function realmSandboxFieldComponent(
   snapshot: () => Record<string, unknown>,
   fieldName: string,
@@ -182,20 +176,85 @@ export default function realmSandboxFieldComponent(
         return getRelationshipContext?.();
       }
 
+      get canWrite() {
+        return this.relationshipContext?.canWrite() === true;
+      }
+
+      get hasEntries() {
+        return this.entries.length > 0;
+      }
+
+      remove = () => {
+        setField?.(fieldName, fieldKind === 'linksToMany' ? [] : null);
+      };
+
+      add = () => this.chooseRelationship.perform();
+
+      private chooseRelationship = restartableTask(async () => {
+        let type = identifyCard(trustedFieldType) ?? baseCardRef;
+        let selected =
+          fieldKind === 'linksToMany'
+            ? await chooseCard({ filter: { type } }, { multiSelect: true })
+            : await chooseCard({ filter: { type } }, { multiSelect: false });
+        if (!selected) {
+          return;
+        }
+        let ids = Array.isArray(selected) ? selected : [selected];
+        let store = this.relationshipContext?.cardContext?.store;
+        if (!store) {
+          return;
+        }
+        let cards = await Promise.all(ids.map((id) => store.get(id)));
+        let values = cards.filter(isCardInstance);
+        setField?.(
+          fieldName,
+          fieldKind === 'linksToMany' ? values : (values[0] ?? null),
+        );
+      });
+
       <template>
-        {{#each this.entries as |entry|}}
-          {{#if this.relationshipContext}}
-            <div
-              class='realm-sandbox-delegated-relationship'
-              {{DeferredRelationshipCard
-                cardId=entry.id
-                format=this.format
-                resourceType=resourceType
-                relationshipContext=this.relationshipContext
-              }}
-            ></div>
+        <div
+          class='realm-sandbox-relationship-field'
+          data-test-links-to-editor={{fieldName}}
+        >
+          {{#if (and this.canWrite this.hasEntries)}}
+            <IconButton
+              @icon={{IconMinusCircle}}
+              @width='20px'
+              @height='20px'
+              aria-label='Remove'
+              data-test-remove-card
+              {{on 'click' this.remove}}
+            />
           {{/if}}
-        {{/each}}
+          {{#each this.entries as |entry|}}
+            {{#if this.relationshipContext}}
+              <div
+                class='realm-sandbox-delegated-relationship'
+                {{DeferredRelationshipCard
+                  cardId=entry.id
+                  format=this.format
+                  resourceType=resourceType
+                  relationshipContext=this.relationshipContext
+                }}
+              ></div>
+            {{/if}}
+          {{else}}
+            {{#if this.canWrite}}
+              <Button
+                @kind='secondary'
+                @size='tall'
+                @rectangular={{true}}
+                data-test-add-new={{fieldName}}
+                {{on 'click' this.add}}
+              >
+                Link
+              </Button>
+            {{else}}
+              - Empty -
+            {{/if}}
+          {{/each}}
+        </div>
       </template>
     } as unknown as BaseDefComponent;
   }
@@ -239,6 +298,10 @@ export default function realmSandboxFieldComponent(
         return components[this.format] ?? components.embedded;
       }
 
+      get canWrite() {
+        return getRelationshipContext?.()?.canWrite() === true;
+      }
+
       get values() {
         return this.isMany && Array.isArray(this.value)
           ? this.value
@@ -246,37 +309,35 @@ export default function realmSandboxFieldComponent(
       }
 
       <template>
-        <SandboxPermissionsConsumer as |canWrite|>
-          {{#if this.component}}
-            {{#if this.values}}
-              <div class='containsMany-field'>
-                {{#each this.values as |value|}}
-                  {{! @glint-ignore Trusted field templates receive only the inert subset of the ordinary field component signature. }}
-                  <this.component
-                    @cardOrField={{this.fieldType}}
-                    @model={{value}}
-                    @fields={{this.fields}}
-                    @format={{this.format}}
-                    @set={{this.set}}
-                    @fieldName={{this.fieldName}}
-                    @canEdit={{and canWrite (eq this.format 'edit')}}
-                  />
-                {{/each}}
-              </div>
-            {{else}}
-              {{! @glint-ignore Trusted field templates receive only the inert subset of the ordinary field component signature. }}
-              <this.component
-                @cardOrField={{this.fieldType}}
-                @model={{this.value}}
-                @fields={{this.fields}}
-                @format={{this.format}}
-                @set={{this.set}}
-                @fieldName={{this.fieldName}}
-                @canEdit={{and canWrite (eq this.format 'edit')}}
-              />
-            {{/if}}
+        {{#if this.component}}
+          {{#if this.values}}
+            <div class='containsMany-field'>
+              {{#each this.values as |value|}}
+                {{! @glint-ignore Trusted field templates receive only the inert subset of the ordinary field component signature. }}
+                <this.component
+                  @cardOrField={{this.fieldType}}
+                  @model={{value}}
+                  @fields={{this.fields}}
+                  @format={{this.format}}
+                  @set={{this.set}}
+                  @fieldName={{this.fieldName}}
+                  @canEdit={{and this.canWrite (eq this.format 'edit')}}
+                />
+              {{/each}}
+            </div>
+          {{else}}
+            {{! @glint-ignore Trusted field templates receive only the inert subset of the ordinary field component signature. }}
+            <this.component
+              @cardOrField={{this.fieldType}}
+              @model={{this.value}}
+              @fields={{this.fields}}
+              @format={{this.format}}
+              @set={{this.set}}
+              @fieldName={{this.fieldName}}
+              @canEdit={{and this.canWrite (eq this.format 'edit')}}
+            />
           {{/if}}
-        </SandboxPermissionsConsumer>
+        {{/if}}
       </template>
     } as unknown as BaseDefComponent;
   }

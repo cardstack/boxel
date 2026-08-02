@@ -57,6 +57,37 @@ module('Unit | realm sandbox acknowledgement', function (hooks) {
     service.releaseCodePreviewSandbox(sandbox);
   });
 
+  test('card JSON saves are never registered as module HMR acknowledgements', function (assert) {
+    let service = getService('realm-sandbox') as RealmSandboxService;
+    let sourceURL = 'https://realm.example/Article/one.json';
+    let source = JSON.stringify({
+      data: {
+        attributes: { title: 'Edited' },
+        meta: {
+          adoptsFrom: {
+            module: 'https://realm.example/article',
+            name: 'Article',
+          },
+        },
+      },
+    });
+    let sandbox = new CodePreviewSandbox();
+    service.publishCodePreviewSource(sandbox, sourceURL, source);
+
+    assert.strictEqual(
+      service.prepareVolatileModuleCommit(
+        sourceURL,
+        source,
+        'editor',
+        'editor:card-data',
+        new Set([sandbox]),
+      ),
+      undefined,
+      'data acknowledgements continue through Store reload/type-change handling',
+    );
+    service.releaseCodePreviewSandbox(sandbox);
+  });
+
   test('an external invalidation cannot overwrite an active local generation', function (assert) {
     let service = getService('realm-sandbox') as RealmSandboxService;
     let sourceURL = 'https://realm.example/article.gts';

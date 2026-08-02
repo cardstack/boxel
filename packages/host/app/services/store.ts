@@ -1086,10 +1086,17 @@ export default class StoreService extends Service implements StoreInterface {
       doc.data.meta = merge(doc.data.meta, patch.meta);
     }
     let api = await this.cardService.getAPI();
-    if (
-      !(await this.realmSandbox.updateOpaqueCardFromDocument(instance, doc))
-    ) {
+    let opaqueUpdate = await this.realmSandbox.updateOpaqueCardFromDocument(
+      instance,
+      doc,
+    );
+    if (opaqueUpdate === false) {
       await api.updateFromSerialized(instance, doc, this.store);
+    } else if (opaqueUpdate !== instance) {
+      await this.stopAutoSaving(instance);
+      instance = opaqueUpdate as T;
+      this.setIdentityContext(instance);
+      await this.startAutoSaving(instance);
     }
     let shouldPersist = !opts?.doNotPersist;
     let shouldAwaitPersist = shouldPersist && !opts?.doNotWaitForPersist;
@@ -3180,7 +3187,12 @@ export default class StoreService extends Service implements StoreInterface {
 
         // send doc over the wire with absolute URL's. The realm server will convert
         // to relative URL's as it serializes the cards
-        let realmURL = instance[realmURLSymbol];
+        // An explicit create/copy destination is authoritative. In
+        // particular, a sandboxed card can execute code from its source realm
+        // while its newly copied data belongs to another realm.
+        let realmURL = opts?.realm
+          ? new URL(opts.realm)
+          : instance[realmURLSymbol];
         // in the case where we get no realm URL from the card, we are dealing with
         // a new card instance that does not have a realm URL yet.
         if (!realmURL) {
@@ -3286,6 +3298,18 @@ export default class StoreService extends Service implements StoreInterface {
           `bug: server returned a non card document for ${instance.id}:
         ${JSON.stringify(incomingDoc, null, 2)}`,
         );
+      }
+
+      // User-realm records remain opaque during reloads too. This is also the
+      // safe type-change path: updateOpaqueCardFromDocument rebuilds exactly
+      // this facade when adoptsFrom changes, instead of importing either the
+      // old or new user-authored CardDef into the trusted Host loader.
+      let opaqueUpdate = await this.realmSandbox.updateOpaqueCardFromDocument(
+        instance,
+        incomingDoc,
+      );
+      if (opaqueUpdate !== false) {
+        return opaqueUpdate as CardDef;
       }
 
       // Scenario: a saved card instance changes its type — its JSON

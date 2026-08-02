@@ -133,13 +133,26 @@ export function serializeOpaqueRealmCard(
   let document = structuredClone(state.document);
   let attributes = document.data.attributes;
   if (attributes) {
+    let relationshipPaths = Object.keys(document.data.relationships ?? {});
     for (let name of Object.keys(attributes)) {
       if (!(name in value)) {
         continue;
       }
       let fieldValue = (value as unknown as Record<string, unknown>)[name];
       try {
-        attributes[name] = structuredClone(fieldValue) as never;
+        // A contains field can itself contain links (CardInfoField.theme is
+        // the common case). The live host projection holds the linked CardDef
+        // so trusted edit widgets can render it, but relationships belong in
+        // JSON:API `relationships`, never inside the cloned attribute value.
+        // Remove those paths before crossing the opaque JSON boundary.
+        attributes[name] = structuredClone(
+          omitOpaqueRelationshipPaths(
+            fieldValue,
+            relationshipPaths
+              .filter((path) => path.startsWith(`${name}.`))
+              .map((path) => path.slice(name.length + 1).split('.')),
+          ),
+        ) as never;
       } catch (error) {
         let detail = error instanceof Error ? `: ${error.message}` : '';
         throw new Error(
@@ -157,6 +170,33 @@ export function serializeOpaqueRealmCard(
     absolutizeOpaqueDocumentReferences(document);
   }
   return document;
+}
+
+function omitOpaqueRelationshipPaths(
+  value: unknown,
+  paths: string[][],
+): unknown {
+  if (paths.length === 0 || value == null || typeof value !== 'object') {
+    return value;
+  }
+  let result: Record<string, unknown> | unknown[] = Array.isArray(value)
+    ? [...value]
+    : { ...(value as Record<string, unknown>) };
+  for (let [head, ...tail] of paths) {
+    if (!head) {
+      continue;
+    }
+    if (tail.length === 0) {
+      delete (result as Record<string, unknown>)[head];
+      continue;
+    }
+    let child = (result as Record<string, unknown>)[head];
+    (result as Record<string, unknown>)[head] = omitOpaqueRelationshipPaths(
+      child,
+      [tail],
+    );
+  }
+  return result;
 }
 
 function absolutizeOpaqueDocumentReferences(

@@ -26,12 +26,14 @@ import {
   decodeScopedCSSRequest,
   delegatedCardRenderComponent,
   delegatedCardRenderComponentFor,
+  getField,
   hasExecutableExtension,
   type getCard,
   localId as localIdSymbol,
   meta,
   realmURL as realmURLSymbol,
   rri,
+  relativeReference,
 } from '@cardstack/runtime-common';
 
 import config from '@cardstack/host/config/environment';
@@ -120,6 +122,7 @@ export interface RealmSandboxRender {
 export interface RealmSandboxRelationshipContext {
   getCard: getCard;
   cardContext?: CardContext;
+  canWrite: () => boolean;
 }
 
 class StableRealmSandboxRender implements RealmSandboxRender {
@@ -733,6 +736,11 @@ export default class RealmSandboxService extends Service {
     BaseDef,
     RealmSandboxRelationshipContext
   >();
+  private relationshipContextRevisions = new WeakMap<
+    BaseDef,
+    ReactiveRevision
+  >();
+  private relationshipContextInitialized = new WeakSet<BaseDef>();
   private trustedFieldTypesByOpaqueType = new Map<
     string,
     Record<string, typeof BaseDef>
@@ -1040,7 +1048,7 @@ export default class RealmSandboxService extends Service {
     Object.defineProperty(snapshot, realmURLSymbol, {
       configurable: false,
       enumerable: false,
-      value: new URL(principal),
+      value: new URL(resource.meta.realmURL ?? principal),
     });
     let key = `${moduleIdentifier}|${typeName}`;
     let api = await this.cardService.getAPI();
@@ -1063,6 +1071,10 @@ export default class RealmSandboxService extends Service {
       let prefersWideFormat = metadata?.prefersWideFormat === true;
       fieldMetadata = metadata?.fields ?? {};
       trustedFieldTypes = await this.resolveTrustedFieldTypes(fieldMetadata);
+      // `cardInfo` is inherited from trusted Base and therefore may not be
+      // repeated in user-authored metadata. Preserve its concrete FieldDef so
+      // nested name/summary/theme/notes editors use the normal Base widgets.
+      trustedFieldTypes.cardInfo = api.CardInfoField;
       typeState = {
         typeRef: resolvedTypeRef,
         displayName,
@@ -1099,7 +1111,14 @@ export default class RealmSandboxService extends Service {
 
         get [realmURLSymbol]() {
           let state = getOpaqueRealmCardState(this);
-          return state ? new URL(state.principal) : undefined;
+          if (!state) {
+            return undefined;
+          }
+          // The sandbox principal answers "where may this card's code load
+          // from?"; it is not necessarily the realm that owns this data
+          // instance. Copies intentionally keep adopting code from the source
+          // realm while their JSON belongs to the selected target realm.
+          return new URL(state.document.data.meta.realmURL ?? state.principal);
         }
       };
       Object.defineProperty(OpaqueCard, 'icon', {
@@ -1217,7 +1236,7 @@ export default class RealmSandboxService extends Service {
   async updateOpaqueCardFromDocument(
     card: BaseDef,
     document: LooseSingleCardDocument,
-  ): Promise<boolean> {
+  ): Promise<BaseDef | false> {
     let state = getOpaqueRealmCardState(card);
     if (!state || !isResolvedCodeRef(state.typeRef)) {
       return false;
@@ -1228,6 +1247,33 @@ export default class RealmSandboxService extends Service {
       document.data.id,
       String(state.typeRef.module),
     );
+    let nextTypeRef = document.data.meta.adoptsFrom;
+    if (!isResolvedCodeRef(nextTypeRef)) {
+      return false;
+    }
+    let nextModuleIdentifier = new URL(
+      this.network.resolveImport(String(nextTypeRef.module)),
+      relativeURL,
+    ).href;
+    let currentModuleIdentifier = this.network.virtualNetwork.toURL(
+      state.typeRef.module,
+    ).href;
+    if (
+      currentModuleIdentifier !== nextModuleIdentifier ||
+      String(state.typeRef.name) !== String(nextTypeRef.name)
+    ) {
+      // A CardDef's class is fixed at construction. Re-pointing adoptsFrom is
+      // therefore the one data edit that cannot preserve the opaque record
+      // object itself. Rebuild only this record, retain its local identity,
+      // and let Store replace the canonical remote-id entry; every unrelated
+      // sandbox runtime, loader, stylesheet, and rendered island stays live.
+      return await this.createOpaqueCard(
+        document.data,
+        document.data.id ? rri(document.data.id) : relativeURL,
+        document,
+        (card as BaseDef & { [localIdSymbol]: string })[localIdSymbol],
+      );
+    }
     let previousSnapshot = state.snapshot;
     let nextSnapshot = this.snapshotFromResource(
       document.data,
@@ -1237,7 +1283,7 @@ export default class RealmSandboxService extends Service {
     Object.defineProperty(nextSnapshot, realmURLSymbol, {
       configurable: false,
       enumerable: false,
-      value: new URL(state.principal),
+      value: new URL(document.data.meta.realmURL ?? state.principal),
     });
     state.document = structuredClone(document);
     state.snapshot = nextSnapshot;
@@ -1251,10 +1297,15 @@ export default class RealmSandboxService extends Service {
       if (fieldName === 'id') {
         continue;
       }
-      api.setCardFieldValue(card, fieldName, nextSnapshot[fieldName]);
+      // This is a server/index acknowledgement, not a new local edit. Update
+      // the opaque projection without feeding the autosave subscriber back
+      // into another persist cycle.
+      api.setCardFieldValue(card, fieldName, nextSnapshot[fieldName], {
+        notify: false,
+      });
     }
     this.bumpOpaqueData(card);
-    return true;
+    return card;
   }
 
   renderFor(
@@ -1398,6 +1449,14 @@ export default class RealmSandboxService extends Service {
     context: RealmSandboxRelationshipContext,
   ): () => void {
     this.relationshipContexts.set(card, context);
+    let revision = this.relationshipContextRevisionFor(card);
+    // The field island can render once before this host modifier registers.
+    // Wake it exactly once. Subsequent modifier lifecycles already occur as
+    // part of another render and must not recursively schedule a new render.
+    if (!this.relationshipContextInitialized.has(card)) {
+      this.relationshipContextInitialized.add(card);
+      scheduleOnce('afterRender', revision, revision.bump);
+    }
     return () => {
       if (this.relationshipContexts.get(card) === context) {
         this.relationshipContexts.delete(card);
@@ -2525,6 +2584,7 @@ export default class RealmSandboxService extends Service {
     saveType: SaveType,
   ): PreparedCodePreviewCommit | undefined {
     if (
+      !hasExecutableExtension(sourceURL) ||
       (saveType !== 'editor' && saveType !== 'editor-with-instance') ||
       !codePreviewSandbox.matchesVolatileDraft(sourceURL, source)
     ) {
@@ -2548,9 +2608,10 @@ export default class RealmSandboxService extends Service {
     candidateSandboxes?: Set<CodePreviewSandbox>,
   ): PreparedCodePreviewCommit | undefined {
     if (
-      saveType !== 'editor' &&
-      saveType !== 'editor-with-instance' &&
-      saveType !== 'bot-patch'
+      !hasExecutableExtension(sourceURL) ||
+      (saveType !== 'editor' &&
+        saveType !== 'editor-with-instance' &&
+        saveType !== 'bot-patch')
     ) {
       return undefined;
     }
@@ -3893,6 +3954,7 @@ export default class RealmSandboxService extends Service {
       return cached;
     }
     let fields: Record<string, BaseDefComponent> = {};
+    let contextualFields: Record<string, BaseDefComponent> = {};
     let typeKey = this.opaqueTypeKeyFor(card);
     let trustedFieldTypes =
       (typeKey ? this.trustedFieldTypesByOpaqueType.get(typeKey) : undefined) ??
@@ -3921,7 +3983,7 @@ export default class RealmSandboxService extends Service {
           format,
           fieldMetadata[name]?.kind,
           getOpaqueRealmCardState(card)?.setField,
-          () => this.relationshipContexts.get(card),
+          () => this.relationshipContextFor(card),
         );
       }
     }
@@ -3933,6 +3995,46 @@ export default class RealmSandboxService extends Service {
     ) {
       let cardInfoFields = fields.cardInfo as BaseDefComponent &
         Record<string, BaseDefComponent>;
+      let cardInfoFieldType = trustedFieldTypes.cardInfo;
+      let nestedComponents: Record<string, BaseDefComponent> = {};
+      let setCardInfoField = (name: string, value: unknown) => {
+        let state = getOpaqueRealmCardState(card);
+        let current = snapshot().cardInfo;
+        let next = {
+          ...(typeof current === 'object' && current !== null
+            ? (current as Record<string, unknown>)
+            : {}),
+          [name]: value,
+        };
+        if (state) {
+          let nestedField = cardInfoFieldType
+            ? getField(cardInfoFieldType, name)
+            : undefined;
+          if (nestedField?.fieldType === 'linksTo') {
+            let id =
+              value && typeof value === 'object' && 'id' in value
+                ? (value as { id?: unknown }).id
+                : undefined;
+            let reference =
+              typeof id === 'string'
+                ? (relativeReference(
+                    this.network.virtualNetwork.toURL(rri(id)),
+                    this.network.virtualNetwork.toURL(
+                      rri(state.document.data.id ?? state.principal),
+                    ),
+                    new URL(
+                      state.document.data.meta.realmURL ?? state.principal,
+                    ),
+                  ) ?? id)
+                : null;
+            state.document.data.relationships ??= {};
+            state.document.data.relationships[`cardInfo.${name}`] = {
+              links: { self: reference },
+            };
+          }
+        }
+        state?.setField?.('cardInfo', next);
+      };
       for (let name of [
         'name',
         'summary',
@@ -3940,21 +4042,93 @@ export default class RealmSandboxService extends Service {
         'theme',
         'notes',
       ]) {
-        Object.defineProperty(cardInfoFields, name, {
-          configurable: true,
-          value: realmSandboxFieldComponent(
-            () => {
-              let value = snapshot().cardInfo;
-              return typeof value === 'object' && value !== null
-                ? (value as Record<string, unknown>)
-                : {};
-            },
-            name,
-            undefined,
-            format,
-          ),
-        });
+        let nestedField = cardInfoFieldType
+          ? getField(cardInfoFieldType, name)
+          : undefined;
+        nestedComponents[name] = realmSandboxFieldComponent(
+          () => {
+            let value = snapshot().cardInfo;
+            return typeof value === 'object' && value !== null
+              ? (value as Record<string, unknown>)
+              : {};
+          },
+          name,
+          nestedField?.card,
+          format,
+          nestedField?.fieldType,
+          setCardInfoField,
+          () => this.relationshipContextFor(card),
+        );
+        contextualFields[`cardInfo.${name}`] = nestedComponents[name]!;
       }
+      // Match Base's contextual-field contract. Glimmer resolves
+      // `<@fields.cardInfo.theme />` through the component proxy, while the
+      // prototype hook preserves the template belonging to the cardInfo field
+      // component itself.
+      fields.cardInfo = new Proxy(cardInfoFields, {
+        get(target, property, receiver) {
+          if (typeof property === 'string' && nestedComponents[property]) {
+            return nestedComponents[property];
+          }
+          return Reflect.get(target, property, receiver);
+        },
+        getPrototypeOf() {
+          return cardInfoFields;
+        },
+        ownKeys(target) {
+          return [
+            ...new Set([
+              ...Reflect.ownKeys(target),
+              ...Object.keys(nestedComponents),
+            ]),
+          ];
+        },
+        getOwnPropertyDescriptor(target, property) {
+          if (typeof property === 'string' && nestedComponents[property]) {
+            return {
+              configurable: true,
+              enumerable: true,
+              writable: false,
+              value: nestedComponents[property],
+            };
+          }
+          return Reflect.getOwnPropertyDescriptor(target, property);
+        },
+      });
+    }
+    // Ember's contextual-component path resolver may ask the outer fields
+    // object for a dotted path in one operation. Base's ordinary field proxy
+    // supports that shape through `getField(model, property)`; mirror it for
+    // opaque records so both segmented and dotted resolution are explicit.
+    if (Object.keys(contextualFields).length > 0) {
+      let target = fields;
+      fields = new Proxy(target, {
+        get(target, property, receiver) {
+          if (typeof property === 'string' && contextualFields[property]) {
+            return contextualFields[property];
+          }
+          return Reflect.get(target, property, receiver);
+        },
+        ownKeys(target) {
+          return [
+            ...new Set([
+              ...Reflect.ownKeys(target),
+              ...Object.keys(contextualFields),
+            ]),
+          ];
+        },
+        getOwnPropertyDescriptor(target, property) {
+          if (typeof property === 'string' && contextualFields[property]) {
+            return {
+              configurable: true,
+              enumerable: true,
+              writable: false,
+              value: contextualFields[property],
+            };
+          }
+          return Reflect.getOwnPropertyDescriptor(target, property);
+        },
+      });
     }
     if (!componentsByFormat) {
       componentsByFormat = new Map();
@@ -4047,6 +4221,22 @@ export default class RealmSandboxService extends Service {
       this.opaqueDataRevisions.set(card, revision);
     }
     return revision;
+  }
+
+  private relationshipContextRevisionFor(card: BaseDef): ReactiveRevision {
+    let revision = this.relationshipContextRevisions.get(card);
+    if (!revision) {
+      revision = new ReactiveRevision();
+      this.relationshipContextRevisions.set(card, revision);
+    }
+    return revision;
+  }
+
+  private relationshipContextFor(
+    card: BaseDef,
+  ): RealmSandboxRelationshipContext | undefined {
+    this.relationshipContextRevisionFor(card).consume();
+    return this.relationshipContexts.get(card);
   }
 
   private bumpOpaqueData(card: BaseDef) {
