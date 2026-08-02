@@ -214,11 +214,12 @@ module('Unit | realm sandbox boundary', function () {
       id: 'https://realm.example/Theme/starry-night',
       hostCapability: () => 'must not cross the JSON boundary',
     };
+    let rawCardInfo = {
+      name: 'Edited title',
+      theme: linkedTheme,
+    };
     let card = {
-      cardInfo: {
-        name: 'Edited title',
-        theme: linkedTheme,
-      },
+      cardInfo: new Proxy(rawCardInfo, {}),
     } as unknown as BaseDef;
     Object.defineProperty(card, opaqueRealmCardState, {
       value: {
@@ -250,10 +251,7 @@ module('Unit | realm sandbox boundary', function () {
           },
         },
         snapshot: {
-          cardInfo: {
-            name: 'Original title',
-            theme: linkedTheme,
-          },
+          cardInfo: rawCardInfo,
         },
         presentation: {
           headerColor: null,

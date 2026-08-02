@@ -143,6 +143,19 @@ export function serializeOpaqueRealmCard(
         continue;
       }
       let fieldValue = (value as unknown as Record<string, unknown>)[name];
+      let snapshotValue = state.snapshot[name];
+      // Object-valued fields are exposed to trusted Host widgets through a
+      // reactive Proxy. The proxy mutates this raw snapshot in place, but a
+      // Proxy itself cannot cross structuredClone. Serialize the synchronized
+      // raw value while keeping primitive/replacement edits on the public
+      // field fail-closed below.
+      let serializableValue =
+        fieldValue !== null &&
+        typeof fieldValue === 'object' &&
+        snapshotValue !== null &&
+        typeof snapshotValue === 'object'
+          ? snapshotValue
+          : fieldValue;
       try {
         // A contains field can itself contain links (CardInfoField.theme is
         // the common case). The live host projection holds the linked CardDef
@@ -151,7 +164,7 @@ export function serializeOpaqueRealmCard(
         // Remove those paths before crossing the opaque JSON boundary.
         attributes[name] = structuredClone(
           omitOpaqueRelationshipPaths(
-            fieldValue,
+            serializableValue,
             relationshipPaths
               .filter((path) => path.startsWith(`${name}.`))
               .map((path) => path.slice(name.length + 1).split('.')),
