@@ -358,13 +358,12 @@ export default class LoaderService extends Service {
       return this.allLoaders();
     }
 
-    let loaders = [this.loader];
-    for (let [realmURL, loader] of this.realmLoaders) {
-      if (resolved.startsWith(realmURL)) {
-        loaders.push(loader);
-      }
-    }
-    return loaders;
+    // A trusted-realm loader may import a readable dependency from a different
+    // realm. Realm ownership therefore cannot identify every consumer. Ask
+    // each non-Base loader to invalidate its already-known dependency closure;
+    // unrelated loaders retain their object and every unrelated module, while
+    // cross-realm importers cannot keep a stale evaluation alive.
+    return [this.loader, ...this.realmLoaders.values()];
   }
 
   private clearSessionCaches() {

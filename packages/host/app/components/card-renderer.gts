@@ -192,6 +192,7 @@ export default class CardRenderer extends Component<Signature> {
     return this.realmSandbox.renderFor(this.args.card, this.args.format, {
       useBaseTemplate: this.useTrustedBaseTemplate,
       codePreviewSandbox: this.effectiveCodePreviewSandbox,
+      codeRef: this.args.codeRef,
     });
   }
 

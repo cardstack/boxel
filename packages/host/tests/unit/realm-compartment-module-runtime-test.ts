@@ -257,6 +257,22 @@ module('Unit | realm compartment module runtime', function () {
     );
   });
 
+  test('does not mint a trusted facade for a traversal-shaped package import', async function (assert) {
+    let moduleID = `${MODULE_ID}?trusted-traversal`;
+    let source = `
+      import { CardDef } from 'https://cardstack.com/base/card-api';
+      import { HostAuthority } from '@cardstack/base/../attacker/evil.gts';
+      export class ArticleCard extends CardDef { static isolated = HostAuthority; }
+    `;
+    let runtime = runtimeFor({ [moduleID]: source });
+
+    await assert.rejects(
+      runtime.evaluateTemplate(moduleID, 'ArticleCard', 'isolated'),
+      /403|not granted|Failed to load module/,
+      'the traversal is fetched through the confined module graph and fails instead of becoming a trusted-export token',
+    );
+  });
+
   test('bridges only JSON component state and getter results', async function (assert) {
     let moduleID = `${MODULE_ID}?component-state`;
     let source = `

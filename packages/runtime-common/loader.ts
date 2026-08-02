@@ -1160,6 +1160,15 @@ export class Loader {
     try {
       loaded = await this.load(moduleURL);
     } catch (exception) {
+      // invalidateModule() may have removed this fetch (and a later import may
+      // already have installed a new one) while the transport was in flight.
+      // The fetching object is the epoch token: a stale failure must neither
+      // delete the newer entry nor reject an import that can advance through
+      // that newer generation.
+      if (this.getModule(moduleIdentifier) !== module) {
+        module.deferred.fulfill();
+        return;
+      }
       // A failure to OBTAIN the module — a network failure or an error
       // HTTP response — is never cached as `broken`. The modules map keys
       // entries by the extension-trimmed identifier (see
@@ -1178,6 +1187,15 @@ export class Loader {
       this.modules.delete(this.moduleCacheKey(moduleIdentifier));
       module.deferred.fulfill();
       throw exception;
+    }
+
+    // The response belongs only to the exact fetching entry that initiated
+    // it. If invalidation replaced that entry during the await, discard this
+    // response before it can restore stale source, shims, canonical URLs, or
+    // dependency edges into the Loader.
+    if (this.getModule(moduleIdentifier) !== module) {
+      module.deferred.fulfill();
+      return;
     }
 
     let canonicalURL =
@@ -1284,7 +1302,9 @@ export class Loader {
     let moduleProxy = this.readOnlyProxy(privateModuleInstance);
     let consumedModules = new Set(
       flatMap(module.dependencies, (dep) =>
-        dep.type === 'dep' ? [dep.moduleURL.href] : [],
+        dep.type === 'dep' || dep.type === 'completing-dep'
+          ? [dep.moduleURL.href]
+          : [],
       ),
     );
 

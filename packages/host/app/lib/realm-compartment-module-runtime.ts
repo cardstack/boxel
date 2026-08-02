@@ -113,7 +113,7 @@ export interface RealmCompartmentRuntimeOptions {
   decoratorRuntime?: unknown;
   documentFacade?: object;
   mathFacade?: object;
-  isTrustedImport?: (moduleIdentifier: string) => boolean;
+  isTrustedImport?: (moduleIdentifier: string) => boolean | string;
 }
 
 const lockdownMarker = Symbol.for('boxel.realm-compartment.lockdown');
@@ -168,7 +168,7 @@ export default class RealmCompartmentModuleRuntime {
   private moduleEvaluator: ReturnType<
     typeof createRealmSandboxCompartment
   >['moduleEvaluator'];
-  private isTrustedImport: (moduleIdentifier: string) => boolean;
+  private isTrustedImport: (moduleIdentifier: string) => boolean | string;
 
   readonly ambientReport: CompartmentAmbientReport;
 
@@ -406,13 +406,14 @@ export default class RealmCompartmentModuleRuntime {
         if (!this.loader.isModuleLoaded(stylesheet)) {
           this.loader.shimModule(stylesheet, {});
         }
-      } else if (
-        this.isTrustedImport(dependency) &&
-        !this.loader.isModuleLoaded(dependency)
-      ) {
+      } else {
+        let trustedIdentity = this.trustedImportIdentity(dependency);
+        if (!trustedIdentity || this.loader.isModuleLoaded(dependency)) {
+          continue;
+        }
         this.loader.shimModule(
           dependency,
-          this.trustedModuleFacade(dependency),
+          this.trustedModuleFacade(trustedIdentity),
         );
       }
     }
@@ -430,6 +431,15 @@ export default class RealmCompartmentModuleRuntime {
         }
       },
     };
+  }
+
+  private trustedImportIdentity(moduleIdentifier: string): string | undefined {
+    let result = this.isTrustedImport(moduleIdentifier);
+    return typeof result === 'string'
+      ? result
+      : result
+        ? moduleIdentifier
+        : undefined;
   }
 
   private async importCardType(
@@ -898,6 +908,19 @@ export default class RealmCompartmentModuleRuntime {
 }
 
 function defaultTrustedImport(moduleIdentifier: string): boolean {
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(moduleIdentifier).split('\\').join('/');
+  } catch {
+    return false;
+  }
+  if (
+    decoded
+      .split(/[/?#]/)
+      .some((segment) => segment === '.' || segment === '..')
+  ) {
+    return false;
+  }
   return (
     moduleIdentifier === '@ember/object' ||
     moduleIdentifier === '@ember/helper' ||

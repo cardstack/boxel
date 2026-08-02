@@ -206,4 +206,84 @@ module('Unit | loader custom evaluator', function () {
       loader.dispose();
     }
   });
+
+  test('does not let an invalidated in-flight fetch restore stale source', async function (assert) {
+    let url = 'https://sandbox.test/value.js';
+    let resolveStaleFetch!: (response: Response) => void;
+    let fetchCount = 0;
+    let loader = new Loader(async () => {
+      fetchCount++;
+      if (fetchCount === 1) {
+        return await new Promise<Response>((resolve) => {
+          resolveStaleFetch = resolve;
+        });
+      }
+      return new Response(`export const value = 'fresh';`, {
+        headers: { 'content-type': 'text/javascript' },
+      });
+    });
+
+    try {
+      let staleImport = loader.import<{ value: string }>(url);
+      await Promise.resolve();
+      assert.strictEqual(
+        loader.invalidateModule(url),
+        1,
+        'the fetching generation was invalidated',
+      );
+
+      let fresh = await loader.import<{ value: string }>(url);
+      resolveStaleFetch(
+        new Response(`export const value = 'stale';`, {
+          headers: { 'content-type': 'text/javascript' },
+        }),
+      );
+      let staleCaller = await staleImport;
+
+      assert.strictEqual(fresh.value, 'fresh');
+      assert.strictEqual(
+        staleCaller,
+        fresh,
+        'the original caller advances through the replacement generation',
+      );
+      assert.strictEqual(
+        await loader.import(url),
+        fresh,
+        'the stale response never repopulates the cache',
+      );
+      assert.strictEqual(fetchCount, 2);
+    } finally {
+      loader.dispose();
+    }
+  });
+
+  test('retains reverse invalidation edges across a cyclic module graph', async function (assert) {
+    let sources = new Map([
+      ['https://sandbox.test/a.js', `import './b.js'; export const a = 'a';`],
+      ['https://sandbox.test/b.js', `import './a.js'; export const b = 'b';`],
+    ]);
+    let loader = new Loader(async (input) => {
+      let url = input instanceof Request ? input.url : String(input);
+      let source = sources.get(url);
+      return source == null
+        ? new Response('not found', { status: 404 })
+        : new Response(source, {
+            headers: { 'content-type': 'text/javascript' },
+          });
+    });
+
+    try {
+      await loader.import('https://sandbox.test/a.js');
+
+      assert.strictEqual(
+        loader.invalidateModule('https://sandbox.test/a.js'),
+        2,
+        'both sides of the cycle are invalidated',
+      );
+      assert.false(loader.isModuleLoaded('https://sandbox.test/a.js'));
+      assert.false(loader.isModuleLoaded('https://sandbox.test/b.js'));
+    } finally {
+      loader.dispose();
+    }
+  });
 });

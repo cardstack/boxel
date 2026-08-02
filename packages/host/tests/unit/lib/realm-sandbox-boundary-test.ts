@@ -127,4 +127,36 @@ module('Unit | realm sandbox boundary', function () {
       'the canonical realm id comes from the opaque document, not executable object state',
     );
   });
+
+  test('host persistence fails closed for a non-serializable edited field', function (assert) {
+    let card = {
+      title: () => 'host capability',
+    } as unknown as BaseDef;
+    Object.defineProperty(card, opaqueRealmCardState, {
+      value: {
+        typeRef: {
+          module: 'https://realm.example/article',
+          name: 'Article',
+        } as ResolvedCodeRef,
+        principal: 'https://realm.example/',
+        document: {
+          data: {
+            type: 'card',
+            attributes: { title: 'Last serializable title' },
+          },
+        },
+        snapshot: { title: 'Last serializable title' },
+        presentation: {
+          headerColor: null,
+          prefersWideFormat: false,
+        },
+      },
+    });
+
+    assert.throws(
+      () => serializeOpaqueRealmCard(card),
+      /Cannot serialize sandboxed card field "title"/,
+      'a failed edit cannot silently preserve and save stale field data',
+    );
+  });
 });

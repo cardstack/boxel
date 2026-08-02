@@ -712,9 +712,9 @@ class _FileResource extends Resource<Args> {
       // Capture before saveSource invalidates this module and its known
       // dependants in place.
       let moduleWasLoaded =
-        opts?.flushLoader && this.loaderService.isModuleLoaded(this._url);
+        opts?.flushLoader && this.loaderService.isModuleLoaded(state.url);
       let response = await this.cardService.saveSource(
-        new URL(this._url),
+        new URL(state.url),
         content,
         opts?.saveType ?? 'editor',
         {
@@ -733,11 +733,11 @@ class _FileResource extends Resource<Args> {
       // belongs here: a write to a module nothing imported has no rendered
       // consumers to refresh.
       if (moduleWasLoaded && !opts?.deferStoreRefresh?.()) {
-        if (this.realmSandbox.isSandboxedUserModule(this._url)) {
+        if (this.realmSandbox.isSandboxedUserModule(state.url)) {
           // User CardDefs are opaque Store records. Their data identity does
           // not depend on the executable class generation, so update only the
           // canonical SES module/template cache.
-          this.realmSandbox.invalidateCanonicalSandboxModule(this._url);
+          this.realmSandbox.invalidateCanonicalSandboxModule(state.url);
         } else {
           this.store.refreshReferencesForCodeChange('trusted file write', {
             triggerModule: this._url,

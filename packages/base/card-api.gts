@@ -27,6 +27,7 @@ import {
   baseRef,
   CardContextName,
   delegatedCardRenderComponent,
+  delegatedCardRenderComponentFor,
   CardError,
   CodeRef,
   ToolContext,
@@ -4729,6 +4730,16 @@ export function getComponent(
   // Base features such as Markdown card embeds to delegate rendering without
   // importing or introspecting user code in the host loader.
   if (!field) {
+    let delegatedFor = (
+      model as BaseDef & {
+        [delegatedCardRenderComponentFor]?: (
+          componentCodeRef?: CodeRef,
+        ) => BoxComponent;
+      }
+    )[delegatedCardRenderComponentFor];
+    if (delegatedFor) {
+      return delegatedFor(opts?.componentCodeRef);
+    }
     let delegated = (
       model as BaseDef & {
         [delegatedCardRenderComponent]?: BoxComponent;

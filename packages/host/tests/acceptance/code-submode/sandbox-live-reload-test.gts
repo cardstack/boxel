@@ -81,6 +81,12 @@ const repairedLivePreviewSource = livePreviewSource.replace(
   'VERSION TWO',
 );
 
+const wideLivePreviewSource = livePreviewSource.replace(
+  'export class LivePreview extends CardDef {',
+  `export class LivePreview extends CardDef {
+  static prefersWideFormat = true;`,
+);
+
 function typeAtEndOfMarker(marker: string, text: string) {
   let monaco = getService('monaco-service') as MonacoService;
   let editor = monaco.editor;
@@ -343,10 +349,29 @@ module('Acceptance | code submode | sandbox live reload', function (hooks) {
         )!;
         let stableBoundary = frameBoundary.querySelector('iframe')!;
         stablePreviewNode = stableBoundary;
-        let initialRevision = Number(
+        let initialPublishedRevision = Number(
           frameBoundary.getAttribute('data-card-sandbox-draft-revision'),
         );
-        assert.ok(initialRevision >= 0, 'initial draft was published');
+        assert.ok(initialPublishedRevision >= 0, 'initial draft was published');
+        await waitUntil(
+          () =>
+            Number(
+              document
+                .querySelector(
+                  '[data-card-sandbox-code-preview-loader="dedicated"]',
+                )
+                ?.getAttribute('data-card-sandbox-applied-draft-revision'),
+            ) >= initialPublishedRevision,
+        );
+        let initialAppliedRevision = Number(
+          frameBoundary.getAttribute(
+            'data-card-sandbox-applied-draft-revision',
+          ),
+        );
+        assert.ok(
+          initialAppliedRevision >= initialPublishedRevision,
+          'the child confirmed the initial draft generation',
+        );
 
         previewLoadingAppeared = false;
 
@@ -357,8 +382,11 @@ module('Acceptance | code submode | sandbox live reload', function (hooks) {
             '[data-card-sandbox-code-preview-loader="dedicated"]',
           );
           return (
-            Number(boundary?.getAttribute('data-card-sandbox-draft-revision')) >
-            initialRevision
+            Number(
+              boundary?.getAttribute(
+                'data-card-sandbox-applied-draft-revision',
+              ),
+            ) > initialAppliedRevision
           );
         });
         frameBoundary = document.querySelector(
@@ -409,6 +437,64 @@ module('Acceptance | code submode | sandbox live reload', function (hooks) {
       );
     });
   }
+
+  test('[HMR-02] opaque presentation metadata follows the current valid draft before persistence', async function (assert) {
+    let environment = getService('environment-service') as EnvironmentService;
+    environment.autoSaveDelayMs = 1_000;
+    setPlaygroundSelections({
+      [`${testRealmURL}live-preview-compartment/LivePreview`]: {
+        cardId: rri(`${testRealmURL}LivePreview/sample`),
+        format: 'isolated',
+      },
+    });
+
+    await visitOperatorMode({
+      stacks: [],
+      submode: 'code',
+      codePath: `${testRealmURL}live-preview-compartment.gts`,
+      codeSelection: 'LivePreview',
+      moduleInspector: 'preview',
+      cardPreviewFormat: 'isolated',
+    });
+
+    await waitFor('[data-test-editor]');
+    await waitFor('[data-test-live-preview]');
+    let realmSandbox = getService('realm-sandbox') as RealmSandboxService;
+    let initialCommitCount =
+      realmSandbox.metricsSnapshot().codePreviewCommitsPrepared;
+    assert
+      .dom('[data-test-playground-panel] .playground-panel-content')
+      .hasAttribute('style', 'max-width: 50rem;');
+
+    setMonacoContent(wideLivePreviewSource);
+
+    await waitUntil(
+      () =>
+        document
+          .querySelector(
+            '[data-test-playground-panel] .playground-panel-content',
+          )
+          ?.getAttribute('style') === 'max-width: 100%;',
+    );
+    assert.strictEqual(
+      realmSandbox.metricsSnapshot().codePreviewCommitsPrepared,
+      initialCommitCount,
+      'the explicit metadata boundary updates from the local draft without waiting for save/index acknowledgement',
+    );
+    assert
+      .dom('[data-test-live-preview]')
+      .hasText('VERSION ONE', 'the authored preview stays mounted');
+
+    setMonacoContent(livePreviewSource);
+    await waitUntil(
+      () =>
+        document
+          .querySelector(
+            '[data-test-playground-panel] .playground-panel-content',
+          )
+          ?.getAttribute('style') === 'max-width: 50rem;',
+    );
+  });
 
   test('[NAV-07][IFR-01][IFR-02] two SES format islands stay warm and iframe format updates keep the child document', async function (assert) {
     setPlaygroundSelections({

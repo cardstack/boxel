@@ -121,9 +121,11 @@ export function serializeOpaqueRealmCard(
       let fieldValue = (value as unknown as Record<string, unknown>)[name];
       try {
         attributes[name] = structuredClone(fieldValue) as never;
-      } catch {
-        // Host capabilities and other non-cloneable values never cross the
-        // opaque JSON boundary. Preserve the last serializable value instead.
+      } catch (error) {
+        let detail = error instanceof Error ? `: ${error.message}` : '';
+        throw new Error(
+          `Cannot serialize sandboxed card field "${name}" across the opaque JSON boundary${detail}`,
+        );
       }
     }
   }

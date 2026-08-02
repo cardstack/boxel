@@ -20,6 +20,10 @@ const sources = new Map([
   ],
   [`${userRealmURL}c.js`, `export const c = 'c';`],
   [`${userRealmURL}unrelated.js`, `export const value = 'unrelated';`],
+  [
+    `${trustedRealmURL}entry.js`,
+    `import { c } from '${userRealmURL}c.js'; export const value = 'trusted-' + c;`,
+  ],
 ]);
 
 module('Unit | service | loader targeted invalidation', function (hooks) {
@@ -100,6 +104,40 @@ module('Unit | service | loader targeted invalidation', function (hooks) {
     assert.false(
       loaderService.wasModuleFlushedForCodeChange(`${userRealmURL}c.js`),
       'the matching realm acknowledgement consumes only that generation',
+    );
+  });
+
+  test('[LDR-02] user source invalidation reaches cross-realm importers without replacing their loader', async function (assert) {
+    let loaderService = getService('loader-service');
+    let trustedLoader = loaderService.loaderForTrustedRealm(trustedRealmURL);
+    let baseLoader = loaderService.baseLoader;
+
+    let first = await trustedLoader.import<{ value: string }>(
+      `${trustedRealmURL}entry.js`,
+    );
+    assert.strictEqual(first.value, 'trusted-c');
+
+    loaderService.invalidateModule(`${userRealmURL}c.js`, {
+      codeChange: true,
+    });
+
+    assert.strictEqual(
+      loaderService.loaderForTrustedRealm(trustedRealmURL),
+      trustedLoader,
+      'the trusted loader identity remains warm',
+    );
+    assert.strictEqual(
+      loaderService.baseLoader,
+      baseLoader,
+      'Base remains outside user-realm invalidation',
+    );
+    assert.false(
+      trustedLoader.isModuleLoaded(`${trustedRealmURL}entry.js`),
+      'the cross-realm importer was evicted through its dependency graph',
+    );
+    assert.false(
+      trustedLoader.isModuleLoaded(`${userRealmURL}c.js`),
+      'the changed dependency was evicted from the trusted-realm loader',
     );
   });
 });

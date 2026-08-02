@@ -10,6 +10,8 @@ import {
   DefaultFormatsContextName,
 } from '@cardstack/runtime-common';
 
+import type { CodeRef } from '@cardstack/runtime-common';
+
 import RealmSandboxIframe from '@cardstack/host/components/realm-sandbox-iframe';
 import RealmSandboxRender from '@cardstack/host/components/realm-sandbox-render';
 import { CodePreviewSandboxContextName } from '@cardstack/host/lib/code-preview-sandbox';
@@ -27,6 +29,7 @@ interface Signature {
   Element: HTMLElement;
   Args: {
     card: BaseDef;
+    codeRef?: CodeRef;
     format?: Format;
     displayContainer?: boolean;
   };
@@ -51,6 +54,7 @@ export default class RealmSandboxDelegatedRender extends Component<Signature> {
   get sandboxRender() {
     return this.realmSandbox.renderFor(this.args.card, this.effectiveFormat, {
       codePreviewSandbox: this.codePreviewSandbox,
+      codeRef: this.args.codeRef,
     });
   }
 
@@ -67,6 +71,7 @@ export default class RealmSandboxDelegatedRender extends Component<Signature> {
       this.effectiveFormat,
       {
         displayContainer: this.args.displayContainer,
+        codeRef: this.args.codeRef,
         codePreviewSandbox: this.codePreviewSandbox,
       },
     );

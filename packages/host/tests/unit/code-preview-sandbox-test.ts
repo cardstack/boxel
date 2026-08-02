@@ -223,6 +223,29 @@ module('Unit | code preview sandbox', function () {
     assert.strictEqual(sandbox.generationState.lastKnownGoodRevision, 2);
   });
 
+  test('a persistence failure is visible without discarding the local draft', function (assert) {
+    let sandbox = new CodePreviewSandbox();
+    sandbox.update('https://realm.example/card.gts', 'LOCAL VERSION');
+    let draft = sandbox.draft!;
+    sandbox.markRendered(draft);
+
+    sandbox.markCommitPrepared(draft, 'save-failed');
+    sandbox.markCommitFailed(draft, 'save-failed', 'Realm write denied');
+
+    assert.strictEqual(
+      sandbox.draft,
+      draft,
+      'the recoverable source stays open',
+    );
+    assert.strictEqual(sandbox.generationState.phase, 'failed');
+    assert.strictEqual(sandbox.moduleError?.message, 'Realm write denied');
+    assert.strictEqual(
+      sandbox.generationState.lastKnownGoodRevision,
+      draft.revision,
+      'the locally rendered generation remains the last-known-good preview',
+    );
+  });
+
   test('classifies each immutable source generation once', async function (assert) {
     let sandbox = new CodePreviewSandbox();
     sandbox.update(
@@ -349,5 +372,19 @@ module('Unit | code preview sandbox', function () {
       registry.isLatestPublished(second),
       'explicit settlement invalidates pending async results',
     );
+  });
+
+  test('bounds volatile source generations across many modules', function (assert) {
+    let registry = new VolatileModuleRegistry(90_000, () => 1_000, 2);
+    let first = registry.publish('https://realm.example/first.gts', 'first');
+    let second = registry.publish('https://realm.example/second.gts', 'second');
+    let third = registry.publish('https://realm.example/third.gts', 'third');
+
+    assert.false(
+      registry.isLatestPublished(first),
+      'the oldest full-source generation is evicted',
+    );
+    assert.true(registry.isLatestPublished(second));
+    assert.true(registry.isLatestPublished(third));
   });
 });

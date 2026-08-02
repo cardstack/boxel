@@ -1999,10 +1999,24 @@ export default class StoreService extends Service implements StoreInterface {
     // code change would rebuild the loader and Store around the mounted
     // preview, briefly replacing both the preview and permission inputs with
     // loading state before rendering the same revision again.
-    if (ownWrite && this.isCodePreviewCommitAcknowledgement(event)) {
-      for (let invalidation of invalidations.filter(hasExecutableExtension)) {
+    let acknowledgedInvalidations = ownWrite
+      ? this.realmSandbox.codePreviewCommitAcknowledgedInvalidations(
+          event.clientRequestId ?? undefined,
+          invalidations,
+        )
+      : new Set<string>();
+    if (acknowledgedInvalidations.size > 0) {
+      for (let invalidation of [...acknowledgedInvalidations].filter(
+        hasExecutableExtension,
+      )) {
         this.loaderService.acknowledgeModuleInvalidation(invalidation);
       }
+    }
+
+    let remainingInvalidations = invalidations.filter(
+      (url) => !acknowledgedInvalidations.has(url),
+    );
+    if (remainingInvalidations.length === 0) {
       telemetry?.recordEvent({
         event_type: 'realm-event',
         realm: event.realmURL,
@@ -2019,7 +2033,9 @@ export default class StoreService extends Service implements StoreInterface {
       return;
     }
 
-    let executableInvalidations = invalidations.filter(hasExecutableExtension);
+    let executableInvalidations = remainingInvalidations.filter(
+      hasExecutableExtension,
+    );
     // Out-of-band writers (notably boxel-cli agents and another browser tab)
     // have no local commit acknowledgement. Advance every displayed module
     // independently; one undisplayed module in the same event must not force
@@ -2100,7 +2116,10 @@ export default class StoreService extends Service implements StoreInterface {
       // reference, so running that loop too would only re-fetch cards the
       // rebuild is about to discard.
     } else {
-      reloadsTriggered = this.#reloadInvalidatedInstances(event, invalidations);
+      reloadsTriggered = this.#reloadInvalidatedInstances(
+        event,
+        remainingInvalidations,
+      );
     }
 
     if (telemetry?.isEnabled) {

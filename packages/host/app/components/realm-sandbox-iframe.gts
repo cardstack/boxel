@@ -61,6 +61,7 @@ export default class RealmSandboxIframe extends Component<Signature> {
     }
 
     let channel: MessageChannel | undefined;
+    let connected = false;
     let post = (message: Record<string, unknown>) =>
       channel?.port1.postMessage({
         protocol: realmIframeSandboxProtocol,
@@ -106,6 +107,11 @@ export default class RealmSandboxIframe extends Component<Signature> {
       }
     };
     let connect = () => {
+      if (connected) {
+        return;
+      }
+      connected = true;
+      globalThis.removeEventListener('message', receiveBootstrap);
       channel?.port1.close();
       channel = new MessageChannel();
       channel.port1.addEventListener('message', receive);

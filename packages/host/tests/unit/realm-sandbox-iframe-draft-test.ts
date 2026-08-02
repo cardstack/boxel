@@ -2,6 +2,8 @@ import { getService } from '@universal-ember/test-support';
 import { setupTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
+import { codePreviewModuleKey } from '@cardstack/host/lib/code-preview-sandbox';
+
 import type RealmSandboxService from '@cardstack/host/services/realm-sandbox';
 import type { RealmIframeSandboxRender } from '@cardstack/host/services/realm-sandbox';
 
@@ -27,6 +29,8 @@ module('Unit | realm sandbox iframe draft', function (hooks) {
 
   test('serves the private Monaco buffer only for its exact module URL', async function (assert) {
     let sandbox = {
+      rootModuleURL: 'https://realm.example/cards/article.gts',
+      principal: 'https://realm.example/',
       draft: {
         sourceURL: 'https://realm.example/cards/article.gts',
         source: 'export const title = "Unsaved draft";',
@@ -49,6 +53,54 @@ module('Unit | realm sandbox iframe draft', function (hooks) {
       response.url,
       'https://realm.example/cards/article.gts?preview-cache-bust=7',
       'the child Loader keeps the requested module identity',
+    );
+  });
+
+  test('denies an undeclared cross-realm read before authenticated fetch', async function (assert) {
+    let sandbox = {
+      rootModuleURL: 'https://realm-a.example/cards/article.gts',
+      principal: 'https://realm-a.example/',
+    } as RealmIframeSandboxRender;
+    let service = getService('realm-sandbox') as RealmSandboxService;
+
+    await assert.rejects(
+      service.fetchForIframe(
+        sandbox,
+        'https://realm-b.example/private/notes.json',
+      ),
+      /denied undeclared module read/,
+      'the child cannot turn the host broker into a cross-realm credential proxy',
+    );
+  });
+
+  test('allows only a declared cross-realm module dependency', function (assert) {
+    let rootModuleURL = 'https://realm-a.example/cards/article.gts';
+    let dependencyURL = 'https://realm-b.example/shared/nav.gts';
+    let sandbox = {
+      rootModuleURL,
+      principal: 'https://realm-a.example/',
+    } as RealmIframeSandboxRender;
+    let service = getService('realm-sandbox') as RealmSandboxService;
+    let internal = service as unknown as {
+      moduleDependencies: Map<string, string[]>;
+      isIframeFetchAllowed(
+        sandbox: RealmIframeSandboxRender,
+        targetURL: string,
+      ): boolean;
+    };
+    internal.moduleDependencies.set(codePreviewModuleKey(rootModuleURL), [
+      dependencyURL,
+    ]);
+    assert.true(
+      internal.isIframeFetchAllowed(sandbox, dependencyURL),
+      'the explicitly imported dependency is readable',
+    );
+    assert.false(
+      internal.isIframeFetchAllowed(
+        sandbox,
+        'https://realm-b.example/private/notes.json',
+      ),
+      'another resource in that realm does not inherit the module grant',
     );
   });
 });

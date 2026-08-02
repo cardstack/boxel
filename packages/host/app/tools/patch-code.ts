@@ -154,7 +154,7 @@ export default class PatchCodeTool extends HostBaseTool<
             )
             .then(() => volatileCommit?.persisted())
             .catch((error: unknown) => {
-              volatileCommit?.failed();
+              volatileCommit?.failed(error);
               console.error('PatchCodeTool: failed to save source', error);
             });
         }
@@ -202,7 +202,7 @@ export default class PatchCodeTool extends HostBaseTool<
         })
         .then(() => volatileCommit?.persisted())
         .catch((error: unknown) => {
-          volatileCommit?.failed();
+          volatileCommit?.failed(error);
           console.error(
             'PatchCodeTool: failed to write through FileResource',
             error,

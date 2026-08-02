@@ -20,10 +20,12 @@ import {
   type LooseCardResource,
   type LooseSingleCardDocument,
   type Relationship,
+  type ResolvedCodeRef,
   type RealmResourceIdentifier,
   SupportedMimeType,
   decodeScopedCSSRequest,
   delegatedCardRenderComponent,
+  delegatedCardRenderComponentFor,
   hasExecutableExtension,
   localId as localIdSymbol,
   meta,
@@ -64,6 +66,7 @@ import {
   opaqueRealmCardState,
   type OpaqueRealmCardState,
   type OpaqueRealmCardTheme,
+  type OpaqueRealmCardTypeState,
 } from '@cardstack/host/lib/realm-sandbox-boundary';
 import realmSandboxDelegatedCardComponent from '@cardstack/host/lib/realm-sandbox-delegated-card-component';
 import realmSandboxFieldComponent from '@cardstack/host/lib/realm-sandbox-field-component';
@@ -71,7 +74,8 @@ import {
   isBaseRealmModule,
   isCatalogRealmModule,
   isTrustedHostRealmModule,
-  isTrustedSandboxImport,
+  isModuleWithinRealm,
+  trustedSandboxImportIdentity,
 } from '@cardstack/host/lib/realm-sandbox-import-policy';
 import RealmSandboxRuntimeRegistry from '@cardstack/host/lib/realm-sandbox-runtime-registry';
 import {
@@ -89,6 +93,7 @@ import type {
   BaseDef,
   BaseDefComponent,
   BoxComponent,
+  CardOrFieldTypeIcon,
   Field,
   Format,
 } from '@cardstack/base/card-api';
@@ -203,6 +208,7 @@ export interface RealmIframeSandboxRender {
   document: LooseSingleCardDocument;
   format: Format;
   principal: string;
+  rootModuleURL: string;
   targetOrigin: string;
   url: string;
   accessibleTitle: string;
@@ -214,6 +220,62 @@ export interface RealmIframeSandboxRender {
     source: string;
     revision: number;
   };
+}
+
+class StableRealmIframeSandboxRender implements RealmIframeSandboxRender {
+  @tracked document: LooseSingleCardDocument;
+  @tracked format: Format;
+  @tracked principal: string;
+  @tracked rootModuleURL: string;
+  @tracked targetOrigin: string;
+  @tracked url: string;
+  @tracked accessibleTitle: string;
+  @tracked presentation: RealmIframeSandboxPresentation;
+  @tracked codePreviewID?: string;
+  @tracked onGenerationResult?: (revision: number, error?: string) => void;
+  @tracked draft?: RealmIframeSandboxRender['draft'];
+  cardID?: string;
+  private pending?: RealmIframeSandboxRender;
+
+  constructor(value: RealmIframeSandboxRender) {
+    this.cardID = value.cardID;
+    this.document = value.document;
+    this.format = value.format;
+    this.principal = value.principal;
+    this.rootModuleURL = value.rootModuleURL;
+    this.targetOrigin = value.targetOrigin;
+    this.url = value.url;
+    this.accessibleTitle = value.accessibleTitle;
+    this.presentation = value.presentation;
+    this.codePreviewID = value.codePreviewID;
+    this.onGenerationResult = value.onGenerationResult;
+    this.draft = value.draft;
+  }
+
+  scheduleUpdate(value: RealmIframeSandboxRender) {
+    this.pending = value;
+    scheduleOnce('afterRender', this, this.flushUpdate);
+  }
+
+  private flushUpdate() {
+    let value = this.pending;
+    this.pending = undefined;
+    if (!value) {
+      return;
+    }
+    this.cardID = value.cardID;
+    this.document = value.document;
+    this.format = value.format;
+    this.principal = value.principal;
+    this.rootModuleURL = value.rootModuleURL;
+    this.targetOrigin = value.targetOrigin;
+    this.url = value.url;
+    this.accessibleTitle = value.accessibleTitle;
+    this.presentation = value.presentation;
+    this.codePreviewID = value.codePreviewID;
+    this.onGenerationResult = value.onGenerationResult;
+    this.draft = value.draft;
+  }
 }
 
 export interface RealmIframeFetchResult {
@@ -275,6 +337,7 @@ type CodePreviewCommitRegistry = Map<
     drafts?: Map<CodePreviewSandbox, CodePreviewDraft>;
     sourceURL: string;
     expiresAt: number;
+    acknowledgementRecorded?: boolean;
   }
 >;
 
@@ -296,6 +359,49 @@ if (!(codePreviewCommits instanceof Map)) {
 const codePreviewCommitRegistry =
   codePreviewCommits as CodePreviewCommitRegistry;
 const maxCachedThemes = 128;
+const maxCompartmentErrorKinds = 64;
+
+const networkBearingCSS =
+  /(?:@import\b|(?:url|src|image|(?:-webkit-)?image-set)\s*\()/i;
+
+function decodedCSSForPolicy(css: string): string {
+  // CSS identifiers may use a 1-6 digit hex escape (with optional trailing
+  // whitespace) or escape a single non-newline character. Decode a policy-only
+  // copy before looking for fetch-bearing grammar. The authored source remains
+  // unchanged and is returned only after this validation succeeds.
+  return css
+    .replace(/\\([0-9a-f]{1,6})\s?/gi, (_match, hex: string) =>
+      String.fromCodePoint(Number.parseInt(hex, 16)),
+    )
+    .replace(/\\([^\r\n0-9a-f])/gi, '$1')
+    .replace(/\/\*[\s\S]*?\*\//g, '');
+}
+
+// Parse with the browser before inspecting. Raw regex replacement is not a
+// security boundary: CSS escapes, comments, and image-set() can spell network
+// requests without containing a literal `url(...)` substring. The detached
+// constructed sheet uses the same parser as the eventual document stylesheet
+// but cannot initiate fetches because it is never adopted.
+export function validateCompartmentCSS(css: string): string {
+  if (typeof CSSStyleSheet === 'undefined') {
+    throw new Error('Sandbox CSS validation is unavailable');
+  }
+  let parsed = new CSSStyleSheet();
+  try {
+    parsed.replaceSync(css);
+  } catch (error) {
+    let detail = error instanceof Error ? `: ${error.message}` : '';
+    throw new Error(`Sandbox stylesheet could not be parsed${detail}`);
+  }
+  let normalized = [...parsed.cssRules].map((rule) => rule.cssText).join('\n');
+  if (
+    networkBearingCSS.test(decodedCSSForPolicy(css)) ||
+    networkBearingCSS.test(normalized)
+  ) {
+    throw new Error('Sandbox stylesheet contains a network-bearing value');
+  }
+  return css;
+}
 
 class ReactiveRevision {
   @tracked value = 0;
@@ -307,6 +413,10 @@ class ReactiveRevision {
   bump() {
     this.value++;
   }
+}
+
+interface MutableOpaqueRealmCardTypeState extends OpaqueRealmCardTypeState {
+  icon: CardOrFieldTypeIcon;
 }
 
 function createSandboxMathFacade(): object {
@@ -381,6 +491,9 @@ export default class RealmSandboxService extends Service {
   >();
   private compartmentRenderedCards = new WeakSet<object>();
   private opaqueCardTypes = new Map<string, typeof BaseDef>();
+  private opaqueTypeStates = new Map<string, MutableOpaqueRealmCardTypeState>();
+  private opaqueTypeKeysByModule = new Map<string, Set<string>>();
+  private opaqueMetadataRevisions = new Map<string, ReactiveRevision>();
   private trustedFieldTypesByOpaqueType = new Map<
     string,
     Record<string, typeof BaseDef>
@@ -409,6 +522,10 @@ export default class RealmSandboxService extends Service {
   private renderEnvelopes = new WeakMap<
     BaseDef,
     Map<string, RealmSandboxRender>
+  >();
+  private iframeRenderEnvelopes = new WeakMap<
+    BaseDef,
+    Map<string, StableRealmIframeSandboxRender>
   >();
   private cardReloadRevisions = new WeakMap<BaseDef, ReactiveRevision>();
   @tracked private metricsRevision = 0;
@@ -497,6 +614,16 @@ export default class RealmSandboxService extends Service {
     opts?: { componentCodeRef?: CodeRef },
   ): BoxComponent {
     if (!field) {
+      let delegatedFor = (
+        card as BaseDef & {
+          [delegatedCardRenderComponentFor]?: (
+            componentCodeRef?: CodeRef,
+          ) => BoxComponent;
+        }
+      )[delegatedCardRenderComponentFor];
+      if (delegatedFor) {
+        return delegatedFor(opts?.componentCodeRef);
+      }
       let delegated = (
         card as BaseDef & {
           [delegatedCardRenderComponent]?: BoxComponent;
@@ -620,7 +747,11 @@ export default class RealmSandboxService extends Service {
     ...moduleIdentifiers: string[]
   ): string | undefined {
     for (let realmURL of config.trustedCardRealmURLs ?? []) {
-      if (moduleIdentifiers.some((module) => module.startsWith(realmURL))) {
+      if (
+        moduleIdentifiers.some((module) =>
+          isModuleWithinRealm(module, realmURL),
+        )
+      ) {
         return realmURL;
       }
     }
@@ -629,7 +760,7 @@ export default class RealmSandboxService extends Service {
       moduleIdentifiers.some(
         (module) =>
           isCatalogRealmModule(module) ||
-          module.startsWith(config.resolvedCatalogRealmURL!),
+          isModuleWithinRealm(module, config.resolvedCatalogRealmURL!),
       )
     ) {
       return config.resolvedCatalogRealmURL;
@@ -671,6 +802,7 @@ export default class RealmSandboxService extends Service {
     let key = `${moduleIdentifier}|${typeName}`;
     let api = await this.cardService.getAPI();
     let OpaqueCard = this.opaqueCardTypes.get(key);
+    let typeState = this.opaqueTypeStates.get(key);
     let trustedFieldTypes = this.trustedFieldTypesByOpaqueType.get(key);
     let fieldMetadata = this.fieldMetadataByOpaqueType.get(key);
     if (!OpaqueCard) {
@@ -688,17 +820,38 @@ export default class RealmSandboxService extends Service {
       let prefersWideFormat = metadata?.prefersWideFormat === true;
       fieldMetadata = metadata?.fields ?? {};
       trustedFieldTypes = await this.resolveTrustedFieldTypes(fieldMetadata);
+      typeState = {
+        typeRef: resolvedTypeRef,
+        displayName,
+        fields: Object.freeze({ ...fieldMetadata }),
+        hasCustomEditTemplate,
+        hasCustomIsolatedTemplate,
+        authoredTemplateFormats,
+        headerColor,
+        prefersWideFormat,
+        icon:
+          (await this.resolveTrustedIcon(metadata?.icon)) ?? api.CardDef.icon,
+      };
+      let mutableTypeState = typeState;
       OpaqueCard = class OpaqueRealmCard extends api.CardDef {
-        static displayName = displayName;
-        static headerColor = headerColor;
-        static prefersWideFormat = prefersWideFormat;
+        static get displayName() {
+          return mutableTypeState.displayName;
+        }
+
+        static get headerColor() {
+          return mutableTypeState.headerColor;
+        }
+
+        static get prefersWideFormat() {
+          return mutableTypeState.prefersWideFormat;
+        }
 
         static get hasCustomEditTemplate() {
-          return hasCustomEditTemplate;
+          return mutableTypeState.hasCustomEditTemplate;
         }
 
         static get hasCustomIsolatedTemplate() {
-          return hasCustomIsolatedTemplate;
+          return mutableTypeState.hasCustomIsolatedTemplate;
         }
 
         get [realmURLSymbol]() {
@@ -706,27 +859,29 @@ export default class RealmSandboxService extends Service {
           return state ? new URL(state.principal) : undefined;
         }
       };
+      Object.defineProperty(OpaqueCard, 'icon', {
+        configurable: true,
+        get: () => mutableTypeState.icon,
+      });
       Object.defineProperty(OpaqueCard, opaqueRealmCardTypeState, {
         configurable: false,
         enumerable: false,
-        value: Object.freeze({
-          typeRef: resolvedTypeRef,
-          displayName,
-          fields: Object.freeze({ ...fieldMetadata }),
-          hasCustomEditTemplate,
-          hasCustomIsolatedTemplate,
-          authoredTemplateFormats,
-          headerColor,
-          prefersWideFormat,
-        }),
+        value: typeState,
       });
-      let icon = await this.resolveTrustedIcon(metadata?.icon);
-      if (icon) {
-        Object.defineProperty(OpaqueCard, 'icon', { value: icon });
-      }
       this.opaqueCardTypes.set(key, OpaqueCard);
+      this.opaqueTypeStates.set(key, typeState);
+      let moduleKey = codePreviewModuleKey(moduleIdentifier);
+      let typeKeys = this.opaqueTypeKeysByModule.get(moduleKey);
+      if (!typeKeys) {
+        typeKeys = new Set();
+        this.opaqueTypeKeysByModule.set(moduleKey, typeKeys);
+      }
+      typeKeys.add(key);
       this.trustedFieldTypesByOpaqueType.set(key, trustedFieldTypes);
       this.fieldMetadataByOpaqueType.set(key, fieldMetadata);
+    }
+    if (!OpaqueCard) {
+      throw new Error(`Unable to construct opaque card type ${key}`);
     }
     // Authored templates commonly read `@model.constructor.displayName` and
     // `.icon`. Give them an inert presentation descriptor, not the executable
@@ -734,7 +889,7 @@ export default class RealmSandboxService extends Service {
     // property non-enumerable also means component getter args remain JSON-only
     // when they are cloned back into the compartment.
     Object.defineProperty(snapshot, 'constructor', {
-      configurable: false,
+      configurable: true,
       enumerable: false,
       value: Object.freeze({
         displayName: OpaqueCard.displayName,
@@ -778,6 +933,23 @@ export default class RealmSandboxService extends Service {
       enumerable: false,
       value: realmSandboxDelegatedCardComponent(card),
     });
+    let delegatedComponents = new Map<string, BoxComponent>();
+    Object.defineProperty(card, delegatedCardRenderComponentFor, {
+      configurable: false,
+      enumerable: false,
+      value: (componentCodeRef?: CodeRef) => {
+        let key = componentCodeRef ? JSON.stringify(componentCodeRef) : '';
+        let component = delegatedComponents.get(key);
+        if (!component) {
+          component = realmSandboxDelegatedCardComponent(
+            card,
+            componentCodeRef,
+          );
+          delegatedComponents.set(key, component);
+        }
+        return component;
+      },
+    });
     this.trustedFieldTypesByCard.set(card, trustedFieldTypes ?? {});
     this.fieldMetadataByCard.set(card, fieldMetadata ?? {});
     for (let [name, value] of Object.entries(snapshot)) {
@@ -800,8 +972,10 @@ export default class RealmSandboxService extends Service {
     options: {
       useBaseTemplate?: boolean;
       codePreviewSandbox?: CodePreviewSandbox;
+      codeRef?: CodeRef;
     } = {},
   ): RealmSandboxRender | undefined {
+    this.consumeOpaqueMetadataRevision(card);
     let reloadRevision = this.cardReloadRevisionFor(card).consume();
     if (
       !this.isTransparentSandboxEnabled() ||
@@ -818,6 +992,7 @@ export default class RealmSandboxService extends Service {
       // for non-base realm types.
       return undefined;
     }
+    this.syncOpaqueCardPresentation(card, opaqueState);
     let useBaseTemplate =
       options.useBaseTemplate === true ||
       this.usesInheritedBaseTemplate(card, effectiveFormat);
@@ -831,12 +1006,13 @@ export default class RealmSandboxService extends Service {
     this.metrics.renderRequests++;
     let principal = opaqueState.principal;
     let inertTemplate = useBaseTemplate
-      ? this.trustedBaseTemplateFor(card, effectiveFormat)
+      ? this.trustedBaseTemplateFor(card, effectiveFormat, options.codeRef)
       : this.compartmentTemplateFor(
           card,
           effectiveFormat,
           principal,
           options.codePreviewSandbox,
+          options.codeRef,
         );
     if (!inertTemplate) {
       // The opaque Store record inherits only trusted base templates. Until
@@ -865,7 +1041,11 @@ export default class RealmSandboxService extends Service {
     // its tracked payload; they are not separate render-envelope identities.
     // This keeps the Glimmer component, island element, and style modifier
     // mounted while RealmSandboxTemplateIsland adopts a compatible program.
-    let envelopeKey = `${effectiveFormat}|${useBaseTemplate ? 'base' : 'sandbox'}|${options.codePreviewSandbox?.id ?? 'canonical'}|reload:${reloadRevision}`;
+    let componentRefKey =
+      options.codeRef && isResolvedCodeRef(options.codeRef)
+        ? `${String(options.codeRef.module)}#${String(options.codeRef.name)}`
+        : '';
+    let envelopeKey = `${effectiveFormat}|${useBaseTemplate ? 'base' : 'sandbox'}|${componentRefKey}|${options.codePreviewSandbox?.id ?? 'canonical'}|reload:${reloadRevision}`;
     let envelopes = this.renderEnvelopes.get(card);
     if (!envelopes) {
       envelopes = new Map();
@@ -938,6 +1118,7 @@ export default class RealmSandboxService extends Service {
       codePreviewSandbox?: CodePreviewSandbox;
     } = {},
   ): RealmIframeSandboxRender | undefined {
+    this.consumeOpaqueMetadataRevision(card);
     let reloadRevision = this.cardReloadRevisionFor(card).consume();
     let effectiveFormat = format ?? 'isolated';
     // The sandbox metadata has already established that this format is not
@@ -964,6 +1145,7 @@ export default class RealmSandboxService extends Service {
     if (!state || !cardID || !targetOrigin) {
       return undefined;
     }
+    this.syncOpaqueCardPresentation(card, state);
     let iframeFormat = this.safeIframeFormat(effectiveFormat);
     if (!iframeFormat) {
       return undefined;
@@ -974,11 +1156,22 @@ export default class RealmSandboxService extends Service {
     url.searchParams.set('reload', String(reloadRevision));
     this.metrics.executionTier = 'iframe';
     this.metrics.executionReason = decision.reason;
-    return {
+    if (!isResolvedCodeRef(state.typeRef)) {
+      return undefined;
+    }
+    let rootModuleURL = this.network.virtualNetwork.toURL(
+      state.typeRef.module,
+    ).href;
+    let resolvedCodeRef =
+      options.codeRef && isResolvedCodeRef(options.codeRef)
+        ? options.codeRef
+        : undefined;
+    let next: RealmIframeSandboxRender = {
       cardID,
       document: state.document,
       format: iframeFormat,
       principal: state.principal,
+      rootModuleURL,
       targetOrigin,
       url: url.href,
       accessibleTitle: `${state.presentation.displayName} sandboxed card`,
@@ -986,11 +1179,11 @@ export default class RealmSandboxService extends Service {
         format: iframeFormat,
         displayContainer: options.displayContainer !== false,
         ...(options.field ? { fieldName: options.field.name } : {}),
-        ...(options.codeRef && isResolvedCodeRef(options.codeRef)
+        ...(resolvedCodeRef
           ? {
               codeRef: {
-                module: options.codeRef.module,
-                name: options.codeRef.name,
+                module: resolvedCodeRef.module,
+                name: resolvedCodeRef.name,
               },
             }
           : {}),
@@ -1013,6 +1206,20 @@ export default class RealmSandboxService extends Service {
           }
         : {}),
     };
+    let envelopeKey = `${iframeFormat}|${options.field?.name ?? ''}|${resolvedCodeRef?.module ?? ''}#${resolvedCodeRef?.name ?? ''}|${options.codePreviewSandbox?.id ?? 'canonical'}|reload:${reloadRevision}`;
+    let envelopes = this.iframeRenderEnvelopes.get(card);
+    if (!envelopes) {
+      envelopes = new Map();
+      this.iframeRenderEnvelopes.set(card, envelopes);
+    }
+    let envelope = envelopes.get(envelopeKey);
+    if (envelope) {
+      envelope.scheduleUpdate(next);
+      return envelope;
+    }
+    envelope = new StableRealmIframeSandboxRender(next);
+    envelopes.set(envelopeKey, envelope);
+    return envelope;
   }
 
   async fetchForIframe(
@@ -1040,6 +1247,9 @@ export default class RealmSandboxService extends Service {
         url: url.href,
       };
     }
+    if (!this.isIframeFetchAllowed(sandbox, url.href)) {
+      throw new Error(`Iframe renderer denied undeclared module read: ${url}`);
+    }
     let headers = new Headers();
     for (let [name, value] of init.headers ?? []) {
       if (
@@ -1050,25 +1260,79 @@ export default class RealmSandboxService extends Service {
         headers.set(name, value);
       }
     }
-    // authorizationMiddleware grants credentials only when the response is a
-    // Boxel realm challenge. Public CDN/module reads remain credentialless,
-    // while same- and cross-realm imports use the user's server-enforced read
-    // permissions without exposing the token to the iframe.
-    let response = await this.network.authedFetch(url, {
+    // Only declared Boxel realm dependencies receive the user's realm token.
+    // Public CDN dependencies use the credentialless virtual network fetch.
+    let isRealmRead =
+      isModuleWithinRealm(url.href, sandbox.principal) ||
+      Boolean(this.network.realm.realmOf(url));
+    let fetch = isRealmRead ? this.network.authedFetch : this.network.fetch;
+    let response = await fetch(url, {
       method,
       headers,
       credentials: 'omit',
       referrerPolicy: 'no-referrer',
+      redirect: 'error',
     });
+    let responseURL = response.url || url.href;
+    if (!this.isIframeFetchAllowed(sandbox, responseURL)) {
+      throw new Error('Iframe renderer response escaped its module allowlist');
+    }
+    let body = [204, 205, 304].includes(response.status)
+      ? null
+      : await response.text();
+    if (response.ok && body != null && hasExecutableExtension(responseURL)) {
+      await this.recordModuleSourceClassification(responseURL, body);
+    }
+    let responseHeaders: [string, string][] = [];
+    for (let name of [
+      'content-type',
+      'etag',
+      'last-modified',
+      'cache-control',
+    ]) {
+      let value = response.headers.get(name);
+      if (value != null) {
+        responseHeaders.push([name, value]);
+      }
+    }
     return {
-      body: [204, 205, 304].includes(response.status)
-        ? null
-        : await response.text(),
-      headers: [...response.headers.entries()],
+      body,
+      headers: responseHeaders,
       status: response.status,
       statusText: response.statusText,
-      url: response.url || url.href,
+      url: responseURL,
     };
+  }
+
+  private isIframeFetchAllowed(
+    sandbox: RealmIframeSandboxRender,
+    targetURL: string,
+  ): boolean {
+    if (
+      sameCodePreviewModuleURL(targetURL, sandbox.rootModuleURL) ||
+      isModuleWithinRealm(targetURL, sandbox.principal) ||
+      trustedSandboxImportIdentity(targetURL, this.network.resolveImport)
+    ) {
+      return true;
+    }
+    let pending = [sandbox.rootModuleURL];
+    let visited = new Set<string>();
+    while (pending.length > 0) {
+      let moduleIdentifier = pending.pop()!;
+      if (visited.has(moduleIdentifier)) {
+        continue;
+      }
+      visited.add(moduleIdentifier);
+      for (let dependency of this.moduleDependencies.get(
+        codePreviewModuleKey(moduleIdentifier),
+      ) ?? []) {
+        if (sameCodePreviewModuleURL(dependency, targetURL)) {
+          return true;
+        }
+        pending.push(dependency);
+      }
+    }
+    return false;
   }
 
   isIframeSandboxChild(): boolean {
@@ -1148,7 +1412,42 @@ export default class RealmSandboxService extends Service {
   private trustedBaseTemplateFor(
     card: BaseDef,
     format: Format,
+    componentCodeRef?: CodeRef,
   ): InertTemplate | undefined {
+    if (componentCodeRef && isResolvedCodeRef(componentCodeRef)) {
+      let moduleIdentifier = this.resolveCardModule(
+        String(componentCodeRef.module),
+      );
+      if (
+        !trustedSandboxImportIdentity(
+          moduleIdentifier,
+          this.network.resolveImport,
+        )
+      ) {
+        return undefined;
+      }
+      let key = `trusted-component|${moduleIdentifier}|${String(componentCodeRef.name)}|${format}`;
+      this.compartmentTemplateRevisionFor(key).consume();
+      let cached = this.compartmentTemplates.get(key);
+      if (cached) {
+        return cached;
+      }
+      if (
+        !this.compartmentLoads.has(key) &&
+        !this.compartmentFailures.has(key)
+      ) {
+        this.updateCompartmentLoading(card, format, 1);
+        let load = this.loadTrustedComponentTemplate(
+          key,
+          card,
+          componentCodeRef,
+          moduleIdentifier,
+          format,
+        );
+        this.compartmentLoads.set(key, load);
+      }
+      return undefined;
+    }
     let component = (card.constructor as unknown as Record<string, unknown>)[
       format
     ];
@@ -1159,6 +1458,46 @@ export default class RealmSandboxService extends Service {
       return undefined;
     }
     return { component: component as BaseDefComponent, styles: [] };
+  }
+
+  private async loadTrustedComponentTemplate(
+    key: string,
+    card: BaseDef,
+    componentCodeRef: ResolvedCodeRef,
+    moduleIdentifier: string,
+    format: Format,
+  ) {
+    try {
+      let loader = this.loaderForTrustedCard(componentCodeRef);
+      let module =
+        await loader.import<Record<string, unknown>>(moduleIdentifier);
+      let cardType = module[String(componentCodeRef.name)] as
+        | Record<string, unknown>
+        | undefined;
+      let component = cardType?.[format];
+      if (
+        (typeof component !== 'object' || component === null) &&
+        typeof component !== 'function'
+      ) {
+        throw new Error(
+          `Trusted component ${moduleIdentifier}#${String(componentCodeRef.name)} has no ${format} template`,
+        );
+      }
+      this.compartmentTemplates.set(key, {
+        component: component as BaseDefComponent,
+        styles: [],
+      });
+      this.compartmentFailures.delete(key);
+    } catch (error) {
+      this.compartmentFailures.add(key);
+      this.recordCompartmentError(error);
+    } finally {
+      this.compartmentLoads.delete(key);
+      this.updateCompartmentLoading(card, format, -1);
+      this.scheduleCompartmentRevision(
+        this.compartmentTemplateRevisionFor(key),
+      );
+    }
   }
 
   private usesInheritedBaseTemplate(card: BaseDef, format: Format): boolean {
@@ -1186,7 +1525,11 @@ export default class RealmSandboxService extends Service {
         removeEventListener: () => undefined,
       }),
       mathFacade: createSandboxMathFacade(),
-      isTrustedImport: isTrustedSandboxImport,
+      isTrustedImport: (moduleIdentifier) =>
+        trustedSandboxImportIdentity(
+          moduleIdentifier,
+          this.network.resolveImport,
+        ) ?? false,
     });
   }
 
@@ -1532,6 +1875,7 @@ export default class RealmSandboxService extends Service {
   ) {
     let generation = this.volatileModules.publish(sourceURL, source);
     this.seedCodePreviewSource(codePreviewSandbox, sourceURL, source);
+    void this.refreshOpaqueTypeMetadataForModule(sourceURL, codePreviewSandbox);
     return generation;
   }
 
@@ -1558,6 +1902,7 @@ export default class RealmSandboxService extends Service {
     let generation = this.volatileModules.publish(sourceURL, source);
     let key = codePreviewModuleKey(sourceURL);
     let interactivePreview = this.ensureInteractiveCodePreview(key, generation);
+    let metadataPreview = interactivePreview;
     for (let preview of this.activeCodePreviews) {
       if (
         preview !== interactivePreview &&
@@ -1567,7 +1912,11 @@ export default class RealmSandboxService extends Service {
       ) {
         preview.update(sourceURL, source);
         void this.classifyCodePreviewSource(preview);
+        metadataPreview ??= preview;
       }
+    }
+    if (metadataPreview) {
+      void this.refreshOpaqueTypeMetadataForModule(sourceURL, metadataPreview);
     }
     if (interactivePreview && !this.externallyVolatileModules.has(key)) {
       this.scheduleInteractiveCodePreviewSettlement(key, generation);
@@ -1608,6 +1957,18 @@ export default class RealmSandboxService extends Service {
       ) {
         continue;
       }
+      // A local Monaco/assistant generation is the authoritative source for
+      // its mounted preview until its volatile lease settles. An out-of-band
+      // realm event that arrives during that lease may be stale (or a true
+      // concurrent edit), but it must never overwrite the user's local
+      // buffer. Consume the event here; if the local edit is abandoned, lease
+      // settlement returns the card to canonical Store state and observes the
+      // latest server source then. A successfully saved local edit has its own
+      // clientRequestId acknowledgement path above this one in Store.
+      if (this.hasLocalVolatileGeneration(sourceURL)) {
+        handled.add(sourceURL);
+        continue;
+      }
       this.queueExternalModuleRefresh(sourceURL);
       handled.add(sourceURL);
     }
@@ -1643,6 +2004,14 @@ export default class RealmSandboxService extends Service {
         preview.active &&
         preview.sourceURL != null &&
         codePreviewModuleKey(preview.sourceURL) === key,
+    );
+  }
+
+  private hasLocalVolatileGeneration(sourceURL: string): boolean {
+    let key = codePreviewModuleKey(sourceURL);
+    return (
+      this.volatileModules.current(sourceURL) != null &&
+      !this.externallyVolatileModules.has(key)
     );
   }
 
@@ -1684,6 +2053,13 @@ export default class RealmSandboxService extends Service {
       }
       if (result.status < 200 || result.status >= 300) {
         this.fallbackToCanonicalModule(key, sourceURL);
+        return;
+      }
+
+      // A local edit may have started while getSource() was in flight. Do not
+      // let the older response recapture the module as externally volatile.
+      if (this.hasLocalVolatileGeneration(sourceURL)) {
+        this.externalModuleInvalidationRevisions.delete(key);
         return;
       }
 
@@ -1760,9 +2136,10 @@ export default class RealmSandboxService extends Service {
     for (let moduleIdentifier of [...this.moduleClassifications.keys()]) {
       if (sameCodePreviewModuleURL(moduleIdentifier, sourceURL)) {
         this.moduleClassifications.delete(moduleIdentifier);
-        this.moduleDependencies.delete(moduleIdentifier);
+        this.moduleDependencies.delete(codePreviewModuleKey(moduleIdentifier));
       }
     }
+    void this.refreshOpaqueTypeMetadataForModule(sourceURL);
   }
 
   prepareCodePreviewCommit(
@@ -1812,10 +2189,16 @@ export default class RealmSandboxService extends Service {
         sandboxes.delete(sandbox);
       }
     }
-    let volatileGeneration = this.volatileModules.current(sourceURL);
-    if (sandboxes.size === 0 || !volatileGeneration) {
+    if (sandboxes.size === 0) {
       return undefined;
     }
+    // A user can pause longer than the quiet-period lease before the editor's
+    // save runs. The active preview still proves that this exact source is the
+    // locally rendered draft, so renew it instead of letting persistence fall
+    // back through the canonical loader and flash the preview.
+    let volatileGeneration =
+      this.volatileModules.current(sourceURL) ??
+      this.volatileModules.publish(sourceURL, source);
 
     clientRequestId ??= this.cardService.createClientRequestId(saveType);
     let drafts = new Map<CodePreviewSandbox, CodePreviewDraft>();
@@ -1841,7 +2224,7 @@ export default class RealmSandboxService extends Service {
       }
     }
 
-    let finish = (persisted: boolean) => {
+    let finish = (persisted: boolean, error?: unknown) => {
       let entry = codePreviewCommitRegistry.get(clientRequestId);
       if (!entry) {
         return;
@@ -1857,8 +2240,18 @@ export default class RealmSandboxService extends Service {
           }
         }
       } else {
+        let message =
+          error instanceof Error
+            ? (error.stack ?? `${error.name}: ${error.message}`)
+            : error == null
+              ? undefined
+              : String(error);
         for (let sandbox of entry.sandboxes) {
-          sandbox.markCommitFailed(entry.drafts?.get(sandbox), clientRequestId);
+          sandbox.markCommitFailed(
+            entry.drafts?.get(sandbox),
+            clientRequestId,
+            message,
+          );
         }
         codePreviewCommitRegistry.delete(clientRequestId);
       }
@@ -1870,35 +2263,40 @@ export default class RealmSandboxService extends Service {
         this.volatileModules.isVolatile(sourceURL) &&
         [...sandboxes].some((sandbox) => sandbox.active),
       persisted: () => finish(true),
-      failed: () => finish(false),
+      failed: (error?: unknown) => finish(false, error),
     };
   }
 
   // The editor has already rendered this exact source revision. Its realm
   // event is an acknowledgement, not a second source update. This is a
-  // read-only query because Store and live-search subscriptions receive the
-  // same event independently and must all reach the same decision.
-  isCodePreviewCommitAcknowledgement(
+  // idempotent transition: Store and live-search subscriptions may receive the
+  // same event independently, but the guarded commit state records the
+  // acknowledgement and metric only once.
+  codePreviewCommitAcknowledgedInvalidations(
     clientRequestId: string | undefined,
     invalidations: string[],
-  ): boolean {
+  ): Set<string> {
     if (!clientRequestId) {
-      return false;
+      return new Set();
     }
     let commit = codePreviewCommitRegistry.get(clientRequestId);
-    if (
-      !commit ||
-      commit.expiresAt <= Date.now() ||
-      !invalidations.some((url) =>
+    if (!commit || commit.expiresAt <= Date.now()) {
+      return new Set();
+    }
+    let acknowledged = new Set(
+      invalidations.filter((url) =>
         sameCodePreviewModuleURL(url, commit.sourceURL),
-      )
-    ) {
-      return false;
+      ),
+    );
+    if (acknowledged.size === 0) {
+      return acknowledged;
     }
     let hasActivePreview = false;
+    let metadataPreview: CodePreviewSandbox | undefined;
     for (let sandbox of commit.sandboxes) {
       if (sandbox.active) {
         hasActivePreview = true;
+        metadataPreview ??= sandbox;
         sandbox.markCommitAcknowledged(
           commit.drafts?.get(sandbox),
           clientRequestId,
@@ -1907,10 +2305,31 @@ export default class RealmSandboxService extends Service {
       }
     }
     if (!hasActivePreview) {
-      return false;
+      return new Set();
     }
-    this.metrics.codePreviewAcknowledgementsRecognized++;
-    return true;
+    void this.refreshOpaqueTypeMetadataForModule(
+      commit.sourceURL,
+      metadataPreview,
+    );
+    if (!commit.acknowledgementRecorded) {
+      commit.acknowledgementRecorded = true;
+      this.metrics.codePreviewAcknowledgementsRecognized++;
+    }
+    return acknowledged;
+  }
+
+  isCodePreviewCommitAcknowledgement(
+    clientRequestId: string | undefined,
+    invalidations: string[],
+  ): boolean {
+    let acknowledged = this.codePreviewCommitAcknowledgedInvalidations(
+      clientRequestId,
+      invalidations,
+    );
+    return (
+      acknowledged.size > 0 &&
+      invalidations.every((url) => acknowledged.has(url))
+    );
   }
 
   async classifyCodePreviewSource(codePreviewSandbox: CodePreviewSandbox) {
@@ -2001,8 +2420,9 @@ export default class RealmSandboxService extends Service {
         reason: classification.reason,
       };
     }
-    for (let dependency of this.moduleDependencies.get(moduleIdentifier) ??
-      []) {
+    for (let dependency of this.moduleDependencies.get(
+      codePreviewModuleKey(moduleIdentifier),
+    ) ?? []) {
       let dependencyDecision = this.moduleSandboxDecision(dependency, visited);
       if (dependencyDecision.tier === 'iframe') {
         return {
@@ -2021,10 +2441,12 @@ export default class RealmSandboxService extends Service {
     principal: string,
     moduleIdentifier: string,
     exportName: string,
+    codePreviewSandbox?: CodePreviewSandbox,
   ): Promise<SandboxCardTypeMetadata | undefined> {
     try {
-      return await this.cardModuleRuntimeFor(
+      return await this.compartmentRuntimeFor(
         principal,
+        codePreviewSandbox,
       ).evaluateCardTypeMetadata(moduleIdentifier, exportName);
     } catch (error) {
       this.recordCompartmentError(error);
@@ -2032,17 +2454,88 @@ export default class RealmSandboxService extends Service {
     }
   }
 
+  private async refreshOpaqueTypeMetadataForModule(
+    sourceURL: string,
+    codePreviewSandbox?: CodePreviewSandbox,
+  ) {
+    let expectedDraft = codePreviewSandbox?.draft;
+    let moduleKey = codePreviewModuleKey(sourceURL);
+    let typeKeys = this.opaqueTypeKeysByModule.get(moduleKey);
+    if (!typeKeys?.size) {
+      return;
+    }
+    let changed = false;
+    for (let key of typeKeys) {
+      let typeState = this.opaqueTypeStates.get(key);
+      if (!typeState || !isResolvedCodeRef(typeState.typeRef)) {
+        continue;
+      }
+      let moduleIdentifier = this.network.virtualNetwork.toURL(
+        typeState.typeRef.module,
+      ).href;
+      let metadata = await this.loadCardTypeMetadata(
+        this.principalForModule(moduleIdentifier),
+        moduleIdentifier,
+        String(typeState.typeRef.name),
+        codePreviewSandbox,
+      );
+      // Metadata evaluation is asynchronous. A later Monaco/assistant
+      // generation may already own this sandbox by the time an older import
+      // completes; only the exact draft that started the evaluation may
+      // publish presentation or schema changes.
+      if (codePreviewSandbox && codePreviewSandbox.draft !== expectedDraft) {
+        return;
+      }
+      // Metadata evaluation failed. Keep the last-known-good schema and
+      // presentation instead of replacing it with an empty definition.
+      if (!metadata) {
+        continue;
+      }
+      let fields = metadata.fields ?? {};
+      let trustedFieldTypes = await this.resolveTrustedFieldTypes(fields);
+      typeState.displayName =
+        metadata.displayName ?? String(typeState.typeRef.name);
+      typeState.fields = Object.freeze({ ...fields });
+      typeState.hasCustomEditTemplate = metadata.hasCustomEditTemplate === true;
+      typeState.hasCustomIsolatedTemplate =
+        metadata.hasCustomIsolatedTemplate === true;
+      typeState.authoredTemplateFormats = metadata.authoredTemplateFormats;
+      typeState.headerColor = this.safeHeaderColor(metadata.headerColor);
+      typeState.prefersWideFormat = metadata.prefersWideFormat === true;
+      typeState.icon =
+        (await this.resolveTrustedIcon(metadata.icon)) ?? typeState.icon;
+      this.trustedFieldTypesByOpaqueType.set(key, trustedFieldTypes);
+      this.fieldMetadataByOpaqueType.set(key, fields);
+      changed = true;
+    }
+    if (changed) {
+      // Field component wrappers capture their FieldDef and relationship kind.
+      // Replace the weak cache so the next tracked render reconstructs only
+      // the cards that are still live.
+      this.opaqueFieldComponents = new WeakMap();
+      this.opaqueMetadataRevisionFor(moduleKey).bump();
+    }
+  }
+
   private async resolveTrustedIcon(
     identity: SandboxTrustedExportIdentity | undefined,
-  ): Promise<unknown> {
-    if (!identity || !isTrustedSandboxImport(identity.module)) {
+  ): Promise<CardOrFieldTypeIcon | undefined> {
+    if (!identity) {
+      return undefined;
+    }
+    let trustedIdentity = trustedSandboxImportIdentity(
+      identity.module,
+      this.network.resolveImport,
+    );
+    if (!trustedIdentity) {
       return undefined;
     }
     try {
-      let module = await this.network.loaderService.loader.import<
-        Record<string, unknown>
-      >(identity.module);
-      return module[identity.name];
+      let module =
+        await this.network.loaderService.loader.import<Record<string, unknown>>(
+          trustedIdentity,
+        );
+      return module[identity.name] as CardOrFieldTypeIcon | undefined;
     } catch (error) {
       this.recordCompartmentError(error);
       return undefined;
@@ -2067,17 +2560,20 @@ export default class RealmSandboxService extends Service {
   private async resolveTrustedFieldType(
     identity: SandboxTrustedExportIdentity,
   ): Promise<typeof BaseDef | undefined> {
-    let resolvedModule = this.network.resolveImport(identity.module);
-    if (
-      !isTrustedHostRealmModule(identity.module) &&
-      !isTrustedHostRealmModule(resolvedModule)
-    ) {
+    let resolvedModule = trustedSandboxImportIdentity(
+      identity.module,
+      this.network.resolveImport,
+    );
+    if (!resolvedModule || !isTrustedHostRealmModule(resolvedModule)) {
       return undefined;
     }
     let key = `${resolvedModule}|${identity.name}`;
     let pending = this.trustedFieldTypeLoads.get(key);
     if (!pending) {
-      pending = this.loadTrustedFieldType(identity);
+      pending = this.loadTrustedFieldType({
+        ...identity,
+        module: resolvedModule,
+      });
       this.trustedFieldTypeLoads.set(key, pending);
     }
     return await pending;
@@ -2237,13 +2733,20 @@ export default class RealmSandboxService extends Service {
     if (rawCss.length > 512_000) {
       return undefined;
     }
-    let css = this.sanitizeCompartmentCSS(rawCss);
+    let css = validateCompartmentCSS(rawCss);
     let scope = themeScope(id, css);
     return scope ? { css, id, scope } : undefined;
   }
 
   private recordCompartmentError(error: unknown) {
     let reason = error instanceof Error ? error.message : String(error);
+    if (
+      !(reason in this.metrics.compartmentErrors) &&
+      Object.keys(this.metrics.compartmentErrors).length >=
+        maxCompartmentErrorKinds
+    ) {
+      reason = 'other sandbox errors';
+    }
     this.metrics.compartmentErrors[reason] =
       (this.metrics.compartmentErrors[reason] ?? 0) + 1;
   }
@@ -2253,8 +2756,12 @@ export default class RealmSandboxService extends Service {
     format: string,
     principal: string,
     codePreviewSandbox?: CodePreviewSandbox,
+    componentCodeRef?: CodeRef,
   ): InertTemplate | undefined {
-    let ref = getOpaqueRealmCardState(card)?.typeRef;
+    let ref =
+      componentCodeRef && isResolvedCodeRef(componentCodeRef)
+        ? componentCodeRef
+        : getOpaqueRealmCardState(card)?.typeRef;
     if (!ref || !('module' in ref) || !('name' in ref)) {
       return undefined;
     }
@@ -2664,7 +3171,7 @@ export default class RealmSandboxService extends Service {
     this.moduleClassifications.set(moduleIdentifier, classification);
     let dependencies: string[] = [];
     for (let specifier of classification.imports) {
-      if (isTrustedSandboxImport(specifier)) {
+      if (trustedSandboxImportIdentity(specifier, this.network.resolveImport)) {
         continue;
       }
       try {
@@ -2677,7 +3184,10 @@ export default class RealmSandboxService extends Service {
         // failure instead of silently escalating authority.
       }
     }
-    this.moduleDependencies.set(moduleIdentifier, dependencies);
+    this.moduleDependencies.set(
+      codePreviewModuleKey(moduleIdentifier),
+      dependencies,
+    );
     for (let preview of this.activeCodePreviews) {
       if (!preview.sourceURL) {
         continue;
@@ -2872,21 +3382,26 @@ export default class RealmSandboxService extends Service {
           return component;
         }
         case 'trusted-export': {
-          if (!isTrustedSandboxImport(reference.module)) {
+          let trustedIdentity = trustedSandboxImportIdentity(
+            reference.module,
+            this.network.resolveImport,
+          );
+          if (!trustedIdentity) {
             throw new Error(
               `compartment-template-untrusted-scope:${reference.module}`,
             );
           }
-          let module = trustedModules.get(reference.module);
+          let module = trustedModules.get(trustedIdentity);
           if (!module) {
-            module = await this.network.loaderService.loader.import<
-              Record<string, unknown>
-            >(reference.module);
-            trustedModules.set(reference.module, module);
+            module =
+              await this.network.loaderService.loader.import<
+                Record<string, unknown>
+              >(trustedIdentity);
+            trustedModules.set(trustedIdentity, module);
           }
           if (!(reference.name in module)) {
             throw new Error(
-              `compartment-template-missing-export:${reference.module}#${reference.name}`,
+              `compartment-template-missing-export:${trustedIdentity}#${reference.name}`,
             );
           }
           return module[reference.name];
@@ -2929,17 +3444,8 @@ export default class RealmSandboxService extends Service {
 
   private loadCompartmentStyles(stylesheets: string[]): string[] {
     return stylesheets.map((stylesheet) =>
-      this.sanitizeCompartmentCSS(decodeScopedCSSRequest(stylesheet).css),
+      validateCompartmentCSS(decodeScopedCSSRequest(stylesheet).css),
     );
-  }
-
-  private sanitizeCompartmentCSS(css: string): string {
-    // Compiled scoped styles are inert presentation data. Network-bearing CSS
-    // is denied so a card cannot turn url() or @import into an exfiltration
-    // channel from the shared document.
-    return css
-      .replace(/@import[^;]*;/gi, '')
-      .replace(/url\s*\([^)]*\)/gi, 'none');
   }
 
   private fieldsFor(
@@ -2953,8 +3459,15 @@ export default class RealmSandboxService extends Service {
       return cached;
     }
     let fields: Record<string, BaseDefComponent> = {};
-    let trustedFieldTypes = this.trustedFieldTypesByCard.get(card) ?? {};
-    let fieldMetadata = this.fieldMetadataByCard.get(card) ?? {};
+    let typeKey = this.opaqueTypeKeyFor(card);
+    let trustedFieldTypes =
+      (typeKey ? this.trustedFieldTypesByOpaqueType.get(typeKey) : undefined) ??
+      this.trustedFieldTypesByCard.get(card) ??
+      {};
+    let fieldMetadata =
+      (typeKey ? this.fieldMetadataByOpaqueType.get(typeKey) : undefined) ??
+      this.fieldMetadataByCard.get(card) ??
+      {};
     for (let name of Object.keys(model)) {
       if (name !== 'id') {
         fields[name] = realmSandboxFieldComponent(
@@ -3021,14 +3534,71 @@ export default class RealmSandboxService extends Service {
   }
 
   private principalFor(
-    resource: LooseCardResource,
+    _resource: LooseCardResource,
     moduleIdentifier: string,
   ): string {
-    let realmURL = resource.meta?.realmURL;
-    if (realmURL) {
-      return this.network.virtualNetwork.toURL(realmURL).href;
+    // The instance document is data supplied by a remote realm. Its
+    // meta.realmURL cannot grant execution into another principal's runtime.
+    // Key the compartment from the canonical code URL instead. A later
+    // response-level realm header still constrains every module fetch.
+    return this.principalForModule(moduleIdentifier);
+  }
+
+  private principalForModule(moduleIdentifier: string): string {
+    let owningRealm = this.network.realm.realmOf(new URL(moduleIdentifier));
+    return owningRealm
+      ? this.network.virtualNetwork.toURL(owningRealm).href
+      : new URL('./', moduleIdentifier).href;
+  }
+
+  private opaqueTypeKeyFor(card: BaseDef): string | undefined {
+    let typeState = getOpaqueRealmCardTypeState(card);
+    if (!typeState || !isResolvedCodeRef(typeState.typeRef)) {
+      return undefined;
     }
-    return new URL('./', moduleIdentifier).href;
+    return `${this.network.virtualNetwork.toURL(typeState.typeRef.module).href}|${String(typeState.typeRef.name)}`;
+  }
+
+  private opaqueMetadataRevisionFor(moduleKey: string): ReactiveRevision {
+    let revision = this.opaqueMetadataRevisions.get(moduleKey);
+    if (!revision) {
+      revision = new ReactiveRevision();
+      this.opaqueMetadataRevisions.set(moduleKey, revision);
+    }
+    return revision;
+  }
+
+  private consumeOpaqueMetadataRevision(card: BaseDef) {
+    let typeState = getOpaqueRealmCardTypeState(card);
+    if (typeState && isResolvedCodeRef(typeState.typeRef)) {
+      this.opaqueMetadataRevisionFor(
+        codePreviewModuleKey(
+          this.network.virtualNetwork.toURL(typeState.typeRef.module).href,
+        ),
+      ).consume();
+    }
+  }
+
+  private syncOpaqueCardPresentation(
+    card: BaseDef,
+    state: OpaqueRealmCardState,
+  ) {
+    let typeState = getOpaqueRealmCardTypeState(card);
+    if (!typeState) {
+      return;
+    }
+    let icon = (typeState as MutableOpaqueRealmCardTypeState).icon;
+    Object.defineProperty(state.snapshot, 'constructor', {
+      configurable: true,
+      enumerable: false,
+      value: Object.freeze({
+        displayName: typeState.displayName,
+        icon,
+      }),
+    });
+    state.presentation.displayName = typeState.displayName;
+    state.presentation.headerColor = typeState.headerColor;
+    state.presentation.prefersWideFormat = typeState.prefersWideFormat;
   }
 
   private snapshotFromResource(

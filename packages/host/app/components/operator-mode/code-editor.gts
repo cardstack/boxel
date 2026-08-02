@@ -542,7 +542,7 @@ export default class CodeEditor extends Component<Signature> {
       })
       .then(() => commit?.persisted())
       .catch((error) => {
-        commit?.failed();
+        commit?.failed(error);
         // Task cancellations are expected when the restartable contentChangedTask is
         // performed again while still running - this is normal behaviour, not an error
         if (didCancel(error)) {

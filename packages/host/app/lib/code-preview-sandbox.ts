@@ -47,7 +47,7 @@ export interface PreparedCodePreviewCommit {
   readonly clientRequestId: string;
   shouldDeferStoreRefresh(): boolean;
   persisted(): void;
-  failed(): void;
+  failed(error?: unknown): void;
 }
 
 export interface VolatileModuleGeneration {
@@ -102,6 +102,7 @@ export class VolatileModuleRegistry {
   constructor(
     private quietPeriodMs = DEFAULT_VOLATILE_MODULE_QUIET_PERIOD_MS,
     private now: () => number = () => Date.now(),
+    private maxEntries = 256,
   ) {}
 
   begin(sourceURL: string, canonicalSource: string): VolatileModuleGeneration {
@@ -121,8 +122,18 @@ export class VolatileModuleRegistry {
       revision: (previous?.revision ?? 0) + 1,
       expiresAt: this.now() + this.quietPeriodMs,
     });
+    this.modules.delete(key);
+    this.latestPublished.delete(key);
     this.modules.set(key, generation);
     this.latestPublished.set(key, generation);
+    while (this.modules.size > this.maxEntries) {
+      let oldest = this.modules.keys().next().value as string | undefined;
+      if (oldest == null) {
+        break;
+      }
+      this.modules.delete(oldest);
+      this.latestPublished.delete(oldest);
+    }
     return generation;
   }
 
@@ -396,6 +407,7 @@ export default class CodePreviewSandbox {
       return;
     }
     let failure: CodePreviewError = { type: 'runtime', message: error };
+    this.moduleError = failure;
     this.generationState = {
       phase: 'failed',
       revision: expectedDraft.revision,

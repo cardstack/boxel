@@ -106,6 +106,7 @@ class RealmSandboxFrame extends Component<Signature> {
         return;
       }
       this.port = event.ports[0];
+      globalThis.removeEventListener('message', acceptCapabilityPort);
       this.port.addEventListener('message', this.receive);
       this.port.start();
       heightService.start();

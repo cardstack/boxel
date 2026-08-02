@@ -113,6 +113,14 @@ export const delegatedCardRenderComponent = Symbol.for(
   'boxel-delegated-card-render-component',
 );
 
+// Some trusted renderers intentionally select a component other than the
+// card's default format component. Opaque cards expose that choice as a
+// factory so Base can preserve getComponent(instance, { componentCodeRef })
+// without recovering the authored constructor or a Loader.
+export const delegatedCardRenderComponentFor = Symbol.for(
+  'boxel-delegated-card-render-component-for',
+);
+
 export interface Permissions {
   readonly canRead: boolean;
   readonly canWrite: boolean;
