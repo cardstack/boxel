@@ -18,7 +18,6 @@ import { RealmServer } from './server.ts';
 import { join } from 'path';
 import * as Sentry from '@sentry/node';
 import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
-import { createRealmProgramExecutor } from '@cardstack/realm-runner';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 
 import 'decorator-transforms/globals';
@@ -517,16 +516,6 @@ const reportHostShellToManager = async () => {
     moduleCacheCoordinator,
   );
 
-  let realmProgramExecutor = await createRealmProgramExecutor({
-    realmServerUrl: serverURL,
-    notebookEncryptionKey: REALM_SECRET_SEED,
-    onBxlUnavailable(error) {
-      log.warn(
-        `Realm Program started without BXL; set BXL_API or install @cardstack/bxl to enable realm.bxl: ${error}`,
-      );
-    },
-  });
-
   if (SKIP_MODULES_CACHE_CLEAR_ON_STARTUP) {
     log.info('Skipping modules cache clear on startup (opted out via env)');
   } else {
@@ -630,7 +619,6 @@ const reportHostShellToManager = async () => {
           fileSizeLimitBytes: Number(
             process.env.FILE_SIZE_LIMIT_BYTES ?? DEFAULT_FILE_SIZE_LIMIT_BYTES,
           ),
-          realmProgramExecutor,
         },
         {
           ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),
