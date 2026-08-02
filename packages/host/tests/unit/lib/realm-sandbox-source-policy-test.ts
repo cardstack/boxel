@@ -105,6 +105,44 @@ module('Unit | realm sandbox source policy', function () {
     assert.deepEqual(scoped.signals, []);
   });
 
+  test('dynamic inline styles require an isolated document', async function (assert) {
+    let source = `
+      import { CardDef, Component } from '@cardstack/base/card-api';
+      export class StyledCard extends CardDef {
+        static isolated = class extends Component<typeof this> {
+          style = 'color: rebeccapurple';
+          <template><article style={{this.style}}>Styled</article></template>
+        };
+      }
+    `;
+    let result = await classifyCardSourceForSandbox(source);
+    assert.strictEqual(result.tier, 'iframe', 'authored GTS selects iframe');
+    assert.deepEqual(
+      result.signals,
+      ['dynamic-inline-style'],
+      'authored GTS reports the dynamic style signal',
+    );
+
+    let compiledSource = await transpileJS(source, '/dynamic-inline-style.gts');
+    let compiled = await classifyCardSourceForSandbox(compiledSource);
+    assert.strictEqual(compiled.tier, 'iframe', 'compiled GTS selects iframe');
+    assert.deepEqual(
+      compiled.signals,
+      ['dynamic-inline-style'],
+      'compiled GTS reports the dynamic style signal',
+    );
+
+    let staticStyle = await classifyCardSourceForSandbox(`
+      import { CardDef, Component } from '@cardstack/base/card-api';
+      export class StyledCard extends CardDef {
+        static isolated = class extends Component<typeof this> {
+          <template><article style="width: 100%">Styled</article></template>
+        };
+      }
+    `);
+    assert.strictEqual(staticStyle.tier, 'compartment');
+  });
+
   test('comments and string literals do not grant a broader renderer', async function (assert) {
     let result = await classifyCardSourceForSandbox(`
       // document.createElement('canvas');

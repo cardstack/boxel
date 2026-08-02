@@ -7,6 +7,7 @@ import RealmCompartmentModuleRuntime, {
   sandboxRealmURLArgument,
 } from '@cardstack/host/lib/realm-compartment-module-runtime';
 import { validateCompartmentCSS } from '@cardstack/host/services/realm-sandbox';
+import { validateCompartmentInlineStyle } from '@cardstack/host/services/realm-sandbox';
 
 const MODULE_ID = 'https://realm.example/cards/article.js';
 const TEMPLATE_BLOCK = JSON.stringify([
@@ -52,6 +53,7 @@ function runtimeFor(sources: Record<string, string>) {
       moduleIdentifier.startsWith('@')
         ? `https://packages.example/${moduleIdentifier}`
         : moduleIdentifier,
+    validateInlineStyle: validateCompartmentInlineStyle,
   });
 }
 
@@ -677,6 +679,73 @@ module('Unit | realm compartment module runtime', function () {
     );
   });
 
+  test('validates static inline styles and rejects dynamic inline styles before rendering', async function (assert) {
+    let moduleID = 'https://realm.example/cards/inline-style';
+    let safeSource = await transpileJS(
+      `
+        import { CardDef, Component } from '@cardstack/base/card-api';
+
+        export class InlineCard extends CardDef {
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <article style="width: 100%; color: rebeccapurple">Safe</article>
+            </template>
+          };
+        }
+      `,
+      '/inline-style.gts',
+    );
+    let safeRuntime = runtimeFor({ [moduleID]: safeSource });
+    await safeRuntime.evaluateTemplate(moduleID, 'InlineCard', 'isolated');
+    assert.step('safe literal style accepted');
+
+    let networkSource = await transpileJS(
+      `
+        import { CardDef, Component } from '@cardstack/base/card-api';
+
+        export class InlineCard extends CardDef {
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <article style="background: url(https://evil.example/steal)">Unsafe</article>
+            </template>
+          };
+        }
+      `,
+      '/inline-style.gts',
+    );
+    await assert.rejects(
+      runtimeFor({ [moduleID]: networkSource }).evaluateTemplate(
+        moduleID,
+        'InlineCard',
+        'isolated',
+      ),
+      /network-bearing value/,
+    );
+
+    let dynamicSource = await transpileJS(
+      `
+        import { CardDef, Component } from '@cardstack/base/card-api';
+
+        export class InlineCard extends CardDef {
+          static isolated = class Isolated extends Component<typeof this> {
+            style = 'color: rebeccapurple';
+            <template><article style={{this.style}}>Unsafe</article></template>
+          };
+        }
+      `,
+      '/inline-style.gts',
+    );
+    await assert.rejects(
+      runtimeFor({ [moduleID]: dynamicSource }).evaluateTemplate(
+        moduleID,
+        'InlineCard',
+        'isolated',
+      ),
+      /cannot use dynamic inline styles/,
+    );
+    assert.verifySteps(['safe literal style accepted']);
+  });
+
   test('rejects a scoped template that compiles a document-global rule', async function (assert) {
     let moduleID = 'https://realm.example/cards/global-style';
     let source = await transpileJS(
@@ -929,6 +998,7 @@ module('Unit | realm compartment module runtime', function () {
 
           @field name = contains(StringField);
           @field heroImage = linksTo(() => ImageDef, { searchable: true });
+          @field relatedStyle = linksTo(() => Style);
           @field definingRules = containsMany(StringField);
           @field ingredients = containsMany(IngredientField);
           @field prose = contains(MarkdownField);
@@ -976,11 +1046,25 @@ module('Unit | realm compartment module runtime', function () {
           name: 'default',
         },
       },
+      relatedStyle: {
+        kind: 'linksTo',
+        type: {
+          module: '@cardstack/base/card-api',
+          name: 'CardDef',
+        },
+      },
       definingRules: {
         kind: 'containsMany',
         type: {
           module: '@cardstack/base/string',
           name: 'default',
+        },
+      },
+      ingredients: {
+        kind: 'containsMany',
+        type: {
+          module: '@cardstack/base/card-api',
+          name: 'FieldDef',
         },
       },
       prose: {

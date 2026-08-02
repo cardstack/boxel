@@ -1134,6 +1134,7 @@ export default class PlaygroundPanel extends Component<Signature> {
                     @card={{card}}
                     @format={{this.effectiveFormat}}
                     @codeRef={{this.effectiveCodeRef}}
+                    @viewCard={{@viewCard}}
                     @realmInfo={{this.realmInfo}}
                     @contextMenuItems={{unless
                       @isFileDef

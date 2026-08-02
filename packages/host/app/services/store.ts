@@ -872,6 +872,10 @@ export default class StoreService extends Service implements StoreInterface {
       isNonPresentLink: api.isNonPresentLink,
       getCardMeta: api.getCardMeta as CardAPIForMatching['getCardMeta'],
       primitive: api.primitive,
+      isInstanceOf: (instance, ref) =>
+        this.realmSandbox.opaqueCardIsInstanceOf(instance, ref),
+      resolveQueryablePath: (instance, path) =>
+        this.realmSandbox.resolveOpaqueQueryablePath(instance, path),
       virtualNetwork: this.network.virtualNetwork,
     };
   }
@@ -1831,6 +1835,10 @@ export default class StoreService extends Service implements StoreInterface {
         relativeTo,
       )
     ) {
+      await this.materializeTrustedIncludedRelationships(
+        doc,
+        dependencyTrackingContext,
+      );
       // Match card-api's normal deserializer identity behavior. A no-cache
       // reload may materialize a fresh opaque facade, but one remote URL must
       // keep one local identity or the Store correctly rejects the duplicate.
@@ -1840,6 +1848,14 @@ export default class StoreService extends Service implements StoreInterface {
         relativeTo,
         doc,
         existing?.[localIdSymbol],
+        (id, fieldType) => {
+          let isFileType = Boolean(
+            (fieldType as typeof BaseDef & { isFileDef?: boolean }).isFileDef,
+          );
+          return isFileType
+            ? this.store.getFileMeta(id)
+            : this.store.getCard(id);
+        },
       );
     }
     let shouldStubTimers =
@@ -1868,6 +1884,32 @@ export default class StoreService extends Service implements StoreInterface {
       });
     }
     return card;
+  }
+
+  private async materializeTrustedIncludedRelationships(
+    doc: LooseSingleCardDocument | CardDocument,
+    dependencyTrackingContext?: RuntimeDependencyTrackingContext,
+  ): Promise<void> {
+    let fileResources = (doc.included ?? []).filter(isFileMetaResource);
+    if (fileResources.length === 0) {
+      return;
+    }
+    let api = await this.cardService.getAPI();
+    for (let resource of fileResources) {
+      if (!resource.id || this.store.getFileMeta(resource.id)) {
+        continue;
+      }
+      await api.createFromSerialized(
+        resource,
+        { data: resource },
+        rri(resource.id),
+        {
+          store: this.store,
+          dependencyTrackingContext,
+          loader: this.loaderService.baseLoader,
+        },
+      );
+    }
   }
 
   // Defensive lookup of the telemetry service — never forces the hooked path
@@ -2061,12 +2103,32 @@ export default class StoreService extends Service implements StoreInterface {
       (url) => !hmrHandled.has(url),
     );
 
+    // Realm trust decides where new code may execute. It must not erase the
+    // fact that an older/native consumer may already hold this module in a
+    // trusted Loader graph (including a graph a local code write just
+    // invalidated). In that case the trusted graph still needs its legacy
+    // Store rebuild while the sandbox graph is invalidated independently.
+    let loadedByTrustedHost = new Set(
+      remainingExecutableInvalidations.filter((url) =>
+        this.loaderService.isModuleLoaded(url),
+      ),
+    );
+    let flushedByTrustedHost = new Set(
+      remainingExecutableInvalidations.filter((url) =>
+        this.loaderService.wasModuleFlushedForCodeChange(url),
+      ),
+    );
+    let requiresTrustedStoreRebuild = (url: string) =>
+      !this.realmSandbox.isSandboxedUserModule(url) ||
+      loadedByTrustedHost.has(url) ||
+      flushedByTrustedHost.has(url);
+
     // Opaque user cards keep their canonical Store data while source code is
     // invalidated in the realm compartment. There is no executable CardDef
     // class in the host Store to rebuild, so replacing the Store and every
     // Loader graph here is both unnecessary and visibly disruptive.
     let sandboxedUserInvalidations = remainingExecutableInvalidations.filter(
-      (url) => this.realmSandbox.isSandboxedUserModule(url),
+      (url) => !requiresTrustedStoreRebuild(url),
     );
     for (let sourceURL of sandboxedUserInvalidations) {
       this.realmSandbox.invalidateCanonicalSandboxModule(sourceURL);
@@ -2079,18 +2141,12 @@ export default class StoreService extends Service implements StoreInterface {
     // Invalidate just the changed Loader modules (and known dependants), then
     // reestablish Store references only if one of those modules was live.
     let trustedExecutableInvalidations =
-      remainingExecutableInvalidations.filter(
-        (url) => !this.realmSandbox.isSandboxedUserModule(url),
-      );
+      remainingExecutableInvalidations.filter(requiresTrustedStoreRebuild);
     let alreadyFlushed = new Set(
-      trustedExecutableInvalidations.filter((i) =>
-        this.loaderService.wasModuleFlushedForCodeChange(i),
-      ),
+      trustedExecutableInvalidations.filter((i) => flushedByTrustedHost.has(i)),
     );
     let loadedTrustedInvalidations = new Set(
-      trustedExecutableInvalidations.filter((i) =>
-        this.loaderService.isModuleLoaded(i),
-      ),
+      trustedExecutableInvalidations.filter((i) => loadedByTrustedHost.has(i)),
     );
     for (let sourceURL of trustedExecutableInvalidations) {
       this.loaderService.invalidateModule(sourceURL, {
@@ -2120,6 +2176,7 @@ export default class StoreService extends Service implements StoreInterface {
           event.realmURL,
           trustedExecutableInvalidations,
           alreadyFlushed,
+          loadedTrustedInvalidations,
         );
       }
       this.rebuildForCodeChange.perform();
@@ -2369,6 +2426,7 @@ export default class StoreService extends Service implements StoreInterface {
     realm: string,
     executableInvalidations: string[],
     alreadyFlushed: Set<string>,
+    loadedBeforeInvalidation: Set<string>,
   ) {
     let pending = (this.#pendingRebuild ??= {
       realm,
@@ -2384,10 +2442,7 @@ export default class StoreService extends Service implements StoreInterface {
       pending.triggerModules.add(module);
       // A module the code change already flushed was loaded and the rebuild
       // will re-fetch it, even though the flushed loader no longer reports it.
-      if (
-        alreadyFlushed.has(module) ||
-        this.loaderService.isModuleLoaded(module)
-      ) {
+      if (alreadyFlushed.has(module) || loadedBeforeInvalidation.has(module)) {
         pending.modulesRefetched.add(module);
       }
     }

@@ -3261,24 +3261,23 @@ module('Integration | Store', function (hooks) {
     );
   });
 
-  // Count full rebuilds by the loader flush each one performs: the coalesced
-  // rebuild calls resetLoader exactly once, and nothing else flushes the loader
-  // in these tests, so resetLoader-call-count == rebuild-count.
+  // Count the Store graph resets that constitute a trusted-code rebuild. The
+  // targeted invalidation architecture deliberately preserves Loader identity,
+  // so replacing the Loader is no longer an observable proxy for a rebuild.
   function countRebuilds() {
     let count = 0;
-    let original = loaderService.resetLoader;
-    loaderService.resetLoader = function (
-      options?: Parameters<LoaderService['resetLoader']>[0],
-    ) {
+    let cardStore = (storeService as any).store;
+    let original = cardStore.reset;
+    cardStore.reset = function () {
       count++;
-      return original.call(loaderService, options);
-    } as LoaderService['resetLoader'];
+      return original.call(cardStore);
+    };
     return {
       get count() {
         return count;
       },
       restore() {
-        loaderService.resetLoader = original;
+        cardStore.reset = original;
       },
     };
   }

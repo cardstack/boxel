@@ -65,6 +65,10 @@ export interface OpaqueRealmCardState {
   snapshot: Record<string, unknown>;
   presentation: OpaqueRealmCardPresentation;
   setField?: (fieldName: string, value: unknown) => void;
+  resolveTrustedRelationship?: (
+    id: string,
+    fieldType: typeof BaseDef,
+  ) => BaseDef | undefined;
 }
 
 export interface OpaqueRealmCard {

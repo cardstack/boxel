@@ -37,6 +37,7 @@ import type {
   Format,
   Field,
   CardContext,
+  ViewCardFn,
 } from '@cardstack/base/card-api';
 
 interface Signature {
@@ -47,6 +48,7 @@ interface Signature {
     field?: Field;
     codeRef?: ResolvedCodeRef;
     displayContainer?: boolean;
+    viewCard?: ViewCardFn;
   };
 }
 
@@ -280,7 +282,7 @@ export default class CardRenderer extends Component<Signature> {
   }
 
   get viewCard() {
-    return this.cardCrudFunctions?.viewCard;
+    return this.args.viewCard ?? this.cardCrudFunctions?.viewCard;
   }
 
   get useTrustedBaseTemplate() {

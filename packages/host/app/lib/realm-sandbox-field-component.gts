@@ -3,6 +3,7 @@ import { registerDestructor } from '@ember/destroyable';
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import { scheduleOnce } from '@ember/runloop';
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import { restartableTask } from 'ember-concurrency';
@@ -20,13 +21,15 @@ import {
   GetCardContextName,
   identifyCard,
   isCardInstance,
+  isFileDefInstance,
   type getCard,
 } from '@cardstack/runtime-common';
 
-import HydratableCard from '@cardstack/host/components/search/hydratable-card';
+import CardRenderer from '@cardstack/host/components/card-renderer';
 import { renderWithArgs, teardown } from '@cardstack/host/lib/isolated-render';
 import type { SandboxCardFieldMetadata } from '@cardstack/host/lib/realm-compartment-module-runtime';
 import type { RealmSandboxRelationshipContext } from '@cardstack/host/services/realm-sandbox';
+import type StoreService from '@cardstack/host/services/store';
 
 import type {
   BaseDef,
@@ -41,8 +44,8 @@ type RelationshipResourceType = 'card' | 'file-meta';
 class HostRelationshipCard extends Component<{
   Args: {
     cardId: string;
+    card: BaseDef;
     format: Format;
-    resourceType: RelationshipResourceType;
     relationshipContext: RealmSandboxRelationshipContext;
   };
 }> {
@@ -59,12 +62,12 @@ class HostRelationshipCard extends Component<{
   }
 
   <template>
-    <HydratableCard
-      @cardId={{@cardId}}
+    <CardRenderer
+      @card={{@card}}
       @format={{@format}}
-      @mode='none'
-      @overlays={{true}}
-      @type={{@resourceType}}
+      @displayContainer={{false}}
+      @viewCard={{@relationshipContext.viewCard}}
+      data-test-hydratable-card={{@cardId}}
     />
   </template>
 }
@@ -87,12 +90,15 @@ interface DeferredRelationshipSignature {
 // This is an explicit presentation portal: only identity, format, and resource
 // kind cross it; Store and loader authority remain inside HydratableCard.
 class DeferredRelationshipCard extends Modifier<DeferredRelationshipSignature> {
+  @service declare private store: StoreService;
   private element?: HTMLDivElement;
   private args?: DeferredRelationshipSignature['Args']['Named'];
+  private generation = 0;
 
   constructor(owner: Owner, args: ArgsFor<DeferredRelationshipSignature>) {
     super(owner, args);
     registerDestructor(this, () => {
+      this.generation++;
       if (this.element) {
         teardown(this.element as any);
       }
@@ -106,18 +112,31 @@ class DeferredRelationshipCard extends Modifier<DeferredRelationshipSignature> {
   ) {
     this.element = element;
     this.args = args;
+    this.generation++;
     scheduleOnce('afterRender', this, this.renderCard);
   }
 
-  private renderCard() {
+  private async renderCard() {
     if (!this.element || !this.args) {
+      return;
+    }
+    let generation = this.generation;
+    let { cardId, resourceType } = this.args;
+    let card =
+      resourceType === 'file-meta'
+        ? await this.store.get(cardId, { type: 'file-meta' })
+        : await this.store.get(cardId);
+    if (
+      generation !== this.generation ||
+      (!isCardInstance(card) && !isFileDefInstance(card))
+    ) {
       return;
     }
     renderWithArgs(
       HostRelationshipCard as any,
       this.element as any,
       getOwner(this) as Owner,
-      this.args,
+      { ...this.args, card },
     );
   }
 }

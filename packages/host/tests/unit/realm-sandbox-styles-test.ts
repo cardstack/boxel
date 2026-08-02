@@ -2,7 +2,10 @@ import { getService } from '@universal-ember/test-support';
 import { setupTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
-import { validateCompartmentCSS } from '@cardstack/host/services/realm-sandbox';
+import {
+  validateCompartmentCSS,
+  validateCompartmentInlineStyle,
+} from '@cardstack/host/services/realm-sandbox';
 
 module('Unit | Service | realm sandbox styles', function (hooks) {
   setupTest(hooks);
@@ -52,6 +55,23 @@ module('Unit | Service | realm sandbox styles', function (hooks) {
         () => validateCompartmentCSS(css),
         /network-bearing value/,
         css,
+      );
+    }
+  });
+
+  test('validates literal inline styles before they reach the DOM', function (assert) {
+    let safe = 'width: 100%; color: rebeccapurple';
+    assert.strictEqual(validateCompartmentInlineStyle(safe), safe);
+
+    for (let style of [
+      'background: url("https://evil.example/steal")',
+      'background: u\\72l("https://evil.example/steal")',
+      'background-image: image-set("steal.png" 1x)',
+    ]) {
+      assert.throws(
+        () => validateCompartmentInlineStyle(style),
+        /network-bearing value/,
+        style,
       );
     }
   });

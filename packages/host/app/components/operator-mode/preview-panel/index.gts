@@ -369,6 +369,7 @@ export default class PreviewPanel extends Component<Signature> {
               @card={{@card}}
               @format={{this.effectiveFormat}}
               @codeRef={{this.effectiveCodeRef}}
+              @viewCard={{@viewCard}}
             />
           {{/if}}
         </CardContainer>

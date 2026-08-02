@@ -128,12 +128,40 @@ export interface RealmCompartmentRuntimeOptions {
   documentFacade?: object;
   mathFacade?: object;
   isTrustedImport?: (moduleIdentifier: string) => boolean | string;
+  validateInlineStyle?: (style: string) => void;
 }
 
 const lockdownMarker = Symbol.for('boxel.realm-compartment.lockdown');
 export const sandboxRealmURLArgument = '__boxelSandboxRealmURL';
 export const sandboxViewCardCapabilityArgument =
   '__boxelSandboxHasViewCardCapability';
+
+const staticAttributeOpcodes = new Set([14, 24]);
+const dynamicAttributeOpcodes = new Set([15, 16, 22, 23]);
+
+function validateTemplateInlineStyles(
+  value: unknown,
+  validateInlineStyle: ((style: string) => void) | undefined,
+): void {
+  if (!Array.isArray(value)) {
+    return;
+  }
+  let [opcode, name, attributeValue] = value;
+  let isStyleAttribute = name === 'style' || name === 5;
+  if (isStyleAttribute && staticAttributeOpcodes.has(Number(opcode))) {
+    if (typeof attributeValue !== 'string' || !validateInlineStyle) {
+      throw new Error('SES template inline style validation is unavailable');
+    }
+    validateInlineStyle(attributeValue);
+  } else if (isStyleAttribute && dynamicAttributeOpcodes.has(Number(opcode))) {
+    throw new Error(
+      'SES templates cannot use dynamic inline styles; use <style scoped> or an iframe-rendered format',
+    );
+  }
+  for (let entry of value) {
+    validateTemplateInlineStyles(entry, validateInlineStyle);
+  }
+}
 
 function ensureLockdown() {
   let globals = globalThis as typeof globalThis & {
@@ -146,6 +174,19 @@ function ensureLockdown() {
     // confined evaluator and receives only the endowments declared below.
     lockdown({
       evalTaming: 'unsafe-eval',
+      // The start compartment is the trusted Ember host, not realm code. SES's
+      // default causal console is frozen, which prevents the host test harness
+      // (and normal host diagnostics tooling) from temporarily stubbing
+      // console methods. Preserve the platform console here; it is not an
+      // endowment of user-realm compartments.
+      consoleTaming: 'unsafe',
+      // Keep the trusted Host's existing Error constructors, stacks, and
+      // top-of-turn handlers. Boxel's standard error surfaces depend on the
+      // platform stack, and the compartment is never endowed with host Error
+      // objects whose diagnostics would become a capability leak.
+      errorTaming: 'unsafe',
+      errorTrapping: 'none',
+      unhandledRejectionTrapping: 'none',
       // Monaco and other webpack/Rollup-produced host libraries assign an
       // own `constructor` while establishing generated prototype chains.
       // Endo documents override taming as a compatibility (not security)
@@ -302,7 +343,7 @@ export default class RealmCompartmentModuleRuntime {
 
   constructor(
     readonly principal: string,
-    options: RealmCompartmentRuntimeOptions,
+    private options: RealmCompartmentRuntimeOptions,
   ) {
     ensureLockdown();
 
@@ -829,17 +870,26 @@ export default class RealmCompartmentModuleRuntime {
           let trustedType = this.trustedExportByValue.get(
             (definition as { card?: object }).card ?? {},
           );
-          if (trustedType) {
-            let fields = this.fieldMetadataByPrototype.get(target);
-            if (!fields) {
-              fields = new Map();
-              this.fieldMetadataByPrototype.set(target, fields);
-            }
-            fields.set(name, {
-              kind,
-              type: trustedType,
-            });
+          // A realm-authored field type is not a trusted Host constructor, but
+          // its declaration is still safe inert schema. Preserve the field and
+          // substitute the corresponding trusted Base supertype. This lets the
+          // Host render relationship portals and generic nested fields without
+          // importing the authored constructor outside the compartment.
+          let genericType = this.trustedExportByValue.get(
+            kind === 'linksTo' || kind === 'linksToMany'
+              ? SandboxCardDef
+              : SandboxFieldDef,
+          );
+          let fieldType = trustedType ?? genericType;
+          if (!fieldType) {
+            return descriptor;
           }
+          let fields = this.fieldMetadataByPrototype.get(target);
+          if (!fields) {
+            fields = new Map();
+            this.fieldMetadataByPrototype.set(target, fields);
+          }
+          fields.set(name, { kind, type: fieldType });
         }
       }
       return descriptor;
@@ -918,6 +968,7 @@ export default class RealmCompartmentModuleRuntime {
         'SES templates must use <style scoped>; unscoped <style> would affect the shared host document',
       );
     }
+    validateTemplateInlineStyles(block, this.options.validateInlineStyle);
     let scope = descriptor.scope?.() ?? [];
     if (!Array.isArray(scope)) {
       throw new Error('Card template descriptor has an invalid scope');

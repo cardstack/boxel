@@ -1,4 +1,5 @@
 import { registerDestructor } from '@ember/destroyable';
+import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
@@ -45,6 +46,7 @@ interface RelationshipContextSignature {
       getCard: getCard;
       cardContext?: CardContext;
       canWrite: () => boolean;
+      viewCard?: ViewCardFn;
     };
   };
 }
@@ -53,6 +55,7 @@ type RealmSandboxRelationshipContextValue = {
   getCard: getCard;
   cardContext?: CardContext;
   canWrite: () => boolean;
+  viewCard?: ViewCardFn;
 };
 
 class RealmSandboxRelationshipContext extends Modifier<RelationshipContextSignature> {
@@ -75,6 +78,7 @@ class RealmSandboxRelationshipContext extends Modifier<RelationshipContextSignat
       this.context.getCard = named.getCard;
       this.context.cardContext = named.cardContext;
       this.context.canWrite = named.canWrite;
+      this.context.viewCard = named.viewCard;
       return;
     }
     this.unregister?.();
@@ -83,11 +87,41 @@ class RealmSandboxRelationshipContext extends Modifier<RelationshipContextSignat
       getCard: named.getCard,
       cardContext: named.cardContext,
       canWrite: named.canWrite,
+      viewCard: named.viewCard,
     };
     this.unregister = this.realmSandbox.registerRelationshipContext(
       named.card,
       this.context,
     );
+  }
+}
+
+interface RetainRealmSandboxCardSignature {
+  Element: Element;
+  Args: { Positional: [card: BaseDef] };
+}
+
+class RetainRealmSandboxCard extends Modifier<RetainRealmSandboxCardSignature> {
+  @service declare private realmSandbox: RealmSandboxService;
+  private release?: () => void;
+  private card?: BaseDef;
+
+  constructor(owner: Owner, args: ArgsFor<RetainRealmSandboxCardSignature>) {
+    super(owner, args);
+    registerDestructor(this, () => this.release?.());
+  }
+
+  modify(
+    _element: Element,
+    [card]: PositionalArgs<RetainRealmSandboxCardSignature>,
+  ) {
+    if (this.card === card) {
+      return;
+    }
+    let previousRelease = this.release;
+    this.card = card;
+    this.release = this.realmSandbox.retainRealmCard(card);
+    previousRelease?.();
   }
 }
 
@@ -214,6 +248,25 @@ export default class RealmSandboxRender extends Component<Signature> {
     this.args.viewCard(rri(cardURL.href), format, options);
   };
 
+  navigate = (event: Event) => {
+    if (!this.args.viewCard || !this.cardID || event.defaultPrevented) {
+      return;
+    }
+    let target = event.target;
+    if (
+      target instanceof Element &&
+      target !== event.currentTarget &&
+      target.closest('a, button, input, select, textarea, [role="button"]')
+    ) {
+      return;
+    }
+    // Nested relationship cards are independent navigation surfaces. The
+    // nearest card owns the click; do not let it bubble into the containing
+    // card and enqueue a second navigation.
+    event.stopPropagation();
+    this.viewCard(rri(this.cardID), this.format);
+  };
+
   <template>
     <CardContainer
       @displayBoundaries={{this.displayContainer}}
@@ -227,6 +280,8 @@ export default class RealmSandboxRender extends Component<Signature> {
         (if (eq this.format 'embedded') 'embedded-format')
         (if (eq this.format 'fitted') 'fitted-format')
         (if (eq this.format 'atom') 'atom-format')
+        (if (eq this.format 'edit') 'edit-format')
+        (if (eq this.format 'markdown') 'markdown-format')
         (if
           this.displayContainer
           'display-container-true'
@@ -243,6 +298,8 @@ export default class RealmSandboxRender extends Component<Signature> {
       data-test-card={{this.cardID}}
       data-test-card-format={{this.format}}
       data-test-field-component-card
+      {{on 'click' this.navigate}}
+      {{RetainRealmSandboxCard @card}}
       {{this.cardComponentModifier
         cardId=this.cardID
         format=this.format
@@ -259,6 +316,7 @@ export default class RealmSandboxRender extends Component<Signature> {
           getCard=this.getCard
           cardContext=this.cardContext
           canWrite=this.canWrite
+          viewCard=this.viewCard
         }}
         {{RealmSandboxStyles @sandbox.styles}}
         {{RealmSandboxTemplateIsland

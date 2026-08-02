@@ -1,7 +1,8 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
+import type Owner from '@ember/owner';
 import Service from '@ember/service';
-import { click, waitFor } from '@ember/test-helpers';
+import { click, settled, waitFor } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
@@ -13,13 +14,17 @@ import type { Loader } from '@cardstack/runtime-common/loader';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
 import RealmSandboxRender from '@cardstack/host/components/realm-sandbox-render';
-import { getOpaqueRealmCardState } from '@cardstack/host/lib/realm-sandbox-boundary';
+import {
+  getOpaqueRealmCardState,
+  opaqueRealmCardState,
+} from '@cardstack/host/lib/realm-sandbox-boundary';
 
 import { percySnapshot, testRealmURL } from '../../helpers';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
 import type {
+  BaseDef,
   BaseDefComponent,
   Format,
   ViewCardFn,
@@ -251,6 +256,154 @@ module('Integration | preview', function (hooks) {
     assert
       .dom('[data-boxel-theme-style]')
       .includesText('--background: #f7f8fa');
+  });
+
+  test('[SOAK-03] rendered cross-realm navigation releases departed runtimes and styles', async function (assert) {
+    let { CardDef } = cardApi;
+    class TestCard extends CardDef {}
+    let templateForNavigation = () =>
+      class InertTemplate extends GlimmerComponent<{
+        Args: { model: { navigation: number } };
+      }> {
+        <template>
+          <p data-test-rendered-soak>{{@model.navigation}}</p>
+        </template>
+      };
+    let realmSandbox = getService('realm-sandbox') as unknown as {
+      compartmentRuntimeFor(principal: string): unknown;
+      evictIdleRealmRuntimes(): void;
+      metricsSnapshot(): {
+        activeCompartments: number;
+        activeCompartmentLoads: number;
+        cachedCompartmentTemplates: number;
+      };
+    };
+    let collectGarbage = (globalThis as typeof globalThis & { gc?: () => void })
+      .gc;
+    let memory = (
+      performance as Performance & {
+        memory?: { usedJSHeapSize: number };
+      }
+    ).memory;
+    let warmHeap: number | undefined;
+
+    let driver!: TestDriver;
+    class TestDriver extends GlimmerComponent {
+      @tracked renderState?: {
+        card: BaseDef;
+        sandbox: {
+          component: BaseDefComponent;
+          model: { navigation: number };
+          fields: Record<string, BaseDefComponent>;
+          styles: string[];
+          principal: string;
+          markerBacked: boolean;
+        };
+      };
+
+      constructor(owner: Owner, args: Record<string, never>) {
+        super(owner, args);
+        driver = this;
+      }
+
+      navigate(
+        card: BaseDef,
+        sandbox: NonNullable<this['renderState']>['sandbox'],
+      ) {
+        this.renderState = { card, sandbox };
+      }
+
+      clear() {
+        this.renderState = undefined;
+      }
+
+      <template>
+        {{#if this.renderState}}
+          <RealmSandboxRender
+            @card={{this.renderState.card}}
+            @format='fitted'
+            @sandbox={{this.renderState.sandbox}}
+          />
+        {{/if}}
+      </template>
+    }
+
+    await renderComponent(TestDriver);
+    for (let navigation = 0; navigation < 512; navigation++) {
+      let principal = `https://rendered-realm-${navigation}.example/`;
+      let card = new TestCard({});
+      Object.defineProperty(card, opaqueRealmCardState, {
+        value: {
+          typeRef: { module: `${principal}card`, name: 'Card' },
+          principal,
+          document: { data: { type: 'card' } },
+          snapshot: {},
+          presentation: { headerColor: null, prefersWideFormat: false },
+        },
+      });
+      realmSandbox.compartmentRuntimeFor(principal);
+      driver.navigate(card, {
+        component: templateForNavigation() as unknown as BaseDefComponent,
+        model: { navigation },
+        fields: {},
+        styles: [
+          `[data-scopedcss-render-soak-${navigation % 8}] { color: rgb(${navigation % 255} 0 0); }`,
+        ],
+        principal,
+        markerBacked: false,
+      });
+      await settled();
+      realmSandbox.evictIdleRealmRuntimes();
+
+      if (navigation % 64 === 0) {
+        assert.dom('[data-test-rendered-soak]').hasText(String(navigation));
+        assert.strictEqual(
+          realmSandbox.metricsSnapshot().activeCompartments,
+          1,
+          `navigation ${navigation} retains only its rendered realm`,
+        );
+        assert.strictEqual(
+          document.querySelectorAll('[data-realm-sandbox-stylesheet]').length,
+          1,
+          `navigation ${navigation} retains one authored stylesheet`,
+        );
+      }
+      if (navigation === 63 && collectGarbage && memory) {
+        collectGarbage();
+        collectGarbage();
+        warmHeap = memory.usedJSHeapSize;
+      }
+    }
+
+    driver.clear();
+    await settled();
+    realmSandbox.evictIdleRealmRuntimes();
+    let final = realmSandbox.metricsSnapshot();
+    assert.strictEqual(final.activeCompartments, 0, 'all runtimes exit');
+    assert.strictEqual(final.activeCompartmentLoads, 0, 'no loads remain');
+    assert.strictEqual(
+      final.cachedCompartmentTemplates,
+      0,
+      'no templates remain',
+    );
+    assert.strictEqual(
+      document.querySelectorAll('[data-realm-sandbox-stylesheet]').length,
+      0,
+      'all rendered sandbox styles exit',
+    );
+    if (warmHeap != null && collectGarbage && memory) {
+      collectGarbage();
+      collectGarbage();
+      let growth = memory.usedJSHeapSize - warmHeap;
+      let growthMB = (growth / 1024 / 1024).toFixed(2);
+      console.log(
+        `REALM_SANDBOX_RENDER_SOAK navigations=512 heap_growth_mb=${growthMB} active_compartments=${final.activeCompartments} active_loads=${final.activeCompartmentLoads} cached_templates=${final.cachedCompartmentTemplates}`,
+      );
+      assert.true(
+        growth <= 16 * 1024 * 1024,
+        `rendered steady-state heap grows by at most 16 MiB (actual ${growthMB} MiB)`,
+      );
+    }
   });
 
   test('routes sandbox navigation through a realm-relative viewCard capability', async function (assert) {

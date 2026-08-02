@@ -53,6 +53,22 @@ export interface CardAPIForMatching {
     metaKey: 'lastModified' | 'resourceCreatedAt',
   ): any;
   primitive: symbol;
+  // Sandboxed records deliberately do not expose their executable CardDef
+  // constructor or field descriptors to the Host. A host may provide these
+  // inert-data adapters so the matcher can preserve live-search behavior
+  // without reaching through that boundary. Returning undefined delegates to
+  // the ordinary card-api implementation below.
+  isInstanceOf?(instance: BaseDef, ref: CodeRef): boolean | undefined;
+  resolveQueryablePath?(
+    instance: BaseDef,
+    path: string,
+  ):
+    | {
+        values: any[];
+        leafField: Field<any> | undefined;
+        sawUnresolvable: boolean;
+      }
+    | undefined;
   // Resolves a module reference's URL aliases so a type gate compares refs by
   // their resolved identity rather than raw spelling. The server tolerates
   // equivalent spellings (RRI / real-URL / virtual-alias) via `internalKeyFor`
@@ -271,6 +287,10 @@ function resolvePath(
   path: string,
   api: CardAPIForMatching,
 ): PathResolution {
+  let explicit = api.resolveQueryablePath?.(instance, path);
+  if (explicit) {
+    return explicit;
+  }
   let synthetic = resolveSyntheticKey(instance, path, api);
   if (synthetic) {
     return synthetic;
@@ -591,6 +611,10 @@ function instanceIsType(
   ref: CodeRef,
   api: CardAPIForMatching,
 ): boolean {
+  let explicit = api.isInstanceOf?.(instance, ref);
+  if (explicit !== undefined) {
+    return explicit;
+  }
   let klass: typeof BaseDef | null =
     (instance.constructor as typeof BaseDef) ?? null;
   while (klass) {

@@ -15,6 +15,7 @@ import { tracked } from '@glimmer/tracking';
 import { themeScope } from '@cardstack/boxel-ui/helpers';
 
 import {
+  canonicalModuleKey,
   type CodeRef,
   isResolvedCodeRef,
   type LooseCardResource,
@@ -101,6 +102,7 @@ import type {
   CardContext,
   Field,
   Format,
+  ViewCardFn,
 } from '@cardstack/base/card-api';
 
 const compartmentTemplateWaiter = buildWaiter(
@@ -123,6 +125,7 @@ export interface RealmSandboxRelationshipContext {
   getCard: getCard;
   cardContext?: CardContext;
   canWrite: () => boolean;
+  viewCard?: ViewCardFn;
 }
 
 class StableRealmSandboxRender implements RealmSandboxRender {
@@ -639,6 +642,11 @@ export function validateCompartmentCSS(
   return css;
 }
 
+export function validateCompartmentInlineStyle(style: string): string {
+  validateCompartmentCSS(`[data-realm-sandbox-inline-style] { ${style} }`);
+  return style;
+}
+
 class ReactiveRevision {
   @tracked value = 0;
 
@@ -824,6 +832,81 @@ export default class RealmSandboxService extends Service {
 
   isOpaqueCard(card: BaseDef): boolean {
     return Boolean(getOpaqueRealmCardState(card));
+  }
+
+  // Explicit inert-data adapters for runtime-common's client-side search
+  // matcher. They replace constructor/field introspection for opaque records;
+  // ordinary CardDefs return undefined and keep using card-api.
+  opaqueCardIsInstanceOf(card: BaseDef, ref: CodeRef): boolean | undefined {
+    let state = getOpaqueRealmCardState(card);
+    if (
+      !state ||
+      !isResolvedCodeRef(state.typeRef) ||
+      !isResolvedCodeRef(ref)
+    ) {
+      return undefined;
+    }
+    let actualModule = canonicalModuleKey(
+      state.typeRef.module,
+      this.network.virtualNetwork,
+    );
+    let expectedModule = canonicalModuleKey(
+      ref.module,
+      this.network.virtualNetwork,
+    );
+    return state.typeRef.name === ref.name && actualModule === expectedModule;
+  }
+
+  resolveOpaqueQueryablePath(
+    card: BaseDef,
+    path: string,
+  ):
+    | {
+        values: unknown[];
+        leafField: Field | undefined;
+        sawUnresolvable: boolean;
+      }
+    | undefined {
+    let state = getOpaqueRealmCardState(card);
+    if (!state) {
+      return undefined;
+    }
+    this.opaqueDataRevisionFor(card).consume();
+    let segments = path.split('.').filter(Boolean);
+    if (segments.length === 0) {
+      return { values: [], leafField: undefined, sawUnresolvable: false };
+    }
+    let nodes: unknown[] = [state.snapshot];
+    let sawUnresolvable = false;
+    for (let index = 0; index < segments.length; index++) {
+      let segment = segments[index]!;
+      let next: unknown[] = [];
+      for (let node of nodes) {
+        if (node == null || typeof node !== 'object') {
+          continue;
+        }
+        if (!(segment in node)) {
+          // A relationship projection that only carries identity is a loaded
+          // boundary placeholder, not evidence that a nested value is absent.
+          // Trust the server result instead of incorrectly filtering it out.
+          if (index > 0 && typeof (node as { id?: unknown }).id === 'string') {
+            sawUnresolvable = true;
+          }
+          continue;
+        }
+        let value = (node as Record<string, unknown>)[segment];
+        if (index < segments.length - 1 && Array.isArray(value)) {
+          next.push(...value);
+        } else {
+          next.push(value);
+        }
+      }
+      nodes = next;
+    }
+    let values = nodes.flatMap((value) =>
+      Array.isArray(value) ? value : [value],
+    );
+    return { values, leafField: undefined, sawUnresolvable };
   }
 
   reloadCard(card: BaseDef, codePreviewSandbox?: CodePreviewSandbox): boolean {
@@ -1024,6 +1107,10 @@ export default class RealmSandboxService extends Service {
     relativeTo: RealmResourceIdentifier | URL | undefined,
     document?: Pick<LooseSingleCardDocument, 'included'>,
     existingLocalId?: string,
+    resolveTrustedRelationship?: (
+      id: string,
+      fieldType: typeof BaseDef,
+    ) => BaseDef | undefined,
   ): Promise<T> {
     let typeRef = resource.meta?.adoptsFrom;
     if (!typeRef || !isResolvedCodeRef(typeRef)) {
@@ -1188,11 +1275,10 @@ export default class RealmSandboxService extends Service {
           OpaqueCard.prefersWideFormat === true,
         theme,
       },
+      resolveTrustedRelationship,
     };
     state.setField = (fieldName, value) => {
-      state.snapshot = { ...state.snapshot, [fieldName]: value };
       api.setCardFieldValue(card, fieldName, value);
-      this.bumpOpaqueData(card);
     };
     Object.defineProperty(card, opaqueRealmCardState, { value: state });
     Object.defineProperty(card, delegatedCardRenderComponent, {
@@ -1219,15 +1305,72 @@ export default class RealmSandboxService extends Service {
     });
     this.trustedFieldTypesByCard.set(card, trustedFieldTypes ?? {});
     this.fieldMetadataByCard.set(card, fieldMetadata ?? {});
+    let proxies = new WeakMap<object, object>();
+    let proxyTargets = new WeakMap<object, object>();
+    let observableValue = (input: unknown): unknown => {
+      if (
+        input === null ||
+        typeof input !== 'object' ||
+        (!Array.isArray(input) &&
+          Object.getPrototypeOf(input) !== Object.prototype &&
+          Object.getPrototypeOf(input) !== null)
+      ) {
+        return input;
+      }
+      let existing = proxies.get(input);
+      if (existing) {
+        return existing;
+      }
+      let proxy = new Proxy(input, {
+        get: (target, property) =>
+          observableValue(Reflect.get(target, property)),
+        set: (target, property, value) => {
+          let raw =
+            value !== null && typeof value === 'object'
+              ? (proxyTargets.get(value) ?? value)
+              : value;
+          let changed = Reflect.get(target, property) !== raw;
+          let result = Reflect.set(target, property, raw);
+          if (changed && result) {
+            this.bumpOpaqueData(card);
+          }
+          return result;
+        },
+        deleteProperty: (target, property) => {
+          let existed = Reflect.has(target, property);
+          let result = Reflect.deleteProperty(target, property);
+          if (existed && result) {
+            this.bumpOpaqueData(card);
+          }
+          return result;
+        },
+      });
+      proxies.set(input, proxy);
+      proxyTargets.set(proxy, input);
+      return proxy;
+    };
     for (let [name, value] of Object.entries(snapshot)) {
       if (name === 'id') {
         continue;
       }
-      Object.defineProperty(card, name, {
+      let current = this.hydrateTrustedRelationship(
         value,
+        fieldMetadata?.[name],
+        trustedFieldTypes?.[name],
+        resolveTrustedRelationship,
+      );
+      Object.defineProperty(card, name, {
+        get: () => observableValue(current),
+        set: (next) => {
+          current =
+            next !== null && typeof next === 'object'
+              ? (proxyTargets.get(next) ?? next)
+              : next;
+          state.snapshot[name] = current;
+          this.bumpOpaqueData(card);
+        },
         enumerable: true,
         configurable: true,
-        writable: true,
       });
     }
     return card;
@@ -1272,6 +1415,7 @@ export default class RealmSandboxService extends Service {
         document.data.id ? rri(document.data.id) : relativeURL,
         document,
         (card as BaseDef & { [localIdSymbol]: string })[localIdSymbol],
+        state.resolveTrustedRelationship,
       );
     }
     let previousSnapshot = state.snapshot;
@@ -1300,9 +1444,26 @@ export default class RealmSandboxService extends Service {
       // This is a server/index acknowledgement, not a new local edit. Update
       // the opaque projection without feeding the autosave subscriber back
       // into another persist cycle.
-      api.setCardFieldValue(card, fieldName, nextSnapshot[fieldName], {
-        notify: false,
-      });
+      let typeKey = this.opaqueTypeKeyFor(card);
+      let fieldMetadata = typeKey
+        ? this.fieldMetadataByOpaqueType.get(typeKey)?.[fieldName]
+        : this.fieldMetadataByCard.get(card)?.[fieldName];
+      let fieldType = typeKey
+        ? this.trustedFieldTypesByOpaqueType.get(typeKey)?.[fieldName]
+        : this.trustedFieldTypesByCard.get(card)?.[fieldName];
+      api.setCardFieldValue(
+        card,
+        fieldName,
+        this.hydrateTrustedRelationship(
+          nextSnapshot[fieldName],
+          fieldMetadata,
+          fieldType,
+          state.resolveTrustedRelationship,
+        ),
+        {
+          notify: false,
+        },
+      );
     }
     this.bumpOpaqueData(card);
     return card;
@@ -1913,6 +2074,7 @@ export default class RealmSandboxService extends Service {
           moduleIdentifier,
           this.network.resolveImport,
         ) ?? false,
+      validateInlineStyle: validateCompartmentInlineStyle,
     });
   }
 
@@ -4283,27 +4445,76 @@ export default class RealmSandboxService extends Service {
         snapshot[name] = cloned;
       }
     }
+    let relationshipValues: Record<string, unknown> = {};
     for (let [name, relationship] of Object.entries(
       resource.relationships ?? {},
     )) {
+      let segments = name.split('.');
+      let index =
+        segments.length === 2 && /^\d+$/.test(segments[1]!)
+          ? Number(segments[1])
+          : undefined;
+      let fieldName = index === undefined ? name : segments[0]!;
+      let projection: unknown;
       if (Array.isArray(relationship)) {
-        snapshot[name] = relationship
+        projection = relationship
           .map((item) =>
             this.relationshipProjection(item, relativeURL, document),
           )
           .filter((item) => item !== undefined);
       } else {
-        let projection = this.relationshipProjection(
+        projection = this.relationshipProjection(
           relationship,
           relativeURL,
           document,
         );
-        if (projection !== undefined) {
-          snapshot[name] = projection;
+      }
+      if (projection === undefined) {
+        continue;
+      }
+      if (index === undefined) {
+        relationshipValues[fieldName] = projection;
+      } else {
+        let values = relationshipValues[fieldName];
+        let indexedValues: unknown[];
+        if (!Array.isArray(values)) {
+          indexedValues = [];
+          relationshipValues[fieldName] = indexedValues;
+        } else {
+          indexedValues = values;
         }
+        indexedValues[index] = projection;
       }
     }
+    Object.assign(snapshot, relationshipValues);
     return snapshot;
+  }
+
+  private hydrateTrustedRelationship(
+    value: unknown,
+    metadata: SandboxCardFieldMetadata | undefined,
+    fieldType: typeof BaseDef | undefined,
+    resolve: OpaqueRealmCardState['resolveTrustedRelationship'],
+  ): unknown {
+    if (
+      !resolve ||
+      !fieldType ||
+      (metadata?.kind !== 'linksTo' && metadata?.kind !== 'linksToMany')
+    ) {
+      return value;
+    }
+    let hydrate = (item: unknown) => {
+      if (
+        typeof item !== 'object' ||
+        item === null ||
+        Array.isArray(item) ||
+        typeof (item as { id?: unknown }).id !== 'string'
+      ) {
+        return item;
+      }
+      return resolve((item as { id: string }).id, fieldType) ?? item;
+    };
+    return Array.isArray(value) ? value.map(hydrate) : hydrate(value);
   }
 
   private relationshipProjection(

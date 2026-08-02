@@ -22,6 +22,8 @@ export interface CardSourceSandboxClassification {
 const iframeRenderFormats = new Set<string>(['isolated', 'embedded', 'edit']);
 const compiledLiteralStyleElement =
   /\[\s*10\s*,\s*(?:["']style["']|\\["']style\\["'])\s*\]/i;
+const compiledDynamicInlineStyleAttribute =
+  /\[\s*(?:15|16|22|23)\s*,\s*(?:5|\\*["']style\\*["'])\s*,/i;
 
 // Source classification describes what the module needs. The requested card
 // format separately limits where it may run. Compact and non-DOM formats must
@@ -89,11 +91,14 @@ let lexerReady = Promise.resolve(init);
 
 function analyzeEmbeddedTemplates(source: string): {
   javascript: string;
+  hasDynamicInlineStyle: boolean;
   hasUnscopedStyle: boolean;
 } {
   let characters = Array.from(source);
+  let hasDynamicInlineStyle = false;
   let hasUnscopedStyle = false;
   for (let match of new ContentTag.Preprocessor().parse(source)) {
+    hasDynamicInlineStyle ||= /\sstyle\s*=\s*{{/i.test(match.contents);
     let styleTags = match.contents.matchAll(/<style(?=[\s>])([^>]*)>/gi);
     for (let styleTag of styleTags) {
       let attributes = styleTag[1] ?? '';
@@ -112,7 +117,11 @@ function analyzeEmbeddedTemplates(source: string): {
       }
     }
   }
-  return { javascript: characters.join(''), hasUnscopedStyle };
+  return {
+    javascript: characters.join(''),
+    hasDynamicInlineStyle,
+    hasUnscopedStyle,
+  };
 }
 
 function hasCompiledUnscopedStyle(source: string): boolean {
@@ -221,9 +230,11 @@ export async function classifyCardSourceForSandbox(
   source: string,
 ): Promise<CardSourceSandboxClassification> {
   let javascript: string;
+  let dynamicInlineStyle = compiledDynamicInlineStyleAttribute.test(source);
   let unscopedStyle = hasCompiledUnscopedStyle(source);
   try {
     let templateAnalysis = analyzeEmbeddedTemplates(source);
+    dynamicInlineStyle ||= templateAnalysis.hasDynamicInlineStyle;
     unscopedStyle ||= templateAnalysis.hasUnscopedStyle;
     javascript = templateAnalysis.javascript;
   } catch {
@@ -262,6 +273,7 @@ export async function classifyCardSourceForSandbox(
     ...new Set([
       ...importSignals,
       ...globalSignals,
+      ...(dynamicInlineStyle ? ['dynamic-inline-style'] : []),
       ...(unscopedStyle ? ['unscoped-style'] : []),
     ]),
   ];

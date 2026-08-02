@@ -16,7 +16,12 @@ import FittedFormatGallery from '@cardstack/host/components/operator-mode/previe
 import MarkdownPreview from '@cardstack/host/components/operator-mode/preview-panel/markdown-preview';
 import type { EnhancedRealmInfo } from '@cardstack/host/services/realm';
 
-import type { CardDef, FieldDef, Format } from '@cardstack/base/card-api';
+import type {
+  CardDef,
+  FieldDef,
+  Format,
+  ViewCardFn,
+} from '@cardstack/base/card-api';
 import type { FileDef } from '@cardstack/base/file-api';
 
 interface Signature {
@@ -34,6 +39,7 @@ interface Signature {
     contextMenuItems?: MenuItem[];
     onEdit?: () => void;
     onFinishEditing?: () => void;
+    viewCard?: ViewCardFn;
   };
 }
 function fileDefName(card: CardDef | FieldDef | FileDef) {
@@ -81,11 +87,17 @@ const PlaygroundPreview: TemplateOnlyComponent<Signature> = <template>
         @card={{@card}}
         @format={{@format}}
         @codeRef={{@codeRef}}
+        @viewCard={{@viewCard}}
       />
     </CardContainer>
   {{else if (eq @format 'head')}}
     <CardContainer class='preview-container'>
-      <CardRenderer class='preview' @card={{@card}} @format={{@format}} />
+      <CardRenderer
+        class='preview'
+        @card={{@card}}
+        @format={{@format}}
+        @viewCard={{@viewCard}}
+      />
     </CardContainer>
   {{else if (eq @format 'atom')}}
     <div class='atom-preview-container' data-test-atom-preview>Lorem ipsum dolor
@@ -95,6 +107,7 @@ const PlaygroundPreview: TemplateOnlyComponent<Signature> = <template>
         @card={{@card}}
         @format={{@format}}
         @displayContainer={{unless @isFieldDef false}}
+        @viewCard={{@viewCard}}
       />
       tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim
       veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea
