@@ -8,8 +8,8 @@ Each accepted case records:
 
 - a human intent;
 - the loaded Card or Field value before the mutation;
-- human-facing BXL readable statements and their canonical jq-shaped
-  solidification;
+- human-facing BXL readable statements and their schema-solidified,
+  jq-shaped mutation BXL;
 - equivalent structured tool-call operations;
 - the normalized mutation-plan statements and concrete intents;
 - the loaded value after applying the plan; and
@@ -26,6 +26,17 @@ Run the semantic verifier with:
 npm run example:mutation
 ```
 
+Run only the realm-shaped seam—with committed Workspace, Contest, Classroom,
+Zine, and query-backed relationship snapshots—with:
+
+```sh
+npm run example:mutation:realm
+```
+
+Those cases retain source-evidence metadata so an integration harness can
+replace the snapshots with loaded Card Store models while reusing the same
+plans and assertions.
+
 Explore and run the same corpus in the standalone browser workbench with:
 
 ```sh
@@ -33,7 +44,7 @@ npm run demo:mutation
 ```
 
 The workbench includes every accepted and rejected fixture, filters for each
-pattern and feature, readable and canonical source, structured AI tool calls,
+pattern and feature, readable and schema-solidified source, structured AI tool calls,
 before/after loaded models, normalized plans, and stepwise stream replay. Its
 browser verifier is the same module used by the CLI test above.
 

@@ -61,7 +61,8 @@ export interface MutationExecutionFixture {
   };
   delivery: 'complete' | 'streaming';
   transaction: 'atomic' | 'statement';
-  syntax: 'readable' | 'jq';
+  /** `solidified` is planner-facing mutation BXL, not general value-mode jq. */
+  syntax: 'readable' | 'solidified';
   baseRevision?: string;
   schemaVersion?: string;
   actor?: string;
@@ -140,7 +141,7 @@ interface MutationFixtureBase {
   before: MutationJson;
   /** Human-facing BXL readable spelling before schema-aware solidification. */
   readableSource?: string;
-  /** Candidate BXL/jq surface syntax. Every statement is semicolon framed. */
+  /** Schema-solidified mutation BXL. Every statement is semicolon framed. */
   source: string;
   /** JSON-schema-friendly source encoding with equivalent semantics. */
   operations: StructuredMutationOperation[];
@@ -183,7 +184,7 @@ export const mutationSchemaFixtures = {
   },
   'tag-list-field': {
     root: 'field',
-    field: { kind: 'containsMany', item: 'string', loadedAs: 'string[]' },
+    field: { kind: 'containsMany', item: 'string', loadedAs: 'string[]', label: 'Tag' },
   },
   'ordered-sections-field': {
     root: 'field',
@@ -298,7 +299,7 @@ export const mutationSchemaFixtures = {
   },
   'scalar-field': {
     root: 'field',
-    field: { kind: 'number' },
+    field: { kind: 'number', label: 'Score' },
   },
 } as const;
 
@@ -338,8 +339,8 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       billingAddress: { city: 'Boston', country: 'US' },
       shippingAddress: null,
     },
-    readableSource: 'copy_to("Billing Address", "Shipping Address");',
-    source: 'copy_to(.billingAddress; .shippingAddress);',
+    readableSource: 'copy_value_to("Billing Address", "Shipping Address");',
+    source: 'copy_value_to(.billingAddress; .shippingAddress);',
     operations: [
       {
         id: 'copy-address',
@@ -351,7 +352,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     outcome: 'accepted',
     plan: [
       {
-        canonical: 'copy_to(.billingAddress;.shippingAddress)',
+        canonical: 'copy_value_to(.billingAddress;.shippingAddress)',
         affected: 1,
         intents: [
           {
@@ -369,6 +370,29 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     notes: ['Copy is deep by value; it never creates an alias between fields.'],
   },
   {
+    id: 'replace-field-root',
+    group: '01 replacement',
+    name: 'replace an existing Field value',
+    intent: 'Replace the targeted Score Field while requiring its current value to exist.',
+    features: ['field-root', 'write-set'],
+    schema: 'scalar-field',
+    execution: execution('replace-field-root', scalarTarget),
+    before: 41,
+    readableSource: 'replace(Score, 42);',
+    source: 'replace(.; 42);',
+    operations: [{ id: 'replace-score', op: 'replace', target: { path: [] }, value: 42 }],
+    outcome: 'accepted',
+    plan: [
+      {
+        canonical: 'replace(.;42)',
+        affected: 1,
+        intents: [{ op: 'set', path: [], before: 41, after: 42 }],
+      },
+    ],
+    after: 42,
+    notes: ['Unlike set/upsert, replace rejects a missing target before evaluating the write.'],
+  },
+  {
     id: 'append-contained-value',
     group: '02 containsMany collections',
     name: 'append a value to a containsMany field',
@@ -377,7 +401,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     schema: 'tag-list-field',
     execution: execution('append-contained-value', tagsTarget),
     before: ['customer', 'legal'],
-    readableSource: 'append(., "urgent");',
+    readableSource: 'append(Tag, "urgent");',
     source: 'append(.; "urgent");',
     operations: [{ id: 'append-urgent', op: 'insert', into: { path: [] }, position: { at: 'end' }, value: 'urgent' }],
     outcome: 'accepted',
@@ -392,6 +416,28 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     notes: ['containsMany is ordered and permits repeated values; BXL preserves that behavior.'],
   },
   {
+    id: 'prepend-contained-value',
+    group: '02 containsMany collections',
+    name: 'prepend a value to a containsMany field',
+    intent: 'Add urgent at the start of the ordered tags Field.',
+    features: ['field-root', 'collection-semantics'],
+    schema: 'tag-list-field',
+    execution: execution('prepend-contained-value', tagsTarget),
+    before: ['customer', 'legal'],
+    readableSource: 'prepend(Tag, "urgent");',
+    source: 'prepend(.; "urgent");',
+    operations: [{ id: 'prepend-urgent', op: 'insert', into: { path: [] }, position: { at: 'start' }, value: 'urgent' }],
+    outcome: 'accepted',
+    plan: [
+      {
+        canonical: 'prepend(.;"urgent")',
+        affected: 1,
+        intents: [{ op: 'insert', collection: [], index: 0, value: 'urgent' }],
+      },
+    ],
+    after: ['urgent', 'customer', 'legal'],
+  },
+  {
     id: 'delete-contained-value',
     group: '02 containsMany collections',
     name: 'delete one selected containsMany value',
@@ -400,7 +446,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     schema: 'tag-list-field',
     execution: execution('delete-contained-value', tagsTarget),
     before: ['customer', 'obsolete', 'urgent'],
-    readableSource: 'del(.[] | select(. = "obsolete"));',
+    readableSource: 'del(Tag[. = "obsolete"]);',
     source: 'del(.[] | select(. == "obsolete"));',
     operations: [
       {
@@ -418,7 +464,39 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       },
     ],
     after: ['customer', 'urgent'],
-    notes: ['Exact-one cardinality rejects ambiguous duplicate matches; delete_all makes bulk removal explicit.'],
+    notes: ['Exact-one cardinality rejects ambiguous duplicate matches; [* predicate] makes bulk removal explicit.'],
+  },
+  {
+    id: 'explicit-bulk-delete',
+    group: '02 containsMany collections',
+    name: 'delete every explicitly selected contained value',
+    intent: 'Remove every obsolete tag while preserving repeated-value array semantics.',
+    features: ['field-root', 'collection-semantics', 'cardinality'],
+    schema: 'tag-list-field',
+    execution: execution('explicit-bulk-delete', tagsTarget),
+    before: ['obsolete', 'customer', 'obsolete'],
+    readableSource: 'del(Tag[* . = "obsolete"]);',
+    source: 'del(.[* . == "obsolete"]);',
+    operations: [
+      {
+        id: 'delete-all-obsolete',
+        op: 'delete-all',
+        target: { collection: [], where: [{ path: [], equals: 'obsolete' }] },
+      },
+    ],
+    outcome: 'accepted',
+    plan: [
+      {
+        canonical: 'del(.[*.=="obsolete"])',
+        affected: 2,
+        intents: [
+          { op: 'delete', path: [2], before: 'obsolete' },
+          { op: 'delete', path: [0], before: 'obsolete' },
+        ],
+      },
+    ],
+    after: ['customer'],
+    notes: ['Bulk array deletions lower to descending indexes so earlier removals cannot retarget later ones.'],
   },
   {
     id: 'insert-after-stable-anchor',
@@ -432,8 +510,8 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       { id: 'overview', title: 'Overview' },
       { id: 'summary', title: 'Summary' },
     ],
-    readableSource: 'insert_after(Section[ID = "overview"], {id: "details", title: "Details"});',
-    source: 'insert_after(.[] | select(.id == "overview"); {id: "details", title: "Details"});',
+    readableSource: 'insert_item_after({ id: "details", title: "Details" }, Section[ID = "overview"]);',
+    source: 'insert_item_after({id: "details", title: "Details"}; .[] | select(.id == "overview"));',
     operations: [
       {
         id: 'insert-details',
@@ -446,7 +524,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     outcome: 'accepted',
     plan: [
       {
-        canonical: 'insert_after(.[]|select(.id=="overview");{id:"details",title:"Details"})',
+        canonical: 'insert_item_after({id:"details",title:"Details"};.[]|select(.id=="overview"))',
         affected: 1,
         intents: [
           {
@@ -463,6 +541,81 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       { id: 'details', title: 'Details' },
       { id: 'summary', title: 'Summary' },
     ],
+  },
+  {
+    id: 'insert-before-stable-anchor',
+    group: '03 stable positioning',
+    name: 'insert before an identity-selected item',
+    intent: 'Insert the preface section before overview without using an index.',
+    features: ['stable-position', 'collection-semantics', 'write-set'],
+    schema: 'ordered-sections-field',
+    execution: execution('insert-before-stable-anchor', sectionsTarget),
+    before: [
+      { id: 'overview', title: 'Overview' },
+      { id: 'summary', title: 'Summary' },
+    ],
+    readableSource: 'insert_item_before({ id: "preface", title: "Preface" }, Section[ID = "overview"]);',
+    source: 'insert_item_before({id: "preface", title: "Preface"}; .[] | select(.id == "overview"));',
+    operations: [
+      {
+        id: 'insert-preface',
+        op: 'insert',
+        into: { path: [] },
+        position: { before: { collection: [], where: [{ path: ['id'], equals: 'overview' }] } },
+        value: { id: 'preface', title: 'Preface' },
+      },
+    ],
+    outcome: 'accepted',
+    plan: [
+      {
+        canonical: 'insert_item_before({id:"preface",title:"Preface"};.[]|select(.id=="overview"))',
+        affected: 1,
+        intents: [{ op: 'insert', collection: [], index: 0, value: { id: 'preface', title: 'Preface' } }],
+      },
+    ],
+    after: [
+      { id: 'preface', title: 'Preface' },
+      { id: 'overview', title: 'Overview' },
+      { id: 'summary', title: 'Summary' },
+    ],
+  },
+  {
+    id: 'insert-at-revision-pinned-index',
+    group: '03 stable positioning',
+    name: 'insert at an index only against a pinned snapshot',
+    intent: 'Insert details at zero-based index one while the collection revision is pinned.',
+    features: ['collection-semantics', 'atomic'],
+    schema: 'ordered-sections-field',
+    execution: execution('insert-at-revision-pinned-index', sectionsTarget, { baseRevision: 'rev-sections-7' }),
+    before: [
+      { id: 'overview', title: 'Overview' },
+      { id: 'summary', title: 'Summary' },
+    ],
+    readableSource: 'insert_at(Section, 1, { id: "details", title: "Details" });',
+    source: 'insert_at(.; 1; {id: "details", title: "Details"});',
+    operations: [
+      {
+        id: 'insert-details-at-one',
+        op: 'insert',
+        into: { path: [] },
+        position: { index: 1 },
+        value: { id: 'details', title: 'Details' },
+      },
+    ],
+    outcome: 'accepted',
+    plan: [
+      {
+        canonical: 'insert_at(.;1;{id:"details",title:"Details"})',
+        affected: 1,
+        intents: [{ op: 'insert', collection: [], index: 1, value: { id: 'details', title: 'Details' } }],
+      },
+    ],
+    after: [
+      { id: 'overview', title: 'Overview' },
+      { id: 'details', title: 'Details' },
+      { id: 'summary', title: 'Summary' },
+    ],
+    notes: ['Index positioning is accepted only because the atomic execution carries a matching base revision.'],
   },
   {
     id: 'move-before-stable-anchor',
@@ -500,6 +653,120 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       { id: 'overview', title: 'Overview' },
       { id: 'summary', title: 'Summary' },
       { id: 'round-one', title: 'Round One' },
+    ],
+  },
+  {
+    id: 'move-after-stable-anchor',
+    group: '03 stable positioning',
+    name: 'move an item after a stable anchor',
+    intent: 'Move summary after round-one while retaining move intent.',
+    features: ['stable-position', 'collection-semantics', 'write-set'],
+    schema: 'ordered-sections-field',
+    execution: execution('move-after-stable-anchor', sectionsTarget),
+    before: [
+      { id: 'summary', title: 'Summary' },
+      { id: 'round-one', title: 'Round One' },
+      { id: 'overview', title: 'Overview' },
+    ],
+    readableSource: 'move_item_after(Section[ID = "summary"], Section[ID = "round-one"]);',
+    source: 'move_item_after(.[] | select(.id == "summary"); .[] | select(.id == "round-one"));',
+    operations: [
+      {
+        id: 'move-summary-after-round-one',
+        op: 'move',
+        target: { collection: [], where: [{ path: ['id'], equals: 'summary' }] },
+        into: { path: [] },
+        position: { after: { collection: [], where: [{ path: ['id'], equals: 'round-one' }] } },
+      },
+    ],
+    outcome: 'accepted',
+    plan: [
+      {
+        canonical: 'move_item_after(.[]|select(.id=="summary");.[]|select(.id=="round-one"))',
+        affected: 1,
+        intents: [{ op: 'move', from: [0], toCollection: [], toIndex: 1 }],
+      },
+    ],
+    after: [
+      { id: 'round-one', title: 'Round One' },
+      { id: 'summary', title: 'Summary' },
+      { id: 'overview', title: 'Overview' },
+    ],
+  },
+  {
+    id: 'move-item-to-start',
+    group: '03 stable positioning',
+    name: 'move an item to the start of a collection',
+    intent: 'Move summary to the first position without selecting an anchor.',
+    features: ['stable-position', 'collection-semantics', 'write-set'],
+    schema: 'ordered-sections-field',
+    execution: execution('move-item-to-start', sectionsTarget),
+    before: [
+      { id: 'overview', title: 'Overview' },
+      { id: 'round-one', title: 'Round One' },
+      { id: 'summary', title: 'Summary' },
+    ],
+    readableSource: 'move_item_to_start(Section[ID = "summary"], Section);',
+    source: 'move_item_to_start(.[] | select(.id == "summary"); .);',
+    operations: [
+      {
+        id: 'move-summary-to-start',
+        op: 'move',
+        target: { collection: [], where: [{ path: ['id'], equals: 'summary' }] },
+        into: { path: [] },
+        position: { at: 'start' },
+      },
+    ],
+    outcome: 'accepted',
+    plan: [
+      {
+        canonical: 'move_item_to_start(.[]|select(.id=="summary");.)',
+        affected: 1,
+        intents: [{ op: 'move', from: [2], toCollection: [], toIndex: 0 }],
+      },
+    ],
+    after: [
+      { id: 'summary', title: 'Summary' },
+      { id: 'overview', title: 'Overview' },
+      { id: 'round-one', title: 'Round One' },
+    ],
+  },
+  {
+    id: 'move-item-to-end',
+    group: '03 stable positioning',
+    name: 'move an item to the end of a collection',
+    intent: 'Move summary to the last position without selecting an anchor.',
+    features: ['stable-position', 'collection-semantics', 'write-set'],
+    schema: 'ordered-sections-field',
+    execution: execution('move-item-to-end', sectionsTarget),
+    before: [
+      { id: 'summary', title: 'Summary' },
+      { id: 'overview', title: 'Overview' },
+      { id: 'round-one', title: 'Round One' },
+    ],
+    readableSource: 'move_item_to_end(Section[ID = "summary"], Section);',
+    source: 'move_item_to_end(.[] | select(.id == "summary"); .);',
+    operations: [
+      {
+        id: 'move-summary-to-end',
+        op: 'move',
+        target: { collection: [], where: [{ path: ['id'], equals: 'summary' }] },
+        into: { path: [] },
+        position: { at: 'end' },
+      },
+    ],
+    outcome: 'accepted',
+    plan: [
+      {
+        canonical: 'move_item_to_end(.[]|select(.id=="summary");.)',
+        affected: 1,
+        intents: [{ op: 'move', from: [0], toCollection: [], toIndex: 2 }],
+      },
+    ],
+    after: [
+      { id: 'overview', title: 'Overview' },
+      { id: 'round-one', title: 'Round One' },
+      { id: 'summary', title: 'Summary' },
     ],
   },
   {
@@ -605,8 +872,8 @@ export const bxlMutationExamples: BxlMutationExample[] = [
         { sku: 'COPY-03', taxable: true, discount: 0.1 },
       ],
     },
-    readableSource: 'update_all("Line Item"[* Taxable].Discount, . + 0.05);',
-    source: 'update_all(.lineItems[] | select(.taxable) | .discount; . + 0.05);',
+    readableSource: '"Line Item"[* Taxable].Discount += 0.05;',
+    source: '(.lineItems[* .taxable].discount) |= . + 0.05;',
     operations: [
       {
         id: 'discount-taxable',
@@ -622,7 +889,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     outcome: 'accepted',
     plan: [
       {
-        canonical: 'update_all(.lineItems[]|select(.taxable)|.discount;.+0.05)',
+        canonical: '(.lineItems[*.taxable].discount)|=.+0.05',
         affected: 2,
         intents: [
           { op: 'set', path: ['lineItems', 0, 'discount'], before: 0, after: 0.05 },
@@ -635,6 +902,54 @@ export const bxlMutationExamples: BxlMutationExample[] = [
         { sku: 'PAPER-01', taxable: true, discount: 0.05 },
         { sku: 'SERVICE-01', taxable: false, discount: 0 },
         { sku: 'COPY-03', taxable: true, discount: 0.15 },
+      ],
+    },
+  },
+  {
+    id: 'explicit-bulk-set',
+    group: '04 cardinality',
+    name: 'set every explicitly selected field to one value',
+    intent: 'Reset the discount on every taxable line item without rebuilding the collection.',
+    features: ['cardinality', 'write-set'],
+    schema: 'invoice-card',
+    execution: execution('explicit-bulk-set', cardTarget),
+    before: {
+      lineItems: [
+        { sku: 'PAPER-01', taxable: true, discount: 0.05 },
+        { sku: 'SERVICE-01', taxable: false, discount: 0.2 },
+        { sku: 'COPY-03', taxable: true, discount: 0.15 },
+      ],
+    },
+    readableSource: '"Line Item"[* Taxable].Discount = 0;',
+    source: '(.lineItems[* .taxable].discount) = 0;',
+    operations: [
+      {
+        id: 'reset-taxable-discounts',
+        op: 'set-all',
+        target: {
+          collection: ['lineItems'],
+          where: [{ path: ['taxable'], equals: true }],
+          relativePath: ['discount'],
+        },
+        value: 0,
+      },
+    ],
+    outcome: 'accepted',
+    plan: [
+      {
+        canonical: '(.lineItems[*.taxable].discount)=0',
+        affected: 2,
+        intents: [
+          { op: 'set', path: ['lineItems', 0, 'discount'], before: 0.05, after: 0 },
+          { op: 'set', path: ['lineItems', 2, 'discount'], before: 0.15, after: 0 },
+        ],
+      },
+    ],
+    after: {
+      lineItems: [
+        { sku: 'PAPER-01', taxable: true, discount: 0 },
+        { sku: 'SERVICE-01', taxable: false, discount: 0.2 },
+        { sku: 'COPY-03', taxable: true, discount: 0 },
       ],
     },
   },
@@ -771,7 +1086,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     schema: 'reviewers-relationship-field',
     execution: execution('relate-card', reviewersTarget),
     before: [{ id: 'card:ada', cardTitle: 'Ada' }],
-    readableSource: 'append(., card("card:grace"));',
+    readableSource: 'append(Reviewer, card("card:grace"));',
     source: 'append(.; card("card:grace"));',
     operations: [{ id: 'relate-grace', op: 'relate', target: { path: [] }, cardId: 'card:grace' }],
     store: {
@@ -1009,7 +1324,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
         { id: 'card:fragment/personal-web', cardTitle: 'The Personal Web' },
       ],
     },
-    readableSource: 'move_item_before("Fragment"[ID = "card:fragment/personal-web"], "Fragment"[ID = "card:fragment/opposite-viral"]);',
+    readableSource: 'move_item_before(Fragment[ID = "card:fragment/personal-web"], Fragment[ID = "card:fragment/opposite-viral"]);',
     source: 'move_item_before(.fragments[] | select(.id == "card:fragment/personal-web"); .fragments[] | select(.id == "card:fragment/opposite-viral"));',
     operations: [
       {
@@ -1164,7 +1479,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     schema: 'scalar-field',
     execution: execution('field-root-update', scalarTarget),
     before: 41,
-    readableSource: '. += 1;',
+    readableSource: 'Score += 1;',
     source: '. |= . + 1;',
     operations: [{ id: 'increment-score', op: 'update', target: { path: [] }, expression: '. + 1' }],
     outcome: 'accepted',
@@ -1252,6 +1567,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
         { sku: 'B', taxable: true, discount: 0 },
       ],
     },
+    readableSource: '"Line Item"[Taxable].Discount = 0.05;',
     source: '(.lineItems[] | select(.taxable) | .discount) = 0.05;',
     operations: [
       {
@@ -1277,7 +1593,8 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     schema: 'invoice-card',
     execution: execution('reject-empty-bulk-target', cardTarget),
     before: { lineItems: [{ sku: 'A', taxable: false, discount: 0 }] },
-    source: 'update_all(.lineItems[] | select(.taxable) | .discount; . + 0.05);',
+    readableSource: '"Line Item"[* Taxable].Discount += 0.05;',
+    source: '(.lineItems[* .taxable].discount) |= . + 0.05;',
     operations: [
       {
         id: 'discount-taxable',
@@ -1509,6 +1826,23 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     committedStatements: 0,
   },
 ];
+
+const realmMutationSchemas = new Set<MutationSchemaRef>([
+  'workspace-card',
+  'contest-card',
+  'classroom-card',
+  'zine-issue-card',
+  'query-backed-directory-card',
+]);
+
+/**
+ * Realm-shaped cases backed by Card/Field shapes observed in Boxel workspaces.
+ * This subset is the seam for replacing committed snapshots with Card Store
+ * loads in integration tests without changing the mutation assertions.
+ */
+export const realmMutationExamples: BxlMutationExample[] = bxlMutationExamples.filter(
+  (fixture) => realmMutationSchemas.has(fixture.schema),
+);
 
 const requiredFeatures: MutationFeature[] = [
   'copy',

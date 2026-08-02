@@ -102,10 +102,7 @@ Corpus cases: `explicit-bulk-update`, `reject-ambiguous-single-target`, and
 **BXL Mutation**
 
 ```bxl
-update_all(
-  "Line Item"[* Taxable].Discount,
-  . + 0.05
-);
+"Line Item"[* Taxable].Discount += 0.05;
 ```
 
 **XQuery Update**
@@ -532,9 +529,9 @@ and a Card that begins matching after the search snapshot.
 
 | Corpus area | Fixture IDs | Comparison pressure |
 | --- | --- | --- |
-| Scalars, compounds, and roots | `copy-compound-field`, `field-root-update`, `assign-null`, `delete-member`, `reject-card-root-replacement` | Copy versus replace, null versus absence, and root boundaries. |
-| Contained structure | `append-contained-value`, `delete-contained-value`, `insert-after-stable-anchor`, `move-before-stable-anchor`, `exact-reorder` | Granular structure without whole-array replacement. |
-| Cardinality | `exact-one-selected-update`, `explicit-bulk-update`, `reject-ambiguous-single-target`, `reject-empty-bulk-target` | Exactly one by default; explicit one-or-more bulk intent. |
+| Scalars, compounds, and roots | `copy-compound-field`, `replace-field-root`, `field-root-update`, `assign-null`, `delete-member`, `reject-card-root-replacement` | Copy versus replace, null versus absence, and root boundaries. |
+| Contained structure | `append-contained-value`, `prepend-contained-value`, `delete-contained-value`, `insert-at-revision-pinned-index`, `insert-before-stable-anchor`, `insert-after-stable-anchor`, `move-before-stable-anchor`, `move-after-stable-anchor`, `move-item-to-start`, `move-item-to-end`, `exact-reorder` | Granular structure without whole-array replacement. |
+| Cardinality | `exact-one-selected-update`, `explicit-bulk-set`, `explicit-bulk-update`, `explicit-bulk-delete`, `reject-ambiguous-single-target`, `reject-empty-bulk-target` | Exactly one by default; explicit one-or-more bulk intent. |
 | Evaluation and results | `sequential-statement-evaluation`, `assert-then-update`, `returning-projection` | Intermediate state, preconditions, and result projection. |
 | Execution envelope | `actor-revision-and-idempotency`, `reject-revision-conflict`, `reject-duplicate-operation-id` | Actor, revision, replay identity, and operation identity. |
 | Relationships and real Cards | `relate-card`, `unrelate-card`, `move-relationship`, `workspace-append-entry-point`, `contest-set-singular-link`, `classroom-update-contained-schedule`, `zine-reorder-linked-fragments` | Loaded Cards and relationship-edge lowering. |
@@ -570,9 +567,9 @@ reuse the existing BXL/jq expression grammar and add planner semantics only.
 | Question | Recommendation | Why it needs no parser work |
 | --- | --- | --- |
 | Relative move | Use `move_item_before(item, anchor)` and `move_item_after(item, anchor)`. | The function name states that the first argument is the item; `before` or `after` states that the second is the anchor. They remain ordinary readable-BXL calls, and exact-one behavior belongs to the planner. |
-| Relative insert | Change the pre-grammar candidate to subject-first: `insert_after(value, anchor)` and `insert_before(value, anchor)`. | This matches the subject-first order of `move_item_before(item, anchor)`, XQuery, and familiar tree APIs while changing only builtin/planner argument semantics. |
+| Relative insert | Use `insert_item_after(value, anchor)` and `insert_item_before(value, anchor)`. | The `item` noun makes the structural operation explicit, while subject-first order matches `move_item_before(item, anchor)`, XQuery, and familiar tree APIs. These remain ordinary function calls. |
 | Descendant evidence | Keep `Product[Variants[SKU = value]]`; do not add an `any` keyword or new selector form. | Nested readable labels and predicates already parse. Mutation planning preserves the outer Product location instead of ordinary derive-mode first-match value lowering. |
-| Exact one versus bulk | Keep ordinary `[predicate]` for exact-one mutation locations and existing `[* predicate]` only inside `update_all`/`delete_all`. | Both selector forms already exist. Cardinality enforcement is a profile rule after parsing. |
+| Exact one versus bulk | Keep ordinary `[predicate]` for exact-one mutation locations and use existing `[* predicate]` as the sole textual bulk marker on assignment, update assignment, and `del`. | Both selector forms and assignment operators already exist. Cardinality enforcement is a profile rule after parsing; separate bulk functions would duplicate the selector's intent. |
 | Preconditions | Keep `assert(predicate, message)`. Carry resolved revision/precondition data in JSON:API operation `meta` or a Boxel namespaced extension. | `assert` is an ordinary function call. Wire metadata does not require readable-language grammar. |
 | Multiple statements | Frame complete semicolon-terminated statements outside the parser and prepare each expression once. | The parser continues to receive one ordinary BXL expression at a time; streaming state belongs to the mutation runner. |
 | Cross-Card loops | Use QuickJS `for` plus repeated calls to one prepared mutation; do not add `for`, `collection`, search, or I/O to Mutation BXL. | JavaScript owns orchestration and host capabilities; BXL remains pure over one loaded target. |
@@ -580,7 +577,7 @@ reuse the existing BXL/jq expression grammar and add planner semantics only.
 Concretely, the recommended structural handwriting is:
 
 ```bxl
-insert_after(
+insert_item_after(
   { id: "details", title: "Details" },
   Section[ID = "overview"]
 );
@@ -596,9 +593,9 @@ move_item_before(
 );
 ```
 
-Only the `insert_after` argument order differs from the current fixture
-candidate. That is the one syntax change I recommend making before the corpus
-becomes a grammar contract.
+The corpus now uses this subject-first order consistently for both insertion
+and movement. No new parser production is required; the mutation planner owns
+the builtin signatures and exact-one anchor rule.
 
 ## Primary references
 

@@ -231,7 +231,7 @@ export function verifyMutationFixture(fixture: BxlMutationExample): MutationFixt
     check('documents human intent', () => assert(fixture.intent.length > 0, `${fixture.id}: intent is documented`));
 
     if (fixture.chunks) {
-      check('stream chunks reconstruct canonical source', () => assertEqual(fixture.chunks!.join(''), fixture.source, `${fixture.id}: chunks`));
+      check('stream chunks reconstruct solidified source', () => assertEqual(fixture.chunks!.join(''), fixture.source, `${fixture.id}: chunks`));
     }
 
     check('operation identities follow the contract', () => {
@@ -241,12 +241,20 @@ export function verifyMutationFixture(fixture: BxlMutationExample): MutationFixt
       assertEqual(hasDuplicate, expectsDuplicate, `${fixture.id}: duplicate operation IDs`);
     });
 
+    if (fixture.readableSource) {
+      check('text and tool calls agree on bulk cardinality', () => {
+        const textIsBulk = fixture.readableSource!.includes('[*');
+        const toolIsBulk = fixture.operations.some((operation) => operation.op.endsWith('-all'));
+        assertEqual(toolIsBulk, textIsBulk, `${fixture.id}: bulk encoding`);
+      });
+    }
+
     let computedAfter: MutationJson | undefined;
     if (fixture.outcome === 'accepted') {
       check('readable source is statement-framed', () => assert(fixture.readableSource.trim().endsWith(';'), `${fixture.id}: readable framing`));
       check('readable statements match planned statements', () => assertEqual(completeMutationStatements(fixture.readableSource).length, fixture.plan.length, `${fixture.id}: readable statement count`));
-      check('canonical source is statement-framed', () => assert(fixture.source.trim().endsWith(';'), `${fixture.id}: canonical framing`));
-      check('canonical statements match planned statements', () => assertEqual(completeMutationStatements(fixture.source).length, fixture.plan.length, `${fixture.id}: canonical statement count`));
+      check('solidified source is statement-framed', () => assert(fixture.source.trim().endsWith(';'), `${fixture.id}: solidified framing`));
+      check('solidified statements match planned statements', () => assertEqual(completeMutationStatements(fixture.source).length, fixture.plan.length, `${fixture.id}: solidified statement count`));
       check('tool operations match planned statements', () => assertEqual(fixture.operations.length, fixture.plan.length, `${fixture.id}: operation count`));
       check('normalized plan produces the expected loaded model', () => {
         computedAfter = applyMutationFixturePlan(fixture);
@@ -294,6 +302,15 @@ export function verifyMutationCorpus(
   const readableSolidifications = fixtures.filter(
     (fixture) => fixture.outcome === 'accepted' && fixture.readableSource !== fixture.source,
   ).length;
+  const acceptedReadableSources = fixtures.flatMap((fixture) =>
+    fixture.outcome === 'accepted' ? [fixture.readableSource] : [],
+  );
+  const textualSources = fixtures.flatMap((fixture) => [
+    fixture.source,
+    ...(fixture.readableSource ? [fixture.readableSource] : []),
+    ...(fixture.outcome === 'accepted' ? fixture.plan.map((statement) => statement.canonical) : []),
+  ]);
+  const operationKinds = new Set(fixtures.flatMap((fixture) => fixture.operations.map((operation) => operation.op)));
   const groups = new Set(fixtures.map((fixture) => fixture.group)).size;
   const errorCodes = new Set(
     fixtures.flatMap((fixture) => fixture.outcome === 'rejected' ? [fixture.error.code] : []),
@@ -307,6 +324,70 @@ export function verifyMutationCorpus(
   corpusCheck('at least 10 rejected fixtures', rejected >= 10);
   corpusCheck('at least 15 readable solidifications', readableSolidifications >= 15);
   corpusCheck('at least 15 fixture groups', groups >= 15);
+  corpusCheck(
+    'readable syntax omits deprecated copy and insert spellings',
+    acceptedReadableSources.every((source) => !/\b(?:copy_to|insert_after|insert_before)\s*\(/.test(source)),
+  );
+  corpusCheck(
+    '[* predicate] is the only textual bulk marker',
+    textualSources.every((source) => !/\b(?:update_all|delete_all)\s*\(/.test(source)),
+  );
+  corpusCheck(
+    'bulk update uses an explicit all-selector with compound assignment',
+    acceptedReadableSources.includes('"Line Item"[* Taxable].Discount += 0.05;'),
+  );
+  corpusCheck(
+    'bulk set uses the same explicit all-selector',
+    acceptedReadableSources.includes('"Line Item"[* Taxable].Discount = 0;'),
+  );
+  corpusCheck(
+    'bulk delete uses the same explicit all-selector',
+    acceptedReadableSources.includes('del(Tag[* . = "obsolete"]);'),
+  );
+  corpusCheck(
+    'field-root fixtures use schema labels instead of a bare root',
+    fixtures.every((fixture) =>
+      fixture.outcome !== 'accepted' ||
+      !fixture.features.includes('field-root') ||
+      !/(?:^\s*\.|\b(?:append|prepend|del)\s*\(\s*\.)/.test(fixture.readableSource),
+    ),
+  );
+  corpusCheck(
+    'the closed structural statement set has executable examples',
+    [
+      'replace(',
+      'prepend(',
+      'append(',
+      'insert_at(',
+      'insert_item_before(',
+      'insert_item_after(',
+      'move_item_before(',
+      'move_item_after(',
+      'move_item_to_start(',
+      'move_item_to_end(',
+      'reorder_by(',
+    ].every((spelling) => acceptedReadableSources.some((source) => source.includes(spelling))),
+  );
+  corpusCheck(
+    'every structured operation kind has a corpus case',
+    [
+      'set',
+      'update',
+      'set-all',
+      'update-all',
+      'replace',
+      'copy',
+      'delete',
+      'delete-all',
+      'insert',
+      'move',
+      'reorder',
+      'assert',
+      'relate',
+      'unrelate',
+      'move-relation',
+    ].every((operation) => operationKinds.has(operation)),
+  );
   corpusCheck('raw JSON:API relationship writes are rejected', errorCodes.has('storage-projection-forbidden'));
   corpusCheck('query-backed linksToMany writes are rejected', errorCodes.has('field-read-only'));
 

@@ -184,7 +184,7 @@ BXL is one of three layers where logic lives in a typical application. Each laye
 - **Class methods and computed properties** — logic that is *code compiled with the type*: getters, `@computed` columns on an ORM model, derived fields declared on a class. Ships with the module; changes require a redeploy.
 - **Application code with side effects** — controllers, handlers, services: writes, deletes, network calls, LLM invocations, external APIs. Full language power, attributable, auditable.
 
-One-line rule: **BXL for logic-as-data · class methods for logic-as-type · application code for changes-to-the-world.** BXL never writes. Application code never embeds in records. When in doubt, ask *"could a stranger run this expression a million times against my data?"* — if yes, it's BXL; if no, it's application code.
+One-line rule: **BXL for logic-as-data · class methods for logic-as-type · application code for changes-to-the-world.** Derive-mode BXL never writes; Mutation BXL can describe a write-set, but only the host may authorize and commit it. Application code never embeds in records. When in doubt, ask *"could a stranger run this expression a million times against my data?"* — if yes, it's BXL; if no, it's application code.
 
 ### User-defined helpers live inside the expression
 
@@ -539,12 +539,12 @@ BXL is a **data sandbox**, not an OS sandbox. Expressions compute over a supplie
 
 Not warnings. Enforced by the evaluator at parse or at runtime:
 
-- **No side effects.** No writes, no deletes, no messages sent.
+- **No side effects.** Even Mutation BXL returns an inert write plan; it does not commit writes, deletes, or messages.
 - **No network.** No `fetch`, no external APIs, no URLs opened.
 - **No LLM calls.** Those live in your application code, one layer up.
 - **No unbounded loops.** Op budget + wall-clock ceiling → `#LIMIT!` error.
 - **No closures or shared state.** Same input, same data, same result — always.
-- **No direct data mutation.** BXL reads; your application code writes.
+- **No direct storage mutation.** BXL reads a snapshot and returns a value or plan; trusted application code authorizes and commits it.
 
 These six guarantees are what let the platform embed BXL inside Guides, workflows, notifications, and queries without worrying that a schema author just drilled a hole into production.
 
@@ -682,6 +682,41 @@ generalized examples with `npm run example:authorization`, or open the browser
 harness with `npm run demo:authorization`. Runtime architecture, OpenFGA source
 citations, licensing, and merge gates are in
 [`src/authorization/README.md`](./src/authorization/README.md).
+
+---
+
+## Mutation: change Cards without rewriting them
+
+The proposed `Profile.mutation` is BXL's DML for schema-known Card and Field
+models. It transforms the loaded Card Store model—not raw JSON:API—and produces
+a typed write plan for the host to validate, authorize, and commit.
+
+```bxl-mutation
+Title = "Final";
+"Line Item"[SKU = "COPY-03"].Quantity += 1;
+"Line Item"[* Taxable].Discount += 0.05;
+insert_item_after(
+  { id: "details", title: "Details" },
+  Section[ID = "overview"]
+);
+move_item_before(
+  Section[ID = "summary"],
+  Section[ID = "round-one"]
+);
+```
+
+Ordinary `[predicate]` mutations require exactly one match. `[* predicate]` is
+the single visible opt-in to bulk assignment, transformation, or deletion.
+Loaded `linksTo` and `linksToMany` fields use the same syntax; schema-directed
+planning lowers their changes to relationship-edge operations without asking
+the author to reproduce JSON:API relationship objects.
+
+The same plan can come from readable streaming statements or structured JSON
+tool calls. Start with the [usage guide](./docs/mutation-language-guide.md) and
+[profile contract](./docs/mutation-profile.md), run all semantic fixtures with
+`npm run example:mutation`, run the realm-shaped subset with
+`npm run example:mutation:realm`, or open the standalone workbench with
+`npm run demo:mutation`.
 
 ---
 

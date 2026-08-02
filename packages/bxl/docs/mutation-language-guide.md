@@ -20,7 +20,7 @@ frozen grammar.
 
 Readable calls use Excel-style commas, such as
 `move_item_before(item, anchor)`. The readable compiler solidifies them to
-canonical jq calls with semicolons. A final semicolon terminates the mutation
+jq-shaped mutation BXL calls with semicolons. A final semicolon terminates the mutation
 statement; it is not an argument separator in handwritten BXL.
 
 ## Start with the Card you already have
@@ -55,10 +55,11 @@ The readable compiler solidifies that to canonical update assignment:
 .count |= . + 1;
 ```
 
-If the target itself is a numeric Field, the same expression becomes:
+If the target itself is the numeric Field labeled “Score,” the label remains
+the human-facing spelling even though it solidifies to the root value:
 
 ```bxl
-. += 1;
+Score += 1;
 ```
 
 Deletion is different from assigning `null`. This keeps an explicit null:
@@ -130,15 +131,13 @@ Sometimes changing several matches is exactly what you want. Mutation BXL asks
 you to say so where a reviewer—and an authorization policy—can see it:
 
 ```bxl
-update_all(
-  "Line Item"[* Taxable].Discount,
-  . + 0.05
-);
+"Line Item"[* Taxable].Discount += 0.05;
 ```
 
-The first argument selects every writable discount. The second expression runs
-against each selected value. This is deliberately different from hiding a
-multi-location write inside ordinary jq assignment.
+The `[* Taxable]` selector is the visible bulk authorization; `+= 0.05` is the
+ordinary transformation. There is no separate `update_all` function and no
+anonymous `.` value for a human or model to decode. An ordinary `[predicate]`
+still requires exactly one match.
 
 An empty explicit bulk selection is still an error by default. A stale filter
 should not make a migration or generated tool call appear successful.
@@ -181,11 +180,15 @@ append(Section, { id: "summary", title: "Summary" });
 When placement matters, select a stable anchor:
 
 ```bxl
-insert_after(
-  Section[ID = "overview"],
-  { id: "details", title: "Details" }
+insert_item_after(
+  { id: "details", title: "Details" },
+  Section[ID = "overview"]
 );
 ```
+
+The value being inserted is first and the existing anchor is second: “insert
+the details item after overview.” This is the same subject-first convention as
+`move_item_before(item, anchor)`.
 
 Moving an existing item preserves even more intent:
 
@@ -264,8 +267,15 @@ del(Tag[. = "obsolete"]);
 
 Repeated values are possible because `containsMany` does not promise set
 membership. The delete above must select exactly one item; if the collection
-contains several matching values, use `delete_all` to make the bulk intent
-explicit.
+contains several matching values, put the same explicit all-selector on the
+location:
+
+```bxl
+del(Tag[* . = "obsolete"]);
+```
+
+The plan resolves all matches first and deletes array positions from highest
+to lowest so one removal cannot retarget the next.
 
 This is particularly important for complex FieldDefs. A contained Field has
 no intrinsic Card ID, and the mutation language should not invent identity by
@@ -285,7 +295,7 @@ supports then.
 Compound data can also be copied without reproducing it:
 
 ```bxl
-copy_to("Billing Address", "Shipping Address");
+copy_value_to("Billing Address", "Shipping Address");
 ```
 
 Copy is deep by value. Later changes to the shipping address do not mutate the
@@ -500,6 +510,27 @@ the mutation profile, Card schema, authorization profile, and revision check
 still decide whether the requested writes are valid. JSON Schema validation is
 not authorization.
 
+Bulk intent is just as explicit in the tool encoding. This operation is the
+structured equivalent of
+`"Line Item"[* Taxable].Discount += 0.05;`:
+
+```json
+{
+  "id": "discount-taxable",
+  "op": "update-all",
+  "target": {
+    "collection": ["lineItems"],
+    "where": [{ "path": ["taxable"], "equals": true }],
+    "relativePath": ["discount"]
+  },
+  "expression": ". + 0.05"
+}
+```
+
+Ordinary `update` remains exact-one. The `update-all` operation name carries
+the same one-or-more cardinality as `[* predicate]` without adding a separate
+flag to the target shape. `set-all` and `delete-all` follow the same rule.
+
 Tool-call arguments may themselves arrive as a JSON stream. A decoder can
 queue each fully closed operation object, but never plans a partial JSON
 object. With an atomic transaction, queued operations still commit together
@@ -567,17 +598,19 @@ syntax alone:
 
 | Theme | Corpus cases |
 | --- | --- |
-| Small field edits | `field-root-update`, `assign-null`, `delete-member`, `copy-compound-field` |
-| Selection and bulk changes | `classroom-update-contained-schedule`, `exact-one-selected-update`, `explicit-bulk-update` |
+| Small field edits | `field-root-update`, `replace-field-root`, `assign-null`, `delete-member`, `copy-compound-field` |
+| Selection and bulk changes | `classroom-update-contained-schedule`, `exact-one-selected-update`, `explicit-bulk-set`, `explicit-bulk-update`, `explicit-bulk-delete` |
 | Evaluation order | `sequential-statement-evaluation`, `assert-then-update` |
-| Ordered collections | `append-contained-value`, `delete-contained-value`, `insert-after-stable-anchor`, `move-before-stable-anchor`, `exact-reorder` |
+| Ordered collections | `append-contained-value`, `prepend-contained-value`, `delete-contained-value`, `insert-at-revision-pinned-index`, `insert-before-stable-anchor`, `insert-after-stable-anchor`, `move-before-stable-anchor`, `move-after-stable-anchor`, `move-item-to-start`, `move-item-to-end`, `exact-reorder` |
 | Loaded Card relationships | `workspace-append-entry-point`, `contest-set-singular-link`, `unrelate-card`, `zine-reorder-linked-fragments` |
 | Streaming | `streaming-statement-commits`, `streaming-atomic-semicolon-string` |
 | Safety boundaries | every `reject-*` fixture, including raw JSON:API paths, ambiguous selectors, unstable indexes, relationship traversal, and query-backed membership |
 
 Running `npm run example:mutation` checks that each accepted normalized plan
 produces its documented after-state and that the corpus retains these design
-areas.
+areas. `npm run example:mutation:realm` runs the source-evidenced realm-shaped
+subset separately; it is the integration seam for replacing snapshots with
+Card Store loads from real test realms.
 
 ## A compact handwriting reference
 
@@ -594,11 +627,11 @@ del(Note);
 Item[ID = $params.id].Score += 10;
 
 # Explicitly update every match
-update_all(Item[* Done].Status, "archived");
+Item[* Done].Status = "archived";
 
 # Structural collection edits
 append(Item, $params.item);
-insert_after(Item[ID = $params.anchorId], $params.item);
+insert_item_after($params.item, Item[ID = $params.anchorId]);
 move_item_before(
   Item[ID = $params.movingId],
   Item[ID = $params.anchorId]
@@ -613,6 +646,7 @@ reorder_by(Item, ID, $params.order);
 # Contained collections preserve their natural order
 append(Tag, "urgent");
 del(Tag[. = "obsolete"]);
+del(Tag[* . = "obsolete"]); # every matching value
 
 # Preconditions
 assert(Status = "draft", "must still be a draft");

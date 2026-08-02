@@ -28,9 +28,9 @@ compound field, or expanded relationship subtrees.
 ```bxl
 .title = "Championship Replay";
 .score |= . + 10;
-insert_after(
-  .moves[] | select(.id == "move-07");
-  { id: "move-08", word: "STREAM", score: 24 }
+insert_item_after(
+  { id: "move-08", word: "STREAM", score: 24 };
+  .moves[] | select(.id == "move-07")
 );
 move_item_before(
   .sections[] | select(.id == "summary");
@@ -97,7 +97,7 @@ approved statement and operation forms can produce writes.
 
 Textual statements have the same two syntax modes as ordinary BXL. Readable
 BXL lets humans use schema labels, predicates, Excel-style comparison, and
-compound assignment sugar. It solidifies to canonical jq-shaped mutation
+compound assignment sugar. It solidifies to schema-resolved, jq-shaped mutation
 source before AST validation and planning:
 
 ```bxl
@@ -112,9 +112,11 @@ This solidification must be mutation-aware. In ordinary derive expressions a
 readable `[predicate]` returns the first matching value. On the left side of a
 mutation it remains a location selector and must satisfy the mutation
 statement's exact-one cardinality. It must not be lowered through `first(...)`
-in a way that conceals multiple matches. Readable `[* predicate]` supplies an
-explicit multi-location selector only to bulk statements such as
-`update_all` and `delete_all`.
+in a way that conceals multiple matches. Readable `[* predicate]` is the
+explicit multi-location marker on the left side of assignment, update
+assignment, or `del`. The mutation-aware compiler preserves that selector mode
+in the prepared AST even after displaying a jq-shaped solidification; ordinary
+`[]` iteration never silently becomes bulk permission.
 
 At the top level of the mutation profile, `Label = expression;` is an
 assignment statement. Inside predicates, assertions, and value expressions,
@@ -156,8 +158,8 @@ interface BxlMutationExecution {
   actor?: string;
   delivery?: 'complete' | 'streaming';
   transaction?: 'atomic' | 'statement';
-  /** Textual programs default to readable BXL; jq selects canonical syntax. */
-  syntax?: 'readable' | 'jq';
+  /** Textual programs default to readable BXL; solidified is planner-facing mutation BXL. */
+  syntax?: 'readable' | 'solidified';
   parameters?: Readonly<Record<string, JsonValue>>;
   returning?: ReadonlyArray<'old' | 'new' | 'changes' | 'affected' | 'paths'>;
 }
@@ -169,6 +171,10 @@ Defaults are `delivery: 'complete'`, `transaction: 'atomic'`, and
 The target defines what `.` means. For a Card target, `.` is the Card's
 editable projection. For a Field target, `.` is that Field's own value. The
 profile is otherwise independent of CardDef and FieldDef names or shapes.
+Readable source may spell a Field root with that Field's existing display
+label—`Score += 1` or `append(Tag, "urgent")`. This reuses Card/Field metadata;
+it does not add mutation-specific identity or naming configuration. The
+solidified form uses `.` for the same root.
 
 This produces four meaningful combinations:
 
@@ -187,24 +193,23 @@ a sequence whose earlier statements have already become durable.
 Version 1 should support this closed statement set:
 
 The signatures below use readable BXL's comma-separated arguments. During
-solidification they become canonical jq calls with semicolon-separated
-arguments. Statement-terminating semicolons are framed outside the expression
-parser.
+solidification, calls become jq-shaped mutation BXL with semicolon-separated
+arguments. The mutation AST may retain profile information such as a
+filter-all location that ordinary value-mode jq would collapse into an array.
+Statement-terminating semicolons are framed outside the expression parser.
 
 | Statement | Meaning | Cardinality |
 | --- | --- | --- |
-| `location = expression` | Set/upsert a schema-permitted location. | exactly one target |
-| `location \|= expression` | Transform an existing value. | exactly one target |
+| `location = expression` | Set/upsert a schema-permitted location. | exactly one, or every match selected with `[* predicate]` |
+| `location \|= expression` | Transform an existing value. Readable `+=`, `-=`, `*=`, and `/=` use this form. | exactly one, or every match selected with `[* predicate]` |
 | `replace(location, expression)` | Replace an existing value. | exactly one target |
-| `copy_to(source, destination)` | Deep-copy one loaded value to another writable field. | one source, one destination |
-| `del(location)` | Delete an existing member or item. | exactly one target |
-| `update_all(location, expression)` | Explicit bulk update. | one or more targets |
-| `delete_all(location)` | Explicit bulk delete. | one or more targets |
+| `copy_value_to(source, destination)` | Deep-copy one loaded value to another writable field. | one source, one destination |
+| `del(location)` | Delete an existing member or item. | exactly one, or every match selected with `[* predicate]` |
 | `prepend(collection, expression)` | Insert at array start. | one collection, one value |
 | `append(collection, expression)` | Insert at array end. | one collection, one value |
 | `insert_at(collection, index, expression)` | Insert at a zero-based index. | one collection, one value |
-| `insert_before(anchor, expression)` | Insert before a stable array item. | exactly one anchor |
-| `insert_after(anchor, expression)` | Insert after a stable array item. | exactly one anchor |
+| `insert_item_before(value, anchor)` | Insert a value before a stable array item. | exactly one anchor |
+| `insert_item_after(value, anchor)` | Insert a value after a stable array item. | exactly one anchor |
 | `move_item_before(item, anchor)` | Move an item immediately before an anchor. | exactly one item, exactly one anchor |
 | `move_item_after(item, anchor)` | Move an item immediately after an anchor. | exactly one item, exactly one anchor |
 | `move_item_to_start(item, collection)` | Move an item to array start. | exactly one item, one collection |
@@ -214,8 +219,9 @@ parser.
 
 The strict single-target default is deliberate. jq's implicit multi-location
 assignment is concise but dangerous for generated DML. Bulk intent must be
-visible in source through `update_all` or `delete_all`, and the result reports
-the affected count.
+visible in the location through `[* predicate]`, and the result reports the
+affected count. This gives assignment and deletion one shared cardinality
+rule instead of separate bulk functions.
 
 An expression used as a value must produce exactly one JSON value. Zero or
 multiple outputs are an `expression-cardinality` error.
@@ -260,9 +266,12 @@ type OperationValue =
 type BxlMutationOperation =
   | ({ id: string; op: 'set'; target: StructuredTarget } & OperationValue)
   | { id: string; op: 'update'; target: StructuredTarget; expression: string }
+  | ({ id: string; op: 'set-all'; target: StructuredTarget } & OperationValue)
+  | { id: string; op: 'update-all'; target: StructuredTarget; expression: string }
   | ({ id: string; op: 'replace'; target: StructuredTarget } & OperationValue)
   | { id: string; op: 'copy'; from: StructuredTarget; target: StructuredTarget }
   | { id: string; op: 'delete'; target: StructuredTarget }
+  | { id: string; op: 'delete-all'; target: StructuredTarget }
   | ({ id: string; op: 'insert'; into: StructuredTarget; position: StructuredPosition } & OperationValue)
   | { id: string; op: 'move'; target: StructuredTarget; into: StructuredTarget; position: StructuredPosition }
   | { id: string; op: 'reorder'; target: StructuredTarget; key: JqPath; order: JsonScalar[] }
@@ -278,6 +287,12 @@ An operation takes either a literal JSON `value` or a mutation-profile BXL
 `expression`, never both. This keeps structured operations as expressive as
 textual statements without asking a tool caller to serialize a complete
 replacement tree.
+
+Ordinary structured `set`, `update`, and `delete` operations require exactly
+one target. Their `-all` counterparts are the tool-call encoding of a textual
+`[* predicate]` location and require one or more targets. Cardinality is
+therefore explicit in the operation name rather than added as target
+configuration.
 
 For streaming JSON tool calls, an executor may accept each fully closed
 operation object as it arrives. A partial JSON object is never planned or
