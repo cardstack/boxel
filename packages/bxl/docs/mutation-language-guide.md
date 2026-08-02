@@ -309,21 +309,31 @@ Raw persistence paths are never part of the language:
 .relationships["entryPoints.1"].links.self = "./some-card";
 ```
 
-## Stream handwriting without changing its meaning
+## Let an AI stream the same handwriting
 
-The language is the same whether it arrives all at once or token by token:
+An AI does not have to wait for a complete replacement Card—or even a
+complete mutation program—before the host can understand its intent. It can
+stream the same readable BXL a person would write:
 
 ```bxl
 Status = "review";
 Count += 1;
 ```
 
-In `streaming` + `statement` mode, the first complete statement may commit
-before the second has arrived. In `streaming` + `atomic` mode, both statements
-are parsed and planned as they complete, but the host buffers their effects and
-commits once at end of stream.
+Token boundaries have no semantic meaning. A model might happen to deliver the
+program in these chunks:
 
-A semicolon inside a string is just text:
+| Arriving text | Decoder result | Host action |
+| --- | --- | --- |
+| `Status = "rev` | Incomplete | Buffer; do not evaluate anything. |
+| `iew";\nCount ` | One complete statement, plus an incomplete tail | Solidify `Status` to `.status`, parse it, and produce its plan. |
+| `+= ` | Incomplete tail | Keep buffering the second statement. |
+| `1;` | Second complete statement | Solidify the compound assignment and produce its plan. |
+
+The framing rule is intentionally small: only a top-level semicolon completes
+a statement. The decoder still tracks quoted strings, escapes, comments, and
+nested brackets. A semicolon inside a string is just text, so this remains two
+statements rather than three fragments:
 
 ```bxl
 Note = "keep; this semicolon";
@@ -333,8 +343,24 @@ Status = "ready";
 Only a top-level semicolon frames a statement. An unfinished final statement
 is an error and is never partially evaluated.
 
+### Choose progressive or atomic AI edits
+
+For a live interaction—such as the Scrabble stream in the prototype—the host
+can use `delivery: "streaming"` with `transaction: "statement"`. As soon as the
+AI finishes `Status = "review";`, that statement is schema-checked,
+authorized, revision-checked, and committed. The next statement sees the first
+statement's result and revision. All commits share an undo session, but a later
+failure does not silently roll back edits already shown to collaborators.
+
+For a change that must never be observed half-finished, use streaming delivery
+with an atomic transaction. The host can still parse, validate, plan, and show
+a preview as each AI-written statement completes. It evaluates later
+statements against the private working result of earlier ones, then performs
+one final authorization, revision check, and commit at end of stream. A
+truncated or invalid stream commits nothing.
+
 Transaction and delivery choices belong to the execution envelope rather than
-being repeated in every handwritten statement:
+being repeated in every AI-written statement:
 
 ```json
 {
@@ -352,31 +378,109 @@ being repeated in every handwritten statement:
 
 The revision supplies optimistic concurrency. The program identity supports
 durable deduplication. The actor travels with the plan into authorization and
-audit. None of those concerns makes the actual edit harder to read.
+audit. The trusted host supplies the actor and authoritative target/revision
+context; they are not claims the model gets to make about itself. None of
+those concerns makes the actual edit harder to read.
 
-## The same edit as a tool call
+## Let an AI make a schema-constrained tool call
 
-Humans and streamed models write BXL statements. A model using a strict JSON
-Schema tool can send structured operations instead. These two inputs express
-the same edit:
+Some AI integrations work better when the model calls a strict JSON Schema
+tool instead of emitting source text. Suppose the user asks, “Pin the
+Collaboration Stage at the end of this workspace.” The human-readable version
+of that request is:
 
 ```bxl
 append("Entry Point"; card("card:collab-stage"));
 ```
 
+An illustrative `mutate_card` tool call written by the AI is:
+
 ```json
 {
-  "id": "pin-collab-stage",
-  "op": "relate",
-  "target": { "path": ["entryPoints"] },
-  "cardId": "card:collab-stage",
-  "position": { "at": "end" }
+  "language": "bxl-mutation-ops/1",
+  "programId": "pin-collab-stage-01",
+  "target": { "kind": "card", "id": "card:workspace" },
+  "baseRevision": "rev-18",
+  "delivery": "complete",
+  "transaction": "atomic",
+  "operations": [
+    {
+      "id": "pin-collab-stage",
+      "op": "relate",
+      "target": { "path": ["entryPoints"] },
+      "cardId": "card:collab-stage",
+      "position": { "at": "end" }
+    }
+  ]
 }
 ```
 
-Both lower to the same normalized relationship intent. The textual form is
-optimized for handwriting and token streaming. The object form is optimized
-for tool validation. Neither is allowed to invent different semantics.
+The model names the logical Card field and the linked Card ID. It does not
+manufacture a loaded Card object, an `entryPoints.2` storage key, or a
+JSON:API relationship record. The Card Store resolves the ID and the schema
+tells the planner that this is a `linksToMany`, so the operation lowers to a
+single normalized `relate` intent.
+
+The structured form also handles several atomic edits without reprinting the
+Card. For “send this invoice to review and increment its attempt count,” an AI
+can call the same tool with:
+
+```json
+{
+  "language": "bxl-mutation-ops/1",
+  "programId": "review-invoice-42",
+  "target": { "kind": "card", "id": "card:invoice-42" },
+  "baseRevision": "rev-7",
+  "delivery": "complete",
+  "transaction": "atomic",
+  "operations": [
+    {
+      "id": "set-review",
+      "op": "set",
+      "target": { "path": ["status"] },
+      "value": "review"
+    },
+    {
+      "id": "increment-attempts",
+      "op": "update",
+      "target": { "path": ["count"] },
+      "expression": ". + 1"
+    }
+  ]
+}
+```
+
+That is semantically identical to `Status = "review"; Count += 1;`. The tool
+schema catches misspelled operation shapes and missing IDs before planning;
+the mutation profile, Card schema, authorization profile, and revision check
+still decide whether the requested writes are valid. JSON Schema validation is
+not authorization.
+
+Tool-call arguments may themselves arrive as a JSON stream. A decoder can
+queue each fully closed operation object, but never plans a partial JSON
+object. With an atomic transaction, queued operations still commit together
+only after the complete tool call is valid. Operation IDs make retry and
+deduplication explicit.
+
+Both encodings lower to the same normalized plan. The textual form is
+optimized for readable handwriting, token streaming, and replay. The object
+form is optimized for tool validation and direct construction. Neither is
+allowed to invent different mutation semantics.
+
+## Pick the AI interface for the interaction
+
+| Interaction | Suggested encoding | Why |
+| --- | --- | --- |
+| A chat assistant visibly edits a Card as it talks | Readable BXL, streaming + statement | Each finished statement can update the UI immediately. |
+| An AI drafts a multi-field change for approval | Readable BXL, streaming + atomic | The host can preview incrementally and commit all-or-nothing. |
+| A model has a strict mutation tool | Structured operations, complete + atomic | JSON Schema constrains operation shapes and literal values. |
+| A long tool call is delivered incrementally | Structured operations, streaming + atomic | Closed operations can be planned early without exposing a partial commit. |
+
+The executable cases `streaming-statement-commits`,
+`streaming-atomic-semicolon-string`, and `workspace-append-entry-point` in the
+fixture corpus cover these paths. Rejected fixtures also pin down incomplete
+streams and duplicate operation IDs, so these examples are conformance
+requirements rather than presentation-only syntax.
 
 ## What the host sees before committing
 
