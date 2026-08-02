@@ -62,6 +62,7 @@ export interface MutationExecutionFixture {
   };
   delivery: 'complete' | 'streaming';
   transaction: 'atomic' | 'statement';
+  syntax: 'readable' | 'jq';
   baseRevision?: string;
   schemaVersion?: string;
   actor?: string;
@@ -148,6 +149,8 @@ interface MutationFixtureBase {
   schema: MutationSchemaRef;
   execution: MutationExecutionFixture;
   before: MutationJson;
+  /** Human-facing BXL readable spelling before schema-aware solidification. */
+  readableSource?: string;
   /** Candidate BXL/jq surface syntax. Every statement is semicolon framed. */
   source: string;
   /** JSON-schema-friendly source encoding with equivalent semantics. */
@@ -161,6 +164,7 @@ interface MutationFixtureBase {
 
 export interface AcceptedMutationFixture extends MutationFixtureBase {
   outcome: 'accepted';
+  readableSource: string;
   plan: MutationPlanStatementFixture[];
   after: MutationJson;
   expectedReturning?: MutationJson;
@@ -184,8 +188,8 @@ export const mutationSchemaFixtures = {
   'copy-card': {
     root: 'card',
     fields: {
-      billingAddress: { kind: 'compound' },
-      shippingAddress: { kind: 'compound', optional: true },
+      billingAddress: { kind: 'compound', label: 'Billing Address' },
+      shippingAddress: { kind: 'compound', label: 'Shipping Address', optional: true },
     },
   },
   'tag-set-field': {
@@ -198,6 +202,7 @@ export const mutationSchemaFixtures = {
       kind: 'collection',
       semantics: 'ordered-keyed',
       identity: ['id'],
+      itemFields: { id: { label: 'ID' }, title: { label: 'Title' } },
     },
   },
   'invoice-card': {
@@ -207,6 +212,8 @@ export const mutationSchemaFixtures = {
       status: { kind: 'string' },
       note: { kind: 'string', optional: true, nullable: true },
       count: { kind: 'number' },
+      quantity: { kind: 'number' },
+      unitPrice: { kind: 'number', label: 'Unit Price' },
       subtotal: { kind: 'number' },
       shipping: { kind: 'number' },
       total: { kind: 'number' },
@@ -214,6 +221,13 @@ export const mutationSchemaFixtures = {
         kind: 'collection',
         semantics: 'ordered-keyed',
         identity: ['sku'],
+        label: 'Line Item',
+        itemFields: {
+          sku: { label: 'SKU' },
+          quantity: { label: 'Quantity' },
+          taxable: { label: 'Taxable' },
+          discount: { label: 'Discount' },
+        },
       },
     },
   },
@@ -238,6 +252,7 @@ export const mutationSchemaFixtures = {
         semantics: 'ordered-keyed',
         identity: ['id'],
         loadedAs: 'CardDef[]',
+        label: 'Entry Point',
       },
     },
   },
@@ -256,6 +271,7 @@ export const mutationSchemaFixtures = {
         kind: 'linksTo',
         cardinality: 'one',
         loadedAs: 'Submission | undefined',
+        label: 'Winner',
       },
     },
   },
@@ -268,7 +284,12 @@ export const mutationSchemaFixtures = {
       leadTeacher: { kind: 'linksTo', loadedAs: 'StaffMember | undefined' },
       staff: { kind: 'linksToMany', loadedAs: 'StaffMember[]', identity: ['id'] },
       students: { kind: 'linksToMany', loadedAs: 'Student[]', identity: ['id'] },
-      scheduleItems: { kind: 'containsMany', loadedAs: 'ScheduleItemField[]' },
+      scheduleItems: {
+        kind: 'containsMany',
+        loadedAs: 'ScheduleItemField[]',
+        label: 'Schedule Item',
+        itemFields: { time: { label: 'Time' }, status: { label: 'Status' } },
+      },
     },
   },
   'zine-issue-card': {
@@ -282,6 +303,7 @@ export const mutationSchemaFixtures = {
         semantics: 'ordered-keyed',
         identity: ['id'],
         loadedAs: 'SavedFragment[]',
+        label: 'Fragment',
       },
       clusters: { kind: 'linksToMany', loadedAs: 'ThemeCluster[]', identity: ['id'] },
     },
@@ -319,6 +341,7 @@ function execution(
     target,
     delivery: 'complete',
     transaction: 'atomic',
+    syntax: 'readable',
     ...overrides,
   };
 }
@@ -342,6 +365,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       billingAddress: { city: 'Boston', country: 'US' },
       shippingAddress: null,
     },
+    readableSource: 'copy_to("Billing Address"; "Shipping Address");',
     source: 'copy_to(.billingAddress; .shippingAddress);',
     operations: [
       {
@@ -380,6 +404,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     schema: 'tag-set-field',
     execution: execution('add-to-set', tagsTarget),
     before: ['customer', 'legal'],
+    readableSource: 'add_to_set(.; "urgent");',
     source: 'add_to_set(.; "urgent");',
     operations: [{ id: 'add-urgent', op: 'add-to-set', target: { path: [] }, value: 'urgent' }],
     outcome: 'accepted',
@@ -401,6 +426,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     schema: 'tag-set-field',
     execution: execution('add-existing-to-set', tagsTarget),
     before: ['customer', 'urgent'],
+    readableSource: 'add_to_set(.; "urgent");',
     source: 'add_to_set(.; "urgent");',
     operations: [{ id: 'add-urgent', op: 'add-to-set', target: { path: [] }, value: 'urgent' }],
     outcome: 'accepted',
@@ -422,6 +448,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     schema: 'tag-set-field',
     execution: execution('remove-from-set', tagsTarget),
     before: ['customer', 'obsolete', 'urgent'],
+    readableSource: 'remove_from_set(.; "obsolete");',
     source: 'remove_from_set(.; "obsolete");',
     operations: [{ id: 'remove-obsolete', op: 'remove-from-set', target: { path: [] }, value: 'obsolete' }],
     outcome: 'accepted',
@@ -446,6 +473,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       { id: 'overview', title: 'Overview' },
       { id: 'summary', title: 'Summary' },
     ],
+    readableSource: 'insert_after(.[] | select(ID = "overview"); {id: "details", title: "Details"});',
     source: 'insert_after(.[] | select(.id == "overview"); {id: "details", title: "Details"});',
     operations: [
       {
@@ -490,6 +518,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       { id: 'round-one', title: 'Round One' },
       { id: 'summary', title: 'Summary' },
     ],
+    readableSource: 'move_before(.[] | select(ID = "summary"); .[] | select(ID = "round-one"));',
     source: 'move_before(.[] | select(.id == "summary"); .[] | select(.id == "round-one"));',
     operations: [
       {
@@ -527,6 +556,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       { id: 'round-one', title: 'Round One' },
       { id: 'summary', title: 'Summary' },
     ],
+    readableSource: 'reorder_by(.; ID; ["summary", "overview", "round-one"]);',
     source: 'reorder_by(.; .id; ["summary", "overview", "round-one"]);',
     operations: [
       {
@@ -572,6 +602,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
         { sku: 'COPY-03', quantity: 3 },
       ],
     },
+    readableSource: '"Line Item"[SKU = "COPY-03"].Quantity += 1;',
     source: '(.lineItems[] | select(.sku == "COPY-03") | .quantity) |= . + 1;',
     operations: [
       {
@@ -615,6 +646,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
         { sku: 'COPY-03', taxable: true, discount: 0.1 },
       ],
     },
+    readableSource: 'update_all("Line Item"[* Taxable].Discount; . + 0.05);',
     source: 'update_all(.lineItems[] | select(.taxable) | .discount; . + 0.05);',
     operations: [
       {
@@ -656,6 +688,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     schema: 'invoice-card',
     execution: execution('sequential-statement-evaluation', cardTarget),
     before: { quantity: 3, unitPrice: 20, subtotal: 50, shipping: 5, total: 55 },
+    readableSource: 'Subtotal = (Quantity * "Unit Price");\nTotal = (Subtotal + Shipping);',
     source: '.subtotal = (.quantity * .unitPrice);\n.total = (.subtotal + .shipping);',
     operations: [
       {
@@ -695,6 +728,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     schema: 'invoice-card',
     execution: execution('assert-then-update', cardTarget),
     before: { status: 'draft' },
+    readableSource: 'assert(Status = "draft"; "must still be a draft");\nStatus = "published";',
     source: 'assert(.status == "draft"; "must still be a draft");\n.status = "published";',
     operations: [
       { id: 'still-draft', op: 'assert', expression: '.status == "draft"', message: 'must still be a draft' },
@@ -722,6 +756,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       returning: ['old', 'new', 'changes', 'affected', 'paths'],
     }),
     before: { title: 'Draft' },
+    readableSource: 'Title = "Final";',
     source: '.title = "Final";',
     operations: [{ id: 'rename', op: 'set', target: { path: ['title'] }, value: 'Final' }],
     outcome: 'accepted',
@@ -755,6 +790,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       schemaVersion: 'invoice/3',
     }),
     before: { status: 'draft' },
+    readableSource: 'Status = "review";',
     source: '.status = "review";',
     operations: [{ id: 'request-review', op: 'set', target: { path: ['status'] }, value: 'review' }],
     outcome: 'accepted',
@@ -776,6 +812,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     schema: 'reviewers-relationship-field',
     execution: execution('relate-card', reviewersTarget),
     before: [{ id: 'card:ada', cardTitle: 'Ada' }],
+    readableSource: 'append(.; card("card:grace"));',
     source: 'append(.; card("card:grace"));',
     operations: [{ id: 'relate-grace', op: 'relate', target: { path: [] }, cardId: 'card:grace' }],
     store: {
@@ -810,6 +847,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       { id: 'card:ada', cardTitle: 'Ada' },
       { id: 'card:grace', cardTitle: 'Grace' },
     ],
+    readableSource: 'del(.[] | select(ID = "card:ada"));',
     source: 'del(.[] | select(.id == "card:ada"));',
     operations: [{ id: 'unrelate-ada', op: 'unrelate', target: { path: [] }, cardId: 'card:ada' }],
     outcome: 'accepted',
@@ -832,6 +870,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     schema: 'reviewers-relationship-field',
     execution: execution('move-relationship', reviewersTarget),
     before: [{ id: 'card:ada' }, { id: 'card:grace' }, { id: 'card:lin' }],
+    readableSource: 'move_before(.[] | select(ID = "card:grace"); .[] | select(ID = "card:ada"));',
     source: 'move_before(.[] | select(.id == "card:grace"); .[] | select(.id == "card:ada"));',
     operations: [
       {
@@ -868,6 +907,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
         { id: 'card:attendance', cardTitle: 'Staff Attendance' },
       ],
     },
+    readableSource: 'append("Entry Point"; card("card:collab-stage"));',
     source: 'append(.entryPoints; card("card:collab-stage"));',
     operations: [
       {
@@ -915,6 +955,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     before: {
       submissions: [{ id: 'card:submission/tidal', cardTitle: 'Tidal' }],
     },
+    readableSource: 'Winner = card("card:submission/tidal");',
     source: '.winner = card("card:submission/tidal");',
     operations: [
       {
@@ -958,6 +999,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
         { time: '1:00 PM', activity: 'OT push-in', status: 'current' },
       ],
     },
+    readableSource: '"Schedule Item"[Time = "1:00 PM"].Status = "done";',
     source: '(.scheduleItems[] | select(.time == "1:00 PM") | .status) = "done";',
     operations: [
       {
@@ -1008,6 +1050,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
         { id: 'card:fragment/personal-web', cardTitle: 'The Personal Web' },
       ],
     },
+    readableSource: 'move_before("Fragment"[ID = "card:fragment/personal-web"]; "Fragment"[ID = "card:fragment/opposite-viral"]);',
     source: 'move_before(.fragments[] | select(.id == "card:fragment/personal-web"); .fragments[] | select(.id == "card:fragment/opposite-viral"));',
     operations: [
       {
@@ -1056,6 +1099,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     schema: 'invoice-card',
     execution: execution('authorization-write-set', cardTarget, { actor: 'user:ada' }),
     before: { status: 'draft', title: 'Quarterly report' },
+    readableSource: 'Status = "review";\nTitle = (Title + " — reviewed");',
     source: '.status = "review";\n.title = (.title + " — reviewed");',
     operations: [
       { id: 'status-review', op: 'set', target: { path: ['status'] }, value: 'review' },
@@ -1096,6 +1140,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       baseRevision: 'rev-1',
     }),
     before: { status: 'draft', count: 1 },
+    readableSource: 'Status = "review";\nCount += 1;',
     source: '.status = "review";\n.count |= . + 1;',
     chunks: ['.status = "rev', 'iew";\n.count ', '|= . + ', '1;'],
     operations: [
@@ -1129,6 +1174,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       transaction: 'atomic',
     }),
     before: { note: null, status: 'draft' },
+    readableSource: 'Note = "keep; this semicolon";\nStatus = "ready";',
     source: '.note = "keep; this semicolon";\n.status = "ready";',
     chunks: ['.note = "keep;', ' this semi', 'colon";\n.status = ', '"ready";'],
     operations: [
@@ -1159,6 +1205,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     schema: 'scalar-field',
     execution: execution('field-root-update', scalarTarget),
     before: 41,
+    readableSource: '. += 1;',
     source: '. |= . + 1;',
     operations: [{ id: 'increment-score', op: 'update', target: { path: [] }, expression: '. + 1' }],
     outcome: 'accepted',
@@ -1180,6 +1227,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     schema: 'invoice-card',
     execution: execution('assign-null', cardTarget),
     before: { note: 'temporary' },
+    readableSource: 'Note = null;',
     source: '.note = null;',
     operations: [{ id: 'null-note', op: 'set', target: { path: ['note'] }, value: null }],
     outcome: 'accepted',
@@ -1201,6 +1249,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     schema: 'invoice-card',
     execution: execution('delete-member', cardTarget),
     before: { title: 'Draft', note: null },
+    readableSource: 'del(Note);',
     source: 'del(.note);',
     operations: [{ id: 'delete-note', op: 'delete', target: { path: ['note'] } }],
     outcome: 'accepted',

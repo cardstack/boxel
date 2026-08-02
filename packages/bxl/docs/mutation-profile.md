@@ -83,6 +83,34 @@ Statements can calculate a value from the current snapshot; structured
 operations carry JSON values and canonical target/selector objects. Only
 approved statement and operation forms can produce writes.
 
+Textual statements have the same two syntax modes as ordinary BXL. Readable
+BXL lets humans use schema labels, predicates, Excel-style comparison, and
+compound assignment sugar. It solidifies to canonical jq-shaped mutation
+source before AST validation and planning:
+
+```bxl
+"Line Item"[SKU = "COPY-03"].Quantity += 1;
+```
+
+```bxl
+(.lineItems[] | select(.sku == "COPY-03") | .quantity) |= . + 1;
+```
+
+This solidification must be mutation-aware. In ordinary derive expressions a
+readable `[predicate]` returns the first matching value. On the left side of a
+mutation it remains a location selector and must satisfy the mutation
+statement's exact-one cardinality. It must not be lowered through `first(...)`
+in a way that conceals multiple matches. Readable `[* predicate]` supplies an
+explicit multi-location selector only to bulk statements such as
+`update_all` and `delete_all`.
+
+At the top level of the mutation profile, `Label = expression;` is an
+assignment statement. Inside predicates, assertions, and value expressions,
+readable `=` retains its established comparison meaning. Readable `+=`, `-=`,
+`*=`, and `/=` normalize to canonical `|=` expressions. They are permitted for
+schema-compatible scalar values, but not as a way to replace collection or
+relationship fields wholesale.
+
 ### 2. Mutation plan
 
 The compiler lowers source to typed mutation intent. During evaluation,
@@ -116,12 +144,15 @@ interface BxlMutationExecution {
   actor?: string;
   delivery?: 'complete' | 'streaming';
   transaction?: 'atomic' | 'statement';
+  /** Textual programs default to readable BXL; jq selects canonical syntax. */
+  syntax?: 'readable' | 'jq';
   parameters?: Readonly<Record<string, JsonValue>>;
   returning?: ReadonlyArray<'old' | 'new' | 'changes' | 'affected' | 'paths'>;
 }
 ```
 
-Defaults are `delivery: 'complete'` and `transaction: 'atomic'`.
+Defaults are `delivery: 'complete'`, `transaction: 'atomic'`, and
+`syntax: 'readable'`. Structured operation programs ignore `syntax`.
 
 The target defines what `.` means. For a Card target, `.` is the Card's
 editable projection. For a Field target, `.` is that Field's own value. The
@@ -606,9 +637,11 @@ ordinary JSON construction. Version 1 forbids:
 - writes outside the target snapshot;
 - writes to a Card root (a Field root may be replaced explicitly).
 
-Only `=` and `|=` assignment operators are source syntax. Compound assignment
-operators should normalize to `|=` or be rejected in version 1 so their target
-and value semantics remain explicit.
+Canonical mutation source uses only `=` and `|=` assignment operators.
+Readable mutation source may use the scalar compound-assignment sugar defined
+above; solidification normalizes it to `|=` before profile validation. A
+compound operator over a collection or relationship field is rejected so it
+cannot disguise whole-collection replacement.
 
 The initial function allowlist should be conservative. Collection-wide
 rewrites such as `sort`, `map`, and arbitrary array construction can recreate

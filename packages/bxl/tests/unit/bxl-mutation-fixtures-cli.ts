@@ -205,12 +205,14 @@ function completeStatements(source: string): string[] {
 
 let accepted = 0;
 let rejected = 0;
+let readableSolidifications = 0;
 const groups = new Set<string>();
 const errorCodes = new Set<string>();
 
 for (const fixture of bxlMutationExamples) {
   groups.add(fixture.group);
   strictEqual(fixture.execution.model, 'loaded-card', `${fixture.id}: mutations target loaded Cards`);
+  strictEqual(fixture.execution.syntax, 'readable', `${fixture.id}: corpus defaults to human-readable syntax`);
   ok(fixture.schema in mutationSchemaFixtures, `${fixture.id}: schema fixture exists`);
   ok(fixture.intent.length > 0, `${fixture.id}: intent is documented`);
 
@@ -228,6 +230,15 @@ for (const fixture of bxlMutationExamples) {
 
   if (fixture.outcome === 'accepted') {
     accepted++;
+    strictEqual(fixture.readableSource.trim().endsWith(';'), true, `${fixture.id}: readable source is framed`);
+    strictEqual(
+      completeStatements(fixture.readableSource).length,
+      fixture.plan.length,
+      `${fixture.id}: readable source and normalized plan have equal statement counts`,
+    );
+    if (fixture.readableSource !== fixture.source) {
+      readableSolidifications++;
+    }
     strictEqual(fixture.source.trim().endsWith(';'), true, `${fixture.id}: accepted source is framed`);
     strictEqual(
       completeStatements(fixture.source).length,
@@ -268,10 +279,14 @@ for (const fixture of bxlMutationExamples) {
 
 ok(accepted >= 20, `expected at least 20 accepted mutation fixtures, found ${accepted}`);
 ok(rejected >= 10, `expected at least 10 rejected mutation fixtures, found ${rejected}`);
+ok(
+  readableSolidifications >= 15,
+  `expected at least 15 readable-to-canonical examples, found ${readableSolidifications}`,
+);
 ok(groups.size >= 15, `expected at least 15 fixture groups, found ${groups.size}`);
 ok(errorCodes.has('storage-projection-forbidden'), 'raw JSON:API relationship writes are rejected');
 ok(errorCodes.has('field-read-only'), 'query-backed linksToMany writes are rejected');
 
 console.log(
-  `BXL mutation fixtures: ${bxlMutationExamples.length} cases passed (${accepted} accepted, ${rejected} rejected, ${groups.size} groups)`,
+  `BXL mutation fixtures: ${bxlMutationExamples.length} cases passed (${accepted} accepted, ${rejected} rejected, ${readableSolidifications} readable solidifications, ${groups.size} groups)`,
 );

@@ -8,7 +8,8 @@ Each accepted case records:
 
 - a human intent;
 - the loaded Card or Field value before the mutation;
-- candidate jq-shaped statements;
+- human-facing BXL readable statements and their canonical jq-shaped
+  solidification;
 - equivalent structured tool-call operations;
 - the normalized mutation-plan statements and concrete intents;
 - the loaded value after applying the plan; and
@@ -25,11 +26,12 @@ Run the semantic verifier with:
 npm run example:mutation
 ```
 
-The verifier currently checks framing, structured-operation identities,
-coverage of the ten syntax questions, streaming chunk reconstruction, loaded
-relationship boundaries, and `before -> normalized plan -> after`. It does not
-parse the statement source yet. That is deliberate: the accepted examples
-should settle before they become grammar compatibility commitments.
+The verifier currently checks readable and canonical framing, statement-count
+equivalence, structured-operation identities, coverage of the ten syntax
+questions, streaming chunk reconstruction, loaded relationship boundaries,
+and `before -> normalized plan -> after`. It does not parse the mutation
+statement source yet. That is deliberate: the accepted examples should settle
+before they become grammar compatibility commitments.
 
 ## Loaded relationship model
 
@@ -38,12 +40,12 @@ resource document. A `linksTo` field appears as a loaded Card and a
 `linksToMany` field appears as an ordered array of loaded Cards. For example:
 
 ```bxl
-.winner = card("card:submission/tidal");
-append(.entryPoints; card("card:collab-stage"));
-del(.entryPoints[] | select(.id == "card:architecture"));
+Winner = card("card:submission/tidal");
+append("Entry Point"; card("card:collab-stage"));
+del("Entry Point"[ID = "card:architecture"]);
 move_before(
-  .entryPoints[] | select(.id == "card:attendance");
-  .entryPoints[] | select(.id == "card:collab-stage")
+  "Entry Point"[ID = "card:attendance"];
+  "Entry Point"[ID = "card:collab-stage"]
 );
 ```
 

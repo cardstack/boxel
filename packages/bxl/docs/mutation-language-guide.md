@@ -8,7 +8,7 @@ subtree you did not mean to touch, and upload the whole thing again. You want
 to write the edit you actually mean:
 
 ```bxl
-.title = "Final";
+Title = "Final";
 ```
 
 That is the idea behind mutation BXL. It is a small data-manipulation language
@@ -27,13 +27,24 @@ number itself. It is never the raw JSON:API resource document.
 That makes the smallest edits pleasantly unsurprising:
 
 ```bxl
-.title = "Championship Replay";
-.status = "review";
-.note = null;
+Title = "Championship Replay";
+Status = "review";
+Note = null;
 ```
 
+The mutation profile gives top-level `Label = value;` statement shape the
+meaning “assign this field.” Inside a predicate or `assert`, readable `=` keeps
+its established comparison meaning.
+
 Assignment writes one location. Update assignment passes the current value to
-the expression on its right:
+the expression on its right. Readable compound assignment is usually nicer for
+a small arithmetic change:
+
+```bxl
+Count += 1;
+```
+
+The readable compiler solidifies that to canonical update assignment:
 
 ```bxl
 .count |= . + 1;
@@ -42,19 +53,19 @@ the expression on its right:
 If the target itself is a numeric Field, the same expression becomes:
 
 ```bxl
-. |= . + 1;
+. += 1;
 ```
 
 Deletion is different from assigning `null`. This keeps an explicit null:
 
 ```bxl
-.note = null;
+Note = null;
 ```
 
 This removes the member:
 
 ```bxl
-del(.note);
+del(Note);
 ```
 
 That distinction matters for Card schemas where “missing,” “unknown,” and
@@ -64,28 +75,31 @@ Every top-level statement ends with a semicolon. Besides making a handwritten
 program easy to scan, the terminator tells a streaming executor when it has a
 complete statement that can be parsed and planned.
 
-## Select an item the jq way
+## Select a row by what it says
 
-The useful part of jq is not merely its JSON syntax. It is the way a path can
-describe a precise location inside a tree.
+BXL readable syntax lets a person use the labels printed by the Card rather
+than its internal camelCase paths. Predicates retain jq's ability to describe a
+precise location inside a tree.
 
 Here is a real Classroom-shaped example from the corpus. It finds the 1:00 PM
 schedule item and marks its `status` done:
 
 ```bxl
-(
-  .scheduleItems[]
-  | select(.time == "1:00 PM")
-  | .status
-) = "done";
+"Schedule Item"[Time = "1:00 PM"].Status = "done";
 ```
 
-The parentheses say, “this whole pipeline is the location I am assigning.”
-The mutation planner resolves it to a concrete contained-field path such as
-`["scheduleItems", 1, "status"]`. The loaded `staff` and `students`
-relationships beside it are untouched.
+The readable compiler uses the Card schema to resolve “Schedule Item,” “Time,”
+and “Status.” The mutation planner then resolves a concrete contained-field
+path such as `["scheduleItems", 1, "status"]`. The loaded `staff` and
+`students` relationships beside it are untouched.
 
 Update assignment is equally useful for arithmetic:
+
+```bxl
+"Line Item"[SKU = "COPY-03"].Quantity += 1;
+```
+
+That handwritten statement solidifies to the canonical jq-shaped mutation:
 
 ```bxl
 (
@@ -94,6 +108,12 @@ Update assignment is equally useful for arithmetic:
   | .quantity
 ) |= . + 1;
 ```
+
+Readable mutation predicates need one important profile-specific rule. In an
+ordinary value expression, `[predicate]` means “give me the first match.” In a
+mutation location it means “resolve this predicate and require exactly one
+match.” The compiler must preserve the selector until cardinality validation;
+it must not hide ambiguity by lowering through `first(...)`.
 
 Ordinary assignment and update assignment require exactly one selected
 location. If the selector finds nothing, the edit is stale. If it finds two
@@ -106,7 +126,7 @@ you to say so where a reviewer—and an authorization policy—can see it:
 
 ```bxl
 update_all(
-  .lineItems[] | select(.taxable) | .discount;
+  "Line Item"[* Taxable].Discount;
   . + 0.05
 );
 ```
@@ -124,8 +144,8 @@ Statements observe the output of earlier statements. A recalculation can
 therefore read like the steps a person would write on paper:
 
 ```bxl
-.subtotal = (.quantity * .unitPrice);
-.total = (.subtotal + .shipping);
+Subtotal = (Quantity * "Unit Price");
+Total = (Subtotal + Shipping);
 ```
 
 The second statement reads the newly calculated subtotal. In atomic mode the
@@ -136,8 +156,8 @@ When an edit is valid only in a particular state, put the assumption beside
 the edit:
 
 ```bxl
-assert(.status == "draft"; "must still be a draft");
-.status = "published";
+assert(Status = "draft"; "must still be a draft");
+Status = "published";
 ```
 
 The assertion produces no write. It becomes a checked precondition in the
@@ -145,17 +165,19 @@ mutation plan.
 
 ## Change collections without reprinting them
 
-Appending a value should not require rebuilding its surrounding array:
+Appending a value should not require rebuilding its surrounding array. When
+the Card schema labels its collection “Section,” a person can keep using that
+label throughout the structural vocabulary:
 
 ```bxl
-append(.sections; { id: "summary", title: "Summary" });
+append(Section; { id: "summary", title: "Summary" });
 ```
 
 When placement matters, select a stable anchor:
 
 ```bxl
 insert_after(
-  .sections[] | select(.id == "overview");
+  Section[ID = "overview"];
   { id: "details", title: "Details" }
 );
 ```
@@ -164,8 +186,8 @@ Moving an existing item preserves even more intent:
 
 ```bxl
 move_before(
-  .sections[] | select(.id == "summary");
-  .sections[] | select(.id == "round-one")
+  Section[ID = "summary"];
+  Section[ID = "round-one"]
 );
 ```
 
@@ -178,8 +200,8 @@ directly:
 
 ```bxl
 reorder_by(
-  .sections;
-  .id;
+  Section;
+  ID;
   ["summary", "overview", "round-one"]
 );
 ```
@@ -199,9 +221,11 @@ have the same mutation vocabulary. For a schema-declared set collection, use
 set intent:
 
 ```bxl
-add_to_set(.tags; "urgent");
-remove_from_set(.tags; "obsolete");
+add_to_set(Tag; "urgent");
+remove_from_set(Tag; "obsolete");
 ```
+
+Here `Tag` is the schema's readable label for the set-like field.
 
 Adding a value that is already present is a successful no-op with an affected
 count of zero. Positional operations such as `append` are rejected for a set
@@ -217,7 +241,7 @@ add_to_set(.; "urgent");
 Compound data can also be copied without reproducing it:
 
 ```bxl
-copy_to(.billingAddress; .shippingAddress);
+copy_to("Billing Address"; "Shipping Address");
 ```
 
 Copy is deep by value. Later changes to the shipping address do not mutate the
@@ -235,7 +259,7 @@ the same field is simply an ordered array of Cards.
 To set a singular `linksTo`, resolve a Card by identity:
 
 ```bxl
-.winner = card("card:submission/tidal");
+Winner = card("card:submission/tidal");
 ```
 
 `card(id)` is not a JSON object constructor. It asks the Card Store to load the
@@ -246,21 +270,21 @@ host normally supplies the Card Store's canonical URL-shaped Card ID.
 A `linksToMany` uses the same collection vocabulary as contained data:
 
 ```bxl
-append(.entryPoints; card("card:collab-stage"));
+append("Entry Point"; card("card:collab-stage"));
 ```
 
 Removal selects the loaded Card by identity:
 
 ```bxl
-del(.entryPoints[] | select(.id == "card:architecture"));
+del("Entry Point"[ID = "card:architecture"]);
 ```
 
 And rearrangement remains an ordinary move:
 
 ```bxl
 move_before(
-  .fragments[] | select(.id == "card:fragment/personal-web");
-  .fragments[] | select(.id == "card:fragment/opposite-viral")
+  Fragment[ID = "card:fragment/personal-web"];
+  Fragment[ID = "card:fragment/opposite-viral"]
 );
 ```
 
@@ -290,8 +314,8 @@ Raw persistence paths are never part of the language:
 The language is the same whether it arrives all at once or token by token:
 
 ```bxl
-.status = "review";
-.count |= . + 1;
+Status = "review";
+Count += 1;
 ```
 
 In `streaming` + `statement` mode, the first complete statement may commit
@@ -302,8 +326,8 @@ commits once at end of stream.
 A semicolon inside a string is just text:
 
 ```bxl
-.note = "keep; this semicolon";
-.status = "ready";
+Note = "keep; this semicolon";
+Status = "ready";
 ```
 
 Only a top-level semicolon frames a statement. An unfinished final statement
@@ -321,6 +345,7 @@ being repeated in every handwritten statement:
   "baseRevision": "rev-7",
   "delivery": "streaming",
   "transaction": "atomic",
+  "syntax": "readable",
   "returning": ["changes", "affected", "paths"]
 }
 ```
@@ -336,7 +361,7 @@ Schema tool can send structured operations instead. These two inputs express
 the same edit:
 
 ```bxl
-append(.entryPoints; card("card:collab-stage"));
+append("Entry Point"; card("card:collab-stage"));
 ```
 
 ```json
@@ -359,8 +384,8 @@ The author writes intent. The planner resolves it into a concrete write set.
 For example:
 
 ```bxl
-.status = "review";
-.title = (.title + " — reviewed");
+Status = "review";
+Title = (Title + " — reviewed");
 ```
 
 may plan as:
@@ -410,39 +435,39 @@ areas.
 
 ```bxl
 # Set or transform one field
-.title = "Final";
-.count |= . + 1;
+Title = "Final";
+Count += 1;
 
 # Preserve null versus remove a member
-.note = null;
-del(.note);
+Note = null;
+del(Note);
 
 # Select exactly one nested field
-(.items[] | select(.id == $params.id) | .score) |= . + 10;
+Item[ID = $params.id].Score += 10;
 
 # Explicitly update every match
-update_all(.items[] | select(.done) | .status; "archived");
+update_all(Item[* Done].Status; "archived");
 
 # Structural collection edits
-append(.items; $params.item);
-insert_after(.items[] | select(.id == $params.anchorId); $params.item);
+append(Item; $params.item);
+insert_after(Item[ID = $params.anchorId]; $params.item);
 move_before(
-  .items[] | select(.id == $params.movingId);
-  .items[] | select(.id == $params.anchorId)
+  Item[ID = $params.movingId];
+  Item[ID = $params.anchorId]
 );
-reorder_by(.items; .id; $params.order);
+reorder_by(Item; ID; $params.order);
 
 # Set collections
-add_to_set(.tags; "urgent");
-remove_from_set(.tags; "obsolete");
+add_to_set(Tag; "urgent");
+remove_from_set(Tag; "obsolete");
 
 # Preconditions
-assert(.status == "draft"; "must still be a draft");
+assert(Status = "draft"; "must still be a draft");
 
 # Loaded Card relationships
-.owner = card($params.ownerId);
-append(.reviewers; card($params.reviewerId));
-del(.reviewers[] | select(.id == $params.reviewerId));
+Owner = card($params.ownerId);
+append(Reviewer; card($params.reviewerId));
+del(Reviewer[ID = $params.reviewerId]);
 ```
 
 The recurring pattern is simple: select the smallest meaningful location,
