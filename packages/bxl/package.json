@@ -54,6 +54,10 @@
       "types": "./dist/runtime-bare.d.ts",
       "import": "./dist/runtime-bare.js"
     },
+    "./mutation": {
+      "types": "./dist/mutation/index.d.ts",
+      "import": "./dist/mutation/index.js"
+    },
     "./syntax/textmate": "./dist/syntax/bxl.tmLanguage.json",
     "./examples": {
       "types": "./dist/examples/index.d.ts",

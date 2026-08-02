@@ -7,7 +7,7 @@ This directory holds the v0.1 documentation set.
 | `syntax-reference.md`       | Canonical public BXL syntax                    |
 | `syntax-modes.md`           | Boxel `computeVia`, `jq`, and `fx` call-site modes |
 | `profiles.md`               | Execution profile contracts and use cases      |
-| `mutation-profile.md`       | Proposed Card-native DML contract for streaming, atomic, structural, and relationship edits |
+| `mutation-profile.md`       | Implemented pure Card-native DML planner and candidate contract for streaming, atomic, structural, and relationship edits |
 | `mutation-language-guide.md` | Blog-style guide to handwriting mutation BXL against loaded Cards and Fields |
 | `authorization.md`          | BXL Authorization guide: Resources, Parties, Seats, Capabilities, BXL rules, APIs, and domain patterns |
 | `authorization-kernel-ir.md` | Internal `bxl-authorization-ir/1` compatibility IR and graph-kernel reference |

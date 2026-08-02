@@ -3,7 +3,13 @@
 BXL has one syntax and one semantic AST. A profile is not a second language; it is a validation contract for a specific execution surface. The profile exists so authors get parser-time errors when an expression asks for more power than that surface can safely provide.
 
 ```ts
-type BxlProfile = 'compute' | 'policy' | 'authorization' | 'predicate' | 'derive';
+type BxlProfile =
+  | 'compute'
+  | 'policy'
+  | 'authorization'
+  | 'predicate'
+  | 'derive'
+  | 'mutation';
 ```
 
 Use `compileBxl(expression, { target: 'ast', profile })` or `parseBxlAst(expression, { profile })` to collect `profileIssues`. Use `assertValidBxlProfile(ast, { profile })` when a caller should reject invalid expressions.
@@ -426,6 +432,31 @@ debug
 ```
 
 Invalid because runtime control, side-effect, and metadata helpers are outside the derivation contract.
+
+## `mutation`
+
+`mutation` is the bounded DML profile for planning changes to one loaded Card
+or Field snapshot. Unlike the expression-only profiles, its public entry point
+is `prepareBxlMutation` (or `prepareBxlMutationOperations`), which enforces the
+closed statement vocabulary, exact-one versus explicit-bulk cardinality,
+schema writability, relationship boundaries, and semantic intent planning.
+
+Value expressions are deterministic: volatile, control/side-effect, and
+runtime-metadata calls are rejected. Assignment is permitted only as part of
+the mutation statement grammar. The planner itself is pure and performs no
+storage or network I/O.
+
+```ts
+const prepared = prepareBxlMutation('Status = "review";', {
+  targetKind: 'card',
+  schema,
+});
+
+const plan = prepared.plan(card, { programId: 'assistant:call-42' });
+```
+
+Use [`mutation-profile.md`](./mutation-profile.md) for the full source,
+planning, relationship, authorization, and commit contracts.
 
 ## Attachments are not profiles
 

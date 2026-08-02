@@ -687,7 +687,7 @@ citations, licensing, and merge gates are in
 
 ## Mutation: change Cards without rewriting them
 
-The proposed `Profile.mutation` is BXL's DML for schema-known Card and Field
+`Profile.mutation` is BXL's DML for schema-known Card and Field
 models. It transforms the loaded Card Store model—not raw JSON:API—and produces
 a typed write plan for the host to validate, authorize, and commit.
 
@@ -712,7 +712,58 @@ planning lowers their changes to relationship-edge operations without asking
 the author to reproduce JSON:API relationship objects.
 
 The same plan can come from readable streaming statements or structured JSON
-tool calls. Start with the [usage guide](./docs/mutation-language-guide.md) and
+tool calls. The planner is pure: it returns the output snapshot, concrete
+paths, affected count, per-statement plans, and semantic intents without
+performing persistence.
+
+```ts
+import { prepareBxlMutation } from '@cardstack/bxl/mutation';
+
+const prepared = prepareBxlMutation(
+  '"Line Item"[SKU = "COPY-03"].Quantity += 1;',
+  {
+    targetKind: 'card',
+    schema: invoiceMutationSchema,
+  },
+);
+
+const plan = prepared.plan(loadedInvoice, {
+  programId: 'assistant:call_123',
+  returning: ['affected', 'paths', 'changes'],
+});
+```
+
+Realm cards can use the single-Card adapter when they want to plan and apply a
+mutation directly to their live Card Store-backed model. It mirrors the
+`computeVia: bxl(...)` call shape, but returns the full plan after writing its
+granular intents through Card/Field setters:
+
+```ts
+import { updateViaBxl } from 'https://example.test/bxl/bxl.ts';
+
+const incrementCopyQuantity = updateViaBxl(
+  '"Line Item"[SKU = "COPY-03"].Quantity += 1;',
+);
+
+const plan = incrementCopyQuantity.call(invoice, {
+  programId: 'assistant:call_123',
+});
+```
+
+The Realm bundle derives schema from `getFields(invoice)` and resolves
+`card("…")` through `getStore(invoice)`, so Card authors do not maintain a
+second mutation schema or pass the Card Store manually. Contained inserts are
+materialized as their natural Field class; moves preserve live object
+identity; `linksTo`/`linksToMany` operations keep real loaded Card instances.
+The adapter changes one resident Card model only. Host code still owns durable
+idempotency, permission checks, revision tokens, network persistence, and
+cross-Card transactions.
+
+Use `prepareBxlMutationOperations(operations, options)` for the equivalent
+`bxl-mutation-ops/1` JSON tool-call encoding, and
+`createBxlMutationStatementStream()` to frame arbitrary token chunks without
+ever emitting a partial statement. Start with the
+[usage guide](./docs/mutation-language-guide.md) and
 [profile contract](./docs/mutation-profile.md), run all semantic fixtures with
 `npm run example:mutation`, run the realm-shaped subset with
 `npm run example:mutation:realm`, or open the standalone workbench with

@@ -148,6 +148,28 @@ export function* evaluateWithRegistry(
   yield* generateValues(env.evaluate(ast.expr, generateItems(input)));
 }
 
+/**
+ * Evaluate an AST while retaining jq's concrete result paths.
+ *
+ * Most runtime callers only need values, so `evaluateWithRegistry` deliberately
+ * strips the internal Item wrapper. Mutation planning is different: it must
+ * authorize and persist the exact locations selected by the source program.
+ * Keeping this as an internal evaluator seam lets the mutation planner reuse
+ * jq's selector implementation without reconstructing paths from a JSON diff.
+ */
+export function* evaluateItemsWithRegistry(
+  ast: ProgAst | ExpressionAst,
+  input: ItemIterator | Item[],
+  registry: ResolvedBuiltinRegistry,
+): ItemIterator {
+  const env = new Environment(null, registry);
+  const expression = ast.type === 'root' ? ast.expr : ast;
+  yield* env.evaluate(
+    expression,
+    Array.isArray(input) ? input[Symbol.iterator]() : input,
+  );
+}
+
 class Environment {
   private readonly vars: Record<string, Var>;
 

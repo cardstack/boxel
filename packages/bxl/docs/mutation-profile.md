@@ -1,12 +1,12 @@
 # BXL Mutation Profile
 
-Status: proposed, example-led contract for `Profile.mutation`
+Status: implemented pure planner with an example-led candidate source contract
 
 The pre-grammar design corpus is
 [`examples/bxl-mutation-examples.ts`](../examples/bxl-mutation-examples.ts).
 Its accepted and rejected cases are the current source of truth for candidate
-surface syntax. Grammar and AST work should be derived from that corpus after
-the examples settle, not used to prematurely freeze it.
+surface syntax. The planner is implemented against that corpus, but the
+human-facing grammar remains candidate syntax until the examples settle.
 
 For a human-first walkthrough of the candidate syntax, see
 [`mutation-language-guide.md`](./mutation-language-guide.md).
@@ -45,6 +45,15 @@ The same DML has two equivalent source encodings:
 
 Both lower to the same mutation-plan IR and must have identical semantics.
 
+The implementation entry points are:
+
+```ts
+import {
+  prepareBxlMutation,
+  prepareBxlMutationOperations,
+} from '@cardstack/bxl/mutation';
+```
+
 This is a DML, not a persistence API. Evaluation is pure:
 
 ```text
@@ -68,6 +77,91 @@ therefore observed as a loaded Card or array of loaded Cards. Storage details
 such as `relationships["entryPoints.0"].links.self` are not addressable BXL
 paths. Only the commit adapter translates relationship intents to that
 serialization.
+
+## Planner API
+
+`prepareBxlMutation` parses and prepares a complete textual program once. Its
+`plan` method may then run against a loaded Card/Field snapshot:
+
+```ts
+const prepared = prepareBxlMutation(
+  '"Line Item"[SKU = "COPY-03"].Quantity += 1;',
+  {
+    targetKind: 'card',
+    syntax: 'readable',
+    schema: invoiceMutationSchema,
+  },
+);
+
+const plan = prepared.plan(loadedInvoice, {
+  programId: 'assistant:call_123',
+  targetId: loadedInvoice.id,
+  baseRevision: loadedRevision,
+  currentRevision: loadedRevision,
+  returning: ['affected', 'paths', 'changes'],
+  cards: loadedRelatedCardsById,
+  authorize(statement) {
+    return authorizeConcreteWriteSet(statement.intents);
+  },
+});
+```
+
+`prepareBxlMutationOperations` accepts the equivalent structured operation
+array and returns the same prepared-planner interface with language
+`bxl-mutation-ops/1`. Operation IDs must be present and unique.
+
+For token streaming, `createBxlMutationStatementStream()` accepts arbitrary
+chunks and emits only complete semicolon-terminated statements. It preserves
+semicolons inside strings and nested calls, enforces buffer/statement limits,
+and rejects an incomplete tail from `finish()`. A host may prepare emitted
+statements independently for statement transactions or collect them for one
+complete atomic program.
+
+The mutation schema extends BXL's existing readable schema with facts a host
+already knows from CardDef/FieldDef metadata:
+
+- `fieldType`: `contains`, `containsMany`, `linksTo`, or `linksToMany`;
+- `writable`: whether the Field accepts writes; and
+- `rootField`: the natural Field metadata when the planner target is a Field
+  value rather than a complete Card.
+
+The Realm bundle's single-Card adapter derives this shape from the loaded
+Card's definitions with `getFields(card)`. It is not additional
+author-maintained mutation configuration.
+
+Planning is synchronous and pure. It clones the supplied snapshot, evaluates
+statements sequentially against a private working snapshot, and returns only
+after every statement, schema check, revision precondition, and optional
+authorization callback succeeds. An error therefore cannot mutate the
+caller's snapshot. The returned intents retain `copy`, `insert`, `move`,
+`reorder`, `relate`, `unrelate`, and `move-relation`; they are not reconstructed
+from a final JSON diff.
+
+The pure planner does not persist. `updateViaBxl(source)` is the small
+single-Card convenience boundary: its returned function snapshots `this`,
+plans the complete program, and applies semantic intents to the resident
+Card Store-backed model through Card/Field setters. It derives schema through
+`getFields(this)` and resolves relationship Cards through `getStore(this)`.
+This deliberately stops at the local model. A trusted host still owns
+current-revision loading, durable idempotency, transaction limits, network
+persistence, JSON:API Atomic lowering, and result publication.
+
+```ts
+const update = updateViaBxl(
+  '"Line Item"[SKU = "COPY-03"].Quantity += 1;',
+);
+
+const plan = update.call(invoice, {
+  programId: 'assistant:call_123',
+});
+```
+
+The adapter applies the plan's original `set`, `insert`, `move`, `reorder`,
+`relate`, `unrelate`, and `move-relation` intents rather than diffing
+`plan.output`. Contained values are materialized with their Field class, and
+structural operations preserve the identity of existing live objects. A
+synchronous setter failure triggers best-effort reverse-order rollback before
+the error is returned.
 
 ## Why a profile is needed
 
@@ -790,23 +884,41 @@ snapshot, inverse application restores the base snapshot in isolation, reorder
 preserves the exact multiset, and chunking a streaming source at any byte
 boundary does not change its parsed statements.
 
-## Implementation sequence
+## Implementation status and sequence
 
-1. Expand and review the accepted/rejected example corpus until syntax,
-   normalized plans, loaded Card semantics, and error behavior are coherent.
-2. Derive the mutation AST and grammar from the accepted corpus.
-3. Add `mutation` to `BxlProfile` and implement AST-based source validation.
-4. Add a real incremental statement parser with canonical source and spans.
-5. Lower assignment and structural helpers to a closed mutation-plan IR.
-6. Implement the pure planner/evaluator and conformance tests.
-7. Define a host-neutral commit-adapter interface and an in-memory reference
-   adapter.
-8. Port both the Scrabble structured tool-call flow and textual statement flow
-   to the package API and verify byte-boundary streaming plus canonical-plan
-   equivalence and granular move/reorder intent.
-9. Add the Boxel CardDef/FieldDef/Card Store/Yjs adapter in the Boxel
-   integration layer.
-10. Add relationship intents, authorization integration, and audit records.
+Implemented in BXL:
+
+1. The accepted/rejected corpus defines loaded-Card semantics and error codes.
+2. `mutation` is a public `BxlProfile`, with deterministic value-expression
+   validation.
+3. Complete semicolon-framed readable and solidified programs parse into a
+   closed mutation statement representation.
+4. Assignment, copy, delete, insert, move, reorder, assert, and relationship
+   helpers lower to a typed mutation-plan IR.
+5. The pure planner evaluates sequentially against a private snapshot,
+   enforces exact-one/explicit-bulk cardinality, and supports revision and
+   concrete-write authorization hooks.
+6. Structured operations and textual statements share the same planner. All
+   34 accepted corpus cases pass through both encodings; all 13 rejected
+   boundaries are exercised.
+7. Relationship intents cover singular/plural relate, unrelate, and ordered
+   move while forbidding related-Card traversal and JSON:API storage paths.
+8. The stateful stream framer is verified across every two-chunk byte boundary,
+   one-character chunks, quoted semicolons, and incomplete tails.
+9. The Realm-facing `updateViaBxl` adapter derives Card schema and snapshots,
+   resolves relationships through the Card's own store, and applies granular
+   intents to one live Card model. Focused tests cover identity preservation,
+   relationship edits, authorization-before-write, and setter rollback.
+
+Remaining host and streaming work:
+
+1. Freeze the candidate surface grammar and add source spans after the example
+   syntax settles.
+2. Connect the single-Card adapter to Boxel Host tool execution and focused
+   real-Realm fixtures.
+3. Add Yjs/JSON:API Atomic lowering for durable multi-Card Host transactions.
+4. Add durable idempotency, audit/inverse records, revision chaining, and
+   statement-commit undo grouping in the host.
 
 The profile should not ship as supported merely because assignment nodes pass
 AST validation. Source validation, plan lowering, result cardinality, and the

@@ -30,7 +30,8 @@ export type BxlProfile =
   | 'policy'
   | 'authorization'
   | 'predicate'
-  | 'derive';
+  | 'derive'
+  | 'mutation';
 
 export type BxlAttachment =
   | 'formula'
@@ -338,6 +339,10 @@ export function validateBxlAst(
     if (options.profile === 'derive') {
       validateDeriveNode(node, parent, issues);
     }
+
+    if (options.profile === 'mutation') {
+      validateMutationNode(node, issues);
+    }
   });
 
   return issues;
@@ -422,7 +427,11 @@ function validateSandboxProfileNode(
     });
   }
 
-  if (node.type === 'binary' && ASSIGNMENT_OPERATORS.has(node.operator)) {
+  if (
+    profile !== 'mutation' &&
+    node.type === 'binary' &&
+    ASSIGNMENT_OPERATORS.has(node.operator)
+  ) {
     issues.push({
       code: `${profile}-assignment-banned`,
       severity: 'error',
@@ -590,6 +599,31 @@ function validateDeriveNode(
   }
 }
 
+function validateMutationNode(
+  node: BxlAstNode,
+  issues: BxlProfileIssue[],
+): void {
+  if (node.type === 'contextPath') {
+    issues.push({
+      code: 'mutation-context-banned',
+      severity: 'error',
+      message: `Profile.mutation plans against one explicit loaded snapshot and cannot use ambient context ${node.root}.`,
+      nodeType: node.type,
+    });
+  }
+  if (node.type === 'call') {
+    const decision = classifyBxlProfileFunction('mutation', node.name);
+    if (decision.safety === 'deny') {
+      issues.push({
+        code: 'mutation-call-banned',
+        severity: 'error',
+        message: `Profile.mutation requires deterministic pure plan expressions and cannot use call ${node.name}${decision.message ? `: ${decision.message}` : ''}.`,
+        nodeType: node.type,
+      });
+    }
+  }
+}
+
 function isArrayComma(parent: BxlAstNode | undefined): boolean {
   return parent?.type === 'array' ||
     (parent?.type === 'binary' && parent.operator === ',');
@@ -618,6 +652,8 @@ function profileMessagePrefix(profile: BxlProfile): string {
       return 'Profile.predicate must compile to a query-time boolean predicate and';
     case 'derive':
       return 'Profile.derive is for deterministic write/index-time computation and';
+    case 'mutation':
+      return 'Profile.mutation is for bounded Card/Field write planning and';
   }
 }
 

@@ -188,6 +188,8 @@ export const BXL_BUILD_INFO = {
     'jq-keywords-guard',    // §13
     'authorization-kernel',
     'bxl-authorization',
+    'mutation-planner',
+    'boxel-mutation-adapter',
   ] as const,
 };
 
@@ -274,6 +276,51 @@ export {
   prepareBxlAuthorizationSafe,
   prepareAuthorizationGraphSafe,
 } from './authorization/index.js';
+
+export {
+  applyBxlMutationPlanToCard,
+  BxlMutationError,
+  BxlMutationStatementStream,
+  createBxlMutationStatementStream,
+  frameBxlMutationStatements,
+  isBxlMutationError,
+  mutationSchemaForCard,
+  parseBxlMutationValueExpression,
+  planBxlMutation,
+  prepareBxlMutation,
+  prepareBxlMutationOperations,
+  printBxlMutationValueExpression,
+  snapshotBxlCard,
+  solidifyBxlMutationOperations,
+  updateViaBxl,
+} from './mutation/index.js';
+export type {
+  BxlBoxelAdapterOptions,
+  BxlBoxelCardStore,
+  BxlBoxelField,
+  BxlBoxelGetFields,
+  BxlBoxelGetStore,
+  BxlMutationErrorPhase,
+  BxlMutationField,
+  BxlMutationFieldType,
+  BxlMutationIntent,
+  BxlMutationJson,
+  BxlMutationPath,
+  BxlMutationPlan,
+  BxlMutationPlanOptions,
+  BxlMutationPrepareOptions,
+  BxlMutationReturning,
+  BxlMutationRootField,
+  BxlMutationSchema,
+  BxlMutationStatementPlan,
+  BxlMutationStatementStreamOptions,
+  BxlStructuredMutationOperation,
+  BxlUpdateViaExecutionOptions,
+  BxlUpdateViaFunction,
+  BxlUpdateViaMetadata,
+  BxlUpdateViaOptions,
+  PreparedBxlMutation,
+} from './mutation/index.js';
 export type {
   AuthorizationCheckRequest,
   AuthorizationCheckResult,

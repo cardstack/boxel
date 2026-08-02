@@ -4,6 +4,10 @@
 // imports as external so esbuild leaves the statement in the output.
 
 declare module 'https://cardstack.com/base/card-api' {
+  export interface CardStore {
+    getCard(id: string): unknown;
+  }
+
   export function getFields(
     instance: unknown,
     options?: { includeComputeds?: boolean },
@@ -13,6 +17,9 @@ declare module 'https://cardstack.com/base/card-api' {
       fieldType?: string;
       card?: unknown;
       computeVia?: (...args: unknown[]) => unknown;
+      queryDefinition?: unknown;
     }
   >;
+
+  export function getStore(instance: unknown): CardStore;
 }
