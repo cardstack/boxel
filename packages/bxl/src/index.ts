@@ -148,7 +148,7 @@ export type {
   PreparedBoxelRuntime,
 } from './boxel-runtime.js';
 
-export const VERSION = '0.2.0';
+export const VERSION = '0.3.0';
 
 /**
  * Build identity, useful for debugging stale caches in the realm
@@ -170,7 +170,7 @@ export const VERSION = '0.2.0';
  *
  * console.log(BXL_BUILD_INFO);
  * // {
- * //   version: '0.2.0',
+ * //   version: '0.3.0',
  * //   buildTime: '2026-05-07T15:42:01.000Z',
  * //   features: ['null-tolerance', 'jq-fx-tags', 'as-materialize',
  * //              'pascalcase-fallback', 'jq-keywords-guard'],
@@ -188,6 +188,8 @@ export const BXL_BUILD_INFO = {
     'jq-keywords-guard',    // §13
     'authorization-kernel',
     'bxl-authorization',
+    'mutation-planner',
+    'boxel-mutation-adapter',
   ] as const,
 };
 
@@ -274,6 +276,51 @@ export {
   prepareBxlAuthorizationSafe,
   prepareAuthorizationGraphSafe,
 } from './authorization/index.js';
+
+export {
+  applyBxlMutationPlanToCard,
+  BxlMutationError,
+  BxlMutationStatementStream,
+  createBxlMutationStatementStream,
+  frameBxlMutationStatements,
+  isBxlMutationError,
+  mutationSchemaForCard,
+  parseBxlMutationValueExpression,
+  planBxlMutation,
+  prepareBxlMutation,
+  prepareBxlMutationOperations,
+  printBxlMutationValueExpression,
+  snapshotBxlCard,
+  solidifyBxlMutationOperations,
+  updateViaBxl,
+} from './mutation/index.js';
+export type {
+  BxlBoxelAdapterOptions,
+  BxlBoxelCardStore,
+  BxlBoxelField,
+  BxlBoxelGetFields,
+  BxlBoxelGetStore,
+  BxlMutationErrorPhase,
+  BxlMutationField,
+  BxlMutationFieldType,
+  BxlMutationIntent,
+  BxlMutationJson,
+  BxlMutationPath,
+  BxlMutationPlan,
+  BxlMutationPlanOptions,
+  BxlMutationPrepareOptions,
+  BxlMutationReturning,
+  BxlMutationRootField,
+  BxlMutationSchema,
+  BxlMutationStatementPlan,
+  BxlMutationStatementStreamOptions,
+  BxlStructuredMutationOperation,
+  BxlUpdateViaExecutionOptions,
+  BxlUpdateViaFunction,
+  BxlUpdateViaMetadata,
+  BxlUpdateViaOptions,
+  PreparedBxlMutation,
+} from './mutation/index.js';
 export type {
   AuthorizationCheckRequest,
   AuthorizationCheckResult,

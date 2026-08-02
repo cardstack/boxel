@@ -27,6 +27,10 @@ value, and diagnostics. Docs reference cases by `id`.
 - `contexts.ts`      — formulas, constraints, transforms, workflow gates
 - `realm-collaboration-examples.ts` — real gateway admission, transition,
   event, clock, and decision-test cases from the collaboration realm
+- `bxl-mutation-examples.ts` — accepted and rejected pre-grammar DML fixtures
+  pairing human-readable and schema-solidified streamed statements, structured tool
+  operations, loaded Card/Field snapshots, and normalized mutation plans; see
+  [`bxl-mutation-examples.md`](./bxl-mutation-examples.md)
 - `authorization/` — runnable generalized coordination and software-release
   capability policies using the public `bxl-authorization/1` API
 - `excel-paste.ts`   — `=`, `<>`, `^`, `&`, formula coverage
@@ -36,6 +40,9 @@ Plus a browser harness:
 
 - `browser.html`     — minimal v0.1 demo that loads the min bundle and runs
                        one compile + eval round-trip.
+- `npm run demo:mutation` — standalone mutation-profile workbench covering
+  every accepted and rejected fixture, readable/solidified source, AI tool-call
+  encoding, loaded-model transitions, normalized plans, and stream replay.
 
 And a package-level formula bundle export:
 
@@ -52,6 +59,9 @@ tsx examples/bxl-150.ts
 tsx examples/formula.ts
 node scripts/run-ts-entry.mjs tests/unit/bxl-realm-formula-bundles-cli.ts
 node scripts/run-ts-entry.mjs tests/unit/realm-collaboration-cli.ts
+npm run example:mutation
+npm run example:mutation:realm
+npm run demo:mutation
 ```
 
 Each script prints a pass/fail summary and exits non-zero on failure.

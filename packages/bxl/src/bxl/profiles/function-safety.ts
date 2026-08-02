@@ -393,6 +393,14 @@ export const BXL_PROFILE_FUNCTION_POLICIES: Record<
       volatile: 'volatile calls are not stable write-time derivations',
     },
   },
+  mutation: {
+    deniedCalls: BXL_DERIVE_DENIED_CALLS,
+    denyMessageByCategory: {
+      controlOrSideEffect: 'control/side-effect calls are not pure mutation-plan expressions',
+      metadata: 'runtime metadata calls are not stable mutation-plan expressions',
+      volatile: 'volatile calls are not repeatable mutation-plan expressions',
+    },
+  },
 };
 
 export function normalizeBxlFunctionName(name: string): string {

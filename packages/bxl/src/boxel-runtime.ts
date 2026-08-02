@@ -492,6 +492,7 @@ function leafKey(path: string): string {
 function cloneField(field: ReadableField): ReadableField {
   return {
     key: field.key,
+    path: field.path ? [...field.path] : undefined,
     label: field.label,
     displayName: field.displayName,
     kind: field.kind,

@@ -16,6 +16,8 @@ export interface ReadableSchema {
 
 export interface ReadableField {
   key: string;
+  /** Optional storage path for a readable alias promoted into this scope. */
+  path?: string[];
   label?: string;
   displayName?: string;
   kind?: ReadableFieldKind;
@@ -825,6 +827,18 @@ function resolveField(
   };
   index.resolutions.set(label, resolution);
   return resolution;
+}
+
+function readableFieldPath(field: ReadableField): string[] {
+  return field.path?.length ? field.path : [field.key];
+}
+
+function jqPathSuffix(field: ReadableField): string {
+  return readableFieldPath(field)
+    .map((key) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(key)
+      ? `.${key}`
+      : `[${JSON.stringify(key)}]`)
+    .join('');
 }
 
 /**
@@ -2371,7 +2385,9 @@ class Compiler {
         const resolved = resolveField(dotScope, label.value);
         const fallbackKey =
           !resolved && allowPascalFallback ? pascalCaseToCamelKey(label) : null;
-        out += resolved?.field.key ?? fallbackKey ?? label.value;
+        out = resolved
+          ? jqPathSuffix(resolved.field)
+          : `.${fallbackKey ?? label.value}`;
         valueScope = resolved?.valueScope;
         arrayItemScope = resolved?.arrayItemScope;
         pendingImplicitArray = Boolean(resolved?.field.kind === 'array');
@@ -2390,7 +2406,7 @@ class Compiler {
       const resolved = resolveField(dotScope, label.value);
       const fallbackKey =
         !resolved && allowPascalFallback ? pascalCaseToCamelKey(label) : null;
-      out += `${resolved?.field.key ?? fallbackKey ?? label.value}?`;
+      out = `${resolved ? jqPathSuffix(resolved.field) : `.${fallbackKey ?? label.value}`}?`;
       valueScope = resolved?.valueScope;
       arrayItemScope = resolved?.arrayItemScope;
       pendingImplicitArray = Boolean(resolved?.field.kind === 'array');
@@ -2422,13 +2438,13 @@ class Compiler {
         this.index = start;
         return null;
       }
-      const key = resolved?.field.key ?? fallbackKey!;
+      const suffix = resolved ? jqPathSuffix(resolved.field) : `.${fallbackKey!}`;
       const resolvesAgainstItem = Boolean(itemResolved);
       out = resolvesAgainstItem
-        ? `.${key}`
+        ? suffix
         : rootPathPrefix
-          ? `${rootPathPrefix}.${key}`
-          : `.${key}`;
+          ? `${rootPathPrefix}${suffix}`
+          : suffix;
       valueScope = resolved?.valueScope;
       arrayItemScope = resolved?.arrayItemScope;
       pendingImplicitArray = resolved?.field.kind === 'array';
@@ -2477,7 +2493,10 @@ class Compiler {
             `Unknown field '${label.value}' in schema-aware path.`,
           );
         }
-        out += `${optional ? '?' : ''}.${resolved?.field.key ?? fallbackKey ?? label.value}`;
+        const suffix = resolved
+          ? jqPathSuffix(resolved.field)
+          : `.${fallbackKey ?? label.value}`;
+        out += `${optional ? '?' : ''}${suffix}`;
         valueScope = resolved?.valueScope;
         arrayItemScope = resolved?.arrayItemScope;
         pendingImplicitArray = Boolean(resolved?.field.kind === 'array');

@@ -1,6 +1,6 @@
 {
   "name": "@cardstack/bxl",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Boxel Expression Language: readable syntax, linter, formatter, and sandboxed evaluator that compiles to jqxl v1.",
   "keywords": [
     "bxl",
@@ -54,6 +54,10 @@
       "types": "./dist/runtime-bare.d.ts",
       "import": "./dist/runtime-bare.js"
     },
+    "./mutation": {
+      "types": "./dist/mutation/index.d.ts",
+      "import": "./dist/mutation/index.js"
+    },
     "./syntax/textmate": "./dist/syntax/bxl.tmLanguage.json",
     "./examples": {
       "types": "./dist/examples/index.d.ts",
@@ -88,11 +92,15 @@
     "demo:realm-collaboration": "node scripts/perf-browser.mjs --serve --corpus",
     "demo:authorization": "node scripts/perf-browser.mjs --serve --authorization",
     "demo:authorization-conformance": "node scripts/perf-browser.mjs --serve --authorization-conformance",
+    "demo:mutation": "node scripts/perf-browser.mjs --serve --mutation",
     "example:authorization": "node scripts/run-ts-entry.mjs examples/authorization/run.ts",
+    "example:mutation": "node scripts/run-ts-entry.mjs tests/unit/bxl-mutation-fixtures-cli.ts",
+    "example:mutation:realm": "node scripts/run-ts-entry.mjs tests/unit/bxl-mutation-realm-fixtures-cli.ts",
     "perf:computed": "node scripts/run-ts-entry.mjs scripts/bench-boxel-computed.ts",
     "bench:authorization": "node scripts/run-ts-entry.mjs scripts/bench-authorization.ts",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src tests examples",
+    "typecheck:mutation": "tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --lib ES2022,DOM --skipLibCheck perf/browser/mutation.ts examples/bxl-mutation-fixture-runner.ts examples/bxl-mutation-examples.ts tests/unit/bxl-mutation-realm-fixtures-cli.ts tests/unit/readme-mutation-snippets.ts",
+    "lint": "eslint src tests examples perf/browser",
     "test": "node scripts/run-tests.mjs",
     "test:authorization:conformance": "node scripts/run-ts-entry.mjs scripts/run-authorization-conformance.ts",
     "test:authorization:performance": "node scripts/run-ts-entry.mjs tests/unit/authorization-performance-cli.ts",
