@@ -11,8 +11,26 @@ versions may change syntax behavior until `1.0.0`. See
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-08-02
+
 ### Added
 
+- **Mutation execution profile and Card-native DML.** Readable mutation
+  statements and structured operations now lower to one typed, pure plan with
+  exact-one selectors, explicit bulk intent, atomic sequential evaluation,
+  scalar updates, assertions, copy/delete, contained collection operations,
+  and loaded Card relationship intents.
+- **Boxel `updateViaBxl` adapter.** Realm Cards derive mutation schema through
+  `getFields(this)`, resolve relationship values through `getStore(this)`, and
+  apply granular intents to their live Card Store-backed model. Contained
+  inserts materialize their Field class, structural edits preserve identity,
+  detached plans reject stale snapshots, and synchronous setter failures roll
+  back earlier writes.
+- **Streaming and AI tool-call surfaces.** Semicolon framing accepts arbitrary
+  token chunks without releasing partial statements; `bxl-mutation-ops/1`
+  offers the equivalent JSON operation encoding. The guide and Boxel handoff
+  document model-written tool calls, structural statement shapes, root
+  assertions, and source-first value copy.
 - **Authorization execution profile.** Relationship rewrites now use an
   explicit `authorization` profile: a strict superset of `policy` that adds
   only the compiler-lowered OpenFGA graph forms (`direct`, `userset`,
@@ -20,6 +38,17 @@ versions may change syntax behavior until `1.0.0`. See
   form. Plain
   policy expressions and tuple conditions reject graph traversal, while
   authorization rewrites reject recursive authorization-kernel calls.
+
+### Fixed
+
+- **`reorder_by` keys use collection-item scope.** Programs such as
+  `reorder_by(Bookings, Booking ID, order)` now compile the key to item-relative
+  `.bookingId` instead of a root collection projection, so valid exact
+  permutations no longer fail.
+- **Inherited Card Info relationships are root-readable.** Natural statements
+  such as `Theme = card(id)` now compile to the concrete `cardInfo.theme`
+  relationship path without adding synthetic properties to snapshots or
+  plans. Conflicting real root labels still take precedence.
 
 ## [0.2.0] — 2026-07-27
 

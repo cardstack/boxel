@@ -36,7 +36,7 @@ evaluateBxl('ROUND(Subtotal * "Tax Rate" / 100, 2)', invoice, { schema });
 // => 12.38
 ```
 
-> **Current release: `0.2.0`.** The public API is intentionally unstable below 1.0 — see [RELEASE-PLAN.md](./RELEASE-PLAN.md).
+> **Current release: `0.3.0`.** The public API is intentionally unstable below 1.0 — see [RELEASE-PLAN.md](./RELEASE-PLAN.md).
 
 ---
 
@@ -755,6 +755,9 @@ The Realm bundle derives schema from `getFields(invoice)` and resolves
 second mutation schema or pass the Card Store manually. Contained inserts are
 materialized as their natural Field class; moves preserve live object
 identity; `linksTo`/`linksToMany` operations keep real loaded Card instances.
+Collection keys in `reorder_by(Bookings, Booking ID, order)` resolve against a
+Booking item, and inherited Card Info relationships remain root-readable—for
+example, `Theme = card(id)` plans against the concrete `cardInfo.theme` path.
 The adapter changes one resident Card model only. Host code still owns durable
 idempotency, permission checks, revision tokens, network persistence, and
 cross-Card transactions.

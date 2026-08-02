@@ -167,6 +167,17 @@ Status = "published";
 The assertion produces no write. It becomes a checked precondition in the
 mutation plan.
 
+For a precondition on the target Card itself, assert its root fields directly.
+The Card is already the mutation target; do not invent a Card-type selector:
+
+```bxl
+# correct
+assert("Trip Code" = "FAM-ME-0726", "trip code changed");
+
+# wrong
+assert("Family Itinerary"["Trip Code" = "FAM-ME-0726"], "trip code changed");
+```
+
 ## Change collections without reprinting them
 
 Appending a value should not require rebuilding its surrounding array. When
@@ -175,6 +186,17 @@ label throughout the structural vocabulary:
 
 ```bxl
 append(Section, { id: "summary", title: "Summary" });
+```
+
+Structural functions are complete mutation statements. They are not value
+functions and must not appear on the right side of assignment:
+
+```bxl
+# correct
+append(Bookings, { bookingId: "BK-PORTLAND", status: "confirmed" });
+
+# wrong: append/2 does not return a replacement collection
+Bookings = append({ bookingId: "BK-PORTLAND", status: "confirmed" });
 ```
 
 When placement matters, select a stable anchor:
@@ -249,6 +271,17 @@ reorder_by(
 The order must contain every current identity exactly once. It cannot quietly
 drop an item, duplicate one, or introduce a new value.
 
+The key is evaluated in each collection item's schema, not at the Card root.
+Thus `Booking ID` below means `.bookingId` on each Booking:
+
+```bxl
+reorder_by(
+  Bookings,
+  Booking ID,
+  ["BK-BARHARBOR", "BK-CAMDEN", "BK-PORTLAND"]
+);
+```
+
 Indexes are useful in a fixed snapshot, but identities make better handwritten
 edits. In particular, progressively committed streams should not use an
 ordinary numeric index: another edit could insert an item and make index `1`
@@ -300,6 +333,8 @@ copy_value_to("Billing Address", "Shipping Address");
 
 Copy is deep by value. Later changes to the shipping address do not mutate the
 billing address.
+Read `copy_value_to(source, destination)` from left to right: the first value
+is read and the second location is written. The source is never modified.
 
 ## Treat links as loaded Cards
 
@@ -320,6 +355,14 @@ Winner = card("card:submission/tidal");
 Card and verifies that the relationship field accepts its type.
 The corpus uses short `card:` identifiers to keep examples readable; a real
 host normally supplies the Card Store's canonical URL-shaped Card ID.
+
+Boxel's inherited Card Info relationships are promoted into the readable Card
+scope. `Theme` stays pleasant to write while the concrete plan and
+authorization path correctly identify `cardInfo.theme`:
+
+```bxl
+Theme = card("https://example.test/Theme/family-field-notes");
+```
 
 A `linksToMany` uses the same collection vocabulary as contained data:
 
@@ -643,6 +686,8 @@ move_item_before(
 );
 reorder_by(Item, ID, $params.order);
 
+# Structural calls stand alone; never write Item = append(...)
+
 # Contained collections preserve their natural order
 append(Tag, "urgent");
 del(Tag[. = "obsolete"]);
@@ -650,6 +695,9 @@ del(Tag[* . = "obsolete"]); # every matching value
 
 # Preconditions
 assert(Status = "draft", "must still be a draft");
+
+# Copy is source first, destination second
+copy_value_to(Summary, "Packing Notes");
 
 # Loaded Card relationships
 Owner = card($params.ownerId);

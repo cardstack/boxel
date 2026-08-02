@@ -159,6 +159,10 @@ function displayName(shape: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value : undefined;
 }
 
+function normalizedReadableName(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
 function structuredShape(
   runtime: AdapterRuntime,
   field: BxlBoxelField,
@@ -260,6 +264,29 @@ function schemaForShape(
       entry.kind = fieldType === 'containsMany' ? 'array' : 'scalar';
     }
     result.push(entry);
+  }
+
+  // CardDef inherits user-facing relationship fields through CardInfoField
+  // (notably Theme at cardInfo.theme). Promote those relationship labels into
+  // the Card's readable root while retaining their concrete storage path.
+  // The compiler emits `.cardInfo.theme`; snapshots and plans never contain a
+  // synthetic alias property.
+  const cardInfo = result.find((field) => field.key === 'cardInfo');
+  const occupied = new Set(
+    result.flatMap((field) => [field.key, field.label, field.displayName])
+      .filter((name): name is string => Boolean(name))
+      .map(normalizedReadableName),
+  );
+  for (const child of cardInfo?.fields ?? []) {
+    if (child.fieldType !== 'linksTo' && child.fieldType !== 'linksToMany') continue;
+    const names = [child.key, child.label, child.displayName]
+      .filter((name): name is string => Boolean(name));
+    if (names.some((name) => occupied.has(normalizedReadableName(name)))) continue;
+    result.push({
+      ...child,
+      path: ['cardInfo', child.key],
+    });
+    for (const name of names) occupied.add(normalizedReadableName(name));
   }
 
   return { fields: result };

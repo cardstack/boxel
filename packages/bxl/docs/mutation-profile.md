@@ -476,6 +476,10 @@ reorder_by(.sections; .id; ["overview", "round-one", "summary"])
 ```
 
 `reorder_by` requires every current item to have one unique JSON-scalar key.
+The readable key argument is compiled in the collection item's schema. A Card
+program such as `reorder_by(Bookings, Booking ID, order)` therefore lowers its
+key to item-relative `.bookingId`, not root-relative
+`.bookings[].bookingId`.
 The supplied order must be an exact permutation: no missing, duplicate, or
 unknown keys. It changes order only; it cannot insert, delete, or replace an
 item. This makes accidental data loss impossible and gives the commit adapter
@@ -622,6 +626,13 @@ insert, and move to relationship intents when the target field is a
 relationship. Structured tool-call operations keep explicit `relate`,
 `unrelate`, and `move-relation` operation names because this makes their JSON
 Schema and authorization intent unambiguous.
+
+The Boxel adapter also exposes inherited Card Info relationships at their
+natural readable root label. `Theme = card(id)` compiles to the concrete
+`.cardInfo.theme` location and produces a relationship intent at
+`["cardInfo", "theme"]`; the snapshot never gains a synthetic `theme` member.
+Promoted aliases are derived from FieldDef metadata and skipped when their
+label would collide with a real root field.
 
 This surface matches how real Card code works: it reads a `linksToMany` as a
 Card array and assigns a new Card array. It intentionally hides the persistence

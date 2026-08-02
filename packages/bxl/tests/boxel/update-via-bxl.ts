@@ -22,10 +22,12 @@ class LineItem {
   static displayName = 'Line Item';
   static fields: Record<string, BxlBoxelField> = {
     sku: { fieldType: 'contains', card: StringValue },
+    bookingId: { fieldType: 'contains', card: StringValue },
     quantity: { fieldType: 'contains', card: NumberValue },
     taxable: { fieldType: 'contains', card: BooleanValue },
   };
   sku = '';
+  bookingId = '';
   quantity = 0;
   taxable = false;
 }
@@ -40,10 +42,31 @@ class Collaborator {
   name = '';
 }
 
+class ThemeCard {
+  static displayName = 'Theme';
+  static fields: Record<string, BxlBoxelField> = {
+    id: { fieldType: 'contains', card: StringValue },
+    name: { fieldType: 'contains', card: StringValue },
+  };
+  id = '';
+  name = '';
+}
+
+class CardInfo {
+  static displayName = 'Card Info';
+  static fields: Record<string, BxlBoxelField> = {
+    name: { fieldType: 'contains', card: StringValue },
+    theme: { fieldType: 'linksTo', card: ThemeCard },
+  };
+  name = '';
+  theme: ThemeCard | null = null;
+}
+
 class Invoice {
   static displayName = 'Invoice';
   static fields: Record<string, BxlBoxelField> = {
     id: { fieldType: 'contains', card: StringValue },
+    cardInfo: { fieldType: 'contains', card: CardInfo },
     title: { fieldType: 'contains', card: StringValue },
     lineItems: { fieldType: 'containsMany', card: LineItem },
     collaborators: { fieldType: 'linksToMany', card: Collaborator },
@@ -61,6 +84,7 @@ class Invoice {
   };
 
   id = 'card:invoice/42';
+  cardInfo = new CardInfo();
   title = 'Draft';
   lineItems: LineItem[] = [];
   collaborators: Collaborator[] = [];
@@ -91,6 +115,7 @@ const getFields = (value: unknown): Record<string, BxlBoxelField> => {
 function item(sku: string, quantity: number, taxable = true): LineItem {
   const value = new LineItem();
   value.sku = sku;
+  value.bookingId = sku;
   value.quantity = quantity;
   value.taxable = taxable;
   return value;
@@ -103,8 +128,17 @@ function collaborator(id: string, name: string): Collaborator {
   return value;
 }
 
+function theme(id: string, name: string): ThemeCard {
+  const value = new ThemeCard();
+  value.id = id;
+  value.name = name;
+  return value;
+}
+
 function invoiceFixture() {
   const invoice = new Invoice();
+  invoice.cardInfo.name = 'Coastal Maine';
+  invoice.cardInfo.theme = theme('card:theme/original', 'Original');
   invoice.lineItems = [item('COPY-03', 1), item('PAPER-01', 4, false)];
   invoice.collaborators = [collaborator('card:ada', 'Ada'), collaborator('card:grace', 'Grace')];
   invoice.reviewer = invoice.collaborators[0]!;
@@ -131,16 +165,23 @@ check('derives readable schema from CardDef/FieldDef metadata', () => {
   strictEqual(schema.fields.find((field) => field.key === 'id')?.writable, false);
   strictEqual(schema.fields.find((field) => field.key === 'searchResults')?.writable, false);
   strictEqual(schema.fields.some((field) => field.key === 'total'), false);
+  const promotedTheme = schema.fields.find((field) => field.key === 'theme');
+  strictEqual(promotedTheme?.label, 'Theme');
+  deepStrictEqual(promotedTheme?.path, ['cardInfo', 'theme']);
 });
 
 check('snapshots the loaded model and represents relationships only by Card ID', () => {
   const snapshot = snapshotBxlCard(invoiceFixture(), { getFields });
   deepStrictEqual(snapshot, {
     id: 'card:invoice/42',
+    cardInfo: {
+      name: 'Coastal Maine',
+      theme: { id: 'card:theme/original' },
+    },
     title: 'Draft',
     lineItems: [
-      { sku: 'COPY-03', quantity: 1, taxable: true },
-      { sku: 'PAPER-01', quantity: 4, taxable: false },
+      { sku: 'COPY-03', bookingId: 'COPY-03', quantity: 1, taxable: true },
+      { sku: 'PAPER-01', bookingId: 'PAPER-01', quantity: 4, taxable: false },
     ],
     collaborators: [{ id: 'card:ada' }, { id: 'card:grace' }],
     reviewer: { id: 'card:ada' },
@@ -199,6 +240,19 @@ check('moves contained items without losing object identity', () => {
   deepStrictEqual(card.lineItems, [paper, copy]);
 });
 
+check('reorder_by compiles its key in collection-item scope', () => {
+  const card = invoiceFixture();
+  const copy = card.lineItems[0]!;
+  const paper = card.lineItems[1]!;
+  const update = updateViaBxl(
+    'reorder_by("Line Item", Booking ID, ["PAPER-01", "COPY-03"]);',
+    { getFields },
+  );
+  const plan = update.call(card, { programId: 'tool-call-reorder' });
+  deepStrictEqual(card.lineItems, [paper, copy]);
+  strictEqual(plan.statements[0]?.canonical, 'reorder_by(.lineItems;.bookingId;["PAPER-01","COPY-03"])');
+});
+
 check('resolves and inserts relationship Cards through the Card own store', () => {
   const card = invoiceFixture();
   const lin = collaborator('card:lin', 'Lin');
@@ -215,6 +269,27 @@ check('resolves and inserts relationship Cards through the Card own store', () =
     cardId: 'card:lin',
     index: 2,
   });
+});
+
+check('promotes inherited CardInfo relationships as root readable aliases', () => {
+  const card = invoiceFixture();
+  const fieldNotes = theme('card:theme/field-notes', 'Field Notes');
+  const store = {
+    getCard(id: string) {
+      return id === fieldNotes.id ? fieldNotes : undefined;
+    },
+  };
+  const plan = updateViaBxl('Theme = card("card:theme/field-notes");', {
+    getFields,
+    getStore() { return store; },
+  }).call(card, { programId: 'tool-call-theme' });
+  strictEqual(card.cardInfo.theme, fieldNotes);
+  deepStrictEqual(plan.paths, [['cardInfo', 'theme']]);
+  deepStrictEqual(plan.intents, [{
+    op: 'relate',
+    field: ['cardInfo', 'theme'],
+    cardId: 'card:theme/field-notes',
+  }]);
 });
 
 check('unrelates and reorders relationships as live Card objects', () => {

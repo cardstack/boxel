@@ -9,7 +9,11 @@ import type {
   FilterAst,
   IndexAst,
 } from '../jqtools/parser/AST.js';
-import type { BxlMutationPrepareOptions } from './types.js';
+import type {
+  BxlMutationField,
+  BxlMutationPrepareOptions,
+  BxlMutationSchema,
+} from './types.js';
 import { BxlMutationError } from './types.js';
 
 export type MutationAssignmentOperator =
@@ -446,6 +450,58 @@ function readableMutationSchema(options: BxlMutationPrepareOptions) {
   };
 }
 
+interface MutationAstSchemaResult {
+  field?: BxlMutationField;
+  schema?: BxlMutationSchema;
+  item?: BxlMutationSchema;
+}
+
+function schemaField(schema: BxlMutationSchema | undefined, key: string): BxlMutationField | undefined {
+  return schema?.fields.find((field) => field.key === key);
+}
+
+/** Follow only the value-producing spine of a compiled location AST. */
+function schemaResultForLocation(
+  node: ExpressionAst,
+  input: BxlMutationSchema | undefined,
+): MutationAstSchemaResult {
+  switch (node.type) {
+    case 'identity':
+      return { schema: input };
+    case 'index': {
+      if (typeof node.index !== 'string') return {};
+      const base = schemaResultForLocation(node.expr, input);
+      const field = schemaField(base.schema, node.index);
+      if (!field) return {};
+      return {
+        field,
+        schema: field.fields ? { fields: field.fields } : undefined,
+        item: field.item,
+      };
+    }
+    case 'iterator': {
+      const base = schemaResultForLocation(node.expr, input);
+      return { schema: base.item };
+    }
+    case 'binary':
+      if (node.operator === '|') {
+        const left = schemaResultForLocation(node.left, input);
+        return schemaResultForLocation(node.right, left.schema ?? left.item);
+      }
+      return {};
+    case 'filter':
+      if (node.name === 'select/1') return { schema: input };
+      if (node.name === 'first/1' && node.args[0]) {
+        return schemaResultForLocation(node.args[0], input);
+      }
+      return {};
+    case 'array':
+      return node.expr ? schemaResultForLocation(node.expr, input) : {};
+    default:
+      return {};
+  }
+}
+
 function isFirstCall(node: ExpressionAst): node is FilterAst {
   return node.type === 'filter' && node.name === 'first/1' && node.args.length === 1;
 }
@@ -734,9 +790,23 @@ export function parseBxlMutationProgram(
         `${name} expects ${CALL_ARITIES[name]} arguments; received ${rawArgs.length}.`,
       );
     }
-    const args = rawArgs.map((raw, index) =>
-      argument(raw, options, statementNumber, LOCATION_ARGUMENTS[name].has(index)),
-    );
+    const args = rawArgs.map((raw, index) => {
+      if (name === 'reorder_by' && index === 1) {
+        const collection = argument(rawArgs[0]!, options, statementNumber, true);
+        const rootSchema = readableMutationSchema(options) as BxlMutationSchema;
+        const collectionField = schemaResultForLocation(collection.argument.ast, rootSchema).field;
+        const itemSchema = collectionField?.item ?? options.schema.rootField?.item;
+        if (itemSchema) {
+          return argument(
+            raw,
+            { ...options, schema: itemSchema, targetKind: 'card' },
+            statementNumber,
+            true,
+          );
+        }
+      }
+      return argument(raw, options, statementNumber, LOCATION_ARGUMENTS[name].has(index));
+    });
     warnings.push(...args.flatMap((entry) => entry.warnings));
     statements.push({
       kind: 'call',
