@@ -12,8 +12,9 @@ For a human-first walkthrough of the candidate syntax, see
 [`mutation-language-guide.md`](./mutation-language-guide.md).
 
 For a corpus-driven comparison with XQuery Update, PostgreSQL JSONB,
-JSON:API Atomic Operations, and MongoDB—including proposed cross-Card batch
-mutation—see [`mutation-language-comparison.md`](./mutation-language-comparison.md).
+JSON:API Atomic Operations, and MongoDB—including the boundary with
+cross-Card QuickJS orchestration—see
+[`mutation-language-comparison.md`](./mutation-language-comparison.md).
 
 ## Purpose
 
@@ -31,7 +32,7 @@ insert_after(
   .moves[] | select(.id == "move-07");
   { id: "move-08", word: "STREAM", score: 24 }
 );
-move_before(
+move_item_before(
   .sections[] | select(.id == "summary");
   .sections[] | select(.id == "round-one")
 );
@@ -53,6 +54,13 @@ snapshot + mutation source + parameters
 
 A trusted host separately authorizes and commits the plan through CardDef and
 FieldDef setters, relationship APIs, and the host's transaction mechanism.
+
+The snapshot must already be loaded. Realm search, collection lookup,
+file-tree traversal, and other network or host I/O are outside this profile.
+A separate capability-limited QuickJS program may perform those operations,
+prepare one mutation program, and invoke it independently against each loaded
+Card. This keeps cross-Card orchestration out of the mutation parser and keeps
+the one-Card mutation evaluator pure.
 
 The input snapshot is the **loaded Card or Field model exposed by the Card
 Store**, not the raw JSON:API card resource document. A relationship field is
@@ -178,26 +186,31 @@ a sequence whose earlier statements have already become durable.
 
 Version 1 should support this closed statement set:
 
+The signatures below use readable BXL's comma-separated arguments. During
+solidification they become canonical jq calls with semicolon-separated
+arguments. Statement-terminating semicolons are framed outside the expression
+parser.
+
 | Statement | Meaning | Cardinality |
 | --- | --- | --- |
 | `location = expression` | Set/upsert a schema-permitted location. | exactly one target |
 | `location \|= expression` | Transform an existing value. | exactly one target |
-| `replace(location; expression)` | Replace an existing value. | exactly one target |
-| `copy_to(source; destination)` | Deep-copy one loaded value to another writable field. | one source, one destination |
+| `replace(location, expression)` | Replace an existing value. | exactly one target |
+| `copy_to(source, destination)` | Deep-copy one loaded value to another writable field. | one source, one destination |
 | `del(location)` | Delete an existing member or item. | exactly one target |
-| `update_all(location; expression)` | Explicit bulk update. | one or more targets |
+| `update_all(location, expression)` | Explicit bulk update. | one or more targets |
 | `delete_all(location)` | Explicit bulk delete. | one or more targets |
-| `prepend(collection; expression)` | Insert at array start. | one collection, one value |
-| `append(collection; expression)` | Insert at array end. | one collection, one value |
-| `insert_at(collection; index; expression)` | Insert at a zero-based index. | one collection, one value |
-| `insert_before(anchor; expression)` | Insert before a stable array item. | exactly one anchor |
-| `insert_after(anchor; expression)` | Insert after a stable array item. | exactly one anchor |
-| `move_before(item; anchor)` | Move an item immediately before an anchor. | exactly one item, exactly one anchor |
-| `move_after(item; anchor)` | Move an item immediately after an anchor. | exactly one item, exactly one anchor |
-| `move_to_start(item; collection)` | Move an item to array start. | exactly one item, one collection |
-| `move_to_end(item; collection)` | Move an item to array end. | exactly one item, one collection |
-| `reorder_by(collection; key; order)` | Apply an exact key permutation. | one collection |
-| `assert(expression; message)` | Add a no-write precondition. | exactly one Boolean |
+| `prepend(collection, expression)` | Insert at array start. | one collection, one value |
+| `append(collection, expression)` | Insert at array end. | one collection, one value |
+| `insert_at(collection, index, expression)` | Insert at a zero-based index. | one collection, one value |
+| `insert_before(anchor, expression)` | Insert before a stable array item. | exactly one anchor |
+| `insert_after(anchor, expression)` | Insert after a stable array item. | exactly one anchor |
+| `move_item_before(item, anchor)` | Move an item immediately before an anchor. | exactly one item, exactly one anchor |
+| `move_item_after(item, anchor)` | Move an item immediately after an anchor. | exactly one item, exactly one anchor |
+| `move_item_to_start(item, collection)` | Move an item to array start. | exactly one item, one collection |
+| `move_item_to_end(item, collection)` | Move an item to array end. | exactly one item, one collection |
+| `reorder_by(collection, key, order)` | Apply an exact key permutation. | one collection |
+| `assert(expression, message)` | Add a no-write precondition. | exactly one Boolean |
 
 The strict single-target default is deliberate. jq's implicit multi-location
 assignment is concise but dangerous for generated DML. Bulk intent must be
@@ -393,8 +406,8 @@ A descendant may identify the enclosing structural item. Readable BXL keeps
 the item being moved outermost:
 
 ```bxl
-move_before(
-  Product[Variants[SKU = "COPY-03"]];
+move_item_before(
+  Product[Variants[SKU = "COPY-03"]],
   Product[ID = "featured"]
 )
 ```
@@ -402,7 +415,7 @@ move_before(
 This solidifies to an existential selector over the descendant collection:
 
 ```bxl
-move_before(
+move_item_before(
   .products[] | select(any(.variants[]; .sku == "COPY-03"));
   .products[] | select(.id == "featured")
 )
@@ -488,7 +501,7 @@ append(.reviewers; card("https://example.com/people/grace"));
 del(.reviewers[] | select(.id == "https://example.com/people/grace"));
 
 // The same positional vocabulary used by contained collections
-move_before(
+move_item_before(
   .reviewers[] | select(.id == "https://example.com/people/ada");
   .reviewers[] | select(.id == "https://example.com/people/grace")
 );

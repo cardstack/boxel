@@ -18,6 +18,11 @@ a time. The examples in this guide come from the executable
 surface syntax is still being settled through those examples; it is not yet a
 frozen grammar.
 
+Readable calls use Excel-style commas, such as
+`move_item_before(item, anchor)`. The readable compiler solidifies them to
+canonical jq calls with semicolons. A final semicolon terminates the mutation
+statement; it is not an argument separator in handwritten BXL.
+
 ## Start with the Card you already have
 
 In a mutation program, `.` means the loaded target. If the target is an Invoice
@@ -126,7 +131,7 @@ you to say so where a reviewer—and an authorization policy—can see it:
 
 ```bxl
 update_all(
-  "Line Item"[* Taxable].Discount;
+  "Line Item"[* Taxable].Discount,
   . + 0.05
 );
 ```
@@ -156,7 +161,7 @@ When an edit is valid only in a particular state, put the assumption beside
 the edit:
 
 ```bxl
-assert(Status = "draft"; "must still be a draft");
+assert(Status = "draft", "must still be a draft");
 Status = "published";
 ```
 
@@ -170,14 +175,14 @@ the Card schema labels its collection “Section,” a person can keep using tha
 label throughout the structural vocabulary:
 
 ```bxl
-append(Section; { id: "summary", title: "Summary" });
+append(Section, { id: "summary", title: "Summary" });
 ```
 
 When placement matters, select a stable anchor:
 
 ```bxl
 insert_after(
-  Section[ID = "overview"];
+  Section[ID = "overview"],
   { id: "details", title: "Details" }
 );
 ```
@@ -185,8 +190,8 @@ insert_after(
 Moving an existing item preserves even more intent:
 
 ```bxl
-move_before(
-  Section[ID = "summary"];
+move_item_before(
+  Section[ID = "summary"],
   Section[ID = "round-one"]
 );
 ```
@@ -201,8 +206,8 @@ want to move. Keep the outer item as the operand and nest the identifying
 predicate inside it:
 
 ```bxl
-move_before(
-  Product[Variants[SKU = "COPY-03"]];
+move_item_before(
+  Product[Variants[SKU = "COPY-03"]],
   Product[ID = "featured"]
 );
 ```
@@ -212,7 +217,7 @@ move the Variant. The canonical jq-shaped selector makes that existential
 test explicit:
 
 ```bxl
-move_before(
+move_item_before(
   .products[] | select(any(.variants[]; .sku == "COPY-03"));
   .products[] | select(.id == "featured")
 );
@@ -232,8 +237,8 @@ directly:
 
 ```bxl
 reorder_by(
-  Section;
-  ID;
+  Section,
+  ID,
   ["summary", "overview", "round-one"]
 );
 ```
@@ -253,7 +258,7 @@ FieldDef. A `containsMany` already behaves as an ordered array, so use the
 ordinary array vocabulary:
 
 ```bxl
-append(Tag; "urgent");
+append(Tag, "urgent");
 del(Tag[. = "obsolete"]);
 ```
 
@@ -280,7 +285,7 @@ supports then.
 Compound data can also be copied without reproducing it:
 
 ```bxl
-copy_to("Billing Address"; "Shipping Address");
+copy_to("Billing Address", "Shipping Address");
 ```
 
 Copy is deep by value. Later changes to the shipping address do not mutate the
@@ -309,7 +314,7 @@ host normally supplies the Card Store's canonical URL-shaped Card ID.
 A `linksToMany` uses the same collection vocabulary as contained data:
 
 ```bxl
-append("Entry Point"; card("card:collab-stage"));
+append("Entry Point", card("card:collab-stage"));
 ```
 
 Removal selects the loaded Card by identity:
@@ -321,8 +326,8 @@ del("Entry Point"[ID = "card:architecture"]);
 And rearrangement remains an ordinary move:
 
 ```bxl
-move_before(
-  Fragment[ID = "card:fragment/personal-web"];
+move_item_before(
+  Fragment[ID = "card:fragment/personal-web"],
   Fragment[ID = "card:fragment/opposite-viral"]
 );
 ```
@@ -429,7 +434,7 @@ Collaboration Stage at the end of this workspace.” The human-readable version
 of that request is:
 
 ```bxl
-append("Entry Point"; card("card:collab-stage"));
+append("Entry Point", card("card:collab-stage"));
 ```
 
 An illustrative `mutate_card` tool call written by the AI is:
@@ -589,32 +594,32 @@ del(Note);
 Item[ID = $params.id].Score += 10;
 
 # Explicitly update every match
-update_all(Item[* Done].Status; "archived");
+update_all(Item[* Done].Status, "archived");
 
 # Structural collection edits
-append(Item; $params.item);
-insert_after(Item[ID = $params.anchorId]; $params.item);
-move_before(
-  Item[ID = $params.movingId];
+append(Item, $params.item);
+insert_after(Item[ID = $params.anchorId], $params.item);
+move_item_before(
+  Item[ID = $params.movingId],
   Item[ID = $params.anchorId]
 );
 # Select and move an enclosing item by a nested field
-move_before(
-  Product[Variants[SKU = $params.sku]];
+move_item_before(
+  Product[Variants[SKU = $params.sku]],
   Product[ID = $params.anchorId]
 );
-reorder_by(Item; ID; $params.order);
+reorder_by(Item, ID, $params.order);
 
 # Contained collections preserve their natural order
-append(Tag; "urgent");
+append(Tag, "urgent");
 del(Tag[. = "obsolete"]);
 
 # Preconditions
-assert(Status = "draft"; "must still be a draft");
+assert(Status = "draft", "must still be a draft");
 
 # Loaded Card relationships
 Owner = card($params.ownerId);
-append(Reviewer; card($params.reviewerId));
+append(Reviewer, card($params.reviewerId));
 del(Reviewer[ID = $params.reviewerId]);
 ```
 

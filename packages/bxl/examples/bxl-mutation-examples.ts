@@ -338,7 +338,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       billingAddress: { city: 'Boston', country: 'US' },
       shippingAddress: null,
     },
-    readableSource: 'copy_to("Billing Address"; "Shipping Address");',
+    readableSource: 'copy_to("Billing Address", "Shipping Address");',
     source: 'copy_to(.billingAddress; .shippingAddress);',
     operations: [
       {
@@ -377,7 +377,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     schema: 'tag-list-field',
     execution: execution('append-contained-value', tagsTarget),
     before: ['customer', 'legal'],
-    readableSource: 'append(.; "urgent");',
+    readableSource: 'append(., "urgent");',
     source: 'append(.; "urgent");',
     operations: [{ id: 'append-urgent', op: 'insert', into: { path: [] }, position: { at: 'end' }, value: 'urgent' }],
     outcome: 'accepted',
@@ -432,7 +432,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       { id: 'overview', title: 'Overview' },
       { id: 'summary', title: 'Summary' },
     ],
-    readableSource: 'insert_after(Section[ID = "overview"]; {id: "details", title: "Details"});',
+    readableSource: 'insert_after(Section[ID = "overview"], {id: "details", title: "Details"});',
     source: 'insert_after(.[] | select(.id == "overview"); {id: "details", title: "Details"});',
     operations: [
       {
@@ -477,8 +477,8 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       { id: 'round-one', title: 'Round One' },
       { id: 'summary', title: 'Summary' },
     ],
-    readableSource: 'move_before(Section[ID = "summary"]; Section[ID = "round-one"]);',
-    source: 'move_before(.[] | select(.id == "summary"); .[] | select(.id == "round-one"));',
+    readableSource: 'move_item_before(Section[ID = "summary"], Section[ID = "round-one"]);',
+    source: 'move_item_before(.[] | select(.id == "summary"); .[] | select(.id == "round-one"));',
     operations: [
       {
         id: 'move-summary',
@@ -491,7 +491,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     outcome: 'accepted',
     plan: [
       {
-        canonical: 'move_before(.[]|select(.id=="summary");.[]|select(.id=="round-one"))',
+        canonical: 'move_item_before(.[]|select(.id=="summary");.[]|select(.id=="round-one"))',
         affected: 1,
         intents: [{ op: 'move', from: [2], toCollection: [], toIndex: 1 }],
       },
@@ -515,7 +515,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
       { id: 'round-one', title: 'Round One' },
       { id: 'summary', title: 'Summary' },
     ],
-    readableSource: 'reorder_by(Section; ID; ["summary", "overview", "round-one"]);',
+    readableSource: 'reorder_by(Section, ID, ["summary", "overview", "round-one"]);',
     source: 'reorder_by(.; .id; ["summary", "overview", "round-one"]);',
     operations: [
       {
@@ -605,7 +605,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
         { sku: 'COPY-03', taxable: true, discount: 0.1 },
       ],
     },
-    readableSource: 'update_all("Line Item"[* Taxable].Discount; . + 0.05);',
+    readableSource: 'update_all("Line Item"[* Taxable].Discount, . + 0.05);',
     source: 'update_all(.lineItems[] | select(.taxable) | .discount; . + 0.05);',
     operations: [
       {
@@ -687,7 +687,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     schema: 'invoice-card',
     execution: execution('assert-then-update', cardTarget),
     before: { status: 'draft' },
-    readableSource: 'assert(Status = "draft"; "must still be a draft");\nStatus = "published";',
+    readableSource: 'assert(Status = "draft", "must still be a draft");\nStatus = "published";',
     source: 'assert(.status == "draft"; "must still be a draft");\n.status = "published";',
     operations: [
       { id: 'still-draft', op: 'assert', expression: '.status == "draft"', message: 'must still be a draft' },
@@ -771,7 +771,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     schema: 'reviewers-relationship-field',
     execution: execution('relate-card', reviewersTarget),
     before: [{ id: 'card:ada', cardTitle: 'Ada' }],
-    readableSource: 'append(.; card("card:grace"));',
+    readableSource: 'append(., card("card:grace"));',
     source: 'append(.; card("card:grace"));',
     operations: [{ id: 'relate-grace', op: 'relate', target: { path: [] }, cardId: 'card:grace' }],
     store: {
@@ -829,8 +829,8 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     schema: 'reviewers-relationship-field',
     execution: execution('move-relationship', reviewersTarget),
     before: [{ id: 'card:ada' }, { id: 'card:grace' }, { id: 'card:lin' }],
-    readableSource: 'move_before(Reviewer[ID = "card:grace"]; Reviewer[ID = "card:ada"]);',
-    source: 'move_before(.[] | select(.id == "card:grace"); .[] | select(.id == "card:ada"));',
+    readableSource: 'move_item_before(Reviewer[ID = "card:grace"], Reviewer[ID = "card:ada"]);',
+    source: 'move_item_before(.[] | select(.id == "card:grace"); .[] | select(.id == "card:ada"));',
     operations: [
       {
         id: 'prioritize-grace',
@@ -843,7 +843,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     outcome: 'accepted',
     plan: [
       {
-        canonical: 'move_before(.[]|select(.id=="card:grace");.[]|select(.id=="card:ada"))',
+        canonical: 'move_item_before(.[]|select(.id=="card:grace");.[]|select(.id=="card:ada"))',
         affected: 1,
         intents: [{ op: 'move-relation', field: [], cardId: 'card:grace', toIndex: 0 }],
       },
@@ -866,7 +866,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
         { id: 'card:attendance', cardTitle: 'Staff Attendance' },
       ],
     },
-    readableSource: 'append("Entry Point"; card("card:collab-stage"));',
+    readableSource: 'append("Entry Point", card("card:collab-stage"));',
     source: 'append(.entryPoints; card("card:collab-stage"));',
     operations: [
       {
@@ -1009,8 +1009,8 @@ export const bxlMutationExamples: BxlMutationExample[] = [
         { id: 'card:fragment/personal-web', cardTitle: 'The Personal Web' },
       ],
     },
-    readableSource: 'move_before("Fragment"[ID = "card:fragment/personal-web"]; "Fragment"[ID = "card:fragment/opposite-viral"]);',
-    source: 'move_before(.fragments[] | select(.id == "card:fragment/personal-web"); .fragments[] | select(.id == "card:fragment/opposite-viral"));',
+    readableSource: 'move_item_before("Fragment"[ID = "card:fragment/personal-web"], "Fragment"[ID = "card:fragment/opposite-viral"]);',
+    source: 'move_item_before(.fragments[] | select(.id == "card:fragment/personal-web"); .fragments[] | select(.id == "card:fragment/opposite-viral"));',
     operations: [
       {
         id: 'lead-with-personal-web',
@@ -1028,7 +1028,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     outcome: 'accepted',
     plan: [
       {
-        canonical: 'move_before(.fragments[]|select(.id=="card:fragment/personal-web");.fragments[]|select(.id=="card:fragment/opposite-viral"))',
+        canonical: 'move_item_before(.fragments[]|select(.id=="card:fragment/personal-web");.fragments[]|select(.id=="card:fragment/opposite-viral"))',
         affected: 1,
         intents: [
           {
@@ -1320,7 +1320,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     schema: 'ordered-sections-field',
     execution: execution('reject-source-is-anchor', sectionsTarget),
     before: [{ id: 'a' }, { id: 'b' }],
-    source: 'move_before(.[] | select(.id == "a"); .[] | select(.id == "a"));',
+    source: 'move_item_before(.[] | select(.id == "a"); .[] | select(.id == "a"));',
     operations: [
       {
         id: 'self-move',

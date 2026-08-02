@@ -103,7 +103,7 @@ Corpus cases: `explicit-bulk-update`, `reject-ambiguous-single-target`, and
 
 ```bxl
 update_all(
-  "Line Item"[* Taxable].Discount;
+  "Line Item"[* Taxable].Discount,
   . + 0.05
 );
 ```
@@ -193,8 +193,8 @@ Corpus cases: `move-before-stable-anchor`, `exact-reorder`,
 **BXL Mutation**
 
 ```bxl
-move_before(
-  Section[ID = "summary"];
+move_item_before(
+  Section[ID = "summary"],
   Section[ID = "round-one"]
 );
 ```
@@ -292,7 +292,7 @@ Corpus cases: `relate-card`, `unrelate-card`, `move-relationship`,
 
 | Technology | Equivalent relationship edit |
 | --- | --- |
-| BXL | `append(Reviewer; card("card:grace"));` and `del(Reviewer[ID = "card:ada"]);` |
+| BXL | `append(Reviewer, card("card:grace"));` and `del(Reviewer[ID = "card:ada"]);` |
 | XQuery Update | By application convention: `insert node <reviewer ref="card:grace"/> as last into $card/reviewers`; `delete node $card/reviewers/reviewer[@ref = "card:ada"]` |
 | PostgreSQL JSONB | `UPDATE cards SET document = jsonb_insert(document, '{reviewers,999999}', '{"id":"card:grace"}') ...`; removal needs a resolved index or array reconstruction. |
 | JSON:API Atomic Operations | `add` or `remove` with `ref: {type: "cards", id: "review-1", relationship: "reviewers"}` and `data: [{type: "cards", id: "card:grace"}]`. This is the closest direct wire equivalent. |
@@ -324,7 +324,7 @@ Corpus cases: `sequential-statement-evaluation`, `assert-then-update`,
 **BXL Mutation**
 
 ```bxl
-assert(Status = "draft"; "must still be a draft");
+assert(Status = "draft", "must still be a draft");
 Subtotal = (Quantity * "Unit Price");
 Total = (Subtotal + Shipping);
 Status = "published";
@@ -459,38 +459,56 @@ profile should keep these separate:
 - the execution adapter may use SQL `ON CONFLICT` internally only when its
   external semantics actually request create-or-update.
 
-## 6. Proposed: search first, then mutate many Cards
+## 6. Outside the profile: search first, then mutate many Cards
 
-The current corpus mutates one Card or Field target. A database DML can select
-many records and apply one transformation across them. This is worth adding as
-a separate batch capability rather than making an ordinary mutation selector
-quietly cross Card boundaries.
+The current corpus correctly mutates one already-loaded Card or Field target.
+Realm search, collection lookup, and file-tree traversal are network or host
+I/O operations. They must not enter the mutation profile, whose evaluation is
+pure and has no network or filesystem authority.
+
+Cross-Card DML belongs in a separate sandboxed QuickJS orchestration program.
+The host exposes narrowly scoped realm-search or file-tree capabilities, while
+each returned Card is transformed by the same prepared BXL mutation. QuickJS
+does not receive ambient `fetch`, filesystem, process, or credential access.
 
 | Technology | Search-and-transform equivalent | Target-set and commit behavior |
 | --- | --- | --- |
-| BXL Mutation, proposed | Run a Card search, freeze its returned IDs and revisions, then apply one existing mutation program independently to every loaded Card. | Not current syntax. The batch envelope should choose atomic or chunked commit and declare expected target bounds. |
+| BXL + sandboxed QuickJS orchestration | QuickJS calls the host's realm search or file-tree iterator, freezes returned IDs and revisions, and invokes one prepared BXL mutation for each loaded Card. | Deliberately outside the mutation profile. The orchestration API chooses atomic or chunked commit and declares expected target bounds. |
 | XQuery Update | `for $card in collection("cards")/card[status = "draft"] return replace value of node $card/status with "review"` | The query evaluates against one XDM snapshot and accumulates one pending update list. Persistence across documents remains implementation-defined. |
 | PostgreSQL JSONB | `UPDATE cards SET document = jsonb_set(document, '{status}', '"review"') WHERE document->>'status' = 'draft' RETURNING id, revision;` | Search and transform are one statement. All matching rows are updated transactionally; zero matches is not an error unless the application checks the count. |
 | JSON:API Atomic Operations | First `GET /cards?filter[status]=draft`, then emit one `update` operation with a resource `ref` for every returned Card. | The submitted operations succeed or fail atomically, but the preceding search is not part of that atomic snapshot. Every target must be enumerated. |
 | MongoDB | `db.cards.updateMany({status: "draft"}, {$set: {status: "review"}})` | Search and transform are server-side, but only each individual document update is atomic; the whole multi-document operation needs a transaction for all-or-nothing behavior. |
 
-A candidate envelope can keep search syntax and mutation syntax separate:
+A conceptual QuickJS program looks like this; the host API names are
+provisional, but the boundary is not:
 
-```json
-{
-  "search": {
-    "cardType": "Invoice",
-    "where": { "Status": "draft" }
-  },
-  "mutateEach": "Status = \"review\";",
-  "expect": { "min": 1, "max": 100 },
-  "commit": "atomic"
+```javascript
+const mutation = bxl.prepareMutation(`
+  Status = "review";
+`);
+
+const cards = await realm.search({
+  cardType: "Invoice",
+  where: { status: "draft" },
+  limit: 100,
+});
+
+const batch = bxl.beginBatch({
+  expected: { min: 1, max: 100 },
+  commit: "atomic",
+});
+
+for (const card of cards) {
+  batch.mutate(card, mutation, { baseRevision: card.revision });
 }
+
+await batch.commit();
 ```
 
-This is deliberately an execution-envelope sketch, not accepted Mutation BXL
-grammar. It lets the existing one-Card program remain the unit of schema
-validation, authorization, testing, and retry.
+Preparation occurs once. Each `batch.mutate` evaluates the prepared program
+against one loaded Card, producing the same per-Card schema validation,
+authorization plan, and retry boundary as an ordinary mutation call. The
+network search is visibly a QuickJS host call rather than hidden inside BXL.
 
 The minimum semantics to fixture before adding syntax are:
 
@@ -503,12 +521,12 @@ The minimum semantics to fixture before adding syntax are:
 | Atomicity | Offer `atomic` only within a host-supported transaction limit; otherwise require explicit `chunked`. | JSON:API Atomic and SQL can express an atomic batch, while large realm mutations need bounded operational behavior. |
 | Failure and retry | Return results keyed by Card ID and revision; keep a batch/program ID for idempotency. | Makes conflicts, retries, and partial chunk progress unambiguous. |
 | Returning | Return matched, changed, skipped, denied, and conflicted counts plus bounded Card projections. | Gives an AI enough evidence to verify the batch without returning every full Card. |
-| Streaming | Stream search/progress/results, not uncommitted mutation statements inside an atomic batch. | An atomic batch cannot honestly expose progressively durable statements. |
+| Streaming | Stream search/progress/results from QuickJS, not uncommitted mutation statements inside an atomic batch. | An atomic batch cannot honestly expose progressively durable statements. |
 
-This should become a new corpus area with at least: atomic success, empty
-search, over-limit search, one stale revision, one denied Card, chunked partial
-progress, idempotent retry, and a Card that begins matching after the search
-snapshot.
+This should become a separate QuickJS orchestration corpus—not mutation-profile
+grammar—with at least: atomic success, empty search, over-limit search, one
+stale revision, one denied Card, chunked partial progress, idempotent retry,
+and a Card that begins matching after the search snapshot.
 
 ## Coverage of the mutation runner
 
@@ -524,7 +542,7 @@ snapshot.
 | Authorization | `authorization-write-set`, `reject-authorization-write` | Concrete leaf/edge intents checked as a complete set. |
 | Streaming | `streaming-statement-commits`, `streaming-atomic-semicolon-string`, `reject-incomplete-stream`, `reject-streaming-numeric-position` | Statement framing and stable addressing under progressive commit. |
 | Structural validation | `reject-source-is-anchor`, `reject-non-permutation-reorder` | Move and exact-permutation invariants. |
-| Cross-Card batch, proposed | no fixtures yet | Search snapshot, target bounds, batch authorization, atomic versus chunked commit, retry, and bounded returning. |
+| Cross-Card batch orchestration | intentionally outside this corpus | A separate QuickJS corpus should cover search snapshots, target bounds, batch authorization, atomic versus chunked commit, retry, and bounded returning. |
 
 ## What appears worth borrowing
 
@@ -546,16 +564,41 @@ snapshot.
 
 ## Syntax decisions to make next
 
-| Question | Current candidate | Alternative suggested by comparison | Trade-off |
-| --- | --- | --- | --- |
-| Relative move | `move_before(item; anchor)` | `move item before anchor` | Phrase form is clearest and resembles XQuery, but adds a special statement grammar instead of the BXL function-call shape. |
-| Descendant evidence | `Product[Variants[SKU = value]]` | `Product[any(Variants; SKU = value)]` | Nested brackets match XPath and handwriting. Explicit `any` exposes existential semantics but adds noise. |
-| Preconditions | `assert(predicate; message)` | Carry resolved revision/precondition data in JSON:API operation `meta` or a Boxel namespaced extension. | Keep expressive authoring in BXL while making the wire condition explicit; do not pretend non-standard `meta` has portable JSON:API semantics. |
+The syntax recommendation is to add **no parser productions**. Mutation should
+reuse the existing BXL/jq expression grammar and add planner semantics only.
 
-The evidence supports keeping exact-one selectors, loaded-model labels, and
-first-class move intents. The phrase-like move is the only surface change that
-looks likely to improve clarity enough to justify new grammar. We should test
-both move spellings against human and AI comprehension fixtures before choosing.
+| Question | Recommendation | Why it needs no parser work |
+| --- | --- | --- |
+| Relative move | Use `move_item_before(item, anchor)` and `move_item_after(item, anchor)`. | The function name states that the first argument is the item; `before` or `after` states that the second is the anchor. They remain ordinary readable-BXL calls, and exact-one behavior belongs to the planner. |
+| Relative insert | Change the pre-grammar candidate to subject-first: `insert_after(value, anchor)` and `insert_before(value, anchor)`. | This matches the subject-first order of `move_item_before(item, anchor)`, XQuery, and familiar tree APIs while changing only builtin/planner argument semantics. |
+| Descendant evidence | Keep `Product[Variants[SKU = value]]`; do not add an `any` keyword or new selector form. | Nested readable labels and predicates already parse. Mutation planning preserves the outer Product location instead of ordinary derive-mode first-match value lowering. |
+| Exact one versus bulk | Keep ordinary `[predicate]` for exact-one mutation locations and existing `[* predicate]` only inside `update_all`/`delete_all`. | Both selector forms already exist. Cardinality enforcement is a profile rule after parsing. |
+| Preconditions | Keep `assert(predicate, message)`. Carry resolved revision/precondition data in JSON:API operation `meta` or a Boxel namespaced extension. | `assert` is an ordinary function call. Wire metadata does not require readable-language grammar. |
+| Multiple statements | Frame complete semicolon-terminated statements outside the parser and prepare each expression once. | The parser continues to receive one ordinary BXL expression at a time; streaming state belongs to the mutation runner. |
+| Cross-Card loops | Use QuickJS `for` plus repeated calls to one prepared mutation; do not add `for`, `collection`, search, or I/O to Mutation BXL. | JavaScript owns orchestration and host capabilities; BXL remains pure over one loaded target. |
+
+Concretely, the recommended structural handwriting is:
+
+```bxl
+insert_after(
+  { id: "details", title: "Details" },
+  Section[ID = "overview"]
+);
+
+move_item_before(
+  Section[ID = "summary"],
+  Section[ID = "round-one"]
+);
+
+move_item_before(
+  Product[Variants[SKU = "COPY-03"]],
+  Product[ID = "featured"]
+);
+```
+
+Only the `insert_after` argument order differs from the current fixture
+candidate. That is the one syntax change I recommend making before the corpus
+becomes a grammar contract.
 
 ## Primary references
 

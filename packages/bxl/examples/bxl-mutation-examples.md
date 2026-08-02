@@ -52,10 +52,10 @@ resource document. A `linksTo` field appears as a loaded Card and a
 
 ```bxl
 Winner = card("card:submission/tidal");
-append("Entry Point"; card("card:collab-stage"));
+append("Entry Point", card("card:collab-stage"));
 del("Entry Point"[ID = "card:architecture"]);
-move_before(
-  "Entry Point"[ID = "card:attendance"];
+move_item_before(
+  "Entry Point"[ID = "card:attendance"],
   "Entry Point"[ID = "card:collab-stage"]
 );
 ```
