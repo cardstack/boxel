@@ -1,10 +1,10 @@
 import {
   CardDef,
-  BaseDef,
   Component,
   contains,
   containsMany,
   field,
+  getComponent,
   linksTo,
   linksToMany,
   realmURL,
@@ -1646,8 +1646,4 @@ export class Deal extends CardDef {
   static isolated = IsolatedTemplate;
   static embedded = EmbeddedTemplate;
   static fitted = FittedTemplate;
-}
-
-function getComponent(cardOrField: BaseDef) {
-  return cardOrField.constructor.getComponent(cardOrField);
 }

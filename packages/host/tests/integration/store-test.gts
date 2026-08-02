@@ -3397,6 +3397,42 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  test('[HMR-04] an out-of-band write claimed by a displayed module keeps Store data mounted', async function (assert) {
+    let hassan = `${testRealmURL}Person/hassan`;
+    await renderCard(hassan);
+    let instanceBeforeWrite = storeService.peek(hassan);
+    let realmSandbox = getService('realm-sandbox');
+    let originalHandler =
+      realmSandbox.handleExternalModuleInvalidationPartition;
+    realmSandbox.handleExternalModuleInvalidationPartition = (invalidations) =>
+      new Set(invalidations);
+
+    let rebuilds = countRebuilds();
+    try {
+      (storeService as any).handleInvalidations({
+        eventName: 'index',
+        indexType: 'incremental',
+        realmURL: testRealmURL,
+        invalidations: [`${testRealmURL}person.gts`],
+      } as RealmEventContent);
+      await settled();
+    } finally {
+      rebuilds.restore();
+      realmSandbox.handleExternalModuleInvalidationPartition = originalHandler;
+    }
+
+    assert.strictEqual(
+      rebuilds.count,
+      0,
+      'the shared realm loader and Store graph are not rebuilt',
+    );
+    assert.strictEqual(
+      storeService.peek(hassan),
+      instanceBeforeWrite,
+      'the card keeps the same Store-backed data identity',
+    );
+  });
+
   // Arms the client-performance instrument (dormant under isTesting() until a
   // test opts in) and captures the events the rebuild path emits. Captured at
   // record time rather than drained afterwards so the assertion can't race the

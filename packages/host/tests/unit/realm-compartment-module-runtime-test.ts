@@ -5,14 +5,36 @@ import { transpileJS } from '@cardstack/runtime-common/transpile';
 import RealmCompartmentModuleRuntime, {
   sandboxRealmURLArgument,
 } from '@cardstack/host/lib/realm-compartment-module-runtime';
-import { EDITORIAL_CHILD_CARDS_SOURCE } from '@cardstack/host/lib/realm-isolation-spike';
-import RealmWorkerCompartmentModuleRuntime from '@cardstack/host/lib/realm-worker-compartment-module-runtime';
 
 const MODULE_ID = 'https://realm.example/cards/article.js';
 const TEMPLATE_BLOCK = JSON.stringify([
   [['Append', 'A compartment-owned template']],
   [],
 ]);
+const FITTED_TEMPLATE_BLOCK = JSON.stringify([
+  [['Append', 'A fitted compartment-owned template']],
+  [],
+]);
+const SCOPED_GTS_CARD_SOURCE = `
+  import {
+    CardDef,
+    Component,
+  } from 'https://cardstack.com/base/card-api';
+
+  export class RecipeCard extends CardDef {
+    static isolated = class Isolated extends Component<typeof this> {
+      <template>
+        <article>
+          <h2>Ask the story</h2>
+          <h3>Ingredients</h3>
+        </article>
+        <style scoped>
+          article { color: #272019; }
+        </style>
+      </template>
+    };
+  }
+`;
 
 function runtimeFor(sources: Record<string, string>) {
   let fetchModule = async (input: RequestInfo | URL) => {
@@ -32,75 +54,6 @@ function runtimeFor(sources: Record<string, string>) {
 }
 
 module('Unit | realm compartment module runtime', function () {
-  test('evaluates and materializes a card template inside a web worker', async function (assert) {
-    let moduleID = `${MODULE_ID}?worker`;
-    let source = `
-      import { CardDef, Component } from 'https://cardstack.com/base/card-api';
-      import { setComponentTemplate } from '@ember/component';
-      import { createTemplateFactory } from '@ember/template-factory';
-      import './article.glimmer-scoped.css';
-
-      export class ArticleCard extends CardDef {}
-      ArticleCard.isolated = class Isolated extends Component {
-        get title() { return this.args.model.title; }
-      };
-      setComponentTemplate(createTemplateFactory({
-        id: 'worker-isolated',
-        block: ${JSON.stringify(TEMPLATE_BLOCK)},
-        moduleName: ${JSON.stringify(moduleID)},
-        isStrictMode: true,
-      }), ArticleCard.isolated);
-    `;
-    let runtime = new RealmWorkerCompartmentModuleRuntime(
-      'https://realm.example/cards/',
-      async (input) => {
-        let url = input instanceof Request ? input.url : String(input);
-        return url === moduleID
-          ? new Response(source, { status: 200 })
-          : new Response('not granted', { status: 403 });
-      },
-      {
-        exact: [],
-        prefixes: ['https://cardstack.com/base/'],
-      },
-    );
-
-    try {
-      let bundle = await runtime.evaluateTemplate(
-        moduleID,
-        'ArticleCard',
-        'isolated',
-        { model: { title: 'Worker-owned value' } },
-      );
-      let instance = bundle.templates[bundle.root]!.instance;
-
-      assert.deepEqual(instance.state, { title: 'Worker-owned value' });
-      assert.deepEqual(
-        instance.getters,
-        [],
-        'live getters become inert JSON before crossing into Ember',
-      );
-      assert.deepEqual(
-        bundle.templates[bundle.root]!.stylesheets,
-        ['https://realm.example/cards/article.glimmer-scoped.css'],
-        'relative generated stylesheets resolve against the card module',
-      );
-      assert.deepEqual(await runtime.ambientReport(), {
-        window: 'undefined',
-        document: 'undefined',
-        localStorage: 'undefined',
-        fetch: 'undefined',
-        XMLHttpRequest: 'undefined',
-      });
-      assert.deepEqual(await runtime.stats(), {
-        moduleEvaluations: 1,
-        moduleCacheHits: 0,
-      });
-    } finally {
-      runtime.destroy();
-    }
-  });
-
   test('evaluates and caches a card module without browser authority', async function (assert) {
     let source = `
       import { CardDef, Component } from 'https://cardstack.com/base/card-api';
@@ -122,6 +75,13 @@ module('Unit | realm compartment module runtime', function () {
         moduleName: ${JSON.stringify(MODULE_ID)},
         isStrictMode: true,
       }), ArticleCard.isolated);
+      ArticleCard.fitted = class Fitted extends Component {};
+      setComponentTemplate(createTemplateFactory({
+        id: 'article-fitted',
+        block: ${JSON.stringify(FITTED_TEMPLATE_BLOCK)},
+        moduleName: ${JSON.stringify(MODULE_ID)},
+        isStrictMode: true,
+      }), ArticleCard.fitted);
     `;
     let runtime = runtimeFor({ [MODULE_ID]: source });
 
@@ -131,6 +91,11 @@ module('Unit | realm compartment module runtime', function () {
       'isolated',
     );
     let second = await runtime.evaluateTemplate(
+      MODULE_ID,
+      'ArticleCard',
+      'fitted',
+    );
+    let third = await runtime.evaluateTemplate(
       MODULE_ID,
       'ArticleCard',
       'isolated',
@@ -155,10 +120,20 @@ module('Unit | realm compartment module runtime', function () {
         },
       },
     });
-    assert.deepEqual(second, first, 'returns a cloned cached descriptor');
+    assert.strictEqual(
+      second.templates[second.root]?.id,
+      'article-fitted',
+      'switches formats through the already-evaluated module',
+    );
+    assert.strictEqual(
+      second.templates[second.root]?.block,
+      FITTED_TEMPLATE_BLOCK,
+      'captures the requested format template',
+    );
+    assert.deepEqual(third, first, 'can switch back without reevaluating');
     assert.deepEqual(runtime.stats, {
       moduleEvaluations: 1,
-      moduleCacheHits: 1,
+      moduleCacheHits: 2,
     });
     assert.deepEqual(runtime.ambientReport, {
       window: 'undefined',
@@ -202,6 +177,7 @@ module('Unit | realm compartment module runtime', function () {
         headerColor: '#123456',
         hasCustomEditTemplate: false,
         hasCustomIsolatedTemplate: true,
+        authoredTemplateFormats: ['isolated'],
         icon: {
           module: '@cardstack/boxel-icons/network',
           name: 'default',
@@ -210,6 +186,31 @@ module('Unit | realm compartment module runtime', function () {
       },
       'executable and unknown statics are omitted',
     );
+  });
+
+  test('reports inherited Base templates without importing them into the compartment', async function (assert) {
+    let moduleID = `${MODULE_ID}?base-template-fallbacks`;
+    let source = `
+      import { CardDef } from 'https://cardstack.com/base/card-api';
+
+      export class BlankCard extends CardDef {
+        static displayName = 'Blank Card';
+      }
+    `;
+    let runtime = runtimeFor({ [moduleID]: source });
+
+    let metadata = await runtime.evaluateCardTypeMetadata(
+      moduleID,
+      'BlankCard',
+    );
+
+    assert.deepEqual(
+      metadata.authoredTemplateFormats,
+      [],
+      'the explicit metadata boundary distinguishes inherited Base templates from authored templates',
+    );
+    assert.false(metadata.hasCustomIsolatedTemplate);
+    assert.false(metadata.hasCustomEditTemplate);
   });
 
   test('allows readable same-realm and cross-realm module graphs', async function (assert) {
@@ -456,6 +457,7 @@ module('Unit | realm compartment module runtime', function () {
         headerColor: null,
         hasCustomEditTemplate: false,
         hasCustomIsolatedTemplate: true,
+        authoredTemplateFormats: ['isolated'],
         icon: undefined,
         prefersWideFormat: false,
       },
@@ -465,7 +467,7 @@ module('Unit | realm compartment module runtime', function () {
 
   test('captures an unchanged compiled GTS card template', async function (assert) {
     let source = await transpileJS(
-      EDITORIAL_CHILD_CARDS_SOURCE,
+      SCOPED_GTS_CARD_SOURCE,
       '/story-modules.gts',
     );
     let moduleID = 'https://realm.example/cards/story-modules';
@@ -481,11 +483,36 @@ module('Unit | realm compartment module runtime', function () {
     assert.true(descriptor.isStrictMode);
     assert.ok(descriptor.block.includes('Ask the story'));
     assert.ok(descriptor.block.includes('Ingredients'));
-    assert.strictEqual(descriptor.stylesheets.length, 3);
+    assert.strictEqual(descriptor.stylesheets.length, 1);
     assert.true(
       descriptor.stylesheets.every((stylesheet) =>
         stylesheet.endsWith('.glimmer-scoped.css'),
       ),
+    );
+  });
+
+  test('rejects unscoped styles that would affect the shared host document', async function (assert) {
+    let moduleID = 'https://realm.example/cards/unscoped-style';
+    let source = await transpileJS(
+      `
+        import { CardDef, Component } from '@cardstack/base/card-api';
+
+        export class RetroCard extends CardDef {
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <article>Retro card</article>
+              <style>body, button { font-family: serif; }</style>
+            </template>
+          };
+        }
+      `,
+      '/unscoped-style.gts',
+    );
+    let runtime = runtimeFor({ [moduleID]: source });
+
+    await assert.rejects(
+      runtime.evaluateTemplate(moduleID, 'RetroCard', 'isolated'),
+      /SES templates must use <style scoped>/,
     );
   });
 

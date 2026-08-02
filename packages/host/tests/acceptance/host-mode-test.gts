@@ -7,14 +7,19 @@ import {
   waitUntil,
 } from '@ember/test-helpers';
 
+import { tracked } from '@glimmer/tracking';
+
 import { getService } from '@universal-ember/test-support';
 import { getPageTitle } from 'ember-page-title/test-support';
 import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
-import { Deferred } from '@cardstack/runtime-common';
+import { Deferred, isCardErrorJSONAPI } from '@cardstack/runtime-common';
 
+import { buildCardIslandContext } from '@cardstack/host/lib/card-island-context';
 import HostModeService from '@cardstack/host/services/host-mode-service';
+import type RealmSandboxService from '@cardstack/host/services/realm-sandbox';
+import type RenderService from '@cardstack/host/services/render-service';
 import type StoreService from '@cardstack/host/services/store';
 
 import {
@@ -37,6 +42,24 @@ let testHostModeRealmURLWithoutRealm = testHostModeRealmURL.replace(
   '',
 );
 
+const opaquePetSource = `
+  import { contains, field, Component, CardDef } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
+
+  export class OpaquePet extends CardDef {
+    static displayName = 'Opaque Pet';
+    @field name = contains(StringField);
+
+    static isolated = class Isolated extends Component<typeof this> {
+      <template>
+        <article data-test-opaque-pet={{@model.name}}>
+          <h2>{{@model.name}}</h2>
+        </article>
+      </template>
+    };
+  }
+`;
+
 // Overrides to simulate a request to a host mode domain
 class StubHostModeService extends HostModeService {
   get isActive() {
@@ -52,6 +75,10 @@ class StubCustomSubdomainHostModeService extends StubHostModeService {
   get hostModeOrigin() {
     return removeTrailingSlash(testHostModeRealmURL);
   }
+}
+
+class HydrationGate {
+  @tracked open = false;
 }
 
 module('Acceptance | host mode tests', function (hooks) {
@@ -245,6 +272,7 @@ module('Acceptance | host mode tests', function (hooks) {
       contents: {
         ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'pet.gts': { Pet },
+        'opaque-pet-a.gts': opaquePetSource,
         'whitepaper.gts': { Whitepaper },
         'view-card-demo.gts': viewCardDemoCardSource,
         'Whitepaper/index.json': {
@@ -268,6 +296,17 @@ module('Acceptance | host mode tests', function (hooks) {
               adoptsFrom: {
                 module: `${testHostModeRealmURL}pet`,
                 name: 'Pet',
+              },
+            },
+          },
+        },
+        'OpaquePetA/ember.json': {
+          data: {
+            attributes: { name: 'Ember' },
+            meta: {
+              adoptsFrom: {
+                module: `${testHostModeRealmURL}opaque-pet-a`,
+                name: 'OpaquePet',
               },
             },
           },
@@ -794,6 +833,256 @@ module('Acceptance | host mode tests', function (hooks) {
 
     // Stack shouldn't exist when there are no stacked cards
     assert.dom('[data-test-host-mode-stack]').doesNotExist();
+  });
+
+  test('moves a prerendered card island into host mode without replacing its container', async function (assert) {
+    let start = document.createElement('div');
+    start.id = 'boxel-isolated-start';
+    let end = document.createElement('div');
+    end.id = 'boxel-isolated-end';
+    let island = document.createElement('div');
+    island.setAttribute('data-boxel-card-island', '');
+    island.setAttribute(
+      'data-boxel-card-url',
+      `${testHostModeRealmURL}Pet/mango`,
+    );
+    island.innerHTML =
+      '<!--%+b:0%--><div data-test-prerendered-card>prerendered</div><!--%-b:0%-->';
+    document.body.appendChild(start);
+    document.body.appendChild(island);
+    document.body.appendChild(end);
+
+    try {
+      await visit('/test/Pet/mango.json');
+      await waitFor('[data-boxel-card-island][data-boxel-card-island-status]');
+
+      assert.strictEqual(
+        document.querySelector('[data-boxel-card-island]'),
+        island,
+        'the server-provided island container survives the handoff',
+      );
+      assert.true(
+        island.parentElement?.hasAttribute('data-boxel-card-island-slot'),
+        'the island is moved into the live host-mode card slot',
+      );
+      assert.strictEqual(
+        island.dataset.boxelCardIslandStatus,
+        'replaced',
+        'an incompatible prerender uses the safe replacement fallback',
+      );
+      assert.strictEqual(
+        island.dataset.boxelCardIslandReason,
+        'protocol-mismatch',
+        'an unversioned island is never adopted speculatively',
+      );
+      assert.dom('[data-host-mode-card-scroll-container]').exists();
+      assert.dom('.message').doesNotExist();
+    } finally {
+      start.remove();
+      end.remove();
+      island.remove();
+    }
+  });
+
+  test('rehydrates a compatible server CardIsland without replacing authored DOM', async function (assert) {
+    let store = getService('store') as StoreService;
+    let card = await store.get(`${testHostModeRealmURL}Pet/mango`);
+    if (isCardErrorJSONAPI(card)) {
+      throw new Error('could not load the card-island fixture');
+    }
+    let renderService = getService('render-service') as RenderService;
+    let islandHTML = await renderService.renderCardIsland({
+      card,
+      format: 'isolated',
+      ...buildCardIslandContext(store, card),
+    });
+    let fixture = document.createElement('template');
+    fixture.innerHTML = islandHTML;
+    let island = fixture.content.firstElementChild as HTMLElement | null;
+    if (!island) {
+      throw new Error('server render did not produce a card island');
+    }
+    let authoredNode = island.querySelector('[data-test-pet-isolated]');
+    if (!authoredNode) {
+      throw new Error('server card island did not contain the authored card');
+    }
+
+    let start = document.createElement('div');
+    start.id = 'boxel-isolated-start';
+    let end = document.createElement('div');
+    end.id = 'boxel-isolated-end';
+    document.body.appendChild(start);
+    document.body.appendChild(island);
+    document.body.appendChild(end);
+
+    try {
+      await visit('/test/Pet/mango.json');
+      await waitFor(
+        '[data-boxel-card-island][data-boxel-card-island-status="rehydrated"]',
+      );
+
+      assert.strictEqual(
+        document.querySelector('[data-boxel-card-island]'),
+        island,
+        'the server island container survives the handoff',
+      );
+      assert.strictEqual(
+        island.querySelector('[data-test-pet-isolated]'),
+        authoredNode,
+        'Host Mode adopts the server-rendered authored element',
+      );
+      assert.strictEqual(
+        island.dataset.boxelCardIslandStatus,
+        'rehydrated',
+        'the compatible protocol takes the adoption path',
+      );
+      assert.notOk(
+        island.dataset.boxelCardIslandReason,
+        'a compatible handoff has no fallback reason',
+      );
+    } finally {
+      start.remove();
+      end.remove();
+      island.remove();
+    }
+  });
+
+  test('keeps a prerendered opaque SES card visible while client activation is delayed', async function (assert) {
+    let store = getService('store') as StoreService;
+    let realmSandbox = getService('realm-sandbox') as RealmSandboxService;
+    let serverCard = await store.get(`${testHostModeRealmURL}OpaquePetA/ember`);
+    if (isCardErrorJSONAPI(serverCard)) {
+      throw new Error('could not load the opaque card-island fixture');
+    }
+    assert.true(
+      realmSandbox.isOpaqueCard(serverCard),
+      'the fixture crosses the real realm sandbox boundary',
+    );
+
+    realmSandbox.renderFor(serverCard, 'isolated');
+    await waitUntil(() =>
+      Boolean(realmSandbox.renderFor(serverCard, 'isolated')),
+    );
+
+    let renderService = getService('render-service') as RenderService;
+    let islandHTML = await renderService.renderCardIsland({
+      card: serverCard,
+      format: 'isolated',
+      ...buildCardIslandContext(store, serverCard),
+    });
+    let fixture = document.createElement('template');
+    fixture.innerHTML = islandHTML;
+    let island = fixture.content.firstElementChild as HTMLElement | null;
+    let cardContainer = island?.querySelector('[data-boxel-card-container]');
+    let authoredNode = island?.querySelector('[data-test-opaque-pet]');
+    if (!island || !cardContainer || !authoredNode) {
+      throw new Error('server render did not contain the opaque card DOM');
+    }
+
+    let hydrationGate = new HydrationGate();
+    let originalHydrationReady =
+      realmSandbox.isCardIslandHydrationReady.bind(realmSandbox);
+    realmSandbox.isCardIslandHydrationReady = (card, format) => {
+      let ready = originalHydrationReady(card, format);
+      return card === serverCard ? hydrationGate.open && ready : ready;
+    };
+
+    let start = document.createElement('div');
+    start.id = 'boxel-isolated-start';
+    let end = document.createElement('div');
+    end.id = 'boxel-isolated-end';
+    document.body.appendChild(start);
+    document.body.appendChild(island);
+    document.body.appendChild(end);
+
+    let visitPromise: Promise<void> | undefined;
+    try {
+      visitPromise = visit('/test/OpaquePetA/ember.json');
+      await waitFor(
+        '[data-boxel-card-island][data-boxel-card-island-handoff="waiting"]',
+      );
+
+      assert.strictEqual(
+        document.querySelector('[data-boxel-card-island]'),
+        island,
+        'the outer server island stays mounted during SES evaluation',
+      );
+      assert.strictEqual(
+        island.querySelector('[data-boxel-card-container]'),
+        cardContainer,
+        'the server CardContainer stays mounted during SES evaluation',
+      );
+      assert.strictEqual(
+        island.querySelector('[data-test-opaque-pet]'),
+        authoredNode,
+        'the authored server element stays visible instead of a spinner',
+      );
+      assert.dom('[data-card-sandbox-loading]').doesNotExist();
+
+      hydrationGate.open = true;
+      await visitPromise;
+      await waitFor(
+        '[data-boxel-card-island][data-boxel-card-island-status="rehydrated"]',
+      );
+
+      assert.strictEqual(
+        island.querySelector('[data-boxel-card-container]'),
+        cardContainer,
+        'the outer Glimmer program adopts the server CardContainer',
+      );
+      assert.strictEqual(
+        island.querySelector('[data-test-opaque-pet]'),
+        authoredNode,
+        'the nested SES program adopts the authored server element',
+      );
+      assert.strictEqual(
+        island.querySelector<HTMLElement>(
+          '[data-realm-sandbox-template-island]',
+        )?.dataset.realmSandboxIslandUpdate,
+        'rehydrated',
+        'the nested SES island uses its first-attachment hydration path',
+      );
+    } finally {
+      hydrationGate.open = true;
+      realmSandbox.isCardIslandHydrationReady = originalHydrationReady;
+      start.remove();
+      end.remove();
+      island.remove();
+    }
+  });
+
+  test('removes a prerendered CardIsland for a different primary card', async function (assert) {
+    let start = document.createElement('div');
+    start.id = 'boxel-isolated-start';
+    let island = document.createElement('div');
+    island.setAttribute('data-boxel-card-island', '');
+    island.setAttribute(
+      'data-boxel-card-url',
+      `${testHostModeRealmURL}Pet/not-mango`,
+    );
+    island.textContent = 'stale prerender';
+    let end = document.createElement('div');
+    end.id = 'boxel-isolated-end';
+    document.body.appendChild(start);
+    document.body.appendChild(island);
+    document.body.appendChild(end);
+
+    try {
+      await visit('/test/Pet/mango.json');
+      await waitFor('[data-test-pet-isolated="Mango"]');
+
+      assert.false(
+        island.isConnected,
+        'a stale island is removed instead of being left beside the live card',
+      );
+      assert
+        .dom('[data-test-pet-isolated="Mango"]')
+        .exists('the requested primary card renders normally');
+    } finally {
+      start.remove();
+      end.remove();
+      island.remove();
+    }
   });
 
   test('scroll position is restored on card container after hydration', async function (assert) {

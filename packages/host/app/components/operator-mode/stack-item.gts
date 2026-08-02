@@ -16,6 +16,7 @@ import { tracked, cached } from '@glimmer/tracking';
 
 import DeselectIcon from '@cardstack/boxel-icons/deselect';
 import Maximize from '@cardstack/boxel-icons/maximize';
+import RefreshCw from '@cardstack/boxel-icons/refresh-cw';
 import SelectAllIcon from '@cardstack/boxel-icons/select-all';
 import { restartableTask, timeout, dropTask } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
@@ -87,6 +88,7 @@ import type CardTypeService from '../../services/card-type-service';
 import type NetworkService from '../../services/network';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RealmService from '../../services/realm';
+import type RealmSandboxService from '../../services/realm-sandbox';
 import type StoreService from '../../services/store';
 import type {
   CardContext,
@@ -140,6 +142,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   @service declare private network: NetworkService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
+  @service declare private realmSandbox: RealmSandboxService;
   @service declare private store: StoreService;
 
   @tracked private selectedCards = new TrackedSet<string>();
@@ -677,6 +680,16 @@ export default class OperatorModeStackItem extends Component<Signature> {
         useBaseTemplate: this.args.item.useBaseTemplate,
       }) ?? [],
     );
+
+    if (this.card && this.realmSandbox.isOpaqueCard(this.card)) {
+      items.unshift(
+        new MenuItem({
+          label: 'Reload Card',
+          icon: RefreshCw,
+          action: () => this.card && this.realmSandbox.reloadCard(this.card),
+        }),
+      );
+    }
 
     if (this.isTopCard) {
       let expandItem = new MenuItem({

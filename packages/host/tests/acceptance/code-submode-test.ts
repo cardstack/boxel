@@ -1337,7 +1337,7 @@ module('Acceptance | code submode tests', function (_hooks) {
         .containsText('This resource does not exist');
     });
 
-    test('card preview will show in the 3rd column when submode is set to code', async function (assert) {
+    test('[NAV-01] card preview will show in the 3rd column when submode is set to code', async function (assert) {
       await visitOperatorMode({
         stacks: [
           [
@@ -1424,7 +1424,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert.dom('[data-test-card-schema]').doesNotExist();
     });
 
-    test('"form" format button appears only for cards with a custom edit template', async function (assert) {
+    test('[NAV-05] "form" format button appears only for cards with a custom edit template', async function (assert) {
       await visitOperatorMode({
         submode: 'code',
         codePath: `${testRealmURL}CustomEdit/sample.json`,
@@ -2779,7 +2779,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert.dom('[data-test-active-module-inspector-view="preview"]').exists();
     });
 
-    test('Open in Interact and Edit Template buttons work correctly', async function (assert) {
+    test('[NAV-04][NAV-05] Open in Interact and Edit Template buttons work correctly', async function (assert) {
       await visitOperatorMode({
         stacks: [
           [
@@ -2794,6 +2794,14 @@ module('Acceptance | code submode tests', function (_hooks) {
       });
 
       await waitFor('[data-test-card-resource-loaded]');
+
+      await waitUntil(() =>
+        Boolean(
+          getService('code-source-cache').sourceFor(
+            `${testRealmURL}person.gts`,
+          ),
+        ),
+      );
 
       // Verify the buttons are rendered
       assert

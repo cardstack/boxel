@@ -344,6 +344,38 @@ module('Unit | loader', function (hooks) {
     );
   });
 
+  test('isModuleShimmed distinguishes live test shims from fetched modules', async function (assert) {
+    let shimURL = `${testRealmURL}live-test-shim`;
+    loader.shimModule(shimURL, { value: 'shimmed' });
+
+    assert.true(loader.isModuleShimmed(shimURL), 'registered shim is reported');
+    assert.false(
+      loader.isModuleShimmed(`${testRealmURL}a`),
+      'unloaded network module is not reported as a shim',
+    );
+
+    await loader.import(`${testRealmURL}a`);
+    assert.false(
+      loader.isModuleShimmed(`${testRealmURL}a`),
+      'loaded network module is still not reported as a shim',
+    );
+  });
+
+  test('isModuleShimmed reports a live shim supplied by a fetch adapter', async function (assert) {
+    let shimURL = `${testRealmURL}adapter-test-shim`;
+    let fetchedShimLoader = new Loader(async () => {
+      let response = new Response();
+      (response as Response & { [key: symbol]: unknown })[
+        Symbol.for('shimmed-module')
+      ] = { value: 'shimmed' };
+      return response;
+    });
+
+    assert.false(fetchedShimLoader.isModuleShimmed(shimURL));
+    await fetchedShimLoader.import(shimURL);
+    assert.true(fetchedShimLoader.isModuleShimmed(shimURL));
+  });
+
   test('isModuleLoaded returns true for dependencies of an imported module', async function (assert) {
     assert.false(
       loader.isModuleLoaded(`${testRealmURL}b`),

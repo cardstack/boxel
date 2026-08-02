@@ -791,7 +791,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert.dom('[data-option-index="3"]').containsText('City Design');
     });
 
-    test('can update the instance chooser when selected card def changes (same file)', async function (assert) {
+    test('[NAV-02] can update the instance chooser when selected card def changes (same file)', async function (assert) {
       await openFileInPlayground('blog-post.gts', testRealmURL, {
         declaration: 'Category',
       });

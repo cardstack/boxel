@@ -43,6 +43,7 @@ export interface OpaqueRealmCardTypeState {
   fields: Record<string, OpaqueRealmCardFieldMetadata>;
   hasCustomEditTemplate: boolean;
   hasCustomIsolatedTemplate: boolean;
+  authoredTemplateFormats?: string[];
   headerColor: string | null;
   prefersWideFormat: boolean;
 }

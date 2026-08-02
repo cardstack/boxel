@@ -33,8 +33,12 @@
     <link href="/boxel-webclip.png" rel="apple-touch-icon" />
     <style>
       /* Allow prerendered cards to scroll while card-specific CSS loads */
-      #boxel-isolated-start + .boxel-card-container {
+      #boxel-isolated-start + .boxel-card-container,
+      #boxel-isolated-start + [data-boxel-card-island] .boxel-card-container {
         overflow-y: auto;
+      }
+      [data-boxel-card-island] {
+        display: contents;
       }
     </style>
 

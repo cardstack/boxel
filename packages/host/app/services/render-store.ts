@@ -4,12 +4,14 @@ import type {
   LooseSingleResourceDocument,
 } from '@cardstack/runtime-common';
 
-import StoreService from './store';
+import StoreService, { type CardMaterializationPurpose } from './store';
 
 import type { FileDef } from '@cardstack/base/file-api';
 
 export default class RenderStoreService extends StoreService {
   protected override isRenderStore = true;
+  protected override cardMaterializationPurpose: CardMaterializationPurpose =
+    'realm-execution';
 
   async addFileMeta(
     resource: LooseLinkableResource<FileMetaResource>,

@@ -9,6 +9,7 @@ interface Signature {
     realmURL: string;
     selectedFile?: LocalPath;
     openDirs?: LocalPath[];
+    onFileIntent?: (entryPath: LocalPath) => void;
     onFileSelected?: (entryPath: LocalPath) => Promise<void>;
     onDirectorySelected?: (entryPath: LocalPath) => void;
     onDeleteFile?: (entryPath: LocalPath) => void;
@@ -23,6 +24,7 @@ const FileTree: TemplateOnlyComponent<Signature> = <template>
       @realmURL={{@realmURL}}
       @selectedFile={{@selectedFile}}
       @openDirs={{@openDirs}}
+      @onFileIntent={{@onFileIntent}}
       @onFileSelected={{@onFileSelected}}
       @onDirectorySelected={{@onDirectorySelected}}
       @onDeleteFile={{@onDeleteFile}}

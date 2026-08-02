@@ -13,13 +13,19 @@ import { getService } from '@universal-ember/test-support';
 import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
-import { baseRealmRRI } from '@cardstack/runtime-common';
+import {
+  baseRealmRRI,
+  Deferred,
+  rri,
+  SupportedMimeType,
+} from '@cardstack/runtime-common';
 
 import WriteTextFileTool from '@cardstack/host/tools/write-text-file';
 import { ScrollPositions } from '@cardstack/host/utils/local-storage-keys';
 
 import {
   elementIsVisible,
+  getMonacoContent,
   setupLocalIndexing,
   setupRealmCacheTeardown,
   testModuleRealm,
@@ -381,6 +387,148 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     await click('[data-test-file="Person/1.json"]');
 
     assert.dom('[data-test-person]').exists();
+  });
+
+  test('[NAV-06] rapid file navigation ignores a stale source response', async function (assert) {
+    let delayedURL = `${testRealmURL}pet-person.gts`;
+    let finalURL = `${testRealmURL}person.gts`;
+    let delayedRequestStarted = new Deferred<void>();
+    let releaseDelayedRequest = new Deferred<void>();
+
+    getService('network').mount(
+      async (request: Request) => {
+        if (
+          request.url === delayedURL &&
+          request.headers.get('accept') === SupportedMimeType.CardSource
+        ) {
+          delayedRequestStarted.fulfill();
+          await releaseDelayedRequest.promise;
+        }
+        return null;
+      },
+      { prepend: true },
+    );
+
+    await visitOperatorMode({
+      submode: 'code',
+      fileView: 'browser',
+      codePath: `${testRealmURL}Person/1.json`,
+    });
+    await waitFor('[data-test-editor]');
+    await waitFor('[data-test-file="pet-person.gts"]');
+
+    let editorElement = find('[data-test-editor]');
+    (find('[data-test-file="pet-person.gts"]') as HTMLElement).click();
+    await delayedRequestStarted.promise;
+    await waitFor('[data-test-source-loading]');
+
+    (find('[data-test-file="person.gts"]') as HTMLElement).click();
+    let operatorModeStateService = getService('operator-mode-state-service');
+    assert.strictEqual(
+      operatorModeStateService.state.codePath?.href,
+      finalURL,
+      'the selected filename changes synchronously',
+    );
+    await waitFor('[data-test-file="person.gts"].selected');
+    assert
+      .dom('[data-test-file-tree-mask]')
+      .doesNotExist(
+        'the populated file list remains interactive while source is loading',
+      );
+    assert.strictEqual(
+      find('[data-test-editor]'),
+      editorElement,
+      'the host-owned Monaco element remains mounted',
+    );
+
+    releaseDelayedRequest.fulfill();
+    await waitUntil(() => {
+      let file = operatorModeStateService.openFile?.current;
+      return (
+        operatorModeStateService.state.codePath?.href === finalURL &&
+        file?.state === 'ready' &&
+        file.url === rri(finalURL)
+      );
+    });
+    assert.strictEqual(
+      operatorModeStateService.state.codePath?.href,
+      finalURL,
+      'the stale response cannot redirect navigation back to the previous file',
+    );
+    assert.dom('[data-test-source-loading]').doesNotExist();
+  });
+
+  test('file pointer intent prefetches source without changing selection', async function (assert) {
+    let selectedURL = `${testRealmURL}person.gts`;
+    let intendedURL = `${testRealmURL}employee.gts`;
+
+    await visitOperatorMode({
+      submode: 'code',
+      fileView: 'browser',
+      codePath: selectedURL,
+    });
+    await waitFor('[data-test-file="employee.gts"]');
+
+    await triggerEvent('[data-test-file="employee.gts"]', 'pointerenter');
+    await waitUntil(() =>
+      Boolean(getService('code-source-cache').sourceFor(intendedURL)),
+    );
+
+    assert.strictEqual(
+      getService('operator-mode-state-service').state.codePath?.href,
+      selectedURL,
+      'prefetch does not navigate before the click',
+    );
+  });
+
+  test('returning to a loaded file restores source before revalidation finishes', async function (assert) {
+    let cachedURL = `${testRealmURL}employee.gts`;
+
+    await visitOperatorMode({
+      submode: 'code',
+      fileView: 'browser',
+      codePath: `${testRealmURL}person.gts`,
+    });
+    await waitFor('[data-test-editor]');
+    await waitFor('[data-test-file="employee.gts"]');
+
+    await click('[data-test-file="employee.gts"]');
+    await waitUntil(() => getMonacoContent().includes('department'));
+    await click('[data-test-file="person.gts"]');
+    await waitUntil(() => !getMonacoContent().includes('department'));
+
+    let delayedRequestStarted = new Deferred<void>();
+    let releaseDelayedRequest = new Deferred<void>();
+    getService('network').mount(
+      async (request: Request) => {
+        if (
+          request.url === cachedURL &&
+          request.headers.get('accept') === SupportedMimeType.CardSource
+        ) {
+          delayedRequestStarted.fulfill();
+          await releaseDelayedRequest.promise;
+        }
+        return null;
+      },
+      { prepend: true },
+    );
+
+    let editorElement = find('[data-test-editor]');
+    (find('[data-test-file="employee.gts"]') as HTMLElement).click();
+
+    await waitUntil(() => getMonacoContent().includes('department'));
+    assert.strictEqual(
+      find('[data-test-editor]'),
+      editorElement,
+      'the existing Monaco element displays the cached source',
+    );
+    assert
+      .dom('[data-test-source-loading]')
+      .doesNotExist('background source validation does not cover the editor');
+
+    await delayedRequestStarted.promise;
+    releaseDelayedRequest.fulfill();
+    await settled();
   });
 
   module('when the user lacks write permissions', function (hooks) {

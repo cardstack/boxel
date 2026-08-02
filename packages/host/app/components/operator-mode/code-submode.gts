@@ -50,7 +50,9 @@ import ModuleInspector from '@cardstack/host/components/operator-mode/code-submo
 import consumeContext from '@cardstack/host/helpers/consume-context';
 import CodePreviewSandbox, {
   CodePreviewSandboxContextName,
+  sameCodePreviewModuleURL,
 } from '@cardstack/host/lib/code-preview-sandbox';
+import type { MonacoContentChangeOrigin } from '@cardstack/host/modifiers/monaco';
 
 import type { FileResource } from '@cardstack/host/resources/file';
 import type {
@@ -58,6 +60,7 @@ import type {
   State as ModuleState,
 } from '@cardstack/host/resources/module-contents';
 import type CardService from '@cardstack/host/services/card-service';
+import type { SaveType } from '@cardstack/host/services/card-service';
 import type CodeSemanticsService from '@cardstack/host/services/code-semantics-service';
 import type FileUploadService from '@cardstack/host/services/file-upload';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
@@ -103,6 +106,8 @@ interface Signature {
     saveSourceOnClose: (url: URL, content: string) => void;
   };
 }
+
+const loadingEditorFile: FileResource = { state: 'loading' };
 
 type PanelWidths = {
   rightPanel: number;
@@ -227,6 +232,7 @@ export default class CodeSubmode extends Component<Signature> {
     registerDestructor(this, () => {
       this.operatorModeStateService.unsubscribeFromOpenFileStateChanges(this);
       this.codeSemanticsService.clearOnModuleEditCallback(this.onModuleEdit);
+      this.settleDeferredCodePreviewModule();
       this.realmSandbox.releaseCodePreviewSandbox(this.codePreviewSandbox);
     });
   }
@@ -290,6 +296,10 @@ export default class CodeSubmode extends Component<Signature> {
     return this.codeSemanticsService.currentOpenFile;
   }
 
+  private get editorFile(): FileResource {
+    return this.currentOpenFile ?? loadingEditorFile;
+  }
+
   private get isReady() {
     return this.codeSemanticsService.isReady;
   }
@@ -311,15 +321,23 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   @action private onModuleEdit(state: ModuleState) {
+    let selectedDeclaration = this.selectedDeclaration;
+    if (
+      !selectedDeclaration ||
+      state.declarations.some(
+        (declaration) =>
+          declaration.localName === selectedDeclaration.localName,
+      )
+    ) {
+      return;
+    }
+
     let editedDeclaration = state.declarations.find(
       (newDeclaration: ModuleDeclaration) => {
-        return this.selectedDeclaration
-          ? this.selectedDeclaration.localName !== newDeclaration.localName &&
-              isEquivalentBodyPosition(
-                this.selectedDeclaration.path,
-                newDeclaration.path,
-              )
-          : false;
+        return isEquivalentBodyPosition(
+          selectedDeclaration.path,
+          newDeclaration.path,
+        );
       },
     );
     if (editedDeclaration) {
@@ -334,7 +352,9 @@ export default class CodeSubmode extends Component<Signature> {
 
     return {
       declarations: this.codeSemanticsService.getDeclarations(file, isModule),
-      moduleError: this.codeSemanticsService.getModuleError(file, isModule),
+      moduleError:
+        this.codePreviewSandbox.moduleError ??
+        this.codeSemanticsService.getModuleError(file, isModule),
       isLoading: this.codeSemanticsService.getIsLoading(file, isModule),
     };
   }
@@ -403,8 +423,48 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   @action
-  private updateCodePreview(sourceURL: string, source: string) {
-    this.codePreviewSandbox.update(sourceURL, source);
+  private updateCodePreview(
+    sourceURL: string,
+    source: string,
+    origin: MonacoContentChangeOrigin,
+  ) {
+    if (
+      this.codePreviewSandbox.sourceURL &&
+      !sameCodePreviewModuleURL(this.codePreviewSandbox.sourceURL, sourceURL)
+    ) {
+      this.settleDeferredCodePreviewModule();
+    }
+    if (origin === 'user') {
+      this.realmSandbox.publishCodePreviewSource(
+        this.codePreviewSandbox,
+        sourceURL,
+        source,
+      );
+    } else {
+      this.realmSandbox.seedCodePreviewSource(
+        this.codePreviewSandbox,
+        sourceURL,
+        source,
+      );
+    }
+  }
+
+  private settleDeferredCodePreviewModule() {
+    this.realmSandbox.settleDeferredCodePreviewModule(this.codePreviewSandbox);
+  }
+
+  @action
+  private prepareSourceCommit(
+    sourceURL: string,
+    source: string,
+    saveType: SaveType,
+  ) {
+    return this.realmSandbox.prepareCodePreviewCommit(
+      this.codePreviewSandbox,
+      sourceURL,
+      source,
+      saveType,
+    );
   }
 
   @action
@@ -589,15 +649,21 @@ export default class CodeSubmode extends Component<Signature> {
       }
 
       this.isCreateModalOpen = true;
-      let url = await this.createFileModal.createNewFile(
+      let createdFile = await this.createFileModal.createNewFile(
         fileType,
         new URL(destinationRealm),
         definitionClass,
         sourceInstance,
       );
       this.isCreateModalOpen = false;
-      if (url) {
-        await this.operatorModeStateService.updateCodePath(url);
+      if (createdFile) {
+        if (createdFile.source) {
+          this.operatorModeStateService.seedOpenFile(
+            createdFile.url,
+            createdFile.source,
+          );
+        }
+        await this.operatorModeStateService.updateCodePath(createdFile.url);
         this.setCardPreviewFormat('edit');
       }
     },
@@ -727,16 +793,15 @@ export default class CodeSubmode extends Component<Signature> {
   });
 
   private get realmWritability() {
-    if (!this.isReady) {
-      return 'pending';
-    }
-    return this.realm.writability(this.readyFile.url);
+    return this.realm.writability(
+      this.isReady
+        ? this.readyFile.url
+        : (this.codePath?.href ?? this.realmURL),
+    );
   }
 
   get isReadOnly() {
-    return (
-      this.realmWritability !== 'writable' || this.fileDefResource?.isLoading
-    );
+    return this.realmWritability !== 'writable';
   }
 
   private get showReadOnlyIndicator() {
@@ -850,6 +915,7 @@ export default class CodeSubmode extends Component<Signature> {
                           @realmURL={{this.realmURL}}
                           @selectedFile={{this.operatorModeStateService.codePathRelativeToRealm}}
                           @openDirs={{this.operatorModeStateService.currentRealmOpenDirs}}
+                          @onFileIntent={{this.operatorModeStateService.onFileIntent}}
                           @onFileSelected={{this.operatorModeStateService.onFileSelected}}
                           @onDirectorySelected={{this.operatorModeStateService.toggleOpenDir}}
                           @onDeleteFile={{if
@@ -888,30 +954,24 @@ export default class CodeSubmode extends Component<Signature> {
                 @minSize={{20}}
               >
                 <InnerContainer class='monaco-editor-panel'>
-                  {{#if this.currentOpenFile}}
-                    <CodeEditor
-                      @file={{this.currentOpenFile}}
-                      @moduleAnalysis={{this.moduleAnalysis}}
-                      @selectedDeclaration={{this.selectedDeclaration}}
-                      @saveSourceOnClose={{@saveSourceOnClose}}
-                      @selectDeclaration={{this.selectDeclaration}}
-                      @onFileSave={{this.onSourceFileSave}}
-                      @onContentChange={{this.updateCodePreview}}
-                      @onWriteError={{this.onWriteError}}
-                      @onSetup={{this.setupCodeEditor}}
-                      @isReadOnly={{this.isReadOnly}}
-                    />
-                    {{#if this.isReady}}
-                      <CodeSubmodeEditorIndicator
-                        @isSaving={{this.isSaving}}
-                        @isReadOnly={{this.showReadOnlyIndicator}}
-                        @errorMessage={{this.writeError}}
-                      />
-                    {{/if}}
-                  {{else}}
-                    <LoadingIndicator
-                      @color='var(--boxel-light)'
-                      class='loading-indicator'
+                  <CodeEditor
+                    @file={{this.editorFile}}
+                    @moduleAnalysis={{this.moduleAnalysis}}
+                    @selectedDeclaration={{this.selectedDeclaration}}
+                    @saveSourceOnClose={{@saveSourceOnClose}}
+                    @selectDeclaration={{this.selectDeclaration}}
+                    @onFileSave={{this.onSourceFileSave}}
+                    @onContentChange={{this.updateCodePreview}}
+                    @prepareSourceCommit={{this.prepareSourceCommit}}
+                    @onWriteError={{this.onWriteError}}
+                    @onSetup={{this.setupCodeEditor}}
+                    @isReadOnly={{this.isReadOnly}}
+                  />
+                  {{#if this.isReady}}
+                    <CodeSubmodeEditorIndicator
+                      @isSaving={{this.isSaving}}
+                      @isReadOnly={{this.showReadOnlyIndicator}}
+                      @errorMessage={{this.writeError}}
                     />
                   {{/if}}
                 </InnerContainer>

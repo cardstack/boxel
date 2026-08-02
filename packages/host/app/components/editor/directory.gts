@@ -28,6 +28,7 @@ interface Args {
     realmURL: string;
     selectedFile?: LocalPath;
     openDirs?: LocalPath[];
+    onFileIntent?: (entryPath: LocalPath) => void;
     onFileSelected?: (entryPath: LocalPath) => void;
     onDirectorySelected?: (entryPath: LocalPath) => void;
     onDeleteFile?: (entryPath: LocalPath) => void;
@@ -49,6 +50,8 @@ export default class Directory extends Component<Args> {
               <button
                 data-test-file={{entryPath}}
                 title={{entry.name}}
+                {{on 'focus' (fn this.prefetchFile entryPath)}}
+                {{on 'pointerenter' (fn this.prefetchFile entryPath)}}
                 {{on 'click' (fn this.selectFile entryPath)}}
                 {{scrollIntoViewModifier
                   (this.isSelectedFile entryPath)
@@ -94,6 +97,7 @@ export default class Directory extends Component<Args> {
                   this.selectedFile
                 }}
                 @openDirs={{if @openDirs @openDirs this.openDirs}}
+                @onFileIntent={{this.prefetchFile}}
                 @onFileSelected={{this.selectFile}}
                 @onDirectorySelected={{this.selectDirectory}}
                 @onDeleteFile={{@onDeleteFile}}
@@ -221,6 +225,11 @@ export default class Directory extends Component<Args> {
       this.menuEntryPath = undefined;
       this.menuTriggerEl = undefined;
     });
+  }
+
+  @action
+  private prefetchFile(entryPath: LocalPath) {
+    this.args.onFileIntent?.(entryPath);
   }
 
   @action

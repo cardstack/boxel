@@ -142,11 +142,10 @@ module('Integration | preview', function (hooks) {
     let doc = { data: resource };
 
     assert.false(loader.isModuleLoaded(moduleURL));
-    let card = await getService('store').__dangerousCreateFromSerialized(
-      resource,
-      doc,
-      new URL(id),
-    );
+    let card = await getService('store').add(doc, {
+      doNotPersist: true,
+      relativeTo: new URL(id),
+    });
 
     assert.false(
       loader.isModuleLoaded(moduleURL),

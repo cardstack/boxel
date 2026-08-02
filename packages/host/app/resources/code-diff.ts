@@ -5,6 +5,7 @@ import { restartableTask } from 'ember-concurrency';
 import { Resource } from 'ember-modify-based-class-resource';
 
 import type CardService from '@cardstack/host/services/card-service';
+import type RealmSandboxService from '@cardstack/host/services/realm-sandbox';
 import type ToolService from '@cardstack/host/services/tool-service';
 
 import ApplySearchReplaceBlockTool from '../tools/apply-search-replace-block';
@@ -29,6 +30,7 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
 
   @service declare private cardService: CardService;
   @service declare private toolService: ToolService;
+  @service declare private realmSandbox: RealmSandboxService;
 
   modify(_positional: never[], named: CodeDiffResourceArgs['named']) {
     let { fileUrl, searchReplaceBlock, codePatchStatus } = named;
@@ -118,6 +120,7 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
           codeBlock: searchReplaceBlock,
         });
       this.modifiedCode = patchedCode;
+      this.realmSandbox.prewarmCodePreviewSource(fileUrl, patchedCode);
     } catch (error) {
       this.modifiedCode = this.originalCode;
       this.errorMessage =

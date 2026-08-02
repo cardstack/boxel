@@ -281,6 +281,9 @@ export class SearchEntriesResource extends Resource<Args> {
           if (this.#previousQuery === undefined) {
             return;
           }
+          if (this.store.isCodePreviewCommitAcknowledgement(event)) {
+            return;
+          }
           // Two triggers re-run a subscribed search: an incremental index
           // event (the search doc — and so membership — changed) and a
           // prerender_html event (fresh HTML / corrected full-text membership

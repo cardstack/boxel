@@ -41,30 +41,40 @@ function fileDefName(card: CardDef | FieldDef | FileDef) {
 }
 
 const PlaygroundPreview: TemplateOnlyComponent<Signature> = <template>
-  {{#if (or (eq @format 'isolated') (eq @format 'edit'))}}
+  {{#if
+    (or
+      (or (eq @format 'isolated') (eq @format 'edit')) (eq @format 'embedded')
+    )
+  }}
     <CardContainer
       class={{if
         @isFieldDef
         'field-preview-container'
-        'full-height-preview isolated-and-edit-preview'
+        (if
+          (eq @format 'embedded')
+          'preview-container'
+          'full-height-preview isolated-and-edit-preview'
+        )
       }}
     >
       {{#unless @isFieldDef}}
-        <CardHeader
-          class='preview-header'
-          @cardTypeDisplayName={{cardTypeDisplayName @card}}
-          @cardTypeIcon={{cardTypeIcon @card}}
-          @cardTitle={{if
-            (isCardInstance @card)
-            @card.cardTitle
-            (if @isFileDef (fileDefName @card) undefined)
-          }}
-          @realmInfo={{@realmInfo}}
-          @onEdit={{@onEdit}}
-          @onFinishEditing={{@onFinishEditing}}
-          @isTopCard={{true}}
-          @moreOptionsMenuItems={{@contextMenuItems}}
-        />
+        {{#unless (eq @format 'embedded')}}
+          <CardHeader
+            class='preview-header'
+            @cardTypeDisplayName={{cardTypeDisplayName @card}}
+            @cardTypeIcon={{cardTypeIcon @card}}
+            @cardTitle={{if
+              (isCardInstance @card)
+              @card.cardTitle
+              (if @isFileDef (fileDefName @card) undefined)
+            }}
+            @realmInfo={{@realmInfo}}
+            @onEdit={{@onEdit}}
+            @onFinishEditing={{@onFinishEditing}}
+            @isTopCard={{true}}
+            @moreOptionsMenuItems={{@contextMenuItems}}
+          />
+        {{/unless}}
       {{/unless}}
       <CardRenderer
         class='preview'
@@ -72,12 +82,6 @@ const PlaygroundPreview: TemplateOnlyComponent<Signature> = <template>
         @format={{@format}}
         @codeRef={{@codeRef}}
       />
-    </CardContainer>
-  {{else if (eq @format 'embedded')}}
-    <CardContainer
-      class={{if @isFieldDef 'field-preview-container' 'preview-container'}}
-    >
-      <CardRenderer class='preview' @card={{@card}} @format={{@format}} />
     </CardContainer>
   {{else if (eq @format 'head')}}
     <CardContainer class='preview-container'>

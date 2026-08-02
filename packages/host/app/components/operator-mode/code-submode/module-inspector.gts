@@ -648,6 +648,13 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
           data-test-module-inspector='card-or-field'
           data-test-active-module-inspector-view={{this.activePanel}}
         >
+          {{#if @moduleAnalysis.moduleError}}
+            <div class='module-preview-error' data-test-module-preview-error>
+              <SyntaxErrorDisplay
+                @syntaxErrors={{@moduleAnalysis.moduleError.message}}
+              />
+            </div>
+          {{/if}}
           {{#if (eq this.activePanel 'schema')}}
             <SchemaEditorPanel class='non-preview-panel-content' />
           {{else if (eq this.activePanel 'preview')}}
@@ -713,9 +720,19 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       }
 
       .module-inspector-content {
+        position: relative;
         overflow: auto;
         height: 100%;
         background-color: var(--boxel-light);
+      }
+
+      .module-preview-error {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        max-height: 45%;
+        overflow: auto;
+        border-bottom: var(--boxel-border);
       }
 
       .module-inspector-content.error {

@@ -228,52 +228,74 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
     };
   });
 
-  // TODO: remove in CS-9977, with rehydration
-  removeIsolatedMarkup = modifier(() => {
-    if (typeof document === 'undefined') {
-      return;
-    }
-    let start = document.getElementById('boxel-isolated-start');
-    let end = document.getElementById('boxel-isolated-end');
-    if (!start || !end) {
-      return;
-    }
-
-    // Before hydration the page scrolls at window level; after hydration the
-    // card container becomes the scroll host. Capture both so we cover
-    // whichever is non-zero.
-    let scrollTop = 0;
-    let prerenderedContainer = start.nextElementSibling;
-    if (
-      prerenderedContainer instanceof HTMLElement &&
-      prerenderedContainer !== end
-    ) {
-      scrollTop = Math.max(scrollTop, prerenderedContainer.scrollTop);
-    }
-    scrollTop = Math.max(scrollTop, window.scrollY);
-
-    let node = start.nextSibling;
-    while (node && node !== end) {
-      let next = node.nextSibling;
-      node.parentNode?.removeChild(node);
-      node = next;
-    }
-
-    // Stash the captured offset in a meta element so HostModeCard can pick it
-    // up and apply it once the card content has rendered and the container is
-    // scrollable.
-    if (scrollTop > 0) {
-      let meta = document.head.querySelector(
-        'meta[name="boxel-restore-scroll"]',
-      );
-      if (!meta) {
-        meta = document.createElement('meta');
-        meta.setAttribute('name', 'boxel-restore-scroll');
-        document.head.appendChild(meta);
+  // Marker-bearing card islands are preserved for HostModeCard to adopt.
+  // Older prerenders still use the destructive handoff and scroll restoration
+  // below, so deployments remain compatible while stored HTML turns over.
+  removeIsolatedMarkup = modifier(
+    (
+      _element: Element,
+      [preserveCardIsland, primaryCardID]: [boolean, (string | null)?],
+    ) => {
+      if (typeof document === 'undefined') {
+        return;
       }
-      meta.setAttribute('content', String(scrollTop));
-    }
-  });
+      let start = document.getElementById('boxel-isolated-start');
+      let end = document.getElementById('boxel-isolated-end');
+      if (!start || !end) {
+        return;
+      }
+
+      if (preserveCardIsland && primaryCardID) {
+        let candidate = start.nextElementSibling;
+        let islandCardURL =
+          candidate instanceof HTMLElement &&
+          candidate.hasAttribute('data-boxel-card-island')
+            ? candidate.dataset.boxelCardUrl
+            : undefined;
+        if (
+          islandCardURL &&
+          normalizeCardID(islandCardURL) === normalizeCardID(primaryCardID)
+        ) {
+          return;
+        }
+      }
+
+      // Before hydration the page scrolls at window level; after hydration the
+      // card container becomes the scroll host. Capture both so we cover
+      // whichever is non-zero.
+      let scrollTop = 0;
+      let prerenderedContainer = start.nextElementSibling;
+      if (
+        prerenderedContainer instanceof HTMLElement &&
+        prerenderedContainer !== end
+      ) {
+        scrollTop = Math.max(scrollTop, prerenderedContainer.scrollTop);
+      }
+      scrollTop = Math.max(scrollTop, window.scrollY);
+
+      let node = start.nextSibling;
+      while (node && node !== end) {
+        let next = node.nextSibling;
+        node.parentNode?.removeChild(node);
+        node = next;
+      }
+
+      // Stash the captured offset in a meta element so HostModeCard can pick it
+      // up and apply it once the card content has rendered and the container is
+      // scrollable.
+      if (scrollTop > 0) {
+        let meta = document.head.querySelector(
+          'meta[name="boxel-restore-scroll"]',
+        );
+        if (!meta) {
+          meta = document.createElement('meta');
+          meta.setAttribute('name', 'boxel-restore-scroll');
+          document.head.appendChild(meta);
+        }
+        meta.setAttribute('content', String(scrollTop));
+      }
+    },
+  );
 
   <template>
     {{#if this.hostModeService.isActive}}
@@ -286,19 +308,23 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
         @stackItemCardIds={{this.hostModeStateService.stackItems}}
         @removeCardFromStack={{this.removeCardFromStack}}
         @viewCard={{this.viewCard}}
-        {{this.removeIsolatedMarkup}}
+        {{this.removeIsolatedMarkup true this.hostModeStateService.primaryCard}}
       />
     {{else}}
       {{pageTitle this.operatorModeStateService.title}}
       <OperatorModeContainer
         @onClose={{this.closeOperatorMode}}
-        {{this.removeIsolatedMarkup}}
+        {{this.removeIsolatedMarkup false}}
       />
     {{/if}}
   </template>
 }
 
 export default RouteTemplate(IndexComponent);
+
+function normalizeCardID(cardID: string): string {
+  return cardID.replace(/\.json$/, '');
+}
 
 function eventHasValidOrigin(event: MessageEvent) {
   if (isDevelopingApp()) {

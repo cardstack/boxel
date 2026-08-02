@@ -1094,9 +1094,12 @@ export async function captureResult(
         } as RenderCapture;
       } else {
         if (capture === 'innerHTML') {
+          let cardIsland = resolvedElement.querySelector(
+            '[data-boxel-card-island]',
+          ) as HTMLElement | null;
           return {
             status: finalStatus,
-            value: resolvedElement.innerHTML ?? '',
+            value: cardIsland?.outerHTML ?? resolvedElement.innerHTML ?? '',
             alive,
             id: resolvedElement.dataset.prerenderId ?? undefined,
             nonce: resolvedElement.dataset.prerenderNonce ?? undefined,

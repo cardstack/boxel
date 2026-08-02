@@ -651,7 +651,7 @@ module('Acceptance | markdown BFM card references', function (hooks) {
       .hasValue(`${testRealmURL}Pet/mango.json`);
   });
 
-  test('code mode restores embedded markdown card references after navigating away and back', async function (assert) {
+  test('[HIST-01] code mode restores embedded markdown card references after navigating away and back', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}bfm-test.md`,

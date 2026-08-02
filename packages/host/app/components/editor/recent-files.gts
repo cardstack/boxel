@@ -53,6 +53,11 @@ class File extends Component<FileArgs> {
     await this.operatorModeStateService.updateCodePath(new URL(this.fullUrl));
   }
 
+  @action
+  prefetchFile() {
+    void this.operatorModeStateService.prefetchCodePath(this.fullUrl);
+  }
+
   get realmPaths() {
     return new RealmPaths(this.args.recentFile.realmURL);
   }
@@ -98,6 +103,7 @@ class File extends Component<FileArgs> {
         class='recent-file'
         data-test-recent-file={{this.fullUrl.href}}
         role='button'
+        {{on 'pointerenter' this.prefetchFile}}
         {{on 'click' this.openFile}}
       >
         <RealmIcon @realmInfo={{this.realmMeta.info}} />

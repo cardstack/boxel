@@ -1,9 +1,11 @@
 import { destroy } from '@ember/destroyable';
 
 import type Owner from '@ember/owner';
+// @ts-ignore - no types for @glimmer/node
+import { serializeBuilder } from '@glimmer/node';
 // prettier-ignore
 // @ts-ignore - no types for @glimmer/runtime
-import { renderComponent as glimmerRenderComponent, inTransaction } from '@glimmer/runtime';
+import { renderComponent as glimmerRenderComponent, inTransaction, rehydrationBuilder } from '@glimmer/runtime';
 // @ts-ignore - no types for @glimmer/validator
 import { resetTracking } from '@glimmer/validator';
 
@@ -16,27 +18,154 @@ import type { ComponentLike } from '@glint/template';
 import type { SimpleElement } from '@simple-dom/interface';
 
 interface Signature {
-  Args: {
-    format?: Format;
-  };
+  Args: Record<string, unknown>;
 }
+
+type RenderableComponent = ComponentLike<Signature>;
+export type IsolatedRenderArgs = Record<string, unknown>;
 
 type ActiveRender = {
   drop: object;
 };
 
+type RenderMode = 'client' | 'serialize' | 'rehydrate';
+
 const activeRenders = new WeakMap<SimpleElement, ActiveRender>();
+type SimpleNode = NonNullable<SimpleElement['firstChild']>;
+const suspendedSerializedChildren = new WeakMap<SimpleElement, SimpleNode[]>();
+
+export function hasSerializedComponent(element: SimpleElement): boolean {
+  for (let child = element.firstChild; child; child = child.nextSibling) {
+    if (child.nodeType === 8 && child.nodeValue?.startsWith('%+b:')) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Nested render owners need an explicit server-to-client handoff. The outer
+// Glimmer program expects the modifier-owned element to have no template
+// children and would otherwise clear the inner serialized program before its
+// modifier gets a chance to attach. Park those exact nodes while the outer
+// shell hydrates; the inner owner restores and adopts them synchronously.
+export function suspendSerializedComponent(element: SimpleElement): boolean {
+  if (!hasSerializedComponent(element)) {
+    return false;
+  }
+  let children: SimpleNode[] = [];
+  while (element.firstChild) {
+    let child = element.firstChild as SimpleNode;
+    children.push(child);
+    element.removeChild(child);
+  }
+  suspendedSerializedChildren.set(element, children);
+  return true;
+}
+
+export function resumeSerializedComponent(element: SimpleElement): boolean {
+  let children = suspendedSerializedChildren.get(element);
+  if (!children) {
+    return false;
+  }
+  suspendedSerializedChildren.delete(element);
+  for (let child of children) {
+    element.appendChild(child);
+  }
+  return true;
+}
+
+export function discardSuspendedSerializedComponent(
+  element: SimpleElement,
+): void {
+  suspendedSerializedChildren.delete(element);
+}
 
 export function render(
-  C: ComponentLike<Signature>,
+  C: RenderableComponent,
   element: SimpleElement,
   owner: Owner,
   format?: Format,
 ): void {
+  renderWithMode('client', C, element, owner, { format });
+}
+
+export function renderWithArgs(
+  C: RenderableComponent,
+  element: SimpleElement,
+  owner: Owner,
+  args: IsolatedRenderArgs,
+): void {
+  renderWithMode('client', C, element, owner, args);
+}
+
+export function serialize(
+  C: RenderableComponent,
+  element: SimpleElement,
+  owner: Owner,
+  format?: Format,
+): void {
+  renderWithMode('serialize', C, element, owner, { format });
+}
+
+export function serializeWithArgs(
+  C: RenderableComponent,
+  element: SimpleElement,
+  owner: Owner,
+  args: IsolatedRenderArgs,
+): void {
+  renderWithMode('serialize', C, element, owner, args);
+}
+
+export function rehydrate(
+  C: RenderableComponent,
+  element: SimpleElement,
+  owner: Owner,
+  format?: Format,
+): void {
+  renderWithMode('rehydrate', C, element, owner, { format });
+}
+
+export function rehydrateWithArgs(
+  C: RenderableComponent,
+  element: SimpleElement,
+  owner: Owner,
+  args: IsolatedRenderArgs,
+): void {
+  renderWithMode('rehydrate', C, element, owner, args);
+}
+
+// Replacing a live component program normally clears and recreates its DOM.
+// Serialized boundaries let Glimmer release the old program, keep the marked
+// nodes in place, and adopt them into the next compatible program. This is the
+// shared identity primitive for server-to-client card hydration and Code mode
+// template updates.
+export function rehydrateReplacingActiveWithArgs(
+  C: RenderableComponent,
+  element: SimpleElement,
+  owner: Owner,
+  args: IsolatedRenderArgs,
+): void {
+  releaseActiveRender(element);
+  renderWithMode('rehydrate', C, element, owner, args);
+}
+
+function renderWithMode(
+  mode: RenderMode,
+  C: RenderableComponent,
+  element: SimpleElement,
+  owner: Owner,
+  args: IsolatedRenderArgs,
+): void {
   // `renderComponent()` creates a live Glimmer tree. Dropping the DOM nodes
   // without destroying the previous render leaks that tree across rerenders.
-  teardown(element);
-  removeChildren(element);
+  if (mode === 'rehydrate') {
+    if (activeRenders.has(element)) {
+      throw new Error('cannot rehydrate an element with an active render');
+    }
+  } else {
+    teardown(element);
+    removeChildren(element);
+  }
 
   let {
     state: { owner: _owner, builder: _builder, context: _context },
@@ -46,12 +175,18 @@ export function render(
 
   try {
     inTransaction(_context.env, () => {
+      let builder =
+        mode === 'serialize'
+          ? serializeBuilder
+          : mode === 'rehydrate'
+            ? rehydrationBuilder
+            : _builder;
       let iterator = glimmerRenderComponent(
         _context,
-        _builder(_context.env, { element }),
+        builder(_context.env, { element }),
         _owner,
         C,
-        { format },
+        args,
       );
       result = iterator.sync();
     });
@@ -72,13 +207,16 @@ export function render(
 }
 
 export function teardown(element: SimpleElement): void {
-  let activeRender = activeRenders.get(element);
-  if (!activeRender) {
-    return;
-  }
-  activeRenders.delete(element);
-  destroy(activeRender.drop);
+  releaseActiveRender(element);
   removeChildren(element);
+}
+
+function releaseActiveRender(element: SimpleElement): void {
+  let activeRender = activeRenders.get(element);
+  if (activeRender) {
+    activeRenders.delete(element);
+    destroy(activeRender.drop);
+  }
 }
 
 function removeChildren(element: SimpleElement) {

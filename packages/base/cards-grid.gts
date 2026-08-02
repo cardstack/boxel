@@ -39,6 +39,7 @@ import CardsGridLayout, {
 import {
   contains,
   field,
+  getComponent,
   Component,
   CardDef,
   realmInfo,
@@ -471,21 +472,15 @@ class Isolated extends Component<typeof CardsGrid> {
       this.highlightsCards.splice(0, this.highlightsCards.length);
 
       if (welcomeCard) {
-        this.highlightsCards.push(
-          welcomeCard.constructor.getComponent(welcomeCard),
-        );
+        this.highlightsCards.push(getComponent(welcomeCard));
       }
 
       if (aiAppGeneratorCard) {
-        this.highlightsCards.push(
-          aiAppGeneratorCard.constructor.getComponent(aiAppGeneratorCard),
-        );
+        this.highlightsCards.push(getComponent(aiAppGeneratorCard));
       }
 
       if (communityCards) {
-        this.highlightsCards.push(
-          communityCards.constructor.getComponent(communityCards),
-        );
+        this.highlightsCards.push(getComponent(communityCards));
       }
     } catch (error) {
       console.warn('Failed to load highlights cards:', error);

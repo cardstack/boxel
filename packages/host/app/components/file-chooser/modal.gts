@@ -3,6 +3,7 @@ import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
+import { schedule } from '@ember/runloop';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
@@ -56,6 +57,8 @@ export default class FileChooserModal extends Component<Signature> {
   @service declare private store: StoreService;
   @service('loader-service') declare private loaderService: LoaderService;
 
+  private choiceGeneration = 0;
+
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     (globalThis as any)._CARDSTACK_FILE_CHOOSER = this;
@@ -77,6 +80,7 @@ export default class FileChooserModal extends Component<Signature> {
     fileTypeName?: string;
     fileFieldFilter?: Record<string, unknown>;
   }): Promise<undefined | T> {
+    let choiceGeneration = ++this.choiceGeneration;
     this.deferred = new Deferred();
     this.fileTypeFilter = opts?.fileType;
     this.fileFieldFilter = opts?.fileFieldFilter;
@@ -86,14 +90,14 @@ export default class FileChooserModal extends Component<Signature> {
     this.initialRealmURL = this.operatorModeStateService.realmURL?.toString();
 
     if (opts?.fileType) {
-      try {
-        let cardDef = await loadCardDef(opts.fileType, {
-          loader: this.loaderService.loader,
-        });
-        this.acceptTypes = (cardDef as any).acceptTypes;
-      } catch {
-        // If we can't load the def, acceptTypes stays undefined (allow all)
-      }
+      // Loading a FileDef is only needed to constrain the optional upload
+      // picker. It must never sit in front of the host-owned modal and file
+      // tree. In particular, a sandboxed/custom FileDef may need module
+      // evaluation before `acceptTypes` is available. Paint the chooser first
+      // and fill this enhancement after the render boundary.
+      schedule('afterRender', () => {
+        void this.loadAcceptTypes(opts.fileType!, choiceGeneration);
+      });
     }
 
     let file = await this.deferred.promise;
@@ -101,6 +105,22 @@ export default class FileChooserModal extends Component<Signature> {
       return file as T;
     } else {
       return undefined;
+    }
+  }
+
+  private async loadAcceptTypes(
+    fileType: CodeRef,
+    choiceGeneration: number,
+  ): Promise<void> {
+    try {
+      let cardDef = await loadCardDef(fileType, {
+        loader: this.loaderService.loader,
+      });
+      if (this.deferred && this.choiceGeneration === choiceGeneration) {
+        this.acceptTypes = (cardDef as any).acceptTypes;
+      }
+    } catch {
+      // If we can't load the def, acceptTypes stays undefined (allow all).
     }
   }
 
@@ -159,6 +179,7 @@ export default class FileChooserModal extends Component<Signature> {
   }
 
   private resetState() {
+    this.choiceGeneration++;
     this.selectedFile = undefined;
     this.fileTypeFilter = undefined;
     this.fileFieldFilter = undefined;

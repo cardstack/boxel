@@ -1,4 +1,5 @@
 import Helper from '@ember/component/helper';
+import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 
@@ -13,16 +14,13 @@ import {
 import { meta } from '@cardstack/runtime-common/constants';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
+import type CardTypeService from '@cardstack/host/services/card-type-service';
 
 import HostModeBreadcrumbs from './breadcrumbs';
 import HostModeCard from './card';
 import HostModeStack from './stack';
 
-import type {
-  CardDef,
-  ViewCardFn,
-  CardCrudFunctions,
-} from '@cardstack/base/card-api';
+import type { ViewCardFn, CardCrudFunctions } from '@cardstack/base/card-api';
 
 interface Signature {
   Element: HTMLElement;
@@ -36,6 +34,8 @@ interface Signature {
 }
 
 export default class HostModeContent extends Component<Signature> {
+  @service declare private cardTypeService: CardTypeService;
+
   get primaryCard() {
     return this.primaryCardResource?.card;
   }
@@ -64,7 +64,7 @@ export default class HostModeContent extends Component<Signature> {
       return false;
     }
 
-    return (primaryCard.constructor as typeof CardDef).prefersWideFormat;
+    return this.cardTypeService.introspect(primaryCard)?.prefersWideFormat;
   }
 
   get backgroundImageStyle() {

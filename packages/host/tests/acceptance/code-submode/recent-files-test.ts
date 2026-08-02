@@ -608,6 +608,12 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
     assert.strictEqual(cursorPosition?.column, 1);
 
     monacoService.updateCursorPosition(new MonacoSDK.Position(22, 3));
+    await waitUntil(
+      () =>
+        getRecentFiles()?.[0]?.[2]?.line === 22 &&
+        getRecentFiles()?.[0]?.[2]?.column === 3,
+      { timeout: 1000 },
+    );
     assert.deepEqual(recentFilesWoTimestamp(), [
       [testRealmURL, 'friend.gts', { column: 3, line: 22 }],
       [testRealmURL, 'index.json', null],

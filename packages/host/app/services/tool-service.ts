@@ -34,6 +34,7 @@ import CheckCorrectnessTool from '@cardstack/host/tools/check-correctness';
 import PatchCodeTool from '@cardstack/host/tools/patch-code';
 
 import LimitedSet from '../lib/limited-set';
+import { isCompleteSearchReplaceBlock } from '../lib/search-replace-block-parsing';
 import {
   CHECK_CORRECTNESS_COMMAND_NAME,
   isAutoExecutableTool,
@@ -674,19 +675,14 @@ export default class ToolService extends Service {
     roomId: string,
     message: Message,
   ) {
-    let roomResource = this.matrixService.roomResources.get(roomId);
-    if (!roomResource || message.agentId !== this.matrixService.agentId) {
-      // A code patch from a different agent never inherits this client's Act
-      // authority.
-      return;
-    }
-
-    let activeModeAtMessageTime = roomResource.getActiveLLMModeForMessage(
-      message.eventId,
-    );
-    if (activeModeAtMessageTime !== 'act') {
-      let llmModeEvents = roomResource.llmModeEvents;
+    if (!this.shouldAutoApplyCodePatches(message)) {
+      let roomResource = this.matrixService.roomResources.get(roomId);
+      let activeModeAtMessageTime = roomResource?.getActiveLLMModeForMessage(
+        message.eventId,
+      );
+      let llmModeEvents = roomResource?.llmModeEvents ?? [];
       if (
+        roomResource &&
         isTesting() &&
         llmModeEvents.some((e) => (e as any).content?.mode === 'act')
       ) {
@@ -716,6 +712,29 @@ export default class ToolService extends Service {
     } finally {
       this.acceptingAllRoomIds.delete(roomId);
     }
+  }
+
+  shouldAutoApplyCodePatches(message: Message): boolean {
+    let roomResource = this.matrixService.roomResources.get(message.roomId);
+    return Boolean(
+      roomResource &&
+      message.agentId === this.matrixService.agentId &&
+      roomResource.getActiveLLMModeForMessage(message.eventId) === 'act',
+    );
+  }
+
+  shouldAutoApplyCodePatch(codeData: CodeData): boolean {
+    if (
+      !codeData.fileUrl ||
+      !isCompleteSearchReplaceBlock(codeData.searchReplaceBlock)
+    ) {
+      return false;
+    }
+    let roomResource = this.matrixService.roomResources.get(codeData.roomId);
+    let message = roomResource?.messages.find(
+      (candidate) => candidate.eventId === codeData.eventId,
+    );
+    return Boolean(message && this.shouldAutoApplyCodePatches(message));
   }
 
   // Pre-rename spelling of `toolContext`: realm content constructs tools with
@@ -1038,6 +1057,17 @@ export default class ToolService extends Service {
 
     try {
       let patchCodeCommand = new PatchCodeTool(this.toolContext);
+      patchCodeCommand.onLocallyApplied = ({ results }) => {
+        for (let i = 0; i < codeDataItems.length; i++) {
+          let codeData = codeDataItems[i];
+          let result = results[i];
+          let requestId = `${codeData.eventId}:${codeData.codeBlockIndex}`;
+          if (result?.status === 'applied') {
+            this.executedToolRequestIds.add(requestId);
+          }
+          this.currentlyExecutingToolRequestIds.delete(requestId);
+        }
+      };
 
       let patchCodeResult = await patchCodeCommand.execute({
         fileIdentifier: fileUrl,
@@ -1138,12 +1168,20 @@ export default class ToolService extends Service {
     }
 
     for (let [fileUrl, codeDataItems] of Object.entries(grouped)) {
-      let patchItems = codeDataItems.map((codeData) => ({
-        searchReplaceBlock: codeData.searchReplaceBlock,
-        eventId: codeData.eventId,
-        codeBlockIndex: codeData.codeBlockIndex,
-      }));
-      await this.patchCode(roomId, fileUrl, patchItems);
+      // A complete search/replace block is one source generation and one
+      // persistence transaction. Do not collapse multiple newly-complete
+      // blocks from the same streaming update into one batch: publishing each
+      // one through PatchCodeTool is what opens/advances the module's volatile
+      // source and lets the preview render each coherent intermediate state.
+      for (let codeData of codeDataItems) {
+        await this.patchCode(roomId, fileUrl, [
+          {
+            searchReplaceBlock: codeData.searchReplaceBlock,
+            eventId: codeData.eventId,
+            codeBlockIndex: codeData.codeBlockIndex,
+          },
+        ]);
+      }
     }
   };
 

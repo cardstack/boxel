@@ -759,6 +759,10 @@ export default class RealmService extends Service {
   // so an unchanged blob is never re-parsed or re-walked; a later write (a newly
   // seeded realm session) changes the string and re-runs the walk.
   private lastRestoredSessionsString: string | null = null;
+  private lastSettledWritability = new WeakMap<
+    RealmResource,
+    Exclude<RealmWritability, 'pending'>
+  >();
 
   @tracked private identifyRealmTracker = 0;
 
@@ -781,6 +785,7 @@ export default class RealmService extends Service {
     this.realmPathsCache.clear();
     this.realmOfCache.clear();
     this.lastRestoredSessionsString = null;
+    this.lastSettledWritability = new WeakMap();
   }
 
   async waitForBulkInfoIfNeeded(): Promise<void> {
@@ -1023,17 +1028,32 @@ export default class RealmService extends Service {
     // login updates auth and therefore invalidates consumers even though the
     // shared login Promise itself is deliberately not tracked.
     let canWrite = resource.canWrite;
-    if (resource.isLoginPending || !resource.info) {
-      if (!resource.info) {
-        resource
-          .fetchInfo()
-          .catch((error: unknown) =>
-            this.swallowBackgroundInfoError(url, 'fetchInfo', error),
-          );
-      }
-      return 'pending';
+    let lastSettled = this.lastSettledWritability.get(resource);
+    if (resource.isLoginPending) {
+      return lastSettled ?? 'pending';
     }
-    return canWrite ? 'writable' : 'read-only';
+    // A restored realm token already contains the authoritative write claim;
+    // realm-info discovery should not temporarily make Monaco read-only.
+    if (resource.isLoggedIn) {
+      let result: Exclude<RealmWritability, 'pending'> = canWrite
+        ? 'writable'
+        : 'read-only';
+      this.lastSettledWritability.set(resource, result);
+      return result;
+    }
+    if (!resource.info) {
+      resource
+        .fetchInfo()
+        .catch((error: unknown) =>
+          this.swallowBackgroundInfoError(url, 'fetchInfo', error),
+        );
+      return lastSettled ?? 'pending';
+    }
+    let result: Exclude<RealmWritability, 'pending'> = canWrite
+      ? 'writable'
+      : 'read-only';
+    this.lastSettledWritability.set(resource, result);
+    return result;
   };
 
   isRealmOwner = (url: string): boolean => {

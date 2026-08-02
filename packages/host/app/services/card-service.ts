@@ -67,6 +67,11 @@ export default class CardService extends Service {
   @service declare private session: SessionService;
 
   private subscriber: CardSaveSubscriber | undefined;
+  // Source writes for one URL are canonical generations and must reach the
+  // realm in invocation order. In particular, a slow earlier AI/Monaco POST
+  // must not complete after a newer write and make the realm index advertise
+  // stale source. Failures release the queue so later edits can still save.
+  private sourceWriteTails = new Map<string, Promise<void>>();
   // This error will be used by check-correctness command to report size limit errors
   private sizeLimitError = new Map<string, Error>();
   // For tracking requests during the duration of this service. Used for being able to tell when to ignore an incremental indexing realm event.
@@ -120,6 +125,11 @@ export default class CardService extends Service {
     this.loaderToCardAPILoadingCache = new WeakMap();
     this.loaderToSearchableLoadingCache = new WeakMap();
     this.sizeLimitError.clear();
+    this.sourceWriteTails.clear();
+  }
+
+  createClientRequestId(type: SaveType): string {
+    return `${type}:${uuidv4()}`;
   }
 
   // used for tests only!
@@ -262,7 +272,31 @@ export default class CardService extends Service {
     };
   }
 
-  async saveSource(
+  saveSource(
+    url: URL,
+    content: string,
+    type: SaveType,
+    options?: SaveSourceOptions,
+  ) {
+    let key = url.href;
+    let previous = this.sourceWriteTails.get(key) ?? Promise.resolve();
+    let operation = previous
+      .catch(() => undefined)
+      .then(() => this.performSaveSource(url, content, type, options));
+    let tail = operation.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.sourceWriteTails.set(key, tail);
+    void tail.then(() => {
+      if (this.sourceWriteTails.get(key) === tail) {
+        this.sourceWriteTails.delete(key);
+      }
+    });
+    return operation;
+  }
+
+  private async performSaveSource(
     url: URL,
     content: string,
     type: SaveType,
@@ -273,7 +307,8 @@ export default class CardService extends Service {
         ? 'card'
         : 'file';
       this.validateSizeLimit(url.href, content, sizeType);
-      let clientRequestId = options?.clientRequestId ?? `${type}:${uuidv4()}`;
+      let clientRequestId =
+        options?.clientRequestId ?? this.createClientRequestId(type);
       this.clientRequestIds.add(clientRequestId);
 
       let response = await this.network.authedFetch(url, {
@@ -295,8 +330,8 @@ export default class CardService extends Service {
       this.subscriber?.(url, content);
 
       if (options?.resetLoader && this.loaderService.isModuleLoaded(url.href)) {
-        this.loaderService.resetLoader({
-          reason: 'source-write',
+        this.loaderService.invalidateModule(url.href, {
+          clearFetchCache: true,
           codeChange: true,
         });
       }

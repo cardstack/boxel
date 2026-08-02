@@ -76,6 +76,10 @@ export default class RealmSandboxIframe extends Component<Signature> {
         if (typeof event.data.revision === 'number') {
           this.appliedDraftRevision = event.data.revision;
           this.draftError = event.data.error;
+          this.args.sandbox.onGenerationResult?.(
+            event.data.revision,
+            event.data.error,
+          );
         }
       } else if (event.data.type === 'resize') {
         let height = Math.max(40, Math.min(2400, event.data.height));
@@ -111,6 +115,7 @@ export default class RealmSandboxIframe extends Component<Signature> {
           protocol: realmIframeSandboxProtocol,
           type: 'connect',
           document: this.args.sandbox.document,
+          presentation: this.args.sandbox.presentation,
           draft: this.args.sandbox.draft
             ? {
                 protocol: realmIframeSandboxProtocol,
@@ -165,6 +170,36 @@ export default class RealmSandboxIframe extends Component<Signature> {
     },
   );
 
+  syncPresentation = modifier(
+    (
+      _element: HTMLIFrameElement,
+      [format, fieldName, componentModule, componentName, displayContainer]: [
+        Format,
+        string | undefined,
+        string | undefined,
+        string | undefined,
+        boolean,
+      ],
+    ) => {
+      this.postToFrame?.({
+        type: 'render',
+        presentation: {
+          format,
+          displayContainer,
+          ...(fieldName ? { fieldName } : {}),
+          ...(componentModule && componentName
+            ? {
+                codeRef: {
+                  module: componentModule,
+                  name: componentName,
+                },
+              }
+            : {}),
+        },
+      });
+    },
+  );
+
   <template>
     <CardContainer
       @displayBoundaries={{this.displayContainer}}
@@ -172,8 +207,6 @@ export default class RealmSandboxIframe extends Component<Signature> {
         'realm-sandbox-iframe'
         (if (eq this.format 'isolated') 'isolated-format')
         (if (eq this.format 'embedded') 'embedded-format')
-        (if (eq this.format 'fitted') 'fitted-format')
-        (if (eq this.format 'atom') 'atom-format')
         (if (eq this.format 'edit') 'edit-format')
       }}
       data-card-sandbox-frame-status={{this.status}}
@@ -196,6 +229,13 @@ export default class RealmSandboxIframe extends Component<Signature> {
       {{/if}}
       <iframe
         {{this.connectFrame}}
+        {{this.syncPresentation
+          @sandbox.presentation.format
+          @sandbox.presentation.fieldName
+          @sandbox.presentation.codeRef.module
+          @sandbox.presentation.codeRef.name
+          @sandbox.presentation.displayContainer
+        }}
         {{this.syncDraft
           @sandbox.draft.sourceURL
           @sandbox.draft.source
@@ -203,7 +243,7 @@ export default class RealmSandboxIframe extends Component<Signature> {
         }}
         src={{@sandbox.url}}
         title={{@sandbox.accessibleTitle}}
-        sandbox='allow-downloads allow-scripts allow-same-origin'
+        sandbox='allow-scripts allow-same-origin'
         referrerpolicy='no-referrer'
       ></iframe>
     </CardContainer>
@@ -238,19 +278,9 @@ export default class RealmSandboxIframe extends Component<Signature> {
         height: 100%;
         min-height: 25rem;
       }
-      .fitted-format,
-      .fitted-format iframe {
-        width: 100%;
-        height: 100%;
-        min-height: 2.5rem;
-        max-height: 37.5rem;
-      }
-      .atom-format {
-        display: inline-block;
-        width: auto;
-      }
-      .atom-format iframe {
-        width: auto;
+      .embedded-format,
+      .embedded-format iframe {
+        height: auto;
       }
     </style>
   </template>

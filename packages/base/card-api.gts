@@ -26,6 +26,7 @@ import {
   assertIsSerializerName,
   baseRef,
   CardContextName,
+  delegatedCardRenderComponent,
   CardError,
   CodeRef,
   ToolContext,
@@ -4723,6 +4724,20 @@ export function getComponent(
   field?: Field,
   opts?: { componentCodeRef?: CodeRef },
 ): BoxComponent {
+  // Opaque host records cannot expose their authored constructor or templates.
+  // Their trusted boundary adapter supplies a component explicitly, allowing
+  // Base features such as Markdown card embeds to delegate rendering without
+  // importing or introspecting user code in the host loader.
+  if (!field) {
+    let delegated = (
+      model as BaseDef & {
+        [delegatedCardRenderComponent]?: BoxComponent;
+      }
+    )[delegatedCardRenderComponent];
+    if (delegated) {
+      return delegated;
+    }
+  }
   if (field) {
     return getBoxComponent(
       model.constructor as BaseDefConstructor,

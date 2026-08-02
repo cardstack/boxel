@@ -18,7 +18,7 @@ import {
   type AttributesSchema,
   type CardSchema,
 } from '@cardstack/runtime-common/helpers/ai';
-import type { Loader } from '@cardstack/runtime-common/loader';
+import { Loader } from '@cardstack/runtime-common/loader';
 
 import { FieldPathParser } from '@cardstack/host/lib/field-path-parser';
 import {
@@ -162,9 +162,29 @@ export default class CardTypeService extends Service {
     if (!definition) {
       throw new Error('cannot generate schema without a card definition');
     }
-    let loader = this.loaderService.loader;
+    let opaque = getOpaqueRealmCardTypeState(definition);
+    let loader =
+      (opaque ? undefined : Loader.getLoaderFor(definition)) ??
+      this.loaderService.loader;
     cardApi ??= await loader.import<typeof CardAPI>('@cardstack/base/card-api');
-    mappings ??= await basicMappings(loader);
+    if (!mappings) {
+      let mappingsLoader = loader;
+      if (!opaque) {
+        // A test realm or a secondary trusted loader can own the definition
+        // while its field classes come from another matching Base loader.
+        // Preserve the pre-sandbox lookup so class-identity-based primitive
+        // mappings remain valid.
+        let cardFields = cardApi.getFields(definition, {
+          usedLinksToFieldsOnly: false,
+        });
+        mappingsLoader =
+          Object.values(cardFields)
+            .map((field) => Loader.getLoaderFor(field.card))
+            .find((candidate): candidate is Loader => Boolean(candidate)) ??
+          loader;
+      }
+      mappings = await basicMappings(mappingsLoader);
+    }
     let adapted = await this.cardAPIIntrospectionAdapter(
       definition,
       cardApi,

@@ -11,7 +11,6 @@ import {
 } from '@cardstack/boxel-ui/icons';
 import { type Query, primitive } from '@cardstack/runtime-common';
 import {
-  BaseDef,
   CardDef,
   Component,
   StringField,
@@ -21,13 +20,10 @@ import {
   type CardContext,
   type Format,
   FieldDef,
+  getComponent,
   linksToMany,
 } from '../card-api';
 import CodeRefField from '../code-ref';
-
-function getComponent(cardOrField: BaseDef) {
-  return cardOrField.constructor.getComponent(cardOrField);
-}
 
 interface CardListSignature {
   cardIds: string[];

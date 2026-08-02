@@ -62,12 +62,24 @@ import { setupRenderingTest } from '../helpers/setup';
 let loader: Loader;
 
 function unwrap(html: string): string {
-  return html
-    .trim()
-    .replace(/^<div ([^>]*>)/, '')
-    .trim()
-    .replace(/^<!---->/, '')
-    .replace(/<\/div>$/, '')
+  let fixture = document.createElement('div');
+  fixture.innerHTML = html;
+  let cardContainer = fixture.querySelector('[data-boxel-card-container]');
+  let result: string;
+  if (cardContainer) {
+    result = cardContainer.innerHTML;
+  } else {
+    result = html
+      .trim()
+      .replace(/^<div ([^>]*>)/, '')
+      .trim()
+      .replace(/^<!---->/, '')
+      .replace(/<\/div>$/, '')
+      .trim();
+  }
+  return result
+    .replace(/<!--%.*?%-->/g, '')
+    .replace(/=""/g, '')
     .trim();
 }
 
@@ -5269,6 +5281,18 @@ posts/ignore-me.json
       assert,
       entry?.isolatedHtml,
       `<h1 data-test-plain-home> Welcome </h1>`,
+    );
+    assert.true(
+      entry?.isolatedHtml?.includes('data-boxel-card-island'),
+      'isolated HTML includes the stable card-island boundary',
+    );
+    assert.true(
+      entry?.isolatedHtml?.includes('data-boxel-card-island-protocol="1"'),
+      'isolated HTML declares the card-island protocol',
+    );
+    assert.true(
+      entry?.isolatedHtml?.includes('<!--%+b:'),
+      'isolated HTML preserves Glimmer serialization markers',
     );
   });
 });

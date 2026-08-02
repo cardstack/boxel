@@ -11,6 +11,7 @@ import {
   maybeHandleScopedCSSRequest,
   authorizationMiddleware,
   clearFetchCache,
+  clearFetchCacheFor,
   clearInjectedScopedCSS,
   logger,
 } from '@cardstack/runtime-common';
@@ -96,6 +97,17 @@ export default class LoaderService extends Service {
     return key ? this.flushedForCodeChange.has(key) : false;
   }
 
+  // The realm index event for this source generation has arrived. Targeted
+  // invalidation records are per module (unlike the old whole-loader snapshot)
+  // and can be consumed independently without disturbing writes still waiting
+  // for their own acknowledgement.
+  public acknowledgeModuleInvalidation(moduleIdentifier: string): void {
+    let key = this.loader?.moduleKey(moduleIdentifier);
+    if (key) {
+      this.flushedForCodeChange.delete(key);
+    }
+  }
+
   // Loader topology is intentionally plural. Invalidation callers must ask
   // the service rather than inspecting the legacy host loader directly or a
   // Base/trusted-realm module can remain live after its source changes.
@@ -103,6 +115,38 @@ export default class LoaderService extends Service {
     return this.allLoaders().some((loader) =>
       loader.isModuleLoaded(moduleIdentifier),
     );
+  }
+
+  // Evict one changed module and the already-known modules that depend on it
+  // without replacing any Loader object. This is the normal source-change
+  // path. In particular, user-realm changes never dispose Base or trusted
+  // realm graphs, so long-running workspace/card UI keeps its class identity
+  // and module cache.
+  public invalidateModule(
+    moduleIdentifier: string,
+    options?: { clearFetchCache?: boolean; codeChange?: boolean },
+  ): { invalidated: number; wasLoaded: boolean } {
+    if (options?.clearFetchCache) {
+      clearFetchCacheFor(moduleIdentifier);
+    }
+
+    let loaders = this.loadersForModuleInvalidation(moduleIdentifier);
+    let wasLoaded = loaders.some((loader) =>
+      loader.isModuleLoaded(moduleIdentifier),
+    );
+    let invalidated = 0;
+    for (let loader of loaders) {
+      invalidated += loader.invalidateModule(moduleIdentifier);
+    }
+
+    if (options?.codeChange && (wasLoaded || invalidated > 0)) {
+      let key = this.loader.moduleKey(moduleIdentifier);
+      if (key) {
+        this.flushedForCodeChange.add(key);
+      }
+    }
+
+    return { invalidated, wasLoaded };
   }
 
   // Called whenever the loader is actually replaced. A code-change flush makes
@@ -303,6 +347,24 @@ export default class LoaderService extends Service {
       (loader, index, loaders): loader is Loader =>
         Boolean(loader) && loaders.indexOf(loader) === index,
     );
+  }
+
+  private loadersForModuleInvalidation(moduleIdentifier: string): Loader[] {
+    let resolved = this.network.resolveImport(moduleIdentifier);
+    if (isBaseRealmModule(moduleIdentifier) || isBaseRealmModule(resolved)) {
+      // Trusted realm loaders borrow Base exports. Their dependency graphs can
+      // therefore contain cards that must be reevaluated when Base itself
+      // changes. This path is reserved for an actual Base invalidation.
+      return this.allLoaders();
+    }
+
+    let loaders = [this.loader];
+    for (let [realmURL, loader] of this.realmLoaders) {
+      if (resolved.startsWith(realmURL)) {
+        loaders.push(loader);
+      }
+    }
+    return loaders;
   }
 
   private clearSessionCaches() {

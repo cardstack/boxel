@@ -1,7 +1,9 @@
+import { getOwner } from '@ember/application';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { cached } from '@glimmer/tracking';
 
+import { modifier } from 'ember-modifier';
 import { provide } from 'ember-provide-consume-context';
 import RouteTemplate from 'ember-route-template';
 
@@ -17,7 +19,13 @@ import {
   type Query,
 } from '@cardstack/runtime-common';
 
+import CardIsland from '@cardstack/host/components/card-island';
 import SearchResults from '@cardstack/host/components/search/search-results';
+import { CARD_ISLAND_PROTOCOL_VERSION } from '@cardstack/host/lib/card-island-protocol';
+import {
+  serializeWithArgs,
+  teardown,
+} from '@cardstack/host/lib/isolated-render';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 import type RenderStoreService from '@cardstack/host/services/render-store';
@@ -86,6 +94,21 @@ class RenderHtmlTemplate extends Component<Signature> {
     };
   }
 
+  private serializeIsland = modifier(
+    (element: HTMLElement, [model]: [Model]) => {
+      serializeWithArgs(CardIsland as any, element as any, getOwner(this)!, {
+        card: model.instance,
+        format: model.format,
+        getCard: this.getCard,
+        getCards: this.getCards,
+        getCardCollection: this.getCardCollection,
+        context: this.context,
+      });
+
+      return () => teardown(element as any);
+    },
+  );
+
   <template>
     {{! Whitespace-preserving container for markdown-format renders (CS-10781).
         `white-space: pre` keeps newlines and indentation authored in the
@@ -93,7 +116,15 @@ class RenderHtmlTemplate extends Component<Signature> {
         attribute gives the prerender extraction a tight target so surrounding
         route-template whitespace does not leak into the captured markdown.
         Only applies when format === 'markdown'; other formats are unaffected. }}
-    {{#if (eq @model.format 'markdown')}}
+    {{#if (eq @model.format 'isolated')}}
+      <div
+        data-boxel-card-island
+        data-boxel-card-island-protocol={{CARD_ISLAND_PROTOCOL_VERSION}}
+        data-boxel-card-format={{@model.format}}
+        data-boxel-card-url={{@model.instance.id}}
+        {{this.serializeIsland @model}}
+      ></div>
+    {{else if (eq @model.format 'markdown')}}
       <div data-markdown-render-container class='markdown-render-container'>
         <@model.Component @format={{@model.format}} />
       </div>

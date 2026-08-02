@@ -1,6 +1,10 @@
 import { module, test } from 'qunit';
 
-import { cachedFetch, clearFetchCache } from '@cardstack/runtime-common';
+import {
+  cachedFetch,
+  clearFetchCache,
+  clearFetchCacheFor,
+} from '@cardstack/runtime-common';
 
 type FetchCall = {
   accept: string | null;
@@ -119,5 +123,29 @@ module('Unit | cached-fetch', function (hooks) {
       { accept: '*/*', ifNoneMatch: null },
       { accept: null, ifNoneMatch: 'etag-module' },
     ]);
+  });
+
+  test('targeted invalidation clears every representation of one executable module', async function (assert) {
+    let { calls, impl } = createFetchStub();
+    let sourceRequest = new Request(TEST_URL, {
+      headers: { Accept: 'application/vnd.card+source' },
+    });
+    let sourceResponse = await cachedFetch(impl, sourceRequest);
+    sourceResponse.cacheResponse?.(await sourceResponse.text());
+    let moduleResponse = await cachedFetch(impl, new Request(TEST_URL));
+    moduleResponse.cacheResponse?.(await moduleResponse.text());
+
+    clearFetchCacheFor(TEST_URL.replace(/\.js$/, '.gts'));
+
+    await cachedFetch(impl, sourceRequest);
+    await cachedFetch(impl, new Request(TEST_URL));
+    assert.deepEqual(
+      calls.slice(-2),
+      [
+        { accept: 'application/vnd.card+source', ifNoneMatch: null },
+        { accept: null, ifNoneMatch: null },
+      ],
+      'a concrete GTS invalidation clears source/module Accept variants and executable aliases',
+    );
   });
 });

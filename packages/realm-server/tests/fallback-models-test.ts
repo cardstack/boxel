@@ -18,6 +18,10 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(fallbackModelsTests, assert, {});
     });
 
+    test('includes GPT-5.6 Luna with its OpenRouter capabilities', async function (assert) {
+      await runSharedTest(fallbackModelsTests, assert, {});
+    });
+
     test('every row has valid typed fields', async function (assert) {
       await runSharedTest(fallbackModelsTests, assert, {});
     });

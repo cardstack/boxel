@@ -40,6 +40,7 @@ import {
 
 import { readFileAsText as _readFileAsText } from '@cardstack/runtime-common/stream';
 
+import { buildCardIslandContext } from '../lib/card-island-context';
 import {
   buildModuleModel,
   type ModuleModelContext,
@@ -743,12 +744,25 @@ export default class CardPrerender extends Component {
       } else {
         captureMode = 'outerHTML';
       }
-      let captured = await this.renderService.renderCardComponent(
-        component,
-        captureMode,
-        format,
-        this.waitForLinkedData,
-      );
+      let captured =
+        format === 'isolated'
+          ? await this.renderService.renderCardIsland(
+              {
+                card: routeInfo.attributes.instance,
+                format,
+                ...buildCardIslandContext(
+                  this.store,
+                  routeInfo.attributes.instance,
+                ),
+              },
+              this.waitForLinkedData,
+            )
+          : await this.renderService.renderCardComponent(
+              component,
+              captureMode,
+              format,
+              this.waitForLinkedData,
+            );
 
       if (typeof captured !== 'string') {
         return null;

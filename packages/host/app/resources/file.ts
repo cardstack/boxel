@@ -1,11 +1,17 @@
 import { registerDestructor } from '@ember/destroyable';
 import type Owner from '@ember/owner';
+import { next } from '@ember/runloop';
 import { service } from '@ember/service';
 
 import { tracked } from '@glimmer/tracking';
 
 import { parse } from 'date-fns';
-import { enqueueTask, keepLatestTask } from 'ember-concurrency';
+import {
+  enqueueTask,
+  keepLatestTask,
+  restartableTask,
+  timeout,
+} from 'ember-concurrency';
 import { Resource } from 'ember-modify-based-class-resource';
 
 import {
@@ -18,9 +24,11 @@ import {
 
 import type CardService from '@cardstack/host/services/card-service';
 import type { SaveType } from '@cardstack/host/services/card-service';
+import type CodeSourceCacheService from '@cardstack/host/services/code-source-cache';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
+import type RealmSandboxService from '@cardstack/host/services/realm-sandbox';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type StoreService from '@cardstack/host/services/store';
 
@@ -84,9 +92,17 @@ function utf8ByteLength(content: string): number {
 interface Args {
   named: {
     url: string;
+    initial?: InitialFileContent;
+    onInitialSettled?: () => void;
     onStateChange?: (state: FileResource['state']) => void;
     onRedirect?: (url: string) => void;
   };
+}
+
+export interface InitialFileContent {
+  content: string;
+  lastModified?: string;
+  realmURL: string;
 }
 
 export interface Loading {
@@ -105,6 +121,11 @@ export interface NotFound {
 
 export interface Ready {
   state: 'ready';
+  isCanonical?: boolean;
+  // The source POST succeeded, but a hosted realm's executable route may not
+  // yet be visible on every serving node. Module analysis uses this narrowly
+  // scoped marker to retry transient 404s without hiding real missing imports.
+  isNewlyCreated?: boolean;
   content: string;
   name: string;
   url: RealmResourceIdentifier;
@@ -115,6 +136,7 @@ export interface Ready {
     content: string,
     opts?: {
       flushLoader?: boolean;
+      deferStoreRefresh?: () => boolean;
       saveType?: SaveType;
       clientRequestId?: string;
     },
@@ -130,7 +152,13 @@ class _FileResource extends Resource<Args> {
   declare private _url: string;
   private onStateChange?: ((state: FileResource['state']) => void) | undefined;
   private onRedirect?: ((url: string) => void) | undefined;
+  private onInitialSettled?: (() => void) | undefined;
   private subscription: { url: string; unsubscribe: () => void } | undefined;
+  private appliedInitial: InitialFileContent | undefined;
+  private appliedCached: InitialFileContent | undefined;
+  private validatingCachedURL: string | undefined;
+  private awaitingInitialInvalidation = false;
+  private recordedRecentURL: string | undefined;
   writing: Promise<void> | undefined;
 
   @tracked private innerState: FileResource = {
@@ -141,9 +169,11 @@ class _FileResource extends Resource<Args> {
   @service declare private network: NetworkService;
   @service declare private messageService: MessageService;
   @service declare private cardService: CardService;
+  @service declare private codeSourceCache: CodeSourceCacheService;
   @service declare private recentFilesService: RecentFilesService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
+  @service declare private realmSandbox: RealmSandboxService;
   @service declare private store: StoreService;
 
   constructor(owner: Owner) {
@@ -154,6 +184,65 @@ class _FileResource extends Resource<Args> {
         this.subscription = undefined;
       }
     });
+  }
+
+  private readyState({
+    content,
+    isCanonical = true,
+    isNewlyCreated = false,
+    lastModified,
+    realmURL,
+    url,
+  }: InitialFileContent & {
+    url: string;
+    isCanonical?: boolean;
+    isNewlyCreated?: boolean;
+  }): Ready {
+    let self = this;
+    let rawName = url.split('/').pop();
+    let ready: Ready = {
+      state: 'ready',
+      isCanonical,
+      isNewlyCreated,
+      lastModified,
+      realmURL,
+      content,
+      name: rawName ? decodeURIComponent(rawName) : rawName!,
+      size: utf8ByteLength(content),
+      url: rri(url),
+      write(
+        nextContent: string,
+        opts?: {
+          flushLoader?: boolean;
+          deferStoreRefresh?: () => boolean;
+          saveType?: SaveType;
+          clientRequestId?: string;
+        },
+      ) {
+        let currentState = self.innerState;
+        if (currentState.state !== 'ready') {
+          return Promise.reject(
+            new Error(`Cannot write ${self._url} before it is ready`),
+          );
+        }
+        // Stage the new buffer synchronously. Monaco, the code-preview
+        // sandbox, and a following streamed patch block must all observe the
+        // same newest generation without waiting for the realm round trip.
+        // Writes are persisted in generation order below, so an older realm
+        // response can never land after and overwrite a newer streamed block.
+        let stagedState: Ready = {
+          ...currentState,
+          content: nextContent,
+          size: utf8ByteLength(nextContent),
+        };
+        self.updateState(stagedState);
+        self.writing = self.writeTask
+          .unlinked() // Keep the write alive if its initiating UI is destroyed.
+          .perform(stagedState, nextContent, opts);
+        return self.writing;
+      },
+    };
+    return ready;
   }
 
   private setSubscription(
@@ -174,11 +263,17 @@ class _FileResource extends Resource<Args> {
   }
 
   modify(_positional: never[], named: Args['named']) {
-    let { url, onStateChange, onRedirect } = named;
+    let { url, initial, onInitialSettled, onStateChange, onRedirect } = named;
 
+    if (this._url !== url) {
+      this.recordedRecentURL = undefined;
+      this.appliedCached = undefined;
+      this.validatingCachedURL = undefined;
+    }
     this._url = url;
     this.onStateChange = onStateChange;
     this.onRedirect = onRedirect;
+    this.onInitialSettled = onInitialSettled;
 
     // Subscribe to realm events BEFORE the first fetch so a 404 result
     // (e.g. the AI assistant navigates code-submode to a file it just
@@ -201,8 +296,131 @@ class _FileResource extends Resource<Args> {
       );
     }
 
-    this.read.perform();
+    // New-file creation already has an acknowledged source write. Starting
+    // from that receipt avoids an unnecessary cross-node GET that can briefly
+    // observe a 404 in hosted realms even though the POST is durable. Realm
+    // invalidation remains subscribed above and reconciles canonical state.
+    if (initial) {
+      if (this.appliedInitial !== initial) {
+        // Remember the receipt before scheduling the state update. Updating
+        // Ready invalidates consumers and re-runs modify; without this guard,
+        // the same receipt would continuously schedule another update.
+        this.appliedInitial = initial;
+        this.awaitingInitialInvalidation = true;
+        this.seed.perform(url, initial);
+      }
+      return;
+    }
+
+    this.appliedInitial = undefined;
+    this.awaitingInitialInvalidation = false;
+
+    let cached = this.codeSourceCache.sourceFor(url);
+    if (cached && this.appliedCached !== cached) {
+      this.appliedCached = cached;
+      this.seedCached.perform(url, cached);
+      return;
+    }
+    if (this.validatingCachedURL === url) {
+      return;
+    }
+
+    this.read.perform({ url });
   }
+
+  private seedCached = restartableTask(
+    async (url: string, cached: InitialFileContent) => {
+      await new Promise<void>((resolve) => next(resolve));
+      if (this._url !== url) {
+        return;
+      }
+      this.validatingCachedURL = url;
+      this.updateState(this.readyState({ ...cached, url }));
+      try {
+        // Cached bytes lead the UI, but the server remains canonical. Force
+        // the body read because Last-Modified is only second precision.
+        await this.read.perform({ url, force: true });
+      } finally {
+        if (this.validatingCachedURL === url) {
+          this.validatingCachedURL = undefined;
+        }
+      }
+    },
+  );
+
+  private seed = restartableTask(
+    async (url: string, initial: InitialFileContent) => {
+      // Resource.modify runs inside a reactive computation. Cross an async
+      // boundary before updating tracked state so the acknowledged source can
+      // become Ready without mutating a value consumed by that computation.
+      await new Promise<void>((resolve) => next(resolve));
+      if (this._url !== url) {
+        return;
+      }
+      this.updateState(
+        this.readyState({
+          ...this.codeSourceCache.remember(url, initial),
+          url,
+          isCanonical: false,
+          isNewlyCreated: true,
+        }),
+      );
+      this.setSubscription(initial.realmURL, this.onRealmInvalidation);
+    },
+  );
+
+  private settleInitial = restartableTask(async (url: string) => {
+    let retryDelay = 50;
+
+    while (this.awaitingInitialInvalidation && this._url === url) {
+      let response: Response;
+      try {
+        // The index event says the write is durable, but in a hosted realm it
+        // can reach the browser before every serving node can materialize the
+        // executable representation. Probe the same representation that the
+        // Loader will request; a source-only GET is not a sufficient boundary.
+        response = await this.network.authedFetch(url, {
+          headers: { Accept: SupportedMimeType.All },
+        });
+      } catch (err: any) {
+        log.debug(
+          `waiting for newly-created module ${url} after fetch failed: ${err.message}`,
+        );
+        await timeout(retryDelay);
+        retryDelay = Math.min(retryDelay * 2, 1000);
+        continue;
+      }
+
+      if (!this.awaitingInitialInvalidation || this._url !== url) {
+        return;
+      }
+
+      if (response.status === 404) {
+        await response.body?.cancel();
+        log.debug(
+          `waiting for newly-created module ${url} to become visible on this serving node`,
+        );
+        await timeout(retryDelay);
+        retryDelay = Math.min(retryDelay * 2, 1000);
+        continue;
+      }
+
+      // Any non-404 response proves that the executable route now exists.
+      // ModuleContents owns classification of real compile/runtime failures;
+      // settling here lets those errors surface without confusing a transient
+      // cross-node visibility race with authored syntax.
+      this.awaitingInitialInvalidation = false;
+      let currentState = this.innerState;
+      if (currentState.state === 'ready') {
+        this.updateState({ ...currentState, isCanonical: true });
+      }
+      this.onInitialSettled?.();
+      realmEventsLogger.debug(
+        `newly-created module ${url} is visible to the executable loader`,
+      );
+      return;
+    }
+  });
 
   private updateState(newState: FileResource): void {
     let prevState = this.innerState;
@@ -210,8 +428,14 @@ class _FileResource extends Resource<Args> {
     if (this.onStateChange && this.innerState.state !== prevState.state) {
       this.onStateChange(this.innerState.state);
     }
-    if (this.innerState.state === 'ready') {
+    if (
+      this.innerState.state === 'ready' &&
+      this.recordedRecentURL !== this.innerState.url
+    ) {
+      this.recordedRecentURL = this.innerState.url;
       this.recentFilesService.addRecentFileUrl(this.innerState.url);
+    }
+    if (this.innerState.state === 'ready') {
       if (this.onRedirect && this._url != this.innerState.url) {
         // code below handles redirect returned by the realm server
         // this updates code path to be in-sync with the file.url
@@ -230,112 +454,101 @@ class _FileResource extends Resource<Args> {
   // task's `state: 'ready'` with `state: 'not-found'` whenever the
   // cancelled response happened to land after the restart's response.
   // Queuing the latest extra perform keeps state writes sequential.
-  private read = keepLatestTask(async (opts?: { force?: boolean }) => {
-    let response;
-    try {
-      response = await this.network.authedFetch(this._url, {
-        headers: { Accept: SupportedMimeType.CardSource },
-      });
+  private read = keepLatestTask(
+    async (opts: { url: string; force?: boolean }) => {
+      let requestedURL = opts.url;
+      let response;
+      try {
+        response = await this.network.authedFetch(requestedURL, {
+          headers: { Accept: SupportedMimeType.CardSource },
+        });
 
-      if (!response.ok) {
-        log.error(
-          `Could not get file ${this._url}, status ${response.status}: ${
-            response.statusText
-          } - ${await response.text()}`,
-        );
-        if (response.status === 404) {
-          this.updateState({ state: 'not-found', url: rri(this._url) });
-        } else {
-          this.updateState({ state: 'server-error', url: rri(this._url) });
+        // `modify` can select another file while this request is in flight.
+        // A response for the previous file must never update state or invoke
+        // `onRedirect` for the newly selected path. Doing so bounces the route
+        // between the old and new files and can create an unbounded render /
+        // navigation loop. `keepLatestTask` will run the newest queued request;
+        // this completion is simply obsolete.
+        if (this._url !== requestedURL) {
+          return;
         }
+
+        if (!response.ok) {
+          log.error(
+            `Could not get file ${requestedURL}, status ${response.status}: ${
+              response.statusText
+            } - ${await response.text()}`,
+          );
+          if (this._url !== requestedURL) {
+            return;
+          }
+          if (response.status === 404) {
+            this.updateState({ state: 'not-found', url: rri(requestedURL) });
+          } else {
+            this.updateState({ state: 'server-error', url: rri(requestedURL) });
+          }
+          return;
+        }
+      } catch (err: any) {
+        if (this._url !== requestedURL) {
+          return;
+        }
+        log.error(`Could not get file ${requestedURL}, err: ${err.message}`);
+        this.updateState({ state: 'not-found', url: rri(requestedURL) });
         return;
       }
-    } catch (err: any) {
-      log.error(`Could not get file ${this._url}, err: ${err.message}`);
-      this.updateState({ state: 'not-found', url: rri(this._url) });
-      return;
-    }
 
-    let lastModified = response.headers.get('last-modified') || undefined;
+      let lastModified = response.headers.get('last-modified') || undefined;
 
-    // The short-circuit skips a no-op state update when nothing has changed.
-    // Two guards both have to hold:
-    //   1. Same URL as the prior state. Last-Modified is only unix-second
-    //      precision (formatRFC7231(fileRef.lastModified * 1000) where
-    //      fileRef.lastModified is unixTime(Date.now()) in both the
-    //      node-realm and in-memory test adapters), so two DIFFERENT files
-    //      written within the same wall-clock second carry identical
-    //      headers — without the URL guard, navigating between such files
-    //      would leave innerState pointing at the prior file.
-    //   2. force !== true. An invalidation-driven read passes force: true
-    //      because the realm has authoritatively told us the file changed,
-    //      which outranks our cached timestamp — same reason same-second
-    //      rewrites of the SAME file would otherwise be skipped.
-    if (
-      !opts?.force &&
-      lastModified &&
-      this.innerState.state === 'ready' &&
-      this.innerState.url === rri(response.url) &&
-      this.innerState.lastModified === lastModified
-    ) {
-      return;
-    }
-
-    let realmURL = response.headers.get('x-boxel-realm-url');
-
-    if (!realmURL) {
-      throw new Error('Missing x-boxel-realm-url header in response.');
-    }
-
-    let buffer = await response.arrayBuffer();
-    let size = buffer.byteLength;
-    let content = decodeUtf8(buffer);
-
-    let self = this;
-    let rawName = response.url.split('/').pop();
-
-    this.updateState({
-      state: 'ready',
-      lastModified,
-      realmURL,
-      content,
-      name: rawName ? decodeURIComponent(rawName) : rawName!,
-      size,
-      url: rri(response.url),
-      write(
-        content: string,
-        opts?: {
-          flushLoader?: boolean;
-          saveType?: SaveType;
-          clientRequestId?: string;
-        },
+      // The short-circuit skips a no-op state update when nothing has changed.
+      // Two guards both have to hold:
+      //   1. Same URL as the prior state. Last-Modified is only unix-second
+      //      precision (formatRFC7231(fileRef.lastModified * 1000) where
+      //      fileRef.lastModified is unixTime(Date.now()) in both the
+      //      node-realm and in-memory test adapters), so two DIFFERENT files
+      //      written within the same wall-clock second carry identical
+      //      headers — without the URL guard, navigating between such files
+      //      would leave innerState pointing at the prior file.
+      //   2. force !== true. An invalidation-driven read passes force: true
+      //      because the realm has authoritatively told us the file changed,
+      //      which outranks our cached timestamp — same reason same-second
+      //      rewrites of the SAME file would otherwise be skipped.
+      if (
+        !opts?.force &&
+        lastModified &&
+        this.innerState.state === 'ready' &&
+        this.innerState.url === rri(response.url) &&
+        this.innerState.lastModified === lastModified
       ) {
-        let currentState = self.innerState;
-        if (currentState.state !== 'ready') {
-          return Promise.reject(
-            new Error(`Cannot write ${self._url} before it is ready`),
-          );
-        }
-        // Stage the new buffer synchronously. Monaco, the code-preview
-        // sandbox, and a following streamed patch block must all observe the
-        // same newest generation without waiting for the realm round trip.
-        // Writes are persisted in generation order below, so an older realm
-        // response can never land after and overwrite a newer streamed block.
-        let stagedState: Ready = {
-          ...currentState,
-          content,
-          size: utf8ByteLength(content),
-        };
-        self.updateState(stagedState);
-        self.writing = self.writeTask
-          .unlinked() // If the component which performs this task from within another task is destroyed, for example the "add field" modal, we want this task to continue running
-          .perform(stagedState, content, opts);
-        return self.writing;
-      },
-    });
+        return;
+      }
 
-    this.setSubscription(realmURL, this.onRealmInvalidation);
-  });
+      let realmURL = response.headers.get('x-boxel-realm-url');
+
+      if (!realmURL) {
+        throw new Error('Missing x-boxel-realm-url header in response.');
+      }
+
+      let buffer = await response.arrayBuffer();
+      if (this._url !== requestedURL) {
+        return;
+      }
+      let content = decodeUtf8(buffer);
+
+      let cached = this.codeSourceCache.remember(response.url, {
+        lastModified,
+        realmURL,
+        content,
+      });
+      if (response.url !== requestedURL) {
+        this.codeSourceCache.remember(requestedURL, cached);
+      }
+      this.appliedCached = cached;
+      this.updateState(this.readyState({ ...cached, url: response.url }));
+
+      this.setSubscription(realmURL, this.onRealmInvalidation);
+    },
+  );
 
   private onRealmInvalidation = (event: RealmEventContent): void => {
     if (
@@ -377,6 +590,46 @@ class _FileResource extends Resource<Args> {
       let clientRequestId = event.clientRequestId;
       let reloadFile = false;
 
+      // The source POST that supplied `appliedInitial` is already reflected
+      // locally. Its index event confirms durability, but a hosted follow-up
+      // GET can still race cross-node visibility and return 404. Consume that
+      // one acknowledgement without replacing the authoritative local bytes;
+      // later external invalidations continue through the normal reload path.
+      //
+      // This must run before the ordinary code-preview acknowledgement below.
+      // A create-file commit can also be registered as an already-rendered
+      // preview generation, but its FileResource still has `isCanonical:
+      // false`. Swallowing the echo before this probe leaves module analysis
+      // permanently gated even though an instance using the CardDef can load.
+      if (
+        this.awaitingInitialInvalidation &&
+        clientRequestId?.startsWith('create-file:')
+      ) {
+        realmEventsLogger.debug(
+          `verifying executable visibility for acknowledged source ${normalizedURL}`,
+        );
+        this.settleInitial.perform(this._url);
+        return;
+      }
+
+      // Monaco/AI already published and rendered the exact source attached to
+      // this write. The incremental index event is durability acknowledgement,
+      // not another source generation. FileResource is a separate realm-event
+      // subscriber from Store/search, so it must make the same decision or it
+      // will fetch the canonical file and flash the preview after Store has
+      // correctly stayed put.
+      if (
+        this.realmSandbox.isCodePreviewCommitAcknowledgement(
+          clientRequestId ?? undefined,
+          invalidations,
+        )
+      ) {
+        realmEventsLogger.debug(
+          `acknowledging locally rendered source ${normalizedURL} without reloading`,
+        );
+        return;
+      }
+
       if (!clientRequestId || clientRequestId.startsWith('instance:')) {
         reloadFile = true;
         realmEventsLogger.debug(
@@ -415,12 +668,16 @@ class _FileResource extends Resource<Args> {
       }
 
       if (reloadFile) {
-        // Mirrors the store's invalidation path: only reset the loader when
-        // the rewritten module has actually been imported (which includes
-        // entries cached as `state: 'broken'`). Resetting unconditionally
-        // would clone the whole loader on every external write — including
-        // boxel-cli writes for modules the host never loaded — and drop
-        // unrelated loaded modules. clearFetchCache is required because
+        let handledByDisplayedPreview =
+          (!clientRequestId ||
+            !this.cardService.clientRequestIds.has(clientRequestId)) &&
+          hasExecutableExtension(normalizedURL) &&
+          this.realmSandbox.handleExternalModuleInvalidations([normalizedURL]);
+        // Mirrors the store's invalidation path: only invalidate an ordinary
+        // loader module when the rewritten module has actually been imported
+        // (which includes entries cached as `state: 'broken'`). The targeted
+        // eviction keeps Base, trusted realm, and unrelated user modules warm.
+        // Clearing this URL's fetch-cache variants is required because
         // the module endpoint's ETag is keyed on unix-second-granularity
         // `lastModified`; without it, a write landing in the same second
         // as the prior fetch can be served as a 304 with the old broken
@@ -428,16 +685,15 @@ class _FileResource extends Resource<Args> {
         // it loaded a card instance from), so code-mode-only browsing of
         // a .gts whose realm has no loaded instance relies on this path.
         if (
+          !handledByDisplayedPreview &&
           hasExecutableExtension(normalizedURL) &&
           this.loaderService.isModuleLoaded(normalizedURL)
         ) {
-          this.loaderService.resetLoader({
+          this.loaderService.invalidateModule(normalizedURL, {
             clearFetchCache: true,
-            reason: 'file-resource-external-invalidation',
-            codeChange: true,
           });
         }
-        this.read.perform({ force: true });
+        this.read.perform({ url: this._url, force: true });
       }
     }
   };
@@ -448,12 +704,13 @@ class _FileResource extends Resource<Args> {
       content: string,
       opts?: {
         flushLoader?: boolean;
+        deferStoreRefresh?: () => boolean;
         saveType?: SaveType;
         clientRequestId?: string;
       },
     ) => {
-      // Capture before saveSource which may call resetLoader(), replacing
-      // the loader with a fresh clone that has no loaded modules.
+      // Capture before saveSource invalidates this module and its known
+      // dependants in place.
       let moduleWasLoaded =
         opts?.flushLoader && this.loaderService.isModuleLoaded(this._url);
       let response = await this.cardService.saveSource(
@@ -475,11 +732,18 @@ class _FileResource extends Resource<Args> {
       // subscribes the realm. The moduleWasLoaded gate is the one that
       // belongs here: a write to a module nothing imported has no rendered
       // consumers to refresh.
-      if (moduleWasLoaded) {
-        this.store.refreshReferencesForCodeChange('file write', {
-          triggerModule: this._url,
-          realm: state.realmURL,
-        });
+      if (moduleWasLoaded && !opts?.deferStoreRefresh?.()) {
+        if (this.realmSandbox.isSandboxedUserModule(this._url)) {
+          // User CardDefs are opaque Store records. Their data identity does
+          // not depend on the executable class generation, so update only the
+          // canonical SES module/template cache.
+          this.realmSandbox.invalidateCanonicalSandboxModule(this._url);
+        } else {
+          this.store.refreshReferencesForCodeChange('trusted file write', {
+            triggerModule: this._url,
+            realm: state.realmURL,
+          });
+        }
       }
       if (this.innerState.state === 'not-found') {
         // TODO think about the "unauthorized" scenario
@@ -489,10 +753,18 @@ class _FileResource extends Resource<Args> {
       }
       let size = utf8ByteLength(content);
 
-      this.updateState({
-        state: 'ready',
+      let cached = this.codeSourceCache.remember(state.url, {
         content,
         lastModified: response.headers.get('last-modified') || undefined,
+        realmURL: state.realmURL,
+      });
+      this.appliedCached = cached;
+      this.updateState({
+        state: 'ready',
+        isCanonical: state.isCanonical,
+        isNewlyCreated: state.isNewlyCreated,
+        content: cached.content,
+        lastModified: cached.lastModified,
         url: state.url,
         name: state.name,
         size,
@@ -504,6 +776,10 @@ class _FileResource extends Resource<Args> {
 
   get state() {
     return this.innerState.state;
+  }
+
+  get isCanonical() {
+    return (this.innerState as Ready).isCanonical;
   }
 
   get content() {

@@ -33,6 +33,18 @@ const tests: SharedTests<unknown> = Object.freeze({
     );
   },
 
+  'includes GPT-5.6 Luna with its OpenRouter capabilities': async (assert) => {
+    let luna = DEFAULT_FALLBACK_MODELS.find(
+      (m) => m.modelId === 'openai/gpt-5.6-luna',
+    );
+    assert.deepEqual(luna, {
+      modelId: 'openai/gpt-5.6-luna',
+      displayName: 'OpenAI: GPT-5.6 Luna',
+      toolsSupported: true,
+      inputModalities: ['file', 'image', 'text'],
+    });
+  },
+
   'every row has valid typed fields': async (assert) => {
     for (let row of DEFAULT_FALLBACK_MODELS) {
       let label = row.modelId || '<no modelId>';

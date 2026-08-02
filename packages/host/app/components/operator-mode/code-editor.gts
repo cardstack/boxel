@@ -35,7 +35,9 @@ import {
 } from '@cardstack/runtime-common';
 import { getName } from '@cardstack/runtime-common/schema-analysis-plugin';
 
+import type { PreparedCodePreviewCommit } from '@cardstack/host/lib/code-preview-sandbox';
 import monacoModifier from '@cardstack/host/modifiers/monaco';
+import type { MonacoContentChangeOrigin } from '@cardstack/host/modifiers/monaco';
 import {
   isReady,
   type FileResource,
@@ -69,7 +71,16 @@ interface Signature {
     saveSourceOnClose: (url: URL, content: string) => void;
     selectDeclaration: (declaration: ModuleDeclaration) => void;
     onFileSave: (status: 'started' | 'finished') => void;
-    onContentChange?: (url: string, content: string) => void;
+    onContentChange?: (
+      url: string,
+      content: string,
+      origin: MonacoContentChangeOrigin,
+    ) => void;
+    prepareSourceCommit?: (
+      url: string,
+      content: string,
+      saveType: SaveType,
+    ) => PreparedCodePreviewCommit | undefined;
     onSetup: (
       updateCursorByName: (name: string, fieldName?: string) => void,
     ) => void;
@@ -114,6 +125,7 @@ export default class CodeEditor extends Component<Signature> {
 
     registerDestructor(this, () => {
       this.saveUnsavedSourceOnClose();
+      this.recentFilesService.flushPendingPersistence();
       this.formatActionDisposable?.dispose();
       this.formatActionDisposable = undefined;
       this.formatContextKey = undefined;
@@ -126,6 +138,7 @@ export default class CodeEditor extends Component<Signature> {
 
   private onEditorDispose = () => {
     this.saveUnsavedSourceOnClose();
+    this.recentFilesService.flushPendingPersistence();
   };
 
   private get editorIsReady() {
@@ -140,8 +153,22 @@ export default class CodeEditor extends Component<Signature> {
     return isReady(this.args.file) ? this.args.file.url : undefined;
   }
 
+  private get sourceIsLoading() {
+    let selectedURL = this.operatorModeStateService.state.codePath?.href;
+    if (!this.args.file || this.args.file.state === 'loading') {
+      return true;
+    }
+    return Boolean(
+      selectedURL &&
+      isReady(this.args.file) &&
+      this.args.file.url !== selectedURL,
+    );
+  }
+
   private get editorIsReadOnly() {
-    return this.args.isReadOnly || !isReady(this.args.file);
+    return (
+      this.args.isReadOnly || !isReady(this.args.file) || this.sourceIsLoading
+    );
   }
 
   private get isBinaryFile() {
@@ -386,9 +413,12 @@ export default class CodeEditor extends Component<Signature> {
     this.hasSavedUnsavedSourceOnClose = false;
   });
 
-  private contentChanging = (content: string) => {
+  private contentChanging = (
+    content: string,
+    origin: MonacoContentChangeOrigin,
+  ) => {
     if (isReady(this.args.file)) {
-      this.args.onContentChange?.(this.args.file.url, content);
+      this.args.onContentChange?.(this.args.file.url, content, origin);
     }
   };
 
@@ -498,14 +528,21 @@ export default class CodeEditor extends Component<Signature> {
       return;
     }
 
-    // flush the loader so that the preview (when card instance data is shown),
-    // or schema editor (when module code is shown) gets refreshed on save
+    let commit = this.args.prepareSourceCommit?.(file.url, content, saveType);
+    // The canonical loader still needs the persisted module invalidated, but
+    // an active Code preview has already rendered this source revision. Its
+    // Store refresh is deferred so the mounted preview is not replaced by the
+    // POST response and then replaced again by the realm event.
     return file
       .write(content, {
         flushLoader: hasExecutableExtension(file.name),
+        deferStoreRefresh: commit?.shouldDeferStoreRefresh,
         saveType,
+        clientRequestId: commit?.clientRequestId,
       })
+      .then(() => commit?.persisted())
       .catch((error) => {
+        commit?.failed();
         // Task cancellations are expected when the restartable contentChangedTask is
         // performed again while still running - this is normal behaviour, not an error
         if (didCancel(error)) {
@@ -680,7 +717,7 @@ export default class CodeEditor extends Component<Signature> {
             </div>
           {{/if}}
           <div
-            class='monaco-container {{if @isReadOnly "readonly"}}'
+            class='monaco-container {{if this.editorIsReadOnly "readonly"}}'
             data-test-editor
             data-test-percy-hide
             data-monaco-container-operator-mode
@@ -699,6 +736,16 @@ export default class CodeEditor extends Component<Signature> {
               editorDisplayOptions=(hash lineNumbersMinChars=3 fontSize=12)
             }}
           ></div>
+          {{#if this.sourceIsLoading}}
+            <div
+              class='source-loading'
+              data-test-source-loading
+              role='status'
+              aria-label='Loading source'
+            >
+              <LoadingIndicator @color='var(--boxel-light)' />
+            </div>
+          {{/if}}
         </div>
       {{else}}
         <div class='loading'>
@@ -738,6 +785,16 @@ export default class CodeEditor extends Component<Signature> {
         background: rgba(220, 53, 69, 0.9);
         color: white;
         max-width: 60ch;
+      }
+
+      .source-loading {
+        position: absolute;
+        inset: 0;
+        z-index: 2;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgb(37 35 45 / 55%);
       }
 
       .monaco-container {

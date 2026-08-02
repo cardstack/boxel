@@ -144,6 +144,13 @@ let waiter = buildWaiter('store-service');
 const realmEventsLogger = logger('realm:events');
 const storeLogger = logger('store');
 
+// Deserialization serves two security domains. The interactive host keeps
+// user-realm cards opaque, while realm execution (indexing, prerendering, and
+// validation) needs the real card definition. Callers that require executable
+// semantics must opt into that purpose instead of relying on constructor
+// introspection to happen incidentally.
+export type CardMaterializationPurpose = 'host-record' | 'realm-execution';
+
 // Companion to `jobIdHeader()` (re-exported from
 // `../lib/prerender-fetch-headers`). Policy is two-state, gated by
 // `__boxelRenderContext`, not by the presence of
@@ -308,6 +315,8 @@ export default class StoreService extends Service implements StoreInterface {
   private searchCacheGeneration = 0;
   private store: CardStore;
   protected isRenderStore = false;
+  protected cardMaterializationPurpose: CardMaterializationPurpose =
+    'host-record';
 
   // This is used for tests
   private onSaveSubscriber: CardSaveSubscriber | undefined;
@@ -1792,6 +1801,7 @@ export default class StoreService extends Service implements StoreInterface {
       doc,
       relativeTo,
       dependencyTrackingContext,
+      'realm-execution',
     );
   }
 
@@ -1800,11 +1810,15 @@ export default class StoreService extends Service implements StoreInterface {
     doc: LooseSingleCardDocument | CardDocument,
     relativeTo?: RealmResourceIdentifier | URL | undefined,
     dependencyTrackingContext?: RuntimeDependencyTrackingContext,
+    purpose: CardMaterializationPurpose = this.cardMaterializationPurpose,
   ): Promise<T> {
     let api = await this.cardService.getAPI();
     if (
-      !this.isRenderStore &&
-      this.realmSandbox.shouldUseOpaqueCard(resource.meta?.adoptsFrom)
+      purpose === 'host-record' &&
+      this.realmSandbox.shouldUseOpaqueCard(
+        resource.meta?.adoptsFrom,
+        relativeTo,
+      )
     ) {
       // Match card-api's normal deserializer identity behavior. A no-cache
       // reload may materialize a fresh opaque facade, but one remote URL must
@@ -1922,6 +1936,22 @@ export default class StoreService extends Service implements StoreInterface {
     );
   }
 
+  // Realm subscriptions are owned by several resources, but the active Code
+  // preview and its save IDs belong to this Store's application boundary.
+  // Route every subscriber through this single acknowledgement decision so a
+  // matching autosave cannot refresh the Store in one place and a live search
+  // in another.
+  isCodePreviewCommitAcknowledgement(event: RealmEventContent): boolean {
+    return (
+      event.eventName === 'index' &&
+      event.indexType === 'incremental' &&
+      this.realmSandbox.isCodePreviewCommitAcknowledgement(
+        event.clientRequestId ?? undefined,
+        event.invalidations as string[],
+      )
+    );
+  }
+
   private handleInvalidations = (event: RealmEventContent) => {
     if (event.eventName !== 'index') {
       return;
@@ -1964,28 +1994,89 @@ export default class StoreService extends Service implements StoreInterface {
       ? this.cardService.clientRequestIds.has(event.clientRequestId)
       : false;
 
-    // The invalidation triggers a rebuild when it touches an already-loaded
-    // executable module: the loader must be flushed so the updated code is
-    // picked up before the open card graph re-runs. Net-new modules that were
-    // never loaded don't need one. `isModuleLoaded` alone can't answer that,
-    // because a loader the code change already flushed carries no loaded
-    // modules and so reports every module as net-new. Two flushes beat this
-    // event to the punch: a rebuild already in flight (fold every further
-    // executable invalidation into it), and the flush a local write or an open
-    // editor performed for this very module the moment it was rewritten.
+    // Code mode has already rendered this exact source revision from Monaco.
+    // Its matching realm event confirms persistence; treating it as a second
+    // code change would rebuild the loader and Store around the mounted
+    // preview, briefly replacing both the preview and permission inputs with
+    // loading state before rendering the same revision again.
+    if (ownWrite && this.isCodePreviewCommitAcknowledgement(event)) {
+      for (let invalidation of invalidations.filter(hasExecutableExtension)) {
+        this.loaderService.acknowledgeModuleInvalidation(invalidation);
+      }
+      telemetry?.recordEvent({
+        event_type: 'realm-event',
+        realm: event.realmURL,
+        index_type: 'incremental',
+        invalidations_count: invalidations.length,
+        invalidated_ids: invalidations.slice(0, 50),
+        reloads_triggered: 0,
+        own_write: true,
+        processing_ms:
+          processingStart !== undefined
+            ? Math.round(performance.now() - processingStart)
+            : 0,
+      });
+      return;
+    }
+
     let executableInvalidations = invalidations.filter(hasExecutableExtension);
+    // Out-of-band writers (notably boxel-cli agents and another browser tab)
+    // have no local commit acknowledgement. Advance every displayed module
+    // independently; one undisplayed module in the same event must not force
+    // the displayed cards off their private SES/iframe HMR path.
+    let hmrHandled = !ownWrite
+      ? this.realmSandbox.handleExternalModuleInvalidationPartition(
+          executableInvalidations,
+        )
+      : new Set<string>();
+    let remainingExecutableInvalidations = executableInvalidations.filter(
+      (url) => !hmrHandled.has(url),
+    );
+
+    // Opaque user cards keep their canonical Store data while source code is
+    // invalidated in the realm compartment. There is no executable CardDef
+    // class in the host Store to rebuild, so replacing the Store and every
+    // Loader graph here is both unnecessary and visibly disruptive.
+    let sandboxedUserInvalidations = remainingExecutableInvalidations.filter(
+      (url) => this.realmSandbox.isSandboxedUserModule(url),
+    );
+    for (let sourceURL of sandboxedUserInvalidations) {
+      this.realmSandbox.invalidateCanonicalSandboxModule(sourceURL);
+      this.loaderService.invalidateModule(sourceURL, {
+        clearFetchCache: true,
+      });
+    }
+
+    // Trusted/Base definitions still materialize executable classes in Store.
+    // Invalidate just the changed Loader modules (and known dependants), then
+    // reestablish Store references only if one of those modules was live.
+    let trustedExecutableInvalidations =
+      remainingExecutableInvalidations.filter(
+        (url) => !this.realmSandbox.isSandboxedUserModule(url),
+      );
     let alreadyFlushed = new Set(
-      executableInvalidations.filter((i) =>
+      trustedExecutableInvalidations.filter((i) =>
         this.loaderService.wasModuleFlushedForCodeChange(i),
       ),
     );
+    let loadedTrustedInvalidations = new Set(
+      trustedExecutableInvalidations.filter((i) =>
+        this.loaderService.isModuleLoaded(i),
+      ),
+    );
+    for (let sourceURL of trustedExecutableInvalidations) {
+      this.loaderService.invalidateModule(sourceURL, {
+        clearFetchCache: true,
+      });
+    }
     let needsRebuild =
-      executableInvalidations.length > 0 &&
+      trustedExecutableInvalidations.length > 0 &&
       (this.rebuildForCodeChange.isRunning ||
         alreadyFlushed.size > 0 ||
-        executableInvalidations.some((i) =>
-          this.loaderService.isModuleLoaded(i),
-        ));
+        loadedTrustedInvalidations.size > 0);
+    for (let sourceURL of executableInvalidations) {
+      this.loaderService.acknowledgeModuleInvalidation(sourceURL);
+    }
 
     let reloadsTriggered = 0;
     if (needsRebuild) {
@@ -1999,7 +2090,7 @@ export default class StoreService extends Service implements StoreInterface {
       if (telemetry?.isEnabled) {
         this.#accumulatePendingRebuild(
           event.realmURL,
-          executableInvalidations,
+          trustedExecutableInvalidations,
           alreadyFlushed,
         );
       }
@@ -2246,8 +2337,11 @@ export default class StoreService extends Service implements StoreInterface {
     }
   }
 
-  // Coalesced client rebuild: flush the loader, reset the store, and re-fetch
-  // every live card reference. `keepLatest` bounds a write burst to one
+  // Coalesced trusted-code rebuild: the changed modules were already evicted
+  // in place above. Reset the Store and re-fetch every live card reference so
+  // executable trusted CardDef instances adopt the new class generation while
+  // preserving the Loader objects and all unrelated module graphs.
+  // `keepLatest` bounds a write burst to one
   // in-flight rebuild plus one pending — intermediate events collapse into the
   // pending slot — so a burst of rapid executable invalidations costs at most 2
   // rebuilds regardless of its length. The final rebuild re-fetches current
@@ -2261,14 +2355,6 @@ export default class StoreService extends Service implements StoreInterface {
     let rebuildStart =
       telemetry?.isEnabled && pending ? performance.now() : undefined;
 
-    // When this reset actually replaces the loader — it is debounce-eligible,
-    // so it may not — it also drops the flush records that armed this rebuild:
-    // a plain replacement supersedes them. Records that outlive a debounced
-    // reset cost at most one extra rebuild later, whose own reset drops them.
-    // A code-change flush landing *during* the re-fetch below writes fresh
-    // records against the new loader, so the invalidation still to come for
-    // that write finds them.
-    this.loaderService.resetLoader();
     this.store.reset();
     let cardsReloaded: number | undefined;
     try {

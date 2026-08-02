@@ -106,11 +106,15 @@ The same transport handles nested `FieldDef` rendering: the host sends only the
 field name and optional resolved component reference, and the child resolves
 that field from its locally deserialized card before invoking `CardRenderer`.
 
-Intrinsic size is also explicit. A renderer-owned height service observes the
-child render root, document, font readiness, mutations, and resizes, coalesces
-measurements after Ember render, and sends changed width/height values over the
-port. The parent clamps and applies the iframe height. Card and field code never
-receives a resize callback or a reference to the parent document.
+Intrinsic size is also explicit. For `embedded`, the renderer wrapper applies
+the trusted `safeModifier('observe-size')` to its child root and sends changed
+width/height values over the private port. The first measurement is retained if
+it occurs before the MessageChannel connects. The parent clamps and applies the
+iframe height. Isolated and edit use the broader renderer-owned height service,
+and embedded uses both that service and the safe root measurement. Format CSS
+remains authoritative for overflow, clipping, and stretching. Card and field
+code never receives a resize callback, MessagePort, or reference to the parent
+document.
 
 The current proof uses the unchanged Tribeca SignMaker card, including its
 Three.js canvas, OrbitControls, `three-bvh-csg`, JSZip, STL export, and 3MF
@@ -285,6 +289,15 @@ known dependents, and retains unrelated dependencies in cache. Intermediate
 revisions are skipped when evaluation falls behind the editor. A syntax error
 keeps the last valid template visible and the next valid revision retries the
 same graph.
+
+Preview-format switching reuses that same private SES module graph. After the
+selected format paints, the host materializes and caches the other format
+templates from the already-evaluated module. Returning to isolated, embedded,
+fitted, atom, edit, head, or markdown therefore does not fetch, transpile, or
+evaluate the card module again. The cache holds inert template descriptors—not
+hidden live components—so background formats cannot run effects or retain a
+second DOM tree. A format switch still mounts the selected format's authored
+subtree; this is a latency optimization, not cross-format DOM/state retention.
 
 The same authoring contract applies to both renderer transports:
 
@@ -890,15 +903,40 @@ from Monaco, not a filesystem event. The useful Vite HMR mechanics are instead
 implemented at the card-loader boundary:
 
 - Every mounted code preview owns a `CodePreviewSandbox` revision stream.
-- A Monaco buffer change publishes immediately, before the existing debounced
-  realm write.
-- Editable code-mode previews always use one dedicated iframe. The child keeps
-  its document, `MessageChannel`, and detached loader mounted, invalidates the
-  affected graph, and renders only the newest revision. Ordinary Interact-mode
-  cards still use the realm SES compartment unless their runtime requirements
-  select the iframe tier.
+- A real Monaco user edit publishes immediately, before the existing debounced
+  realm write. Initial editor hydration and external/server synchronization only
+  seed the preview; they do not mark an otherwise stable module as volatile.
+- AI Act mode is not a volatility trigger. For AI edits, the first completed
+  search-and-replace mutation command opens the volatile-module lease. Manual
+  Apply and Act use the same ordered mutation path; Act controls acceptance
+  only. Incomplete streamed blocks never execute.
+- Every assistant room created while Code mode is already active receives the
+  source-code-editing skill as a room-creation invariant. It is not dependent
+  on a later Interact-to-Code transition, so a fresh localhost assistant can
+  exercise the same search-and-replace/volatile-module path immediately.
+- Each completed search-and-replace block creates one in-memory source
+  generation and one persistence transaction. A following block reads the
+  newest volatile generation, even while the previous realm save or index
+  acknowledgement is still pending. Activity renews a bounded quiet-period
+  lease; after it expires, the canonical realm source is authoritative again.
+- Editable code-mode previews start in one private SES runtime. The runtime
+  invalidates the affected graph, keeps the last valid template visible, and
+  installs only the newest successful revision. Source analysis promotes a
+  browser-dependent preview to iframe only for isolated, embedded, and edit.
+  Fitted, atom, head, and markdown remain SES so multi-card galleries and host
+  composition do not become nested browsing contexts.
 - Updates are serialized and stale revisions are ignored. A compile failure
   reports against the draft while the last good card/template stays mounted.
+- Every SES-selected format renders through a stable, marker-bearing template
+  island. A compatible replacement program adopts the existing authored DOM;
+  incompatible structure falls back to replacing only the island contents.
+  This preserves DOM identity, selection, and browser-owned element state when
+  the Glimmer programs are compatible, but does not promise preservation of the
+  replaced component instance's private JavaScript state.
+- The selected SES format renders first, then the remaining formats are
+  materialized in the background from the same evaluated module and retained
+  in a per-preview, per-revision template-family cache. No extra module
+  evaluation and no hidden live component tree is required for a warm switch.
 - Base-realm source remains trusted and read-only, so it does not participate
   in editable per-preview reload.
 
@@ -910,13 +948,47 @@ at `/Users/chris/Projects/vite`, not from remembered behavior.
 The explicit acceptance boundary is therefore:
 
 ```text
-Monaco keystroke
-  -> revisioned open-file buffer
+Monaco user keystroke OR first completed AI search-and-replace command
+  -> open/renew bounded volatile-module lease
+  -> revisioned open-file or command source generation
   -> one private CodePreviewSandbox
-  -> iframe MessageChannel invalidation
-  -> last-good-render swap
+  -> SES graph invalidation + last-good marker-island adoption
+     OR iframe MessageChannel invalidation for DOM-heavy isolated/embedded/edit
+  -> compatible authored DOM retained; incompatible island contents replaced
   -> debounced/policy-checked realm persistence
 ```
+
+## Host Mode card-island rehydration
+
+Host Mode reuses the same primitive as SES hot reload. Isolated server HTML is
+serialized as a `CardIsland` with Glimmer boundary markers plus explicit card
+URL, format, and protocol-version attributes. The client moves the server's
+actual island element into the Host Mode slot and asks the live `CardIsland`
+program to adopt its children.
+
+An opaque SES card introduces a second render owner inside that outer island.
+The handoff therefore has two explicit phases:
+
+1. Host Mode leaves the complete server island visible until the exact SES or
+   iframe render branch that `CardRenderer` will consume is ready. A cold SES
+   evaluation does not reconcile the server card into a loading indicator.
+2. Before the outer `CardIsland` adopts its markers, it temporarily parks the
+   marker-bearing children of each nested SES template island. The outer
+   Glimmer program adopts the host/card-container shell; the nested modifier
+   restores those exact nodes and performs first-attachment rehydration with
+   the compartment-owned template program.
+
+This preserves the server island, `CardContainer`, and compatible authored DOM
+nodes across the complete server-to-client boundary. The implementation still
+does not promise preservation of the server component instance or its private
+tracked JavaScript state: the client program and behavior are newly installed.
+
+The handoff fails closed. Host Mode does not attempt adoption when the card URL,
+protocol, format, or markers are incompatible. It keeps the stable outer island
+but replaces its contents with an ordinary live render and records the reason
+for tests and diagnostics. A Glimmer adoption error follows the same fallback.
+This makes prerender reuse an owned runtime contract rather than a best-effort
+DOM trick.
 
 ## Hosted iframe origin requirement
 
@@ -1050,9 +1122,11 @@ must never select an arbitrary script or asset URL.
    authority, including when `allow-same-origin` is enabled for an explicitly
    reviewed renderer.
 
-Local development uses `https://localhost:4200` for the host and
-`https://127.0.0.1:4200` for the renderer. The mkcert leaf covers both names;
-the two loopback origins reach one Vite process without Docker.
+The staging-backed preview uses `https://localhost:4200` for the host and
+`https://127.0.0.1:4200` for the renderer. When both backends are needed at
+once, run the direct ordinary local-stack host on `http://localhost:4203`. The
+mkcert leaf covers both loopback names used by the staging preview; its host
+and renderer origins reach one Vite process.
 
 ## Local staging sign-in invariant
 
@@ -1069,12 +1143,18 @@ source packages/host/config/staging.env
 mise exec -- pnpm -C packages/host start
 ```
 
-Use the checked-in host command, which applies staging after mise, clears
-Docker/Traefik environment mode, and prints the selected endpoints:
+Use the checked-in monorepo launcher. For staging it delegates to the host's
+staging-safe command, applies staging after mise, clears Docker/Traefik
+environment mode, and prints the selected endpoints:
 
 ```sh
-mise exec -- pnpm -C packages/host start:staging
+scripts/start-host.sh staging
 ```
+
+Do not run a second Vite host from the same worktree on another port. The two
+processes share generated Ember/Vite configuration and dependency caches, so
+one can silently rebuild the other with the wrong backend. Use a separate Git
+worktree for a simultaneous local-stack host.
 
 The misleading symptom is a normal-looking Boxel sign-in form followed by
 “Sign in failed.” The decisive diagnostic is the Matrix login destination: a

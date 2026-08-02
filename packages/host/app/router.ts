@@ -8,9 +8,6 @@ export default class Router extends EmberRouter {
 
 Router.map(function () {
   this.route('host-freestyle', { path: '/_freestyle' });
-  this.route('realm-isolation-spike', {
-    path: '/_realm-isolation-spike',
-  });
   this.route('realm-sandbox-frame', {
     path: '/_realm-sandbox-frame',
   });

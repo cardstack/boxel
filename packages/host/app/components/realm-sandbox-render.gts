@@ -1,4 +1,5 @@
 import Component from '@glimmer/component';
+import { cached } from '@glimmer/tracking';
 
 import Modifier from 'ember-modifier';
 
@@ -9,6 +10,8 @@ import { cn, eq } from '@cardstack/boxel-ui/helpers';
 
 import { CardContextName, rri } from '@cardstack/runtime-common';
 
+import RealmSandboxTemplateIsland from '@cardstack/host/components/realm-sandbox-template-island';
+import RealmSandboxStyles from '@cardstack/host/modifiers/realm-sandbox-styles';
 import type RealmSandboxService from '@cardstack/host/services/realm-sandbox';
 
 import type {
@@ -78,7 +81,7 @@ export default class RealmSandboxRender extends Component<Signature> {
     return this.theme?.scope;
   }
 
-  get context() {
+  @cached get context() {
     let context = this.cardContext;
     if (!context) {
       return undefined;
@@ -125,13 +128,6 @@ export default class RealmSandboxRender extends Component<Signature> {
   };
 
   <template>
-    {{#each @sandbox.styles as |css|}}
-      {{! template-lint-disable require-scoped-style }}
-      <style>
-        {{css}}
-      </style>
-      {{! template-lint-enable require-scoped-style }}
-    {{/each}}
     <CardContainer
       @displayBoundaries={{this.displayContainer}}
       @isThemed={{if this.theme true false}}
@@ -152,6 +148,14 @@ export default class RealmSandboxRender extends Component<Signature> {
       }}
       data-boxel-card-id={{this.cardID}}
       data-boxel-card-format={{this.format}}
+      {{! Keep the host renderer's observable card identity contract when the
+          authored component crosses the SES boundary. The ordinary
+          FieldComponent renderer exposes these same hooks; playground
+          selection and compatibility tests must not need to know which
+          renderer tier supplied the selected instance. }}
+      data-test-card={{this.cardID}}
+      data-test-card-format={{this.format}}
+      data-test-field-component-card
       {{this.cardComponentModifier
         cardId=this.cardID
         format=this.format
@@ -160,16 +164,23 @@ export default class RealmSandboxRender extends Component<Signature> {
       }}
       ...attributes
     >
-      {{! @glint-ignore The inert template receives only the sandbox-safe subset of the ordinary card component signature. }}
-      <this.component
-        @cardOrField={{@card.constructor}}
-        @model={{@sandbox.model}}
-        @fields={{@sandbox.fields}}
-        @context={{this.context}}
-        @format={{this.format}}
-        @set={{this.set}}
-        @viewCard={{this.viewCard}}
-      />
+      <div
+        class='realm-sandbox-template-island'
+        data-realm-sandbox-template-island
+        {{RealmSandboxStyles @sandbox.styles}}
+        {{RealmSandboxTemplateIsland
+          this.component
+          cardOrField=@card.constructor
+          model=@sandbox.model
+          fields=@sandbox.fields
+          context=this.context
+          format=this.format
+          set=this.set
+          viewCard=this.viewCard
+          onError=@sandbox.onError
+          onRendered=@sandbox.onRendered
+        }}
+      ></div>
     </CardContainer>
 
     <style scoped>
@@ -201,6 +212,9 @@ export default class RealmSandboxRender extends Component<Signature> {
       }
       .realm-sandbox-render.atom-format > :deep(*) {
         vertical-align: middle;
+      }
+      .realm-sandbox-template-island {
+        display: contents;
       }
       .realm-sandbox-render.edit-format:has(.default-card-template.edit) {
         background-color: var(--muted, var(--boxel-100));

@@ -61,6 +61,7 @@ import {
   contains,
   field,
   getCardMeta,
+  getComponent,
   linksTo,
   linksToMany,
   Component,
@@ -2741,9 +2742,7 @@ class Isolated extends Component<typeof Workspace> {
   // the invite pane renders the survey card itself (themed, lazy)
   surveyComponentFor = (job: { card: JobCard }): BoxComponent | undefined => {
     let survey = job.card.setupSurvey;
-    return survey
-      ? (survey.constructor as typeof BaseDef).getComponent(survey)
-      : undefined;
+    return survey ? getComponent(survey) : undefined;
   };
 
   // ── Home: setup bar, inventory, recent preview ──
@@ -3130,9 +3129,7 @@ class Isolated extends Component<typeof Workspace> {
       get cards() {
         return (model.entryPoints ?? [])
           .filter(Boolean)
-          .map((card: CardDef) =>
-            (card.constructor as typeof BaseDef).getComponent(card),
-          );
+          .map((card: CardDef) => getComponent(card));
       },
     };
   }
@@ -3443,7 +3440,7 @@ class Isolated extends Component<typeof Workspace> {
         id: card.id!,
         card,
         status: card.processStatus ?? 'running',
-        component: (card.constructor as typeof BaseDef).getComponent(card),
+        component: getComponent(card),
       });
     }
     // Speak completion once, on the running→idle edge. A fresh run underway
@@ -3591,7 +3588,7 @@ class Isolated extends Component<typeof Workspace> {
       let day = modMs !== undefined ? dayLabelFor(modMs) : '';
       this.feedItems.push({
         id: card.id!,
-        component: (card.constructor as typeof BaseDef).getComponent(card),
+        component: getComponent(card),
         when: modMs !== undefined ? relativeTime(modMs) : undefined,
         absolute:
           modMs !== undefined ? new Date(modMs).toLocaleString() : undefined,

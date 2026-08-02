@@ -1,6 +1,11 @@
 import { module, test } from 'qunit';
 
-import { classifyCardSourceForSandbox } from '@cardstack/host/lib/realm-sandbox-source-policy';
+import { transpileJS } from '@cardstack/runtime-common/transpile';
+
+import {
+  classifyCardSourceForSandbox,
+  sandboxDecisionForFormat,
+} from '@cardstack/host/lib/realm-sandbox-source-policy';
 
 module('Unit | realm sandbox source policy', function () {
   test('ordinary authored GTS stays in SES', async function (assert) {
@@ -57,6 +62,49 @@ module('Unit | realm sandbox source policy', function () {
     assert.deepEqual(result.signals, []);
   });
 
+  test('unscoped template styles require an isolated document', async function (assert) {
+    let source = `
+      import { CardDef, Component } from '@cardstack/base/card-api';
+      export class RetroCard extends CardDef {
+        static isolated = class extends Component<typeof this> {
+          <template>
+            <article>Retro card</article>
+            <style>body, button { font-family: serif; }</style>
+          </template>
+        };
+      }
+    `;
+    let result = await classifyCardSourceForSandbox(source);
+
+    assert.strictEqual(result.tier, 'iframe');
+    assert.deepEqual(result.signals, ['unscoped-style']);
+
+    let compiled = await classifyCardSourceForSandbox(
+      await transpileJS(source, '/retro-card.gts'),
+    );
+    assert.strictEqual(
+      compiled.tier,
+      'iframe',
+      'the realm server compiled form selects the same isolated renderer',
+    );
+    assert.deepEqual(compiled.signals, ['unscoped-style']);
+
+    let scoped = await classifyCardSourceForSandbox(`
+      import { CardDef, Component } from '@cardstack/base/card-api';
+      export class RetroCard extends CardDef {
+        static isolated = class extends Component<typeof this> {
+          <template>
+            <article>Retro card</article>
+            <style scoped>article { font-family: serif; }</style>
+          </template>
+        };
+      }
+    `);
+
+    assert.strictEqual(scoped.tier, 'compartment');
+    assert.deepEqual(scoped.signals, []);
+  });
+
   test('comments and string literals do not grant a broader renderer', async function (assert) {
     let result = await classifyCardSourceForSandbox(`
       // document.createElement('canvas');
@@ -65,5 +113,26 @@ module('Unit | realm sandbox source policy', function () {
     `);
 
     assert.strictEqual(result.tier, 'compartment');
+  });
+
+  test('browser-dependent cards use iframes only for isolated, embedded, and edit', function (assert) {
+    let browserDecision = {
+      tier: 'iframe' as const,
+      reason: 'browser-runtime:three',
+    };
+
+    for (let format of ['isolated', 'embedded', 'edit'] as const) {
+      assert.strictEqual(
+        sandboxDecisionForFormat(browserDecision, format).tier,
+        'iframe',
+        `${format} may use the DOM-heavy iframe renderer`,
+      );
+    }
+    for (let format of ['fitted', 'atom', 'head', 'markdown'] as const) {
+      assert.deepEqual(sandboxDecisionForFormat(browserDecision, format), {
+        tier: 'compartment',
+        reason: `ses-only-format:${format}`,
+      });
+    }
   });
 });

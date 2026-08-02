@@ -1,3 +1,4 @@
+import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { cached } from '@glimmer/tracking';
@@ -11,6 +12,8 @@ import {
   DefaultFormatsContextName,
   FITTED_FORMATS,
 } from '@cardstack/runtime-common';
+
+import type RealmSandboxService from '@cardstack/host/services/realm-sandbox';
 
 import type { BaseDef } from '@cardstack/base/card-api';
 
@@ -33,6 +36,8 @@ const setContainerSize = ({
 };
 
 export default class FittedFormatGallery extends Component<Signature> {
+  @service declare private realmSandbox: RealmSandboxService;
+
   formats = FITTED_FORMATS;
 
   @provide(DefaultFormatsContextName)
@@ -42,7 +47,7 @@ export default class FittedFormatGallery extends Component<Signature> {
 
   @cached
   get renderedCard() {
-    return this.args.card.constructor.getComponent(this.args.card);
+    return this.realmSandbox.componentFor(this.args.card);
   }
 
   <template>

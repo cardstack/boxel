@@ -18,7 +18,10 @@ interface Signature {
       content: string;
       contentIdentity?: string;
       contentChanged: (text: string) => void;
-      contentChanging?: (text: string) => void;
+      contentChanging?: (
+        text: string,
+        origin: MonacoContentChangeOrigin,
+      ) => void;
       initialCursorPosition?: MonacoSDK.Position;
       onCursorPositionChange?: (position: MonacoSDK.Position) => void;
       onSetup?: (editor: MonacoSDK.editor.IStandaloneCodeEditor) => void;
@@ -30,6 +33,8 @@ interface Signature {
     };
   };
 }
+
+export type MonacoContentChangeOrigin = 'initial' | 'external' | 'user';
 
 const { monacoDebounceMs, monacoCursorDebounceMs } = config;
 
@@ -48,7 +53,10 @@ export default class Monaco extends Modifier<Signature> {
   private waiterManager = createMonacoWaiterManager();
   private onDispose: (() => void) | undefined;
   private disposables: MonacoSDK.IDisposable[] = [];
-  private contentChanging: ((text: string) => void) | undefined;
+  private contentChanging:
+    | ((text: string, origin: MonacoContentChangeOrigin) => void)
+    | undefined;
+  private pendingBufferOrigin: MonacoContentChangeOrigin = 'initial';
   private isApplyingExternalContent = false;
   @service declare private monacoService: MonacoService;
 
@@ -93,7 +101,7 @@ export default class Monaco extends Modifier<Signature> {
         } finally {
           this.isApplyingExternalContent = false;
         }
-        this.publishCurrentBufferAfterRender();
+        this.publishCurrentBufferAfterRender('external');
       }
       if (readOnly !== this.lastReadOnly) {
         this.editor.updateOptions({ readOnly });
@@ -199,15 +207,15 @@ export default class Monaco extends Modifier<Signature> {
     // first keypress after navigation. This must land after the current render
     // transaction so it does not mutate tracked preview state while
     // CardRenderer is consuming that state.
-    this.publishCurrentBufferAfterRender();
+    this.publishCurrentBufferAfterRender('initial');
 
     this.disposables.push(
       this.model.onDidChangeContent(() => {
         if (this.model) {
           if (this.isApplyingExternalContent) {
-            this.publishCurrentBufferAfterRender();
+            this.publishCurrentBufferAfterRender('external');
           } else {
-            this.contentChanging?.(this.model.getValue());
+            this.contentChanging?.(this.model.getValue(), 'user');
           }
         }
         this.onContentChanged.perform(contentChanged);
@@ -229,13 +237,14 @@ export default class Monaco extends Modifier<Signature> {
     );
   }
 
-  private publishCurrentBufferAfterRender() {
+  private publishCurrentBufferAfterRender(origin: MonacoContentChangeOrigin) {
+    this.pendingBufferOrigin = origin;
     scheduleOnce('afterRender', this, this.publishCurrentBuffer);
   }
 
   private publishCurrentBuffer = () => {
     if (this.model) {
-      this.contentChanging?.(this.model.getValue());
+      this.contentChanging?.(this.model.getValue(), this.pendingBufferOrigin);
     }
   };
 

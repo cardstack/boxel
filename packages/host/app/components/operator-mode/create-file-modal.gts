@@ -140,6 +140,15 @@ export interface FileType {
   displayName: string;
 }
 
+export interface CreatedFile {
+  url: URL;
+  source?: {
+    content: string;
+    lastModified?: string;
+    realmURL: string;
+  };
+}
+
 const TEXT_FILE_EXTENSIONS = ['.txt', '.md'];
 
 function textFileExtensionFromInput(input: string) {
@@ -528,7 +537,7 @@ export default class CreateFileModal extends Component<Signature> {
   @tracked private currentRequest:
     | {
         fileType: FileType;
-        newFileDeferred: Deferred<URL | undefined>; // user may close the modal without creating a new file
+        newFileDeferred: Deferred<CreatedFile | undefined>; // user may close the modal without creating a new file
         realmURL?: URL;
         definitionClass?: {
           displayName: string;
@@ -977,12 +986,20 @@ export class ${className} extends ${exportName} {
     src.push(`}`);
 
     try {
-      await this.cardService.saveSource(
+      let content = src.join('\n').trim();
+      let response = await this.cardService.saveSource(
         url,
-        src.join('\n').trim(),
+        content,
         'create-file',
       );
-      this.currentRequest.newFileDeferred.fulfill(url);
+      this.currentRequest.newFileDeferred.fulfill({
+        url,
+        source: {
+          content,
+          lastModified: response.headers.get('last-modified') || undefined,
+          realmURL: this.selectedRealmURL,
+        },
+      });
     } catch (e: any) {
       let typeLabel = isFileDef ? 'file' : isField ? 'field' : 'card';
       console.log(`Error saving ${typeLabel} definition`, e);
@@ -1012,7 +1029,9 @@ export class ${className} extends ${exportName} {
       sourceCard: this.currentRequest.sourceInstance,
       targetRealm: this.selectedRealmURL,
     });
-    this.currentRequest.newFileDeferred.fulfill(new URL(`${newCardId}.json`));
+    this.currentRequest.newFileDeferred.fulfill({
+      url: new URL(`${newCardId}.json`),
+    });
   });
 
   private createCardInstance = restartableTask(async () => {
@@ -1070,7 +1089,9 @@ export class ${className} extends ${exportName} {
         let error = maybeId;
         throw error;
       }
-      this.currentRequest.newFileDeferred.fulfill(new URL(`${maybeId}.json`));
+      this.currentRequest.newFileDeferred.fulfill({
+        url: new URL(`${maybeId}.json`),
+      });
     } catch (e: any) {
       console.log('Error saving', e);
       this.saveError = e;
@@ -1114,8 +1135,20 @@ export class ${className} extends ${exportName} {
     }
 
     try {
-      await this.cardService.saveSource(url, '', 'create-file');
-      this.currentRequest.newFileDeferred.fulfill(url);
+      let content = '';
+      let response = await this.cardService.saveSource(
+        url,
+        content,
+        'create-file',
+      );
+      this.currentRequest.newFileDeferred.fulfill({
+        url,
+        source: {
+          content,
+          lastModified: response.headers.get('last-modified') || undefined,
+          realmURL: this.selectedRealmURL,
+        },
+      });
     } catch (e: any) {
       console.log('Error saving text file', e);
       this.saveError = e;
@@ -1172,8 +1205,19 @@ export class ${className} extends ${exportName} {
     ].join('\n');
 
     try {
-      await this.cardService.saveSource(url, content, 'create-file');
-      this.currentRequest.newFileDeferred.fulfill(url);
+      let response = await this.cardService.saveSource(
+        url,
+        content,
+        'create-file',
+      );
+      this.currentRequest.newFileDeferred.fulfill({
+        url,
+        source: {
+          content,
+          lastModified: response.headers.get('last-modified') || undefined,
+          realmURL: this.selectedRealmURL,
+        },
+      });
     } catch (e: any) {
       console.log('Error saving skill file', e);
       this.saveError = e;

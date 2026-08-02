@@ -13,7 +13,7 @@ const { startWithTraefik } = require('./vite-with-traefik');
 
 startWithTraefik({
   subcommand: null,
-  defaultPort: 4200,
+  defaultPort: Number(process.env.HOST_PORT || 4200),
   label: 'vite dev server',
   nodeMemory: true,
 });

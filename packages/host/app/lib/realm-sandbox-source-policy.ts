@@ -3,11 +3,44 @@ import { init, parse } from 'es-module-lexer';
 
 export type CardRenderSandboxTier = 'compartment' | 'iframe';
 
+export type CardSandboxRenderFormat =
+  | 'isolated'
+  | 'embedded'
+  | 'fitted'
+  | 'edit'
+  | 'atom'
+  | 'head'
+  | 'markdown';
+
 export interface CardSourceSandboxClassification {
   tier: CardRenderSandboxTier;
   reason: string;
   imports: string[];
   signals: string[];
+}
+
+const iframeRenderFormats = new Set<string>(['isolated', 'embedded', 'edit']);
+const compiledLiteralStyleElement =
+  /\[\s*10\s*,\s*(?:["']style["']|\\["']style\\["'])\s*\]/i;
+
+// Source classification describes what the module needs. The requested card
+// format separately limits where it may run. Compact and non-DOM formats must
+// remain composable in the host document (especially the fitted gallery), so
+// a browser-dependent definition receives an iframe only for its full/edit
+// surfaces. Its fitted, atom, head, and markdown surfaces stay in SES and fail
+// closed there if they depend on ambient DOM authority.
+export function sandboxDecisionForFormat(
+  decision: Pick<CardSourceSandboxClassification, 'tier' | 'reason'>,
+  format: string | undefined,
+): Pick<CardSourceSandboxClassification, 'tier' | 'reason'> {
+  let effectiveFormat = format ?? 'isolated';
+  if (decision.tier !== 'iframe' || iframeRenderFormats.has(effectiveFormat)) {
+    return decision;
+  }
+  return {
+    tier: 'compartment',
+    reason: `ses-only-format:${effectiveFormat}`,
+  };
 }
 
 // These packages require a real browser document/canvas or are commonly
@@ -54,9 +87,20 @@ const iframeGlobalSignals = [
 
 let lexerReady = Promise.resolve(init);
 
-function maskEmbeddedTemplates(source: string): string {
+function analyzeEmbeddedTemplates(source: string): {
+  javascript: string;
+  hasUnscopedStyle: boolean;
+} {
   let characters = Array.from(source);
+  let hasUnscopedStyle = false;
   for (let match of new ContentTag.Preprocessor().parse(source)) {
+    let styleTags = match.contents.matchAll(/<style(?=[\s>])([^>]*)>/gi);
+    for (let styleTag of styleTags) {
+      let attributes = styleTag[1] ?? '';
+      if (!/(?:^|\s)scoped(?=\s|=|$)/i.test(attributes)) {
+        hasUnscopedStyle = true;
+      }
+    }
     for (
       let index = match.range.startChar;
       index < match.range.endChar;
@@ -68,7 +112,17 @@ function maskEmbeddedTemplates(source: string): string {
       }
     }
   }
-  return characters.join('');
+  return { javascript: characters.join(''), hasUnscopedStyle };
+}
+
+function hasCompiledUnscopedStyle(source: string): boolean {
+  // The realm server normally sends already-compiled card JavaScript to
+  // interact mode. Ember's wire format represents a literal element as
+  // [OpenElement, tagName], where OpenElement is opcode 10. A scoped style is
+  // extracted by glimmer-scoped-css and never produces this tuple. This signal
+  // is only a compatibility router; template capture independently rejects the
+  // literal style and remains the fail-closed security boundary.
+  return compiledLiteralStyleElement.test(source);
 }
 
 function maskStringsAndComments(source: string): string {
@@ -167,8 +221,11 @@ export async function classifyCardSourceForSandbox(
   source: string,
 ): Promise<CardSourceSandboxClassification> {
   let javascript: string;
+  let unscopedStyle = hasCompiledUnscopedStyle(source);
   try {
-    javascript = maskEmbeddedTemplates(source);
+    let templateAnalysis = analyzeEmbeddedTemplates(source);
+    unscopedStyle ||= templateAnalysis.hasUnscopedStyle;
+    javascript = templateAnalysis.javascript;
   } catch {
     // A malformed in-progress GTS draft remains in the more restrictive SES
     // renderer. The last-good-render path keeps the prior preview visible.
@@ -201,7 +258,13 @@ export async function classifyCardSourceForSandbox(
     .map(iframeImportSignal)
     .filter((signal): signal is string => Boolean(signal));
   let globalSignals = usedBrowserGlobals(javascript);
-  let signals = [...new Set([...importSignals, ...globalSignals])];
+  let signals = [
+    ...new Set([
+      ...importSignals,
+      ...globalSignals,
+      ...(unscopedStyle ? ['unscoped-style'] : []),
+    ]),
+  ];
   if (signals.length > 0) {
     return {
       tier: 'iframe',

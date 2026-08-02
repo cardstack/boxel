@@ -1,6 +1,7 @@
 import { merge } from 'lodash-es';
 
 import { isNode } from './environment.ts';
+import { executableExtensions } from './executable-extensions.ts';
 
 const cache = new Map<string, { etag: string; body: string }>();
 
@@ -85,4 +86,42 @@ export async function cachedFetch(
 // outside each test
 export function clearFetchCache() {
   cache.clear();
+}
+
+// A source write invalidates one resource representation, not the entire
+// application's HTTP cache. Keep unrelated realm, Base, icon, and template
+// responses warm while ensuring every Accept variant for this URL is fetched
+// again. Callers should pass the concrete URL carried by the realm
+// invalidation (normally the executable filename, including its extension).
+export function clearFetchCacheFor(url: string | URL) {
+  let href = typeof url === 'string' ? url : url.href;
+  let moduleIdentity = executableModuleIdentity(href);
+  for (let key of cache.keys()) {
+    let separator = key.lastIndexOf('::accept:');
+    let cachedURL = separator === -1 ? key : key.slice(0, separator);
+    if (
+      cachedURL === href ||
+      (moduleIdentity != null &&
+        executableModuleIdentity(cachedURL) === moduleIdentity)
+    ) {
+      cache.delete(key);
+    }
+  }
+}
+
+function executableModuleIdentity(value: string): string | undefined {
+  try {
+    let url = new URL(value);
+    for (let extension of executableExtensions) {
+      if (url.pathname.endsWith(extension)) {
+        url.pathname = url.pathname.slice(0, -extension.length);
+        url.search = '';
+        url.hash = '';
+        return url.href;
+      }
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
 }

@@ -1,5 +1,7 @@
 import 'ses';
 
+import { isTesting } from '@embroider/macros';
+
 import {
   baseRRI,
   getMenuItems,
@@ -56,6 +58,7 @@ export interface SandboxCardTypeMetadata {
   headerColor: string | null;
   hasCustomEditTemplate: boolean;
   hasCustomIsolatedTemplate: boolean;
+  authoredTemplateFormats: string[];
   icon?: SandboxTrustedExportIdentity;
   prefersWideFormat: boolean;
 }
@@ -83,6 +86,24 @@ interface TemplateFactoryResult {
 interface CapturedTemplate {
   descriptor: Omit<SandboxTemplateDescriptor, 'scope' | 'instance'>;
   scope: unknown[];
+}
+
+function templateContainsLiteralElement(
+  value: unknown,
+  tagName: string,
+): boolean {
+  if (!Array.isArray(value)) {
+    return false;
+  }
+  // Ember's serialized wire format represents a literal element as
+  // [OpenElement, tagName]. Scoped style elements never reach this block:
+  // glimmer-scoped-css removes them and emits a hashed stylesheet dependency.
+  // Therefore a literal style element here is necessarily an unscoped style
+  // that the browser would apply to the shared host document.
+  if (value[0] === 10 && value[1] === tagName) {
+    return true;
+  }
+  return value.some((entry) => templateContainsLiteralElement(entry, tagName));
 }
 
 export interface RealmCompartmentRuntimeOptions {
@@ -236,6 +257,28 @@ export default class RealmCompartmentModuleRuntime {
     return structuredClone(this.bundleFor(component as object));
   }
 
+  // QUnit realm adapters install live class objects with Loader.shimModule().
+  // Those fixtures intentionally have no source text for SES to evaluate and
+  // therefore cannot participate in template capture. Keep this escape hatch
+  // test-only: production modules must always cross the explicit template
+  // bundle boundary above.
+  async trustedTestShimComponent(
+    moduleIdentifier: string,
+    exportName: string,
+    format: string,
+  ): Promise<unknown> {
+    if (!isTesting()) {
+      return undefined;
+    }
+    let module =
+      await this.loader.import<Record<string, unknown>>(moduleIdentifier);
+    if (!this.loader.isModuleShimmed(moduleIdentifier)) {
+      return undefined;
+    }
+    let cardType = module[exportName] as Record<string, unknown> | undefined;
+    return cardType?.[format] ?? cardType?.isolated;
+  }
+
   async evaluateCardTypeMetadata(
     moduleIdentifier: string,
     exportName: string,
@@ -254,12 +297,26 @@ export default class RealmCompartmentModuleRuntime {
       typeof cardType.icon === 'function'
         ? this.trustedExportByValue.get(cardType.icon as object)
         : undefined;
+    // SandboxCardDef intentionally does not carry Base's executable default
+    // templates. A missing format therefore means "use the trusted Base
+    // fallback" rather than "render nothing". Export that decision as inert
+    // metadata so the host never needs to introspect the authored class.
+    let authoredTemplateFormats = [
+      'isolated',
+      'embedded',
+      'fitted',
+      'atom',
+      'edit',
+      'head',
+      'markdown',
+    ].filter((format) => cardType[format] != null);
     return structuredClone({
       displayName,
       fields: this.cardFieldMetadata(cardType),
       headerColor,
       hasCustomEditTemplate: cardType.edit != null,
       hasCustomIsolatedTemplate: cardType.isolated != null,
+      authoredTemplateFormats,
       icon,
       prefersWideFormat: cardType.prefersWideFormat === true,
     });
@@ -639,7 +696,12 @@ export default class RealmCompartmentModuleRuntime {
     ) {
       throw new Error('Card template descriptor has an invalid shape');
     }
-    JSON.parse(descriptor.block);
+    let block = JSON.parse(descriptor.block) as unknown;
+    if (templateContainsLiteralElement(block, 'style')) {
+      throw new Error(
+        'SES templates must use <style scoped>; unscoped <style> would affect the shared host document',
+      );
+    }
     let scope = descriptor.scope?.() ?? [];
     if (!Array.isArray(scope)) {
       throw new Error('Card template descriptor has an invalid scope');
@@ -721,7 +783,7 @@ export default class RealmCompartmentModuleRuntime {
   ): SandboxComponentInstanceDescriptor {
     let state: Record<string, unknown> = {};
     let actions = new Set<string>();
-    for (let key of Object.keys(instance)) {
+    for (let key of Object.keys(instance).sort()) {
       if (key !== 'args') {
         let value = instance[key];
         if (typeof value === 'function') {
@@ -734,7 +796,7 @@ export default class RealmCompartmentModuleRuntime {
     let getters = new Set<string>();
     let prototype = Object.getPrototypeOf(instance) as object | null;
     while (prototype && prototype !== Object.prototype) {
-      for (let name of Object.getOwnPropertyNames(prototype)) {
+      for (let name of Object.getOwnPropertyNames(prototype).sort()) {
         let descriptor = Object.getOwnPropertyDescriptor(prototype, name);
         if (name !== 'constructor' && typeof descriptor?.get === 'function') {
           getters.add(name);

@@ -7,21 +7,28 @@ import { modifier } from 'ember-modifier';
 import { provide } from 'ember-provide-consume-context';
 import RouteTemplate from 'ember-route-template';
 
+import { safeModifier } from '@cardstack/boxel-ui/modifiers';
+
 import {
   CardContextName,
   SupportedMimeType,
+  type Loader,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 
-import type { Loader } from '@cardstack/runtime-common';
-
 import CardRenderer from '@cardstack/host/components/card-renderer';
+import {
+  compileCodePreviewDraftSource,
+  sameCodePreviewModuleURL,
+} from '@cardstack/host/lib/code-preview-sandbox';
 import RealmIframeHeightService from '@cardstack/host/lib/realm-iframe-height-service';
 import {
+  isRealmIframeSandboxInbound,
   isRealmIframeSandboxConnect,
   realmIframeSandboxProtocol,
   type RealmIframeSandboxInbound,
   type RealmIframeSandboxDraft,
+  type RealmIframeSandboxPresentation,
 } from '@cardstack/host/lib/realm-iframe-sandbox-protocol';
 
 import type { RealmSandboxFrameModel } from '@cardstack/host/routes/realm-sandbox-frame';
@@ -39,6 +46,11 @@ type PendingFetch = {
   reject: (error: Error) => void;
 };
 
+interface SafeElementSize {
+  height: number;
+  width: number;
+}
+
 // Avoid flashing transient transport state inside otherwise polished cards.
 // Errors still render immediately; this copy is only for a genuinely slow
 // module graph (for example, a cold Three.js CDN load).
@@ -51,14 +63,20 @@ class RealmSandboxFrame extends Component<Signature> {
   @tracked private field?: Field;
   @tracked private error?: string;
   @tracked private showLoadingMessage = false;
+  @tracked private presentation?: RealmIframeSandboxPresentation;
 
   private port?: MessagePort;
   private loader?: Loader;
   private fetchSequence = 0;
   private pendingFetches = new Map<string, PendingFetch>();
+  private compiledDrafts = new WeakMap<
+    RealmIframeSandboxDraft,
+    Promise<string>
+  >();
   private loadingMessageTimer?: ReturnType<typeof setTimeout>;
   private document?: LooseSingleCardDocument;
   private activeDraft?: RealmIframeSandboxDraft;
+  private embeddedSize?: SafeElementSize;
   private latestDraftRevision = -1;
   private pendingDraft = Promise.resolve();
 
@@ -69,6 +87,11 @@ class RealmSandboxFrame extends Component<Signature> {
   }
 
   connect = modifier((element: HTMLElement) => {
+    // Every iframe format reports intrinsic dimensions. The parent format CSS
+    // remains authoritative for clipping, scrolling, and stretching. Embedded
+    // additionally uses the safe modifier below so nested FieldDef content is
+    // measured at the exact delegated root without giving authored code a DOM
+    // or MessagePort capability.
     let heightService = new RealmIframeHeightService(element, (dimensions) =>
       this.post({ type: 'resize', ...dimensions }),
     );
@@ -86,11 +109,15 @@ class RealmSandboxFrame extends Component<Signature> {
       this.port.addEventListener('message', this.receive);
       this.port.start();
       heightService.start();
+      if (this.embeddedSize) {
+        this.post({ type: 'resize', ...this.embeddedSize });
+      }
       this.loadingMessageTimer = globalThis.setTimeout(() => {
         if (!this.card && !this.error) {
           this.showLoadingMessage = true;
         }
       }, loadingMessageDelay);
+      this.applyPresentation(event.data.presentation);
       void this.loadCard(event.data.document, event.data.draft);
     };
     globalThis.addEventListener('message', acceptCapabilityPort);
@@ -122,19 +149,25 @@ class RealmSandboxFrame extends Component<Signature> {
     });
   }
 
-  private receive = (event: MessageEvent) => {
-    let message = event.data as Partial<RealmIframeSandboxInbound>;
-    if (message?.protocol !== realmIframeSandboxProtocol) {
+  private reportEmbeddedSize = (dimensions: SafeElementSize) => {
+    if (this.currentPresentation.format !== 'embedded') {
       return;
     }
+    this.embeddedSize = dimensions;
+    this.post({ type: 'resize', ...dimensions });
+  };
+
+  private receive = (event: MessageEvent) => {
+    if (!isRealmIframeSandboxInbound(event.data)) {
+      return;
+    }
+    let message: RealmIframeSandboxInbound = event.data;
     if (message.type === 'draft') {
-      if (
-        typeof message.sourceURL === 'string' &&
-        typeof message.source === 'string' &&
-        typeof message.revision === 'number'
-      ) {
-        this.scheduleDraft(message as RealmIframeSandboxDraft);
-      }
+      this.scheduleDraft(message);
+      return;
+    }
+    if (message.type === 'render') {
+      this.applyPresentation(message.presentation);
       return;
     }
     if (
@@ -168,16 +201,22 @@ class RealmSandboxFrame extends Component<Signature> {
     pending.resolve(response);
   };
 
-  private brokerFetch = (input: RequestInfo | URL, init?: RequestInit) => {
+  private brokerFetch = async (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ) => {
     let request = input instanceof Request ? input : new Request(input, init);
     let draft = this.activeDraft;
-    if (draft && this.sameModuleURL(request.url, draft.sourceURL)) {
-      return Promise.resolve(
-        new Response(draft.source, {
-          status: 200,
-          headers: { 'content-type': SupportedMimeType.CardSource },
-        }),
-      );
+    if (draft && sameCodePreviewModuleURL(request.url, draft.sourceURL)) {
+      let compiledSource = this.compiledDrafts.get(draft);
+      if (!compiledSource) {
+        compiledSource = compileCodePreviewDraftSource(draft);
+        this.compiledDrafts.set(draft, compiledSource);
+      }
+      return new Response(await compiledSource, {
+        status: 200,
+        headers: { 'content-type': SupportedMimeType.CardSource },
+      });
     }
     let requestId = `iframe-fetch-${++this.fetchSequence}`;
     let result = new Promise<Response>((resolve, reject) => {
@@ -192,7 +231,7 @@ class RealmSandboxFrame extends Component<Signature> {
         headers: [...request.headers.entries()],
       },
     });
-    return result;
+    return await result;
   };
 
   private async loadCard(
@@ -247,17 +286,50 @@ class RealmSandboxFrame extends Component<Signature> {
       new URL(this.args.model.cardID),
       { loader },
     )) as BaseDef;
-    let field: Field | undefined;
-    if (this.args.model.fieldName) {
-      let fields = api.getFields(card) as Record<string, Field | undefined>;
-      field = fields[this.args.model.fieldName];
-      if (!field) {
-        throw new Error(`Could not resolve field ${this.args.model.fieldName}`);
+    let field = this.resolveFieldFor(card, api);
+    this.cardAPI = api;
+    this.card = card;
+    this.field = field;
+    this.error = undefined;
+  }
+
+  private cardAPI?: typeof CardAPI;
+
+  private get currentPresentation(): RealmIframeSandboxPresentation {
+    return (
+      this.presentation ?? {
+        format: this.args.model.format,
+        fieldName: this.args.model.fieldName,
+        codeRef: this.args.model.codeRef,
+        displayContainer: this.args.model.displayContainer,
+      }
+    );
+  }
+
+  private applyPresentation(presentation: RealmIframeSandboxPresentation) {
+    this.presentation = presentation;
+    if (this.card && this.cardAPI) {
+      try {
+        this.field = this.resolveFieldFor(this.card, this.cardAPI);
+        this.error = undefined;
+      } catch (error) {
+        this.field = undefined;
+        this.error = error instanceof Error ? error.message : String(error);
       }
     }
-    this.field = field;
-    this.card = card;
-    this.error = undefined;
+  }
+
+  private resolveFieldFor(card: BaseDef, api: typeof CardAPI) {
+    let fieldName = this.currentPresentation.fieldName;
+    if (!fieldName) {
+      return undefined;
+    }
+    let fields = api.getFields(card) as Record<string, Field | undefined>;
+    let field = fields[fieldName];
+    if (!field) {
+      throw new Error(`Could not resolve field ${fieldName}`);
+    }
+    return field;
   }
 
   private scheduleDraft(draft: RealmIframeSandboxDraft) {
@@ -316,29 +388,20 @@ class RealmSandboxFrame extends Component<Signature> {
     return (await response.json()) as LooseSingleCardDocument;
   }
 
-  private sameModuleURL(left: string, right: string): boolean {
-    try {
-      let leftURL = new URL(left);
-      let rightURL = new URL(right);
-      leftURL.search = '';
-      leftURL.hash = '';
-      rightURL.search = '';
-      rightURL.hash = '';
-      return leftURL.href === rightURL.href;
-    } catch {
-      return false;
-    }
-  }
-
   <template>
-    <main class={{@model.format}} data-realm-sandbox-frame {{this.connect}}>
+    <main
+      class={{this.currentPresentation.format}}
+      data-realm-sandbox-frame
+      {{this.connect}}
+      {{safeModifier 'observe-size' this.reportEmbeddedSize}}
+    >
       {{#if this.card}}
         <CardRenderer
           @card={{this.card}}
           @field={{this.field}}
-          @codeRef={{@model.codeRef}}
-          @format={{@model.format}}
-          @displayContainer={{@model.displayContainer}}
+          @codeRef={{this.currentPresentation.codeRef}}
+          @format={{this.currentPresentation.format}}
+          @displayContainer={{this.currentPresentation.displayContainer}}
         />
       {{else if this.error}}
         <div class='realm-sandbox-frame-error' role='alert'>
@@ -359,8 +422,7 @@ class RealmSandboxFrame extends Component<Signature> {
         width: 100%;
         overflow: hidden;
       }
-      main.isolated,
-      main.fitted {
+      main.isolated {
         min-height: 100vh;
       }
       .realm-sandbox-frame-loading,

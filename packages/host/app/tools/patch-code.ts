@@ -11,10 +11,12 @@ import { findNonConflictingFilename } from '../utils/file-name';
 import ApplySearchReplaceBlockTool from './apply-search-replace-block';
 import LintAndFixTool from './lint-and-fix';
 
+import type { PreparedCodePreviewCommit } from '../lib/code-preview-sandbox';
 import type CardService from '../services/card-service';
 import type MonacoService from '../services/monaco-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RealmService from '../services/realm';
+import type RealmSandboxService from '../services/realm-sandbox';
 import type ToolService from '../services/tool-service';
 import type * as BaseToolModule from '@cardstack/base/command';
 
@@ -24,12 +26,20 @@ interface FileInfo {
   content: string;
 }
 
+export interface LocallyAppliedCodePatch {
+  finalFileIdentifier: string;
+  patchedContent: string;
+  results: { status: string; failureReason?: string }[];
+}
+
 export default class PatchCodeTool extends HostBaseTool<
   typeof BaseToolModule.PatchCodeInput,
   typeof BaseToolModule.PatchCodeCommandResult
 > {
+  onLocallyApplied?: (result: LocallyAppliedCodePatch) => void;
   @service declare private cardService: CardService;
   @service declare private realm: RealmService;
+  @service declare private realmSandbox: RealmSandboxService;
   @service declare private monacoService: MonacoService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private toolService: ToolService;
@@ -60,38 +70,94 @@ export default class PatchCodeTool extends HostBaseTool<
     let finalFileIdentifier = fileUrl;
     let lintIssues: string[] = [];
     if (results.some((r) => r.status === 'applied')) {
-      if (patchedCode.trim() !== '' && this.isLintableFile(fileUrl)) {
-        let lintResult = await this.lintAndFix(fileUrl, patchedCode);
-        patchedCode = lintResult.output;
-        lintIssues = lintResult.lintIssues ?? [];
-      }
-
       finalFileIdentifier = await this.determineFinalFileUrl(
         fileUrl,
         fileInfo,
         hasEmptySearchPortion,
       );
 
-      let clientRequestId = this.toolService.trackAiAssistantCardRequest({
-        action: 'patch-code',
-        roomId,
-        fileUrl: finalFileIdentifier,
-      });
-
-      let savedThroughOpenFile = await this.trySaveThroughOpenFile(
+      // The search/replace result is already one coherent source generation.
+      // Publish it before the remote lint/autofix request so the active
+      // SES/iframe preview can update immediately. If lint changes the source,
+      // the final publish below advances the same volatile module once more;
+      // persistence and the realm index remain canonical in either case.
+      const publishedGeneration = this.realmSandbox.publishVolatileModuleSource(
         finalFileIdentifier,
         patchedCode,
-        clientRequestId,
       );
-      if (!savedThroughOpenFile) {
-        this.cardService
-          .saveSource(new URL(finalFileIdentifier), patchedCode, 'bot-patch', {
-            resetLoader: hasExecutableExtension(finalFileIdentifier),
-            clientRequestId,
-          })
-          .catch((error: unknown) => {
-            console.error('PatchCodeTool: failed to save source', error);
-          });
+      let publishedPreviewSource = patchedCode;
+
+      // This is the user-visible completion boundary. Lint/autofix,
+      // persistence, indexing, and Matrix acknowledgement deliberately occur
+      // afterward and must not keep the Apply control spinning.
+      this.onLocallyApplied?.({
+        finalFileIdentifier,
+        patchedContent: patchedCode,
+        results,
+      });
+
+      if (patchedCode.trim() !== '' && this.isLintableFile(fileUrl)) {
+        let lintResult = await this.lintAndFix(fileUrl, patchedCode);
+        patchedCode = lintResult.output;
+        lintIssues = lintResult.lintIssues ?? [];
+      }
+
+      // Remote lint is deliberately outside the local-apply boundary and may
+      // complete after another streamed block or a Monaco edit has published a
+      // newer source generation. A late result is formatting for its original
+      // input, not a rebase; publishing or saving it would roll the preview and
+      // canonical realm source backward. Only the generation that started this
+      // lint pass may advance to persistence.
+      let generationIsCurrent =
+        this.realmSandbox.isLatestVolatileModuleGeneration(publishedGeneration);
+
+      if (generationIsCurrent) {
+        let clientRequestId = this.toolService.trackAiAssistantCardRequest({
+          action: 'patch-code',
+          roomId,
+          fileUrl: finalFileIdentifier,
+        });
+
+        // The completed search/replace command—not Act mode—makes this module
+        // volatile. Publish before persistence so a mounted SES/iframe preview
+        // can render this generation immediately and the next streamed block can
+        // compose against it without waiting for the realm/indexing round trip.
+        if (patchedCode !== publishedPreviewSource) {
+          this.realmSandbox.publishVolatileModuleSource(
+            finalFileIdentifier,
+            patchedCode,
+          );
+        }
+        let volatileCommit = this.realmSandbox.prepareVolatileModuleCommit(
+          finalFileIdentifier,
+          patchedCode,
+          'bot-patch',
+          clientRequestId,
+        );
+
+        let savedThroughOpenFile = await this.trySaveThroughOpenFile(
+          finalFileIdentifier,
+          patchedCode,
+          clientRequestId,
+          volatileCommit,
+        );
+        if (!savedThroughOpenFile) {
+          this.cardService
+            .saveSource(
+              new URL(finalFileIdentifier),
+              patchedCode,
+              'bot-patch',
+              {
+                resetLoader: hasExecutableExtension(finalFileIdentifier),
+                clientRequestId,
+              },
+            )
+            .then(() => volatileCommit?.persisted())
+            .catch((error: unknown) => {
+              volatileCommit?.failed();
+              console.error('PatchCodeTool: failed to save source', error);
+            });
+        }
       }
     }
 
@@ -115,6 +181,7 @@ export default class PatchCodeTool extends HostBaseTool<
     targetFileUrl: string,
     content: string,
     clientRequestId?: string,
+    volatileCommit?: PreparedCodePreviewCommit,
   ): Promise<boolean> {
     try {
       let openFileResource = this.operatorModeStateService.openFile?.current;
@@ -129,10 +196,13 @@ export default class PatchCodeTool extends HostBaseTool<
       void openFileResource
         .write(content, {
           flushLoader: hasExecutableExtension(targetFileUrl),
+          deferStoreRefresh: volatileCommit?.shouldDeferStoreRefresh,
           saveType: 'bot-patch',
           clientRequestId,
         })
+        .then(() => volatileCommit?.persisted())
         .catch((error: unknown) => {
+          volatileCommit?.failed();
           console.error(
             'PatchCodeTool: failed to write through FileResource',
             error,
@@ -158,7 +228,10 @@ export default class PatchCodeTool extends HostBaseTool<
       return {
         exists: true,
         hasContent: content.trim() !== '',
-        content,
+        content: this.realmSandbox.beginVolatileModuleMutation(
+          fileUrl,
+          content,
+        ),
       };
     }
     let getSourceResult = await this.cardService.getSource(rri(fileUrl));
@@ -166,7 +239,11 @@ export default class PatchCodeTool extends HostBaseTool<
     let content = exists ? getSourceResult.content : '';
     let hasContent = exists && content.trim() !== '';
 
-    return { exists, hasContent, content };
+    return {
+      exists,
+      hasContent,
+      content: this.realmSandbox.beginVolatileModuleMutation(fileUrl, content),
+    };
   }
 
   private hasEmptySearchPortion(codeBlocks: string[]): boolean {

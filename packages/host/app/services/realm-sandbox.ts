@@ -1,8 +1,13 @@
+import { getOwner } from '@ember/application';
 import { setComponentTemplate } from '@ember/component';
 import type Owner from '@ember/owner';
-import { next } from '@ember/runloop';
+import { cancel, schedule, scheduleOnce } from '@ember/runloop';
+import type { Timer } from '@ember/runloop';
 import Service, { service } from '@ember/service';
 import { createTemplateFactory } from '@ember/template-factory';
+import { buildWaiter } from '@ember/test-waiters';
+
+import { isTesting } from '@embroider/macros';
 
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -18,14 +23,31 @@ import {
   type RealmResourceIdentifier,
   SupportedMimeType,
   decodeScopedCSSRequest,
+  delegatedCardRenderComponent,
+  hasExecutableExtension,
   localId as localIdSymbol,
+  meta,
   realmURL as realmURLSymbol,
   rri,
 } from '@cardstack/runtime-common';
 
 import config from '@cardstack/host/config/environment';
-import type CodePreviewSandbox from '@cardstack/host/lib/code-preview-sandbox';
-import type { CodePreviewDraft } from '@cardstack/host/lib/code-preview-sandbox';
+import {
+  CodePreviewAnalysisCache,
+  codePreviewModuleKey,
+  sameCodePreviewModuleURL,
+  type VolatileModuleGeneration,
+  VolatileModuleRegistry,
+} from '@cardstack/host/lib/code-preview-sandbox';
+import CodePreviewSandbox from '@cardstack/host/lib/code-preview-sandbox';
+import type {
+  CodePreviewDraft,
+  PreparedCodePreviewCommit,
+} from '@cardstack/host/lib/code-preview-sandbox';
+import {
+  serializeWithArgs,
+  teardown,
+} from '@cardstack/host/lib/isolated-render';
 import RealmCompartmentModuleRuntime, {
   sandboxRealmURLArgument,
   type SandboxCardFieldMetadata,
@@ -34,22 +56,16 @@ import RealmCompartmentModuleRuntime, {
   type SandboxTemplateBundle,
   type SandboxTrustedExportIdentity,
 } from '@cardstack/host/lib/realm-compartment-module-runtime';
-import {
-  assertAllowedAIProxyURL,
-  assertURLWithinRealm,
-  snapshotFromCardDocument,
-  type RealmSandboxProbeReport,
-  type SpikeRealmConfig,
-  type WorkerCapabilityRequest,
-} from '@cardstack/host/lib/realm-isolation-spike';
-import RealmIsolationWorkerRuntime from '@cardstack/host/lib/realm-isolation-worker-runtime';
+import type { RealmIframeSandboxPresentation } from '@cardstack/host/lib/realm-iframe-sandbox-protocol';
 import {
   getOpaqueRealmCardState,
+  getOpaqueRealmCardTypeState,
   opaqueRealmCardTypeState,
   opaqueRealmCardState,
   type OpaqueRealmCardState,
   type OpaqueRealmCardTheme,
 } from '@cardstack/host/lib/realm-sandbox-boundary';
+import realmSandboxDelegatedCardComponent from '@cardstack/host/lib/realm-sandbox-delegated-card-component';
 import realmSandboxFieldComponent from '@cardstack/host/lib/realm-sandbox-field-component';
 import {
   isBaseRealmModule,
@@ -57,21 +73,29 @@ import {
   isTrustedHostRealmModule,
   isTrustedSandboxImport,
 } from '@cardstack/host/lib/realm-sandbox-import-policy';
+import RealmSandboxRuntimeRegistry from '@cardstack/host/lib/realm-sandbox-runtime-registry';
 import {
   classifyCardSourceForSandbox,
+  sandboxDecisionForFormat,
   type CardRenderSandboxTier,
   type CardSourceSandboxClassification,
 } from '@cardstack/host/lib/realm-sandbox-source-policy';
-import RealmWorkerCompartmentModuleRuntime from '@cardstack/host/lib/realm-worker-compartment-module-runtime';
+import { assertURLWithinRealm } from '@cardstack/host/lib/realm-sandbox-url-policy';
 import type CardService from '@cardstack/host/services/card-service';
+import type { SaveType } from '@cardstack/host/services/card-service';
 import type NetworkService from '@cardstack/host/services/network';
 
 import type {
   BaseDef,
   BaseDefComponent,
+  BoxComponent,
   Field,
   Format,
 } from '@cardstack/base/card-api';
+
+const compartmentTemplateWaiter = buildWaiter(
+  'realm-sandbox:compartment-template',
+);
 
 export interface RealmSandboxRender {
   component: BaseDefComponent;
@@ -80,6 +104,98 @@ export interface RealmSandboxRender {
   styles: string[];
   principal: string;
   theme?: OpaqueRealmCardTheme;
+  onError?: (error: unknown, component: BaseDefComponent) => void;
+  onRendered?: (component: BaseDefComponent) => void;
+}
+
+class StableRealmSandboxRender implements RealmSandboxRender {
+  @tracked component: BaseDefComponent;
+  @tracked model: BaseDef | Record<string, unknown>;
+  @tracked fields: Record<string, BaseDefComponent>;
+  @tracked styles: string[];
+  @tracked principal: string;
+  @tracked theme?: OpaqueRealmCardTheme;
+  onError?: (error: unknown, component: BaseDefComponent) => void;
+  onRendered?: (component: BaseDefComponent) => void;
+  private pending?: RealmSandboxRender;
+
+  constructor(value: RealmSandboxRender) {
+    this.component = value.component;
+    this.model = value.model;
+    this.fields = value.fields;
+    this.styles = value.styles;
+    this.principal = value.principal;
+    this.theme = value.theme;
+    this.onError = value.onError;
+    this.onRendered = value.onRendered;
+  }
+
+  scheduleUpdate(value: RealmSandboxRender) {
+    let current = this.pending ?? this;
+    if (
+      current.component === value.component &&
+      current.model === value.model &&
+      current.fields === value.fields &&
+      sameStyles(current.styles, value.styles) &&
+      current.principal === value.principal &&
+      current.theme === value.theme &&
+      current.onError === value.onError &&
+      current.onRendered === value.onRendered
+    ) {
+      return;
+    }
+    this.pending = value;
+    scheduleOnce('afterRender', this, this.flushUpdate);
+  }
+
+  private flushUpdate() {
+    let value = this.pending;
+    this.pending = undefined;
+    if (!value) {
+      return;
+    }
+    if (this.component !== value.component) {
+      this.component = value.component;
+    }
+    if (this.model !== value.model) {
+      this.model = value.model;
+    }
+    if (this.fields !== value.fields) {
+      this.fields = value.fields;
+    }
+    if (!sameStyles(this.styles, value.styles)) {
+      this.styles = value.styles;
+    }
+    if (this.principal !== value.principal) {
+      this.principal = value.principal;
+    }
+    if (this.theme !== value.theme) {
+      this.theme = value.theme;
+    }
+    if (this.onError !== value.onError) {
+      this.onError = value.onError;
+    }
+    if (this.onRendered !== value.onRendered) {
+      this.onRendered = value.onRendered;
+    }
+  }
+}
+
+function sameStyles(left: readonly string[], right: readonly string[]) {
+  return (
+    left.length === right.length &&
+    left.every((stylesheet, index) => stylesheet === right[index])
+  );
+}
+
+interface PendingCodePreviewTemplate {
+  codePreviewSandbox: CodePreviewSandbox;
+  draft: CodePreviewDraft;
+  key: string;
+  previewSlot: string;
+  template: InertTemplate;
+  previousKey?: string;
+  previousTemplate?: InertTemplate;
 }
 
 export interface RealmIframeSandboxRender {
@@ -90,7 +206,9 @@ export interface RealmIframeSandboxRender {
   targetOrigin: string;
   url: string;
   accessibleTitle: string;
+  presentation: RealmIframeSandboxPresentation;
   codePreviewID?: string;
+  onGenerationResult?: (revision: number, error?: string) => void;
   draft?: {
     sourceURL: string;
     source: string;
@@ -108,7 +226,7 @@ export interface RealmIframeFetchResult {
 
 export interface RealmSandboxMetrics {
   enabled: boolean;
-  executionTier: 'compartment' | 'worker' | 'iframe';
+  executionTier: 'compartment' | 'iframe';
   executionReason: string;
   renderRequests: number;
   sandboxedCards: number;
@@ -122,7 +240,10 @@ export interface RealmSandboxMetrics {
   omittedFields: Record<string, number>;
   activeCompartments: number;
   activeCodePreviewLoaders: number;
-  activeWorkerCompartments: number;
+  codePreviewCommitsPrepared: number;
+  codePreviewAcknowledgementsRecognized: number;
+  codePreviewAnalysisCacheHits: number;
+  codePreviewAnalysisCacheMisses: number;
   compartmentTemplateCacheHits: number;
   compartmentTemplateCacheMisses: number;
   compartmentEvaluationTimeMs: number;
@@ -142,17 +263,50 @@ interface CodePreviewRuntimeEntry {
   pending: Promise<void>;
 }
 
-export interface RealmSandboxProbeCard {
-  id?: string;
-  realmLabel?: string;
-  realmURL?: string;
-  targetCardURL?: string;
-  targetEndpoint?: string;
-}
+// Search resources can be instantiated under a render Store owner while Code
+// mode lives under the host owner. Realm events fan out to both owners, so the
+// save transaction registry must be client-wide rather than service-instance
+// local. Entries still retain their exact CodePreviewSandbox and are bounded
+// like CardService's own request-id history.
+type CodePreviewCommitRegistry = Map<
+  string,
+  {
+    sandboxes: Set<CodePreviewSandbox>;
+    drafts?: Map<CodePreviewSandbox, CodePreviewDraft>;
+    sourceURL: string;
+    expiresAt: number;
+  }
+>;
 
-interface RealmRuntimeEntry {
-  cardURL: string;
-  runtime: RealmIsolationWorkerRuntime;
+const codePreviewCommitRegistryKey = Symbol.for(
+  '@cardstack/host/code-preview-commits',
+);
+const codePreviewCommitGlobal = globalThis as unknown as Record<
+  PropertyKey,
+  unknown
+>;
+let codePreviewCommits = codePreviewCommitGlobal[codePreviewCommitRegistryKey];
+if (!(codePreviewCommits instanceof Map)) {
+  codePreviewCommits = new Map();
+  Object.defineProperty(globalThis, codePreviewCommitRegistryKey, {
+    configurable: true,
+    value: codePreviewCommits,
+  });
+}
+const codePreviewCommitRegistry =
+  codePreviewCommits as CodePreviewCommitRegistry;
+const maxCachedThemes = 128;
+
+class ReactiveRevision {
+  @tracked value = 0;
+
+  consume() {
+    return this.value;
+  }
+
+  bump() {
+    this.value++;
+  }
 }
 
 function createSandboxMathFacade(): object {
@@ -173,23 +327,39 @@ export default class RealmSandboxService extends Service {
   @service declare private network: NetworkService;
   @service declare private cardService: CardService;
 
-  private runtimes = new Map<string, Promise<RealmRuntimeEntry>>();
-  private compartmentRuntimes = new Map<
-    string,
-    RealmCompartmentModuleRuntime
-  >();
+  private realmRuntimes = new RealmSandboxRuntimeRegistry(
+    (principal) =>
+      this.createCompartmentRuntime(principal, this.fetchCompartmentModule),
+    (principal) => this.onRealmRuntimeEvicted(principal),
+  );
   private codePreviewRuntimes = new WeakMap<
     CodePreviewSandbox,
     Map<string, CodePreviewRuntimeEntry>
   >();
+  private codePreviewAnalyses = new CodePreviewAnalysisCache(
+    () => this.metrics.codePreviewAnalysisCacheHits++,
+    () => this.metrics.codePreviewAnalysisCacheMisses++,
+  );
   private activeCodePreviews = new Set<CodePreviewSandbox>();
+  private volatileModules = new VolatileModuleRegistry();
+  private interactiveCodePreviewConsumers = new Map<string, Set<object>>();
+  private interactiveCodePreviews = new Map<string, CodePreviewSandbox>();
+  private interactiveCodePreviewRevisions = new Map<string, ReactiveRevision>();
+  private interactiveCodePreviewTimers = new Map<
+    string,
+    ReturnType<typeof setTimeout>
+  >();
+  private externallyVolatileModules = new Set<string>();
+  private externalModuleInvalidationRevisions = new Map<string, number>();
+  private externalModuleRefreshes = new Map<string, Promise<void>>();
   private activeIframeCodePreviewLoaders = new Set<object>();
   private codePreviewTemplates = new Map<string, InertTemplate>();
   private codePreviewTemplateKeys = new Map<string, string>();
-  private workerCompartmentRuntimes = new Map<
-    string,
-    RealmWorkerCompartmentModuleRuntime
+  private pendingCodePreviewTemplates = new Map<
+    BaseDefComponent,
+    PendingCodePreviewTemplate
   >();
+  private canonicalTemplateKeysByModule = new Map<string, Set<string>>();
   private compartmentTemplates = new Map<string, InertTemplate>();
   private moduleClassifications = new Map<
     string,
@@ -197,6 +367,14 @@ export default class RealmSandboxService extends Service {
   >();
   private moduleDependencies = new Map<string, string[]>();
   private compartmentLoads = new Map<string, Promise<void>>();
+  private compartmentFailures = new Set<string>();
+  private compartmentTemplateRevisions = new Map<string, ReactiveRevision>();
+  private compartmentLoadingRevisions = new WeakMap<
+    BaseDef,
+    Map<string, ReactiveRevision>
+  >();
+  private pendingCompartmentRevisions = new Set<ReactiveRevision>();
+  private compartmentRevisionFrame?: Timer;
   private compartmentLoadingByCard = new WeakMap<
     BaseDef,
     Map<string, number>
@@ -224,13 +402,16 @@ export default class RealmSandboxService extends Service {
     Record<string, SandboxCardFieldMetadata>
   >();
   private themes = new Map<string, Promise<OpaqueRealmCardTheme | undefined>>();
-  private workerSnapshotKeys = new WeakMap<object, string>();
-  private nextWorkerSnapshotKey = 0;
   private opaqueFieldComponents = new WeakMap<
     object,
     Map<Format, Record<string, BaseDefComponent>>
   >();
-  @tracked private compartmentRevision = 0;
+  private renderEnvelopes = new WeakMap<
+    BaseDef,
+    Map<string, RealmSandboxRender>
+  >();
+  private cardReloadRevisions = new WeakMap<BaseDef, ReactiveRevision>();
+  @tracked private metricsRevision = 0;
   private sandboxedCards = new WeakSet<object>();
   private principals = new Set<string>();
   private metrics: RealmSandboxMetrics = {
@@ -249,7 +430,10 @@ export default class RealmSandboxService extends Service {
     omittedFields: {},
     activeCompartments: 0,
     activeCodePreviewLoaders: 0,
-    activeWorkerCompartments: 0,
+    codePreviewCommitsPrepared: 0,
+    codePreviewAcknowledgementsRecognized: 0,
+    codePreviewAnalysisCacheHits: 0,
+    codePreviewAnalysisCacheMisses: 0,
     compartmentTemplateCacheHits: 0,
     compartmentTemplateCacheMisses: 0,
     compartmentEvaluationTimeMs: 0,
@@ -274,7 +458,61 @@ export default class RealmSandboxService extends Service {
     return Boolean(getOpaqueRealmCardState(card));
   }
 
-  shouldUseOpaqueCard(typeRef: CodeRef | undefined): boolean {
+  reloadCard(card: BaseDef, codePreviewSandbox?: CodePreviewSandbox): boolean {
+    if (!this.isOpaqueCard(card)) {
+      return false;
+    }
+
+    let moduleKey = this.interactiveCodePreviewKey(card);
+    let preview =
+      codePreviewSandbox ??
+      (moduleKey ? this.interactiveCodePreviews.get(moduleKey) : undefined);
+    let reloadedPreview = preview?.reload() ?? false;
+    if (reloadedPreview && moduleKey && preview !== codePreviewSandbox) {
+      this.bumpInteractiveCodePreview(moduleKey);
+    }
+
+    if (!reloadedPreview) {
+      let ref = getOpaqueRealmCardState(card)?.typeRef;
+      if (ref && 'module' in ref) {
+        this.invalidateCanonicalSandboxModule(String(ref.module));
+      }
+    }
+
+    // A manual reload is deliberately the escape hatch from HMR's stable
+    // rendered island. Drop only this card's envelope, leave Store identity
+    // and other realm runtimes alone, then invalidate both SES and iframe
+    // render getters through one explicit boundary revision.
+    this.renderEnvelopes.delete(card);
+    this.cardReloadRevisionFor(card).bump();
+    return true;
+  }
+
+  // Host-owned rendering entry point. Interactive host UI must ask the
+  // boundary for a component instead of introspecting an opaque card's
+  // constructor. Trusted cards retain the ordinary card-api behavior.
+  componentFor(
+    card: BaseDef,
+    field?: Field,
+    opts?: { componentCodeRef?: CodeRef },
+  ): BoxComponent {
+    if (!field) {
+      let delegated = (
+        card as BaseDef & {
+          [delegatedCardRenderComponent]?: BoxComponent;
+        }
+      )[delegatedCardRenderComponent];
+      if (delegated) {
+        return delegated;
+      }
+    }
+    return card.constructor.getComponent(card, field, opts);
+  }
+
+  shouldUseOpaqueCard(
+    typeRef: CodeRef | undefined,
+    relativeTo?: RealmResourceIdentifier | URL,
+  ): boolean {
     if (this.isIframeSandboxChild()) {
       return false;
     }
@@ -282,11 +520,45 @@ export default class RealmSandboxService extends Service {
       return false;
     }
     let module = String(typeRef.module);
+    if (isTesting() && relativeTo) {
+      // Existing integration tests construct realm modules as live class
+      // objects and install them with Loader.shimModule(). There is no source
+      // text for an SES compartment to evaluate. Treat only an already-loaded
+      // test shim as trusted so the pre-sandbox feature suites continue to
+      // exercise their own behavior; network-backed test modules still take
+      // the real opaque/sandbox path.
+      let resolvedModule = this.resolveCardModule(module, relativeTo);
+      if (this.network.loaderService.loader.isModuleShimmed(resolvedModule)) {
+        return false;
+      }
+    }
     return !(
       isTrustedHostRealmModule(module) ||
       isTrustedHostRealmModule(this.network.resolveImport(module)) ||
       this.isConfiguredTrustedRealmModule(module)
     );
+  }
+
+  // Executable invalidations need the same trust decision as Store
+  // materialization, but realm events carry a module URL rather than a CodeRef.
+  // Test shims remain on the legacy trusted path because they have no source
+  // text for the compartment to evaluate.
+  isSandboxedUserModule(moduleIdentifier: string): boolean {
+    let resolved = this.network.resolveImport(moduleIdentifier);
+    if (
+      isTrustedHostRealmModule(moduleIdentifier) ||
+      isTrustedHostRealmModule(resolved) ||
+      this.isConfiguredTrustedRealmModule(moduleIdentifier)
+    ) {
+      return false;
+    }
+    if (
+      isTesting() &&
+      this.network.loaderService.loader.isModuleShimmed(resolved)
+    ) {
+      return false;
+    }
+    return true;
   }
 
   // Returns the ordinary loader that is allowed to evaluate a trusted card
@@ -412,6 +684,7 @@ export default class RealmSandboxService extends Service {
       let hasCustomEditTemplate = metadata?.hasCustomEditTemplate === true;
       let hasCustomIsolatedTemplate =
         metadata?.hasCustomIsolatedTemplate === true;
+      let authoredTemplateFormats = metadata?.authoredTemplateFormats;
       let prefersWideFormat = metadata?.prefersWideFormat === true;
       fieldMetadata = metadata?.fields ?? {};
       trustedFieldTypes = await this.resolveTrustedFieldTypes(fieldMetadata);
@@ -442,6 +715,7 @@ export default class RealmSandboxService extends Service {
           fields: Object.freeze({ ...fieldMetadata }),
           hasCustomEditTemplate,
           hasCustomIsolatedTemplate,
+          authoredTemplateFormats,
           headerColor,
           prefersWideFormat,
         }),
@@ -472,6 +746,12 @@ export default class RealmSandboxService extends Service {
       id: resource.id ? rri(resource.id) : undefined,
       ...(existingLocalId ? { [localIdSymbol]: existingLocalId } : {}),
     }) as unknown as T;
+    // Match Base's createFromSerialized contract: host presentation metadata
+    // such as realmInfo is inert data and must survive opaque materialization.
+    // Do not expose the executable definition or loader through this channel.
+    if (resource.meta) {
+      card[meta] = structuredClone(resource.meta);
+    }
     let state: OpaqueRealmCardState = {
       typeRef: resolvedTypeRef,
       principal,
@@ -493,6 +773,11 @@ export default class RealmSandboxService extends Service {
       },
     };
     Object.defineProperty(card, opaqueRealmCardState, { value: state });
+    Object.defineProperty(card, delegatedCardRenderComponent, {
+      configurable: false,
+      enumerable: false,
+      value: realmSandboxDelegatedCardComponent(card),
+    });
     this.trustedFieldTypesByCard.set(card, trustedFieldTypes ?? {});
     this.fieldMetadataByCard.set(card, fieldMetadata ?? {});
     for (let [name, value] of Object.entries(snapshot)) {
@@ -517,9 +802,9 @@ export default class RealmSandboxService extends Service {
       codePreviewSandbox?: CodePreviewSandbox;
     } = {},
   ): RealmSandboxRender | undefined {
+    let reloadRevision = this.cardReloadRevisionFor(card).consume();
     if (
       !this.isTransparentSandboxEnabled() ||
-      this.isSecurityProbe(card, format) ||
       !this.isSupportedFormat(format)
     ) {
       return undefined;
@@ -533,16 +818,18 @@ export default class RealmSandboxService extends Service {
       // for non-base realm types.
       return undefined;
     }
+    let useBaseTemplate =
+      options.useBaseTemplate === true ||
+      this.usesInheritedBaseTemplate(card, effectiveFormat);
     if (
-      this.sandboxDecisionFor(card, options.codePreviewSandbox).tier ===
-      'iframe'
+      !useBaseTemplate &&
+      this.sandboxDecisionFor(card, effectiveFormat, options.codePreviewSandbox)
+        .tier === 'iframe'
     ) {
       return undefined;
     }
     this.metrics.renderRequests++;
     let principal = opaqueState.principal;
-    let useBaseTemplate =
-      options.useBaseTemplate === true || effectiveFormat === 'edit';
     let inertTemplate = useBaseTemplate
       ? this.trustedBaseTemplateFor(card, effectiveFormat)
       : this.compartmentTemplateFor(
@@ -573,22 +860,72 @@ export default class RealmSandboxService extends Service {
       this.compartmentRenderedCards.add(card);
       this.metrics.compartmentRenderedCards++;
     }
-    return {
+    let fields = this.fieldsFor(card, opaqueState.snapshot, effectiveFormat);
+    // A preview slot is the stable rendered island. Source generations update
+    // its tracked payload; they are not separate render-envelope identities.
+    // This keeps the Glimmer component, island element, and style modifier
+    // mounted while RealmSandboxTemplateIsland adopts a compatible program.
+    let envelopeKey = `${effectiveFormat}|${useBaseTemplate ? 'base' : 'sandbox'}|${options.codePreviewSandbox?.id ?? 'canonical'}|reload:${reloadRevision}`;
+    let envelopes = this.renderEnvelopes.get(card);
+    if (!envelopes) {
+      envelopes = new Map();
+      this.renderEnvelopes.set(card, envelopes);
+    }
+    let next = {
       component: inertTemplate.component,
       model,
-      fields: this.fieldsFor(card, opaqueState.snapshot, effectiveFormat),
+      fields,
       styles: inertTemplate.styles,
       principal,
       theme: opaqueState.presentation.theme,
+      ...(options.codePreviewSandbox
+        ? {
+            onError: this.onCodePreviewTemplateError,
+            onRendered: this.onCodePreviewTemplateRendered,
+          }
+        : {}),
     };
+    let envelope = envelopes.get(envelopeKey) as
+      | StableRealmSandboxRender
+      | undefined;
+    if (envelope) {
+      envelope.scheduleUpdate(next);
+      return envelope;
+    }
+    envelope = new StableRealmSandboxRender(next);
+    envelopes.set(envelopeKey, envelope);
+    return envelope;
   }
 
   isRenderLoading(card: BaseDef, format: Format | undefined): boolean {
-    this.compartmentRevision;
     let effectiveFormat = format ?? 'isolated';
+    this.compartmentLoadingRevisionFor(card, effectiveFormat).consume();
     return (
       (this.compartmentLoadingByCard.get(card)?.get(effectiveFormat) ?? 0) > 0
     );
+  }
+
+  // A prerendered CardIsland must remain the visible authority until the
+  // client has the exact sandbox branch that CardRenderer will consume.
+  // Calling this method starts SES evaluation when necessary and subscribes
+  // the caller only to this card/format's load. A completed failure is also
+  // ready: the
+  // live CardRenderer can then take its normal explicit error/fallback path
+  // instead of leaving stale server DOM mounted forever.
+  isCardIslandHydrationReady(
+    card: BaseDef,
+    format: Format | undefined,
+  ): boolean {
+    if (!this.isOpaqueCard(card)) {
+      return true;
+    }
+    if (this.iframeRenderFor(card, format)) {
+      return true;
+    }
+    if (this.renderFor(card, format)) {
+      return true;
+    }
+    return !this.isRenderLoading(card, format);
   }
 
   iframeRenderFor(
@@ -601,7 +938,19 @@ export default class RealmSandboxService extends Service {
       codePreviewSandbox?: CodePreviewSandbox;
     } = {},
   ): RealmIframeSandboxRender | undefined {
-    let decision = this.sandboxDecisionFor(card, options.codePreviewSandbox);
+    let reloadRevision = this.cardReloadRevisionFor(card).consume();
+    let effectiveFormat = format ?? 'isolated';
+    // The sandbox metadata has already established that this format is not
+    // authored. Render Base's trusted, app-wide fallback in the host instead
+    // of paying to boot an iframe that would only inherit the same template.
+    if (this.usesInheritedBaseTemplate(card, effectiveFormat)) {
+      return undefined;
+    }
+    let decision = this.sandboxDecisionFor(
+      card,
+      effectiveFormat,
+      options.codePreviewSandbox,
+    );
     if (
       decision.tier !== 'iframe' ||
       this.isIframeSandboxChild() ||
@@ -615,34 +964,43 @@ export default class RealmSandboxService extends Service {
     if (!state || !cardID || !targetOrigin) {
       return undefined;
     }
-    let effectiveFormat = this.safeIframeFormat(format);
+    let iframeFormat = this.safeIframeFormat(effectiveFormat);
+    if (!iframeFormat) {
+      return undefined;
+    }
     let url = new URL('/_realm-sandbox-frame', targetOrigin);
     url.searchParams.set('cardURL', cardID);
-    url.searchParams.set('format', effectiveFormat);
     url.searchParams.set('parentOrigin', globalThis.location.origin);
-    if (options.field) {
-      url.searchParams.set('fieldName', options.field.name);
-    }
-    if (options.codeRef && isResolvedCodeRef(options.codeRef)) {
-      url.searchParams.set('componentModule', String(options.codeRef.module));
-      url.searchParams.set('componentName', options.codeRef.name);
-    }
-    url.searchParams.set(
-      'displayContainer',
-      options.displayContainer === false ? 'false' : 'true',
-    );
+    url.searchParams.set('reload', String(reloadRevision));
     this.metrics.executionTier = 'iframe';
     this.metrics.executionReason = decision.reason;
     return {
       cardID,
       document: state.document,
-      format: effectiveFormat,
+      format: iframeFormat,
       principal: state.principal,
       targetOrigin,
       url: url.href,
       accessibleTitle: `${state.presentation.displayName} sandboxed card`,
+      presentation: {
+        format: iframeFormat,
+        displayContainer: options.displayContainer !== false,
+        ...(options.field ? { fieldName: options.field.name } : {}),
+        ...(options.codeRef && isResolvedCodeRef(options.codeRef)
+          ? {
+              codeRef: {
+                module: options.codeRef.module,
+                name: options.codeRef.name,
+              },
+            }
+          : {}),
+      },
       ...(options.codePreviewSandbox
-        ? { codePreviewID: options.codePreviewSandbox.id }
+        ? {
+            codePreviewID: options.codePreviewSandbox.id,
+            onGenerationResult:
+              options.codePreviewSandbox.onIframeGenerationResult,
+          }
         : {}),
       ...(options.codePreviewSandbox?.sourceURL &&
       options.codePreviewSandbox.source != null
@@ -727,12 +1085,10 @@ export default class RealmSandboxService extends Service {
     }
   }
 
-  safeIframeFormat(format: string | undefined): Format {
-    return ['isolated', 'embedded', 'fitted', 'atom', 'edit'].includes(
-      String(format),
-    )
+  safeIframeFormat(format: string | undefined): Format | undefined {
+    return ['isolated', 'embedded', 'edit'].includes(String(format))
       ? (format as Format)
-      : 'isolated';
+      : undefined;
   }
 
   private iframeSandboxOrigin(): string | undefined {
@@ -752,7 +1108,7 @@ export default class RealmSandboxService extends Service {
   }
 
   metricsSnapshot(): RealmSandboxMetrics {
-    this.compartmentRevision;
+    this.metricsRevision;
     return {
       ...this.metrics,
       fallbackReasons: { ...this.metrics.fallbackReasons },
@@ -774,141 +1130,18 @@ export default class RealmSandboxService extends Service {
     }
   }
 
-  isSecurityProbe(card: object, format: string | undefined): boolean {
-    return (
-      format !== 'edit' &&
-      format !== 'head' &&
-      (card as { sandboxProfile?: string }).sandboxProfile ===
-        'realm-exfiltration-probe'
-    );
-  }
-
-  async runSecurityProbe(
-    card: RealmSandboxProbeCard,
-  ): Promise<RealmSandboxProbeReport> {
-    let realmURL = this.requiredString(card.realmURL, 'realmURL');
-    let targetCardURL = this.requiredString(
-      card.targetCardURL,
-      'targetCardURL',
-    );
-    let targetEndpoint = this.requiredString(
-      card.targetEndpoint,
-      'targetEndpoint',
-    );
-    let entry = await this.runtimeForRealm(realmURL, card);
-    return await entry.runtime.invoke<RealmSandboxProbeReport>(
-      'scrapeAll',
-      targetCardURL,
-      targetEndpoint,
-    );
-  }
-
-  private async runtimeForRealm(
-    realmURL: string,
-    card: RealmSandboxProbeCard,
-  ): Promise<RealmRuntimeEntry> {
-    let cardURL = this.requiredString(card.id, 'card id');
-    let existing = this.runtimes.get(realmURL);
-    if (existing) {
-      let entry = await existing;
-      if (entry.cardURL !== cardURL) {
-        throw new Error(
-          `Realm sandbox is already bound to ${entry.cardURL}; per-card authority must be selected at invocation time before multiple active probe cards are supported`,
-        );
-      }
-      return entry;
-    }
-
-    let pending = this.createRuntime(realmURL, cardURL, card.realmLabel);
-    this.runtimes.set(realmURL, pending);
-    try {
-      return await pending;
-    } catch (error) {
-      this.runtimes.delete(realmURL);
-      throw error;
-    }
-  }
-
-  private async createRuntime(
-    realmURL: string,
-    cardURL: string,
-    realmLabel: string | undefined,
-  ): Promise<RealmRuntimeEntry> {
-    let programURL = assertURLWithinRealm(
-      realmURL,
-      `${realmURL}security-probe-program.js`,
-    ).href;
-    let response = await this.network.authedFetch(programURL, {
-      headers: { Accept: SupportedMimeType.CardSource },
-    });
-    if (!response.ok) {
-      throw new Error(
-        `Could not load realm sandbox program: ${response.status} ${await response.text()}`,
-      );
-    }
-
-    let config: SpikeRealmConfig = {
-      realmURL,
-      cardURL,
-      programURL,
-      label: realmLabel ?? realmURL,
-      role: 'child',
-      // The compartment gets a fetch-shaped capability. The host still
-      // validates every destination, so attacker.invalid is rejected before
-      // any network request is created.
-      canUseAIProxy: true,
-    };
-    let runtime = new RealmIsolationWorkerRuntime(
-      config,
-      await response.text(),
-      async (request) => await this.handleCapability(config, request),
-    );
-    return { cardURL, runtime };
-  }
-
-  private async handleCapability(
-    config: SpikeRealmConfig,
-    request: WorkerCapabilityRequest,
-  ): Promise<unknown> {
-    switch (request.operation) {
-      case 'read-own-card':
-        return await this.readCard(config, config.cardURL);
-      case 'read-card':
-        return await this.readCard(config, String(request.args[0] ?? ''));
-      case 'proxy-fetch':
-        // Throws for every target except the single approved AI proxy. This
-        // probe deliberately asks for attacker.invalid.
-        assertAllowedAIProxyURL(String(request.args[0] ?? ''));
-        throw new Error('The security probe is not granted AI proxy access');
-      default:
-        throw new Error(
-          `Capability ${request.operation} is not granted to this card`,
-        );
-    }
-  }
-
-  private async readCard(config: SpikeRealmConfig, cardURL: string) {
-    assertURLWithinRealm(config.realmURL, cardURL);
-    let response = await this.network.authedFetch(`${cardURL}.json`, {
-      headers: { Accept: SupportedMimeType.CardSource },
-    });
-    if (!response.ok) {
-      throw new Error(`Could not read card ${cardURL}: ${response.status}`);
-    }
-    return snapshotFromCardDocument(cardURL, await response.json());
-  }
-
-  private requiredString(value: string | undefined, label: string): string {
-    if (!value) {
-      throw new Error(`Security probe card is missing ${label}`);
-    }
-    return value;
-  }
-
   private isSupportedFormat(format: Format | undefined): boolean {
     return (
       format == null ||
-      ['isolated', 'embedded', 'fitted', 'atom', 'edit'].includes(format)
+      [
+        'isolated',
+        'embedded',
+        'fitted',
+        'atom',
+        'edit',
+        'head',
+        'markdown',
+      ].includes(format)
     );
   }
 
@@ -926,6 +1159,18 @@ export default class RealmSandboxService extends Service {
       return undefined;
     }
     return { component: component as BaseDefComponent, styles: [] };
+  }
+
+  private usesInheritedBaseTemplate(card: BaseDef, format: Format): boolean {
+    let authoredTemplateFormats =
+      getOpaqueRealmCardTypeState(card)?.authoredTemplateFormats;
+    // Absence means metadata evaluation itself failed. Preserve the existing
+    // fail-closed path in that case; only an explicit sandbox result may opt
+    // into a trusted Base fallback.
+    return (
+      authoredTemplateFormats !== undefined &&
+      !authoredTemplateFormats.includes(format)
+    );
   }
 
   private createCompartmentRuntime(
@@ -953,16 +1198,47 @@ export default class RealmSandboxService extends Service {
       return this.codePreviewRuntimeEntryFor(principal, codePreviewSandbox)
         .runtime;
     }
-    let runtime = this.compartmentRuntimes.get(principal);
-    if (!runtime) {
-      runtime = this.createCompartmentRuntime(
-        principal,
-        this.fetchCompartmentModule,
-      );
-      this.compartmentRuntimes.set(principal, runtime);
-      this.metrics.activeCompartments = this.compartmentRuntimes.size;
-    }
+    let runtime = this.realmRuntimes.runtimeFor(principal);
+    this.metrics.activeCompartments = this.realmRuntimes.size;
     return runtime;
+  }
+
+  retainRealmCard(card: BaseDef): () => void {
+    let principal = getOpaqueRealmCardState(card)?.principal;
+    if (!principal) {
+      return () => undefined;
+    }
+    return this.realmRuntimes.retain(principal);
+  }
+
+  // Gives memory-pressure handlers and deterministic tests an immediate
+  // version of the normal TTL sweep. Active realms are never touched.
+  evictIdleRealmRuntimes() {
+    this.realmRuntimes.evictIdle();
+  }
+
+  private onRealmRuntimeEvicted(principal: string) {
+    let keyFragment = `|${principal}|`;
+    for (let key of [...this.compartmentTemplates.keys()]) {
+      if (!key.includes(keyFragment)) {
+        continue;
+      }
+      this.compartmentTemplates.delete(key);
+      this.compartmentLoads.delete(key);
+      this.compartmentFailures.delete(key);
+      this.compartmentTemplateRevisions.delete(key);
+      for (let templateKeys of this.canonicalTemplateKeysByModule.values()) {
+        templateKeys.delete(key);
+      }
+    }
+    for (let [moduleKey, templateKeys] of this.canonicalTemplateKeysByModule) {
+      if (templateKeys.size === 0) {
+        this.canonicalTemplateKeysByModule.delete(moduleKey);
+      }
+    }
+    this.principals.delete(principal);
+    this.metrics.activePrincipals = this.principals.size;
+    this.metrics.activeCompartments = this.realmRuntimes.size;
   }
 
   private codePreviewRuntimeEntryFor(
@@ -1008,10 +1284,16 @@ export default class RealmSandboxService extends Service {
         draft &&
         this.sameModuleURL(request.url, draft.sourceURL)
       ) {
-        await this.recordModuleSourceClassification(request.url, draft.source);
+        let classification = await this.classifyCodePreviewDraft(draft);
+        await this.recordModuleSourceClassification(
+          request.url,
+          draft.source,
+          classification,
+        );
+        let compiledSource = await this.compileCodePreviewDraft(draft);
         // This response is never put into the global response cache: it has no
         // ETag or realm header and belongs only to this preview Loader.
-        return new Response(draft.source, {
+        return new Response(compiledSource, {
           status: 200,
           headers: { 'content-type': SupportedMimeType.CardSource },
         });
@@ -1020,22 +1302,46 @@ export default class RealmSandboxService extends Service {
     };
   }
 
-  private sameModuleURL(left: string, right: string): boolean {
-    try {
-      let leftURL = new URL(left);
-      let rightURL = new URL(right);
-      leftURL.search = '';
-      leftURL.hash = '';
-      rightURL.search = '';
-      rightURL.hash = '';
-      return leftURL.href === rightURL.href;
-    } catch {
-      return false;
+  private compileCodePreviewDraft(draft: CodePreviewDraft): Promise<string> {
+    return this.codePreviewAnalyses.compiledFor(draft);
+  }
+
+  private classifyCodePreviewDraft(
+    draft: CodePreviewDraft,
+  ): Promise<CardSourceSandboxClassification> {
+    return this.codePreviewAnalyses.classificationFor(draft);
+  }
+
+  // A completed AI diff already contains the exact next module source. Start
+  // classification and GTS transpilation while the user is reading the diff;
+  // Apply will reuse these promises by URL + source hash.
+  prewarmCodePreviewSource(sourceURL: string, source: string): void {
+    if (!hasExecutableExtension(sourceURL)) {
+      return;
     }
+    let draft = { sourceURL, source, revision: 0 };
+    this.codePreviewAnalyses.prewarm(draft);
+  }
+
+  private sameModuleURL(left: string, right: string): boolean {
+    // Loader intentionally gives executable siblings one module identity.
+    // Monaco publishes the concrete `.gts` file URL while an evaluated import
+    // is commonly extensionless. Using a stricter comparison makes revision N
+    // evaluate saved source and appear only after revision N + 1.
+    return sameCodePreviewModuleURL(left, right);
   }
 
   releaseCodePreviewSandbox(codePreviewSandbox: CodePreviewSandbox) {
+    let moduleKey = codePreviewSandbox.sourceURL
+      ? codePreviewModuleKey(codePreviewSandbox.sourceURL)
+      : undefined;
     codePreviewSandbox.deactivate();
+    for (let [clientRequestId, commit] of codePreviewCommitRegistry) {
+      commit.sandboxes.delete(codePreviewSandbox);
+      if (commit.sandboxes.size === 0) {
+        codePreviewCommitRegistry.delete(clientRequestId);
+      }
+    }
     let runtimes = this.codePreviewRuntimes.get(codePreviewSandbox);
     if (runtimes) {
       for (let entry of runtimes.values()) {
@@ -1045,6 +1351,11 @@ export default class RealmSandboxService extends Service {
       this.codePreviewRuntimes.delete(codePreviewSandbox);
     }
     this.activeCodePreviews.delete(codePreviewSandbox);
+    for (let [component, pending] of this.pendingCodePreviewTemplates) {
+      if (pending.codePreviewSandbox === codePreviewSandbox) {
+        this.pendingCodePreviewTemplates.delete(component);
+      }
+    }
     for (let key of this.codePreviewTemplates.keys()) {
       if (key.startsWith(`${codePreviewSandbox.id}|`)) {
         this.codePreviewTemplates.delete(key);
@@ -1054,7 +1365,568 @@ export default class RealmSandboxService extends Service {
       if (slot.startsWith(`${codePreviewSandbox.id}|`)) {
         this.codePreviewTemplateKeys.delete(slot);
         this.compartmentTemplates.delete(key);
+        this.compartmentLoads.delete(key);
+        this.compartmentFailures.delete(key);
+        this.compartmentTemplateRevisions.delete(key);
       }
+    }
+    if (moduleKey) {
+      this.clearExternalVolatilityIfUnused(moduleKey);
+    }
+  }
+
+  settleDeferredCodePreviewModule(codePreviewSandbox: CodePreviewSandbox) {
+    if (
+      codePreviewSandbox.consumeDeferredCanonicalRefresh() &&
+      codePreviewSandbox.sourceURL
+    ) {
+      this.invalidateCanonicalSandboxModule(codePreviewSandbox.sourceURL);
+    }
+  }
+
+  // Interact mode does not own a Monaco preview object, but a mounted card is
+  // still a live consumer of its definition module. Register that interest so
+  // the first assistant source mutation can attach the same private preview
+  // loader used by Code mode before the realm write/index round trip begins.
+  registerInteractiveCodePreview(card: BaseDef): () => void {
+    let key = this.interactiveCodePreviewKey(card);
+    if (!key) {
+      return () => undefined;
+    }
+    let consumers = this.interactiveCodePreviewConsumers.get(key);
+    if (!consumers) {
+      consumers = new Set();
+      this.interactiveCodePreviewConsumers.set(key, consumers);
+    }
+    let consumer = {};
+    consumers.add(consumer);
+
+    let ref = getOpaqueRealmCardState(card)?.typeRef;
+    let generation =
+      ref && 'module' in ref
+        ? this.volatileModules.current(String(ref.module))
+        : undefined;
+    if (generation) {
+      this.ensureInteractiveCodePreview(key, generation);
+    }
+
+    let active = true;
+    return () => {
+      if (!active) {
+        return;
+      }
+      active = false;
+      let currentConsumers = this.interactiveCodePreviewConsumers.get(key);
+      currentConsumers?.delete(consumer);
+      if (currentConsumers?.size) {
+        return;
+      }
+      this.interactiveCodePreviewConsumers.delete(key);
+      this.settleInteractiveCodePreview(key);
+      this.clearExternalVolatilityIfUnused(key);
+    };
+  }
+
+  interactiveCodePreviewFor(card: BaseDef): CodePreviewSandbox | undefined {
+    let key = this.interactiveCodePreviewKey(card);
+    if (key) {
+      this.interactiveCodePreviewRevisionFor(key).consume();
+    }
+    return key ? this.interactiveCodePreviews.get(key) : undefined;
+  }
+
+  private interactiveCodePreviewKey(card: BaseDef): string | undefined {
+    let ref = getOpaqueRealmCardState(card)?.typeRef;
+    if (!ref || !('module' in ref)) {
+      return undefined;
+    }
+    try {
+      return codePreviewModuleKey(String(ref.module));
+    } catch {
+      return undefined;
+    }
+  }
+
+  private ensureInteractiveCodePreview(
+    key: string,
+    generation: VolatileModuleGeneration,
+  ): CodePreviewSandbox | undefined {
+    if (!this.interactiveCodePreviewConsumers.get(key)?.size) {
+      return undefined;
+    }
+    let preview = this.interactiveCodePreviews.get(key);
+    if (!preview) {
+      preview = new CodePreviewSandbox();
+      this.interactiveCodePreviews.set(key, preview);
+    }
+    this.seedCodePreviewSource(
+      preview,
+      generation.sourceURL,
+      generation.source,
+    );
+    return preview;
+  }
+
+  private scheduleInteractiveCodePreviewSettlement(
+    key: string,
+    generation: VolatileModuleGeneration,
+  ) {
+    // A server-observed write stays on the private loader for the lifetime of
+    // the displayed card. Unlike an unsaved Monaco/assistant burst, there is
+    // no useful quiet-period handoff: doing so would rebuild the realm loader
+    // while the user is still looking at the same card.
+    if (this.externallyVolatileModules.has(key)) {
+      return;
+    }
+    let previous = this.interactiveCodePreviewTimers.get(key);
+    if (previous) {
+      clearTimeout(previous);
+    }
+    let delay = Math.max(0, generation.expiresAt - Date.now()) + 1;
+    let timer = setTimeout(() => {
+      this.interactiveCodePreviewTimers.delete(key);
+      let current = this.volatileModules.current(generation.sourceURL);
+      if (current) {
+        this.scheduleInteractiveCodePreviewSettlement(key, current);
+        return;
+      }
+      this.settleInteractiveCodePreview(key);
+    }, delay);
+    this.interactiveCodePreviewTimers.set(key, timer);
+  }
+
+  private settleInteractiveCodePreview(key: string) {
+    let timer = this.interactiveCodePreviewTimers.get(key);
+    if (timer) {
+      clearTimeout(timer);
+      this.interactiveCodePreviewTimers.delete(key);
+    }
+    let preview = this.interactiveCodePreviews.get(key);
+    if (!preview) {
+      return;
+    }
+    this.interactiveCodePreviews.delete(key);
+    this.releaseCodePreviewSandbox(preview);
+    this.bumpInteractiveCodePreview(key);
+    setTimeout(() => {
+      if (
+        !this.interactiveCodePreviews.has(key) &&
+        !this.interactiveCodePreviewTimers.has(key)
+      ) {
+        this.interactiveCodePreviewRevisions.delete(key);
+      }
+    }, 0);
+  }
+
+  // Mutation, not UI mode, opens the volatile lease. The first Monaco change
+  // or AI search/replace command seeds this buffer; following commands compose
+  // against it without waiting for persistence/indexing to round-trip.
+  beginVolatileModuleMutation(sourceURL: string, canonicalSource: string) {
+    return this.volatileModules.begin(sourceURL, canonicalSource).source;
+  }
+
+  publishCodePreviewSource(
+    codePreviewSandbox: CodePreviewSandbox,
+    sourceURL: string,
+    source: string,
+  ) {
+    let generation = this.volatileModules.publish(sourceURL, source);
+    this.seedCodePreviewSource(codePreviewSandbox, sourceURL, source);
+    return generation;
+  }
+
+  seedCodePreviewSource(
+    codePreviewSandbox: CodePreviewSandbox,
+    sourceURL: string,
+    source: string,
+  ) {
+    let previousKey = codePreviewSandbox.sourceURL
+      ? codePreviewModuleKey(codePreviewSandbox.sourceURL)
+      : undefined;
+    this.activeCodePreviews.add(codePreviewSandbox);
+    codePreviewSandbox.update(sourceURL, source);
+    if (previousKey && previousKey !== codePreviewModuleKey(sourceURL)) {
+      this.clearExternalVolatilityIfUnused(previousKey);
+    }
+    void this.classifyCodePreviewSource(codePreviewSandbox);
+  }
+
+  // AI patches do not need to know whether Monaco, SES, or an iframe owns the
+  // preview. Publish one generation to every mounted preview of this module;
+  // each private loader then evaluates that same immutable source.
+  publishVolatileModuleSource(sourceURL: string, source: string) {
+    let generation = this.volatileModules.publish(sourceURL, source);
+    let key = codePreviewModuleKey(sourceURL);
+    let interactivePreview = this.ensureInteractiveCodePreview(key, generation);
+    for (let preview of this.activeCodePreviews) {
+      if (
+        preview !== interactivePreview &&
+        preview.active &&
+        preview.sourceURL &&
+        sameCodePreviewModuleURL(preview.sourceURL, sourceURL)
+      ) {
+        preview.update(sourceURL, source);
+        void this.classifyCodePreviewSource(preview);
+      }
+    }
+    if (interactivePreview && !this.externallyVolatileModules.has(key)) {
+      this.scheduleInteractiveCodePreviewSettlement(key, generation);
+    }
+    this.bumpInteractiveCodePreview(key);
+    return generation;
+  }
+
+  isLatestVolatileModuleGeneration(generation: VolatileModuleGeneration) {
+    return this.volatileModules.isLatestPublished(generation);
+  }
+
+  // A CLI or another browser can rewrite a module without going through the
+  // local Monaco/assistant buffer. If every executable invalidation belongs to
+  // a module that is currently displayed, fetch the new source into those
+  // cards' private preview loaders instead of cloning the shared realm loader.
+  // The caller can then skip its broad loader reset. The lease lasts until the
+  // last displayed consumer unloads.
+  handleExternalModuleInvalidations(invalidations: string[]): boolean {
+    let executableInvalidations = invalidations.filter(hasExecutableExtension);
+    let handled = this.handleExternalModuleInvalidationPartition(invalidations);
+    return (
+      executableInvalidations.length > 0 &&
+      handled.size === executableInvalidations.length
+    );
+  }
+
+  // Partition a mixed realm event instead of making HMR all-or-nothing. Every
+  // displayed module advances through its private preview runtime; undisplayed
+  // modules remain for Store's targeted canonical invalidation path.
+  handleExternalModuleInvalidationPartition(
+    invalidations: string[],
+  ): Set<string> {
+    let handled = new Set<string>();
+    for (let sourceURL of invalidations.filter(hasExecutableExtension)) {
+      if (
+        !this.hasDisplayedModuleConsumerKey(codePreviewModuleKey(sourceURL))
+      ) {
+        continue;
+      }
+      this.queueExternalModuleRefresh(sourceURL);
+      handled.add(sourceURL);
+    }
+    return handled;
+  }
+
+  hasDisplayedModuleConsumer(sourceURL: string): boolean {
+    try {
+      return this.hasDisplayedModuleConsumerKey(
+        codePreviewModuleKey(sourceURL),
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  isUsingExternalModuleHMR(sourceURL: string): boolean {
+    try {
+      return this.externallyVolatileModules.has(
+        codePreviewModuleKey(sourceURL),
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  private hasDisplayedModuleConsumerKey(key: string): boolean {
+    if (this.interactiveCodePreviewConsumers.get(key)?.size) {
+      return true;
+    }
+    return [...this.activeCodePreviews].some(
+      (preview) =>
+        preview.active &&
+        preview.sourceURL != null &&
+        codePreviewModuleKey(preview.sourceURL) === key,
+    );
+  }
+
+  private queueExternalModuleRefresh(sourceURL: string) {
+    let key = codePreviewModuleKey(sourceURL);
+    this.externalModuleInvalidationRevisions.set(
+      key,
+      (this.externalModuleInvalidationRevisions.get(key) ?? 0) + 1,
+    );
+    if (this.externalModuleRefreshes.has(key)) {
+      return;
+    }
+
+    let refresh = this.refreshExternalModule(key, sourceURL).finally(() => {
+      if (this.externalModuleRefreshes.get(key) === refresh) {
+        this.externalModuleRefreshes.delete(key);
+      }
+    });
+    this.externalModuleRefreshes.set(key, refresh);
+  }
+
+  private async refreshExternalModule(key: string, sourceURL: string) {
+    while (this.hasDisplayedModuleConsumerKey(key)) {
+      let expectedRevision =
+        this.externalModuleInvalidationRevisions.get(key) ?? 0;
+      let result: Awaited<ReturnType<CardService['getSource']>>;
+      try {
+        result = await this.cardService.getSource(rri(sourceURL));
+      } catch {
+        this.fallbackToCanonicalModule(key, sourceURL);
+        return;
+      }
+      // Another event arrived while the request was in flight. Fetch once more
+      // rather than briefly publishing a response that may be one write old.
+      if (
+        expectedRevision !== this.externalModuleInvalidationRevisions.get(key)
+      ) {
+        continue;
+      }
+      if (result.status < 200 || result.status >= 300) {
+        this.fallbackToCanonicalModule(key, sourceURL);
+        return;
+      }
+
+      this.externallyVolatileModules.add(key);
+      let timer = this.interactiveCodePreviewTimers.get(key);
+      if (timer) {
+        clearTimeout(timer);
+        this.interactiveCodePreviewTimers.delete(key);
+      }
+      this.invalidateCanonicalSandboxModule(sourceURL);
+      this.publishExternalModuleSource(sourceURL, result.content);
+      return;
+    }
+    this.clearExternalVolatilityIfUnused(key);
+  }
+
+  private publishExternalModuleSource(sourceURL: string, source: string) {
+    let generation = this.volatileModules.publish(sourceURL, source);
+    let key = codePreviewModuleKey(sourceURL);
+    let interactivePreview = this.ensureInteractiveCodePreview(key, generation);
+    for (let preview of this.activeCodePreviews) {
+      if (
+        preview !== interactivePreview &&
+        preview.active &&
+        preview.sourceURL &&
+        sameCodePreviewModuleURL(preview.sourceURL, sourceURL)
+      ) {
+        preview.update(sourceURL, source);
+        void this.classifyCodePreviewSource(preview);
+      }
+    }
+    this.bumpInteractiveCodePreview(key);
+  }
+
+  private fallbackToCanonicalModule(key: string, sourceURL: string) {
+    this.externallyVolatileModules.delete(key);
+    this.externalModuleInvalidationRevisions.delete(key);
+    this.volatileModules.clear(sourceURL);
+    this.invalidateCanonicalSandboxModule(sourceURL);
+    let hadInteractivePreview = this.interactiveCodePreviews.has(key);
+    this.settleInteractiveCodePreview(key);
+    if (!hadInteractivePreview) {
+      this.bumpInteractiveCodePreview(key);
+    }
+  }
+
+  private clearExternalVolatilityIfUnused(key: string) {
+    if (this.hasDisplayedModuleConsumerKey(key)) {
+      return;
+    }
+    this.externallyVolatileModules.delete(key);
+    this.externalModuleInvalidationRevisions.delete(key);
+    this.volatileModules.clear(key);
+  }
+
+  // Card data remains in Store throughout source HMR. This only evicts the
+  // changed module (plus loader-known dependants) and its inert template
+  // cache from the ordinary realm compartment so a later non-volatile render
+  // re-fetches canonical server source without rebuilding unrelated modules.
+  invalidateCanonicalSandboxModule(sourceURL: string) {
+    let key = codePreviewModuleKey(sourceURL);
+    for (let runtime of this.realmRuntimes.values()) {
+      runtime.invalidateModule(sourceURL);
+    }
+    for (let templateKey of this.canonicalTemplateKeysByModule.get(key) ?? []) {
+      this.compartmentTemplates.delete(templateKey);
+      this.compartmentLoads.delete(templateKey);
+      this.compartmentFailures.delete(templateKey);
+      this.scheduleCompartmentRevision(
+        this.compartmentTemplateRevisionFor(templateKey),
+      );
+    }
+    this.canonicalTemplateKeysByModule.delete(key);
+    for (let moduleIdentifier of [...this.moduleClassifications.keys()]) {
+      if (sameCodePreviewModuleURL(moduleIdentifier, sourceURL)) {
+        this.moduleClassifications.delete(moduleIdentifier);
+        this.moduleDependencies.delete(moduleIdentifier);
+      }
+    }
+  }
+
+  prepareCodePreviewCommit(
+    codePreviewSandbox: CodePreviewSandbox,
+    sourceURL: string,
+    source: string,
+    saveType: SaveType,
+  ): PreparedCodePreviewCommit | undefined {
+    if (
+      (saveType !== 'editor' && saveType !== 'editor-with-instance') ||
+      !codePreviewSandbox.matchesDraft(sourceURL, source)
+    ) {
+      return undefined;
+    }
+
+    return this.prepareVolatileModuleCommit(
+      sourceURL,
+      source,
+      saveType,
+      undefined,
+      new Set([codePreviewSandbox]),
+    );
+  }
+
+  prepareVolatileModuleCommit(
+    sourceURL: string,
+    source: string,
+    saveType: SaveType,
+    clientRequestId?: string,
+    candidateSandboxes?: Set<CodePreviewSandbox>,
+  ): PreparedCodePreviewCommit | undefined {
+    if (
+      saveType !== 'editor' &&
+      saveType !== 'editor-with-instance' &&
+      saveType !== 'bot-patch'
+    ) {
+      return undefined;
+    }
+    let sandboxes = new Set(
+      candidateSandboxes ??
+        [...this.activeCodePreviews].filter((preview) =>
+          preview.matchesDraft(sourceURL, source),
+        ),
+    );
+    for (let sandbox of sandboxes) {
+      if (!sandbox.matchesDraft(sourceURL, source)) {
+        sandboxes.delete(sandbox);
+      }
+    }
+    let volatileGeneration = this.volatileModules.current(sourceURL);
+    if (sandboxes.size === 0 || !volatileGeneration) {
+      return undefined;
+    }
+
+    clientRequestId ??= this.cardService.createClientRequestId(saveType);
+    let drafts = new Map<CodePreviewSandbox, CodePreviewDraft>();
+    for (let sandbox of sandboxes) {
+      if (sandbox.draft) {
+        drafts.set(sandbox, sandbox.draft);
+        sandbox.markCommitPrepared(sandbox.draft, clientRequestId);
+      }
+    }
+    codePreviewCommitRegistry.set(clientRequestId, {
+      sandboxes,
+      drafts,
+      sourceURL,
+      expiresAt: volatileGeneration.expiresAt,
+    });
+    this.metrics.codePreviewCommitsPrepared++;
+    // Match CardService's bounded request-id history. A missing realm event
+    // must not make a long-lived Code mode session accumulate commits forever.
+    if (codePreviewCommitRegistry.size > 250) {
+      let oldest = codePreviewCommitRegistry.keys().next().value;
+      if (oldest) {
+        codePreviewCommitRegistry.delete(oldest);
+      }
+    }
+
+    let finish = (persisted: boolean) => {
+      let entry = codePreviewCommitRegistry.get(clientRequestId);
+      if (!entry) {
+        return;
+      }
+      if (persisted) {
+        for (let sandbox of entry.sandboxes) {
+          if (sandbox.active) {
+            sandbox.markCommitPersisted(
+              entry.drafts?.get(sandbox),
+              clientRequestId,
+            );
+            sandbox.deferCanonicalRefresh();
+          }
+        }
+      } else {
+        for (let sandbox of entry.sandboxes) {
+          sandbox.markCommitFailed(entry.drafts?.get(sandbox), clientRequestId);
+        }
+        codePreviewCommitRegistry.delete(clientRequestId);
+      }
+    };
+
+    return {
+      clientRequestId,
+      shouldDeferStoreRefresh: () =>
+        this.volatileModules.isVolatile(sourceURL) &&
+        [...sandboxes].some((sandbox) => sandbox.active),
+      persisted: () => finish(true),
+      failed: () => finish(false),
+    };
+  }
+
+  // The editor has already rendered this exact source revision. Its realm
+  // event is an acknowledgement, not a second source update. This is a
+  // read-only query because Store and live-search subscriptions receive the
+  // same event independently and must all reach the same decision.
+  isCodePreviewCommitAcknowledgement(
+    clientRequestId: string | undefined,
+    invalidations: string[],
+  ): boolean {
+    if (!clientRequestId) {
+      return false;
+    }
+    let commit = codePreviewCommitRegistry.get(clientRequestId);
+    if (
+      !commit ||
+      commit.expiresAt <= Date.now() ||
+      !invalidations.some((url) =>
+        sameCodePreviewModuleURL(url, commit.sourceURL),
+      )
+    ) {
+      return false;
+    }
+    let hasActivePreview = false;
+    for (let sandbox of commit.sandboxes) {
+      if (sandbox.active) {
+        hasActivePreview = true;
+        sandbox.markCommitAcknowledged(
+          commit.drafts?.get(sandbox),
+          clientRequestId,
+        );
+        sandbox.deferCanonicalRefresh();
+      }
+    }
+    if (!hasActivePreview) {
+      return false;
+    }
+    this.metrics.codePreviewAcknowledgementsRecognized++;
+    return true;
+  }
+
+  async classifyCodePreviewSource(codePreviewSandbox: CodePreviewSandbox) {
+    let expectedDraft = codePreviewSandbox.draft;
+    if (!expectedDraft) {
+      return;
+    }
+    let decision = await this.classifyCodePreviewDraft(expectedDraft);
+    if (!decision) {
+      return;
+    }
+    if (
+      codePreviewSandbox.active &&
+      codePreviewSandbox.draft === expectedDraft
+    ) {
+      codePreviewSandbox.applySandboxDecision(decision.tier, decision.reason);
     }
   }
 
@@ -1073,32 +1945,42 @@ export default class RealmSandboxService extends Service {
 
   private sandboxDecisionFor(
     card: BaseDef,
+    format: Format | undefined,
     codePreviewSandbox?: CodePreviewSandbox,
   ): { tier: CardRenderSandboxTier; reason: string } {
+    let sourceDecision: { tier: CardRenderSandboxTier; reason: string };
     if (codePreviewSandbox) {
-      let decision = {
+      sourceDecision = {
         tier: codePreviewSandbox.sandboxTier,
         reason: codePreviewSandbox.sandboxReason,
       };
-      this.metrics.executionTier = decision.tier;
-      this.metrics.executionReason = decision.reason;
-      return decision;
+    } else {
+      let state = getOpaqueRealmCardState(card);
+      let ref = state?.typeRef;
+      if (!state || !ref || !('module' in ref)) {
+        sourceDecision = {
+          tier: 'compartment',
+          reason: 'default-user-card',
+        };
+      } else {
+        try {
+          let moduleIdentifier = new URL(
+            this.network.resolveImport(String(ref.module)),
+            state.principal,
+          ).href;
+          sourceDecision = this.moduleSandboxDecision(
+            moduleIdentifier,
+            new Set(),
+          );
+        } catch {
+          sourceDecision = {
+            tier: 'compartment',
+            reason: 'default-user-card',
+          };
+        }
+      }
     }
-    let state = getOpaqueRealmCardState(card);
-    let ref = state?.typeRef;
-    if (!state || !ref || !('module' in ref)) {
-      return { tier: 'compartment', reason: 'default-user-card' };
-    }
-    let moduleIdentifier: string;
-    try {
-      moduleIdentifier = new URL(
-        this.network.resolveImport(String(ref.module)),
-        state.principal,
-      ).href;
-    } catch {
-      return { tier: 'compartment', reason: 'default-user-card' };
-    }
-    let decision = this.moduleSandboxDecision(moduleIdentifier, new Set());
+    let decision = sandboxDecisionForFormat(sourceDecision, format);
     this.metrics.executionTier = decision.tier;
     this.metrics.executionReason = decision.reason;
     return decision;
@@ -1295,6 +2177,17 @@ export default class RealmSandboxService extends Service {
     if (!pending) {
       pending = this.loadTheme(themeURL);
       this.themes.set(key, pending);
+      while (this.themes.size > maxCachedThemes) {
+        let oldest = this.themes.keys().next().value;
+        if (oldest == null) {
+          break;
+        }
+        this.themes.delete(oldest);
+      }
+    } else {
+      // Refresh insertion order so the bounded map behaves as an LRU.
+      this.themes.delete(key);
+      this.themes.set(key, pending);
     }
     return await pending;
   }
@@ -1361,7 +2254,6 @@ export default class RealmSandboxService extends Service {
     principal: string,
     codePreviewSandbox?: CodePreviewSandbox,
   ): InertTemplate | undefined {
-    this.compartmentRevision;
     let ref = getOpaqueRealmCardState(card)?.typeRef;
     if (!ref || !('module' in ref) || !('name' in ref)) {
       return undefined;
@@ -1377,21 +2269,29 @@ export default class RealmSandboxService extends Service {
     }
     let tier = 'compartment';
     let snapshot = getOpaqueRealmCardState(card)?.snapshot ?? {};
-    let snapshotKey =
-      tier === 'worker' ? `|${this.workerSnapshotKey(snapshot)}` : '';
     let previewSlot = codePreviewSandbox
       ? `${codePreviewSandbox.id}|${principal}|${moduleIdentifier}|${String(ref.name)}|${format}`
       : undefined;
     let previewKey = codePreviewSandbox
       ? `|${codePreviewSandbox.id}:${codePreviewSandbox.revision}`
       : '';
-    let key = `${tier}|${principal}|${moduleIdentifier}|${String(ref.name)}|${format}${snapshotKey}${previewKey}`;
+    let key = `${tier}|${principal}|${moduleIdentifier}|${String(ref.name)}|${format}${previewKey}`;
+    this.compartmentTemplateRevisionFor(key).consume();
+    if (!codePreviewSandbox) {
+      let moduleKey = codePreviewModuleKey(moduleIdentifier);
+      let templateKeys = this.canonicalTemplateKeysByModule.get(moduleKey);
+      if (!templateKeys) {
+        templateKeys = new Set();
+        this.canonicalTemplateKeysByModule.set(moduleKey, templateKeys);
+      }
+      templateKeys.add(key);
+    }
     let cached = this.compartmentTemplates.get(key);
     if (cached) {
       this.metrics.compartmentTemplateCacheHits++;
       return cached;
     }
-    if (!this.compartmentLoads.has(key)) {
+    if (!this.compartmentLoads.has(key) && !this.compartmentFailures.has(key)) {
       this.metrics.compartmentTemplateCacheMisses++;
       this.updateCompartmentLoading(card, format, 1);
       let load = this.loadCompartmentTemplate(
@@ -1423,7 +2323,9 @@ export default class RealmSandboxService extends Service {
     previewSlot?: string,
     expectedDraft?: CodePreviewDraft,
   ) {
+    let waiterToken = compartmentTemplateWaiter.beginAsync();
     let started = performance.now();
+    let failed = false;
     try {
       if (codePreviewSandbox) {
         // CodeSubmode provides the first Monaco snapshot immediately after the
@@ -1432,6 +2334,11 @@ export default class RealmSandboxService extends Service {
         if (!expectedDraft) {
           return;
         }
+        this.scheduleCodePreviewStateUpdate(
+          codePreviewSandbox,
+          expectedDraft,
+          () => codePreviewSandbox.markEvaluating(expectedDraft),
+        );
         let entry = this.codePreviewRuntimeEntryFor(
           principal,
           codePreviewSandbox,
@@ -1452,6 +2359,7 @@ export default class RealmSandboxService extends Service {
             }
             await this.evaluateAndInstallCompartmentTemplate(
               key,
+              card,
               principal,
               moduleIdentifier,
               exportName,
@@ -1467,6 +2375,7 @@ export default class RealmSandboxService extends Service {
       } else {
         await this.evaluateAndInstallCompartmentTemplate(
           key,
+          card,
           principal,
           moduleIdentifier,
           exportName,
@@ -1475,14 +2384,33 @@ export default class RealmSandboxService extends Service {
         );
       }
     } catch (error) {
+      failed = true;
+      this.compartmentFailures.add(key);
       this.recordCompartmentError(error);
+      if (codePreviewSandbox && expectedDraft) {
+        this.scheduleCodePreviewStateUpdate(
+          codePreviewSandbox,
+          expectedDraft,
+          () => codePreviewSandbox.reportError(expectedDraft, error, 'compile'),
+        );
+      }
     } finally {
       this.updateCompartmentLoading(card, format, -1);
-      if (codePreviewSandbox) {
-        this.compartmentLoads.delete(key);
+      this.compartmentLoads.delete(key);
+      if (!failed) {
+        this.compartmentFailures.delete(key);
       }
       this.metrics.compartmentEvaluationTimeMs += performance.now() - started;
-      next(this, this.bumpCompartmentRevision);
+      // The template load itself is complete before we invalidate the tracked
+      // render result. Publishing synchronously can recursively revalidate the
+      // render that requested this load, while Ember's `next()` leaves a
+      // run-loop timer that cannot settle. A native task avoids both: the
+      // waiter closes with the cached result ready, then the next browser turn
+      // asks Ember to consume it.
+      compartmentTemplateWaiter.endAsync(waiterToken);
+      this.scheduleCompartmentRevision(
+        this.compartmentTemplateRevisionFor(key),
+      );
     }
   }
 
@@ -1505,10 +2433,14 @@ export default class RealmSandboxService extends Service {
     } else {
       formats.set(format, count);
     }
+    this.scheduleCompartmentRevision(
+      this.compartmentLoadingRevisionFor(card, format),
+    );
   }
 
   private async evaluateAndInstallCompartmentTemplate(
     key: string,
+    card: BaseDef,
     principal: string,
     moduleIdentifier: string,
     exportName: string,
@@ -1519,19 +2451,88 @@ export default class RealmSandboxService extends Service {
     expectedDraft?: CodePreviewDraft,
   ) {
     let runtime = this.cardModuleRuntimeFor(principal, codePreviewSandbox);
-    let bundle =
-      runtime instanceof RealmWorkerCompartmentModuleRuntime
-        ? await runtime.evaluateTemplate(
+    let trustedTestComponent =
+      runtime instanceof RealmCompartmentModuleRuntime
+        ? await runtime.trustedTestShimComponent(
             moduleIdentifier,
             exportName,
             format,
-            plainComponentArgs({ model }),
           )
-        : await runtime.evaluateTemplate(moduleIdentifier, exportName, format);
+        : undefined;
+    if (trustedTestComponent) {
+      this.installCompartmentTemplate(
+        key,
+        {
+          component: trustedTestComponent as BaseDefComponent,
+          styles: [],
+        },
+        codePreviewSandbox,
+        previewSlot,
+        expectedDraft,
+      );
+      return;
+    }
+    let bundle = await runtime.evaluateTemplate(
+      moduleIdentifier,
+      exportName,
+      format,
+    );
     let inertTemplate = await this.inertTemplateFromBundle(bundle, runtime);
     if (typeof inertTemplate === 'string') {
       throw new Error(inertTemplate);
     }
+    if (codePreviewSandbox && expectedDraft) {
+      this.assertCodePreviewTemplateRenders(
+        inertTemplate.component,
+        card,
+        model,
+        format as Format,
+      );
+    }
+    this.installCompartmentTemplate(
+      key,
+      inertTemplate,
+      codePreviewSandbox,
+      previewSlot,
+      expectedDraft,
+    );
+  }
+
+  private assertCodePreviewTemplateRenders(
+    component: BaseDefComponent,
+    card: BaseDef,
+    model: Record<string, unknown>,
+    format: Format,
+  ) {
+    // Evaluating a module proves that its class and template compile, but
+    // Glimmer does not execute component getters until rendering. Validate a
+    // volatile candidate outside the host render transaction so a throwing
+    // getter cannot replace the visible last-known-good island or trap Ember
+    // in a rerender loop.
+    let element = document.createElement('div');
+    let fields = this.fieldsFor(card, model, format);
+    try {
+      serializeWithArgs(component as any, element as any, getOwner(this)!, {
+        cardOrField: card.constructor,
+        model,
+        fields,
+        context: undefined,
+        format,
+        set: () => undefined,
+        viewCard: () => undefined,
+      });
+    } finally {
+      teardown(element as any);
+    }
+  }
+
+  private installCompartmentTemplate(
+    key: string,
+    inertTemplate: InertTemplate,
+    codePreviewSandbox?: CodePreviewSandbox,
+    previewSlot?: string,
+    expectedDraft?: CodePreviewDraft,
+  ) {
     if (
       codePreviewSandbox &&
       (!codePreviewSandbox.active || codePreviewSandbox.draft !== expectedDraft)
@@ -1539,15 +2540,83 @@ export default class RealmSandboxService extends Service {
       return;
     }
     this.compartmentTemplates.set(key, inertTemplate);
+    this.compartmentFailures.delete(key);
     if (previewSlot) {
       let previousKey = this.codePreviewTemplateKeys.get(previewSlot);
-      if (previousKey && previousKey !== key) {
-        this.compartmentTemplates.delete(previousKey);
+      let previousTemplate = this.codePreviewTemplates.get(previewSlot);
+      if (codePreviewSandbox && expectedDraft) {
+        this.pendingCodePreviewTemplates.set(inertTemplate.component, {
+          codePreviewSandbox,
+          draft: expectedDraft,
+          key,
+          previewSlot,
+          template: inertTemplate,
+          previousKey,
+          previousTemplate,
+        });
       }
       this.codePreviewTemplateKeys.set(previewSlot, key);
       this.codePreviewTemplates.set(previewSlot, inertTemplate);
+    } else {
+      codePreviewSandbox?.clearError(expectedDraft);
     }
   }
+
+  private onCodePreviewTemplateRendered = (component: BaseDefComponent) => {
+    let pending = this.pendingCodePreviewTemplates.get(component);
+    if (!pending) {
+      return;
+    }
+    this.pendingCodePreviewTemplates.delete(component);
+    if (
+      this.codePreviewTemplates.get(pending.previewSlot) !== pending.template
+    ) {
+      return;
+    }
+    pending.codePreviewSandbox.clearError(pending.draft);
+    pending.codePreviewSandbox.markRendered(pending.draft);
+    if (pending.previousKey && pending.previousKey !== pending.key) {
+      this.compartmentTemplates.delete(pending.previousKey);
+      this.compartmentLoads.delete(pending.previousKey);
+      this.compartmentFailures.delete(pending.previousKey);
+      this.compartmentTemplateRevisions.delete(pending.previousKey);
+    }
+  };
+
+  private onCodePreviewTemplateError = (
+    error: unknown,
+    component: BaseDefComponent,
+  ) => {
+    let pending = this.pendingCodePreviewTemplates.get(component);
+    if (!pending) {
+      return;
+    }
+    this.pendingCodePreviewTemplates.delete(component);
+    if (
+      this.codePreviewTemplates.get(pending.previewSlot) === pending.template
+    ) {
+      if (pending.previousTemplate && pending.previousKey) {
+        this.codePreviewTemplates.set(
+          pending.previewSlot,
+          pending.previousTemplate,
+        );
+        this.codePreviewTemplateKeys.set(
+          pending.previewSlot,
+          pending.previousKey,
+        );
+      } else {
+        this.codePreviewTemplates.delete(pending.previewSlot);
+        this.codePreviewTemplateKeys.delete(pending.previewSlot);
+      }
+    }
+    this.compartmentTemplates.delete(pending.key);
+    this.compartmentLoads.delete(pending.key);
+    this.compartmentFailures.add(pending.key);
+    pending.codePreviewSandbox.reportError(pending.draft, error, 'runtime');
+    this.scheduleCompartmentRevision(
+      this.compartmentTemplateRevisionFor(pending.key),
+    );
+  };
 
   private fetchCompartmentModule = async (
     input: RequestInfo | URL,
@@ -1588,8 +2657,10 @@ export default class RealmSandboxService extends Service {
   private async recordModuleSourceClassification(
     moduleIdentifier: string,
     source: string,
+    knownClassification?: CardSourceSandboxClassification,
   ) {
-    let classification = await classifyCardSourceForSandbox(source);
+    let classification =
+      knownClassification ?? (await classifyCardSourceForSandbox(source));
     this.moduleClassifications.set(moduleIdentifier, classification);
     let dependencies: string[] = [];
     for (let specifier of classification.imports) {
@@ -1611,45 +2682,104 @@ export default class RealmSandboxService extends Service {
       if (!preview.sourceURL) {
         continue;
       }
-      // Code previews deliberately stay in their dedicated iframe even when
-      // the source would be eligible for the ordinary Interact-mode SES tier.
-      // Changing tier here would replace the live preview boundary while the
-      // user types.
-      preview.applySandboxDecision('iframe', 'code-preview-dedicated-iframe');
+      let rootModule = [...this.moduleClassifications.keys()].find(
+        (candidate) => this.sameModuleURL(candidate, preview.sourceURL!),
+      );
+      let decision = rootModule
+        ? this.moduleSandboxDecision(rootModule, new Set())
+        : { tier: 'compartment' as const, reason: 'code-preview-ses' };
+      preview.applySandboxDecision(decision.tier, decision.reason);
     }
   }
 
-  private bumpCompartmentRevision() {
-    this.compartmentRevision++;
+  private interactiveCodePreviewRevisionFor(key: string): ReactiveRevision {
+    let revision = this.interactiveCodePreviewRevisions.get(key);
+    if (!revision) {
+      revision = new ReactiveRevision();
+      this.interactiveCodePreviewRevisions.set(key, revision);
+    }
+    return revision;
   }
 
-  private workerSnapshotKey(snapshot: object): string {
-    let key = this.workerSnapshotKeys.get(snapshot);
-    if (!key) {
-      key = `snapshot-${++this.nextWorkerSnapshotKey}`;
-      this.workerSnapshotKeys.set(snapshot, key);
+  private cardReloadRevisionFor(card: BaseDef): ReactiveRevision {
+    let revision = this.cardReloadRevisions.get(card);
+    if (!revision) {
+      revision = new ReactiveRevision();
+      this.cardReloadRevisions.set(card, revision);
     }
-    return key;
+    return revision;
+  }
+
+  private bumpInteractiveCodePreview(key: string) {
+    this.metricsRevision++;
+    this.scheduleCompartmentRevision(
+      this.interactiveCodePreviewRevisionFor(key),
+    );
+  }
+
+  private compartmentTemplateRevisionFor(key: string): ReactiveRevision {
+    let revision = this.compartmentTemplateRevisions.get(key);
+    if (!revision) {
+      revision = new ReactiveRevision();
+      this.compartmentTemplateRevisions.set(key, revision);
+    }
+    return revision;
+  }
+
+  private compartmentLoadingRevisionFor(
+    card: BaseDef,
+    format: string,
+  ): ReactiveRevision {
+    let revisions = this.compartmentLoadingRevisions.get(card);
+    if (!revisions) {
+      revisions = new Map();
+      this.compartmentLoadingRevisions.set(card, revisions);
+    }
+    let revision = revisions.get(format);
+    if (!revision) {
+      revision = new ReactiveRevision();
+      revisions.set(format, revision);
+    }
+    return revision;
+  }
+
+  private scheduleCompartmentRevision(revision: ReactiveRevision) {
+    this.pendingCompartmentRevisions.add(revision);
+    if (this.compartmentRevisionFrame != null) {
+      return;
+    }
+    this.compartmentRevisionFrame = scheduleOnce(
+      'afterRender',
+      this,
+      this.flushCompartmentRevisions,
+    );
+  }
+
+  private scheduleCodePreviewStateUpdate(
+    sandbox: CodePreviewSandbox,
+    expectedDraft: CodePreviewDraft,
+    update: () => void,
+  ) {
+    schedule('afterRender', null, () => {
+      if (sandbox.active && sandbox.draft === expectedDraft) {
+        update();
+      }
+    });
+  }
+
+  private flushCompartmentRevisions() {
+    this.compartmentRevisionFrame = undefined;
+    let revisions = [...this.pendingCompartmentRevisions];
+    this.pendingCompartmentRevisions.clear();
+    for (let pending of revisions) {
+      pending.bump();
+    }
   }
 
   private async inertTemplateFromBundle(
     bundle: SandboxTemplateBundle,
-    runtime:
-      | RealmCompartmentModuleRuntime
-      | RealmWorkerCompartmentModuleRuntime,
+    runtime: RealmCompartmentModuleRuntime,
   ): Promise<InertTemplate | string> {
-    let compartmentRuntime =
-      runtime instanceof RealmCompartmentModuleRuntime ? runtime : undefined;
-    if (
-      !compartmentRuntime &&
-      Object.values(bundle.templates).some(
-        (descriptor) =>
-          descriptor.instance.getters.length > 0 ||
-          descriptor.instance.actions.length > 0,
-      )
-    ) {
-      return 'worker-template-returned-live-component-behavior';
-    }
     let components = new Map<string, object>();
     for (let [id, descriptor] of Object.entries(bundle.templates)) {
       try {
@@ -1666,38 +2796,32 @@ export default class RealmSandboxService extends Service {
 
         constructor(owner: Owner, args: Record<string, unknown>) {
           super(owner, args);
-          if (compartmentRuntime) {
-            let live = compartmentRuntime.instantiateComponent(
-              descriptor.instance.handle,
-              plainComponentArgs(args),
-            );
-            this.sandboxInstanceHandle = live.handle;
-            this.sandboxState = live.state;
-            for (let action of live.actions) {
-              this.sandboxActions[action] = async (
-                ...actionArgs: unknown[]
-              ) => {
-                if (!this.sandboxInstanceHandle) {
-                  return;
-                }
-                let updated = await compartmentRuntime.invokeComponentAction(
-                  this.sandboxInstanceHandle,
-                  action,
-                  actionArgs,
-                );
-                this.sandboxState = updated.state;
-                this.sandboxRevision++;
-              };
-            }
+          let live = runtime.instantiateComponent(
+            descriptor.instance.handle,
+            plainComponentArgs(args),
+          );
+          this.sandboxInstanceHandle = live.handle;
+          this.sandboxState = live.state;
+          for (let action of live.actions) {
+            this.sandboxActions[action] = async (...actionArgs: unknown[]) => {
+              if (!this.sandboxInstanceHandle) {
+                return;
+              }
+              let updated = await runtime.invokeComponentAction(
+                this.sandboxInstanceHandle,
+                action,
+                actionArgs,
+              );
+              this.sandboxState = updated.state;
+              this.sandboxRevision++;
+            };
           }
         }
 
         willDestroy() {
           super.willDestroy();
           if (this.sandboxInstanceHandle) {
-            compartmentRuntime?.releaseComponentInstance(
-              this.sandboxInstanceHandle,
-            );
+            runtime.releaseComponentInstance(this.sandboxInstanceHandle);
           }
         }
       }
@@ -1718,10 +2842,7 @@ export default class RealmSandboxService extends Service {
           get(this: InertCompartmentTemplate) {
             this.sandboxRevision;
             return this.sandboxInstanceHandle
-              ? compartmentRuntime!.readComponentProperty(
-                  this.sandboxInstanceHandle,
-                  name,
-                )
+              ? runtime.readComponentProperty(this.sandboxInstanceHandle, name)
               : undefined;
           },
         });
@@ -2059,18 +3180,27 @@ export default class RealmSandboxService extends Service {
 
   willDestroy() {
     super.willDestroy();
-    for (let pending of this.runtimes.values()) {
-      void pending.then(({ runtime }) => runtime.destroy());
+    if (this.compartmentRevisionFrame != null) {
+      cancel(this.compartmentRevisionFrame);
+      this.compartmentRevisionFrame = undefined;
     }
-    this.runtimes.clear();
-    for (let runtime of this.compartmentRuntimes.values()) {
-      runtime.destroy();
+    this.pendingCompartmentRevisions.clear();
+    this.realmRuntimes.destroy();
+    for (let timer of this.interactiveCodePreviewTimers.values()) {
+      clearTimeout(timer);
     }
-    this.compartmentRuntimes.clear();
-    for (let runtime of this.workerCompartmentRuntimes.values()) {
-      runtime.destroy();
-    }
-    this.workerCompartmentRuntimes.clear();
+    this.interactiveCodePreviewTimers.clear();
+    this.interactiveCodePreviewConsumers.clear();
+    this.interactiveCodePreviews.clear();
+    this.interactiveCodePreviewRevisions.clear();
+    this.canonicalTemplateKeysByModule.clear();
+    this.compartmentTemplates.clear();
+    this.compartmentLoads.clear();
+    this.compartmentFailures.clear();
+    this.compartmentTemplateRevisions.clear();
+    this.externallyVolatileModules.clear();
+    this.externalModuleInvalidationRevisions.clear();
+    this.externalModuleRefreshes.clear();
     for (let preview of [...this.activeCodePreviews]) {
       this.releaseCodePreviewSandbox(preview);
     }

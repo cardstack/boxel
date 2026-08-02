@@ -1,9 +1,9 @@
 import {
   CardDef,
-  BaseDef,
   Component,
   contains,
   field,
+  getComponent,
   linksTo,
   linksToMany,
   realmURL,
@@ -1285,8 +1285,4 @@ export class Account extends CardDef {
   static isolated = IsolatedTemplate;
   static embedded = EmbeddedTemplate;
   static fitted = FittedTemplate;
-}
-
-function getComponent(cardOrField: BaseDef) {
-  return cardOrField.constructor.getComponent(cardOrField);
 }

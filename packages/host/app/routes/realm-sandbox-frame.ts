@@ -55,9 +55,19 @@ export default class RealmSandboxFrameRoute extends Route<RealmSandboxFrameModel
             name: params.componentName,
           }
         : undefined;
+    // Format/field/component/container updates arrive over the persistent
+    // MessageChannel. The query value is only a backwards-compatible bootstrap
+    // default; keeping it out of the parent's iframe URL preserves the child
+    // document and Loader while Code preview switches formats.
+    let format = this.realmSandbox.safeIframeFormat(
+      params.format ?? 'isolated',
+    );
+    if (!format) {
+      throw new Error('Realm iframe renderer received an unsupported format');
+    }
     return {
       cardID: cardURL.href,
-      format: this.realmSandbox.safeIframeFormat(params.format),
+      format,
       parentOrigin,
       fieldName: params.fieldName,
       codeRef,

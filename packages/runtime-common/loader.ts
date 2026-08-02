@@ -232,6 +232,11 @@ export class Loader {
   private modules = new Map<string, Module>();
 
   private moduleShims = new Map<string, Record<string, any>>();
+  // A fetch adapter can supply a live module namespace instead of source via
+  // the shimmed-module symbol (the host test realm does this). Track that
+  // provenance separately from locally registered shims so boundary code can
+  // distinguish source-evaluated modules without relying on adapter identity.
+  private fetchedModuleShims = new Set<string>();
   private moduleCanonicalURLs = new Map<string, string>();
   // Cache the flattened dependency sets for evaluated modules. Once a module is
   // evaluated its consumedModules never change, so the result of
@@ -309,6 +314,7 @@ export class Loader {
     // entry can't outlive the spelling it was keyed under.
     this.unsubscribeMappingChange = this.virtualNetwork?.onMappingChange(() => {
       this.modules.clear();
+      this.fetchedModuleShims.clear();
       this.moduleCanonicalURLs.clear();
       this.knownDepsCache.clear();
     });
@@ -534,6 +540,21 @@ export class Loader {
       moduleIdentifier = this.resolveImport(moduleIdentifier);
       let resolvedModuleIdentifier = new URL(moduleIdentifier).href;
       return this.getModule(resolvedModuleIdentifier) !== undefined;
+    } catch (e) {
+      if (e instanceof TypeError) {
+        return false;
+      }
+      throw e;
+    }
+  }
+
+  isModuleShimmed(moduleIdentifier: string): boolean {
+    try {
+      moduleIdentifier = this.resolveImport(moduleIdentifier);
+      return (
+        this.moduleShims.has(moduleIdentifier) ||
+        this.fetchedModuleShims.has(this.moduleCacheKey(moduleIdentifier))
+      );
     } catch (e) {
       if (e instanceof TypeError) {
         return false;
@@ -1171,6 +1192,7 @@ export class Loader {
       // must continue to point at the shared Base loader, not whichever realm
       // happened to import Base most recently.
       if (loaded.type === 'shimmed') {
+        this.fetchedModuleShims.add(this.moduleCacheKey(moduleIdentifier));
         this.captureIdentitiesOfModuleExports(loaded.module, moduleIdentifier);
       }
 

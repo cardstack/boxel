@@ -15,6 +15,9 @@ import {
   isCardInstance,
   logger,
   rri,
+  REPLACE_MARKER,
+  SEARCH_MARKER,
+  SEPARATOR_MARKER,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 
@@ -873,6 +876,24 @@ export class RoomResource extends Resource<Args> {
         skills: this.skills,
       });
       await messageBuilder.updateMessage(message);
+
+      // The to-device preview is the first place a completed search/replace
+      // block becomes visible. Do not wait for ai-bot's final consolidated
+      // Matrix edit: Act mode applies each complete block through the same
+      // serialized PatchCodeTool path immediately, which also publishes the
+      // next volatile source generation to the active Code preview. Later
+      // previews and the final room event are safe to submit again because
+      // ToolService claims blocks by message/index and skips applied results.
+      if (
+        payload.body.includes(SEARCH_MARKER) &&
+        payload.body.includes(SEPARATOR_MARKER) &&
+        payload.body.includes(REPLACE_MARKER)
+      ) {
+        void this.toolService.processCodePatchesForMessage(
+          payload.roomId,
+          message,
+        );
+      }
     } catch (err) {
       // A dropped preview is harmless — the final room edit reconciles the true
       // state — so swallow (mirroring ai-bot's best-effort sendToDevicePreview)

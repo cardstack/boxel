@@ -36,6 +36,7 @@ import { StackItem, type StackItemType } from '@cardstack/host/lib/stack-item';
 import {
   file,
   isReady,
+  type InitialFileContent,
   type FileResource,
 } from '@cardstack/host/resources/file';
 import { maybe } from '@cardstack/host/resources/maybe';
@@ -59,6 +60,7 @@ import { removeCardJsonExtension } from '../utils/search/types';
 
 import type CardService from './card-service';
 import type CodeSemanticsService from './code-semantics-service';
+import type CodeSourceCacheService from './code-source-cache';
 import type ErrorDisplayService from './error-display';
 import type MatrixService from './matrix-service';
 import type NetworkService from './network';
@@ -165,6 +167,9 @@ export default class OperatorModeStateService extends Service {
     workspaceChooserOpened: false,
   });
   private cachedRealmURL: URL | null = null;
+  private pendingOpenFileSeed:
+    | (InitialFileContent & { url: string })
+    | undefined;
   private openFileSubscribers: OpenFileSubscriber[] = [];
   private cardTitles = new TrackedMap<string, string>();
 
@@ -220,6 +225,7 @@ export default class OperatorModeStateService extends Service {
   @tracked expandedCardHeaderElement: HTMLElement | null = null;
 
   @service declare private cardService: CardService;
+  @service declare private codeSourceCache: CodeSourceCacheService;
   @service declare private codeSemanticsService: CodeSemanticsService;
   @service declare private errorDisplay: ErrorDisplayService;
   @service declare private loaderService: LoaderService;
@@ -323,6 +329,7 @@ export default class OperatorModeStateService extends Service {
     });
     this.cachedRealmURL = null;
     this.openFileSubscribers = [];
+    this.pendingOpenFileSeed = undefined;
     this.cardTitles = new TrackedMap();
     this.moduleInspectorHistory = {};
     this.profileSettingsOpen = false;
@@ -832,6 +839,11 @@ export default class OperatorModeStateService extends Service {
     await this.updateCodePath(fileUrl);
   };
 
+  onFileIntent = (entryPath: LocalPath) => {
+    let fileURL = new RealmPaths(new URL(this.realmURL)).fileURL(entryPath);
+    void this.prefetchCodePath(fileURL);
+  };
+
   async updateCodePath(
     codePath: RealmResourceIdentifier | URL | null,
     moduleInspectorView?: ModuleInspectorView,
@@ -840,6 +852,12 @@ export default class OperatorModeStateService extends Service {
       typeof codePath === 'string'
         ? this.network.virtualNetwork.toURL(codePath)
         : codePath;
+    if (
+      this.pendingOpenFileSeed &&
+      this.pendingOpenFileSeed.url !== codePathURL?.href
+    ) {
+      this.pendingOpenFileSeed = undefined;
+    }
     // Selecting a file is a navigation concern. Commit it immediately so the
     // host-owned editor can mount while the file request, module analysis, and
     // sandbox preview proceed independently. Redirect canonicalization already
@@ -858,6 +876,14 @@ export default class OperatorModeStateService extends Service {
     this.updateModuleInspectorView(moduleInspectorView);
 
     this.specPanelService.setSelection(null);
+  }
+
+  prefetchCodePath(codePath: URL) {
+    return this.codeSourceCache.prefetch(codePath);
+  }
+
+  seedOpenFile(url: URL, initial: InitialFileContent) {
+    this.pendingOpenFileSeed = { url: url.href, ...initial };
   }
 
   persistModuleInspectorView(
@@ -1304,8 +1330,19 @@ export default class OperatorModeStateService extends Service {
       return undefined;
     }
 
+    let initial =
+      this.pendingOpenFileSeed?.url === codePath.href
+        ? this.pendingOpenFileSeed
+        : undefined;
+
     return file(context, () => ({
       url: codePath!.href,
+      initial,
+      onInitialSettled: () => {
+        if (this.pendingOpenFileSeed === initial) {
+          this.pendingOpenFileSeed = undefined;
+        }
+      },
       onStateChange: (state: FileResource['state']) => {
         if (state === 'ready') {
           this.cachedRealmURL = new URL(this.readyFile.realmURL);

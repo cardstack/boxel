@@ -6,6 +6,7 @@ import Component from '@glimmer/component';
 import type { CodeData } from '@cardstack/host/lib/formatted-message/utils';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type ToolService from '@cardstack/host/services/tool-service';
 
 import ApplyButton from '../../ai-assistant/apply-button';
 
@@ -31,7 +32,7 @@ export default class ApplyCodePatchButton extends Component<ApplyCodePatchButton
 
     <ApplyButton
       data-test-apply-code-button
-      @state={{@patchCodeStatus}}
+      @state={{this.patchCodeStatus}}
       {{on 'click' this.performPatch}}
     >
       Apply
@@ -47,6 +48,17 @@ export default class ApplyCodePatchButton extends Component<ApplyCodePatchButton
   </template>
 
   @service declare operatorModeStateService: OperatorModeStateService;
+  @service declare toolService: ToolService;
+
+  private get patchCodeStatus() {
+    if (
+      this.args.patchCodeStatus === 'ready' &&
+      this.toolService.shouldAutoApplyCodePatch(this.args.codeData)
+    ) {
+      return 'applying';
+    }
+    return this.args.patchCodeStatus;
+  }
 
   // This is for debugging purposes only
   private logCodePatchAction = () => {

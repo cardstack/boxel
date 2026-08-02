@@ -6,6 +6,8 @@ import { modifier } from 'ember-modifier';
 
 import { findDisallowedHeadTags } from '@cardstack/runtime-common';
 
+import type { Format } from '@cardstack/base/card-api';
+
 import type { ComponentLike } from '@glint/template';
 
 type HeadPreviewData = {
@@ -22,7 +24,9 @@ type HeadPreviewData = {
 interface Signature {
   Element: any;
   Args: {
-    renderedCard: ComponentLike<{ Args: { displayContainer?: boolean } }>;
+    renderedCard: ComponentLike<{
+      Args: { displayContainer?: boolean; format?: Format };
+    }>;
     cardURL?: string;
   };
 }
@@ -363,7 +367,7 @@ export default class HeadFormatPreview extends Component<Signature> {
 
   <template>
     <div hidden aria-hidden='true' {{this.captureHeadMarkup}}>
-      <@renderedCard @displayContainer={{false}} />
+      <@renderedCard @format='head' @displayContainer={{false}} />
     </div>
 
     <div class='social-preview-container'>
