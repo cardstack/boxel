@@ -26,6 +26,17 @@ Run the semantic verifier with:
 npm run example:mutation
 ```
 
+Explore and run the same corpus in the standalone browser workbench with:
+
+```sh
+npm run demo:mutation
+```
+
+The workbench includes every accepted and rejected fixture, filters for each
+pattern and feature, readable and canonical source, structured AI tool calls,
+before/after loaded models, normalized plans, and stepwise stream replay. Its
+browser verifier is the same module used by the CLI test above.
+
 The verifier currently checks readable and canonical framing, statement-count
 equivalence, structured-operation identities, coverage of the ten syntax
 questions, streaming chunk reconstruction, loaded relationship boundaries,
