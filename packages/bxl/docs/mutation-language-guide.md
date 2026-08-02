@@ -214,29 +214,36 @@ edits. In particular, progressively committed streams should not use an
 ordinary numeric index: another edit could insert an item and make index `1`
 mean something different before the statement arrives.
 
-## Let the schema distinguish lists from sets
+## Follow the collection the Field already exposes
 
-An ordered list and a set are both arrays when printed as JSON, but they do not
-have the same mutation vocabulary. For a schema-declared set collection, use
-set intent:
-
-```bxl
-add_to_set(Tag; "urgent");
-remove_from_set(Tag; "obsolete");
-```
-
-Here `Tag` is the schema's readable label for the set-like field.
-
-Adding a value that is already present is a successful no-op with an affected
-count of zero. Positional operations such as `append` are rejected for a set
-because “last” has no semantic meaning there.
-
-When the execution target is the `tags` Field itself, the handwritten form is
-even smaller:
+Mutation BXL does not add a separate collection schema on top of CardDef and
+FieldDef. A `containsMany` already behaves as an ordered array, so use the
+ordinary array vocabulary:
 
 ```bxl
-add_to_set(.; "urgent");
+append(Tag; "urgent");
+del(Tag[. = "obsolete"]);
 ```
+
+Repeated values are possible because `containsMany` does not promise set
+membership. The delete above must select exactly one item; if the collection
+contains several matching values, use `delete_all` to make the bulk intent
+explicit.
+
+This is particularly important for complex FieldDefs. A contained Field has
+no intrinsic Card ID, and the mutation language should not invent identity by
+hashing its serialized JSON. Select it using the fields a person naturally
+uses in that Card shape:
+
+```bxl
+del("Line Item"[SKU = "COPY-03"]);
+```
+
+`linksToMany` is also ordered, but its members are loaded Cards. There the
+Card's ID is naturally available for selection, and the Card Store turns the
+array edit into a relationship edit. If Boxel later gains a keyed or hash-map
+relationship, mutation BXL can add the operations that field naturally
+supports then.
 
 Compound data can also be copied without reproducing it:
 
@@ -526,7 +533,7 @@ syntax alone:
 | Small field edits | `field-root-update`, `assign-null`, `delete-member`, `copy-compound-field` |
 | Selection and bulk changes | `classroom-update-contained-schedule`, `exact-one-selected-update`, `explicit-bulk-update` |
 | Evaluation order | `sequential-statement-evaluation`, `assert-then-update` |
-| Ordered and set collections | `insert-after-stable-anchor`, `move-before-stable-anchor`, `exact-reorder`, `add-to-set`, `remove-from-set` |
+| Ordered collections | `append-contained-value`, `delete-contained-value`, `insert-after-stable-anchor`, `move-before-stable-anchor`, `exact-reorder` |
 | Loaded Card relationships | `workspace-append-entry-point`, `contest-set-singular-link`, `unrelate-card`, `zine-reorder-linked-fragments` |
 | Streaming | `streaming-statement-commits`, `streaming-atomic-semicolon-string` |
 | Safety boundaries | every `reject-*` fixture, including raw JSON:API paths, ambiguous selectors, unstable indexes, relationship traversal, and query-backed membership |
@@ -561,9 +568,9 @@ move_before(
 );
 reorder_by(Item; ID; $params.order);
 
-# Set collections
-add_to_set(Tag; "urgent");
-remove_from_set(Tag; "obsolete");
+# Contained collections preserve their natural order
+append(Tag; "urgent");
+del(Tag[. = "obsolete"]);
 
 # Preconditions
 assert(Status = "draft"; "must still be a draft");

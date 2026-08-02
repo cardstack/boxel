@@ -84,20 +84,6 @@ function applyIntent(
       ok(source !== undefined, `${fixture.id}: copy source must exist`);
       return setAt(root, intent.path, source);
     }
-    case 'add-to-set': {
-      const collection = collectionAt(root, intent.collection);
-      if (!collection.some((value) => JSON.stringify(value) === JSON.stringify(intent.value))) {
-        collection.push(clone(intent.value));
-      }
-      return root;
-    }
-    case 'remove-from-set': {
-      const collection = collectionAt(root, intent.collection);
-      const index = collection.findIndex((value) => JSON.stringify(value) === JSON.stringify(intent.value));
-      ok(index >= 0, `${fixture.id}: set value to remove must exist`);
-      collection.splice(index, 1);
-      return root;
-    }
     case 'insert': {
       const collection = collectionAt(root, intent.collection);
       collection.splice(intent.index, 0, clone(intent.value));

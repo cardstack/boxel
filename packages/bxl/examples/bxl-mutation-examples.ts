@@ -21,7 +21,6 @@ export type MutationPath = Array<string | number>;
 
 export type MutationFeature =
   | 'copy'
-  | 'set-collection'
   | 'stable-position'
   | 'collection-semantics'
   | 'cardinality'
@@ -39,7 +38,7 @@ export type MutationFeature =
 
 export type MutationSchemaRef =
   | 'copy-card'
-  | 'tag-set-field'
+  | 'tag-list-field'
   | 'ordered-sections-field'
   | 'invoice-card'
   | 'workspace-card'
@@ -87,16 +86,6 @@ export type MutationPlanIntent =
       op: 'copy';
       from: MutationPath;
       path: MutationPath;
-    }
-  | {
-      op: 'add-to-set';
-      collection: MutationPath;
-      value: MutationJson;
-    }
-  | {
-      op: 'remove-from-set';
-      collection: MutationPath;
-      value: MutationJson;
     }
   | {
       op: 'insert';
@@ -192,16 +181,15 @@ export const mutationSchemaFixtures = {
       shippingAddress: { kind: 'compound', label: 'Shipping Address', optional: true },
     },
   },
-  'tag-set-field': {
+  'tag-list-field': {
     root: 'field',
-    field: { kind: 'collection', semantics: 'set', item: 'string' },
+    field: { kind: 'containsMany', item: 'string', loadedAs: 'string[]' },
   },
   'ordered-sections-field': {
     root: 'field',
     field: {
-      kind: 'collection',
-      semantics: 'ordered-keyed',
-      identity: ['id'],
+      kind: 'containsMany',
+      loadedAs: 'SectionField[]',
       itemFields: { id: { label: 'ID' }, title: { label: 'Title' } },
     },
   },
@@ -218,9 +206,8 @@ export const mutationSchemaFixtures = {
       shipping: { kind: 'number' },
       total: { kind: 'number' },
       lineItems: {
-        kind: 'collection',
-        semantics: 'ordered-keyed',
-        identity: ['sku'],
+        kind: 'containsMany',
+        loadedAs: 'LineItemField[]',
         label: 'Line Item',
         itemFields: {
           sku: { label: 'SKU' },
@@ -235,9 +222,6 @@ export const mutationSchemaFixtures = {
     root: 'field',
     field: {
       kind: 'linksToMany',
-      cardinality: 'many',
-      semantics: 'ordered-keyed',
-      identity: ['id'],
       loadedAs: 'CardDef[]',
     },
   },
@@ -248,9 +232,6 @@ export const mutationSchemaFixtures = {
       signage: { kind: 'string' },
       entryPoints: {
         kind: 'linksToMany',
-        cardinality: 'many',
-        semantics: 'ordered-keyed',
-        identity: ['id'],
         loadedAs: 'CardDef[]',
         label: 'Entry Point',
       },
@@ -262,14 +243,10 @@ export const mutationSchemaFixtures = {
     fields: {
       submissions: {
         kind: 'linksToMany',
-        cardinality: 'many',
-        semantics: 'ordered-keyed',
-        identity: ['id'],
         loadedAs: 'Submission[]',
       },
       winner: {
         kind: 'linksTo',
-        cardinality: 'one',
         loadedAs: 'Submission | undefined',
         label: 'Winner',
       },
@@ -282,8 +259,8 @@ export const mutationSchemaFixtures = {
       name: { kind: 'string' },
       roomNumber: { kind: 'string' },
       leadTeacher: { kind: 'linksTo', loadedAs: 'StaffMember | undefined' },
-      staff: { kind: 'linksToMany', loadedAs: 'StaffMember[]', identity: ['id'] },
-      students: { kind: 'linksToMany', loadedAs: 'Student[]', identity: ['id'] },
+      staff: { kind: 'linksToMany', loadedAs: 'StaffMember[]' },
+      students: { kind: 'linksToMany', loadedAs: 'Student[]' },
       scheduleItems: {
         kind: 'containsMany',
         loadedAs: 'ScheduleItemField[]',
@@ -299,13 +276,10 @@ export const mutationSchemaFixtures = {
       title: { kind: 'string' },
       fragments: {
         kind: 'linksToMany',
-        cardinality: 'many',
-        semantics: 'ordered-keyed',
-        identity: ['id'],
         loadedAs: 'SavedFragment[]',
         label: 'Fragment',
       },
-      clusters: { kind: 'linksToMany', loadedAs: 'ThemeCluster[]', identity: ['id'] },
+      clusters: { kind: 'linksToMany', loadedAs: 'ThemeCluster[]' },
     },
   },
   'query-backed-directory-card': {
@@ -314,9 +288,6 @@ export const mutationSchemaFixtures = {
     fields: {
       students: {
         kind: 'linksToMany',
-        cardinality: 'many',
-        semantics: 'ordered-keyed',
-        identity: ['id'],
         loadedAs: 'Student[]',
         membership: 'query',
         writable: false,
@@ -396,70 +367,56 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     notes: ['Copy is deep by value; it never creates an alias between fields.'],
   },
   {
-    id: 'add-to-set',
-    group: '02 set collections',
-    name: 'add a distinct value to a set-like field',
-    intent: 'Add urgent to tags while preserving set semantics.',
-    features: ['set-collection', 'collection-semantics'],
-    schema: 'tag-set-field',
-    execution: execution('add-to-set', tagsTarget),
+    id: 'append-contained-value',
+    group: '02 containsMany collections',
+    name: 'append a value to a containsMany field',
+    intent: 'Add urgent to the ordered tags Field without inventing set semantics.',
+    features: ['field-root', 'collection-semantics'],
+    schema: 'tag-list-field',
+    execution: execution('append-contained-value', tagsTarget),
     before: ['customer', 'legal'],
-    readableSource: 'add_to_set(.; "urgent");',
-    source: 'add_to_set(.; "urgent");',
-    operations: [{ id: 'add-urgent', op: 'add-to-set', target: { path: [] }, value: 'urgent' }],
+    readableSource: 'append(.; "urgent");',
+    source: 'append(.; "urgent");',
+    operations: [{ id: 'append-urgent', op: 'insert', into: { path: [] }, position: { at: 'end' }, value: 'urgent' }],
     outcome: 'accepted',
     plan: [
       {
-        canonical: 'add_to_set(.;"urgent")',
+        canonical: 'append(.;"urgent")',
         affected: 1,
-        intents: [{ op: 'add-to-set', collection: [], value: 'urgent' }],
+        intents: [{ op: 'insert', collection: [], index: 2, value: 'urgent' }],
       },
     ],
     after: ['customer', 'legal', 'urgent'],
+    notes: ['containsMany is ordered and permits repeated values; BXL preserves that behavior.'],
   },
   {
-    id: 'add-existing-to-set',
-    group: '02 set collections',
-    name: 'adding an existing set value is a no-op',
-    intent: 'Keep a set unchanged when the requested value already exists.',
-    features: ['set-collection', 'collection-semantics', 'idempotency'],
-    schema: 'tag-set-field',
-    execution: execution('add-existing-to-set', tagsTarget),
-    before: ['customer', 'urgent'],
-    readableSource: 'add_to_set(.; "urgent");',
-    source: 'add_to_set(.; "urgent");',
-    operations: [{ id: 'add-urgent', op: 'add-to-set', target: { path: [] }, value: 'urgent' }],
-    outcome: 'accepted',
-    plan: [
-      {
-        canonical: 'add_to_set(.;"urgent")',
-        affected: 0,
-        intents: [],
-      },
-    ],
-    after: ['customer', 'urgent'],
-  },
-  {
-    id: 'remove-from-set',
-    group: '02 set collections',
-    name: 'remove a value from a set-like field',
-    intent: 'Remove obsolete from tags without replacing the collection.',
-    features: ['set-collection', 'collection-semantics'],
-    schema: 'tag-set-field',
-    execution: execution('remove-from-set', tagsTarget),
+    id: 'delete-contained-value',
+    group: '02 containsMany collections',
+    name: 'delete one selected containsMany value',
+    intent: 'Remove one obsolete tag using ordinary loaded-array selection.',
+    features: ['field-root', 'collection-semantics', 'cardinality'],
+    schema: 'tag-list-field',
+    execution: execution('delete-contained-value', tagsTarget),
     before: ['customer', 'obsolete', 'urgent'],
-    readableSource: 'remove_from_set(.; "obsolete");',
-    source: 'remove_from_set(.; "obsolete");',
-    operations: [{ id: 'remove-obsolete', op: 'remove-from-set', target: { path: [] }, value: 'obsolete' }],
+    readableSource: 'del(.[] | select(. = "obsolete"));',
+    source: 'del(.[] | select(. == "obsolete"));',
+    operations: [
+      {
+        id: 'delete-obsolete',
+        op: 'delete',
+        target: { collection: [], where: [{ path: [], equals: 'obsolete' }] },
+      },
+    ],
     outcome: 'accepted',
     plan: [
       {
-        canonical: 'remove_from_set(.;"obsolete")',
+        canonical: 'del(.[]|select(.=="obsolete"))',
         affected: 1,
-        intents: [{ op: 'remove-from-set', collection: [], value: 'obsolete' }],
+        intents: [{ op: 'delete', path: [1], before: 'obsolete' }],
       },
     ],
     after: ['customer', 'urgent'],
+    notes: ['Exact-one cardinality rejects ambiguous duplicate matches; delete_all makes bulk removal explicit.'],
   },
   {
     id: 'insert-after-stable-anchor',
@@ -1391,22 +1348,8 @@ export const bxlMutationExamples: BxlMutationExample[] = [
     error: { phase: 'plan', code: 'order-not-permutation', statement: 1 },
   },
   {
-    id: 'reject-list-operation-on-set',
-    group: '15 rejected schema semantics',
-    name: 'ordered insertion is invalid for a set-like field',
-    intent: 'Let field schema determine which structural verbs are meaningful.',
-    features: ['set-collection', 'collection-semantics'],
-    schema: 'tag-set-field',
-    execution: execution('reject-list-operation-on-set', tagsTarget),
-    before: ['legal'],
-    source: 'append(.; "urgent");',
-    operations: [{ id: 'append-tag', op: 'insert', into: { path: [] }, position: { at: 'end' }, value: 'urgent' }],
-    outcome: 'rejected',
-    error: { phase: 'validate', code: 'collection-semantics', statement: 1 },
-  },
-  {
     id: 'reject-related-card-traversal',
-    group: '16 rejected relationships',
+    group: '15 rejected relationships',
     name: 'a relationship cannot be traversed for mutation',
     intent: 'Require a separate target and authorization decision for the related Card.',
     features: ['relationship', 'authorization'],
@@ -1431,7 +1374,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
   },
   {
     id: 'reject-jsonapi-relationship-path',
-    group: '16 rejected relationships',
+    group: '15 rejected relationships',
     name: 'raw JSON:API relationship storage is not part of the mutation root',
     intent: 'Prevent authors from manufacturing entryPoints.N relationship records.',
     features: ['relationship', 'write-set'],
@@ -1458,7 +1401,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
   },
   {
     id: 'reject-query-backed-links-to-many',
-    group: '16 rejected relationships',
+    group: '15 rejected relationships',
     name: 'query-backed linksToMany membership is read-only',
     intent: 'Reject writes to relationship membership derived from a schema query.',
     features: ['relationship', 'collection-semantics'],
@@ -1489,7 +1432,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
   },
   {
     id: 'reject-revision-conflict',
-    group: '17 rejected execution',
+    group: '16 rejected execution',
     name: 'revision drift rejects the complete plan',
     intent: 'Never re-resolve a selector against a newer snapshot implicitly.',
     features: ['actor', 'atomic'],
@@ -1507,7 +1450,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
   },
   {
     id: 'reject-authorization-write',
-    group: '17 rejected execution',
+    group: '16 rejected execution',
     name: 'authorization evaluates the complete concrete write set',
     intent: 'Commit nothing when one leaf intent is denied.',
     features: ['authorization', 'write-set', 'atomic'],
@@ -1525,7 +1468,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
   },
   {
     id: 'reject-incomplete-stream',
-    group: '18 rejected streaming',
+    group: '17 rejected streaming',
     name: 'end of stream with a partial statement is an error',
     intent: 'Never evaluate an unterminated streamed edit.',
     features: ['streaming'],
@@ -1544,7 +1487,7 @@ export const bxlMutationExamples: BxlMutationExample[] = [
   },
   {
     id: 'reject-duplicate-operation-id',
-    group: '18 rejected streaming',
+    group: '17 rejected streaming',
     name: 'structured operation identities are unique within a program',
     intent: 'Make retries and replay unambiguous.',
     features: ['streaming', 'idempotency'],
@@ -1567,7 +1510,6 @@ export const bxlMutationExamples: BxlMutationExample[] = [
 
 const requiredFeatures: MutationFeature[] = [
   'copy',
-  'set-collection',
   'stable-position',
   'collection-semantics',
   'cardinality',

@@ -183,8 +183,6 @@ Version 1 should support this closed statement set:
 | `del(location)` | Delete an existing member or item. | exactly one target |
 | `update_all(location; expression)` | Explicit bulk update. | one or more targets |
 | `delete_all(location)` | Explicit bulk delete. | one or more targets |
-| `add_to_set(collection; expression)` | Add a value if absent from a schema-declared set collection. | one collection, zero or one write |
-| `remove_from_set(collection; expression)` | Remove a value from a schema-declared set collection. | one collection, exactly one value |
 | `prepend(collection; expression)` | Insert at array start. | one collection, one value |
 | `append(collection; expression)` | Insert at array end. | one collection, one value |
 | `insert_at(collection; index; expression)` | Insert at a zero-based index. | one collection, one value |
@@ -248,8 +246,6 @@ type BxlMutationOperation =
   | ({ id: string; op: 'replace'; target: StructuredTarget } & OperationValue)
   | { id: string; op: 'copy'; from: StructuredTarget; target: StructuredTarget }
   | { id: string; op: 'delete'; target: StructuredTarget }
-  | ({ id: string; op: 'add-to-set'; target: StructuredTarget } & OperationValue)
-  | ({ id: string; op: 'remove-from-set'; target: StructuredTarget } & OperationValue)
   | ({ id: string; op: 'insert'; into: StructuredTarget; position: StructuredPosition } & OperationValue)
   | { id: string; op: 'move'; target: StructuredTarget; into: StructuredTarget; position: StructuredPosition }
   | { id: string; op: 'reorder'; target: StructuredTarget; key: JqPath; order: JsonScalar[] }
@@ -318,6 +314,20 @@ missing targets.
 Insertion expressions produce one sibling value. An array expression inserts
 one array value, not several sibling values.
 
+Version 1 follows the collection shapes that CardDef and FieldDef expose
+today. A `containsMany` is an ordered array of Field values, and a
+`linksToMany` is an ordered array of loaded Cards. Neither field kind implies
+set membership, and repeated values are not assigned an invented equality or
+identity rule by the mutation language. Use insert, delete, move, and reorder
+against the loaded array; relationship-shaped writes lower to relationship
+intents as described below.
+
+The profile deliberately has no generic `add_to_set` operation. Complex
+FieldDefs have no intrinsic ID, while deep serialized-value equality would
+make membership depend on representation details. A future keyed or hash-map
+Card relationship can add key-based operations when that capability exists in
+the Card model itself, without preconfiguring an identity system here.
+
 Move is a first-class intent. Its normative algorithm is:
 
 1. Resolve source and anchor against the pre-statement snapshot.
@@ -357,10 +367,12 @@ Direct locations use jq paths. Selected locations use bounded jq iteration and
 The compiler records a location expression, not just its current value.
 Structural sources and anchors must resolve to direct array items.
 
-Stable selectors should use schema-declared identity fields. For arrays of
-objects, an implementation should accept a schema hint such as `id`, `key`, or
-another unique field. Numeric indexes are allowed only when one of these is
-true:
+Stable selectors should use values that naturally identify an item in the
+loaded model: a linked Card's ID, or one or more ordinary fields of a contained
+value. The author supplies that selector and the planner proves its cardinality
+against the current snapshot; the mutation profile does not add identity
+configuration to the FieldDef. Numeric indexes are allowed only when one of
+these is true:
 
 - the execution carries a matching `baseRevision` and commits atomically; or
 - the collection is declared position-addressed by its schema.
@@ -408,8 +420,6 @@ type BxlMutationIntent =
   | { op: 'set'; path: JqPath; before?: JsonValue; after: JsonValue }
   | { op: 'delete'; path: JqPath; before: JsonValue }
   | { op: 'copy'; from: JqPath; path: JqPath }
-  | { op: 'add-to-set'; collection: JqPath; value: JsonValue }
-  | { op: 'remove-from-set'; collection: JqPath; value: JsonValue }
   | { op: 'insert'; collection: JqPath; index: number; value: JsonValue }
   | { op: 'move'; from: JqPath; toCollection: JqPath; toIndex: number }
   | { op: 'reorder'; collection: JqPath; keys: JsonScalar[] }
@@ -421,10 +431,9 @@ highlighting. Intent kinds are necessary for granular Yjs/CRDT operations and
 correct undo. Implementations must not collapse array intent to a single
 whole-array `set` merely because the output snapshot differs.
 
-Copy and set-collection operations likewise remain explicit in the plan for
-audit, authorization, idempotent no-op reporting, and adapters that support
-granular operations. Copy is deep by value and never aliases two loaded
-fields.
+Copy operations likewise remain explicit in the plan for audit,
+authorization, and adapters that support granular operations. Copy is deep by
+value and never aliases two loaded fields.
 
 The IR is shape-generic. It contains paths, values, collection operations, and
 relationship edges—not domain-specific Card or Field classes. Schema adapters
