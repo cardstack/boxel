@@ -1,5 +1,5 @@
 import GlimmerComponent from '@glimmer/component';
-import type { CardDef, FieldsTypeFor, Format } from '../card-api';
+import type { BaseDef, CardDef, FieldsTypeFor, Format } from '../card-api';
 import { FieldContainer, Header } from '@cardstack/boxel-ui/components';
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import { startCase } from 'lodash-es';
@@ -12,6 +12,7 @@ import CardInfoTemplates from './card-info';
 
 export default class DefaultCardDefTemplate extends GlimmerComponent<{
   Args: {
+    cardOrField: typeof BaseDef;
     model: CardDef;
     fields: FieldsTypeFor<CardDef>;
     format: Format;
@@ -29,7 +30,12 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
   // then display its edit format alongside other top-level fields.
   private get cardInfoFieldDisplayNames(): string[] | undefined {
     let fieldNames = this.standardComputedFields.filter((fieldName) => {
-      const field = getField(this.args.model.constructor, fieldName);
+      // Read the field off the card class (@cardOrField), not
+      // @model.constructor: the host can invoke this template for a tick while
+      // the model instance is still resolving (initial load, or a store
+      // re-resolve when an incremental index invalidation lands under an open
+      // card), and dereferencing the undefined model there crashes the render.
+      const field = getField(this.args.cardOrField, fieldName);
       return field?.computeVia == undefined;
     });
 
@@ -38,6 +44,9 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
 
   // Fields to display in between the cardInfo header and notes footer
   private get displayFields(): FieldsTypeFor<CardDef> | undefined {
+    if (!this.args.fields) {
+      return undefined;
+    }
     let excludedFields = this.excludedFields.filter(
       (name) => !this.cardInfoFieldDisplayNames?.includes(name),
     );
@@ -52,7 +61,9 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
 
   private get isThemeCard() {
     return Boolean(
-      Object.entries(this.args.fields).find(([key]) => key === 'cssVariables'),
+      Object.entries(this.args.fields ?? {}).find(
+        ([key]) => key === 'cssVariables',
+      ),
     );
   }
 
@@ -70,7 +81,7 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
               @cardThumbnailURL={{@model.cardThumbnailURL}}
               @icon={{@model.constructor.icon}}
             />
-          {{else}}
+          {{else if @fields.cardInfo}}
             <CardInfoTemplates.edit
               @fields={{@fields}}
               @model={{@model}}
@@ -91,15 +102,17 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
             {{/each-in}}
           </section>
         {{/if}}
-        <footer class='notes-footer'>
-          <FieldContainer
-            @label='Notes'
-            @icon={{getFieldIcon @model.cardInfo 'notes'}}
-            data-test-field='cardInfo-notes'
-          >
-            <@fields.cardInfo.notes />
-          </FieldContainer>
-        </footer>
+        {{#if @fields.cardInfo.notes}}
+          <footer class='notes-footer'>
+            <FieldContainer
+              @label='Notes'
+              @icon={{getFieldIcon @model.cardInfo 'notes'}}
+              data-test-field='cardInfo-notes'
+            >
+              <@fields.cardInfo.notes />
+            </FieldContainer>
+          </footer>
+        {{/if}}
       </div>
     </div>
     <style scoped>
