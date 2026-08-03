@@ -17,6 +17,9 @@ import {
   beginRuntimeDependencyTrackingSession,
   endRuntimeDependencyTrackingSession,
   formattedError,
+  identifyCard,
+  isResolvedCodeRef,
+  resetRuntimeDependencyTracker,
   snapshotRuntimeDependencies,
   SupportedMimeType,
   isCardError,
@@ -574,6 +577,33 @@ export default class RenderRoute extends Route<Model> {
       );
       instance = hydratedInstance;
       model.instance = instance;
+
+      // Card hydration can be the first operation in a render tab that imports
+      // Base and the authored card module. Those one-time module-evaluation
+      // side effects are loader initialization, not dependencies of this
+      // particular render. If we keep the session that was open while
+      // hydrating, a fused index visit captures the whole cold Base closure,
+      // while the equivalent split visits (whose file extraction warmed Base)
+      // capture only the stable graph.
+      //
+      // Normalize both paths by opening a fresh card-render session after
+      // hydration, then replay the authored module import from the loader
+      // cache. Loader imports report their stable consumed-module graph even
+      // when the module is already evaluated, while the subsequent template
+      // render and searchable walk add the instance/link dependencies they
+      // actually consume.
+      resetRuntimeDependencyTracker();
+      beginRuntimeDependencyTrackingSession({
+        sessionKey: `${id}|${nonce}|${serializeRenderRouteOptions(parsedOptions)}|card-render`,
+        rootURL: id,
+        rootKind: 'instance',
+      });
+      let hydratedCardRef = identifyCard(
+        instance.constructor as typeof CardDef,
+      );
+      if (isResolvedCodeRef(hydratedCardRef)) {
+        await this.loaderService.loader.import(hydratedCardRef.module);
+      }
     } catch (e: any) {
       console.warn(
         `Encountered error when deserializing doc for ${id}: ${e.message}: ${e.responseText}`,

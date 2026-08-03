@@ -104,8 +104,13 @@ export default class CardService extends Service {
   async getAPI(): Promise<typeof CardAPI> {
     let loader = this.loaderService.baseLoader;
     if (!this.loaderToCardAPILoadingCache.has(loader)) {
+      // This is Host infrastructure borrowing the one shared Base namespace,
+      // not a card consuming Base. Authored card modules record their own
+      // direct card-api edge through the realm loader.
       let apiPromise = loader.import<typeof CardAPI>(
         '@cardstack/base/card-api',
+        undefined,
+        { trackDependencies: false },
       );
       this.loaderToCardAPILoadingCache.set(loader, apiPromise);
       return apiPromise;
@@ -116,8 +121,12 @@ export default class CardService extends Service {
   async getSearchable(): Promise<typeof Searchable> {
     let loader = this.loaderService.baseLoader;
     if (!this.loaderToSearchableLoadingCache.has(loader)) {
+      // Search-doc generation records searchable explicitly in render.meta;
+      // do not make a cold service initialization claim Base's whole graph.
       let searchablePromise = loader.import<typeof Searchable>(
         '@cardstack/base/searchable',
+        undefined,
+        { trackDependencies: false },
       );
       this.loaderToSearchableLoadingCache.set(loader, searchablePromise);
       return searchablePromise;

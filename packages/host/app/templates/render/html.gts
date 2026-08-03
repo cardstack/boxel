@@ -1,10 +1,7 @@
-import { getOwner } from '@ember/application';
 import { service } from '@ember/service';
-import { buildWaiter } from '@ember/test-waiters';
 import Component from '@glimmer/component';
 import { cached } from '@glimmer/tracking';
 
-import { modifier } from 'ember-modifier';
 import { provide } from 'ember-provide-consume-context';
 import RouteTemplate from 'ember-route-template';
 
@@ -20,21 +17,10 @@ import {
   type Query,
 } from '@cardstack/runtime-common';
 
-import CardIsland from '@cardstack/host/components/card-island';
 import SearchResults from '@cardstack/host/components/search/search-results';
 import { CARD_ISLAND_PROTOCOL_VERSION } from '@cardstack/host/lib/card-island-protocol';
-import {
-  captureIsolatedRenderErrors,
-  rerenderSerializedComponent,
-  serializeWithArgs,
-  settleDeferredIsolatedRenders,
-  teardown,
-} from '@cardstack/host/lib/isolated-render';
-import { isTrustedRealmCardDefinition } from '@cardstack/host/lib/realm-sandbox-boundary';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
-import type LoaderService from '@cardstack/host/services/loader-service';
-import type RealmSandboxService from '@cardstack/host/services/realm-sandbox';
 import type RenderStoreService from '@cardstack/host/services/render-store';
 
 import type { Model } from '../../routes/render/html';
@@ -46,13 +32,8 @@ interface Signature {
   };
 }
 
-const serializeIslandWaiter = buildWaiter('render-html:serialize-card-island');
-const MAX_ASYNC_RENDER_PASSES = 3;
-
 class RenderHtmlTemplate extends Component<Signature> {
   @service('render-store') declare private store: RenderStoreService;
-  @service declare private loaderService: LoaderService;
-  @service declare private realmSandbox: RealmSandboxService;
 
   @provide(GetCardContextName)
   private get getCard(): GetCardType {
@@ -106,67 +87,6 @@ class RenderHtmlTemplate extends Component<Signature> {
     };
   }
 
-  private serializeIsland = modifier(
-    (element: HTMLElement, [model]: [Model]) => {
-      let args = {
-        card: model.instance,
-        format: model.format,
-        getCard: this.getCard,
-        getCards: this.getCards,
-        getCardCollection: this.getCardCollection,
-        context: this.context,
-      };
-      let owner = getOwner(this)!;
-      let cancelled = false;
-      let waiterToken = serializeIslandWaiter.beginAsync();
-      void (async () => {
-        try {
-          // The route template itself is a host-rendered Glimmer root. Prepare
-          // only this card/format's SES program before creating the nested
-          // low-level CardIsland, then start that program after the async
-          // boundary has closed the host transaction.
-          await this.realmSandbox.prepareRender(model.instance, model.format);
-          if (cancelled) {
-            return;
-          }
-          await captureIsolatedRenderErrors(async () => {
-            serializeWithArgs(CardIsland as any, element as any, owner, args);
-            let cardAPI = await this.loaderService.loader.import<
-              typeof import('@cardstack/base/card-api')
-            >('@cardstack/base/card-api');
-            for (let i = 0; i < MAX_ASYNC_RENDER_PASSES; i++) {
-              await settleDeferredIsolatedRenders();
-              await Promise.resolve();
-              await Promise.all([
-                this.store.loaded(),
-                cardAPI.waitForCardLoads(model.instance),
-              ]);
-              rerenderSerializedComponent(element as any);
-            }
-            await settleDeferredIsolatedRenders();
-          });
-        } catch (error) {
-          if (!cancelled) {
-            queueMicrotask(() => {
-              throw error;
-            });
-          }
-        } finally {
-          serializeIslandWaiter.endAsync(waiterToken);
-        }
-      })();
-
-      return () => {
-        cancelled = true;
-        teardown(element as any);
-      };
-    },
-  );
-
-  private get useTrustedDOMRenderer(): boolean {
-    return isTrustedRealmCardDefinition(this.args.model.instance);
-  }
-
   <template>
     {{! Whitespace-preserving container for markdown-format renders (CS-10781).
         `white-space: pre` keeps newlines and indentation authored in the
@@ -175,36 +95,20 @@ class RenderHtmlTemplate extends Component<Signature> {
         route-template whitespace does not leak into the captured markdown.
         Only applies when format === 'markdown'; other formats are unaffected. }}
     {{#if (eq @model.format 'isolated')}}
-      {{#if this.useTrustedDOMRenderer}}
-        {{! Trusted official templates render through the route's normal Glimmer
-            tree. Calling a nested live renderer from a modifier is re-entrant
-            and can put the prerender route into an unusable state. }}
-        <div
-          data-boxel-card-island
-          data-boxel-card-island-protocol={{CARD_ISLAND_PROTOCOL_VERSION}}
-          data-boxel-card-format={{@model.format}}
-          data-boxel-card-url={{@model.instance.id}}
-          data-boxel-card-island-serialization='rendered'
-        >
-          <CardIsland
-            @card={{@model.instance}}
-            @format={{@model.format}}
-            @getCard={{this.getCard}}
-            @getCards={{this.getCards}}
-            @getCardCollection={{this.getCardCollection}}
-            @context={{this.context}}
-          />
-        </div>
-      {{else}}
-        <div
-          data-boxel-card-island
-          data-boxel-card-island-protocol={{CARD_ISLAND_PROTOCOL_VERSION}}
-          data-boxel-card-format={{@model.format}}
-          data-boxel-card-url={{@model.instance.id}}
-          data-boxel-card-island-serialization='serialized'
-          {{this.serializeIsland @model}}
-        ></div>
-      {{/if}}
+      {{! The realm server already executes card code in an isolated headless
+          browser context. Render the canonical, host-loaded component there;
+          the interactive host applies SES or iframe isolation when it adopts
+          this boundary. Waiting for a second realm fetch from an SES runtime
+          here would deadlock the realm's own indexing transaction. }}
+      <div
+        data-boxel-card-island
+        data-boxel-card-island-protocol={{CARD_ISLAND_PROTOCOL_VERSION}}
+        data-boxel-card-format={{@model.format}}
+        data-boxel-card-url={{@model.instance.id}}
+        data-boxel-card-island-serialization='rendered'
+      >
+        <@model.Component @format={{@model.format}} />
+      </div>
     {{else if (eq @model.format 'markdown')}}
       <div data-markdown-render-container class='markdown-render-container'>
         <@model.Component @format={{@model.format}} />

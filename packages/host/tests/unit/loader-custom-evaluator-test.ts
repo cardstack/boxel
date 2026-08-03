@@ -2,7 +2,10 @@ import { module, test } from 'qunit';
 
 import {
   baseRealm,
+  beginRuntimeDependencyTrackingSession,
   Loader,
+  resetRuntimeDependencyTracker,
+  snapshotRuntimeDependencies,
   type ModuleEvaluator,
   type ModuleRegistration,
 } from '@cardstack/runtime-common';
@@ -76,6 +79,60 @@ module('Unit | loader custom evaluator', function () {
         'https://sandbox.test/c.js',
       ]);
     } finally {
+      loader.dispose();
+    }
+  });
+
+  test('can import a shared module without attributing its graph to the active consumer', async function (assert) {
+    let entry = 'https://shared.test/entry.js';
+    let dependency = 'https://shared.test/dependency.js';
+    let loader = new Loader(async (input) => {
+      let url = input instanceof Request ? input.url : String(input);
+      if (url === entry) {
+        return new Response(
+          `import { value } from './dependency.js'; export { value };`,
+          { headers: { 'content-type': 'text/javascript' } },
+        );
+      }
+      if (url === dependency) {
+        return new Response(`export const value = 'shared';`, {
+          headers: { 'content-type': 'text/javascript' },
+        });
+      }
+      return new Response('not found', { status: 404 });
+    });
+
+    try {
+      resetRuntimeDependencyTracker();
+      beginRuntimeDependencyTrackingSession({
+        sessionKey: 'shared-import',
+        rootURL: 'https://consumer.test/card',
+        rootKind: 'instance',
+      });
+      let module = await loader.import<{ value: string }>(entry, undefined, {
+        trackDependencies: false,
+      });
+      assert.strictEqual(module.value, 'shared');
+      assert.deepEqual(
+        snapshotRuntimeDependencies().deps,
+        [],
+        'a cold shared import does not claim its evaluated graph',
+      );
+
+      resetRuntimeDependencyTracker();
+      beginRuntimeDependencyTrackingSession({
+        sessionKey: 'ordinary-import',
+        rootURL: 'https://consumer.test/card',
+        rootKind: 'instance',
+      });
+      await loader.import(entry);
+      assert.deepEqual(
+        snapshotRuntimeDependencies().deps.sort(),
+        ['https://shared.test/dependency', 'https://shared.test/entry'],
+        'a later ordinary import attributes the stable cached module graph',
+      );
+    } finally {
+      resetRuntimeDependencyTracker();
       loader.dispose();
     }
   });

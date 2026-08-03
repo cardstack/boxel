@@ -9,7 +9,6 @@ import { isEqual } from 'lodash-es';
 import type { CodeRef } from '@cardstack/runtime-common';
 import {
   baseRef,
-  beginRuntimeDependencyTrackingSession,
   identifyCard,
   internalKeyFor,
   logger,
@@ -394,21 +393,15 @@ export default class RenderMetaRoute extends Route<Model> {
     // `cardRender`, so this one transition also produces the file row's
     // extract. It runs only now — the card payload above is fully
     // materialized and its dependency snapshot taken, so nothing the extract
-    // does can leak into the card row. The extract gets a fresh tracking
-    // session: the tracker is session-scoped and a snapshot reads the whole
-    // session, so sharing the card's session would fold the hydration graph
-    // into the file row's deps. The instance id is the canonical (extension-
-    // less) card URL; the extract targets the `.json` file that stores it,
-    // the same URL a standalone render.file-extract receives.
+    // does can leak into the card row. `runFileExtract` owns the fresh
+    // tracking session that keeps the card hydration graph out of the file
+    // row. The instance id is the canonical (extension-less) card URL; the
+    // extract targets the `.json` file that stores it, the same URL a
+    // standalone render.file-extract receives.
     let fileURL = renderModel.cardId.endsWith('.json')
       ? renderModel.cardId
       : `${renderModel.cardId}.json`;
     let extractStart = performance.now();
-    beginRuntimeDependencyTrackingSession({
-      sessionKey: `${renderModel.cardId}|${renderModel.nonce}|file-extract`,
-      rootURL: fileURL,
-      rootKind: 'file',
-    });
     this.#authGuard.register();
     let extractResult: FileDefExtractResult;
     try {

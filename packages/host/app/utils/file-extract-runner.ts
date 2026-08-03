@@ -4,7 +4,9 @@ import type Owner from '@ember/owner';
 import {
   baseFileRef,
   baseRealm,
+  beginRuntimeDependencyTrackingSession,
   formattedError,
+  resetRuntimeDependencyTracker,
   snapshotRuntimeDependencies,
   ToolContextStamp,
   trackRuntimeModuleDependency,
@@ -36,11 +38,12 @@ export function buildFileExtractError(url: string, error: any): RenderError {
 // standalone render.file-extract route and the fused branch of render.meta so
 // both produce the identical file-row payload.
 //
-// The caller owns the dependency-tracking SESSION this runs inside: the
-// extract snapshots the whole current session, so it must not share one with
-// card hydration — the standalone route inherits the parent render route's
-// session (whose fileExtract-mode model tracks nothing else), while the fused
-// meta branch starts a fresh session first.
+// This operation owns its dependency-tracking session. The parent render route
+// starts tracking before its child route is known, while the outgoing child
+// template can still be tearing down. Reusing that session lets render-only
+// template and scoped-CSS dependencies leak into a standalone file extract.
+// Reset at the latest possible boundary, immediately before extraction; the
+// fused meta route snapshots its card dependencies before calling us.
 //
 // Throws never escape: an extractor failure is caught into a
 // `status: 'error'` result so it surfaces through the route's payload (and
@@ -65,6 +68,27 @@ export async function runFileExtract({
   let fileDefCodeRef = renderOptions.fileDefCodeRef ?? baseFileRef;
   let contentHash: string | undefined = renderOptions.fileContentHash;
   let contentSize: number | undefined = renderOptions.fileContentSize;
+  // Evaluate the FileDef modules before opening the operation's tracking
+  // session. A cold module evaluation can load one-time template/scoped-CSS
+  // support that a warm import does not repeat. Those initialization effects
+  // are not dependencies of this particular file extraction; the cached
+  // re-import below replays the FileDef's stable known module graph instead,
+  // making standalone and fused extraction visits identical.
+  try {
+    await Promise.all([
+      loaderService.loader.import(fileDefCodeRef.module),
+      loaderService.loader.import(baseFileRef.module),
+    ]);
+  } catch {
+    // The extractor's import is authoritative and converts the same failure
+    // into the route's structured error result below.
+  }
+  resetRuntimeDependencyTracker();
+  beginRuntimeDependencyTrackingSession({
+    sessionKey: `${fileURL}|file-extract`,
+    rootURL: fileURL,
+    rootKind: 'file',
+  });
   // This runs on the indexing path, so skill tool schemas are generated
   // during the extract and persisted with the row. Tool classes never read
   // the context during schema generation, but host-package tools resolve

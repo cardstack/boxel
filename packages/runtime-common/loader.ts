@@ -510,11 +510,13 @@ export class Loader {
   async import<T extends object>(
     moduleIdentifier: string,
     dependencyTrackingContext?: RuntimeDependencyTrackingContext,
+    options?: { trackDependencies?: boolean },
   ): Promise<T> {
     moduleIdentifier = this.resolveImport(moduleIdentifier);
     let resolvedModule = new URL(moduleIdentifier);
     let resolvedModuleIdentifier = resolvedModule.href;
-    if (!this.moduleShims.has(resolvedModuleIdentifier)) {
+    let trackDependencies = options?.trackDependencies !== false;
+    if (trackDependencies && !this.moduleShims.has(resolvedModuleIdentifier)) {
       // Normalize tracker keys to the virtual-alias URL form when one
       // exists (the dependency tracker requires `http://`/`https://`
       // URLs — see `canonicalURL` in dependency-tracker.ts — so RRI
@@ -529,10 +531,12 @@ export class Loader {
     }
 
     await this.advanceToState(resolvedModule, 'evaluated');
-    this.trackKnownModuleDependencies(
-      resolvedModuleIdentifier,
-      dependencyTrackingContext,
-    );
+    if (trackDependencies) {
+      this.trackKnownModuleDependencies(
+        resolvedModuleIdentifier,
+        dependencyTrackingContext,
+      );
+    }
     let module = this.getModule(resolvedModuleIdentifier);
     switch (module?.state) {
       case 'evaluated':

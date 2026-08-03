@@ -251,15 +251,20 @@ export default class LoaderService extends Service {
         isBaseRealmModule(moduleIdentifier) ||
         isBaseRealmModule(this.network.resolveImport(moduleIdentifier))
       ) {
-        let module =
-          await this.baseLoader.import<Record<string, unknown>>(
-            moduleIdentifier,
-          );
-        return {
-          module,
-          consumedModules:
-            this.baseLoader.getKnownConsumedModules(moduleIdentifier),
-        };
+        let module = await this.baseLoader.import<Record<string, unknown>>(
+          moduleIdentifier,
+          undefined,
+          { trackDependencies: false },
+        );
+        // The realm loader owns the direct edge to this delegated module, but
+        // the shared Base loader owns everything beneath it. Copying Base's
+        // transitive closure here makes the authored realm graph depend on
+        // whichever one-time Base modules happened to be evaluated when the
+        // namespace was borrowed. Besides bloating every card's invalidation
+        // set, that makes cold fused prerenders disagree with equivalent warm
+        // split visits. Keep the trusted graph behind this explicit loader
+        // boundary instead.
+        return { module };
       }
       return undefined;
     };
