@@ -10,6 +10,7 @@ import CopyIcon from '@cardstack/boxel-icons/copy';
 import FileSettingsIcon from '@cardstack/boxel-icons/file-settings';
 import Home from '@cardstack/boxel-icons/home';
 import RefreshIcon from '@cardstack/boxel-icons/refresh-cw';
+import { format as formatDate } from 'date-fns';
 import { dropTask, task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import pluralize from 'pluralize';
@@ -23,7 +24,7 @@ import {
   RealmIcon,
   Tooltip,
 } from '@cardstack/boxel-ui/components';
-import { MenuItem, cssVar, gt } from '@cardstack/boxel-ui/helpers';
+import { MenuItem, cssVar, gt, or } from '@cardstack/boxel-ui/helpers';
 import {
   Group,
   IconGlobe,
@@ -63,6 +64,8 @@ interface Signature {
     realmIdentifier: RealmIdentifier;
     showMenu?: boolean;
     isSelected?: boolean;
+    isFavoritesSection?: boolean;
+    enlargedWidth?: string;
     navIndex?: number;
   };
 }
@@ -75,7 +78,9 @@ export default class Workspace extends Component<Signature> {
       <div
         class='workspace-card
           {{if this.isHostDropdownOpen "is-open"}}
-          {{if @isSelected "is-selected"}}'
+          {{if @isSelected "is-selected"}}
+          {{if @isFavoritesSection "is-enlarged"}}'
+        style={{cssVar favorite-tile-width=@enlargedWidth}}
         data-test-workspace={{this.name}}
         data-test-workspace-selected={{if @isSelected this.name}}
         {{on 'mouseleave' this.closeHostDropdown}}
@@ -110,13 +115,79 @@ export default class Workspace extends Component<Signature> {
               workspace-background-image-url=this.backgroundImageURL
             }}
           >
-            <div class='realm-icon-wrapper'>
-              <RealmIcon
-                class='workspace-realm-icon'
-                @realmInfo={{this.realmInfo}}
-                @canAnimate={{true}}
-              />
-            </div>
+            {{#if @isFavoritesSection}}
+              <div class='tile-scrim'></div>
+              <div class='tile-content'>
+                <div class='realm-icon-wrapper'>
+                  <RealmIcon
+                    class='workspace-realm-icon'
+                    @realmInfo={{this.realmInfo}}
+                    @canAnimate={{true}}
+                  />
+                </div>
+                <div class='tile-text'>
+                  <span
+                    class='tile-name'
+                    data-test-workspace-name
+                  >{{this.name}}</span>
+                  {{#if this.hasAnyTileStats}}
+                    <div
+                      class='tile-metadata-row'
+                      data-test-workspace-stats={{@realmIdentifier}}
+                    >
+                      {{#if this.hasCardCount}}
+                        <Tooltip @placement='top'>
+                          <:trigger>
+                            <span class='tile-stat'>
+                              <span class='tile-stat-label'>Cards</span>
+                              <span
+                                class='tile-stat-number'
+                              >{{this.cardCount}}</span>
+                            </span>
+                          </:trigger>
+                          <:content>Cards {{this.cardCount}}</:content>
+                        </Tooltip>
+                      {{/if}}
+                      {{#if this.hasFileCount}}
+                        <Tooltip @placement='top'>
+                          <:trigger>
+                            <span class='tile-stat'>
+                              <span class='tile-stat-label'>Files</span>
+                              <span
+                                class='tile-stat-number'
+                              >{{this.fileCount}}</span>
+                            </span>
+                          </:trigger>
+                          <:content>Files {{this.fileCount}}</:content>
+                        </Tooltip>
+                      {{/if}}
+                      {{#if this.hasDefinitionCount}}
+                        <Tooltip @placement='top'>
+                          <:trigger>
+                            <span class='tile-stat'>
+                              <span class='tile-stat-label'>Definitions</span>
+                              <span
+                                class='tile-stat-number'
+                              >{{this.definitionCount}}</span>
+                            </span>
+                          </:trigger>
+                          <:content>Definitions
+                            {{this.definitionCount}}</:content>
+                        </Tooltip>
+                      {{/if}}
+                    </div>
+                  {{/if}}
+                </div>
+              </div>
+            {{else}}
+              <div class='realm-icon-wrapper'>
+                <RealmIcon
+                  class='workspace-realm-icon'
+                  @realmInfo={{this.realmInfo}}
+                  @canAnimate={{true}}
+                />
+              </div>
+            {{/if}}
           </div>
         </ItemContainer>
         <ContextButton
@@ -129,8 +200,34 @@ export default class Workspace extends Component<Signature> {
           {{on 'click' this.toggleFavorite}}
           data-test-workspace-favorite-btn={{@realmIdentifier}}
         />
+        {{#if @isFavoritesSection}}
+          <div
+            class='tile-status-bar'
+            data-test-workspace-status-bar={{@realmIdentifier}}
+          >
+            {{#if this.hasPublishedRealms}}
+              <Tooltip @placement='top'>
+                <:trigger>
+                  <span class='tile-status-icon'>
+                    <Home width='12' height='12' />
+                  </span>
+                </:trigger>
+                <:content>Hosted on the web</:content>
+              </Tooltip>
+            {{/if}}
+            <Tooltip @placement='top'>
+              <:trigger>
+                <span class='tile-status-visibility'>
+                  <this.visibilityIcon width='12' height='12' />
+                  <span class='tile-status-label'>{{this.visibility}}</span>
+                </span>
+              </:trigger>
+              <:content>{{this.visibilityLabel}}</:content>
+            </Tooltip>
+          </div>
+        {{/if}}
         <div class='tile-menu-btn'>
-          <BoxelDropdown>
+          <BoxelDropdown @contentClass='workspace-menu-dropdown'>
             <:trigger as |bindings|>
               <ContextButton
                 @label='Options'
@@ -143,6 +240,26 @@ export default class Workspace extends Component<Signature> {
             </:trigger>
             <:content as |dd|>
               <Menu @items={{this.tileMenuItems}} @closeMenu={{dd.close}} />
+              {{#if (or this.updatedAtLabel this.createdAtLabel)}}
+                <div
+                  class='workspace-menu-footer'
+                  data-test-workspace-menu-footer={{@realmIdentifier}}
+                >
+                  {{#if this.updatedAtLabel}}
+                    <span
+                      class='workspace-menu-footer__value'
+                    >{{this.updatedAtLabel}}</span>
+                  {{/if}}
+                  {{#if this.createdAtLabel}}
+                    <span class='workspace-menu-footer__row'>
+                      <span class='workspace-menu-footer__label'>Created</span>
+                      <span
+                        class='workspace-menu-footer__value'
+                      >{{this.createdAtLabel}}</span>
+                    </span>
+                  {{/if}}
+                </div>
+              {{/if}}
             </:content>
           </BoxelDropdown>
         </div>
@@ -184,30 +301,32 @@ export default class Workspace extends Component<Signature> {
           {{/if}}
         {{/if}}
 
-        <div class='info {{if this.isHostDropdownOpen "info--hidden"}}'>
-          <span class='name' data-test-workspace-name>{{this.name}}</span>
-          <span class='visibility' data-test-workspace-visibility>
-            {{#if this.hasPublishedRealms}}
+        {{#unless @isFavoritesSection}}
+          <div class='info {{if this.isHostDropdownOpen "info--hidden"}}'>
+            <span class='name' data-test-workspace-name>{{this.name}}</span>
+            <span class='visibility' data-test-workspace-visibility>
+              {{#if this.hasPublishedRealms}}
+                <Tooltip @placement='top'>
+                  <:trigger>
+                    <span class='hosted-icon'>
+                      <Home width='13' height='13' />
+                    </span>
+                  </:trigger>
+                  <:content>Hosted on the web</:content>
+                </Tooltip>
+              {{/if}}
               <Tooltip @placement='top'>
                 <:trigger>
-                  <span class='hosted-icon'>
-                    <Home width='13' height='13' />
-                  </span>
+                  <this.visibilityIcon width='12' height='12' />
                 </:trigger>
-                <:content>Hosted on the web</:content>
+                <:content>
+                  {{this.visibilityLabel}}
+                </:content>
               </Tooltip>
-            {{/if}}
-            <Tooltip @placement='top'>
-              <:trigger>
-                <this.visibilityIcon width='12' height='12' />
-              </:trigger>
-              <:content>
-                {{this.visibilityLabel}}
-              </:content>
-            </Tooltip>
-            <span class='visibility-label'>{{this.visibility}}</span>
-          </span>
-        </div>
+              <span class='visibility-label'>{{this.visibility}}</span>
+            </span>
+          </div>
+        {{/unless}}
       </div>
       {{#if this.showDeleteModal}}
         <ModalContainer
@@ -490,35 +609,60 @@ export default class Workspace extends Component<Signature> {
         pointer-events: none;
         z-index: 20;
       }
+      .workspace-card.is-enlarged :deep(.workspace) {
+        width: var(
+          --favorite-tile-width,
+          calc(var(--boxel-xxs-container) * 1.5)
+        );
+        min-width: var(
+          --favorite-tile-width,
+          calc(var(--boxel-xxs-container) * 1.5)
+        );
+      }
+      .workspace-card.is-enlarged::after {
+        width: var(
+          --favorite-tile-width,
+          calc(var(--boxel-xxs-container) * 1.5)
+        );
+      }
       .workspace-card:hover::after {
         border-color: rgba(255 255 255 / 50%);
-      }
-      .workspace-card.is-selected::after {
-        border-color: var(--boxel-teal);
-        box-shadow: 0 0 0 1px var(--boxel-teal);
       }
       .tile-favorite-btn {
         position: absolute;
         top: 0.5rem;
         left: 0.5rem;
         z-index: 3;
+        width: var(--boxel-button-xs);
+        height: var(--boxel-button-xs);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
         color: var(--boxel-light);
         --icon-color: var(--boxel-light);
         opacity: 0;
-        transition: opacity 0.15s ease;
+        border-radius: var(--boxel-border-radius-sm);
+        transition:
+          opacity 0.15s ease,
+          background 0.15s ease;
       }
       .workspace-card:hover .tile-favorite-btn {
         opacity: 1;
-      }
-      .tile-favorite-btn:hover {
         background: rgba(0 0 0 / 40%);
         backdrop-filter: blur(6px);
-        border-radius: var(--boxel-border-radius-sm);
+      }
+      .workspace-card:hover .tile-favorite-btn:hover {
+        background: var(--boxel-teal);
+        color: var(--boxel-dark);
+        --icon-color: var(--boxel-dark);
       }
       .tile-favorite-btn.is-favorited {
         color: var(--boxel-teal);
         --icon-color: var(--boxel-teal);
         opacity: 1;
+        background: rgba(0 0 0 / 40%);
+        backdrop-filter: blur(6px);
       }
       .tile-menu-btn {
         position: absolute;
@@ -533,31 +677,96 @@ export default class Workspace extends Component<Signature> {
         align-items: center;
         justify-content: center;
         overflow: hidden;
+        opacity: 0;
+        transition:
+          opacity 0.15s ease,
+          background 0.15s ease;
         --boxel-icon-button-width: var(--boxel-button-xs);
         --boxel-icon-button-height: var(--boxel-button-xs);
       }
-      .tile-menu-btn:hover {
+      .workspace-card:hover .tile-menu-btn {
+        opacity: 1;
         background: rgba(0 0 0 / 40%);
         backdrop-filter: blur(6px);
       }
-      .tile-menu-btn:focus-within {
+      .workspace-card:hover .tile-menu-btn:hover {
+        background: var(--boxel-teal);
+        color: var(--boxel-dark);
+        --icon-color: var(--boxel-dark);
+      }
+      .tile-menu-btn:has([aria-expanded='true']) {
+        opacity: 1;
         background: var(--boxel-highlight);
         color: var(--boxel-highlight-foreground);
       }
+      .workspace-card:hover .tile-menu-btn:has([aria-expanded='true']) {
+        background: var(--boxel-highlight);
+        color: var(--boxel-highlight-foreground);
+      }
+      /* Hosted + visibility indicators for the enlarged favorite tile,
+         combined into a single pill to the right of the favorite star,
+         matching its height. Persistently visible (not hover-gated) since
+         it's informational, same as the favorited star. */
+      .tile-status-bar {
+        position: absolute;
+        top: 0.5rem;
+        left: calc(0.5rem + var(--boxel-button-xs) + var(--boxel-sp-3xs));
+        z-index: 3;
+        box-sizing: border-box;
+        height: var(--boxel-button-xs);
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-3xs);
+        padding: 0 var(--boxel-sp-2xs);
+        border-radius: var(--boxel-border-radius-sm);
+        background: rgba(0 0 0 / 40%);
+        backdrop-filter: blur(6px);
+        color: var(--boxel-light);
+      }
+      .tile-status-icon {
+        display: flex;
+        align-items: center;
+        color: var(--boxel-teal);
+      }
+      .tile-status-visibility {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-6xs);
+        --icon-color: var(--boxel-light);
+      }
+      .tile-status-label {
+        font-size: var(--boxel-font-size-2xs);
+        text-transform: capitalize;
+        letter-spacing: var(--boxel-lsp);
+        margin-left: 3px;
+      }
       .tile-icon {
+        position: relative;
+        height: 100%;
+        width: 100%;
+        overflow: hidden;
+
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+      /* The background image lives on its own layer (rather than directly
+         on .tile-icon) so it can be scaled on hover without also zooming
+         the icon/name/metadata content stacked on top of it. */
+      .tile-icon::before {
+        content: '';
+        position: absolute;
+        inset: 0;
         background-color: var(--boxel-500);
         background-image: var(--workspace-background-image-url);
         background-position: center;
         background-size: cover;
         background-repeat: no-repeat;
-
-        position: relative;
-        height: 100%;
-        width: 100%;
-
-        display: flex;
-        justify-content: center;
-        align-items: center;
+        transition: transform 0.4s ease-out;
+        z-index: 0;
+      }
+      .workspace-card.is-enlarged:hover .tile-icon::before {
+        transform: scale(1.15);
       }
       .realm-icon-wrapper {
         flex-shrink: 0;
@@ -678,6 +887,75 @@ export default class Workspace extends Component<Signature> {
         align-items: center;
         margin-right: var(--boxel-sp-6xs);
       }
+      /* Sits between the tile's background image and its text/icon
+         content, darkening the image so the name and metadata stay
+         readable regardless of the underlying artwork. */
+      .tile-scrim {
+        position: absolute;
+        inset: 0;
+        background: rgba(0 0 0 / 50%);
+        z-index: 1;
+        pointer-events: none;
+      }
+      /* The icon + name + metadata group, vertically centered as a unit
+         within the tile. padding-top reserves the zone occupied by the
+         favorite star and status bar (see .tile-favorite-btn/.tile-status-bar
+         above) so the centered group never sits under them; padding-bottom
+         stays 0 so centering is computed against the space below that zone,
+         not the full tile height. Nudged up 10px from that centered
+         position per design feedback. Stays visible even when the
+         host-trigger bar is hovered/open (see .host-trigger below) — only
+         the .info block used to need to fade for that, and this group
+         replaced it. */
+      .tile-content {
+        position: absolute;
+        inset: 0;
+        box-sizing: border-box;
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+        padding: calc(0.5rem + var(--boxel-button-xs) + var(--boxel-sp-3xs))
+          var(--boxel-sp) 0;
+        transform: translateY(-10px);
+        z-index: 2;
+      }
+      .tile-text {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-5xs);
+        min-width: 0;
+        flex: 1;
+      }
+      .tile-name {
+        font: 400 var(--boxel-font-md);
+        color: var(--boxel-light);
+        text-align: left;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        overflow-wrap: anywhere;
+      }
+      .tile-metadata-row {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-sm);
+      }
+      .tile-stat {
+        display: flex;
+        align-items: baseline;
+        gap: 0.25rem;
+        font-size: 0.75rem;
+        color: var(--boxel-light);
+        letter-spacing: var(--boxel-lsp);
+        --icon-color: var(--boxel-450);
+      }
+      .tile-stat-label {
+        font-weight: 400;
+      }
+      .tile-stat-number {
+        font-weight: 600;
+      }
       .realm-url {
         font-size: var(--boxel-font-xs);
         color: var(--boxel-500);
@@ -715,6 +993,12 @@ export default class Workspace extends Component<Signature> {
         opacity: 1;
         transition: none;
       }
+      .workspace-card.is-enlarged .host-trigger {
+        width: var(
+          --favorite-tile-width,
+          calc(var(--boxel-xxs-container) * 1.5)
+        );
+      }
       .trigger-house {
         color: var(--boxel-teal);
         display: flex;
@@ -724,7 +1008,7 @@ export default class Workspace extends Component<Signature> {
       .trigger-url {
         font-size: var(--boxel-font-size-2xs);
         color: var(--boxel-light);
-        font-weight: 500;
+        font-weight: 400;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -739,7 +1023,7 @@ export default class Workspace extends Component<Signature> {
       .host-dropdown {
         position: absolute;
         top: 10.375rem;
-        left: 0;
+        right: 0;
         width: var(--boxel-xxs-container);
         background: var(--boxel-light);
         border-radius: var(--boxel-border-radius);
@@ -823,6 +1107,49 @@ export default class Workspace extends Component<Signature> {
       }
       .workspace-chooser-delete-modal-container {
         --stack-card-footer-height: auto;
+      }
+      :global(.workspace-menu-dropdown) {
+        --boxel-dropdown-border-color: rgba(0 0 0 / 50%);
+      }
+      .workspace-menu-footer {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-5xs);
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+      }
+      .workspace-menu-footer::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 10px;
+        right: 10px;
+        height: 1px;
+        background: #e8e8e8;
+        opacity: 0.75;
+      }
+      /* The last menu item normally rounds its bottom corners to match the
+         panel when hovered, since it's usually flush with the panel's
+         bottom edge. This dropdown has the Updated/Created footer below
+         it instead, so that rounding now reads as a mismatched cutout —
+         square it off here. */
+      :deep(.boxel-menu__item:last-child:hover) {
+        border-bottom-left-radius: 0;
+        border-bottom-right-radius: 0;
+      }
+      :deep([data-menu-item-id='realm-settings'] svg) {
+        width: 17px;
+        height: 17px;
+      }
+      .workspace-menu-footer__row {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-6xs);
+      }
+      .workspace-menu-footer__label,
+      .workspace-menu-footer__value {
+        font-size: var(--boxel-font-size-2xs);
+        color: var(--boxel-450);
       }
       .workspace-chooser-delete-modal-container > :deep(.boxel-modal__inner) {
         display: flex;
@@ -1327,6 +1654,7 @@ export default class Workspace extends Component<Signature> {
     }
     items.push(
       new MenuItem({
+        id: 'realm-settings',
         label: 'Realm Settings',
         icon: FileSettingsIcon,
         action: this.openRealmConfig,
@@ -1456,6 +1784,58 @@ export default class Workspace extends Component<Signature> {
       default:
         return '';
     }
+  }
+
+  private get createdAtLabel() {
+    let { createdAt } = this.realmInfo;
+    if (!createdAt) {
+      return undefined;
+    }
+    return formatRelativeTime(new Date(createdAt));
+  }
+
+  private get updatedAtLabel() {
+    let { updatedAt } = this.realmInfo;
+    if (!updatedAt) {
+      return undefined;
+    }
+    return formatUpdatedTime(new Date(updatedAt));
+  }
+
+  // Compact metadata for the enlarged favorite tile's in-tile content (see
+  // .tile-metadata-row below) — Cards/Files/Definitions counts, plus
+  // collaborators. Number/label are split into separate getters so the
+  // template can emphasize the count with larger type than its unit
+  // label. Each stat is real, per-workspace content (see the matching
+  // RealmInfo fields' doc comment) — a workspace with none of a given type
+  // simply omits that stat, which is what gives each favorite tile a
+  // different mix of metadata rather than always showing all three.
+  private get hasCardCount() {
+    return !!this.realmInfo.cardCount;
+  }
+
+  private get cardCount() {
+    return this.realmInfo.cardCount ?? 0;
+  }
+
+  private get hasFileCount() {
+    return !!this.realmInfo.fileCount;
+  }
+
+  private get fileCount() {
+    return this.realmInfo.fileCount ?? 0;
+  }
+
+  private get hasDefinitionCount() {
+    return !!this.realmInfo.definitionCount;
+  }
+
+  private get definitionCount() {
+    return this.realmInfo.definitionCount ?? 0;
+  }
+
+  private get hasAnyTileStats() {
+    return this.hasCardCount || this.hasFileCount || this.hasDefinitionCount;
   }
 
   private get canDeleteWorkspace() {
@@ -1784,4 +2164,49 @@ export function joinWithAnd(parts: string[]): string {
   }
 
   return `${parts.slice(0, -1).join(', ')}, and ${parts.at(-1)}`;
+}
+
+export function formatRelativeTime(date: Date): string {
+  let diffMinutes = Math.floor((Date.now() - date.getTime()) / (60 * 1000));
+  if (diffMinutes < 1) {
+    return formatDate(date, 'h:mm a');
+  }
+  if (diffMinutes < 60) {
+    return `${diffMinutes} min ago`;
+  }
+  let diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) {
+    return `${diffHours} ${diffHours === 1 ? 'hr' : 'hrs'} ago`;
+  }
+  return formatDate(date, 'EEE, MMM d, yyyy');
+}
+
+export function formatUpdatedTime(date: Date): string {
+  // Clamp to 0: a clock skewed slightly ahead of the server (or a
+  // just-written timestamp racing this render) can otherwise produce a
+  // negative diff.
+  let diffSeconds = Math.max(
+    0,
+    Math.floor((Date.now() - date.getTime()) / 1000),
+  );
+  if (diffSeconds === 0) {
+    return 'Updated just now';
+  }
+  if (diffSeconds < 60) {
+    return `Updated ${diffSeconds} sec ago`;
+  }
+  let diffMinutes = Math.floor(diffSeconds / 60);
+  if (diffMinutes < 60) {
+    return `Updated ${diffMinutes} min ago`;
+  }
+  let diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) {
+    return `Updated ${diffHours} ${diffHours === 1 ? 'hr' : 'hrs'} ago`;
+  }
+  let diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 30) {
+    return `Updated ${diffDays} ${diffDays === 1 ? 'day' : 'days'} ago`;
+  }
+  let diffMonths = Math.floor(diffDays / 30);
+  return `Updated ${diffMonths} ${diffMonths === 1 ? 'month' : 'months'} ago`;
 }

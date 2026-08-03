@@ -8,6 +8,7 @@ import ArchiveIcon from '@cardstack/boxel-icons/archive';
 import Home from '@cardstack/boxel-icons/home';
 import Shapes from '@cardstack/boxel-icons/shapes';
 import { dropTask } from 'ember-concurrency';
+import { modifier } from 'ember-modifier';
 
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
 import { add, eq } from '@cardstack/boxel-ui/helpers';
@@ -156,6 +157,25 @@ export default class WorkspaceChooser extends Component<Signature> {
     return urls;
   }
 
+  // Newest first. Realms without a createdAt (e.g. a broken/orphaned realm
+  // reference) sort to the end rather than clumping at the front.
+  private sortByCreatedAtDesc = <T extends string>(urls: T[]): T[] => {
+    return [...urls].sort((a, b) => {
+      let aCreatedAt = this.realm.info(a).createdAt;
+      let bCreatedAt = this.realm.info(b).createdAt;
+      if (!aCreatedAt && !bCreatedAt) {
+        return 0;
+      }
+      if (!aCreatedAt) {
+        return 1;
+      }
+      if (!bCreatedAt) {
+        return -1;
+      }
+      return new Date(bCreatedAt).getTime() - new Date(aCreatedAt).getTime();
+    });
+  };
+
   private get filteredUserRealmIdentifiers() {
     // Render in list order: `_realm-auth` enumerates realms
     // newest-created-first and realms created mid-session are prepended, so
@@ -165,7 +185,9 @@ export default class WorkspaceChooser extends Component<Signature> {
   }
 
   private get filteredCatalogRealmIdentifiers() {
-    return this.filterByHosted(this.communityRealmIdentifiers);
+    return this.filterByHosted(
+      this.sortByCreatedAtDesc(this.communityRealmIdentifiers),
+    );
   }
 
   private get favoriteRealmIdentifiers() {
@@ -208,9 +230,84 @@ export default class WorkspaceChooser extends Component<Signature> {
     return null;
   }
 
+  // Measured live from the Your Workspaces tile grid so favorited tiles can
+  // mirror however many tiles actually fit per row at the current viewport
+  // width (see measureWorkspaceGrid below).
+  @tracked private workspaceGridWidth = 0;
+  @tracked private workspaceTileWidth = 0;
+  @tracked private workspaceTileGap = 0;
+
+  private get tilesPerRow(): number {
+    if (!this.workspaceTileWidth) {
+      return 3;
+    }
+    let perRow = Math.floor(
+      (this.workspaceGridWidth + this.workspaceTileGap) /
+        (this.workspaceTileWidth + this.workspaceTileGap),
+    );
+    return Math.max(1, perRow);
+  }
+
+  // Two tiles' worth of Favorites-section width for every 3-across, rounded
+  // up — a row of 3 or 4 gives favorited tiles pairs, a row of 5 gives
+  // groups of 3, etc.
+  private get favoritesSlotCount(): number {
+    return Math.ceil(this.tilesPerRow / 2);
+  }
+
+  // The width a single favorited tile should be so that `favoritesSlotCount`
+  // of them, plus the gaps between them, exactly span the measured Your
+  // Workspaces row width. Null before the grid has been measured.
+  private get favoritesSlotWidth(): number | null {
+    if (!this.workspaceTileWidth) {
+      return null;
+    }
+    let n = this.favoritesSlotCount;
+    let rowWidth =
+      this.tilesPerRow * this.workspaceTileWidth +
+      (this.tilesPerRow - 1) * this.workspaceTileGap;
+    return (rowWidth - (n - 1) * this.workspaceTileGap) / n;
+  }
+
+  // Applied to real favorited tiles (via cssVar, see workspace.gts) so they
+  // take up this responsive width. Undefined before the grid has been
+  // measured, so the tile falls back to its static CSS width.
+  private get favoritesTileWidthPx(): string | undefined {
+    let width = this.favoritesSlotWidth;
+    return width === null ? undefined : `${width}px`;
+  }
+
+  // Watches the Your Workspaces tile grid so we always know how many tiles
+  // currently fit per row (and their exact width/gap), regardless of how
+  // many workspaces the user actually has.
+  private measureWorkspaceGrid = modifier((el: HTMLElement) => {
+    let measure = () => {
+      this.workspaceGridWidth = el.clientWidth;
+      let tile = el.querySelector('.workspace-card button.workspace');
+      if (tile) {
+        this.workspaceTileWidth = tile.getBoundingClientRect().width;
+      }
+      let gap = parseFloat(getComputedStyle(el).columnGap);
+      if (!Number.isNaN(gap)) {
+        this.workspaceTileGap = gap;
+      }
+    };
+    let ro: ResizeObserver | undefined;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(measure);
+      ro.observe(el);
+    }
+    window.addEventListener('resize', measure);
+    measure();
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  });
+
   // The keyboard-selected tile, identified by its position in the flat,
   // DOM-ordered sequence of selectable tiles. The sequence spans, in render
-  // order: Favorites, Your Workspaces, the "New Workspace" tile, then Catalogs.
+  // order: Favorites, the "New Workspace" tile, Your Workspaces, then Catalogs.
   @tracked private selectedIndex = 0;
 
   private get favoritesCount() {
@@ -235,17 +332,17 @@ export default class WorkspaceChooser extends Component<Signature> {
   }
 
   // navIndex of the first tile in each section. The "New Workspace" tile sits
-  // between Your Workspaces and Catalogs.
-  private get userWorkspacesNavBase() {
+  // first in Your Workspaces, ahead of the actual workspace tiles.
+  private get addWorkspaceNavIndex() {
     return this.favoritesCount;
   }
 
-  private get addWorkspaceNavIndex() {
-    return this.favoritesCount + this.userWorkspacesCount;
+  private get userWorkspacesNavBase() {
+    return this.favoritesCount + (this.isAddWorkspaceShown ? 1 : 0);
   }
 
   private get catalogNavBase() {
-    return this.addWorkspaceNavIndex + (this.isAddWorkspaceShown ? 1 : 0);
+    return this.userWorkspacesNavBase + this.userWorkspacesCount;
   }
 
   private get selectableCount() {
@@ -434,6 +531,8 @@ export default class WorkspaceChooser extends Component<Signature> {
                     @realmIdentifier={{realmIdentifier}}
                     @navIndex={{i}}
                     @isSelected={{eq this.currentIndex i}}
+                    @isFavoritesSection={{true}}
+                    @enlargedWidth={{this.favoritesTileWidthPx}}
                   />
                 {{/each}}
               </div>
@@ -450,7 +549,18 @@ export default class WorkspaceChooser extends Component<Signature> {
                 data-test-workspaces-empty
               >{{this.userWorkspacesEmptyMessage}}</span>
             {{else}}
-              <div class='workspace-list' data-test-workspace-list>
+              <div
+                class='workspace-list'
+                data-test-workspace-list
+                {{this.measureWorkspaceGrid}}
+              >
+                <AddWorkspace
+                  @navIndex={{this.addWorkspaceNavIndex}}
+                  @isSelected={{eq this.currentIndex this.addWorkspaceNavIndex}}
+                />
+                {{#if this.matrixService.isInitializingNewUser}}
+                  <WorkspaceLoadingIndicator />
+                {{/if}}
                 {{#each
                   this.filteredUserRealmIdentifiers
                   as |realmIdentifier i|
@@ -464,13 +574,6 @@ export default class WorkspaceChooser extends Component<Signature> {
                     />
                   {{/let}}
                 {{/each}}
-                {{#if this.matrixService.isInitializingNewUser}}
-                  <WorkspaceLoadingIndicator />
-                {{/if}}
-                <AddWorkspace
-                  @navIndex={{this.addWorkspaceNavIndex}}
-                  @isSelected={{eq this.currentIndex this.addWorkspaceNavIndex}}
-                />
               </div>
             {{/if}}
           </div>

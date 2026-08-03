@@ -270,6 +270,8 @@ export const testRealmInfo = {
   realmUserId: testRealmServerMatrixUserId,
   publishable: null,
   lastPublishedAt: null,
+  createdAt: null,
+  updatedAt: null,
   includePrerenderedDefaultRealmIndex: null,
 };
 

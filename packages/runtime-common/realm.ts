@@ -230,6 +230,18 @@ export type RealmInfo = {
   realmUserId?: string;
   publishable: boolean | null;
   lastPublishedAt: string | Record<string, string> | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  // Compact metadata for space-constrained tile UIs (e.g. the host
+  // workspace-chooser's favorite tiles). Each is independently
+  // best-effort — null when the underlying tables aren't available
+  // (e.g. sqlite-backed host tests) or the query fails, so a gap in one
+  // never blocks the others or the rest of RealmInfo.
+  cardCount?: number | null;
+  fileCount?: number | null;
+  definitionCount?: number | null;
+  recentActivityCount?: number | null;
+  collaboratorUsernames?: string[] | null;
   // Opt-in to producing the full prerendered isolated HTML for the
   // realm's default index card (CardsGrid or Workspace). When
   // undefined / null / false the host's render route substitutes a
@@ -6801,31 +6813,192 @@ export class Realm {
     }
   }
 
-  // Reads showAsCatalog / publishable from realm_metadata. Both columns
-  // are nullable; missing rows or query failures return null/null,
-  // matching the pre-CS-10053 behavior of "absent in sidecar".
+  // Reads showAsCatalog / publishable from realm_metadata and
+  // created_at / updated_at from realm_registry. showAsCatalog and
+  // publishable are nullable; missing realm_metadata rows or query
+  // failures return null/null, matching the pre-CS-10053 behavior of
+  // "absent in sidecar". created_at/updated_at come from realm_registry
+  // (not realm_metadata) because every mounted realm has a registry
+  // row — source, published, and bootstrap realms alike — while
+  // realm_metadata rows only exist for realms that went through the
+  // create-realm or publish flow.
   private async getRealmMetadata(): Promise<{
     showAsCatalog: boolean | null;
     publishable: boolean | null;
+    createdAt: string | null;
+    updatedAt: string | null;
   }> {
     try {
       let results = (await query(this.#dbAdapter, [
-        `SELECT show_as_catalog, publishable FROM realm_metadata WHERE url =`,
+        `SELECT rm.show_as_catalog, rm.publishable, rr.created_at, rr.updated_at
+         FROM realm_registry rr
+         LEFT JOIN realm_metadata rm ON rm.url = rr.url
+         WHERE rr.url =`,
         param(this.url),
       ])) as {
         show_as_catalog: boolean | null;
         publishable: boolean | null;
+        // pg returns a `timestamp` column as a native Date; sqlite (used
+        // in host tests) stores/returns it as text. Normalize both to an
+        // ISO string below so `createdAt`/`updatedAt` honor their
+        // declared types.
+        created_at: string | Date | null;
+        updated_at: string | Date | null;
       }[];
       if (results.length === 0) {
-        return { showAsCatalog: null, publishable: null };
+        return {
+          showAsCatalog: null,
+          publishable: null,
+          createdAt: null,
+          updatedAt: null,
+        };
       }
       return {
         showAsCatalog: results[0].show_as_catalog,
         publishable: results[0].publishable,
+        createdAt: results[0].created_at
+          ? new Date(results[0].created_at).toISOString()
+          : null,
+        updatedAt: results[0].updated_at
+          ? new Date(results[0].updated_at).toISOString()
+          : null,
       };
     } catch (error) {
       this.#log.warn(`Failed to query realm metadata: ${error}`);
-      return { showAsCatalog: null, publishable: null };
+      return {
+        showAsCatalog: null,
+        publishable: null,
+        createdAt: null,
+        updatedAt: null,
+      };
+    }
+  }
+
+  // Card count for the tile-metadata row (see workspace-chooser). Counts
+  // live `instance` rows in the realm's *current* index generation.
+  // Deliberately a separate query (and separate try/catch) from
+  // getRealmMetadata() above — boxel_index/realm_generations are
+  // Postgres-only unlogged tables absent from the sqlite adapter used in
+  // host tests, so a missing-table failure here must not blank out
+  // showAsCatalog/publishable/createdAt/updatedAt too.
+  private async getCardCount(): Promise<number | null> {
+    try {
+      let results = (await query(this.#dbAdapter, [
+        `SELECT count(*)::int AS count
+         FROM boxel_index bi
+         JOIN realm_generations rg ON rg.realm_url = bi.realm_url
+         WHERE bi.realm_url =`,
+        param(this.url),
+        `AND bi.type = 'instance'
+         AND bi.generation = rg.current_generation
+         AND (bi.is_deleted = FALSE OR bi.is_deleted IS NULL)`,
+      ])) as { count: number }[];
+      return results[0]?.count ?? null;
+    } catch (error) {
+      this.#log.warn(`Failed to query realm card count: ${error}`);
+      return null;
+    }
+  }
+
+  // Definition count for the tile-metadata row: non-instance rows whose url
+  // is a card/field-definition module (.gts/.ts/.gjs/.js), e.g. Note.gts.
+  // See getCardCount() above for why this is its own fault-tolerant query.
+  private async getDefinitionCount(): Promise<number | null> {
+    try {
+      let results = (await query(this.#dbAdapter, [
+        `SELECT count(*)::int AS count
+         FROM boxel_index bi
+         JOIN realm_generations rg ON rg.realm_url = bi.realm_url
+         WHERE bi.realm_url =`,
+        param(this.url),
+        `AND bi.type = 'file'
+         AND bi.generation = rg.current_generation
+         AND (bi.is_deleted = FALSE OR bi.is_deleted IS NULL)
+         AND (bi.url ILIKE '%.gts' OR bi.url ILIKE '%.ts' OR bi.url ILIKE '%.gjs' OR bi.url ILIKE '%.js')`,
+      ])) as { count: number }[];
+      return results[0]?.count ?? null;
+    } catch (error) {
+      this.#log.warn(`Failed to query realm definition count: ${error}`);
+      return null;
+    }
+  }
+
+  // File count for the tile-metadata row: non-instance, non-definition rows
+  // (plain assets/docs/data files). See getCardCount() above for why this is
+  // its own fault-tolerant query.
+  private async getFileCount(): Promise<number | null> {
+    try {
+      let results = (await query(this.#dbAdapter, [
+        `SELECT count(*)::int AS count
+         FROM boxel_index bi
+         JOIN realm_generations rg ON rg.realm_url = bi.realm_url
+         WHERE bi.realm_url =`,
+        param(this.url),
+        `AND bi.type = 'file'
+         AND bi.generation = rg.current_generation
+         AND (bi.is_deleted = FALSE OR bi.is_deleted IS NULL)
+         AND NOT (bi.url ILIKE '%.gts' OR bi.url ILIKE '%.ts' OR bi.url ILIKE '%.gjs' OR bi.url ILIKE '%.js')`,
+      ])) as { count: number }[];
+      return results[0]?.count ?? null;
+    } catch (error) {
+      this.#log.warn(`Failed to query realm file count: ${error}`);
+      return null;
+    }
+  }
+
+  // Rough "recent activity" signal for the tile-metadata row: how many of
+  // the realm's current-generation index rows were last modified within
+  // the given window (default 7 days). This counts modified files, not
+  // individual edits, since there's no dedicated activity/event log —
+  // see getCardCount() above for why this is its own fault-tolerant query.
+  private async getRecentActivityCount(
+    windowSeconds = 7 * 24 * 60 * 60,
+  ): Promise<number | null> {
+    try {
+      // last_modified is Unix *seconds* (see node-realm.ts's unixTime()),
+      // not the JS-native milliseconds Date.now() returns.
+      let since = Math.floor(Date.now() / 1000) - windowSeconds;
+      let results = (await query(this.#dbAdapter, [
+        `SELECT count(*)::int AS count
+         FROM boxel_index bi
+         JOIN realm_generations rg ON rg.realm_url = bi.realm_url
+         WHERE bi.realm_url =`,
+        param(this.url),
+        `AND bi.generation = rg.current_generation
+         AND (bi.is_deleted = FALSE OR bi.is_deleted IS NULL)
+         AND bi.last_modified >`,
+        param(since),
+      ])) as { count: number }[];
+      return results[0]?.count ?? null;
+    } catch (error) {
+      this.#log.warn(`Failed to query realm recent activity count: ${error}`);
+      return null;
+    }
+  }
+
+  // Real matrix usernames with (at least read) access to the realm, for
+  // rendering a compact collaborator-avatar stack. Filters out the
+  // wildcard public-read row ('*'), non-user group grants (e.g. 'users'),
+  // and realm service-bot accounts (`@<slug>_realm:server`) — none of
+  // those represent an actual person to show an avatar for. Deliberately
+  // queries realm_user_permissions directly rather than going through the
+  // owner-gated `/_permissions` route, since this is surfaced to anyone
+  // who can already see the realm (the same audience as the rest of
+  // RealmInfo), not just the owner.
+  private async getCollaboratorUsernames(): Promise<string[] | null> {
+    try {
+      let results = (await query(this.#dbAdapter, [
+        `SELECT username FROM realm_user_permissions
+         WHERE realm_url =`,
+        param(this.url),
+        `AND username LIKE '@%'
+         AND username NOT LIKE '%\\_realm:%'
+         ORDER BY realm_owner DESC, username`,
+      ])) as { username: string }[];
+      return results.map((r) => r.username);
+    } catch (error) {
+      this.#log.warn(`Failed to query realm collaborators: ${error}`);
+      return null;
     }
   }
 
@@ -6935,9 +7108,22 @@ export class Realm {
   }
 
   private async parseRealmInfo(): Promise<RealmInfo> {
-    let [lastPublishedAt, metadata] = await Promise.all([
+    let [
+      lastPublishedAt,
+      metadata,
+      cardCount,
+      fileCount,
+      definitionCount,
+      recentActivityCount,
+      collaboratorUsernames,
+    ] = await Promise.all([
       this.getLastPublishedAt(),
       this.getRealmMetadata(),
+      this.getCardCount(),
+      this.getFileCount(),
+      this.getDefinitionCount(),
+      this.getRecentActivityCount(),
+      this.getCollaboratorUsernames(),
     ]);
     let realmInfo: RealmInfo = {
       name: 'Unnamed Workspace',
@@ -6951,6 +7137,13 @@ export class Realm {
       ),
       publishable: metadata.publishable,
       lastPublishedAt,
+      createdAt: metadata.createdAt,
+      updatedAt: metadata.updatedAt,
+      cardCount,
+      fileCount,
+      definitionCount,
+      recentActivityCount,
+      collaboratorUsernames,
       includePrerenderedDefaultRealmIndex: null,
     };
 

@@ -898,6 +898,8 @@ export default class RealmService extends Service {
         isIndexing: false,
         isPublic: false,
         lastPublishedAt: null,
+        createdAt: null,
+        updatedAt: null,
       };
     }
 
@@ -917,6 +919,8 @@ export default class RealmService extends Service {
         isIndexing: false,
         isPublic: false,
         lastPublishedAt: null,
+        createdAt: null,
+        updatedAt: null,
       };
     } else {
       return resource.info;

@@ -676,7 +676,10 @@ export default class SubmodeLayout extends Component<Signature> {
       }
 
       .submode-layout-top-bar-center {
-        flex: 1;
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
         display: flex;
         justify-content: center;
         min-width: 0;
@@ -722,6 +725,10 @@ export default class SubmodeLayout extends Component<Signature> {
       .profile-icon-button {
         --boxel-icon-button-width: var(--container-button-size);
         --boxel-icon-button-height: var(--container-button-size);
+        /* Match the outline treatment used by the search and AI-assistant
+           icon buttons (see .ai-assistant-button/search-sheet), instead of
+           the Avatar component's default 2px solid white border. */
+        --profile-avatar-icon-border: var(--boxel-border-flexible);
 
         background: none;
 
