@@ -189,11 +189,15 @@ module(basename(import.meta.filename), function () {
         card.deps?.includes(`${realmURL.href}pet`),
         `${realmURL.href}pet is a dep`,
       );
-      assert.ok(
+      // The direct Base edge above is the card's invalidation contract. The
+      // shared trusted loader owns Base's generated CSS and other internals;
+      // copying that closure into each realm makes cold and warm renders
+      // produce different dependency sets.
+      assert.notOk(
         (card.deps as string[]).find((d) =>
           d.match(/^@cardstack\/base\/card-api\.gts\..*glimmer-scoped\.css$/),
         ),
-        `glimmer scoped css from ${baseCardRef.module} is a dep`,
+        `trusted internals beneath ${baseCardRef.module} stay behind the shared Base loader boundary`,
       );
       assert.ok(res.body.meta?.timing?.totalMs >= 0, 'has timing');
       assert.ok(res.body.meta?.pool?.pageId, 'has pool.pageId');
