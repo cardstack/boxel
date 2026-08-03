@@ -382,7 +382,7 @@ function formatUnitWithLocale(
     if (cleaned) {
       return cleaned;
     }
-  } catch (e) {
+  } catch {
     // Ignore and fall back to parts-based assembly below.
   }
 

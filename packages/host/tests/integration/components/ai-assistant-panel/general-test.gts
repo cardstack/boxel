@@ -97,7 +97,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     createAndJoinRoom,
     simulateRemoteMessage,
     setReadReceipt,
-    getRoomEvents,
+    waitForRoomMessages,
   } = mockMatrixUtils;
 
   // Setup realm server endpoints for summarization tests
@@ -1301,6 +1301,10 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       'First message with card',
     );
     await click('[data-test-send-message-btn]');
+    // Wait out each send before clicking the next: while a send pipeline is
+    // in flight the send button is a no-op, so a premature click would drop
+    // the message instead of queueing it.
+    await waitForRoomMessages(roomId, 1);
 
     // Send second message with the same card
     await fillIn(
@@ -1310,9 +1314,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     await click('[data-test-send-message-btn]');
 
     // Get the first two message events
-    let messageEvents = getRoomEvents(roomId).filter(
-      (e) => e.type === 'm.room.message',
-    );
+    let messageEvents = await waitForRoomMessages(roomId, 2);
     let firstMessageEvent = messageEvents[0];
     let secondMessageEvent = messageEvents[1];
     let firstMessageData = firstMessageEvent.content.data
@@ -1354,9 +1356,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     await click('[data-test-send-message-btn]');
 
     // Get the third message event
-    messageEvents = getRoomEvents(roomId).filter(
-      (e) => e.type === 'm.room.message',
-    );
+    messageEvents = await waitForRoomMessages(roomId, 3);
     let thirdMessageEvent = messageEvents[2];
     let thirdMessageData = thirdMessageEvent.content.data
       ? JSON.parse(thirdMessageEvent.content.data)
@@ -1393,6 +1393,10 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       'First message with file',
     );
     await click('[data-test-send-message-btn]');
+    // Wait out each send before clicking the next: while a send pipeline is
+    // in flight the send button is a no-op, so a premature click would drop
+    // the message instead of queueing it.
+    await waitForRoomMessages(roomId, 1);
 
     // Send second message with the same file
     await fillIn(
@@ -1402,9 +1406,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     await click('[data-test-send-message-btn]');
 
     // Get the first two message events
-    let messageEvents = getRoomEvents(roomId).filter(
-      (e) => e.type === 'm.room.message',
-    );
+    let messageEvents = await waitForRoomMessages(roomId, 2);
     let firstMessageEvent = messageEvents[0];
     let secondMessageEvent = messageEvents[1];
     let firstMessageData = firstMessageEvent.content.data
@@ -1449,12 +1451,9 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       'Third message with modified file',
     );
     await click('[data-test-send-message-btn]');
-    await waitFor('[data-test-message-idx="2"]');
 
     // Get the third message event
-    messageEvents = getRoomEvents(roomId).filter(
-      (e) => e.type === 'm.room.message',
-    );
+    messageEvents = await waitForRoomMessages(roomId, 3);
     let thirdMessageEvent = messageEvents[2];
     let thirdMessageData = thirdMessageEvent.content.data
       ? JSON.parse(thirdMessageEvent.content.data)

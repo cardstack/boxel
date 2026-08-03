@@ -894,22 +894,27 @@ jobs:
         run: node packages/host/scripts/check-memory-baseline.mjs all-memory-reports packages/host/memory-baseline.json
 
   host-memory-baseline-update:
-    name: Update Host Memory Baseline
+    name: Update Host Baselines
     # Intentionally scoped to push-to-main only so the job only runs in a
     # context where the PR workflow file cannot be modified by an untrusted
     # branch — this is the one job that holds `contents: write`.
     #
-    # We refresh the baseline whenever host-test completes (success OR failure),
-    # not only on full green. An unrelated shard flake otherwise freezes the
-    # baseline indefinitely, which then blocks downstream PRs on drift that has
-    # nothing to do with their diffs. Modules missing from the current reports
-    # (because a shard failed to upload) keep their prior baseline values —
-    # the merge is handled in update-memory-baseline.mjs.
+    # Maintains two committed per-module measurement files from each main
+    # run: packages/host/memory-baseline.json (gates PRs on memory
+    # regressions) and packages/host/tests/test-module-timings.json (drives
+    # duration-weighted shard assignment; see tests/helpers/shard-modules.ts).
+    #
+    # We refresh whenever host-test completes (success OR failure), not only
+    # on full green. An unrelated shard flake otherwise freezes the memory
+    # baseline indefinitely, which then blocks downstream PRs on drift that
+    # has nothing to do with their diffs. Modules missing from the current
+    # reports (because a shard failed to upload) keep their prior values —
+    # both update scripts merge with the committed file.
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && !cancelled() && (needs.host-test.result == 'success' || needs.host-test.result == 'failure') }}
     concurrency:
       group: host-memory-baseline-update-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
-    needs: host-test
+    needs: [host-test, host-merge-reports-and-publish]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -929,7 +934,17 @@ jobs:
           pattern: memory-report-*
           merge-multiple: true
 
-      - name: Update memory baseline
+      # The merged junit report feeds the shard-timing update. Best-effort:
+      # if the merge job failed to produce it, the memory baseline still
+      # updates and the timings file is simply left alone this run.
+      - name: Download merged junit report
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: merged-junit-report
+          name: host-test-report-merged
+
+      - name: Update memory baseline and shard timings
         # Retry from the latest main: another PR may merge to main while host
         # CI is running (~15+ min), causing `git push` to be rejected. On each
         # retry we fetch and hard-reset to the freshest tip-of-main, then
@@ -952,20 +967,34 @@ jobs:
             git fetch origin main
 
             if [ "$(git rev-parse origin/main)" != "$WORKFLOW_SHA" ] && \
-               git log --format="%s" "$WORKFLOW_SHA..origin/main" | grep -qv "Update host test memory baseline"; then
-              echo "main has advanced past $WORKFLOW_SHA with non-baseline commits — skipping (a newer CI run will publish the baseline)."
+               git log --format="%s" "$WORKFLOW_SHA..origin/main" | grep -qvE "Update host test (memory )?baselines?"; then
+              echo "main has advanced past $WORKFLOW_SHA with non-baseline commits — skipping (a newer CI run will publish the baselines)."
               exit 0
             fi
 
             git reset --hard origin/main
 
             node packages/host/scripts/update-memory-baseline.mjs all-memory-reports packages/host/memory-baseline.json
-            if git diff --quiet packages/host/memory-baseline.json; then
-              echo "Baseline unchanged — nothing to commit."
+
+            # Shard-timing refresh is gated on drift: the file is only
+            # rewritten when regenerating it improves the predicted
+            # slowest-shard time by over a minute, so balance-equivalent
+            # run-to-run jitter doesn't produce a commit per main push.
+            # Nonzero exit (e.g. the attribution-coverage floor) fails the
+            # job loudly rather than committing a degraded weights file.
+            if [ -f merged-junit-report/host.xml ]; then
+              node packages/host/scripts/generate-test-module-timings.mjs merged-junit-report/host.xml \
+                --min-drift-seconds 60 --shard-count 20
+            else
+              echo "No merged junit report available — leaving shard timings unchanged."
+            fi
+
+            if git diff --quiet packages/host/memory-baseline.json packages/host/tests/test-module-timings.json; then
+              echo "Baselines unchanged — nothing to commit."
               exit 0
             fi
-            git add packages/host/memory-baseline.json
-            git commit -m "Update host test memory baseline [skip ci]"
+            git add packages/host/memory-baseline.json packages/host/tests/test-module-timings.json
+            git commit -m "Update host test baselines [skip ci]"
 
             if git push; then
               exit 0
@@ -973,5 +1002,5 @@ jobs:
             echo "Push rejected on attempt $attempt — retrying after $((attempt * 5))s"
             sleep $((attempt * 5))
           done
-          echo "Failed to push memory baseline after 5 attempts"
+          echo "Failed to push baselines after 5 attempts"
           exit 1

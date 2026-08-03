@@ -58,8 +58,9 @@ jobs:
         # built locally). This also guards against declaration-emit
         # regressions: an unresolvable import inside a .d.ts is silently
         # suppressed under skipLibCheck and degrades every Boxel UI symbol to
-        # `any`, turning the host type check into a no-op (see boxel-ui's
-        # bin/fix-declaration-extensions.mjs).
+        # `any`, turning the host type check into a no-op (the emitted
+        # declaration import specifiers are rewritten by addon.declarations()
+        # in boxel-ui's rollup.config.mjs).
         if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/host

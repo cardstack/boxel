@@ -36,7 +36,10 @@ import {
   shouldSkipSearchQuery,
 } from '@cardstack/host/utils/search/query-builder';
 import { SectionPagination } from '@cardstack/host/utils/search/section-pagination';
-import type { NewCardArgs } from '@cardstack/host/utils/search/types';
+import type {
+  NewCardArgs,
+  SearchResultKind,
+} from '@cardstack/host/utils/search/types';
 import {
   isURLSearchKey,
   resolveSearchKeyAsURL,
@@ -119,7 +122,10 @@ interface Signature {
     // by default; the card choosers set this so file rows never surface.
     cardsOnly?: boolean;
     isCompact: boolean;
-    handleSelect: (selection: string | NewCardArgs) => void;
+    handleSelect: (
+      selection: string | NewCardArgs,
+      kind?: SearchResultKind,
+    ) => void;
     selectedCards?: (string | NewCardArgs)[];
     multiSelect?: boolean;
     onSelectAll?: (cards: string[]) => void;
@@ -128,7 +134,10 @@ interface Signature {
       ref: CodeRef;
       relativeTo: URL | undefined;
     };
-    onSubmit?: (selection: string | NewCardArgs) => void;
+    onSubmit?: (
+      selection: string | NewCardArgs,
+      kind?: SearchResultKind,
+    ) => void;
     showHeader?: boolean;
     activeSort: SortOption;
     onSortChange: (sort: SortOption) => void;
@@ -476,6 +485,7 @@ export default class PanelContent extends Component<Signature> {
                 @resolvedCard={{this.resolvedCard}}
                 @isCardResourceLoaded={{this.isCardResourceLoaded}}
                 @realms={{this.realms}}
+                @realmsLocked={{@realmFilter.locked}}
                 @baseFilter={{@baseFilter}}
                 @offerToCreate={{@offerToCreate}}
                 @recentCardBareIds={{this.recentCardBareIds}}

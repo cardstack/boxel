@@ -42,6 +42,11 @@ export interface SearchEntryRendering {
 export interface RenderableSearchEntryLike {
   // The card/file identity URL.
   id: string;
+  // The result's card/file classification, resolved when the entry is built.
+  // Consumers thread this alongside `id` to open the right URL (a card's source
+  // is `<id>.json`; a file's `id` already is its URL) instead of re-deriving it
+  // from the string. Kept in sync with `StoreReadType`.
+  type: 'card' | 'file-meta';
   // The URL of the realm hosting this result — used to group results by realm.
   realmUrl: string;
   // The result's realm-local path (e.g. `Person/error`) — a readable label a

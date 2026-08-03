@@ -27,7 +27,6 @@ import {
   assembleImplementPrompt,
   assembleIteratePrompt,
   assembleSystemPrompt,
-  assembleTestPrompt,
   buildOneShotMessages,
   FilePromptLoader,
 } from '../../src/factory-prompt-loader.ts';
@@ -234,18 +233,17 @@ function main(): void {
   }
 
   if (stage === 'all' || stage === 'test') {
-    separator('STAGE: test (generate tests for existing implementation)');
+    separator('STAGE: harden (QUnit test pass over a shipped card)');
 
-    let userPrompt = assembleTestPrompt({
-      context: ctx,
-      implementedFiles: [
-        {
-          path: 'sticky-note.gts',
-          content: SAMPLE_PREVIOUS_ACTIONS[0].content!,
-          realm: 'target',
-        },
-      ],
-      loader,
+    let userPrompt = loader.load('issue-harden', {
+      project: ctx.project,
+      issue: {
+        id: 'Issues/harden-sticky-note',
+        summary: 'Harden: Implement Sticky Note card',
+        description: 'Write QUnit tests for the shipped work of SN-1.',
+        acceptanceCriteria: '- [ ] run_tests passes',
+      },
+      knowledge: ctx.knowledge,
     });
     let messages = buildOneShotMessages(systemPrompt, userPrompt);
     printMessages(messages);

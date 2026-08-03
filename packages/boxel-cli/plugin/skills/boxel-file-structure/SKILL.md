@@ -26,8 +26,7 @@ Example: https://app.boxel.ai/sarah/pet-rescue/animals/dog.gts
 ```
 workspace/
 ├── realm.json            # Workspace config (RealmConfig card)
-├── index.json            # Workspace index
-├── cards-grid.json       # Default cards grid
+├── index.json            # The workspace's default index card
 ├── blog-post.gts         # Card definition (kebab-case)
 ├── BlogPost/             # Instance directory (PascalCase)
 │   ├── my-first-post.json
@@ -36,6 +35,16 @@ workspace/
 └── Author/
     └── jane-doe.json
 ```
+
+A new workspace is seeded with exactly two files, `realm.json` and
+`index.json`; everything else is yours. `index.json` adopts `Workspace` from
+`@cardstack/base/workspace` (`workspace.gts`), which gives the workspace its
+Home, Library, and Activity views. Replace that adoption to put your own card
+on the workspace root instead.
+
+Some workspaces adopt `CardsGrid` as their root card, and some also carry a separate
+`cards-grid.json` instance at the root. Both shapes are supported — `CardsGrid`
+remains available — so treat either as valid unless you're deliberately migrating.
 
 ## Module Paths in JSON (CRITICAL)
 

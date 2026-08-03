@@ -155,28 +155,36 @@ export default class KanbanUsage extends Component {
   }
 
   @action toggleCollapsed(col: KanbanColumnConfig | null): void {
-    if (!col) return;
+    if (!col) {
+      return;
+    }
     this.columns = this.columns.map((c) =>
       c.key === col.key ? { ...c, collapsed: !c.collapsed } : c,
     );
   }
 
   @action onLabelChange(col: KanbanColumnConfig | null, val: string): void {
-    if (!col) return;
+    if (!col) {
+      return;
+    }
     this.columns = this.columns.map((c) =>
       c.key === col.key ? { ...c, label: val } : c,
     );
   }
 
   @action onColorChange(col: KanbanColumnConfig | null, val: string): void {
-    if (!col) return;
+    if (!col) {
+      return;
+    }
     this.columns = this.columns.map((c) =>
       c.key === col.key ? { ...c, color: val } : c,
     );
   }
 
   @action onWipLimitChange(col: KanbanColumnConfig | null, val: string): void {
-    if (!col) return;
+    if (!col) {
+      return;
+    }
     let raw = parseInt(val, 10);
     let wipLimit = isNaN(raw) || raw < 0 ? 0 : raw;
     this.columns = this.columns.map((c) =>

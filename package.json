@@ -17,7 +17,7 @@
     "lint": "pnpm run --filter './packages/**' --if-present -r lint",
     "lint:fix": "pnpm run --filter './packages/**' --if-present -r lint:fix",
     "openrouter:sync": "OPENROUTER_REALM_URL=${OPENROUTER_REALM_URL:-https://localhost:4201/openrouter/} pnpm --filter @cardstack/realm-server sync-openrouter-models",
-    "prepare-worktree-types": "pnpm --filter @cardstack/boxel-icons build && pnpm --filter @cardstack/boxel-ui build:types",
+    "prepare-worktree-types": "pnpm --filter @cardstack/boxel-icons build && pnpm --filter @cardstack/boxel-ui build",
     "prepare": "husky"
   },
   "devDependencies": {

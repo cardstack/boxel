@@ -32,16 +32,24 @@ export class KanbanColumnConfigSidebar extends Component<Signature> {
   ): KanbanColumnConfig[] => {
     let cols = [...(this.args.columns ?? [])];
     let [column] = cols.splice(fromIndex, 1);
-    if (!column) return cols;
+    if (!column) {
+      return cols;
+    }
     cols.splice(toIndex, 0, column);
     return cols.map((col, i) => ({ ...col, sortOrder: i + 1 }));
   };
 
   reorder = (index: number, direction: 'up' | 'down'): void => {
     let cols = this.args.columns;
-    if (!cols) return;
-    if (direction === 'up' && index === 0) return;
-    if (direction === 'down' && index >= cols.length - 1) return;
+    if (!cols) {
+      return;
+    }
+    if (direction === 'up' && index === 0) {
+      return;
+    }
+    if (direction === 'down' && index >= cols.length - 1) {
+      return;
+    }
     let toIndex = direction === 'up' ? index - 1 : index + 1;
     this.args.onReorder?.(this.buildReordered(index, toIndex));
   };
