@@ -90,8 +90,8 @@ strictEqual(
   false,
 );
 strictEqual(
-  schema.fields.some((entry) => entry.key === 'computedLabel'),
-  false,
+  schema.fields.find((entry) => entry.key === 'computedLabel')?.writeBehavior,
+  'skip',
 );
 
 function sourceFixture(): BxlCardSourceDocument {
@@ -156,6 +156,7 @@ deepStrictEqual(snapshotBxlCardSource(sourceFixture(), schema, projectionOptions
   },
   image: 'https://example.test/typescript.svg',
   tags: ['language', 'web'],
+  computedLabel: null,
   recommendations: [],
 });
 
@@ -893,6 +894,263 @@ strictEqual(
   '../Friend/d',
 );
 
+const matrixCardInfoDefinition: BxlBoxelSourceDefinition = {
+  type: 'field-def',
+  codeRef: ref('MatrixCardInfo'),
+  displayName: 'Matrix Card Info',
+  fields: { theme: 'f0', themes: 'f1', computedSummary: 'f2' },
+  fieldDefs: {
+    f0: field('linksTo', 'Theme'),
+    f1: field('linksToMany', 'Theme'),
+    f2: field('contains', 'String', { primitive: true, computed: true }),
+  },
+};
+
+const matrixHolderDefinition: BxlBoxelSourceDefinition = {
+  type: 'field-def',
+  codeRef: ref('MatrixHolder'),
+  displayName: 'Matrix Holder',
+  fields: { owner: 'f0', peers: 'f1' },
+  fieldDefs: {
+    f0: field('linksTo', 'Person'),
+    f1: field('linksToMany', 'Person'),
+  },
+};
+
+const linkMatrixDefinition: BxlBoxelSourceDefinition = {
+  type: 'card-def',
+  codeRef: ref('LinkMatrix'),
+  displayName: 'Link Matrix',
+  fields: {
+    cardInfo: 'f0',
+    primary: 'f1',
+    collaborators: 'f2',
+    holders: 'f3',
+  },
+  fieldDefs: {
+    f0: field('contains', 'MatrixCardInfo'),
+    f1: field('linksTo', 'Person'),
+    f2: field('linksToMany', 'Person'),
+    f3: field('containsMany', 'MatrixHolder'),
+  },
+};
+
+const matrixDefinitions = new Map(
+  [
+    matrixCardInfoDefinition,
+    matrixHolderDefinition,
+    linkMatrixDefinition,
+  ].map((definition) => [JSON.stringify(definition.codeRef), definition]),
+);
+const linkMatrixSchema = await mutationSchemaForCardSource(
+  linkMatrixDefinition,
+  {
+    async lookupDefinition(codeRef) {
+      return matrixDefinitions.get(JSON.stringify(codeRef));
+    },
+  },
+);
+
+function linkMatrixSource(): BxlCardSourceDocument {
+  return {
+    data: {
+      type: 'card',
+      attributes: {
+        cardInfo: {},
+        holders: [{}],
+      },
+      relationships: {
+        'cardInfo.theme': {
+          links: { self: '../Theme/old', related: 'theme-related' },
+          meta: { slot: 'card-info-one' },
+          extension: { preserve: true },
+        },
+        'cardInfo.themes.0': {
+          links: { self: '@catalog/theme/portable' },
+          meta: { slot: 'card-info-many-rri' },
+        },
+        'cardInfo.themes.1': {
+          links: { self: 'https://external.test/Theme/absolute' },
+          meta: { slot: 'card-info-many-absolute' },
+        },
+        primary: {
+          links: { self: 'https://external.test/Person/primary' },
+          meta: { slot: 'root-one' },
+        },
+        'collaborators.0': {
+          links: { self: '../Person/relative' },
+          meta: { slot: 'root-many-relative' },
+        },
+        'collaborators.1': {
+          links: { self: '@catalog/person/portable' },
+          meta: { slot: 'root-many-rri' },
+        },
+        'holders.0.owner': {
+          links: { self: '@catalog/person/nested-owner' },
+          meta: { slot: 'nested-one' },
+        },
+        'holders.0.peers.0': {
+          links: { self: '../Person/nested-relative' },
+          meta: { slot: 'nested-many-relative' },
+        },
+        'holders.0.peers.1': {
+          links: { self: 'https://external.test/Person/nested-absolute' },
+          meta: { slot: 'nested-many-absolute' },
+        },
+      },
+      meta: {
+        adoptsFrom: ref('LinkMatrix'),
+        fields: {
+          cardInfo: {
+            adoptsFrom: { module: '../fields', name: 'MatrixCardInfo' },
+            custom: { preserve: 'card-info-meta' },
+          },
+          holders: [
+            {
+              adoptsFrom: { module: '../fields', name: 'MatrixHolder' },
+              custom: { preserve: 'holder-meta' },
+            },
+          ],
+        },
+        custom: { preserve: 'root-meta' },
+      },
+    },
+  };
+}
+
+const matrixBase = 'https://realm.test/LinkMatrix/one';
+const matrixOptions = {
+  targetId: matrixBase,
+  resolveReference(reference: string) {
+    return reference.startsWith('@')
+      ? reference
+      : new URL(reference, matrixBase).href;
+  },
+  formatReference(id: string) {
+    if (id.startsWith('@')) return id;
+    const url = new URL(id);
+    return url.origin === 'https://realm.test'
+      ? `../${url.pathname.slice(1)}`
+      : id;
+  },
+};
+
+const matrixOriginal = linkMatrixSource();
+const matrixBefore = structuredClone(matrixOriginal);
+const matrixSnapshot = snapshotBxlCardSource(
+  matrixOriginal,
+  linkMatrixSchema,
+  matrixOptions,
+) as Record<string, any>;
+strictEqual(matrixSnapshot.cardInfo.theme.id, 'https://realm.test/Theme/old');
+strictEqual(matrixSnapshot.cardInfo.themes[0].id, '@catalog/theme/portable');
+strictEqual(
+  matrixSnapshot.cardInfo.themes[1].id,
+  'https://external.test/Theme/absolute',
+);
+strictEqual(
+  matrixSnapshot.collaborators[0].id,
+  'https://realm.test/Person/relative',
+);
+strictEqual(
+  matrixSnapshot.holders[0].peers[0].id,
+  'https://realm.test/Person/nested-relative',
+);
+
+const matrixResult = mutateBxlCardSource(
+  matrixOriginal,
+  '.cardInfo.computedSummary = (1 / 0);\n' +
+    '.cardInfo.theme = card("@catalog/theme/dark");\n' +
+    'prepend(.cardInfo.themes; card("https://realm.test/Theme/new"));\n' +
+    '.primary = card("https://realm.test/Person/new");\n' +
+    'prepend(.collaborators; card("@catalog/person/new"));\n' +
+    '.holders[0].owner = card("https://realm.test/Person/nested");\n' +
+    'prepend(.holders[0].peers; card("https://external.test/Person/new"));',
+  {
+    schema: linkMatrixSchema,
+    syntax: 'solidified',
+    programId: 'link-cardinality-meta-reference-matrix',
+    ...matrixOptions,
+    resolveCard(id) {
+      return { id };
+    },
+  },
+);
+deepStrictEqual(matrixOriginal, matrixBefore);
+strictEqual(matrixResult.plan.statements[0].affected, 0);
+strictEqual(matrixResult.plan.affected, 6);
+strictEqual(
+  matrixResult.document.data.attributes?.cardInfo &&
+    (matrixResult.document.data.attributes.cardInfo as Record<string, unknown>)
+      .computedSummary,
+  undefined,
+);
+strictEqual(
+  matrixResult.document.data.relationships?.['cardInfo.theme'].links?.self,
+  '@catalog/theme/dark',
+);
+strictEqual(
+  matrixResult.document.data.relationships?.['cardInfo.theme'].meta?.slot,
+  'card-info-one',
+);
+deepStrictEqual(
+  matrixResult.document.data.relationships?.['cardInfo.theme'].extension,
+  { preserve: true },
+);
+strictEqual(
+  matrixResult.document.data.relationships?.['cardInfo.themes.0'].links?.self,
+  '../Theme/new',
+);
+strictEqual(
+  matrixResult.document.data.relationships?.['cardInfo.themes.1'].meta?.slot,
+  'card-info-many-rri',
+);
+strictEqual(
+  matrixResult.document.data.relationships?.['cardInfo.themes.2'].meta?.slot,
+  'card-info-many-absolute',
+);
+strictEqual(
+  matrixResult.document.data.relationships?.primary.links?.self,
+  '../Person/new',
+);
+strictEqual(
+  matrixResult.document.data.relationships?.primary.meta?.slot,
+  'root-one',
+);
+strictEqual(
+  matrixResult.document.data.relationships?.['collaborators.0'].links?.self,
+  '@catalog/person/new',
+);
+strictEqual(
+  matrixResult.document.data.relationships?.['collaborators.1'].meta?.slot,
+  'root-many-relative',
+);
+strictEqual(
+  matrixResult.document.data.relationships?.['collaborators.2'].meta?.slot,
+  'root-many-rri',
+);
+strictEqual(
+  matrixResult.document.data.relationships?.['holders.0.owner'].links?.self,
+  '../Person/nested',
+);
+strictEqual(
+  matrixResult.document.data.relationships?.['holders.0.owner'].meta?.slot,
+  'nested-one',
+);
+strictEqual(
+  matrixResult.document.data.relationships?.['holders.0.peers.0'].links?.self,
+  'https://external.test/Person/new',
+);
+strictEqual(
+  matrixResult.document.data.relationships?.['holders.0.peers.1'].meta?.slot,
+  'nested-many-relative',
+);
+strictEqual(
+  matrixResult.document.data.relationships?.['holders.0.peers.2'].meta?.slot,
+  'nested-many-absolute',
+);
+deepStrictEqual(matrixResult.document.data.meta, matrixBefore.data.meta);
+
 const detachedSource = sourceFixture();
 const detachedSnapshot = snapshotBxlCardSource(
   detachedSource,
@@ -922,6 +1180,30 @@ throws(
 );
 
 ok(result.plan.affected === 3);
+
+const computedSkipSource = sourceFixture();
+const computedSkip = mutateBxlCardSource(
+  computedSkipSource,
+  '.computedLabel = (1 / 0);\n' +
+    '.image = "computed-write-was-skipped";',
+  {
+    schema,
+    syntax: 'solidified',
+    programId: 'skip-computed-field-write',
+    ...projectionOptions,
+  },
+);
+strictEqual(computedSkip.plan.statements[0].affected, 0);
+deepStrictEqual(computedSkip.plan.statements[0].intents, []);
+strictEqual(computedSkip.plan.affected, 1);
+strictEqual(
+  computedSkip.document.data.attributes?.computedLabel,
+  undefined,
+);
+strictEqual(
+  computedSkip.document.data.attributes?.image,
+  'computed-write-was-skipped',
+);
 console.log(
-  'BXL Boxel card-source adapter: Definition schema, recursive metadata, structural collections, relationship lowering, preservation, and stale-plan safety passed',
+  'BXL Boxel card-source adapter: Definition schema, computed skips, recursive metadata, structural collections, RRI/relative relationship matrix, preservation, and stale-plan safety passed',
 );

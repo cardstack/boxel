@@ -230,6 +230,20 @@ extensions travel with move/copy operations. If a collection already uses
 per-value `adoptsFrom`, an insertion without matching metadata fails with
 `card-source-contained-meta-required` rather than damaging the source.
 
+Computed Fields use `writeBehavior: 'skip'` in the derived mutation schema.
+They remain readable and addressable, but any assignment, replacement,
+deletion, or collection operation targeting one produces no intent and reports
+zero affected values. The right-hand expression is not evaluated. This makes
+model-generated updates tolerant of derived Card Info fields without weakening
+the fail-closed behavior of query-backed or otherwise read-only Fields.
+
+Relationship references are logical Card IDs in plans and source references at
+the persistence boundary. `resolveReference(reference, path)` expands authored
+relative links when projecting a snapshot and may preserve portable RRI values
+such as `@catalog/...`. `formatReference(cardId, path)` performs the inverse for
+writes and may choose RRI, relative, or absolute form per edge. Reindexing never
+rewrites an untouched relationship's reference, metadata, or extension members.
+
 ## Why a profile is needed
 
 Ordinary BXL computes a value. Mutation BXL additionally describes locations

@@ -11,6 +11,21 @@ versions may change syntax behavior until `1.0.0`. See
 
 ## [Unreleased]
 
+## [0.4.2] — 2026-08-02
+
+### Fixed
+
+- **Computed mutation targets are tolerant no-ops.** Derived Fields—including
+  nested Card Info Fields—remain schema-addressable, but attempts to assign,
+  replace, delete, or structurally edit them skip without evaluating the value,
+  emit no intent, and report zero affected records. Query-backed and other
+  read-only Fields continue to reject writes.
+- **Relationship serialization cross-product coverage.** Source conformance now
+  covers root, Card Info, and nested contained relationships across `linksTo`
+  and `linksToMany`, recursive per-value metadata, relationship extensions,
+  collection index shifts, and mixed RRI, relative, and absolute references.
+  Reference resolution/formatting remains an explicit host boundary.
+
 ## [0.4.1] — 2026-08-02
 
 ### Fixed

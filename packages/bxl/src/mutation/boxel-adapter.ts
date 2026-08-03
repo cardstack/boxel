@@ -203,7 +203,6 @@ function schemaForShape(
   const result: BxlMutationField[] = [];
   const displayNameCounts = new Map<string, number>();
   for (const [key, field] of Object.entries(fields)) {
-    if (field.computeVia) continue;
     const value = sample && typeof sample === 'object'
       ? (sample as Record<string, unknown>)[key]
       : undefined;
@@ -221,13 +220,13 @@ function schemaForShape(
   );
 
   for (const [key, field] of Object.entries(fields)) {
-    if (field.computeVia) continue;
     const fieldType = field.fieldType;
     if (!fieldType) continue;
     const value = sample && typeof sample === 'object'
       ? (sample as Record<string, unknown>)[key]
       : undefined;
-    const writable = key !== 'id' && !field.queryDefinition;
+    const writable =
+      !field.computeVia && key !== 'id' && !field.queryDefinition;
     const label = fieldLabel(runtime, field, value, ambiguousDisplayNames);
     const entry: BxlMutationField = {
       key,
@@ -237,6 +236,7 @@ function schemaForShape(
       } : {}),
       fieldType,
       writable,
+      ...(field.computeVia ? { writeBehavior: 'skip' as const } : {}),
     };
 
     if (fieldType === 'linksTo' || fieldType === 'linksToMany') {
@@ -358,7 +358,6 @@ function projectModel(
   const output: Record<string, BxlMutationJson> = {};
   try {
     for (const [key, field] of Object.entries(safeFields(runtime, model))) {
-      if (field.computeVia) continue;
       const value = (model as Record<string, unknown>)[key];
       switch (field.fieldType) {
         case 'linksTo': {

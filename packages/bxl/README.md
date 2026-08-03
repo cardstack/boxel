@@ -36,7 +36,7 @@ evaluateBxl('ROUND(Subtotal * "Tax Rate" / 100, 2)', invoice, { schema });
 // => 12.38
 ```
 
-> **Current release: `0.4.1`.** The public API is intentionally unstable below 1.0 — see [RELEASE-PLAN.md](./RELEASE-PLAN.md).
+> **Current release: `0.4.2`.** The public API is intentionally unstable below 1.0 — see [RELEASE-PLAN.md](./RELEASE-PLAN.md).
 
 ---
 
@@ -817,6 +817,16 @@ to provide their source-relative `adoptsFrom` and any nested relationships;
 the adapter fails closed when an existing polymorphic collection would
 otherwise lose that type. The input document is never mutated, and a detached
 plan is rejected when its projected source snapshot is stale.
+
+Computed Fields remain addressable so generated mutation programs do not fail
+when they mention derived Card Info or other computed values. A write targeting
+one is an intentional no-op: its expression is not evaluated, it produces no
+intent, and its statement reports `affected: 0`. Query-backed and otherwise
+read-only Fields still fail closed. Relationship reference interpretation stays
+with the host callbacks: `resolveReference` may expand source-relative links
+while leaving portable RRI values such as `@catalog/...` opaque, and
+`formatReference` may serialize each logical Card ID as an RRI, a source-relative
+link, or an absolute URL.
 
 Use `prepareBxlMutationOperations(operations, options)` for the equivalent
 `bxl-mutation-ops/1` JSON tool-call encoding, and

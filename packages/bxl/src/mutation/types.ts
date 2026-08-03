@@ -30,6 +30,8 @@ export type BxlMutationFieldType =
 export interface BxlMutationField extends ReadableField {
   fieldType?: BxlMutationFieldType;
   writable?: boolean;
+  /** A computed Field accepts author intent as an intentional no-op. */
+  writeBehavior?: 'write' | 'skip';
   item?: BxlMutationSchema;
   fields?: BxlMutationField[];
   /**
@@ -48,6 +50,7 @@ export interface BxlMutationRootField {
   label?: string;
   fieldType?: BxlMutationFieldType;
   writable?: boolean;
+  writeBehavior?: 'write' | 'skip';
   item?: BxlMutationSchema;
 }
 

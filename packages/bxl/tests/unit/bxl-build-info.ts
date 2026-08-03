@@ -37,6 +37,7 @@ const required = [
   'authorization-kernel',
   'boxel-source-mutation-adapter',
   'boxel-source-structural-lowering',
+  'computed-write-skip',
 ];
 for (const r of required) {
   ok(

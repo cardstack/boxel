@@ -181,7 +181,7 @@ async function schemaForDefinition<CodeReference>(
   const candidates = await Promise.all(
     Object.keys(definition.fields).map(async (key) => {
       const field = fieldDefinition(definition, key);
-      if (!field || field.isComputed) return undefined;
+      if (!field) return undefined;
       const child = field.isPrimitive
         ? undefined
         : await lookupDefinition(field.fieldOrCard);
@@ -217,7 +217,9 @@ async function schemaForDefinition<CodeReference>(
       key,
       ...(label ? { label, displayName: label } : {}),
       fieldType: field.type,
-      writable: key !== 'id' && field.query === undefined,
+      writable:
+        !field.isComputed && key !== 'id' && field.query === undefined,
+      ...(field.isComputed ? { writeBehavior: 'skip' as const } : {}),
       boxelSource: {
         isPrimitive: field.isPrimitive,
         fieldOrCard: cloneJson(field.fieldOrCard),

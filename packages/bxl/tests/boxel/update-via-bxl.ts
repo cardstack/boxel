@@ -57,9 +57,15 @@ class CardInfo {
   static fields: Record<string, BxlBoxelField> = {
     name: { fieldType: 'contains', card: StringValue },
     theme: { fieldType: 'linksTo', card: ThemeCard },
+    summary: {
+      fieldType: 'contains',
+      card: StringValue,
+      computeVia() { return ''; },
+    },
   };
   name = '';
   theme: ThemeCard | null = null;
+  summary = 'Computed summary';
 }
 
 class Invoice {
@@ -164,7 +170,16 @@ check('derives readable schema from CardDef/FieldDef metadata', () => {
   strictEqual(lineItems?.item?.fields.find((field) => field.key === 'quantity')?.writable, true);
   strictEqual(schema.fields.find((field) => field.key === 'id')?.writable, false);
   strictEqual(schema.fields.find((field) => field.key === 'searchResults')?.writable, false);
-  strictEqual(schema.fields.some((field) => field.key === 'total'), false);
+  strictEqual(
+    schema.fields.find((field) => field.key === 'total')?.writeBehavior,
+    'skip',
+  );
+  strictEqual(
+    schema.fields
+      .find((field) => field.key === 'cardInfo')
+      ?.fields?.find((field) => field.key === 'summary')?.writeBehavior,
+    'skip',
+  );
   const promotedTheme = schema.fields.find((field) => field.key === 'theme');
   strictEqual(promotedTheme?.label, 'Theme');
   deepStrictEqual(promotedTheme?.path, ['cardInfo', 'theme']);
@@ -177,6 +192,7 @@ check('snapshots the loaded model and represents relationships only by Card ID',
     cardInfo: {
       name: 'Coastal Maine',
       theme: { id: 'card:theme/original' },
+      summary: 'Computed summary',
     },
     title: 'Draft',
     lineItems: [
@@ -186,7 +202,31 @@ check('snapshots the loaded model and represents relationships only by Card ID',
     collaborators: [{ id: 'card:ada' }, { id: 'card:grace' }],
     reviewer: { id: 'card:ada' },
     searchResults: [],
+    total: 0,
   });
+});
+
+check('computed writes are skipped without evaluating their values', () => {
+  const card = invoiceFixture();
+  let authorizationCalls = 0;
+  const plan = updateViaBxl(
+    '.cardInfo.summary = (1 / 0); Total = (1 / 0); Title = "Still writable";',
+    { getFields },
+  ).call(card, {
+    programId: 'computed-no-op',
+    authorize() {
+      authorizationCalls++;
+      return true;
+    },
+  });
+  strictEqual(card.cardInfo.summary, 'Computed summary');
+  strictEqual(card.total, 0);
+  strictEqual(card.title, 'Still writable');
+  strictEqual(plan.statements[0].affected, 0);
+  strictEqual(plan.statements[1].affected, 0);
+  strictEqual(plan.statements[2].affected, 1);
+  strictEqual(plan.affected, 1);
+  strictEqual(authorizationCalls, 1);
 });
 
 check('updates one nested field without replacing contained identity', () => {

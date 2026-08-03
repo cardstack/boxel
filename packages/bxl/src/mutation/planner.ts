@@ -63,6 +63,7 @@ interface FieldResolution {
   fieldType?: BxlMutationFieldType;
   fieldPath: BxlMutationPath;
   relationship?: { type: 'linksTo' | 'linksToMany'; path: BxlMutationPath };
+  writeBehavior?: 'write' | 'skip';
 }
 
 interface PlannerContext {
@@ -303,10 +304,15 @@ function resolveField(
     const relationship = root?.fieldType === 'linksTo' || root?.fieldType === 'linksToMany'
       ? { type: root.fieldType, path: [] as BxlMutationPath }
       : undefined;
-    if (root?.writable === false) {
+    if (root?.writable === false && root.writeBehavior !== 'skip') {
       throw new BxlMutationError('validate', 'field-read-only', statement, 'The targeted Field is read-only.');
     }
-    return { fieldType: root?.fieldType, fieldPath: [], relationship };
+    return {
+      fieldType: root?.fieldType,
+      fieldPath: [],
+      relationship,
+      writeBehavior: root?.writeBehavior,
+    };
   }
 
   let schema = context.prepare.schema;
@@ -318,6 +324,7 @@ function resolveField(
         key: '',
         fieldType: rootField.fieldType,
         writable: rootField.writable,
+        writeBehavior: rootField.writeBehavior,
         item: rootField.item,
         kind:
           rootField.fieldType === 'containsMany' || rootField.fieldType === 'linksToMany'
@@ -332,7 +339,8 @@ function resolveField(
     rootField?.fieldType === 'linksTo' || rootField?.fieldType === 'linksToMany'
       ? { type: rootField.fieldType, path: [] }
       : undefined;
-  if (rootField?.writable === false) {
+  let writeBehavior = rootField?.writeBehavior;
+  if (rootField?.writable === false && writeBehavior !== 'skip') {
     throw new BxlMutationError('validate', 'field-read-only', statement, 'The targeted Field is read-only.');
   }
   for (let index = 0; index < path.length; index++) {
@@ -368,7 +376,8 @@ function resolveField(
       );
     }
     fieldPath = path.slice(0, index + 1);
-    if (field.writable === false) {
+    writeBehavior = field.writeBehavior;
+    if (field.writable === false && writeBehavior !== 'skip') {
       throw new BxlMutationError(
         'validate',
         'field-read-only',
@@ -394,7 +403,13 @@ function resolveField(
     const next = nestedSchema(field);
     if (next) schema = next;
   }
-  return { field, fieldType: field?.fieldType, fieldPath, relationship };
+  return {
+    field,
+    fieldType: field?.fieldType,
+    fieldPath,
+    relationship,
+    writeBehavior,
+  };
 }
 
 function validateWritableLocations(
@@ -506,6 +521,7 @@ function planAssignment(
   for (let index = 0; index < locations.length; index++) {
     const location = locations[index]!;
     const field = fields[index]!;
+    if (field.writeBehavior === 'skip') continue;
     let next: BxlMutationJson | CardReference;
     if (statement.operator === '=') {
       next = evaluateSingleJson(statement.value, output, context, statement.statement);
@@ -605,6 +621,7 @@ function planCall(
     }
     case 'replace': {
       const { location, field } = exactLocation(statement.args[0]!, root, context, number);
+      if (field.writeBehavior === 'skip') break;
       if (!location.exists) {
         throw new BxlMutationError('plan', 'replace-target-missing', number, 'replace requires an existing target.');
       }
@@ -622,6 +639,7 @@ function planCall(
     case 'copy_value_to': {
       const source = exactLocation(statement.args[0]!, root, context, number);
       const destination = exactLocation(statement.args[1]!, root, context, number);
+      if (destination.field.writeBehavior === 'skip') break;
       if (!source.location.exists) throw new BxlMutationError('plan', 'copy-source-missing', number, 'Copy source does not exist.');
       if (source.field.relationship || destination.field.relationship) {
         throw new BxlMutationError('validate', 'copy-relationship-forbidden', number, 'Relationship edges must be changed with relationship operations.');
@@ -645,6 +663,7 @@ function planCall(
       for (const index of ordered) {
         const location = locations[index]!;
         const field = fields[index]!;
+        if (field.writeBehavior === 'skip') continue;
         if (!location.exists) throw new BxlMutationError('plan', 'delete-target-missing', number, 'Delete target does not exist.');
         if (field.relationship) {
           const id = objectId(location.value);
@@ -661,6 +680,7 @@ function planCall(
     case 'append':
     case 'insert_at': {
       const target = exactLocation(statement.args[0]!, root, context, number);
+      if (target.field.writeBehavior === 'skip') break;
       const collection = collectionAt(output, target.location.path);
       let index = statement.name === 'prepend' ? 0 : collection.length;
       let valueArg = statement.args[1]!;
@@ -694,6 +714,7 @@ function planCall(
     case 'insert_item_before':
     case 'insert_item_after': {
       const anchor = exactLocation(statement.args[1]!, root, context, number);
+      if (anchor.field.writeBehavior === 'skip') break;
       const anchorIndex = anchor.location.path.at(-1);
       if (typeof anchorIndex !== 'number') throw new BxlMutationError('plan', 'anchor-not-item', number, 'Insertion anchor must be a collection item.');
       const collectionPath = anchor.location.path.slice(0, -1);
@@ -720,6 +741,7 @@ function planCall(
     case 'move_item_to_start':
     case 'move_item_to_end': {
       const item = exactLocation(statement.args[0]!, root, context, number);
+      if (item.field.writeBehavior === 'skip') break;
       const sourceIndex = item.location.path.at(-1);
       if (typeof sourceIndex !== 'number') throw new BxlMutationError('plan', 'move-source-not-item', number, 'Move source must be a collection item.');
       const sourceCollectionPath = item.location.path.slice(0, -1);
@@ -763,6 +785,7 @@ function planCall(
     }
     case 'reorder_by': {
       const target = exactLocation(statement.args[0]!, root, context, number);
+      if (target.field.writeBehavior === 'skip') break;
       if (target.field.relationship) {
         throw new BxlMutationError('validate', 'relationship-reorder-operation', number, 'Use relationship move operations to reorder linksToMany.');
       }
@@ -887,7 +910,7 @@ export function prepareBxlMutation(
             { cause: error },
           );
         }
-        if (context.plan.authorize) {
+        if (context.plan.authorize && result.plan.intents.length > 0) {
           try {
             const allowed = context.plan.authorize(result.plan);
             if (allowed === false) throw new Error('Authorization hook returned false.');
