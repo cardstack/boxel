@@ -1,12 +1,15 @@
 import { registerDestructor } from '@ember/destroyable';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
+import { buildWaiter } from '@ember/test-waiters';
 
 import Modifier from 'ember-modifier';
 
 import type ScrollPositionService from '@cardstack/host/services/scroll-position-service';
 
 import type { ArgsFor, NamedArgs, PositionalArgs } from 'ember-modifier';
+
+const scrollIntoViewWaiter = buildWaiter('scroll-into-view-modifier');
 
 interface ScrollIntoViewModifierArgs {
   Positional: [boolean];
@@ -23,13 +26,14 @@ export default class ScrollIntoViewModifier extends Modifier<ScrollIntoViewModif
 
   element!: Element;
   #intersectionObserver?: IntersectionObserver;
+  #resolveObservation?: () => void;
+  #waiterToken?: ReturnType<typeof scrollIntoViewWaiter.beginAsync>;
   #lastRunScrolled = false;
 
   constructor(owner: Owner, args: ArgsFor<ScrollIntoViewModifierSignature>) {
     super(owner, args);
     registerDestructor(this, () => {
-      this.#intersectionObserver?.disconnect();
-      this.#intersectionObserver = undefined;
+      this.finishObservation();
       this.element = undefined as never;
     });
   }
@@ -52,8 +56,7 @@ export default class ScrollIntoViewModifier extends Modifier<ScrollIntoViewModif
       this.#lastRunScrolled = true;
     } else {
       this.#lastRunScrolled = false;
-      this.#intersectionObserver?.disconnect();
-      this.#intersectionObserver = undefined;
+      this.finishObservation();
     }
   }
 
@@ -61,22 +64,31 @@ export default class ScrollIntoViewModifier extends Modifier<ScrollIntoViewModif
     let element = this.element;
 
     return new Promise((resolve) => {
-      this.#intersectionObserver?.disconnect();
+      this.finishObservation();
+      this.#waiterToken = scrollIntoViewWaiter.beginAsync();
+      this.#resolveObservation = () => resolve(void 0);
       let intersectionObserver = new IntersectionObserver((entries) => {
-        intersectionObserver.disconnect();
-        if (this.#intersectionObserver === intersectionObserver) {
-          this.#intersectionObserver = undefined;
-        }
-
         if (!entries[0].isIntersecting) {
           element.scrollIntoView({ block: 'center' });
         }
-
-        resolve(void 0);
+        if (this.#intersectionObserver === intersectionObserver) {
+          this.finishObservation();
+        }
       });
       this.#intersectionObserver = intersectionObserver;
 
       intersectionObserver.observe(element);
     });
+  }
+
+  private finishObservation() {
+    this.#intersectionObserver?.disconnect();
+    this.#intersectionObserver = undefined;
+    this.#resolveObservation?.();
+    this.#resolveObservation = undefined;
+    if (this.#waiterToken) {
+      scrollIntoViewWaiter.endAsync(this.#waiterToken);
+      this.#waiterToken = undefined;
+    }
   }
 }

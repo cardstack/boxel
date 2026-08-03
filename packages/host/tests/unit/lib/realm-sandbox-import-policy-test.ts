@@ -9,7 +9,10 @@ import {
 
 module('Unit | realm sandbox import policy', function () {
   test('trusts a canonical Base import', function (assert) {
-    let baseModule = new URL('card-api', `${ENV.resolvedBaseRealmURL}/`).href;
+    let baseModule = new URL(
+      'card-api',
+      `${ENV.resolvedBaseRealmURL.replace(/\/$/, '')}/`,
+    ).href;
     assert.strictEqual(
       trustedSandboxImportIdentity(
         '@cardstack/base/card-api',

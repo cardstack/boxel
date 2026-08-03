@@ -96,6 +96,7 @@ export default class ToolService extends Service {
   // released; the manual "Try Anyway" path bypasses them.
   claimedToolRequestIds = new Set<string>();
   acceptingAllRoomIds = new TrackedSet<string>();
+  private pendingLocalCodePatchesByRoom = new Map<string, Set<string>>();
   private aiAssistantClientRequestIdsByRoom = new Map<
     string,
     LimitedSet<string>
@@ -132,6 +133,7 @@ export default class ToolService extends Service {
     this.executedToolRequestIds.clear();
     this.claimedToolRequestIds.clear();
     this.acceptingAllRoomIds.clear();
+    this.pendingLocalCodePatchesByRoom.clear();
     this.aiAssistantClientRequestIdsByRoom.clear();
     for (let invalidation of this.aiAssistantInvalidations.values()) {
       invalidation.deferred.fulfill();
@@ -706,10 +708,43 @@ export default class ToolService extends Service {
       return;
     }
 
-    this.acceptingAllRoomIds.add(roomId);
+    this.beginLocalCodePatchBatch(roomId, readyCodePatches);
     try {
       await this.executeReadyCodePatches(roomId, message.htmlParts);
     } finally {
+      this.finishLocalCodePatchBatch(roomId, readyCodePatches);
+    }
+  }
+
+  private beginLocalCodePatchBatch(roomId: string, patches: CodeData[]) {
+    let pending = this.pendingLocalCodePatchesByRoom.get(roomId);
+    if (!pending) {
+      pending = new Set();
+      this.pendingLocalCodePatchesByRoom.set(roomId, pending);
+    }
+    for (let patch of patches) {
+      pending.add(`${patch.eventId}:${patch.codeBlockIndex}`);
+    }
+    this.acceptingAllRoomIds.add(roomId);
+  }
+
+  private finishLocalCodePatchBatch(roomId: string, patches: CodeData[]) {
+    for (let patch of patches) {
+      this.finishLocalCodePatch(
+        roomId,
+        `${patch.eventId}:${patch.codeBlockIndex}`,
+      );
+    }
+  }
+
+  private finishLocalCodePatch(roomId: string, requestId: string) {
+    let pending = this.pendingLocalCodePatchesByRoom.get(roomId);
+    if (!pending) {
+      return;
+    }
+    pending.delete(requestId);
+    if (pending.size === 0) {
+      this.pendingLocalCodePatchesByRoom.delete(roomId);
       this.acceptingAllRoomIds.delete(roomId);
     }
   }
@@ -1066,6 +1101,7 @@ export default class ToolService extends Service {
             this.executedToolRequestIds.add(requestId);
           }
           this.currentlyExecutingToolRequestIds.delete(requestId);
+          this.finishLocalCodePatch(roomId, requestId);
         }
       };
 

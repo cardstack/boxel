@@ -940,15 +940,39 @@ export default class RealmSandboxService extends Service {
     if (!state) {
       return undefined;
     }
-    if (!isResolvedCodeRef(ref)) {
+    // A CodeRef editor asks this capability to resolve relative inert
+    // descriptors. Requiring an already-resolved ref here would reject the
+    // exact input this boundary exists to validate.
+    if (
+      !('module' in ref) ||
+      !('name' in ref) ||
+      typeof ref.module !== 'string' ||
+      typeof ref.name !== 'string'
+    ) {
       return undefined;
     }
+    let refModule = ref.module;
+    let refName = ref.name;
     try {
-      let moduleIdentifier = String(ref.module);
+      let moduleIdentifier = String(refModule);
       if (moduleIdentifier.startsWith('.')) {
-        let referenceBase = state.document.data.id;
+        let snapshotID = state.snapshot.id;
+        let cardID = (card as BaseDef & { id?: string }).id;
+        let referenceBase =
+          state.document.data.id ??
+          (typeof snapshotID === 'string' ? snapshotID : undefined) ??
+          cardID;
         if (!referenceBase) {
-          return undefined;
+          // A newly-created preview can become editable before its persisted
+          // document acknowledgement supplies an id. Preserve the ordinary
+          // card-relative semantics with an inert temporary instance path in
+          // the same realm; no URL from the card crosses this boundary.
+          let typeName =
+            'name' in state.typeRef ? String(state.typeRef.name) : 'Card';
+          referenceBase = new URL(
+            `${encodeURIComponent(typeName)}/__preview__`,
+            state.principal,
+          ).href;
         }
         moduleIdentifier = new URL(
           moduleIdentifier,
@@ -957,14 +981,12 @@ export default class RealmSandboxService extends Service {
       }
       let resolvedRef = {
         module: rri(moduleIdentifier),
-        name: ref.name,
+        name: refName,
       } satisfies ResolvedCodeRef;
-      return (await this.compartmentRuntimeFor(state.principal).hasModuleExport(
-        moduleIdentifier,
-        ref.name,
-      ))
-        ? resolvedRef
-        : undefined;
+      let hasExport = await this.compartmentRuntimeFor(
+        state.principal,
+      ).hasModuleExport(moduleIdentifier, refName);
+      return hasExport ? resolvedRef : undefined;
     } catch (error) {
       this.recordCompartmentError(error);
       return undefined;

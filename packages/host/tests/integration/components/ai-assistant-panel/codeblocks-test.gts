@@ -435,11 +435,17 @@ const data = {
       'Monaco content should exactly match the HTML code block',
     );
 
-    await waitUntil(() => document.getElementsByClassName('view-lines')[1]);
+    let expectedPatchText =
+      '// existing code ... \nlet a = 1;\nlet c = 3;\n// new code ... \nlet a = 2;';
+    await waitUntil(
+      () =>
+        (document.getElementsByClassName('view-lines')[1] as HTMLElement)
+          ?.innerText === expectedPatchText,
+    );
     assert.strictEqual(
       (document.getElementsByClassName('view-lines')[1] as HTMLElement)
         .innerText,
-      '// existing code ... \nlet a = 1;\nlet c = 3;\n// new code ... \nlet a = 2;',
+      expectedPatchText,
     );
 
     assert.dom('ol li').exists({ count: 4 }, 'Should have 4 list items');

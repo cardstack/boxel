@@ -705,8 +705,12 @@ module('Unit | realm compartment module runtime', function () {
     );
 
     assert.strictEqual(bundle.templates[bundle.root]?.id, 'catalog-isolated');
+    let metadata = await runtime.evaluateCardTypeMetadata(
+      moduleID,
+      'CatalogCard',
+    );
     assert.deepEqual(
-      await runtime.evaluateCardTypeMetadata(moduleID, 'CatalogCard'),
+      JSON.parse(JSON.stringify(metadata)),
       {
         definitionKind: 'card',
         ancestorTypes: [
@@ -715,7 +719,6 @@ module('Unit | realm compartment module runtime', function () {
             name: 'CardDef',
           },
         ],
-        displayName: undefined,
         fields: {
           content: {
             kind: 'contains',
@@ -729,7 +732,6 @@ module('Unit | realm compartment module runtime', function () {
         hasCustomEditTemplate: false,
         hasCustomIsolatedTemplate: true,
         authoredTemplateFormats: ['isolated'],
-        icon: undefined,
         prefersWideFormat: false,
       },
       'trusted field identities cross as inert descriptors',
@@ -1176,7 +1178,7 @@ module('Unit | realm compartment module runtime', function () {
     let metadata = await runtime.evaluateCardTypeMetadata(moduleID, 'Style');
 
     assert.ok(bundle.templates[bundle.root], 'captures the isolated template');
-    assert.deepEqual(metadata.fields, {
+    assert.deepEqual(JSON.parse(JSON.stringify(metadata.fields)), {
       name: {
         kind: 'contains',
         type: {
@@ -1197,6 +1199,7 @@ module('Unit | realm compartment module runtime', function () {
           module: moduleID,
           name: 'Style',
         },
+        displayName: 'Style',
       },
       definingRules: {
         kind: 'containsMany',

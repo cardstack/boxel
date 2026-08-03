@@ -86,16 +86,23 @@ module('Integration | modifier | monaco', function (hooks) {
         </template>,
       );
 
-      let model = MonacoSDK.editor.getModels()[0]!;
-      model.setValue('unsaved first file');
+      let firstModel = MonacoSDK.editor.getModels()[0]!;
+      firstModel.setValue('unsaved first file');
       source.content = 'second file';
       source.identity = 'https://realm.example/second.gts';
       await settled();
 
+      let selectedModel = MonacoSDK.editor
+        .getModels()
+        .find((model) => !model.isDisposed())!;
       assert.strictEqual(
-        model.getValue(),
+        selectedModel.getValue(),
         'second file',
         'route navigation is not mistaken for a save echo',
+      );
+      assert.true(
+        firstModel.isDisposed(),
+        'the replaced file model is released instead of leaking',
       );
     } finally {
       monacoService.serverEchoDebounceMs = originalDebounce;

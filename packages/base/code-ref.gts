@@ -33,15 +33,17 @@ class BaseView extends Component<typeof CodeRefField> {
 }
 
 class EditView extends Component<typeof CodeRefField> {
-  @consume(CardContextName) declare cardContext: CardContext;
+  @consume(CardContextName) declare cardContext: CardContext | undefined;
   @consume(CardURLContextName) declare cardURL: string | undefined;
   @tracked validationState: 'initial' | 'valid' | 'invalid' = 'initial';
+  @tracked hasValidated = false;
+  private validationGeneration = 0;
   @tracked private maybeCodeRef: string | undefined =
     CodeRefSerializer.queryableValue(this.args.model ?? undefined);
 
   <template>
     <BoxelInput
-      data-test-hasValidated={{this.setIfValid.isIdle}}
+      data-test-hasValidated={{if this.hasValidated true}}
       @value={{this.maybeCodeRef}}
       @state={{this.validationState}}
       @onInput={{this.onInput}}
@@ -58,7 +60,6 @@ class EditView extends Component<typeof CodeRefField> {
 
   private onInput = (inputVal: string) => {
     this.maybeCodeRef = inputVal;
-    this.cardContext.requestRender?.();
     this.performValidation(this.maybeCodeRef);
   };
 
@@ -66,19 +67,22 @@ class EditView extends Component<typeof CodeRefField> {
     maybeCodeRef: string,
     opts?: { checkOnly?: true },
   ) {
+    let generation = ++this.validationGeneration;
+    this.hasValidated = false;
+    this.cardContext?.requestRender?.();
     let validation = this.setIfValid.perform(maybeCodeRef, opts);
-    // The final task state (`isIdle`) changes after the task body resolves.
-    // Request once more at that explicit completion boundary so the Host sees
-    // both the validation result and the settled task state.
-    void validation.then(
-      () => this.cardContext.requestRender?.(),
-      () => this.cardContext.requestRender?.(),
-    );
+    let finish = () => {
+      if (generation === this.validationGeneration) {
+        this.hasValidated = true;
+        this.cardContext?.requestRender?.();
+      }
+    };
+    void validation.then(finish, finish);
   }
 
   private setValidationState(state: 'initial' | 'valid' | 'invalid') {
     this.validationState = state;
-    this.cardContext.requestRender?.();
+    this.cardContext?.requestRender?.();
   }
 
   private setIfValid = restartableTask(
@@ -104,7 +108,7 @@ class EditView extends Component<typeof CodeRefField> {
       }
       try {
         let ref = { module, name } as CodeRef;
-        let validatedRef = this.cardContext.validateCodeRef
+        let validatedRef = this.cardContext?.validateCodeRef
           ? await this.cardContext.validateCodeRef(ref)
           : (await import(module))[name]
             ? (ref as ResolvedCodeRef)
@@ -117,7 +121,7 @@ class EditView extends Component<typeof CodeRefField> {
         } else {
           this.setValidationState('invalid');
         }
-      } catch (err) {
+      } catch {
         this.setValidationState('invalid');
       }
     },

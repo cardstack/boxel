@@ -52,6 +52,11 @@ export default class SendAiAssistantMessageTool extends HostBaseTool<
     input: BaseToolModule.SendAiAssistantMessageInput,
   ): Promise<BaseToolModule.SendAiAssistantMessageResult> {
     let { matrixService, operatorModeStateService } = this;
+    // Host tools can run before any Matrix-backed UI has forced the lazy SDK
+    // to load. The tool's first state-event write is itself a Matrix boundary,
+    // so make that dependency explicit instead of relying on test or route
+    // ordering to have initialized the client already.
+    await matrixService.ready;
     let roomId = input.roomId;
     let requireToolCall = input.requireCommandCall ?? false;
     let cardAPI = await this.loadCardAPI();
