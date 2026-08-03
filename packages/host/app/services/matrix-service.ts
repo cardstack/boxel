@@ -530,6 +530,15 @@ export default class MatrixService extends Service {
     );
   }
 
+  // Who the persisted auth belongs to, readable without booting a client — so a
+  // route outside the authenticated app (e.g. the CLI authorization page) can
+  // tell whose account this browser last signed in as. Deliberately narrower
+  // than `getAuth()`: knowing the user id shouldn't come with the ability to
+  // read the persisted access token.
+  get persistedUserId(): string | undefined {
+    return this.getAuth()?.user_id;
+  }
+
   // Test-only diagnostic for the intermittent "operator-mode renders the login
   // form" flake: names which precondition of `isLoggedIn` is unmet when a route
   // decides to render <Auth/>, plus a compact tail of the `postLoginCompleted`

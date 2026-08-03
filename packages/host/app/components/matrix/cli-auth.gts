@@ -51,8 +51,17 @@ export default class CliAuth extends Component {
           to continue. You can close this tab.</p>
       {{else}}
         <span class='title'>Authorize Boxel CLI</span>
-        <p class='subtitle'>Signing in gives the Boxel CLI running on this
-          computer access to your workspaces.</p>
+        {{#if this.signedInUserId}}
+          <p class='subtitle'>Confirm your password to give the Boxel CLI
+            running on this computer access to the workspaces of
+            <span
+              class='signed-in-user'
+              data-test-cli-auth-signed-in-as
+            >{{this.signedInUserId}}</span>.</p>
+        {{else}}
+          <p class='subtitle'>Signing in gives the Boxel CLI running on this
+            computer access to your workspaces.</p>
+        {{/if}}
         <form data-test-cli-auth-form {{on 'submit' this.submitPassword}}>
           {{#if this.googleSsoAvailable}}
             <AuthButton
@@ -127,6 +136,10 @@ export default class CliAuth extends Component {
         font: var(--boxel-font-sm);
         line-height: 1.4;
       }
+      .signed-in-user {
+        font-weight: 600;
+        overflow-wrap: anywhere;
+      }
       /* The sign-in screen gets this gap from the "Forgot password?" link's
          bottom margin. There's no such link here, so the button carries it. */
       .submit-button {
@@ -180,6 +193,18 @@ export default class CliAuth extends Component {
   constructor(owner: unknown, args: object) {
     super(owner as never, args);
     this.detectGoogleSso.perform();
+    // Whoever this browser is signed in as is overwhelmingly who they mean to
+    // authorize, so fill it in — while leaving it editable, since authorizing a
+    // different account is a legitimate thing to want. The password still has to
+    // be given: it is what mints the CLI a device of its own.
+    let localpart = this.signedInUserId?.replace(/^@/, '').split(':')[0];
+    if (localpart) {
+      this.username = localpart;
+    }
+  }
+
+  private get signedInUserId(): string | undefined {
+    return this.matrixService.persistedUserId;
   }
 
   // Where the result goes: loopback on this machine, on the port the CLI named.
