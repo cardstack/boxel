@@ -1017,7 +1017,7 @@ module(basename(import.meta.filename), function () {
       assert.ok(instance!.resourceCreatedAt, 'resourceCreatedAt is set');
     });
 
-    test('sets urls containing encoded CSS for deps for an instance', async function (assert) {
+    test('sets realm CSS deps without leaking trusted Base CSS for an instance', async function (assert) {
       await realm.write(
         'fancy.json',
         JSON.stringify({
@@ -1052,7 +1052,7 @@ module(basename(import.meta.filename), function () {
         );
       };
 
-      let dependencies = [
+      let realmDependencies = [
         {
           pattern: /fancy-person\.gts.*\.glimmer-scoped\.css$/,
           fileName: 'fancy-person.gts',
@@ -1061,6 +1061,17 @@ module(basename(import.meta.filename), function () {
           pattern: /\/person\.gts.*\.glimmer-scoped\.css$/,
           fileName: 'person.gts',
         },
+      ];
+
+      realmDependencies.forEach(({ pattern, fileName }) => {
+        assertCssDependency(deps, pattern, fileName);
+      });
+
+      // The direct Base module edge is the invalidation boundary. Base's
+      // shared trusted loader owns its transitive styles, so copying those
+      // implementation details into every realm card would make cold and warm
+      // index results differ and multiply invalidation fan-out.
+      let trustedBaseDependencies = [
         {
           pattern:
             /@cardstack\/base\/default-templates\/embedded\.gts.*\.glimmer-scoped\.css$/,
@@ -1103,8 +1114,11 @@ module(basename(import.meta.filename), function () {
         },
       ];
 
-      dependencies.forEach(({ pattern, fileName }) => {
-        assertCssDependency(deps, pattern, fileName);
+      trustedBaseDependencies.forEach(({ pattern, fileName }) => {
+        assert.false(
+          deps.some((dep) => pattern.test(dep)),
+          `trusted Base css for ${fileName} is not copied into realm deps`,
+        );
       });
     });
 
