@@ -3,13 +3,16 @@ const { module, test } = QUnit;
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
 import type { RealmHttpServer as Server } from '../../server.ts';
+import { rri } from '@cardstack/runtime-common';
 import type { Realm } from '@cardstack/runtime-common';
 import {
   setupPermissionedRealmCached,
+  assertRealmInfoExtras,
   closeServer,
   testRealmInfo,
   createJWT,
   testRealmURLFor,
+  withoutRealmInfoExtras,
 } from '../helpers/index.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.ts';
@@ -66,7 +69,12 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         );
         let json = response.body;
         assert.deepEqual(
-          json,
+          {
+            data: {
+              ...json.data,
+              attributes: withoutRealmInfoExtras(json.data.attributes),
+            },
+          },
           {
             data: {
               id: realmURL.href,
@@ -78,6 +86,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           },
           '/_info response is correct',
         );
+        assertRealmInfoExtras(assert, json.data.attributes);
       });
     });
 
@@ -136,7 +145,12 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
         let json = response.body;
         assert.deepEqual(
-          json,
+          {
+            data: {
+              ...json.data,
+              attributes: withoutRealmInfoExtras(json.data.attributes),
+            },
+          },
           {
             data: {
               id: realmURL.href,
@@ -149,6 +163,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           },
           '/_info response is correct',
         );
+        assertRealmInfoExtras(assert, json.data.attributes);
       });
     });
 
@@ -179,7 +194,12 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
           let json = response.body;
           assert.deepEqual(
-            json,
+            {
+              data: {
+                ...json.data,
+                attributes: withoutRealmInfoExtras(json.data.attributes),
+              },
+            },
             {
               data: {
                 id: realmURL.href,
@@ -192,9 +212,158 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
             },
             '/_info response is correct',
           );
+          assertRealmInfoExtras(assert, json.data.attributes);
         });
       },
     );
+
+    // The counts feed the workspace-chooser favorite tiles' Cards / Files /
+    // Definitions row. Asserted as deltas around a write rather than against
+    // absolute numbers, so the realm's own scaffolding (index card, realm.json,
+    // …) doesn't have to be enumerated here — what matters is that each kind of
+    // file lands in exactly one bucket.
+    module('index counts', function (hooks) {
+      setupPermissionedRealmCached(hooks, {
+        permissions: {
+          '*': ['read'],
+          '@node-test_realm:localhost': ['read', 'realm-owner'],
+        },
+        realmURL,
+        onRealmSetup,
+        fileSystem: {
+          'person.gts': `
+            import { contains, field, CardDef } from "@cardstack/base/card-api";
+            import StringField from "@cardstack/base/string";
+            export class Person extends CardDef {
+              @field firstName = contains(StringField);
+            }
+          `,
+          'mango.json': {
+            data: {
+              attributes: { firstName: 'Mango' },
+              meta: {
+                adoptsFrom: { module: rri('./person.gts'), name: 'Person' },
+              },
+            },
+          },
+          'notes.txt': 'plain text, not a card and not a definition',
+        },
+      });
+
+      async function fetchCounts(): Promise<{
+        cardCount: number;
+        fileCount: number;
+        definitionCount: number;
+      }> {
+        let response = await request
+          .post(new URL('_info', realmURL).pathname)
+          .set('X-HTTP-Method-Override', 'QUERY')
+          .set('Accept', 'application/vnd.api+json');
+        let { cardCount, fileCount, definitionCount } =
+          response.body.data.attributes;
+        return { cardCount, fileCount, definitionCount };
+      }
+
+      test('counts each indexed file as exactly one of cards / files / definitions', async function (assert) {
+        let before = await fetchCounts();
+
+        assert.ok(
+          before.cardCount >= 1,
+          `the seeded instance is counted as a card, got ${before.cardCount}`,
+        );
+        assert.ok(
+          before.definitionCount >= 1,
+          `person.gts is counted as a definition, got ${before.definitionCount}`,
+        );
+        assert.ok(
+          before.fileCount >= 1,
+          `notes.txt is counted as a file, got ${before.fileCount}`,
+        );
+
+        await testRealm.write(
+          'vanGogh.json',
+          JSON.stringify({
+            data: {
+              attributes: { firstName: 'Van Gogh' },
+              meta: {
+                adoptsFrom: { module: rri('./person.gts'), name: 'Person' },
+              },
+            },
+          }),
+        );
+        let afterInstance = await fetchCounts();
+        assert.strictEqual(
+          afterInstance.cardCount,
+          before.cardCount + 1,
+          'writing an instance increments cardCount',
+        );
+        assert.strictEqual(
+          afterInstance.definitionCount,
+          before.definitionCount,
+          'writing an instance leaves definitionCount alone',
+        );
+        // An instance is indexed as both an `instance` row and a `file` row at
+        // the same url; only the card count may move.
+        assert.strictEqual(
+          afterInstance.fileCount,
+          before.fileCount,
+          'writing an instance leaves fileCount alone — its .json is not counted a second time as a file',
+        );
+
+        await testRealm.write(
+          'pet.gts',
+          `
+            import { contains, field, CardDef } from "@cardstack/base/card-api";
+            import StringField from "@cardstack/base/string";
+            export class Pet extends CardDef {
+              @field name = contains(StringField);
+            }
+          `,
+        );
+        let afterModule = await fetchCounts();
+        assert.strictEqual(
+          afterModule.definitionCount,
+          afterInstance.definitionCount + 1,
+          'writing a .gts module increments definitionCount',
+        );
+        assert.strictEqual(
+          afterModule.cardCount,
+          afterInstance.cardCount,
+          'writing a .gts module leaves cardCount alone',
+        );
+
+        // Deliberately .txt rather than .md: markdown files carry
+        // skill-specific indexing behavior, and this assertion is about plain
+        // non-module files.
+        await testRealm.write('more-notes.txt', 'another plain file');
+        let afterFile = await fetchCounts();
+        assert.strictEqual(
+          afterFile.fileCount,
+          afterModule.fileCount + 1,
+          'writing a non-module file increments fileCount',
+        );
+        assert.strictEqual(
+          afterFile.definitionCount,
+          afterModule.definitionCount,
+          'writing a non-module file leaves definitionCount alone',
+        );
+        assert.strictEqual(
+          afterFile.cardCount,
+          afterModule.cardCount,
+          'writing a non-module file leaves cardCount alone',
+        );
+      });
+
+      test('createdAt and updatedAt are served from the realm registry', async function (assert) {
+        let response = await request
+          .post(new URL('_info', realmURL).pathname)
+          .set('X-HTTP-Method-Override', 'QUERY')
+          .set('Accept', 'application/vnd.api+json');
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assertRealmInfoExtras(assert, response.body.data.attributes);
+      });
+    });
 
     module('shared realm because there are multiple users', function (hooks) {
       setupPermissionedRealmCached(hooks, {
@@ -223,7 +392,12 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
         let json = response.body;
         assert.deepEqual(
-          json,
+          {
+            data: {
+              ...json.data,
+              attributes: withoutRealmInfoExtras(json.data.attributes),
+            },
+          },
           {
             data: {
               id: realmURL.href,
@@ -236,6 +410,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           },
           '/_info response is correct',
         );
+        assertRealmInfoExtras(assert, json.data.attributes);
       });
     });
   });

@@ -130,51 +130,29 @@ export default class Workspace extends Component<Signature> {
                     class='tile-name'
                     data-test-workspace-name
                   >{{this.name}}</span>
-                  {{#if this.hasAnyTileStats}}
+                  {{#if this.tileStats.length}}
                     <div
                       class='tile-metadata-row'
                       data-test-workspace-stats={{@realmIdentifier}}
                     >
-                      {{#if this.hasCardCount}}
+                      {{#each this.tileStats as |stat|}}
                         <Tooltip @placement='top'>
                           <:trigger>
-                            <span class='tile-stat'>
-                              <span class='tile-stat-label'>Cards</span>
+                            <span
+                              class='tile-stat'
+                              data-test-workspace-stat={{stat.label}}
+                            >
+                              <span
+                                class='tile-stat-label'
+                              >{{stat.label}}</span>
                               <span
                                 class='tile-stat-number'
-                              >{{this.cardCount}}</span>
+                              >{{stat.count}}</span>
                             </span>
                           </:trigger>
-                          <:content>Cards {{this.cardCount}}</:content>
+                          <:content>{{stat.label}} {{stat.count}}</:content>
                         </Tooltip>
-                      {{/if}}
-                      {{#if this.hasFileCount}}
-                        <Tooltip @placement='top'>
-                          <:trigger>
-                            <span class='tile-stat'>
-                              <span class='tile-stat-label'>Files</span>
-                              <span
-                                class='tile-stat-number'
-                              >{{this.fileCount}}</span>
-                            </span>
-                          </:trigger>
-                          <:content>Files {{this.fileCount}}</:content>
-                        </Tooltip>
-                      {{/if}}
-                      {{#if this.hasDefinitionCount}}
-                        <Tooltip @placement='top'>
-                          <:trigger>
-                            <span class='tile-stat'>
-                              <span class='tile-stat-label'>Definitions</span>
-                              <span
-                                class='tile-stat-number'
-                              >{{this.definitionCount}}</span>
-                            </span>
-                          </:trigger>
-                          <:content>Definitions
-                            {{this.definitionCount}}</:content>
-                        </Tooltip>
-                      {{/if}}
+                      {{/each}}
                     </div>
                   {{/if}}
                 </div>
@@ -190,16 +168,22 @@ export default class Workspace extends Component<Signature> {
             {{/if}}
           </div>
         </ItemContainer>
-        <ContextButton
-          class='tile-favorite-btn {{if this.isFavorited "is-favorited"}}'
-          @label={{if this.isFavorited 'Unfavorite' 'Favorite'}}
-          @icon={{if this.isFavorited StarFilled Star}}
-          @variant='ghost'
-          @width='16'
-          @height='16'
-          {{on 'click' this.toggleFavorite}}
-          data-test-workspace-favorite-btn={{@realmIdentifier}}
-        />
+        <div class='tile-favorite-btn {{if this.isFavorited "is-favorited"}}'>
+          <Tooltip @placement='top'>
+            <:trigger>
+              <ContextButton
+                @label={{this.favoriteLabel}}
+                @icon={{if this.isFavorited StarFilled Star}}
+                @variant='ghost'
+                @width='16'
+                @height='16'
+                {{on 'click' this.toggleFavorite}}
+                data-test-workspace-favorite-btn={{@realmIdentifier}}
+              />
+            </:trigger>
+            <:content>{{this.favoriteLabel}}</:content>
+          </Tooltip>
+        </div>
         {{#if @isFavoritesSection}}
           <div
             class='tile-status-bar'
@@ -628,6 +612,13 @@ export default class Workspace extends Component<Signature> {
       .workspace-card:hover::after {
         border-color: rgba(255 255 255 / 50%);
       }
+      /* The keyboard-navigation selection ring. Declared after the :hover
+         rule so a selected tile keeps its ring while the pointer is over
+         it. */
+      .workspace-card.is-selected::after {
+        border-color: var(--boxel-teal);
+        box-shadow: 0 0 0 1px var(--boxel-teal);
+      }
       .tile-favorite-btn {
         position: absolute;
         top: 0.5rem;
@@ -663,6 +654,17 @@ export default class Workspace extends Component<Signature> {
         opacity: 1;
         background: rgba(0 0 0 / 40%);
         backdrop-filter: blur(6px);
+      }
+      /* Tooltip wraps its trigger in a `width: fit-content` div. Stretch that
+         wrapper (and the button inside it) to fill the star's box so the whole
+         box stays the hover target, rather than only the glyph. */
+      .tile-favorite-btn > :deep(.trigger),
+      .tile-favorite-btn :deep(button) {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
       .tile-menu-btn {
         position: absolute;
@@ -1585,6 +1587,12 @@ export default class Workspace extends Component<Signature> {
     );
   }
 
+  // Serves as both the button's accessible label and its tooltip text, so the
+  // two can't drift apart.
+  private get favoriteLabel() {
+    return this.isFavorited ? 'Remove from Favorites' : 'Add to Favorites';
+  }
+
   @service declare private workspaceDuplication: WorkspaceDuplicationService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private matrixService: MatrixService;
@@ -1803,39 +1811,20 @@ export default class Workspace extends Component<Signature> {
   }
 
   // Compact metadata for the enlarged favorite tile's in-tile content (see
-  // .tile-metadata-row below) — Cards/Files/Definitions counts, plus
-  // collaborators. Number/label are split into separate getters so the
-  // template can emphasize the count with larger type than its unit
-  // label. Each stat is real, per-workspace content (see the matching
-  // RealmInfo fields' doc comment) — a workspace with none of a given type
-  // simply omits that stat, which is what gives each favorite tile a
-  // different mix of metadata rather than always showing all three.
-  private get hasCardCount() {
-    return !!this.realmInfo.cardCount;
-  }
-
-  private get cardCount() {
-    return this.realmInfo.cardCount ?? 0;
-  }
-
-  private get hasFileCount() {
-    return !!this.realmInfo.fileCount;
-  }
-
-  private get fileCount() {
-    return this.realmInfo.fileCount ?? 0;
-  }
-
-  private get hasDefinitionCount() {
-    return !!this.realmInfo.definitionCount;
-  }
-
-  private get definitionCount() {
-    return this.realmInfo.definitionCount ?? 0;
-  }
-
-  private get hasAnyTileStats() {
-    return this.hasCardCount || this.hasFileCount || this.hasDefinitionCount;
+  // .tile-metadata-row below). Label and count stay separate fields so the
+  // template can emphasize the count with larger type than its unit label.
+  // A stat with no count is dropped rather than rendered as "0" — that's
+  // what gives each favorite tile its own mix of metadata instead of always
+  // showing all three. The counts are only served by the realm's `/_info`
+  // endpoint (see RealmInfo), so they're absent, not zero, on a realm whose
+  // info hasn't loaded yet.
+  private get tileStats(): { label: string; count: number }[] {
+    let { cardCount, fileCount, definitionCount } = this.realmInfo;
+    return [
+      { label: 'Cards', count: cardCount },
+      { label: 'Files', count: fileCount },
+      { label: 'Definitions', count: definitionCount },
+    ].filter((stat): stat is { label: string; count: number } => !!stat.count);
   }
 
   private get canDeleteWorkspace() {

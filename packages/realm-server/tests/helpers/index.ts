@@ -270,10 +270,47 @@ export const testRealmInfo = {
   realmUserId: testRealmServerMatrixUserId,
   publishable: null,
   lastPublishedAt: null,
-  createdAt: null,
-  updatedAt: null,
   includePrerenderedDefaultRealmIndex: null,
 };
+
+import {
+  realmInfoExtraKeys,
+  withoutRealmInfoExtras,
+} from '@cardstack/runtime-common/helpers/const';
+export { realmInfoExtraKeys, withoutRealmInfoExtras };
+
+export function assertRealmInfoExtras(
+  assert: Assert,
+  attributes: Record<string, unknown>,
+  expected: {
+    cardCount?: number;
+    fileCount?: number;
+    definitionCount?: number;
+  } = {},
+): void {
+  for (let key of realmInfoExtraKeys) {
+    assert.ok(key in attributes, `/_info includes ${key}`);
+  }
+  for (let key of ['createdAt', 'updatedAt'] as const) {
+    let value = attributes[key];
+    assert.ok(
+      value === null ||
+        (typeof value === 'string' && !Number.isNaN(Date.parse(value))),
+      `/_info ${key} is null or a parseable timestamp, got ${JSON.stringify(value)}`,
+    );
+  }
+  for (let key of ['cardCount', 'fileCount', 'definitionCount'] as const) {
+    if (expected[key] !== undefined) {
+      assert.strictEqual(attributes[key], expected[key], `/_info ${key}`);
+      continue;
+    }
+    let value = attributes[key];
+    assert.ok(
+      typeof value === 'number' && Number.isInteger(value) && value >= 0,
+      `/_info ${key} is a non-negative integer, got ${JSON.stringify(value)}`,
+    );
+  }
+}
 
 export const realmServerTestMatrix: MatrixConfig = {
   url: matrixURL,

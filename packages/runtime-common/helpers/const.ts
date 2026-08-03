@@ -25,7 +25,28 @@ export const testRealmInfo: RealmInfo = {
   realmUserId: '@realm_server:localhost',
   publishable: null,
   lastPublishedAt: null,
-  createdAt: null,
-  updatedAt: null,
   includePrerenderedDefaultRealmIndex: null,
 };
+
+// The info endpoints (`/_info`, `/_federated-info`) serve `testRealmInfo`'s
+// shape plus these — realm-lifecycle timestamps and index counts, whose values
+// depend on realm contents and wall-clock time (see
+// `Realm#getDetailedRealmInfo`). A fixture can't pin them, so split them off
+// and assert them on their own terms.
+export const realmInfoExtraKeys = [
+  'createdAt',
+  'updatedAt',
+  'cardCount',
+  'fileCount',
+  'definitionCount',
+] as const;
+
+export function withoutRealmInfoExtras(
+  attributes: Record<string, unknown>,
+): Record<string, unknown> {
+  let rest = { ...attributes };
+  for (let key of realmInfoExtraKeys) {
+    delete rest[key];
+  }
+  return rest;
+}

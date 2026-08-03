@@ -308,7 +308,9 @@ export default class WorkspaceChooser extends Component<Signature> {
   // The keyboard-selected tile, identified by its position in the flat,
   // DOM-ordered sequence of selectable tiles. The sequence spans, in render
   // order: Favorites, the "New Workspace" tile, Your Workspaces, then Catalogs.
-  @tracked private selectedIndex = 0;
+  // `null` until the user moves the selection, at which point
+  // `defaultSelectedIndex` no longer applies.
+  @tracked private selectedIndex: number | null = null;
 
   private get favoritesCount() {
     return this.favoriteRealmIdentifiers.length;
@@ -349,6 +351,21 @@ export default class WorkspaceChooser extends Component<Signature> {
     return this.catalogNavBase + this.renderedCatalogCount;
   }
 
+  // Where the selection sits before the user has moved it. The "New Workspace"
+  // tile renders first within Your Workspaces, but it must not be what opening
+  // the chooser lands on: the selected tile takes focus, so starting there
+  // would make the first Enter create a workspace instead of opening one. Skip
+  // past it to the first real workspace whenever there is one.
+  private get defaultSelectedIndex() {
+    if (this.favoritesCount > 0) {
+      return 0;
+    }
+    if (this.userWorkspacesCount > 0) {
+      return this.userWorkspacesNavBase;
+    }
+    return 0;
+  }
+
   // `selectedIndex` can fall out of range when the selectable set shrinks
   // without a keypress (e.g. switching to the Hosted Only filter hides the
   // user section and "New Workspace" tile). Clamping on read keeps a tile
@@ -359,7 +376,8 @@ export default class WorkspaceChooser extends Component<Signature> {
     if (count === 0) {
       return 0;
     }
-    return Math.min(Math.max(this.selectedIndex, 0), count - 1);
+    let index = this.selectedIndex ?? this.defaultSelectedIndex;
+    return Math.min(Math.max(index, 0), count - 1);
   }
 
   // Keep the selection in sync with focus, so tabbing onto a tile selects it.
@@ -369,7 +387,13 @@ export default class WorkspaceChooser extends Component<Signature> {
       return;
     }
     let index = Number((tile as HTMLElement).dataset.navIndex);
-    if (!Number.isNaN(index) && index !== this.selectedIndex) {
+    // Compare against the *effective* selection, not the raw backing field.
+    // The selected tile is focused by a modifier (`focusWhenSelected`), whose
+    // synchronous `focus()` re-enters here during the same render pass that
+    // just read `currentIndex`. Writing `selectedIndex` there trips Ember's
+    // backtracking-rerender assertion, so the already-selected case has to be
+    // a genuine no-op — which it isn't if we compare to a still-unset field.
+    if (!Number.isNaN(index) && index !== this.currentIndex) {
       this.selectedIndex = index;
     }
   }

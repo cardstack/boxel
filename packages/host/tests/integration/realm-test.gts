@@ -18,6 +18,10 @@ import {
   compiledCard,
 } from '@cardstack/runtime-common/etc/test-fixtures';
 
+import {
+  realmInfoExtraKeys,
+  withoutRealmInfoExtras,
+} from '@cardstack/runtime-common/helpers/const';
 import stripScopedCSSGlimmerAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-glimmer-attributes';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
@@ -3545,8 +3549,16 @@ posts/ignore-me.gts
       }),
     );
     let json = await response.json();
+    // `/_info` also carries the endpoint-only extras (index counts, realm
+    // timestamps), whose values depend on realm contents — compare the pinned
+    // part, then assert the extras' shape.
     assert.deepEqual(
-      json,
+      {
+        data: {
+          ...json.data,
+          attributes: withoutRealmInfoExtras(json.data.attributes),
+        },
+      },
       {
         data: {
           id: testRealmURL,
@@ -3556,6 +3568,9 @@ posts/ignore-me.gts
       },
       '/_info response is correct',
     );
+    for (let key of realmInfoExtraKeys) {
+      assert.ok(key in json.data.attributes, `/_info includes ${key}`);
+    }
   });
 
   test('realm can serve info requests if the RealmConfig card is malformed', async function (assert) {
@@ -3575,8 +3590,16 @@ posts/ignore-me.gts
       }),
     );
     let json = await response.json();
+    // `/_info` also carries the endpoint-only extras (index counts, realm
+    // timestamps), whose values depend on realm contents — compare the pinned
+    // part, then assert the extras' shape.
     assert.deepEqual(
-      json,
+      {
+        data: {
+          ...json.data,
+          attributes: withoutRealmInfoExtras(json.data.attributes),
+        },
+      },
       {
         data: {
           id: testRealmURL,
@@ -3586,6 +3609,9 @@ posts/ignore-me.gts
       },
       '/_info response is correct',
     );
+    for (let key of realmInfoExtraKeys) {
+      assert.ok(key in json.data.attributes, `/_info includes ${key}`);
+    }
   });
 
   test('realm does not crash when indexing a broken instance', async function (assert) {
