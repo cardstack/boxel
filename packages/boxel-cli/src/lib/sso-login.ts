@@ -122,10 +122,17 @@ export async function startLoopbackCallback(opts?: {
   // is safe: `waitForResult` races this same promise and still sees the error.
   resultPromise.catch(() => {});
 
+  // Settle only once the page has reached the browser. Settling is what triggers
+  // `close()`, which tears sockets down — do it first and the user is left
+  // looking at a failed navigation instead of the outcome.
   const fail = (res: ServerResponse, shown: string, thrown: string) => {
     res.writeHead(400, HTML_RESPONSE_HEADERS);
-    res.end(errorPage(shown));
-    rejectResult(new Error(thrown));
+    res.end(errorPage(shown), () => rejectResult(new Error(thrown)));
+  };
+
+  const succeed = (res: ServerResponse, result: LoopbackResult) => {
+    res.writeHead(200, HTML_RESPONSE_HEADERS);
+    res.end(successPage(), () => resolveResult(result));
   };
 
   const server = createServer((req, res) => {
@@ -174,9 +181,7 @@ export async function startLoopbackCallback(opts?: {
           );
           return;
         }
-        res.writeHead(200, HTML_RESPONSE_HEADERS);
-        res.end(successPage());
-        resolveResult({
+        succeed(res, {
           kind: 'session',
           session: { accessToken, deviceId, userId },
         });
@@ -195,9 +200,7 @@ export async function startLoopbackCallback(opts?: {
         return;
       }
 
-      res.writeHead(200, HTML_RESPONSE_HEADERS);
-      res.end(successPage());
-      resolveResult({ kind: 'loginToken', loginToken });
+      succeed(res, { kind: 'loginToken', loginToken });
     })();
   });
 
@@ -216,11 +219,13 @@ export async function startLoopbackCallback(opts?: {
       timer = undefined;
     }
     server.close();
-    // `close()` only stops listening. A browser keeps its connection alive after
-    // the response, and may have opened speculative ones it never used — each
-    // holds the event loop open, so the CLI would sit there having already
-    // finished. Idle sockets only, so a response still in flight isn't cut off.
-    server.closeIdleConnections();
+    // `close()` only stops listening; established sockets keep the event loop
+    // alive, so the CLI would sit there having already finished. Closing only
+    // *idle* sockets isn't enough — a browser follows the page with further
+    // requests of its own (favicon, and whatever else it fancies), so the socket
+    // often isn't idle at this moment. Every response is flushed before the flow
+    // settles, so nothing in flight is lost by being blunt here.
+    server.closeAllConnections();
   };
 
   return {
