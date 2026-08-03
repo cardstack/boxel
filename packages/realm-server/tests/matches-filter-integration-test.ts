@@ -357,33 +357,56 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('planner uses prerendered_html_markdown_fts_idx for matches queries', async function (assert) {
-      // The filter emits `to_tsvector('english', markdown_search_text(ph.markdown))`
-      // which must match the GIN index expression exactly. With only a handful
-      // of seeded rows PG will ordinarily prefer a seqscan; disabling seqscan
-      // forces the planner to reveal whether the GIN index is a viable
-      // candidate at all — which is the property we actually care about.
+    test('the null-rejecting guard reduces the prerendered_html LEFT JOIN to an inner join', async function (assert) {
+      // The engine attaches prerendered_html to boxel_index through a LEFT JOIN
+      // (see `prerenderedJoin`) and runs the `matches` predicate against the
+      // joined `ph`. `markdown_search_text` coalesces null markdown to '', which
+      // hides the predicate's null-rejection from the planner: without the
+      // `ph.markdown IS NOT NULL` guard the planner cannot reduce the outer join,
+      // so it drives the query from boxel_index and recomputes `to_tsvector` for
+      // every joined row instead of reaching `prerendered_html_markdown_fts_idx`.
+      // The guard restores the join reduction — and that reduction is exactly
+      // what makes the markdown GIN index reachable at scale (on a realm with
+      // thousands of rows the planner then BitmapAnds the realm B-tree with the
+      // markdown GIN; with only a handful of seeded rows here it prefers the
+      // realm B-tree plus a filter, so asserting the index name would be
+      // dataset-dependent). The join type is the size-independent signal, so we
+      // assert directly on it: the guarded predicate yields an inner join and the
+      // unguarded (pre-fix) predicate stays a left join. A regression that drops
+      // the guard fails here rather than silently reintroducing the slowdown.
       //
-      // SET LOCAL is bound to a transaction, so we run SET/EXPLAIN/COMMIT on
-      // the same pooled connection via withConnection. Each inner query is
-      // its own round-trip, so EXPLAIN's result is returned cleanly.
-      let plan = await dbAdapter.withConnection(async (run) => {
-        await run(['BEGIN']);
-        await run(['SET LOCAL enable_seqscan = OFF']);
-        let rows = await run([
-          `EXPLAIN (FORMAT JSON)
-           SELECT url FROM prerendered_html
-           WHERE to_tsvector('english', markdown_search_text(markdown))
-                 @@ websearch_to_tsquery('english', 'mango')`,
-        ]);
-        await run(['COMMIT']);
-        return rows;
-      });
+      // EXPLAIN's JSON output stringifies each join's planner-chosen strategy as
+      // `"Join Type":"Inner"` / `"Join Type":"Left"`; this query has exactly one
+      // join, so a substring check is unambiguous.
+      let tsPredicate = `to_tsvector('english', markdown_search_text(ph.markdown)) @@ websearch_to_tsquery('english', 'mango')`;
+      let joinShapeExplain = (predicate: string) =>
+        `EXPLAIN (FORMAT JSON)
+         SELECT i.url
+         FROM boxel_index AS i
+         LEFT JOIN prerendered_html AS ph
+           ON ph.url = i.url AND ph.realm_url = i.realm_url AND ph.type = i.type
+         WHERE i.realm_url = '${testRealmURL}'
+           AND ${predicate}`;
 
-      let planText = JSON.stringify(plan);
+      let explainJoinShape = async (predicate: string) =>
+        JSON.stringify(await dbAdapter.execute(joinShapeExplain(predicate)));
+
+      let guarded = await explainJoinShape(
+        `ph.markdown IS NOT NULL AND ${tsPredicate}`,
+      );
+      let unguarded = await explainJoinShape(tsPredicate);
+
       assert.ok(
-        planText.includes('prerendered_html_markdown_fts_idx'),
-        `plan should reference the GIN index; got: ${planText}`,
+        guarded.includes('"Join Type":"Inner"'),
+        `guarded predicate should reduce the outer join to an inner join; got: ${guarded}`,
+      );
+      assert.notOk(
+        guarded.includes('"Join Type":"Left"'),
+        `guarded predicate should leave no unreduced outer join; got: ${guarded}`,
+      );
+      assert.ok(
+        unguarded.includes('"Join Type":"Left"'),
+        `unguarded predicate should leave the outer join unreduced — the bug the guard fixes; got: ${unguarded}`,
       );
     });
   });
