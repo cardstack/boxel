@@ -11,7 +11,7 @@ versions may change syntax behavior until `1.0.0`. See
 
 ## [Unreleased]
 
-## [0.4.2] — 2026-08-02
+## [0.5.1] — 2026-08-02
 
 ### Fixed
 
@@ -25,6 +25,11 @@ versions may change syntax behavior until `1.0.0`. See
   and `linksToMany`, recursive per-value metadata, relationship extensions,
   collection index shifts, and mixed RRI, relative, and absolute references.
   Reference resolution/formatting remains an explicit host boundary.
+
+## [0.4.2] — 2026-08-02
+
+- Superseded immediately by `0.5.1`; the source tag used the wrong release
+  number. No npm package was published under `0.4.2`.
 
 ## [0.4.1] — 2026-08-02
 
