@@ -9,5 +9,13 @@
   },
   "homepage": "https://github.com/cardstack/boxel/tree/main/packages/boxel-cli/plugin",
   "repository": "https://github.com/cardstack/boxel.git",
-  "license": "MIT"
+  "license": "MIT",
+  "interface": {
+    "displayName": "Boxel CLI",
+    "shortDescription": "Author and sync Boxel cards, realms, and workspaces",
+    "longDescription": "Create and edit Boxel cards, fields, and templates, then sync them between local disk and a Boxel realm — with skills covering card authoring, theming, catalog listings, federated search, and realm indexing diagnostics.",
+    "developerName": "Cardstack",
+    "category": "Developer Tools",
+    "websiteURL": "https://boxel.ai"
+  }
 }

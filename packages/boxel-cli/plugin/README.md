@@ -46,8 +46,22 @@ Codex discovers the plugin through the marketplace manifest at
 ```
 
 Skills are invoked with the `$` prefix (`$boxel`, `$realm-sync`, …) or picked
-up implicitly by description match. The workflow commands under `commands/`
-are Claude Code-only; Codex plugins have no commands slot.
+up implicitly by description match.
+
+Codex plugins have no commands slot, so the `skills/` directory is the whole
+Codex surface. Codex does convert a plugin's `commands/` to skills of its own
+accord at install time, naming them `source-command-<name>`, but that conversion
+drops any command whose generated skill would exceed 4000 bytes — silently, with
+no warning at install. The four largest commands land on the wrong side of that
+line and do not reach Codex: `boxel-create-card`, `boxel-edit-template`,
+`boxel-sync-workspace`, and `distill-learnings`.
+
+Restaging those commands as skills here would fix the symptom in the wrong
+place. `commands/` is imported from
+[`cardstack/boxel-skills`](https://github.com/cardstack/boxel-skills), which
+owns the decision about what is a skill and what is a command; this package
+copies that decision rather than making its own. They reach Codex when they are
+skills upstream.
 
 Without installing the plugin, a checkout also works directly: Codex reads
 skills from `~/.agents/skills` (or a project's `.agents/skills`), expecting

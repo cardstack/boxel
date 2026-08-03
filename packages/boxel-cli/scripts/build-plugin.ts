@@ -186,9 +186,14 @@ function rewriteSkillFile(skill: string, body: string): boolean {
  * Derive `.codex-plugin/plugin.json` from `.claude-plugin/plugin.json` so the
  * two manifests can't drift: name/version/metadata come from the Claude
  * manifest (which the publish workflow bumps in both files), while the
- * description and `skills` pointer are Codex-specific. Codex plugins have no
- * commands slot, so `plugin/commands/` is Claude-only; the workflow commands
- * ship to Codex only once they become skills upstream.
+ * description, `skills` pointer, and `interface` block are Codex-specific.
+ *
+ * Codex plugins have no commands slot, so `plugin/commands/` is Claude-only.
+ * Codex converts a plugin's commands to skills at install time, but that
+ * conversion drops any command whose generated skill exceeds 4000 bytes, so the
+ * largest workflows do not reach Codex. Restaging them here is not the fix:
+ * `plugin/commands/` is imported from `cardstack/boxel-skills`, which owns the
+ * skill-versus-command split. They reach Codex once they are skills upstream.
  */
 function syncCodexManifest(): boolean {
   const claude = JSON.parse(readFileSync(CLAUDE_MANIFEST_PATH, 'utf8'));
@@ -201,6 +206,18 @@ function syncCodexManifest(): boolean {
     homepage: claude.homepage,
     repository: claude.repository,
     license: claude.license,
+    interface: {
+      displayName: 'Boxel CLI',
+      shortDescription: 'Author and sync Boxel cards, realms, and workspaces',
+      longDescription:
+        'Create and edit Boxel cards, fields, and templates, then sync them ' +
+        'between local disk and a Boxel realm — with skills covering card ' +
+        'authoring, theming, catalog listings, federated search, and realm ' +
+        'indexing diagnostics.',
+      developerName: 'Cardstack',
+      category: 'Developer Tools',
+      websiteURL: 'https://boxel.ai',
+    },
   };
   const next = JSON.stringify(codex, null, 2) + '\n';
   const prior = existsSync(CODEX_MANIFEST_PATH)
