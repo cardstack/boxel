@@ -35,7 +35,7 @@ const PR_LISTING_CREATE = 'pr-listing-create';
 const PR_LISTING_RETRY = 'pr-listing-retry';
 
 type FailedStep = 'collect-files' | 'lint' | 'create-pr-card' | 'github-pr';
-type FileContent = { filename: string; contents: string };
+type FileContent = { filename: string; contents: string; isBinary?: boolean };
 
 interface PrCardData {
   prCardResult: RunCommandResponse;
@@ -303,11 +303,15 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
     });
     requireReady(result, 'collect-submission-files');
 
-    // Binary files bypass the PrCard 512KB size limit; they're committed to
-    // GitHub directly via addContentsToCommit's binaryFiles arg.
+    // Binaries skip lint and are committed to GitHub as base64 blobs. The
+    // collector's isBinary flag says how each file was actually read — a
+    // text-extension FileDef (e.g. a generated .js) still carries base64;
+    // the extension check is only a fallback for pre-flag collect results.
     let allFiles = extractFileContents(result.cardResultString);
-    let binaryFiles = allFiles.filter((f) => isBinaryFilename(f.filename));
-    let textFiles = allFiles.filter((f) => !isBinaryFilename(f.filename));
+    let isBinaryFile = (f: FileContent) =>
+      f.isBinary ?? isBinaryFilename(f.filename);
+    let binaryFiles = allFiles.filter((f) => isBinaryFile(f));
+    let textFiles = allFiles.filter((f) => !isBinaryFile(f));
     log.info('pr-listing-create: files collected', {
       fileCount: allFiles.length,
       binaryCount: binaryFiles.length,
@@ -714,12 +718,20 @@ function extractFileContents(cardResultString?: string | null): FileContent[] {
     if (!Array.isArray(items)) {
       return [];
     }
-    return items.filter(
-      (item: any) =>
-        item &&
-        typeof item.filename === 'string' &&
-        typeof item.contents === 'string',
-    );
+    return items
+      .filter(
+        (item: any) =>
+          item &&
+          typeof item.filename === 'string' &&
+          typeof item.contents === 'string',
+      )
+      .map((item: any) => ({
+        filename: item.filename,
+        contents: item.contents,
+        ...(typeof item.isBinary === 'boolean'
+          ? { isBinary: item.isBinary }
+          : {}),
+      }));
   } catch {
     return [];
   }

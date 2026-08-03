@@ -1307,6 +1307,200 @@ module('command runner', () => {
     );
   });
 
+  test('a binary-flagged text-extension file skips lint and commits as binary', async (assert) => {
+    let workflowCardUrl =
+      'http://localhost:4201/test/SubmissionWorkflowCard/abc-123';
+    let base64Js = Buffer.from('export const model = 1;').toString('base64');
+    let lintedFilenames: string[] = [];
+    let capturingLint: LintSubmissionFilesFn = async (files) => {
+      lintedFilenames.push(...files.map((f) => f.filename));
+      return {
+        passed: true,
+        fixedFiles: files.map((f) => ({
+          filename: f.filename,
+          contents: f.contents ?? '',
+        })),
+        lintErrors: [],
+        fixedFileCount: 0,
+      };
+    };
+
+    let publishedJobs: Array<{
+      args: Record<string, any>;
+      concurrencyGroup: string;
+    }> = [];
+    let queuePublisher: QueuePublisher = {
+      publish: async (job: any) => {
+        publishedJobs.push(job);
+        let command = (job.args.command as string | undefined) ?? '';
+        if (command.endsWith('/collect-submission-files/default')) {
+          return {
+            id: publishedJobs.length,
+            done: Promise.resolve({
+              status: 'ready',
+              cardResultString: JSON.stringify({
+                data: {
+                  attributes: {
+                    allFileContents: [
+                      {
+                        filename: 'catalog/MyListing/listing.json',
+                        contents: '{"data":{"type":"card"}}',
+                        isBinary: false,
+                      },
+                      {
+                        filename: 'catalog/MyListing/exports/model.js',
+                        contents: base64Js,
+                        isBinary: true,
+                      },
+                    ],
+                  },
+                },
+              }),
+            }),
+          } as any;
+        }
+        if (command.endsWith('/create-pr-card/default')) {
+          return {
+            id: publishedJobs.length,
+            done: Promise.resolve({
+              status: 'ready',
+              cardResultString: JSON.stringify({
+                data: {
+                  id: 'http://localhost:4201/submissions/PrCard/pr-1',
+                  attributes: {},
+                },
+              }),
+            }),
+          } as any;
+        }
+        return {
+          id: publishedJobs.length,
+          done: Promise.resolve({ status: 'ready', cardResultString: null }),
+        } as any;
+      },
+      destroy: async () => {},
+    };
+
+    let branchWrites: {
+      files: { path: string; content: string; isBinary?: boolean }[];
+    }[] = [];
+    let githubClient: GitHubClient = {
+      createBranch: async () => ({ ref: 'refs/heads/test', sha: 'abc123' }),
+      writeFileToBranch: async () => ({ commitSha: 'def456' }),
+      writeFilesToBranch: async (params) => {
+        branchWrites.push({ files: params.files });
+        return { commitSha: 'def456' };
+      },
+      openPullRequest: async () => ({
+        number: 1,
+        html_url: 'https://example/pr/1',
+      }),
+    };
+
+    let commandsByRegistrationId = new Map<
+      string,
+      Record<string, PgPrimitive>[]
+    >([
+      [
+        'bot-registration-binary-flag',
+        [
+          {
+            command_filter: {
+              type: 'matrix-event',
+              event_type: 'app.boxel.bot-trigger',
+              content_type: 'pr-listing-create',
+            },
+            command:
+              '@cardstack/catalog/commands/collect-submission-files/default',
+          },
+        ],
+      ],
+    ]);
+    let dbAdapter = {
+      kind: 'pg',
+      notify: async () => {},
+      isClosed: false,
+      execute: async (sql: string, opts?: ExecuteOptions) => {
+        if (sql.includes('FROM bot_commands WHERE bot_id =')) {
+          let registrationId = opts?.bind?.[0];
+          if (typeof registrationId !== 'string') {
+            return [];
+          }
+          return commandsByRegistrationId.get(registrationId) ?? [];
+        }
+        return [];
+      },
+      close: async () => {},
+      getColumnNames: async () => [],
+      withWriteLock: async (_url, fn) => fn(undefined),
+      withUserCostLock: async (_userId, fn) => fn(),
+    } as DBAdapter;
+
+    let commandRunner = makeRunner(
+      dbAdapter,
+      queuePublisher,
+      githubClient,
+      capturingLint,
+    );
+
+    await commandRunner.maybeEnqueueCommand(
+      '@alice:localhost',
+      {
+        type: 'pr-listing-create',
+        realm: 'http://localhost:4201/test/',
+        userId: '@alice:localhost',
+        input: {
+          roomId: '!abc123:localhost',
+          listingId: 'http://localhost:4201/test/Listing/1',
+          listingName: 'My Listing',
+          branchName: 'a1b2c3-my-listing',
+          workflowCardUrl,
+        },
+      },
+      'bot-registration-binary-flag',
+    );
+
+    assert.deepEqual(
+      lintedFilenames,
+      ['catalog/MyListing/listing.json'],
+      'the binary-flagged .js never reaches lint',
+    );
+
+    let createPrCardJob = publishedJobs.find((j) =>
+      (j.args.command as string).endsWith('/create-pr-card/default'),
+    );
+    assert.deepEqual(
+      createPrCardJob!.args.commandInput.fileManifest,
+      [
+        {
+          filename: 'catalog/MyListing/listing.json',
+          size: Buffer.byteLength('{"data":{"type":"card"}}', 'utf8'),
+          kind: 'text',
+        },
+        {
+          filename: 'catalog/MyListing/exports/model.js',
+          size: Buffer.byteLength('export const model = 1;', 'utf8'),
+          kind: 'binary',
+        },
+      ],
+      'manifest records the .js as binary with its decoded byte size',
+    );
+
+    let written = branchWrites[0].files.find((f) =>
+      f.path.endsWith('exports/model.js'),
+    );
+    assert.strictEqual(
+      written?.isBinary,
+      true,
+      'the .js is committed through the binary path (base64 blob), not as text',
+    );
+    assert.strictEqual(
+      written?.content,
+      base64Js,
+      'the committed payload is the untouched base64',
+    );
+  });
+
   test('lint auto-fixes are forwarded to the GitHub commit and the PrCard manifest', async (assert) => {
     let workflowCardUrl =
       'http://localhost:4201/test/SubmissionWorkflowCard/abc-123';
