@@ -7,18 +7,21 @@ import {
   startTestRealmServer,
   stopTestRealmServer,
   createTestHome,
-  reloadProfile,
-  setupTestProfile,
   TEST_REALM_SERVER_URL,
 } from '../helpers/integration.ts';
 import { runBoxel } from '../helpers/run-boxel.ts';
+import { SeedAuthenticator } from '../../src/lib/seed-auth.ts';
 
 // A realm's `skills/<name>/SKILL.md` files are the user-authored skills of the
-// Boxel workspace. `boxel realm pull` exposes them to Claude Code by mirroring
-// them into the surrounding checkout's `.claude/skills/<realm>-<name>/`, so a
-// skill written in the workspace is available in the next agentic session
-// without a second command. The pull goes through the binary; the mirror is
-// inspected on disk.
+// Boxel workspace. `boxel realm pull` exposes them to Claude Code by copying
+// them into `<local-dir>/.claude/skills/<realm>-<name>/`, so a skill written in
+// the workspace is available in the next agentic session without a second
+// command. The pull goes through the binary; the mirror is inspected on disk.
+//
+// Auth is the administrative seed path (the test realm server signs realm JWTs
+// with this seed), which the mirror is indifferent to — it keeps this file free
+// of a Matrix dependency. Profile-based pulls are covered by realm-pull.test.ts.
+const TEST_REALM_SECRET_SEED = `shhh! it's a secret`;
 
 const SKILL_BODY = `---
 name: trip-planner
@@ -30,14 +33,13 @@ boxel:
 Ask for dates and budget first.
 `;
 
-let home: string;
-let cleanupProfile: () => void;
 let realmUrl: string;
 let localDirs: string[] = [];
+let homes: string[] = [];
 
 function makeLocalDir(): string {
-  // realpath so macOS's /var → /private/var symlink doesn't make the expected
-  // and actual link targets differ as strings.
+  // realpath so macOS's /var → /private/var symlink doesn't make expected and
+  // actual paths differ as strings.
   let dir = fs.realpathSync(
     fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-pull-skills-')),
   );
@@ -45,12 +47,26 @@ function makeLocalDir(): string {
   return dir;
 }
 
+function makeEmptyHome(): string {
+  let { home } = createTestHome();
+  homes.push(home);
+  return home;
+}
+
 function mirrorDir(localDir: string): string {
   return path.join(localDir, '.claude', 'skills');
 }
 
+function runBoxelWithSeed(args: string[]): ReturnType<typeof runBoxel> {
+  return runBoxel(args, {
+    home: makeEmptyHome(),
+    env: { BOXEL_REALM_SECRET_SEED: TEST_REALM_SECRET_SEED },
+  });
+}
+
 beforeAll(async () => {
   await startTestRealmServer({
+    registerMatrixUser: false,
     fileSystem: {
       'hello.gts': 'export const hello = "world";\n',
       'skills/trip-planner/SKILL.md': SKILL_BODY,
@@ -61,30 +77,27 @@ beforeAll(async () => {
   });
 
   realmUrl = `${TEST_REALM_SERVER_URL}/test/`;
-
-  let testHome = createTestHome();
-  home = testHome.home;
-  cleanupProfile = testHome.cleanup;
-  await setupTestProfile(testHome.profileManager);
 });
 
 afterAll(async () => {
   for (let dir of localDirs) {
     fs.rmSync(dir, { recursive: true, force: true });
   }
-  cleanupProfile?.();
+  for (let home of homes) {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
   await stopTestRealmServer();
 });
 
 describe('realm pull → .claude/skills (integration)', () => {
-  it("mirrors the realm's skills into the checkout's .claude/skills", async () => {
+  it("mirrors the realm's skills into the local directory's .claude/skills", async () => {
     let localDir = makeLocalDir();
 
-    let res = await runBoxel(['realm', 'pull', realmUrl, localDir], { home });
+    let res = await runBoxelWithSeed(['realm', 'pull', realmUrl, localDir]);
     expect(res.ok, res.stderr).toBe(true);
 
-    // The realm URL's last segment (`test`) prefixes the mirrored directory,
-    // so two realms with same-named skills stay distinguishable.
+    // The realm URL's last segment (`test`) prefixes the mirrored directory, so
+    // two realms with same-named skills stay distinguishable.
     let entry = path.join(mirrorDir(localDir), 'test-trip-planner');
     expect(fs.lstatSync(entry).isDirectory()).toBe(true);
 
@@ -105,10 +118,13 @@ describe('realm pull → .claude/skills (integration)', () => {
   it('leaves .claude alone under --no-claude-skills', async () => {
     let localDir = makeLocalDir();
 
-    let res = await runBoxel(
-      ['realm', 'pull', realmUrl, localDir, '--no-claude-skills'],
-      { home },
-    );
+    let res = await runBoxelWithSeed([
+      'realm',
+      'pull',
+      realmUrl,
+      localDir,
+      '--no-claude-skills',
+    ]);
     expect(res.ok, res.stderr).toBe(true);
 
     expect(fs.existsSync(path.join(localDir, 'skills', 'trip-planner'))).toBe(
@@ -120,18 +136,21 @@ describe('realm pull → .claude/skills (integration)', () => {
   it('does not push the mirror back to the realm', async () => {
     let localDir = makeLocalDir();
 
-    let pull = await runBoxel(['realm', 'pull', realmUrl, localDir], { home });
+    let pull = await runBoxelWithSeed(['realm', 'pull', realmUrl, localDir]);
     expect(pull.ok, pull.stderr).toBe(true);
     expect(fs.existsSync(path.join(localDir, '.claude'))).toBe(true);
 
-    let push = await runBoxel(['realm', 'push', localDir, realmUrl], { home });
+    let push = await runBoxelWithSeed(['realm', 'push', localDir, realmUrl]);
     expect(push.ok, push.stderr).toBe(true);
     expect(push.stdout).not.toContain('.claude');
 
     // The realm must not gain a `.claude` tree — the mirror is local harness
     // wiring, and pushing it would put the same skills back into the realm one
     // directory deeper on the next round trip.
-    let listing = await reloadProfile(home).authedRealmFetch(realmUrl, {
+    let authenticator = new SeedAuthenticator({
+      seed: TEST_REALM_SECRET_SEED,
+    });
+    let listing = await authenticator.authedRealmFetch(realmUrl, {
       headers: { Accept: 'application/vnd.api+json' },
     });
     expect(listing.ok).toBe(true);
