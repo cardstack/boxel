@@ -1354,7 +1354,9 @@ export default class RealmSandboxService extends Service {
         definitionKind,
         ancestorTypes: metadata?.ancestorTypes ?? [],
         displayName,
-        fields: Object.freeze({ ...fieldMetadata }),
+        fields: Object.freeze(
+          this.canonicalOpaqueFieldMetadata(fieldMetadata, trustedFieldTypes),
+        ),
         hasCustomEditTemplate,
         hasCustomIsolatedTemplate,
         authoredTemplateFormats,
@@ -3612,7 +3614,9 @@ export default class RealmSandboxService extends Service {
       }
       typeState.ancestorTypes = metadata.ancestorTypes;
       typeState.displayName = nextDisplayName;
-      typeState.fields = Object.freeze({ ...fields });
+      typeState.fields = Object.freeze(
+        this.canonicalOpaqueFieldMetadata(fields, trustedFieldTypes),
+      );
       typeState.hasCustomEditTemplate = nextHasCustomEditTemplate;
       typeState.hasCustomIsolatedTemplate = nextHasCustomIsolatedTemplate;
       typeState.authoredTemplateFormats = metadata.authoredTemplateFormats;
@@ -3673,6 +3677,32 @@ export default class RealmSandboxService extends Service {
       }),
     );
     return resolved;
+  }
+
+  private canonicalOpaqueFieldMetadata(
+    fields: Record<string, SandboxCardFieldMetadata>,
+    trustedFieldTypes: Record<string, typeof BaseDef>,
+  ): Record<string, SandboxCardFieldMetadata> {
+    return Object.fromEntries(
+      Object.entries(fields).map(([name, field]) => {
+        let trustedType = trustedFieldTypes[name];
+        let trustedModule = trustedType
+          ? trustedSandboxImportIdentity(
+              field.type.module,
+              this.network.resolveImport,
+            )
+          : undefined;
+        return [
+          name,
+          trustedModule
+            ? {
+                ...field,
+                type: { module: trustedModule, name: field.type.name },
+              }
+            : field,
+        ];
+      }),
+    );
   }
 
   private async resolveTrustedFieldType(

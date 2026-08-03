@@ -748,6 +748,68 @@ module('Integration | serialization', function (hooks) {
     );
   });
 
+  test('can omit a trusted field type from an opaque card', async function (assert) {
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'puppy.gts': `
+          import Base64ImageField from 'https://cardstack.com/base/base64-image';
+          import { CardDef, contains, field } from 'https://cardstack.com/base/card-api';
+          import StringField from 'https://cardstack.com/base/string';
+
+          export class Puppy extends CardDef {
+            @field name = contains(StringField);
+            @field picture = contains(Base64ImageField);
+          }
+        `,
+        'Puppy/mango.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              name: 'Mango',
+              picture: {
+                base64: 'data:image/png;base64,iVBORw0K',
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../puppy',
+                name: 'Puppy',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    let store = getService('store');
+    let realmSandbox = getService('realm-sandbox');
+    let cardService = getService('card-service') as CardService;
+    let mango = await store.get(`${testRealmURL}Puppy/mango`);
+    if (!isCardInstance(mango)) {
+      throw new Error('could not load the puppy card');
+    }
+    assert.true(realmSandbox.isOpaqueCard(mango), 'card crossed the boundary');
+    assert.ok(
+      realmSandbox.introspectOpaqueCardFields(mango)?.picture,
+      'trusted field metadata crossed the explicit boundary',
+    );
+    assert.deepEqual(
+      realmSandbox.introspectOpaqueCardType(mango)?.authoredTemplateFormats,
+      [],
+      'missing authored formats explicitly select trusted Base fallbacks',
+    );
+
+    let serialized = await cardService.serializeCard(mango, {
+      omitFields: [Base64ImageField],
+    });
+
+    assert.notOk(
+      serialized.data.attributes?.picture,
+      'the Base64 field is omitted through its trusted boundary identity',
+    );
+  });
+
   test('can update an instance from serialized data', async function (assert) {
     class Person extends CardDef {
       @field firstName = contains(StringField);

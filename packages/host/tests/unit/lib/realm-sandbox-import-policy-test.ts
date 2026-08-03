@@ -23,6 +23,15 @@ module('Unit | realm sandbox import policy', function () {
     assert.true(isBaseRealmModule(baseModule));
     assert.strictEqual(
       trustedSandboxImportIdentity(
+        'https://cardstack.com/base/base64-image',
+        (specifier) => specifier,
+      ),
+      new URL('base64-image', `${ENV.resolvedBaseRealmURL.replace(/\/$/, '')}/`)
+        .href,
+      'the public Base URL spelling maps to the configured trusted realm',
+    );
+    assert.strictEqual(
+      trustedSandboxImportIdentity(
         '@cardstack/base/rich-markdown',
         () => 'https://user-realm.example/@cardstack/base/rich-markdown',
       ),
@@ -31,6 +40,26 @@ module('Unit | realm sandbox import policy', function () {
         `${ENV.resolvedBaseRealmURL.replace(/\/$/, '')}/`,
       ).href,
       'package spelling is canonicalized before a realm-local import map',
+    );
+  });
+
+  test('canonicalizes transpiled package fake-origin imports', function (assert) {
+    assert.strictEqual(
+      trustedSandboxImportIdentity(
+        'https://packages/@ember/template',
+        (specifier) => specifier,
+      ),
+      '@ember/template',
+      'a compiler-emitted runtime import maps to its explicit safe shim',
+    );
+    assert.strictEqual(
+      trustedSandboxImportIdentity(
+        'https://packages/@cardstack/base/base64-image',
+        (specifier) => specifier,
+      ),
+      new URL('base64-image', `${ENV.resolvedBaseRealmURL.replace(/\/$/, '')}/`)
+        .href,
+      'a compiler-emitted Base import maps to the trusted Base realm',
     );
   });
 

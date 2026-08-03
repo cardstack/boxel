@@ -367,6 +367,9 @@ export default class RealmCompartmentModuleRuntime {
     SandboxTrustedExportIdentity
   >();
   private trustedModuleFacades = new Map<string, Record<string, unknown>>();
+  private explicitRuntimeFacades = new Map<string, Record<string, unknown>>();
+  private cardAPIRuntimeFacade!: Record<string, unknown>;
+  private inertHostCommandFacades = new Map<string, Record<string, unknown>>();
   private trustedExports = new Map<string, object>();
   private fieldMetadataByPrototype = new WeakMap<
     object,
@@ -787,14 +790,22 @@ export default class RealmCompartmentModuleRuntime {
           this.loader.shimModule(stylesheet, {});
         }
       } else {
-        let trustedIdentity = this.trustedImportIdentity(dependency);
-        if (!trustedIdentity || this.loader.isModuleLoaded(dependency)) {
+        if (this.isHostCommandImport(dependency)) {
+          this.loader.shimModule(
+            dependency,
+            this.inertHostCommandFacade(dependency),
+          );
           continue;
         }
-        this.loader.shimModule(
-          dependency,
-          this.trustedModuleFacade(trustedIdentity),
-        );
+        let trustedIdentity = this.trustedImportIdentity(dependency);
+        if (!trustedIdentity) {
+          continue;
+        }
+        let facade = this.isCardAPIImport(trustedIdentity)
+          ? this.cardAPIRuntimeFacade
+          : (this.explicitRuntimeFacades.get(trustedIdentity) ??
+            this.trustedModuleFacade(trustedIdentity));
+        this.loader.shimModule(dependency, facade);
       }
     }
 
@@ -811,6 +822,61 @@ export default class RealmCompartmentModuleRuntime {
         }
       },
     };
+  }
+
+  private isHostCommandImport(moduleIdentifier: string): boolean {
+    return [
+      '@cardstack/boxel-host/commands/',
+      '@cardstack/boxel-host/tools/',
+      'https://packages/@cardstack/boxel-host/commands/',
+      'https://packages/@cardstack/boxel-host/tools/',
+    ].some((prefix) => moduleIdentifier.startsWith(prefix));
+  }
+
+  private isCardAPIImport(moduleIdentifier: string): boolean {
+    if (
+      moduleIdentifier === '@cardstack/base/card-api' ||
+      moduleIdentifier === 'https://cardstack.com/base/card-api'
+    ) {
+      return true;
+    }
+    try {
+      return /\/card-api(?:\.gts)?$/.test(new URL(moduleIdentifier).pathname);
+    } catch {
+      return false;
+    }
+  }
+
+  private inertHostCommandFacade(
+    moduleIdentifier: string,
+  ): Record<string, unknown> {
+    let cached = this.inertHostCommandFacades.get(moduleIdentifier);
+    if (cached) {
+      return cached;
+    }
+    let commandTokens = new Map<string, object>();
+    let facade = new Proxy(Object.create(null) as Record<string, unknown>, {
+      get: (_target, property) => {
+        if (typeof property !== 'string') {
+          return undefined;
+        }
+        let token = commandTokens.get(property);
+        if (!token) {
+          token = class SandboxHostCommandToken {
+            execute(): never {
+              throw new Error(
+                `Sandbox host command ${moduleIdentifier}#${property} requires an explicit host capability`,
+              );
+            }
+          };
+          commandTokens.set(property, token);
+        }
+        return token;
+      },
+    });
+    harden(facade);
+    this.inertHostCommandFacades.set(moduleIdentifier, facade);
+    return facade;
   }
 
   private trustedImportIdentity(moduleIdentifier: string): string | undefined {
@@ -841,36 +907,42 @@ export default class RealmCompartmentModuleRuntime {
   }
 
   private installRuntimeFacades() {
+    this.cardAPIRuntimeFacade = this.cardAPIFacade(
+      'https://cardstack.com/base/card-api',
+    );
     this.loader.shimModule(
       'https://cardstack.com/base/card-api',
-      this.cardAPIFacade('https://cardstack.com/base/card-api'),
+      this.cardAPIRuntimeFacade,
     );
     this.loader.shimModule(
       '@cardstack/base/card-api',
-      this.cardAPIFacade('@cardstack/base/card-api'),
+      this.cardAPIRuntimeFacade,
     );
-    this.loader.shimModule(
+    this.installExplicitRuntimeFacade(
       '@glimmer/component',
       Object.freeze({ default: this.componentBase() }),
     );
-    this.loader.shimModule('@ember/component', this.emberComponentFacade());
-    this.loader.shimModule(
+    this.installExplicitRuntimeFacade(
+      '@ember/component',
+      this.emberComponentFacade(),
+    );
+    this.installExplicitRuntimeFacade(
       '@ember/template-factory',
       this.templateFactoryFacade(),
     );
-    this.loader.shimModule(
+    this.installExplicitRuntimeFacade(
       '@ember/modifier',
       harden({ on: this.trustedExport('@ember/modifier', 'on') }),
     );
-    this.loader.shimModule(
+    this.installExplicitRuntimeFacade(
       '@ember/object',
       this.decoratorFacade('@ember/object', ['action']),
     );
-    this.loader.shimModule(
+    this.installExplicitRuntimeFacade(
       '@glimmer/tracking',
       this.decoratorFacade('@glimmer/tracking', ['cached', 'tracked']),
     );
-    this.loader.shimModule(
+    this.installExplicitRuntimeFacade(
       '@ember/helper',
       harden(
         Object.fromEntries(
@@ -881,10 +953,18 @@ export default class RealmCompartmentModuleRuntime {
         ),
       ),
     );
-    this.loader.shimModule(
+    this.installExplicitRuntimeFacade(
       '@cardstack/runtime-common',
       this.runtimeCommonFacade(),
     );
+  }
+
+  private installExplicitRuntimeFacade(
+    moduleIdentifier: string,
+    facade: Record<string, unknown>,
+  ) {
+    this.explicitRuntimeFacades.set(moduleIdentifier, facade);
+    this.loader.shimModule(moduleIdentifier, facade);
   }
 
   private runtimeCommonFacade() {

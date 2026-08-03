@@ -257,6 +257,81 @@ module('Unit | realm compartment module runtime', function () {
     assert.false(metadata.hasCustomEditTemplate);
   });
 
+  test('legacy host command imports remain inert while card metadata is evaluated', async function (assert) {
+    let personID = 'https://realm.example/cards/person.js';
+    let petID = 'https://realm.example/cards/pet.js';
+    let personSource = `
+      import HostCommand from '@cardstack/boxel-host/commands/example';
+      import { CardDef } from 'https://cardstack.com/base/card-api';
+
+      export class Person extends CardDef {
+        static command = HostCommand;
+
+        runCommand() {
+          return new HostCommand().execute();
+        }
+      }
+    `;
+    let petSource = `
+      import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+      import { Person } from './person.js';
+
+      export class Pet extends CardDef {
+        static ownerType = Person;
+        static isolated = class Isolated extends Component {};
+      }
+    `;
+    let runtime = runtimeFor({
+      [personID]: personSource,
+      [petID]: petSource,
+    });
+
+    let metadata = await runtime.evaluateCardTypeMetadata(petID, 'Pet');
+
+    assert.deepEqual(
+      metadata.authoredTemplateFormats,
+      ['isolated'],
+      'an authority-free command token preserves the explicit Base fallback decision',
+    );
+    await assert.rejects(
+      runtime.invokeCardMethod(personID, 'Person', {}, 'runCommand'),
+      /requires an explicit host capability/,
+      'evaluating metadata does not grant authority to execute the command',
+    );
+  });
+
+  test('captures field metadata from a transpiled GTS decorator', async function (assert) {
+    let moduleID = 'https://realm.example/cards/puppy.gts';
+    let source = await transpileJS(
+      `
+        import Base64ImageField from 'https://cardstack.com/base/base64-image';
+        import { CardDef, contains, field } from 'https://cardstack.com/base/card-api';
+
+        export class Puppy extends CardDef {
+          @field picture = contains(Base64ImageField);
+        }
+      `,
+      '/puppy.gts',
+    );
+    let runtime = runtimeFor({ [moduleID]: source });
+
+    let metadata = await runtime.evaluateCardTypeMetadata(moduleID, 'Puppy');
+
+    assert.strictEqual(
+      JSON.stringify(metadata.fields),
+      JSON.stringify({
+        picture: {
+          kind: 'contains',
+          type: {
+            module: 'https://cardstack.com/base/base64-image',
+            name: 'default',
+          },
+        },
+      }),
+      'the lowered decorator publishes an inert field descriptor',
+    );
+  });
+
   test('reports the explicit card-or-field definition kind', async function (assert) {
     let moduleID = `${MODULE_ID}?definition-kind`;
     let source = `

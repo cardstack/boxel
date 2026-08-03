@@ -2,6 +2,8 @@ import ENV from '@cardstack/host/config/environment';
 
 type ImportResolver = (moduleIdentifier: string) => string;
 
+const PACKAGES_FAKE_ORIGIN = 'https://packages/';
+
 export const trustedHostRealmSpecifierPrefixes = [
   'https://cardstack.com/base/',
   '@cardstack/base/',
@@ -11,6 +13,12 @@ export const trustedHostRealmSpecifierPrefixes = [
 
 function withTrailingSlash(value: string): string {
   return value.endsWith('/') ? value : `${value}/`;
+}
+
+function packageSpecifier(moduleIdentifier: string): string {
+  return moduleIdentifier.startsWith(PACKAGES_FAKE_ORIGIN)
+    ? moduleIdentifier.slice(PACKAGES_FAKE_ORIGIN.length)
+    : moduleIdentifier;
 }
 
 function hasUnsafePathSegment(moduleIdentifier: string): boolean {
@@ -50,6 +58,7 @@ export function isBaseRealmModule(moduleIdentifier: string): boolean {
   if (hasUnsafePathSegment(moduleIdentifier)) {
     return false;
   }
+  moduleIdentifier = packageSpecifier(moduleIdentifier);
   return (
     moduleIdentifier.startsWith('https://cardstack.com/base/') ||
     moduleIdentifier.startsWith('@cardstack/base/') ||
@@ -61,6 +70,7 @@ export function isCatalogRealmModule(moduleIdentifier: string): boolean {
   if (hasUnsafePathSegment(moduleIdentifier)) {
     return false;
   }
+  moduleIdentifier = packageSpecifier(moduleIdentifier);
   return (
     moduleIdentifier.startsWith('https://cardstack.com/catalog/') ||
     moduleIdentifier.startsWith('@cardstack/catalog/') ||
@@ -81,6 +91,7 @@ export const trustedSandboxRuntimeSpecifiers = [
   '@ember/helper',
   '@ember/modifier',
   '@glimmer/tracking',
+  '@ember/template',
   '@cardstack/runtime-common',
 ] as const;
 
@@ -95,6 +106,7 @@ export function isTrustedSandboxImport(moduleIdentifier: string): boolean {
   if (hasUnsafePathSegment(moduleIdentifier)) {
     return false;
   }
+  moduleIdentifier = packageSpecifier(moduleIdentifier);
   return (
     isTrustedHostRealmModule(moduleIdentifier) ||
     trustedSandboxRuntimeSpecifiers.some(
@@ -120,6 +132,7 @@ export function trustedSandboxImportIdentity(
   if (hasUnsafePathSegment(moduleIdentifier)) {
     return undefined;
   }
+  moduleIdentifier = packageSpecifier(moduleIdentifier);
   if (
     trustedSandboxRuntimeSpecifiers.some(
       (specifier) => moduleIdentifier === specifier,
@@ -136,18 +149,28 @@ export function trustedSandboxImportIdentity(
   // workspace import maps may otherwise resolve `@cardstack/base/*` beneath
   // the user realm, turning a trusted standard-library import into a remote
   // fetch (or, worse, a realm-local lookalike).
-  if (moduleIdentifier.startsWith('@cardstack/base/')) {
+  if (
+    moduleIdentifier.startsWith('@cardstack/base/') ||
+    moduleIdentifier.startsWith('https://cardstack.com/base/')
+  ) {
+    let prefix = moduleIdentifier.startsWith('@cardstack/base/')
+      ? '@cardstack/base/'
+      : 'https://cardstack.com/base/';
     return new URL(
-      moduleIdentifier.slice('@cardstack/base/'.length),
+      moduleIdentifier.slice(prefix.length),
       withTrailingSlash(ENV.resolvedBaseRealmURL),
     ).href;
   }
   if (
     ENV.resolvedCatalogRealmURL &&
-    moduleIdentifier.startsWith('@cardstack/catalog/')
+    (moduleIdentifier.startsWith('@cardstack/catalog/') ||
+      moduleIdentifier.startsWith('https://cardstack.com/catalog/'))
   ) {
+    let prefix = moduleIdentifier.startsWith('@cardstack/catalog/')
+      ? '@cardstack/catalog/'
+      : 'https://cardstack.com/catalog/';
     return new URL(
-      moduleIdentifier.slice('@cardstack/catalog/'.length),
+      moduleIdentifier.slice(prefix.length),
       withTrailingSlash(ENV.resolvedCatalogRealmURL),
     ).href;
   }
