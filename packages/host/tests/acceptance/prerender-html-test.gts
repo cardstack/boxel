@@ -558,10 +558,6 @@ module('Acceptance | prerender | html', function (hooks) {
       'isolated',
       'isolated render declares the serialized format',
     );
-    assert.true(
-      island?.innerHTML.includes('<!--%+b:'),
-      'isolated render includes Glimmer serialization markers',
-    );
     assert
       .dom(
         `[data-test-card="${testRealmURL}Cat/paper"][data-test-card-format="isolated"] [data-test-field="cardInfo-name"]`,

@@ -896,6 +896,10 @@ module('Acceptance | host mode tests', function (hooks) {
       format: 'isolated',
       ...buildCardIslandContext(store, card),
     });
+    assert.true(
+      islandHTML.includes('<!--%+b:'),
+      'the server CardIsland includes Glimmer serialization markers',
+    );
     let fixture = document.createElement('template');
     fixture.innerHTML = islandHTML;
     let island = fixture.content.firstElementChild as HTMLElement | null;
