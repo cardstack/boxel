@@ -35,6 +35,13 @@ interface EnvironmentDefaults {
   domain: string;
   matrixUrl: string;
   realmServerUrl: string;
+  // Only set where the app is served from a different origin than the realm
+  // server. Deployed environments serve both from one, so the sign-in page is
+  // reachable at realmServerUrl and this stays unset. Local dev splits them
+  // across ports, and the origin matters: the browser session lives in
+  // origin-scoped storage, so a page loaded from the realm server's port
+  // wouldn't see the session established on the app's.
+  appUrl?: string;
 }
 
 const MENU_ENVIRONMENTS: Record<
@@ -55,6 +62,8 @@ const MENU_ENVIRONMENTS: Record<
     domain: 'localhost',
     matrixUrl: 'http://localhost:8008',
     realmServerUrl: 'https://localhost:4201/',
+    // The host vite dev server, which is where local dev signs in.
+    appUrl: 'https://localhost:4200/',
   },
 };
 
@@ -429,6 +438,7 @@ async function addProfile(
   let domain: string;
   let defaultMatrixUrl: string;
   let defaultRealmUrl: string;
+  let defaultAppUrl: string | undefined;
 
   if (envDefaults) {
     console.log(
@@ -437,20 +447,22 @@ async function addProfile(
     domain = envDefaults.domain;
     defaultMatrixUrl = envDefaults.matrixUrl;
     defaultRealmUrl = envDefaults.realmServerUrl;
+    defaultAppUrl = envDefaults.appUrl;
   } else {
     const menuResult = await promptEnvironmentMenu();
     domain = menuResult.domain;
     defaultMatrixUrl = menuResult.matrixUrl;
     defaultRealmUrl = menuResult.realmServerUrl;
+    defaultAppUrl = menuResult.appUrl;
   }
 
-  // The realm server serves the host app, so it also serves the sign-in page —
-  // `--host-url` is only for a setup that splits them.
+  // The realm server serves the app, so it serves the sign-in page too wherever
+  // the two share an origin — which is everywhere except local dev.
   let outcome: AddProfileOutcome = useBrowser
     ? await addProfileViaBrowser(
         manager,
         defaultMatrixUrl,
-        hostUrlOverride ?? defaultRealmUrl,
+        hostUrlOverride ?? defaultAppUrl ?? defaultRealmUrl,
         defaultRealmUrl,
       )
     : { status: 'usePassword' };
