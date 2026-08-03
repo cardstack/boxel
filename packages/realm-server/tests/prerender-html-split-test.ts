@@ -886,12 +886,22 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('the pass persists the visit meta as render diagnostics, keyed by prerenderHtmlRequestId', async function (assert) {
+    test('the pass persists visit diagnostics and explicit metadata deps', async function (assert) {
       let cardURL = `${testRealm}pine.json`;
       let cardJSON = JSON.stringify({
         data: {
           type: 'card',
-          meta: { adoptsFrom: { module: `${testRealm}pine`, name: 'Pine' } },
+          meta: {
+            adoptsFrom: { module: `${testRealm}pine`, name: 'Pine' },
+            fields: {
+              polymorphicChild: {
+                adoptsFrom: {
+                  module: `${testRealm}polymorphic-child`,
+                  name: 'PolymorphicChild',
+                },
+              },
+            },
+          },
         },
       });
       let prerenderer: Prerenderer = {
@@ -965,6 +975,10 @@ module(basename(import.meta.filename), function () {
       };
       let instanceRow = await productionRow(cardURL, 'instance');
       assert.deepEqual(instanceRow.diagnostics, expected);
+      assert.ok(
+        instanceRow.deps?.includes(`${testRealm}polymorphic-child`),
+        'the split pass retains explicit polymorphic metadata dependencies that the render did not report',
+      );
       let fileRow = await productionRow(cardURL, 'file');
       assert.deepEqual(fileRow.diagnostics, expected);
     });
