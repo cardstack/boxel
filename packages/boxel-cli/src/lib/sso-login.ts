@@ -81,6 +81,14 @@ export interface LoopbackCallback {
 
 const MAX_CALLBACK_BODY_BYTES = 8 * 1024;
 
+// `Connection: close` so the browser doesn't hold the socket open after reading
+// the page. A kept-alive socket outlives `server.close()` and keeps the CLI
+// running after it has nothing left to do.
+const HTML_RESPONSE_HEADERS = {
+  'Content-Type': 'text/html',
+  Connection: 'close',
+};
+
 async function readBody(req: IncomingMessage): Promise<string> {
   const chunks: Buffer[] = [];
   let size = 0;
@@ -115,7 +123,7 @@ export async function startLoopbackCallback(opts?: {
   resultPromise.catch(() => {});
 
   const fail = (res: ServerResponse, shown: string, thrown: string) => {
-    res.writeHead(400, { 'Content-Type': 'text/html' });
+    res.writeHead(400, HTML_RESPONSE_HEADERS);
     res.end(errorPage(shown));
     rejectResult(new Error(thrown));
   };
@@ -124,7 +132,7 @@ export async function startLoopbackCallback(opts?: {
     void (async () => {
       const requestUrl = new URL(req.url ?? '/', 'http://127.0.0.1');
       if (requestUrl.pathname !== CALLBACK_PATH) {
-        res.writeHead(404).end();
+        res.writeHead(404, { Connection: 'close' }).end();
         return;
       }
 
@@ -166,7 +174,7 @@ export async function startLoopbackCallback(opts?: {
           );
           return;
         }
-        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.writeHead(200, HTML_RESPONSE_HEADERS);
         res.end(successPage());
         resolveResult({
           kind: 'session',
@@ -187,7 +195,7 @@ export async function startLoopbackCallback(opts?: {
         return;
       }
 
-      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.writeHead(200, HTML_RESPONSE_HEADERS);
       res.end(successPage());
       resolveResult({ kind: 'loginToken', loginToken });
     })();
@@ -208,6 +216,11 @@ export async function startLoopbackCallback(opts?: {
       timer = undefined;
     }
     server.close();
+    // `close()` only stops listening. A browser keeps its connection alive after
+    // the response, and may have opened speculative ones it never used — each
+    // holds the event loop open, so the CLI would sit there having already
+    // finished. Idle sockets only, so a response still in flight isn't cut off.
+    server.closeIdleConnections();
   };
 
   return {

@@ -185,6 +185,20 @@ describe('startLoopbackCallback', () => {
     await expect(callback.waitForResult()).rejects.toThrow(/--no-browser/);
   });
 
+  // A kept-alive socket outlives server.close() and would leave the CLI running
+  // with nothing left to do.
+  it('asks the browser not to hold the connection open', async () => {
+    const callback = await startLoopbackCallback();
+    const redirect = new URL(callback.redirectUrl);
+    const pending = callback.waitForResult();
+
+    redirect.searchParams.set('loginToken', 'syt_token');
+    const response = await fetch(redirect.href);
+
+    expect(response.headers.get('connection')).toBe('close');
+    await pending;
+  });
+
   it('stops listening once the flow settles', async () => {
     const callback = await startLoopbackCallback({ timeoutMs: 20 });
     const { redirectUrl } = callback;
