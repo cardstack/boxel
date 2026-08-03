@@ -86,7 +86,7 @@ export interface PullOptions {
   /**
    * Mirror the realm's `skills/` directory into the surrounding checkout's
    * `.claude/skills/` so realm-authored skills are available to Claude Code
-   * (default: true; `BOXEL_NO_CLAUDE_SKILLS=1` also disables it).
+   * (default: true; `BOXEL_DISABLE_CLAUDE_SKILLS_SYNC=1` also disables it).
    */
   claudeSkills?: boolean;
 }
@@ -111,7 +111,7 @@ export interface SyncOptions {
   /**
    * Mirror the realm's `skills/` directory into the surrounding checkout's
    * `.claude/skills/` so realm-authored skills are available to Claude Code
-   * (default: true; `BOXEL_NO_CLAUDE_SKILLS=1` also disables it).
+   * (default: true; `BOXEL_DISABLE_CLAUDE_SKILLS_SYNC=1` also disables it).
    */
   claudeSkills?: boolean;
   /**

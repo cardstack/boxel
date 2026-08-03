@@ -163,12 +163,10 @@ export class RealmWatcher extends RealmSyncBase {
   }
 
   /**
-   * Refresh `.claude/skills/` from the checkout's `skills/` directory. Run at
+   * Refresh `.claude/skills/` from the local `skills/` directory. Run at
    * startup so a realm that already has skills on disk exposes them
-   * immediately, and after any flush that touched `skills/` so an added or
-   * removed skill takes effect while the watcher runs. Copies of the mirror
-   * (the symlink fallback) are what make the post-flush pass necessary; a
-   * symlinked entry already reflects the download.
+   * immediately, and after any flush that touched `skills/` so a skill added,
+   * changed, or removed on the realm takes effect while the watcher runs.
    */
   private async reconcileSkills(): Promise<void> {
     await reconcileSkillsMirror({
@@ -447,7 +445,7 @@ export interface WatchRealmsOptions {
   /**
    * Mirror the realm's `skills/` directory into the surrounding checkout's
    * `.claude/skills/` so realm-authored skills are available to Claude Code.
-   * On by default; `--no-claude-skills` (or `BOXEL_NO_CLAUDE_SKILLS=1`) opts
+   * On by default; `--no-claude-skills` (or `BOXEL_DISABLE_CLAUDE_SKILLS_SYNC=1`) opts
    * out.
    */
   claudeSkills?: boolean;
@@ -771,7 +769,7 @@ export function registerStartCommand(watch: Command): void {
     )
     .option(
       '--no-claude-skills',
-      "Skip mirroring the realm's skills/ directory into the checkout's .claude/skills/ (env: BOXEL_NO_CLAUDE_SKILLS=1)",
+      "Skip mirroring the realm's skills/ directory into the checkout's .claude/skills/ (env: BOXEL_DISABLE_CLAUDE_SKILLS_SYNC=1)",
     )
     .action(
       async (

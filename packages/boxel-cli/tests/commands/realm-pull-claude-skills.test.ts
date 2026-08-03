@@ -107,7 +107,7 @@ beforeEach(() => {
 
 afterEach(() => {
   fs.rmSync(localDir, { recursive: true, force: true });
-  delete process.env.BOXEL_NO_CLAUDE_SKILLS;
+  delete process.env.BOXEL_DISABLE_CLAUDE_SKILLS_SYNC;
 });
 
 describe('realm pull → .claude/skills', () => {
@@ -177,10 +177,25 @@ describe('realm pull → .claude/skills', () => {
     expect(fs.existsSync(path.join(localDir, '.claude'))).toBe(false);
   });
 
-  it('skips the mirror when BOXEL_NO_CLAUDE_SKILLS is set', async () => {
-    process.env.BOXEL_NO_CLAUDE_SKILLS = '1';
+  // Both spellings are honoured: the repo sets this kind of flag with `1` in
+  // some places and `true` in others, and an opt-out that quietly ignores the
+  // other one is a bad way to discover which.
+  it.each(['1', 'true', 'TRUE'])(
+    'skips the mirror when BOXEL_DISABLE_CLAUDE_SKILLS_SYNC=%s',
+    async (value) => {
+      process.env.BOXEL_DISABLE_CLAUDE_SKILLS_SYNC = value;
+      await runPull();
+
+      expect(fs.existsSync(path.join(localDir, '.claude'))).toBe(false);
+    },
+  );
+
+  it('mirrors when the opt-out is set to something falsy', async () => {
+    process.env.BOXEL_DISABLE_CLAUDE_SKILLS_SYNC = '0';
     await runPull();
 
-    expect(fs.existsSync(path.join(localDir, '.claude'))).toBe(false);
+    expect(
+      fs.existsSync(path.join(mirrorDir(), 'experiments-trip-planner')),
+    ).toBe(true);
   });
 });

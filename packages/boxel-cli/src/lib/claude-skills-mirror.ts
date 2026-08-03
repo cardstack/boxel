@@ -77,9 +77,16 @@ export interface MirrorRealmSkillsOptions {
   dryRun?: boolean;
 }
 
-/** Env opt-out, for a checkout where the mirror is unwanted. */
+/**
+ * Env opt-out, for a checkout where the mirror is unwanted. `1` and `true` are
+ * both accepted (case-insensitively): the repo spells this kind of flag both
+ * ways — `BOXEL_DISABLE_PATH_WARNING === '1'` next to
+ * `REALM_REGISTRY_SKIP_ORPHAN_CHECK === 'true'` — and an opt-out that silently
+ * ignores the other spelling is a bad way to find that out.
+ */
 export function isSkillsMirrorDisabled(): boolean {
-  return process.env.BOXEL_NO_CLAUDE_SKILLS === '1';
+  const value = process.env.BOXEL_DISABLE_CLAUDE_SKILLS_SYNC?.toLowerCase();
+  return value === '1' || value === 'true';
 }
 
 /**

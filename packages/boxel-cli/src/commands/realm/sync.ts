@@ -530,7 +530,7 @@ export interface SyncCommandOptions {
   /**
    * Mirror the realm's `skills/` directory into the surrounding checkout's
    * `.claude/skills/` so realm-authored skills are available to Claude Code.
-   * On by default; `--no-claude-skills` (or `BOXEL_NO_CLAUDE_SKILLS=1`) opts
+   * On by default; `--no-claude-skills` (or `BOXEL_DISABLE_CLAUDE_SKILLS_SYNC=1`) opts
    * out.
    */
   claudeSkills?: boolean;
@@ -583,7 +583,7 @@ export function registerSyncCommand(realm: Command): Command {
     .option('--dry-run', 'Preview without making changes')
     .option(
       '--no-claude-skills',
-      "Skip mirroring the realm's skills/ directory into the checkout's .claude/skills/ (env: BOXEL_NO_CLAUDE_SKILLS=1)",
+      "Skip mirroring the realm's skills/ directory into the checkout's .claude/skills/ (env: BOXEL_DISABLE_CLAUDE_SKILLS_SYNC=1)",
     )
     .option(
       '--realm-secret-seed',

@@ -53,7 +53,7 @@ A workspace's user-authored skills live in the realm as `skills/<name>/SKILL.md`
 - Entries are copies, refreshed whenever the realm's version changes. **Edit a skill in the realm checkout's `skills/<name>/`, not in `.claude/skills/`** — the checkout is what `push` and `sync` carry back to the realm. A copy that was edited in place is reported and left alone rather than overwritten, so the change can be moved to the realm.
 - A skill renamed or deleted in the realm has its mirror entry removed on the next run. A `.claude/skills/` directory boxel did not write is never touched.
 - `.claude/` is ignored by every direction of sync, so the mirror is never pushed into the realm.
-- Pass `--no-claude-skills` (or set `BOXEL_NO_CLAUDE_SKILLS=1`) to skip it.
+- Pass `--no-claude-skills` (or set `BOXEL_DISABLE_CLAUDE_SKILLS_SYNC=1`) to skip it.
 
 If `watch` is starting in a directory that already mirrors the realm but has no `.boxel-sync.json` (e.g. populated by hand, by `git clone`, or by a different tool), run `boxel realm pull` first. Without a manifest every existing file looks "diverged" and the first poll warns about each one until reconciled.
 
@@ -79,7 +79,7 @@ Bidirectional sync between a local directory and a Boxel realm
 - `--prefer-newest` — Resolve conflicts by keeping newest version
 - `--delete` — Sync deletions both ways
 - `--dry-run` — Preview without making changes
-- `--no-claude-skills` — Skip mirroring the realm's skills/ directory into the checkout's .claude/skills/ (env: BOXEL_NO_CLAUDE_SKILLS=1)
+- `--no-claude-skills` — Skip mirroring the realm's skills/ directory into the checkout's .claude/skills/ (env: BOXEL_DISABLE_CLAUDE_SKILLS_SYNC=1)
 - `--realm-secret-seed` — Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)
 
 ### `boxel realm watch start <realm-url> <local-dir>`
@@ -97,7 +97,7 @@ Start watching a Boxel realm for server-side changes and pull them into a local 
 - `-d, --debounce <seconds>` — Seconds to wait after a burst of changes before applying them
 - `--realm-secret-seed` — Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)
 - `--overwrite-local` — Overwrite local files when the remote changes. Default: skip + warn when the local copy diverges from the sync manifest.
-- `--no-claude-skills` — Skip mirroring the realm's skills/ directory into the checkout's .claude/skills/ (env: BOXEL_NO_CLAUDE_SKILLS=1)
+- `--no-claude-skills` — Skip mirroring the realm's skills/ directory into the checkout's .claude/skills/ (env: BOXEL_DISABLE_CLAUDE_SKILLS_SYNC=1)
 
 ### `boxel realm watch stop`
 
@@ -132,7 +132,7 @@ Pull files from a Boxel realm to a local directory
 
 - `--delete` — Delete local files that do not exist in the realm
 - `--dry-run` — Show what would be done without making changes
-- `--no-claude-skills` — Skip mirroring the realm's skills/ directory into the checkout's .claude/skills/ (env: BOXEL_NO_CLAUDE_SKILLS=1)
+- `--no-claude-skills` — Skip mirroring the realm's skills/ directory into the checkout's .claude/skills/ (env: BOXEL_DISABLE_CLAUDE_SKILLS_SYNC=1)
 - `--realm-secret-seed` — Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)
 
 ### `boxel realm create <realm-name> <display-name>`
