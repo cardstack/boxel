@@ -36,6 +36,7 @@ const required = [
   'jq-keywords-guard',
   'authorization-kernel',
   'boxel-source-mutation-adapter',
+  'boxel-source-structural-lowering',
 ];
 for (const r of required) {
   ok(

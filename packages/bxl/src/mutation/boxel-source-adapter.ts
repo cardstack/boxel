@@ -16,6 +16,7 @@ export interface BxlBoxelSourceFieldDefinition<CodeReference = unknown> {
   isPrimitive: boolean;
   isComputed: boolean;
   fieldOrCard: CodeReference;
+  serializerName?: string;
   query?: unknown;
 }
 
@@ -80,6 +81,31 @@ export interface BxlCardSourceCommitOptions
   extends BxlCardSourceProjectionOptions {
   /** Format a logical Card ID for `relationships[path].links.self`. */
   formatReference?: (cardId: string, field: BxlMutationPath) => string;
+  /**
+   * Supply Boxel's sidecars when a mutation creates or replaces a contained
+   * value whose runtime FieldDef cannot be inferred from plain JSON. This is
+   * required for new polymorphic values such as Spec.containedExamples.
+   * Returned relationship keys are local to the contained value and are
+   * hoisted into the resource's dotted relationship map.
+   */
+  serializeContainedValue?: (
+    context: BxlCardSourceContainedValueContext,
+  ) => BxlCardSourceContainedValueSerialization | undefined;
+}
+
+export interface BxlCardSourceContainedValueContext {
+  operation: 'insert' | 'replace';
+  path: BxlMutationPath;
+  value: BxlMutationJson;
+  field: BxlMutationField;
+}
+
+export interface BxlCardSourceContainedValueSerialization {
+  meta?: Record<string, unknown>;
+  relationships?: Record<
+    string,
+    BxlCardSourceRelationship | BxlCardSourceRelationship[]
+  >;
 }
 
 export interface BxlMutateCardSourceOptions
@@ -192,6 +218,11 @@ async function schemaForDefinition<CodeReference>(
       ...(label ? { label, displayName: label } : {}),
       fieldType: field.type,
       writable: key !== 'id' && field.query === undefined,
+      boxelSource: {
+        isPrimitive: field.isPrimitive,
+        fieldOrCard: cloneJson(field.fieldOrCard),
+        ...(field.serializerName ? { serializerName: field.serializerName } : {}),
+      },
     };
 
     if (field.type === 'linksTo' || field.type === 'linksToMany') {
@@ -543,6 +574,31 @@ function resolveSourceField(
   return { field, relationshipPath, item };
 }
 
+function sourceFieldIsPrimitive(field: BxlMutationField): boolean {
+  if (field.boxelSource) return field.boxelSource.isPrimitive;
+  if (field.fieldType === 'containsMany') return field.item === undefined;
+  if (field.fieldType === 'contains') return field.fields === undefined;
+  return false;
+}
+
+function isCompositeContained(field: BxlMutationField): boolean {
+  return (
+    (field.fieldType === 'contains' || field.fieldType === 'containsMany') &&
+    !sourceFieldIsPrimitive(field)
+  );
+}
+
+function valueAt(root: unknown, path: BxlMutationPath): unknown {
+  let value = root;
+  for (const part of path) {
+    if ((!isRecord(value) && !Array.isArray(value)) || !(part in value)) {
+      return undefined;
+    }
+    value = (value as Record<string | number, unknown>)[part];
+  }
+  return value;
+}
+
 function recordAt(
   root: Record<string, unknown>,
   path: BxlMutationPath,
@@ -557,7 +613,7 @@ function recordAt(
   let value: unknown = root;
   for (const part of path.slice(0, -1)) {
     if (typeof part === 'number') {
-      if (!Array.isArray(value) || !isRecord(value[part])) {
+      if (!Array.isArray(value) || value[part] === undefined) {
         throw sourceError(
           'commit',
           'card-source-path-missing',
@@ -594,23 +650,507 @@ function recordAt(
   };
 }
 
-function assertScalarContainedWrite(
+function arrayAt(
+  root: Record<string, unknown>,
+  path: BxlMutationPath,
+): unknown[] {
+  const value = valueAt(root, path);
+  if (!Array.isArray(value)) {
+    throw sourceError(
+      'commit',
+      'card-source-collection-shape',
+      `Mutation collection ${JSON.stringify(path)} is not an array in card source.`,
+    );
+  }
+  return value;
+}
+
+interface MetaSlot {
+  fields?: Record<string, unknown>;
+  field: BxlMutationField;
+  name: string;
+}
+
+function resourceMetaFields(
+  resource: BxlCardSourceResource,
+  create: boolean,
+): Record<string, unknown> | undefined {
+  if (resource.meta === undefined) {
+    if (!create) return undefined;
+    resource.meta = {};
+  }
+  if (!isRecord(resource.meta)) {
+    throw sourceError(
+      'commit',
+      'card-source-meta-shape',
+      'Card source data.meta must be an object.',
+    );
+  }
+  let fields = resource.meta.fields;
+  if (fields === undefined) {
+    if (!create) return undefined;
+    fields = {};
+    resource.meta.fields = fields;
+  }
+  if (!isRecord(fields)) {
+    throw sourceError(
+      'commit',
+      'card-source-meta-fields-shape',
+      'Card source data.meta.fields must be an object.',
+    );
+  }
+  return fields;
+}
+
+function childMetaFields(
+  meta: Record<string, unknown>,
+  create: boolean,
+): Record<string, unknown> | undefined {
+  let fields = meta.fields;
+  if (fields === undefined) {
+    if (!create) return undefined;
+    fields = {};
+    meta.fields = fields;
+  }
+  if (!isRecord(fields)) {
+    throw sourceError(
+      'commit',
+      'card-source-nested-meta-fields-shape',
+      'Contained Boxel metadata fields must be an object.',
+    );
+  }
+  return fields;
+}
+
+function metaSlotForField(
+  resource: BxlCardSourceResource,
+  path: BxlMutationPath,
+  schema: BxlMutationSchema,
+  create: boolean,
+): MetaSlot {
+  if (path.length === 0 || typeof path.at(-1) !== 'string') {
+    throw sourceError(
+      'commit',
+      'card-source-meta-path-invalid',
+      `Expected a Field path, received ${JSON.stringify(path)}.`,
+    );
+  }
+  let currentSchema = schema;
+  let fields = resourceMetaFields(resource, create);
+  let index = 0;
+  while (index < path.length) {
+    const name = path[index];
+    if (typeof name !== 'string') {
+      throw sourceError(
+        'commit',
+        'card-source-meta-path-invalid',
+        `Expected a Field name in ${JSON.stringify(path)}.`,
+      );
+    }
+    const field = currentSchema.fields.find(
+      (candidate) => candidate.key === name && candidate.path === undefined,
+    );
+    if (!field) {
+      throw sourceError(
+        'commit',
+        'card-source-field-missing',
+        `Mutation path ${JSON.stringify(path)} is not present in the supplied source schema.`,
+      );
+    }
+    if (index === path.length - 1) return { fields, field, name };
+
+    if (!isCompositeContained(field)) {
+      throw sourceError(
+        'commit',
+        'card-source-meta-path-invalid',
+        `Mutation path ${JSON.stringify(path)} descends through a primitive or relationship Field.`,
+      );
+    }
+
+    let childMeta: Record<string, unknown> | undefined;
+    if (field.fieldType === 'containsMany') {
+      const itemIndex = path[index + 1];
+      if (typeof itemIndex !== 'number') {
+        throw sourceError(
+          'commit',
+          'card-source-meta-path-invalid',
+          `Contained-many path ${JSON.stringify(path)} is missing an item index.`,
+        );
+      }
+      let metas = fields?.[name];
+      if (metas === undefined && create) {
+        metas = [];
+        fields![name] = metas;
+      }
+      if (metas !== undefined && !Array.isArray(metas)) {
+        throw sourceError(
+          'commit',
+          'card-source-contained-many-meta-shape',
+          `meta.fields.${name} must be an array for a composite containsMany Field.`,
+        );
+      }
+      if (Array.isArray(metas)) {
+        let itemMeta = metas[itemIndex];
+        if (itemMeta === undefined && create) {
+          itemMeta = {};
+          while (metas.length < itemIndex) metas.push({});
+          metas[itemIndex] = itemMeta;
+        }
+        if (itemMeta !== undefined && !isRecord(itemMeta)) {
+          throw sourceError(
+            'commit',
+            'card-source-contained-item-meta-shape',
+            `meta.fields.${name}[${itemIndex}] must be an object.`,
+          );
+        }
+        childMeta = itemMeta;
+      }
+      index += 2;
+    } else {
+      let fieldMeta = fields?.[name];
+      if (fieldMeta === undefined && create) {
+        fieldMeta = {};
+        fields![name] = fieldMeta;
+      }
+      if (fieldMeta !== undefined && !isRecord(fieldMeta)) {
+        throw sourceError(
+          'commit',
+          'card-source-contained-meta-shape',
+          `meta.fields.${name} must be an object for a composite contains Field.`,
+        );
+      }
+      childMeta = fieldMeta;
+      index += 1;
+    }
+    fields = childMeta ? childMetaFields(childMeta, create) : undefined;
+    currentSchema = nestedSchema(field) ?? { fields: [] };
+  }
+  throw sourceError(
+    'commit',
+    'card-source-meta-path-invalid',
+    `Unable to resolve metadata path ${JSON.stringify(path)}.`,
+  );
+}
+
+function cleanupRootMetaFields(resource: BxlCardSourceResource): void {
+  const fields = resourceMetaFields(resource, false);
+  if (fields && Object.keys(fields).length === 0 && isRecord(resource.meta)) {
+    delete resource.meta.fields;
+  }
+}
+
+function relationshipIndex(
+  key: string,
+  prefix: string,
+): { index: number; suffix: string } | undefined {
+  if (!key.startsWith(`${prefix}.`)) return undefined;
+  const remainder = key.slice(prefix.length + 1);
+  const match = /^(\d+)(.*)$/.exec(remainder);
+  if (!match) return undefined;
+  return { index: Number(match[1]), suffix: match[2] ?? '' };
+}
+
+function normalizeToManyRelationship(
+  resource: BxlCardSourceResource,
+  prefix: string,
+): void {
+  const exact = resource.relationships?.[prefix];
+  if (!exact) return;
+  if (Array.isArray(exact)) {
+    delete resource.relationships![prefix];
+    exact.forEach((entry, index) => {
+      resource.relationships![`${prefix}.${index}`] = entry;
+    });
+  } else if (Array.isArray(exact.data)) {
+    delete resource.relationships![prefix];
+    exact.data.forEach((data, index) => {
+      resource.relationships![`${prefix}.${index}`] = {
+        ...(exact.links ? { links: cloneJson(exact.links) } : {}),
+        ...(exact.meta ? { meta: cloneJson(exact.meta) } : {}),
+        data,
+      };
+    });
+  } else {
+    // Boxel represents an empty linksToMany as `{ links: { self: null } }`.
+    // Once it gains an item the indexed representation replaces that marker.
+    delete resource.relationships![prefix];
+  }
+}
+
+function permuteRelationshipIndexes(
+  resource: BxlCardSourceResource,
+  collectionPath: BxlMutationPath,
+  oldToNew: Map<number, number>,
+): void {
+  if (!resource.relationships) return;
+  const prefix = collectionPath.join('.');
+  normalizeToManyRelationship(resource, prefix);
+  const replacements: Array<[
+    string,
+    BxlCardSourceRelationship | BxlCardSourceRelationship[],
+  ]> = [];
+  for (const [key, relationship] of Object.entries(resource.relationships)) {
+    const indexed = relationshipIndex(key, prefix);
+    if (!indexed) continue;
+    delete resource.relationships[key];
+    const nextIndex = oldToNew.get(indexed.index);
+    if (nextIndex !== undefined) {
+      replacements.push([
+        `${prefix}.${nextIndex}${indexed.suffix}`,
+        relationship,
+      ]);
+    }
+  }
+  replacements
+    .sort(([left], [right]) => left.localeCompare(right, undefined, { numeric: true }))
+    .forEach(([key, relationship]) => {
+      resource.relationships![key] = relationship;
+    });
+}
+
+function permuteCollectionMeta(
+  resource: BxlCardSourceResource,
+  collectionPath: BxlMutationPath,
+  schema: BxlMutationSchema,
+  oldToNew: Map<number, number>,
+  nextLength: number,
+): void {
+  const slot = metaSlotForField(resource, collectionPath, schema, false);
+  if (!slot.fields) return;
+  if (isCompositeContained(slot.field)) {
+    const existing = slot.fields[slot.name];
+    if (existing === undefined) return;
+    if (!Array.isArray(existing)) {
+      throw sourceError(
+        'commit',
+        'card-source-contained-many-meta-shape',
+        `meta.fields.${slot.name} must be an array for a composite containsMany Field.`,
+      );
+    }
+    const next = Array.from({ length: nextLength }, () => ({}));
+    for (const [oldIndex, newIndex] of oldToNew) {
+      next[newIndex] = cloneJson(existing[oldIndex] ?? {});
+    }
+    if (next.length === 0) delete slot.fields[slot.name];
+    else slot.fields[slot.name] = next;
+  } else {
+    const prefix = `${slot.name}.`;
+    const replacements: Array<[string, unknown]> = [];
+    for (const [key, meta] of Object.entries(slot.fields)) {
+      if (!key.startsWith(prefix)) continue;
+      const suffix = key.slice(prefix.length);
+      if (!/^\d+$/.test(suffix)) continue;
+      delete slot.fields[key];
+      const nextIndex = oldToNew.get(Number(suffix));
+      if (nextIndex !== undefined) {
+        replacements.push([`${slot.name}.${nextIndex}`, meta]);
+      }
+    }
+    replacements.forEach(([key, meta]) => {
+      slot.fields![key] = meta;
+    });
+  }
+  cleanupRootMetaFields(resource);
+}
+
+function permuteCollectionSidecars(
+  resource: BxlCardSourceResource,
+  collectionPath: BxlMutationPath,
+  schema: BxlMutationSchema,
+  oldToNew: Map<number, number>,
+  nextLength: number,
+): void {
+  permuteCollectionMeta(resource, collectionPath, schema, oldToNew, nextLength);
+  permuteRelationshipIndexes(resource, collectionPath, oldToNew);
+}
+
+function removeRelationshipSubtree(
+  resource: BxlCardSourceResource,
+  path: BxlMutationPath,
+): void {
+  if (!resource.relationships) return;
+  const prefix = path.join('.');
+  for (const key of Object.keys(resource.relationships)) {
+    if (key === prefix || key.startsWith(`${prefix}.`)) {
+      delete resource.relationships[key];
+    }
+  }
+}
+
+function writeContainedMeta(
+  resource: BxlCardSourceResource,
+  path: BxlMutationPath,
+  schema: BxlMutationSchema,
+  meta: Record<string, unknown> | undefined,
+): void {
+  const last = path.at(-1);
+  if (typeof last === 'number') {
+    const collectionPath = path.slice(0, -1);
+    const slot = metaSlotForField(resource, collectionPath, schema, Boolean(meta));
+    if (!slot.fields) return;
+    if (isCompositeContained(slot.field)) {
+      let values = slot.fields[slot.name];
+      if (values === undefined && meta) {
+        values = [];
+        slot.fields[slot.name] = values;
+      }
+      if (values !== undefined && !Array.isArray(values)) {
+        throw sourceError(
+          'commit',
+          'card-source-contained-many-meta-shape',
+          `meta.fields.${slot.name} must be an array.`,
+        );
+      }
+      if (Array.isArray(values)) {
+        while (values.length <= last) values.push({});
+        values[last] = cloneJson(meta ?? {});
+      }
+    } else if (meta) {
+      slot.fields[`${slot.name}.${last}`] = cloneJson(meta);
+    } else {
+      delete slot.fields[`${slot.name}.${last}`];
+    }
+    return;
+  }
+  const slot = metaSlotForField(resource, path, schema, Boolean(meta));
+  if (!slot.fields) return;
+  if (meta) slot.fields[slot.name] = cloneJson(meta);
+  else delete slot.fields[slot.name];
+  cleanupRootMetaFields(resource);
+}
+
+function writeContainedRelationships(
+  resource: BxlCardSourceResource,
+  path: BxlMutationPath,
+  relationships:
+    | Record<
+        string,
+        BxlCardSourceRelationship | BxlCardSourceRelationship[]
+      >
+    | undefined,
+): void {
+  if (!relationships) return;
+  const prefix = path.join('.');
+  resource.relationships ??= {};
+  for (const [key, relationship] of Object.entries(relationships)) {
+    resource.relationships[`${prefix}.${key}`] = cloneJson(relationship);
+  }
+}
+
+function collectionUsesPerValueAdoptsFrom(
+  resource: BxlCardSourceResource,
+  collectionPath: BxlMutationPath,
+  schema: BxlMutationSchema,
+): boolean {
+  const slot = metaSlotForField(resource, collectionPath, schema, false);
+  if (!slot.fields) return false;
+  if (isCompositeContained(slot.field)) {
+    const values = slot.fields[slot.name];
+    return (
+      Array.isArray(values) &&
+      values.some((value) => isRecord(value) && value.adoptsFrom !== undefined)
+    );
+  }
+  const prefix = `${slot.name}.`;
+  return Object.entries(slot.fields).some(
+    ([key, value]) =>
+      key.startsWith(prefix) &&
+      /^\d+$/.test(key.slice(prefix.length)) &&
+      isRecord(value) &&
+      value.adoptsFrom !== undefined,
+  );
+}
+
+function serializeNewContainedValue(
+  resource: BxlCardSourceResource,
+  path: BxlMutationPath,
+  value: BxlMutationJson,
+  field: BxlMutationField,
+  operation: 'insert' | 'replace',
+  schema: BxlMutationSchema,
+  options: BxlCardSourceCommitOptions,
+  requiresAdoptsFrom = false,
+): void {
+  const serialized = options.serializeContainedValue?.({
+    operation,
+    path: [...path],
+    value: cloneJson(value),
+    field,
+  });
+  if (requiresAdoptsFrom && serialized?.meta?.adoptsFrom === undefined) {
+    throw sourceError(
+      'commit',
+      'card-source-contained-meta-required',
+      `Contained value ${JSON.stringify(path)} needs per-value meta.adoptsFrom. Supply serializeContainedValue so the source keeps its runtime FieldDef.`,
+    );
+  }
+  writeContainedMeta(resource, path, schema, serialized?.meta);
+  writeContainedRelationships(resource, path, serialized?.relationships);
+}
+
+function removeValueMeta(
+  resource: BxlCardSourceResource,
   path: BxlMutationPath,
   schema: BxlMutationSchema,
 ): void {
-  const resolved = resolveSourceField(path, schema);
-  if (
-    resolved.relationshipPath ||
-    resolved.field.fieldType !== 'contains' ||
-    resolved.field.kind === 'object' ||
-    resolved.item
-  ) {
-    throw sourceError(
-      'commit',
-      'card-source-structural-write-unsupported',
-      `Version 1 card-source commits only support contained scalar leaves and singular relationships; received ${JSON.stringify(path)}.`,
-    );
+  const last = path.at(-1);
+  if (typeof last === 'number') {
+    writeContainedMeta(resource, path, schema, undefined);
+    return;
   }
+  const slot = metaSlotForField(resource, path, schema, false);
+  if (slot.fields) delete slot.fields[slot.name];
+  cleanupRootMetaFields(resource);
+}
+
+function copyValueSidecars(
+  resource: BxlCardSourceResource,
+  from: BxlMutationPath,
+  to: BxlMutationPath,
+  schema: BxlMutationSchema,
+): void {
+  const destination = resolveSourceField(to, schema);
+  if (sourceFieldIsPrimitive(destination.field)) {
+    // copy_value_to changes a primitive value through the destination Field;
+    // its existing per-field/per-index implementation override remains the
+    // destination's, just as it does on a loaded Card instance.
+    return;
+  }
+  const fromLast = from.at(-1);
+  let meta: unknown;
+  if (typeof fromLast === 'number') {
+    const slot = metaSlotForField(resource, from.slice(0, -1), schema, false);
+    if (slot.fields) {
+      if (isCompositeContained(slot.field)) {
+        const values = slot.fields[slot.name];
+        meta = Array.isArray(values) ? values[fromLast] : undefined;
+      } else {
+        meta = slot.fields[`${slot.name}.${fromLast}`];
+      }
+    }
+  } else {
+    const slot = metaSlotForField(resource, from, schema, false);
+    meta = slot.fields?.[slot.name];
+  }
+  removeValueMeta(resource, to, schema);
+  if (isRecord(meta)) writeContainedMeta(resource, to, schema, cloneJson(meta));
+
+  const fromPrefix = from.join('.');
+  const toPrefix = to.join('.');
+  const copied: Array<[
+    string,
+    BxlCardSourceRelationship | BxlCardSourceRelationship[],
+  ]> = [];
+  for (const [key, relationship] of Object.entries(resource.relationships ?? {})) {
+    if (key === fromPrefix || key.startsWith(`${fromPrefix}.`)) {
+      copied.push([`${toPrefix}${key.slice(fromPrefix.length)}`, cloneJson(relationship)]);
+    }
+  }
+  removeRelationshipSubtree(resource, to);
+  if (copied.length > 0) resource.relationships ??= {};
+  copied.forEach(([key, relationship]) => {
+    resource.relationships![key] = relationship;
+  });
 }
 
 function relationshipAt(
@@ -647,9 +1187,9 @@ function setRelationship(
 
 /**
  * Apply a validated plan to a cloned canonical card-source document.
- * The input document is never mutated. Version 1 intentionally supports only
- * scalar contained leaves and singular relationship writes, which cannot
- * desynchronize Boxel's parallel `meta.fields` collection metadata.
+ * The input document is never mutated. Structural changes update Boxel's
+ * parallel attributes, dotted relationships, and recursive `meta.fields`
+ * representations as one operation.
  */
 export function applyBxlMutationPlanToCardSource(
   document: BxlCardSourceDocument,
@@ -679,81 +1219,305 @@ export function applyBxlMutationPlanToCardSource(
   for (const intent of plan.intents) {
     switch (intent.op) {
       case 'set': {
-        assertScalarContainedWrite(intent.path, schema);
+        const resolved = resolveSourceField(intent.path, schema);
+        const replacingCollection =
+          resolved.field.fieldType === 'containsMany' &&
+          typeof intent.path.at(-1) === 'string';
+        const requiresAdoptsFrom = replacingCollection
+          ? collectionUsesPerValueAdoptsFrom(
+              resource,
+              intent.path,
+              schema,
+            )
+          : typeof intent.path.at(-1) === 'number'
+            ? collectionUsesPerValueAdoptsFrom(
+                resource,
+                intent.path.slice(0, -1),
+                schema,
+              )
+            : false;
         const { parent, key } = recordAt(resource.attributes, intent.path);
         parent[key] = cloneJson(intent.after);
+        const replacingComposite =
+          isCompositeContained(resolved.field) &&
+          (replacingCollection || typeof intent.path.at(-1) === 'number' || resolved.field.fieldType === 'contains');
+        if (replacingComposite) {
+          if (replacingCollection) {
+            permuteCollectionSidecars(
+              resource,
+              intent.path,
+              schema,
+              new Map(),
+              0,
+            );
+          } else {
+            removeValueMeta(resource, intent.path, schema);
+            removeRelationshipSubtree(resource, intent.path);
+          }
+          if (replacingCollection && Array.isArray(intent.after)) {
+            intent.after.forEach((value, index) =>
+              serializeNewContainedValue(
+                resource,
+                [...intent.path, index],
+                value,
+                resolved.field,
+                'replace',
+                schema,
+                options,
+                requiresAdoptsFrom,
+              ),
+            );
+          } else {
+            serializeNewContainedValue(
+              resource,
+              intent.path,
+              intent.after,
+              resolved.field,
+              'replace',
+              schema,
+              options,
+              requiresAdoptsFrom,
+            );
+          }
+        } else if (replacingCollection) {
+          // Primitive containsMany uses direct `field.N` metadata keys rather
+          // than a metadata array. A whole-array replacement invalidates all
+          // old indexes and then serializes each new value's optional sidecar.
+          permuteCollectionSidecars(
+            resource,
+            intent.path,
+            schema,
+            new Map(),
+            0,
+          );
+          if (Array.isArray(intent.after)) {
+            intent.after.forEach((value, index) =>
+              serializeNewContainedValue(
+                resource,
+                [...intent.path, index],
+                value,
+                resolved.field,
+                'replace',
+                schema,
+                options,
+                requiresAdoptsFrom,
+              ),
+            );
+          }
+        }
         break;
       }
       case 'copy': {
-        assertScalarContainedWrite(intent.path, schema);
         const { parent, key } = recordAt(resource.attributes, intent.path);
-        let value: unknown = plan.output;
-        for (const part of intent.path) {
-          value =
-            value && typeof value === 'object'
-              ? (value as Record<string | number, unknown>)[part]
-              : undefined;
-        }
+        const value = valueAt(resource.attributes, intent.from);
         parent[key] = cloneJson(value);
+        copyValueSidecars(resource, intent.from, intent.path, schema);
         break;
       }
       case 'delete': {
-        assertScalarContainedWrite(intent.path, schema);
         const { parent, key } = recordAt(resource.attributes, intent.path);
         if (Array.isArray(parent) && typeof key === 'number') {
+          const collectionPath = intent.path.slice(0, -1);
+          const oldLength = parent.length;
+          const oldToNew = new Map<number, number>();
+          for (let index = 0; index < oldLength; index++) {
+            if (index < key) oldToNew.set(index, index);
+            else if (index > key) oldToNew.set(index, index - 1);
+          }
+          parent.splice(key, 1);
+          permuteCollectionSidecars(
+            resource,
+            collectionPath,
+            schema,
+            oldToNew,
+            parent.length,
+          );
+        } else {
+          delete parent[key];
+          const resolved = resolveSourceField(intent.path, schema);
+          if (!sourceFieldIsPrimitive(resolved.field)) {
+            removeValueMeta(resource, intent.path, schema);
+            removeRelationshipSubtree(resource, intent.path);
+          }
+        }
+        break;
+      }
+      case 'insert': {
+        const collection = arrayAt(resource.attributes, intent.collection);
+        const resolved = resolveSourceField(intent.collection, schema);
+        const requiresAdoptsFrom = collectionUsesPerValueAdoptsFrom(
+          resource,
+          intent.collection,
+          schema,
+        );
+        const oldToNew = new Map<number, number>();
+        for (let index = 0; index < collection.length; index++) {
+          oldToNew.set(index, index < intent.index ? index : index + 1);
+        }
+        permuteCollectionSidecars(
+          resource,
+          intent.collection,
+          schema,
+          oldToNew,
+          collection.length + 1,
+        );
+        collection.splice(intent.index, 0, cloneJson(intent.value));
+        serializeNewContainedValue(
+          resource,
+          [...intent.collection, intent.index],
+          intent.value,
+          resolved.field,
+          'insert',
+          schema,
+          options,
+          requiresAdoptsFrom,
+        );
+        break;
+      }
+      case 'move': {
+        const collectionPath = intent.from.slice(0, -1);
+        const collection = arrayAt(resource.attributes, collectionPath);
+        const fromIndex = intent.from.at(-1);
+        if (typeof fromIndex !== 'number') {
           throw sourceError(
             'commit',
-            'card-source-structural-write-unsupported',
-            'Version 1 card-source commits cannot delete collection items.',
+            'card-source-move-path-invalid',
+            `Move source ${JSON.stringify(intent.from)} is not a collection item.`,
           );
         }
-        delete parent[key];
+        const order = collection.map((_, index) => index);
+        const [movedIndex] = order.splice(fromIndex, 1);
+        order.splice(intent.toIndex, 0, movedIndex!);
+        const oldToNew = new Map(order.map((oldIndex, newIndex) => [oldIndex, newIndex]));
+        const [moved] = collection.splice(fromIndex, 1);
+        collection.splice(intent.toIndex, 0, moved);
+        permuteCollectionSidecars(
+          resource,
+          collectionPath,
+          schema,
+          oldToNew,
+          collection.length,
+        );
+        break;
+      }
+      case 'reorder': {
+        const collection = arrayAt(resource.attributes, intent.collection);
+        const itemKey = (value: unknown): string =>
+          JSON.stringify(valueAt(value, intent.key));
+        const oldByKey = new Map(
+          collection.map((value, index) => [itemKey(value), index]),
+        );
+        const order = intent.order.map((key) => {
+          const oldIndex = oldByKey.get(JSON.stringify(key));
+          if (oldIndex === undefined) {
+            throw sourceError(
+              'commit',
+              'card-source-reorder-key-missing',
+              `Reorder key ${JSON.stringify(key)} is missing from card source.`,
+            );
+          }
+          return oldIndex;
+        });
+        const oldValues = [...collection];
+        collection.splice(0, collection.length, ...order.map((index) => oldValues[index]));
+        const oldToNew = new Map(order.map((oldIndex, newIndex) => [oldIndex, newIndex]));
+        permuteCollectionSidecars(
+          resource,
+          intent.collection,
+          schema,
+          oldToNew,
+          collection.length,
+        );
         break;
       }
       case 'relate': {
         const resolved = resolveSourceField(intent.field, schema);
-        if (
-          resolved.field.fieldType !== 'linksTo' ||
-          !resolved.relationshipPath
-        ) {
+        if (!resolved.relationshipPath) {
           throw sourceError(
             'commit',
-            'card-source-structural-write-unsupported',
-            'Version 1 card-source commits only support singular linksTo relationships.',
+            'card-source-relationship-path-invalid',
+            `Relationship path ${JSON.stringify(intent.field)} is invalid.`,
           );
         }
-        setRelationship(
-          resource,
-          resolved.relationshipPath,
-          options.formatReference?.(intent.cardId, intent.field) ??
-            intent.cardId,
-        );
+        const reference =
+          options.formatReference?.(intent.cardId, intent.field) ?? intent.cardId;
+        if (resolved.field.fieldType === 'linksToMany') {
+          const current = relationshipValues(resource.relationships, intent.field, options);
+          const index = intent.index ?? current.length;
+          const oldToNew = new Map<number, number>();
+          for (let oldIndex = 0; oldIndex < current.length; oldIndex++) {
+            oldToNew.set(oldIndex, oldIndex < index ? oldIndex : oldIndex + 1);
+          }
+          permuteRelationshipIndexes(resource, intent.field, oldToNew);
+          resource.relationships ??= {};
+          resource.relationships[`${intent.field.join('.')}.${index}`] = {
+            links: { self: reference },
+          };
+        } else {
+          setRelationship(resource, resolved.relationshipPath, reference);
+        }
         break;
       }
       case 'unrelate': {
         const resolved = resolveSourceField(intent.field, schema);
-        if (
-          resolved.field.fieldType !== 'linksTo' ||
-          !resolved.relationshipPath
-        ) {
+        if (!resolved.relationshipPath) {
           throw sourceError(
             'commit',
-            'card-source-structural-write-unsupported',
-            'Version 1 card-source commits only support singular linksTo relationships.',
+            'card-source-relationship-path-invalid',
+            `Relationship path ${JSON.stringify(intent.field)} is invalid.`,
           );
         }
-        setRelationship(resource, resolved.relationshipPath, null);
+        if (resolved.field.fieldType === 'linksToMany') {
+          const current = relationshipValues(resource.relationships, intent.field, options);
+          const index = current.findIndex(
+            (value) => isRecord(value) && value.id === intent.cardId,
+          );
+          if (index < 0) {
+            throw sourceError(
+              'commit',
+              'card-source-relationship-card-missing',
+              `Related Card ${JSON.stringify(intent.cardId)} is missing from ${JSON.stringify(intent.field)}.`,
+            );
+          }
+          const oldToNew = new Map<number, number>();
+          for (let oldIndex = 0; oldIndex < current.length; oldIndex++) {
+            if (oldIndex < index) oldToNew.set(oldIndex, oldIndex);
+            else if (oldIndex > index) oldToNew.set(oldIndex, oldIndex - 1);
+          }
+          permuteRelationshipIndexes(resource, intent.field, oldToNew);
+          if (current.length === 1) {
+            resource.relationships ??= {};
+            resource.relationships[intent.field.join('.')] = {
+              links: { self: null },
+            };
+          }
+        } else {
+          setRelationship(resource, resolved.relationshipPath, null);
+        }
         break;
       }
-      case 'insert':
-      case 'move':
-      case 'reorder':
-      case 'move-relation':
-        throw sourceError(
-          'commit',
-          'card-source-structural-write-unsupported',
-          `Card-source commit operation ${intent.op} is not supported in version 1.`,
+      case 'move-relation': {
+        const current = relationshipValues(resource.relationships, intent.field, options);
+        const fromIndex = current.findIndex(
+          (value) => isRecord(value) && value.id === intent.cardId,
         );
+        if (fromIndex < 0) {
+          throw sourceError(
+            'commit',
+            'card-source-relationship-card-missing',
+            `Related Card ${JSON.stringify(intent.cardId)} is missing from ${JSON.stringify(intent.field)}.`,
+          );
+        }
+        const order = current.map((_, index) => index);
+        const [movedIndex] = order.splice(fromIndex, 1);
+        order.splice(intent.toIndex, 0, movedIndex!);
+        permuteRelationshipIndexes(
+          resource,
+          intent.field,
+          new Map(order.map((oldIndex, newIndex) => [oldIndex, newIndex])),
+        );
+        break;
+      }
     }
   }
 

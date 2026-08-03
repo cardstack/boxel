@@ -47,6 +47,8 @@ export type {
   BxlBoxelSourceDefinitionLookup,
   BxlBoxelSourceFieldDefinition,
   BxlCardSourceCommitOptions,
+  BxlCardSourceContainedValueContext,
+  BxlCardSourceContainedValueSerialization,
   BxlCardSourceDocument,
   BxlCardSourceMutationResult,
   BxlCardSourceProjectionOptions,

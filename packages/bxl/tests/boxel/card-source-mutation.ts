@@ -212,19 +212,686 @@ deepStrictEqual(result.plan.paths, [
 ]);
 
 const structuralSource = sourceFixture();
+const structuralResult = mutateBxlCardSource(
+  structuralSource,
+  'append(.tags; "native");',
+  {
+    schema,
+    syntax: 'solidified',
+    programId: 'source-structure',
+    ...projectionOptions,
+  },
+);
+deepStrictEqual(structuralResult.document.data.attributes?.tags, [
+  'language',
+  'web',
+  'native',
+]);
+deepStrictEqual(structuralSource, sourceFixture());
+
+const partDefinition: BxlBoxelSourceDefinition = {
+  type: 'field-def',
+  codeRef: ref('Part'),
+  displayName: 'Part',
+  fields: { key: 'f0', owner: 'f1' },
+  fieldDefs: {
+    f0: field('contains', 'String', { primitive: true }),
+    f1: field('linksTo', 'Friend'),
+  },
+};
+
+const exampleDefinition: BxlBoxelSourceDefinition = {
+  type: 'field-def',
+  codeRef: ref('Example'),
+  displayName: 'Example',
+  fields: {
+    key: 'f0',
+    label: 'f1',
+    friend: 'f2',
+    aliases: 'f3',
+    parts: 'f4',
+  },
+  fieldDefs: {
+    f0: field('contains', 'String', { primitive: true }),
+    f1: field('contains', 'String', { primitive: true }),
+    f2: field('linksTo', 'Friend'),
+    f3: field('containsMany', 'String', { primitive: true }),
+    f4: field('containsMany', 'Part'),
+  },
+};
+
+const specLikeDefinition: BxlBoxelSourceDefinition = {
+  type: 'card-def',
+  codeRef: ref('SpecLike'),
+  displayName: 'Spec Like',
+  fields: { examples: 'f0', codes: 'f1', linked: 'f2' },
+  fieldDefs: {
+    f0: field('containsMany', 'Example'),
+    f1: field('containsMany', 'String', { primitive: true }),
+    f2: field('linksToMany', 'Friend'),
+  },
+};
+
+const richDefinitions = new Map(
+  [partDefinition, exampleDefinition, specLikeDefinition].map((definition) => [
+    JSON.stringify(definition.codeRef),
+    definition,
+  ]),
+);
+const richSchema = await mutationSchemaForCardSource(specLikeDefinition, {
+  async lookupDefinition(codeRef) {
+    return richDefinitions.get(JSON.stringify(codeRef));
+  },
+});
+
+function richSourceFixture(): BxlCardSourceDocument {
+  return {
+    data: {
+      type: 'card',
+      attributes: {
+        examples: [
+          {
+            key: 'a',
+            label: 'Alpha',
+            aliases: ['A-one', 'A-two'],
+            parts: [{ key: 'p1' }, { key: 'p2' }],
+          },
+          { key: 'b', label: 'Beta', aliases: [], parts: [] },
+          { key: 'c', label: 'Gamma', aliases: [], parts: [] },
+        ],
+        codes: ['one', 'two', 'three'],
+      },
+      relationships: {
+        'examples.0.friend': {
+          links: { self: '../Friend/a', related: 'keep-a' },
+          meta: { slot: 'a' },
+        },
+        'examples.1.friend': {
+          links: { self: '../Friend/b', related: 'keep-b' },
+          meta: { slot: 'b' },
+        },
+        'examples.2.friend': {
+          links: { self: '../Friend/c', related: 'keep-c' },
+          meta: { slot: 'c' },
+        },
+        'examples.0.parts.0.owner': {
+          links: { self: '../Friend/part-1' },
+          meta: { part: 'p1' },
+        },
+        'examples.0.parts.1.owner': {
+          links: { self: '../Friend/part-2' },
+          meta: { part: 'p2' },
+        },
+        'linked.0': {
+          links: { self: '../Friend/a', related: 'linked-a' },
+          meta: { edge: 'a' },
+        },
+        'linked.1': {
+          links: { self: '../Friend/b', related: 'linked-b' },
+          meta: { edge: 'b' },
+        },
+        'linked.2': {
+          links: { self: '../Friend/c', related: 'linked-c' },
+          meta: { edge: 'c' },
+        },
+      },
+      meta: {
+        adoptsFrom: ref('SpecLike'),
+        fields: {
+          examples: [
+            {
+              adoptsFrom: { module: '../fields', name: 'AlphaExample' },
+              fields: {
+                label: {
+                  adoptsFrom: { module: '../fields', name: 'FancyString' },
+                },
+                'aliases.0': {
+                  adoptsFrom: { module: '../fields', name: 'FirstAlias' },
+                },
+                'aliases.1': {
+                  adoptsFrom: { module: '../fields', name: 'SecondAlias' },
+                },
+                parts: [
+                  {
+                    adoptsFrom: { module: '../fields', name: 'FirstPart' },
+                  },
+                  {
+                    adoptsFrom: { module: '../fields', name: 'SecondPart' },
+                  },
+                ],
+              },
+            },
+            {
+              adoptsFrom: { module: '../fields', name: 'BetaExample' },
+              custom: { preserve: 'beta' },
+            },
+            {
+              adoptsFrom: { module: '../fields', name: 'GammaExample' },
+              fields: {
+                label: {
+                  adoptsFrom: { module: '../fields', name: 'MarkdownString' },
+                },
+              },
+            },
+          ],
+          'codes.0': {
+            adoptsFrom: { module: '../fields', name: 'FirstCode' },
+          },
+          'codes.2': {
+            adoptsFrom: { module: '../fields', name: 'ThirdCode' },
+          },
+        },
+        extension: { preserve: true },
+      },
+    },
+  };
+}
+
+const richProjectionOptions = {
+  targetId: 'https://example.test/SpecLike/one',
+  resolveReference(reference: string) {
+    return new URL(reference, 'https://example.test/SpecLike/one').href;
+  },
+  formatReference(id: string) {
+    return id.replace('https://example.test/', '../');
+  },
+};
+
+const moved = mutateBxlCardSource(
+  richSourceFixture(),
+  'move_item_to_start(.examples[2]; .examples);',
+  {
+    schema: richSchema,
+    syntax: 'solidified',
+    programId: 'move-composite-with-sidecars',
+    ...richProjectionOptions,
+  },
+).document;
+deepStrictEqual(
+  (moved.data.attributes?.examples as Array<Record<string, unknown>>).map(
+    (item) => item.key,
+  ),
+  ['c', 'a', 'b'],
+);
+deepStrictEqual(
+  (
+    (moved.data.meta?.fields as Record<string, unknown>)
+      .examples as Array<Record<string, unknown>>
+  ).map((item) => (item.adoptsFrom as Record<string, unknown>).name),
+  ['GammaExample', 'AlphaExample', 'BetaExample'],
+);
+strictEqual(
+  moved.data.relationships?.['examples.0.friend'].meta?.slot,
+  'c',
+);
+strictEqual(
+  moved.data.relationships?.['examples.1.friend'].links?.related,
+  'keep-a',
+);
+
+function assertExampleSidecarsAligned(document: BxlCardSourceDocument): void {
+  const values = document.data.attributes?.examples as Array<
+    Record<string, unknown>
+  >;
+  const metas = (document.data.meta?.fields as Record<string, unknown>)
+    .examples as Array<Record<string, Record<string, unknown>>>;
+  const typeForKey: Record<string, string> = {
+    a: 'AlphaExample',
+    b: 'BetaExample',
+    c: 'GammaExample',
+    z: 'ZetaExample',
+  };
+  values.forEach((value, index) => {
+    const key = value.key as string;
+    strictEqual(metas[index].adoptsFrom.name, typeForKey[key]);
+    strictEqual(
+      document.data.relationships?.[`examples.${index}.friend`].meta?.slot,
+      key,
+    );
+  });
+  strictEqual(
+    Object.keys(document.data.relationships ?? {}).some((key) => {
+      const match = /^examples\.(\d+)\.friend$/.exec(key);
+      return match ? Number(match[1]) >= values.length : false;
+    }),
+    false,
+  );
+}
+
+for (const index of [0, 1, 2]) {
+  const document = mutateBxlCardSource(
+    richSourceFixture(),
+    `del(.examples[${index}]);`,
+    {
+      schema: richSchema,
+      syntax: 'solidified',
+      programId: `delete-index-${index}`,
+      ...richProjectionOptions,
+    },
+  ).document;
+  assertExampleSidecarsAligned(document);
+}
+
+for (const order of [
+  ['a', 'b', 'c'],
+  ['a', 'c', 'b'],
+  ['b', 'a', 'c'],
+  ['b', 'c', 'a'],
+  ['c', 'a', 'b'],
+  ['c', 'b', 'a'],
+]) {
+  const document = mutateBxlCardSource(
+    richSourceFixture(),
+    `reorder_by(.examples; .key; ${JSON.stringify(order)});`,
+    {
+      schema: richSchema,
+      syntax: 'solidified',
+      programId: `reorder-${order.join('')}`,
+      ...richProjectionOptions,
+    },
+  ).document;
+  assertExampleSidecarsAligned(document);
+}
+
+for (const index of [0, 1, 2, 3]) {
+  const document = mutateBxlCardSource(
+    richSourceFixture(),
+    `insert_at(.examples; ${index}; {"key":"z","label":"Zeta","aliases":[],"parts":[]});`,
+    {
+      schema: richSchema,
+      syntax: 'solidified',
+      programId: `insert-index-${index}`,
+      baseRevision: 'revision-1',
+      ...richProjectionOptions,
+      serializeContainedValue(context) {
+        if (context.path.at(-1) !== index) return undefined;
+        return {
+          meta: { adoptsFrom: { module: '../fields', name: 'ZetaExample' } },
+          relationships: {
+            friend: {
+              links: { self: '../Friend/z' },
+              meta: { slot: 'z' },
+            },
+          },
+        };
+      },
+    },
+  ).document;
+  assertExampleSidecarsAligned(document);
+}
+
+assertExampleSidecarsAligned(
+  mutateBxlCardSource(
+    richSourceFixture(),
+    'move_item_to_end(.examples[0]; .examples);',
+    {
+      schema: richSchema,
+      syntax: 'solidified',
+      programId: 'move-first-to-end',
+      ...richProjectionOptions,
+    },
+  ).document,
+);
+
+const nested = mutateBxlCardSource(
+  richSourceFixture(),
+  'del(.examples[0].aliases[0]);\n' +
+    'move_item_to_start(.examples[0].parts[1]; .examples[0].parts);',
+  {
+    schema: richSchema,
+    syntax: 'solidified',
+    programId: 'nested-collection-sidecars',
+    ...richProjectionOptions,
+  },
+).document;
+deepStrictEqual(
+  (
+    (nested.data.attributes?.examples as Array<Record<string, unknown>>)[0]
+      .aliases
+  ),
+  ['A-two'],
+);
+const nestedFields = (
+  (
+    (nested.data.meta?.fields as Record<string, unknown>)
+      .examples as Array<Record<string, unknown>>
+  )[0].fields as Record<string, unknown>
+);
+strictEqual(nestedFields['aliases.1'], undefined);
+strictEqual(
+  (
+    nestedFields['aliases.0'] as Record<string, Record<string, unknown>>
+  ).adoptsFrom.name,
+  'SecondAlias',
+);
+strictEqual(
+  (
+    (nestedFields.parts as Array<Record<string, Record<string, unknown>>>)[0]
+      .adoptsFrom
+  ).name,
+  'SecondPart',
+);
+strictEqual(
+  nested.data.relationships?.['examples.0.parts.0.owner'].meta?.part,
+  'p2',
+);
+strictEqual(
+  nested.data.relationships?.['examples.0.parts.1.owner'].meta?.part,
+  'p1',
+);
+
+const deleted = mutateBxlCardSource(
+  richSourceFixture(),
+  'del(.examples[1]);\ndel(.codes[1]);',
+  {
+    schema: richSchema,
+    syntax: 'solidified',
+    programId: 'delete-and-renumber-sidecars',
+    ...richProjectionOptions,
+  },
+).document;
+deepStrictEqual(deleted.data.attributes?.codes, ['one', 'three']);
+deepStrictEqual(
+  Object.keys(deleted.data.meta?.fields as Record<string, unknown>).sort(),
+  ['codes.0', 'codes.1', 'examples'],
+);
+strictEqual(
+  (
+    (deleted.data.meta?.fields as Record<string, unknown>)[
+      'codes.1'
+    ] as Record<string, Record<string, unknown>>
+  ).adoptsFrom.name,
+  'ThirdCode',
+);
+strictEqual(
+  deleted.data.relationships?.['examples.1.friend'].meta?.slot,
+  'c',
+);
+strictEqual(deleted.data.relationships?.['examples.2.friend'], undefined);
+
+const reordered = mutateBxlCardSource(
+  richSourceFixture(),
+  'reorder_by(.examples; .key; ["b", "c", "a"]);',
+  {
+    schema: richSchema,
+    syntax: 'solidified',
+    programId: 'reorder-all-sidecars',
+    ...richProjectionOptions,
+  },
+).document;
+deepStrictEqual(
+  (reordered.data.attributes?.examples as Array<Record<string, unknown>>).map(
+    (item) => item.key,
+  ),
+  ['b', 'c', 'a'],
+);
+strictEqual(reordered.data.relationships?.['examples.0.friend'].meta?.slot, 'b');
+strictEqual(
+  (
+    (
+      (reordered.data.meta?.fields as Record<string, unknown>)
+        .examples as Array<Record<string, unknown>>
+    )[1].fields as Record<string, Record<string, Record<string, unknown>>>
+  ).label.adoptsFrom.name,
+  'MarkdownString',
+);
+
+const inserted = mutateBxlCardSource(
+  richSourceFixture(),
+  'prepend(.examples; {"key":"z","label":"Zeta"});\n' +
+    'append(.codes; "four");',
+  {
+    schema: richSchema,
+    syntax: 'solidified',
+    programId: 'insert-polymorphic-sidecars',
+    ...richProjectionOptions,
+    serializeContainedValue(context) {
+      if (context.path[0] === 'examples') {
+        return {
+          meta: {
+            adoptsFrom: { module: '../fields', name: 'ZetaExample' },
+            fields: {
+              label: {
+                adoptsFrom: { module: '../fields', name: 'LocalizedString' },
+              },
+            },
+          },
+          relationships: {
+            friend: {
+              links: { self: '../Friend/z' },
+              meta: { slot: 'z' },
+            },
+          },
+        };
+      }
+      return {
+        meta: { adoptsFrom: { module: '../fields', name: 'FourthCode' } },
+      };
+    },
+  },
+).document;
+strictEqual(
+  (
+    (
+      (inserted.data.meta?.fields as Record<string, unknown>)
+        .examples as Array<Record<string, unknown>>
+    )[0].adoptsFrom as Record<string, unknown>
+  ).name,
+  'ZetaExample',
+);
+strictEqual(inserted.data.relationships?.['examples.0.friend'].meta?.slot, 'z');
+strictEqual(inserted.data.relationships?.['examples.1.friend'].meta?.slot, 'a');
+strictEqual(
+  (
+    (inserted.data.meta?.fields as Record<string, unknown>)[
+      'codes.3'
+    ] as Record<string, Record<string, unknown>>
+  ).adoptsFrom.name,
+  'FourthCode',
+);
+
 throws(
   () =>
-    mutateBxlCardSource(structuralSource, 'append(.tags; "native");', {
-      schema,
-      syntax: 'solidified',
-      programId: 'reject-source-structure',
-      ...projectionOptions,
-    }),
+    mutateBxlCardSource(
+      richSourceFixture(),
+      'append(.examples; {"key":"unsafe","label":"Missing type"});',
+      {
+        schema: richSchema,
+        syntax: 'solidified',
+        programId: 'reject-untyped-polymorphic-insert',
+        ...richProjectionOptions,
+      },
+    ),
   (error) =>
     error instanceof BxlMutationError &&
-    error.code === 'card-source-structural-write-unsupported',
+    error.code === 'card-source-contained-meta-required',
 );
-deepStrictEqual(structuralSource, sourceFixture());
+
+const copied = mutateBxlCardSource(
+  richSourceFixture(),
+  'copy_value_to(.examples[0]; .examples[1]);\n' +
+    'copy_value_to(.codes[1]; .codes[2]);',
+  {
+    schema: richSchema,
+    syntax: 'solidified',
+    programId: 'copy-values-and-sidecars',
+    ...richProjectionOptions,
+  },
+).document;
+strictEqual(
+  (
+    (
+      (copied.data.meta?.fields as Record<string, unknown>)
+        .examples as Array<Record<string, unknown>>
+    )[1].adoptsFrom as Record<string, unknown>
+  ).name,
+  'AlphaExample',
+);
+strictEqual(copied.data.relationships?.['examples.1.friend'].meta?.slot, 'a');
+strictEqual(
+  (
+    (copied.data.meta?.fields as Record<string, unknown>)[
+      'codes.2'
+    ] as Record<string, Record<string, unknown>>
+  ).adoptsFrom.name,
+  'ThirdCode',
+  'copying a primitive value preserves the destination Field override',
+);
+
+const replacedCollections = mutateBxlCardSource(
+  richSourceFixture(),
+  '.examples = [{"key":"n","label":"New","aliases":[],"parts":[]}];\n' +
+    '.codes = ["new-code"];',
+  {
+    schema: richSchema,
+    syntax: 'solidified',
+    programId: 'replace-complete-collections',
+    ...richProjectionOptions,
+    serializeContainedValue(context) {
+      if (context.path[0] === 'examples') {
+        return {
+          meta: { adoptsFrom: { module: '../fields', name: 'NewExample' } },
+          relationships: {
+            friend: { links: { self: '../Friend/new' } },
+          },
+        };
+      }
+      return {
+        meta: { adoptsFrom: { module: '../fields', name: 'NewCode' } },
+      };
+    },
+  },
+).document;
+strictEqual(
+  (
+    (
+      (replacedCollections.data.meta?.fields as Record<string, unknown>)
+        .examples as Array<Record<string, Record<string, unknown>>>
+    )[0].adoptsFrom
+  ).name,
+  'NewExample',
+);
+strictEqual(
+  (
+    (replacedCollections.data.meta?.fields as Record<string, unknown>)[
+      'codes.0'
+    ] as Record<string, Record<string, unknown>>
+  ).adoptsFrom.name,
+  'NewCode',
+);
+strictEqual(
+  replacedCollections.data.relationships?.['examples.0.friend'].links?.self,
+  '../Friend/new',
+);
+strictEqual(
+  replacedCollections.data.relationships?.['examples.1.friend'],
+  undefined,
+);
+
+const deletedPrimitiveLeaf = mutateBxlCardSource(
+  richSourceFixture(),
+  'del(.examples[0]["label"]);',
+  {
+    schema: richSchema,
+    syntax: 'solidified',
+    programId: 'delete-primitive-preserves-field-type',
+    ...richProjectionOptions,
+  },
+).document;
+strictEqual(
+  (
+    (
+      (
+        (deletedPrimitiveLeaf.data.meta?.fields as Record<string, unknown>)
+          .examples as Array<Record<string, unknown>>
+      )[0].fields as Record<string, Record<string, Record<string, unknown>>>
+    ).label.adoptsFrom
+  ).name,
+  'FancyString',
+);
+
+const dataArraySource = richSourceFixture();
+dataArraySource.data.relationships = {
+  ...dataArraySource.data.relationships,
+  linked: {
+    links: { related: 'preserve-array-link' },
+    data: [
+      { type: 'card', id: 'https://example.test/Friend/a' },
+      { type: 'card', id: 'https://example.test/Friend/b' },
+    ],
+    meta: { source: 'data-array' },
+  },
+};
+delete dataArraySource.data.relationships['linked.0'];
+delete dataArraySource.data.relationships['linked.1'];
+delete dataArraySource.data.relationships['linked.2'];
+const normalizedDataArray = mutateBxlCardSource(
+  dataArraySource,
+  'prepend(.linked; card("https://example.test/Friend/z"));',
+  {
+    schema: richSchema,
+    syntax: 'solidified',
+    programId: 'normalize-json-api-data-array',
+    ...richProjectionOptions,
+    resolveCard(id) {
+      return { id };
+    },
+  },
+).document;
+strictEqual(normalizedDataArray.data.relationships?.linked, undefined);
+strictEqual(
+  normalizedDataArray.data.relationships?.['linked.1'].meta?.source,
+  'data-array',
+);
+strictEqual(
+  normalizedDataArray.data.relationships?.['linked.2'].links?.related,
+  'preserve-array-link',
+);
+
+const emptyLinksSource = richSourceFixture();
+emptyLinksSource.data.relationships = {
+  linked: { links: { self: null }, meta: { empty: true } },
+};
+const populatedEmptyLinks = mutateBxlCardSource(
+  emptyLinksSource,
+  'append(.linked; card("https://example.test/Friend/a"));',
+  {
+    schema: richSchema,
+    syntax: 'solidified',
+    programId: 'replace-empty-link-marker',
+    ...richProjectionOptions,
+    resolveCard(id) {
+      return { id };
+    },
+  },
+).document;
+strictEqual(populatedEmptyLinks.data.relationships?.linked, undefined);
+strictEqual(
+  populatedEmptyLinks.data.relationships?.['linked.0'].links?.self,
+  '../Friend/a',
+);
+
+const related = mutateBxlCardSource(
+  richSourceFixture(),
+  'move_item_to_start(.linked[2]; .linked);\n' +
+    'del(.linked[1]);\n' +
+    'append(.linked; card("https://example.test/Friend/d"));',
+  {
+    schema: richSchema,
+    syntax: 'solidified',
+    programId: 'relationship-collections',
+    ...richProjectionOptions,
+    resolveCard(id) {
+      return { id };
+    },
+  },
+).document;
+strictEqual(related.data.relationships?.['linked.0'].meta?.edge, 'c');
+strictEqual(related.data.relationships?.['linked.1'].meta?.edge, 'b');
+strictEqual(
+  related.data.relationships?.['linked.2'].links?.self,
+  '../Friend/d',
+);
 
 const detachedSource = sourceFixture();
 const detachedSnapshot = snapshotBxlCardSource(
@@ -256,5 +923,5 @@ throws(
 
 ok(result.plan.affected === 3);
 console.log(
-  'BXL Boxel card-source adapter: Definition schema, immutable scalar/link writes, preservation, and safety boundaries passed',
+  'BXL Boxel card-source adapter: Definition schema, recursive metadata, structural collections, relationship lowering, preservation, and stale-plan safety passed',
 );

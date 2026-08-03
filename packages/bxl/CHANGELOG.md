@@ -11,6 +11,22 @@ versions may change syntax behavior until `1.0.0`. See
 
 ## [Unreleased]
 
+## [0.4.1] — 2026-08-02
+
+### Fixed
+
+- **Complete Boxel source serialization lowering.** Card-source mutations now
+  coordinate attributes with Boxel's recursive `meta.fields` shapes and
+  flattened relationship indexes for contained and relationship collection
+  insert/delete/move/reorder operations, whole-value replacement, and copy.
+  Composite `containsMany` metadata arrays, primitive `field.N` overrides,
+  nested field metadata, compact JSON:API relationship data, empty to-many
+  markers, and relationship extensions are preserved or reindexed exactly.
+- **Fail-closed polymorphic inserts.** New Spec-like contained values can supply
+  source-relative `adoptsFrom` and nested relationship sidecars through
+  `serializeContainedValue`; mutations reject an untyped insertion into an
+  already-polymorphic collection instead of silently producing invalid source.
+
 ## [0.4.0] — 2026-08-02
 
 ### Added
@@ -24,8 +40,8 @@ versions may change syntax behavior until `1.0.0`. See
 - **Source-preserving commit safety.** Card-source commits retain unknown
   authored data, document extensions, `meta.fields`, relationship metadata,
   and untouched relationships; remove stale relationship `data`; reject stale
-  plans; and fail closed on collection-structural operations that require
-  coordinated Boxel metadata or indexed-key rewrites.
+  plans; and (as of 0.4.0) fail closed on collection-structural operations that
+  require coordinated Boxel metadata or indexed-key rewrites.
 
 ## [0.3.1] — 2026-08-02
 

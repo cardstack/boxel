@@ -32,6 +32,16 @@ export interface BxlMutationField extends ReadableField {
   writable?: boolean;
   item?: BxlMutationSchema;
   fields?: BxlMutationField[];
+  /**
+   * Loaderless Boxel serialization facts. The mutation planner ignores this;
+   * the card-source adapter uses it to keep attributes, relationships, and
+   * `meta.fields` in the same shapes as Boxel's runtime serializer.
+   */
+  boxelSource?: {
+    isPrimitive: boolean;
+    fieldOrCard?: unknown;
+    serializerName?: string;
+  };
 }
 
 export interface BxlMutationRootField {

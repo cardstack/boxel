@@ -36,7 +36,7 @@ evaluateBxl('ROUND(Subtotal * "Tax Rate" / 100, 2)', invoice, { schema });
 // => 12.38
 ```
 
-> **Current release: `0.4.0`.** The public API is intentionally unstable below 1.0 — see [RELEASE-PLAN.md](./RELEASE-PLAN.md).
+> **Current release: `0.4.1`.** The public API is intentionally unstable below 1.0 — see [RELEASE-PLAN.md](./RELEASE-PLAN.md).
 
 ---
 
@@ -767,8 +767,8 @@ Server-side tools that hold canonical `.json` card source instead of a loaded
 Card can use the separate immutable source adapter. It derives the same
 mutation schema from Boxel's loaderless `Definition` graph, projects authored
 attributes and dotted relationship keys into the loaded-shaped planner model,
-then lowers only validated scalar and singular-relationship intents back into
-a clone of the original source document:
+then lowers validated scalar, contained-collection, and relationship intents
+back into a clone of the original source document:
 
 ```ts
 import {
@@ -793,6 +793,13 @@ const { document, plan } = mutateBxlCardSource(
     resolveReference: (reference) => resolveAgainstSource(reference),
     formatReference: (cardId) => formatForTarget(cardId),
     resolveCard: (cardId) => validatedCardIds.has(cardId) ? { id: cardId } : undefined,
+    serializeContainedValue({ path }) {
+      // Required when a new contained value has a polymorphic FieldDef that
+      // cannot be inferred from plain JSON (for example Spec.containedExamples).
+      if (path[0] === 'containedExamples') {
+        return { meta: { adoptsFrom: selectedFieldRef } };
+      }
+    },
   },
 );
 ```
@@ -800,11 +807,16 @@ const { document, plan } = mutateBxlCardSource(
 The source adapter does not expose raw `attributes` or `relationships` paths
 to mutation authors. Logical `.cardInfo.theme` is persisted as
 `data.relationships["cardInfo.theme"].links.self`; scalar paths such as
-`.cardInfo.name` and `.image` land under `data.attributes`. Version 1 rejects
-contained and relationship collection restructuring because those operations
-also require coordinated updates to Boxel's indexed relationship keys and
-parallel `meta.fields` arrays. The input document is never mutated, and a
-detached plan is rejected when its projected source snapshot is stale.
+`.cardInfo.name` and `.image` land under `data.attributes`. Collection inserts,
+deletes, moves, and reorders update attributes together with Boxel's two
+per-item metadata encodings (`meta.fields.fieldName[index]` for composite
+values and `meta.fields["fieldName.index"]` for primitive overrides), recursive
+nested `fields`, and dotted relationship indexes. Existing sidecars move or
+copy with their values. New polymorphic values use `serializeContainedValue`
+to provide their source-relative `adoptsFrom` and any nested relationships;
+the adapter fails closed when an existing polymorphic collection would
+otherwise lose that type. The input document is never mutated, and a detached
+plan is rejected when its projected source snapshot is stale.
 
 Use `prepareBxlMutationOperations(operations, options)` for the equivalent
 `bxl-mutation-ops/1` JSON tool-call encoding, and

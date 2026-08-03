@@ -148,7 +148,7 @@ export type {
   PreparedBoxelRuntime,
 } from './boxel-runtime.js';
 
-export const VERSION = '0.4.0';
+export const VERSION = '0.4.1';
 
 /**
  * Build identity, useful for debugging stale caches in the realm
@@ -170,7 +170,7 @@ export const VERSION = '0.4.0';
  *
  * console.log(BXL_BUILD_INFO);
  * // {
- * //   version: '0.4.0',
+ * //   version: '0.4.1',
  * //   buildTime: '2026-05-07T15:42:01.000Z',
  * //   features: ['null-tolerance', 'jq-fx-tags', 'as-materialize',
  * //              'pascalcase-fallback', 'jq-keywords-guard'],
@@ -191,6 +191,7 @@ export const BXL_BUILD_INFO = {
     'mutation-planner',
     'boxel-mutation-adapter',
     'boxel-source-mutation-adapter',
+    'boxel-source-structural-lowering',
   ] as const,
 };
 
@@ -309,6 +310,8 @@ export type {
   BxlBoxelSourceDefinitionLookup,
   BxlBoxelSourceFieldDefinition,
   BxlCardSourceCommitOptions,
+  BxlCardSourceContainedValueContext,
+  BxlCardSourceContainedValueSerialization,
   BxlCardSourceDocument,
   BxlCardSourceMutationResult,
   BxlCardSourceProjectionOptions,

@@ -176,6 +176,9 @@ const result = mutateBxlCardSource(sourceDocument, changes, {
   resolveReference,
   formatReference,
   resolveCard,
+  serializeContainedValue({ path, value, field, operation }) {
+    return serializePolymorphicFieldSidecars(path, value, field, operation);
+  },
 });
 ```
 
@@ -192,26 +195,40 @@ resolve source-relative references before planning.
 
 `applyBxlMutationPlanToCardSource` structured-clones the complete source
 document and changes only storage locations named by validated intents. It
-preserves unknown authored data, document extensions, `meta`, `meta.fields`,
-relationship metadata, and untouched relationship records. Relationship
-assignment removes stale `data`, writes `links.self`, and retains other
-relationship extensions. The original source object is never mutated.
+preserves unknown authored data, document extensions, relationship metadata,
+and untouched relationship records. Relationship assignment removes stale
+`data`, writes `links.self`, and retains other relationship extensions. The
+original source object is never mutated.
 
-The first source-commit version intentionally accepts only contained scalar
-leaf `set`/`copy`/`delete` intents and singular `linksTo` relate/unrelate
-intents. It rejects collection insertion, deletion, movement, reordering,
-whole-compound replacement, `linksToMany` changes, and field-root plans with
-`card-source-structural-write-unsupported`. Those operations need Boxel-owned
-lowering that also updates indexed relationship keys and polymorphic
-`meta.fields` arrays. Planning remains fully capable; the restriction is at
-this persistence boundary.
+The source adapter applies the plan's original `set`, `copy`, `delete`,
+`insert`, `move`, `reorder`, `relate`, `unrelate`, and `move-relation` intents
+rather than diffing `plan.output`. Structural operations coordinate all three
+parallel source representations:
 
-The adapter applies the plan's original `set`, `insert`, `move`, `reorder`,
-`relate`, `unrelate`, and `move-relation` intents rather than diffing
-`plan.output`. Contained values are materialized with their Field class, and
-structural operations preserve the identity of existing live objects. A
-synchronous setter failure triggers best-effort reverse-order rollback before
-the error is returned.
+- authored values under `data.attributes`;
+- flattened relationship keys such as `examples.2.owner` and
+  `sections.0.items.1.target`; and
+- recursive field metadata under `data.meta.fields`.
+
+Boxel has two collection metadata shapes. A composite `containsMany` stores a
+parallel array at `meta.fields[fieldName]`, whose items may contain both
+`adoptsFrom` and recursive `fields`. A polymorphic primitive `containsMany`
+stores direct keys such as `meta.fields["fieldName.0"]`. Inserts, deletes,
+moves, reorders, and copies reindex the applicable shape and every nested
+relationship prefix together. Compact JSON:API to-many `data: [...]` is
+normalized to Boxel's indexed source representation before an edit, and an
+empty `linksToMany` returns to `{ links: { self: null } }` when its last edge is
+removed.
+
+Plain mutation JSON does not identify the runtime FieldDef of a newly created
+polymorphic contained value. `serializeContainedValue` is the host boundary for
+that information. It returns the value's source-relative `meta` (normally an
+`adoptsFrom`, optionally recursive `fields`) and local relationship records;
+the adapter hoists those relationships under the contained value's dotted
+path. Existing values need no callback: their exact metadata and relationship
+extensions travel with move/copy operations. If a collection already uses
+per-value `adoptsFrom`, an insertion without matching metadata fails with
+`card-source-contained-meta-required` rather than damaging the source.
 
 ## Why a profile is needed
 
