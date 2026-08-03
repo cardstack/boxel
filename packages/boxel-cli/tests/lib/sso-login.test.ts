@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest';
 
 import {
+  DEFAULT_TIMEOUT_MS,
   SsoTimeoutError,
   browserLogin,
   buildCliAuthUrl,
+  describeDuration,
   redeemLoginToken,
   startLoopbackCallback,
 } from '../../src/lib/sso-login.ts';
@@ -22,6 +24,20 @@ function jsonResponse(body: unknown, status = 200): Response {
 function formBody(fields: Record<string, string>): string {
   return new URLSearchParams(fields).toString();
 }
+
+describe('the wait for the browser', () => {
+  // A password reset mid-flow links back to the same listener, so the window
+  // has to outlast an email round trip.
+  it('lasts a quarter of an hour', () => {
+    expect(DEFAULT_TIMEOUT_MS).toBe(15 * 60 * 1000);
+  });
+
+  it('is described in whichever unit the reader thinks in', () => {
+    expect(describeDuration(15 * 60 * 1000)).toBe('15 minutes');
+    expect(describeDuration(60 * 1000)).toBe('1 minute');
+    expect(describeDuration(30 * 1000)).toBe('30s');
+  });
+});
 
 describe('buildCliAuthUrl', () => {
   it('names the listener by port rather than by URL', () => {

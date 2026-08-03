@@ -8,8 +8,23 @@ import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 import type { MatrixAuth } from './auth.ts';
 
-const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
+// Long enough to cover a password reset mid-flow: the reset email links back to
+// this page carrying the same port and nonce, so the authorization resumes only
+// while this listener is still up. The listener is bound to loopback and admits
+// exactly one nonce-matching callback, so waiting longer costs little.
+export const DEFAULT_TIMEOUT_MS = 15 * 60 * 1000;
 const CALLBACK_PATH = '/callback';
+
+// "15 minutes" rather than "900s", since the wait is long enough that seconds
+// stop being the unit anyone thinks in.
+export function describeDuration(ms: number): string {
+  const seconds = Math.round(ms / 1000);
+  if (seconds < 60) {
+    return `${seconds}s`;
+  }
+  const minutes = Math.round(seconds / 60);
+  return `${minutes} minute${minutes === 1 ? '' : 's'}`;
+}
 
 // The user never finished in the browser (or never got there).
 export class SsoTimeoutError extends Error {
@@ -208,7 +223,7 @@ export async function startLoopbackCallback(opts?: {
             () =>
               reject(
                 new SsoTimeoutError(
-                  `Timed out after ${Math.round(timeoutMs / 1000)}s waiting for ` +
+                  `Timed out after ${describeDuration(timeoutMs)} waiting for ` +
                     'the browser sign-in to complete. Re-run with --no-browser ' +
                     'to sign in with a username and password instead.',
                 ),
@@ -368,7 +383,10 @@ export async function browserLogin(
     } else {
       log(`Open this URL in your browser to sign in:\n  ${authUrl}`);
     }
-    log('Waiting for you to finish signing in...');
+    log(
+      `Waiting up to ${describeDuration(timeoutMs ?? DEFAULT_TIMEOUT_MS)} for ` +
+        'you to finish signing in. Press Ctrl-C to stop.',
+    );
 
     const result = await callback.waitForResult();
     if (result.kind === 'loginToken') {
