@@ -8,7 +8,7 @@ import { restartableTask } from 'ember-concurrency';
 
 import window from 'ember-window-mock';
 
-import { BoxelInput, LoadingIndicator } from '@cardstack/boxel-ui/components';
+import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { GoogleColor } from '@cardstack/boxel-ui/icons';
 
 import ENV from '@cardstack/host/config/environment';
@@ -16,6 +16,7 @@ import { cliAuthLoopbackUrl } from '@cardstack/host/lib/cli-auth-loopback';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
 import AuthButton from './auth-button';
+import AuthContainer from './auth-container';
 import AuthFormField from './auth-form-field';
 
 const { matrixURL } = ENV;
@@ -40,23 +41,19 @@ interface MatrixLoginResponse {
 // the CLI's, and this app stays signed in (or out) exactly as it was.
 export default class CliAuth extends Component {
   <template>
-    <div class='cli-auth'>
+    <AuthContainer>
       {{#if this.redirectError}}
-        <div class='panel' data-test-cli-auth-error>
-          <h1 class='title'>Can't authorize</h1>
-          <p class='body'>{{this.redirectError}}</p>
-        </div>
+        <span class='title'>Can't authorize</span>
+        <p class='subtitle' data-test-cli-auth-error>{{this.redirectError}}</p>
       {{else if this.completed}}
-        <div class='panel' data-test-cli-auth-complete>
-          <h1 class='title'>Authorized</h1>
-          <p class='body'>Return to your terminal to continue.</p>
-        </div>
+        <span class='title'>You're signed in</span>
+        <p class='subtitle' data-test-cli-auth-complete>Return to your terminal
+          to continue. You can close this tab.</p>
       {{else}}
-        <div class='panel'>
-          <h1 class='title'>Authorize Boxel CLI</h1>
-          <p class='body'>Signing in here gives the Boxel CLI running on this
-            computer access to your workspaces.</p>
-
+        <span class='title'>Authorize Boxel CLI</span>
+        <p class='subtitle'>Signing in gives the Boxel CLI running on this
+          computer access to your workspaces.</p>
+        <form data-test-cli-auth-form {{on 'submit' this.submitPassword}}>
           {{#if this.googleSsoAvailable}}
             <AuthButton
               class='google-button'
@@ -67,98 +64,101 @@ export default class CliAuth extends Component {
               <GoogleColor class='google-g' aria-hidden='true' />
               Continue with Google
             </AuthButton>
-            <div class='divider'><span>or</span></div>
+            <div class='divider' aria-hidden='true'>
+              <span class='divider-label'>or use your email</span>
+            </div>
           {{/if}}
-
-          <form data-test-cli-auth-form {{on 'submit' this.submitPassword}}>
-            <AuthFormField @label='Email Address or Username'>
-              <BoxelInput
-                data-test-cli-auth-username
-                type='text'
-                id='boxel-cli-auth-username'
-                name='username'
-                autocomplete='username'
-                @value={{this.username}}
-                @onInput={{this.setUsername}}
-              />
-            </AuthFormField>
-            <AuthFormField @label='Password'>
-              <BoxelInput
-                data-test-cli-auth-password
-                type='password'
-                id='boxel-cli-auth-password'
-                name='password'
-                autocomplete='current-password'
-                @value={{this.password}}
-                @onInput={{this.setPassword}}
-              />
-            </AuthFormField>
-            {{#if this.error}}
-              <div
-                class='error'
-                data-test-cli-auth-form-error
-              >{{this.error}}</div>
-            {{/if}}
-            <AuthButton
-              data-test-cli-auth-submit
-              @loading={{this.doPasswordLogin.isRunning}}
-              type='submit'
-            >
-              {{#if this.doPasswordLogin.isRunning}}
-                <LoadingIndicator />
-              {{else}}
-                Sign in
-              {{/if}}
-            </AuthButton>
-          </form>
-        </div>
+          <AuthFormField @label='Email Address or Username'>
+            <BoxelInput
+              data-test-cli-auth-username
+              type='text'
+              id='boxel-cli-auth-username'
+              name='username'
+              autocomplete='username'
+              @value={{this.username}}
+              @onInput={{this.setUsername}}
+              @onKeyPress={{this.handleEnter}}
+            />
+          </AuthFormField>
+          <AuthFormField @label='Password'>
+            <BoxelInput
+              data-test-cli-auth-password
+              type='password'
+              id='boxel-cli-auth-password'
+              name='password'
+              autocomplete='current-password'
+              @value={{this.password}}
+              @onInput={{this.setPassword}}
+              @onKeyPress={{this.handleEnter}}
+            />
+          </AuthFormField>
+          <AuthButton
+            data-test-cli-auth-submit
+            @variant='primary'
+            @disabled={{this.isSubmitDisabled}}
+            @loading={{this.doPasswordLogin.isRunning}}
+            {{on 'click' this.submitPassword}}
+          >Sign In</AuthButton>
+          {{#if this.error}}
+            <div
+              class='error'
+              data-test-cli-auth-form-error
+            >{{this.error}}</div>
+          {{/if}}
+        </form>
       {{/if}}
-    </div>
+    </AuthContainer>
 
     <style scoped>
-      .cli-auth {
-        display: flex;
-        justify-content: center;
-        padding: var(--boxel-sp-xxl) var(--boxel-sp);
-      }
-      .panel {
-        width: 100%;
-        max-width: 24rem;
+      form {
         display: flex;
         flex-direction: column;
-        gap: var(--boxel-sp);
       }
       .title {
-        font: 600 var(--boxel-font-lg);
-        margin: 0;
+        font: 600 var(--boxel-font-md);
+        color: var(--foreground);
+        margin-bottom: var(--boxel-sp-sm);
+        padding: 0;
       }
-      .body {
-        color: var(--boxel-450);
-        margin: 0;
+      .subtitle {
+        margin: 0 0 var(--boxel-sp-lg);
+        color: var(--foreground);
+        font: var(--boxel-font-sm);
+        line-height: 1.4;
+      }
+      .google-button {
+        margin-top: var(--boxel-sp-sm);
+        gap: var(--boxel-sp-xs);
+      }
+      .google-g {
+        width: 1.125rem;
+        height: 1.125rem;
+        flex-shrink: 0;
       }
       .divider {
         display: flex;
         align-items: center;
-        gap: var(--boxel-sp-xs);
-        color: var(--boxel-450);
+        gap: var(--boxel-sp-sm);
+        margin: var(--boxel-sp-lg) 0 var(--boxel-sp-xs);
       }
       .divider::before,
       .divider::after {
         content: '';
         flex: 1;
-        border-top: 1px solid var(--boxel-300);
+        height: 1px;
+        background-color: rgba(255, 255, 255, 0.18);
       }
-      .google-g {
-        width: 1rem;
-        height: 1rem;
+      .divider-label {
+        color: var(--muted-foreground);
+        font: 600 var(--boxel-font-xs);
+        letter-spacing: var(--boxel-lsp-lg);
+        text-transform: uppercase;
       }
       .error {
         color: var(--boxel-error-100);
-      }
-      form {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-sm);
+        padding: 0;
+        font: 500 var(--boxel-font-xs);
+        margin: var(--boxel-sp-2xs) auto 0 auto;
       }
     </style>
   </template>
@@ -187,6 +187,17 @@ export default class CliAuth extends Component {
       return 'This page needs the listening port and request id that the Boxel CLI supplies. Start it with `boxel profile add`.';
     }
     return undefined;
+  }
+
+  private get isSubmitDisabled() {
+    return !this.username || !this.password;
+  }
+
+  @action private handleEnter(ev: KeyboardEvent) {
+    if (ev.key === 'Enter') {
+      ev.preventDefault();
+      this.submitPassword(ev);
+    }
   }
 
   @action private setUsername(value: string) {
