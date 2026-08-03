@@ -418,6 +418,14 @@ async function findConflict(args: {
  * Content hash of every file under `dir`, keyed by its path relative to `dir`.
  * Comparing two of these answers both questions the reconcile asks: has the
  * realm's copy changed, and has the mirrored copy been edited?
+ *
+ * Dot-prefixed names are left out. A skill is authored markdown, so they are
+ * never its content — but the mirror sits on someone's disk, where Finder,
+ * Spotlight and editors drop `.DS_Store` and swap files into any directory they
+ * touch. Hashing those would read as "edited in place" and freeze the entry:
+ * never refreshed, never swept, on the strength of a file the user did not
+ * write. The cost is that a change confined to a dotfile inside a realm's skill
+ * does not by itself trigger a refresh.
  */
 async function hashTree(dir: string, prefix = ''): Promise<FileHashes> {
   const hashes: FileHashes = {};
@@ -430,6 +438,7 @@ async function hashTree(dir: string, prefix = ''): Promise<FileHashes> {
   }
 
   for (const entry of entries) {
+    if (entry.name.startsWith('.')) continue;
     const full = path.join(dir, entry.name);
     const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
     if (await isDirectory(full)) {

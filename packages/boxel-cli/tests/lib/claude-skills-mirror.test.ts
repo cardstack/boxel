@@ -239,6 +239,30 @@ describe('mirrorRealmSkills', () => {
     );
   });
 
+  it('is not fooled into "edited in place" by an OS dotfile', async () => {
+    writeSkill(checkout, 'trip-planner');
+    await mirror();
+
+    // Finder drops one of these into any directory it looks at. Treating it as
+    // an edit would freeze the entry: never refreshed, never swept.
+    fs.writeFileSync(
+      mirrorPath(checkout, 'experiments-trip-planner', '.DS_Store'),
+      'junk',
+    );
+    writeSkill(checkout, 'trip-planner', 'Changed in the realm.');
+
+    const result = await mirror();
+
+    expect(result?.skipped).toEqual([]);
+    expect(result?.updated).toEqual(['experiments-trip-planner']);
+    expect(
+      fs.readFileSync(
+        mirrorPath(checkout, 'experiments-trip-planner', 'SKILL.md'),
+        'utf8',
+      ),
+    ).toBe(skillBody('trip-planner', 'Changed in the realm.'));
+  });
+
   it('sweeps an entry whose realm-side skill is gone', async () => {
     writeSkill(checkout, 'trip-planner');
     writeSkill(checkout, 'retired');
