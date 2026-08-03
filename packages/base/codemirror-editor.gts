@@ -11,7 +11,6 @@ import { eq, not } from '@cardstack/boxel-ui/helpers';
 
 import {
   baseRRI,
-  maybeRelativeReference,
   resolveRRIReference,
   rri,
   CardContextName,
@@ -131,28 +130,6 @@ function resolveUrl(raw: string, baseUrl: string | null | undefined): string {
   }
 }
 
-function makeCardRef(
-  cardUrl: string,
-  baseUrl: string | null | undefined,
-): string {
-  if (!baseUrl) return cardUrl;
-  try {
-    return maybeRelativeReference(
-      new URL(cardUrl),
-      new URL(baseUrl),
-      undefined,
-    );
-  } catch {
-    return cardUrl;
-  }
-}
-
-function labelFromUrl(url: string): string {
-  let cleaned = trimJsonExtension(url);
-  let parts = cleaned.split('/');
-  return parts[parts.length - 1] || cleaned;
-}
-
 // `getCards` is typed to return CardDef instances (its generic is constrained to
 // `T extends CardDef`, and FileDef extends BaseDef — not CardDef). A query routed
 // through `on: FileDef` actually yields FileDef instances, so we reinterpret the
@@ -238,16 +215,6 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
   @tracked _widgetTargets: CardWidgetTarget[] = [];
   @tracked _isLoaded = false;
 
-  // ── Card search state ────────────────────────────────────────────────────
-  @tracked _cardSearchMode = false;
-  @tracked _cardSearchText = '';
-  @tracked _cardSearchIndex = 0;
-  @tracked _menuCoords: { left: number; top: number } | null = null;
-
-  // Format picker (after selecting a card from search)
-  @tracked _formatPickerCardUrl: string | null = null;
-  @tracked _formatPickerCardTitle: string | null = null;
-
   // ── Docked toolbar state ────────────────────────────────────────────────
   @tracked _selectionInfo: SelectionInfo | null = null;
 
@@ -282,156 +249,13 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
 
   // ── Card search logic ────────────────────────────────────────────────────
 
-  private _handleOpenCardSearch = (_pos: { from: number; to: number }) => {
+  // Typing `/card` reuses the same embed chooser modal as the toolbar's
+  // Add-embed button. The slash completion's `apply` already deleted the typed
+  // `/`, so the caret sits where the directive should land — `_openEmbedChooser`
+  // inserts at the current selection.
+  private _handleOpenCardSearch = () => {
     if (isDestroying(this) || isDestroyed(this)) return;
-    this._cardSearchMode = true;
-    this._cardSearchText = '';
-    this._cardSearchIndex = 0;
-    this._updateMenuCoords();
-    scheduleOnce('afterRender', this, this._focusSearchInput);
-  };
-
-  private _updateMenuCoords() {
-    let view = this.editorView;
-    if (!view) {
-      this._menuCoords = null;
-      return;
-    }
-    try {
-      let { head } = view.state.selection.main;
-      let coords = view.coordsAtPos(head);
-      let editorRect = view.dom
-        .closest('.codemirror-editor')
-        ?.getBoundingClientRect();
-      if (editorRect && coords) {
-        this._menuCoords = {
-          left: coords.left - editorRect.left,
-          top: coords.bottom - editorRect.top + 4,
-        };
-      }
-    } catch {
-      this._menuCoords = null;
-    }
-  }
-
-  get menuStyle(): string {
-    let coords = this._menuCoords;
-    if (!coords) return 'display: none';
-    return `left: ${coords.left}px; top: ${coords.top}px;`;
-  }
-
-  private _focusSearchInput = () => {
-    // Scope query to this editor instance's container to avoid focusing
-    // the wrong input when multiple editors exist on the page
-    let container = this.editorView?.dom?.closest('.codemirror-editor');
-    let input = (container ?? document).querySelector(
-      '[data-codemirror-card-search-input]',
-    ) as HTMLInputElement;
-    input?.focus();
-  };
-
-  // ── Card search resource ─────────────────────────────────────────────────
-
-  private _searchResourceCreated = false;
-  private _searchResource: {
-    instances: CardDef[];
-    isLoading: boolean;
-  } | null = null;
-
-  get cardSearchResults(): CardDef[] {
-    if (!this._cardSearchMode) return [];
-    if (!this._searchResourceCreated) {
-      this._searchResourceCreated = true;
-      try {
-        let getCards = this.args.getCards;
-        if (typeof getCards === 'function') {
-          this._searchResource =
-            getCards(this, () => {
-              let text = this._cardSearchText?.trim();
-              if (!text) return undefined;
-              return {
-                filter: { contains: { name: text } },
-                page: { size: 10 },
-              };
-            }) ?? null;
-        }
-      } catch {
-        // Card search not available
-      }
-    }
-    return this._searchResource?.instances ?? [];
-  }
-
-  get isSearchLoading(): boolean {
-    return this._searchResource?.isLoading ?? false;
-  }
-
-  _handleCardSearchInput = (event: Event) => {
-    this._cardSearchText = (event.target as HTMLInputElement).value;
-    this._cardSearchIndex = 0;
-  };
-
-  _handleCardSearchKeydown = (evt: Event) => {
-    let event = evt as KeyboardEvent;
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      this._dismissCardSearch();
-      return;
-    }
-    if (event.key === 'ArrowDown') {
-      event.preventDefault();
-      let max = this.cardSearchResults.length;
-      if (max > 0) {
-        this._cardSearchIndex = (this._cardSearchIndex + 1) % max;
-      }
-      return;
-    }
-    if (event.key === 'ArrowUp') {
-      event.preventDefault();
-      let max = this.cardSearchResults.length;
-      if (max > 0) {
-        this._cardSearchIndex = (this._cardSearchIndex - 1 + max) % max;
-      }
-      return;
-    }
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      // Check if the input looks like a URL
-      let text = this._cardSearchText.trim();
-      if (
-        text &&
-        (text.startsWith('http://') ||
-          text.startsWith('https://') ||
-          text.startsWith('./'))
-      ) {
-        this._formatPickerCardUrl = text;
-        this._formatPickerCardTitle = labelFromUrl(text);
-        this._cardSearchMode = false;
-        return;
-      }
-      // Otherwise select the highlighted search result
-      let results = this.cardSearchResults;
-      let card = results[this._cardSearchIndex];
-      if (card) {
-        this._selectCardResult(card);
-      }
-      return;
-    }
-  };
-
-  _selectCardResult = (card: CardDef) => {
-    if (!card.id) return;
-    this._formatPickerCardUrl = card.id;
-    this._formatPickerCardTitle = (card as any).title ?? labelFromUrl(card.id);
-    this._cardSearchMode = false;
-  };
-
-  _dismissCardSearch = () => {
-    this._cardSearchMode = false;
-    this._cardSearchText = '';
-    this._cardSearchIndex = 0;
-    this._menuCoords = null;
-    this.editorView?.focus();
+    this._openEmbedChooser('card');
   };
 
   // ── Docked toolbar ──────────────────────────────────────────────────────
@@ -816,61 +640,6 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     }
   };
 
-  // ── Card insertion ───────────────────────────────────────────────────────
-
-  _insertCardWithFormat = (format: string) => {
-    let cardUrl = this._formatPickerCardUrl;
-    if (!cardUrl) return;
-
-    let view = this.editorView;
-    if (!view) return;
-
-    let baseUrl = this.args.cardReferenceBaseUrl;
-    let ref = makeCardRef(cardUrl, baseUrl);
-
-    let { from } = view.state.selection.main;
-
-    if (format === 'inline') {
-      view.dispatch({
-        changes: { from, insert: `:card[${ref}]` },
-      });
-    } else {
-      // For block cards, insert on a new line
-      let line = view.state.doc.lineAt(from);
-      let insertPos = line.to;
-      let prefix = line.text.trim() === '' ? '' : '\n';
-      view.dispatch({
-        changes: { from: insertPos, insert: `${prefix}::card[${ref}]\n` },
-      });
-    }
-
-    // Clean up all popup state
-    this._formatPickerCardUrl = null;
-    this._formatPickerCardTitle = null;
-    this._cardSearchMode = false;
-    this._cardSearchText = '';
-    this._menuCoords = null;
-
-    view.focus();
-
-    // Trigger save immediately
-    let onUpdate = this.args.onUpdate;
-    if (onUpdate) {
-      if (this.saveTimer) {
-        clearTimeout(this.saveTimer);
-        this.saveTimer = null;
-      }
-      onUpdate(view.state.doc.toString());
-    }
-  };
-
-  _dismissFormatPicker = () => {
-    this._formatPickerCardUrl = null;
-    this._formatPickerCardTitle = null;
-    this._menuCoords = null;
-    this.editorView?.focus();
-  };
-
   // ── Reference resolution via getCards ─────────────────────────────────────
   // The linkedCards/linkedFiles linksToMany queries on RichMarkdownField return
   // empty in edit mode because nested FieldDef instances lack a card store. We
@@ -1040,12 +809,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     this._widgetTargets = [];
     this._pendingTargets = [];
     this._selectionInfo = null;
-    this._menuCoords = null;
-    this._formatPickerCardUrl = null;
-    this._formatPickerCardTitle = null;
-    this._searchResource = null;
     this._cardRefResource = null;
-    this._searchResourceCreated = false;
     this._cardRefResourceCreated = false;
     this._cm = null;
   }
@@ -1251,90 +1015,6 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
           {{this.mountEditor this.cm @content @onUpdate this.livePreview}}
         ></div>
 
-        {{! ── Card search popup ── }}
-        {{! template-lint-disable no-pointer-down-event-binding }}
-        {{#if this._cardSearchMode}}
-          <div
-            class='codemirror-card-search'
-            style={{this.menuStyle}}
-            data-test-card-search
-          >
-            <input
-              class='codemirror-card-search-input'
-              placeholder='Search cards or paste URL…'
-              aria-label='Search cards or paste URL'
-              value={{this._cardSearchText}}
-              data-codemirror-card-search-input
-              data-test-card-search-input
-              {{on 'input' this._handleCardSearchInput}}
-              {{on 'keydown' this._handleCardSearchKeydown}}
-            />
-            {{#if this.isSearchLoading}}
-              <div class='codemirror-card-search-loading'>Searching…</div>
-            {{/if}}
-            {{#if this.cardSearchResults.length}}
-              <div
-                class='codemirror-card-search-results'
-                data-test-card-search-results
-              >
-                {{#each this.cardSearchResults as |card index|}}
-                  <button
-                    class='codemirror-card-search-result
-                      {{if (eq index this._cardSearchIndex) "selected"}}'
-                    data-test-card-search-result
-                    {{on 'mousedown' this._preventFocusLoss}}
-                    {{on 'click' (fn this._selectCardResult card)}}
-                  >
-                    <span class='search-result-title'>{{card.title}}</span>
-                    {{#if card.id}}
-                      <span class='search-result-url'>{{card.id}}</span>
-                    {{/if}}
-                  </button>
-                {{/each}}
-              </div>
-            {{/if}}
-          </div>
-        {{/if}}
-
-        {{! ── Format picker popup ── }}
-        {{! template-lint-disable no-pointer-down-event-binding }}
-        {{#if this._formatPickerCardUrl}}
-          <div
-            class='codemirror-format-picker'
-            style={{this.menuStyle}}
-            data-test-format-picker
-          >
-            <span class='format-picker-label'>
-              Insert "{{this._formatPickerCardTitle}}" as:
-            </span>
-            <div class='format-picker-buttons'>
-              <button
-                class='format-picker-btn'
-                data-test-format-inline
-                {{on 'mousedown' this._preventFocusLoss}}
-                {{on 'click' (fn this._insertCardWithFormat 'inline')}}
-              >
-                Inline
-              </button>
-              <button
-                class='format-picker-btn format-picker-btn--primary'
-                data-test-format-block
-                {{on 'mousedown' this._preventFocusLoss}}
-                {{on 'click' (fn this._insertCardWithFormat 'block')}}
-              >
-                Block
-              </button>
-            </div>
-            <button
-              class='format-picker-dismiss'
-              data-test-format-picker-dismiss
-              {{on 'mousedown' this._preventFocusLoss}}
-              {{on 'click' this._dismissFormatPicker}}
-            >
-              Cancel
-            </button>
-          </div>
-        {{/if}}
       </div>
 
       {{#if this.livePreview}}
@@ -1793,146 +1473,6 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
           justify-content: center;
           color: var(--boxel-400, #999);
           font-style: italic;
-        }
-
-        /* ── Card search popup ── */
-        .codemirror-card-search {
-          position: absolute;
-          z-index: 100;
-          background: var(--boxel-light, #fff);
-          border: 1px solid var(--boxel-border-color, #c4c4c4);
-          border-radius: var(--boxel-border-radius, 4px);
-          box-shadow: 0 4px 12px rgb(0 0 0 / 0.15);
-          min-width: 280px;
-          max-width: 400px;
-          padding: 8px;
-        }
-
-        .codemirror-card-search-input {
-          width: 100%;
-          padding: 6px 10px;
-          border: 1px solid var(--boxel-border-color, #c4c4c4);
-          border-radius: var(--boxel-border-radius, 4px);
-          font: inherit;
-          font-size: 0.9em;
-          outline: none;
-          box-sizing: border-box;
-        }
-
-        .codemirror-card-search-input:focus {
-          border-color: var(--boxel-highlight, #0078d4);
-          box-shadow: 0 0 0 1px var(--boxel-highlight, #0078d4);
-        }
-
-        .codemirror-card-search-loading {
-          padding: 8px 4px;
-          color: var(--boxel-400, #666);
-          font-size: 0.85em;
-          font-style: italic;
-        }
-
-        .codemirror-card-search-results {
-          margin-top: 4px;
-          max-height: 240px;
-          overflow-y: auto;
-        }
-
-        .codemirror-card-search-result {
-          display: flex;
-          flex-direction: column;
-          align-items: flex-start;
-          width: 100%;
-          padding: 6px 10px;
-          border: none;
-          background: transparent;
-          cursor: pointer;
-          border-radius: var(--boxel-border-radius, 4px);
-          text-align: left;
-          font: inherit;
-        }
-
-        .codemirror-card-search-result:hover,
-        .codemirror-card-search-result.selected {
-          background: var(--boxel-highlight-hover, #e8f0fe);
-        }
-
-        .search-result-title {
-          font-weight: 500;
-          font-size: 0.9em;
-        }
-
-        .search-result-url {
-          font-size: 0.75em;
-          color: var(--boxel-400, #666);
-          word-break: break-all;
-        }
-
-        /* ── Format picker popup ── */
-        .codemirror-format-picker {
-          position: absolute;
-          z-index: 100;
-          background: var(--boxel-light, #fff);
-          border: 1px solid var(--boxel-border-color, #c4c4c4);
-          border-radius: var(--boxel-border-radius, 4px);
-          box-shadow: 0 4px 12px rgb(0 0 0 / 0.15);
-          padding: 12px;
-          min-width: 220px;
-        }
-
-        .format-picker-label {
-          display: block;
-          font-size: 0.85em;
-          color: var(--boxel-400, #666);
-          margin-bottom: 8px;
-          word-break: break-word;
-        }
-
-        .format-picker-buttons {
-          display: flex;
-          gap: 8px;
-          margin-bottom: 8px;
-        }
-
-        .format-picker-btn {
-          flex: 1;
-          padding: 6px 12px;
-          border: 1px solid var(--boxel-border-color, #c4c4c4);
-          border-radius: var(--boxel-border-radius, 4px);
-          background: var(--boxel-light, #fff);
-          cursor: pointer;
-          font: inherit;
-          font-size: 0.9em;
-        }
-
-        .format-picker-btn:hover {
-          background: var(--boxel-highlight-hover, #e8f0fe);
-        }
-
-        .format-picker-btn--primary {
-          background: var(--boxel-highlight, #0078d4);
-          color: white;
-          border-color: var(--boxel-highlight, #0078d4);
-        }
-
-        .format-picker-btn--primary:hover {
-          opacity: 0.9;
-        }
-
-        .format-picker-dismiss {
-          display: block;
-          width: 100%;
-          padding: 4px;
-          border: none;
-          background: transparent;
-          color: var(--boxel-400, #666);
-          cursor: pointer;
-          font: inherit;
-          font-size: 0.8em;
-          text-align: center;
-        }
-
-        .format-picker-dismiss:hover {
-          color: var(--boxel-dark, #333);
         }
       }
     </style>
