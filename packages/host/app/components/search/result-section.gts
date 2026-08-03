@@ -28,6 +28,7 @@ import type {
 import {
   removeCardJsonExtension,
   type NewCardArgs,
+  type SearchResultKind,
 } from '@cardstack/host/utils/search/types';
 
 import { SECTION_SHOW_MORE_INCREMENT } from './constants';
@@ -69,7 +70,10 @@ interface Signature {
     section: SearchSheetSection;
     viewOption?: string;
     isCompact?: boolean;
-    handleSelect: (selection: string | NewCardArgs) => void;
+    handleSelect: (
+      selection: string | NewCardArgs,
+      kind?: SearchResultKind,
+    ) => void;
     isFocused?: boolean;
     isCollapsed?: boolean;
     onFocusSection?: (sectionId: string | null) => void;
@@ -81,7 +85,10 @@ interface Signature {
       ref: CodeRef;
       relativeTo: URL | undefined;
     };
-    onSubmit?: (selection: string | NewCardArgs) => void;
+    onSubmit?: (
+      selection: string | NewCardArgs,
+      kind?: SearchResultKind,
+    ) => void;
     // When true, the tiles render the Adorn visual treatment (teal hover
     // type-label tab + selection chip) rather than the plain grey
     // hover/selection visuals.
