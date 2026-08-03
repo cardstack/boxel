@@ -181,6 +181,7 @@ Key modules:
 - `src/factory-context-builder.ts` — assembles agent context from issue relationships
 - `src/validators/validation-pipeline.ts` — the validation pipeline run after every agent turn
 - `src/run-trace.ts` — per-run NDJSON span telemetry (see `docs/run-trace.md`)
+- `src/run-telemetry.ts` — folds the trace into a live `RunTelemetry` card in the control realm (`Runs/<slug>-telemetry`): timeline and per-ticket time, token economics, phase subtotals, and the skills each phase's context carried
 
 ## Layout
 

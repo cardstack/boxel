@@ -45,6 +45,8 @@ export interface RunMonitorOptions {
 
 export interface TurnInfo {
   issueTitle: string;
+  /** Tracker board key ("SN-1"); absent for turns not tied to one issue. */
+  issueId?: string;
   /** prime | bootstrap | design | build | fix | implement | acceptance */
   turnType: string;
   iteration?: number;

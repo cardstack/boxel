@@ -28,9 +28,9 @@ wall-clock so lines cross-reference the debug log.
 | `run`         | `meta`, `issue-loop`                                                                                               | run                                                                               |
 | `startup`     | `load-brief`, `bootstrap-target-realm`, `pull-target-realm`, `pull-control-realm`                                  | run                                                                               |
 | `seed`        | `create-seed`                                                                                                      | run                                                                               |
-| `skills`      | `materialize` (run), `load` (turn)                                                                                 | —                                                                                 |
+| `skills`      | `materialize` (run), `load` (turn), `in-context` (event, per skill per turn)                                       | —                                                                                 |
 | `manifest`    | `host-imports`                                                                                                     | run                                                                               |
-| `scheduler`   | `load-issues`, `skip-stale-done`                                                                                   | occurrence                                                                        |
+| `scheduler`   | `load-issues`, `skip-stale-done`, `board` (event, per issue per board load)                                        | occurrence                                                                        |
 | `issue`       | issue slug                                                                                                         | outer cycle; tags `exitReason`, `iterations`, `agentMs`, `validationMs`, `syncMs` |
 | `iteration`   | issue slug                                                                                                         | inner pass; tag `iteration`                                                       |
 | `context`     | `build-for-issue`                                                                                                  | agent-context build                                                               |
@@ -45,6 +45,18 @@ span as wall-clock cost, the step spans as attribution. Same for `tool` and
 `sync` spans inside an `inference` span — tool time is part of the turn's
 wall clock, so "model thinking time" ≈ inference `d` minus contained `tool`
 spans.
+
+`scheduler`/`board` is a state snapshot rather than a timeline marker: one
+event per issue every time the scheduler reloads the board, tagged `issueId`,
+`issue` (title), `status`, and `blocked`. It is the only signal that mentions a
+ticket the run has not taken a turn on, which is how the telemetry card shows
+backlog and blocked issues alongside the ones it worked.
+
+`skills`/`load` records what a turn _asked_ for; `skills`/`in-context` is one
+event per skill per turn recording what the turn actually carried — after
+budget trimming and including generated skills — with tags `skill`,
+`turnType`, `issueId`, `chars` (body + references), and `refs`. The telemetry
+card's "Skills in context" section folds these by lifecycle phase.
 
 ## Quick triage without the visualization
 
