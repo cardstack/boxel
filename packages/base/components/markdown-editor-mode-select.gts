@@ -64,6 +64,11 @@ export default class MarkdownEditorModeSelect extends GlimmerComponent<Signature
 
     <style scoped>
       .markdown-editor-mode-select {
+        /* Trim the trigger's corners: the default form-control radius reads a
+           touch too rounded here, so drop it 2px (scoped to this select). */
+        --boxel-form-control-border-radius: calc(
+          var(--boxel-border-radius) - 2px
+        );
         /* Compact the trigger: tight padding and a small label↔caret gap,
            via the BoxelSelect trigger tokens. */
         --boxel-select-trigger-padding: var(--boxel-sp-5xs) var(--boxel-sp-xxs);
@@ -91,8 +96,19 @@ export default class MarkdownEditorModeSelect extends GlimmerComponent<Signature
     {{! template-lint-disable require-scoped-style }}
     <style>
       .boxel-select__dropdown.markdown-editor-mode-select-dropdown {
+        /* Match the trigger: 2px less rounded than the default menu radius. */
+        --boxel-form-control-border-radius: calc(
+          var(--boxel-border-radius) - 2px
+        );
         width: max-content;
         min-width: 7rem;
+      }
+      /* Shorter rows: tighten the vertical padding so the menu reads less tall.
+         (0,3,0) specificity wins over BoxelSelect's own row rules regardless of
+         stylesheet order. */
+      .boxel-select__dropdown.markdown-editor-mode-select-dropdown
+        .boxel-select-option-item {
+        padding-block: var(--boxel-sp-3xs);
       }
       .markdown-editor-mode-select-dropdown .boxel-select-option-text {
         white-space: nowrap;
