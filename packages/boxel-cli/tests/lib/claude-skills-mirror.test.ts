@@ -293,6 +293,33 @@ describe('mirrorRealmSkills', () => {
     );
   });
 
+  it('does not offer to sweep an edited copy under dryRun', async () => {
+    writeSkill(checkout, 'retired');
+    await mirror();
+
+    const mirrored = mirrorPath(checkout, 'experiments-retired', 'SKILL.md');
+    fs.writeFileSync(mirrored, skillBody('retired', 'Edited by hand.'));
+    fs.rmSync(path.join(checkout, 'skills', 'retired'), { recursive: true });
+
+    const result = await mirrorRealmSkills({
+      realmUrl: REALM_URL,
+      localDir: checkout,
+      dryRun: true,
+    });
+
+    // A preview has to name what a real run would do, and a real run keeps
+    // this copy.
+    expect(result?.removed).toEqual([]);
+    expect(result?.skipped).toEqual([
+      {
+        name: 'experiments-retired',
+        reason:
+          'edited in place and no longer in the realm — delete it once the change is saved elsewhere',
+      },
+    ]);
+    expect(fs.existsSync(mirrored)).toBe(true);
+  });
+
   it('leaves a hand-authored .claude/skills entry alone', async () => {
     writeSkill(checkout, 'trip-planner');
     const occupied = mirrorPath(checkout, 'experiments-trip-planner');

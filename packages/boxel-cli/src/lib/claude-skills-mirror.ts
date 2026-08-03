@@ -255,9 +255,11 @@ export async function mirrorRealmSkills(
     if (nextEntries[name] !== undefined) continue;
     const target = path.join(mirrorDir, name);
 
-    if (!dryRun && (await pathPresent(target))) {
+    if (await pathPresent(target)) {
       // Same protection as the refresh path: an edited copy is kept, and its
-      // manifest record with it, so the next run reports it again.
+      // manifest record with it, so the next run reports it again. Decided
+      // before the dry-run check so a preview names what a real run would
+      // delete, rather than promising to remove an edit it would keep.
       const mirrorFiles = await hashTree(target);
       if (!sameHashes(mirrorFiles, prior.files)) {
         result.skipped.push({
@@ -268,7 +270,9 @@ export async function mirrorRealmSkills(
         nextEntries[name] = prior;
         continue;
       }
-      await fs.rm(target, { recursive: true, force: true });
+      if (!dryRun) {
+        await fs.rm(target, { recursive: true, force: true });
+      }
     }
     result.removed.push(name);
   }
