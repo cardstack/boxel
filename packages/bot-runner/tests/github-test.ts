@@ -72,6 +72,8 @@ module('github client', (hooks) => {
     assert.strictEqual(createdTreeBodies.length, 1, 'creates one tree');
     let entries = createdTreeBodies[0].tree as {
       path: string;
+      mode: string;
+      type: string;
       sha: string | null;
     }[];
     assert.deepEqual(
