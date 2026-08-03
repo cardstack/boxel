@@ -1024,6 +1024,9 @@ module('Acceptance | host mode tests', function (hooks) {
       await waitFor(
         '[data-boxel-card-island][data-boxel-card-island-status="rehydrated"]',
       );
+      await waitFor(
+        '[data-realm-sandbox-template-island][data-realm-sandbox-island-update="rehydrated"]',
+      );
 
       assert.strictEqual(
         island.querySelector('[data-boxel-card-container]'),

@@ -222,7 +222,16 @@ export default class HostModeCard extends Component<Signature> {
         console.warn('Card island rehydration failed; replaced its DOM', error);
       } finally {
         for (let nestedIsland of nestedSandboxIslands) {
-          discardSuspendedSerializedComponent(nestedIsland as any);
+          // Nested SES activation is deliberately deferred until the outer
+          // Host Mode transaction has committed. Its task was queued during
+          // rehydrateWithArgs(), so leave the parked marker nodes available
+          // through that task and discard only if no nested owner resumed
+          // them. Discarding synchronously here turns a compatible handoff
+          // into a fresh render and loses authored DOM identity.
+          setTimeout(
+            () => discardSuspendedSerializedComponent(nestedIsland as any),
+            0,
+          );
         }
       }
 

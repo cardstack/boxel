@@ -828,10 +828,19 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     await waitFor('[data-test-file-tree-mask]', { count: 0 });
     let openFileSelector = `[data-test-file="${openFilename}"]`;
     let openFileElement = find(openFileSelector)!;
-    assert.ok(
-      await elementIsVisible(openFileElement),
-      'expected near-top file to be visible',
-    );
+
+    // The populated tree is intentionally interactive immediately now; it no
+    // longer keeps the former 300ms mask mounted while the selected-file
+    // IntersectionObserver runs. Wait for the behavior this assertion cares
+    // about instead of using that removed visual delay as a timing proxy.
+    let openFileIsVisible = false;
+    for (let i = 0; i < 20 && !openFileIsVisible; i++) {
+      openFileIsVisible = (await elementIsVisible(openFileElement)) as boolean;
+      if (!openFileIsVisible) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+    }
+    assert.ok(openFileIsVisible, 'expected near-top file to be visible');
 
     let fileToOpenSelector = `[data-test-file="${filenameToOpen}"]`;
     let fileToOpenElement = find(fileToOpenSelector)!;

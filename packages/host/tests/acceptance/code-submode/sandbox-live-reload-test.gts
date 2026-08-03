@@ -699,7 +699,16 @@ module('Acceptance | code submode | sandbox live reload', function (hooks) {
         .exists('Monaco remains mounted while the preview is broken');
 
       setMonacoContent(repairedLivePreviewSource);
-      await waitFor('[data-test-live-preview]');
+      // The last-known-good island intentionally remains mounted while the
+      // repaired generation compiles. Waiting for the selector alone returns
+      // immediately against that older island, so synchronize on the new
+      // generation's observable content instead.
+      await waitUntil(
+        () =>
+          document
+            .querySelector('[data-test-live-preview]')
+            ?.textContent?.trim() === 'VERSION TWO',
+      );
       assert
         .dom('[data-test-live-preview]')
         .hasText(

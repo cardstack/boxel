@@ -1,4 +1,4 @@
-import { click, settled } from '@ember/test-helpers';
+import { click, settled, waitFor } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 
@@ -73,10 +73,14 @@ export const openFileInPlayground = async (
   await settled();
 };
 
-export const selectDeclaration = async (name: string) =>
-  await click(
-    `[data-test-in-this-file-selector] [data-test-boxel-selector-item-text="${name}"]`,
-  );
+export const selectDeclaration = async (name: string) => {
+  let selector = `[data-test-in-this-file-selector] [data-test-boxel-selector-item-text="${name}"]`;
+  // File navigation now exposes Code mode before module analysis finishes.
+  // The declaration selector is the analysis boundary, so wait for the exact
+  // requested export rather than assuming route settlement populated it.
+  await waitFor(selector);
+  await click(selector);
+};
 
 export const selectFormat = async (format: Format) =>
   await click(`[data-test-format-chooser="${format}"]`);

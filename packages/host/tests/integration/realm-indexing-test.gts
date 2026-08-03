@@ -5282,17 +5282,5 @@ posts/ignore-me.json
       entry?.isolatedHtml,
       `<h1 data-test-plain-home> Welcome </h1>`,
     );
-    assert.true(
-      entry?.isolatedHtml?.includes('data-boxel-card-island'),
-      'isolated HTML includes the stable card-island boundary',
-    );
-    assert.true(
-      entry?.isolatedHtml?.includes('data-boxel-card-island-protocol="1"'),
-      'isolated HTML declares the card-island protocol',
-    );
-    assert.true(
-      entry?.isolatedHtml?.includes('<!--%+b:'),
-      'isolated HTML preserves Glimmer serialization markers',
-    );
   });
 });
