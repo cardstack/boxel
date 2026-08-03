@@ -121,7 +121,7 @@ describe('mirrorRealmSkills', () => {
     const result = await mirror();
 
     expect(result?.root).toBe(checkout);
-    expect(result?.created).toEqual([
+    expect(result?.written).toEqual([
       'experiments-invoice-review',
       'experiments-trip-planner',
     ]);
@@ -137,14 +137,13 @@ describe('mirrorRealmSkills', () => {
     ).toBe('- passports\n');
   });
 
-  it('reports no work when nothing changed', async () => {
+  it('rewrites the copy on a rerun with nothing changed', async () => {
     writeSkill(checkout, 'trip-planner');
     await mirror();
     const second = await mirror();
 
-    expect(second?.created).toEqual([]);
-    expect(second?.updated).toEqual([]);
-    expect(second?.unchanged).toEqual(['experiments-trip-planner']);
+    expect(second?.written).toEqual(['experiments-trip-planner']);
+    expect(second?.removed).toEqual([]);
     expect(second?.skipped).toEqual([]);
     expect(fs.readdirSync(mirrorPath(checkout)).sort()).toEqual([
       '.boxel-skills-sync.json',
@@ -159,7 +158,7 @@ describe('mirrorRealmSkills', () => {
     writeSkill(checkout, 'trip-planner', 'Ask for dates first.');
     const result = await mirror();
 
-    expect(result?.updated).toEqual(['experiments-trip-planner']);
+    expect(result?.written).toEqual(['experiments-trip-planner']);
     expect(
       fs.readFileSync(
         mirrorPath(checkout, 'experiments-trip-planner', 'SKILL.md'),
@@ -211,58 +210,6 @@ describe('mirrorRealmSkills', () => {
     ).toBe(true);
   });
 
-  it('will not overwrite a copy that was edited in place', async () => {
-    writeSkill(checkout, 'trip-planner');
-    await mirror();
-
-    const mirrored = mirrorPath(
-      checkout,
-      'experiments-trip-planner',
-      'SKILL.md',
-    );
-    fs.writeFileSync(mirrored, skillBody('trip-planner', 'Edited by hand.'));
-    // The realm moved on too, so a blind refresh would discard the local edit.
-    writeSkill(checkout, 'trip-planner', 'Changed in the realm.');
-
-    const result = await mirror();
-
-    expect(result?.updated).toEqual([]);
-    expect(result?.skipped).toEqual([
-      {
-        name: 'experiments-trip-planner',
-        reason:
-          'edited in place — move the change to skills/trip-planner/ in the realm checkout',
-      },
-    ]);
-    expect(fs.readFileSync(mirrored, 'utf8')).toBe(
-      skillBody('trip-planner', 'Edited by hand.'),
-    );
-  });
-
-  it('is not fooled into "edited in place" by an OS dotfile', async () => {
-    writeSkill(checkout, 'trip-planner');
-    await mirror();
-
-    // Finder drops one of these into any directory it looks at. Treating it as
-    // an edit would freeze the entry: never refreshed, never swept.
-    fs.writeFileSync(
-      mirrorPath(checkout, 'experiments-trip-planner', '.DS_Store'),
-      'junk',
-    );
-    writeSkill(checkout, 'trip-planner', 'Changed in the realm.');
-
-    const result = await mirror();
-
-    expect(result?.skipped).toEqual([]);
-    expect(result?.updated).toEqual(['experiments-trip-planner']);
-    expect(
-      fs.readFileSync(
-        mirrorPath(checkout, 'experiments-trip-planner', 'SKILL.md'),
-        'utf8',
-      ),
-    ).toBe(skillBody('trip-planner', 'Changed in the realm.'));
-  });
-
   it('sweeps an entry whose realm-side skill is gone', async () => {
     writeSkill(checkout, 'trip-planner');
     writeSkill(checkout, 'retired');
@@ -303,29 +250,6 @@ describe('mirrorRealmSkills', () => {
     ).toBe(true);
   });
 
-  it('keeps an edited copy the realm no longer has', async () => {
-    writeSkill(checkout, 'retired');
-    await mirror();
-
-    const mirrored = mirrorPath(checkout, 'experiments-retired', 'SKILL.md');
-    fs.writeFileSync(mirrored, skillBody('retired', 'Edited by hand.'));
-    fs.rmSync(path.join(checkout, 'skills', 'retired'), { recursive: true });
-
-    const result = await mirror();
-
-    expect(result?.removed).toEqual([]);
-    expect(result?.skipped).toEqual([
-      {
-        name: 'experiments-retired',
-        reason:
-          'edited in place and no longer in the realm — delete it once the change is saved elsewhere',
-      },
-    ]);
-    expect(fs.readFileSync(mirrored, 'utf8')).toBe(
-      skillBody('retired', 'Edited by hand.'),
-    );
-  });
-
   it('leaves a hand-authored .claude/skills entry alone', async () => {
     writeSkill(checkout, 'trip-planner');
     const occupied = mirrorPath(checkout, 'experiments-trip-planner');
@@ -334,7 +258,7 @@ describe('mirrorRealmSkills', () => {
 
     const result = await mirror();
 
-    expect(result?.created).toEqual([]);
+    expect(result?.written).toEqual([]);
     expect(result?.skipped).toEqual([
       {
         name: 'experiments-trip-planner',
@@ -359,7 +283,7 @@ describe('mirrorRealmSkills', () => {
       checkout,
     );
 
-    expect(result?.created).toEqual([]);
+    expect(result?.written).toEqual([]);
     expect(result?.skipped).toEqual([
       {
         name: 'experiments-trip-planner',
@@ -384,11 +308,9 @@ describe('mirrorRealmSkills', () => {
       REALM_URL,
       OTHER_REALM_URL,
     ]);
-    expect(
-      Object.keys(
-        manifest.realms[OTHER_REALM_URL].entries['notes-trip-planner'].files,
-      ),
-    ).toEqual(['SKILL.md']);
+    expect(manifest.realms[OTHER_REALM_URL].entries).toEqual([
+      'notes-trip-planner',
+    ]);
 
     // Mirroring one realm again must not sweep the other realm's entries.
     await mirror();
@@ -413,7 +335,7 @@ describe('mirrorRealmSkills', () => {
 
     const result = await mirror();
 
-    expect(result?.created).toEqual(['experiments-trip-planner']);
+    expect(result?.written).toEqual(['experiments-trip-planner']);
   });
 
   it('does nothing when the realm has no skills', async () => {
