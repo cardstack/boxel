@@ -45,23 +45,11 @@ export default class ScrollIntoViewModifier extends Modifier<ScrollIntoViewModif
   ): Promise<void> {
     this.element = element;
 
-    // A zero offset is commonly recorded while a sparse file tree is still
-    // growing. It does not represent a meaningful restored position, and
-    // treating it as one can leave the selected row below the viewport after
-    // the final entries arrive. Positive offsets are intentional user scroll
-    // positions and continue to take precedence over selected-row scrolling.
-    let restoredScrollPosition =
-      container && key
-        ? this.scrollPositionService.getScrollPosition(container, key)
-        : undefined;
-    let shouldRestoreScrollPosition =
-      restoredScrollPosition !== undefined && restoredScrollPosition > 0;
-
     if (
       shouldScrollIntoView &&
       container &&
       key &&
-      !shouldRestoreScrollPosition &&
+      !this.scrollPositionService.keyHasScrollPosition(container, key) &&
       !this.#lastRunScrolled
     ) {
       await this.scrollIfNotVisible();

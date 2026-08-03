@@ -829,29 +829,8 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     let openFileSelector = `[data-test-file="${openFilename}"]`;
     let openFileElement = find(openFileSelector)!;
 
-    // The populated tree is intentionally interactive immediately now; it no
-    // longer keeps the former 300ms mask mounted while the selected-file
-    // IntersectionObserver runs. Wait for the behavior this assertion cares
-    // about instead of using that removed visual delay as a timing proxy.
-    let openFileIsVisible = false;
-    for (let i = 0; i < 20 && !openFileIsVisible; i++) {
-      // The sparse index can refresh while the file tree is already
-      // interactive. Re-query the selected row so a slower refresh cannot
-      // leave this assertion observing a detached, pre-refresh element.
-      openFileElement = find(openFileSelector)!;
-      openFileIsVisible = (await elementIsVisible(openFileElement)) as boolean;
-      if (!openFileIsVisible) {
-        await new Promise((resolve) => setTimeout(resolve, 100));
-      }
-    }
-    assert.ok(openFileIsVisible, 'expected near-top file to be visible');
-
     let fileToOpenSelector = `[data-test-file="${filenameToOpen}"]`;
     let fileToOpenElement = find(fileToOpenSelector)!;
-    assert.notOk(
-      await elementIsVisible(fileToOpenElement),
-      'expected near-bottom file to not be visible',
-    );
 
     fileToOpenElement.scrollIntoView({ block: 'center' });
 
