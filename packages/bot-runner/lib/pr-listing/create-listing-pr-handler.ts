@@ -1,8 +1,4 @@
-import {
-  logger,
-  toBranchName,
-  type RunCommandResponse,
-} from '@cardstack/runtime-common';
+import { logger, toBranchName } from '@cardstack/runtime-common';
 import type { BotTriggerContent } from '@cardstack/base/matrix-event';
 import { createHash } from 'node:crypto';
 import type { GitHubClient, OpenPullRequestResult } from '../github.ts';
@@ -119,18 +115,15 @@ export class CreateListingPRHandler {
 
   async addContentsToCommit(
     eventContent: BotTriggerEventContent,
-    runCommandResult?: RunCommandResponse | null,
+    files?: { path: string; content: string }[],
     binaryFiles?: { path: string; content: string }[],
   ): Promise<void> {
     let context = getCreateListingPRContext(eventContent);
     if (!context) {
       return;
     }
-    let rawFiles = await getContentsFromRealm(
-      runCommandResult?.cardResultString,
-    );
     let folderName = buildSubmissionFolderName(context);
-    let textFiles = rawFiles.map((file) => ({
+    let textFiles = (files ?? []).map((file) => ({
       ...file,
       path: `${folderName}/${file.path}`,
       isBinary: false as const,
@@ -157,7 +150,7 @@ export class CreateListingPRHandler {
   async openCreateListingPR(
     eventContent: BotTriggerEventContent,
     runAs: string,
-    runCommandResult?: RunCommandResponse | null,
+    fileCount: number,
     workflowCardUrl?: string | null,
   ): Promise<CreatedListingPRResult | null> {
     let context = getCreateListingPRContext(eventContent);
@@ -167,10 +160,10 @@ export class CreateListingPRHandler {
     let { owner, repoName, repo, head, title, listingDisplayName } = context;
 
     try {
-      let summary = await this.getSubmissionSummary(
+      let summary = this.getSubmissionSummary(
         eventContent,
         runAs,
-        runCommandResult,
+        fileCount,
         workflowCardUrl,
       );
       let prParams = {
@@ -222,12 +215,12 @@ export class CreateListingPRHandler {
     }
   }
 
-  async getSubmissionSummary(
+  getSubmissionSummary(
     eventContent: BotTriggerEventContent,
     runAs: string,
-    runCommandResult?: RunCommandResponse | null,
+    fileCount: number,
     workflowCardUrl?: string | null,
-  ): Promise<string | null> {
+  ): string | null {
     let context = getCreateListingPRContext(eventContent);
     if (!context) {
       return null;
@@ -240,7 +233,6 @@ export class CreateListingPRHandler {
       typeof input.listingSummary === 'string'
         ? input.listingSummary.trim()
         : '';
-    let files = await getContentsFromRealm(runCommandResult?.cardResultString);
 
     return [
       '## Summary',
@@ -248,7 +240,7 @@ export class CreateListingPRHandler {
       `- Listing Name: ${context.listingDisplayName}`,
       `- Room ID: \`${context.roomId}\``,
       `- User ID: \`${runAs}\``,
-      `- Number of Files: ${files.length}`,
+      `- Number of Files: ${fileCount}`,
       ...(workflowCardUrl
         ? [`- Workflow Card: [${workflowCardUrl}](${workflowCardUrl})`]
         : []),
@@ -273,88 +265,6 @@ function mapOpenPullRequestResult(
     branchName,
     summary,
   };
-}
-
-async function getContentsFromRealm(
-  cardResultString?: string | null,
-): Promise<{ path: string; content: string }[]> {
-  if (!cardResultString || !cardResultString.trim()) {
-    return [];
-  }
-  let parsed = parseJSONLike(cardResultString);
-  if (parsed === undefined) {
-    return [];
-  }
-  return extractFileContents(parsed);
-}
-
-function parseJSONLike(value: string): unknown | undefined {
-  let current: unknown = value;
-  for (let i = 0; i < 3; i++) {
-    if (typeof current !== 'string') {
-      return current;
-    }
-    let text = current.trim();
-    if (!text) {
-      return undefined;
-    }
-    try {
-      current = JSON.parse(text);
-      continue;
-    } catch {
-      try {
-        current = JSON.parse(decodeURIComponent(text));
-        continue;
-      } catch {
-        return undefined;
-      }
-    }
-  }
-  return current;
-}
-
-function extractFileContents(
-  doc: unknown,
-): { path: string; content: string }[] {
-  if (!doc || typeof doc !== 'object') {
-    return [];
-  }
-  let root = doc as Record<string, unknown>;
-  let attributes = (root.data as Record<string, unknown> | undefined)
-    ?.attributes as Record<string, unknown> | undefined;
-  let items = attributes?.allFileContents;
-  if (!Array.isArray(items)) {
-    items = attributes?.filesWithContent;
-  }
-  if (!Array.isArray(items)) {
-    return [];
-  }
-  let dedupe = new Map<string, { path: string; content: string }>();
-  for (let item of items) {
-    let normalized =
-      typeof item === 'string' ? parseJSONLike(item) : (item as unknown);
-    if (!normalized || typeof normalized !== 'object') {
-      continue;
-    }
-    let record = normalized as Record<string, unknown>;
-    let path =
-      typeof record.filename === 'string'
-        ? record.filename.trim()
-        : typeof record.path === 'string'
-          ? record.path.trim()
-          : '';
-    let content =
-      typeof record.contents === 'string'
-        ? record.contents
-        : typeof record.content === 'string'
-          ? record.content
-          : '';
-    if (!path) {
-      continue;
-    }
-    dedupe.set(path, { path, content });
-  }
-  return [...dedupe.values()];
 }
 
 function hashFiles(files: { path: string; content: string }[]): string {

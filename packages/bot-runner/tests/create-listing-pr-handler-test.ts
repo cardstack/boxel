@@ -36,19 +36,7 @@ module('create-listing-pr handler', () => {
     let result = await handler.openCreateListingPR(
       eventContent,
       '@alice:localhost',
-      {
-        status: 'ready',
-        cardResultString: JSON.stringify({
-          data: {
-            attributes: {
-              allFileContents: [
-                { filename: 'catalog/Listing/listing.json', contents: '{}' },
-                { filename: 'catalog/Listing/readme.md', contents: '# readme' },
-              ],
-            },
-          },
-        }),
-      },
+      2,
     );
 
     assert.strictEqual(result?.prNumber, 1, 'returns PR number');
@@ -138,19 +126,7 @@ module('create-listing-pr handler', () => {
     let result = await handler.openCreateListingPR(
       eventContent,
       '@alice:localhost',
-      {
-        status: 'ready',
-        cardResultString: JSON.stringify({
-          data: {
-            id: workflowCardUrl,
-            attributes: {
-              allFileContents: [
-                { filename: 'catalog/Listing/listing.json', contents: '{}' },
-              ],
-            },
-          },
-        }),
-      },
+      1,
       workflowCardUrl,
     );
     assert.strictEqual(result?.prNumber, 2, 'returns PR metadata when opened');
@@ -195,6 +171,7 @@ module('create-listing-pr handler', () => {
     let result = await handler.openCreateListingPR(
       eventContent,
       '@alice:localhost',
+      0,
     );
 
     assert.strictEqual(result, null, 'returns null when PR already exists');
@@ -228,20 +205,11 @@ module('create-listing-pr handler', () => {
     };
 
     let handler = new CreateListingPRHandler(githubClient);
-    await handler.addContentsToCommit(eventContent, {
-      status: 'ready',
-      cardResultString: JSON.stringify({
-        data: {
-          attributes: {
-            allFileContents: [
-              { filename: 'CardListing/abc.json', contents: '{}' },
-              { filename: 'Spec/def.json', contents: '{}' },
-              { filename: 'Recipe.gts', contents: 'export const x = 1;' },
-            ],
-          },
-        },
-      }),
-    });
+    await handler.addContentsToCommit(eventContent, [
+      { path: 'CardListing/abc.json', content: '{}' },
+      { path: 'Spec/def.json', content: '{}' },
+      { path: 'Recipe.gts', content: 'export const x = 1;' },
+    ]);
 
     assert.strictEqual(writeCalls.length, 1, 'writes once');
     assert.deepEqual(
@@ -279,18 +247,9 @@ module('create-listing-pr handler', () => {
     };
 
     let handler = new CreateListingPRHandler(githubClient);
-    let runResult = {
-      status: 'ready' as const,
-      cardResultString: JSON.stringify({
-        data: {
-          attributes: {
-            allFileContents: [{ filename: 'Recipe.gts', contents: 'x' }],
-          },
-        },
-      }),
-    };
-    await handler.addContentsToCommit(eventContent, runResult);
-    await handler.addContentsToCommit(eventContent, runResult);
+    let files = [{ path: 'Recipe.gts', content: 'x' }];
+    await handler.addContentsToCommit(eventContent, files);
+    await handler.addContentsToCommit(eventContent, files);
 
     assert.strictEqual(writeCalls.length, 2, 'writes twice');
     assert.deepEqual(
@@ -313,16 +272,7 @@ module('create-listing-pr handler', () => {
     };
 
     let handler = new CreateListingPRHandler(githubClient);
-    let runResult = {
-      status: 'ready' as const,
-      cardResultString: JSON.stringify({
-        data: {
-          attributes: {
-            allFileContents: [{ filename: 'Recipe.gts', contents: 'x' }],
-          },
-        },
-      }),
-    };
+    let files = [{ path: 'Recipe.gts', content: 'x' }];
 
     await handler.addContentsToCommit(
       {
@@ -331,7 +281,7 @@ module('create-listing-pr handler', () => {
         userId: '@alice:localhost',
         input: { roomId: '!room-a:localhost', listingName: 'My Listing' },
       },
-      runResult,
+      files,
     );
 
     assert.strictEqual(folders.length, 1, 'wrote once');
@@ -369,6 +319,7 @@ module('create-listing-pr handler', () => {
     let result = await handler.openCreateListingPR(
       eventContent,
       '@alice:localhost',
+      0,
     );
 
     assert.strictEqual(result, null, 'returns null when no PR can be opened');

@@ -364,15 +364,16 @@ module('command runner', () => {
           branchName: 'a1b2c3-my-listing-name',
           submittedBy: '@alice:localhost',
           prSummary: `## Summary\nMy listing Summary\n\n---\n- Listing Name: My Listing Name\n- Room ID: \`!abc123:localhost\`\n- User ID: \`@alice:localhost\`\n- Number of Files: 1\n- Workflow Card: [${submissionCardUrl}](${submissionCardUrl})`,
-          allFileContents: [
+          fileManifest: [
             {
               filename: 'catalog/MyListing/listing.json',
-              contents: '{"data":{"type":"card"}}',
+              size: Buffer.byteLength('{"data":{"type":"card"}}', 'utf8'),
+              kind: 'text',
             },
           ],
         },
       },
-      'enqueues PR card creation in submissions realm',
+      'enqueues PR card creation in submissions realm with a manifest instead of file contents',
     );
     assert.deepEqual(
       (publishedJobs[4] as { args: Record<string, unknown> }).args,
@@ -812,7 +813,7 @@ module('command runner', () => {
     );
   });
 
-  test('pr-listing-retry with existing PrCard skips collect-files + create-pr-card', async (assert) => {
+  test('pr-listing-retry with existing PrCard re-collects but skips create-pr-card', async (assert) => {
     let workflowCardUrl =
       'http://localhost:4201/test/SubmissionWorkflowCard/abc-123';
     let prCardUrl = 'http://localhost:4201/submissions/PrCard/pr-1';
@@ -862,35 +863,28 @@ module('command runner', () => {
               }),
             } as any;
           }
-          if (url === prCardUrl) {
-            return {
-              id: publishedJobs.length,
-              done: Promise.resolve({
-                status: 'ready',
-                cardResultString: JSON.stringify({
-                  data: {
-                    attributes: {
-                      document: {
-                        data: {
-                          id: prCardUrl,
-                          attributes: {
-                            allFileContents: [
-                              {
-                                filename: 'catalog/MyListing/listing.json',
-                                contents: '{"data":{"type":"card"}}',
-                              },
-                            ],
-                          },
-                        },
-                      },
-                    },
-                  },
-                }),
-              }),
-            } as any;
-          }
         }
-        // patch-card-instance — final link/clear patch
+        if (command.endsWith('/collect-submission-files/default')) {
+          return {
+            id: publishedJobs.length,
+            done: Promise.resolve({
+              status: 'ready',
+              cardResultString: JSON.stringify({
+                data: {
+                  attributes: {
+                    allFileContents: [
+                      {
+                        filename: 'catalog/MyListing/listing.json',
+                        contents: '{"data":{"type":"card"}}',
+                      },
+                    ],
+                  },
+                },
+              }),
+            }),
+          } as any;
+        }
+        // patch-card-instance — lint status, link, and clear patches
         return {
           id: publishedJobs.length,
           done: Promise.resolve({ status: 'ready', cardResultString: null }),
@@ -971,21 +965,21 @@ module('command runner', () => {
     );
 
     let commands = publishedJobs.map((j) => j.args.command);
-    assert.notOk(
+    assert.ok(
       commands.some((c: string) =>
         c.endsWith('/collect-submission-files/default'),
       ),
-      'retry skips collect-submission-files',
+      'retry re-collects submission files from the source realm',
     );
     assert.notOk(
       commands.some((c: string) => c.endsWith('/create-pr-card/default')),
-      'retry skips create-pr-card',
+      'retry skips create-pr-card and reuses the linked PrCard',
     );
     assert.strictEqual(
       commands.filter((c: string) => c.endsWith('/fetch-card-json/default'))
         .length,
-      2,
-      'retry fetches workflow card AND existing PrCard',
+      1,
+      'retry fetches only the workflow card, never the PrCard contents',
     );
     let patchAttrs = publishedJobs
       .filter((j) =>
@@ -1001,6 +995,18 @@ module('command runner', () => {
     );
     assert.strictEqual(createdBranches.length, 1, 'creates GitHub branch');
     assert.strictEqual(branchWrites.length, 1, 'writes files to branch');
+    assert.deepEqual(
+      (
+        branchWrites[0] as { files: { path: string; content: string }[] }
+      ).files.map((f) => ({ path: f.path, content: f.content })),
+      [
+        {
+          path: 'a1b2c3-my-listing/catalog/MyListing/listing.json',
+          content: '{"data":{"type":"card"}}',
+        },
+      ],
+      'pushed files come from the fresh collection, not the PrCard',
+    );
     assert.strictEqual(openedPRs.length, 1, 'opens pull request');
     // Regression: retry must reuse the *persisted* branchName, not recompute
     // from the workflow card's display-formatted title. Without this guard,
@@ -1301,7 +1307,7 @@ module('command runner', () => {
     );
   });
 
-  test('lint auto-fixes are forwarded to create-pr-card', async (assert) => {
+  test('lint auto-fixes are forwarded to the GitHub commit and the PrCard manifest', async (assert) => {
     let workflowCardUrl =
       'http://localhost:4201/test/SubmissionWorkflowCard/abc-123';
     let prCardUrl = 'http://localhost:4201/submissions/PrCard/pr-1';
@@ -1350,17 +1356,7 @@ module('command runner', () => {
             done: Promise.resolve({
               status: 'ready',
               cardResultString: JSON.stringify({
-                data: {
-                  id: prCardUrl,
-                  attributes: {
-                    allFileContents: [
-                      {
-                        filename: 'catalog/MyListing/component.gts',
-                        contents: 'export const x = 1; // fixed',
-                      },
-                    ],
-                  },
-                },
+                data: { id: prCardUrl, attributes: {} },
               }),
             }),
           } as any;
@@ -1373,10 +1369,14 @@ module('command runner', () => {
       destroy: async () => {},
     };
 
+    let branchWrites: unknown[] = [];
     let githubClient: GitHubClient = {
       createBranch: async () => ({ ref: 'refs/heads/test', sha: 'abc123' }),
       writeFileToBranch: async () => ({ commitSha: 'def456' }),
-      writeFilesToBranch: async () => ({ commitSha: 'def456' }),
+      writeFilesToBranch: async (params) => {
+        branchWrites.push(params);
+        return { commitSha: 'def456' };
+      },
       openPullRequest: async () => ({
         number: 1,
         html_url: 'https://example/pr/1',
@@ -1450,14 +1450,22 @@ module('command runner', () => {
     );
     assert.ok(createPrCardJob, 'create-pr-card job is enqueued');
     assert.deepEqual(
-      createPrCardJob!.args.commandInput.allFileContents,
+      createPrCardJob!.args.commandInput.fileManifest,
       [
         {
           filename: 'catalog/MyListing/component.gts',
-          contents: 'export const x = 1; // fixed',
+          size: Buffer.byteLength('export const x = 1; // fixed', 'utf8'),
+          kind: 'text',
         },
       ],
-      'auto-fixed contents (not originals) are sent to create-pr-card',
+      'manifest reflects the auto-fixed contents, not the originals',
+    );
+    assert.deepEqual(
+      (
+        branchWrites[0] as { files: { path: string; content: string }[] }
+      ).files.map((f) => f.content),
+      ['export const x = 1; // fixed'],
+      'auto-fixed contents (not originals) are committed to GitHub',
     );
 
     let passedPatch = publishedJobs
