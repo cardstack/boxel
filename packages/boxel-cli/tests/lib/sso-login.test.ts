@@ -1,3 +1,5 @@
+import { connect } from 'node:net';
+
 import { describe, it, expect } from 'vitest';
 
 import {
@@ -23,6 +25,24 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 function formBody(fields: Record<string, string>): string {
   return new URLSearchParams(fields).toString();
+}
+
+// `fetch` won't send a request target this malformed, but a browser or anything
+// else on the machine can, so the raw socket is the only way to knock on the
+// listener with one.
+function sendRawRequest(port: number, target: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const socket = connect(port, '127.0.0.1', () => {
+      socket.write(
+        `GET ${target} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n`,
+      );
+    });
+    let response = '';
+    socket.setEncoding('utf8');
+    socket.on('data', (chunk) => (response += chunk));
+    socket.on('error', reject);
+    socket.on('close', () => resolve(response));
+  });
 }
 
 describe('the wait for the browser', () => {
@@ -206,6 +226,33 @@ describe('startLoopbackCallback', () => {
       SsoTimeoutError,
     );
     await expect(fetch(redirectUrl)).rejects.toThrow();
+  });
+
+  // Both the settling of `waitForResult` and the command's own `finally` close
+  // the listener, so closing twice is the normal case rather than a mistake.
+  it('can be closed more than once', async () => {
+    const callback = await startLoopbackCallback({ timeoutMs: 20 });
+    await expect(callback.waitForResult()).rejects.toBeInstanceOf(
+      SsoTimeoutError,
+    );
+    expect(() => {
+      callback.close();
+      callback.close();
+    }).not.toThrow();
+  });
+
+  // A request the handler can't even parse used to reject nothing, leaving the
+  // command waiting out the full window for a callback that had already failed.
+  it('fails a request it cannot parse rather than waiting out the timeout', async () => {
+    const callback = await startLoopbackCallback({ timeoutMs: 60_000 });
+    const settled = expect(callback.waitForResult()).rejects.toThrow(
+      /invalid url/i,
+    );
+
+    const response = await sendRawRequest(callback.port, '//%5C');
+
+    expect(response).toMatch(/^HTTP\/1\.1 400 /);
+    await settled;
   });
 });
 

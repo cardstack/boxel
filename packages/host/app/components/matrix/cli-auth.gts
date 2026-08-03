@@ -295,7 +295,7 @@ export default class CliAuth extends Component {
 
   private get redirectError(): string | undefined {
     if (!this.redirect) {
-      return 'This page needs the listening port and request id that the Boxel CLI supplies. Start it with `boxel profile add`.';
+      return 'This page needs the `port` and `state` values that the Boxel CLI puts in its URL. Start it with `boxel profile add`.';
     }
     return undefined;
   }

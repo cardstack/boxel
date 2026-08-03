@@ -201,7 +201,23 @@ export async function startLoopbackCallback(opts?: {
       }
 
       succeed(res, { kind: 'loginToken', loginToken });
-    })();
+    })().catch((err: unknown) => {
+      // Without this, anything unexpected in the handler is an unhandled
+      // rejection and the CLI waits out the whole timeout for a callback that
+      // has already failed. Reject with what went wrong instead, so the command
+      // exits on the real reason.
+      const error = err instanceof Error ? err : new Error(String(err));
+      // The terminal reports the rejection either way; what differs is whether
+      // there is still a response left to write. Past `headersSent` a second
+      // `writeHead` would throw from inside this handler, so the socket is
+      // abandoned rather than answered.
+      if (res.headersSent) {
+        rejectResult(error);
+        res.destroy();
+        return;
+      }
+      fail(res, 'That sign-in could not be completed.', error.message);
+    });
   });
 
   await new Promise<void>((resolve, reject) => {
@@ -213,7 +229,15 @@ export async function startLoopbackCallback(opts?: {
   const redirectUrl = `http://127.0.0.1:${port}${CALLBACK_PATH}?state=${state}`;
 
   let timer: NodeJS.Timeout | undefined;
+  // Callers close defensively — `waitForResult()` closes when it settles and
+  // `browserLogin()` closes again in its own `finally` — so closing has to be
+  // safe to repeat.
+  let closed = false;
   const close = () => {
+    if (closed) {
+      return;
+    }
+    closed = true;
     if (timer) {
       clearTimeout(timer);
       timer = undefined;
