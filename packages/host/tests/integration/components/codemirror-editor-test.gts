@@ -1327,7 +1327,7 @@ module('Integration | codemirror-context', function (hooks) {
     }
   });
 
-  test('wrapWith inserts empty markers with cursor centered when no selection', async function (assert) {
+  test('wrapWith does nothing when there is no selection', async function (assert) {
     let element = document.createElement('div');
     document.body.appendChild(element);
 
@@ -1348,19 +1348,15 @@ module('Integration | codemirror-context', function (hooks) {
       view.dispatch({ selection: { anchor: 6, head: 6 } });
       let result = cmContext.wrapWith('**')(view);
 
-      assert.true(result, 'returns true after inserting markers');
+      assert.true(result, 'returns true (shortcut consumed) without editing');
       assert.strictEqual(
         view.state.doc.toString(),
-        'Hello ****World',
-        'an empty pair of bold markers is inserted at the cursor',
+        'Hello World',
+        'no stray markers are inserted when nothing is selected',
       );
       let sel = view.state.selection.main;
       assert.true(sel.empty, 'cursor is collapsed (no selection)');
-      assert.strictEqual(
-        sel.from,
-        8,
-        'cursor sits between the two pairs of markers',
-      );
+      assert.strictEqual(sel.from, 6, 'cursor stays where it was');
 
       view.destroy();
     } finally {
@@ -1950,6 +1946,43 @@ module('Integration | codemirror-context', function (hooks) {
         'Click here for details',
         'link syntax is removed, leaving just the text',
       );
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
+  test('toggleLink does nothing when there is no selection', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      let state = cmContext.createEditorState({
+        content: 'Hello World',
+        onDocChange: () => {},
+        onCardTargetsChange: () => {},
+        onOpenCardSearch: () => {},
+      });
+
+      let view = new cmContext.EditorView({
+        state,
+        parent: element,
+      });
+
+      // Cursor at position 6, no selection
+      view.dispatch({ selection: { anchor: 6, head: 6 } });
+      let result = cmContext.toggleLink(view);
+
+      assert.true(result, 'returns true without editing');
+      assert.strictEqual(
+        view.state.doc.toString(),
+        'Hello World',
+        'no stray [](url) is inserted when nothing is selected',
+      );
+      let sel = view.state.selection.main;
+      assert.true(sel.empty, 'cursor is collapsed (no selection)');
+      assert.strictEqual(sel.from, 6, 'cursor stays where it was');
 
       view.destroy();
     } finally {

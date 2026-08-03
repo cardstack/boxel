@@ -1011,13 +1011,11 @@ function wrapWith(marker: string) {
     let { from, to } = view.state.selection.main;
     let len = marker.length;
 
-    // No selection: insert an empty pair of markers and drop the cursor
-    // between them so the user can type the content (e.g. **|**).
+    // No selection: do nothing. Inserting an empty marker pair here leaves
+    // stray markers (e.g. **) visible in source and preview. Inline formatting
+    // applies to selected text only — the toolbar disables these buttons and
+    // the keyboard shortcut is a no-op until the user highlights something.
     if (from === to) {
-      view.dispatch({
-        changes: { from, insert: marker + marker },
-        selection: { anchor: from + len },
-      });
       return true;
     }
 
@@ -1099,12 +1097,8 @@ function toggleLink(view: EditorView): boolean {
   }
 
   if (from === to) {
-    // No selection: insert empty link syntax with the cursor inside the
-    // brackets so the user can type the link text — [|](url).
-    view.dispatch({
-      changes: { from, insert: '[](url)' },
-      selection: { anchor: from + 1 },
-    });
+    // No selection: do nothing. Inserting empty link syntax leaves a stray
+    // [](url) in the document. Linking applies to selected text only.
     return true;
   }
 

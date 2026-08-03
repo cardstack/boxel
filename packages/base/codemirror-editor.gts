@@ -7,7 +7,7 @@ import { on } from '@ember/modifier';
 import { scheduleOnce } from '@ember/runloop';
 import { htmlSafe } from '@ember/template';
 import { Tooltip } from '@cardstack/boxel-ui/components';
-import { eq, not } from '@cardstack/boxel-ui/helpers';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
   baseRRI,
@@ -199,6 +199,13 @@ interface ToolbarItem {
   // binding in the CodeMirror keymap (bold/italic/code); absent items render a
   // label-only tooltip.
   shortcut?: string;
+  // Inline-format toggles (bold/italic/etc.) wrap the current selection, so they
+  // only make sense when text is highlighted. Set for those buttons so they
+  // disable when the selection is collapsed. Line-based buttons omit it.
+  requiresSelection?: boolean;
+  // Computed enablement for this button, folding in focus and (for
+  // selection-requiring buttons) whether text is highlighted.
+  disabled?: boolean;
 }
 
 const EMPTY_FORMATS: SelectionFormats = Object.freeze({
@@ -212,6 +219,9 @@ const EMPTY_FORMATS: SelectionFormats = Object.freeze({
 function sameToolbarState(a: SelectionInfo, b: SelectionInfo): boolean {
   return (
     a.hasFocus === b.hasFocus &&
+    // Selection presence gates the inline-format buttons' enablement, so a
+    // collapse/expand must refresh the toolbar even when nothing else changed.
+    a.hasSelection === b.hasSelection &&
     a.formats.bold === b.formats.bold &&
     a.formats.italic === b.formats.italic &&
     a.formats.code === b.formats.code &&
@@ -467,7 +477,13 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
   get toolbarButtons(): ToolbarItem[] {
     let f = this.toolbarFormats;
     let pressed = (active: boolean) => (active ? 'true' : 'false');
-    return [
+    let enabled = this.toolbarEnabled;
+    let hasSelection = this._selectionInfo?.hasSelection ?? false;
+    // Inline-format toggles additionally require a highlighted selection;
+    // line-based buttons only require focus.
+    let disabledFor = (requiresSelection?: boolean) =>
+      !enabled || (!!requiresSelection && !hasSelection);
+    let items: ToolbarItem[] = [
       {
         testId: 'bold',
         label: 'Bold',
@@ -476,6 +492,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
         active: f.bold,
         ariaPressed: pressed(f.bold),
         shortcut: `${modKey}B`,
+        requiresSelection: true,
       },
       {
         testId: 'italic',
@@ -485,6 +502,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
         active: f.italic,
         ariaPressed: pressed(f.italic),
         shortcut: `${modKey}I`,
+        requiresSelection: true,
       },
       {
         testId: 'strikethrough',
@@ -493,6 +511,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
         action: this._wrapStrikethrough,
         active: f.strikethrough,
         ariaPressed: pressed(f.strikethrough),
+        requiresSelection: true,
       },
       {
         testId: 'code',
@@ -502,6 +521,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
         active: f.code,
         ariaPressed: pressed(f.code),
         shortcut: `${modKey}\``,
+        requiresSelection: true,
       },
       {
         testId: 'link',
@@ -510,6 +530,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
         action: this._toggleLink,
         active: f.link,
         ariaPressed: pressed(f.link),
+        requiresSelection: true,
       },
       { divider: true },
       {
@@ -550,6 +571,12 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
         action: this._toggleBlockquote,
       },
     ];
+    for (let item of items) {
+      if (!item.divider) {
+        item.disabled = disabledFor(item.requiresSelection);
+      }
+    }
+    return items;
   }
 
   /** Prevent mousedown on toolbar/popup buttons from stealing editor focus/selection */
@@ -1212,7 +1239,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
                   is suppressed while the control is disabled. }}
               <Tooltip
                 @placement='top'
-                @disabled={{not this.toolbarEnabled}}
+                @disabled={{btn.disabled}}
                 data-test-toolbar-tooltip={{btn.testId}}
               >
                 <:trigger>
@@ -1222,7 +1249,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
                     type='button'
                     aria-label={{btn.label}}
                     aria-pressed={{btn.ariaPressed}}
-                    disabled={{not this.toolbarEnabled}}
+                    disabled={{btn.disabled}}
                     {{on 'mousedown' this._preventFocusLoss}}
                     {{on 'click' btn.action}}
                   >{{#let btn.icon as |Icon|}}<Icon

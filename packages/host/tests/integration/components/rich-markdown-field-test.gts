@@ -1607,6 +1607,13 @@ module('Integration | RichMarkdownField', function (hooks) {
     assert
       .dom('[data-test-toolbar="bold"]')
       .isDisabled('Bold is disabled before the editor gains focus');
+    // The inline-format toggles wrap a selection, so they stay disabled with no
+    // focus (and, once focused, until text is highlighted — see the note above).
+    for (let testId of ['italic', 'strikethrough', 'code', 'link']) {
+      assert
+        .dom(`[data-test-toolbar="${testId}"]`)
+        .isDisabled(`${testId} is disabled before the editor gains focus`);
+    }
     assert
       .dom('[data-test-toolbar="blockquote"]')
       .isDisabled('all formatting controls start disabled');
