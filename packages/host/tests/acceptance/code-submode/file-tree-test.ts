@@ -835,6 +835,10 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     // about instead of using that removed visual delay as a timing proxy.
     let openFileIsVisible = false;
     for (let i = 0; i < 20 && !openFileIsVisible; i++) {
+      // The sparse index can refresh while the file tree is already
+      // interactive. Re-query the selected row so a slower refresh cannot
+      // leave this assertion observing a detached, pre-refresh element.
+      openFileElement = find(openFileSelector)!;
       openFileIsVisible = (await elementIsVisible(openFileElement)) as boolean;
       if (!openFileIsVisible) {
         await new Promise((resolve) => setTimeout(resolve, 100));
