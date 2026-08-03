@@ -1547,6 +1547,7 @@ export default class MatrixService extends Service {
         // files re-upload their file content. Both contribute commands.
         let skillCardsToReupload: SkillModule.Skill[] = [];
         let markdownSkillFileDefs: FileDef[] = [];
+        let unchangedMarkdownSkillFileDefs: FileAPI.SerializedFile[] = [];
         await Promise.all(
           enabledSkillCardFileDefs.map(async (fileDef) => {
             let source = await loadSkillSource(this.store, fileDef.sourceUrl);
@@ -1558,6 +1559,16 @@ export default class MatrixService extends Service {
             );
             if (isSkillCard in source) {
               skillCardsToReupload.push(source as SkillModule.Skill);
+            } else if (
+              isUnchangedMarkdownSkill(source as unknown as FileDef, fileDef)
+            ) {
+              // Re-uploading a `.md` skill means fetching its source over HTTP
+              // first. The realm-indexed file-meta already carries the hash of
+              // that content, so when it matches what the room recorded there
+              // is nothing to upload — keep the stored fileDef and skip the
+              // fetch. This runs on every message send, so without the check
+              // each send re-downloads every enabled markdown skill.
+              unchangedMarkdownSkillFileDefs.push(fileDef);
             } else {
               markdownSkillFileDefs.push(this.fileAPI.createFileDef(fileDef));
             }
@@ -1574,14 +1585,21 @@ export default class MatrixService extends Service {
         // any room holding both a skill card and a `.md` skill — a rewrite that
         // changes nothing but the sequence, which still writes a new state
         // event on every send. Skills that no longer load drop out, as before.
-        let reuploadedBySourceUrl = new Map(
-          [...enabledSkillFileDefs, ...enabledMarkdownSkillFileDefs].map(
-            (fileDef) => [fileDef.sourceUrl, fileDef],
-          ),
-        );
+        let bySourceUrl = new Map<string, FileAPI.SerializedFile>();
+        for (let fileDef of [
+          ...enabledSkillFileDefs,
+          ...enabledMarkdownSkillFileDefs,
+        ]) {
+          bySourceUrl.set(fileDef.sourceUrl, fileDef.serialize());
+        }
+        for (let fileDef of unchangedMarkdownSkillFileDefs) {
+          bySourceUrl.set(fileDef.sourceUrl, fileDef);
+        }
         let orderedSkillFileDefs = enabledSkillCardFileDefs
-          .map((fileDef) => reuploadedBySourceUrl.get(fileDef.sourceUrl))
-          .filter((fileDef): fileDef is FileDef => Boolean(fileDef));
+          .map((fileDef) => bySourceUrl.get(fileDef.sourceUrl))
+          .filter((fileDef): fileDef is FileAPI.SerializedFile =>
+            Boolean(fileDef),
+          );
         // get the unique subset of enabledCommandDefinitions by functionName
         enabledCommandDefinitions = this.getUniqueToolDefinitions(
           enabledCommandDefinitions,
@@ -1590,9 +1608,7 @@ export default class MatrixService extends Service {
           enabledCommandDefinitions,
         );
         return {
-          enabledSkillCards: orderedSkillFileDefs.map((fileDef) =>
-            fileDef.serialize(),
-          ),
+          enabledSkillCards: orderedSkillFileDefs,
           disabledSkillCards: currentSkillsConfig?.disabledSkillCards ?? [],
           toolDefinitions: enabledCommandDefFileDefs.map((fileDef) =>
             fileDef.serialize(),
@@ -3431,6 +3447,23 @@ async function getStorage() {
   }
 
   return storage;
+}
+
+// True when a `.md` skill's realm-indexed content matches what the room
+// already recorded, so the stored fileDef can be reused as-is. Both hashes come
+// from the same content, one via the realm's index and one from the upload that
+// wrote the room's copy, so equality means an upload would produce the same
+// bytes. A stored def with no uploaded `url` is never reusable.
+function isUnchangedMarkdownSkill(
+  source: FileDef,
+  stored: FileAPI.SerializedFile,
+): boolean {
+  return Boolean(
+    source.contentHash &&
+    stored.contentHash &&
+    source.contentHash === stored.contentHash &&
+    stored.url,
+  );
 }
 
 function serializeFileForPersistence(
