@@ -18,13 +18,12 @@ import {
   type SerializedFile,
 } from './file-api';
 import {
-  ModelDef,
+  ThreeDModelDef,
   ModelIsolatedBody,
   ModelInspectorSection,
   getExtension,
-  type Model3dData,
   type ModelInspectorRow,
-} from './model-file-def';
+} from './three-d-model-def';
 import { parseStl, type StlMetadata } from './stl-meta-extractor';
 
 export class StlMetadataField extends FieldDef {
@@ -34,12 +33,7 @@ export class StlMetadataField extends FieldDef {
   @field solidName = contains(StringField);
   @field binaryHeader = contains(StringField);
   @field facetCount = contains(NumberField);
-  @field normalCount = contains(NumberField);
-  @field degenerateFacetCount = contains(NumberField);
   @field hasColorData = contains(BooleanField);
-  @field sizeX = contains(NumberField);
-  @field sizeY = contains(NumberField);
-  @field sizeZ = contains(NumberField);
 
   static embedded = class Embedded extends Component<typeof StlMetadataField> {
     <template>
@@ -50,22 +44,14 @@ export class StlMetadataField extends FieldDef {
             >{{@model.solidName}}</dd></div>{{/if}}
         {{#if @model.facetCount}}<div><dt>Facets</dt><dd
             >{{@model.facetCount}}</dd></div>{{/if}}
-        {{#if @model.normalCount}}<div><dt>Normals</dt><dd
-            >{{@model.normalCount}}</dd></div>{{/if}}
         <div><dt>Color data</dt><dd>{{if
               @model.hasColorData
               'Present'
               'None'
             }}</dd></div>
-        {{#if @model.sizeX}}<div><dt>Extents</dt><dd
+        {{#if @model.binaryHeader}}<div><dt>Header</dt><dd
               class='mono'
-            >{{@model.sizeX}}
-              ×
-              {{@model.sizeY}}
-              ×
-              {{@model.sizeZ}}</dd></div>{{/if}}
-        {{#if @model.degenerateFacetCount}}<div><dt>Degenerate</dt><dd
-            >{{@model.degenerateFacetCount}}</dd></div>{{/if}}
+            >{{@model.binaryHeader}}</dd></div>{{/if}}
       </dl>
       <style scoped>
         .stl-meta {
@@ -112,21 +98,12 @@ class StlIsolated extends GlimmerComponent<{ Args: { model: StlDef } }> {
     if (s.facetCount) {
       rows.push({ term: 'Facets', detail: s.facetCount });
     }
-    if (s.normalCount) {
-      rows.push({ term: 'Normals', detail: s.normalCount });
-    }
     rows.push({
       term: 'Color data',
       detail: s.hasColorData ? 'Present' : 'None',
     });
-    if (s.sizeX) {
-      rows.push({
-        term: 'Extents',
-        detail: `${s.sizeX} × ${s.sizeY} × ${s.sizeZ}`,
-      });
-    }
-    if (s.degenerateFacetCount) {
-      rows.push({ term: 'Degenerate', detail: s.degenerateFacetCount });
+    if (s.binaryHeader) {
+      rows.push({ term: 'Header', detail: s.binaryHeader });
     }
     return rows;
   }
@@ -140,20 +117,12 @@ class StlIsolated extends GlimmerComponent<{ Args: { model: StlDef } }> {
   </template>
 }
 
-export class StlDef extends ModelDef {
+export class StlDef extends ThreeDModelDef {
   static displayName = 'STL Mesh';
   static icon = File3dIcon;
   static acceptTypes = '.stl,model/stl,application/sla';
 
   @field stlMetadata = contains(StlMetadataField);
-
-  get extents() {
-    return {
-      x: this.stlMetadata?.sizeX ?? 1,
-      y: this.stlMetadata?.sizeY ?? 1,
-      z: this.stlMetadata?.sizeZ ?? 1,
-    };
-  }
 
   static isolated: BaseDefComponent = StlIsolated;
 
@@ -163,16 +132,16 @@ export class StlDef extends ModelDef {
     options: {
       contentHash?: string;
       contentSize?: number;
-      // Backstop bound on the bytes we're willing to parse at index time,
-      // threaded from the host; defaults to the realm's standard file-size
-      // limit (`DEFAULT_FILE_SIZE_LIMIT_BYTES`), the same ceiling the write
-      // path enforces, so the two can't drift.
+      // Backstop bound on the bytes we're willing to sniff at index time,
+      // threaded from the host (see `FileDefAttributesExtractor`); defaults to
+      // the realm's standard file-size limit (`DEFAULT_FILE_SIZE_LIMIT_BYTES`),
+      // the same ceiling the write path enforces, so the two stay in step.
       fileSizeLimitBytes?: number;
     } = {},
   ): Promise<
-    // `model3d`/`stlMetadata` are optional: over the size cap we skip the parse
-    // and return only the base file attributes (see below).
-    SerializedFile<Partial<{ model3d: Model3dData; stlMetadata: StlMetadata }>>
+    // `stlMetadata` is optional: over the size cap we skip the sniff and return
+    // only the base file attributes (see below).
+    SerializedFile<Partial<{ stlMetadata: StlMetadata }>>
   > {
     let extension = getExtension(url);
     if (extension !== '.stl') {
@@ -189,9 +158,9 @@ export class StlDef extends ModelDef {
 
     let base = await super.extractAttributes(url, memoizedStream, options);
     let bytes = await memoizedStream();
-    // Over the size cap, skip the parse but keep the StlDef type — the file
+    // Over the size cap, skip the sniff but keep the StlDef type — the file
     // still renders via the live client-side viewer (which parses its own
-    // geometry); it just has empty inspector panels and a generic silhouette.
+    // geometry); it just has an empty inspector panel and the cube placeholder.
     // Do NOT throw FileContentMismatchError here: that would demote the file to
     // a plain FileDef and lose the 3D card entirely.
     let sizeCap = options.fileSizeLimitBytes ?? DEFAULT_FILE_SIZE_LIMIT_BYTES;

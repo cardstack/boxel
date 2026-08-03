@@ -1,17 +1,39 @@
 import { unzipSync, strFromU8 } from 'fflate';
-import type { Model3dData } from './model-file-def';
 
-// Bounded 3MF (OPC ZIP) parser. Unzips the package, parses the model part(s) and
-// the optional slicer config, and returns the generic scene facts plus the
-// 3MF-specific package metadata. Uses `fflate` (bundled dependency, not a CDN
-// import) and the runtime `DOMParser` (available in the host/prerender Chromium).
-// Kept in a plain `.ts` module (mirroring `png-meta-extractor.ts`) so it is
-// directly unit-testable. Returns `undefined` for anything that isn't a
-// parseable 3MF package — a non-ZIP payload, a package with no `.model` part, or
-// malformed model XML — and the calling FileDef turns that into a
-// `FileContentMismatchError`. (It intentionally does NOT import
-// `FileContentMismatchError` itself: that lives in `card-api`, and pulling it in
-// would drag the whole card-api module into this pure parser and its tests.)
+// Bounded, header-only 3MF (OPC ZIP) reader. A 3MF package's useful text
+// metadata lives at the TOP of the `*.model` part — the `<model>` root's
+// namespaces/unit, the `<metadata>` children, and the `<basematerials>` in
+// `<resources>` — all of which precede the geometry (`<object>`/`<mesh>`/
+// `<vertices>`). This reader exploits that layout to avoid paying for the
+// geometry:
+//   1. `unzipSync`'s `filter` runs BEFORE decompression, so we decompress only
+//      the `.model` and `model_settings.config` entries — every other package
+//      entry (embedded plate-thumbnail PNGs, textures, `.rels`) is skipped, and
+//      any entry declaring an implausibly large decompressed size is rejected
+//      as a ZIP-bomb backstop.
+//   2. We read metadata off the model part's PROLOGUE (everything up to the
+//      first `<object>`) with lightweight regex — no DOM parse of the vertex/
+//      triangle body, and no per-vertex bounding-box scan. Physical dimensions
+//      come from the live client-side viewer instead, which is both cheaper at
+//      index time and correct (it applies the build/component transforms this
+//      reader would have ignored).
+// Pure JS (`fflate` + regex, no DOM), so it is directly unit-testable. Returns
+// `undefined` for anything that isn't a 3MF core package — a non-ZIP payload, a
+// package with no `.model` part, or a `.model` whose root isn't the 3MF
+// `<model>` core element — and the calling FileDef turns that into a
+// `FileContentMismatchError`.
+
+// ZIP-bomb backstop: reject any entry that DECLARES a decompressed size beyond
+// this. A 3MF's model XML compresses well, so a legitimate part can be many
+// times the (write-capped) archive — but never hundreds of MB. Declared sizes
+// can be forged, so this stops the honest bomb, not an adversarial one; realm
+// files come from authenticated members, so this is hardening, not a hard DoS
+// guarantee.
+const MAX_DECOMPRESSED_BYTES = 128 * 1024 * 1024;
+const CORE_NS = '3dmanufacturing/core';
+
+const MODEL_PART_RE = /\.model$/i;
+const CONFIG_PART_RE = /(?:^|\/)model_settings\.config$/i;
 
 interface ThreeMfPrintPartData {
   name?: string;
@@ -23,15 +45,6 @@ export interface ThreeMfMetadata {
   unit?: string;
   language?: string;
   modelPart?: string;
-  sizeX?: number;
-  sizeY?: number;
-  sizeZ?: number;
-  packageEntryCount?: number;
-  objectCount?: number;
-  buildItemCount?: number;
-  componentCount?: number;
-  textureCount?: number;
-  materialResourceCount?: number;
   extensionCount?: number;
   extensions?: string[];
   title?: string;
@@ -50,174 +63,155 @@ export interface ThreeMfMetadata {
   printParts?: ThreeMfPrintPartData[];
 }
 
+function decodeXmlEntities(value: string): string {
+  return (
+    value
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'")
+      .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(Number(dec)))
+      .replace(/&#x([0-9a-f]+);/gi, (_, hex) =>
+        String.fromCodePoint(parseInt(hex, 16)),
+      )
+      // `&amp;` last so a literal `&amp;lt;` doesn't double-decode.
+      .replace(/&amp;/g, '&')
+  );
+}
+
+// Read a single `name="value"` attribute out of a raw start-tag string.
+function attr(tag: string, name: string): string | undefined {
+  let match = tag.match(new RegExp(`\\b${name}\\s*=\\s*"([^"]*)"`, 'i'));
+  return match ? decodeXmlEntities(match[1]) : undefined;
+}
+
 export function parseThreeMf(
   buf: ArrayBuffer,
-): { model3d: Model3dData; threeMfMetadata: ThreeMfMetadata } | undefined {
+): { threeMfMetadata: ThreeMfMetadata } | undefined {
   let files: Record<string, Uint8Array>;
   try {
-    files = unzipSync(new Uint8Array(buf)) as Record<string, Uint8Array>;
+    files = unzipSync(new Uint8Array(buf), {
+      // Runs before decompression: only the entries we actually read are
+      // inflated, and an oversized declared entry is refused outright.
+      filter: (file) =>
+        (MODEL_PART_RE.test(file.name) || CONFIG_PART_RE.test(file.name)) &&
+        file.originalSize <= MAX_DECOMPRESSED_BYTES,
+    }) as Record<string, Uint8Array>;
   } catch {
     // Not a valid ZIP / OPC package.
     return undefined;
   }
-  let modelPart = Object.keys(files).find((path) => /\.model$/i.test(path));
-  if (!modelPart) {
+
+  let modelName = Object.keys(files).find((name) => MODEL_PART_RE.test(name));
+  if (!modelName) {
     return undefined;
   }
-  let modelDocuments: { path: string; document: Document; root: Element }[] =
-    [];
-  for (let [path, bytes] of Object.entries(files)) {
-    if (!/\.model$/i.test(path)) {
-      continue;
-    }
-    let document = new DOMParser().parseFromString(
-      strFromU8(bytes),
-      'application/xml',
-    );
-    if (document.getElementsByTagName('parsererror').length) {
-      // Malformed model XML — treat the whole package as unparseable.
-      return undefined;
-    }
-    modelDocuments.push({ path, document, root: document.documentElement });
+  let modelText = strFromU8(files[modelName]);
+
+  // Require a real 3MF core `<model>` root — not merely a `.model`-named XML
+  // file. This rejects a mislabeled document (e.g. `<document/>`) that would
+  // otherwise be stamped as a 3MF and handed to a viewer that can't parse it.
+  let rootTag = modelText.match(/<model\b[^>]*>/i)?.[0];
+  if (!rootTag || !new RegExp(CORE_NS, 'i').test(rootTag)) {
+    return undefined;
   }
-  let primary =
-    modelDocuments.find(({ path }) => path === modelPart) ?? modelDocuments[0];
-  let root = primary.root;
-  let elements = (name: string) =>
-    modelDocuments.flatMap(({ document }) =>
-      Array.from(document.getElementsByTagNameNS('*', name)),
-    );
-  let metadata = new Map<string, string>();
-  for (let element of elements('metadata')) {
-    let key = element.getAttribute('name');
-    if (key) {
-      metadata.set(key.toLowerCase(), element.textContent?.trim() ?? '');
-    }
-  }
-  let extensions = Array.from(
-    new Set(
-      modelDocuments.flatMap(({ root }) =>
-        Array.from(root.attributes)
-          .filter((attribute) => attribute.name.startsWith('xmlns:'))
-          .map(
-            (attribute) => `${attribute.name.slice(6)} · ${attribute.value}`,
-          ),
-      ),
-    ),
-  );
-  let materialResourceCount = [
-    'basematerials',
-    'colorgroup',
-    'texture2dgroup',
-    'compositematerials',
-    'multiproperties',
-  ].reduce((total, name) => total + elements(name).length, 0);
-  let materialBases = elements('base');
-  let materialNames = materialBases
-    .map((element) => element.getAttribute('name'))
-    .filter((value): value is string => Boolean(value));
-  let materialColors = materialBases
-    .map((element) => element.getAttribute('displaycolor'))
-    .filter((value): value is string => Boolean(value));
-  let vertices = elements('vertex')
-    .map((element) =>
-      ['x', 'y', 'z'].map((axis) => Number(element.getAttribute(axis))),
+  if (
+    !/^\s*(?:<\?xml[^>]*\?>\s*)?(?:<!--[\s\S]*?-->\s*)*<model\b/i.test(
+      modelText,
     )
-    .filter((vertex) => vertex.every(Number.isFinite));
-  let mins = [Infinity, Infinity, Infinity];
-  let maxs = [-Infinity, -Infinity, -Infinity];
-  for (let vertex of vertices) {
-    for (let axis = 0; axis < 3; axis++) {
-      mins[axis] = Math.min(mins[axis], vertex[axis]);
-      maxs[axis] = Math.max(maxs[axis], vertex[axis]);
+  ) {
+    return undefined;
+  }
+
+  // The metadata prologue: everything before the first geometry object. All the
+  // facts we read (metadata children, basematerials) live here.
+  let objectIndex = modelText.search(/<object\b/i);
+  let prologue =
+    objectIndex === -1 ? modelText : modelText.slice(0, objectIndex);
+
+  let metadata = new Map<string, string>();
+  let metadataRe = /<metadata\b([^>]*)>([\s\S]*?)<\/metadata>/gi;
+  for (let match; (match = metadataRe.exec(prologue)); ) {
+    let key = attr(match[1], 'name');
+    if (key) {
+      metadata.set(key.toLowerCase(), decodeXmlEntities(match[2].trim()));
     }
   }
-  let dimension = (axis: number) =>
-    vertices.length
-      ? Math.round((maxs[axis] - mins[axis]) * 1_000_000) / 1_000_000
-      : undefined;
-  let configPath = Object.keys(files).find((path) =>
-    /(?:^|\/)model_settings\.config$/i.test(path),
-  );
-  let configuredParts: ThreeMfPrintPartData[] = [];
-  let plateCount = 0;
-  let configuredFaceCount = 0;
-  let extruders = new Set<number>();
-  if (configPath) {
-    let config = new DOMParser().parseFromString(
-      strFromU8(files[configPath]),
-      'application/xml',
-    );
-    if (!config.getElementsByTagName('parsererror').length) {
-      plateCount = config.getElementsByTagName('plate').length;
-      for (let part of Array.from(config.getElementsByTagName('part'))) {
-        let values = new Map<string, string>();
-        for (let child of Array.from(part.children)) {
-          if (child.localName === 'metadata') {
-            let key = child.getAttribute('key');
-            if (key) {
-              values.set(key, child.getAttribute('value') ?? '');
-            }
-          }
-        }
-        let meshStat = Array.from(part.children).find(
-          (child) => child.localName === 'mesh_stat',
-        );
-        let faceCount = Number(meshStat?.getAttribute('face_count') ?? 0);
-        let extruder = Number(values.get('extruder') ?? 0);
-        if (extruder > 0) {
-          extruders.add(extruder);
-        }
-        configuredFaceCount += Number.isFinite(faceCount) ? faceCount : 0;
-        configuredParts.push({
-          name:
-            values.get('name') ||
-            `Part ${part.getAttribute('id') ?? configuredParts.length + 1}`,
-          extruder: extruder || undefined,
-          faceCount: faceCount || undefined,
-        });
-      }
+
+  let materialNames: string[] = [];
+  let materialColors: string[] = [];
+  let baseRe = /<base\b([^>]*?)\/?>/gi;
+  for (let match; (match = baseRe.exec(prologue)); ) {
+    let name = attr(match[1], 'name');
+    let color = attr(match[1], 'displaycolor');
+    if (name) {
+      materialNames.push(name);
+    }
+    if (color) {
+      materialColors.push(color);
     }
   }
-  if (!configuredParts.length) {
-    for (let object of elements('object')) {
-      let triangleCount = object.getElementsByTagNameNS('*', 'triangle').length;
-      if (triangleCount) {
-        configuredParts.push({
-          name:
-            object.getAttribute('name') ||
-            `Object ${object.getAttribute('id') ?? configuredParts.length + 1}`,
-          faceCount: triangleCount,
-        });
-      }
-    }
+
+  let extensions: string[] = [];
+  let namespaceRe = /xmlns:([\w-]+)\s*=\s*"([^"]*)"/gi;
+  for (let match; (match = namespaceRe.exec(rootTag)); ) {
+    extensions.push(`${match[1]} · ${match[2]}`);
   }
+
   let application =
     metadata.get('application') ??
     metadata.get('producer') ??
     metadata.get('generator');
+
+  // The slicer config is a separate, small entry — decompressed in full and
+  // parsed for the Bambu/PrusaSlicer print-part facts (plates, extruders,
+  // per-part face counts). Absent for non-slicer 3MFs, which simply omit these.
+  let configName = Object.keys(files).find((name) => CONFIG_PART_RE.test(name));
+  let printParts: ThreeMfPrintPartData[] = [];
+  let plateCount = 0;
+  let configuredFaceCount = 0;
+  let extruders = new Set<number>();
+  if (configName) {
+    let config = strFromU8(files[configName]);
+    plateCount = (config.match(/<plate\b/gi) ?? []).length;
+    let partRe = /<part\b([^>]*)>([\s\S]*?)<\/part>/gi;
+    for (let partMatch; (partMatch = partRe.exec(config)); ) {
+      let partAttrs = partMatch[1];
+      let body = partMatch[2];
+      let values = new Map<string, string>();
+      let kvRe = /<metadata\b([^>]*?)\/?>/gi;
+      for (let kv; (kv = kvRe.exec(body)); ) {
+        let key = attr(kv[1], 'key');
+        if (key) {
+          values.set(key, attr(kv[1], 'value') ?? '');
+        }
+      }
+      let faceCount = Number(
+        body.match(/<mesh_stat\b[^>]*\bface_count\s*=\s*"([^"]*)"/i)?.[1] ?? 0,
+      );
+      let extruder = Number(values.get('extruder') ?? 0);
+      if (extruder > 0) {
+        extruders.add(extruder);
+      }
+      if (Number.isFinite(faceCount)) {
+        configuredFaceCount += faceCount;
+      }
+      printParts.push({
+        name:
+          values.get('name') ||
+          `Part ${attr(partAttrs, 'id') ?? printParts.length + 1}`,
+        extruder: extruder || undefined,
+        faceCount: faceCount || undefined,
+      });
+    }
+  }
+
   return {
-    model3d: {
-      meshes: elements('mesh').length,
-      materials: materialResourceCount,
-      vertices: elements('vertex').length,
-      triangles: elements('triangle').length,
-      generator: application ?? metadata.get('designer'),
-    },
     threeMfMetadata: {
-      unit: root.getAttribute('unit') ?? 'millimeter',
-      language: root.getAttribute('xml:lang') ?? undefined,
-      modelPart,
-      sizeX: dimension(0),
-      sizeY: dimension(1),
-      sizeZ: dimension(2),
-      packageEntryCount: Object.keys(files).length,
-      objectCount: elements('object').length,
-      buildItemCount: elements('item').length,
-      componentCount: elements('component').length,
-      textureCount: elements('texture2d').length,
-      materialResourceCount,
-      extensionCount: extensions.length,
+      unit: attr(rootTag, 'unit') ?? 'millimeter',
+      language: attr(rootTag, 'xml:lang'),
+      modelPart: modelName,
+      extensionCount: extensions.length || undefined,
       extensions,
       title: metadata.get('title'),
       designer: metadata.get('designer'),
@@ -227,12 +221,12 @@ export function parseThreeMf(
       licenseTerms: metadata.get('licenseterms'),
       description: metadata.get('description'),
       plateCount: plateCount || undefined,
-      printPartCount: configuredParts.length || undefined,
+      printPartCount: printParts.length || undefined,
       configuredFaceCount: configuredFaceCount || undefined,
       extruderCount: extruders.size || undefined,
       materialNames,
       materialColors,
-      printParts: configuredParts,
+      printParts,
     },
   };
 }

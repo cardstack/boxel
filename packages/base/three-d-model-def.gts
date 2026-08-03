@@ -1,41 +1,19 @@
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
+import CubeIcon from '@cardstack/boxel-icons/cube';
 import File3dIcon from '@cardstack/boxel-icons/file-3d';
 import {
   BaseDefComponent,
-  FieldDef,
   FileDef,
   StringField,
   contains,
   field,
 } from './card-api';
-import NumberField from './number';
-import { silhouettePath } from './model-silhouette';
-
-// Re-exported for back-compat; the implementation lives in a card-api-free `.ts`
-// module so it stays unit-testable without pulling card-api into the bundle.
-export { silhouettePath };
 
 // Extracted to a module const: a regex literal inline in a `.gts` (with `/`
 // inside a character class) can confuse the content-tag template lexer.
 const EXTENSION_RE = new RegExp('\\.[^/.]+$');
-
-// Generic scene facts a leaf's `extractAttributes` produces from the file
-// bytes, shared by every 3D model format (STL, 3MF, …). Mirrors the fields on
-// `Model3DInfoField`.
-export interface Model3dData {
-  meshes: number;
-  materials: number;
-  // Vertex records **as stored in the file**, NOT unique positions — the two
-  // formats store geometry differently, so this counts what the format carries:
-  // STL is triangle soup (≈ 3 × triangles, no shared vertices); 3MF stores
-  // indexed `<vertex>` elements (unique). Don't compare the number across
-  // formats as if it were the same quantity.
-  vertices: number;
-  triangles: number;
-  generator?: string;
-}
 
 // Lowercased file extension (including the leading dot) from a URL, e.g.
 // `.stl`. Shared by the leaf `extractAttributes` methods to reject a file whose
@@ -53,75 +31,50 @@ export function getExtension(url: string): string {
   }
 }
 
-// Generic scene facts shared by every 3D model format (STL, 3MF, and later
-// GLB/glTF). Format-specific facts (STL facet counts, 3MF print parts) live on
-// the leaf's own metadata FieldDef, not here.
-export class Model3DInfoField extends FieldDef {
-  static displayName = '3D Scene';
-  static icon = File3dIcon;
-  @field meshes = contains(NumberField);
-  @field materials = contains(NumberField);
-  // See `Model3dData.vertices`: vertex records as the format stores them, not
-  // unique positions — not comparable across formats.
-  @field vertices = contains(NumberField);
-  @field triangles = contains(NumberField);
-  @field generator = contains(StringField);
-}
-
-// Shared preview: the generated PNG (`thumbnailUrl`, populated by CS-12401)
-// when present, otherwise the SVG silhouette. Used directly by fitted and as
-// the placeholder behind the live WebGL viewer.
-export class ModelPreview extends GlimmerComponent<{
-  Args: { model: ModelDef };
+// Static preview: the generated PNG (`thumbnailUrl`, populated by CS-12401) when
+// present, otherwise a plain cube icon. Used by fitted (which never boots a
+// viewer) and as the placeholder behind the live WebGL viewer. Deliberately not
+// a silhouette drawn from index-time bounds — those are gone; the real preview
+// is a shaded thumbnail (CS-12401) and the interactive shape is the live viewer.
+export class ModelThumbnail extends GlimmerComponent<{
+  Args: { model: ThreeDModelDef };
   Element: HTMLElement;
 }> {
-  get path() {
-    let e = this.args.model.extents;
-    return silhouettePath(e.x, e.y, e.z);
-  }
-
   <template>
-    <div class='model-preview' ...attributes>
+    <div class='model-thumb' ...attributes>
       {{#if @model.thumbnailUrl}}
         <img
-          class='model-preview__img'
+          class='model-thumb__img'
           src={{@model.thumbnailUrl}}
           alt={{@model.name}}
           loading='lazy'
         />
       {{else}}
-        <svg
-          class='model-preview__svg'
-          viewBox='0 0 240 220'
+        <CubeIcon
+          class='model-thumb__icon'
           role='img'
           aria-label={{@model.name}}
-        >
-          <path
-            d={{this.path}}
-            fill='rgba(120, 140, 170, 0.10)'
-            stroke='currentColor'
-            stroke-width='1.25'
-            stroke-linejoin='round'
-          />
-        </svg>
+        />
       {{/if}}
     </div>
     <style scoped>
-      .model-preview {
+      .model-thumb {
         width: 100%;
         height: 100%;
         display: grid;
         place-items: center;
         overflow: hidden;
       }
-      .model-preview__img {
+      .model-thumb__img {
         width: 100%;
         height: 100%;
         object-fit: contain;
       }
-      .model-preview__svg {
-        width: 80%;
-        height: 80%;
+      .model-thumb__icon {
+        width: 45%;
+        height: 45%;
+        max-width: 96px;
+        max-height: 96px;
         color: var(--boxel-450);
       }
     </style>
@@ -150,13 +103,10 @@ function disposeObject(root: any) {
 // CDN (esm.run/esm.sh) only at client render time — the sanctioned Boxel card
 // pattern for external libraries (the loader resolves https:// specifiers). The
 // engine is never imported during extraction/indexing, so the prerender stays
-// pure-JS + silhouette. Any failure (no WebGL, offline, blocked CDN, unparseable
-// geometry) is caught and leaves the silhouette placeholder in place.
+// pure-JS + the static thumbnail. Any failure (no WebGL, offline, blocked CDN,
+// unparseable geometry) is caught and leaves the thumbnail placeholder in place.
 const renderModel = modifier(
-  (
-    element: HTMLElement,
-    [component, url, lazy]: [ModelViewer, string, boolean],
-  ) => {
+  (element: HTMLElement, [component, url]: [ModelViewer, string]) => {
     if (!url) {
       return;
     }
@@ -171,9 +121,6 @@ const renderModel = modifier(
     let frameModel: ((resetDirection?: boolean) => void) | undefined;
     let isThreeMf = /\.3mf(?:$|[?#])/i.test(url);
     let isStl = /\.stl(?:$|[?#])/i.test(url);
-    // Fitted (lazy) tiles render a static model — no orbit controls, and they
-    // must not swallow the grid's scroll/drag.
-    let interactive = !lazy;
 
     let resize = () => {
       if (!renderer || !camera) {
@@ -260,9 +207,6 @@ const renderModel = modifier(
           controls.enableDamping = true;
           controls.dampingFactor = 0.07;
           controls.enablePan = false;
-          controls.enableRotate = interactive;
-          controls.enableZoom = interactive;
-          controls.enabled = interactive;
           controls.autoRotate = false;
           resize();
           tick();
@@ -281,6 +225,9 @@ const renderModel = modifier(
             scene.add(modelRoot);
             let size = bounds.getSize(new THREE.Vector3());
             let center = bounds.getCenter(new THREE.Vector3());
+            // Report the true, transform-correct bounding box for display — the
+            // dimensions we no longer extract at index time come from here.
+            component.setDimensions(size);
             frameModel = (resetDirection = false) => {
               let verticalFov = THREE.MathUtils.degToRad(camera.fov);
               let horizontalFov =
@@ -361,71 +308,49 @@ const renderModel = modifier(
       })();
     };
 
-    // In `lazy` mode (fitted collection tiles) only boot the WebGL engine once
-    // the tile is actually on-screen, so a grid of many models doesn't exhaust
-    // the browser's WebGL context budget. Off-screen tiles keep the silhouette.
-    let io: IntersectionObserver | undefined;
-    if (lazy) {
-      io = new IntersectionObserver((entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          io?.disconnect();
-          start();
-        }
-      });
-      io.observe(element);
-    } else {
-      start();
-    }
+    start();
 
     let stop = (event: Event) => event.stopPropagation();
     let resetView = (event: Event) => {
       event.stopPropagation();
       frameModel?.(true);
     };
-    // Only trap gestures for an interactive (isolated/embedded) viewer. Fitted
-    // tiles stay pass-through so the enclosing grid scrolls normally.
-    if (interactive) {
-      for (let eventName of ['pointerdown', 'pointerup', 'click', 'wheel']) {
-        element.addEventListener(eventName, stop);
-      }
-      element.addEventListener('dblclick', resetView);
+    for (let eventName of ['pointerdown', 'pointerup', 'click', 'wheel']) {
+      element.addEventListener(eventName, stop);
     }
+    element.addEventListener('dblclick', resetView);
 
     return () => {
       cancelled = true;
       controller.abort();
       cancelAnimationFrame(frameId);
-      io?.disconnect();
       observer.disconnect();
       controls?.dispose?.();
       disposeObject(modelRoot);
       renderer?.dispose?.();
       renderer?.forceContextLoss?.();
       renderer?.domElement?.remove();
-      if (interactive) {
-        for (let eventName of ['pointerdown', 'pointerup', 'click', 'wheel']) {
-          element.removeEventListener(eventName, stop);
-        }
-        element.removeEventListener('dblclick', resetView);
+      for (let eventName of ['pointerdown', 'pointerup', 'click', 'wheel']) {
+        element.removeEventListener(eventName, stop);
       }
+      element.removeEventListener('dblclick', resetView);
     };
   },
 );
 
-// Live WebGL orbit viewer used by embedded + isolated. The silhouette
-// (ModelPreview) shows until the scene paints and remains as the fallback if
-// WebGL/the CDN engine is unavailable (e.g. during prerender).
+// Live WebGL orbit viewer used by embedded + isolated. The static thumbnail
+// (ModelThumbnail) shows until the scene paints and remains as the fallback if
+// WebGL/the CDN engine is unavailable (e.g. during prerender). Fitted does NOT
+// use this — a grid of tiles must never boot one WebGL context per tile.
 export class ModelViewer extends GlimmerComponent<{
-  Args: { model: ModelDef; lazy?: boolean };
+  Args: { model: ThreeDModelDef; unit?: string };
   Element: HTMLElement;
 }> {
   @tracked state: 'loading' | 'ready' | 'error' = 'loading';
+  @tracked dimensions: { x: number; y: number; z: number } | null = null;
 
   get url() {
     return this.args.model.url;
-  }
-  get lazy() {
-    return this.args.lazy ?? false;
   }
   get label() {
     return `Interactive 3D preview of ${this.args.model.name ?? 'model'}`;
@@ -434,10 +359,20 @@ export class ModelViewer extends GlimmerComponent<{
     return this.state === 'ready';
   }
   get showHint() {
-    return this.isReady && !this.lazy;
+    return this.isReady;
+  }
+  // True, transform-correct dimensions from the loaded geometry, labeled with
+  // the format's unit when it has one (3MF); STL is unitless.
+  get dimensionsLabel() {
+    if (!this.dimensions) {
+      return '';
+    }
+    let unit = this.args.unit ? ` ${this.args.unit}` : '';
+    return `${this.dimensions.x} × ${this.dimensions.y} × ${this.dimensions.z}${unit}`;
   }
   setLoading = () => {
     this.state = 'loading';
+    this.dimensions = null;
   };
   setReady = () => {
     this.state = 'ready';
@@ -445,20 +380,24 @@ export class ModelViewer extends GlimmerComponent<{
   setError = (_error: unknown) => {
     this.state = 'error';
   };
+  setDimensions = (size: { x: number; y: number; z: number }) => {
+    let round = (n: number) => Math.round(n * 100) / 100;
+    this.dimensions = { x: round(size.x), y: round(size.y), z: round(size.z) };
+  };
 
   <template>
     <div class='model-viewer' ...attributes>
       {{#if this.url}}
-        <div
-          class='model-viewer__host'
-          {{renderModel this this.url this.lazy}}
-        ></div>
+        <div class='model-viewer__host' {{renderModel this this.url}}></div>
       {{/if}}
       {{#unless this.isReady}}
         <div class='model-viewer__placeholder'>
-          <ModelPreview @model={{@model}} />
+          <ModelThumbnail @model={{@model}} />
         </div>
       {{/unless}}
+      {{#if this.dimensionsLabel}}
+        <div class='model-viewer__dims'>{{this.dimensionsLabel}}</div>
+      {{/if}}
       {{#if this.showHint}}
         <div class='model-viewer__hint'>Drag to orbit · scroll to zoom</div>
       {{/if}}
@@ -494,6 +433,19 @@ export class ModelViewer extends GlimmerComponent<{
         inset: 0;
         display: grid;
         place-items: center;
+        pointer-events: none;
+      }
+      .model-viewer__dims {
+        position: absolute;
+        left: 0.5rem;
+        bottom: 0.5rem;
+        padding: 0.25rem 0.4375rem;
+        border-radius: 0.1875rem;
+        font-family: var(--font-mono, var(--boxel-monospace-font-family));
+        font-size: 0.5625rem;
+        letter-spacing: 0.02em;
+        color: var(--muted-foreground);
+        background: color-mix(in srgb, var(--card) 84%, transparent);
         pointer-events: none;
       }
       .model-viewer__hint {
@@ -587,7 +539,7 @@ export class ModelInspectorSection extends GlimmerComponent<{
 // templates render this and pass their format-specific metadata group into the
 // inspector via the default block.
 export class ModelIsolatedBody extends GlimmerComponent<{
-  Args: { model: ModelDef };
+  Args: { model: ThreeDModelDef };
   Blocks: { default: [] };
 }> {
   get name() {
@@ -599,27 +551,6 @@ export class ModelIsolatedBody extends GlimmerComponent<{
   get extension() {
     let parts = this.name.split('.');
     return parts.length > 1 ? (parts.pop() ?? '') : '';
-  }
-
-  get modelRows(): ModelInspectorRow[] {
-    let m = this.args.model.model3d;
-    let rows: ModelInspectorRow[] = [];
-    if (m?.triangles) {
-      rows.push({ term: 'Triangles', detail: m.triangles });
-    }
-    if (m?.vertices) {
-      rows.push({ term: 'Vertices', detail: m.vertices });
-    }
-    if (m?.meshes) {
-      rows.push({ term: 'Meshes', detail: m.meshes });
-    }
-    if (m?.materials) {
-      rows.push({ term: 'Materials', detail: m.materials });
-    }
-    if (m?.generator) {
-      rows.push({ term: 'Generator', detail: m.generator });
-    }
-    return rows;
   }
 
   <template>
@@ -640,12 +571,11 @@ export class ModelIsolatedBody extends GlimmerComponent<{
       <div class='iso-cols'>
         <section class='iso-stage-region' aria-label='Preview'>
           <div class='iso-stage'>
-            <ModelViewer @model={{@model}} />
+            <ModelViewer @model={{@model}} @unit={{@model.displayUnit}} />
           </div>
         </section>
 
         <aside class='inspector'>
-          <ModelInspectorSection @heading='3D model' @rows={{this.modelRows}} />
           {{yield}}
         </aside>
       </div>
@@ -714,10 +644,10 @@ export class ModelIsolatedBody extends GlimmerComponent<{
         border-radius: var(--radius, var(--boxel-border-radius));
         background: var(--card);
         padding: 0.875rem 1rem;
-        /* Uniform spacing between inspector groups (the shared 3D-model group
-           plus each leaf's yielded ModelInspectorSection) — replaces the old
-           per-group margin, which can't reach across component boundaries once
-           each group is its own scoped-css component. */
+        /* Uniform spacing between inspector groups (each leaf's yielded
+           ModelInspectorSection) — replaces the old per-group margin, which
+           can't reach across component boundaries once each group is its own
+           scoped-css component. */
         display: flex;
         flex-direction: column;
         gap: 0.875rem;
@@ -727,7 +657,7 @@ export class ModelIsolatedBody extends GlimmerComponent<{
 }
 
 class ModelAtomTemplate extends GlimmerComponent<{
-  Args: { model: ModelDef };
+  Args: { model: ThreeDModelDef };
 }> {
   <template>
     <span class='model-atom'>
@@ -750,39 +680,77 @@ class ModelAtomTemplate extends GlimmerComponent<{
   </template>
 }
 
-// Fitted is the collection-tile format. It mounts the live viewer in `lazy`
-// mode: the silhouette shows until the tile scrolls on-screen, then the WebGL
-// engine boots (and, during prerender/indexing, the silhouette simply stays).
+// Fitted is the collection-tile format. It shows a static cube icon (or the
+// CS-12401 thumbnail once present) plus the file name — mirroring the audio
+// FileDef's fitted tile. It intentionally does NOT mount the live viewer: a grid
+// of many tiles would otherwise boot one WebGL context per tile and exhaust the
+// browser's context budget.
 class ModelFittedTemplate extends GlimmerComponent<{
-  Args: { model: ModelDef };
+  Args: { model: ThreeDModelDef };
 }> {
   <template>
     <div class='model-fitted'>
-      <ModelViewer @model={{@model}} @lazy={{true}} />
+      <div class='model-fitted__thumb'>
+        <ModelThumbnail @model={{@model}} />
+      </div>
+      <span class='model-fitted__name'>{{@model.name}}</span>
     </div>
     <style scoped>
       .model-fitted {
+        container-name: fitted-card;
+        container-type: size;
         width: 100%;
         height: 100%;
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-xs);
         overflow: hidden;
+      }
+      .model-fitted__thumb {
+        flex-shrink: 0;
+        width: 40px;
+        height: 40px;
+      }
+      .model-fitted__name {
+        min-width: 0;
+        font-weight: 600;
+        font-size: var(--boxel-font-sm);
+        overflow: hidden;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+      }
+      /* Portrait/large tiles: stack the thumbnail over the name and let the
+         thumbnail grow. */
+      @container fitted-card (aspect-ratio <= 1.0) and (height >= 120px) {
+        .model-fitted {
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          text-align: center;
+        }
+        .model-fitted__thumb {
+          width: 60%;
+          height: auto;
+          aspect-ratio: 1;
+          max-width: 140px;
+        }
       }
     </style>
   </template>
 }
 
 class ModelEmbeddedTemplate extends GlimmerComponent<{
-  Args: { model: ModelDef };
+  Args: { model: ThreeDModelDef };
 }> {
   <template>
     <figure class='model-embedded'>
       <div class='model-embedded__hero'>
-        <ModelViewer @model={{@model}} />
+        <ModelViewer @model={{@model}} @unit={{@model.displayUnit}} />
       </div>
       <figcaption class='model-embedded__caption'>
         <span class='model-embedded__name'>{{@model.name}}</span>
-        {{#if @model.model3d.triangles}}
-          <small>{{@model.model3d.triangles}} triangles</small>
-        {{/if}}
       </figcaption>
     </figure>
     <style scoped>
@@ -810,39 +778,33 @@ class ModelEmbeddedTemplate extends GlimmerComponent<{
         text-overflow: ellipsis;
         white-space: nowrap;
       }
-      .model-embedded__caption small {
-        color: var(--muted-foreground);
-        font-family: var(--font-mono, var(--boxel-monospace-font-family));
-        font-size: 0.5625rem;
-      }
     </style>
   </template>
 }
 
 class ModelIsolatedTemplate extends GlimmerComponent<{
-  Args: { model: ModelDef };
+  Args: { model: ThreeDModelDef };
 }> {
   <template><ModelIsolatedBody @model={{@model}} /></template>
 }
 
-// Base FileDef subclass for 3D model formats. Owns the shared scene metadata,
-// the thumbnail seam, and the four format templates. Leaves (StlDef,
-// ThreeMfDef) add their format-specific metadata field + extraction and may
-// override `isolated` to append that metadata below the shared body.
-export class ModelDef extends FileDef {
+// Base FileDef subclass for 3D model formats. Owns the thumbnail seam and the
+// four format templates. Leaves (StlDef, ThreeMfDef) add their format-specific
+// metadata field + extraction and may override `isolated` to append that
+// metadata below the shared body, and `displayUnit` to label client-side
+// dimensions.
+export class ThreeDModelDef extends FileDef {
   static displayName = '3D Model';
   static icon = File3dIcon;
 
-  @field model3d = contains(Model3DInfoField);
-
   // Convention path for a generated raster preview, populated by CS-12401
-  // (shaded-PNG job). Empty in this PR, so fitted renders the SVG silhouette.
+  // (shaded-PNG job). Empty for now, so previews fall back to the cube icon.
   @field thumbnailUrl = contains(StringField);
 
-  // Bounding-box extents used to draw the silhouette. Leaves override this to
-  // read their own extracted sizes.
-  get extents(): { x: number; y: number; z: number } {
-    return { x: 1, y: 1, z: 1 };
+  // Unit label for the client-side dimensions readout. Leaves override when the
+  // format carries a unit (3MF); STL is unitless.
+  get displayUnit(): string {
+    return '';
   }
 
   static isolated: BaseDefComponent = ModelIsolatedTemplate;

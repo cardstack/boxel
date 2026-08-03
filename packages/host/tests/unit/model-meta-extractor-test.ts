@@ -1,4 +1,3 @@
-import { silhouettePath } from '@cardstack/base/model-silhouette';
 import { parseStl } from '@cardstack/base/stl-meta-extractor';
 import { parseThreeMf } from '@cardstack/base/three-mf-meta-extractor';
 import { zipSync, strToU8 } from 'fflate';
@@ -7,6 +6,11 @@ import { module, test } from 'qunit';
 // These exercise the pure, index-time metadata extractors directly (no
 // card-api/render harness needed) — they take an ArrayBuffer and return plain
 // data. Inputs are built programmatically so the tests carry no binary fixtures.
+//
+// Both extractors are deliberately header-only: STL reads the fixed binary
+// header (or the ASCII prologue) and 3MF reads the model part's metadata
+// prologue. Neither scans geometry, so neither reports a bounding box or vertex/
+// triangle counts — physical dimensions come from the live client-side viewer.
 
 function toArrayBuffer(u8: Uint8Array): ArrayBuffer {
   return u8.buffer.slice(
@@ -63,28 +67,18 @@ const UNIT_TRIANGLE: BinaryTriangle = {
 };
 
 module('Unit | model metadata extractors | parseStl', function () {
-  test('parses a binary STL: encoding, counts, and bounding box', function (assert) {
-    let parsed = parseStl(buildBinaryStl([UNIT_TRIANGLE]));
+  test('reads the binary STL header: encoding and facet count', function (assert) {
+    let parsed = parseStl(buildBinaryStl([UNIT_TRIANGLE, UNIT_TRIANGLE]));
     assert.ok(parsed, 'binary STL parses');
     assert.strictEqual(parsed!.stlMetadata.encoding, 'binary');
-    assert.strictEqual(parsed!.stlMetadata.facetCount, 1);
-    assert.strictEqual(parsed!.stlMetadata.normalCount, 1);
-    assert.strictEqual(parsed!.stlMetadata.degenerateFacetCount, 0);
-    assert.strictEqual(parsed!.model3d.triangles, 1);
-    assert.strictEqual(parsed!.model3d.vertices, 3, '3 vertex records');
-    assert.strictEqual(parsed!.model3d.meshes, 1);
-    assert.strictEqual(parsed!.stlMetadata.sizeX, 1);
-    assert.strictEqual(parsed!.stlMetadata.sizeY, 1);
-    assert.strictEqual(parsed!.stlMetadata.sizeZ, 0);
+    // Facet count comes straight from the header's uint32 — no facet scan.
+    assert.strictEqual(parsed!.stlMetadata.facetCount, 2);
     assert.false(parsed!.stlMetadata.hasColorData);
-  });
-
-  test('detects color via the attribute byte count', function (assert) {
-    let parsed = parseStl(
-      buildBinaryStl([{ ...UNIT_TRIANGLE, attributeByteCount: 0x8000 }]),
+    // No geometry scan → no bounding box on the extracted metadata.
+    assert.notOk(
+      (parsed!.stlMetadata as unknown as Record<string, unknown>).sizeX,
+      'no index-time size',
     );
-    assert.true(parsed!.stlMetadata.hasColorData, 'color bit set');
-    assert.strictEqual(parsed!.model3d.materials, 1);
   });
 
   test('detects color via a COLOR= binary header', function (assert) {
@@ -92,23 +86,7 @@ module('Unit | model metadata extractors | parseStl', function () {
     assert.true(parsed!.stlMetadata.hasColorData, 'COLOR= header');
   });
 
-  test('counts a degenerate facet without misaligning the count', function (assert) {
-    // First facet degenerate (all vertices identical), second is valid — the
-    // streaming parser must attribute degeneracy to the right facet.
-    let degenerate: BinaryTriangle = {
-      normal: [0, 0, 0],
-      vertices: [
-        [0, 0, 0],
-        [0, 0, 0],
-        [0, 0, 0],
-      ],
-    };
-    let parsed = parseStl(buildBinaryStl([degenerate, UNIT_TRIANGLE]));
-    assert.strictEqual(parsed!.stlMetadata.facetCount, 2);
-    assert.strictEqual(parsed!.stlMetadata.degenerateFacetCount, 1);
-  });
-
-  test('parses an ASCII STL: solid name and extents', function (assert) {
+  test('parses an ASCII STL: encoding and solid name', function (assert) {
     let ascii = [
       'solid mycube',
       ' facet normal 0 0 1',
@@ -124,11 +102,8 @@ module('Unit | model metadata extractors | parseStl', function () {
     assert.ok(parsed, 'ASCII STL parses');
     assert.strictEqual(parsed!.stlMetadata.encoding, 'ASCII');
     assert.strictEqual(parsed!.stlMetadata.solidName, 'mycube');
-    assert.strictEqual(parsed!.stlMetadata.facetCount, 1);
-    assert.strictEqual(parsed!.model3d.vertices, 3);
-    assert.strictEqual(parsed!.stlMetadata.sizeX, 2);
-    assert.strictEqual(parsed!.stlMetadata.sizeY, 4);
-    assert.strictEqual(parsed!.stlMetadata.sizeZ, 0);
+    // ASCII carries no facet count in its head, and we never scan the body.
+    assert.strictEqual(parsed!.stlMetadata.facetCount, undefined);
   });
 
   test('returns undefined for non-STL content', function (assert) {
@@ -152,50 +127,55 @@ function buildThreeMf(entries: Record<string, string>): ArrayBuffer {
 }
 
 const CUBE_MODEL_XML = `<?xml version="1.0" encoding="UTF-8"?>
-<model unit="millimeter" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
-  <metadata name="Title">My Cube</metadata>
+<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" xmlns:slic3rpe="http://schemas.slic3r.org/3mf/2017/06">
+  <metadata name="Title">My Cube &amp; Co</metadata>
   <metadata name="Designer">Alice</metadata>
   <metadata name="Application">TestApp</metadata>
   <resources>
-    <object id="1" type="model" name="Cube">
+    <basematerials id="1">
+      <base name="PLA Black" displaycolor="#101010FF"/>
+      <base name="PLA Red" displaycolor="#FF0000FF"/>
+    </basematerials>
+    <object id="2" type="model" name="Cube">
       <mesh>
         <vertices>
           <vertex x="0" y="0" z="0"/>
           <vertex x="10" y="0" z="0"/>
-          <vertex x="0" y="20" z="0"/>
-          <vertex x="0" y="0" z="30"/>
         </vertices>
-        <triangles>
-          <triangle v1="0" v2="1" v3="2"/>
-          <triangle v1="0" v2="1" v3="3"/>
-        </triangles>
       </mesh>
     </object>
   </resources>
-  <build><item objectid="1"/></build>
+  <build><item objectid="2"/></build>
 </model>`;
 
 module('Unit | model metadata extractors | parseThreeMf', function () {
-  test('parses a minimal 3MF package', function (assert) {
+  test('reads the 3MF metadata prologue', function (assert) {
     let parsed = parseThreeMf(
       buildThreeMf({ '3D/3dmodel.model': CUBE_MODEL_XML }),
     );
     assert.ok(parsed, '3MF parses');
-    assert.strictEqual(parsed!.model3d.meshes, 1);
-    assert.strictEqual(parsed!.model3d.vertices, 4, 'indexed unique vertices');
-    assert.strictEqual(parsed!.model3d.triangles, 2);
     assert.strictEqual(parsed!.threeMfMetadata.unit, 'millimeter');
-    assert.strictEqual(parsed!.threeMfMetadata.sizeX, 10);
-    assert.strictEqual(parsed!.threeMfMetadata.sizeY, 20);
-    assert.strictEqual(parsed!.threeMfMetadata.sizeZ, 30);
-    assert.strictEqual(parsed!.threeMfMetadata.objectCount, 1);
-    assert.strictEqual(parsed!.threeMfMetadata.buildItemCount, 1);
-    assert.strictEqual(parsed!.threeMfMetadata.title, 'My Cube');
+    assert.strictEqual(parsed!.threeMfMetadata.language, 'en-US');
+    // Values are XML-entity-decoded.
+    assert.strictEqual(parsed!.threeMfMetadata.title, 'My Cube & Co');
     assert.strictEqual(parsed!.threeMfMetadata.designer, 'Alice');
     assert.strictEqual(parsed!.threeMfMetadata.application, 'TestApp');
-    // With no slicer config, print parts fall back to mesh objects.
-    assert.strictEqual(parsed!.threeMfMetadata.printPartCount, 1);
-    assert.strictEqual(parsed!.threeMfMetadata.printParts?.[0]?.faceCount, 2);
+    assert.deepEqual(parsed!.threeMfMetadata.materialNames, [
+      'PLA Black',
+      'PLA Red',
+    ]);
+    assert.strictEqual(parsed!.threeMfMetadata.extensionCount, 1);
+    // No geometry parse → no bounding box, no object/vertex counts.
+    assert.notOk(
+      (parsed!.threeMfMetadata as Record<string, unknown>).sizeX,
+      'no index-time size',
+    );
+    assert.notOk(
+      (parsed!.threeMfMetadata as Record<string, unknown>).objectCount,
+      'no geometry counts',
+    );
+    // No slicer config → no print parts (we no longer fall back to geometry).
+    assert.strictEqual(parsed!.threeMfMetadata.printPartCount, undefined);
   });
 
   test('reads slicer config parts, plates, and extruders', function (assert) {
@@ -224,10 +204,23 @@ module('Unit | model metadata extractors | parseThreeMf', function () {
     assert.strictEqual(part?.faceCount, 1234);
   });
 
-  test('returns undefined for malformed model XML', function (assert) {
+  test('rejects well-formed XML that is not a 3MF core model', function (assert) {
+    // The negative space around the format check: a `.model`-named XML file
+    // whose root is not the 3MF `<model>` core element must NOT be accepted.
     assert.strictEqual(
-      parseThreeMf(buildThreeMf({ '3D/3dmodel.model': '<model><unclosed>' })),
+      parseThreeMf(buildThreeMf({ '3D/3dmodel.model': '<document/>' })),
       undefined,
+      'unrelated root rejected',
+    );
+    assert.strictEqual(
+      parseThreeMf(
+        buildThreeMf({
+          '3D/3dmodel.model':
+            '<model xmlns="http://example.com/other"><resources/></model>',
+        }),
+      ),
+      undefined,
+      'wrong namespace rejected',
     );
   });
 
@@ -242,27 +235,6 @@ module('Unit | model metadata extractors | parseThreeMf', function () {
     assert.strictEqual(
       parseThreeMf(toArrayBuffer(new TextEncoder().encode('not a zip'))),
       undefined,
-    );
-  });
-});
-
-module('Unit | model metadata extractors | silhouettePath', function () {
-  test('emits one move+line segment per box edge and is deterministic', function (assert) {
-    let path = silhouettePath(1, 1, 1);
-    assert.strictEqual(
-      (path.match(/M/g) ?? []).length,
-      12,
-      '12 edges of a box',
-    );
-    assert.ok(path.includes('L'), 'draws line segments');
-    assert.strictEqual(path, silhouettePath(1, 1, 1), 'deterministic');
-  });
-
-  test('does not divide by zero for degenerate extents', function (assert) {
-    assert.strictEqual(
-      typeof silhouettePath(0, 0, 0),
-      'string',
-      'zero extents guarded',
     );
   });
 });

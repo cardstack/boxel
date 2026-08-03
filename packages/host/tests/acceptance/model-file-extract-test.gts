@@ -149,12 +149,21 @@ module('Acceptance | model file-extract', function (hooks) {
     let result = await captureFileExtractResult('ready');
     let doc = result.searchDoc as Record<string, any>;
     assert.strictEqual(result.status, 'ready');
-    assert.strictEqual(doc?.model3d?.triangles, 1, 'facet count');
-    assert.strictEqual(doc?.model3d?.vertices, 3, 'vertex records');
     assert.strictEqual(doc?.stlMetadata?.encoding, 'ASCII');
     assert.strictEqual(doc?.stlMetadata?.solidName, 'testcube');
-    assert.strictEqual(doc?.stlMetadata?.sizeX, 2);
-    assert.strictEqual(doc?.stlMetadata?.sizeY, 4);
+    assert.false(doc?.stlMetadata?.hasColorData);
+    // Header-only sniff: dimensions come from the client-side viewer, never the
+    // index, and an ASCII STL carries no facet count in its header.
+    assert.strictEqual(
+      doc?.stlMetadata?.facetCount,
+      undefined,
+      'no ASCII count',
+    );
+    assert.strictEqual(
+      doc?.stlMetadata?.sizeX,
+      undefined,
+      'no index-time size',
+    );
   });
 
   test('extracts 3MF scene + package metadata through the render route', async function (assert) {
@@ -167,12 +176,15 @@ module('Acceptance | model file-extract', function (hooks) {
     let result = await captureFileExtractResult('ready');
     let doc = result.searchDoc as Record<string, any>;
     assert.strictEqual(result.status, 'ready');
-    assert.strictEqual(doc?.model3d?.triangles, 2, 'triangle count');
-    assert.strictEqual(doc?.model3d?.vertices, 4, 'unique vertices');
     assert.strictEqual(doc?.threeMfMetadata?.unit, 'millimeter');
-    assert.strictEqual(doc?.threeMfMetadata?.sizeX, 10);
-    assert.strictEqual(doc?.threeMfMetadata?.sizeZ, 30);
     assert.strictEqual(doc?.threeMfMetadata?.title, 'Round-trip Cube');
+    assert.strictEqual(doc?.threeMfMetadata?.designer, 'Test');
+    // Bounded prologue read: no geometry counts, no index-time dimensions.
+    assert.strictEqual(
+      doc?.threeMfMetadata?.sizeX,
+      undefined,
+      'no index-time size',
+    );
   });
 
   test('a .stl whose bytes are not STL falls back and marks mismatch', async function (assert) {
@@ -186,6 +198,10 @@ module('Acceptance | model file-extract', function (hooks) {
     let doc = result.searchDoc as Record<string, any>;
     assert.strictEqual(result.status, 'ready', 'still indexes as base file');
     assert.true(result.mismatch, 'sets mismatch flag');
-    assert.strictEqual(doc?.model3d, undefined, 'no 3D metadata on fallback');
+    assert.strictEqual(
+      doc?.stlMetadata,
+      undefined,
+      'no 3D metadata on fallback',
+    );
   });
 });

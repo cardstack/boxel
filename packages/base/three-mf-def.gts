@@ -19,13 +19,12 @@ import {
   type SerializedFile,
 } from './file-api';
 import {
-  ModelDef,
+  ThreeDModelDef,
   ModelIsolatedBody,
   ModelInspectorSection,
   getExtension,
-  type Model3dData,
   type ModelInspectorRow,
-} from './model-file-def';
+} from './three-d-model-def';
 import { parseThreeMf, type ThreeMfMetadata } from './three-mf-meta-extractor';
 
 export class ThreeMfPrintPartField extends FieldDef {
@@ -71,15 +70,6 @@ export class ThreeMfMetadataField extends FieldDef {
   @field unit = contains(StringField);
   @field language = contains(StringField);
   @field modelPart = contains(StringField);
-  @field sizeX = contains(NumberField);
-  @field sizeY = contains(NumberField);
-  @field sizeZ = contains(NumberField);
-  @field packageEntryCount = contains(NumberField);
-  @field objectCount = contains(NumberField);
-  @field buildItemCount = contains(NumberField);
-  @field componentCount = contains(NumberField);
-  @field textureCount = contains(NumberField);
-  @field materialResourceCount = contains(NumberField);
   @field extensionCount = contains(NumberField);
   @field extensions = containsMany(StringField);
   @field title = contains(StringField);
@@ -107,20 +97,10 @@ export class ThreeMfMetadataField extends FieldDef {
       <dl class='three-mf-meta'>
         {{#if @model.unit}}<div><dt>Units</dt><dd
             >{{@model.unit}}</dd></div>{{/if}}
-        {{#if @model.sizeX}}<div><dt>Bounds</dt><dd>{{@model.sizeX}}
-              ×
-              {{@model.sizeY}}
-              ×
-              {{@model.sizeZ}}
-              {{@model.unit}}</dd></div>{{/if}}
-        {{#if @model.objectCount}}<div><dt>Objects</dt><dd
-            >{{@model.objectCount}}</dd></div>{{/if}}
-        {{#if @model.buildItemCount}}<div><dt>Build items</dt><dd
-            >{{@model.buildItemCount}}</dd></div>{{/if}}
-        {{#if @model.textureCount}}<div><dt>Textures</dt><dd
-            >{{@model.textureCount}}</dd></div>{{/if}}
         {{#if @model.designer}}<div><dt>Designer</dt><dd
             >{{@model.designer}}</dd></div>{{/if}}
+        {{#if @model.application}}<div><dt>Application</dt><dd
+            >{{@model.application}}</dd></div>{{/if}}
         {{#if @model.licenseTerms}}<div><dt>License</dt><dd
             >{{@model.licenseTerms}}</dd></div>{{/if}}
         {{#if @model.bambuStudioVersion}}<div><dt>Bambu 3MF</dt><dd
@@ -188,15 +168,6 @@ class ThreeMfIsolated extends GlimmerComponent<{
     if (t.unit) {
       rows.push({ term: 'Units', detail: t.unit });
     }
-    if (t.sizeX) {
-      rows.push({
-        term: 'Bounds',
-        detail: `${t.sizeX} × ${t.sizeY} × ${t.sizeZ} ${t.unit}`,
-      });
-    }
-    if (t.objectCount) {
-      rows.push({ term: 'Objects', detail: t.objectCount });
-    }
     if (t.plateCount) {
       rows.push({ term: 'Plates', detail: t.plateCount });
     }
@@ -227,19 +198,15 @@ class ThreeMfIsolated extends GlimmerComponent<{
   </template>
 }
 
-export class ThreeMfDef extends ModelDef {
+export class ThreeMfDef extends ThreeDModelDef {
   static displayName = '3MF Package';
   static icon = PrinterIcon;
   static acceptTypes = '.3mf,model/3mf,application/vnd.ms-3mfdocument';
 
   @field threeMfMetadata = contains(ThreeMfMetadataField);
 
-  get extents() {
-    return {
-      x: this.threeMfMetadata?.sizeX ?? 1,
-      y: this.threeMfMetadata?.sizeY ?? 1,
-      z: this.threeMfMetadata?.sizeZ ?? 1,
-    };
+  get displayUnit(): string {
+    return this.threeMfMetadata?.unit ?? '';
   }
 
   static isolated: BaseDefComponent = ThreeMfIsolated;
@@ -250,18 +217,16 @@ export class ThreeMfDef extends ModelDef {
     options: {
       contentHash?: string;
       contentSize?: number;
-      // Backstop bound on the bytes we're willing to parse at index time,
-      // threaded from the host; defaults to the realm's standard file-size
-      // limit (`DEFAULT_FILE_SIZE_LIMIT_BYTES`), the same ceiling the write
-      // path enforces, so the two can't drift.
+      // Backstop bound on the bytes we're willing to read at index time,
+      // threaded from the host (see `FileDefAttributesExtractor`); defaults to
+      // the realm's standard file-size limit (`DEFAULT_FILE_SIZE_LIMIT_BYTES`),
+      // the same ceiling the write path enforces, so the two stay in step.
       fileSizeLimitBytes?: number;
     } = {},
   ): Promise<
-    // `model3d`/`threeMfMetadata` are optional: over the size cap we skip the
-    // parse and return only the base file attributes (see below).
-    SerializedFile<
-      Partial<{ model3d: Model3dData; threeMfMetadata: ThreeMfMetadata }>
-    >
+    // `threeMfMetadata` is optional: over the size cap we skip the read and
+    // return only the base file attributes (see below).
+    SerializedFile<Partial<{ threeMfMetadata: ThreeMfMetadata }>>
   > {
     let extension = getExtension(url);
     if (extension !== '.3mf') {
@@ -278,9 +243,9 @@ export class ThreeMfDef extends ModelDef {
 
     let base = await super.extractAttributes(url, memoizedStream, options);
     let bytes = await memoizedStream();
-    // Over the size cap, skip the parse but keep the ThreeMfDef type — the file
+    // Over the size cap, skip the read but keep the ThreeMfDef type — the file
     // still renders via the live client-side viewer (which parses its own
-    // geometry); it just has empty inspector panels and a generic silhouette.
+    // geometry); it just has an empty inspector panel and the cube placeholder.
     // Do NOT throw FileContentMismatchError here: that would demote the file to
     // a plain FileDef and lose the 3D card entirely.
     let sizeCap = options.fileSizeLimitBytes ?? DEFAULT_FILE_SIZE_LIMIT_BYTES;
