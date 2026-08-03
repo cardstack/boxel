@@ -93,6 +93,7 @@ export default class CliAuth extends Component {
             />
           </AuthFormField>
           <AuthButton
+            class='submit-button'
             data-test-cli-auth-submit
             @variant='primary'
             @disabled={{this.isSubmitDisabled}}
@@ -125,6 +126,11 @@ export default class CliAuth extends Component {
         color: var(--foreground);
         font: var(--boxel-font-sm);
         line-height: 1.4;
+      }
+      /* The sign-in screen gets this gap from the "Forgot password?" link's
+         bottom margin. There's no such link here, so the button carries it. */
+      .submit-button {
+        margin-top: var(--boxel-sp-lg);
       }
       .google-button {
         margin-top: var(--boxel-sp-sm);
