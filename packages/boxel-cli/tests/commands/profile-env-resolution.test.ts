@@ -60,7 +60,6 @@ describe('resolveBoxelEnvironment', () => {
       domain: 'cs-10998-foo.localhost',
       matrixUrl: 'https://matrix.cs-10998-foo.localhost',
       realmServerUrl: 'https://realm-server.cs-10998-foo.localhost/',
-      hostUrl: 'https://host.cs-10998-foo.localhost/',
     });
   });
 
@@ -70,7 +69,6 @@ describe('resolveBoxelEnvironment', () => {
       domain: 'my-branchname.localhost',
       matrixUrl: 'https://matrix.my-branchname.localhost',
       realmServerUrl: 'https://realm-server.my-branchname.localhost/',
-      hostUrl: 'https://host.my-branchname.localhost/',
     });
   });
 });

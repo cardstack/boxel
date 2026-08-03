@@ -1,12 +1,14 @@
 import { expect, test } from './fixtures.ts';
 import { getMatrixTestContext } from '../helpers/index.ts';
+import { appURL } from '../support/isolated-realm-server.ts';
 import { createSubscribedUser, updateSynapseUser } from '../helpers/index.ts';
 import { browserLogin } from '../../boxel-cli/src/lib/sso-login.ts';
 
-// The host app's own origin, which is where /cli-auth lives. Deliberately not
-// `appURL` — that names a realm (`https://localhost:4205/test`), and resolving
-// the page against it would ask for `/test/cli-auth`.
-const HOST_URL = 'https://localhost:4200';
+// The realm server serves the host app, so /cli-auth lives at its root. Taken
+// from `appURL` rather than written out, since that names a realm on the same
+// server (`https://localhost:4205/test`) — resolving the page against `appURL`
+// directly would ask for `/test/cli-auth`.
+const HOST_URL = new URL('/', appURL).href;
 
 // boxel-cli authorizes a machine by opening the host app's /cli-auth page and
 // waiting on a loopback listener. The page offers the same two choices as the
@@ -109,7 +111,7 @@ test.describe('boxel-cli browser authorization', () => {
     // The redirect target is attacker-controllable, so the page has to reject
     // a non-loopback one rather than hand a session to it.
     await page.goto(
-      `${HOST_URL}/cli-auth?redirect=${encodeURIComponent('https://evil.example.com/steal')}`,
+      `${HOST_URL}cli-auth?redirect=${encodeURIComponent('https://evil.example.com/steal')}`,
     );
     await expect(page.locator('[data-test-cli-auth-error]')).toBeVisible();
     await expect(page.locator('[data-test-cli-auth-form]')).toHaveCount(0);

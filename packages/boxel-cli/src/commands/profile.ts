@@ -35,11 +35,6 @@ interface EnvironmentDefaults {
   domain: string;
   matrixUrl: string;
   realmServerUrl: string;
-  // Origin of the host app, which serves the browser sign-in page. Deployed
-  // environments serve it from the realm server's origin, but local dev splits
-  // them across ports and env mode gives each its own subdomain — so this can't
-  // be derived from realmServerUrl.
-  hostUrl: string;
 }
 
 const MENU_ENVIRONMENTS: Record<
@@ -50,21 +45,16 @@ const MENU_ENVIRONMENTS: Record<
     domain: 'stack.cards',
     matrixUrl: 'https://matrix-staging.stack.cards',
     realmServerUrl: 'https://realms-staging.stack.cards/',
-    hostUrl: 'https://realms-staging.stack.cards/',
   },
   production: {
     domain: 'boxel.ai',
     matrixUrl: 'https://matrix.boxel.ai',
     realmServerUrl: 'https://app.boxel.ai/',
-    hostUrl: 'https://app.boxel.ai/',
   },
   local: {
     domain: 'localhost',
     matrixUrl: 'http://localhost:8008',
     realmServerUrl: 'https://localhost:4201/',
-    // The host vite dev server, which terminates HTTPS with the same mkcert
-    // leaf as the realm server on 4201.
-    hostUrl: 'https://localhost:4200/',
   },
 };
 
@@ -120,7 +110,6 @@ export function resolveBoxelEnvironment(): EnvironmentDefaults | null {
     domain: `${slug}.localhost`,
     matrixUrl: `https://matrix.${slug}.localhost`,
     realmServerUrl: `https://realm-server.${slug}.localhost/`,
-    hostUrl: `https://host.${slug}.localhost/`,
   };
 }
 
@@ -286,12 +275,6 @@ async function promptEnvironmentMenu(): Promise<EnvironmentDefaults> {
       process.exit(1);
     }
     const realmServerUrl = validateUrl(realmServerUrlInput, 'Realm server URL');
-    // The host app commonly shares an origin with the realm server, so offer
-    // that as the default rather than making it a required fourth URL.
-    const hostUrlInput = await prompt(`Host app URL [${realmServerUrl}]: `);
-    const hostUrl = hostUrlInput
-      ? validateUrl(hostUrlInput, 'Host app URL')
-      : realmServerUrl;
     // matrixUrl is already validated by validateUrl above, so new URL won't
     // throw — the hostname fallback is just for the unlikely edge case of
     // a parseable URL with empty hostname (e.g. "http:///path").
@@ -303,7 +286,6 @@ async function promptEnvironmentMenu(): Promise<EnvironmentDefaults> {
       domain: domainInput || defaultDomain,
       matrixUrl,
       realmServerUrl,
-      hostUrl,
     };
   }
 
@@ -447,7 +429,6 @@ async function addProfile(
   let domain: string;
   let defaultMatrixUrl: string;
   let defaultRealmUrl: string;
-  let defaultHostUrl: string;
 
   if (envDefaults) {
     console.log(
@@ -456,20 +437,20 @@ async function addProfile(
     domain = envDefaults.domain;
     defaultMatrixUrl = envDefaults.matrixUrl;
     defaultRealmUrl = envDefaults.realmServerUrl;
-    defaultHostUrl = envDefaults.hostUrl;
   } else {
     const menuResult = await promptEnvironmentMenu();
     domain = menuResult.domain;
     defaultMatrixUrl = menuResult.matrixUrl;
     defaultRealmUrl = menuResult.realmServerUrl;
-    defaultHostUrl = menuResult.hostUrl;
   }
 
+  // The realm server serves the host app, so it also serves the sign-in page —
+  // `--host-url` is only for a setup that splits them.
   let outcome: AddProfileOutcome = useBrowser
     ? await addProfileViaBrowser(
         manager,
         defaultMatrixUrl,
-        hostUrlOverride ?? defaultHostUrl,
+        hostUrlOverride ?? defaultRealmUrl,
         defaultRealmUrl,
       )
     : { status: 'usePassword' };

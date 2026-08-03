@@ -60,7 +60,7 @@ export function buildBoxelProgram(version: string): Command {
     )
     .option(
       '--host-url <url>',
-      'Host app URL serving the browser sign-in page (for add command with non-standard domains)',
+      'Origin serving the browser sign-in page, when it is not the realm server (for add command)',
     )
     .addHelpText(
       'after',
