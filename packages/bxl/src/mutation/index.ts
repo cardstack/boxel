@@ -37,6 +37,26 @@ export type {
 } from './boxel-adapter.js';
 
 export {
+  applyBxlMutationPlanToCardSource,
+  mutateBxlCardSource,
+  mutationSchemaForCardSource,
+  snapshotBxlCardSource,
+} from './boxel-source-adapter.js';
+export type {
+  BxlBoxelSourceDefinition,
+  BxlBoxelSourceDefinitionLookup,
+  BxlBoxelSourceFieldDefinition,
+  BxlCardSourceCommitOptions,
+  BxlCardSourceDocument,
+  BxlCardSourceMutationResult,
+  BxlCardSourceProjectionOptions,
+  BxlCardSourceRelationship,
+  BxlCardSourceResource,
+  BxlCardSourceSchemaOptions,
+  BxlMutateCardSourceOptions,
+} from './boxel-source-adapter.js';
+
+export {
   BxlMutationError,
 } from './types.js';
 

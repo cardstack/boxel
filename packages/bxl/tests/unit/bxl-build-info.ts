@@ -35,6 +35,7 @@ const required = [
   'pascalcase-fallback',
   'jq-keywords-guard',
   'authorization-kernel',
+  'boxel-source-mutation-adapter',
 ];
 for (const r of required) {
   ok(

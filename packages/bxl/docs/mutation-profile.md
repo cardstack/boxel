@@ -156,6 +156,56 @@ const plan = update.call(invoice, {
 });
 ```
 
+### Canonical card-source adapter
+
+Server-side clone/create tools may hold canonical Boxel `.json` source without
+loading a CardDef instance. They use a separate commit adapter while retaining
+the same source language, schema rules, pure planner, plan IR, and
+authorization hook:
+
+```ts
+const schema = await mutationSchemaForCardSource(definition, {
+  lookupDefinition,
+});
+
+const result = mutateBxlCardSource(sourceDocument, changes, {
+  schema,
+  syntax: 'solidified',
+  programId,
+  targetId,
+  resolveReference,
+  formatReference,
+  resolveCard,
+});
+```
+
+`mutationSchemaForCardSource` consumes the loaderless subset of Boxel's
+`Definition` graph: field type, primitive/compound shape, computed and query
+status, target code reference, and target display name. The host-provided
+lookup owns code-reference resolution and Definition caching.
+
+`snapshotBxlCardSource` maps authored attributes to their logical field paths
+and maps Boxel dotted relationship keys to `{ id }` projections. It accepts
+both canonical `links.self` relationships and served JSON:API `data` resource
+identifiers, including indexed and compact to-many forms. A host callback may
+resolve source-relative references before planning.
+
+`applyBxlMutationPlanToCardSource` structured-clones the complete source
+document and changes only storage locations named by validated intents. It
+preserves unknown authored data, document extensions, `meta`, `meta.fields`,
+relationship metadata, and untouched relationship records. Relationship
+assignment removes stale `data`, writes `links.self`, and retains other
+relationship extensions. The original source object is never mutated.
+
+The first source-commit version intentionally accepts only contained scalar
+leaf `set`/`copy`/`delete` intents and singular `linksTo` relate/unrelate
+intents. It rejects collection insertion, deletion, movement, reordering,
+whole-compound replacement, `linksToMany` changes, and field-root plans with
+`card-source-structural-write-unsupported`. Those operations need Boxel-owned
+lowering that also updates indexed relationship keys and polymorphic
+`meta.fields` arrays. Planning remains fully capable; the restriction is at
+this persistence boundary.
+
 The adapter applies the plan's original `set`, `insert`, `move`, `reorder`,
 `relate`, `unrelate`, and `move-relation` intents rather than diffing
 `plan.output`. Contained values are materialized with their Field class, and

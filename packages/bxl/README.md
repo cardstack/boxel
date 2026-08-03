@@ -36,7 +36,7 @@ evaluateBxl('ROUND(Subtotal * "Tax Rate" / 100, 2)', invoice, { schema });
 // => 12.38
 ```
 
-> **Current release: `0.3.1`.** The public API is intentionally unstable below 1.0 — see [RELEASE-PLAN.md](./RELEASE-PLAN.md).
+> **Current release: `0.4.0`.** The public API is intentionally unstable below 1.0 — see [RELEASE-PLAN.md](./RELEASE-PLAN.md).
 
 ---
 
@@ -762,6 +762,49 @@ example, `Theme = card(id)` plans against the concrete `cardInfo.theme` path.
 The adapter changes one resident Card model only. Host code still owns durable
 idempotency, permission checks, revision tokens, network persistence, and
 cross-Card transactions.
+
+Server-side tools that hold canonical `.json` card source instead of a loaded
+Card can use the separate immutable source adapter. It derives the same
+mutation schema from Boxel's loaderless `Definition` graph, projects authored
+attributes and dotted relationship keys into the loaded-shaped planner model,
+then lowers only validated scalar and singular-relationship intents back into
+a clone of the original source document:
+
+```ts
+import {
+  mutateBxlCardSource,
+  mutationSchemaForCardSource,
+} from '@cardstack/bxl/mutation';
+
+const schema = await mutationSchemaForCardSource(definition, {
+  lookupDefinition: (codeRef) => definitionLookup.lookupDefinition(codeRef),
+});
+
+const { document, plan } = mutateBxlCardSource(
+  clonedSourceDocument,
+  `.cardInfo.name = "C#";
+   .image = "https://cdn.example.test/csharp.svg";
+   .cardInfo.theme = card("https://example.test/themes/dark");`,
+  {
+    schema,
+    syntax: 'solidified',
+    programId: toolCallId,
+    targetId: cloneFrom,
+    resolveReference: (reference) => resolveAgainstSource(reference),
+    formatReference: (cardId) => formatForTarget(cardId),
+    resolveCard: (cardId) => validatedCardIds.has(cardId) ? { id: cardId } : undefined,
+  },
+);
+```
+
+The source adapter does not expose raw `attributes` or `relationships` paths
+to mutation authors. Logical `.cardInfo.theme` is persisted as
+`data.relationships["cardInfo.theme"].links.self`; scalar paths such as
+`.cardInfo.name` and `.image` land under `data.attributes`. Version 1 rejects
+contained and relationship collection restructuring because those operations
+also require coordinated updates to Boxel's indexed relationship keys and
+parallel `meta.fields` arrays. The input document is never mutated, and a
+detached plan is rejected when its projected source snapshot is stale.
 
 Use `prepareBxlMutationOperations(operations, options)` for the equivalent
 `bxl-mutation-ops/1` JSON tool-call encoding, and

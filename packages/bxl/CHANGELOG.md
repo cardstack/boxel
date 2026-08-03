@@ -11,6 +11,22 @@ versions may change syntax behavior until `1.0.0`. See
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-08-02
+
+### Added
+
+- **Immutable Boxel card-source mutation adapter.** Server-side clone/create
+  tools can derive mutation schema from loaderless Boxel `Definition` graphs,
+  project canonical `.json` source into the loaded-shaped planner model, and
+  lower validated scalar and singular-relationship intents back into a cloned
+  source document. Logical `cardInfo.theme` writes become dotted Boxel
+  relationship records without exposing JSON:API storage paths to authors.
+- **Source-preserving commit safety.** Card-source commits retain unknown
+  authored data, document extensions, `meta.fields`, relationship metadata,
+  and untouched relationships; remove stale relationship `data`; reject stale
+  plans; and fail closed on collection-structural operations that require
+  coordinated Boxel metadata or indexed-key rewrites.
+
 ## [0.3.1] — 2026-08-02
 
 ### Fixed
