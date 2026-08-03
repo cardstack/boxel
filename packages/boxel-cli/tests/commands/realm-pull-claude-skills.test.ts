@@ -90,7 +90,7 @@ function mirrorDir(): string {
 
 async function runPull(
   files: Record<string, string> = BASE_FILES,
-  options: { claudeSkills?: boolean } = {},
+  options: { claudeSkills?: boolean; dryRun?: boolean } = {},
 ): Promise<void> {
   const result = await pull(ROOT, localDir, {
     authenticator: makeFakeAuthenticator(files),
@@ -160,6 +160,14 @@ describe('realm pull → .claude/skills', () => {
     expect(
       fs.existsSync(path.join(mirrorDir(), 'experiments-trip-planner')),
     ).toBe(false);
+  });
+
+  it('neither writes nor previews the mirror under --dry-run', async () => {
+    // A dry run downloads nothing, so the mirror has nothing to be derived
+    // from: it is settled by the real run rather than guessed at here.
+    await runPull(BASE_FILES, { dryRun: true });
+
+    expect(fs.existsSync(path.join(localDir, '.claude'))).toBe(false);
   });
 
   it('writes no mirror for a realm with no skills', async () => {

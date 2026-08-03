@@ -22,6 +22,7 @@
  * the edit can be moved to the realm rather than silently lost.
  */
 import * as fs from 'fs/promises';
+import { realpathSync } from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { computeFileHash } from './sync-manifest.ts';
@@ -73,8 +74,6 @@ export interface MirrorRealmSkillsOptions {
   realmUrl: string;
   /** Realm checkout — the directory `realm pull` writes the realm into. */
   localDir: string;
-  /** Report what would change without touching the filesystem. */
-  dryRun?: boolean;
 }
 
 /**
@@ -99,12 +98,29 @@ export function isSkillsMirrorDisabled(): boolean {
  *
  * Null for the home directory itself, where `.claude/skills` is Claude Code's
  * personal scope — one realm's skills must not be pushed into every unrelated
- * project.
+ * project. Symlinks are followed before that comparison, so a checkout that
+ * merely points at the home directory is recognised as the personal scope
+ * rather than writing through the link into it.
  */
 export function resolveMirrorRoot(localDir: string): string | null {
   const resolved = path.resolve(localDir);
-  if (resolved === path.resolve(os.homedir())) return null;
+  if (realOrLexicalPath(resolved) === realOrLexicalPath(os.homedir())) {
+    return null;
+  }
   return resolved;
+}
+
+/**
+ * Symlink-resolved form of an absolute path, falling back to the path itself
+ * when it cannot be resolved — a directory that does not exist yet is not the
+ * home directory, so the lexical form answers the only question asked here.
+ */
+function realOrLexicalPath(absolutePath: string): string {
+  try {
+    return realpathSync.native(absolutePath);
+  } catch {
+    return absolutePath;
+  }
 }
 
 /**
@@ -151,7 +167,7 @@ export function mirrorDirName(realmSlug: string, skillName: string): string {
 export async function mirrorRealmSkills(
   options: MirrorRealmSkillsOptions,
 ): Promise<SkillsMirrorResult | null> {
-  const { realmUrl, dryRun } = options;
+  const { realmUrl } = options;
   const localDir = path.resolve(options.localDir);
   const realmSlug = realmSlugFromUrl(realmUrl);
   if (realmSlug === null) return null;
@@ -226,12 +242,6 @@ export async function mirrorRealmSkills(
       }
     }
 
-    if (dryRun) {
-      (exists ? result.updated : result.created).push(name);
-      nextEntries[name] = { skill, files: sourceFiles };
-      continue;
-    }
-
     await fs.mkdir(mirrorDir, { recursive: true });
     // Replace rather than merge, so a file dropped from the realm's skill
     // (a retired reference) doesn't linger in the copy.
@@ -257,9 +267,7 @@ export async function mirrorRealmSkills(
 
     if (await pathPresent(target)) {
       // Same protection as the refresh path: an edited copy is kept, and its
-      // manifest record with it, so the next run reports it again. Decided
-      // before the dry-run check so a preview names what a real run would
-      // delete, rather than promising to remove an edit it would keep.
+      // manifest record with it, so the next run reports it again.
       const mirrorFiles = await hashTree(target);
       if (!sameHashes(mirrorFiles, prior.files)) {
         result.skipped.push({
@@ -270,21 +278,17 @@ export async function mirrorRealmSkills(
         nextEntries[name] = prior;
         continue;
       }
-      if (!dryRun) {
-        await fs.rm(target, { recursive: true, force: true });
-      }
+      await fs.rm(target, { recursive: true, force: true });
     }
     result.removed.push(name);
   }
 
-  if (!dryRun) {
-    if (Object.keys(nextEntries).length === 0) {
-      delete manifest.realms[realmUrl];
-    } else {
-      manifest.realms[realmUrl] = { entries: nextEntries };
-    }
-    await saveMirrorManifest(mirrorDir, manifest);
+  if (Object.keys(nextEntries).length === 0) {
+    delete manifest.realms[realmUrl];
+  } else {
+    manifest.realms[realmUrl] = { entries: nextEntries };
   }
+  await saveMirrorManifest(mirrorDir, manifest);
 
   result.created.sort();
   result.updated.sort();
@@ -298,11 +302,27 @@ export async function mirrorRealmSkills(
  * reconcile, report it, and swallow anything that goes wrong. The transfer that
  * precedes it has already succeeded by this point, so a mirror problem is worth
  * a warning and nothing more — it must never turn a good sync into a failure.
+ *
+ * A dry run neither writes nor previews. The mirror is derived from the
+ * `skills/` tree the transfer leaves behind, and a dry run transfers nothing, so
+ * anything reported from the untouched checkout would be wrong in both
+ * directions: silent about a skill the real run would expose, and calling a
+ * skill the realm no longer has "unchanged". Guessing the names from the
+ * transfer plan would not fix it either — without the file contents there is no
+ * way to tell a refreshed copy from an identical one. So it says what it can
+ * stand behind: that the mirror is settled by the real run.
  */
 export async function reconcileSkillsMirror(
-  options: MirrorRealmSkillsOptions & { enabled?: boolean },
+  options: MirrorRealmSkillsOptions & { enabled?: boolean; dryRun?: boolean },
 ): Promise<SkillsMirrorResult | null> {
   if (options.enabled === false || isSkillsMirrorDisabled()) return null;
+
+  if (options.dryRun) {
+    console.log(
+      `${DIM}[DRY RUN] .claude/skills is reconciled by the real run, from the files it transfers${RESET}`,
+    );
+    return null;
+  }
 
   let result: SkillsMirrorResult | null;
   try {
@@ -318,21 +338,18 @@ export async function reconcileSkillsMirror(
   if (result === null) return null;
 
   const written = [...result.created, ...result.updated].sort();
-  const prefix = options.dryRun ? '[DRY RUN] Would ' : '';
   const mirrorDir = path.join(result.root, '.claude', 'skills');
 
   if (written.length > 0) {
     console.log(
-      `\n${prefix}${options.dryRun ? 'expose' : 'Exposed'} ${written.length} realm skill(s) to Claude Code in ${mirrorDir}:`,
+      `\nExposed ${written.length} realm skill(s) to Claude Code in ${mirrorDir}:`,
     );
     for (const name of written) {
       console.log(`  ${DIM}/${name}${RESET}`);
     }
   }
   for (const name of result.removed) {
-    console.log(
-      `${prefix}${options.dryRun ? 'remove' : 'Removed'} stale skill: ${name}`,
-    );
+    console.log(`Removed stale skill: ${name}`);
   }
   for (const { name, reason } of result.skipped) {
     console.warn(

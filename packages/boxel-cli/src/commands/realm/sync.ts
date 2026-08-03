@@ -277,6 +277,11 @@ class RealmSyncer extends RealmSyncBase {
         // First sync with no changes needed - still write manifest
         await this.writeManifest(localHashes, remoteMtimes);
       }
+      // The mirror is reconciled against the checkout, not against this run's
+      // transfers, so it still has work to do when nothing moved: the first
+      // sync after upgrading finds the realm's files already in place and
+      // would otherwise never create the mirror at all.
+      await this.reconcileClaudeSkills();
       return;
     }
 
@@ -482,14 +487,18 @@ class RealmSyncer extends RealmSyncBase {
       }
     }
 
+    await this.reconcileClaudeSkills();
+
+    console.log('\nSync completed');
+  }
+
+  private async reconcileClaudeSkills(): Promise<void> {
     await reconcileSkillsMirror({
       realmUrl: this.normalizedRealmUrl,
       localDir: this.options.localDir,
       dryRun: this.options.dryRun,
       enabled: this.syncOptions.claudeSkills,
     });
-
-    console.log('\nSync completed');
   }
 
   private async writeManifest(
