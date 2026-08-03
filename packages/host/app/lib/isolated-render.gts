@@ -34,7 +34,8 @@ type RenderMode = 'client' | 'serialize' | 'rehydrate';
 let activeRenderMode: RenderMode | undefined;
 type IsolatedRenderErrorCapture = { firstError?: unknown };
 let activeErrorCapture: IsolatedRenderErrorCapture | undefined;
-const deferredIsolatedRenderQueues: Array<Array<() => void>> = [];
+type DeferredIsolatedRender = () => void | Promise<void>;
+const deferredIsolatedRenderQueues: Array<Array<DeferredIsolatedRender>> = [];
 const pendingDeferredIsolatedRenders = new Set<Promise<void>>();
 
 export function isInIsolatedRenderTransaction(): boolean {
@@ -74,7 +75,9 @@ export async function captureIsolatedRenderErrors<T>(
   }
 }
 
-export function deferUntilIsolatedRenderCompletes(callback: () => void) {
+export function deferUntilIsolatedRenderCompletes(
+  callback: DeferredIsolatedRender,
+) {
   let queue =
     deferredIsolatedRenderQueues[deferredIsolatedRenderQueues.length - 1];
   if (!activeRenderMode || !queue) {
@@ -101,7 +104,7 @@ export async function settleDeferredIsolatedRenders(): Promise<void> {
 }
 
 function scheduleDeferredIsolatedRenders(
-  deferredRenders: Array<() => void>,
+  deferredRenders: Array<DeferredIsolatedRender>,
   errorCapture: IsolatedRenderErrorCapture | undefined,
 ) {
   let pending = new Promise<void>((resolve, reject) => {
@@ -111,18 +114,20 @@ function scheduleDeferredIsolatedRenders(
     // stack before the host closes its frame. A new task is the first point at
     // which the host commit is guaranteed to have returned.
     setTimeout(() => {
-      let previousCapture = activeErrorCapture;
-      activeErrorCapture = errorCapture;
-      try {
-        for (let deferredRender of deferredRenders) {
-          deferredRender();
+      void (async () => {
+        let previousCapture = activeErrorCapture;
+        activeErrorCapture = errorCapture;
+        try {
+          for (let deferredRender of deferredRenders) {
+            await deferredRender();
+          }
+          resolve();
+        } catch (error) {
+          reject(error);
+        } finally {
+          activeErrorCapture = previousCapture;
         }
-        resolve();
-      } catch (error) {
-        reject(error);
-      } finally {
-        activeErrorCapture = previousCapture;
-      }
+      })();
     }, 0);
   });
   pendingDeferredIsolatedRenders.add(pending);
@@ -332,7 +337,7 @@ function renderWithMode(
   let result: ActiveRender | undefined;
   let previousRenderMode = activeRenderMode;
   let renderErrorCapture = activeErrorCapture;
-  let deferredRenders: Array<() => void> | undefined;
+  let deferredRenders: Array<DeferredIsolatedRender> | undefined;
 
   try {
     if (previousRenderMode === undefined) {

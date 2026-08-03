@@ -39,6 +39,8 @@ import {
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
 import {
+  deferUntilIsolatedRenderCompletes,
+  isInIsolatedRenderTransaction,
   renderWithArgs,
   rerenderSerializedComponent,
   teardown,
@@ -126,6 +128,8 @@ class HostRelationshipCard extends Component<{
       <CardRenderer
         @card={{@card}}
         @format={{@format}}
+        @fieldType={{@fieldType}}
+        @fieldName={{@fieldName}}
         @displayContainer={{false}}
         @viewCard={{@relationshipContext.viewCard}}
         data-test-hydratable-card={{@cardId}}
@@ -204,6 +208,12 @@ class DeferredRelationshipCard extends Modifier<DeferredRelationshipSignature> {
 
   private scheduleRender() {
     this.generation++;
+    if (
+      isInIsolatedRenderTransaction() &&
+      deferUntilIsolatedRenderCompletes(() => this.renderCard())
+    ) {
+      return;
+    }
     scheduleOnce('afterRender', this, this.renderCard);
   }
 

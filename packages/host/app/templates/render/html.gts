@@ -25,6 +25,7 @@ import SearchResults from '@cardstack/host/components/search/search-results';
 import { CARD_ISLAND_PROTOCOL_VERSION } from '@cardstack/host/lib/card-island-protocol';
 import {
   captureIsolatedRenderErrors,
+  rerenderSerializedComponent,
   serializeWithArgs,
   settleDeferredIsolatedRenders,
   teardown,
@@ -32,6 +33,7 @@ import {
 import { isTrustedRealmCardDefinition } from '@cardstack/host/lib/realm-sandbox-boundary';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
+import type LoaderService from '@cardstack/host/services/loader-service';
 import type RealmSandboxService from '@cardstack/host/services/realm-sandbox';
 import type RenderStoreService from '@cardstack/host/services/render-store';
 
@@ -45,9 +47,11 @@ interface Signature {
 }
 
 const serializeIslandWaiter = buildWaiter('render-html:serialize-card-island');
+const MAX_ASYNC_RENDER_PASSES = 3;
 
 class RenderHtmlTemplate extends Component<Signature> {
   @service('render-store') declare private store: RenderStoreService;
+  @service declare private loaderService: LoaderService;
   @service declare private realmSandbox: RealmSandboxService;
 
   @provide(GetCardContextName)
@@ -127,6 +131,18 @@ class RenderHtmlTemplate extends Component<Signature> {
           }
           await captureIsolatedRenderErrors(async () => {
             serializeWithArgs(CardIsland as any, element as any, owner, args);
+            let cardAPI = await this.loaderService.loader.import<
+              typeof import('@cardstack/base/card-api')
+            >('@cardstack/base/card-api');
+            for (let i = 0; i < MAX_ASYNC_RENDER_PASSES; i++) {
+              await settleDeferredIsolatedRenders();
+              await Promise.resolve();
+              await Promise.all([
+                this.store.loaded(),
+                cardAPI.waitForCardLoads(model.instance),
+              ]);
+              rerenderSerializedComponent(element as any);
+            }
             await settleDeferredIsolatedRenders();
           });
         } catch (error) {

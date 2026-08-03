@@ -13,6 +13,7 @@ import { TrackedObject } from 'tracked-built-ins';
 import RealmSandboxTemplateIsland from '@cardstack/host/components/realm-sandbox-template-island';
 import {
   captureIsolatedRenderErrors,
+  deferUntilIsolatedRenderCompletes,
   hasSerializedComponent,
   prerenderWithArgs,
   rehydrateWithArgs,
@@ -60,6 +61,22 @@ class DOMModifierProbe extends Component {
 }
 
 let interactions: string[] = [];
+
+const deferAsyncWork = modifier(() => {
+  deferUntilIsolatedRenderCompletes(async () => {
+    interactions.push('started');
+    await Promise.resolve();
+    interactions.push('finished');
+  });
+});
+
+class DeferredAsyncWork extends Component {
+  deferAsyncWork = deferAsyncWork;
+
+  <template>
+    <div {{this.deferAsyncWork}}>deferred</div>
+  </template>
+}
 
 class FirstHotTemplate extends Component {
   record = () => interactions.push('first');
@@ -151,6 +168,29 @@ module('Unit | isolated-render', function (hooks) {
   hooks.beforeEach(function () {
     destroyCount = 0;
     interactions = [];
+  });
+
+  test('settlement waits for asynchronous deferred renders', async function (assert) {
+    let element = document.createElement('div');
+
+    try {
+      serializeWithArgs(DeferredAsyncWork, element as any, this.owner, {});
+      assert.deepEqual(
+        interactions,
+        [],
+        'deferred work does not run inside the serialization transaction',
+      );
+
+      await settleDeferredIsolatedRenders();
+
+      assert.deepEqual(
+        interactions,
+        ['started', 'finished'],
+        'settlement includes the asynchronous callback',
+      );
+    } finally {
+      teardown(element as any);
+    }
   });
 
   test('render tears down the previous live tree before rerendering', async function (assert) {

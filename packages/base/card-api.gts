@@ -4974,6 +4974,15 @@ function getStore(instance: BaseDef): CardStore {
   return stores.get(instance as BaseDef) ?? new FallbackCardStore();
 }
 
+// Wait for asynchronous work initiated by this card's own materializing Store.
+// Host renderers must not infer that Store from their Ember owner: prerender,
+// sandbox, and test-shim cards can cross owner boundaries while retaining the
+// Store that deserialized them. This narrow capability keeps that ownership
+// explicit without exposing the Store itself across the card boundary.
+export async function waitForCardLoads(instance: BaseDef): Promise<void> {
+  await getStore(instance).loaded();
+}
+
 // Resolve a (possibly relative or RRI) reference to a real, fetchable URL,
 // relative to the instance's own location. Card definitions that must hand a
 // real URL to a boundary that can't consume canonical RRI (an `<img src>`, the

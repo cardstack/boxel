@@ -36,6 +36,7 @@ import type {
   CardCrudFunctions,
   Format,
   Field,
+  FieldType,
   CardContext,
   ViewCardFn,
 } from '@cardstack/base/card-api';
@@ -46,6 +47,8 @@ interface Signature {
     card: BaseDef;
     format?: Format;
     field?: Field;
+    fieldType?: FieldType;
+    fieldName?: string;
     codeRef?: ResolvedCodeRef;
     displayContainer?: boolean;
     viewCard?: ViewCardFn;
@@ -127,6 +130,8 @@ export default class CardRenderer extends Component<Signature> {
             @model={{slot.sandbox.model}}
             @displayContainer={{@displayContainer}}
             @field={{@field}}
+            @fieldType={{@fieldType}}
+            @fieldName={{@fieldName}}
             @viewCard={{this.viewCard}}
             ...attributes
           />
@@ -143,6 +148,8 @@ export default class CardRenderer extends Component<Signature> {
     {{else}}
       <this.renderedCard
         @displayContainer={{@displayContainer}}
+        @fieldType={{@fieldType}}
+        @fieldName={{@fieldName}}
         ...attributes
       />
     {{/if}}

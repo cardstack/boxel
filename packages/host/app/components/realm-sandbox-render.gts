@@ -9,7 +9,7 @@ import Modifier from 'ember-modifier';
 import { consume } from 'ember-provide-consume-context';
 
 import { CardContainer } from '@cardstack/boxel-ui/components';
-import { cn, eq } from '@cardstack/boxel-ui/helpers';
+import { cn, coalesce, eq } from '@cardstack/boxel-ui/helpers';
 
 import {
   CardContextName,
@@ -28,6 +28,7 @@ import type {
   BaseDef,
   CardContext,
   Field,
+  FieldType,
   Format,
   ViewCardFn,
 } from '@cardstack/base/card-api';
@@ -110,6 +111,8 @@ interface Signature {
     model?: BaseDef | Record<string, unknown>;
     displayContainer?: boolean;
     field?: Field;
+    fieldType?: FieldType;
+    fieldName?: string;
     viewCard?: ViewCardFn;
   };
 }
@@ -257,8 +260,8 @@ export default class RealmSandboxRender extends Component<Signature> {
       {{this.cardComponentModifier
         cardId=this.cardID
         format=this.format
-        fieldType=@field.fieldType
-        fieldName=@field.name
+        fieldType=(coalesce @fieldType @field.fieldType)
+        fieldName=(coalesce @fieldName @field.name)
       }}
       ...attributes
     >
