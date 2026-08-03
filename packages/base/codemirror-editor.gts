@@ -201,7 +201,9 @@ interface ToolbarItem {
   shortcut?: string;
   // Inline-format toggles (bold/italic/etc.) wrap the current selection, so they
   // only make sense when text is highlighted. Set for those buttons so they
-  // disable when the selection is collapsed. Line-based buttons omit it.
+  // disable when the selection is collapsed — unless the toggle is active
+  // (e.g. the caret sits inside a link), since untoggling works at a bare
+  // caret. Line-based buttons omit it.
   requiresSelection?: boolean;
   // Computed enablement for this button, folding in focus and (for
   // selection-requiring buttons) whether text is highlighted.
@@ -479,10 +481,12 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     let pressed = (active: boolean) => (active ? 'true' : 'false');
     let enabled = this.toolbarEnabled;
     let hasSelection = this._selectionInfo?.hasSelection ?? false;
-    // Inline-format toggles additionally require a highlighted selection;
-    // line-based buttons only require focus.
-    let disabledFor = (requiresSelection?: boolean) =>
-      !enabled || (!!requiresSelection && !hasSelection);
+    // Inline-format toggles additionally require a highlighted selection,
+    // except when already active — an active toggle can always be untoggled
+    // (unlink works from a bare caret inside the link). Line-based buttons
+    // only require focus.
+    let disabledFor = (item: ToolbarItem) =>
+      !enabled || (!!item.requiresSelection && !hasSelection && !item.active);
     let items: ToolbarItem[] = [
       {
         testId: 'bold',
@@ -573,7 +577,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     ];
     for (let item of items) {
       if (!item.divider) {
-        item.disabled = disabledFor(item.requiresSelection);
+        item.disabled = disabledFor(item);
       }
     }
     return items;

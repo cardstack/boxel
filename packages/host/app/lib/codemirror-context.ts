@@ -1064,21 +1064,32 @@ function wrapWith(marker: string) {
   };
 }
 
-// Toggle a markdown link around the selection. Uses the syntax tree to detect
-// an enclosing [text](url) — a string scan can match across unrelated brackets
-// and delete text the user never selected.
+// Find the markdown Link syntax node enclosing the given range, if any. Uses
+// the syntax tree — a string scan can match across unrelated brackets and
+// claim text the user never selected. Shared by toggleLink's unlink branch and
+// the selection-info emitter, so the toolbar's Link-button state can't drift
+// from what the command actually supports.
+function findEnclosingLink(
+  state: EditorState,
+  from: number,
+  to: number,
+): any | null {
+  let node: any = syntaxTree(state).resolveInner(from, 1);
+  for (let n: any = node; n; n = n.parent) {
+    if (n.name === 'Link' && from >= n.from && to <= n.to) {
+      return n;
+    }
+  }
+  return null;
+}
+
+// Toggle a markdown link around the selection. A caret or selection inside an
+// existing [text](url) unlinks it; a selection elsewhere wraps as a link.
 function toggleLink(view: EditorView): boolean {
   let { from, to } = view.state.selection.main;
 
-  let node: any = syntaxTree(view.state).resolveInner(from, 1);
-  let link: any = null;
-  for (let n: any = node; n; n = n.parent) {
-    if (n.name === 'Link') {
-      link = n;
-      break;
-    }
-  }
-  if (link && from >= link.from && to <= link.to) {
+  let link = findEnclosingLink(view.state, from, to);
+  if (link) {
     // Unlink: replace the whole node with just its text (between [ and ]).
     let marks: { from: number; to: number }[] = [];
     let c = link.cursor();
@@ -1097,8 +1108,9 @@ function toggleLink(view: EditorView): boolean {
   }
 
   if (from === to) {
-    // No selection: do nothing. Inserting empty link syntax leaves a stray
-    // [](url) in the document. Linking applies to selected text only.
+    // Caret outside any link: nothing to unlink, and inserting empty link
+    // syntax would leave a stray [](url) in the document. The wrap direction
+    // needs a selection.
     return true;
   }
 
@@ -1252,11 +1264,15 @@ function createEditorState(options: CreateEditorStateOptions): EditorState {
             formats: hasSelection
               ? detectFormats(update.state, from, to)
               : {
+                  // The wrap toggles no-op at a caret, so they read inactive.
+                  // Link is the exception: toggleLink can still unlink an
+                  // enclosing [text](url) from a bare caret, so report it
+                  // active — the toolbar keeps an active toggle clickable.
                   bold: false,
                   italic: false,
                   code: false,
                   strikethrough: false,
-                  link: false,
+                  link: !!findEnclosingLink(update.state, from, to),
                 },
             currentRef,
           });

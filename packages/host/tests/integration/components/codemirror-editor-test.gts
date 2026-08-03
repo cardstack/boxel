@@ -1478,6 +1478,57 @@ module('Integration | codemirror-context', function (hooks) {
     }
   });
 
+  test('onSelectionChange reports link active at a bare caret inside a link', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      let selectionInfo: {
+        hasSelection: boolean;
+        formats: { link: boolean; bold: boolean };
+      } | null = null;
+      let state = cmContext.createEditorState({
+        content: 'Click [here](https://example.com) for details',
+        onDocChange: () => {},
+        onCardTargetsChange: () => {},
+        onOpenCardSearch: () => {},
+        onSelectionChange: (info) => {
+          selectionInfo = info;
+        },
+      });
+
+      let view = new cmContext.EditorView({
+        state,
+        parent: element,
+      });
+
+      // Collapsed caret inside the link text "here"
+      view.dispatch({ selection: { anchor: 9, head: 9 } });
+
+      assert.ok(selectionInfo, 'onSelectionChange was called');
+      assert.false(selectionInfo!.hasSelection, 'no selection at a caret');
+      assert.true(
+        selectionInfo!.formats.link,
+        'link reads active — toggleLink can unlink from this caret, so the toolbar keeps the Link toggle clickable',
+      );
+      assert.false(
+        selectionInfo!.formats.bold,
+        'wrap toggles read inactive at a caret (they no-op there)',
+      );
+
+      // Caret outside the link
+      view.dispatch({ selection: { anchor: 2, head: 2 } });
+      assert.false(
+        selectionInfo!.formats.link,
+        'link reads inactive once the caret leaves the link',
+      );
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
   // ── Heading insertion (same logic as component's _insertHeading) ──
 
   test('heading prefix is added to line', async function (assert) {
@@ -1925,22 +1976,9 @@ module('Integration | codemirror-context', function (hooks) {
       // as a user would in live preview where [ and ](url) are hidden
       view.dispatch({ selection: { anchor: 7, head: 11 } });
 
-      // Simulate _toggleLink: scan for enclosing [text](url)
-      let doc = view.state.doc.toString();
-      let { from, to } = view.state.selection.main;
-      let bracketOpen = doc.lastIndexOf('[', from);
-      let parenClose = doc.indexOf(')', to - 1);
-      let between = doc.slice(bracketOpen, parenClose + 1);
-      let linkMatch = between.match(/^\[(.+)\]\(.*\)$/);
-      assert.ok(linkMatch, 'enclosing link pattern found');
-      view.dispatch({
-        changes: {
-          from: bracketOpen,
-          to: parenClose + 1,
-          insert: linkMatch![1],
-        },
-      });
+      let result = cmContext.toggleLink(view);
 
+      assert.true(result, 'returns true after unlinking');
       assert.strictEqual(
         view.state.doc.toString(),
         'Click here for details',
@@ -1953,7 +1991,7 @@ module('Integration | codemirror-context', function (hooks) {
     }
   });
 
-  test('toggleLink does nothing when there is no selection', async function (assert) {
+  test('toggleLink does nothing at a caret outside any link', async function (assert) {
     let element = document.createElement('div');
     document.body.appendChild(element);
 
@@ -1970,7 +2008,7 @@ module('Integration | codemirror-context', function (hooks) {
         parent: element,
       });
 
-      // Cursor at position 6, no selection
+      // Cursor at position 6, no selection, no enclosing link
       view.dispatch({ selection: { anchor: 6, head: 6 } });
       let result = cmContext.toggleLink(view);
 
@@ -1983,6 +2021,40 @@ module('Integration | codemirror-context', function (hooks) {
       let sel = view.state.selection.main;
       assert.true(sel.empty, 'cursor is collapsed (no selection)');
       assert.strictEqual(sel.from, 6, 'cursor stays where it was');
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
+  test('toggleLink unlinks from a bare caret inside a link', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      let state = cmContext.createEditorState({
+        content: 'Click [here](https://example.com) for details',
+        onDocChange: () => {},
+        onCardTargetsChange: () => {},
+        onOpenCardSearch: () => {},
+      });
+
+      let view = new cmContext.EditorView({
+        state,
+        parent: element,
+      });
+
+      // Collapsed caret inside the link text "here" — no selection
+      view.dispatch({ selection: { anchor: 9, head: 9 } });
+      let result = cmContext.toggleLink(view);
+
+      assert.true(result, 'returns true after unlinking');
+      assert.strictEqual(
+        view.state.doc.toString(),
+        'Click here for details',
+        'the enclosing link is unwrapped, leaving just its text',
+      );
 
       view.destroy();
     } finally {

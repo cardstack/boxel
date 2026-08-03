@@ -3,6 +3,7 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import {
   click,
   render,
+  settled,
   triggerEvent,
   waitFor,
   waitUntil,
@@ -1625,6 +1626,70 @@ module('Integration | RichMarkdownField', function (hooks) {
       .dom('[data-test-markdown-mode-option="source"]')
       .exists('view selector opens without editor focus');
     await click('[data-test-markdown-mode-option="compose"]');
+  });
+
+  test('the Link toggle reads active when the caret sits inside a link', async function (assert) {
+    // Enablement can't be asserted headless (document.hasFocus() is false —
+    // see the note in the "formatting controls start disabled" test), but the
+    // active-state wiring can: a bare caret inside a link marks the Link
+    // toggle pressed, since unlinking works from a caret. This pins the path
+    // from CodeMirror's selection-info emitter through the toolbar's
+    // change-detection to the button's aria-pressed.
+    class TestCard extends CardDef {
+      @field body = contains(RichMarkdownField);
+      static edit = class Edit extends Component<typeof this> {
+        <template><@fields.body /></template>
+      };
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-card.gts': { TestCard },
+      },
+    });
+
+    let card = new TestCard({
+      body: new RichMarkdownField({
+        content: 'Click [here](https://example.com) now',
+      }),
+    });
+    await renderCard(loader, card, 'edit');
+    await waitFor('[data-test-toolbar="link"]');
+
+    let editorEl = document.querySelector('.cm-editor') as HTMLElement;
+    assert.ok(editorEl, 'editor is rendered');
+    let view = cmContext.EditorView.findFromDOM(editorEl);
+    assert.ok(view, 'live EditorView is reachable from the DOM');
+
+    // Collapsed caret inside the link text "here" — no selection
+    view!.dispatch({ selection: { anchor: 9, head: 9 } });
+    await settled();
+    assert
+      .dom('[data-test-toolbar="link"]')
+      .hasAttribute(
+        'aria-pressed',
+        'true',
+        'Link toggle reads active at a caret inside a link',
+      );
+    assert
+      .dom('[data-test-toolbar="bold"]')
+      .hasAttribute(
+        'aria-pressed',
+        'false',
+        'wrap toggles stay inactive at a caret',
+      );
+
+    // Caret outside the link
+    view!.dispatch({ selection: { anchor: 2, head: 2 } });
+    await settled();
+    assert
+      .dom('[data-test-toolbar="link"]')
+      .hasAttribute(
+        'aria-pressed',
+        'false',
+        'Link toggle deactivates once the caret leaves the link',
+      );
   });
 
   test('toolbar items are wrapped in tooltips whose hint is suppressed while the control is disabled', async function (assert) {
