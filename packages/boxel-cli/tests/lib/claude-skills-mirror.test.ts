@@ -16,7 +16,11 @@ const OTHER_REALM_URL = 'https://app.boxel.ai/bob/notes/';
 let workspace: string;
 let checkout: string;
 
-/** Workspace root holding a `.claude/` dir, with the realm checkout below it. */
+/**
+ * A workspace root with the realm checkout several levels below it, as
+ * `boxel realm pull` lays realms out. The root carries its own `.claude/` to
+ * pin down that the mirror goes into the realm's directory regardless.
+ */
 function makeWorkspace(): { workspace: string; checkout: string } {
   const root = fs.realpathSync(
     fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-skills-mirror-')),
@@ -79,32 +83,19 @@ describe('realmSlugFromUrl', () => {
 });
 
 describe('resolveMirrorRoot', () => {
-  it('prefers an ancestor that already has a .claude directory', async () => {
-    await expect(resolveMirrorRoot(checkout)).resolves.toBe(workspace);
+  it('is the realm directory itself', () => {
+    expect(resolveMirrorRoot(checkout)).toBe(checkout);
   });
 
-  it('falls back to the enclosing git checkout', async () => {
-    fs.rmSync(path.join(workspace, '.claude'), { recursive: true });
-    const gitRoot = path.join(workspace, 'realms');
-    fs.mkdirSync(path.join(gitRoot, '.git'), { recursive: true });
-    await expect(resolveMirrorRoot(checkout)).resolves.toBe(gitRoot);
+  it('does not adopt an ancestor .claude directory', () => {
+    // `workspace` has a `.claude/`; the mirror still belongs to the realm.
+    expect(resolveMirrorRoot(checkout)).not.toBe(workspace);
   });
 
-  it('falls back to the realm directory itself', async () => {
-    fs.rmSync(path.join(workspace, '.claude'), { recursive: true });
-    await expect(resolveMirrorRoot(checkout)).resolves.toBe(checkout);
-  });
-
-  it('never walks up into the home directory', async () => {
-    // A checkout directly under $HOME must not resolve to ~/.claude, which is
-    // Claude Code's personal scope shared by every unrelated project.
-    const home = fs.realpathSync(os.homedir());
-    const dir = fs.mkdtempSync(path.join(home, '.boxel-mirror-root-test-'));
-    try {
-      await expect(resolveMirrorRoot(dir)).resolves.toBe(dir);
-    } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
+  it('refuses the home directory', () => {
+    // `~/.claude/skills` is Claude Code's personal scope, shared by every
+    // unrelated project.
+    expect(resolveMirrorRoot(os.homedir())).toBeNull();
   });
 });
 
@@ -120,13 +111,13 @@ describe('mirrorRealmSkills', () => {
 
     const result = await mirror();
 
-    expect(result?.root).toBe(workspace);
+    expect(result?.root).toBe(checkout);
     expect(result?.created).toEqual([
       'experiments-invoice-review',
       'experiments-trip-planner',
     ]);
 
-    const entry = mirrorPath(workspace, 'experiments-trip-planner');
+    const entry = mirrorPath(checkout, 'experiments-trip-planner');
     // A real directory, not a link — search tools that don't follow symlinks
     // (ripgrep by default) still see the skill's content.
     expect(fs.lstatSync(entry).isSymbolicLink()).toBe(false);
@@ -149,7 +140,7 @@ describe('mirrorRealmSkills', () => {
     expect(second?.updated).toEqual([]);
     expect(second?.unchanged).toEqual(['experiments-trip-planner']);
     expect(second?.skipped).toEqual([]);
-    expect(fs.readdirSync(mirrorPath(workspace)).sort()).toEqual([
+    expect(fs.readdirSync(mirrorPath(checkout)).sort()).toEqual([
       '.boxel-skills-sync.json',
       'experiments-trip-planner',
     ]);
@@ -165,7 +156,7 @@ describe('mirrorRealmSkills', () => {
     expect(result?.updated).toEqual(['experiments-trip-planner']);
     expect(
       fs.readFileSync(
-        mirrorPath(workspace, 'experiments-trip-planner', 'SKILL.md'),
+        mirrorPath(checkout, 'experiments-trip-planner', 'SKILL.md'),
         'utf8',
       ),
     ).toBe(skillBody('trip-planner', 'Ask for dates first.'));
@@ -186,7 +177,7 @@ describe('mirrorRealmSkills', () => {
     expect(
       fs.existsSync(
         mirrorPath(
-          workspace,
+          checkout,
           'experiments-trip-planner',
           'references',
           'retired.md',
@@ -200,7 +191,7 @@ describe('mirrorRealmSkills', () => {
     expect(
       fs.existsSync(
         mirrorPath(
-          workspace,
+          checkout,
           'experiments-trip-planner',
           'references',
           'retired.md',
@@ -209,7 +200,7 @@ describe('mirrorRealmSkills', () => {
     ).toBe(false);
     expect(
       fs.existsSync(
-        mirrorPath(workspace, 'experiments-trip-planner', 'SKILL.md'),
+        mirrorPath(checkout, 'experiments-trip-planner', 'SKILL.md'),
       ),
     ).toBe(true);
   });
@@ -219,7 +210,7 @@ describe('mirrorRealmSkills', () => {
     await mirror();
 
     const mirrored = mirrorPath(
-      workspace,
+      checkout,
       'experiments-trip-planner',
       'SKILL.md',
     );
@@ -251,11 +242,11 @@ describe('mirrorRealmSkills', () => {
     const result = await mirror();
 
     expect(result?.removed).toEqual(['experiments-retired']);
-    expect(fs.existsSync(mirrorPath(workspace, 'experiments-retired'))).toBe(
+    expect(fs.existsSync(mirrorPath(checkout, 'experiments-retired'))).toBe(
       false,
     );
     expect(
-      fs.existsSync(mirrorPath(workspace, 'experiments-trip-planner')),
+      fs.existsSync(mirrorPath(checkout, 'experiments-trip-planner')),
     ).toBe(true);
   });
 
@@ -271,10 +262,10 @@ describe('mirrorRealmSkills', () => {
     await mirror();
 
     expect(
-      fs.existsSync(mirrorPath(workspace, 'experiments-trip-planner')),
+      fs.existsSync(mirrorPath(checkout, 'experiments-trip-planner')),
     ).toBe(false);
     expect(
-      fs.existsSync(mirrorPath(workspace, 'experiments-trip-planner-v2')),
+      fs.existsSync(mirrorPath(checkout, 'experiments-trip-planner-v2')),
     ).toBe(true);
     // The sweep removed the copy, never the realm's own file.
     expect(
@@ -286,7 +277,7 @@ describe('mirrorRealmSkills', () => {
     writeSkill(checkout, 'retired');
     await mirror();
 
-    const mirrored = mirrorPath(workspace, 'experiments-retired', 'SKILL.md');
+    const mirrored = mirrorPath(checkout, 'experiments-retired', 'SKILL.md');
     fs.writeFileSync(mirrored, skillBody('retired', 'Edited by hand.'));
     fs.rmSync(path.join(checkout, 'skills', 'retired'), { recursive: true });
 
@@ -307,7 +298,7 @@ describe('mirrorRealmSkills', () => {
 
   it('leaves a hand-authored .claude/skills entry alone', async () => {
     writeSkill(checkout, 'trip-planner');
-    const occupied = mirrorPath(workspace, 'experiments-trip-planner');
+    const occupied = mirrorPath(checkout, 'experiments-trip-planner');
     fs.mkdirSync(occupied, { recursive: true });
     fs.writeFileSync(path.join(occupied, 'SKILL.md'), 'hand-authored\n');
 
@@ -326,16 +317,17 @@ describe('mirrorRealmSkills', () => {
     );
   });
 
+  // Two realms share a mirror only when both are pulled into the same local
+  // directory — one realm pulled over another's checkout.
   it('does not take over an entry another realm owns', async () => {
     writeSkill(checkout, 'trip-planner');
     await mirror();
 
     // A second realm whose slug collides (both end in `experiments`).
-    const other = path.join(workspace, 'realms', 'other', 'experiments');
-    fs.mkdirSync(other, { recursive: true });
-    writeSkill(other, 'trip-planner', 'A different trip planner.');
-
-    const result = await mirror('https://app.boxel.ai/bob/experiments/', other);
+    const result = await mirror(
+      'https://app.boxel.ai/bob/experiments/',
+      checkout,
+    );
 
     expect(result?.created).toEqual([]);
     expect(result?.skipped).toEqual([
@@ -346,7 +338,7 @@ describe('mirrorRealmSkills', () => {
     ]);
     expect(
       fs.readFileSync(
-        mirrorPath(workspace, 'experiments-trip-planner', 'SKILL.md'),
+        mirrorPath(checkout, 'experiments-trip-planner', 'SKILL.md'),
         'utf8',
       ),
     ).toBe(skillBody('trip-planner', 'Do the thing.'));
@@ -355,36 +347,24 @@ describe('mirrorRealmSkills', () => {
   it('tracks realms independently in the manifest', async () => {
     writeSkill(checkout, 'trip-planner');
     await mirror();
+    await mirror(OTHER_REALM_URL, checkout);
 
-    const other = path.join(
-      workspace,
-      'realms',
-      'app.boxel.ai',
-      'bob',
-      'notes',
-    );
-    fs.mkdirSync(other, { recursive: true });
-    writeSkill(other, 'summarize');
-    await mirror(OTHER_REALM_URL, other);
-
-    const manifest = await loadMirrorManifest(mirrorPath(workspace));
+    const manifest = await loadMirrorManifest(mirrorPath(checkout));
     expect(Object.keys(manifest.realms).sort()).toEqual([
       REALM_URL,
       OTHER_REALM_URL,
     ]);
     expect(
       Object.keys(
-        manifest.realms[OTHER_REALM_URL].entries['notes-summarize'].files,
+        manifest.realms[OTHER_REALM_URL].entries['notes-trip-planner'].files,
       ),
     ).toEqual(['SKILL.md']);
-    // Relative so the manifest survives the workspace being mounted elsewhere.
-    expect(manifest.realms[REALM_URL].localDir).toBe(
-      'realms/app.boxel.ai/alice/experiments',
-    );
 
     // Mirroring one realm again must not sweep the other realm's entries.
     await mirror();
-    expect(fs.existsSync(mirrorPath(workspace, 'notes-summarize'))).toBe(true);
+    expect(fs.existsSync(mirrorPath(checkout, 'notes-trip-planner'))).toBe(
+      true,
+    );
   });
 
   it('ignores directories without a SKILL.md and loose reference files', async () => {
@@ -410,7 +390,7 @@ describe('mirrorRealmSkills', () => {
     const result = await mirror();
 
     expect(result).toBeNull();
-    expect(fs.readdirSync(path.join(workspace, '.claude'))).toEqual([]);
+    expect(fs.existsSync(path.join(checkout, '.claude'))).toBe(false);
   });
 
   it('reports without writing under dryRun', async () => {
@@ -423,7 +403,7 @@ describe('mirrorRealmSkills', () => {
     });
 
     expect(result?.created).toEqual(['experiments-trip-planner']);
-    expect(fs.readdirSync(path.join(workspace, '.claude'))).toEqual([]);
+    expect(fs.existsSync(path.join(checkout, '.claude'))).toBe(false);
   });
 });
 

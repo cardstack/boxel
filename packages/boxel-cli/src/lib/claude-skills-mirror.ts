@@ -1,6 +1,6 @@
 /**
  * Expose a realm's `skills/` directory to Claude Code by mirroring it into the
- * surrounding checkout's `.claude/skills/`.
+ * realm's own local directory as `.claude/skills/`.
  *
  * A user authors a skill in their workspace as `skills/<name>/SKILL.md` (see
  * the `boxel-skill-authoring` skill). Claude Code discovers skills as
@@ -40,8 +40,6 @@ interface ManifestEntry {
 }
 
 interface ManifestRealm {
-  /** Realm checkout the entries were copied from, relative to the mirror root. */
-  localDir: string;
   /** Mirror directory name (`<realm>-<skill>`) → what was written into it. */
   entries: Record<string, ManifestEntry>;
 }
@@ -85,33 +83,21 @@ export function isSkillsMirrorDisabled(): boolean {
 }
 
 /**
- * Locate the checkout the mirror belongs to, starting at the realm's local
- * directory and walking up: an existing `.claude/` wins, else the enclosing
- * git checkout, else the realm directory itself (where `.claude/` is created).
+ * The mirror lives in the realm's own local directory — `<localDir>/.claude/`,
+ * created if absent. Nothing is searched for up the tree: a realm's skills
+ * belong to the checkout it was pulled into, and Claude Code loads nested
+ * `.claude/skills/` directories below the working directory (qualifying the
+ * command name by directory when two skills share a name), so a realm several
+ * levels down still surfaces its skills.
  *
- * The walk stops *below* the home directory. Realm checkouts commonly live
- * under `~`, and `~/.claude/skills` is Claude Code's personal scope — writing
- * there would leak one realm's skills into every unrelated project.
+ * Null for the home directory itself, where `.claude/skills` is Claude Code's
+ * personal scope — one realm's skills must not be pushed into every unrelated
+ * project.
  */
-export async function resolveMirrorRoot(localDir: string): Promise<string> {
-  const start = path.resolve(localDir);
-  const home = path.resolve(os.homedir());
-  const candidates: string[] = [];
-  let current = start;
-  while (current !== home) {
-    candidates.push(current);
-    const parent = path.dirname(current);
-    if (parent === current) break;
-    current = parent;
-  }
-
-  for (const dir of candidates) {
-    if (await isDirectory(path.join(dir, '.claude'))) return dir;
-  }
-  for (const dir of candidates) {
-    if (await pathPresent(path.join(dir, '.git'))) return dir;
-  }
-  return start;
+export function resolveMirrorRoot(localDir: string): string | null {
+  const resolved = path.resolve(localDir);
+  if (resolved === path.resolve(os.homedir())) return null;
+  return resolved;
 }
 
 /**
@@ -163,7 +149,13 @@ export async function mirrorRealmSkills(
   const realmSlug = realmSlugFromUrl(realmUrl);
   if (realmSlug === null) return null;
 
-  const root = await resolveMirrorRoot(localDir);
+  const root = resolveMirrorRoot(localDir);
+  if (root === null) {
+    console.warn(
+      `${FG_YELLOW}Warning:${RESET} not mirroring skills into ${path.join(localDir, '.claude', 'skills')} — that is Claude Code's personal skills scope, shared by every project. Pull the realm into a subdirectory instead.`,
+    );
+    return null;
+  }
   const mirrorDir = path.join(root, '.claude', 'skills');
   const manifest = await loadMirrorManifest(mirrorDir);
   const priorEntries = manifest.realms[realmUrl]?.entries ?? {};
@@ -278,10 +270,7 @@ export async function mirrorRealmSkills(
     if (Object.keys(nextEntries).length === 0) {
       delete manifest.realms[realmUrl];
     } else {
-      manifest.realms[realmUrl] = {
-        localDir: toPosix(path.relative(root, localDir)),
-        entries: nextEntries,
-      };
+      manifest.realms[realmUrl] = { entries: nextEntries };
     }
     await saveMirrorManifest(mirrorDir, manifest);
   }
@@ -479,7 +468,6 @@ function isMirrorManifest(value: unknown): value is SkillsMirrorManifest {
   for (const realm of Object.values(v.realms as Record<string, unknown>)) {
     if (typeof realm !== 'object' || realm === null) return false;
     const r = realm as Record<string, unknown>;
-    if (typeof r.localDir !== 'string') return false;
     if (typeof r.entries !== 'object' || r.entries === null) return false;
     for (const entry of Object.values(r.entries as Record<string, unknown>)) {
       if (typeof entry !== 'object' || entry === null) return false;
@@ -510,8 +498,4 @@ async function pathPresent(p: string): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-function toPosix(p: string): string {
-  return p.split(path.sep).join('/');
 }
