@@ -50,7 +50,7 @@ A profile must be active. If `boxel profile list` shows none, the user has to ru
 A workspace's user-authored skills live in the realm as `skills/<name>/SKILL.md` (see `/boxel-cli:boxel-skill-authoring`). `pull`, `sync`, and `watch` expose them to Claude Code with no extra step: each one is linked into the surrounding checkout's `.claude/skills/<realm>-<name>/`, where `<realm>` is the last segment of the realm URL. So a skill named `trip-planner` in `…/alice/experiments/` becomes `/experiments-trip-planner` in the next session.
 
 - The `.claude/` that gets used is the nearest one at or above the local directory, falling back to the enclosing git checkout, then the local directory itself. The home directory is never used — a realm's skills must not land in Claude Code's personal scope.
-- Entries are symlinks into the checkout, so editing a skill through `.claude/skills/<realm>-<name>/SKILL.md` edits the realm's file and `push`/`sync` sends it back up like any other change. Where the OS refuses symlinks the entry is a copy instead, refreshed on the next run.
+- Entries are copies, refreshed whenever the realm's version changes. **Edit a skill in the realm checkout's `skills/<name>/`, not in `.claude/skills/`** — the checkout is what `push` and `sync` carry back to the realm. A copy that was edited in place is reported and left alone rather than overwritten, so the change can be moved to the realm.
 - A skill renamed or deleted in the realm has its mirror entry removed on the next run. A `.claude/skills/` directory boxel did not write is never touched.
 - `.claude/` is ignored by every direction of sync, so the mirror is never pushed into the realm.
 - Pass `--no-claude-skills` (or set `BOXEL_NO_CLAUDE_SKILLS=1`) to skip it.

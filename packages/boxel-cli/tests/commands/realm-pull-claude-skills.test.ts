@@ -115,12 +115,9 @@ describe('realm pull → .claude/skills', () => {
     await runPull();
 
     const entry = path.join(mirrorDir(), 'experiments-trip-planner');
-    expect(fs.lstatSync(entry).isSymbolicLink()).toBe(true);
-    expect(fs.realpathSync(entry)).toBe(
-      path.join(localDir, 'skills', 'trip-planner'),
-    );
-    // Claude Code reads SKILL.md and its references through the link; the
-    // realm's file is served byte-for-byte, `boxel:` frontmatter and all.
+    expect(fs.lstatSync(entry).isDirectory()).toBe(true);
+    // The skill and its references are copied byte-for-byte, `boxel:`
+    // frontmatter and all.
     expect(fs.readFileSync(path.join(entry, 'SKILL.md'), 'utf8')).toBe(
       SKILL_MD,
     );

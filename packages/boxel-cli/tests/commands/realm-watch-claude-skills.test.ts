@@ -65,9 +65,9 @@ describe('realm watch → .claude/skills', () => {
       'skills',
       'experiments-trip-planner',
     );
-    expect(fs.lstatSync(entry).isSymbolicLink()).toBe(true);
-    expect(fs.realpathSync(entry)).toBe(
-      path.join(localDir, 'skills', 'trip-planner'),
+    expect(fs.lstatSync(entry).isDirectory()).toBe(true);
+    expect(fs.readFileSync(path.join(entry, 'SKILL.md'), 'utf8')).toContain(
+      'Do the thing.',
     );
   });
 

@@ -58,9 +58,9 @@ BOXEL_PASSWORD=… boxel profile add \
 
 ### Realm skills in Claude Code
 
-A realm's user-authored skills live in it as `skills/<name>/SKILL.md`. `boxel realm pull`, `sync`, and `watch` link each one into the surrounding checkout's `.claude/skills/<realm>-<name>/`, so the same skill Boxel's AI assistant loads is available in a Claude Code session as `/<realm>-<name>`.
+A realm's user-authored skills live in it as `skills/<name>/SKILL.md`. `boxel realm pull`, `sync`, and `watch` copy each one into the surrounding checkout's `.claude/skills/<realm>-<name>/`, so the same skill Boxel's AI assistant loads is available in a Claude Code session as `/<realm>-<name>`.
 
-The `.claude/` used is the nearest one at or above the local directory, then the enclosing git checkout, then the local directory itself; the home directory is never used, so a realm's skills stay out of Claude Code's personal scope. Entries are symlinks into the checkout (a copy where the OS refuses symlinks), ownership is recorded in `.claude/skills/.boxel-skills-sync.json`, and entries boxel did not write are left alone.
+The `.claude/` used is the nearest one at or above the local directory, then the enclosing git checkout, then the local directory itself; the home directory is never used, so a realm's skills stay out of Claude Code's personal scope. `.claude/skills/.boxel-skills-sync.json` records which entries boxel wrote and the hash of each file it wrote: entries it did not write are left alone, a copy edited in place is reported instead of overwritten or swept, and an entry whose realm-side skill is renamed or removed is deleted. Edit skills in the realm checkout's `skills/` — that is the copy `push` and `sync` carry back to the realm.
 
 Set `BOXEL_NO_CLAUDE_SKILLS=1`, or pass `--no-claude-skills`, to skip it.
 

@@ -10,38 +10,39 @@
  * `watch` reconciles that mirror, so a skill added to the realm shows up in
  * the next agentic session with no extra step.
  *
- * Each mirrored entry is a **symlink** into the realm checkout
- * (`.claude/skills/<realm>-<name>` → `<localDir>/skills/<name>`), which Claude
- * Code follows. That keeps the mirror live — `watch` updating the checkout
- * updates what the agent reads — and makes editing a skill through the link an
- * ordinary checkout edit that `realm push` sends back up through the existing
- * conflict machinery. Where the OS refuses symlinks the entry falls back to a
- * recursive copy, which is stale-until-next-run but still discoverable.
+ * Entries are plain recursive copies. The realm checkout stays the place a
+ * skill is edited: the copy is generated output, and `push` / `sync` carry a
+ * checkout edit back to the realm the same way they carry any other file.
  *
- * Ownership is tracked in `.claude/skills/.boxel-skills-sync.json` so a later
- * run can delete entries whose realm-side skill was renamed or removed, and so
- * a hand-authored `.claude/skills/<dir>` this code never wrote is left alone.
+ * `.claude/skills/.boxel-skills-sync.json` records, per realm, which entries
+ * this code wrote and the hash of every file it wrote. That gives three
+ * properties: an entry whose realm-side skill was renamed or removed is swept,
+ * a `.claude/skills/<dir>` this code never wrote is left alone, and a copy
+ * someone edited in place is neither overwritten nor swept — it is reported so
+ * the edit can be moved to the realm rather than silently lost.
  */
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
+import { computeFileHash } from './sync-manifest.ts';
 import { DIM, FG_YELLOW, RESET } from './colors.ts';
 
 const MANIFEST_NAME = '.boxel-skills-sync.json';
 const MANIFEST_VERSION = 1;
 
-export type MirrorEntryKind = 'symlink' | 'copy';
+/** Entry-relative file path → content hash, for every file written. */
+type FileHashes = Record<string, string>;
 
 interface ManifestEntry {
   /** Realm-side skill directory name, i.e. `skills/<skill>/`. */
   skill: string;
-  kind: MirrorEntryKind;
+  files: FileHashes;
 }
 
 interface ManifestRealm {
-  /** Realm checkout the entries point into, relative to the mirror root. */
+  /** Realm checkout the entries were copied from, relative to the mirror root. */
   localDir: string;
-  /** Mirror directory name (`<realm>-<skill>`) → what it was written from. */
+  /** Mirror directory name (`<realm>-<skill>`) → what was written into it. */
   entries: Record<string, ManifestEntry>;
 }
 
@@ -58,10 +59,12 @@ export interface SkillsMirrorSkipped {
 export interface SkillsMirrorResult {
   /** Directory holding the `.claude/` the mirror was written into. */
   root: string;
-  /** Entries now present and owned by this realm. */
-  linked: string[];
-  /** Entries written as copies because the symlink could not be created. */
-  copied: string[];
+  /** Entries newly written. */
+  created: string[];
+  /** Entries refreshed because the realm's copy changed. */
+  updated: string[];
+  /** Entries already matching the realm's copy. */
+  unchanged: string[];
   /** Entries removed because their realm-side skill is gone. */
   removed: string[];
   /** Entries left untouched, with why. */
@@ -175,62 +178,98 @@ export async function mirrorRealmSkills(
 
   const result: SkillsMirrorResult = {
     root,
-    linked: [],
-    copied: [],
+    created: [],
+    updated: [],
+    unchanged: [],
     removed: [],
     skipped: [],
   };
   const nextEntries: Record<string, ManifestEntry> = {};
 
-  if (!dryRun && skills.length > 0) {
-    await fs.mkdir(mirrorDir, { recursive: true });
-  }
-
   for (const skill of skills) {
     const name = mirrorDirName(realmSlug, skill);
     const target = path.join(mirrorDir, name);
     const source = path.join(localDir, 'skills', skill);
+    const prior = priorEntries[name];
 
-    const claim = await claimEntry({
+    const conflict = await findConflict({
       mirrorDir,
       name,
-      source,
       realmUrl,
       manifest,
-      priorEntries,
+      owned: prior !== undefined,
     });
-    if (!claim.ok) {
-      result.skipped.push({ name, reason: claim.reason });
+    if (conflict !== null) {
+      result.skipped.push({ name, reason: conflict });
       // Keep the prior record so a later run that frees the path can still
-      // sweep what this code wrote before.
-      const prior = priorEntries[name];
+      // refresh or sweep what this code wrote before.
       if (prior) nextEntries[name] = prior;
       continue;
     }
 
+    const sourceFiles = await hashTree(source);
+    const exists = await pathPresent(target);
+
+    if (exists && prior) {
+      const mirrorFiles = await hashTree(target);
+      if (!sameHashes(mirrorFiles, prior.files)) {
+        result.skipped.push({
+          name,
+          reason: `edited in place — move the change to skills/${skill}/ in the realm checkout`,
+        });
+        nextEntries[name] = prior;
+        continue;
+      }
+      if (sameHashes(mirrorFiles, sourceFiles)) {
+        result.unchanged.push(name);
+        nextEntries[name] = { skill, files: sourceFiles };
+        continue;
+      }
+    }
+
     if (dryRun) {
-      result.linked.push(name);
-      nextEntries[name] = { skill, kind: claim.existingKind ?? 'symlink' };
+      (exists ? result.updated : result.created).push(name);
+      nextEntries[name] = { skill, files: sourceFiles };
       continue;
     }
 
-    const written = await writeEntry(target, source, claim.replace);
-    if (written === null) {
+    await fs.mkdir(mirrorDir, { recursive: true });
+    // Replace rather than merge, so a file dropped from the realm's skill
+    // (a retired reference) doesn't linger in the copy.
+    await fs.rm(target, { recursive: true, force: true });
+    try {
+      await fs.cp(source, target, { recursive: true, dereference: true });
+    } catch (error) {
       result.skipped.push({
         name,
-        reason: 'could not be written as a symlink or a copy',
+        reason: `could not be copied: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
       });
       continue;
     }
-    if (written === 'copy') result.copied.push(name);
-    result.linked.push(name);
-    nextEntries[name] = { skill, kind: written };
+    (exists ? result.updated : result.created).push(name);
+    nextEntries[name] = { skill, files: sourceFiles };
   }
 
-  for (const name of Object.keys(priorEntries)) {
+  for (const [name, prior] of Object.entries(priorEntries)) {
     if (nextEntries[name] !== undefined) continue;
-    if (!dryRun) {
-      await removeEntry(path.join(mirrorDir, name));
+    const target = path.join(mirrorDir, name);
+
+    if (!dryRun && (await pathPresent(target))) {
+      // Same protection as the refresh path: an edited copy is kept, and its
+      // manifest record with it, so the next run reports it again.
+      const mirrorFiles = await hashTree(target);
+      if (!sameHashes(mirrorFiles, prior.files)) {
+        result.skipped.push({
+          name,
+          reason:
+            'edited in place and no longer in the realm — delete it once the change is saved elsewhere',
+        });
+        nextEntries[name] = prior;
+        continue;
+      }
+      await fs.rm(target, { recursive: true, force: true });
     }
     result.removed.push(name);
   }
@@ -247,9 +286,10 @@ export async function mirrorRealmSkills(
     await saveMirrorManifest(mirrorDir, manifest);
   }
 
+  result.created.sort();
+  result.updated.sort();
+  result.unchanged.sort();
   result.removed.sort();
-  result.linked.sort();
-  result.copied.sort();
   return result;
 }
 
@@ -277,15 +317,16 @@ export async function reconcileSkillsMirror(
 
   if (result === null) return null;
 
+  const written = [...result.created, ...result.updated].sort();
   const prefix = options.dryRun ? '[DRY RUN] Would ' : '';
   const mirrorDir = path.join(result.root, '.claude', 'skills');
-  if (result.linked.length > 0) {
+
+  if (written.length > 0) {
     console.log(
-      `\n${prefix}${options.dryRun ? 'expose' : 'Exposed'} ${result.linked.length} realm skill(s) to Claude Code in ${mirrorDir}:`,
+      `\n${prefix}${options.dryRun ? 'expose' : 'Exposed'} ${written.length} realm skill(s) to Claude Code in ${mirrorDir}:`,
     );
-    for (const name of result.linked) {
-      const how = result.copied.includes(name) ? ' (copied)' : '';
-      console.log(`  ${DIM}/${name}${RESET}${how}`);
+    for (const name of written) {
+      console.log(`  ${DIM}/${name}${RESET}`);
     }
   }
   for (const name of result.removed) {
@@ -329,95 +370,65 @@ async function listRealmSkills(localDir: string): Promise<string[]> {
 }
 
 /**
- * Decide whether this realm may write `<mirrorDir>/<name>`. An entry the
- * manifest attributes to this realm is ours to refresh; an entry attributed to
- * a different realm, or present on disk without any manifest record, belongs
- * to someone else and is left alone.
+ * Why this realm may not write `<mirrorDir>/<name>`, or null when it may. An
+ * entry the manifest attributes to this realm is ours to refresh; an entry
+ * attributed to a different realm, or present on disk without any manifest
+ * record, belongs to someone else.
  */
-async function claimEntry(args: {
+async function findConflict(args: {
   mirrorDir: string;
   name: string;
-  source: string;
   realmUrl: string;
   manifest: SkillsMirrorManifest;
-  priorEntries: Record<string, ManifestEntry>;
-}): Promise<
-  | { ok: true; replace: boolean; existingKind?: MirrorEntryKind }
-  | { ok: false; reason: string }
-> {
-  const { mirrorDir, name, realmUrl, manifest, priorEntries } = args;
-  const target = path.join(mirrorDir, name);
-  const owned = priorEntries[name];
+  owned: boolean;
+}): Promise<string | null> {
+  const { mirrorDir, name, realmUrl, manifest, owned } = args;
 
   for (const [otherRealm, realm] of Object.entries(manifest.realms)) {
     if (otherRealm === realmUrl) continue;
     if (realm.entries[name] !== undefined) {
-      return {
-        ok: false,
-        reason: `already mirrored from ${otherRealm}`,
-      };
+      return `already mirrored from ${otherRealm}`;
     }
   }
 
-  if (!(await pathPresent(target))) {
-    return { ok: true, replace: false };
+  if (owned) return null;
+  if (await pathPresent(path.join(mirrorDir, name))) {
+    return 'a directory of that name already exists and was not written by boxel';
   }
-  if (owned) {
-    return { ok: true, replace: true, existingKind: owned.kind };
-  }
-  return {
-    ok: false,
-    reason:
-      'a directory of that name already exists and was not written by boxel',
-  };
+  return null;
 }
 
 /**
- * Write one mirror entry, preferring a symlink. Returns the kind written, or
- * null when neither a symlink nor a copy could be created.
+ * Content hash of every file under `dir`, keyed by its path relative to `dir`.
+ * Comparing two of these answers both questions the reconcile asks: has the
+ * realm's copy changed, and has the mirrored copy been edited?
  */
-async function writeEntry(
-  target: string,
-  source: string,
-  replace: boolean,
-): Promise<MirrorEntryKind | null> {
-  if (replace) {
-    await removeEntry(target);
-  }
-
-  // Relative so the mirror survives the whole tree being moved or mounted at
-  // a different path (a factory workspace in a container, for instance).
-  const linkTarget = path.relative(path.dirname(target), source);
+async function hashTree(dir: string, prefix = ''): Promise<FileHashes> {
+  const hashes: FileHashes = {};
+  let entries;
   try {
-    await fs.symlink(linkTarget, target, 'dir');
-    return 'symlink';
-  } catch {
-    // Windows without developer mode, a filesystem without symlink support, a
-    // container mount that forbids them — fall back to a copy.
-  }
-
-  try {
-    await fs.cp(source, target, { recursive: true, dereference: true });
-    return 'copy';
-  } catch {
-    return null;
-  }
-}
-
-async function removeEntry(target: string): Promise<void> {
-  // A symlinked entry must be unlinked rather than recursed into: `rm -r` on
-  // the link path would delete the realm checkout's skill through it.
-  try {
-    const stats = await fs.lstat(target);
-    if (stats.isSymbolicLink() || stats.isFile()) {
-      await fs.unlink(target);
-      return;
-    }
+    entries = await fs.readdir(dir, { withFileTypes: true });
   } catch (err: any) {
-    if (err.code === 'ENOENT') return;
+    if (err.code === 'ENOENT' || err.code === 'ENOTDIR') return hashes;
     throw err;
   }
-  await fs.rm(target, { recursive: true, force: true });
+
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name);
+    const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+    if (await isDirectory(full)) {
+      Object.assign(hashes, await hashTree(full, rel));
+    } else {
+      hashes[rel] = await computeFileHash(full);
+    }
+  }
+  return hashes;
+}
+
+function sameHashes(a: FileHashes, b: FileHashes): boolean {
+  const aKeys = Object.keys(a);
+  if (aKeys.length !== Object.keys(b).length) return false;
+  return aKeys.every((key) => a[key] === b[key]);
 }
 
 export async function loadMirrorManifest(
@@ -474,7 +485,10 @@ function isMirrorManifest(value: unknown): value is SkillsMirrorManifest {
       if (typeof entry !== 'object' || entry === null) return false;
       const e = entry as Record<string, unknown>;
       if (typeof e.skill !== 'string') return false;
-      if (e.kind !== 'symlink' && e.kind !== 'copy') return false;
+      if (typeof e.files !== 'object' || e.files === null) return false;
+      for (const hash of Object.values(e.files as Record<string, unknown>)) {
+        if (typeof hash !== 'string') return false;
+      }
     }
   }
   return true;

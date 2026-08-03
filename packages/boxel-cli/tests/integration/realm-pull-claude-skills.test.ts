@@ -86,12 +86,9 @@ describe('realm pull → .claude/skills (integration)', () => {
     // The realm URL's last segment (`test`) prefixes the mirrored directory,
     // so two realms with same-named skills stay distinguishable.
     let entry = path.join(mirrorDir(localDir), 'test-trip-planner');
-    expect(fs.lstatSync(entry).isSymbolicLink()).toBe(true);
-    expect(fs.realpathSync(entry)).toBe(
-      path.join(localDir, 'skills', 'trip-planner'),
-    );
+    expect(fs.lstatSync(entry).isDirectory()).toBe(true);
 
-    // Claude Code reads SKILL.md and its references through the link.
+    // SKILL.md and its references are copied byte-for-byte.
     expect(fs.readFileSync(path.join(entry, 'SKILL.md'), 'utf8')).toBe(
       SKILL_BODY,
     );
