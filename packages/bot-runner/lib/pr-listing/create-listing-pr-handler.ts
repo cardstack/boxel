@@ -144,6 +144,10 @@ export class CreateListingPRHandler {
       branch: context.head,
       files: allFiles,
       message: `add ${context.listingDisplayName} changes [boxel-content-hash:${hash}]`,
+      // A retry rewrites an existing branch; syncing the submission folder
+      // drops paths that fell out of the fresh collection (deleted or
+      // renamed files) instead of layering onto the previous tree.
+      syncFolder: folderName,
     });
   }
 

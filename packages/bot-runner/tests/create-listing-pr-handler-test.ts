@@ -181,13 +181,18 @@ module('create-listing-pr handler', () => {
     let writeCalls: {
       files: { path: string; content: string }[];
       message: string;
+      syncFolder?: string;
     }[] = [];
     let githubClient: GitHubClient = {
       openPullRequest: async () => ({ number: 1, html_url: 'x' }),
       createBranch: async () => ({ ref: 'refs/heads/test', sha: 'abc123' }),
       writeFileToBranch: async () => ({ commitSha: 'def456' }),
       writeFilesToBranch: async (params) => {
-        writeCalls.push({ files: params.files, message: params.message });
+        writeCalls.push({
+          files: params.files,
+          message: params.message,
+          syncFolder: params.syncFolder,
+        });
         return { commitSha: 'def456' };
       },
     };
@@ -220,6 +225,11 @@ module('create-listing-pr handler', () => {
         `${branchName}/Spec/def.json`,
       ],
       'every file is prefixed with the branch-name folder, inner layout preserved',
+    );
+    assert.strictEqual(
+      writeCalls[0].syncFolder,
+      branchName,
+      'the write syncs the submission folder so a retry drops paths missing from the fresh collection',
     );
   });
 
