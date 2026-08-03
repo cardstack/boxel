@@ -749,13 +749,9 @@ export default class OperatorModeStateService extends Service {
     return this.schedulePersist();
   }
 
-  async updateSubmode(submode: Submode) {
+  updateSubmode(submode: Submode) {
     this._state.submode = submode;
     this.schedulePersist();
-
-    if (submode === Submodes.Code) {
-      await this.matrixService.activateCodingSkill();
-    }
   }
 
   async updateModuleInspectorView(view: ModuleInspectorView) {

@@ -99,7 +99,7 @@ export default class SwitchSubmodeTool extends HostBaseTool<
         throw new Error(`invalid submode specified: ${input.submode}`);
     }
 
-    await this.operatorModeStateService.updateSubmode(input.submode);
+    this.operatorModeStateService.updateSubmode(input.submode);
     if (this.operatorModeStateService.workspaceChooserOpened) {
       this.operatorModeStateService.closeWorkspaceChooser();
     }

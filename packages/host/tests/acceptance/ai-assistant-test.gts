@@ -51,7 +51,7 @@ import {
   type TestContextWithSave,
   delay,
   getMonacoContent,
-  envSkillId,
+  skillsIndexId,
   catalogRealmURL,
   realmConfigCardJSON,
 } from '../helpers';
@@ -3072,7 +3072,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       ).map((el) => el.getAttribute('data-test-attached-card'));
       assert.ok(
         false,
-        `Default skill never rendered on the new session's skill menu. Attached cards seen: ${JSON.stringify(attached)}; expected exactly [${envSkillId}].`,
+        `Default skill never rendered on the new session's skill menu. Attached cards seen: ${JSON.stringify(attached)}; expected exactly [${skillsIndexId}].`,
       );
       return;
     }
@@ -3080,7 +3080,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       .dom('[data-test-skill-menu] [data-test-attached-card]')
       .exists({ count: 1 });
     assert
-      .dom(`[data-test-skill-menu] [data-test-attached-card="${envSkillId}"]`)
+      .dom(
+        `[data-test-skill-menu] [data-test-attached-card="${skillsIndexId}"]`,
+      )
       .exists();
   });
 

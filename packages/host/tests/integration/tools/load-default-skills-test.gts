@@ -13,8 +13,7 @@ import {
   testRealmURL,
   setupRealmCacheTeardown,
   withCachedRealmSetup,
-  devSkillId,
-  envSkillId,
+  skillsIndexId,
 } from '../../helpers';
 import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -54,19 +53,14 @@ module('Integration | tools | load-default-skills', function (hooks) {
     );
   });
 
-  test('falls back to the hardcoded default skill cards when no system card is set', async function (assert) {
+  test('falls back to the skills index when no system card is set', async function (assert) {
     let matrixService = getService('matrix-service') as any;
     matrixService._systemCard = undefined;
 
     assert.deepEqual(
-      await matrixService.loadDefaultSkills('code'),
-      [devSkillId, envSkillId],
-      'code mode falls back to the dev/env skill cards',
-    );
-    assert.deepEqual(
-      await matrixService.loadDefaultSkills('interact'),
-      [envSkillId],
-      'interact mode falls back to the env skill card',
+      await matrixService.loadDefaultSkills(),
+      [skillsIndexId],
+      'the skills index is the default skill',
     );
   });
 
@@ -78,13 +72,13 @@ module('Integration | tools | load-default-skills', function (hooks) {
     };
 
     assert.deepEqual(
-      await matrixService.loadDefaultSkills('interact'),
-      [envSkillId],
-      'empty default-skill lists fall through to the hardcoded default',
+      await matrixService.loadDefaultSkills(),
+      [skillsIndexId],
+      'empty default-skill lists fall through to the skills index',
     );
   });
 
-  test("uses the system card's default skills (mode-agnostic) when set", async function (assert) {
+  test("uses the system card's default skills when set", async function (assert) {
     let matrixService = getService('matrix-service') as any;
     let skillCard = `${testRealmURL}Skill/my-legacy-skill`;
     let skillFileA = `${testRealmURL}skills/my-skill/SKILL.md`;
@@ -97,14 +91,9 @@ module('Integration | tools | load-default-skills', function (hooks) {
     // Card ids and file ids are unioned (cards first, then files); the runtime
     // resolves each id kind-agnostically via `loadSkillSource`.
     assert.deepEqual(
-      await matrixService.loadDefaultSkills('code'),
+      await matrixService.loadDefaultSkills(),
       [skillCard, skillFileA, skillFileB],
-      'configured skill cards and skill files both win in code mode',
-    );
-    assert.deepEqual(
-      await matrixService.loadDefaultSkills('interact'),
-      [skillCard, skillFileA, skillFileB],
-      'the same configured skills apply in interact mode (mode-agnostic)',
+      'configured skill cards and skill files both replace the skills index',
     );
   });
 
@@ -117,7 +106,7 @@ module('Integration | tools | load-default-skills', function (hooks) {
     };
 
     assert.deepEqual(
-      await matrixService.loadDefaultSkills('code'),
+      await matrixService.loadDefaultSkills(),
       [skillCard],
       'a card-only default-skill list is used verbatim',
     );
