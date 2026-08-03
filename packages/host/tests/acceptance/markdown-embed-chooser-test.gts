@@ -6,7 +6,7 @@ import {
   waitUntil,
 } from '@ember/test-helpers';
 
-import { acceptCompletion, startCompletion } from '@codemirror/autocomplete';
+import { currentCompletions, startCompletion } from '@codemirror/autocomplete';
 
 import { module, test } from 'qunit';
 
@@ -216,8 +216,11 @@ module('Acceptance | markdown embed chooser modal', function (hooks) {
     );
 
     // Trigger the `/card` slash completion the way a user does: type `/` at the
-    // caret, open the autocomplete list, and accept the (single) `/card` option.
-    // Its `apply` deletes the typed `/` and asks the editor to open the chooser.
+    // caret and open the autocomplete list. Accepting the `/card` option runs
+    // its `apply`, which deletes the typed `/` and asks the editor to open the
+    // chooser. We invoke that `apply` directly (rather than simulating an Enter
+    // keystroke) so the accept is deterministic and not subject to the
+    // tooltip's selected-option timing.
     let editorEl = document.querySelector(
       `[data-test-stack-card="${noteId}"] [data-test-codemirror-editor] .cm-editor`,
     ) as HTMLElement | null;
@@ -229,8 +232,24 @@ module('Acceptance | markdown embed chooser modal', function (hooks) {
       selection: { anchor: 1 },
     });
     startCompletion(view!);
-    await waitFor('.cm-tooltip-autocomplete', { timeout: 5000 });
-    acceptCompletion(view!);
+    await waitUntil(
+      () => currentCompletions(view!.state).some((c) => c.label === '/card'),
+      { timeout: 5000 },
+    );
+    let cardOption = currentCompletions(view!.state).find(
+      (c) => c.label === '/card',
+    );
+    assert.ok(cardOption, 'the `/card` slash completion is offered');
+    // The completion spans the typed `/` (doc positions 0–1); accepting it
+    // deletes the `/` and opens the chooser.
+    (
+      cardOption!.apply as (
+        v: unknown,
+        c: unknown,
+        f: number,
+        t: number,
+      ) => void
+    )(view!, cardOption!, 0, 1);
     await settled();
 
     // The `/card` path now reuses the same chooser modal as the toolbar,
