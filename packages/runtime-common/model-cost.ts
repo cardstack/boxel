@@ -33,8 +33,12 @@ function parsePrice(
   if (price == null || price === '') {
     return 'absent';
   }
-  let n = parseFloat(price);
-  return Number.isFinite(n) ? n : 'invalid';
+  // `Number` (unlike `parseFloat`) rejects numeric-prefixed junk like
+  // "0.000003 USD" or "1x" as `NaN`, honoring this file's "unparseable => no
+  // badge" contract; the `>= 0` guard rejects a stray negative price that would
+  // otherwise blend below zero and mislabel a paid model as `Free`.
+  let n = Number(price);
+  return Number.isFinite(n) && n >= 0 ? n : 'invalid';
 }
 
 // Blended 3:1 input:output cost per million tokens, or `undefined` when the

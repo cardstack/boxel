@@ -83,7 +83,6 @@ import type StoreService from '@cardstack/host/services/store';
 import type ToolService from '@cardstack/host/services/tool-service';
 import UpdateRoomSkillsTool from '@cardstack/host/tools/update-room-skills';
 import { FileDefAttributesExtractor } from '@cardstack/host/utils/file-def-attributes-extractor';
-import { modelCostTierLabel } from '@cardstack/host/utils/model-cost';
 
 import { errorJsonApiToErrorEntry } from '../../lib/window-error-handler';
 import AiAssistantActionBar from '../ai-assistant/action-bar';
@@ -1213,19 +1212,19 @@ export default class Room extends Component<Signature> {
   }
 
   // Looks up the cost tier for each pickable model by matching its `modelId`
-  // against the OpenRouter model catalog. The pricing lives only on
-  // `OpenRouterModel` cards (correlated to a model configuration by the
-  // `modelId` string, not a link), so we search that realm and derive the tier
-  // client-side. Degrades to an empty map when the OpenRouter realm is
-  // unconfigured, unreachable, or a model has no matching catalog card — the
-  // badge is cosmetic and must never surface an error.
+  // against the OpenRouter model catalog. The tier is a `computeVia` field on
+  // the `OpenRouterModel` card (derived there from its own pricing), which is
+  // correlated to a model configuration by the `modelId` string, not a link —
+  // so we search that realm and read each match's `costTierLabel`. Degrades to
+  // an empty map when the OpenRouter realm is unconfigured, unreachable, or a
+  // model has no matching catalog card — the badge is cosmetic and must never
+  // surface an error.
   //
   // This is a task rather than a `trackedFunction`/resource on purpose:
-  // `store.search` hydrates cards (mutating tracked store state) and the tier
-  // derivation reads those cards' fields, so a reactive body would
-  // self-invalidate into an endless re-run and never settle. The task runs the
-  // search + field reads off the render's reactive path and only writes the
-  // tracked map the picker reads.
+  // `store.search` hydrates cards (mutating tracked store state) and we then
+  // read those cards' fields, so a reactive body would self-invalidate into an
+  // endless re-run and never settle. The task runs the search + field reads off
+  // the render's reactive path and only writes the tracked map the picker reads.
   private loadModelCostTiers = restartableTask(
     async (modelIds: string[], realmURL: string, key: string) => {
       let tiers = new Map<string, string>();
@@ -1243,18 +1242,12 @@ export default class Room extends Component<Signature> {
         for (let instance of instances) {
           let model = instance as unknown as {
             modelId?: string;
-            pricing?: { prompt?: string; completion?: string };
+            costTierLabel?: string;
           };
-          if (!model.modelId) {
+          if (!model.modelId || !model.costTierLabel) {
             continue;
           }
-          let label = modelCostTierLabel(
-            model.pricing?.prompt,
-            model.pricing?.completion,
-          );
-          if (label) {
-            tiers.set(model.modelId, label);
-          }
+          tiers.set(model.modelId, model.costTierLabel);
         }
       } catch (e) {
         console.warn('Failed to load model cost tiers', e);

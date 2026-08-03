@@ -38,6 +38,7 @@ import { setupRenderingTest } from '../../../helpers/setup';
 const OPENROUTER_MODEL_SOURCE = `
   import { CardDef, FieldDef, field, contains } from 'https://cardstack.com/base/card-api';
   import StringField from 'https://cardstack.com/base/string';
+  import { modelCostTierLabel } from '@cardstack/runtime-common/model-cost';
 
   export class OpenRouterPricing extends FieldDef {
     static displayName = 'OpenRouter Pricing';
@@ -49,6 +50,13 @@ const OPENROUTER_MODEL_SOURCE = `
     static displayName = 'OpenRouter Model';
     @field modelId = contains(StringField);
     @field pricing = contains(OpenRouterPricing);
+    // Mirrors the real card: the tier is a computed derived from the card's own
+    // pricing, and the picker reads it straight off the catalog search.
+    @field costTierLabel = contains(StringField, {
+      computeVia: function () {
+        return modelCostTierLabel(this.pricing?.prompt, this.pricing?.completion);
+      },
+    });
   }
 `;
 

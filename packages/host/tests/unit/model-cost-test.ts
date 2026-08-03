@@ -4,7 +4,7 @@ import {
   blendedCostPerMillion,
   modelCostTier,
   modelCostTierLabel,
-} from '@cardstack/host/utils/model-cost';
+} from '@cardstack/runtime-common/model-cost';
 
 // Blended 3:1 $/M = ((3*prompt + completion) / 4) * 1_000_000, prices per token.
 module('Unit | utils | model-cost', function () {
@@ -34,6 +34,22 @@ module('Unit | utils | model-cost', function () {
       assert.strictEqual(blendedCostPerMillion('0.000003', 'n/a'), undefined);
       assert.strictEqual(blendedCostPerMillion('abc', 'abc'), undefined);
     });
+
+    test('rejects numeric-prefixed and negative prices as unparseable', function (assert) {
+      // `parseFloat` would accept the numeric prefix / sign here and produce a
+      // wrong tier; `Number` + the `>= 0` guard treat all of these as unknown.
+      assert.strictEqual(
+        blendedCostPerMillion('0.000003 USD', '0'),
+        undefined,
+        'trailing units',
+      );
+      assert.strictEqual(blendedCostPerMillion('1x', '0'), undefined, 'suffix');
+      assert.strictEqual(
+        blendedCostPerMillion('-0.001', '0'),
+        undefined,
+        'negative price is not Free',
+      );
+    });
   });
 
   module('modelCostTier', function () {
@@ -47,6 +63,8 @@ module('Unit | utils | model-cost', function () {
 
     test('is undefined when pricing is unparseable, never a wrong tier', function (assert) {
       assert.strictEqual(modelCostTierLabel('garbage', '0.00006'), undefined);
+      // A numeric-prefixed price must not slip through as a real (wrong) tier.
+      assert.strictEqual(modelCostTierLabel('0.000003 USD', '0'), undefined);
     });
 
     test('maps blended cost across the 1/5/20 tier bounds', function (assert) {
