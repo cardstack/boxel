@@ -118,9 +118,6 @@ describe('mirrorRealmSkills', () => {
     ]);
 
     const entry = mirrorPath(checkout, 'experiments-trip-planner');
-    // A real directory, not a link — search tools that don't follow symlinks
-    // (ripgrep by default) still see the skill's content.
-    expect(fs.lstatSync(entry).isSymbolicLink()).toBe(false);
     expect(fs.lstatSync(entry).isDirectory()).toBe(true);
     // The realm's file is copied byte-for-byte, `boxel:` frontmatter and all.
     expect(fs.readFileSync(path.join(entry, 'SKILL.md'), 'utf8')).toBe(
