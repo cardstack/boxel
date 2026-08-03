@@ -29,6 +29,7 @@ import {
   cardTypeDisplayName,
   cardTypeIcon,
   codeRefWithAbsoluteIdentifier,
+  internalKeyFor,
   isCardInstance,
   isResolvedCodeRef,
   CardError,
@@ -735,6 +736,7 @@ export default class InteractSubmode extends Component {
     }
 
     let items: { name: string; icon: Icon; ref: ResolvedCodeRef }[] = [];
+    let seenTypeKeys = new Set<string>();
     // A realm index card id and a recent card's id can be in different forms
     // (e.g. the base realm's alias `https://cardstack.com/base/index` vs an
     // instance's registered-prefix form `@cardstack/base/index`). Unresolve
@@ -754,10 +756,20 @@ export default class InteractSubmode extends Component {
         let ref = identifyRealmCard(card);
         let name = cardTypeDisplayName(card);
         if (isResolvedCodeRef(ref)) {
-          if (items.find((item) => item.ref === ref && item.name === name)) {
+          // Trusted CardDef constructors historically returned a shared
+          // CodeRef object, which made reference equality appear to be type
+          // identity. Opaque sandbox records intentionally carry cloned,
+          // inert refs, so compare their canonical keys instead.
+          let typeKey = `${internalKeyFor(
+            ref,
+            undefined,
+            virtualNetwork,
+          )}:${name}`;
+          if (seenTypeKeys.has(typeKey)) {
             // do not add duplicate of the same card type
             return;
           }
+          seenTypeKeys.add(typeKey);
           items.push({
             name,
             icon: cardTypeIcon(card) as Icon,

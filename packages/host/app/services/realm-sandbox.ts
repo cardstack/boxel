@@ -12,6 +12,8 @@ import { isTesting } from '@embroider/macros';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import { TrackedObject } from 'tracked-built-ins';
+
 import { themeScope } from '@cardstack/boxel-ui/helpers';
 
 import {
@@ -32,11 +34,13 @@ import {
   type getCard,
   localId as localIdSymbol,
   meta,
+  primitive,
   realmURL as realmURLSymbol,
   rri,
   relativeReference,
 } from '@cardstack/runtime-common';
 
+import RealmSandboxDelegatedRender from '@cardstack/host/components/realm-sandbox-delegated-render';
 import config from '@cardstack/host/config/environment';
 import {
   CodePreviewAnalysisCache,
@@ -58,6 +62,7 @@ import RealmCompartmentModuleRuntime, {
   sandboxRealmURLArgument,
   sandboxViewCardCapabilityArgument,
   type SandboxCardFieldMetadata,
+  type SandboxCardMethodResult,
   type SandboxCardTypeMetadata,
   type SandboxScopeReference,
   type SandboxTemplateBundle,
@@ -108,6 +113,7 @@ import type {
 const compartmentTemplateWaiter = buildWaiter(
   'realm-sandbox:compartment-template',
 );
+const renderEnvelopeWaiter = buildWaiter('realm-sandbox:render-envelope');
 
 export interface RealmSandboxRender {
   component: BaseDefComponent;
@@ -139,6 +145,7 @@ class StableRealmSandboxRender implements RealmSandboxRender {
   onError?: (error: unknown, component: BaseDefComponent) => void;
   onRendered?: (component: BaseDefComponent) => void;
   private pending?: RealmSandboxRender;
+  private waiterToken?: ReturnType<typeof renderEnvelopeWaiter.beginAsync>;
 
   constructor(value: RealmSandboxRender) {
     this.component = value.component;
@@ -168,41 +175,49 @@ class StableRealmSandboxRender implements RealmSandboxRender {
       return;
     }
     this.pending = value;
+    this.waiterToken ??= renderEnvelopeWaiter.beginAsync();
     scheduleOnce('afterRender', this, this.flushUpdate);
   }
 
   private flushUpdate() {
-    let value = this.pending;
-    this.pending = undefined;
-    if (!value) {
-      return;
-    }
-    if (this.component !== value.component) {
-      this.component = value.component;
-    }
-    if (this.model !== value.model) {
-      this.model = value.model;
-    }
-    if (this.fields !== value.fields) {
-      this.fields = value.fields;
-    }
-    if (!sameStyles(this.styles, value.styles)) {
-      this.styles = value.styles;
-    }
-    if (this.principal !== value.principal) {
-      this.principal = value.principal;
-    }
-    if (this.markerBacked !== value.markerBacked) {
-      this.markerBacked = value.markerBacked;
-    }
-    if (this.theme !== value.theme) {
-      this.theme = value.theme;
-    }
-    if (this.onError !== value.onError) {
-      this.onError = value.onError;
-    }
-    if (this.onRendered !== value.onRendered) {
-      this.onRendered = value.onRendered;
+    try {
+      let value = this.pending;
+      this.pending = undefined;
+      if (!value) {
+        return;
+      }
+      if (this.component !== value.component) {
+        this.component = value.component;
+      }
+      if (this.model !== value.model) {
+        this.model = value.model;
+      }
+      if (this.fields !== value.fields) {
+        this.fields = value.fields;
+      }
+      if (!sameStyles(this.styles, value.styles)) {
+        this.styles = value.styles;
+      }
+      if (this.principal !== value.principal) {
+        this.principal = value.principal;
+      }
+      if (this.markerBacked !== value.markerBacked) {
+        this.markerBacked = value.markerBacked;
+      }
+      if (this.theme !== value.theme) {
+        this.theme = value.theme;
+      }
+      if (this.onError !== value.onError) {
+        this.onError = value.onError;
+      }
+      if (this.onRendered !== value.onRendered) {
+        this.onRendered = value.onRendered;
+      }
+    } finally {
+      if (this.waiterToken) {
+        renderEnvelopeWaiter.endAsync(this.waiterToken);
+        this.waiterToken = undefined;
+      }
     }
   }
 }
@@ -218,6 +233,20 @@ function sameStrings(left: readonly string[], right: readonly string[]) {
   return (
     left.length === right.length &&
     left.every((value, index) => value === right[index])
+  );
+}
+
+function sameTrustedExportIdentities(
+  left: readonly SandboxTrustedExportIdentity[],
+  right: readonly SandboxTrustedExportIdentity[],
+) {
+  return (
+    left.length === right.length &&
+    left.every(
+      (identity, index) =>
+        identity.module === right[index]?.module &&
+        identity.name === right[index]?.name,
+    )
   );
 }
 
@@ -440,6 +469,14 @@ const namedLayerCSS = /@layer\b(?!\s*\{)/i;
 // and lift that snapshot above Host chrome. Keep that document-global naming
 // surface out of shared-document SES styles.
 const topLayerBearingCSS = /\bview-transition-(?:name|class)\s*:/i;
+// These properties publish names into an ancestor/cross-tree lookup space.
+// Even when the declaration's selector is scoped to one card, a matching Host
+// rule can resolve the authored name and have its layout or animation changed.
+// SES cards therefore cannot publish them into the shared document. Cards
+// that need anchor positioning or named scroll/view timelines use the iframe
+// tier, whose document owns a separate name registry.
+const crossTreeNamedPropertyCSS =
+  /\b(?:anchor-name|anchor-scope|timeline-scope|scroll-timeline-name|view-timeline-name)\s*:/i;
 
 interface CompartmentCSSPolicy {
   requireScopedSelectors?: boolean;
@@ -567,8 +604,19 @@ function selectorTargetContainsTopLevelScope(selector: string): boolean {
 function validateParsedCompartmentRules(
   rules: CSSRuleList,
   policy: CompartmentCSSPolicy,
+  compiledScopes: ReadonlySet<string>,
 ): void {
   for (let rule of rules) {
+    if (
+      policy.requireScopedSelectors &&
+      typeof CSSKeyframesRule !== 'undefined' &&
+      rule instanceof CSSKeyframesRule &&
+      ![...compiledScopes].some((scope) => rule.name.endsWith(`-${scope}`))
+    ) {
+      throw new Error(
+        `Sandbox stylesheet keyframes escaped their compiled namespace: ${rule.name}`,
+      );
+    }
     if (
       policy.requireScopedSelectors &&
       typeof CSSStyleRule !== 'undefined' &&
@@ -598,9 +646,39 @@ function validateParsedCompartmentRules(
       validateParsedCompartmentRules(
         (rule as CSSRule & { cssRules: CSSRuleList }).cssRules,
         policy,
+        compiledScopes,
       );
     }
   }
+}
+
+function compiledScopeNames(rules: CSSRuleList): Set<string> {
+  let scopes = new Set<string>();
+  for (let rule of rules) {
+    if (typeof CSSStyleRule !== 'undefined' && rule instanceof CSSStyleRule) {
+      for (let match of rule.selectorText.matchAll(
+        /\[(data-scopedcss-[a-z0-9-]+)(?:[~|^$*]?=[^\]]+)?\]/gi,
+      )) {
+        if (match[1]) {
+          scopes.add(match[1]);
+        }
+      }
+    }
+    if (
+      !(
+        typeof CSSKeyframesRule !== 'undefined' &&
+        rule instanceof CSSKeyframesRule
+      ) &&
+      'cssRules' in rule
+    ) {
+      for (let scope of compiledScopeNames(
+        (rule as CSSRule & { cssRules: CSSRuleList }).cssRules,
+      )) {
+        scopes.add(scope);
+      }
+    }
+  }
+  return scopes;
 }
 
 // Parse with the browser before inspecting. Raw regex replacement is not a
@@ -626,7 +704,8 @@ export function validateCompartmentCSS(
     policy.requireScopedSelectors &&
     (documentGlobalCSS.test(decoded) ||
       namedLayerCSS.test(decoded) ||
-      topLayerBearingCSS.test(decoded))
+      topLayerBearingCSS.test(decoded) ||
+      crossTreeNamedPropertyCSS.test(decoded))
   ) {
     throw new Error('Sandbox stylesheet contains a document-global rule');
   }
@@ -645,11 +724,16 @@ export function validateCompartmentCSS(
     policy.requireScopedSelectors &&
     (documentGlobalCSS.test(normalized) ||
       namedLayerCSS.test(normalized) ||
-      topLayerBearingCSS.test(normalized))
+      topLayerBearingCSS.test(normalized) ||
+      crossTreeNamedPropertyCSS.test(normalized))
   ) {
     throw new Error('Sandbox stylesheet contains a document-global rule');
   }
-  validateParsedCompartmentRules(parsed.cssRules, policy);
+  validateParsedCompartmentRules(
+    parsed.cssRules,
+    policy,
+    compiledScopeNames(parsed.cssRules),
+  );
   return css;
 }
 
@@ -848,11 +932,51 @@ export default class RealmSandboxService extends Service {
     return Boolean(getOpaqueRealmCardState(card));
   }
 
+  async validateCodeRef(
+    card: BaseDef,
+    ref: CodeRef,
+  ): Promise<ResolvedCodeRef | undefined> {
+    let state = getOpaqueRealmCardState(card);
+    if (!state) {
+      return undefined;
+    }
+    if (!isResolvedCodeRef(ref)) {
+      return undefined;
+    }
+    try {
+      let moduleIdentifier = String(ref.module);
+      if (moduleIdentifier.startsWith('.')) {
+        let referenceBase = state.document.data.id;
+        if (!referenceBase) {
+          return undefined;
+        }
+        moduleIdentifier = new URL(
+          moduleIdentifier,
+          this.network.virtualNetwork.toURL(referenceBase),
+        ).href;
+      }
+      let resolvedRef = {
+        module: rri(moduleIdentifier),
+        name: ref.name,
+      } satisfies ResolvedCodeRef;
+      return (await this.compartmentRuntimeFor(state.principal).hasModuleExport(
+        moduleIdentifier,
+        ref.name,
+      ))
+        ? resolvedRef
+        : undefined;
+    } catch (error) {
+      this.recordCompartmentError(error);
+      return undefined;
+    }
+  }
+
   // Explicit inert-data adapters for runtime-common's client-side search
   // matcher. They replace constructor/field introspection for opaque records;
   // ordinary CardDefs return undefined and keep using card-api.
   opaqueCardIsInstanceOf(card: BaseDef, ref: CodeRef): boolean | undefined {
     let state = getOpaqueRealmCardState(card);
+    let typeState = getOpaqueRealmCardTypeState(card);
     if (
       !state ||
       !isResolvedCodeRef(state.typeRef) ||
@@ -868,7 +992,17 @@ export default class RealmSandboxService extends Service {
       ref.module,
       this.network.virtualNetwork,
     );
-    return state.typeRef.name === ref.name && actualModule === expectedModule;
+    if (state.typeRef.name === ref.name && actualModule === expectedModule) {
+      return true;
+    }
+    return Boolean(
+      typeState?.ancestorTypes.some(
+        (ancestor) =>
+          ancestor.name === ref.name &&
+          canonicalModuleKey(ancestor.module, this.network.virtualNetwork) ===
+            expectedModule,
+      ),
+    );
   }
 
   resolveOpaqueQueryablePath(
@@ -961,6 +1095,7 @@ export default class RealmSandboxService extends Service {
     field?: Field,
     opts?: { componentCodeRef?: CodeRef },
   ): BoxComponent {
+    this.consumeOpaqueMetadataRevision(card);
     if (!field) {
       let delegatedFor = (
         card as BaseDef & {
@@ -982,6 +1117,12 @@ export default class RealmSandboxService extends Service {
       }
     }
     return card.constructor.getComponent(card, field, opts);
+  }
+
+  isOpaqueField(card: BaseDef): boolean {
+    this.consumeOpaqueMetadataRevision(card);
+    let kind = getOpaqueRealmCardTypeState(card)?.definitionKind;
+    return kind === 'field' || kind === 'file';
   }
 
   shouldUseOpaqueCard(
@@ -1151,6 +1292,11 @@ export default class RealmSandboxService extends Service {
       enumerable: false,
       value: new URL(resource.meta.realmURL ?? principal),
     });
+    // Keep the value crossing the render boundary JSON-shaped while giving
+    // Glimmer a stable, field-granular invalidation source. The proxy does not
+    // expose the CardDef or Store; it only makes updates to this opaque
+    // projection visible to a mounted SES template without replacing its DOM.
+    snapshot = new TrackedObject(snapshot);
     let key = `${moduleIdentifier}|${typeName}`;
     let api = await this.cardService.getAPI();
     let OpaqueCard = this.opaqueCardTypes.get(key);
@@ -1163,6 +1309,7 @@ export default class RealmSandboxService extends Service {
         moduleIdentifier,
         typeName,
       );
+      let definitionKind = metadata?.definitionKind ?? 'card';
       let displayName = metadata?.displayName ?? typeName;
       let headerColor = this.safeHeaderColor(metadata?.headerColor);
       let hasCustomEditTemplate = metadata?.hasCustomEditTemplate === true;
@@ -1178,6 +1325,8 @@ export default class RealmSandboxService extends Service {
       trustedFieldTypes.cardInfo = api.CardInfoField;
       typeState = {
         typeRef: resolvedTypeRef,
+        definitionKind,
+        ancestorTypes: metadata?.ancestorTypes ?? [],
         displayName,
         fields: Object.freeze({ ...fieldMetadata }),
         hasCustomEditTemplate,
@@ -1186,10 +1335,21 @@ export default class RealmSandboxService extends Service {
         headerColor,
         prefersWideFormat,
         icon:
-          (await this.resolveTrustedIcon(metadata?.icon)) ?? api.CardDef.icon,
+          (await this.resolveTrustedIcon(metadata?.icon)) ??
+          (definitionKind === 'card'
+            ? api.CardDef.icon
+            : definitionKind === 'file'
+              ? api.FileDef.icon
+              : api.FieldDef.icon),
       };
       let mutableTypeState = typeState;
-      OpaqueCard = class OpaqueRealmCard extends api.CardDef {
+      let OpaqueBase =
+        definitionKind === 'card'
+          ? api.CardDef
+          : definitionKind === 'file'
+            ? api.FileDef
+            : api.FieldDef;
+      let OpaqueDefinition = class OpaqueRealmCard extends OpaqueBase {
         static get displayName() {
           return mutableTypeState.displayName;
         }
@@ -1222,10 +1382,78 @@ export default class RealmSandboxService extends Service {
           return new URL(state.document.data.meta.realmURL ?? state.principal);
         }
       };
+      for (let [fieldName, metadata] of Object.entries(fieldMetadata)) {
+        let fieldType = trustedFieldTypes[fieldName];
+        if (!fieldType) {
+          continue;
+        }
+        let initializer = () => {
+          let useFieldType = (factory: (type: typeof BaseDef) => unknown) =>
+            factory(fieldType);
+          switch (metadata.kind) {
+            case 'contains':
+              return useFieldType(
+                api.contains as unknown as (type: typeof BaseDef) => unknown,
+              );
+            case 'containsMany':
+              return useFieldType(
+                api.containsMany as unknown as (
+                  type: typeof BaseDef,
+                ) => unknown,
+              );
+            case 'linksTo':
+              return useFieldType(
+                api.linksTo as unknown as (type: typeof BaseDef) => unknown,
+              );
+            case 'linksToMany':
+              return useFieldType(
+                api.linksToMany as unknown as (type: typeof BaseDef) => unknown,
+              );
+          }
+        };
+        let descriptor = (
+          api.field as unknown as (
+            target: BaseDef,
+            key: string,
+            descriptor: { initializer: () => unknown },
+          ) => PropertyDescriptor
+        )(OpaqueDefinition.prototype as BaseDef, fieldName, { initializer });
+        Object.defineProperty(
+          OpaqueDefinition.prototype,
+          fieldName,
+          descriptor,
+        );
+      }
+      OpaqueCard = OpaqueDefinition as unknown as typeof BaseDef;
+      this.network.loaderService.loader.registerIdentity(OpaqueCard, {
+        module: moduleIdentifier,
+        name: typeName,
+      });
       Object.defineProperty(OpaqueCard, 'icon', {
         configurable: true,
         get: () => mutableTypeState.icon,
       });
+      if (definitionKind !== 'card') {
+        let TrustedBase =
+          definitionKind === 'file' ? api.FileDef : api.FieldDef;
+        for (let format of [
+          'isolated',
+          'embedded',
+          'fitted',
+          'atom',
+          'edit',
+          'head',
+          'markdown',
+        ]) {
+          Object.defineProperty(OpaqueCard, format, {
+            configurable: true,
+            get: () =>
+              mutableTypeState.authoredTemplateFormats?.includes(format)
+                ? RealmSandboxDelegatedRender
+                : Reflect.get(TrustedBase, format),
+          });
+        }
+      }
       Object.defineProperty(OpaqueCard, opaqueRealmCardTypeState, {
         configurable: false,
         enumerable: false,
@@ -1254,10 +1482,10 @@ export default class RealmSandboxService extends Service {
     Object.defineProperty(snapshot, 'constructor', {
       configurable: true,
       enumerable: false,
-      value: Object.freeze({
-        displayName: OpaqueCard.displayName,
-        icon: OpaqueCard.icon,
-      }),
+      value: this.opaquePresentationConstructor(
+        OpaqueCard.displayName,
+        OpaqueCard.icon,
+      ),
     });
     let theme = await this.themeFor(resource, relativeURL, document);
     let card = new (OpaqueCard as typeof api.CardDef)({
@@ -1295,33 +1523,42 @@ export default class RealmSandboxService extends Service {
       api.setCardFieldValue(card, fieldName, value);
     };
     Object.defineProperty(card, opaqueRealmCardState, { value: state });
-    Object.defineProperty(card, delegatedCardRenderComponent, {
-      configurable: false,
-      enumerable: false,
-      value: realmSandboxDelegatedCardComponent(card),
-    });
-    let delegatedComponents = new Map<string, BoxComponent>();
-    Object.defineProperty(card, delegatedCardRenderComponentFor, {
-      configurable: false,
-      enumerable: false,
-      value: (componentCodeRef?: CodeRef) => {
-        let key = componentCodeRef ? JSON.stringify(componentCodeRef) : '';
-        let component = delegatedComponents.get(key);
-        if (!component) {
-          component = realmSandboxDelegatedCardComponent(
-            card,
-            componentCodeRef,
-          );
-          delegatedComponents.set(key, component);
-        }
-        return component;
-      },
-    });
+    if (typeState?.definitionKind === 'card') {
+      Object.defineProperty(card, delegatedCardRenderComponent, {
+        configurable: false,
+        enumerable: false,
+        value: realmSandboxDelegatedCardComponent(card),
+      });
+      let delegatedComponents = new Map<string, BoxComponent>();
+      Object.defineProperty(card, delegatedCardRenderComponentFor, {
+        configurable: false,
+        enumerable: false,
+        value: (componentCodeRef?: CodeRef) => {
+          let key = componentCodeRef ? JSON.stringify(componentCodeRef) : '';
+          let component = delegatedComponents.get(key);
+          if (!component) {
+            component = realmSandboxDelegatedCardComponent(
+              card,
+              componentCodeRef,
+            );
+            delegatedComponents.set(key, component);
+          }
+          return component;
+        },
+      });
+    }
     this.trustedFieldTypesByCard.set(card, trustedFieldTypes ?? {});
     this.fieldMetadataByCard.set(card, fieldMetadata ?? {});
     let proxies = new WeakMap<object, object>();
     let proxyTargets = new WeakMap<object, object>();
-    let observableValue = (input: unknown): unknown => {
+    let updateSnapshot = (fieldName: string, value: unknown) => {
+      // `snapshot` is the stable tracked JSON projection consumed by a
+      // mounted SES template. Dirty the affected top-level field instead of
+      // replacing the projection: replacement would strand the live
+      // component's @model argument on an obsolete object.
+      state.snapshot[fieldName] = value;
+    };
+    let observableValue = (input: unknown, fieldName: string): unknown => {
       if (
         input === null ||
         typeof input !== 'object' ||
@@ -1337,7 +1574,7 @@ export default class RealmSandboxService extends Service {
       }
       let proxy = new Proxy(input, {
         get: (target, property) =>
-          observableValue(Reflect.get(target, property)),
+          observableValue(Reflect.get(target, property), fieldName),
         set: (target, property, value) => {
           let raw =
             value !== null && typeof value === 'object'
@@ -1346,6 +1583,7 @@ export default class RealmSandboxService extends Service {
           let changed = Reflect.get(target, property) !== raw;
           let result = Reflect.set(target, property, raw);
           if (changed && result) {
+            updateSnapshot(fieldName, state.snapshot[fieldName]);
             this.bumpOpaqueData(card);
           }
           return result;
@@ -1354,6 +1592,7 @@ export default class RealmSandboxService extends Service {
           let existed = Reflect.has(target, property);
           let result = Reflect.deleteProperty(target, property);
           if (existed && result) {
+            updateSnapshot(fieldName, state.snapshot[fieldName]);
             this.bumpOpaqueData(card);
           }
           return result;
@@ -1373,14 +1612,34 @@ export default class RealmSandboxService extends Service {
         trustedFieldTypes?.[name],
         resolveTrustedRelationship,
       );
+      let schemaDescriptor: PropertyDescriptor | undefined;
+      let prototype: object | null = Object.getPrototypeOf(card);
+      while (prototype && !schemaDescriptor) {
+        schemaDescriptor = Object.getOwnPropertyDescriptor(prototype, name);
+        prototype = Object.getPrototypeOf(prototype) as object | null;
+      }
+      // Base serialization reads declared fields through their schema
+      // descriptor/data bucket. Seed that trusted bucket while retaining the
+      // inert own-property facade used by sandbox templates.
+      let seedSchemaField = Boolean(
+        fieldMetadata?.[name] &&
+        trustedFieldTypes?.[name] &&
+        primitive in trustedFieldTypes[name],
+      );
+      if (seedSchemaField) {
+        schemaDescriptor?.set?.call(card, current);
+      }
       Object.defineProperty(card, name, {
-        get: () => observableValue(current),
+        get: () => observableValue(current, name),
         set: (next) => {
           current =
             next !== null && typeof next === 'object'
               ? (proxyTargets.get(next) ?? next)
               : next;
-          state.snapshot[name] = current;
+          if (seedSchemaField) {
+            schemaDescriptor?.set?.call(card, current);
+          }
+          updateSnapshot(name, current);
           this.bumpOpaqueData(card);
         },
         enumerable: true,
@@ -1388,6 +1647,49 @@ export default class RealmSandboxService extends Service {
       });
     }
     return card;
+  }
+
+  async invokeOpaqueCardMethod(
+    card: BaseDef,
+    methodName: string,
+    args: unknown[] = [],
+  ): Promise<unknown> {
+    let state = getOpaqueRealmCardState(card);
+    if (!state) {
+      throw new Error('Cannot invoke a sandbox method on a trusted card');
+    }
+    if (!isResolvedCodeRef(state.typeRef)) {
+      throw new Error('Cannot invoke a sandbox method without a resolved type');
+    }
+    let moduleIdentifier = String(state.typeRef.module);
+    let runtime = this.compartmentRuntimeFor(state.principal);
+    let result: SandboxCardMethodResult = await runtime.invokeCardMethod(
+      moduleIdentifier,
+      String(state.typeRef.name),
+      state.snapshot,
+      methodName,
+      args,
+    );
+    if (!result.card) {
+      return result.returnValue;
+    }
+    let resource: LooseCardResource = {
+      type: 'card',
+      attributes: result.card.attributes,
+      meta: {
+        adoptsFrom: {
+          module: rri(result.card.type.module),
+          name: result.card.type.name,
+        },
+      },
+    };
+    return this.createOpaqueCard(
+      resource,
+      new URL(state.principal),
+      state.document,
+      undefined,
+      state.resolveTrustedRelationship,
+    );
   }
 
   async updateOpaqueCardFromDocument(
@@ -1443,8 +1745,20 @@ export default class RealmSandboxService extends Service {
       enumerable: false,
       value: new URL(document.data.meta.realmURL ?? state.principal),
     });
+    // The rendered SES island receives this object as @model. Preserve that
+    // boundary identity across server/index reconciliation so a data update
+    // can rerender the mounted island in place instead of leaving its args
+    // pointed at the previous snapshot generation.
+    for (let fieldName of Object.keys(previousSnapshot)) {
+      if (!(fieldName in nextSnapshot)) {
+        delete previousSnapshot[fieldName];
+      }
+    }
+    for (let [fieldName, value] of Object.entries(nextSnapshot)) {
+      previousSnapshot[fieldName] = value;
+    }
     state.document = structuredClone(document);
-    state.snapshot = nextSnapshot;
+    state.snapshot = previousSnapshot;
     this.syncOpaqueCardPresentation(card, state);
 
     let api = await this.cardService.getAPI();
@@ -1479,6 +1793,9 @@ export default class RealmSandboxService extends Service {
         },
       );
     }
+    // Opaque field setters update this same tracked projection. Reconciliation
+    // must likewise keep the mounted island's existing @model object.
+    state.snapshot = previousSnapshot;
     this.bumpOpaqueData(card);
     return card;
   }
@@ -1490,6 +1807,8 @@ export default class RealmSandboxService extends Service {
       useBaseTemplate?: boolean;
       codePreviewSandbox?: CodePreviewSandbox;
       codeRef?: CodeRef;
+      markerBacked?: boolean;
+      stableEnvelope?: boolean;
     } = {},
   ): RealmSandboxRender | undefined {
     this.consumeOpaqueMetadataRevision(card);
@@ -1573,13 +1892,15 @@ export default class RealmSandboxService extends Service {
       envelopes = new Map();
       this.renderEnvelopes.set(card, envelopes);
     }
+    let markerBacked =
+      options.markerBacked === true || options.codePreviewSandbox != null;
     let next = {
       component: inertTemplate.component,
       model,
       fields,
       styles: inertTemplate.styles,
       principal,
-      markerBacked: options.codePreviewSandbox != null,
+      markerBacked,
       theme: opaqueState.presentation.theme,
       ...(options.codePreviewSandbox
         ? {
@@ -1588,6 +1909,12 @@ export default class RealmSandboxService extends Service {
           }
         : {}),
     };
+    if (options.stableEnvelope === false) {
+      // Head format is rendered only into a hidden, inert metadata extractor.
+      // It needs the latest snapshot synchronously and has no user-visible DOM
+      // whose identity is worth preserving across generations.
+      return new StableRealmSandboxRender(next);
+    }
     let envelope = envelopes.get(envelopeKey) as
       | StableRealmSandboxRender
       | undefined;
@@ -2422,6 +2749,22 @@ export default class RealmSandboxService extends Service {
     return key ? this.interactiveCodePreviews.get(key) : undefined;
   }
 
+  codePreviewAppliesToCard(
+    codePreviewSandbox: CodePreviewSandbox | undefined,
+    card: BaseDef,
+  ): boolean {
+    let sourceURL = codePreviewSandbox?.sourceURL;
+    let cardModuleKey = this.interactiveCodePreviewKey(card);
+    if (!sourceURL || !cardModuleKey || !hasExecutableExtension(sourceURL)) {
+      return false;
+    }
+    try {
+      return codePreviewModuleKey(sourceURL) === cardModuleKey;
+    } catch {
+      return false;
+    }
+  }
+
   private interactiveCodePreviewKey(card: BaseDef): string | undefined {
     let ref = getOpaqueRealmCardState(card)?.typeRef;
     if (!ref || !('module' in ref)) {
@@ -3158,6 +3501,19 @@ export default class RealmSandboxService extends Service {
       if (!metadata) {
         continue;
       }
+      if (metadata.definitionKind !== typeState.definitionKind) {
+        // CardDef versus FieldDef determines the trusted host wrapper and the
+        // opaque record's Base superclass. That structural identity cannot be
+        // hot-swapped in place. Preserve the last-known-good record until the
+        // Store rematerializes it instead of publishing contradictory inert
+        // metadata against the old class.
+        this.recordCompartmentError(
+          new Error(
+            `Sandbox definition kind changed from ${typeState.definitionKind} to ${metadata.definitionKind}`,
+          ),
+        );
+        continue;
+      }
       let fields = metadata.fields ?? {};
       let trustedFieldTypes = await this.resolveTrustedFieldTypes(fields);
       let nextIcon =
@@ -3180,6 +3536,10 @@ export default class RealmSandboxService extends Service {
       let fieldsChanged =
         !sameFieldMetadata(previousFieldMetadata, fields) ||
         !sameFieldTypes(previousFieldTypes, trustedFieldTypes);
+      let ancestryChanged = !sameTrustedExportIdentities(
+        typeState.ancestorTypes,
+        metadata.ancestorTypes,
+      );
       let presentationChanged =
         typeState.displayName !== nextDisplayName ||
         typeState.hasCustomEditTemplate !== nextHasCustomEditTemplate ||
@@ -3191,9 +3551,10 @@ export default class RealmSandboxService extends Service {
         typeState.headerColor !== nextHeaderColor ||
         typeState.prefersWideFormat !== nextPrefersWideFormat ||
         typeState.icon !== nextIcon;
-      if (!fieldsChanged && !presentationChanged) {
+      if (!fieldsChanged && !ancestryChanged && !presentationChanged) {
         continue;
       }
+      typeState.ancestorTypes = metadata.ancestorTypes;
       typeState.displayName = nextDisplayName;
       typeState.fields = Object.freeze({ ...fields });
       typeState.hasCustomEditTemplate = nextHasCustomEditTemplate;
@@ -4201,8 +4562,11 @@ export default class RealmSandboxService extends Service {
           trustedFieldTypes[name],
           format,
           fieldMetadata[name]?.kind,
+          fieldMetadata[name]?.displayName,
           getOpaqueRealmCardState(card)?.setField,
           () => this.relationshipContextFor(card),
+          (ref) => this.validateCodeRef(card, ref),
+          (render) => this.subscribeToOpaqueCardData(card, render),
         );
       }
     }
@@ -4218,6 +4582,20 @@ export default class RealmSandboxService extends Service {
       let nestedComponents: Record<string, BaseDefComponent> = {};
       let setCardInfoField = (name: string, value: unknown) => {
         let state = getOpaqueRealmCardState(card);
+        let nestedField = cardInfoFieldType
+          ? getField(cardInfoFieldType, name)
+          : undefined;
+        if (
+          nestedField?.fieldType === 'linksTo' ||
+          nestedField?.fieldType === 'linksToMany'
+        ) {
+          this.setOpaqueRelationshipPath(card, `cardInfo.${name}`, value);
+          let cardID = getOpaqueRealmCardState(card)?.snapshot.id;
+          if (typeof cardID === 'string') {
+            this.relationshipContextFor(card)?.cardContext?.store.save(cardID);
+          }
+          return;
+        }
         let current = snapshot().cardInfo;
         let next = {
           ...(typeof current === 'object' && current !== null
@@ -4225,33 +4603,6 @@ export default class RealmSandboxService extends Service {
             : {}),
           [name]: value,
         };
-        if (state) {
-          let nestedField = cardInfoFieldType
-            ? getField(cardInfoFieldType, name)
-            : undefined;
-          if (nestedField?.fieldType === 'linksTo') {
-            let id =
-              value && typeof value === 'object' && 'id' in value
-                ? (value as { id?: unknown }).id
-                : undefined;
-            let reference =
-              typeof id === 'string'
-                ? (relativeReference(
-                    this.network.virtualNetwork.toURL(rri(id)),
-                    this.network.virtualNetwork.toURL(
-                      rri(state.document.data.id ?? state.principal),
-                    ),
-                    new URL(
-                      state.document.data.meta.realmURL ?? state.principal,
-                    ),
-                  ) ?? id)
-                : null;
-            state.document.data.relationships ??= {};
-            state.document.data.relationships[`cardInfo.${name}`] = {
-              links: { self: reference },
-            };
-          }
-        }
         state?.setField?.('cardInfo', next);
       };
       for (let name of [
@@ -4275,8 +4626,11 @@ export default class RealmSandboxService extends Service {
           nestedField?.card,
           format,
           nestedField?.fieldType,
+          undefined,
           setCardInfoField,
           () => this.relationshipContextFor(card),
+          (ref) => this.validateCodeRef(card, ref),
+          (render) => this.subscribeToOpaqueCardData(card, render),
         );
         contextualFields[`cardInfo.${name}`] = nestedComponents[name]!;
       }
@@ -4429,6 +4783,138 @@ export default class RealmSandboxService extends Service {
     return typeState;
   }
 
+  introspectOpaqueCardFields(
+    value: BaseDef | typeof BaseDef,
+  ): Readonly<Record<string, SandboxCardFieldMetadata>> | undefined {
+    return this.introspectOpaqueCardType(value)?.fields;
+  }
+
+  opaqueRelationshipPath(card: BaseDef, fieldName: string): string | undefined {
+    let state = getOpaqueRealmCardState(card);
+    if (!state) {
+      return undefined;
+    }
+    return Object.keys(state.document.data.relationships ?? {}).find((path) => {
+      let segments = path.split('.');
+      return path === fieldName || segments[segments.length - 1] === fieldName;
+    });
+  }
+
+  // Relationship editors and tools cannot mutate an authored card by walking
+  // through its opaque record. This is the explicit write boundary: update the
+  // inert snapshot used by sandbox rendering and the JSON:API relationship
+  // document that Store.save() serializes. Trusted cards return false so the
+  // caller can use the ordinary Card API assignment path.
+  setOpaqueRelationshipPath(
+    card: BaseDef,
+    path: string,
+    value: unknown,
+  ): boolean {
+    let state = getOpaqueRealmCardState(card);
+    if (!state) {
+      return false;
+    }
+
+    let project = (item: unknown): unknown => {
+      if (
+        item !== null &&
+        typeof item === 'object' &&
+        typeof (item as { id?: unknown }).id === 'string'
+      ) {
+        return { id: (item as { id: string }).id };
+      }
+      return item;
+    };
+    let projection = Array.isArray(value) ? value.map(project) : project(value);
+    this.setSnapshotPath(state.snapshot, path, projection);
+
+    let root = path.split('.')[0];
+    if (root) {
+      state.setField?.(root, state.snapshot[root]);
+    }
+    this.bumpOpaqueData(card);
+
+    let relationshipReference = (item: unknown): string | null => {
+      let id =
+        item !== null &&
+        typeof item === 'object' &&
+        typeof (item as { id?: unknown }).id === 'string'
+          ? (item as { id: string }).id
+          : undefined;
+      if (!id) {
+        return null;
+      }
+      return (
+        relativeReference(
+          this.network.virtualNetwork.toURL(rri(id)),
+          this.network.virtualNetwork.toURL(
+            rri(state.document.data.id ?? state.principal),
+          ),
+          new URL(state.document.data.meta.realmURL ?? state.principal),
+        ) ?? id
+      );
+    };
+
+    state.document.data.relationships ??= {};
+    for (let key of Object.keys(state.document.data.relationships)) {
+      if (key === path || key.startsWith(`${path}.`)) {
+        delete state.document.data.relationships[key];
+      }
+    }
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => {
+        state.document.data.relationships![`${path}.${index}`] = {
+          links: { self: relationshipReference(item) },
+        };
+      });
+    } else {
+      state.document.data.relationships[path] = {
+        links: { self: relationshipReference(value) },
+      };
+    }
+    return true;
+  }
+
+  // Code-mode schema UI needs the inheritance chain without importing a user
+  // constructor into the Host. Resolve one authored type through the same SES
+  // metadata boundary used for records and return inert data only. Trusted
+  // Base/catalog ancestors intentionally return undefined so callers can use
+  // their ordinary shared loader identity.
+  async introspectOpaqueCardTypeRef(
+    ref: CodeRef,
+  ): Promise<Readonly<OpaqueRealmCardTypeState> | undefined> {
+    if (!isResolvedCodeRef(ref)) {
+      return undefined;
+    }
+    let moduleIdentifier = this.network.virtualNetwork.toURL(ref.module).href;
+    if (isTrustedHostRealmModule(moduleIdentifier)) {
+      return undefined;
+    }
+    let metadata = await this.loadCardTypeMetadata(
+      this.principalForModule(moduleIdentifier),
+      moduleIdentifier,
+      String(ref.name),
+    );
+    if (!metadata) {
+      return undefined;
+    }
+    return {
+      typeRef: {
+        module: rri(moduleIdentifier),
+        name: String(ref.name),
+      },
+      definitionKind: metadata.definitionKind,
+      ancestorTypes: metadata.ancestorTypes,
+      displayName: metadata.displayName ?? String(ref.name),
+      fields: metadata.fields,
+      hasCustomEditTemplate: metadata.hasCustomEditTemplate,
+      hasCustomIsolatedTemplate: metadata.hasCustomIsolatedTemplate,
+      authoredTemplateFormats: metadata.authoredTemplateFormats,
+      headerColor: this.safeHeaderColor(metadata.headerColor),
+      prefersWideFormat: metadata.prefersWideFormat,
+    };
+  }
+
   private consumeOpaqueMetadataRevision(card: BaseDef) {
     this.introspectOpaqueCardType(card);
   }
@@ -4477,14 +4963,24 @@ export default class RealmSandboxService extends Service {
     Object.defineProperty(state.snapshot, 'constructor', {
       configurable: true,
       enumerable: false,
-      value: Object.freeze({
-        displayName: typeState.displayName,
-        icon,
-      }),
+      value: this.opaquePresentationConstructor(typeState.displayName, icon),
     });
     state.presentation.displayName = typeState.displayName;
     state.presentation.headerColor = typeState.headerColor;
     state.presentation.prefersWideFormat = typeState.prefersWideFormat;
+  }
+
+  private opaquePresentationConstructor(displayName: string, icon: unknown) {
+    // CardContainer and other trusted presentation components use these Base
+    // statics. Expose only their inert results to authored templates; never
+    // hand the opaque CardDef constructor (and its Host methods) across the
+    // render boundary.
+    return Object.freeze({
+      displayName,
+      icon,
+      getDisplayName: () => displayName,
+      getIconComponent: () => icon,
+    });
   }
 
   private snapshotFromResource(
@@ -4502,16 +4998,9 @@ export default class RealmSandboxService extends Service {
         snapshot[name] = cloned;
       }
     }
-    let relationshipValues: Record<string, unknown> = {};
     for (let [name, relationship] of Object.entries(
       resource.relationships ?? {},
     )) {
-      let segments = name.split('.');
-      let index =
-        segments.length === 2 && /^\d+$/.test(segments[1]!)
-          ? Number(segments[1])
-          : undefined;
-      let fieldName = index === undefined ? name : segments[0]!;
       let projection: unknown;
       if (Array.isArray(relationship)) {
         projection = relationship
@@ -4529,22 +5018,53 @@ export default class RealmSandboxService extends Service {
       if (projection === undefined) {
         continue;
       }
-      if (index === undefined) {
-        relationshipValues[fieldName] = projection;
-      } else {
-        let values = relationshipValues[fieldName];
-        let indexedValues: unknown[];
-        if (!Array.isArray(values)) {
-          indexedValues = [];
-          relationshipValues[fieldName] = indexedValues;
-        } else {
-          indexedValues = values;
-        }
-        indexedValues[index] = projection;
-      }
+      this.setSnapshotPath(snapshot, name, projection);
     }
-    Object.assign(snapshot, relationshipValues);
     return snapshot;
+  }
+
+  private setSnapshotPath(
+    snapshot: Record<string, unknown>,
+    path: string,
+    value: unknown,
+  ) {
+    let segments = path.split('.').filter(Boolean);
+    if (
+      segments.length === 0 ||
+      segments.some((segment) =>
+        ['__proto__', 'prototype', 'constructor'].includes(segment),
+      )
+    ) {
+      return;
+    }
+    let current: Record<string, unknown> | unknown[] = snapshot;
+    for (let index = 0; index < segments.length - 1; index++) {
+      let segment = segments[index]!;
+      let nextIsIndex = /^\d+$/.test(segments[index + 1]!);
+      let existing = Array.isArray(current)
+        ? current[Number(segment)]
+        : current[segment];
+      if (
+        existing === null ||
+        typeof existing !== 'object' ||
+        (nextIsIndex && !Array.isArray(existing)) ||
+        (!nextIsIndex && Array.isArray(existing))
+      ) {
+        existing = nextIsIndex ? [] : {};
+        if (Array.isArray(current)) {
+          current[Number(segment)] = existing;
+        } else {
+          current[segment] = existing;
+        }
+      }
+      current = existing as Record<string, unknown> | unknown[];
+    }
+    let leaf = segments[segments.length - 1]!;
+    if (Array.isArray(current)) {
+      current[Number(leaf)] = value;
+    } else {
+      current[leaf] = value;
+    }
   }
 
   private hydrateTrustedRelationship(

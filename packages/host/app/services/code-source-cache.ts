@@ -110,10 +110,12 @@ export default class CodeSourceCacheService extends Service {
         await response.body?.cancel();
         return undefined;
       }
+      let buffer = await response.arrayBuffer();
       let source = {
-        content: await response.text(),
+        content: new TextDecoder().decode(buffer),
         lastModified: response.headers.get('last-modified') ?? undefined,
         realmURL,
+        size: buffer.byteLength,
       };
       let snapshot = this.remember(response.url, source);
       if (response.url !== requestedURL.href) {

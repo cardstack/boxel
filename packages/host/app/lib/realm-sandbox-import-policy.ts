@@ -131,6 +131,27 @@ export function trustedSandboxImportIdentity(
     return moduleIdentifier;
   }
 
+  // Package spellings are an explicit part of the sandbox ABI. Canonicalize
+  // them before consulting a realm-relative import map: test realms and
+  // workspace import maps may otherwise resolve `@cardstack/base/*` beneath
+  // the user realm, turning a trusted standard-library import into a remote
+  // fetch (or, worse, a realm-local lookalike).
+  if (moduleIdentifier.startsWith('@cardstack/base/')) {
+    return new URL(
+      moduleIdentifier.slice('@cardstack/base/'.length),
+      withTrailingSlash(ENV.resolvedBaseRealmURL),
+    ).href;
+  }
+  if (
+    ENV.resolvedCatalogRealmURL &&
+    moduleIdentifier.startsWith('@cardstack/catalog/')
+  ) {
+    return new URL(
+      moduleIdentifier.slice('@cardstack/catalog/'.length),
+      withTrailingSlash(ENV.resolvedCatalogRealmURL),
+    ).href;
+  }
+
   let resolved: string;
   try {
     resolved = resolveImport(moduleIdentifier);

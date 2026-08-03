@@ -9,6 +9,7 @@ import {
   getAncestor,
   SupportedMimeType,
   isResolvedCodeRef,
+  rri,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import { isCodeRef, type CodeRef } from '@cardstack/runtime-common/code-ref';
@@ -24,6 +25,7 @@ import { FieldPathParser } from '@cardstack/host/lib/field-path-parser';
 import {
   identifyRealmCard,
   type OpaqueRealmCardFieldMetadata,
+  type OpaqueRealmCardTypeState,
 } from '@cardstack/host/lib/realm-sandbox-boundary';
 import type CardService from '@cardstack/host/services/card-service';
 import type RealmSandboxService from '@cardstack/host/services/realm-sandbox';
@@ -289,6 +291,9 @@ export default class CardTypeService extends Service {
     stack: (typeof BaseDef)[] = [],
   ): Promise<Type | CodeRefType> {
     let opaqueType = this.realmSandbox.introspectOpaqueCardType(card);
+    if (opaqueType) {
+      return this.toOpaqueType(opaqueType, loader);
+    }
     let maybeRef = identifyRealmCard(card);
     if (!maybeRef) {
       throw new Error(`cannot identify card ${card.name}`);
@@ -313,31 +318,26 @@ export default class CardTypeService extends Service {
       (await this.fetchModuleInfo(moduleURL));
 
     let superType: Type | CodeRefType | undefined;
-    let fieldTypes: FieldOfType[];
-    if (opaqueType) {
-      fieldTypes = await this.opaqueFieldTypes(opaqueType.fields, loader);
-    } else {
-      let api = await loader.import<typeof CardAPI>('@cardstack/base/card-api');
-      let { id: _remove, ...fields } = api.getFields(card, {
-        includeComputeds: true,
-      });
-      let superCard = getAncestor(card);
-      if (superCard && card !== superCard) {
-        superType = await this.toType(superCard, loader, [card, ...stack]);
-      }
-
-      fieldTypes = await Promise.all(
-        Object.entries(fields).map(
-          async ([name, field]: [string, Field<typeof BaseDef, any>]) => ({
-            name,
-            type: field.fieldType,
-            isComputed: field.computeVia != undefined,
-            isQueryField: field.queryDefinition != undefined,
-            card: await this.toType(field.card, loader, [card, ...stack]),
-          }),
-        ),
-      );
+    let api = await loader.import<typeof CardAPI>('@cardstack/base/card-api');
+    let { id: _remove, ...fields } = api.getFields(card, {
+      includeComputeds: true,
+    });
+    let superCard = getAncestor(card);
+    if (superCard && card !== superCard) {
+      superType = await this.toType(superCard, loader, [card, ...stack]);
     }
+
+    let fieldTypes = await Promise.all(
+      Object.entries(fields).map(
+        async ([name, field]: [string, Field<typeof BaseDef, any>]) => ({
+          name,
+          type: field.fieldType,
+          isComputed: field.computeVia != undefined,
+          isQueryField: field.queryDefinition != undefined,
+          card: await this.toType(field.card, loader, [card, ...stack]),
+        }),
+      ),
+    );
 
     let type: Type = {
       id,
@@ -353,27 +353,116 @@ export default class CardTypeService extends Service {
     return type;
   }
 
+  private async toOpaqueType(
+    opaqueType: Readonly<OpaqueRealmCardTypeState>,
+    loader: Loader,
+    stack: string[] = [],
+  ): Promise<Type | CodeRefType> {
+    let ref = opaqueType.typeRef;
+    let id = internalKeyFor(ref, undefined, this.network.virtualNetwork);
+    if (stack.includes(id)) {
+      return {
+        ...ref,
+        displayName: opaqueType.displayName,
+        localName: isResolvedCodeRef(ref) ? ref.name : opaqueType.displayName,
+      };
+    }
+    let cached = this.typeCache.get(id);
+    if (cached) {
+      return cached;
+    }
+    let moduleIdentifier = moduleFrom(ref);
+    let moduleURL = this.network.virtualNetwork.toURL(moduleIdentifier);
+    let moduleInfo =
+      this.moduleInfoCache.get(moduleURL.href) ??
+      (await this.fetchModuleInfo(moduleURL));
+
+    let superType: Type | CodeRefType | undefined;
+    let ancestor = opaqueType.ancestorTypes[0];
+    if (ancestor) {
+      let ancestorRef = {
+        module: rri(ancestor.module),
+        name: ancestor.name,
+      } satisfies CodeRef;
+      let opaqueAncestor =
+        await this.realmSandbox.introspectOpaqueCardTypeRef(ancestorRef);
+      if (opaqueAncestor) {
+        superType = await this.toOpaqueType(opaqueAncestor, loader, [
+          id,
+          ...stack,
+        ]);
+      } else {
+        let ancestorModule = await loader.import<Record<string, unknown>>(
+          ancestor.module,
+        );
+        let ancestorDefinition = ancestorModule[ancestor.name];
+        if (typeof ancestorDefinition === 'function') {
+          superType = await this.toType(
+            ancestorDefinition as typeof BaseDef,
+            loader,
+          );
+        }
+      }
+    }
+
+    let type: Type = {
+      id,
+      module: moduleIdentifier,
+      super: isCodeRefType(superType) ? undefined : superType,
+      displayName: opaqueType.displayName,
+      fields: await this.opaqueFieldTypes(opaqueType.fields, loader),
+      moduleInfo,
+      codeRef: ref,
+      localName: isResolvedCodeRef(ref) ? ref.name : opaqueType.displayName,
+    };
+    this.typeCache.set(id, type);
+    return type;
+  }
+
   private async opaqueFieldTypes(
     fields: Record<string, OpaqueRealmCardFieldMetadata>,
     loader: Loader,
   ): Promise<FieldOfType[]> {
     return Promise.all(
       Object.entries(fields).map(async ([name, field]) => {
-        let module = await loader.import<Record<string, unknown>>(
-          field.type.module,
-        );
-        let card = module[field.type.name];
-        if (typeof card !== 'function') {
-          throw new Error(
-            `cannot load field type ${field.type.name} from ${field.type.module}`,
+        let ref = {
+          module: rri(field.type.module),
+          name: field.type.name,
+        } satisfies CodeRef;
+        let opaqueFieldType =
+          await this.realmSandbox.introspectOpaqueCardTypeRef(ref);
+        let card: Type | CodeRefType;
+        if (opaqueFieldType) {
+          // A field row needs identity and presentation, not the referenced
+          // definition's entire schema. Keeping this as an inert leaf avoids
+          // recursively assembling mutually-referential authored types while
+          // still making the definition navigable in code mode.
+          card = {
+            ...ref,
+            displayName: opaqueFieldType.displayName,
+            localName: field.type.name,
+          };
+        } else {
+          // Only trusted Base/catalog definitions reach the ordinary loader.
+          // Authored field definitions are described through inert sandbox
+          // metadata above, including their own inheritance chain.
+          let module = await loader.import<Record<string, unknown>>(
+            field.type.module,
           );
+          let definition = module[field.type.name];
+          if (typeof definition !== 'function') {
+            throw new Error(
+              `cannot load field type ${field.type.name} from ${field.type.module}`,
+            );
+          }
+          card = await this.toType(definition as typeof BaseDef, loader);
         }
         return {
           name,
           type: field.kind,
           isComputed: false,
           isQueryField: false,
-          card: await this.toType(card as typeof BaseDef, loader),
+          card,
         };
       }),
     );

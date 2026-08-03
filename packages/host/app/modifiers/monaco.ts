@@ -53,6 +53,7 @@ export default class Monaco extends Modifier<Signature> {
   private waiterManager = createMonacoWaiterManager();
   private onDispose: (() => void) | undefined;
   private disposables: MonacoSDK.IDisposable[] = [];
+  private modelContentDisposable: MonacoSDK.IDisposable | undefined;
   private contentChanging:
     | ((text: string, origin: MonacoContentChangeOrigin) => void)
     | undefined;
@@ -81,7 +82,11 @@ export default class Monaco extends Modifier<Signature> {
     this.contentChanging = contentChanging;
     if (this.editor && this.model) {
       let contentIdentityChanged = contentIdentity !== this.lastContentIdentity;
-      if (language && language !== this.lastLanguage) {
+      if (
+        !contentIdentityChanged &&
+        language &&
+        language !== this.lastLanguage
+      ) {
         monacoSDK.editor.setModelLanguage(this.model, language);
       }
       if (
@@ -94,14 +99,36 @@ export default class Monaco extends Modifier<Signature> {
           Date.now() >=
             this.lastModified + this.monacoService.serverEchoDebounceMs)
       ) {
-        this.lastContent = content;
-        this.isApplyingExternalContent = true;
-        try {
-          this.model.setValue(content);
-        } finally {
-          this.isApplyingExternalContent = false;
+        if (contentIdentityChanged) {
+          // Keep the editor DOM mounted, but give each selected file a fresh
+          // Monaco text model. Contributions such as sticky scroll retain
+          // line geometry asynchronously; mutating one model from a long file
+          // into a shorter file can make those queued reads out of range.
+          let previousModel = this.model;
+          let nextModel = monacoSDK.editor.createModel(content, language);
+          this.modelContentDisposable?.dispose();
+          this.model = nextModel;
+          this.editor.setModel(nextModel);
+          this.bindModelContentListener(contentChanged);
+          if (
+            !previousModel.isDisposed() &&
+            !previousModel.isAttachedToEditor()
+          ) {
+            previousModel.dispose();
+          }
+          this.lastCursorPosition = undefined;
+          this.lastContent = content;
+          this.publishCurrentBufferAfterRender('external');
+        } else {
+          this.lastContent = content;
+          this.isApplyingExternalContent = true;
+          try {
+            this.model.setValue(content);
+          } finally {
+            this.isApplyingExternalContent = false;
+          }
+          this.publishCurrentBufferAfterRender('external');
         }
-        this.publishCurrentBufferAfterRender('external');
       }
       if (readOnly !== this.lastReadOnly) {
         this.editor.updateOptions({ readOnly });
@@ -196,6 +223,8 @@ export default class Monaco extends Modifier<Signature> {
         }
       }
       this.disposables.length = 0;
+      this.modelContentDisposable?.dispose();
+      this.modelContentDisposable = undefined;
       if (editor) {
         this.disposeEditorAfterInitialLayout(editor, model);
       }
@@ -209,17 +238,8 @@ export default class Monaco extends Modifier<Signature> {
     // CardRenderer is consuming that state.
     this.publishCurrentBufferAfterRender('initial');
 
+    this.bindModelContentListener(contentChanged);
     this.disposables.push(
-      this.model.onDidChangeContent(() => {
-        if (this.model) {
-          if (this.isApplyingExternalContent) {
-            this.publishCurrentBufferAfterRender('external');
-          } else {
-            this.contentChanging?.(this.model.getValue(), 'user');
-          }
-        }
-        this.onContentChanged.perform(contentChanged);
-      }),
       this.editor.onDidChangeCursorSelection((event) => {
         if (
           this.editor &&
@@ -235,6 +255,20 @@ export default class Monaco extends Modifier<Signature> {
         }
       }),
     );
+  }
+
+  private bindModelContentListener(contentChanged: (text: string) => void) {
+    this.modelContentDisposable?.dispose();
+    this.modelContentDisposable = this.model?.onDidChangeContent(() => {
+      if (this.model) {
+        if (this.isApplyingExternalContent) {
+          this.publishCurrentBufferAfterRender('external');
+        } else {
+          this.contentChanging?.(this.model.getValue(), 'user');
+        }
+      }
+      this.onContentChanged.perform(contentChanged);
+    });
   }
 
   private publishCurrentBufferAfterRender(origin: MonacoContentChangeOrigin) {
@@ -274,7 +308,9 @@ export default class Monaco extends Modifier<Signature> {
         position = new MonacoSDK.Position(1, 1);
       }
       if (!this.lastCursorPosition) {
-        this.monacoService.updateCursorPosition(position);
+        this.monacoService.updateCursorPosition(
+          this.model?.validatePosition(position) ?? position,
+        );
       }
     },
   );

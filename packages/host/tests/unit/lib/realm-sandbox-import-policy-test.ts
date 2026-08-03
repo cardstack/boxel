@@ -18,6 +18,17 @@ module('Unit | realm sandbox import policy', function () {
       baseModule,
     );
     assert.true(isBaseRealmModule(baseModule));
+    assert.strictEqual(
+      trustedSandboxImportIdentity(
+        '@cardstack/base/rich-markdown',
+        () => 'https://user-realm.example/@cardstack/base/rich-markdown',
+      ),
+      new URL(
+        'rich-markdown',
+        `${ENV.resolvedBaseRealmURL.replace(/\/$/, '')}/`,
+      ).href,
+      'package spelling is canonicalized before a realm-local import map',
+    );
   });
 
   test('rejects traversal spellings before they can mint host authority', function (assert) {

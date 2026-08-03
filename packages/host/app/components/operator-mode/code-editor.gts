@@ -398,8 +398,12 @@ export default class CodeEditor extends Component<Signature> {
       return;
     }
 
-    // intentionally not awaiting this
-    this.syncWithStore.perform(content);
+    // JSON previews are driven by the canonical Store record. Finish that
+    // in-memory update before this generation is considered settled; the
+    // network save remains debounced below. Opaque sandbox cards need this
+    // explicit ordering because their render model is a Store-owned snapshot,
+    // not an executable CardDef instance that Monaco can mutate directly.
+    await this.syncWithStore.perform(content);
 
     await timeout(this.environmentService.autoSaveDelayMs);
     this.args.onWriteError?.(undefined);

@@ -140,7 +140,15 @@ export function serializeWithArgs(
 export function rerenderSerializedComponent(element: SimpleElement): void {
   let activeRender = activeRenders.get(element);
   if (activeRender) {
-    inTransaction(activeRender.env, () => activeRender.rerender());
+    // Opaque sandbox data deliberately crosses this low-level render boundary
+    // as inert values instead of host-owned tracked objects. A data
+    // acknowledgement therefore has no Glimmer tag inside the isolated
+    // program to invalidate. The host explicitly requests this rerender after
+    // updating the opaque snapshot, so revalidate the mounted program without
+    // tearing it down or replacing its authored DOM.
+    inTransaction(activeRender.env, () =>
+      activeRender.rerender({ alwaysRevalidate: true }),
+    );
   }
 }
 

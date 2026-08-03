@@ -1,14 +1,21 @@
 import type Owner from '@ember/owner';
 import { tracked } from '@glimmer/tracking';
-import { Component, primitive, FieldDef } from './card-api';
+import {
+  type CardContext,
+  Component,
+  primitive,
+  FieldDef,
+} from './card-api';
 import { restartableTask } from 'ember-concurrency';
 import { consume } from 'ember-provide-consume-context';
 import {
   type ResolvedCodeRef,
   isUrlLike,
+  CardContextName,
   CardURLContextName,
   fieldSerializer,
   CodeRefSerializer,
+  type CodeRef,
 } from '@cardstack/runtime-common';
 import { not } from '@cardstack/boxel-ui/helpers';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
@@ -26,6 +33,7 @@ class BaseView extends Component<typeof CodeRefField> {
 }
 
 class EditView extends Component<typeof CodeRefField> {
+  @consume(CardContextName) declare cardContext: CardContext;
   @consume(CardURLContextName) declare cardURL: string | undefined;
   @tracked validationState: 'initial' | 'valid' | 'invalid' = 'initial';
   @tracked private maybeCodeRef: string | undefined =
@@ -44,18 +52,38 @@ class EditView extends Component<typeof CodeRefField> {
   constructor(owner: Owner, args: any) {
     super(owner, args);
     if (this.maybeCodeRef != null) {
-      this.setIfValid.perform(this.maybeCodeRef, { checkOnly: true });
+      this.performValidation(this.maybeCodeRef, { checkOnly: true });
     }
   }
 
   private onInput = (inputVal: string) => {
     this.maybeCodeRef = inputVal;
-    this.setIfValid.perform(this.maybeCodeRef);
+    this.cardContext.requestRender?.();
+    this.performValidation(this.maybeCodeRef);
   };
+
+  private performValidation(
+    maybeCodeRef: string,
+    opts?: { checkOnly?: true },
+  ) {
+    let validation = this.setIfValid.perform(maybeCodeRef, opts);
+    // The final task state (`isIdle`) changes after the task body resolves.
+    // Request once more at that explicit completion boundary so the Host sees
+    // both the validation result and the settled task state.
+    void validation.then(
+      () => this.cardContext.requestRender?.(),
+      () => this.cardContext.requestRender?.(),
+    );
+  }
+
+  private setValidationState(state: 'initial' | 'valid' | 'invalid') {
+    this.validationState = state;
+    this.cardContext.requestRender?.();
+  }
 
   private setIfValid = restartableTask(
     async (maybeCodeRef: string, opts?: { checkOnly?: true }) => {
-      this.validationState = 'initial';
+      this.setValidationState('initial');
       if (maybeCodeRef.length === 0) {
         if (!opts?.checkOnly) {
           this.args.set(undefined);
@@ -65,7 +93,7 @@ class EditView extends Component<typeof CodeRefField> {
 
       let parts = maybeCodeRef.split('/');
       if (parts.length < 2) {
-        this.validationState = 'invalid';
+        this.setValidationState('invalid');
         return;
       }
 
@@ -75,17 +103,22 @@ class EditView extends Component<typeof CodeRefField> {
         module = new URL(module, new URL(this.cardURL)).href;
       }
       try {
-        let code = (await import(module))[name];
-        if (code) {
-          this.validationState = 'valid';
+        let ref = { module, name } as CodeRef;
+        let validatedRef = this.cardContext.validateCodeRef
+          ? await this.cardContext.validateCodeRef(ref)
+          : (await import(module))[name]
+            ? (ref as ResolvedCodeRef)
+            : undefined;
+        if (validatedRef) {
+          this.setValidationState('valid');
           if (!opts?.checkOnly) {
-            this.args.set({ module, name });
+            this.args.set(validatedRef);
           }
         } else {
-          this.validationState = 'invalid';
+          this.setValidationState('invalid');
         }
       } catch (err) {
-        this.validationState = 'invalid';
+        this.setValidationState('invalid');
       }
     },
   );

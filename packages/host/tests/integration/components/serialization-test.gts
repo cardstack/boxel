@@ -17,6 +17,7 @@ import type {
 } from '@cardstack/runtime-common';
 import {
   fields,
+  isCardInstance,
   isSingleCardDocument,
   localId,
   meta,
@@ -79,7 +80,7 @@ import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
-import type { Captain } from '../../../../test-realm-cards/contents/captain';
+import type { Boat } from '../../../../test-realm-cards/contents/captain';
 import type { CardDef as CardDefType } from '@cardstack/base/card-api';
 
 let loader: Loader;
@@ -5796,8 +5797,13 @@ module('Integration | serialization', function (hooks) {
     });
 
     let store = getService('store');
+    let realmSandbox = getService('realm-sandbox');
     let captainMango = await store.get(`${testRealmURL}Captain/mango`);
-    let mangoTheBoat = (captainMango as Captain).createEponymousBoat();
+    assert.true(isCardInstance(captainMango), 'loaded the captain card');
+    let mangoTheBoat = (await realmSandbox.invokeOpaqueCardMethod(
+      captainMango as CardDefType,
+      'createEponymousBoat',
+    )) as Boat;
 
     assert.deepEqual(
       serializeCard(mangoTheBoat, { includeUnrenderedFields: true }),

@@ -118,8 +118,9 @@ unrelated infrastructure or UX changes.
       runtimes, loads, templates, or sandbox stylesheets.
 - [ ] Run a long route-level UI session with SES and iframe cards and inspect
       detached DOM nodes, retained iframe ports, and render drops. The
-      deterministic service soak does not substitute for a CDP retainer
-      snapshot of real mounted card navigation.
+      deterministic service soak and the 128-navigation real-router acceptance
+      soak do not substitute for a CDP retainer snapshot of a long interactive
+      session.
 
 ### Phase 2 completion signal
 

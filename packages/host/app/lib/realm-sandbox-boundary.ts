@@ -49,6 +49,8 @@ export interface OpaqueRealmCardFieldMetadata {
 
 export interface OpaqueRealmCardTypeState {
   typeRef: CodeRef;
+  definitionKind: 'card' | 'field' | 'file';
+  ancestorTypes: OpaqueRealmCardFieldType[];
   displayName: string;
   fields: Record<string, OpaqueRealmCardFieldMetadata>;
   hasCustomEditTemplate: boolean;
@@ -98,6 +100,11 @@ export function getOpaqueRealmCardTypeState(
   return constructor
     ? (constructor as Partial<OpaqueRealmCardType>)[opaqueRealmCardTypeState]
     : undefined;
+}
+
+export function isOpaqueRealmField(value: object): boolean {
+  let kind = getOpaqueRealmCardTypeState(value)?.definitionKind;
+  return kind === 'field' || kind === 'file';
 }
 
 // Host UI and tools historically identified a card through its executable

@@ -383,6 +383,16 @@ export interface CardContext<T extends CardDef = CardDef> {
   // operator-mode; absent in contexts with no chooser modal (prerender,
   // freestyle), so consumers guard on it.
   markdownEmbedChooser?: MarkdownEmbedChooser;
+  // Explicit nested-render capability. Sandboxed cards and trusted field
+  // portals use isolated Glimmer roots, so local tracked state cannot assume
+  // that the host renderer owns their rerender loop.
+  requestRender?: () => void;
+  // Validate a realm CodeRef without importing user-authored code into the
+  // trusted Host graph. Sandboxed field portals provide this through their
+  // owning realm compartment; ordinary trusted contexts may omit it.
+  validateCodeRef?: (
+    ref: CodeRef,
+  ) => Promise<ResolvedCodeRef | undefined>;
   // Optional runtime mode/submode hints used by cards that render differently per context.
   mode?: 'host' | 'operator';
   submode?: 'interact' | 'code' | 'host';

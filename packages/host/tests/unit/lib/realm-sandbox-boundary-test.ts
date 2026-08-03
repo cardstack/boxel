@@ -23,6 +23,8 @@ module('Unit | realm sandbox boundary', function () {
     Object.defineProperty(OpaqueRealmCard, opaqueRealmCardTypeState, {
       value: Object.freeze({
         typeRef,
+        definitionKind: 'card',
+        ancestorTypes: [],
         displayName: 'Article',
         fields: Object.freeze({}),
         hasCustomEditTemplate: true,
@@ -55,6 +57,8 @@ module('Unit | realm sandbox boundary', function () {
           module: '@cardstack/base/card-api',
           name: 'CardDef',
         } as ResolvedCodeRef,
+        definitionKind: 'card',
+        ancestorTypes: [],
         displayName: 'Card',
         fields: Object.freeze({}),
         hasCustomEditTemplate: true,

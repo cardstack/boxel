@@ -27,7 +27,12 @@ import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
 const secondRealmURL = 'http://test-realm/sandbox-soak-iframe/';
-const navigationCount = 32;
+// Exercise the real router, Store, SES renderer, iframe bridge, stylesheet
+// registry, and teardown path long enough for bounded-cache or delayed
+// release mistakes to accumulate. The unit lifecycle soak covers 4,096
+// distinct principals cheaply; this slower acceptance complement alternates
+// 128 mounted cards across two actual realm adapters.
+const navigationCount = 128;
 
 const sesCardSource = `
   import { CardDef, Component } from '@cardstack/base/card-api';

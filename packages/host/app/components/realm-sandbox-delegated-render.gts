@@ -28,7 +28,8 @@ import type {
 interface Signature {
   Element: HTMLElement;
   Args: {
-    card: BaseDef;
+    card?: BaseDef;
+    model?: BaseDef;
     codeRef?: CodeRef;
     format?: Format;
     displayContainer?: boolean;
@@ -51,30 +52,31 @@ export default class RealmSandboxDelegatedRender extends Component<Signature> {
     return this.args.format ?? this.defaultFormats?.cardDef ?? 'isolated';
   }
 
+  private get card(): BaseDef {
+    let card = this.args.card ?? this.args.model;
+    if (!card) {
+      throw new Error('Delegated sandbox render requires a card or field');
+    }
+    return card;
+  }
+
   get sandboxRender() {
-    return this.realmSandbox.renderFor(this.args.card, this.effectiveFormat, {
+    return this.realmSandbox.renderFor(this.card, this.effectiveFormat, {
       codePreviewSandbox: this.codePreviewSandbox,
       codeRef: this.args.codeRef,
     });
   }
 
   get sandboxRenderLoading() {
-    return this.realmSandbox.isRenderLoading(
-      this.args.card,
-      this.effectiveFormat,
-    );
+    return this.realmSandbox.isRenderLoading(this.card, this.effectiveFormat);
   }
 
   get iframeSandboxRender() {
-    return this.realmSandbox.iframeRenderFor(
-      this.args.card,
-      this.effectiveFormat,
-      {
-        displayContainer: this.args.displayContainer,
-        codeRef: this.args.codeRef,
-        codePreviewSandbox: this.codePreviewSandbox,
-      },
-    );
+    return this.realmSandbox.iframeRenderFor(this.card, this.effectiveFormat, {
+      displayContainer: this.args.displayContainer,
+      codeRef: this.args.codeRef,
+      codePreviewSandbox: this.codePreviewSandbox,
+    });
   }
 
   get viewCard() {
@@ -91,9 +93,10 @@ export default class RealmSandboxDelegatedRender extends Component<Signature> {
       />
     {{else if this.sandboxRender}}
       <RealmSandboxRender
-        @card={{@card}}
+        @card={{this.card}}
         @format={{this.effectiveFormat}}
         @sandbox={{this.sandboxRender}}
+        @model={{this.sandboxRender.model}}
         @displayContainer={{@displayContainer}}
         @viewCard={{this.viewCard}}
         ...attributes

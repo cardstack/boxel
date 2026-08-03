@@ -1232,6 +1232,8 @@ export type CreateNewCard = (
 ) => Promise<string | undefined>;
 
 interface CardChooserOpts {
+  /** Host-computed label for an opaque card type. */
+  title?: string;
   offerToCreate?: {
     ref: CodeRef;
     relativeTo: RealmResourceIdentifier | URL | undefined;

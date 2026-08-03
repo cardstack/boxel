@@ -1,6 +1,6 @@
 import { service } from '@ember/service';
 
-import { isCardInstance } from '@cardstack/runtime-common';
+import { isCardInstance, type CodeRef } from '@cardstack/runtime-common';
 
 import HostBaseTool from '../lib/host-base-tool';
 
@@ -8,6 +8,7 @@ import CopyCardToRealmTool from './copy-card';
 
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RealmService from '../services/realm';
+import type RealmSandboxService from '../services/realm-sandbox';
 import type StoreService from '../services/store';
 import type * as CardAPI from '@cardstack/base/card-api';
 import type * as BaseToolModule from '@cardstack/base/command';
@@ -18,6 +19,7 @@ export default class CopyAndEditTool extends HostBaseTool<
 > {
   @service operatorModeStateService!: OperatorModeStateService;
   @service realm!: RealmService;
+  @service realmSandbox!: RealmSandboxService;
   @service store!: StoreService;
 
   #cardAPI?: typeof CardAPI;
@@ -144,8 +146,58 @@ export default class CopyAndEditTool extends HostBaseTool<
     let targetPath = relationshipContext?.fieldName?.includes('.')
       ? relationshipContext.fieldName
       : relationshipContext?.fieldName
-        ? this.findRelationshipPath(parentCard, relationshipContext.fieldName)
+        ? (this.realmSandbox.opaqueRelationshipPath(
+            parentCard,
+            relationshipContext.fieldName,
+          ) ??
+          this.findRelationshipPath(parentCard, relationshipContext.fieldName))
         : undefined;
+
+    // Opaque authored records expose relationship values as inert data, not
+    // nested CardDef instances that Card API reflection can walk. The overlay
+    // already supplies the selected relationship's path and cardinality, so
+    // use the explicit mutation boundary instead of re-introspecting it.
+    if (targetPath && relationshipContext?.fieldType === 'linksTo') {
+      if (
+        this.realmSandbox.setOpaqueRelationshipPath(
+          parentCard,
+          targetPath,
+          newCard,
+        )
+      ) {
+        if (parentCard.id) {
+          this.store.save(parentCard.id as string);
+        }
+        return;
+      }
+    }
+    if (targetPath && relationshipContext?.fieldType === 'linksToMany') {
+      let currentValue = this.dotGetter(targetPath, parentCard);
+      if (Array.isArray(currentValue)) {
+        let found = false;
+        let replaced = currentValue.map((item) => {
+          let itemId = item?.id ?? item;
+          if (itemId && itemId.replace(/\.json$/, '') === normalizedOriginal) {
+            found = true;
+            return newCard;
+          }
+          return item;
+        });
+        if (
+          found &&
+          this.realmSandbox.setOpaqueRelationshipPath(
+            parentCard,
+            targetPath,
+            replaced,
+          )
+        ) {
+          if (parentCard.id) {
+            this.store.save(parentCard.id as string);
+          }
+          return;
+        }
+      }
+    }
     let containerForFields =
       targetPath && this.getWrappedInstance(targetPath, parentCard);
     let fieldContainer = containerForFields ?? parentCard;
@@ -154,10 +206,27 @@ export default class CopyAndEditTool extends HostBaseTool<
     // typically empty at that point (the whole reason we're linking a copy
     // into it). The `usedLinksToFieldsOnly` default would omit an unset target
     // and silently skip the relink.
-    let fields = cardApi.getFields(fieldContainer, {
+    let fields: Record<
+      string,
+      | (CardAPI.Field<CardAPI.BaseDefConstructor> & { cardRef?: CodeRef })
+      | undefined
+    > = cardApi.getFields(fieldContainer, {
       usedLinksToFieldsOnly: false,
       includeComputeds: false,
     });
+    if (fieldContainer === parentCard) {
+      for (let [name, metadata] of Object.entries(
+        this.realmSandbox.introspectOpaqueCardFields(parentCard) ?? {},
+      )) {
+        fields[name] ??= {
+          fieldType: metadata.kind,
+          cardRef: {
+            module: metadata.type.module,
+            name: metadata.type.name,
+          },
+        } as CardAPI.Field<CardAPI.BaseDefConstructor> & { cardRef: CodeRef };
+      }
+    }
 
     // Note: if the parent came from a query-only stack entry, this won't link because it only patches real linksTo/linksToMany fields on a loaded parent card,
     // but the copied card is still created/added and can be used independently.
@@ -178,18 +247,19 @@ export default class CopyAndEditTool extends HostBaseTool<
       if (
         (fieldDef.fieldType === 'linksTo' ||
           fieldDef.fieldType === 'linksToMany') &&
-        'card' in fieldDef &&
-        fieldDef.card &&
-        !(
-          newCard instanceof (fieldDef as any).card ||
-          newCard.constructor?.name === (fieldDef as any).card?.name
-        )
+        !this.matchesRelationshipType(newCard, fieldDef)
       ) {
         continue;
       }
       let currentValue = (fieldContainer as any)[fieldName];
       if (fieldDef.fieldType === 'linksTo') {
-        this.assignAndSave(parentCard, fieldContainer, fieldName, newCard);
+        this.assignAndSave(
+          parentCard,
+          fieldContainer,
+          targetPath ?? fieldName,
+          fieldName,
+          newCard,
+        );
         return;
       } else if (
         fieldDef.fieldType === 'linksToMany' &&
@@ -207,11 +277,38 @@ export default class CopyAndEditTool extends HostBaseTool<
           }
         }
         if (found) {
-          this.assignAndSave(parentCard, fieldContainer, fieldName, replaced);
+          this.assignAndSave(
+            parentCard,
+            fieldContainer,
+            targetPath ?? fieldName,
+            fieldName,
+            replaced,
+          );
           return;
         }
       }
     }
+  }
+
+  private matchesRelationshipType(
+    card: CardAPI.BaseDef,
+    fieldDef: CardAPI.Field<CardAPI.BaseDefConstructor> & {
+      cardRef?: CodeRef;
+    },
+  ): boolean {
+    if (fieldDef.cardRef) {
+      return (
+        this.realmSandbox.opaqueCardIsInstanceOf(card, fieldDef.cardRef) !==
+        false
+      );
+    }
+    if (!('card' in fieldDef) || !fieldDef.card) {
+      return true;
+    }
+    return (
+      card instanceof fieldDef.card ||
+      (card as CardAPI.BaseDef).constructor?.name === fieldDef.card.name
+    );
   }
 
   deriveLinkedParent(cardId: string):
@@ -269,10 +366,19 @@ export default class CopyAndEditTool extends HostBaseTool<
   private assignAndSave(
     parentCard: CardAPI.CardDef,
     targetContainer: any,
+    relationshipPath: string,
     fieldName: string,
     value: unknown,
   ) {
-    (targetContainer as any)[fieldName] = value;
+    if (
+      !this.realmSandbox.setOpaqueRelationshipPath(
+        parentCard,
+        relationshipPath,
+        value,
+      )
+    ) {
+      (targetContainer as any)[fieldName] = value;
+    }
     if (parentCard.id) {
       this.store.save(parentCard.id as string);
     }

@@ -3,6 +3,7 @@ import { registerDestructor } from '@ember/destroyable';
 import type Owner from '@ember/owner';
 import { schedule, scheduleOnce } from '@ember/runloop';
 import { service } from '@ember/service';
+import { buildWaiter } from '@ember/test-waiters';
 
 import Modifier from 'ember-modifier';
 
@@ -54,6 +55,8 @@ interface ModifierSignature {
   };
 }
 
+const islandRenderWaiter = buildWaiter('realm-sandbox:template-island');
+
 // Glimmer's serialized boundary is useful beyond server startup. Code mode
 // keeps this element and its marker-annotated children mounted, releases the
 // previous SES component program, and asks the replacement program to adopt
@@ -76,6 +79,7 @@ export default class RealmSandboxTemplateIsland extends Modifier<ModifierSignatu
     generation: number;
   };
   private generation = 0;
+  private waiterToken?: ReturnType<typeof islandRenderWaiter.beginAsync>;
   private requestRender = () => {
     if (this.element) {
       rerenderSerializedComponent(this.element as any);
@@ -87,6 +91,7 @@ export default class RealmSandboxTemplateIsland extends Modifier<ModifierSignatu
     registerDestructor(this, () => {
       this.generation++;
       this.pending = undefined;
+      this.finishWaiter();
       this.unsubscribeFromData?.();
       this.releaseRuntime?.();
       if (this.element) {
@@ -140,6 +145,7 @@ export default class RealmSandboxTemplateIsland extends Modifier<ModifierSignatu
       args,
       generation: this.generation,
     };
+    this.waiterToken ??= islandRenderWaiter.beginAsync();
     // This modifier runs inside the host component's Glimmer transaction.
     // Starting the isolated component's low-level transaction synchronously
     // corrupts the shared tracking stack under route churn. Treat the island
@@ -232,11 +238,16 @@ export default class RealmSandboxTemplateIsland extends Modifier<ModifierSignatu
           // volatile HMR; subsequent replacements adopt those markers above.
           serializeWithArgs(component as any, element as any, owner, nextArgs);
           element.dataset.realmSandboxIslandUpdate = 'volatile-initial';
-        } else if (args.markerBacked) {
+        } else if (
+          args.markerBacked ||
+          isWithinSerializedIsolatedRender(element as any)
+        ) {
           // Code-preview modules are known to be volatile before their first
           // paint. Give them serialization markers immediately so the first
           // Monaco/assistant generation can adopt authored DOM instead of
-          // paying a one-time remount. Canonical interact cards keep the
+          // paying a one-time remount. A nested SES island inside Host Mode's
+          // server serialization transaction needs the same markers for its
+          // first client attachment. Canonical interact cards keep the
           // ordinary live builder below.
           serializeWithArgs(component as any, element as any, owner, nextArgs);
           element.dataset.realmSandboxIslandUpdate = 'initial-volatile';
@@ -247,12 +258,14 @@ export default class RealmSandboxTemplateIsland extends Modifier<ModifierSignatu
       }
     } catch (error) {
       if (!args.onError) {
+        this.finishWaiter();
         throw error;
       }
       // A microtask can run before Glimmer closes the tracking transaction
       // that invoked this modifier. Error publication changes tracked preview
       // state, so keep that state transition on Ember's render boundary.
       schedule('afterRender', null, () => args.onError?.(error, component));
+      this.finishWaiter();
       return;
     }
 
@@ -265,6 +278,14 @@ export default class RealmSandboxTemplateIsland extends Modifier<ModifierSignatu
     // update.
     this.args = args;
     schedule('afterRender', null, () => args.onRendered?.(component));
+    this.finishWaiter();
+  }
+
+  private finishWaiter() {
+    if (this.waiterToken) {
+      islandRenderWaiter.endAsync(this.waiterToken);
+      this.waiterToken = undefined;
+    }
   }
 
   private sameArgs(previous: IslandArgs | undefined, next: IslandArgs) {

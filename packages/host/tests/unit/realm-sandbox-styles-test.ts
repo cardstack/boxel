@@ -83,7 +83,7 @@ module('Unit | Service | realm sandbox styles', function (hooks) {
       @media (min-width: 40rem) {
         .summary${scoped} { display: grid; }
       }
-      @keyframes pulse-card-template {
+      @keyframes pulse-data-scopedcss-card-template {
         from { opacity: 0.5; }
         to { opacity: 1; }
       }
@@ -91,7 +91,7 @@ module('Unit | Service | realm sandbox styles', function (hooks) {
     assert.strictEqual(
       validateCompartmentCSS(safe, { requireScopedSelectors: true }),
       safe,
-      'scoped selector lists, nested rules, and compiled keyframes remain available',
+      'scoped selector lists, nested rules, and compiler-namespaced keyframes remain available',
     );
 
     for (let css of [
@@ -126,6 +126,11 @@ module('Unit | Service | realm sandbox styles', function (hooks) {
       '@layer host-reset, card;',
       `${scoped} { view-transition-name: host-overlay; }`,
       `${scoped} { view-transition-class: host-overlay; }`,
+      `${scoped} { anchor-name: --host-anchor; }`,
+      `${scoped} { anchor-scope: --host-anchor; }`,
+      `${scoped} { timeline-scope: --host-timeline; }`,
+      `${scoped} { scroll-timeline-name: --host-timeline; }`,
+      `${scoped} { view-timeline-name: --host-timeline; }`,
       '@font\\-face { font-family: stolen; src: local(Arial); }',
       '@lay\\65 r host-reset { body { color: transparent; } }',
       `${scoped} { view\\-transition-name: host-overlay; }`,
@@ -144,6 +149,32 @@ module('Unit | Service | realm sandbox styles', function (hooks) {
       }),
       anonymousLayer,
       'an anonymous layer containing only scoped rules has no reusable global name',
+    );
+  });
+
+  test('requires keyframes to retain the scoped compiler namespace', function (assert) {
+    let scope = 'data-scopedcss-card-template';
+    let safe = `
+      @keyframes pulse-${scope} {
+        from { opacity: 0.5; }
+        to { opacity: 1; }
+      }
+      [${scope}] { animation: pulse-${scope} 1s; }
+    `;
+    assert.strictEqual(
+      validateCompartmentCSS(safe, { requireScopedSelectors: true }),
+      safe,
+      'the scoped-CSS compiler namespace is accepted',
+    );
+
+    assert.throws(
+      () =>
+        validateCompartmentCSS(
+          `@keyframes host-pulse { from { opacity: 0 } to { opacity: 1 } } [${scope}] { animation: host-pulse 1s; }`,
+          { requireScopedSelectors: true },
+        ),
+      /keyframes escaped their compiled namespace/,
+      'an authored global keyframe name cannot collide with Host CSS',
     );
   });
 });

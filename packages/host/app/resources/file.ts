@@ -103,6 +103,7 @@ export interface InitialFileContent {
   content: string;
   lastModified?: string;
   realmURL: string;
+  size?: number;
 }
 
 export interface Loading {
@@ -192,6 +193,7 @@ class _FileResource extends Resource<Args> {
     isNewlyCreated = false,
     lastModified,
     realmURL,
+    size,
     url,
   }: InitialFileContent & {
     url: string;
@@ -208,7 +210,7 @@ class _FileResource extends Resource<Args> {
       realmURL,
       content,
       name: rawName ? decodeURIComponent(rawName) : rawName!,
-      size: utf8ByteLength(content),
+      size: size ?? utf8ByteLength(content),
       url: rri(url),
       write(
         nextContent: string,
@@ -539,6 +541,7 @@ class _FileResource extends Resource<Args> {
         lastModified,
         realmURL,
         content,
+        size: buffer.byteLength,
       });
       if (response.url !== requestedURL) {
         this.codeSourceCache.remember(requestedURL, cached);

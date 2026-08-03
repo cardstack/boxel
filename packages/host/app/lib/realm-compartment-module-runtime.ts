@@ -62,9 +62,12 @@ export interface SandboxTrustedExportIdentity {
 export interface SandboxCardFieldMetadata {
   kind: 'contains' | 'containsMany' | 'linksTo' | 'linksToMany';
   type: SandboxTrustedExportIdentity;
+  displayName?: string;
 }
 
 export interface SandboxCardTypeMetadata {
+  definitionKind: 'card' | 'field' | 'file';
+  ancestorTypes: SandboxTrustedExportIdentity[];
   displayName?: string;
   fields: Record<string, SandboxCardFieldMetadata>;
   headerColor: string | null;
@@ -73,6 +76,19 @@ export interface SandboxCardTypeMetadata {
   authoredTemplateFormats: string[];
   icon?: SandboxTrustedExportIdentity;
   prefersWideFormat: boolean;
+}
+
+export interface SandboxCardMethodResult {
+  returnValue?: unknown;
+  card?: {
+    type: SandboxTrustedExportIdentity;
+    attributes: Record<string, unknown>;
+  };
+}
+
+interface CapturedCardFieldMetadata {
+  kind: SandboxCardFieldMetadata['kind'];
+  card: object;
 }
 
 export interface CompartmentAmbientReport {
@@ -118,6 +134,25 @@ function templateContainsLiteralElement(
     return true;
   }
   return value.some((entry) => templateContainsLiteralElement(entry, tagName));
+}
+
+const inertHeadElementPrefix = 'boxel-head-tag-';
+
+function inertHeadTemplateElements(value: unknown): unknown {
+  if (!Array.isArray(value)) {
+    return value;
+  }
+  let result = value.map(inertHeadTemplateElements);
+  // Head previews must observe authored markup without ever installing live
+  // style, script, link, image, or other browser-active elements into the
+  // shared Host document. Preserve the wire structure and attributes, but
+  // replace every literal tag with an inert custom element. The trusted head
+  // preview restores these names only inside a detached parser.
+  if (result[0] === 10 && typeof result[1] === 'string') {
+    let tagName = result[1].toLowerCase().replace(/[^a-z0-9-]/g, '-');
+    result[1] = `${inertHeadElementPrefix}${tagName}`;
+  }
+  return result;
 }
 
 export interface RealmCompartmentRuntimeOptions {
@@ -335,7 +370,15 @@ export default class RealmCompartmentModuleRuntime {
   private trustedExports = new Map<string, object>();
   private fieldMetadataByPrototype = new WeakMap<
     object,
-    Map<string, SandboxCardFieldMetadata>
+    Map<string, CapturedCardFieldMetadata>
+  >();
+  private definitionKindByPrototype = new WeakMap<
+    object,
+    'card' | 'field' | 'file'
+  >();
+  private initialCardFieldsByInstance = new WeakMap<
+    object,
+    Record<string, unknown>
   >();
   private handleByComponent = new WeakMap<object, string>();
   private componentByHandle = new Map<string, object>();
@@ -449,7 +492,9 @@ export default class RealmCompartmentModuleRuntime {
         `Compartment did not capture the ${format} template for ${exportName}`,
       );
     }
-    return structuredClone(this.bundleFor(component as object));
+    return structuredClone(
+      this.bundleFor(component as object, format === 'head'),
+    );
   }
 
   // QUnit realm adapters install live class objects with Loader.shimModule().
@@ -506,6 +551,8 @@ export default class RealmCompartmentModuleRuntime {
       'markdown',
     ].filter((format) => cardType[format] != null);
     return structuredClone({
+      definitionKind: this.cardDefinitionKind(cardType),
+      ancestorTypes: this.cardAncestorTypes(cardType),
       displayName,
       fields: this.cardFieldMetadata(cardType),
       headerColor,
@@ -515,6 +562,69 @@ export default class RealmCompartmentModuleRuntime {
       icon,
       prefersWideFormat: cardType.prefersWideFormat === true,
     });
+  }
+
+  async hasModuleExport(
+    moduleIdentifier: string,
+    exportName: string,
+  ): Promise<boolean> {
+    let module =
+      await this.loader.import<Record<string, unknown>>(moduleIdentifier);
+    return Object.prototype.hasOwnProperty.call(module, exportName);
+  }
+
+  async invokeCardMethod(
+    moduleIdentifier: string,
+    exportName: string,
+    snapshot: Record<string, unknown>,
+    methodName: string,
+    args: unknown[] = [],
+  ): Promise<SandboxCardMethodResult> {
+    let cardType = await this.importCardType(moduleIdentifier, exportName);
+    let CardType = cardType as unknown as new (
+      fields?: Record<string, unknown>,
+    ) => Record<string, unknown>;
+    let safeSnapshot = this.cloneIntoCompartment(this.jsonClone(snapshot)) as
+      | Record<string, unknown>
+      | undefined;
+    let instance = new CardType(safeSnapshot);
+    // Legacy field decorators initialize after `super()`. Reapply the inert
+    // snapshot so method receivers observe data, never field-definition
+    // descriptors, regardless of decorator transform order.
+    Object.assign(instance, safeSnapshot);
+    let method = instance[methodName];
+    if (typeof method !== 'function') {
+      throw new Error(
+        `Compartment card ${exportName} has no method ${methodName}`,
+      );
+    }
+    let safeArgs = this.cloneIntoCompartment(this.jsonClone(args)) as unknown[];
+    let value = await method.apply(instance, safeArgs);
+    if (value === undefined) {
+      return {};
+    }
+    if (value !== null && typeof value === 'object') {
+      let constructor = (value as { constructor?: unknown }).constructor;
+      let identity =
+        constructor &&
+        (typeof constructor === 'object' || typeof constructor === 'function')
+          ? this.loader.identify(constructor)
+          : undefined;
+      if (identity) {
+        let attributes = this.jsonClone(value) as Record<string, unknown>;
+        let constructorFields = this.initialCardFieldsByInstance.get(value);
+        if (constructorFields) {
+          Object.assign(attributes, this.jsonClone(constructorFields));
+        }
+        return structuredClone({
+          card: {
+            type: identity,
+            attributes,
+          },
+        });
+      }
+    }
+    return structuredClone({ returnValue: this.jsonClone(value) });
   }
 
   get stats() {
@@ -867,11 +977,29 @@ export default class RealmCompartmentModuleRuntime {
   }
 
   private cardAPIFacade(moduleIdentifier: string) {
+    let thisRuntime = this;
+    let initialFields = Symbol('sandbox-card-initial-fields');
     class SandboxBaseDef {
       static baseDef: undefined;
+
+      constructor(fields?: Record<string, unknown>) {
+        if (fields) {
+          thisRuntime.initialCardFieldsByInstance.set(this, fields);
+          Object.defineProperty(this, initialFields, {
+            configurable: false,
+            enumerable: false,
+            value: fields,
+          });
+          Object.assign(this, fields);
+        }
+      }
     }
     class SandboxCardDef extends SandboxBaseDef {}
     class SandboxFieldDef extends SandboxBaseDef {}
+    class SandboxFileDef extends SandboxFieldDef {}
+    this.definitionKindByPrototype.set(SandboxCardDef.prototype, 'card');
+    this.definitionKindByPrototype.set(SandboxFieldDef.prototype, 'field');
+    this.definitionKindByPrototype.set(SandboxFileDef.prototype, 'file');
     let SandboxComponent = this.componentBase();
     let field = (target: object, name: string, descriptor: unknown) => {
       let initializer =
@@ -890,21 +1018,11 @@ export default class RealmCompartmentModuleRuntime {
           ) {
             return descriptor;
           }
-          let trustedType = this.trustedExportByValue.get(
-            (definition as { card?: object }).card ?? {},
-          );
-          // A realm-authored field type is not a trusted Host constructor, but
-          // its declaration is still safe inert schema. Preserve the field and
-          // substitute the corresponding trusted Base supertype. This lets the
-          // Host render relationship portals and generic nested fields without
-          // importing the authored constructor outside the compartment.
-          let genericType = this.trustedExportByValue.get(
-            kind === 'linksTo' || kind === 'linksToMany'
-              ? SandboxCardDef
-              : SandboxFieldDef,
-          );
-          let fieldType = trustedType ?? genericType;
-          if (!fieldType) {
+          let card = (definition as { card?: unknown }).card;
+          if (
+            (typeof card !== 'object' || card === null) &&
+            typeof card !== 'function'
+          ) {
             return descriptor;
           }
           let fields = this.fieldMetadataByPrototype.get(target);
@@ -912,8 +1030,27 @@ export default class RealmCompartmentModuleRuntime {
             fields = new Map();
             this.fieldMetadataByPrototype.set(target, fields);
           }
-          fields.set(name, { kind, type: fieldType });
+          // Keep the compartment-local constructor only inside this runtime.
+          // Once module evaluation finishes Loader can identify authored
+          // types, and cardFieldMetadata converts it to an inert CodeRef. No
+          // executable value crosses into the Host.
+          fields.set(name, { kind, card });
         }
+        let originalInitializer = initializer;
+        return {
+          ...(descriptor as Record<string, unknown>),
+          initializer(this: Record<PropertyKey, unknown>) {
+            let supplied = this[initialFields];
+            if (
+              supplied &&
+              typeof supplied === 'object' &&
+              Object.prototype.hasOwnProperty.call(supplied, name)
+            ) {
+              return (supplied as Record<string, unknown>)[name];
+            }
+            return originalInitializer.call(this);
+          },
+        };
       }
       return descriptor;
     };
@@ -937,9 +1074,10 @@ export default class RealmCompartmentModuleRuntime {
     let linksTo = (cardOrThunk: unknown) => definition('linksTo', cardOrThunk);
     let linksToMany = (cardOrThunk: unknown) =>
       definition('linksToMany', cardOrThunk);
-    let facade = {
+    let facade: Record<string, unknown> = {
       CardDef: SandboxCardDef,
       FieldDef: SandboxFieldDef,
+      FileDef: SandboxFileDef,
       Component: SandboxComponent,
       field,
       contains,
@@ -948,13 +1086,31 @@ export default class RealmCompartmentModuleRuntime {
       linksToMany,
     };
     for (let [name, value] of Object.entries(facade)) {
-      this.trustedExportByValue.set(value, { module: moduleIdentifier, name });
+      if (
+        (typeof value === 'object' && value !== null) ||
+        typeof value === 'function'
+      ) {
+        this.trustedExportByValue.set(value, {
+          module: moduleIdentifier,
+          name,
+        });
+      }
     }
+    let facadeWithTypeTokens = new Proxy(facade, {
+      get: (target, property, receiver) => {
+        if (Reflect.has(target, property)) {
+          return Reflect.get(target, property, receiver);
+        }
+        return typeof property === 'string'
+          ? this.trustedExport(moduleIdentifier, property)
+          : undefined;
+      },
+    });
     // Keep the facade namespace shallowly immutable without recursively
     // freezing its inert class tokens. Decorator-transforms and ordinary
     // subclassing expect writable prototype constructors; these tokens carry
     // no host authority and are private to this realm principal's runtime.
-    return Object.freeze(facade);
+    return Object.freeze(facadeWithTypeTokens);
   }
 
   private cardFieldMetadata(
@@ -965,14 +1121,67 @@ export default class RealmCompartmentModuleRuntime {
       cardType as { prototype?: object }
     ).prototype;
     while (prototype && prototype !== Object.prototype) {
-      for (let [name, metadata] of this.fieldMetadataByPrototype.get(
+      for (let [name, captured] of this.fieldMetadataByPrototype.get(
         prototype,
       ) ?? []) {
-        fields[name] ??= metadata;
+        let type =
+          this.trustedExportByValue.get(captured.card) ??
+          this.loader.identify(captured.card);
+        if (!type) {
+          type = {
+            module: 'https://cardstack.com/base/card-api',
+            name:
+              captured.kind === 'linksTo' || captured.kind === 'linksToMany'
+                ? 'CardDef'
+                : 'FieldDef',
+          };
+        }
+        if (type) {
+          let rawDisplayName = (captured.card as { displayName?: unknown })
+            .displayName;
+          let displayName =
+            typeof rawDisplayName === 'string'
+              ? rawDisplayName.slice(0, 256)
+              : undefined;
+          fields[name] ??= { kind: captured.kind, type, displayName };
+        }
       }
       prototype = Object.getPrototypeOf(prototype) as object | null;
     }
     return fields;
+  }
+
+  private cardDefinitionKind(
+    cardType: Record<string, unknown>,
+  ): 'card' | 'field' | 'file' {
+    let prototype: object | null | undefined = (
+      cardType as { prototype?: object }
+    ).prototype;
+    while (prototype && prototype !== Object.prototype) {
+      let kind = this.definitionKindByPrototype.get(prototype);
+      if (kind) {
+        return kind;
+      }
+      prototype = Object.getPrototypeOf(prototype) as object | null;
+    }
+    throw new Error('Sandbox export is not a CardDef or FieldDef');
+  }
+
+  private cardAncestorTypes(
+    cardType: Record<string, unknown>,
+  ): SandboxTrustedExportIdentity[] {
+    let ancestors: SandboxTrustedExportIdentity[] = [];
+    let constructor = Object.getPrototypeOf(cardType) as object | null;
+    while (constructor && constructor !== Function.prototype) {
+      let identity =
+        this.trustedExportByValue.get(constructor) ??
+        this.loader.identify(constructor);
+      if (identity) {
+        ancestors.push(identity);
+      }
+      constructor = Object.getPrototypeOf(constructor) as object | null;
+    }
+    return ancestors;
   }
 
   private captureDescriptor(
@@ -986,11 +1195,6 @@ export default class RealmCompartmentModuleRuntime {
       throw new Error('Card template descriptor has an invalid shape');
     }
     let block = JSON.parse(descriptor.block) as unknown;
-    if (templateContainsLiteralElement(block, 'style')) {
-      throw new Error(
-        'SES templates must use <style scoped>; unscoped <style> would affect the shared host document',
-      );
-    }
     validateTemplateDOMPolicy(block, this.options.validateInlineStyle);
     let scope = descriptor.scope?.() ?? [];
     if (!Array.isArray(scope)) {
@@ -1008,7 +1212,10 @@ export default class RealmCompartmentModuleRuntime {
     };
   }
 
-  private bundleFor(root: object): SandboxTemplateBundle {
+  private bundleFor(
+    root: object,
+    inertHeadElements = false,
+  ): SandboxTemplateBundle {
     let ids = new WeakMap<object, string>();
     let nextId = 0;
     let templates: Record<string, SandboxTemplateDescriptor> =
@@ -1024,8 +1231,20 @@ export default class RealmCompartmentModuleRuntime {
       }
       let id = `component-${nextId++}`;
       ids.set(component, id);
+      let block = JSON.parse(captured.descriptor.block) as unknown;
+      if (
+        !inertHeadElements &&
+        templateContainsLiteralElement(block, 'style')
+      ) {
+        throw new Error(
+          'SES templates must use <style scoped>; unscoped <style> would affect the shared host document',
+        );
+      }
       templates[id] = {
         ...captured.descriptor,
+        block: JSON.stringify(
+          inertHeadElements ? inertHeadTemplateElements(block) : block,
+        ),
         scope: [],
         instance: this.componentInstanceDescriptor(component),
       };

@@ -65,7 +65,7 @@ export default class CardRenderer extends Component<Signature> {
   declare private codePreviewSandbox: CodePreviewSandbox | undefined;
   private interactivePreview = interactiveCodePreview(this, () => ({
     card: this.args.card,
-    enabled: this.codePreviewSandbox == null,
+    enabled: !this.providedCodePreviewAppliesToCard,
   }));
   private sandboxRenderIDs = new WeakMap<object, number>();
   private nextSandboxRenderID = 0;
@@ -95,6 +95,9 @@ export default class CardRenderer extends Component<Signature> {
     {{#if (eq @format 'head')}}
       <HeadFormatPreview
         @renderedCard={{this.renderedCard}}
+        @card={{@card}}
+        @sandbox={{this.headSandboxRender}}
+        @viewCard={{this.viewCard}}
         @cardURL={{this.cardURL}}
       />
     {{else if this.iframeSandboxRender}}
@@ -121,6 +124,7 @@ export default class CardRenderer extends Component<Signature> {
             @card={{@card}}
             @format={{slot.format}}
             @sandbox={{slot.sandbox}}
+            @model={{slot.sandbox.model}}
             @displayContainer={{@displayContainer}}
             @field={{@field}}
             @viewCard={{this.viewCard}}
@@ -192,10 +196,18 @@ export default class CardRenderer extends Component<Signature> {
   }
 
   @cached get sandboxRender() {
+    if (this.usesTrustedFieldWrapper) {
+      return undefined;
+    }
     return this.realmSandbox.renderFor(this.args.card, this.args.format, {
       useBaseTemplate: this.useTrustedBaseTemplate,
       codePreviewSandbox: this.effectiveCodePreviewSandbox,
       codeRef: this.args.codeRef,
+      // A Code-mode renderer must be ready to adopt its first volatile source
+      // generation even while Monaco is displaying the card instance JSON.
+      // The host-owned context is the mode capability; it does not grant the
+      // selected JSON file executable authority.
+      markerBacked: this.codePreviewSandbox != null,
     });
   }
 
@@ -245,10 +257,11 @@ export default class CardRenderer extends Component<Signature> {
   }
 
   get hasSandboxRenderSlots() {
-    return (
-      this.sandboxRender != null ||
-      (this.codePreviewSandbox != null && this.recentSandboxRenders.length > 0)
-    );
+    // Ask the slot getter so a card identity change clears the two-format LRU
+    // before this conditional chooses the sandbox branch. Looking only at the
+    // previous cache length can select an empty, stale branch for one render
+    // when code mode switches from a CardDef to a FieldDef.
+    return this.sandboxRenderSlots.length > 0;
   }
 
   private sandboxRenderSlot(
@@ -265,10 +278,39 @@ export default class CardRenderer extends Component<Signature> {
   }
 
   get sandboxRenderLoading() {
+    if (this.usesTrustedFieldWrapper) {
+      return false;
+    }
     return this.realmSandbox.isRenderLoading(this.args.card, this.args.format);
   }
 
+  private get headSandboxRender() {
+    // The ordinary sandbox branch consumes this loading revision through its
+    // spinner conditional. Head format renders through HeadFormatPreview, so
+    // explicitly consume it here to replace the trusted fallback as soon as
+    // the compartment template becomes available.
+    void this.sandboxRenderLoading;
+    if (this.usesTrustedFieldWrapper) {
+      return undefined;
+    }
+    return this.realmSandbox.renderFor(this.args.card, 'head', {
+      useBaseTemplate: this.useTrustedBaseTemplate,
+      // A JSON draft mutates the canonical opaque Store record; it does not
+      // supply executable module source. Only route head rendering through a
+      // volatile preview runtime when the edited GTS module owns this card.
+      codePreviewSandbox: this.providedCodePreviewAppliesToCard
+        ? this.codePreviewSandbox
+        : undefined,
+      codeRef: this.args.codeRef,
+      markerBacked: this.providedCodePreviewAppliesToCard,
+      stableEnvelope: false,
+    });
+  }
+
   @cached get iframeSandboxRender() {
+    if (this.usesTrustedFieldWrapper) {
+      return undefined;
+    }
     return this.realmSandbox.iframeRenderFor(this.args.card, this.args.format, {
       field: this.args.field,
       codeRef: this.args.codeRef,
@@ -278,7 +320,16 @@ export default class CardRenderer extends Component<Signature> {
   }
 
   private get effectiveCodePreviewSandbox() {
-    return this.codePreviewSandbox ?? this.interactivePreview.preview;
+    return this.providedCodePreviewAppliesToCard
+      ? this.codePreviewSandbox
+      : this.interactivePreview.preview;
+  }
+
+  private get providedCodePreviewAppliesToCard() {
+    return this.realmSandbox.codePreviewAppliesToCard(
+      this.codePreviewSandbox,
+      this.args.card,
+    );
   }
 
   get viewCard() {
@@ -299,6 +350,10 @@ export default class CardRenderer extends Component<Signature> {
 
   get usesRealmSandbox() {
     return this.realmSandbox.isOpaqueCard(this.args.card);
+  }
+
+  private get usesTrustedFieldWrapper() {
+    return this.realmSandbox.isOpaqueField(this.args.card);
   }
 
   get showSandboxDiagnostics() {

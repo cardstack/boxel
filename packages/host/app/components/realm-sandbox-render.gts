@@ -1,5 +1,4 @@
 import { registerDestructor } from '@ember/destroyable';
-import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
@@ -108,6 +107,7 @@ interface Signature {
     card: BaseDef;
     format?: Format;
     sandbox: NonNullable<ReturnType<RealmSandboxService['renderFor']>>;
+    model?: BaseDef | Record<string, unknown>;
     displayContainer?: boolean;
     field?: Field;
     viewCard?: ViewCardFn;
@@ -131,6 +131,10 @@ export default class RealmSandboxRender extends Component<Signature> {
 
   get component() {
     return this.args.sandbox.component;
+  }
+
+  get model() {
+    return this.args.model ?? this.args.sandbox.model;
   }
 
   get format() {
@@ -219,25 +223,6 @@ export default class RealmSandboxRender extends Component<Signature> {
     this.args.viewCard(rri(cardURL.href), format, options);
   };
 
-  navigate = (event: Event) => {
-    if (!this.args.viewCard || !this.cardID || event.defaultPrevented) {
-      return;
-    }
-    let target = event.target;
-    if (
-      target instanceof Element &&
-      target !== event.currentTarget &&
-      target.closest('a, button, input, select, textarea, [role="button"]')
-    ) {
-      return;
-    }
-    // Nested relationship cards are independent navigation surfaces. The
-    // nearest card owns the click; do not let it bubble into the containing
-    // card and enqueue a second navigation.
-    event.stopPropagation();
-    this.viewCard(rri(this.cardID), this.format);
-  };
-
   <template>
     <CardContainer
       @displayBoundaries={{this.displayContainer}}
@@ -269,7 +254,6 @@ export default class RealmSandboxRender extends Component<Signature> {
       data-test-card={{this.cardID}}
       data-test-card-format={{this.format}}
       data-test-field-component-card
-      {{on 'click' this.navigate}}
       {{this.cardComponentModifier
         cardId=this.cardID
         format=this.format
@@ -292,7 +276,7 @@ export default class RealmSandboxRender extends Component<Signature> {
         {{RealmSandboxTemplateIsland
           this.component
           cardOrField=@card.constructor
-          model=@sandbox.model
+          model=this.model
           fields=@sandbox.fields
           context=this.context
           format=this.format

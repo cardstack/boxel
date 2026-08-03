@@ -209,6 +209,13 @@ module('Unit | realm compartment module runtime', function () {
     assert.deepEqual(
       await runtime.evaluateCardTypeMetadata(moduleID, 'ArticleCard'),
       {
+        definitionKind: 'card',
+        ancestorTypes: [
+          {
+            module: 'https://cardstack.com/base/card-api',
+            name: 'CardDef',
+          },
+        ],
         displayName: 'Realm Article',
         fields: {},
         headerColor: '#123456',
@@ -248,6 +255,100 @@ module('Unit | realm compartment module runtime', function () {
     );
     assert.false(metadata.hasCustomIsolatedTemplate);
     assert.false(metadata.hasCustomEditTemplate);
+  });
+
+  test('reports the explicit card-or-field definition kind', async function (assert) {
+    let moduleID = `${MODULE_ID}?definition-kind`;
+    let source = `
+      import { CardDef, FieldDef, FileDef } from 'https://cardstack.com/base/card-api';
+
+      export class ArticleCard extends CardDef {}
+      export class AuthorField extends FieldDef {}
+      export class NotesFile extends FileDef {}
+    `;
+    let runtime = runtimeFor({ [moduleID]: source });
+
+    assert.strictEqual(
+      (await runtime.evaluateCardTypeMetadata(moduleID, 'ArticleCard'))
+        .definitionKind,
+      'card',
+    );
+    assert.strictEqual(
+      (await runtime.evaluateCardTypeMetadata(moduleID, 'AuthorField'))
+        .definitionKind,
+      'field',
+    );
+    assert.strictEqual(
+      (await runtime.evaluateCardTypeMetadata(moduleID, 'NotesFile'))
+        .definitionKind,
+      'file',
+    );
+    assert.deepEqual(
+      (await runtime.evaluateCardTypeMetadata(moduleID, 'NotesFile'))
+        .ancestorTypes,
+      [
+        {
+          module: 'https://cardstack.com/base/card-api',
+          name: 'FileDef',
+        },
+        {
+          module: 'https://cardstack.com/base/card-api',
+          name: 'FieldDef',
+        },
+      ],
+      'trusted ancestry crosses the boundary as inert identities',
+    );
+  });
+
+  test('reports authored ancestor and field identities as inert code refs', async function (assert) {
+    let ancestorID = 'https://realm.example/cards/ancestors.js';
+    let childID = 'https://realm.example/cards/child.js';
+    let ancestorSource = await transpileJS(
+      `
+        import { CardDef, FieldDef, contains, field } from 'https://cardstack.com/base/card-api';
+        import StringField from 'https://cardstack.com/base/string';
+        export class AncestorCard extends CardDef {}
+        export class AncestorField extends FieldDef {
+          @field name = contains(StringField);
+        }
+      `,
+      '/ancestors.gts',
+    );
+    let childSource = await transpileJS(
+      `
+        import { contains, field } from 'https://cardstack.com/base/card-api';
+        import { AncestorCard, AncestorField } from './ancestors.js';
+        export class ChildCard extends AncestorCard {
+          @field detail = contains(AncestorField);
+        }
+      `,
+      '/child.gts',
+    );
+    let runtime = runtimeFor({
+      [ancestorID]: ancestorSource,
+      [childID]: childSource,
+    });
+
+    let metadata = await runtime.evaluateCardTypeMetadata(childID, 'ChildCard');
+    assert.strictEqual(
+      JSON.stringify(metadata.ancestorTypes[0]),
+      JSON.stringify({
+        module: ancestorID.replace(/\.js$/, ''),
+        name: 'AncestorCard',
+      }),
+      'authored ancestor identity',
+    );
+    assert.strictEqual(
+      JSON.stringify(metadata.fields.detail),
+      JSON.stringify({
+        kind: 'contains',
+        type: {
+          module: ancestorID.replace(/\.js$/, ''),
+          name: 'AncestorField',
+        },
+      }),
+      'authored field identity',
+    );
   });
 
   test('allows readable same-realm and cross-realm module graphs', async function (assert) {
@@ -607,6 +708,13 @@ module('Unit | realm compartment module runtime', function () {
     assert.deepEqual(
       await runtime.evaluateCardTypeMetadata(moduleID, 'CatalogCard'),
       {
+        definitionKind: 'card',
+        ancestorTypes: [
+          {
+            module: 'https://cardstack.com/base/card-api',
+            name: 'CardDef',
+          },
+        ],
         displayName: undefined,
         fields: {
           content: {
@@ -1086,8 +1194,8 @@ module('Unit | realm compartment module runtime', function () {
       relatedStyle: {
         kind: 'linksTo',
         type: {
-          module: '@cardstack/base/card-api',
-          name: 'CardDef',
+          module: moduleID,
+          name: 'Style',
         },
       },
       definingRules: {
@@ -1100,8 +1208,8 @@ module('Unit | realm compartment module runtime', function () {
       ingredients: {
         kind: 'containsMany',
         type: {
-          module: '@cardstack/base/card-api',
-          name: 'FieldDef',
+          module: moduleID,
+          name: 'IngredientField',
         },
       },
       prose: {

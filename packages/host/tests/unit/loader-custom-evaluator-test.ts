@@ -90,9 +90,17 @@ module('Unit | loader custom evaluator', function () {
     baseLoader.shimModule(moduleIdentifier, { CardDef: SharedCardDef });
 
     let realmFetches = 0;
+    let reexportIdentifier = 'https://sandbox.test/reexport.js';
     let realmLoader = new Loader(
-      async () => {
+      async (input) => {
         realmFetches++;
+        let url = input instanceof Request ? input.url : String(input);
+        if (url === reexportIdentifier) {
+          return new Response(
+            `export { CardDef } from '${moduleIdentifier}';`,
+            { headers: { 'content-type': 'text/javascript' } },
+          );
+        }
         throw new Error('a delegated Base module should not fetch');
       },
       undefined,
@@ -121,6 +129,22 @@ module('Unit | loader custom evaluator', function () {
       assert.deepEqual(realmLoader.getKnownConsumedModules(moduleIdentifier), [
         consumedModule,
       ]);
+
+      let reexported = await realmLoader.import<{
+        CardDef: typeof SharedCardDef;
+      }>(reexportIdentifier);
+      assert.strictEqual(reexported.CardDef, SharedCardDef);
+      assert.deepEqual(
+        Loader.identify(SharedCardDef),
+        { module: moduleIdentifier, name: 'CardDef' },
+        'a realm-local re-export retains its canonical trusted identity',
+      );
+      assert.strictEqual(
+        Loader.getLoaderFor(SharedCardDef),
+        baseLoader,
+        'the re-export does not take ownership from the shared loader',
+      );
+      assert.strictEqual(realmFetches, 1, 'only the local module was fetched');
     } finally {
       realmLoader.dispose();
       baseLoader.dispose();

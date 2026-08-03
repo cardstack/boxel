@@ -27,6 +27,7 @@ import {
   Deferred,
   internalKeyFor,
   realmURL as realmURLSymbol,
+  SupportedMimeType,
 } from '@cardstack/runtime-common';
 
 import type { Submode } from '@cardstack/host/components/submode-switcher';
@@ -170,6 +171,10 @@ export default class OperatorModeStateService extends Service {
   private pendingOpenFileSeed:
     | (InitialFileContent & { url: string })
     | undefined;
+  private codeSelectionHistory = new Map<
+    string,
+    { codeSelection: string; fieldSelection?: string }
+  >();
   private openFileSubscribers: OpenFileSubscriber[] = [];
   private cardTitles = new TrackedMap<string, string>();
 
@@ -330,6 +335,7 @@ export default class OperatorModeStateService extends Service {
     this.cachedRealmURL = null;
     this.openFileSubscribers = [];
     this.pendingOpenFileSeed = undefined;
+    this.codeSelectionHistory.clear();
     this.cardTitles = new TrackedMap();
     this.moduleInspectorHistory = {};
     this.profileSettingsOpen = false;
@@ -789,7 +795,12 @@ export default class OperatorModeStateService extends Service {
     if (codeRef && isResolvedCodeRef(codeRef)) {
       //(possibly) in a different module
       this._state.codeSelection = codeRef.name;
-      await this.updateCodePath(codeRef.module);
+      this.rememberCodeSelection(codeRef.module, codeRef.name);
+      await this.updateCodePath(
+        await this.determineCanonicalCodePath(
+          this.network.virtualNetwork.toURL(codeRef.module),
+        ),
+      );
     } else if (
       codeRef &&
       'type' in codeRef &&
@@ -799,14 +810,41 @@ export default class OperatorModeStateService extends Service {
     ) {
       this._state.fieldSelection = codeRef.field;
       this._state.codeSelection = codeRef.card.name;
-      await this.updateCodePath(codeRef.card.module);
+      this.rememberCodeSelection(
+        codeRef.card.module,
+        codeRef.card.name,
+        codeRef.field,
+      );
+      await this.updateCodePath(
+        await this.determineCanonicalCodePath(
+          this.network.virtualNetwork.toURL(codeRef.card.module),
+        ),
+      );
     } else if (localName && onLocalSelection) {
       //in the same module
       this._state.codeSelection = localName;
       this._state.fieldSelection = fieldName;
+      if (this._state.codePath) {
+        this.rememberCodeSelection(this._state.codePath, localName, fieldName);
+      }
       this.schedulePersist();
       onLocalSelection(localName, fieldName);
     }
+  }
+
+  private rememberCodeSelection(
+    module: RealmResourceIdentifier | URL,
+    codeSelection: string,
+    fieldSelection?: string,
+  ) {
+    let moduleURL =
+      typeof module === 'string'
+        ? this.network.virtualNetwork.toURL(module)
+        : module;
+    this.codeSelectionHistory.set(moduleURL.href, {
+      codeSelection,
+      fieldSelection,
+    });
   }
 
   get codePathRelativeToRealm() {
@@ -860,10 +898,7 @@ export default class OperatorModeStateService extends Service {
     }
     // Selecting a file is a navigation concern. Commit it immediately so the
     // host-owned editor can mount while the file request, module analysis, and
-    // sandbox preview proceed independently. Redirect canonicalization already
-    // happens in FileResource.onRedirect after the source request responds;
-    // a separate blocking HEAD here only put network latency in front of
-    // Monaco and duplicated that work.
+    // sandbox preview proceed independently.
     this._state.codePath = codePathURL;
     this.updateOpenDirsForNestedPath();
     this.schedulePersist();
@@ -896,6 +931,19 @@ export default class OperatorModeStateService extends Service {
         ModuleInspectorSelections,
         JSON.stringify(this.moduleInspectorHistory),
       );
+    }
+  }
+
+  private async determineCanonicalCodePath(codePath: URL) {
+    try {
+      let response = await this.network.authedFetch(codePath, {
+        method: 'HEAD',
+        headers: { Accept: SupportedMimeType.CardSource },
+      });
+      await response.body?.cancel();
+      return response.ok ? new URL(response.url) : codePath;
+    } catch {
+      return codePath;
     }
   }
 
@@ -1114,6 +1162,20 @@ export default class OperatorModeStateService extends Service {
       ]),
     );
 
+    let rememberedSelection = rawState.codePath
+      ? this.codeSelectionHistory.get(new URL(rawState.codePath).href)
+      : undefined;
+    let codeSelection =
+      rawState.codeSelection ?? rememberedSelection?.codeSelection;
+    let fieldSelection =
+      rawState.fieldSelection ?? rememberedSelection?.fieldSelection;
+    if (rawState.codePath && codeSelection) {
+      this.codeSelectionHistory.set(new URL(rawState.codePath).href, {
+        codeSelection,
+        fieldSelection,
+      });
+    }
+
     let newState: OperatorModeState = new TrackedObject({
       stacks: new TrackedArray([]),
       submode: rawState.submode ?? Submodes.Interact,
@@ -1126,8 +1188,8 @@ export default class OperatorModeStateService extends Service {
       ),
       fileView: rawState.fileView ?? 'inspector',
       openDirs,
-      codeSelection: rawState.codeSelection,
-      fieldSelection: rawState.fieldSelection,
+      codeSelection,
+      fieldSelection,
       aiAssistantOpen:
         rawState.aiAssistantOpen ?? readPersistedAiAssistantOpen(),
       moduleInspector:

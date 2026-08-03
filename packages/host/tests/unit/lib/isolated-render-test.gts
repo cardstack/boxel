@@ -8,6 +8,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { modifier } from 'ember-modifier';
 import { module, test } from 'qunit';
+import { TrackedObject } from 'tracked-built-ins';
 
 import RealmSandboxTemplateIsland from '@cardstack/host/components/realm-sandbox-template-island';
 import {
@@ -91,6 +92,18 @@ class ReactiveTemplate extends Component<{
     <button type='button' data-reactive-template {{on 'click' this.increment}}>
       {{this.count}}
     </button>
+  </template>
+}
+
+class OpaqueModelTemplate extends Component<{
+  Args: { model: { name: string } };
+}> {
+  get model() {
+    return this.args.model;
+  }
+
+  <template>
+    <p data-opaque-model>{{this.model.name}}</p>
   </template>
 }
 
@@ -277,6 +290,36 @@ module('Unit | isolated-render', function (hooks) {
         hasSerializedComponent(element as any),
         'the live client render retains markers for a future replacement',
       );
+    } finally {
+      teardown(element as any);
+      element.remove();
+    }
+  });
+
+  test('a tracked opaque model updates without replacing its DOM', function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+    let model = new TrackedObject({ name: 'before' });
+
+    try {
+      serializeWithArgs(
+        OpaqueModelTemplate as any,
+        element as any,
+        this.owner,
+        { model },
+      );
+      let paragraph = element.querySelector<HTMLElement>('[data-opaque-model]');
+      assert.dom(paragraph).hasText('before');
+
+      model.name = 'after';
+      rerenderSerializedComponent(element as any);
+
+      assert.strictEqual(
+        element.querySelector('[data-opaque-model]'),
+        paragraph,
+        'the mounted authored element keeps its identity',
+      );
+      assert.dom(paragraph).hasText('after');
     } finally {
       teardown(element as any);
       element.remove();

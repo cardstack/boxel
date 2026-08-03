@@ -488,6 +488,18 @@ export class Loader {
     }
   }
 
+  // Host-owned runtime boundaries can synthesize inert constructor facades
+  // for executable definitions that deliberately remain in another realm.
+  // Register only the facade's code identity; this does not install a module,
+  // expose its implementation, or change import resolution.
+  registerIdentity(
+    value: Function,
+    identity: { module: string; name: string },
+  ): void {
+    this.identities.set(value, identity);
+    Loader.loaders.set(value, this);
+  }
+
   static getLoaderFor(value: unknown): Loader | undefined {
     if (typeof value === 'function') {
       return Loader.loaders.get(value);
@@ -1121,7 +1133,13 @@ export class Loader {
       if (
         typeof exportedEntity === 'function' &&
         typeof propName === 'string' &&
-        !this.identities.has(exportedEntity)
+        !this.identities.has(exportedEntity) &&
+        // A delegated module namespace belongs to its source Loader. A module
+        // evaluated in this Loader can re-export one of those functions, but
+        // the alias must not steal its canonical identity (or, for example, a
+        // realm-local re-export of Base PngDef stops matching indexed PNGs).
+        // Preserve the first Loader that actually owned the export.
+        !Loader.loaders.has(exportedEntity)
       ) {
         this.identities.set(exportedEntity, {
           module: moduleId,

@@ -2,6 +2,27 @@
 
 ## Post-review implementation status (2026-08-02)
 
+The final pre-CI diligence pass was run from a fresh Host build. The existing
+single-realm Code-submode regression group passes 42 tests with its one
+pre-existing skip; the sandbox data-update acceptance row, the seven
+isolated-render rows, two opaque-method serialization rows, and six existing
+RichMarkdown rows all pass. The data-update coverage now proves both that a
+trusted Base field portal receives the new Store snapshot and that its authored
+DOM node retains identity across the update. Host JavaScript/template lint,
+Base lint, runtime-common lint/typecheck, and `git diff --check` pass. The full
+Host lint reaches only the seven already-documented local `Array.at`
+target-library diagnostics and no changed source line.
+
+The lifetime and hostile-style checks were also repeated against this source:
+128 real route navigations alternating SES and iframe cards ended with zero
+active compartments and iframe connections and no measured forced-GC heap
+growth; the 4,096-principal service lifecycle soak ended with zero active
+runtimes, loads, templates, and styles; and all six hostile-CSS rows pass,
+including scoped selectors, network-bearing values, global registrations, and
+compiler-namespaced keyframes. These are strong bounded-lifecycle regression
+checks, but they do not replace the still-open long CDP retainer inspection or
+the full GitHub Host CI run.
+
 The independent review in
 [`realm-sandbox-wip-review-findings.md`](realm-sandbox-wip-review-findings.md)
 has now been applied to the working tree. F-1 through F-20 have concrete fixes

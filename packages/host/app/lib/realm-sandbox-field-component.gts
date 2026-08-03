@@ -17,16 +17,25 @@ import { IconMinusCircle } from '@cardstack/boxel-ui/icons';
 import {
   baseCardRef,
   CardContextName,
+  CardCrudFunctionsContextName,
+  CardURLContextName,
   chooseCard,
   GetCardContextName,
   identifyCard,
   isCardInstance,
   isFileDefInstance,
+  relativeTo,
+  type CodeRef,
   type getCard,
+  type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
-import { renderWithArgs, teardown } from '@cardstack/host/lib/isolated-render';
+import {
+  renderWithArgs,
+  rerenderSerializedComponent,
+  teardown,
+} from '@cardstack/host/lib/isolated-render';
 import type { SandboxCardFieldMetadata } from '@cardstack/host/lib/realm-compartment-module-runtime';
 import type { RealmSandboxRelationshipContext } from '@cardstack/host/services/realm-sandbox';
 import type StoreService from '@cardstack/host/services/store';
@@ -34,18 +43,26 @@ import type StoreService from '@cardstack/host/services/store';
 import type {
   BaseDef,
   BaseDefComponent,
+  CardDef,
   CardContext,
+  CardCrudFunctions,
+  FieldType,
   Format,
 } from '@cardstack/base/card-api';
 import type { ArgsFor } from 'ember-modifier';
 
 type RelationshipResourceType = 'card' | 'file-meta';
 
+const NoopCardComponentModifier = class extends Modifier<any> {};
+
 class HostRelationshipCard extends Component<{
   Args: {
     cardId: string;
-    card: BaseDef;
+    card: CardDef;
     format: Format;
+    fieldType: FieldType;
+    fieldName: string;
+    resourceType: RelationshipResourceType;
     relationshipContext: RealmSandboxRelationshipContext;
   };
 }> {
@@ -61,14 +78,43 @@ class HostRelationshipCard extends Component<{
     return this.args.relationshipContext.cardContext;
   }
 
+  @provide(CardCrudFunctionsContextName)
+  // @ts-ignore consumed by the trusted Base relationship renderer
+  private get cardCrudFunctions(): CardCrudFunctions {
+    // A delegated relationship is rendered in a separate host root so it does
+    // not inherit the outer provider tree. Reintroduce only the navigation
+    // capability explicitly; create/edit/save/delete remain unavailable.
+    return {
+      viewCard: this.args.relationshipContext.viewCard ?? (() => undefined),
+    } as CardCrudFunctions;
+  }
+
+  private get cardComponentModifier(): NonNullable<
+    CardContext['cardComponentModifier']
+  > {
+    return (
+      this.args.relationshipContext.cardContext?.cardComponentModifier ??
+      NoopCardComponentModifier
+    );
+  }
+
   <template>
-    <CardRenderer
-      @card={{@card}}
-      @format={{@format}}
-      @displayContainer={{false}}
-      @viewCard={{@relationshipContext.viewCard}}
-      data-test-hydratable-card={{@cardId}}
-    />
+    <div
+      {{this.cardComponentModifier
+        card=@card
+        format=@format
+        fieldType=@fieldType
+        fieldName=@fieldName
+      }}
+    >
+      <CardRenderer
+        @card={{@card}}
+        @format={{@format}}
+        @displayContainer={{false}}
+        @viewCard={{@relationshipContext.viewCard}}
+        data-test-hydratable-card={{@cardId}}
+      />
+    </div>
   </template>
 }
 
@@ -78,6 +124,8 @@ interface DeferredRelationshipSignature {
     Named: {
       cardId: string;
       format: Format;
+      fieldType: FieldType;
+      fieldName: string;
       resourceType: RelationshipResourceType;
       relationshipContext: RealmSandboxRelationshipContext;
     };
@@ -141,14 +189,178 @@ class DeferredRelationshipCard extends Modifier<DeferredRelationshipSignature> {
   }
 }
 
+interface TrustedFieldPortalArgs {
+  component: BaseDefComponent;
+  fieldType: typeof BaseDef;
+  fieldName: string;
+  format: Format;
+  isMany: boolean;
+  getValue: () => unknown;
+  getCanWrite: () => boolean;
+  getCardContext: () => CardContext | undefined;
+  getCardURL: () => string | undefined;
+  validateCodeRef?: (ref: CodeRef) => Promise<ResolvedCodeRef | undefined>;
+  subscribeToData?: (render: () => void) => () => void;
+  set: (value: unknown) => void;
+  requestRender?: () => void;
+}
+
+class HostTrustedFieldPortal extends Component<{
+  Args: TrustedFieldPortalArgs;
+}> {
+  readonly fields = {};
+  private readonly providedCardContext: CardContext;
+
+  constructor(owner: Owner, args: TrustedFieldPortalArgs) {
+    super(owner, args);
+    let source = args.getCardContext();
+    // Code-mode previews do not always have an outer CardContext yet. The
+    // trusted field island still needs its narrow sandbox capabilities, so
+    // provide a minimal context whose prototype is the ordinary context when
+    // one exists. Base's CardContextConsumer supplies unrelated defaults.
+    this.providedCardContext = Object.assign(
+      source ? Object.create(source) : Object.create(null),
+      {
+        requestRender: args.requestRender,
+        validateCodeRef: args.validateCodeRef,
+      },
+    ) as CardContext;
+  }
+
+  @provide(CardContextName)
+  // @ts-ignore consumed by trusted Base field editors
+  private get cardContext(): CardContext {
+    return this.providedCardContext;
+  }
+
+  @provide(CardURLContextName)
+  // @ts-ignore consumed by trusted Base field editors
+  private get cardURL() {
+    return this.args.getCardURL();
+  }
+
+  get value() {
+    return this.args.getValue();
+  }
+
+  get values() {
+    return this.args.isMany && Array.isArray(this.value)
+      ? this.value
+      : undefined;
+  }
+
+  get canWrite() {
+    return this.args.getCanWrite();
+  }
+
+  <template>
+    {{#if @component}}
+      {{#if this.values}}
+        <div class='containsMany-field'>
+          {{#each this.values as |value|}}
+            {{! @glint-ignore Trusted field templates receive only the inert subset of the ordinary field component signature. }}
+            <@component
+              @cardOrField={{@fieldType}}
+              @model={{value}}
+              @fields={{this.fields}}
+              @format={{@format}}
+              @set={{@set}}
+              @fieldName={{@fieldName}}
+              @canEdit={{and this.canWrite (eq @format 'edit')}}
+            />
+          {{/each}}
+        </div>
+      {{else}}
+        {{! @glint-ignore Trusted field templates receive only the inert subset of the ordinary field component signature. }}
+        <@component
+          @cardOrField={{@fieldType}}
+          @model={{this.value}}
+          @fields={{this.fields}}
+          @format={{@format}}
+          @set={{@set}}
+          @fieldName={{@fieldName}}
+          @canEdit={{and this.canWrite (eq @format 'edit')}}
+        />
+      {{/if}}
+    {{/if}}
+  </template>
+}
+
+interface DeferredTrustedFieldSignature {
+  Element: HTMLDivElement;
+  Args: { Named: TrustedFieldPortalArgs };
+}
+
+// Trusted Base/catalog field editors are deliberately outside the SES
+// transaction. Besides limiting the capability bridge to their inert args,
+// this gives their tracked state a normal Host Glimmer root (CodeMirror and
+// other interactive Base editors otherwise cannot schedule rerenders through
+// the foreign transaction).
+class DeferredTrustedField extends Modifier<DeferredTrustedFieldSignature> {
+  private element?: HTMLDivElement;
+  private args?: TrustedFieldPortalArgs;
+  private rendered = false;
+  private unsubscribeFromData?: () => void;
+  private requestRender = () => {
+    if (this.element) {
+      rerenderSerializedComponent(this.element as any);
+    }
+  };
+
+  constructor(owner: Owner, args: ArgsFor<DeferredTrustedFieldSignature>) {
+    super(owner, args);
+    registerDestructor(this, () => {
+      this.unsubscribeFromData?.();
+      if (this.element) {
+        teardown(this.element as any);
+      }
+    });
+  }
+
+  modify(
+    element: HTMLDivElement,
+    _positional: never[],
+    args: TrustedFieldPortalArgs,
+  ) {
+    this.element = element;
+    this.args = args;
+    if (!this.unsubscribeFromData && args.subscribeToData) {
+      // Trusted Base field templates live in their own Host render root so
+      // DOM-aware editors never execute inside the SES transaction. Data
+      // invalidation therefore has to cross that boundary explicitly; an
+      // outer sandbox-island rerender cannot reach this independent root.
+      this.unsubscribeFromData = args.subscribeToData(this.requestRender);
+    }
+    if (!this.rendered) {
+      this.rendered = true;
+      scheduleOnce('afterRender', this, this.renderField);
+    }
+  }
+
+  private renderField() {
+    if (!this.element || !this.args) {
+      return;
+    }
+    renderWithArgs(
+      HostTrustedFieldPortal as any,
+      this.element as any,
+      getOwner(this) as Owner,
+      { ...this.args, requestRender: this.requestRender },
+    );
+  }
+}
+
 export default function realmSandboxFieldComponent(
   snapshot: () => Record<string, unknown>,
   fieldName: string,
   trustedFieldType?: typeof BaseDef,
   containingFormat: Format = 'isolated',
   fieldKind: SandboxCardFieldMetadata['kind'] = 'contains',
+  fieldTypeDisplayName?: string,
   setField?: (fieldName: string, value: unknown) => void,
   getRelationshipContext?: () => RealmSandboxRelationshipContext | undefined,
+  validateCodeRef?: (ref: CodeRef) => Promise<ResolvedCodeRef | undefined>,
+  subscribeToData?: (render: () => void) => () => void,
 ): BaseDefComponent {
   if (fieldKind === 'linksTo' || fieldKind === 'linksToMany') {
     let defaultFormat: Format;
@@ -213,8 +425,24 @@ export default function realmSandboxFieldComponent(
         let type = identifyCard(trustedFieldType) ?? baseCardRef;
         let selected =
           fieldKind === 'linksToMany'
-            ? await chooseCard({ filter: { type } }, { multiSelect: true })
-            : await chooseCard({ filter: { type } }, { multiSelect: false });
+            ? await chooseCard(
+                { filter: { type } },
+                {
+                  multiSelect: true,
+                  title: fieldTypeDisplayName
+                    ? `Select 1 or more ${fieldTypeDisplayName} cards`
+                    : undefined,
+                },
+              )
+            : await chooseCard(
+                { filter: { type } },
+                {
+                  multiSelect: false,
+                  title: fieldTypeDisplayName
+                    ? `Choose a ${fieldTypeDisplayName} card`
+                    : undefined,
+                },
+              );
         if (!selected) {
           return;
         }
@@ -234,7 +462,8 @@ export default function realmSandboxFieldComponent(
       <template>
         <div
           class='realm-sandbox-relationship-field'
-          data-test-links-to-editor={{fieldName}}
+          data-test-links-to-editor={{if (eq fieldKind 'linksTo') fieldName}}
+          data-test-links-to-many={{if (eq fieldKind 'linksToMany') fieldName}}
         >
           {{#if (and this.canWrite this.hasEntries)}}
             <IconButton
@@ -253,6 +482,8 @@ export default function realmSandboxFieldComponent(
                 {{DeferredRelationshipCard
                   cardId=entry.id
                   format=this.format
+                  fieldType=fieldKind
+                  fieldName=fieldName
                   resourceType=resourceType
                   relationshipContext=this.relationshipContext
                 }}
@@ -299,14 +530,43 @@ export default function realmSandboxFieldComponent(
       Args: { displayContainer?: boolean; format?: Format };
     }> {
       readonly fieldType = fieldType;
-      readonly fields = {};
       readonly fieldName = fieldName;
       readonly set = (value: unknown) => setField?.(fieldName, value);
       readonly isMany =
         fieldKind === 'containsMany' || fieldKind === 'linksToMany';
+      readonly getValue = () => this.value;
+      readonly getCanWrite = () => this.canWrite;
+      readonly getCardContext = () => getRelationshipContext?.()?.cardContext;
+      readonly getCardURL = () => {
+        let id = snapshot().id;
+        return typeof id === 'string' ? id : undefined;
+      };
 
       get value() {
-        return snapshot()[fieldName];
+        let state = snapshot();
+        let value = state[fieldName];
+        let ownerId = state.id;
+        let addReferenceBase = (item: unknown) => {
+          if (
+            typeof ownerId === 'string' &&
+            typeof item === 'object' &&
+            item !== null &&
+            Object.isExtensible(item) &&
+            !(relativeTo in item)
+          ) {
+            Object.defineProperty(item, relativeTo, {
+              configurable: true,
+              enumerable: false,
+              value: ownerId,
+            });
+          }
+        };
+        if (Array.isArray(value)) {
+          value.forEach(addReferenceBase);
+        } else {
+          addReferenceBase(value);
+        }
+        return value;
       }
 
       get format() {
@@ -329,33 +589,23 @@ export default function realmSandboxFieldComponent(
 
       <template>
         {{#if this.component}}
-          {{#if this.values}}
-            <div class='containsMany-field'>
-              {{#each this.values as |value|}}
-                {{! @glint-ignore Trusted field templates receive only the inert subset of the ordinary field component signature. }}
-                <this.component
-                  @cardOrField={{this.fieldType}}
-                  @model={{value}}
-                  @fields={{this.fields}}
-                  @format={{this.format}}
-                  @set={{this.set}}
-                  @fieldName={{this.fieldName}}
-                  @canEdit={{and this.canWrite (eq this.format 'edit')}}
-                />
-              {{/each}}
-            </div>
-          {{else}}
-            {{! @glint-ignore Trusted field templates receive only the inert subset of the ordinary field component signature. }}
-            <this.component
-              @cardOrField={{this.fieldType}}
-              @model={{this.value}}
-              @fields={{this.fields}}
-              @format={{this.format}}
-              @set={{this.set}}
-              @fieldName={{this.fieldName}}
-              @canEdit={{and this.canWrite (eq this.format 'edit')}}
-            />
-          {{/if}}
+          <div
+            class='realm-sandbox-trusted-field'
+            {{DeferredTrustedField
+              component=this.component
+              fieldType=this.fieldType
+              fieldName=this.fieldName
+              format=this.format
+              isMany=this.isMany
+              getValue=this.getValue
+              getCanWrite=this.getCanWrite
+              getCardContext=this.getCardContext
+              getCardURL=this.getCardURL
+              validateCodeRef=validateCodeRef
+              subscribeToData=subscribeToData
+              set=this.set
+            }}
+          ></div>
         {{/if}}
       </template>
     } as unknown as BaseDefComponent;

@@ -1842,12 +1842,17 @@ export default class StoreService extends Service implements StoreInterface {
       // Match card-api's normal deserializer identity behavior. A no-cache
       // reload may materialize a fresh opaque facade, but one remote URL must
       // keep one local identity or the Store correctly rejects the duplicate.
+      // Error entries also reserve that identity even though they do not expose
+      // the CardDef localId symbol themselves.
       let existing = resource.id ? this.store.getCard(resource.id) : undefined;
+      let existingLocalId = resource.id
+        ? (existing?.[localIdSymbol] ?? this.store.getLocalId(resource.id))
+        : undefined;
       return await this.realmSandbox.createOpaqueCard<T>(
         resource,
         relativeTo,
         doc,
-        existing?.[localIdSymbol],
+        existingLocalId,
         (id, fieldType) => {
           let isFileType = Boolean(
             (fieldType as typeof BaseDef & { isFileDef?: boolean }).isFileDef,
@@ -2099,6 +2104,10 @@ export default class StoreService extends Service implements StoreInterface {
           executableInvalidations,
         )
       : new Set<string>();
+    let retainedModuleInvalidations = new Set([
+      ...acknowledgedInvalidations,
+      ...hmrHandled,
+    ]);
     let remainingExecutableInvalidations = executableInvalidations.filter(
       (url) => !hmrHandled.has(url),
     );
@@ -2188,7 +2197,7 @@ export default class StoreService extends Service implements StoreInterface {
       reloadsTriggered = this.#reloadInvalidatedInstances(
         event,
         remainingInvalidations,
-        acknowledgedInvalidations,
+        retainedModuleInvalidations,
       );
     }
 
@@ -3359,6 +3368,16 @@ export default class StoreService extends Service implements StoreInterface {
       // safe type-change path: updateOpaqueCardFromDocument rebuilds exactly
       // this facade when adoptsFrom changes, instead of importing either the
       // old or new user-authored CardDef into the trusted Host loader.
+      // Opaque projections expose Base field accessors for trusted edit UI.
+      // Reconciling server state through those accessors can legitimately
+      // emit field-change notifications, but those notifications are not a
+      // local edit and must not feed the just-read document back into
+      // autosave. Detach only this record's subscriber for the reconciliation;
+      // reloadTask restores it after the update (or replaces the record).
+      this.cardApiCache?.unsubscribeFromChanges(
+        instance,
+        this.onInstanceUpdated,
+      );
       let opaqueUpdate = await this.realmSandbox.updateOpaqueCardFromDocument(
         instance,
         incomingDoc,
@@ -3366,6 +3385,7 @@ export default class StoreService extends Service implements StoreInterface {
       if (opaqueUpdate !== false) {
         return opaqueUpdate as CardDef;
       }
+      this.cardApiCache?.subscribeToChanges(instance, this.onInstanceUpdated);
 
       // Scenario: a saved card instance changes its type — its JSON
       // `meta.adoptsFrom` is edited to point at a different card definition
