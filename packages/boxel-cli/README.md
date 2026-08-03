@@ -56,6 +56,14 @@ BOXEL_PASSWORD=… boxel profile add \
   --realm-server-url https://realms.my.server/
 ```
 
+### Realm skills in Claude Code
+
+A realm's user-authored skills live in it as `skills/<name>/SKILL.md`. `boxel realm pull`, `sync`, and `watch` link each one into the surrounding checkout's `.claude/skills/<realm>-<name>/`, so the same skill Boxel's AI assistant loads is available in a Claude Code session as `/<realm>-<name>`.
+
+The `.claude/` used is the nearest one at or above the local directory, then the enclosing git checkout, then the local directory itself; the home directory is never used, so a realm's skills stay out of Claude Code's personal scope. Entries are symlinks into the checkout (a copy where the OS refuses symlinks), ownership is recorded in `.claude/skills/.boxel-skills-sync.json`, and entries boxel did not write are left alone.
+
+Set `BOXEL_NO_CLAUDE_SKILLS=1`, or pass `--no-claude-skills`, to skip it.
+
 ## Development
 
 ### Building
