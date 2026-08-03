@@ -50,7 +50,10 @@ function computeCanonicalURL(
     // before converting realm URLs to prefix form. Without this step the same
     // dependency can be stored twice (for example the stable localhost test
     // URL from runtime tracking plus its resolved CI hostname from metadata).
-    let virtualAlias = virtualNetwork.mapURL(parsed, 'real-to-virtual');
+    // Some lightweight VirtualNetwork stand-ins only implement URL resolution
+    // and unresolution. Mapping is an optional canonicalization refinement for
+    // those callers, not a reason to discard the successfully resolved URL.
+    let virtualAlias = virtualNetwork.mapURL?.(parsed, 'real-to-virtual');
     return virtualNetwork.unresolveURL((virtualAlias ?? parsed).href);
   } catch (_e) {
     let stripped = url.split('#')[0] ?? url;
