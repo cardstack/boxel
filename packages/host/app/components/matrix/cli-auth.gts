@@ -32,6 +32,11 @@ interface MatrixLoginResponse {
   user_id: string;
 }
 
+interface LoginFlow {
+  type: string;
+  identity_providers?: { id: string }[];
+}
+
 // The page boxel-cli opens to authorize a machine. It offers the same two
 // choices as the web sign-in, and each finishes by handing a session to the
 // loopback listener the CLI is holding open:
@@ -326,16 +331,33 @@ export default class CliAuth extends Component {
     this.doPasswordLogin.perform();
   }
 
+  // Asked of the homeserver directly rather than through MatrixService, whose
+  // `ready` waits on the card and file API modules to load from the realm
+  // server. This page is standalone sign-in machinery — it should not need the
+  // rest of the app running to decide whether to offer Google, and going through
+  // the service meant a realm server that wasn't up left the button silently
+  // missing rather than failing.
   private detectGoogleSso = restartableTask(async () => {
     try {
-      let { flows } = await this.matrixService.loginFlows();
-      this.googleSsoAvailable = flows.some(
-        (f: any) =>
-          f.type === 'm.login.sso' &&
-          Array.isArray(f.identity_providers) &&
-          f.identity_providers.some((p: any) => p.id === GOOGLE_IDP_ID),
+      let response = await fetch(
+        new URL('_matrix/client/v3/login', matrixURL).href,
       );
-    } catch {
+      if (!response.ok) {
+        throw new Error(`${response.status}`);
+      }
+      let { flows } = (await response.json()) as { flows?: LoginFlow[] };
+      this.googleSsoAvailable = (flows ?? []).some(
+        (flow) =>
+          flow.type === 'm.login.sso' &&
+          (flow.identity_providers ?? []).some((p) => p.id === GOOGLE_IDP_ID),
+      );
+    } catch (e: any) {
+      // Non-fatal: the password form still works. Say so rather than leaving a
+      // missing button to be puzzled over.
+      console.warn(
+        `Could not read login flows from ${matrixURL}, so Google sign-in is not being offered:`,
+        e,
+      );
       this.googleSsoAvailable = false;
     }
   });
@@ -347,15 +369,12 @@ export default class CliAuth extends Component {
     if (!redirect) {
       return;
     }
-    try {
-      let url = await this.matrixService.getSsoLoginUrl(
-        redirect,
-        GOOGLE_IDP_ID,
-      );
-      window.location.assign(url);
-    } catch (e: any) {
-      this.error = `Could not start Google sign-in: ${e.message}`;
-    }
+    let url = new URL(
+      `_matrix/client/v3/login/sso/redirect/${encodeURIComponent(GOOGLE_IDP_ID)}`,
+      matrixURL,
+    );
+    url.searchParams.set('redirectUrl', redirect);
+    window.location.assign(url.href);
   });
 
   private doPasswordLogin = restartableTask(async () => {
