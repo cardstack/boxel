@@ -54,10 +54,12 @@ export type LoopbackResult =
   | { kind: 'session'; session: PostedSession };
 
 export interface LoopbackCallback {
-  // Where the browser should come back to. Carries the state nonce, so it must
-  // be passed on verbatim.
+  // Where the browser should come back to. The authorization page rebuilds this
+  // from `port` and `state` rather than being handed it, so the two must agree
+  // on CALLBACK_PATH.
   redirectUrl: string;
   port: number;
+  state: string;
   waitForResult(): Promise<LoopbackResult>;
   close(): void;
 }
@@ -196,6 +198,7 @@ export async function startLoopbackCallback(opts?: {
   return {
     redirectUrl,
     port,
+    state,
     close,
     waitForResult: () =>
       Promise.race([
@@ -283,9 +286,19 @@ export const CLI_AUTH_PATH = 'cli-auth';
 
 // The host app's authorization page, which offers the same sign-in choices as
 // the web login: a password form and a Google button.
-export function buildCliAuthUrl(hostUrl: string, redirectUrl: string): string {
+//
+// The listener is identified by port rather than by handing over its URL. A URL
+// in a query argument reads as an SSRF attempt to the WAF in front of deployed
+// realm servers, which answers 403 (`EC2MetaDataSSRF_QUERYARGUMENTS`). Sending
+// only the port is also tighter: the page can address nothing but loopback,
+// so there is no supplied origin for it to have to distrust.
+export function buildCliAuthUrl(
+  hostUrl: string,
+  callback: { port: number; state: string },
+): string {
   const url = new URL(CLI_AUTH_PATH, ensureTrailingSlash(hostUrl));
-  url.searchParams.set('redirect', redirectUrl);
+  url.searchParams.set('port', String(callback.port));
+  url.searchParams.set('state', callback.state);
   return url.href;
 }
 
@@ -347,7 +360,7 @@ export async function browserLogin(
 
   const callback = await startLoopbackCallback({ timeoutMs });
   try {
-    const authUrl = buildCliAuthUrl(hostUrl, callback.redirectUrl);
+    const authUrl = buildCliAuthUrl(hostUrl, callback);
     const opened = await openBrowserFn(authUrl);
     if (opened) {
       log('Opening your browser to sign in...');

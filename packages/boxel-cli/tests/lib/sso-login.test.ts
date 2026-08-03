@@ -24,20 +24,32 @@ function formBody(fields: Record<string, string>): string {
 }
 
 describe('buildCliAuthUrl', () => {
-  it('targets the host app authorization page with the loopback redirect', () => {
+  it('names the listener by port rather than by URL', () => {
     const url = new URL(
-      buildCliAuthUrl(HOST_URL, 'http://127.0.0.1:1234/callback?state=abc'),
+      buildCliAuthUrl(HOST_URL, { port: 1234, state: 'abc123def456' }),
     );
     expect(url.origin).toBe('https://host.example.com');
     expect(url.pathname).toBe('/cli-auth');
-    expect(url.searchParams.get('redirect')).toBe(
-      'http://127.0.0.1:1234/callback?state=abc',
-    );
+    expect(url.searchParams.get('port')).toBe('1234');
+    expect(url.searchParams.get('state')).toBe('abc123def456');
+  });
+
+  // A URL in a query argument reads as SSRF to the WAF in front of deployed
+  // realm servers, which answers 403 before the app ever sees the request.
+  it('puts no URL in the query string', () => {
+    const href = buildCliAuthUrl(HOST_URL, {
+      port: 1234,
+      state: 'abc123def456',
+    });
+    expect(new URL(href).search).not.toMatch(/http/i);
   });
 
   it('tolerates a host URL without a trailing slash', () => {
     const url = new URL(
-      buildCliAuthUrl('https://host.example.com', 'http://127.0.0.1:1/cb'),
+      buildCliAuthUrl('https://host.example.com', {
+        port: 1,
+        state: 'abc123def456',
+      }),
     );
     expect(url.pathname).toBe('/cli-auth');
   });
@@ -231,8 +243,13 @@ describe('browserLogin', () => {
 
   // Pulls the loopback target back out of the authorization URL and finishes
   // the flow the way the page would.
+  // Rebuilds the callback address from the port and nonce the way the
+  // authorization page does.
   function loopbackFrom(authUrl: string): URL {
-    return new URL(new URL(authUrl).searchParams.get('redirect')!);
+    const params = new URL(authUrl).searchParams;
+    const target = new URL(`http://127.0.0.1:${params.get('port')}/callback`);
+    target.searchParams.set('state', params.get('state')!);
+    return target;
   }
 
   it('redeems the single-use token the SSO branch returns', async () => {

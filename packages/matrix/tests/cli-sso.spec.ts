@@ -105,14 +105,11 @@ test.describe('boxel-cli browser authorization', () => {
     expect(whoami.status).toBe(200);
   });
 
-  test('refuses to send a session anywhere but this machine', async ({
-    page,
-  }) => {
-    // The redirect target is attacker-controllable, so the page has to reject
-    // a non-loopback one rather than hand a session to it.
-    await page.goto(
-      `${HOST_URL}cli-auth?redirect=${encodeURIComponent('https://evil.example.com/steal')}`,
-    );
+  test('offers no sign-in without a usable callback port', async ({ page }) => {
+    // The page addresses loopback and nothing else, so a port it can't use
+    // leaves it with nowhere to send a session — and it should say so rather
+    // than collect a password it would have to discard.
+    await page.goto(`${HOST_URL}cli-auth?port=0&state=abc123def456`);
     await expect(page.locator('[data-test-cli-auth-error]')).toBeVisible();
     await expect(page.locator('[data-test-cli-auth-form]')).toHaveCount(0);
   });

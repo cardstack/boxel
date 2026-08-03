@@ -12,7 +12,7 @@ import { BoxelInput, LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { GoogleColor } from '@cardstack/boxel-ui/icons';
 
 import ENV from '@cardstack/host/config/environment';
-import { isLoopbackRedirect } from '@cardstack/host/lib/cli-auth-redirect';
+import { cliAuthLoopbackUrl } from '@cardstack/host/lib/cli-auth-loopback';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
 import AuthButton from './auth-button';
@@ -176,19 +176,15 @@ export default class CliAuth extends Component {
     this.detectGoogleSso.perform();
   }
 
-  // Read once: this is where the CLI told us to send the result, and it is the
-  // one input on this page that must not be trusted blindly.
+  // Where the result goes: loopback on this machine, on the port the CLI named.
   private get redirect(): string | undefined {
-    let value = new URLSearchParams(window.location.search).get('redirect');
-    return value ?? undefined;
+    let params = new URLSearchParams(window.location.search);
+    return cliAuthLoopbackUrl(params.get('port'), params.get('state'));
   }
 
   private get redirectError(): string | undefined {
     if (!this.redirect) {
-      return 'This page needs a redirect target supplied by the Boxel CLI. Start it with `boxel profile add`.';
-    }
-    if (!isLoopbackRedirect(this.redirect)) {
-      return 'That sign-in request asked to send your session somewhere other than this computer, so it was refused.';
+      return 'This page needs the listening port and request id that the Boxel CLI supplies. Start it with `boxel profile add`.';
     }
     return undefined;
   }
