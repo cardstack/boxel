@@ -27,6 +27,9 @@ function makeStubNetwork(): {
     unresolveURL(url: string) {
       return url;
     },
+    mapURL() {
+      return undefined;
+    },
   } as unknown as VirtualNetwork;
   return { network, resolveCount: () => resolveCalls };
 }
@@ -108,6 +111,33 @@ module(basename(import.meta.filename), function () {
         resolveCount(),
         2,
         'a cleared memo recomputes on the next call',
+      );
+    });
+
+    test('collapses a resolved environment URL to its stable virtual alias', function (assert) {
+      let { network } = makeStubNetwork();
+      network.mapURL = (url, direction) => {
+        if (
+          direction === 'real-to-virtual' &&
+          String(url).startsWith('https://realm-test.ci.localhost/test/')
+        ) {
+          return new URL(
+            String(url).replace(
+              'https://realm-test.ci.localhost/test/',
+              'https://localhost:4202/test/',
+            ),
+          );
+        }
+        return undefined;
+      };
+
+      assert.strictEqual(
+        canonicalURL(
+          'https://realm-test.ci.localhost/test/person',
+          'http://test-realm/test/spec-1',
+          network,
+        ),
+        'https://localhost:4202/test/person',
       );
     });
   });

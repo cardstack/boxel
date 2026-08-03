@@ -46,8 +46,12 @@ function computeCanonicalURL(
     let parsed = virtualNetwork.resolveURL(url, relativeTo);
     parsed.search = '';
     parsed.hash = '';
-    // Convert resolved URLs back to prefix form if possible
-    return virtualNetwork.unresolveURL(parsed.href);
+    // Collapse environment-specific real URLs back to their virtual alias
+    // before converting realm URLs to prefix form. Without this step the same
+    // dependency can be stored twice (for example the stable localhost test
+    // URL from runtime tracking plus its resolved CI hostname from metadata).
+    let virtualAlias = virtualNetwork.mapURL(parsed, 'real-to-virtual');
+    return virtualNetwork.unresolveURL((virtualAlias ?? parsed).href);
   } catch (_e) {
     let stripped = url.split('#')[0] ?? url;
     return stripped.split('?')[0] ?? stripped;
