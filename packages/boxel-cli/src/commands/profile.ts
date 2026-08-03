@@ -35,9 +35,10 @@ interface EnvironmentDefaults {
   domain: string;
   matrixUrl: string;
   realmServerUrl: string;
-  // Origin of the host app, which serves the browser sign-in page. Production
-  // shares an origin with the realm server; staging does not, so this can't be
-  // derived from realmServerUrl.
+  // Origin of the host app, which serves the browser sign-in page. Deployed
+  // environments serve it from the realm server's origin, but local dev splits
+  // them across ports and env mode gives each its own subdomain — so this can't
+  // be derived from realmServerUrl.
   hostUrl: string;
 }
 
@@ -49,7 +50,7 @@ const MENU_ENVIRONMENTS: Record<
     domain: 'stack.cards',
     matrixUrl: 'https://matrix-staging.stack.cards',
     realmServerUrl: 'https://realms-staging.stack.cards/',
-    hostUrl: 'https://boxel-host-staging.stack.cards/',
+    hostUrl: 'https://realms-staging.stack.cards/',
   },
   production: {
     domain: 'boxel.ai',
@@ -61,7 +62,9 @@ const MENU_ENVIRONMENTS: Record<
     domain: 'localhost',
     matrixUrl: 'http://localhost:8008',
     realmServerUrl: 'https://localhost:4201/',
-    hostUrl: 'http://localhost:4200/',
+    // The host vite dev server, which terminates HTTPS with the same mkcert
+    // leaf as the realm server on 4201.
+    hostUrl: 'https://localhost:4200/',
   },
 };
 
