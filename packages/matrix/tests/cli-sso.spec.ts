@@ -105,6 +105,24 @@ test.describe('boxel-cli browser authorization', () => {
     expect(whoami.status).toBe(200);
   });
 
+  test('reaches password reset without leaving the authorization', async ({
+    page,
+  }) => {
+    // The reset email links back to this page carrying the same port and nonce,
+    // so a user who resets mid-flow can finish authorizing rather than starting
+    // over — which only works if the reset lives here rather than in the app.
+    await page.goto(`${HOST_URL}cli-auth?port=53412&state=abc123def456`);
+    await page.locator('[data-test-cli-auth-forgot-password]').click();
+
+    await expect(page.locator('[data-test-email-field]')).toBeVisible();
+    await expect(page.locator('[data-test-cli-auth-form]')).toHaveCount(0);
+
+    // And back again, with the callback still named in the URL.
+    await page.locator('[data-test-back-to-login-btn]').click();
+    await expect(page.locator('[data-test-cli-auth-form]')).toBeVisible();
+    expect(new URL(page.url()).searchParams.get('port')).toBe('53412');
+  });
+
   test('offers no sign-in without a usable callback port', async ({ page }) => {
     // The page addresses loopback and nothing else, so a port it can't use
     // leaves it with nowhere to send a session — and it should say so rather

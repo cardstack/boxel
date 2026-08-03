@@ -8,7 +8,7 @@ import { restartableTask } from 'ember-concurrency';
 
 import window from 'ember-window-mock';
 
-import { BoxelInput } from '@cardstack/boxel-ui/components';
+import { BoxelInput, Button } from '@cardstack/boxel-ui/components';
 import { GoogleColor } from '@cardstack/boxel-ui/icons';
 
 import ENV from '@cardstack/host/config/environment';
@@ -18,6 +18,10 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import AuthButton from './auth-button';
 import AuthContainer from './auth-container';
 import AuthFormField from './auth-form-field';
+import ForgotPassword from './forgot-password';
+
+import type { AuthMode } from './auth';
+import type { ResetPasswordParams } from './forgot-password';
 
 const { matrixURL } = ENV;
 const GOOGLE_IDP_ID = 'oidc-google';
@@ -49,6 +53,12 @@ export default class CliAuth extends Component {
         <span class='title'>You're signed in</span>
         <p class='subtitle' data-test-cli-auth-complete>Return to your terminal
           to continue. You can close this tab.</p>
+      {{else if this.showingPasswordReset}}
+        <ForgotPassword
+          @setMode={{this.setMode}}
+          @nullifyResetPasswordParams={{this.nullifyResetPasswordParams}}
+          @resetPasswordParams={{this.resetPasswordParams}}
+        />
       {{else}}
         <span class='title'>Authorize Boxel CLI</span>
         {{#if this.signedInUserId}}
@@ -61,6 +71,12 @@ export default class CliAuth extends Component {
         {{else}}
           <p class='subtitle'>Signing in gives the Boxel CLI running on this
             computer access to your workspaces.</p>
+        {{/if}}
+        {{#if this.resumedFromEmail}}
+          <p class='notice' data-test-cli-auth-resumed>The CLI stops waiting
+            after 15 minutes. If signing in doesn't reach it, run
+            <code>boxel profile add</code>
+            again.</p>
         {{/if}}
         <form data-test-cli-auth-form {{on 'submit' this.submitPassword}}>
           {{#if this.googleSsoAvailable}}
@@ -101,8 +117,15 @@ export default class CliAuth extends Component {
               @onKeyPress={{this.handleEnter}}
             />
           </AuthFormField>
+          <Button
+            type='button'
+            class='forgot-password'
+            @kind='link-muted'
+            @size='extra-small'
+            data-test-cli-auth-forgot-password
+            {{on 'click' this.startPasswordReset}}
+          >Forgot password?</Button>
           <AuthButton
-            class='submit-button'
             data-test-cli-auth-submit
             @variant='primary'
             @disabled={{this.isSubmitDisabled}}
@@ -140,10 +163,20 @@ export default class CliAuth extends Component {
         font-weight: 600;
         overflow-wrap: anywhere;
       }
-      /* The sign-in screen gets this gap from the "Forgot password?" link's
-         bottom margin. There's no such link here, so the button carries it. */
-      .submit-button {
-        margin-top: var(--boxel-sp-lg);
+      .notice {
+        margin: 0 0 var(--boxel-sp-lg);
+        color: var(--muted-foreground);
+        font: var(--boxel-font-xs);
+        line-height: 1.4;
+      }
+      .notice code {
+        font-family: var(--boxel-monospace-font-family, monospace);
+      }
+      .forgot-password {
+        --host-outline-offset: 2px;
+        margin-top: var(--boxel-sp-4xs);
+        margin-bottom: var(--boxel-sp-lg);
+        margin-left: auto;
       }
       .google-button {
         margin-top: var(--boxel-sp-sm);
@@ -189,6 +222,11 @@ export default class CliAuth extends Component {
   @tracked private error: string | undefined;
   @tracked private googleSsoAvailable = false;
   @tracked private completed = false;
+  @tracked private resettingPassword = false;
+  @tracked private resetPasswordParams: ResetPasswordParams | undefined;
+  // True when this page load came from a reset email, which means the CLI has
+  // been waiting since before the email was sent and may have given up.
+  @tracked private resumedFromEmail = false;
 
   constructor(owner: unknown, args: object) {
     super(owner as never, args);
@@ -201,6 +239,43 @@ export default class CliAuth extends Component {
     if (localpart) {
       this.username = localpart;
     }
+
+    // A reset email links back to this same page, carrying the callback port and
+    // nonce it was requested with — so finishing a reset can hand the waiting
+    // CLI its session without the user starting over.
+    let params = new URLSearchParams(window.location.search);
+    let sid = params.get('sid');
+    let clientSecret = params.get('clientSecret');
+    if (sid && clientSecret) {
+      this.resetPasswordParams = { sid, clientSecret };
+      this.resumedFromEmail = true;
+    }
+  }
+
+  private get showingPasswordReset() {
+    return this.resettingPassword || Boolean(this.resetPasswordParams);
+  }
+
+  // ForgotPassword speaks in AuthMode, where 'login' means "done here". This
+  // page has only the one other state to return to.
+  @action private setMode(mode: AuthMode) {
+    this.resettingPassword = mode === 'forgot-password';
+  }
+
+  @action private nullifyResetPasswordParams() {
+    this.resetPasswordParams = undefined;
+    // Drop them from the URL too, so a refresh doesn't re-enter a reset that has
+    // already been consumed. The port and nonce stay, since the CLI may still be
+    // waiting on them.
+    let url = new URL(window.location.href);
+    url.searchParams.delete('sid');
+    url.searchParams.delete('clientSecret');
+    window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+  }
+
+  @action private startPasswordReset(ev: Event) {
+    ev.preventDefault();
+    this.resettingPassword = true;
   }
 
   private get signedInUserId(): string | undefined {
