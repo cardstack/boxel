@@ -20,6 +20,7 @@ import {
   closeServer,
   matrixURL,
   setupPermissionedRealmsCached,
+  stripGlimmerSerializationMarkers,
   testPort,
   trackServer,
 } from './helpers/index.ts';
@@ -410,8 +411,11 @@ module(basename(import.meta.filename), function (hooks) {
       dbAdapter,
       `${healthyRealmURL}steady-1.json`,
     );
-    assert.ok(
-      healthyRow?.isolated_html?.includes('$60'),
+    assert.ok(healthyRow?.isolated_html, 'the healthy card rendered HTML');
+    assert.true(
+      stripGlimmerSerializationMarkers(healthyRow!.isolated_html!).includes(
+        '$60',
+      ),
       "the healthy realm's write → index → render pipeline lands fresh HTML while the bad card is still broken",
     );
     assert.strictEqual(

@@ -12,6 +12,7 @@ import { TrackedObject } from 'tracked-built-ins';
 
 import RealmSandboxTemplateIsland from '@cardstack/host/components/realm-sandbox-template-island';
 import {
+  captureIsolatedRenderErrors,
   hasSerializedComponent,
   prerenderWithArgs,
   rehydrateWithArgs,
@@ -19,6 +20,7 @@ import {
   render,
   rerenderSerializedComponent,
   serializeWithArgs,
+  settleDeferredIsolatedRenders,
   suspendSerializedComponent,
   teardown,
 } from '@cardstack/host/lib/isolated-render';
@@ -105,6 +107,14 @@ class OpaqueModelTemplate extends Component<{
   <template>
     <p data-opaque-model>{{this.model.name}}</p>
   </template>
+}
+
+class ThrowingTemplate extends Component {
+  get value(): string {
+    throw new Error('intentional nested render error');
+  }
+
+  <template>{{this.value}}</template>
 }
 
 class NestedSandboxIsland extends Component<{
@@ -326,7 +336,7 @@ module('Unit | isolated-render', function (hooks) {
     }
   });
 
-  test('a nested SES island rehydrates its server DOM on first client attachment', function (assert) {
+  test('a nested SES island rehydrates its server DOM on first client attachment', async function (assert) {
     let serverElement = document.createElement('div');
     let clientElement = document.createElement('div');
     document.body.appendChild(serverElement);
@@ -341,6 +351,7 @@ module('Unit | isolated-render', function (hooks) {
           component: FirstHotTemplate,
         },
       );
+      await settleDeferredIsolatedRenders();
       clientElement.innerHTML = serverElement.innerHTML;
       teardown(serverElement as any);
 
@@ -360,6 +371,7 @@ module('Unit | isolated-render', function (hooks) {
         this.owner,
         { component: FirstHotTemplate },
       );
+      await settleDeferredIsolatedRenders();
 
       assert.strictEqual(
         clientElement.querySelector('[data-hot-template]'),
@@ -377,6 +389,33 @@ module('Unit | isolated-render', function (hooks) {
       teardown(clientElement as any);
       serverElement.remove();
       clientElement.remove();
+    }
+  });
+
+  test('a nested SES render error preserves the outer tracking frame', async function (assert) {
+    let element = document.createElement('div');
+
+    try {
+      await assert.rejects(
+        captureIsolatedRenderErrors(async () => {
+          serializeWithArgs(
+            NestedSandboxIsland as any,
+            element as any,
+            this.owner,
+            { component: ThrowingTemplate },
+          );
+          await settleDeferredIsolatedRenders();
+        }),
+        (error: Error) => error.message === 'intentional nested render error',
+        'the exact authored error survives the nested serialization boundary',
+      );
+
+      serializeWithArgs(FirstHotTemplate, element as any, this.owner, {});
+      assert.dom(element.querySelector('[data-hot-template]')).exists({
+        count: 1,
+      });
+    } finally {
+      teardown(element as any);
     }
   });
 });

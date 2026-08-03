@@ -32,9 +32,104 @@ type ActiveRender = {
 
 type RenderMode = 'client' | 'serialize' | 'rehydrate';
 let activeRenderMode: RenderMode | undefined;
+type IsolatedRenderErrorCapture = { firstError?: unknown };
+let activeErrorCapture: IsolatedRenderErrorCapture | undefined;
+const deferredIsolatedRenderQueues: Array<Array<() => void>> = [];
+const pendingDeferredIsolatedRenders = new Set<Promise<void>>();
 
 export function isInIsolatedRenderTransaction(): boolean {
   return activeRenderMode !== undefined;
+}
+
+export async function captureIsolatedRenderErrors<T>(
+  callback: () => Promise<T>,
+): Promise<T> {
+  // A nested capture belongs to the same render island. Keeping the original
+  // collector means the first authored failure wins across delegated renders.
+  if (activeErrorCapture) {
+    return callback();
+  }
+
+  let capture: IsolatedRenderErrorCapture = {};
+  let previousCapture = activeErrorCapture;
+  let result: Promise<T>;
+  try {
+    // Keep the collector global only for the synchronous portion that creates
+    // the isolated transaction. Holding it across an await lets unrelated
+    // concurrent prerenders share the same first-error slot. Deferred nested
+    // renders explicitly retain this collector when they are scheduled.
+    activeErrorCapture = capture;
+    result = callback();
+  } finally {
+    activeErrorCapture = previousCapture;
+  }
+  try {
+    let value = await result;
+    if (capture.firstError !== undefined) {
+      throw capture.firstError;
+    }
+    return value;
+  } catch (error) {
+    throw capture.firstError ?? error;
+  }
+}
+
+export function deferUntilIsolatedRenderCompletes(callback: () => void) {
+  let queue =
+    deferredIsolatedRenderQueues[deferredIsolatedRenderQueues.length - 1];
+  if (!activeRenderMode || !queue) {
+    return false;
+  }
+  queue.push(callback);
+  return true;
+}
+
+export async function settleDeferredIsolatedRenders(): Promise<void> {
+  let firstError: unknown;
+  while (pendingDeferredIsolatedRenders.size > 0) {
+    let batch = [...pendingDeferredIsolatedRenders];
+    let results = await Promise.allSettled(batch);
+    for (let result of results) {
+      if (result.status === 'rejected' && firstError === undefined) {
+        firstError = result.reason;
+      }
+    }
+  }
+  if (firstError !== undefined) {
+    throw firstError;
+  }
+}
+
+function scheduleDeferredIsolatedRenders(
+  deferredRenders: Array<() => void>,
+  errorCapture: IsolatedRenderErrorCapture | undefined,
+) {
+  let pending = new Promise<void>((resolve, reject) => {
+    // Ember can finish the host renderer commit after the current microtask
+    // checkpoint. A Promise callback is therefore not a sufficient boundary:
+    // an SES render error can still reset Glimmer's process-global tracking
+    // stack before the host closes its frame. A new task is the first point at
+    // which the host commit is guaranteed to have returned.
+    setTimeout(() => {
+      let previousCapture = activeErrorCapture;
+      activeErrorCapture = errorCapture;
+      try {
+        for (let deferredRender of deferredRenders) {
+          deferredRender();
+        }
+        resolve();
+      } catch (error) {
+        reject(error);
+      } finally {
+        activeErrorCapture = previousCapture;
+      }
+    }, 0);
+  });
+  pendingDeferredIsolatedRenders.add(pending);
+  void pending.then(
+    () => pendingDeferredIsolatedRenders.delete(pending),
+    () => pendingDeferredIsolatedRenders.delete(pending),
+  );
 }
 
 const activeRenders = new WeakMap<SimpleElement, ActiveRender>();
@@ -235,36 +330,113 @@ function renderWithMode(
   } = owner.lookup('renderer:-dom') as any;
 
   let result: ActiveRender | undefined;
+  let previousRenderMode = activeRenderMode;
+  let renderErrorCapture = activeErrorCapture;
+  let deferredRenders: Array<() => void> | undefined;
 
   try {
-    let previousRenderMode = activeRenderMode;
+    if (previousRenderMode === undefined) {
+      deferredRenders = [];
+      deferredIsolatedRenderQueues.push(deferredRenders);
+    }
     activeRenderMode = mode;
+    let renderComponent = () => {
+      let builder =
+        mode === 'serialize'
+          ? serializeBuilder
+          : mode === 'rehydrate'
+            ? rehydrationBuilder
+            : _builder;
+      let iterator = glimmerRenderComponent(
+        _context,
+        builder(_context.env, { element }),
+        _owner,
+        C,
+        args,
+      );
+      result = iterator.sync();
+    };
+    // Glimmer resets its process-global tracking stack when component
+    // evaluation throws. `inTransaction()` commits in a `finally`, and that
+    // commit can then throw "attempted to close a tracking frame". A finally
+    // exception replaces the authored exception in JavaScript. Capture the
+    // block failure before commit, allow the environment to finish its
+    // cleanup, and give the authored failure precedence afterward.
+    let renderError: unknown;
+    let transactionError: unknown;
     try {
       inTransaction(_context.env, () => {
-        let builder =
-          mode === 'serialize'
-            ? serializeBuilder
-            : mode === 'rehydrate'
-              ? rehydrationBuilder
-              : _builder;
-        let iterator = glimmerRenderComponent(
-          _context,
-          builder(_context.env, { element }),
-          _owner,
-          C,
-          args,
-        );
-        result = iterator.sync();
+        try {
+          renderComponent();
+        } catch (error) {
+          renderError = error;
+        }
       });
-    } finally {
-      activeRenderMode = previousRenderMode;
+    } catch (error) {
+      transactionError = error;
     }
+    if (renderError !== undefined) {
+      throw renderError;
+    }
+    if (transactionError !== undefined) {
+      throw transactionError;
+    }
+    if (deferredRenders) {
+      deferredIsolatedRenderQueues.pop();
+      // The outer Glimmer transaction has closed before deferred nested
+      // islands run. Restore the previous mode now so each deferred island is
+      // treated as its own top-level transaction, including independent
+      // tracking-stack recovery when authored rendering throws. Leaving the
+      // outer mode active here made a failed nested render skip `resetTracking`
+      // and replace the authored error with "attempted to close a tracking
+      // frame" during the next renderer commit.
+      activeRenderMode = previousRenderMode;
+      scheduleDeferredIsolatedRenders(deferredRenders, renderErrorCapture);
+    }
+    activeRenderMode = previousRenderMode;
   } catch (err: any) {
-    resetTracking();
+    // Glimmer can replace an authored render exception with a tracking-stack
+    // cleanup exception while an outer renderer unwinds. Preserve the first
+    // exception at the render-island boundary before any cleanup runs.
+    if (activeErrorCapture) {
+      activeErrorCapture.firstError ??= err;
+    }
+    activeRenderMode = previousRenderMode;
+    if (
+      deferredRenders &&
+      deferredIsolatedRenderQueues[deferredIsolatedRenderQueues.length - 1] ===
+        deferredRenders
+    ) {
+      deferredIsolatedRenderQueues.pop();
+    }
+    let cleanupError: unknown;
+    if (result) {
+      try {
+        destroy(result.drop);
+      } catch (error) {
+        // The render error itself can leave Glimmer midway through unwinding
+        // a tracking frame. Destroying the partial outer tree is still the
+        // right best-effort cleanup, but a second bookkeeping error must not
+        // replace the authored exception that made the render fail.
+        cleanupError = error;
+      }
+      result = undefined;
+    }
+    serializedRenderRoots.delete(element);
+    removeChildren(element);
+    // A nested SES island can fail while the outer Host Mode serialization
+    // transaction still owns Glimmer's tracking frame. Resetting Glimmer's
+    // process-global tracking stack here would erase that outer frame and
+    // replace the authored card error with "attempted to close a tracking
+    // frame, but one was not open". Let the outermost render perform the one
+    // recovery reset after the complete nested transaction has unwound.
+    if (previousRenderMode === undefined) {
+      resetTracking();
+    }
     let error = new CardError(
       `Encountered error rendering HTML for card: ${err.message}`,
     );
-    error.additionalErrors = [err];
+    error.additionalErrors = cleanupError ? [err, cleanupError] : [err];
     throw error;
   }
 

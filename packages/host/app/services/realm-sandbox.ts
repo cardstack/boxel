@@ -818,6 +818,10 @@ export default class RealmSandboxService extends Service {
   >();
   private moduleDependencies = new Map<string, string[]>();
   private compartmentLoads = new Map<string, Promise<void>>();
+  private compartmentLoadsByCard = new WeakMap<
+    BaseDef,
+    Map<string, Set<Promise<void>>>
+  >();
   private compartmentFailures = new Set<string>();
   private compartmentTemplateRevisions = new Map<string, ReactiveRevision>();
   private compartmentLoadingRevisions = new WeakMap<
@@ -1949,6 +1953,35 @@ export default class RealmSandboxService extends Service {
     return envelope;
   }
 
+  async prepareRender(
+    card: BaseDef,
+    format: Format | undefined,
+    options: Parameters<RealmSandboxService['renderFor']>[2] = {},
+  ): Promise<RealmSandboxRender | undefined> {
+    let render = this.renderFor(card, format, options);
+    if (render) {
+      return render;
+    }
+
+    let effectiveFormat = format ?? 'isolated';
+    let loads = this.compartmentLoadsByCard.get(card)?.get(effectiveFormat);
+    if (!loads?.size) {
+      // The load can settle between the first cache read and the scoped
+      // promise lookup. Re-read the installed template before concluding that
+      // there is nothing to prepare.
+      return this.renderFor(card, format, options);
+    }
+
+    await Promise.allSettled([...loads]);
+    // Template installation queues its exact reactive revision in Ember's
+    // afterRender phase. Let that publication finish before a low-level
+    // CardIsland starts consuming the cell. Otherwise the queued revision can
+    // revalidate the island outside renderCardIsland's explicit error capture
+    // and replace an authored exception with Glimmer tracking cleanup noise.
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    return this.renderFor(card, format, options);
+  }
+
   isRenderLoading(card: BaseDef, format: Format | undefined): boolean {
     let effectiveFormat = format ?? 'isolated';
     this.compartmentLoadingRevisionFor(card, effectiveFormat).consume();
@@ -2369,6 +2402,7 @@ export default class RealmSandboxService extends Service {
           format,
         );
         this.compartmentLoads.set(key, load);
+        this.trackCompartmentLoad(card, format, load);
       }
       return undefined;
     }
@@ -3898,6 +3932,7 @@ export default class RealmSandboxService extends Service {
         codePreviewSandbox?.draft,
       );
       this.compartmentLoads.set(key, load);
+      this.trackCompartmentLoad(card, format, load);
     }
     return previewSlot ? this.codePreviewTemplates.get(previewSlot) : undefined;
   }
@@ -3988,6 +4023,44 @@ export default class RealmSandboxService extends Service {
       this.scheduleCompartmentRevision(
         this.compartmentTemplateRevisionFor(key),
       );
+    }
+  }
+
+  private trackCompartmentLoad(
+    card: BaseDef,
+    format: string,
+    load: Promise<void>,
+  ) {
+    let formats = this.compartmentLoadsByCard.get(card);
+    if (!formats) {
+      formats = new Map();
+      this.compartmentLoadsByCard.set(card, formats);
+    }
+    let loads = formats.get(format);
+    if (!loads) {
+      loads = new Set();
+      formats.set(format, loads);
+    }
+    loads.add(load);
+    void load.then(
+      () => this.removeTrackedCompartmentLoad(card, format, load),
+      () => this.removeTrackedCompartmentLoad(card, format, load),
+    );
+  }
+
+  private removeTrackedCompartmentLoad(
+    card: BaseDef,
+    format: string,
+    load: Promise<void>,
+  ) {
+    let formats = this.compartmentLoadsByCard.get(card);
+    let loads = formats?.get(format);
+    loads?.delete(load);
+    if (loads?.size === 0) {
+      formats?.delete(format);
+    }
+    if (formats?.size === 0) {
+      this.compartmentLoadsByCard.delete(card);
     }
   }
 

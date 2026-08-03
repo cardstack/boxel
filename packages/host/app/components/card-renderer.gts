@@ -281,7 +281,15 @@ export default class CardRenderer extends Component<Signature> {
     if (this.usesTrustedFieldWrapper) {
       return false;
     }
-    return this.realmSandbox.isRenderLoading(this.args.card, this.args.format);
+    // An opaque card must never fall through to `renderedCard` while its
+    // compartment template is being evaluated. The loading counter is
+    // deliberately published on a later render boundary, so the first getter
+    // pass can observe no envelope before that tracked revision changes. Keep
+    // the boundary fail-closed based on card authority as well as load state.
+    return (
+      (this.usesRealmSandbox && !this.sandboxRender) ||
+      this.realmSandbox.isRenderLoading(this.args.card, this.args.format)
+    );
   }
 
   private get headSandboxRender() {

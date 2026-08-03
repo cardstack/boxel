@@ -27,6 +27,7 @@ import type {
 import type { runTestRealmServer } from './helpers/index.ts';
 import {
   cleanWhiteSpace,
+  stripGlimmerSerializationMarkers,
   waitUntil,
   cardInfo,
   getTestPrerenderer,
@@ -48,12 +49,25 @@ import { createHash } from 'crypto';
 import type { PgAdapter } from '@cardstack/postgres';
 
 function trimCardContainer(text: string) {
-  return cleanWhiteSpace(text)
-    .replace(/=""/g, '')
-    .replace(
-      /<div .*? data-test-field-component-card>\s?[<!---->]*? (.*?) <\/div>/g,
-      '$1',
-    );
+  let rendered = cleanWhiteSpace(
+    stripGlimmerSerializationMarkers(text),
+  ).replace(/=""/g, '');
+  rendered = unwrapDivWithAttribute(rendered, 'data-boxel-card-island');
+  rendered = unwrapDivWithAttribute(rendered, 'data-test-field-component-card');
+  return cleanWhiteSpace(rendered);
+}
+
+function unwrapDivWithAttribute(text: string, attribute: string) {
+  let openingTagEnd = text.indexOf('>');
+  if (
+    !text.startsWith('<div ') ||
+    openingTagEnd === -1 ||
+    !text.slice(0, openingTagEnd).includes(attribute) ||
+    !text.endsWith('</div>')
+  ) {
+    return text;
+  }
+  return text.slice(openingTagEnd + 1, -'</div>'.length).trim();
 }
 
 let testDbAdapter: DBAdapter;

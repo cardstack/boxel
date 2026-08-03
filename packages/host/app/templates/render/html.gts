@@ -1,5 +1,6 @@
 import { getOwner } from '@ember/application';
 import { service } from '@ember/service';
+import { buildWaiter } from '@ember/test-waiters';
 import Component from '@glimmer/component';
 import { cached } from '@glimmer/tracking';
 
@@ -23,12 +24,15 @@ import CardIsland from '@cardstack/host/components/card-island';
 import SearchResults from '@cardstack/host/components/search/search-results';
 import { CARD_ISLAND_PROTOCOL_VERSION } from '@cardstack/host/lib/card-island-protocol';
 import {
+  captureIsolatedRenderErrors,
   serializeWithArgs,
+  settleDeferredIsolatedRenders,
   teardown,
 } from '@cardstack/host/lib/isolated-render';
 import { isTrustedRealmCardDefinition } from '@cardstack/host/lib/realm-sandbox-boundary';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
+import type RealmSandboxService from '@cardstack/host/services/realm-sandbox';
 import type RenderStoreService from '@cardstack/host/services/render-store';
 
 import type { Model } from '../../routes/render/html';
@@ -40,8 +44,11 @@ interface Signature {
   };
 }
 
+const serializeIslandWaiter = buildWaiter('render-html:serialize-card-island');
+
 class RenderHtmlTemplate extends Component<Signature> {
   @service('render-store') declare private store: RenderStoreService;
+  @service declare private realmSandbox: RealmSandboxService;
 
   @provide(GetCardContextName)
   private get getCard(): GetCardType {
@@ -106,9 +113,37 @@ class RenderHtmlTemplate extends Component<Signature> {
         context: this.context,
       };
       let owner = getOwner(this)!;
-      serializeWithArgs(CardIsland as any, element as any, owner, args);
+      let cancelled = false;
+      let waiterToken = serializeIslandWaiter.beginAsync();
+      void (async () => {
+        try {
+          // The route template itself is a host-rendered Glimmer root. Prepare
+          // only this card/format's SES program before creating the nested
+          // low-level CardIsland, then start that program after the async
+          // boundary has closed the host transaction.
+          await this.realmSandbox.prepareRender(model.instance, model.format);
+          if (cancelled) {
+            return;
+          }
+          await captureIsolatedRenderErrors(async () => {
+            serializeWithArgs(CardIsland as any, element as any, owner, args);
+            await settleDeferredIsolatedRenders();
+          });
+        } catch (error) {
+          if (!cancelled) {
+            queueMicrotask(() => {
+              throw error;
+            });
+          }
+        } finally {
+          serializeIslandWaiter.endAsync(waiterToken);
+        }
+      })();
 
-      return () => teardown(element as any);
+      return () => {
+        cancelled = true;
+        teardown(element as any);
+      };
     },
   );
 

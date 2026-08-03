@@ -21,6 +21,7 @@ import {
   cleanWhiteSpace,
   testCreatePrerenderAuth,
   getPrerendererForTesting,
+  stripGlimmerSerializationMarkers,
 } from './helpers/index.ts';
 import { prerenderCard, prerenderFileExtract } from './helpers/prerender.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
@@ -2135,7 +2136,9 @@ module(basename(import.meta.filename), function () {
           );
 
           let isolatedHTML = cleanWhiteSpace(
-            result.response.isolatedHTML ?? '',
+            stripGlimmerSerializationMarkers(
+              result.response.isolatedHTML ?? '',
+            ),
           );
           assert.ok(
             /data-test-staff-name[^>]*>\s*Bob\s*</.test(isolatedHTML),

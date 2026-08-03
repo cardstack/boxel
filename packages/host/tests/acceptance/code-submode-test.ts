@@ -1616,7 +1616,7 @@ module('Acceptance | code submode tests', function (_hooks) {
           '[data-test-code-mode] .separator-horizontal[data-boxel-panel-resize-handle-id]',
         ),
       ) as HTMLElement[];
-      let previewResizeHandle = handles.at(-1);
+      let previewResizeHandle = handles[handles.length - 1];
       assert.ok(previewResizeHandle, 'preview panel resize handle exists');
 
       let shrinkRect = previewResizeHandle!.getBoundingClientRect();

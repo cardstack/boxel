@@ -32,7 +32,13 @@ import config from '@cardstack/host/config/environment';
 import { CARD_ISLAND_PROTOCOL_VERSION } from '@cardstack/host/lib/card-island-protocol';
 import { isTrustedRealmCardDefinition } from '@cardstack/host/lib/realm-sandbox-boundary';
 
-import { render, prerenderWithArgs, teardown } from '../lib/isolated-render';
+import {
+  captureIsolatedRenderErrors,
+  render,
+  prerenderWithArgs,
+  settleDeferredIsolatedRenders,
+  teardown,
+} from '../lib/isolated-render';
 
 import type CardService from './card-service';
 import type LoaderService from './loader-service';
@@ -230,24 +236,35 @@ export default class RenderService extends Service {
     args: CardIslandArgs,
     waitForAsync?: () => Promise<void>,
   ): Promise<string> {
+    // Glimmer resets its process-global tracking stack when a low-level render
+    // throws. Callers can enter this async API from a tracked host computation,
+    // so yield before starting CardIsland's independent renderer. This makes
+    // the sandbox boundary an actual transaction boundary: an authored SES
+    // error can recover its own tracking state without erasing the host frame
+    // that initiated prerendering.
+    await Promise.resolve();
     let element = getIsolatedRenderElement(this.document);
-    let renderIsland = (): 'serialized' | 'rendered' => {
-      return prerenderWithArgs(
-        CardIsland as any,
-        element,
-        this.owner,
-        args as unknown as Record<string, unknown>,
-        isTrustedRealmCardDefinition(args.card),
-      );
+    let renderIsland = async (): Promise<'serialized' | 'rendered'> => {
+      return captureIsolatedRenderErrors(async () => {
+        let mode = prerenderWithArgs(
+          CardIsland as any,
+          element,
+          this.owner,
+          args as unknown as Record<string, unknown>,
+          isTrustedRealmCardDefinition(args.card),
+        );
+        await settleDeferredIsolatedRenders();
+        return mode;
+      });
     };
     try {
       if (waitForAsync) {
         for (let i = 0; i < MAX_ASYNC_RENDER_PASSES; i++) {
-          renderIsland();
+          await renderIsland();
           await waitForAsync();
         }
       }
-      let serializationMode = renderIsland();
+      let serializationMode = await renderIsland();
       let serializer = new Serializer(voidMap);
       let html = serializer.serialize(element);
       let captured = parseCardHtml(html, 'innerHTML');

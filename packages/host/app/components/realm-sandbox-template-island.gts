@@ -8,6 +8,7 @@ import { buildWaiter } from '@ember/test-waiters';
 import Modifier from 'ember-modifier';
 
 import {
+  deferUntilIsolatedRenderCompletes,
   hasSerializedComponent,
   isInIsolatedRenderTransaction,
   isWithinSerializedIsolatedRender,
@@ -79,6 +80,7 @@ export default class RealmSandboxTemplateIsland extends Modifier<ModifierSignatu
     generation: number;
   };
   private generation = 0;
+  private hostCommitFlushScheduled = false;
   private waiterToken?: ReturnType<typeof islandRenderWaiter.beginAsync>;
   private requestRender = () => {
     if (this.element) {
@@ -152,24 +154,42 @@ export default class RealmSandboxTemplateIsland extends Modifier<ModifierSignatu
     // as an explicit nested render boundary and mount/adopt it only after the
     // host transaction closes. A generation guard below ensures rapid route,
     // format, and HMR changes never install obsolete work.
-    if (
-      isInIsolatedRenderTransaction() ||
-      isWithinSerializedIsolatedRender(element as any) ||
-      typeof HTMLElement === 'undefined' ||
-      !(element instanceof HTMLElement) ||
-      !element.isConnected
-    ) {
-      // SimpleDOM prerendering has no browser run loop capable of flushing an
-      // `afterRender` task. It already used this synchronous nested boundary
-      // safely before client attachment, and its markers are what let the
-      // deferred browser island adopt the exact server DOM later.
-      this.flushRender();
+    let isConnectedBrowserElement =
+      typeof HTMLElement !== 'undefined' &&
+      element instanceof HTMLElement &&
+      element.isConnected;
+    if (isInIsolatedRenderTransaction()) {
+      // Host Mode owns the current low-level Glimmer transaction, and modifier
+      // installation is itself wrapped in a process-global tracking frame.
+      // Queue the nested SES program for the explicit async boundary that the
+      // prerender service settles before capture. A runtime template error can
+      // then reset only its own tracking state instead of corrupting the host.
+      deferUntilIsolatedRenderCompletes(() => this.flushRender());
+    } else if (isConnectedBrowserElement) {
+      this.scheduleAfterHostCommit();
     } else {
-      scheduleOnce('afterRender', this, this.flushRender);
+      // A standalone SimpleDOM render has no enclosing low-level transaction
+      // and no browser run loop. It can mount synchronously.
+      this.flushRender();
     }
   }
 
-  private flushRender() {
+  private scheduleAfterHostCommit() {
+    if (this.hostCommitFlushScheduled) {
+      return;
+    }
+    this.hostCommitFlushScheduled = true;
+    // Ember's `afterRender` queue and the following microtask checkpoint can
+    // both run before the host renderer commits. Start the low-level SES
+    // transaction in the next task so an authored exception cannot erase a
+    // host-owned tracking frame. The waiter keeps prerendering deterministic.
+    setTimeout(() => {
+      this.hostCommitFlushScheduled = false;
+      this.flushRender(true);
+    }, 0);
+  }
+
+  private flushRender(publishImmediately = false) {
     let pending = this.pending;
     if (!pending || pending.generation !== this.generation) {
       return;
@@ -264,7 +284,11 @@ export default class RealmSandboxTemplateIsland extends Modifier<ModifierSignatu
       // A microtask can run before Glimmer closes the tracking transaction
       // that invoked this modifier. Error publication changes tracked preview
       // state, so keep that state transition on Ember's render boundary.
-      schedule('afterRender', null, () => args.onError?.(error, component));
+      if (publishImmediately) {
+        args.onError(error, component);
+      } else {
+        schedule('afterRender', null, () => args.onError?.(error, component));
+      }
       this.finishWaiter();
       return;
     }
@@ -277,7 +301,11 @@ export default class RealmSandboxTemplateIsland extends Modifier<ModifierSignatu
     // appear different and remount the compartment component after each state
     // update.
     this.args = args;
-    schedule('afterRender', null, () => args.onRendered?.(component));
+    if (publishImmediately) {
+      args.onRendered?.(component);
+    } else {
+      schedule('afterRender', null, () => args.onRendered?.(component));
+    }
     this.finishWaiter();
   }
 

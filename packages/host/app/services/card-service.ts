@@ -4,8 +4,11 @@ import Service, { service } from '@ember/service';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
+  canonicalModuleKey,
   formattedError,
+  identifyCard,
   isJsonContentType,
+  normalizeCodeRef,
   SupportedMimeType,
   type CardDocument,
   type SingleCardDocument,
@@ -18,7 +21,10 @@ import type { AtomicOperation } from '@cardstack/runtime-common/atomic-document'
 import { createAtomicDocument } from '@cardstack/runtime-common/atomic-document';
 import { validateWriteSize } from '@cardstack/runtime-common/write-size-validation';
 
-import { serializeOpaqueRealmCard } from '@cardstack/host/lib/realm-sandbox-boundary';
+import {
+  getOpaqueRealmCardTypeState,
+  serializeOpaqueRealmCard,
+} from '@cardstack/host/lib/realm-sandbox-boundary';
 
 import LimitedSet from '../lib/limited-set';
 
@@ -246,7 +252,10 @@ export default class CardService extends Service {
     card: CardDef,
     opts?: SerializeOpts & { withIncluded?: true },
   ): Promise<LooseSingleCardDocument> {
-    let serialized = serializeOpaqueRealmCard(card, opts);
+    let serialized = serializeOpaqueRealmCard(card, {
+      useAbsoluteURL: opts?.useAbsoluteURL,
+      omitFieldNames: this.opaqueFieldNamesToOmit(card, opts?.omitFields),
+    });
     if (!serialized) {
       let api = await this.getAPI();
       serialized = api.serializeCard(card, {
@@ -257,6 +266,34 @@ export default class CardService extends Service {
       delete serialized.included;
     }
     return serialized;
+  }
+
+  private opaqueFieldNamesToOmit(
+    card: CardDef,
+    omitFields: SerializeOpts['omitFields'],
+  ): string[] | undefined {
+    let typeState = getOpaqueRealmCardTypeState(card);
+    if (!typeState || !omitFields?.length) {
+      return undefined;
+    }
+    let omittedTypes = omitFields
+      .map((fieldType) => identifyCard(fieldType))
+      .filter((ref) => ref != null)
+      .map((ref) => normalizeCodeRef(ref));
+    if (omittedTypes.length === 0) {
+      return undefined;
+    }
+    let moduleKey = (module: string) =>
+      canonicalModuleKey(module, this.network.virtualNetwork);
+    return Object.entries(typeState.fields)
+      .filter(([, field]) =>
+        omittedTypes.some(
+          (omitted) =>
+            omitted.name === field.type.name &&
+            moduleKey(omitted.module) === moduleKey(field.type.module),
+        ),
+      )
+      .map(([name]) => name);
   }
 
   async getSource(url: RealmResourceIdentifier | URL) {

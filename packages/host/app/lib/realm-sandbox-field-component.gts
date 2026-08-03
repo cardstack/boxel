@@ -10,7 +10,12 @@ import { restartableTask } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
 import { provide } from 'ember-provide-consume-context';
 
-import { Button, IconButton } from '@cardstack/boxel-ui/components';
+import {
+  BrokenLinkTemplate,
+  Button,
+  IconButton,
+} from '@cardstack/boxel-ui/components';
+import type { BrokenLinkErrorDoc } from '@cardstack/boxel-ui/components';
 import { and, eq } from '@cardstack/boxel-ui/helpers';
 import { IconMinusCircle } from '@cardstack/boxel-ui/icons';
 
@@ -19,12 +24,14 @@ import {
   CardContextName,
   CardCrudFunctionsContextName,
   CardURLContextName,
+  cardTypeName,
   chooseCard,
   GetCardContextName,
   identifyCard,
   isCardInstance,
   isFileDefInstance,
   relativeTo,
+  type CardErrorJSONAPI,
   type CodeRef,
   type getCard,
   type ResolvedCodeRef,
@@ -43,7 +50,6 @@ import type StoreService from '@cardstack/host/services/store';
 import type {
   BaseDef,
   BaseDefComponent,
-  CardDef,
   CardContext,
   CardCrudFunctions,
   FieldType,
@@ -53,12 +59,11 @@ import type { ArgsFor } from 'ember-modifier';
 
 type RelationshipResourceType = 'card' | 'file-meta';
 
-const NoopCardComponentModifier = class extends Modifier<any> {};
-
 class HostRelationshipCard extends Component<{
   Args: {
     cardId: string;
-    card: CardDef;
+    card?: BaseDef;
+    errorDoc?: CardErrorJSONAPI;
     format: Format;
     fieldType: FieldType;
     fieldName: string;
@@ -89,24 +94,35 @@ class HostRelationshipCard extends Component<{
     } as CardCrudFunctions;
   }
 
-  private get cardComponentModifier(): NonNullable<
-    CardContext['cardComponentModifier']
-  > {
-    return (
-      this.args.relationshipContext.cardContext?.cardComponentModifier ??
-      NoopCardComponentModifier
-    );
+  private get brokenLinkFormat() {
+    switch (this.args.format) {
+      case 'isolated':
+      case 'embedded':
+      case 'fitted':
+      case 'atom':
+        return this.args.format;
+      default:
+        return 'embedded' as const;
+    }
   }
 
+  private get brokenLinkErrorDoc(): BrokenLinkErrorDoc | undefined {
+    let errorDoc = this.args.errorDoc;
+    if (!errorDoc) {
+      return undefined;
+    }
+    return {
+      message: errorDoc.message,
+      stack: errorDoc.meta.stack ?? undefined,
+      status: errorDoc.status,
+      title: errorDoc.title,
+    };
+  }
+
+  viewBrokenCard = (url: URL) => this.args.relationshipContext.viewCard?.(url);
+
   <template>
-    <div
-      {{this.cardComponentModifier
-        card=@card
-        format=@format
-        fieldType=@fieldType
-        fieldName=@fieldName
-      }}
-    >
+    {{#if @card}}
       <CardRenderer
         @card={{@card}}
         @format={{@format}}
@@ -114,7 +130,21 @@ class HostRelationshipCard extends Component<{
         @viewCard={{@relationshipContext.viewCard}}
         data-test-hydratable-card={{@cardId}}
       />
-    </div>
+    {{else}}
+      {{#let this.brokenLinkErrorDoc as |errorDoc|}}
+        {{#if errorDoc}}
+          <BrokenLinkTemplate
+            @brokenUrl={{@cardId}}
+            @errorDoc={{errorDoc}}
+            @state={{if (eq errorDoc.status 404) 'not-found' 'error'}}
+            @format={{this.brokenLinkFormat}}
+            @displayName={{cardTypeName @cardId}}
+            @itemType={{if (eq @resourceType 'file-meta') 'file' 'card'}}
+            @viewCard={{this.viewBrokenCard}}
+          />
+        {{/if}}
+      {{/let}}
+    {{/if}}
   </template>
 }
 
@@ -128,6 +158,7 @@ interface DeferredRelationshipSignature {
       fieldName: string;
       resourceType: RelationshipResourceType;
       relationshipContext: RealmSandboxRelationshipContext;
+      subscribeToData?: (render: () => void) => () => void;
     };
   };
 }
@@ -142,11 +173,14 @@ class DeferredRelationshipCard extends Modifier<DeferredRelationshipSignature> {
   private element?: HTMLDivElement;
   private args?: DeferredRelationshipSignature['Args']['Named'];
   private generation = 0;
+  private subscribeToData?: (render: () => void) => () => void;
+  private unsubscribe?: () => void;
 
   constructor(owner: Owner, args: ArgsFor<DeferredRelationshipSignature>) {
     super(owner, args);
     registerDestructor(this, () => {
       this.generation++;
+      this.unsubscribe?.();
       if (this.element) {
         teardown(this.element as any);
       }
@@ -160,6 +194,15 @@ class DeferredRelationshipCard extends Modifier<DeferredRelationshipSignature> {
   ) {
     this.element = element;
     this.args = args;
+    if (this.subscribeToData !== args.subscribeToData) {
+      this.unsubscribe?.();
+      this.subscribeToData = args.subscribeToData;
+      this.unsubscribe = args.subscribeToData?.(() => this.scheduleRender());
+    }
+    this.scheduleRender();
+  }
+
+  private scheduleRender() {
     this.generation++;
     scheduleOnce('afterRender', this, this.renderCard);
   }
@@ -170,21 +213,26 @@ class DeferredRelationshipCard extends Modifier<DeferredRelationshipSignature> {
     }
     let generation = this.generation;
     let { cardId, resourceType } = this.args;
-    let card =
+    let errorDoc =
       resourceType === 'file-meta'
+        ? this.store.peekError(cardId, { type: 'file-meta' })
+        : this.store.peekError(cardId);
+    let loaded = errorDoc
+      ? errorDoc
+      : resourceType === 'file-meta'
         ? await this.store.get(cardId, { type: 'file-meta' })
         : await this.store.get(cardId);
-    if (
-      generation !== this.generation ||
-      (!isCardInstance(card) && !isFileDefInstance(card))
-    ) {
+    if (generation !== this.generation || !this.element || !this.args) {
       return;
     }
+    let card =
+      isCardInstance(loaded) || isFileDefInstance(loaded) ? loaded : undefined;
+    errorDoc ??= card ? undefined : (loaded as CardErrorJSONAPI);
     renderWithArgs(
       HostRelationshipCard as any,
       this.element as any,
       getOwner(this) as Owner,
-      { ...this.args, card },
+      { ...this.args, card, errorDoc },
     );
   }
 }
@@ -392,14 +440,14 @@ export default function realmSandboxFieldComponent(
         let values = Array.isArray(value) ? value : [value];
         return values.flatMap((item) => {
           if (typeof item === 'string') {
-            return [{ id: item }];
+            return [item];
           }
           if (typeof item !== 'object' || item === null) {
             return [];
           }
           let record = item as Record<string, unknown>;
           let id = record.id ?? record.url ?? record.sourceUrl;
-          return typeof id === 'string' ? [{ id }] : [];
+          return typeof id === 'string' ? [id] : [];
         });
       }
 
@@ -475,17 +523,18 @@ export default function realmSandboxFieldComponent(
               {{on 'click' this.remove}}
             />
           {{/if}}
-          {{#each this.entries as |entry|}}
+          {{#each this.entries key='@identity' as |cardId|}}
             {{#if this.relationshipContext}}
               <div
                 class='realm-sandbox-delegated-relationship'
                 {{DeferredRelationshipCard
-                  cardId=entry.id
+                  cardId=cardId
                   format=this.format
                   fieldType=fieldKind
                   fieldName=fieldName
                   resourceType=resourceType
                   relationshipContext=this.relationshipContext
+                  subscribeToData=subscribeToData
                 }}
               ></div>
             {{/if}}

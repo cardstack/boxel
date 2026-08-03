@@ -65,6 +65,7 @@ import type { Model as HtmlRouteModel } from '../routes/render/html';
 import type LoaderService from '../services/loader-service';
 import type LocalIndexer from '../services/local-indexer';
 import type NetworkService from '../services/network';
+import type RealmSandboxService from '../services/realm-sandbox';
 import type RenderService from '../services/render-service';
 import type RenderStoreService from '../services/render-store';
 
@@ -74,6 +75,7 @@ export default class CardPrerender extends Component {
   @service declare private network: NetworkService;
   @service declare private router: RouterService;
   @service declare private renderService: RenderService;
+  @service declare private realmSandbox: RealmSandboxService;
   @service declare private localIndexer: LocalIndexer;
   @service declare private loaderService: LoaderService;
   #nonce = 0;
@@ -745,18 +747,29 @@ export default class CardPrerender extends Component {
         captureMode = 'outerHTML';
       }
       let captured =
-        format === 'isolated'
-          ? await this.renderService.renderCardIsland(
-              {
-                card: routeInfo.attributes.instance,
+        format === 'isolated' &&
+        this.realmSandbox.isOpaqueCard(routeInfo.attributes.instance)
+          ? await (async () => {
+              // A CardIsland is a low-level Glimmer root. Start it only after
+              // this card/format's SES template is installed so a late
+              // template-revision acknowledgement cannot rerender the root
+              // outside renderCardIsland's authored-error boundary.
+              await this.realmSandbox.prepareRender(
+                routeInfo.attributes.instance,
                 format,
-                ...buildCardIslandContext(
-                  this.store,
-                  routeInfo.attributes.instance,
-                ),
-              },
-              this.waitForLinkedData,
-            )
+              );
+              return await this.renderService.renderCardIsland(
+                {
+                  card: routeInfo.attributes.instance,
+                  format,
+                  ...buildCardIslandContext(
+                    this.store,
+                    routeInfo.attributes.instance,
+                  ),
+                },
+                this.waitForLinkedData,
+              );
+            })()
           : await this.renderService.renderCardComponent(
               component,
               captureMode,

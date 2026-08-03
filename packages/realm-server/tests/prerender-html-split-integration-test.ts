@@ -4,7 +4,11 @@ import { basename } from 'path';
 
 import { rri } from '@cardstack/runtime-common';
 import type { DBAdapter, Realm } from '@cardstack/runtime-common';
-import { setupPermissionedRealmCached, waitUntil } from './helpers/index.ts';
+import {
+  setupPermissionedRealmCached,
+  stripGlimmerSerializationMarkers,
+  waitUntil,
+} from './helpers/index.ts';
 import {
   currentRealmGeneration,
   prerenderedHtmlRowFor,
@@ -82,6 +86,15 @@ function personDoc(firstName: string, hourlyRate: number) {
       },
     },
   });
+}
+
+function renderedHTMLIncludes(html: string | null | undefined, text: string) {
+  // Host Mode deliberately preserves Glimmer's serialization markers so the
+  // client can rehydrate the prerendered island. Those comments may split two
+  // adjacent text nodes (for example `$<!--%+b:20%-->25`) without changing
+  // what the user sees. Compare rendered-text semantics while retaining the
+  // marker-bearing HTML artifact itself.
+  return html ? stripGlimmerSerializationMarkers(html).includes(text) : false;
 }
 
 module(basename(import.meta.filename), function (hooks) {
@@ -220,7 +233,7 @@ module(basename(import.meta.filename), function (hooks) {
       'the fresh HTML is stamped with the committed generation',
     );
     assert.ok(
-      htmlRow?.isolated_html?.includes('$25'),
+      renderedHTMLIncludes(htmlRow?.isolated_html, '$25'),
       `the fresh rendering reflects the written content: ${htmlRow?.isolated_html}`,
     );
   });
@@ -277,7 +290,7 @@ module(basename(import.meta.filename), function (hooks) {
         `${file}'s HTML generation matches its index row's generation`,
       );
       assert.ok(
-        htmlRow?.isolated_html?.includes(needle),
+        renderedHTMLIncludes(htmlRow?.isolated_html, needle),
         `${file}'s HTML reflects its written content`,
       );
     }

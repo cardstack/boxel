@@ -342,6 +342,10 @@ export function cleanWhiteSpace(text: string) {
     .trim();
 }
 
+export function stripGlimmerSerializationMarkers(text: string) {
+  return text.replace(/<!--%[^>]*%-->|<!---->/g, '');
+}
+
 export function createVirtualNetwork() {
   let virtualNetwork = new VirtualNetwork();
   virtualNetwork.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));

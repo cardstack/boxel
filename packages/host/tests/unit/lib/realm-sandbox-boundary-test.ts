@@ -288,6 +288,68 @@ module('Unit | realm sandbox boundary', function () {
     });
   });
 
+  test('host persistence omits explicitly named opaque fields', function (assert) {
+    let card = {
+      picture: 'data:image/png;base64,large-payload',
+      title: 'Mango the Puppy',
+    } as unknown as BaseDef;
+    Object.defineProperty(card, opaqueRealmCardState, {
+      value: {
+        typeRef: {
+          module: 'https://realm.example/article',
+          name: 'Article',
+        } as ResolvedCodeRef,
+        principal: 'https://realm.example/',
+        document: {
+          data: {
+            type: 'card',
+            attributes: {
+              picture: 'data:image/png;base64,original-payload',
+              title: 'Original title',
+            },
+            relationships: {
+              'picture.source': {
+                links: { self: '../Image/source' },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'https://realm.example/article',
+                name: 'Article',
+              } as ResolvedCodeRef,
+            },
+          },
+        },
+        snapshot: {
+          picture: 'data:image/png;base64,original-payload',
+          title: 'Original title',
+        },
+        presentation: {
+          headerColor: null,
+          prefersWideFormat: false,
+        },
+      },
+    });
+
+    assert.deepEqual(
+      serializeOpaqueRealmCard(card, { omitFieldNames: ['picture'] }),
+      {
+        data: {
+          type: 'card',
+          attributes: { title: 'Mango the Puppy' },
+          relationships: {},
+          meta: {
+            adoptsFrom: {
+              module: rri('https://realm.example/article'),
+              name: 'Article',
+            },
+          },
+        },
+      },
+      'the explicit opaque boundary omits both attribute and nested relationship data',
+    );
+  });
+
   test('an id-less copied opaque card keeps already-absolute references', function (assert) {
     let card = {} as BaseDef;
     Object.defineProperty(card, opaqueRealmCardState, {

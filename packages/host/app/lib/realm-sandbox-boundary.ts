@@ -135,17 +135,25 @@ export function isTrustedRealmCardDefinition(
 
 export function serializeOpaqueRealmCard(
   value: BaseDef,
-  opts?: { useAbsoluteURL?: boolean },
+  opts?: {
+    useAbsoluteURL?: boolean;
+    omitFieldNames?: readonly string[];
+  },
 ): LooseSingleCardDocument | undefined {
   let state = getOpaqueRealmCardState(value);
   if (!state) {
     return undefined;
   }
   let document = structuredClone(state.document);
+  let omittedFields = new Set(opts?.omitFieldNames);
   let attributes = document.data.attributes;
   if (attributes) {
     let relationshipPaths = Object.keys(document.data.relationships ?? {});
     for (let name of Object.keys(attributes)) {
+      if (omittedFields.has(name)) {
+        delete attributes[name];
+        continue;
+      }
       if (!(name in value)) {
         continue;
       }
@@ -182,6 +190,16 @@ export function serializeOpaqueRealmCard(
         throw new Error(
           `Cannot serialize sandboxed card field "${name}" across the opaque JSON boundary${detail}`,
         );
+      }
+    }
+  }
+  if (document.data.relationships && omittedFields.size > 0) {
+    for (let name of Object.keys(document.data.relationships)) {
+      if (
+        omittedFields.has(name) ||
+        [...omittedFields].some((fieldName) => name.startsWith(`${fieldName}.`))
+      ) {
+        delete document.data.relationships[name];
       }
     }
   }
