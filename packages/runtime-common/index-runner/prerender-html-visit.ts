@@ -505,6 +505,11 @@ async function visitForPrerenderedHtml({
       });
       stats.instanceErrors++;
     } else {
+      let metaModuleDeps = parsedCardResource.meta
+        ? modulesConsumedInMeta(parsedCardResource.meta).map((module) =>
+            canonicalURL(module, fileURL, virtualNetwork),
+          )
+        : undefined;
       await batch.updatePrerenderedHtmlEntry(url, {
         type: 'instance',
         isolatedHtml: card.isolatedHTML,
@@ -515,7 +520,11 @@ async function visitForPrerenderedHtml({
         markdown: card.markdown,
         // The render route's settle-time dependency snapshot — what the
         // format renders actually pulled in (scoped-CSS URLs included).
-        deps: card.deps ?? [],
+        // Preserve explicit resource code references even when a delegated
+        // trusted loader resolved them outside this render's dependency
+        // tracker. This mirrors the fused index path without importing the
+        // trusted loader's full transitive closure.
+        deps: uniqueDeps(card.deps ?? undefined, metaModuleDeps),
         ...(diagnostics ? { diagnostics } : {}),
       });
       stats.instancesIndexed++;

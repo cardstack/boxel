@@ -8,7 +8,6 @@ import { md5 } from 'super-fast-md5';
 import {
   baseRealmRRI,
   baseCardRef,
-  ensureTrailingSlash,
   internalKeyFor,
   ri,
   rri,
@@ -22,13 +21,7 @@ import {
 import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
-import ENV from '@cardstack/host/config/environment';
 import { REALM_INDEX_BOILERPLATE_HTML } from '@cardstack/host/utils/realm-index-boilerplate';
-
-// Standard mode: `http://localhost:4206/`; env mode:
-// `https://icons.<slug>.localhost/`. ENV.iconsURL is the resolved
-// value populated by environment.js from ICONS_URL or BOXEL_ENVIRONMENT.
-const iconsBase = ensureTrailingSlash(ENV.iconsURL);
 
 import {
   testRealmURL,
@@ -1409,19 +1402,19 @@ module(`Integration | realm indexing`, function (hooks) {
             entry.error.errorDetail.message,
             'Encountered error rendering HTML for card: intentional error',
           );
-          // An errored card records its full render closure as deps, not just
-          // its own module: any change to a transitive dependency could be the
-          // one that fixes the render, so the errored card must reindex when
-          // any of them changes. Assert the meaningful members rather than the
-          // whole (large, churn-prone) closure.
+          // An errored card retains known direct edges. This fixture defines
+          // its card class in the test module, so the resource contributes its
+          // own authored module but no explicit Base module edge. The shared
+          // Base loader owns the transitive trusted closure; copying it here
+          // would make every Base change fan out through every realm card.
           let errorDeps = entry.error.errorDetail.deps ?? [];
           assert.ok(
             errorDeps.includes(`${testRealmURL}boom`),
             "error deps include the card's own module",
           );
-          assert.ok(
-            errorDeps.includes(`${testRealmURL}@cardstack/base/card-api`),
-            'error deps include transitive render dependencies (the full closure)',
+          assert.notOk(
+            errorDeps.includes('@cardstack/base/-private'),
+            'error deps do not copy the trusted Base transitive closure',
           );
         } else {
           assert.ok('false', 'expected search entry to be an error document');
@@ -4672,133 +4665,39 @@ module(`Integration | realm indexing`, function (hooks) {
     });
     let refs = (await getInstance(realm, new URL(`${testRealmURL}person-1`)))
       ?.deps;
+    let dependencyBoundary = refs!
+      // Exclude synthetic imports that encapsulate scoped CSS.
+      .filter((ref) => !ref.includes('glimmer-scoped.css'))
+      .sort();
+
     assert.deepEqual(
-      refs!
-        .sort()
-        // Exclude synthetic imports that encapsulate scoped CSS
-        .filter((ref) => !ref.includes('glimmer-scoped.css')),
+      dependencyBoundary,
       [
-        '@cardstack/base/-private',
         '@cardstack/base/card-api',
-        '@cardstack/base/card-serialization',
-        '@cardstack/base/contains-many-component',
-        '@cardstack/base/default-templates/atom',
-        '@cardstack/base/default-templates/card-info',
-        '@cardstack/base/default-templates/embedded',
-        '@cardstack/base/default-templates/field-edit',
-        '@cardstack/base/default-templates/file-def-atom',
-        '@cardstack/base/default-templates/file-def-edit',
-        '@cardstack/base/default-templates/file-def-embedded',
-        '@cardstack/base/default-templates/file-def-fitted',
-        '@cardstack/base/default-templates/file-def-isolated',
-        '@cardstack/base/default-templates/fitted',
-        '@cardstack/base/default-templates/head',
-        '@cardstack/base/default-templates/image-def-atom',
-        '@cardstack/base/default-templates/image-def-embedded',
-        '@cardstack/base/default-templates/image-def-fitted',
-        '@cardstack/base/default-templates/image-def-isolated',
-        '@cardstack/base/default-templates/isolated-and-edit',
-        '@cardstack/base/default-templates/markdown',
-        '@cardstack/base/default-templates/markdown-fallback',
-        '@cardstack/base/default-templates/missing-template',
-        '@cardstack/base/field-component',
-        '@cardstack/base/field-support',
-        '@cardstack/base/file-menu-items',
-        '@cardstack/base/helpers/sanitized-html',
-        '@cardstack/base/helpers/set-background-image',
-        '@cardstack/base/links-to-editor',
-        '@cardstack/base/links-to-many-component',
-        '@cardstack/base/markdown-helpers',
-        '@cardstack/base/menu-items',
         '@cardstack/base/number',
-        '@cardstack/base/number/components/badge-counter',
-        '@cardstack/base/number/components/badge-metric',
-        '@cardstack/base/number/components/badge-notification',
-        '@cardstack/base/number/components/gauge',
-        '@cardstack/base/number/components/progress-bar',
-        '@cardstack/base/number/components/progress-circle',
-        '@cardstack/base/number/components/score',
-        '@cardstack/base/number/components/stat',
-        '@cardstack/base/number/util/index',
-        '@cardstack/base/query-field-support',
         '@cardstack/base/searchable',
-        '@cardstack/base/shared-state',
         '@cardstack/base/string',
-        '@cardstack/base/text-input-validator',
-        '@cardstack/base/watched-array',
-        '@cardstack/boxel-ui/components',
-        '@cardstack/boxel-ui/helpers',
-        '@cardstack/boxel-ui/icons',
-        '@cardstack/boxel-ui/modifiers',
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/align-box-left-middle`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/align-left`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/arrow-left`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/bell`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/captions`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/clipboard-copy`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/code`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/eye`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/file`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/file-pencil`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/folder-pen`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/hash`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/image`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/import`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/letter-case`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/link`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/link-off`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/notepad-text`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/palette`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/rectangle-ellipsis`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/trash-2`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/wand`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/x`,
         // Module deps are stored in canonical (deployment-independent) form,
         // so the live test realm's module resolves to the standard
         // `localhost:4202` address even when served at the env-mode hostname.
         'https://localhost:4202/test/person',
-        'https://packages/@cardstack/boxel-host/commands/copy-and-edit',
-        'https://packages/@cardstack/boxel-host/commands/copy-card',
-        'https://packages/@cardstack/boxel-host/commands/copy-card-as-markdown',
-        'https://packages/@cardstack/boxel-host/commands/copy-file-to-realm',
         'https://packages/@cardstack/boxel-host/commands/create-ai-assistant-room',
-        'https://packages/@cardstack/boxel-host/commands/generate-example-cards',
-        'https://packages/@cardstack/boxel-host/commands/open-create-listing-modal',
-        'https://packages/@cardstack/boxel-host/commands/open-in-interact-mode',
-        'https://packages/@cardstack/boxel-host/commands/patch-theme',
-        'https://packages/@cardstack/boxel-host/commands/populate-with-sample-data',
         'https://packages/@cardstack/boxel-host/commands/send-ai-assistant-message',
-        'https://packages/@cardstack/boxel-host/commands/show-card',
-        'https://packages/@cardstack/boxel-host/commands/show-file',
-        'https://packages/@cardstack/boxel-host/commands/switch-submode',
-        'https://packages/@cardstack/runtime-common',
-        'https://packages/@cardstack/runtime-common/marked-sync',
         'https://packages/@ember/component',
-        'https://packages/@ember/component/template-only',
-        'https://packages/@ember/helper',
         'https://packages/@ember/modifier',
-        'https://packages/@ember/object',
-        'https://packages/@ember/object/internals',
-        'https://packages/@ember/runloop',
-        'https://packages/@ember/template',
         'https://packages/@ember/template-factory',
-        'https://packages/@glimmer/component',
-        'https://packages/@glimmer/tracking',
-        'https://packages/ember-concurrency',
-        'https://packages/ember-concurrency/-private/async-arrow-runtime',
-        'https://packages/ember-css-url',
-        'https://packages/ember-modifier',
-        'https://packages/ember-provide-consume-context',
-        'https://packages/lodash-es',
-        'https://packages/super-fast-md5',
-        'https://packages/tracked-built-ins',
-        // Sort the expected list so the assertion is robust against
-        // the iconsBase URL scheme/host: standard mode puts icons at
-        // `http://localhost:4206/`, env mode at `https://icons.<slug>.localhost/`,
-        // and the lexical position of those entries among the other
-        // URLs differs accordingly.
       ].sort(),
-      'the card references for the instance are correct',
+      'the card records its authored and direct trusted-loader boundary references',
+    );
+    assert.false(
+      dependencyBoundary.includes('@cardstack/base/-private'),
+      'the card does not copy the trusted Base loader transitive closure',
+    );
+    assert.false(
+      dependencyBoundary.some((ref) =>
+        ref.includes('@cardstack/boxel-icons/v1/icons/'),
+      ),
+      'the card does not copy transitive icon dependencies',
     );
   });
 
@@ -4838,143 +4737,25 @@ module(`Integration | realm indexing`, function (hooks) {
       },
     });
     let refs = (await getInstance(realm, new URL(`${realm.url}spec-1`)))?.deps;
+    let dependencyBoundary = refs!
+      // Exclude synthetic imports that encapsulate scoped CSS.
+      .filter((ref) => !ref.includes('glimmer-scoped.css'))
+      .sort();
+
     assert.deepEqual(
-      refs!
-        .sort()
-        // Exclude synthetic imports that encapsulate scoped CSS
-        .filter((ref) => !ref.includes('glimmer-scoped.css')),
+      dependencyBoundary,
       [
-        '@cardstack/base/-private',
-        '@cardstack/base/boolean',
-        '@cardstack/base/card-api',
-        '@cardstack/base/card-serialization',
-        '@cardstack/base/code-ref',
-        '@cardstack/base/contains-many-component',
-        '@cardstack/base/default-templates/atom',
-        '@cardstack/base/default-templates/card-info',
-        '@cardstack/base/default-templates/embedded',
-        '@cardstack/base/default-templates/field-edit',
-        '@cardstack/base/default-templates/file-def-atom',
-        '@cardstack/base/default-templates/file-def-edit',
-        '@cardstack/base/default-templates/file-def-embedded',
-        '@cardstack/base/default-templates/file-def-fitted',
-        '@cardstack/base/default-templates/file-def-isolated',
-        '@cardstack/base/default-templates/fitted',
-        '@cardstack/base/default-templates/head',
-        '@cardstack/base/default-templates/image-def-atom',
-        '@cardstack/base/default-templates/image-def-embedded',
-        '@cardstack/base/default-templates/image-def-fitted',
-        '@cardstack/base/default-templates/image-def-isolated',
-        '@cardstack/base/default-templates/isolated-and-edit',
-        '@cardstack/base/default-templates/markdown',
-        '@cardstack/base/default-templates/markdown-fallback',
-        '@cardstack/base/default-templates/missing-template',
-        '@cardstack/base/field-component',
-        '@cardstack/base/field-support',
-        '@cardstack/base/file-menu-items',
-        '@cardstack/base/helpers/sanitized-html',
-        '@cardstack/base/helpers/set-background-image',
-        '@cardstack/base/links-to-editor',
-        '@cardstack/base/links-to-many-component',
-        '@cardstack/base/markdown',
-        '@cardstack/base/markdown-helpers',
-        '@cardstack/base/menu-items',
-        '@cardstack/base/number',
-        '@cardstack/base/number/components/badge-counter',
-        '@cardstack/base/number/components/badge-metric',
-        '@cardstack/base/number/components/badge-notification',
-        '@cardstack/base/number/components/gauge',
-        '@cardstack/base/number/components/progress-bar',
-        '@cardstack/base/number/components/progress-circle',
-        '@cardstack/base/number/components/score',
-        '@cardstack/base/number/components/stat',
-        '@cardstack/base/number/util/index',
-        '@cardstack/base/query-field-support',
         '@cardstack/base/searchable',
-        '@cardstack/base/shared-state',
         '@cardstack/base/spec',
-        '@cardstack/base/string',
-        '@cardstack/base/text-input-validator',
-        '@cardstack/base/watched-array',
-        '@cardstack/boxel-ui/components',
-        '@cardstack/boxel-ui/helpers',
-        '@cardstack/boxel-ui/icons',
-        '@cardstack/boxel-ui/modifiers',
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/align-box-left-middle`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/align-left`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/apps`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/arrow-left`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/bell`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/book-open-text`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/box-model`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/captions`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/clipboard-copy`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/code`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/eye`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/file`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/file-pencil`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/folder-pen`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/git-branch`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/hash`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/image`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/import`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/layers-subtract`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/layout-list`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/letter-case`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/link`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/link-off`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/notepad-text`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/palette`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/rectangle-ellipsis`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/stack`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/toggle-left`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/trash-2`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/wand`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/x`,
-        // Module deps are stored in canonical (deployment-independent) form,
-        // so the live test realm's module resolves to the standard
-        // `localhost:4202` address even when served at the env-mode hostname.
+        // A polymorphic type named only in meta.fields is still a direct
+        // invalidation edge, even when the shared Base loader resolves it.
         'https://localhost:4202/test/person',
-        'https://packages/@cardstack/boxel-host/commands/copy-and-edit',
-        'https://packages/@cardstack/boxel-host/commands/copy-card',
-        'https://packages/@cardstack/boxel-host/commands/copy-card-as-markdown',
-        'https://packages/@cardstack/boxel-host/commands/copy-file-to-realm',
-        'https://packages/@cardstack/boxel-host/commands/create-ai-assistant-room',
-        'https://packages/@cardstack/boxel-host/commands/generate-example-cards',
-        'https://packages/@cardstack/boxel-host/commands/generate-readme-spec',
-        'https://packages/@cardstack/boxel-host/commands/open-create-listing-modal',
-        'https://packages/@cardstack/boxel-host/commands/open-in-interact-mode',
-        'https://packages/@cardstack/boxel-host/commands/patch-theme',
-        'https://packages/@cardstack/boxel-host/commands/populate-with-sample-data',
-        'https://packages/@cardstack/boxel-host/commands/send-ai-assistant-message',
-        'https://packages/@cardstack/boxel-host/commands/show-card',
-        'https://packages/@cardstack/boxel-host/commands/show-file',
-        'https://packages/@cardstack/boxel-host/commands/switch-submode',
-        'https://packages/@cardstack/runtime-common',
-        'https://packages/@cardstack/runtime-common/marked-sync',
-        'https://packages/@ember/component',
-        'https://packages/@ember/component/template-only',
-        'https://packages/@ember/helper',
-        'https://packages/@ember/modifier',
-        'https://packages/@ember/object',
-        'https://packages/@ember/object/internals',
-        'https://packages/@ember/runloop',
-        'https://packages/@ember/template',
-        'https://packages/@ember/template-factory',
-        'https://packages/@glimmer/component',
-        'https://packages/@glimmer/tracking',
-        'https://packages/ember-concurrency',
-        'https://packages/ember-concurrency/-private/async-arrow-runtime',
-        'https://packages/ember-css-url',
-        'https://packages/ember-modifier',
-        'https://packages/ember-provide-consume-context',
-        'https://packages/ember-resources',
-        'https://packages/lodash-es',
-        'https://packages/super-fast-md5',
-        'https://packages/tracked-built-ins',
-        // See note on iconsBase ordering above.
       ].sort(),
-      'the card references for the instance are correct',
+      'the card records its polymorphic type and direct trusted-loader boundary',
+    );
+    assert.false(
+      dependencyBoundary.includes('@cardstack/base/-private'),
+      'the card does not copy the trusted Base loader transitive closure',
     );
   });
 

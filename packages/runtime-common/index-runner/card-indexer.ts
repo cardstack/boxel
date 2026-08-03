@@ -245,7 +245,18 @@ export async function performCardIndexing({
     markdown,
   } = renderResult;
 
-  let deps = new Set(runtimeDeps ?? []);
+  // The runtime snapshot is authoritative for modules actually consumed while
+  // rendering. Keep the resource's explicit code references as direct edges
+  // too: a polymorphic type named only in `meta.fields` can be resolved by a
+  // delegated trusted loader, so it is not guaranteed to appear in this
+  // card's runtime tracker. That boundary must remain visible for targeted
+  // invalidation without copying the trusted loader's entire transitive graph.
+  let deps = new Set([
+    ...(runtimeDeps ?? []),
+    ...modulesConsumedInMeta(resource.meta).map((module) =>
+      dependencyResolver.canonicalURL(module, instanceURL.href),
+    ),
+  ]);
 
   // Runtime deps are the source of truth. Use index-backed lookup only to
   // detect whether any dependency currently has an errored row.
