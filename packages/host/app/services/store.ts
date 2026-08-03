@@ -791,14 +791,17 @@ export default class StoreService extends Service implements StoreInterface {
         localDir: opts?.localDir,
       });
     } else if (!opts?.doNotPersist) {
-      if (instance.id) {
-        this.save(instance.id);
-      } else {
-        return (await this.persistAndUpdate(instance, {
-          realm: opts?.realm,
-          localDir: opts?.localDir,
-        })) as T | CardErrorJSONAPI;
-      }
+      // Await durable persistence for both new and existing cards. Existing
+      // cards used to queue a fire-and-forget autosave here, which let `add()`
+      // (and callers like SaveCardCommand) resolve before serialization and
+      // the realm PATCH completed, allowing a "saved" result to be reported
+      // while the durable resource still held the pre-mutation state and any
+      // late persistence error never reached the caller. Callers that want
+      // optimistic behavior must opt in explicitly with `doNotWaitForPersist`.
+      return (await this.persistAndUpdate(instance, {
+        realm: opts?.realm,
+        localDir: opts?.localDir,
+      })) as T | CardErrorJSONAPI;
     }
 
     return instance;

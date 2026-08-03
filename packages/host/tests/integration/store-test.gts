@@ -1060,6 +1060,119 @@ module('Integration | Store', function (hooks) {
     assert.strictEqual(fileJSON.data.attributes.name, 'Andrea', 'file exists');
   });
 
+  test('add() awaits durable persistence for an existing card', async function (assert) {
+    let queenzy = (await storeService.get(
+      `${testRealmURL}Person/queenzy`,
+    )) as any;
+    let instance = (await storeService.get(
+      `${testRealmURL}Person/hassan`,
+    )) as any;
+    // compound scalar-plus-link mutation, matching the reported reproduction
+    instance.name = 'Hassan Updated';
+    instance.bestFriend = queenzy;
+
+    let result = await storeService.add(instance);
+    assert.true(
+      isCardInstance(result),
+      'add() resolves with the card instance',
+    );
+
+    // No waitUntil here: if add() resolved before persistence completed (the
+    // reported bug), the durable resource would still hold the pre-mutation
+    // state. Reading the backing JSON immediately proves add() waited.
+    let file = await testRealmAdapter.openFile('Person/hassan.json');
+    let fileJSON = JSON.parse(file!.content as string);
+    assert.strictEqual(
+      fileJSON.data.attributes.name,
+      'Hassan Updated',
+      'the scalar mutation is durable as soon as add() resolves',
+    );
+    assert.ok(
+      (fileJSON.data.relationships.bestFriend.links.self as string).endsWith(
+        'queenzy',
+      ),
+      'the link mutation is durable as soon as add() resolves',
+    );
+  });
+
+  test('add() stays pending until an existing card is durably persisted', async function (assert) {
+    let instance = (await storeService.get(
+      `${testRealmURL}Person/hassan`,
+    )) as any;
+    instance.name = 'Hassan Updated';
+
+    let store = storeService as any;
+    let gate = new Deferred<void>();
+    let originalPersist = store.persistAndUpdate.bind(store);
+    store.persistAndUpdate = async (...args: any[]) => {
+      await gate.promise;
+      return await originalPersist(...args);
+    };
+
+    try {
+      let resolved = false;
+      let addPromise = storeService.add(instance).then((r) => {
+        resolved = true;
+        return r;
+      });
+
+      // Give a fire-and-forget implementation every opportunity to resolve
+      // early; a durable implementation must remain pending while the gate is
+      // held closed.
+      for (let i = 0; i < 10; i++) {
+        await Promise.resolve();
+      }
+      assert.false(
+        resolved,
+        'add() has not resolved while persistence is gated',
+      );
+
+      gate.fulfill();
+      await addPromise;
+      assert.true(resolved, 'add() resolves once persistence completes');
+    } finally {
+      store.persistAndUpdate = originalPersist;
+    }
+
+    let file = await testRealmAdapter.openFile('Person/hassan.json');
+    assert.strictEqual(
+      JSON.parse(file!.content as string).data.attributes.name,
+      'Hassan Updated',
+      'the mutation is durably persisted',
+    );
+  });
+
+  test('add() surfaces persistence failures for an existing card', async function (assert) {
+    let instance = (await storeService.get(
+      `${testRealmURL}Person/hassan`,
+    )) as any;
+    instance.name = 'Hassan Updated';
+
+    let store = storeService as any;
+    let originalSaveCardDocument = store.saveCardDocument.bind(store);
+    store.saveCardDocument = async () => {
+      throw new Error('intentional persistence failure');
+    };
+
+    let result;
+    try {
+      result = await storeService.add(instance);
+    } finally {
+      store.saveCardDocument = originalSaveCardDocument;
+    }
+
+    assert.false(
+      isCardInstance(result),
+      'add() resolves with a card error rather than the instance when persistence fails',
+    );
+    assert.ok(
+      (result as CardErrorJSONAPI).message.includes(
+        'intentional persistence failure',
+      ),
+      'the persistence error propagates to the caller instead of being swallowed',
+    );
+  });
+
   test<TestContextWithSave>('can add a serialized instance to the store', async function (assert) {
     assert.expect(6);
     this.onSave((_, doc) => {
