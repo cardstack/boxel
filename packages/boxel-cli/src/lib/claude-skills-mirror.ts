@@ -354,8 +354,7 @@ async function listRealmSkills(localDir: string): Promise<string[]> {
   for (const entry of entries) {
     if (entry.name.startsWith('.')) continue;
     // `skills/glossary.md`-style loose files are reference material a skill
-    // body links to, not skills; only a directory holding SKILL.md qualifies.
-    if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
+    // body points at, not skills; only a directory holding SKILL.md qualifies.
     if (!(await isDirectory(path.join(skillsDir, entry.name)))) continue;
     if (!(await pathPresent(path.join(skillsDir, entry.name, 'SKILL.md')))) {
       continue;
@@ -497,7 +496,7 @@ async function isDirectory(p: string): Promise<boolean> {
   }
 }
 
-/** Present on disk, following no symlink — a broken link still counts. */
+/** Present on disk — `lstat`, so an unreadable target still counts as taken. */
 async function pathPresent(p: string): Promise<boolean> {
   try {
     await fs.lstat(p);
