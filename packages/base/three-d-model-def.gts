@@ -99,26 +99,49 @@ function disposeObject(root: any) {
   });
 }
 
+// Base cards read this global to tell a server-side prerender from a live
+// client render (same signal `query-field-support` / `links-to-many` use).
+function isLiveRender(): boolean {
+  return !(globalThis as { __boxelRenderContext?: unknown })
+    .__boxelRenderContext;
+}
+
 // Authenticated fetch of the file bytes + a Three.js orbit scene, loaded from a
-// CDN (esm.run/esm.sh) only at client render time — the sanctioned Boxel card
-// pattern for external libraries (the loader resolves https:// specifiers). The
-// engine is never imported during extraction/indexing, so the prerender stays
-// pure-JS + the static thumbnail. Any failure (no WebGL, offline, blocked CDN,
-// unparseable geometry) is caught and leaves the thumbnail placeholder in place.
+// CDN (esm.run/esm.sh) only at live client render time — the sanctioned Boxel
+// card pattern for external libraries (the loader resolves https:// specifiers).
+//
+// Two gates keep WebGL off the paths where it can't or shouldn't run:
+//   - PRERENDER: server-side rendering (indexing/prerender) never boots WebGL or
+//     fetches the CDN engine. The static thumbnail is the prerender
+//     representation; `isLiveRender()` is the deterministic gate (rather than
+//     relying on a doomed CDN import failing).
+//   - VIEWPORT: the viewer boots only while the element is on-screen and
+//     disposes its WebGL context when scrolled off, re-booting on re-entry. So a
+//     strip of embedded models keeps only the visible ones holding a context and
+//     never exhausts the browser's ~16-context budget. (Fitted, a many-tile
+//     grid that can show more than that at once, uses the thumbnail instead —
+//     see ModelFittedTemplate; a pooled renderer for live fitted is CS-12401.)
+//
+// Any failure (no WebGL, offline, blocked CDN, unparseable geometry) is caught
+// and leaves the thumbnail placeholder in place.
 const renderModel = modifier(
   (element: HTMLElement, [component, url]: [ModelViewer, string]) => {
-    if (!url) {
+    if (!url || !isLiveRender()) {
       return;
     }
     let cancelled = false;
     let frameId = 0;
-    let controller = new AbortController();
+    // Model bytes are fetched once and reused across dispose/re-boot cycles, so
+    // scrolling a tile in and out doesn't re-download it.
+    let cachedBytes: ArrayBuffer | undefined;
+    let controller: AbortController | undefined;
     let renderer: any;
     let scene: any;
     let camera: any;
     let controls: any;
     let modelRoot: any;
     let frameModel: ((resetDirection?: boolean) => void) | undefined;
+    let booted = false;
     let isThreeMf = /\.3mf(?:$|[?#])/i.test(url);
     let isStl = /\.stl(?:$|[?#])/i.test(url);
 
@@ -133,8 +156,8 @@ const renderModel = modifier(
       camera.updateProjectionMatrix();
       frameModel?.(false);
     };
-    let observer = new ResizeObserver(resize);
-    observer.observe(element);
+    let resizeObserver = new ResizeObserver(resize);
+    resizeObserver.observe(element);
 
     let tick = () => {
       if (cancelled || !renderer || !scene || !camera) {
@@ -146,41 +169,71 @@ const renderModel = modifier(
       frameId = requestAnimationFrame(tick);
     };
 
-    let started = false;
-    let start = () => {
-      if (started || cancelled) {
+    // Release the WebGL context and scene when the tile leaves the viewport (or
+    // on teardown). Re-entry calls `boot()` again, which rebuilds from the
+    // cached bytes.
+    let disposeGl = () => {
+      cancelAnimationFrame(frameId);
+      frameId = 0;
+      controller?.abort();
+      controls?.dispose?.();
+      disposeObject(modelRoot);
+      renderer?.dispose?.();
+      renderer?.forceContextLoss?.();
+      renderer?.domElement?.remove();
+      renderer = scene = camera = controls = modelRoot = undefined;
+      frameModel = undefined;
+      booted = false;
+      // Back to the thumbnail. Skip during teardown — the component is going
+      // away and must not have tracked state mutated mid-destroy.
+      if (!cancelled) {
+        component.setLoading();
+      }
+    };
+
+    let boot = () => {
+      if (booted || cancelled) {
         return;
       }
-      started = true;
+      booted = true;
       component.setLoading();
+      let localController = new AbortController();
+      controller = localController;
       void (async () => {
         try {
-          let [THREE, controlsModule, loaderModule, response] =
-            await Promise.all([
-              // @ts-expect-error Pinned browser ESM import; the Boxel loader resolves https:// at runtime
-              import('https://esm.sh/three@0.160.0'),
-              // @ts-expect-error Pinned browser ESM import; the Boxel loader resolves https:// at runtime
-              import('https://esm.sh/three@0.160.0/examples/jsm/controls/OrbitControls.js'),
-              isThreeMf
-                ? // @ts-expect-error Pinned browser ESM import; 3MFLoader brings its own fflate dependency
-                  import('https://esm.sh/three@0.160.0/examples/jsm/loaders/3MFLoader.js')
-                : isStl
-                  ? // @ts-expect-error Pinned browser ESM import; STLLoader handles ASCII and binary STL
-                    import('https://esm.sh/three@0.160.0/examples/jsm/loaders/STLLoader.js')
-                  : // @ts-expect-error Pinned browser ESM import; the Boxel loader resolves https:// at runtime
-                    import('https://esm.sh/three@0.160.0/examples/jsm/loaders/GLTFLoader.js'),
-              // No `credentials: 'include'` — that makes a credentialed CORS
-              // request, illegal against the realm's wildcard
-              // `Access-Control-Allow-Origin`. The host auth service worker
-              // injects the realm `Authorization` header on this GET (same path
-              // that lets <img src> load realm images).
-              fetch(url, { signal: controller.signal }),
-            ]);
-          if (!response.ok) {
-            throw new Error(`Model fetch failed with HTTP ${response.status}`);
+          let [THREE, controlsModule, loaderModule] = await Promise.all([
+            // @ts-expect-error Pinned browser ESM import; the Boxel loader resolves https:// at runtime
+            import('https://esm.sh/three@0.160.0'),
+            // @ts-expect-error Pinned browser ESM import; the Boxel loader resolves https:// at runtime
+            import('https://esm.sh/three@0.160.0/examples/jsm/controls/OrbitControls.js'),
+            isThreeMf
+              ? // @ts-expect-error Pinned browser ESM import; 3MFLoader brings its own fflate dependency
+                import('https://esm.sh/three@0.160.0/examples/jsm/loaders/3MFLoader.js')
+              : isStl
+                ? // @ts-expect-error Pinned browser ESM import; STLLoader handles ASCII and binary STL
+                  import('https://esm.sh/three@0.160.0/examples/jsm/loaders/STLLoader.js')
+                : // @ts-expect-error Pinned browser ESM import; the Boxel loader resolves https:// at runtime
+                  import('https://esm.sh/three@0.160.0/examples/jsm/loaders/GLTFLoader.js'),
+          ]);
+          let bytes = cachedBytes;
+          if (!bytes) {
+            // No `credentials: 'include'` — that makes a credentialed CORS
+            // request, illegal against the realm's wildcard
+            // `Access-Control-Allow-Origin`. The host auth service worker
+            // injects the realm `Authorization` header on this GET (same path
+            // that lets <img src> load realm images).
+            let response = await fetch(url, { signal: localController.signal });
+            if (!response.ok) {
+              throw new Error(
+                `Model fetch failed with HTTP ${response.status}`,
+              );
+            }
+            bytes = await response.arrayBuffer();
+            cachedBytes = bytes;
           }
-          let bytes = await response.arrayBuffer();
-          if (cancelled) {
+          // Disposed (scrolled off) or torn down while loading — bail before
+          // creating a context.
+          if (cancelled || !booted) {
             return;
           }
           renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -212,7 +265,7 @@ const renderModel = modifier(
           tick();
 
           let installModel = (root: any) => {
-            if (cancelled) {
+            if (cancelled || !booted) {
               disposeObject(root);
               return;
             }
@@ -301,14 +354,26 @@ const renderModel = modifier(
             );
           }
         } catch (error) {
-          if (!cancelled) {
+          if (!cancelled && booted) {
             component.setError(error);
           }
         }
       })();
     };
 
-    start();
+    // Boot while on-screen, dispose when scrolled off — so only visible viewers
+    // hold a WebGL context.
+    let visibilityObserver = new IntersectionObserver((entries) => {
+      if (cancelled) {
+        return;
+      }
+      if (entries.some((entry) => entry.isIntersecting)) {
+        boot();
+      } else {
+        disposeGl();
+      }
+    });
+    visibilityObserver.observe(element);
 
     let stop = (event: Event) => event.stopPropagation();
     let resetView = (event: Event) => {
@@ -322,14 +387,9 @@ const renderModel = modifier(
 
     return () => {
       cancelled = true;
-      controller.abort();
-      cancelAnimationFrame(frameId);
-      observer.disconnect();
-      controls?.dispose?.();
-      disposeObject(modelRoot);
-      renderer?.dispose?.();
-      renderer?.forceContextLoss?.();
-      renderer?.domElement?.remove();
+      visibilityObserver.disconnect();
+      resizeObserver.disconnect();
+      disposeGl();
       for (let eventName of ['pointerdown', 'pointerup', 'click', 'wheel']) {
         element.removeEventListener(eventName, stop);
       }
@@ -339,9 +399,12 @@ const renderModel = modifier(
 );
 
 // Live WebGL orbit viewer used by embedded + isolated. The static thumbnail
-// (ModelThumbnail) shows until the scene paints and remains as the fallback if
-// WebGL/the CDN engine is unavailable (e.g. during prerender). Fitted does NOT
-// use this — a grid of tiles must never boot one WebGL context per tile.
+// (ModelThumbnail) shows until the scene paints, and remains whenever WebGL
+// isn't running: server-side prerender (the modifier no-ops there) and while a
+// tile is scrolled off-screen (the modifier disposes its context). Fitted does
+// NOT use this — a grid can show more tiles than the browser's WebGL context
+// budget at once, so it stays on the thumbnail (pooled-renderer live fitted is
+// CS-12401).
 export class ModelViewer extends GlimmerComponent<{
   Args: { model: ThreeDModelDef; unit?: string };
   Element: HTMLElement;
