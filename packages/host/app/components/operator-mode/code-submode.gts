@@ -49,7 +49,6 @@ import CodeSubmodeEditorIndicator from '@cardstack/host/components/operator-mode
 import ModuleInspector from '@cardstack/host/components/operator-mode/code-submode/module-inspector';
 
 import consumeContext from '@cardstack/host/helpers/consume-context';
-import { knownFileMetaUrls } from '@cardstack/host/lib/known-file-meta-urls';
 import type { FileResource } from '@cardstack/host/resources/file';
 import type {
   ModuleDeclaration,
@@ -65,6 +64,7 @@ import type RealmService from '@cardstack/host/services/realm';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
+import type { SearchResultKind } from '@cardstack/host/utils/search/types';
 
 import {
   CodeModePanelWidths,
@@ -646,16 +646,20 @@ export default class CodeSubmode extends Component<Signature> {
     this.updateCursorByName = updateCursorByName;
   };
 
-  @action private async openSearchResultInEditor(cardId: string) {
+  @action private async openSearchResultInEditor(
+    cardId: string,
+    kind?: SearchResultKind,
+  ) {
     // A card instance's id is the URL without `.json`, so its source file is
-    // `<id>.json`. A file result's id is already the real file URL and must be
-    // opened as-is. Prerendered search delivers file rows HTML-only, so the
-    // file-meta resource may not be in the Store yet — consult the same
-    // `knownFileMetaUrls` registry the interact-mode click paths rely on.
+    // `<id>.json`; a file result's id is already the real file URL and opens
+    // as-is. The search result carries its own card/file `kind`, so the target
+    // is resolved from that rather than guessed from the id string. `kind` is
+    // absent only for a selection that never came from a search entry — fall
+    // back to the id's own `.json` shape there.
     let codePath =
-      knownFileMetaUrls.has(cardId) || cardId.endsWith('.json')
+      kind === 'file'
         ? rri(cardId)
-        : rri(`${cardId}.json`);
+        : rri(cardId.endsWith('.json') ? cardId : `${cardId}.json`);
     await this.operatorModeStateService.updateCodePath(codePath);
   }
 
