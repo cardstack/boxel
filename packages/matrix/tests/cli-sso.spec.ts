@@ -35,12 +35,8 @@ test.describe('boxel-cli browser authorization', () => {
       log: () => {},
       openBrowserFn: async (authUrl) => {
         await page.goto(authUrl);
-        await page
-          .locator('[data-test-cli-auth-username] input')
-          .fill(username);
-        await page
-          .locator('[data-test-cli-auth-password] input')
-          .fill(password);
+        await page.locator('[data-test-cli-auth-username]').fill(username);
+        await page.locator('[data-test-cli-auth-password]').fill(password);
         await page.locator('[data-test-cli-auth-submit]').click();
         return true;
       },
@@ -118,7 +114,7 @@ test.describe('boxel-cli browser authorization', () => {
     await expect(page.locator('[data-test-cli-auth-form]')).toHaveCount(0);
 
     // And back again, with the callback still named in the URL.
-    await page.locator('[data-test-back-to-login-btn]').click();
+    await page.locator('[data-test-cancel-reset-password-btn]').click();
     await expect(page.locator('[data-test-cli-auth-form]')).toBeVisible();
     expect(new URL(page.url()).searchParams.get('port')).toBe('53412');
   });
