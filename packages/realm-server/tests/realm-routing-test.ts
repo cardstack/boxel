@@ -70,6 +70,10 @@ function makeRoutingFixture(): Record<
             { path: '/self', redirectTo: '/self' },
             { path: '/ring-a', redirectTo: '/ring-b' },
             { path: '/ring-b', redirectTo: '/ring-a' },
+            // An unusable redirect target on a rule that also has a
+            // card: the route keeps serving the card rather than going
+            // down with the typo.
+            { path: '/salvaged', redirectTo: 'terms' },
           ],
         },
         relationships: {
@@ -92,6 +96,11 @@ function makeRoutingFixture(): Record<
           // Carries BOTH a redirect and an instance (only reachable by
           // hand-editing realm.json): the redirect must win.
           'hostRoutingRules.6.instance': {
+            links: { self: './white-paper' },
+          },
+          // Also carries both, but the redirect target is malformed —
+          // the rule must fall back to serving this card.
+          'hostRoutingRules.10.instance': {
             links: { self: './white-paper' },
           },
         },
@@ -139,8 +148,24 @@ module(basename(import.meta.filename), function () {
             statusCode: 301,
           },
           { path: '/ambiguous', redirectTo: '/elsewhere', statusCode: 302 },
+          { path: '/salvaged', id: `${realmURL.href}white-paper` },
         ],
-        'relative reference resolved against the realm root; cross-realm rule filtered; trailing-slash rule normalized to /trailing; redirect rules surface with their (default) status; the invalid javascript: target is dropped; a rule with both targets resolves as a redirect; self-redirect and ring rules dropped',
+        'relative reference resolved against the realm root; cross-realm rule filtered; trailing-slash rule normalized to /trailing; redirect rules surface with their (default) status; the invalid javascript: target is dropped; a rule with both targets resolves as a redirect; self-redirect and ring rules dropped; a rule whose redirect target is malformed falls back to its card',
+      );
+    });
+
+    test('an unusable redirect target falls back to the rule’s card instead of dropping the route', async function (assert) {
+      let map = await testRealm.getHostRoutingMap();
+
+      assert.deepEqual(
+        map.find((rule) => rule.path === '/salvaged'),
+        { path: '/salvaged', id: `${realmURL.href}white-paper` },
+        'the route still serves its card despite the malformed redirect target',
+      );
+      assert.strictEqual(
+        map.find((rule) => rule.path === '/bad-redirect'),
+        undefined,
+        'with no card to fall back to, the rule is dropped',
       );
     });
 

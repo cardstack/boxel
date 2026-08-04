@@ -6877,26 +6877,32 @@ export class Realm {
         let normalizedPath = normalizeRoutingPath(path);
         let redirectTo = (rule as Record<string, unknown>).redirectTo;
         if (typeof redirectTo === 'string' && redirectTo.trim()) {
-          // A redirect rule. When a rule carries both `redirectTo` and
-          // `instance` (only possible by hand-editing realm.json — the
-          // editor clears one when the other is chosen), the redirect
-          // wins: it is the more explicit declaration, and silently
-          // dropping the rule would dead-end the path.
+          // A redirect rule. A rule carrying both `redirectTo` and
+          // `instance` is only reachable by hand-editing realm.json —
+          // the editor clears one when the other is chosen — and the
+          // redirect wins as the more explicit declaration.
+          //
+          // Unless it doesn't hold up: an unusable target falls through
+          // to the instance below rather than taking the rule down with
+          // it, so a typo in a hand-added `redirectTo` leaves a route
+          // that was serving a card still serving it. With no usable
+          // instance either, the rule drops and the path resolves as if
+          // unrouted.
           let target = redirectTo.trim();
           let warning = validateRedirectTarget(target);
           if (warning) {
             this.#log.warn(
-              `dropping host routing rule for path "${normalizedPath}" — invalid redirect target ${JSON.stringify(
+              `ignoring invalid redirect target ${JSON.stringify(
                 target,
-              )}: ${warning}`,
+              )} on host routing rule for path "${normalizedPath}": ${warning}`,
             );
-            return [];
+          } else {
+            let statusCode =
+              parseRedirectStatusCode(
+                (rule as Record<string, unknown>).statusCode,
+              ) ?? DEFAULT_REDIRECT_STATUS;
+            return [{ path: normalizedPath, redirectTo: target, statusCode }];
           }
-          let statusCode =
-            parseRedirectStatusCode(
-              (rule as Record<string, unknown>).statusCode,
-            ) ?? DEFAULT_REDIRECT_STATUS;
-          return [{ path: normalizedPath, redirectTo: target, statusCode }];
         }
         if (!instance || typeof instance !== 'object') return [];
         let id = (instance as Record<string, unknown>).id;
