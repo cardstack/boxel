@@ -4,29 +4,20 @@ import { createServer } from 'node:http';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
+import {
+  CLI_AUTH_TIMEOUT_MS,
+  describeDuration,
+} from '@cardstack/runtime-common/cli-auth';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 import type { MatrixAuth } from './auth.ts';
 
-// Long enough to cover an interactive round-trip mid-flow: a password reset or
-// a sign-up both link an email back to this page carrying the same port and
-// nonce, so the authorization resumes only while this listener is still up, and
-// checking email + clicking through comfortably exceeds a few minutes. The
-// listener is bound to loopback and admits exactly one nonce-matching callback,
-// so waiting longer costs little.
-export const DEFAULT_TIMEOUT_MS = 30 * 60 * 1000;
+// The authorization page states this same window to the person waiting in it, so
+// the two read it from one place.
+export const DEFAULT_TIMEOUT_MS = CLI_AUTH_TIMEOUT_MS;
 const CALLBACK_PATH = '/callback';
 
-// "30 minutes" rather than "1800s", since the wait is long enough that seconds
-// stop being the unit anyone thinks in.
-export function describeDuration(ms: number): string {
-  const seconds = Math.round(ms / 1000);
-  if (seconds < 60) {
-    return `${seconds}s`;
-  }
-  const minutes = Math.round(seconds / 60);
-  return `${minutes} minute${minutes === 1 ? '' : 's'}`;
-}
+export { describeDuration };
 
 // The user never finished in the browser (or never got there).
 export class SsoTimeoutError extends Error {

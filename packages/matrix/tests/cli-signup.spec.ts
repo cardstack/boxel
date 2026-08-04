@@ -98,12 +98,12 @@ test.describe('boxel-cli browser sign-up', () => {
   // The page offers registration to a browser that is already signed in — it
   // even prefills that account's username on the password form — so the session
   // it holds has to be gone before the bootstrap starts. The realm-server token
-  // is the one that bites: it persists in localStorage apart from the Matrix
-  // session and carries a `sessionRoom` claim, and the realm-auth handshake
-  // adopts that room. Left behind, it hands the new account a session room
-  // belonging to the signed-in one, which it was never invited to and cannot
-  // join — the bootstrap dies there, before the personal realm exists, and the
-  // CLI is left waiting on a hand-off that never comes.
+  // is the one that matters: it persists in localStorage apart from the Matrix
+  // session and carries a `sessionRoom` claim, and the realm-auth handshake joins
+  // whatever room that claim names. A token left behind therefore points the new
+  // account at a session room belonging to the signed-in one, which it is not
+  // invited to and cannot join, and the bootstrap fails there — before the
+  // personal realm exists and before the CLI gets its hand-off.
   test('registering from a browser that already holds a session hands the CLI its device anyway', async ({
     page,
   }) => {
@@ -119,10 +119,11 @@ test.describe('boxel-cli browser sign-up', () => {
     const email = `${username}@localhost`;
     const displayName = 'CLI Signup Second User';
 
-    // Sign in through the app's own form, and let it establish realm auth, so the
-    // register flow starts from the state that used to break it. Not the `login`
-    // helper: it re-injects the session on every navigation in the context, which
-    // would put back the very session this flow has to shed.
+    // Sign in through the app's own form and let it establish realm auth, so
+    // registration starts from a browser holding a full session: a Matrix one, a
+    // realm-server token, and per-realm tokens. Not the `login` helper: it
+    // re-injects the session on every navigation in the context, which would put
+    // back the very session this flow has to shed.
     await page.goto(appURL);
     await page.locator('[data-test-username-field]').fill(existingUsername);
     await page.locator('[data-test-password-field]').fill(existingPassword);
@@ -195,8 +196,8 @@ test.describe('boxel-cli browser sign-up', () => {
       device_id: auth.deviceId,
     });
 
-    // The bootstrap ran to completion — this is what the stale token used to
-    // prevent.
+    // The bootstrap runs to completion from this starting state, so the account
+    // handed over is a usable one rather than a shell.
     const realms = await getAccountData<{ realms: string[] } | undefined>(
       auth.userId,
       auth.accessToken,

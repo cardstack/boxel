@@ -11,6 +11,11 @@ import window from 'ember-window-mock';
 import { BoxelInput, Button } from '@cardstack/boxel-ui/components';
 import { GoogleColor } from '@cardstack/boxel-ui/icons';
 
+import {
+  CLI_AUTH_TIMEOUT_MS,
+  describeDuration,
+} from '@cardstack/runtime-common/cli-auth';
+
 import ENV from '@cardstack/host/config/environment';
 import { cliAuthLoopbackUrl } from '@cardstack/host/lib/cli-auth-loopback';
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -54,8 +59,11 @@ interface LoginFlow {
 //              the web app uses (email verification, invite token, personal
 //              realm bootstrap); the device registration mints is POSTed over.
 //
-// Nothing here touches the browser's own session: the credential produced is
-// the CLI's, and this app stays signed in (or out) exactly as it was.
+// The credential produced belongs to the CLI, never to this browser. The Google
+// and password paths leave the browser's own session exactly as it was.
+// Registration is the one exception, and only locally: it needs a page free of
+// another account's session to bootstrap onto, so it signs this browser out
+// without revoking anything server-side.
 export default class CliAuth extends Component {
   <template>
     <AuthContainer>
@@ -101,7 +109,8 @@ export default class CliAuth extends Component {
         {{/if}}
         {{#if this.resumedFromEmail}}
           <p class='notice' data-test-cli-auth-resumed>The CLI stops waiting
-            after 15 minutes. If signing in doesn't reach it, run
+            after
+            {{this.cliWaitWindow}}. If signing in doesn't reach it, run
             <code>boxel profile add</code>
             again.</p>
         {{/if}}
@@ -283,6 +292,12 @@ export default class CliAuth extends Component {
   // True when this page load came from a reset email, which means the CLI has
   // been waiting since before the email was sent and may have given up.
   @tracked private resumedFromEmail = false;
+
+  // How long the CLI holds its listener open, in the CLI's own words, read from
+  // the value the CLI enforces so the page cannot quote a stale number.
+  private get cliWaitWindow() {
+    return describeDuration(CLI_AUTH_TIMEOUT_MS);
+  }
 
   constructor(owner: unknown, args: object) {
     super(owner as never, args);
