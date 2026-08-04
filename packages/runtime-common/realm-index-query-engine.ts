@@ -1649,9 +1649,13 @@ export class RealmIndexQueryEngine {
             relationshipType === CardResourceType && !expectsFileMeta;
           let resolvedSelf: string;
           try {
+            // Resolve the base to a real URL first: `resource.id` may be a
+            // canonical RRI (mapped realm), which `resolveURL` only accepts as
+            // a base for a registered prefix — `toURL` yields the fetchable URL
+            // either form. Mirrors the `linkURL` base above.
             resolvedSelf = vn.resolveURL(
               relationship.links.self,
-              resource.id,
+              resource.id ? vn.toURL(resource.id) : realmURL,
             ).href;
           } catch {
             throw new Error(
