@@ -1060,6 +1060,91 @@ module('Integration | Store', function (hooks) {
     assert.strictEqual(fileJSON.data.attributes.name, 'Andrea', 'file exists');
   });
 
+  // The store's single write-permission check lives on the autosave path
+  // (`useEphemeralState`, consulted by `doAutoSave`). `persistAndUpdate` has no
+  // such guard, so a persist that bypasses the queue must re-apply the check or
+  // it will PATCH a realm the user cannot write to.
+  test<TestContextWithSave>('add() does not persist an existing card when the realm is read-only', async function (assert) {
+    (storeService as any).realm.permissions = () => ({
+      get canRead() {
+        return true;
+      },
+      get canWrite() {
+        return false;
+      },
+    });
+    let instance = (await storeService.get(
+      `${testRealmURL}Person/hassan`,
+    )) as any;
+
+    let writes: string[] = [];
+    this.onSave((url) => writes.push(url.href));
+
+    instance.name = 'Hassan Updated';
+    let result = await storeService.add(instance);
+    await settled();
+
+    assert.deepEqual(writes, [], 'no write is attempted without permission');
+    assert.true(
+      isCardInstance(result),
+      'add() still resolves with the instance rather than a permission error',
+    );
+    let file = await testRealmAdapter.openFile('Person/hassan.json');
+    assert.strictEqual(
+      JSON.parse(file!.content as string).data.attributes.name,
+      'Hassan',
+      'the durable document is untouched',
+    );
+  });
+
+  test('add() reports its save in the card save state', async function (assert) {
+    let instance = (await storeService.get(
+      `${testRealmURL}Person/hassan`,
+    )) as any;
+    instance.name = 'Hassan Updated';
+
+    await storeService.add(instance);
+
+    // add() persists outside the autosave queue, so it has to fold its own
+    // outcome into the save state the indicator renders.
+    let saveState = storeService.getSaveState(instance.id)!;
+    assert.false(
+      saveState.hasUnsavedChanges,
+      'the card no longer reports unsaved changes',
+    );
+    assert.ok(saveState.lastSaved, 'lastSaved reflects the add()-driven save');
+    assert.strictEqual(
+      saveState.lastSaveError,
+      undefined,
+      'no save error is reported',
+    );
+    assert.false(saveState.isSaving, 'the save is no longer in flight');
+  });
+
+  test('add() records a persistence failure in the card save state', async function (assert) {
+    let instance = (await storeService.get(
+      `${testRealmURL}Person/hassan`,
+    )) as any;
+    instance.name = 'Hassan Updated';
+
+    let store = storeService as any;
+    store.saveCardDocument = async () => {
+      throw new Error('intentional persistence failure');
+    };
+    try {
+      await storeService.add(instance);
+    } finally {
+      delete store.saveCardDocument;
+    }
+
+    let saveState = storeService.getSaveState(instance.id)!;
+    assert.ok(
+      saveState.lastSaveError,
+      'the failure is visible to the save indicator, not only to the caller',
+    );
+    assert.false(saveState.isSaving, 'the save is no longer in flight');
+  });
+
   test('add() awaits durable persistence for an existing card', async function (assert) {
     let queenzy = (await storeService.get(
       `${testRealmURL}Person/queenzy`,
