@@ -323,9 +323,24 @@ export const waitForReady: RealmOperation<WaitForReadyInput, void> = async (
       if (response.ok) {
         return;
       }
-      lastError = `HTTP ${response.status}`;
+      // `X-Boxel-Not-Ready` names which stage is outstanding (index vs
+      // prerender-html) and is the only place the poller can read it from —
+      // the server sets it precisely because pollers discard the body.
+      let stage = response.headers.get('X-Boxel-Not-Ready');
+      lastError = `HTTP ${response.status}${stage ? ` (not ready: ${stage})` : ''}`;
     } catch (error) {
+      // Node's fetch reports transport failures as a bare "fetch failed" and
+      // puts the real reason (DNS, TLS, ECONNRESET) on `cause`, so without it
+      // the timeout message is unattributable (CS-12435).
       lastError = error instanceof Error ? error.message : String(error);
+      // Cast: `cause` predates this package's lib target. `!= null` rather than
+      // a truthy check so falsy-but-defined causes aren't dropped.
+      let cause = (error as { cause?: unknown })?.cause;
+      if (cause != null) {
+        lastError += ` (cause: ${
+          cause instanceof Error ? cause.message : String(cause)
+        })`;
+      }
     }
     let remaining = timeoutMs - (Date.now() - startedAt);
     if (remaining <= 0) {
