@@ -641,7 +641,11 @@ export class SearchResource<
 
   private isInTargetRealm(id: RealmResourceIdentifier): boolean {
     return this.realmsToSearch.some((realm) =>
-      new RealmPaths(realm).inRealm(id),
+      // The VN is required, not optional: an instance in a mapped realm has a
+      // prefix-form id while the realms are URL-form, and RealmPaths only
+      // compares across those forms when it can normalize with the VN.
+      // Without it every such instance reads as outside the target realm.
+      new RealmPaths(realm, this.network.virtualNetwork).inRealm(id),
     );
   }
 
@@ -649,7 +653,10 @@ export class SearchResource<
   get instancesByRealm() {
     return this.realmsToSearch
       .map((realm) => {
-        let realmPath = new RealmPaths(realm);
+        // Same cross-form requirement as isInTargetRealm: `card.id` is prefix
+        // form for a mapped realm, so without the VN no card is ever grouped
+        // under its realm and the group is dropped as empty.
+        let realmPath = new RealmPaths(realm, this.network.virtualNetwork);
         let cards = this.instances.filter((card) => realmPath.inRealm(card.id));
         return { realm, cards };
       })
