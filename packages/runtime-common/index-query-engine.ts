@@ -1293,7 +1293,18 @@ export class IndexQueryEngine {
         : [
             dbExpression({
               pg: [
-                `to_tsvector('english', markdown_search_text(ph.markdown)) @@ websearch_to_tsquery('english',`,
+                // The leading `ph.markdown IS NOT NULL` is a null-rejecting
+                // guard, not a behavior change: `markdown_search_text` coalesces
+                // null markdown to '' and a non-empty query never matches an
+                // empty tsvector, so absent-markdown rows are already excluded.
+                // But because that coalesce hides the null-rejection from the
+                // planner, without this guard it cannot reduce the LEFT JOIN to
+                // prerendered_html, drives the query from boxel_index, and
+                // recomputes every row's tsvector at query time instead of using
+                // the markdown GIN index. The explicit guard restores the
+                // reduction so the index is used, and stays correct under `not`
+                // and `any` (an absent row still can't match a positive term).
+                `ph.markdown IS NOT NULL AND to_tsvector('english', markdown_search_text(ph.markdown)) @@ websearch_to_tsquery('english',`,
                 param(filter.matches),
                 `)`,
               ],
