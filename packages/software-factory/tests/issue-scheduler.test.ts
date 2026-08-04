@@ -8,6 +8,7 @@ import type { SchedulableIssue } from '../src/factory-agent/index.ts';
 import {
   IssueScheduler,
   RealmIssueStore,
+  mapCardToSchedulableIssue,
   type IssueStore,
 } from '../src/issue-scheduler.ts';
 import { createTestWorkspace } from './helpers/workspace-fixture.ts';
@@ -634,5 +635,32 @@ module('issue-scheduler > local issue overlay', function () {
       'in_progress',
       'indexed state replaces the local overlay',
     );
+  });
+});
+
+module('issue-scheduler > mapCardToSchedulableIssue', function () {
+  test('carries the board key through, distinct from the card URL', function (assert) {
+    let issue = mapCardToSchedulableIssue({
+      id: 'https://realms.test/user/rt-control/Issues/sticky-note',
+      attributes: {
+        issueId: 'SN-1',
+        summary: 'Implement Sticky Note card',
+        status: 'in_progress',
+        priority: 'high',
+      },
+    });
+    assert.strictEqual(issue.issueId, 'SN-1');
+    assert.strictEqual(
+      issue.id,
+      'https://realms.test/user/rt-control/Issues/sticky-note',
+    );
+  });
+
+  test('an issue written without a board key maps to undefined', function (assert) {
+    let issue = mapCardToSchedulableIssue({
+      id: 'https://realms.test/user/rt-control/Issues/no-key',
+      attributes: { summary: 'No key', status: 'backlog' },
+    });
+    assert.strictEqual(issue.issueId, undefined);
   });
 });

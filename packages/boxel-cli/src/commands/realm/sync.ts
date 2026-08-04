@@ -13,6 +13,7 @@ import type { RealmAuthenticator } from '../../lib/realm-authenticator.ts';
 import { resolveRealmAuthenticator } from '../../lib/auth-resolver.ts';
 import { resolveRealmIdentifier } from '../../lib/resolve-realm-identifier.ts';
 import { resolveRealmSecretSeed } from '../../lib/prompt.ts';
+import { reconcileSkillsMirror } from '../../lib/claude-skills-mirror.ts';
 import {
   type SyncManifest,
   computeFileHash,
@@ -43,6 +44,8 @@ interface BiSyncOptions extends SyncOptions {
   preferRemote?: boolean;
   preferNewest?: boolean;
   deleteSync?: boolean;
+  /** Mirror the realm's `skills/` into `.claude/skills/`. On by default. */
+  claudeSkills?: boolean;
 }
 
 class RealmSyncer extends RealmSyncBase {
@@ -274,6 +277,11 @@ class RealmSyncer extends RealmSyncBase {
         // First sync with no changes needed - still write manifest
         await this.writeManifest(localHashes, remoteMtimes);
       }
+      // The mirror is reconciled against the checkout, not against this run's
+      // transfers, so it still has work to do when nothing moved: the first
+      // sync after upgrading finds the realm's files already in place and
+      // would otherwise never create the mirror at all.
+      await this.reconcileClaudeSkills();
       return;
     }
 
@@ -479,7 +487,18 @@ class RealmSyncer extends RealmSyncBase {
       }
     }
 
+    await this.reconcileClaudeSkills();
+
     console.log('\nSync completed');
+  }
+
+  private async reconcileClaudeSkills(): Promise<void> {
+    await reconcileSkillsMirror({
+      realmUrl: this.normalizedRealmUrl,
+      localDir: this.options.localDir,
+      dryRun: this.options.dryRun,
+      enabled: this.syncOptions.claudeSkills,
+    });
   }
 
   private async writeManifest(
@@ -517,6 +536,13 @@ export interface SyncCommandOptions {
   preferNewest?: boolean;
   delete?: boolean;
   dryRun?: boolean;
+  /**
+   * Mirror the realm's `skills/` directory into the surrounding checkout's
+   * `.claude/skills/` so realm-authored skills are available to Claude Code.
+   * On by default; `--no-claude-skills` (or `BOXEL_DISABLE_CLAUDE_SKILLS_SYNC=1`) opts
+   * out.
+   */
+  claudeSkills?: boolean;
   /**
    * Append `?waitForIndex=true` to the `_atomic` upload so the
    * realm-server returns only after the indexer has processed the
@@ -565,6 +591,10 @@ export function registerSyncCommand(realm: Command): Command {
     .option('--delete', 'Sync deletions both ways')
     .option('--dry-run', 'Preview without making changes')
     .option(
+      '--no-claude-skills',
+      "Skip mirroring the realm's skills/ directory into the checkout's .claude/skills/ (env: BOXEL_DISABLE_CLAUDE_SKILLS_SYNC=1)",
+    )
+    .option(
       '--realm-secret-seed',
       'Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)',
     )
@@ -578,6 +608,7 @@ export function registerSyncCommand(realm: Command): Command {
           preferNewest?: boolean;
           delete?: boolean;
           dryRun?: boolean;
+          claudeSkills?: boolean;
           realmSecretSeed?: boolean;
         },
       ) => {
@@ -590,6 +621,7 @@ export function registerSyncCommand(realm: Command): Command {
           preferNewest: options.preferNewest,
           delete: options.delete,
           dryRun: options.dryRun,
+          claudeSkills: options.claudeSkills,
           realmSecretSeed,
         });
         let hasPartialResults =
@@ -667,6 +699,7 @@ export async function sync(
         preferNewest: options.preferNewest,
         deleteSync: options.delete,
         dryRun: options.dryRun,
+        claudeSkills: options.claudeSkills,
         waitForIndex: options.waitForIndex,
       },
       authenticator,

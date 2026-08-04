@@ -718,6 +718,7 @@ module('Acceptance | code submode tests', function (_hooks) {
               },
             },
             'not-json.json': 'I am not JSON.',
+            'care-guide.md': '# Care Guide\n\nWater weekly.\n',
             'Person/fadhlan.json': {
               data: {
                 attributes: {
@@ -1827,6 +1828,39 @@ module('Acceptance | code submode tests', function (_hooks) {
           },
         },
       });
+    });
+
+    test('Clicking a file in search panel opens the file itself (no .json appended)', async function (assert) {
+      await visitOperatorMode({
+        submode: 'code',
+        codePath: `${testRealmURL}employee.gts`,
+      });
+
+      await click('[data-test-open-search-field]');
+      await fillIn('[data-test-search-field]', 'care-guide');
+
+      await waitFor(
+        `[data-test-search-result="${testRealmURL}care-guide.md"]`,
+        {
+          timeout: 2000,
+        },
+      );
+
+      // Click on the file result
+      await click(`[data-test-search-result="${testRealmURL}care-guide.md"]`);
+
+      assert.dom('[data-test-search-sheet]').doesNotHaveClass('results'); // Search sheet is closed
+      await waitFor('[data-test-card-url-bar-input]');
+      assert
+        .dom('[data-test-card-url-bar-input]')
+        .hasValue(
+          `${testRealmURL}care-guide.md`,
+          'the file opens at its own URL, without a .json extension appended',
+        );
+      assert.true(
+        getMonacoContent().includes('Care Guide'),
+        'the markdown file content is loaded in the editor',
+      );
     });
 
     test('clicking a linksTo field in card renderer panel opens the linked card JSON', async function (assert) {

@@ -63,7 +63,10 @@ import { idFromCardOrURL } from '@cardstack/host/utils/id-from-card-or-url';
 
 import consumeContext from '../../helpers/consume-context';
 
-import { removeCardJsonExtension } from '../../utils/search/types';
+import {
+  removeCardJsonExtension,
+  type SearchResultKind,
+} from '../../utils/search/types';
 
 import CopyButton from './copy-button';
 import DeleteModal from './delete-modal';
@@ -626,10 +629,14 @@ export default class InteractSubmode extends Component {
   }
 
   private openSelectedSearchResultInStack = restartableTask(
-    async (cardId: string) => {
+    async (cardId: string, kind?: SearchResultKind) => {
       let waiterToken = waiter.beginAsync();
       try {
         let searchSheetTrigger = this.searchSheetTrigger; // Will be set by showSearchWithTrigger
+        // The selected result carries its own card/file `kind`; honor it so the
+        // stack item opens as the right type without re-deriving it. Absent
+        // `kind` falls back to the existing detection (`getStackItemType` /
+        // `viewCard`).
 
         // In case the left button was clicked, whatever is currently in stack with index 0 will be moved to stack with index 1,
         // and the card will be added to stack with index 0. shiftStack executes this logic.
@@ -641,7 +648,7 @@ export default class InteractSubmode extends Component {
             id: cardId,
             format: 'isolated',
             stackIndex: 0,
-            type: this.getStackItemType(cardId, cardId),
+            type: kind ?? this.getStackItemType(cardId, cardId),
           });
           // it's important that we await the stack item readiness _before_
           // we mutate the stack, otherwise there are very odd visual artifacts
@@ -662,7 +669,9 @@ export default class InteractSubmode extends Component {
           searchSheetTrigger ===
           SearchSheetTriggers.DropCardToRightNeighborStackButton
         ) {
-          await this.viewCard(this.stacks.length, cardId, 'isolated');
+          await this.viewCard(this.stacks.length, cardId, 'isolated', {
+            type: kind,
+          });
         } else {
           // In case, that the search was accessed directly without clicking right and left buttons,
           // the rightmost stack will be REPLACED by the selection
@@ -674,7 +683,7 @@ export default class InteractSubmode extends Component {
             numberOfStacks === 0 ||
             this.operatorModeStateService.stackIsEmpty(stackIndex)
           ) {
-            await this.viewCard(0, cardId, 'isolated');
+            await this.viewCard(0, cardId, 'isolated', { type: kind });
           } else {
             stack = this.operatorModeStateService.rightMostStack();
             if (stack) {
@@ -684,7 +693,7 @@ export default class InteractSubmode extends Component {
                   id: cardId,
                   format: 'isolated',
                   stackIndex,
-                  type: this.getStackItemType(cardId, cardId),
+                  type: kind ?? this.getStackItemType(cardId, cardId),
                 });
                 // await stackItem.ready();
                 this.operatorModeStateService.clearStackAndAdd(

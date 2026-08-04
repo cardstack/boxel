@@ -24,6 +24,7 @@ import { htmlComponent } from '@cardstack/host/lib/html-component';
 import {
   removeCardJsonExtension,
   type NewCardArgs,
+  type SearchResultKind,
 } from '@cardstack/host/utils/search/types';
 
 import CardRenderer from '../card-renderer';
@@ -54,8 +55,18 @@ interface Signature {
     newCard?: NewCardArgs;
     isSelected: boolean;
     multiSelect?: boolean;
-    onSelect: (selection: string | NewCardArgs) => void;
-    onSubmit?: (selection: string | NewCardArgs) => void;
+    // `kind` carries the selected result's card/file classification (absent for
+    // the "Create New" affordance) so the open handler resolves the right URL
+    // without re-parsing the id. Intermediate components forward these callbacks
+    // by reference, so the arg reaches the consumer untouched.
+    onSelect: (
+      selection: string | NewCardArgs,
+      kind?: SearchResultKind,
+    ) => void;
+    onSubmit?: (
+      selection: string | NewCardArgs,
+      kind?: SearchResultKind,
+    ) => void;
     // When true, render the Adorn visual treatment: a teal hover type-label
     // tab, teal hover/selection outline, and a teal selection chip in place of
     // the plain grey selection circle.
@@ -156,34 +167,47 @@ export default class SearchResultTile extends Component<Signature> {
     return this.resolvedItemId as string;
   }
 
+  // The card/file kind travelling with the payload. An entry row carries its
+  // own classification; the URL-paste live card is always a card; the "Create
+  // New" affordance has no id, so it carries no kind.
+  private get selectionKind(): SearchResultKind | undefined {
+    if (this.args.newCard) {
+      return undefined;
+    }
+    if (this.args.entry) {
+      return this.args.entry.type === 'file-meta' ? 'file' : 'card';
+    }
+    return this.args.card ? 'card' : undefined;
+  }
+
   @action handleClick() {
     if (this.isNewCard) {
       // "Create New" always submits immediately, even in multi-select mode.
-      this.args.onSelect(this.selectPayload);
-      this.args.onSubmit?.(this.selectPayload);
+      this.args.onSelect(this.selectPayload, this.selectionKind);
+      this.args.onSubmit?.(this.selectPayload, this.selectionKind);
       return;
     }
-    this.args.onSelect(this.selectPayload);
+    this.args.onSelect(this.selectPayload, this.selectionKind);
   }
 
   @action handleDblClick() {
     if (this.args.multiSelect && !this.isNewCard) {
       // In multi-select, double-click just toggles for existing cards.
-      this.args.onSelect(this.selectPayload);
+      this.args.onSelect(this.selectPayload, this.selectionKind);
       return;
     }
-    this.args.onSelect(this.selectPayload);
-    this.args.onSubmit?.(this.selectPayload);
+    this.args.onSelect(this.selectPayload, this.selectionKind);
+    this.args.onSubmit?.(this.selectPayload, this.selectionKind);
   }
 
   @action handleKeydown(event: Event) {
     if ((event as KeyboardEvent).key === 'Enter') {
       if (this.args.multiSelect && !this.isNewCard) {
-        this.args.onSelect(this.selectPayload);
+        this.args.onSelect(this.selectPayload, this.selectionKind);
         return;
       }
-      this.args.onSelect(this.selectPayload);
-      this.args.onSubmit?.(this.selectPayload);
+      this.args.onSelect(this.selectPayload, this.selectionKind);
+      this.args.onSubmit?.(this.selectPayload, this.selectionKind);
     }
   }
 

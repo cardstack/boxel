@@ -215,6 +215,14 @@ export default class RenderRoute extends Route<Model> {
       await this.store.ensureSetupComplete();
       this.#restoreRenderTimers = enableRenderTimerStub();
       this.#releaseTimerBlock = beginTimerBlock();
+      // Mark this app as the dedicated prerender app for its whole lifetime.
+      // Persistence must be blocked for EVERY store here (see
+      // renderContextBlocksPersistence): a write from the prerender deadlocks
+      // the from-scratch index — the render holds the sole worker while the
+      // write takes the realm write lock and awaits a reindex that needs that
+      // worker. Never set under isTesting(): host tests run in-browser index
+      // renders alongside an interactive app whose saves must keep working.
+      (globalThis as any).__boxelPrerenderApp = true;
     }
   }
 

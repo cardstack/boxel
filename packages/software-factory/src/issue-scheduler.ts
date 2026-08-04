@@ -23,6 +23,7 @@ import {
 } from './realm-operations.ts';
 import { readCard, writeCard } from './workspace-fs.ts';
 import { logger } from './logger.ts';
+import { traceEvent } from './run-trace.ts';
 
 let log = logger('issue-scheduler');
 
@@ -121,6 +122,18 @@ export class IssueScheduler {
       }
     }
     log.info(`Loaded ${this.issues.length} issue(s) from store`);
+    // One board snapshot per load. This is the only place the whole board is
+    // read, so it is also the only place telemetry can learn about tickets
+    // that have not produced a turn yet — a backlog or blocked issue is
+    // invisible in every other signal the run emits.
+    for (let issue of this.issues) {
+      traceEvent('scheduler', 'board', {
+        issueId: boardKeyOf(issue),
+        issue: issueTitleOf(issue),
+        status: issue.status,
+        blocked: issue.blockedBy.length > 0 || undefined,
+      });
+    }
   }
 
   /**
@@ -508,6 +521,20 @@ function extractLinksToManyIds(
  * Extracts scheduling fields from the card's attributes, falling back
  * to safe defaults for any missing fields.
  */
+/** Board key ("SN-1") when the card carries one, else the URL basename. */
+function boardKeyOf(issue: SchedulableIssue): string {
+  let key = issue.issueId;
+  if (typeof key === 'string' && key.trim() !== '') return key.trim();
+  return String(issue.id).split('/').filter(Boolean).pop() ?? String(issue.id);
+}
+
+function issueTitleOf(issue: SchedulableIssue): string {
+  let summary = issue.summary ?? (issue as Record<string, unknown>).title;
+  return typeof summary === 'string' && summary.trim() !== ''
+    ? summary
+    : String(issue.id);
+}
+
 export function mapCardToSchedulableIssue(
   card: Record<string, unknown>,
 ): SchedulableIssue {
@@ -527,6 +554,10 @@ export function mapCardToSchedulableIssue(
 
   return {
     id,
+    // The tracker's board key ("SN-1"), distinct from `id` (the card URL).
+    // Telemetry groups turns by it and the hardening seeder names issues
+    // after it, so dropping it here leaves both without an identity.
+    issueId: (attrs.issueId as string) ?? undefined,
     status: (attrs.status as IssueStatus) ?? 'backlog',
     priority: (attrs.priority as IssuePriority) ?? 'medium',
     blockedBy,

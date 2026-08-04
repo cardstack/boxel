@@ -27,7 +27,10 @@ import {
   type SearchSheetSection,
   type UrlSection,
 } from '@cardstack/host/utils/search/sections';
-import type { NewCardArgs } from '@cardstack/host/utils/search/types';
+import type {
+  NewCardArgs,
+  SearchResultKind,
+} from '@cardstack/host/utils/search/types';
 
 import { SORT_OPTIONS, VIEW_OPTIONS, type SortOption } from './constants';
 import ResultSection from './result-section';
@@ -82,8 +85,14 @@ interface Signature {
     onChangeSort: (option: SortOption) => void;
 
     // Selection + submit.
-    handleSelect: (selection: string | NewCardArgs) => void;
-    onSubmit?: (selection: string | NewCardArgs) => void;
+    handleSelect: (
+      selection: string | NewCardArgs,
+      kind?: SearchResultKind,
+    ) => void;
+    onSubmit?: (
+      selection: string | NewCardArgs,
+      kind?: SearchResultKind,
+    ) => void;
     multiSelect?: boolean;
     selectedCards?: (string | NewCardArgs)[];
     onSelectAll?: (cards: string[]) => void;

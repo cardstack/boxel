@@ -39,6 +39,12 @@ export class VirtualNetwork {
   // mapping chase. Same pure-function-of-mappings contract as toURLHrefCache:
   // entries stay valid until a realm or URL mapping changes.
   private unresolveURLCache = new Map<string, RealmResourceIdentifier>();
+  // Memo for toRealURLHref — the single canonical STORE KEY. It folds every id
+  // spelling (RRI, virtual alias, url-mapped alias, real URL) onto the real
+  // served URL, so the stores bucket a card the same way regardless of which
+  // form a lookup arrives in. Same pure-function-of-mappings contract as the
+  // memos above.
+  private realURLHrefCache = new Map<string, string>();
   // Cap on the URL memos above. A VirtualNetwork is process-long-lived (notably
   // in the realm server), and toURLHref/unresolveURL are called with distinct
   // card, index, and request URLs — unique or nonexistent inputs would
@@ -67,13 +73,24 @@ export class VirtualNetwork {
 
   constructor(
     nativeFetch = createEnvironmentAwareFetch(),
-    opts?: { fetchHeaderTimeoutMs?: number },
+    opts?: {
+      fetchHeaderTimeoutMs?: number;
+      // A timer scheduler for the fetch retry path. Defaults to the global
+      // setTimeout; the host passes a NATIVE (un-stubbed) scheduler so the
+      // header-timeout abort and retry backoff still fire during prerender,
+      // where render-timer-stub disables the global setTimeout.
+      scheduleFetchTimer?: (callback: () => void, ms: number) => unknown;
+    },
   ) {
     this.nativeFetch = nativeFetch;
     this.fetchHeaderTimeoutMs =
       opts?.fetchHeaderTimeoutMs ?? defaultFetchHeaderTimeoutMs;
+    this.scheduleFetchTimer =
+      opts?.scheduleFetchTimer ?? ((callback, ms) => setTimeout(callback, ms));
     this.mount(this.packageShimHandler.handle);
   }
+
+  private scheduleFetchTimer: (callback: () => void, ms: number) => unknown;
 
   // Subscribe to realm-mapping changes; returns an unsubscribe function.
   onMappingChange(listener: () => void): () => void {
@@ -111,11 +128,13 @@ export class VirtualNetwork {
 
   addURLMapping(from: URL, to: URL) {
     this.urlMappings.push([from.href, to.href]);
-    // unresolveURL chases through urlMappings (via resolveURLMapping), so a new
-    // URL mapping invalidates its memo. toURLHref resolves only through
-    // realmMappings, so clearing its cache here is purely defensive.
+    // unresolveURL and toRealURLHref chase through urlMappings (the latter via
+    // its virtual→real mapURL step), so a new URL mapping invalidates their
+    // memos. toURLHref resolves only through realmMappings, so clearing its
+    // cache here is purely defensive.
     this.toURLHrefCache.clear();
     this.unresolveURLCache.clear();
+    this.realURLHrefCache.clear();
   }
 
   mapURL(
@@ -147,6 +166,7 @@ export class VirtualNetwork {
     this.realmMappings.set(normalizedId, normalizedTarget);
     this.toURLHrefCache.clear();
     this.unresolveURLCache.clear();
+    this.realURLHrefCache.clear();
     this.addImportMap(
       normalizedId,
       (rest) => new URL(rest, normalizedTarget).href,
@@ -166,6 +186,7 @@ export class VirtualNetwork {
     this.importMap.delete(normalizedId);
     this.toURLHrefCache.clear();
     this.unresolveURLCache.clear();
+    this.realURLHrefCache.clear();
     this.notifyMappingChange();
   }
 
@@ -336,6 +357,26 @@ export class VirtualNetwork {
     }
     let href = this.toURL(rri).href;
     return this.setBoundedCache(this.toURLHrefCache, rri, href);
+  }
+
+  /**
+   * Fold any id spelling onto the real served URL — the single canonical key
+   * the stores bucket by. `toURL` first resolves an RRI prefix (or leaves a
+   * URL alone); `mapURL(·, 'virtual-to-real')` then collapses a virtual or
+   * url-mapped alias onto its real backing URL. The composition is total: an
+   * RRI, its virtual alias, a url-mapped alias, and the real URL all converge,
+   * so a lookup by `card.id`, a link's `self`, or a requested URL lands on the
+   * same entry. `unresolveURL` alone is NOT usable as the key — it leaves a
+   * virtual/url-mapped alias unchanged, so those spellings split from the RRI.
+   */
+  toRealURLHref(id: string): string {
+    let cached = this.realURLHrefCache.get(id);
+    if (cached !== undefined) {
+      return cached;
+    }
+    let viaToURL = this.toURL(id).href;
+    let real = this.mapURL(viaToURL, 'virtual-to-real')?.href ?? viaToURL;
+    return this.setBoundedCache(this.realURLHrefCache, id, real);
   }
 
   /**
@@ -535,6 +576,7 @@ export class VirtualNetwork {
     return withRetries(
       new URL(request.url),
       this.fetchHeaderTimeoutMs,
+      this.scheduleFetchTimer,
       (attemptSignal?: AbortSignal) => {
         // Each attempt gets its own abort signal (see withRetries) so that a
         // fetch aborted for stalling on one attempt doesn't poison the next.
@@ -746,6 +788,7 @@ export function shouldRetryFetch(url: URL): boolean {
 async function withRetries(
   url: URL,
   timeoutMs: number,
+  scheduleTimer: (callback: () => void, ms: number) => unknown,
   fetchFn: (attemptSignal?: AbortSignal) => ReturnType<typeof globalThis.fetch>,
 ) {
   let attempt = 0;
@@ -759,10 +802,10 @@ async function withRetries(
     // response's body stream is never aborted (withRetries only awaits the
     // response's headers, not its body).
     let controller: AbortController | undefined;
-    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    let timeoutId: unknown;
     if (shouldTimeoutRetryableFetch(url)) {
       controller = new AbortController();
-      timeoutId = setTimeout(() => {
+      timeoutId = scheduleTimer(() => {
         let timeoutError = new Error(
           `fetch for ${url.href} exceeded ${timeoutMs}ms without response headers`,
         );
@@ -800,10 +843,12 @@ async function withRetries(
           err?.message ?? String(err)
         }) retry attempt #${attempt} in ${attempt * backOffMs}ms`,
       );
-      await new Promise((r) => setTimeout(r, attempt * backOffMs));
+      await new Promise((r) =>
+        scheduleTimer(() => r(undefined), attempt * backOffMs),
+      );
     } finally {
       if (timeoutId !== undefined) {
-        clearTimeout(timeoutId);
+        clearTimeout(timeoutId as Parameters<typeof clearTimeout>[0]);
       }
     }
   }
