@@ -4,6 +4,7 @@ import GlimmerComponent from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 import { htmlSafe } from '@ember/template';
 import { modifier } from 'ember-modifier';
+import { consume } from 'ember-provide-consume-context';
 
 import { eq } from '@cardstack/boxel-ui/helpers';
 import LinkOffIcon from '@cardstack/boxel-icons/link-off';
@@ -13,6 +14,7 @@ import {
   bfmResolvedEmbedStyle,
   buildWaiter,
   cardTypeName,
+  CardContextName,
   fileNameFromUrl,
   extractMermaidBlocks,
   processKatexPlaceholders,
@@ -31,6 +33,7 @@ import {
 import {
   type BaseDef,
   type CardDef,
+  type CardContext,
   type FileDef,
   getComponent,
 } from '../card-api';
@@ -106,6 +109,7 @@ export default class MarkDownTemplate extends GlimmerComponent<{
     cardReferenceBaseUrl?: string | null;
   };
 }> {
+  @consume(CardContextName) declare cardContext: CardContext | undefined;
   @tracked monacoContextInternal: any = undefined;
   @tracked renderSlots: RenderSlot[] = [];
   // On the first modifier run linkedCards is likely still loading (empty [])
@@ -138,6 +142,7 @@ export default class MarkDownTemplate extends GlimmerComponent<{
     let monacoContext = await loadMonacoForMarkdown();
     await preloadMarkdownLanguages(this.args.content || '', monacoContext);
     this.monacoContextInternal = monacoContext;
+    this.cardContext?.requestRender?.();
   });
   get hasCodeBlocks() {
     return hasCodeBlocks(this.args.content);
@@ -426,11 +431,14 @@ export default class MarkDownTemplate extends GlimmerComponent<{
   _loadKatexTask = task({ drop: true }, async () => {
     let token = markdownRenderingWaiter.beginAsync();
     try {
-      let loadKatex = (globalThis as any).__loadKatex;
+      let loadKatex =
+        this.cardContext?.trustedUI?.loadKatex ??
+        (globalThis as any).__loadKatex;
       if (typeof loadKatex !== 'function') {
         return;
       }
       this._katex = await loadKatex();
+      this.cardContext?.requestRender?.();
     } finally {
       markdownRenderingWaiter.endAsync(token);
     }
@@ -457,7 +465,9 @@ export default class MarkDownTemplate extends GlimmerComponent<{
       return;
     }
 
-    let loadMermaid = (globalThis as any).__loadMermaid;
+    let loadMermaid =
+      this.cardContext?.trustedUI?.loadMermaid ??
+      (globalThis as any).__loadMermaid;
     if (typeof loadMermaid !== 'function') {
       return;
     }
@@ -485,6 +495,7 @@ export default class MarkDownTemplate extends GlimmerComponent<{
       }
 
       this._mermaidSvgs = svgs;
+      this.cardContext?.requestRender?.();
     } finally {
       markdownRenderingWaiter.endAsync(token);
     }

@@ -30,12 +30,15 @@ import {
   getField,
   hasExecutableExtension,
   type getCard,
+  isCssResource,
+  isHtmlResource,
   localId as localIdSymbol,
   meta,
   primitive,
   realmURL as realmURLSymbol,
   rri,
   relativeReference,
+  type PrerenderedHtmlFormat,
 } from '@cardstack/runtime-common';
 
 import RealmSandboxDelegatedRender from '@cardstack/host/components/realm-sandbox-delegated-render';
@@ -53,6 +56,10 @@ import type {
   PreparedCodePreviewCommit,
 } from '@cardstack/host/lib/code-preview-sandbox';
 import {
+  htmlComponent,
+  type HTMLComponent,
+} from '@cardstack/host/lib/html-component';
+import {
   serializeWithArgs,
   teardown,
 } from '@cardstack/host/lib/isolated-render';
@@ -63,6 +70,7 @@ import RealmCompartmentModuleRuntime, {
   type SandboxCardFieldMetadata,
   type SandboxCardMethodResult,
   type SandboxCardTypeMetadata,
+  type SandboxFormatOnlyImportDescriptor,
   type SandboxScopeReference,
   type SandboxTemplateBundle,
   type SandboxTrustedExportIdentity,
@@ -101,12 +109,15 @@ import {
   classifyCardSourceForSandbox,
   sandboxDecisionForFormat,
   type CardRenderSandboxTier,
+  type CardSandboxRenderFormat,
   type CardSourceSandboxClassification,
 } from '@cardstack/host/lib/realm-sandbox-source-policy';
 import { assertURLWithinRealm } from '@cardstack/host/lib/realm-sandbox-url-policy';
 import type CardService from '@cardstack/host/services/card-service';
 import type { SaveType } from '@cardstack/host/services/card-service';
+import type LoaderService from '@cardstack/host/services/loader-service';
 import type NetworkService from '@cardstack/host/services/network';
+import type StoreService from '@cardstack/host/services/store';
 
 import type {
   BaseDef,
@@ -172,6 +183,8 @@ export function withContextualComponents<T extends object>(
   }
   return new Proxy(target, handler);
 }
+
+export type ExecutionMode = 'direct' | 'capsule' | 'sandbox';
 
 export interface RealmSandboxRender {
   component: BaseDefComponent;
@@ -310,7 +323,9 @@ function sameModuleClassification(
     left.reason === right.reason &&
     left.propagatesToImporters === right.propagatesToImporters &&
     sameStrings(left.imports, right.imports) &&
-    sameStrings(left.signals, right.signals)
+    sameStrings(left.signals, right.signals) &&
+    JSON.stringify(left.formatOnlyImports ?? []) ===
+      JSON.stringify(right.formatOnlyImports ?? [])
   );
 }
 
@@ -512,6 +527,12 @@ interface CodePreviewRuntimeEntry {
   revision: number;
   draft?: CodePreviewDraft;
   pending: Promise<void>;
+}
+
+interface ResolvedFormatOnlyImport {
+  module: string;
+  exports: string[];
+  formats: CardSandboxRenderFormat[];
 }
 
 // Search resources can be instantiated under a render Store owner while Code
@@ -845,6 +866,19 @@ class ReactiveRevision {
   }
 }
 
+interface IframePrerenderState {
+  component?: HTMLComponent;
+  format?: PrerenderedHtmlFormat;
+  settled: boolean;
+  revision: ReactiveRevision;
+  load?: Promise<void>;
+}
+
+interface IframeInteractiveState {
+  tokens: Map<object, boolean>;
+  revision: ReactiveRevision;
+}
+
 interface MutableOpaqueRealmCardTypeState extends OpaqueRealmCardTypeState {
   icon: CardOrFieldTypeIcon;
 }
@@ -866,6 +900,8 @@ function createSandboxMathFacade(): object {
 export default class RealmSandboxService extends Service {
   @service declare private network: NetworkService;
   @service declare private cardService: CardService;
+  @service declare private loaderService: LoaderService;
+  @service declare private store: StoreService;
 
   private realmRuntimes = new RealmSandboxRuntimeRegistry(
     (principal) => this.createCanonicalCompartmentRuntime(principal),
@@ -909,6 +945,11 @@ export default class RealmSandboxService extends Service {
   >();
   private moduleClassificationRevisions = new Map<string, ReactiveRevision>();
   private moduleDependencies = new Map<string, string[]>();
+  private moduleFormatOnlyImports = new Map<
+    string,
+    ResolvedFormatOnlyImport[]
+  >();
+  private moduleClassificationLoads = new Map<string, Promise<void>>();
   private compartmentLoads = new Map<string, Promise<void>>();
   private compartmentLoadsByCard = new WeakMap<
     BaseDef,
@@ -982,6 +1023,11 @@ export default class RealmSandboxService extends Service {
     Map<string, StableRealmIframeSandboxRender>
   >();
   private iframeRenderOrigins = new WeakMap<BaseDef, Map<string, string>>();
+  private iframePrerenders = new Map<string, IframePrerenderState>();
+  private iframeInteractiveStates = new WeakMap<
+    BaseDef,
+    Map<Format, IframeInteractiveState>
+  >();
   private cardReloadRevisions = new WeakMap<BaseDef, ReactiveRevision>();
   @tracked private metricsRevision = 0;
   private sandboxedCards = new WeakSet<object>();
@@ -2171,6 +2217,293 @@ export default class RealmSandboxService extends Service {
     };
   }
 
+  private iframePrerenderKey(sandbox: RealmIframeSandboxRender): string {
+    let renderType = sandbox.presentation.codeRef;
+    return [
+      sandbox.cardID,
+      sandbox.format === 'edit' ? 'isolated' : sandbox.format,
+      renderType?.module ?? '',
+      renderType?.name ?? '',
+      // The URL carries the explicit reload revision. Including it prevents a
+      // forced Reload Card from briefly reviving an older prerender cache row.
+      sandbox.url,
+    ].join('|');
+  }
+
+  private iframePrerenderFormat(
+    format: Format,
+  ): PrerenderedHtmlFormat | undefined {
+    // The index intentionally has no editable HTML channel. Isolated is the
+    // closest truthful last-known-good visual while the edit iframe boots.
+    let effective = format === 'edit' ? 'isolated' : format;
+    return ['isolated', 'embedded', 'fitted', 'atom'].includes(effective)
+      ? (effective as PrerenderedHtmlFormat)
+      : undefined;
+  }
+
+  private iframePrerenderStateFor(
+    sandbox: RealmIframeSandboxRender,
+  ): IframePrerenderState | undefined {
+    let cardID = sandbox.cardID;
+    let format = this.iframePrerenderFormat(sandbox.format);
+    if (!cardID || !format) {
+      return undefined;
+    }
+    let key = this.iframePrerenderKey(sandbox);
+    let existing = this.iframePrerenders.get(key);
+    if (existing) {
+      // Map insertion order is our small LRU. A frequently revisited format
+      // stays warm without turning this cross-realm cache into app-lifetime
+      // unbounded state.
+      this.iframePrerenders.delete(key);
+      this.iframePrerenders.set(key, existing);
+      return existing;
+    }
+
+    let state: IframePrerenderState = {
+      settled: false,
+      revision: new ReactiveRevision(),
+    };
+    this.iframePrerenders.set(key, state);
+    while (this.iframePrerenders.size > 64) {
+      let oldest = this.iframePrerenders.entries().next().value as
+        | [string, IframePrerenderState]
+        | undefined;
+      if (!oldest || !oldest[1].settled) {
+        break;
+      }
+      this.iframePrerenders.delete(oldest[0]);
+    }
+
+    state.load = this.loadIframePrerender(
+      state,
+      cardID,
+      format,
+      sandbox.presentation.codeRef,
+    );
+    return state;
+  }
+
+  private async loadIframePrerender(
+    state: IframePrerenderState,
+    cardID: string,
+    format: PrerenderedHtmlFormat,
+    renderType?: ResolvedCodeRef,
+  ): Promise<void> {
+    try {
+      state.component = await this.loadIframePrerenderEntry(
+        cardID,
+        format,
+        renderType,
+      );
+      if (state.component) {
+        state.format = format;
+      }
+      if (!state.component && format === 'isolated') {
+        state.component = await this.loadIframePrerenderEntry(
+          cardID,
+          'embedded',
+        );
+        if (state.component) {
+          state.format = 'embedded';
+        } else {
+          state.component = await this.loadInjectedIsolatedPrerender(cardID);
+          if (state.component) {
+            state.format = 'isolated';
+          }
+        }
+      }
+    } catch (error) {
+      if (format === 'isolated') {
+        try {
+          // Temporary rolling-deployment fallback: current staging exposes an
+          // authenticated embedded rendering but not isolated. It remains
+          // inert and explicitly marked as embedded while the header spinner
+          // communicates that the isolated iframe is not interactive yet.
+          state.component = await this.loadIframePrerenderEntry(
+            cardID,
+            'embedded',
+          );
+          if (state.component) {
+            state.format = 'embedded';
+          } else {
+            state.component = await this.loadInjectedIsolatedPrerender(cardID);
+            if (state.component) {
+              state.format = 'isolated';
+            }
+          }
+        } catch {
+          // Prerender is a latency optimization, never a second availability
+          // requirement. The iframe remains the authoritative render path.
+        }
+      }
+    } finally {
+      state.settled = true;
+      scheduleOnce('afterRender', state.revision, state.revision.bump);
+    }
+  }
+
+  private async loadIframePrerenderEntry(
+    cardID: string,
+    format: PrerenderedHtmlFormat,
+    renderType?: ResolvedCodeRef,
+  ): Promise<HTMLComponent | undefined> {
+    let result = await this.store.fetchCardEntry(cardID, {
+      kind: 'card',
+      format,
+      ...(renderType ? { renderType } : {}),
+      fields: 'html',
+    });
+    if (result.notModified) {
+      return undefined;
+    }
+    let htmlIDs = new Set(
+      result.doc.data.relationships.html?.data.map(({ id }) => id) ?? [],
+    );
+    let rendering = (result.doc.included ?? [])
+      .filter(isHtmlResource)
+      .find((resource) => htmlIDs.has(resource.id));
+    if (!rendering || rendering.attributes.html == null) {
+      return undefined;
+    }
+    let styleIDs = new Set(
+      rendering.relationships.styles.data.map(({ id }) => id),
+    );
+    let styleURLs = (result.doc.included ?? [])
+      .filter(isCssResource)
+      .filter((resource) => styleIDs.has(resource.id))
+      .map((resource) => resource.attributes.href);
+    await Promise.all(
+      styleURLs.map((url) => this.loaderService.loader.import(url)),
+    );
+    return htmlComponent(rendering.attributes.html);
+  }
+
+  private async loadInjectedIsolatedPrerender(
+    cardID: string,
+  ): Promise<HTMLComponent | undefined> {
+    let response = await this.network.authedFetch(cardID, {
+      method: 'GET',
+      headers: { Accept: 'text/html' },
+    });
+    if (!response.ok) {
+      return undefined;
+    }
+    let document = new DOMParser().parseFromString(
+      await response.text(),
+      'text/html',
+    );
+    let start = document.getElementById('boxel-isolated-start');
+    let end = document.getElementById('boxel-isolated-end');
+    if (!start || !end) {
+      return undefined;
+    }
+    let container = document.createElement('div');
+    for (let node = start.nextSibling; node && node !== end; ) {
+      let next = node.nextSibling;
+      container.append(node);
+      node = next;
+    }
+    if (!container.innerHTML.trim()) {
+      return undefined;
+    }
+    let scopedStyles = [
+      ...document.querySelectorAll('style[data-boxel-scoped-css]'),
+    ]
+      .map((style) => style.outerHTML)
+      .join('');
+    return htmlComponent(`${scopedStyles}${container.innerHTML}`);
+  }
+
+  iframePrerenderedComponentFor(
+    sandbox: RealmIframeSandboxRender,
+  ): HTMLComponent | undefined {
+    let state = this.iframePrerenderStateFor(sandbox);
+    state?.revision.consume();
+    return state?.component;
+  }
+
+  iframePrerenderedFormatFor(
+    sandbox: RealmIframeSandboxRender,
+  ): PrerenderedHtmlFormat | undefined {
+    let state = this.iframePrerenderStateFor(sandbox);
+    state?.revision.consume();
+    return state?.format;
+  }
+
+  private isIframePrerenderSettled(sandbox: RealmIframeSandboxRender): boolean {
+    let state = this.iframePrerenderStateFor(sandbox);
+    state?.revision.consume();
+    return state?.settled ?? true;
+  }
+
+  registerIframeInteractiveLoad(
+    sandbox: RealmIframeSandboxRender,
+    token: object,
+  ): () => void {
+    if (!sandbox.card || typeof sandbox.card !== 'object') {
+      return () => undefined;
+    }
+    let formats = this.iframeInteractiveStates.get(sandbox.card);
+    if (!formats) {
+      formats = new Map();
+      this.iframeInteractiveStates.set(sandbox.card, formats);
+    }
+    let state = formats.get(sandbox.format);
+    if (!state) {
+      state = { tokens: new Map(), revision: new ReactiveRevision() };
+      formats.set(sandbox.format, state);
+    }
+    state.tokens.set(token, false);
+    state.revision.bump();
+    return () => {
+      if (state?.tokens.delete(token)) {
+        state.revision.bump();
+      }
+    };
+  }
+
+  markIframeInteractive(
+    sandbox: RealmIframeSandboxRender,
+    token: object,
+  ): void {
+    if (!sandbox.card || typeof sandbox.card !== 'object') {
+      return;
+    }
+    let state = this.iframeInteractiveStates
+      .get(sandbox.card)
+      ?.get(sandbox.format);
+    if (state?.tokens.get(token) === false) {
+      state.tokens.set(token, true);
+      state.revision.bump();
+    }
+  }
+
+  isIframeInteractiveLoading(card: BaseDef, format: Format): boolean {
+    let state = this.iframeInteractiveStates.get(card)?.get(format);
+    // CardHeader can render one turn before the iframe modifier registers its
+    // MessageChannel token. The routing decision is already known at that
+    // point, so expose the pending state immediately instead of flashing an
+    // apparently interactive header for a frame.
+    if (!state) {
+      if (this.renderModeFor(card, format) !== 'sandbox') {
+        return false;
+      }
+      let formats = this.iframeInteractiveStates.get(card);
+      if (!formats) {
+        formats = new Map();
+        this.iframeInteractiveStates.set(card, formats);
+      }
+      state = { tokens: new Map(), revision: new ReactiveRevision() };
+      formats.set(format, state);
+    }
+    state.revision.consume();
+    if (state.tokens.size === 0) {
+      return this.renderModeFor(card, format) === 'sandbox';
+    }
+    return [...(state?.tokens.values() ?? [])].some((ready) => !ready);
+  }
+
   // A prerendered CardIsland must remain the visible authority until the
   // client has the exact sandbox branch that CardRenderer will consume.
   // Calling this method starts SES evaluation when necessary and subscribes
@@ -2185,8 +2518,9 @@ export default class RealmSandboxService extends Service {
     if (!this.isOpaqueCard(card)) {
       return true;
     }
-    if (this.iframeRenderFor(card, format)) {
-      return true;
+    let iframe = this.iframeRenderFor(card, format);
+    if (iframe) {
+      return this.isIframePrerenderSettled(iframe);
     }
     if (this.renderFor(card, format)) {
       return true;
@@ -2194,10 +2528,7 @@ export default class RealmSandboxService extends Service {
     return !this.isRenderLoading(card, format);
   }
 
-  renderModeFor(
-    card: BaseDef,
-    format: Format | undefined,
-  ): 'trusted' | 'ses' | 'iframe' {
+  renderModeFor(card: BaseDef, format: Format | undefined): ExecutionMode {
     let effectiveFormat = format ?? 'isolated';
     if (
       !this.isTransparentSandboxEnabled() ||
@@ -2205,12 +2536,12 @@ export default class RealmSandboxService extends Service {
       !getOpaqueRealmCardState(card) ||
       this.usesInheritedBaseTemplate(card, effectiveFormat)
     ) {
-      return 'trusted';
+      return 'direct';
     }
     let decision = this.sandboxDecisionFor(card, effectiveFormat);
     return decision.tier === 'iframe' && this.safeIframeFormat(effectiveFormat)
-      ? 'iframe'
-      : 'ses';
+      ? 'sandbox'
+      : 'capsule';
   }
 
   iframeRenderFor(
@@ -2470,6 +2801,14 @@ export default class RealmSandboxService extends Service {
           return true;
         }
         pending.push(dependency);
+      }
+      for (let dependency of this.moduleFormatOnlyImports.get(
+        codePreviewModuleKey(moduleIdentifier),
+      ) ?? []) {
+        if (sameCodePreviewModuleURL(dependency.module, targetURL)) {
+          return true;
+        }
+        pending.push(dependency.module);
       }
     }
     return false;
@@ -3392,7 +3731,10 @@ export default class RealmSandboxService extends Service {
     for (let moduleIdentifier of [...this.moduleClassifications.keys()]) {
       if (sameCodePreviewModuleURL(moduleIdentifier, sourceURL)) {
         this.moduleClassifications.delete(moduleIdentifier);
-        this.moduleDependencies.delete(codePreviewModuleKey(moduleIdentifier));
+        let moduleKey = codePreviewModuleKey(moduleIdentifier);
+        this.moduleDependencies.delete(moduleKey);
+        this.moduleFormatOnlyImports.delete(moduleKey);
+        this.moduleClassificationLoads.delete(moduleKey);
         let revision = this.moduleClassificationRevisions.get(
           codePreviewModuleKey(moduleIdentifier),
         );
@@ -3606,6 +3948,11 @@ export default class RealmSandboxService extends Service {
     if (!decision) {
       return;
     }
+    await this.recordModuleSourceClassification(
+      expectedDraft.sourceURL,
+      expectedDraft.source,
+      decision,
+    );
     if (
       codePreviewSandbox.active &&
       codePreviewSandbox.draft === expectedDraft
@@ -3634,10 +3981,17 @@ export default class RealmSandboxService extends Service {
   ): { tier: CardRenderSandboxTier; reason: string } {
     let sourceDecision: { tier: CardRenderSandboxTier; reason: string };
     if (codePreviewSandbox) {
-      sourceDecision = {
-        tier: codePreviewSandbox.sandboxTier,
-        reason: codePreviewSandbox.sandboxReason,
-      };
+      let sourceURL = codePreviewSandbox.sourceURL;
+      sourceDecision = sourceURL
+        ? this.moduleSandboxDecision(
+            sourceURL,
+            new Set(),
+            format as CardSandboxRenderFormat | undefined,
+          )
+        : {
+            tier: codePreviewSandbox.sandboxTier,
+            reason: codePreviewSandbox.sandboxReason,
+          };
     } else {
       let state = getOpaqueRealmCardState(card);
       let ref = state?.typeRef;
@@ -3655,6 +4009,7 @@ export default class RealmSandboxService extends Service {
           sourceDecision = this.moduleSandboxDecision(
             moduleIdentifier,
             new Set(),
+            format as CardSandboxRenderFormat | undefined,
           );
         } catch {
           sourceDecision = {
@@ -3673,6 +4028,7 @@ export default class RealmSandboxService extends Service {
   private moduleSandboxDecision(
     moduleIdentifier: string,
     visited: Set<string>,
+    format?: CardSandboxRenderFormat,
   ): { tier: CardRenderSandboxTier; reason: string } {
     this.moduleClassificationRevisionFor(moduleIdentifier).consume();
     let isRoot = visited.size === 0;
@@ -3680,7 +4036,7 @@ export default class RealmSandboxService extends Service {
       return { tier: 'compartment', reason: 'default-user-card' };
     }
     visited.add(moduleIdentifier);
-    let classification = this.moduleClassifications.get(moduleIdentifier);
+    let classification = this.moduleClassificationFor(moduleIdentifier);
     if (
       classification?.tier === 'iframe' &&
       (isRoot || classification.propagatesToImporters)
@@ -3701,10 +4057,71 @@ export default class RealmSandboxService extends Service {
         };
       }
     }
+    if (format) {
+      for (let dependency of this.moduleFormatOnlyImports.get(
+        codePreviewModuleKey(moduleIdentifier),
+      ) ?? []) {
+        if (!dependency.formats.includes(format)) {
+          continue;
+        }
+        if (!this.moduleClassificationFor(dependency.module)) {
+          return {
+            tier: 'iframe',
+            reason: 'dependency:unclassified-format-module',
+          };
+        }
+        let dependencyDecision = this.moduleSandboxDecision(
+          dependency.module,
+          visited,
+        );
+        if (dependencyDecision.tier === 'iframe') {
+          return {
+            tier: 'iframe',
+            reason: `format-dependency:${dependencyDecision.reason}`,
+          };
+        }
+      }
+    }
     return {
       tier: 'compartment',
       reason: classification?.reason ?? 'default-user-card',
     };
+  }
+
+  private moduleClassificationFor(moduleIdentifier: string) {
+    let direct = this.moduleClassifications.get(moduleIdentifier);
+    if (direct) {
+      return direct;
+    }
+    let key = codePreviewModuleKey(moduleIdentifier);
+    for (let [candidate, classification] of this.moduleClassifications) {
+      if (codePreviewModuleKey(candidate) === key) {
+        return classification;
+      }
+    }
+    return undefined;
+  }
+
+  private installFormatOnlyImport(candidate: ResolvedFormatOnlyImport) {
+    let classification = this.moduleClassificationFor(candidate.module);
+    let needsIframe =
+      !classification ||
+      this.moduleSandboxDecision(candidate.module, new Set()).tier === 'iframe';
+    if (!needsIframe) {
+      return;
+    }
+    let descriptor: SandboxFormatOnlyImportDescriptor = {
+      module: candidate.module,
+      exports: candidate.exports,
+    };
+    for (let runtime of this.realmRuntimes.values()) {
+      runtime.installFormatOnlyImport(descriptor);
+    }
+    for (let preview of this.activeCodePreviews) {
+      for (let entry of this.codePreviewRuntimes.get(preview)?.values() ?? []) {
+        entry.runtime.installFormatOnlyImport(descriptor);
+      }
+    }
   }
 
   private moduleClassificationRevisionFor(
@@ -4691,9 +5108,43 @@ export default class RealmSandboxService extends Service {
   ) {
     let classification =
       knownClassification ?? (await classifyCardSourceForSandbox(source));
+    let formatOnlyImports: ResolvedFormatOnlyImport[] = [];
+    let liftedSpecifiers = new Set<string>();
+    for (let candidate of classification.formatOnlyImports ?? []) {
+      if (
+        trustedSandboxImportIdentity(
+          candidate.specifier,
+          this.network.resolveImport,
+        )
+      ) {
+        continue;
+      }
+      try {
+        let module = new URL(
+          this.network.resolveImport(candidate.specifier),
+          moduleIdentifier,
+        ).href;
+        liftedSpecifiers.add(candidate.specifier);
+        formatOnlyImports.push({
+          module,
+          exports: [
+            ...new Set(candidate.bindings.map(({ exportName }) => exportName)),
+          ],
+          formats: [
+            ...new Set(candidate.bindings.flatMap(({ formats }) => formats)),
+          ],
+        });
+      } catch {
+        // An unresolved import remains an ordinary eager edge. Loader will
+        // reject it rather than treating an unknown module as SES-safe.
+      }
+    }
     let dependencies: string[] = [];
     for (let specifier of classification.imports) {
       if (trustedSandboxImportIdentity(specifier, this.network.resolveImport)) {
+        continue;
+      }
+      if (liftedSpecifiers.has(specifier)) {
         continue;
       }
       try {
@@ -4707,18 +5158,33 @@ export default class RealmSandboxService extends Service {
       }
     }
     let dependencyKey = codePreviewModuleKey(moduleIdentifier);
-    let previousClassification =
-      this.moduleClassifications.get(moduleIdentifier);
+    let previousClassification = this.moduleClassificationFor(moduleIdentifier);
     let previousDependencies = this.moduleDependencies.get(dependencyKey) ?? [];
-    if (
+    let previousFormatOnlyImports =
+      this.moduleFormatOnlyImports.get(dependencyKey) ?? [];
+    let changed = !(
       sameModuleClassification(previousClassification, classification) &&
-      sameStrings(previousDependencies, dependencies)
-    ) {
-      return;
-    }
+      sameStrings(previousDependencies, dependencies) &&
+      JSON.stringify(previousFormatOnlyImports) ===
+        JSON.stringify(formatOnlyImports)
+    );
     this.moduleClassifications.set(moduleIdentifier, classification);
     this.moduleDependencies.set(dependencyKey, dependencies);
-    this.moduleClassificationRevisionFor(moduleIdentifier).bump();
+    this.moduleFormatOnlyImports.set(dependencyKey, formatOnlyImports);
+    if (changed) {
+      this.moduleClassificationRevisionFor(moduleIdentifier).bump();
+    }
+    await Promise.all(
+      formatOnlyImports.map(({ module }) =>
+        this.ensureModuleSourceClassification(module),
+      ),
+    );
+    for (let candidate of formatOnlyImports) {
+      this.installFormatOnlyImport(candidate);
+    }
+    if (!changed) {
+      return;
+    }
     for (let preview of this.activeCodePreviews) {
       if (!preview.sourceURL) {
         continue;
@@ -4730,6 +5196,38 @@ export default class RealmSandboxService extends Service {
         ? this.moduleSandboxDecision(rootModule, new Set())
         : { tier: 'compartment' as const, reason: 'code-preview-ses' };
       preview.applySandboxDecision(decision.tier, decision.reason);
+    }
+  }
+
+  private async ensureModuleSourceClassification(moduleIdentifier: string) {
+    if (this.moduleClassificationFor(moduleIdentifier)) {
+      return;
+    }
+    let key = codePreviewModuleKey(moduleIdentifier);
+    let pending = this.moduleClassificationLoads.get(key);
+    if (pending) {
+      await pending;
+      return;
+    }
+    pending = (async () => {
+      try {
+        let response = await this.fetchCompartmentModule(moduleIdentifier);
+        if (!response.ok) {
+          return;
+        }
+      } catch {
+        // The format edge remains unclassified. Routing treats that as an
+        // iframe requirement, while compact SES rendering can still use its
+        // safe local or preindexed fallback without evaluating this module.
+      }
+    })();
+    this.moduleClassificationLoads.set(key, pending);
+    try {
+      await pending;
+    } finally {
+      if (this.moduleClassificationLoads.get(key) === pending) {
+        this.moduleClassificationLoads.delete(key);
+      }
     }
   }
 

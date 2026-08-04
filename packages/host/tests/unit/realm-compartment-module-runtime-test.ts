@@ -59,6 +59,68 @@ function runtimeFor(sources: Record<string, string>) {
 }
 
 module('Unit | realm compartment module runtime', function () {
+  test('defers an independently iframe-classified format module while compact SES formats render', async function (assert) {
+    let moduleID = `${MODULE_ID}?format-only-import`;
+    let sceneURL = new URL('./planet-scene', moduleID).href;
+    let fetched: string[] = [];
+    let source = `
+      import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+      import { setComponentTemplate } from '@ember/component';
+      import { createTemplateFactory } from '@ember/template-factory';
+      import PlanetScene from './planet-scene';
+      class PlanetAtom extends Component {}
+      setComponentTemplate(createTemplateFactory({
+        id: 'planet-atom',
+        block: ${JSON.stringify(TEMPLATE_BLOCK)},
+        moduleName: ${JSON.stringify(moduleID)},
+        isStrictMode: true,
+      }), PlanetAtom);
+      export class PlanetCard extends CardDef {
+        static isolated = PlanetScene;
+        static atom = PlanetAtom;
+      }
+    `;
+    let runtime = new RealmCompartmentModuleRuntime(
+      'https://realm.example/cards/',
+      {
+        fetch: async (input) => {
+          let url = input instanceof Request ? input.url : String(input);
+          fetched.push(url);
+          if (url === moduleID) {
+            return new Response(source, { status: 200 });
+          }
+          if (url === sceneURL) {
+            return new Response(
+              `throw new Error('browser module must not execute in SES')`,
+              { status: 200 },
+            );
+          }
+          return new Response('not granted', { status: 403 });
+        },
+        resolveImport: (moduleIdentifier) =>
+          moduleIdentifier.startsWith('@')
+            ? `https://packages.example/${moduleIdentifier}`
+            : moduleIdentifier,
+      },
+    );
+    runtime.installFormatOnlyImport({
+      module: sceneURL,
+      exports: ['default'],
+    });
+
+    let bundle = await runtime.evaluateTemplate(moduleID, 'PlanetCard', 'atom');
+    assert.strictEqual(bundle.templates[bundle.root]?.id, 'planet-atom');
+    assert.false(
+      fetched.includes(sceneURL),
+      'the resolved format edge is intercepted before module loading',
+    );
+    await assert.rejects(
+      runtime.evaluateTemplate(moduleID, 'PlanetCard', 'isolated'),
+      /delegated to .*planet-scene#default/,
+      'the SES runtime does not pretend it can execute the stronger renderer',
+    );
+  });
+
   test('projects form and pointer event data without exposing DOM nodes', function (assert) {
     let button = document.createElement('button');
     button.dataset.rating = '5';
@@ -650,6 +712,69 @@ module('Unit | realm compartment module runtime', function () {
       bundle.templates[bundle.root]?.id,
       'shared-nav',
       'a readable cross-realm dependency can provide the card template',
+    );
+  });
+
+  test('inherits a captured template while preserving the leaf component behavior', async function (assert) {
+    let childURL = `${MODULE_ID}?inherited-component-template`;
+    let parentURL = new URL('./parent-view', childURL).href;
+    let parentSource = `
+      import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+      import { setComponentTemplate } from '@ember/component';
+      import { createTemplateFactory } from '@ember/template-factory';
+
+      class ParentView extends Component {
+        get version() { return 'parent'; }
+      }
+      setComponentTemplate(createTemplateFactory({
+        id: 'inherited-parent-view',
+        block: ${JSON.stringify(TEMPLATE_BLOCK)},
+        moduleName: ${JSON.stringify(parentURL)},
+        isStrictMode: true,
+      }), ParentView);
+
+      export class ParentCard extends CardDef {
+        static isolated = ParentView;
+      }
+    `;
+    let childSource = `
+      import { CardDef } from 'https://cardstack.com/base/card-api';
+      import { ParentCard } from './parent-view';
+
+      class ChildView extends ParentCard.isolated {
+        get version() { return 'child'; }
+        childAction = () => 'child action';
+      }
+
+      export class ChildCard extends CardDef {
+        static isolated = ChildView;
+      }
+    `;
+    let runtime = runtimeFor({
+      [childURL]: childSource,
+      [parentURL]: parentSource,
+    });
+
+    let bundle = await runtime.evaluateTemplate(
+      childURL,
+      'ChildCard',
+      'isolated',
+    );
+    let root = bundle.templates[bundle.root]!;
+
+    assert.strictEqual(
+      root.id,
+      'inherited-parent-view',
+      'the leaf component inherits the parent template descriptor',
+    );
+    assert.strictEqual(
+      runtime.readComponentProperty(root.instance.handle, 'version'),
+      'child',
+      'the boundary instantiates the leaf component with its overridden behavior',
+    );
+    assert.true(
+      root.instance.actions.includes('childAction'),
+      'leaf-only actions remain available to the delegated renderer',
     );
   });
 

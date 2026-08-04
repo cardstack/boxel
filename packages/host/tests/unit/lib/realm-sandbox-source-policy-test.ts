@@ -22,6 +22,61 @@ module('Unit | realm sandbox source policy', function () {
     assert.strictEqual(result.reason, 'default-user-card');
   });
 
+  test('identifies a format-only import without assigning its sandbox tier', async function (assert) {
+    let source = `
+      import { CardDef, Component } from '@cardstack/base/card-api';
+      import { PlanetEditor, PlanetScene } from './planet-3d';
+      export class PlanetCard extends CardDef {
+        static isolated = PlanetScene;
+        static embedded = PlanetScene;
+        static edit = PlanetEditor;
+        static atom = class extends Component<typeof this> {
+          <template><span>{{@model.name}}</span></template>
+        };
+      }
+    `;
+    let result = await classifyCardSourceForSandbox(source);
+    let expected = [
+      {
+        specifier: './planet-3d',
+        bindings: [
+          { exportName: 'PlanetEditor', formats: ['edit'] },
+          {
+            exportName: 'PlanetScene',
+            formats: ['isolated', 'embedded'],
+          },
+        ],
+      },
+    ];
+
+    assert.strictEqual(
+      result.tier,
+      'compartment',
+      'the safe importing module is classified from its own executable code',
+    );
+    assert.deepEqual(result.formatOnlyImports, expected);
+    let compiled = await classifyCardSourceForSandbox(
+      await transpileJS(source, '/planet.gts'),
+    );
+    assert.deepEqual(
+      compiled.formatOnlyImports,
+      expected,
+      'the same convention survives the Realm executable-source transform',
+    );
+  });
+
+  test('keeps a shared import eager when code outside a full-format slot reads it', async function (assert) {
+    let result = await classifyCardSourceForSandbox(`
+      import { PlanetScene } from './planet-3d';
+      export const sceneName = PlanetScene.name;
+      export class PlanetCard {
+        static isolated = PlanetScene;
+      }
+    `);
+
+    assert.deepEqual(result.formatOnlyImports, undefined);
+  });
+
   test('DOM globals select the isolated iframe', async function (assert) {
     let result = await classifyCardSourceForSandbox(`
       const canvas = document.createElement('canvas');

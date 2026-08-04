@@ -3,7 +3,7 @@
 ## Why this guide exists
 
 This branch is easier to understand as a sequence of architectural boundaries
-than as a 140-file diff. The implementation touches loading, card
+than as a more-than-200-file diff. The implementation touches loading, card
 materialization, rendering, Code mode, iframe hosting, and compatibility code,
 but those changes all serve one idea:
 
@@ -23,7 +23,11 @@ compatibility work that the branch does **not** finish. It should be read with
 scope, diligence, and the proposed commit/PR split, and the
 [follow-up plan](realm-sandbox-follow-up-plan.md), which turns the remaining
 reviewability, verification, cleanup, and hardening work into ordered
-checklists.
+checklists. The companion
+[card API compatibility ledger](realm-sandbox-card-api-compatibility.md) is the
+canonical answer to “what must card authors learn or change?” This guide
+explains the implementation; the ledger distinguishes net-new author APIs from
+Host-owned shims and optional source conventions.
 
 ## How to review the branch
 
@@ -106,16 +110,20 @@ architecture, not a hidden card-rendering path.
 
 ### Vocabulary
 
-| Term             | Meaning in this branch                                                                                                                |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| trusted loader   | The shared normal Base Loader, or a normal Loader for an explicitly trusted realm.                                                    |
-| realm principal  | The security identity used to key a user realm's SES runtime.                                                                         |
-| opaque card      | A host-visible inert representation of card data plus explicit type/presentation metadata. It is not the realm's live class instance. |
-| delegated render | An explicit request to render a card/field through the boundary instead of calling methods on its constructor.                        |
-| render island    | A stable host DOM boundary whose inner Glimmer render may be adopted or replaced.                                                     |
-| volatile module  | A source module currently being edited or externally rewritten, with generations tracked until it becomes quiet.                      |
-| last known good  | The most recent source generation that compiled and rendered successfully.                                                            |
-| acknowledgement  | Confirmation that the persisted/indexed source is the same generation already shown optimistically.                                   |
+| Term               | Meaning in this branch                                                                                                                                 |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| trusted loader     | The shared normal Base Loader, or a normal Loader for an explicitly trusted realm.                                                                     |
+| realm principal    | The security identity used to key a user realm's SES runtime.                                                                                          |
+| opaque card        | A host-visible inert representation of card data plus explicit type/presentation metadata. It is not the realm's live class instance.                  |
+| delegated render   | An explicit request to render a card/field through the boundary instead of calling methods on its constructor.                                         |
+| render island      | A stable host DOM boundary whose inner Glimmer render may be adopted or replaced.                                                                      |
+| volatile module    | A source module currently being edited or externally rewritten, with generations tracked until it becomes quiet.                                       |
+| last known good    | The most recent source generation that compiled and rendered successfully.                                                                             |
+| acknowledgement    | Confirmation that the persisted/indexed source is the same generation already shown optimistically.                                                    |
+| Direct             | The current format's GTS module executes in the trusted Ember Host. This is an execution result for one format, not a trust label for the entire card. |
+| Capsule            | The current format's GTS module executes in an SES Compartment and renders through the trusted Host adapter.                                           |
+| Sandbox            | The current format's GTS module executes in the isolated iframe document and communicates through MessageChannel.                                      |
+| format-only import | An ordinary ESM binding used exclusively as the direct value of an iframe-capable static format slot, allowing that edge to be deferred per format.    |
 
 ## 2. Ideal architecture
 
@@ -555,6 +563,35 @@ Theme, `prefersWideFormat`, editability, and other implicit presentation
 inputs have to be carried explicitly. This is why some apparently unrelated
 UI regressions exposed missing boundary API rather than CSS bugs.
 
+### Trusted Base field portals and inherited templates
+
+A user component may delegate a field to an official Base renderer without
+turning that renderer into user code. The Host creates a separate trusted
+portal for the Base component and supplies only the capabilities that renderer
+needs: `requestRender`, CodeRef validation, and a private `trustedUI` loader for
+Host-bundled CodeMirror, KaTeX, and Mermaid. The realm component never receives
+the `trustedUI` object, those module namespaces, or their ambient globals.
+
+New bundled Base code prefers the explicit context capability:
+
+```ts
+let loadMermaid =
+  this.cardContext?.trustedUI?.loadMermaid ?? globalThis.__loadMermaid; // compatibility for already-deployed Base
+```
+
+The global fallback is installed by the Host for older deployed Base modules;
+it is not installed as an SES endowment. The portal also subscribes to trusted
+UI completion so an independently owned Glimmer root rerenders when an async
+editor or diagram becomes ready. `CORPUS-02` covers both Mermaid output and the
+CodeMirror editor through this path.
+
+Template inheritance is a separate compatibility case. A leaf card class may
+extend a parent card that defined `static isolated` without defining another
+template itself. The Compartment runtime walks the card prototype chain to
+find the captured template, but instantiates the leaf component so overridden
+getters and actions still run. Copying the parent's template into the child
+would be an author-visible workaround and is specifically avoided.
+
 ### Safe modifiers
 
 Ember modifiers normally receive a live DOM element, which would punch a hole
@@ -609,6 +646,9 @@ syntax and global at-rules require additional hardening, called out later.
 
 - `packages/host/app/components/realm-sandbox-render.gts`
 - `packages/host/app/components/realm-sandbox-template-island.gts`
+- `packages/host/app/lib/realm-sandbox-field-component.gts`
+- `packages/host/app/lib/trusted-ui-runtime.ts`
+- `packages/host/app/lib/realm-compartment-module-runtime.ts`
 - `packages/host/app/modifiers/realm-sandbox-styles.ts`
 - `packages/host/app/services/realm-sandbox-styles.ts`
 - `packages/boxel-ui/addon/src/modifiers/safe-modifier.ts`
@@ -664,6 +704,32 @@ export function sandboxDecisionForFormat(decision, format) {
   };
 }
 ```
+
+The branch also recognizes one conservative source convention that avoids
+making a whole card graph pay the iframe cost. If an imported binding is used
+only as the complete value of `static isolated`, `static embedded`, or
+`static edit`, the classifier records that edge as format-only:
+
+```gts
+import { PlanetEditor, PlanetScene } from './planet-3d';
+
+export class PlanetCard extends CardDef {
+  static isolated = PlanetScene;
+  static embedded = PlanetScene;
+  static edit = PlanetEditor;
+  static atom = class Atom extends Component<typeof PlanetCard> {
+    <template>
+      <span>{{@model.name}}</span>
+    </template>
+  };
+}
+```
+
+This is ordinary GTS and ESM—not a privileged annotation. The imported module
+is still classified normally. Its result applies only to the formats that use
+it, while compact formats can remain in Capsule. Any second use in schema,
+module initialization, another renderer, or an ambiguous expression keeps the
+import eager and therefore conservatively affects the whole graph.
 
 ### Why classification is not the security boundary
 
@@ -727,6 +793,26 @@ Intrinsic height is also an explicit service. The child uses the safe
 `observe-size` modifier and sends a numeric resize record; the parent clamps
 and applies it. The card itself does not know it is in an iframe.
 
+Before the iframe is interactive, the parent asks the Realm index for the
+exact requested prerendered format. If indexed isolated HTML is temporarily
+unavailable, it may use embedded HTML as a visual fallback; it never treats
+that fallback as interactive. The inert placeholder stays visible until the
+child has both reported readiness and, for intrinsic formats, supplied its
+first bounded height. The existing card header shows the application loading
+indicator during that interval. Once ready, the persistent iframe fades in
+without requiring the card to implement hydration or MessageChannel code.
+
+Height ownership is part of the private presentation protocol:
+
+- `isolated`, `embedded`, `edit`, and `atom` are intrinsic by default: the
+  child reports content height and the parent owns the iframe element size;
+- `fitted` is allocated by default: the parent supplies the viewport and
+  ignores child resize reports, allowing docked panels and internal overflow.
+
+Prerender fetching is a Host optimization and uses the Host's authenticated
+Store/network path. It is never exposed as a fetch capability available to the
+iframe or SES card.
+
 ### Review these files
 
 - `packages/host/app/lib/realm-sandbox-source-policy.ts`
@@ -739,6 +825,8 @@ and applies it. The card itself does not know it is in an iframe.
 - `packages/host/tests/unit/lib/realm-iframe-sandbox-protocol-test.ts`
 - `packages/host/tests/unit/lib/realm-sandbox-url-policy-test.ts`
 - `packages/host/tests/unit/realm-sandbox-iframe-draft-test.ts`
+- `packages/runtime-common/prerendered-html-format.ts`
+- `packages/realm-server/tests/card-html-endpoints-test.ts`
 
 ### Reviewer checkpoint
 
@@ -1049,13 +1137,16 @@ These flows combine the layers in the order they execute.
    imports to the shared Base Loader. Other allowed trusted imports, including
    Catalog, are admitted by the sandbox import policy without being delegated
    through `baseLoader`.
-4. The source policy selects `compartment`.
+4. The source policy selects the `compartment` tier, reported in the card menu
+   as **Execution: Capsule** for this format.
 5. The principal Loader fetches/transpiles; its `ModuleEvaluator` registers the
    module inside SES.
 6. The runtime captures type metadata and a template descriptor.
 7. The host creates an opaque card representation and trusted delegated-render
    component.
-8. RealmSandboxRender supplies narrow CardContext/presentation args.
+8. RealmSandboxRender supplies narrow CardContext/presentation args. If a
+   trusted Base field is delegated, its separate Host portal receives only the
+   private trusted-UI and validation capabilities it needs.
 9. TemplateIsland renders through Glimmer and the stylesheet registry installs
    the scoped styles.
 10. A nested card delegates back through CardRenderer, which applies the nested
@@ -1082,15 +1173,19 @@ These flows combine the layers in the order they execute.
 
 1. Static classification sees a known DOM-heavy import/global.
 2. For isolated, embedded, or edit, CardRenderer selects the iframe tier.
-3. The stable frame boots on the configured sandbox origin and receives a
+3. The Host paints inert indexed HTML for the requested format immediately and
+   marks the header as loading.
+4. The stable frame boots on the configured sandbox origin and receives a
    MessagePort.
-4. Its detached Loader fetches through the parent's realm-bounded broker.
-5. Draft generations and presentation changes travel over the existing port;
+5. Its detached Loader fetches through the parent's realm-bounded broker.
+6. Draft generations and presentation changes travel over the existing port;
    the iframe is not recreated for each keystroke.
-6. The child renders with a real document. `observe-size` sends frozen numeric
+7. The child renders with a real document. `observe-size` sends frozen numeric
    dimensions, and the parent adjusts the frame while authored CSS retains
    overflow control.
-7. Switching to fitted, atom, head, or markdown selects SES instead; those
+8. Once readiness and the first intrinsic size arrive, the iframe replaces the
+   inert placeholder and the header spinner clears.
+9. Switching to fitted, atom, head, or markdown selects SES instead; those
    formats never create a gallery of frames.
 
 ### D. Out-of-band AI or CLI edit while viewing a card
@@ -1154,8 +1249,22 @@ an unsafe implicit boundary. The main patterns are:
   constructor; and
 - Base fallback templates remain trusted and do not pay sandbox startup cost.
 
+Other compatibility work must remain invisible to existing card source:
+
+- a child class inherits its parent's captured format template while retaining
+  the child's getters/actions;
+- trusted Rich Markdown fields receive Host-owned CodeMirror, KaTeX, and
+  Mermaid loaders without projecting those libraries into realm code;
+- opaque linked-card `getComponent()` calls terminate in the Host's synthetic
+  format-slot shim; and
+- compile/runtime errors appear as a floating bottom overlay over the still
+  mounted last-known-good preview, rather than displacing or blanking it.
+
 Use [the compatibility audit](pr-5663-compatibility-audit.md) to review those
-edits. A compatibility change should either have a focused regression test or
+edits, and use the
+[canonical card API ledger](realm-sandbox-card-api-compatibility.md) to decide
+whether an apparent new API is author-facing, an internal bridge, or a source
+convention. A compatibility change should either have a focused regression test or
 be exercised by an unchanged existing test. It should not silently reintroduce
 live constructor access merely to make a card pass.
 
@@ -1169,17 +1278,23 @@ directory.
 | evaluator and graph semantics                                 | `tests/unit/loader-test.ts`                                                                                     |
 | trusted loader immunity/targeted invalidation                 | `tests/unit/services/loader-service-invalidation-test.ts`                                                       |
 | absent ambient authority, allowed imports, templates, handles | `tests/unit/realm-compartment-module-runtime-test.ts`                                                           |
+| inherited template with leaf behavior                         | `tests/unit/realm-compartment-module-runtime-test.ts`                                                           |
 | principal sharing and idle eviction                           | `tests/unit/lib/realm-sandbox-runtime-registry-test.ts`, `tests/unit/realm-sandbox-runtime-lifecycle-test.ts`   |
 | opaque record/type boundary                                   | `tests/unit/lib/realm-sandbox-boundary-test.ts`                                                                 |
 | static tier decision and format constraints                   | `tests/unit/lib/realm-sandbox-source-policy-test.ts`                                                            |
+| conservative format-only import lifting                       | `tests/unit/lib/realm-sandbox-source-policy-test.ts`, `tests/unit/realm-compartment-module-runtime-test.ts`     |
 | iframe message validation and bounds                          | `tests/unit/lib/realm-iframe-sandbox-protocol-test.ts`                                                          |
 | brokered fetch stays under realm                              | `tests/unit/lib/realm-sandbox-url-policy-test.ts`                                                               |
 | persistent iframe draft update                                | `tests/unit/realm-sandbox-iframe-draft-test.ts`                                                                 |
+| iframe prerender/readiness/height handoff                     | `tests/integration/components/realm-sandbox-iframe-test.gts`, `tests/unit/realm-sandbox-iframe-draft-test.ts`   |
+| exact isolated indexed HTML                                   | Realm Server `tests/card-html-endpoints-test.ts`                                                                |
 | stylesheet identity/ref counts                                | `tests/unit/realm-sandbox-styles-test.ts`                                                                       |
 | safe DOM operations                                           | Boxel UI `safe-modifier-test.gts`                                                                               |
 | Glimmer marker adoption and teardown                          | `tests/unit/lib/isolated-render-test.gts`                                                                       |
 | generation/hash/ack/last-known-good                           | `tests/unit/code-preview-sandbox-test.ts`                                                                       |
 | SES + iframe live editing and recovery                        | `tests/acceptance/code-submode/sandbox-live-reload-test.gts`                                                    |
+| trusted Rich Markdown/Mermaid/CodeMirror portal               | `tests/acceptance/code-submode/sandbox-live-reload-test.gts` (`CORPUS-02`)                                      |
+| last-known-good error overlay geometry                        | `tests/acceptance/code-submode/sandbox-live-reload-test.gts` (`HMR-05`)                                         |
 | server prerender adoption                                     | `tests/acceptance/prerender-html-test.gts`                                                                      |
 | file tree invalidation and query cache                        | `tests/integration/resources/file-tree-from-index-test.ts`, `tests/unit/services/file-tree-query-cache-test.ts` |
 | source cache bounds/identity                                  | `tests/unit/services/code-source-cache-test.ts`                                                                 |

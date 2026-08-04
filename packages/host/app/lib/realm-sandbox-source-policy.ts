@@ -27,9 +27,30 @@ export interface CardSourceSandboxClassification {
   // every importer for a mere `document` token makes otherwise SES-compatible
   // cards depend on the hosted iframe service.
   propagatesToImporters: boolean;
+  // An ordinary ESM import whose runtime bindings are used exclusively as
+  // direct values of iframe-capable static format slots. The SES evaluator
+  // may replace this one eager edge with inert component references while the
+  // iframe/native loader retains ordinary ESM semantics. Absence means the
+  // source contains no provably liftable edge.
+  formatOnlyImports?: CardFormatOnlyImport[];
+}
+
+export interface CardFormatOnlyImportBinding {
+  exportName: string;
+  formats: CardSandboxRenderFormat[];
+}
+
+export interface CardFormatOnlyImport {
+  specifier: string;
+  bindings: CardFormatOnlyImportBinding[];
 }
 
 const iframeRenderFormats = new Set<string>(['isolated', 'embedded', 'edit']);
+const liftableFormatNames = new Set<CardSandboxRenderFormat>([
+  'isolated',
+  'embedded',
+  'edit',
+]);
 const compiledLiteralStyleElement =
   /\[\s*10\s*,\s*(?:["']style["']|\\["']style\\["'])\s*\]/i;
 const compiledDynamicInlineStyleAttribute =
@@ -361,6 +382,147 @@ function executableDOMMethodCalls(source: string): string[] {
   }
 }
 
+// This is deliberately a structural convention, not a filename/package
+// allowlist. A dependency is liftable only when all of its imported runtime
+// bindings are used solely as the complete value of an iframe-capable static
+// format slot. Any other reference preserves normal eager ESM behavior.
+function formatOnlyImports(source: string): CardFormatOnlyImport[] {
+  let result: CardFormatOnlyImport[] = [];
+  let collectFormatImports: babel.PluginObj = {
+    visitor: {
+      Program: {
+        exit(programPath) {
+          for (let statementPath of programPath.get('body')) {
+            if (!statementPath.isImportDeclaration()) {
+              continue;
+            }
+            if (statementPath.node.importKind === 'type') {
+              continue;
+            }
+            let runtimeSpecifiers = statementPath
+              .get('specifiers')
+              .filter(
+                (specifierPath) =>
+                  !specifierPath.isImportSpecifier() ||
+                  specifierPath.node.importKind !== 'type',
+              );
+            if (runtimeSpecifiers.length === 0) {
+              // A side-effect-only import can never be lifted.
+              continue;
+            }
+            let bindings: CardFormatOnlyImportBinding[] = [];
+            let liftable = true;
+            for (let specifierPath of runtimeSpecifiers) {
+              let local = specifierPath.node.local.name;
+              let binding = statementPath.scope.getBinding(local);
+              if (!binding || binding.referencePaths.length === 0) {
+                liftable = false;
+                break;
+              }
+              let importedName = 'default';
+              if (specifierPath.isImportSpecifier()) {
+                importedName = babel.types.isIdentifier(
+                  specifierPath.node.imported,
+                )
+                  ? specifierPath.node.imported.name
+                  : specifierPath.node.imported.value;
+              } else if (specifierPath.isImportNamespaceSpecifier()) {
+                importedName = '*';
+              }
+              let formats = new Set<CardSandboxRenderFormat>();
+              let exportNames = new Set<string>();
+              for (let referencePath of binding.referencePaths) {
+                let valuePath = referencePath;
+                let exportName = importedName;
+                if (specifierPath.isImportNamespaceSpecifier()) {
+                  let memberPath = referencePath.parentPath;
+                  if (
+                    !memberPath?.isMemberExpression() ||
+                    memberPath.node.object !== referencePath.node
+                  ) {
+                    liftable = false;
+                    break;
+                  }
+                  let property = memberPath.node.property;
+                  if (memberPath.node.computed) {
+                    if (!babel.types.isStringLiteral(property)) {
+                      liftable = false;
+                      break;
+                    }
+                    exportName = property.value;
+                  } else {
+                    if (!babel.types.isIdentifier(property)) {
+                      liftable = false;
+                      break;
+                    }
+                    exportName = property.name;
+                  }
+                  valuePath = memberPath;
+                }
+                let propertyPath = valuePath.parentPath;
+                if (
+                  !propertyPath?.isClassProperty() ||
+                  !propertyPath.node.static ||
+                  propertyPath.node.value !== valuePath.node
+                ) {
+                  liftable = false;
+                  break;
+                }
+                let key = propertyPath.node.key;
+                let format = babel.types.isIdentifier(key)
+                  ? key.name
+                  : babel.types.isStringLiteral(key)
+                    ? key.value
+                    : undefined;
+                if (
+                  !format ||
+                  !liftableFormatNames.has(format as CardSandboxRenderFormat)
+                ) {
+                  liftable = false;
+                  break;
+                }
+                formats.add(format as CardSandboxRenderFormat);
+                exportNames.add(exportName);
+              }
+              if (!liftable || exportNames.size !== 1) {
+                liftable = false;
+                break;
+              }
+              bindings.push({
+                exportName: [...exportNames][0]!,
+                formats: [...formats],
+              });
+            }
+            if (liftable) {
+              result.push({
+                specifier: statementPath.node.source.value,
+                bindings,
+              });
+            }
+          }
+        },
+      },
+    },
+  };
+  try {
+    babel.transformSync(source, {
+      filename: 'sandbox-card.ts',
+      babelrc: false,
+      configFile: false,
+      compact: true,
+      plugins: [
+        [typescriptPlugin, { allowDeclareFields: true }],
+        collectFormatImports,
+      ],
+      parserOpts: { plugins: ['decorators-legacy'] },
+    });
+  } catch {
+    // Ambiguous or incomplete source keeps ordinary eager import semantics.
+    return [];
+  }
+  return result;
+}
+
 export async function classifyCardSourceForSandbox(
   source: string,
 ): Promise<CardSourceSandboxClassification> {
@@ -419,6 +581,7 @@ export async function classifyCardSourceForSandbox(
       ...(unscopedStyle ? ['unscoped-style'] : []),
     ]),
   ];
+  let liftedImports = formatOnlyImports(javascript);
   let propagatesToImporters =
     importSignals.length > 0 ||
     domMethodSignals.length > 0 ||
@@ -432,6 +595,7 @@ export async function classifyCardSourceForSandbox(
       imports,
       signals,
       propagatesToImporters,
+      ...(liftedImports.length > 0 ? { formatOnlyImports: liftedImports } : {}),
     };
   }
   return {
@@ -440,5 +604,6 @@ export async function classifyCardSourceForSandbox(
     imports,
     signals: [],
     propagatesToImporters: false,
+    ...(liftedImports.length > 0 ? { formatOnlyImports: liftedImports } : {}),
   };
 }

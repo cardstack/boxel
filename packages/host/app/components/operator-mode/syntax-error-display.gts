@@ -12,6 +12,7 @@ interface Signature {
   Element: HTMLElement;
   Args: {
     syntaxErrors: string;
+    errorType?: 'compile' | 'runtime';
   };
 }
 
@@ -36,6 +37,14 @@ export default class SyntaxErrorDisplay extends Component<Signature> {
       .join('\n');
   }
 
+  private get errorType(): 'syntax' | 'runtime' {
+    return this.args.errorType === 'runtime' ? 'runtime' : 'syntax';
+  }
+
+  private get headerText() {
+    return this.errorType === 'runtime' ? 'Preview Error' : undefined;
+  }
+
   removeSourceMappingURL(syntaxErrors: string): string {
     return syntaxErrors.replace(/\/\/# sourceMappingURL=.*/g, '');
   }
@@ -53,7 +62,8 @@ export default class SyntaxErrorDisplay extends Component<Signature> {
   <template>
     <div class='syntax-error-container' data-test-syntax-error>
       <ErrorDisplay
-        @type='syntax'
+        @type={{this.errorType}}
+        @headerText={{this.headerText}}
         @stack={{this.stack}}
         @fileToAttach={{this.fileToAttach}}
         @openDetails={{true}}

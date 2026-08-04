@@ -385,6 +385,13 @@ export interface CardContext<T extends CardDef = CardDef> {
   // portals use isolated Glimmer roots, so local tracked state cannot assume
   // that the host renderer owns their rerender loop.
   requestRender?: () => void;
+  // Host-owned UI modules used by trusted Base/catalog field components.
+  // Sandboxed realm code never receives this capability object.
+  trustedUI?: {
+    loadCodeMirror?: () => Promise<unknown>;
+    loadKatex?: () => Promise<unknown>;
+    loadMermaid?: () => Promise<unknown>;
+  };
   // Validate a realm CodeRef without importing user-authored code into the
   // trusted Host graph. Sandboxed field portals provide this through their
   // owning realm compartment; ordinary trusted contexts may omit it.

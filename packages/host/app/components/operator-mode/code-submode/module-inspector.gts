@@ -648,13 +648,6 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
           data-test-module-inspector='card-or-field'
           data-test-active-module-inspector-view={{this.activePanel}}
         >
-          {{#if @moduleAnalysis.moduleError}}
-            <div class='module-preview-error' data-test-module-preview-error>
-              <SyntaxErrorDisplay
-                @syntaxErrors={{@moduleAnalysis.moduleError.message}}
-              />
-            </div>
-          {{/if}}
           {{#if (eq this.activePanel 'schema')}}
             <SchemaEditorPanel class='non-preview-panel-content' />
           {{else if (eq this.activePanel 'preview')}}
@@ -665,6 +658,14 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
               @cardOrField={{@selectedCardOrField.cardOrField}}
               @viewCard={{this.viewCardInCodeSubmode}}
             />
+            {{#if @moduleAnalysis.moduleError}}
+              <div class='module-preview-error' data-test-module-preview-error>
+                <SyntaxErrorDisplay
+                  @syntaxErrors={{@moduleAnalysis.moduleError.message}}
+                  @errorType={{@moduleAnalysis.moduleError.type}}
+                />
+              </div>
+            {{/if}}
           {{else if (eq this.activePanel 'spec')}}
             <SpecPreview
               @selectedDeclaration={{@selectedDeclaration}}
@@ -727,12 +728,14 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       }
 
       .module-preview-error {
-        position: sticky;
-        top: 0;
-        z-index: 2;
+        position: absolute;
+        right: var(--boxel-sp);
+        bottom: var(--boxel-sp);
+        left: var(--boxel-sp);
+        z-index: 10;
         max-height: 45%;
         overflow: auto;
-        border-bottom: var(--boxel-border);
+        margin: 0;
       }
 
       .module-inspector-content.error {

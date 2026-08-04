@@ -1,5 +1,34 @@
 # Realm sandbox card API compatibility ledger
 
+## Canonical document contract
+
+This is the canonical inventory of every sandbox-related API, shim, and
+authoring alternative that affects card authors. Reviewers should treat a
+sandbox change as incomplete until this ledger answers all four questions:
+
+1. Does an existing realm card have to change its imports or source?
+2. Is the behavior a net-new opt-in API, a Host-owned compatibility shim, or
+   an ordinary authoring convention?
+3. Which trusted side owns and validates the capability?
+4. Which focused test proves the boundary and the unchanged-card behavior?
+
+Internal protocol fields may be documented here for reviewability, but they
+must not become imports available to realm source. New card-facing APIs are a
+last resort: the preferred order is preserve an existing API with a confined
+Host shim, select a stronger sandbox automatically, and only then introduce a
+new opt-in capability.
+
+Current branch checkpoint (2026-08-04):
+
+- **Required new APIs for existing card source:** none.
+- **Net-new opt-in card-author APIs:** `safeModifier` only.
+- **New optional authoring convention:** isolate browser-dependent renderers
+  in a module referenced only by `isolated`, `embedded`, or `edit` static
+  format slots.
+- **Proposed but not shipped:** literal `static prefersFullSandbox = true`.
+- **Everything else in this document:** a Host/Base compatibility shim or an
+  internal boundary protocol, not a realm-card capability.
+
 ## Compatibility rule
 
 Read/write authority is part of this rule. If a realm is writable, its edit
@@ -65,20 +94,41 @@ different answers:
    none of it requires a staging card source change or a separately deployed
    Base recognition hook for core rendering.
 
-| Branch addition                                                                                     | Imported by authored realm cards? | Does an unchanged staging card fail to render without it?                                                                                                                                                                     | Disposition                                                                                                                    |
-| --------------------------------------------------------------------------------------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `safeModifier`                                                                                      | Only when a new card opts in      | **No.** Existing DOM-dependent source must be classified into an iframe or supported by a shim.                                                                                                                               | Keep optional; never use it as the compatibility fix for an existing card.                                                     |
-| Host-owned static format-slot shim for opaque synthetic definitions                                 | No                                | **No.** Existing trusted Base code continues calling its ordinary `getComponent(opaqueLinkedCard)`. The synthetic type exposes the Host delegate through the same `isolated`/`embedded`/etc. static slots Base already reads. | Implemented without a new symbol or coordinated Base deployment. Unauthored slots retain their trusted Base fallback template. |
-| `CardContext.requestRender`                                                                         | No                                | No. It restores dynamic local-state rerenders inside a trusted Base component portal; basic card rendering does not depend on it.                                                                                             | Keep optional. It is a renderer capability supplied by the Host, not realm card API.                                           |
-| `CardContext.validateCodeRef`                                                                       | No                                | No. It preserves CodeRef edit validation without importing user modules into the trusted Host graph.                                                                                                                          | Keep optional and limited to trusted Base edit UI.                                                                             |
-| `createFromSerialized(..., { loader })`                                                             | No                                | Not as an authored API. Without loader preservation, cross-realm materialization can resolve a definition through the wrong Loader and produce incorrect identity or behavior.                                                | Keep internal. Host and its bundled Base/runtime must agree, but realm source and realm data do not change.                    |
-| Loader `ModuleEvaluator` / module delegation                                                        | No                                | No new source requirement; the sandbox cannot evaluate ordinary existing ESM graphs correctly without an equivalent internal mechanism.                                                                                       | Keep internal and test through existing card imports.                                                                          |
-| Opaque-card state, type, field, theme, stylesheet, generation, iframe, height, and effect protocols | No                                | No new source requirement; missing projections can make cards render incorrectly, but the correction belongs in the Host protocol.                                                                                            | Keep internal. Never serialize these symbols into card data or expose them as realm imports.                                   |
+| Branch addition                                                                                     | Imported by authored realm cards? | Does an unchanged staging card fail to render without it?                                                                                                                                                                                 | Disposition                                                                                                                        |
+| --------------------------------------------------------------------------------------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `safeModifier`                                                                                      | Only when a new card opts in      | **No.** Existing DOM-dependent source must be classified into an iframe or supported by a shim.                                                                                                                                           | Keep optional; never use it as the compatibility fix for an existing card.                                                         |
+| Host-owned static format-slot shim for opaque synthetic definitions                                 | No                                | **No.** Existing trusted Base code continues calling its ordinary `getComponent(opaqueLinkedCard)`. The synthetic type exposes the Host delegate through the same `isolated`/`embedded`/etc. static slots Base already reads.             | Implemented without a new symbol or coordinated Base deployment. Unauthored slots retain their trusted Base fallback template.     |
+| `CardContext.requestRender`                                                                         | No                                | No. It restores dynamic local-state rerenders inside a trusted Base component portal; basic card rendering does not depend on it.                                                                                                         | Keep optional. It is a renderer capability supplied by the Host, not realm card API.                                               |
+| `CardContext.trustedUI`                                                                             | No                                | Rich Markdown and other trusted Base field components need Host-bundled CodeMirror, KaTeX, and Mermaid without receiving `window`, a Loader, or arbitrary imports. Existing deployed Base modules continue through compatibility globals. | Keep private to Host-owned Base/catalog portals. Never project this object into a user component's SES context or iframe document. |
+| `CardContext.validateCodeRef`                                                                       | No                                | No. It preserves CodeRef edit validation without importing user modules into the trusted Host graph.                                                                                                                                      | Keep optional and limited to trusted Base edit UI.                                                                                 |
+| `createFromSerialized(..., { loader })`                                                             | No                                | Not as an authored API. Without loader preservation, cross-realm materialization can resolve a definition through the wrong Loader and produce incorrect identity or behavior.                                                            | Keep internal. Host and its bundled Base/runtime must agree, but realm source and realm data do not change.                        |
+| Loader `ModuleEvaluator` / module delegation                                                        | No                                | No new source requirement; the sandbox cannot evaluate ordinary existing ESM graphs correctly without an equivalent internal mechanism.                                                                                                   | Keep internal and test through existing card imports.                                                                              |
+| Inherited captured-template lookup                                                                  | No                                | Yes, as a Host compatibility behavior: a subclass with no new template must inherit its parent's captured template while keeping leaf getters/actions. No author should copy the template into the subclass.                              | Keep internal to the compartment runtime and cover with inheritance tests.                                                         |
+| Exact-format prerender placeholder and iframe readiness/height protocol                             | No                                | No source change. It makes an iframe-routed card immediately visible from indexed HTML while the interactive child loads, then swaps only after readiness and the first intrinsic size.                                                   | Keep renderer-owned. The card receives neither the prerender fetch capability nor the MessagePort protocol.                        |
+| Format-only import lifting                                                                          | No new symbol                     | No. It recognizes ordinary ESM imports used exclusively as direct static values of iframe-capable format slots. Unchanged unsplit modules still work through the iframe tier.                                                             | Keep as conservative source analysis; ambiguity preserves ordinary eager ESM semantics.                                            |
+| Opaque-card state, type, field, theme, stylesheet, generation, iframe, height, and effect protocols | No                                | No new source requirement; missing projections can make cards render incorrectly, but the correction belongs in the Host protocol.                                                                                                        | Keep internal. Never serialize these symbols into card data or expose them as realm imports.                                       |
 
 Therefore, if “API” means an API a card author must adopt, the list is empty.
 The previous paired Base/Host dependency for opaque linked-card
 `getComponent()` delegation has also been removed. The compatibility shim now
 lives entirely in the Host's synthetic opaque card definition.
+
+## What a card author may choose
+
+The sandbox tier is a Host decision, but an author can structure source so the
+Host can choose the least expensive safe tier:
+
+| Author need                                                                             | Recommended source                                                                                                                     | Result                                                                                                  |
+| --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Ordinary CardDef/FieldDef, templates, fields, actions, computed values, Boxel UI, icons | Write the same card source used today.                                                                                                 | Host selects Direct for trusted code or Capsule for user code.                                          |
+| A small reviewed DOM operation                                                          | Opt into `safeModifier` with a named operation and inert arguments/results.                                                            | The renderer can remain in Capsule.                                                                     |
+| Three.js or another package that genuinely needs `window`/`document`                    | Put that renderer in a separate module and use its import only as the value of `static isolated`, `static embedded`, or `static edit`. | Only those formats select Sandbox; compact formats can remain Capsule or use indexed HTML.              |
+| Browser-dependent code mixed into schema, module initialization, or compact renderers   | No special syntax is required.                                                                                                         | The dependency remains an eager graph edge and the Host conservatively selects Sandbox where supported. |
+| A future explicit request for maximum isolation                                         | `static prefersFullSandbox = true` is the proposed literal descriptor.                                                                 | Not implemented on this branch; it may strengthen policy but must never weaken it.                      |
+
+There is intentionally no `cardSandbox` URL switch and no card-controlled API
+that selects Direct execution. Source analysis may choose a stronger container;
+only Host policy can grant authority.
 
 ## Existing card contract that the sandbox must shim
 
@@ -138,7 +188,51 @@ The child only runs its document observer in intrinsic mode. In allocated mode
 the iframe viewport itself communicates the Host allocation without exposing
 the parent DOM, `window`, or `MessagePort` to authored code.
 
+Iframe startup uses the Realm index's prerendered HTML as an inert visual
+handoff. The Host prefers the exact card/format rendering, marks the header as
+loading, and reveals the iframe only after the child reports both runtime
+readiness and (for intrinsic formats) its first safe height. This is visual
+replacement, not cross-origin DOM hydration: the iframe remains the only
+interactive authority.
+
+During the rolling deployment of authenticated isolated prerenders, an
+isolated sandbox may temporarily show the card's indexed `embedded` rendering
+when the Realm Server cannot return `isolated`. That fallback remains inert,
+is explicitly marked `data-card-sandbox-prerender-format="embedded"`, and
+never clears the loading state. It is therefore a placeholder rather than an
+assertion that the requested format has hydrated. Once the authenticated
+isolated endpoint is deployed everywhere, this compatibility fallback should
+be removed so exact-format handoff is the only path.
+
 ## Runtime bridges that cards do not import
+
+### Execution vocabulary
+
+User-facing execution status describes mechanics, independently of source or
+trust provenance:
+
+- **Direct** runs in the Host JavaScript and DOM environment with no sandbox
+  boundary.
+- **Capsule** runs inline through an SES/Endo compartment with explicit
+  capabilities and no unrestricted browser globals.
+- **Sandbox** runs in a separate iframe document and communicates through the
+  controlled Host bridge.
+- **Private** is a protection modifier, not a fourth execution mode. It is not
+  implied merely by choosing Sandbox and must only appear when the separate
+  data-flow protections are actually enforced.
+
+The status applies to the **currently rendered format module**, not to the
+card, realm, or card definition forever. The Host classifies the GTS module
+selected for the current format (including its import graph) and reports the
+execution boundary actually used for that module. Switching formats can
+therefore legitimately change the status: a trusted format module can be
+Direct, a format implemented by SES-compatible realm code can be Capsule, and
+a format whose module requires browser authority can be Sandbox.
+
+Low-level implementation names such as `iframe`, `MessageChannel`, and
+`compartment` remain appropriate in protocol and transport code. Product UI
+uses `Execution: Direct`, `Execution: Capsule`, or `Execution: Sandbox` and
+does not conflate those modes with Official, Community, or Third-party source.
 
 These changes may ship with the Host/runtime, but they must not appear in realm
 card source or serialized card data.
@@ -211,6 +305,67 @@ Known confined operations stay in SES; an unsupported operation selects an
 iframe only for formats that support it. The compatibility adapter remains
 Host-owned, so an unchanged staging realm gets the safer behavior when the Host
 is upgraded.
+
+## Format-only import splitting
+
+A card may keep its schema, computed data, and compact renderers in an SES-safe
+module while importing a browser-dependent component module only for
+`isolated`, `embedded`, or `edit`:
+
+```gts
+import { PlanetEditor, PlanetScene } from './planet-3d';
+
+export class PlanetCard extends CardDef {
+  static isolated = PlanetScene;
+  static embedded = PlanetScene;
+  static edit = PlanetEditor;
+
+  static atom = class Atom extends Component<typeof PlanetCard> {
+    <template>
+      <span>{{@model.name}}</span>
+    </template>
+  };
+}
+```
+
+There is no privileged filename, package-name assertion, or card-selected
+sandbox tier in this convention. The classifier analyzes each module normally.
+The Host's module graph may defer an import behind inert format references only
+when every runtime use of every imported binding is the direct value of an
+eligible static format slot. This is scheduling metadata, not a classifier
+exception: the target module still receives the same ordinary source
+classification as any other module. Its independently classified requirement
+then applies only to those slots. Native/trusted execution retains ordinary ESM
+behavior.
+
+If the imported binding is also read by schema code, a compact renderer, a
+module-scope initializer, or any other executable path, the import is not
+format-only. The Host conservatively treats it as an ordinary eager ESM edge.
+Mutable object identity, closures, DOM nodes, and renderer instances never
+cross between SES and an iframe; shared state belongs in canonical card data or
+an explicit Host capability.
+
+When an unsplit module needs browser authority, `isolated`, `embedded`, and
+`edit` use the iframe tier. `fitted`, `atom`, `head`, and Markdown composition
+do not create inline iframe farms: they use a safe SES renderer when one can be
+proven, otherwise they remain inert using the Realm's preindexed HTML and open
+the full iframe surface on activation.
+
+## Boundary proof map
+
+| API, shim, or convention                                                                    | Focused proof                                                                                                                                        |
+| ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `safeModifier` exposes inert results and cleans up trusted DOM work                         | `packages/boxel-ui/test-app/tests/integration/modifiers/safe-modifier-test.gts`; `packages/host/tests/unit/realm-compartment-module-runtime-test.ts` |
+| Format-only imports are lifted only from direct eligible static slots                       | `packages/host/tests/unit/lib/realm-sandbox-source-policy-test.ts`; `packages/host/tests/unit/realm-compartment-module-runtime-test.ts`              |
+| Inherited templates keep the leaf component's behavior                                      | `packages/host/tests/unit/realm-compartment-module-runtime-test.ts` (`inherits a captured template while preserving the leaf component behavior`)    |
+| Trusted Rich Markdown portal loads CodeMirror and Mermaid without giving them to realm code | `packages/host/tests/acceptance/code-submode/sandbox-live-reload-test.gts` (`CORPUS-02`)                                                             |
+| Iframe prerender stays visible until interactive readiness and intrinsic size               | `packages/host/tests/integration/components/realm-sandbox-iframe-test.gts`; `packages/host/tests/unit/realm-sandbox-iframe-draft-test.ts`            |
+| Exact isolated HTML is queryable as an indexed prerender format                             | `packages/realm-server/tests/card-html-endpoints-test.ts`                                                                                            |
+| Runtime/compile failure overlays the last-known-good preview                                | `packages/host/tests/acceptance/code-submode/sandbox-live-reload-test.gts` (`HMR-05`)                                                                |
+
+The proof map is intentionally composed of behavior tests. It is not enough to
+assert that a facade property or protocol message exists; the unchanged card
+must render or edit through the full boundary.
 
 ## Merge gate
 

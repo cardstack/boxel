@@ -46,10 +46,13 @@ interface Signature {
 }
 
 function untrackedIframeModifier(
-  callback: (element: HTMLIFrameElement) => void | (() => void),
+  callback: (
+    element: HTMLIFrameElement,
+    positional: unknown[],
+  ) => void | (() => void),
 ) {
-  return modifier((element: HTMLIFrameElement) =>
-    untrack(() => callback(element)),
+  return modifier((element: HTMLIFrameElement, positional: unknown[]) =>
+    untrack(() => callback(element, positional)),
   );
 }
 
@@ -75,6 +78,7 @@ export default class RealmSandboxIframe extends Component<Signature> {
   private cardUpdateQueue = Promise.resolve();
   private loaderMetricToken = {};
   private connectionMetricToken = {};
+  private interactiveMetricToken = {};
   private readonly bootstrapID = globalThis.crypto.randomUUID();
 
   get format() {
@@ -91,6 +95,14 @@ export default class RealmSandboxIframe extends Component<Signature> {
 
   get isLoading() {
     return this.status === 'loading';
+  }
+
+  get prerenderedComponent() {
+    return this.realmSandbox.iframePrerenderedComponentFor(this.args.sandbox);
+  }
+
+  get prerenderedFormat() {
+    return this.realmSandbox.iframePrerenderedFormatFor(this.args.sandbox);
   }
 
   get canWrite() {
@@ -138,6 +150,24 @@ export default class RealmSandboxIframe extends Component<Signature> {
   }
 
   connectFrame = untrackedIframeModifier((element: HTMLIFrameElement) => {
+    let sandbox = this.args.sandbox;
+    this.status = 'loading';
+    let receivedReady = false;
+    let receivedSize = sandbox.presentation.heightMode === 'allocated';
+    let releaseInteractive = this.realmSandbox.registerIframeInteractiveLoad(
+      sandbox,
+      this.interactiveMetricToken,
+    );
+    let markInteractive = () => {
+      if (!receivedReady || !receivedSize) {
+        return;
+      }
+      this.status = 'ready';
+      this.realmSandbox.markIframeInteractive(
+        sandbox,
+        this.interactiveMetricToken,
+      );
+    };
     // The target is required to be a distinct origin. credentialless prevents
     // accidental ambient-cookie authority from crossing into that origin.
     element.setAttribute('credentialless', '');
@@ -176,17 +206,21 @@ export default class RealmSandboxIframe extends Component<Signature> {
         return;
       }
       if (event.data.type === 'ready') {
-        this.status = 'ready';
+        receivedReady = true;
+        // An error is a terminal, painted state too. The child owns the error
+        // presentation, so do not leave a permanent progress indicator over
+        // a frame that has conclusively finished loading.
+        if (event.data.error) {
+          receivedSize = true;
+        }
+        markInteractive();
         if (event.data.typePresentation) {
-          this.args.sandbox.onTypePresentation?.(event.data.typePresentation);
+          sandbox.onTypePresentation?.(event.data.typePresentation);
         }
         if (typeof event.data.revision === 'number') {
           this.appliedDraftRevision = event.data.revision;
           this.draftError = event.data.error;
-          this.args.sandbox.onGenerationResult?.(
-            event.data.revision,
-            event.data.error,
-          );
+          sandbox.onGenerationResult?.(event.data.revision, event.data.error);
         }
       } else if (event.data.type === 'resize') {
         if (this.heightMode !== 'intrinsic') {
@@ -194,6 +228,8 @@ export default class RealmSandboxIframe extends Component<Signature> {
         }
         let height = Math.max(40, Math.min(2400, event.data.height));
         element.style.height = `${height}px`;
+        receivedSize = true;
+        markInteractive();
       } else if (event.data.type === 'card-update') {
         this.receivedCardUpdateRevision = event.data.revision;
         let update = event.data;
@@ -307,6 +343,7 @@ export default class RealmSandboxIframe extends Component<Signature> {
       this.postToFrame = undefined;
       this.realmSandbox.releaseIframeConnection(this.connectionMetricToken);
       this.realmSandbox.releaseIframeCodePreviewLoader(this.loaderMetricToken);
+      releaseInteractive();
     };
   });
 
@@ -422,12 +459,24 @@ export default class RealmSandboxIframe extends Component<Signature> {
       ...attributes
     >
       {{#if this.isLoading}}
-        <div class='iframe-loading' data-card-sandbox-loading>
-          <LoadingIndicator />
-        </div>
+        {{#if this.prerenderedComponent}}
+          <div
+            class='iframe-prerender'
+            aria-hidden='true'
+            inert
+            data-card-sandbox-prerender
+            data-card-sandbox-prerender-format={{this.prerenderedFormat}}
+          >
+            <this.prerenderedComponent />
+          </div>
+        {{else}}
+          <div class='iframe-loading' data-card-sandbox-loading>
+            <LoadingIndicator />
+          </div>
+        {{/if}}
       {{/if}}
       <iframe
-        {{this.connectFrame}}
+        {{this.connectFrame @sandbox.url @sandbox.format}}
         {{this.syncPermissions this.canWrite}}
         {{this.syncHeightMode this.heightMode}}
         {{this.syncPresentation
@@ -467,6 +516,12 @@ export default class RealmSandboxIframe extends Component<Signature> {
         min-height: 2.5rem;
         background-color: white;
       }
+      .iframe-prerender {
+        position: relative;
+        z-index: 1;
+        width: 100%;
+        pointer-events: none;
+      }
       iframe {
         display: block;
         width: 100%;
@@ -474,6 +529,13 @@ export default class RealmSandboxIframe extends Component<Signature> {
         border: 0;
         color-scheme: light dark;
         background: transparent;
+        transition: opacity 120ms ease-out;
+      }
+      .realm-sandbox-iframe[data-card-sandbox-frame-status='loading'] iframe {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+        pointer-events: none;
       }
       .allocated-height,
       .allocated-height iframe {

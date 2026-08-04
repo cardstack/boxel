@@ -64,6 +64,17 @@ export interface SandboxTrustedExportIdentity {
   name: string;
 }
 
+interface SandboxFormatReference {
+  kind: 'sandbox-format-reference';
+  module: string;
+  name: string;
+}
+
+export interface SandboxFormatOnlyImportDescriptor {
+  module: string;
+  exports: string[];
+}
+
 export interface SandboxCardFieldMetadata {
   kind: 'contains' | 'containsMany' | 'linksTo' | 'linksToMany';
   type: SandboxTrustedExportIdentity;
@@ -490,6 +501,10 @@ export default class RealmCompartmentModuleRuntime {
   private cardAPIRuntimeFacade!: Record<string, unknown>;
   private enumFieldRuntimeFacade!: Record<string, unknown>;
   private inertHostCommandFacades = new Map<string, Record<string, unknown>>();
+  private formatOnlyModuleFacades = new Map<
+    string,
+    Record<string, SandboxFormatReference>
+  >();
   private trustedExports = new Map<string, object>();
   private fieldMetadataByPrototype = new WeakMap<
     object,
@@ -602,6 +617,11 @@ export default class RealmCompartmentModuleRuntime {
       );
     }
     let component = cardType[format] ?? cardType.isolated;
+    if (this.isFormatReference(component)) {
+      throw new Error(
+        `Compartment format ${format} is delegated to ${component.module}#${component.name}`,
+      );
+    }
     if (
       (typeof component !== 'object' || component === null) &&
       typeof component !== 'function'
@@ -610,7 +630,7 @@ export default class RealmCompartmentModuleRuntime {
         `Compartment card ${exportName} has no ${format} template`,
       );
     }
-    if (!this.templateByComponent.has(component as object)) {
+    if (!this.capturedTemplateForComponent(component as object)) {
       throw new Error(
         `Compartment did not capture the ${format} template for ${exportName}`,
       );
@@ -776,6 +796,13 @@ export default class RealmCompartmentModuleRuntime {
 
   invalidateModule(moduleIdentifier: string) {
     return this.loader.invalidateModule(moduleIdentifier);
+  }
+
+  installFormatOnlyImport(descriptor: SandboxFormatOnlyImportDescriptor) {
+    this.loader.shimModule(
+      descriptor.module,
+      this.formatOnlyModuleFacade(descriptor),
+    );
   }
 
   destroy() {
@@ -1032,6 +1059,37 @@ export default class RealmCompartmentModuleRuntime {
     harden(facade);
     this.inertHostCommandFacades.set(moduleIdentifier, facade);
     return facade;
+  }
+
+  private formatOnlyModuleFacade(
+    descriptor: SandboxFormatOnlyImportDescriptor,
+  ): Record<string, SandboxFormatReference> {
+    let cacheKey = `${descriptor.module}#${[...descriptor.exports].sort().join(',')}`;
+    let cached = this.formatOnlyModuleFacades.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+    let facade = Object.fromEntries(
+      descriptor.exports.map((name) => [
+        name,
+        harden({
+          kind: 'sandbox-format-reference',
+          module: descriptor.module,
+          name,
+        }) satisfies SandboxFormatReference,
+      ]),
+    );
+    harden(facade);
+    this.formatOnlyModuleFacades.set(cacheKey, facade);
+    return facade;
+  }
+
+  private isFormatReference(value: unknown): value is SandboxFormatReference {
+    return (
+      typeof value === 'object' &&
+      value !== null &&
+      (value as { kind?: unknown }).kind === 'sandbox-format-reference'
+    );
   }
 
   private trustedImportIdentity(moduleIdentifier: string): string | undefined {
@@ -1763,6 +1821,34 @@ export default class RealmCompartmentModuleRuntime {
     };
   }
 
+  // Ember components inherit their template when a subclass does not install
+  // one of its own. Realm cards use that ordinary behavior to specialize a
+  // component's actions/state while reusing a template exported by another
+  // same-realm module. The sandbox cannot ask Ember to introspect the live
+  // class, so make that implicit lookup explicit inside the compartment.
+  //
+  // Cache the inherited descriptor against the leaf component. bundleFor()
+  // must instantiate that leaf (not the template owner), otherwise overridden
+  // getters/actions disappear at the boundary.
+  private capturedTemplateForComponent(
+    component: object,
+  ): CapturedTemplate | undefined {
+    let captured = this.templateByComponent.get(component);
+    if (captured) {
+      return captured;
+    }
+    let ancestor = Object.getPrototypeOf(component) as object | null;
+    while (ancestor) {
+      captured = this.templateByComponent.get(ancestor);
+      if (captured) {
+        this.templateByComponent.set(component, captured);
+        return captured;
+      }
+      ancestor = Object.getPrototypeOf(ancestor) as object | null;
+    }
+    return undefined;
+  }
+
   private bundleFor(
     root: object,
     inertHeadElements = false,
@@ -1776,7 +1862,7 @@ export default class RealmCompartmentModuleRuntime {
       if (existing) {
         return existing;
       }
-      let captured = this.templateByComponent.get(component);
+      let captured = this.capturedTemplateForComponent(component);
       if (!captured) {
         throw new Error('Template scope references an uncaptured component');
       }
@@ -2000,7 +2086,7 @@ export default class RealmCompartmentModuleRuntime {
       typeof value === 'function'
     ) {
       let component = value as object;
-      if (this.templateByComponent.has(component)) {
+      if (this.capturedTemplateForComponent(component)) {
         return harden({ kind: 'component', component: visit(component) });
       }
       let identity = this.trustedExportByValue.get(component);

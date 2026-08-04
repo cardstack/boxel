@@ -10,9 +10,11 @@ import type {
 } from '@cardstack/runtime-common';
 
 import RealmSandboxIframe from '@cardstack/host/components/realm-sandbox-iframe';
+import { htmlComponent } from '@cardstack/host/lib/html-component';
 import { realmIframeSandboxProtocol } from '@cardstack/host/lib/realm-iframe-sandbox-protocol';
 
 import type { RealmIframeSandboxRender } from '@cardstack/host/services/realm-sandbox';
+import type RealmSandboxService from '@cardstack/host/services/realm-sandbox';
 
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -292,7 +294,16 @@ module('Integration | realm sandbox iframe', function (hooks) {
   });
 
   test('applies child measurements only when content owns iframe height', async function (assert) {
+    let realmSandbox = this.owner.lookup(
+      'service:realm-sandbox',
+    ) as RealmSandboxService;
+    let prerendered = htmlComponent(
+      '<article data-test-iframe-prerender>Indexed card HTML</article>',
+    );
+    realmSandbox.iframePrerenderedComponentFor = () => prerendered;
+    realmSandbox.iframePrerenderedFormatFor = () => 'embedded';
     let sandbox = {
+      card: {},
       cardID: 'https://realm.example/EmbeddedCard/sample',
       document: { data: { type: 'card', attributes: {} } },
       format: 'embedded',
@@ -340,6 +351,29 @@ module('Integration | realm sandbox iframe', function (hooks) {
       }),
     );
 
+    assert
+      .dom('[data-test-iframe-prerender]')
+      .exists('indexed HTML remains visible while the iframe boots');
+    assert
+      .dom('[data-card-sandbox-prerender]')
+      .hasAttribute('data-card-sandbox-prerender-format', 'embedded');
+    assert.dom('[data-card-sandbox-loading]').doesNotExist();
+
+    transferredPort?.postMessage({
+      protocol: realmIframeSandboxProtocol,
+      type: 'ready',
+      cardID: sandbox.cardID,
+    });
+    await settled();
+    assert
+      .dom('[data-card-sandbox-frame-status]')
+      .hasAttribute(
+        'data-card-sandbox-frame-status',
+        'loading',
+        'intrinsic readiness waits for the first safe height',
+      );
+    assert.dom('[data-test-iframe-prerender]').exists();
+
     transferredPort?.postMessage({
       protocol: realmIframeSandboxProtocol,
       type: 'resize',
@@ -356,6 +390,12 @@ module('Integration | realm sandbox iframe', function (hooks) {
       '321px',
       'an intrinsic iframe accepts its measured content height',
     );
+    assert
+      .dom('[data-card-sandbox-frame-status]')
+      .hasAttribute('data-card-sandbox-frame-status', 'ready');
+    assert
+      .dom('[data-test-iframe-prerender]')
+      .doesNotExist('the interactive iframe replaces the indexed HTML');
   });
 
   test('preserves read-only realm authority across the iframe boundary', async function (assert) {

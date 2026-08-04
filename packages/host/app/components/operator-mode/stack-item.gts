@@ -691,25 +691,41 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }) ?? [],
     );
 
+    let leadingItems: MenuItem[] = [];
+
     if (this.card) {
       let mode = this.realmSandbox.renderModeFor(this.card, this.cardFormat);
       let label =
-        mode === 'trusted'
-          ? 'Renderer: Trusted'
-          : mode === 'iframe'
-            ? 'Renderer: Sandbox (IFrame)'
-            : 'Renderer: Sandbox (SES)';
-      items.unshift(
+        mode === 'direct'
+          ? 'Execution: Direct'
+          : mode === 'sandbox'
+            ? 'Execution: Sandbox'
+            : 'Execution: Capsule';
+      let subtext =
+        mode === 'direct'
+          ? "This format's GTS module runs in the trusted host."
+          : mode === 'sandbox'
+            ? "This format's GTS module runs in an isolated iframe sandbox."
+            : "This format's GTS module runs in an SES sandbox.";
+      leadingItems.push(
         new MenuItem({
           label,
+          subtext,
           action: () => {},
-          header: true,
+          status: true,
         }),
       );
     }
 
+    for (let label of ['Copy Card URL', 'Copy as Markdown']) {
+      let copyItemIndex = items.findIndex((item) => item.label === label);
+      if (copyItemIndex > -1) {
+        leadingItems.push(...items.splice(copyItemIndex, 1));
+      }
+    }
+
     if (this.card && this.realmSandbox.isOpaqueCard(this.card)) {
-      items.unshift(
+      leadingItems.push(
         new MenuItem({
           label: 'Reload Card',
           icon: RefreshCw,
@@ -718,18 +734,25 @@ export default class OperatorModeStackItem extends Component<Signature> {
       );
     }
 
+    items.unshift(...leadingItems);
+
     if (this.isTopCard) {
       let expandItem = new MenuItem({
         label: this.isExpanded ? 'Restore Width' : 'Expand to Full Width',
         icon: Maximize,
         action: this.toggleExpanded,
       });
-      let copyAsMarkdownIndex = items.findIndex(
-        (item) => item.label === 'Copy as Markdown',
+      let insertAfterIndex = items.findIndex(
+        (item) => item.label === 'Reload Card',
       );
+      if (insertAfterIndex === -1) {
+        insertAfterIndex = items.findIndex(
+          (item) => item.label === 'Copy as Markdown',
+        );
+      }
 
-      if (copyAsMarkdownIndex > -1) {
-        items.splice(copyAsMarkdownIndex + 1, 0, expandItem);
+      if (insertAfterIndex > -1) {
+        items.splice(insertAfterIndex + 1, 0, expandItem);
       } else {
         items.push(expandItem);
       }
@@ -946,6 +969,13 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return this.isFileCard ? 'isolated' : this.args.item.format;
   }
 
+  private get isInteractiveCardLoading() {
+    return Boolean(
+      this.card &&
+      this.realmSandbox.isIframeInteractiveLoading(this.card, this.cardFormat),
+    );
+  }
+
   private get defaultCodeRef() {
     return this.args.item.useBaseTemplate ? baseCardRef : undefined;
   }
@@ -1107,6 +1137,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                   @cardTypeDisplayName={{this.headerType}}
                   @cardTypeIcon={{cardTypeIcon this.card}}
                   @cardTitle={{this.headerTitle}}
+                  @isLoading={{this.isInteractiveCardLoading}}
                   @isSaving={{this.cardResource.autoSaveState.isSaving}}
                   @isTopCard={{this.isTopCard}}
                   @lastSavedMessage={{this.cardResource.autoSaveState.lastSavedErrorMsg}}
@@ -1130,6 +1161,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                 @cardTypeDisplayName={{this.headerType}}
                 @cardTypeIcon={{cardTypeIcon this.card}}
                 @cardTitle={{this.headerTitle}}
+                @isLoading={{this.isInteractiveCardLoading}}
                 @isSaving={{this.cardResource.autoSaveState.isSaving}}
                 @isTopCard={{this.isTopCard}}
                 @lastSavedMessage={{this.cardResource.autoSaveState.lastSavedErrorMsg}}

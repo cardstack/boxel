@@ -11,6 +11,10 @@ import {
   type OpaqueRealmCardState,
   type OpaqueRealmCardTypeState,
 } from '@cardstack/host/lib/realm-sandbox-boundary';
+import type {
+  CardSandboxRenderFormat,
+  CardSourceSandboxClassification,
+} from '@cardstack/host/lib/realm-sandbox-source-policy';
 
 import { isExecutableModuleResponse } from '@cardstack/host/services/realm-sandbox';
 import type RealmSandboxService from '@cardstack/host/services/realm-sandbox';
@@ -279,6 +283,70 @@ module('Unit | realm sandbox iframe draft', function (hooks) {
         'https://realm-b.example/private/notes.json',
       ),
       'another resource in that realm does not inherit the module grant',
+    );
+  });
+
+  test('routes only formats that use an unsafe renderer module to the iframe', function (assert) {
+    let cardModuleURL = 'https://realm.example/cards/planet.gts';
+    let rendererModuleURL = 'https://realm.example/cards/planet-3d.gts';
+    let service = getService('realm-sandbox') as RealmSandboxService;
+    let internal = service as unknown as {
+      moduleClassifications: Map<string, CardSourceSandboxClassification>;
+      moduleDependencies: Map<string, string[]>;
+      moduleFormatOnlyImports: Map<
+        string,
+        {
+          module: string;
+          exports: string[];
+          formats: CardSandboxRenderFormat[];
+        }[]
+      >;
+      moduleSandboxDecision(
+        moduleIdentifier: string,
+        visited: Set<string>,
+        format?: CardSandboxRenderFormat,
+      ): { tier: 'compartment' | 'iframe'; reason: string };
+    };
+    internal.moduleClassifications.set(cardModuleURL, {
+      tier: 'compartment',
+      reason: 'default-user-card',
+      imports: ['./planet-3d.gts'],
+      signals: [],
+      propagatesToImporters: false,
+    });
+    internal.moduleClassifications.set(rendererModuleURL, {
+      tier: 'iframe',
+      reason: 'browser-runtime:three',
+      imports: ['three'],
+      signals: ['three'],
+      propagatesToImporters: true,
+    });
+    internal.moduleDependencies.set(codePreviewModuleKey(cardModuleURL), []);
+    internal.moduleFormatOnlyImports.set(codePreviewModuleKey(cardModuleURL), [
+      {
+        module: rendererModuleURL,
+        exports: ['PlanetScene'],
+        formats: ['isolated', 'embedded', 'edit'],
+      },
+    ]);
+
+    assert.deepEqual(
+      internal.moduleSandboxDecision(cardModuleURL, new Set(), 'atom'),
+      { tier: 'compartment', reason: 'default-user-card' },
+      'the same card uses its safe atom renderer in SES',
+    );
+    assert.deepEqual(
+      internal.moduleSandboxDecision(cardModuleURL, new Set(), 'fitted'),
+      { tier: 'compartment', reason: 'default-user-card' },
+      'the same card uses its safe fitted renderer in SES',
+    );
+    assert.deepEqual(
+      internal.moduleSandboxDecision(cardModuleURL, new Set(), 'isolated'),
+      {
+        tier: 'iframe',
+        reason: 'format-dependency:browser-runtime:three',
+      },
+      'the isolated renderer follows its independently classified module into the iframe',
     );
   });
 

@@ -2063,13 +2063,14 @@ function collectIconId(
 // One candidate rendering of a row, with its markup: a (format, renderType)
 // point in the rendering set the renderSet projection selects. The
 // fitted/embedded JSONB maps contribute one candidate per render-type key;
-// the scalar atom/head columns contribute one candidate at the row's own
+// the scalar isolated/atom/head columns contribute one candidate at the row's own
 // native type.
 type RowRendering = RenderingCandidate & { html: string };
 
 function enumerateRowRenderings(row: {
   fitted_html?: Record<string, string> | null;
   embedded_html?: Record<string, string> | null;
+  isolated_html?: string | null;
   atom_html?: string | null;
   head_html?: string | null;
   types?: string[] | null;
@@ -2086,6 +2087,13 @@ function enumerateRowRenderings(row: {
     }
   }
   let nativeKey = row.types?.[0];
+  if (row.isolated_html != null) {
+    candidates.push({
+      format: 'isolated',
+      ...(nativeKey ? { renderTypeKey: nativeKey } : {}),
+      html: row.isolated_html,
+    });
+  }
   if (row.atom_html != null) {
     candidates.push({
       format: 'atom',
@@ -2118,6 +2126,9 @@ function enumerateFileRenderings(file: IndexedFile): RowRendering[] {
     if (html != null) {
       candidates.push({ format, html });
     }
+  }
+  if (file.isolatedHtml != null) {
+    candidates.push({ format: 'isolated', html: file.isolatedHtml });
   }
   if (file.atomHtml != null) {
     candidates.push({ format: 'atom', html: file.atomHtml });

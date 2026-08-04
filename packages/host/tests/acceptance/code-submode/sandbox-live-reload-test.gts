@@ -910,7 +910,7 @@ module('Acceptance | code submode | sandbox live reload', function (hooks) {
       );
   });
 
-  test('[CORPUS-02] RichMarkdown inert HTML-comment-shaped text survives the trusted field portal', async function (assert) {
+  test('[CORPUS-02] RichMarkdown trusted field portal renders Mermaid and loads its editor', async function (assert) {
     await visitOperatorMode({
       submode: 'interact',
       stacks: [
@@ -933,10 +933,18 @@ module('Acceptance | code submode | sandbox live reload', function (hooks) {
     assert
       .dom('[data-test-rich-markdown-compatibility] table')
       .exists('the markdown table renders');
+    await waitFor('[data-test-rich-markdown-compatibility] pre.mermaid svg');
     assert
-      .dom('[data-test-rich-markdown-compatibility]')
-      .includesText('A --> B', 'the exact inert Mermaid edge survives cloning');
+      .dom('[data-test-rich-markdown-compatibility] pre.mermaid svg')
+      .exists('the trusted Mermaid shim renders the diagram');
     assert.dom('[data-card-sandbox-loading]').doesNotExist();
+
+    await click('[data-test-edit-button]');
+    await waitFor('[data-test-codemirror-editor] .cm-editor');
+    assert
+      .dom('[data-test-codemirror-editor] .cm-editor')
+      .exists('the trusted CodeMirror shim replaces the loading state');
+    assert.dom('[data-test-codemirror-loading]').doesNotExist();
   });
 
   test('[CORPUS-03] inherited fields, chained computeVia, and recursive containsMany compose in SES', async function (assert) {
@@ -1454,6 +1462,26 @@ module('Acceptance | code submode | sandbox live reload', function (hooks) {
           'VERSION ONE',
           'the realm-backed last-known-good preview remains visible',
         );
+      let previewPanel = document.querySelector(
+        '[data-test-playground-panel]',
+      ) as HTMLElement;
+      let errorOverlay = document.querySelector(
+        '[data-test-module-preview-error]',
+      ) as HTMLElement;
+      let previewRect = previewPanel.getBoundingClientRect();
+      let errorRect = errorOverlay.getBoundingClientRect();
+      assert.strictEqual(
+        getComputedStyle(errorOverlay).position,
+        'absolute',
+        'the error floats over the last-known-good preview',
+      );
+      let isBottomOverlay =
+        errorRect.top > previewRect.top &&
+        previewRect.bottom - errorRect.bottom < 40;
+      assert.true(
+        isBottomOverlay,
+        'the error is inset along the bottom of the preview instead of displacing it',
+      );
       assert
         .dom('[data-test-send-error-to-ai-assistant]')
         .exists('the standard Fix with AI action is available');
@@ -1517,8 +1545,33 @@ module('Acceptance | code submode | sandbox live reload', function (hooks) {
       .dom('[data-test-boxel-menu-item-text="Reload Card"]')
       .exists('the sandboxed card menu exposes an explicit reload action');
     assert
-      .dom('[data-test-boxel-menu-item-text="Renderer: Sandbox (SES)"]')
-      .exists('the card menu identifies the effective sandbox renderer');
+      .dom('[data-test-boxel-menu-item-text="Execution: Capsule"]')
+      .exists('the card menu identifies the effective execution mode');
+    assert
+      .dom('[data-test-boxel-menu-item-text="Execution: Capsule"]')
+      .includesText(
+        "This format's GTS module runs in an SES sandbox.",
+        'the status explains that execution mode applies to the current format module',
+      );
+    let menuLabels = Array.from(
+      document.querySelectorAll<HTMLElement>(
+        '[data-test-boxel-menu-item-text]',
+      ),
+      (element) => element.dataset.testBoxelMenuItemText,
+    );
+    assert.deepEqual(
+      menuLabels.slice(0, 4),
+      [
+        'Execution: Capsule',
+        'Copy Card URL',
+        'Copy as Markdown',
+        'Reload Card',
+      ],
+      'execution status is followed by copy actions and Reload Card',
+    );
+    assert
+      .dom('[data-test-boxel-menu-item-text="Execution: Capsule"]')
+      .isDisabled('the execution mode is presented as inert status');
     await click('[data-test-boxel-menu-item-text="Reload Card"]');
 
     await waitUntil(

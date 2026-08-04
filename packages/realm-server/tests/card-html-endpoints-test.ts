@@ -230,6 +230,21 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('?format=isolated serves the indexed isolated rendering', async function (assert) {
+      let response = await cardHtml('/john?format=isolated');
+      assert.strictEqual(response.status, 200);
+      let { data } = bodyOf(response);
+      let html = htmlResourceIn(
+        bodyOf(response),
+        data.relationships.html.data[0].id,
+      );
+      assert.strictEqual(html!.attributes.format, 'isolated');
+      assert.true(
+        Boolean(html!.attributes.html?.trim()),
+        'the exact isolated prerender is available for iframe hydration',
+      );
+    });
+
     test('?fields=item serves the item alone with a rendering-less ETag', async function (assert) {
       let response = await cardHtml('/john?fields=item');
       assert.strictEqual(response.status, 200);

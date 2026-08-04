@@ -272,7 +272,9 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
   }
 
   private async _loadCodeMirror() {
-    let loadCodeMirror = (globalThis as any).__loadCodeMirror;
+    let loadCodeMirror =
+      this.cardContext?.trustedUI?.loadCodeMirror ??
+      (globalThis as any).__loadCodeMirror;
     if (typeof loadCodeMirror !== 'function') {
       scheduleOnce('afterRender', this, this.finishCodeMirrorLoad, null);
       return;

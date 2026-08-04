@@ -47,6 +47,12 @@ import {
   teardown,
 } from '@cardstack/host/lib/isolated-render';
 import type { SandboxCardFieldMetadata } from '@cardstack/host/lib/realm-compartment-module-runtime';
+import {
+  loadCodeMirror,
+  loadKatex,
+  loadMermaid,
+  subscribeToTrustedUIRender,
+} from '@cardstack/host/lib/trusted-ui-runtime';
 import type RealmSandboxService from '@cardstack/host/services/realm-sandbox';
 import type { RealmSandboxRelationshipContext } from '@cardstack/host/services/realm-sandbox';
 import type StoreService from '@cardstack/host/services/store';
@@ -314,9 +320,54 @@ class HostTrustedFieldPortal extends Component<{
       source ? Object.create(source) : Object.create(null),
       {
         requestRender: args.requestRender,
+        trustedUI: {
+          loadCodeMirror,
+          loadKatex,
+          loadMermaid,
+        },
         validateCodeRef: args.validateCodeRef,
       },
     ) as CardContext;
+
+    if (this.isRichMarkdownField(args.fieldType)) {
+      let unsubscribe = subscribeToTrustedUIRender(() => {
+        if (!this.isDestroying && !this.isDestroyed) {
+          args.requestRender?.();
+        }
+      });
+      registerDestructor(this, unsubscribe);
+      void this.prewarmRichMarkdownUI(args.requestRender);
+    }
+  }
+
+  private isRichMarkdownField(fieldType: typeof BaseDef): boolean {
+    try {
+      let ref = identifyCard(fieldType);
+      return Boolean(
+        ref &&
+        'module' in ref &&
+        String(ref.module)
+          .replace(/\.gts$/, '')
+          .endsWith('/rich-markdown'),
+      );
+    } catch {
+      return fieldType.displayName === 'Rich Markdown';
+    }
+  }
+
+  private async prewarmRichMarkdownUI(requestRender?: () => void) {
+    await Promise.allSettled([loadCodeMirror(), loadKatex(), loadMermaid()]);
+    if (this.isDestroying || this.isDestroyed) {
+      return;
+    }
+    // Deployed Base modules still use app globals and do not know about the
+    // explicit trustedUI capability. Let their promise continuations publish
+    // tracked editor/diagram state, then revalidate this manually-owned Host
+    // render root once. New Base modules also use the explicit capability, so
+    // this remains a harmless compatibility rerender rather than a fork.
+    if (requestRender) {
+      scheduleOnce('afterRender', requestRender);
+    }
   }
 
   @provide(CardContextName)
@@ -391,7 +442,9 @@ interface DeferredTrustedFieldSignature {
 class DeferredTrustedField extends Modifier<DeferredTrustedFieldSignature> {
   private element?: HTMLDivElement;
   private args?: TrustedFieldPortalArgs;
-  private rendered = false;
+  private renderedComponent?: BaseDefComponent;
+  private renderedFormat?: Format;
+  private subscribeToData?: TrustedFieldPortalArgs['subscribeToData'];
   private unsubscribeFromData?: () => void;
   private requestRender = () => {
     if (this.element) {
@@ -416,15 +469,19 @@ class DeferredTrustedField extends Modifier<DeferredTrustedFieldSignature> {
   ) {
     this.element = element;
     this.args = args;
-    if (!this.unsubscribeFromData && args.subscribeToData) {
+    if (this.subscribeToData !== args.subscribeToData) {
+      this.unsubscribeFromData?.();
+      this.subscribeToData = args.subscribeToData;
       // Trusted Base field templates live in their own Host render root so
       // DOM-aware editors never execute inside the SES transaction. Data
       // invalidation therefore has to cross that boundary explicitly; an
       // outer sandbox-island rerender cannot reach this independent root.
-      this.unsubscribeFromData = args.subscribeToData(this.requestRender);
+      this.unsubscribeFromData = args.subscribeToData?.(this.requestRender);
     }
-    if (!this.rendered) {
-      this.rendered = true;
+    if (
+      this.renderedComponent !== args.component ||
+      this.renderedFormat !== args.format
+    ) {
       scheduleOnce('afterRender', this, this.renderField);
     }
   }
@@ -433,12 +490,15 @@ class DeferredTrustedField extends Modifier<DeferredTrustedFieldSignature> {
     if (!this.element || !this.args) {
       return;
     }
+    let args = this.args;
     renderWithArgs(
       HostTrustedFieldPortal as any,
       this.element as any,
       getOwner(this) as Owner,
-      { ...this.args, requestRender: this.requestRender },
+      { ...args, requestRender: this.requestRender },
     );
+    this.renderedComponent = args.component;
+    this.renderedFormat = args.format;
   }
 }
 
