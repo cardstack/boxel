@@ -701,16 +701,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
           : mode === 'sandbox'
             ? 'Execution: Sandbox'
             : 'Execution: Capsule';
-      let subtext =
-        mode === 'direct'
-          ? "This format's GTS module runs in the trusted host."
-          : mode === 'sandbox'
-            ? "This format's GTS module runs in an isolated iframe sandbox."
-            : "This format's GTS module runs in an SES sandbox.";
       leadingItems.push(
         new MenuItem({
           label,
-          subtext,
           action: () => {},
           status: true,
         }),

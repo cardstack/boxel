@@ -9,6 +9,8 @@ import { tracked } from '@glimmer/tracking';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
+import { surfacePresentation } from '@cardstack/boxel-ui/surface';
+
 import { ri, rri } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
@@ -201,6 +203,7 @@ module('Integration | preview', function (hooks) {
       hasCustomEditTemplate: false,
       hasCustomIsolatedTemplate: true,
       authoredTemplateFormats: ['isolated'],
+      prefersFullSandbox: false,
       prefersWideFormat: false,
     })) as unknown as typeof privateSandbox.loadCardTypeMetadata;
 
@@ -303,6 +306,64 @@ module('Integration | preview', function (hooks) {
       sandbox.iframeRenderFor = originalIframeRenderFor;
       sandbox.isRenderLoading = originalIsRenderLoading;
     }
+  });
+
+  test('opaque cards derive their trusted header title from cardInfo.name', async function (assert) {
+    let moduleURL = `${testRealmURL}opaque-titled-card`;
+    let id = `${testRealmURL}OpaqueTitledCard/sample`;
+    let sandbox = getService('realm-sandbox') as RealmSandboxService;
+    let privateSandbox = sandbox as unknown as {
+      loadCardTypeMetadata: RealmSandboxService['introspectOpaqueCardType'];
+    };
+    let originalMetadataLoader = privateSandbox.loadCardTypeMetadata;
+    privateSandbox.loadCardTypeMetadata = (async () => ({
+      definitionKind: 'card',
+      ancestorTypes: [],
+      displayName: 'Opaque Titled Card',
+      fields: {},
+      headerColor: null,
+      hasCustomEditTemplate: false,
+      hasCustomIsolatedTemplate: true,
+      authoredTemplateFormats: ['isolated'],
+      prefersFullSandbox: false,
+      prefersWideFormat: false,
+    })) as unknown as typeof privateSandbox.loadCardTypeMetadata;
+
+    let card: BaseDef & {
+      cardInfo: { name: string };
+      cardTitle: string;
+    };
+    try {
+      card = (await sandbox.createOpaqueCard(
+        {
+          id: rri(id),
+          type: 'card',
+          attributes: { cardInfo: { name: 'Named before iframe ready' } },
+          meta: {
+            adoptsFrom: {
+              module: rri(moduleURL),
+              name: 'OpaqueTitledCard',
+            },
+            realmURL: ri(testRealmURL),
+          },
+        },
+        new URL(id),
+      )) as typeof card;
+    } finally {
+      privateSandbox.loadCardTypeMetadata = originalMetadataLoader;
+    }
+
+    assert.strictEqual(
+      card.cardTitle,
+      'Named before iframe ready',
+      'the Host header uses inert cardInfo presentation without evaluating user code',
+    );
+    card.cardInfo.name = 'Renamed card';
+    assert.strictEqual(
+      card.cardTitle,
+      'Renamed card',
+      'the title remains reactive to writable cardInfo updates',
+    );
   });
 
   test('rejects an unsafe included theme without rejecting the opaque card', async function (assert) {
@@ -439,6 +500,52 @@ module('Integration | preview', function (hooks) {
     assert
       .dom('[data-boxel-theme-style]')
       .includesText('--background: #f7f8fa');
+  });
+
+  test('applies bounded surface presentation to the SES Host container', async function (assert) {
+    let { CardDef } = cardApi;
+    class TestCard extends CardDef {}
+    class InertTemplate extends GlimmerComponent {
+      readonly trustedHostTemplate = true;
+
+      <template>
+        <article
+          data-test-surface-presentation
+          {{surfacePresentation containerBackground='#07142d'}}
+        >
+          Presented surface
+        </article>
+      </template>
+    }
+    let card = new TestCard({});
+    let sandbox = {
+      component: InertTemplate as unknown as BaseDefComponent,
+      model: {},
+      fields: {},
+      styles: [],
+      principal: testRealmURL,
+      markerBacked: false,
+    };
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <RealmSandboxRender
+            @card={{card}}
+            @format='embedded'
+            @sandbox={{sandbox}}
+          />
+        </template>
+      },
+    );
+    await settled();
+
+    assert.strictEqual(
+      getComputedStyle(document.querySelector('.realm-sandbox-render')!)
+        .backgroundColor,
+      'rgb(7, 20, 45)',
+      'the Host owns the outer paint while the surface publishes one inert color',
+    );
   });
 
   test('renders a sandboxed FieldDef inside the ordinary compound-field inheritance boundary', async function (assert) {

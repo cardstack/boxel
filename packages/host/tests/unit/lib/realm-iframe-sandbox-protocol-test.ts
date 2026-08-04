@@ -96,6 +96,24 @@ module('Unit | realm iframe sandbox protocol', function () {
     assert.true(
       isRealmIframeSandboxOutbound({
         protocol: realmIframeSandboxProtocol,
+        type: 'surface-presentation',
+        presentation: { containerBackground: '#07142d' },
+      }),
+      'a renderer can publish one bounded Host-container color',
+    );
+    assert.false(
+      isRealmIframeSandboxOutbound({
+        protocol: realmIframeSandboxProtocol,
+        type: 'surface-presentation',
+        presentation: {
+          containerBackground: 'url(https://tracker.invalid/pixel)',
+        },
+      }),
+      'network-bearing CSS cannot cross as surface presentation',
+    );
+    assert.true(
+      isRealmIframeSandboxOutbound({
+        protocol: realmIframeSandboxProtocol,
         type: 'fetch-request',
         requestId: 'fetch-1',
         purpose: 'module',

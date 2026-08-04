@@ -3322,6 +3322,11 @@ export class CardDef extends BaseDef {
   }
 
   static prefersWideFormat = false; // whether the card is full-width in the stack
+  // A one-way request for the strongest available renderer isolation. The
+  // Host forces iframe-capable authored formats into a full Sandbox. Compact
+  // formats that cannot compose as iframes remain on their confined Capsule
+  // or trusted Base fallback path. `false` never weakens Host policy.
+  static prefersFullSandbox = false;
   static headerColor: string | null = null; // set string color value if the stack-item header has a background color
 
   constructor(

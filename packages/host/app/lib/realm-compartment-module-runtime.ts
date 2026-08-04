@@ -91,6 +91,7 @@ export interface SandboxCardTypeMetadata {
   hasCustomIsolatedTemplate: boolean;
   authoredTemplateFormats: string[];
   icon?: SandboxTrustedExportIdentity;
+  prefersFullSandbox: boolean;
   prefersWideFormat: boolean;
 }
 
@@ -703,6 +704,7 @@ export default class RealmCompartmentModuleRuntime {
       hasCustomIsolatedTemplate: cardType.isolated != null,
       authoredTemplateFormats,
       icon,
+      prefersFullSandbox: cardType.prefersFullSandbox === true,
       prefersWideFormat: cardType.prefersWideFormat === true,
     });
   }
@@ -721,7 +723,13 @@ export default class RealmCompartmentModuleRuntime {
       | undefined;
     let instance = new CardType(safeSnapshot);
     this.materializeComputedFields(instance, CardType);
-    return structuredClone(this.jsonClone(instance) as Record<string, unknown>);
+    let projection = this.jsonClone(instance) as Record<string, unknown>;
+    this.materializeAuthoredGetters(
+      instance,
+      Object.getPrototypeOf(instance) as object | undefined,
+      projection,
+    );
+    return structuredClone(projection);
   }
 
   async hasModuleExport(
@@ -1667,6 +1675,44 @@ export default class RealmCompartmentModuleRuntime {
         }
       }
       instance[name] = this.materializeCompartmentFieldValue(value, field);
+    }
+  }
+
+  private materializeAuthoredGetters(
+    instance: Record<string, unknown>,
+    authoredPrototype: object | undefined,
+    projection: Record<string, unknown>,
+  ) {
+    let prototype = authoredPrototype;
+    while (
+      prototype &&
+      prototype !== Object.prototype &&
+      !this.definitionKindByPrototype.has(prototype)
+    ) {
+      for (let name of Object.getOwnPropertyNames(prototype)) {
+        if (
+          name === 'constructor' ||
+          name === '__proto__' ||
+          name === 'prototype' ||
+          Object.prototype.hasOwnProperty.call(projection, name)
+        ) {
+          continue;
+        }
+        let getter = Object.getOwnPropertyDescriptor(prototype, name)?.get;
+        if (!getter) {
+          continue;
+        }
+        try {
+          // Ordinary CardDef getters are part of the model contract consumed
+          // by authored templates just like computeVia fields. Evaluate them
+          // against inert compartment data and only return JSON-safe results.
+          projection[name] = this.jsonClone(getter.call(instance));
+        } catch {
+          // A getter that needs unavailable authority must not erase other
+          // independent projection values.
+        }
+      }
+      prototype = Object.getPrototypeOf(prototype) as object | undefined;
     }
   }
 

@@ -53,6 +53,7 @@ import * as boxelUiComponents from '@cardstack/boxel-ui/components';
 import * as boxelUiHelpers from '@cardstack/boxel-ui/helpers';
 import * as boxelUiIcons from '@cardstack/boxel-ui/icons';
 import * as boxelUiModifiers from '@cardstack/boxel-ui/modifiers';
+import * as boxelUiSurface from '@cardstack/boxel-ui/surface';
 
 import * as runtime from '@cardstack/runtime-common';
 import type { VirtualNetwork } from '@cardstack/runtime-common';
@@ -84,6 +85,7 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('@cardstack/boxel-ui/helpers', boxelUiHelpers);
   virtualNetwork.shimModule('@cardstack/boxel-ui/icons', boxelUiIcons);
   virtualNetwork.shimModule('@cardstack/boxel-ui/modifiers', boxelUiModifiers);
+  virtualNetwork.shimModule('@cardstack/boxel-ui/surface', boxelUiSurface);
   // Spec cards published for boxel-ui components use the bare specifier
   // `@cardstack/boxel-ui/components` in their `ref.module`. The
   // VirtualNetwork needs a realm mapping to translate that into the

@@ -8,6 +8,10 @@ import { provide } from 'ember-provide-consume-context';
 import RouteTemplate from 'ember-route-template';
 
 import { safeModifier } from '@cardstack/boxel-ui/modifiers';
+import {
+  surfacePresentationEvent,
+  type SurfacePresentation,
+} from '@cardstack/boxel-ui/surface';
 
 import {
   CardContextName,
@@ -205,6 +209,18 @@ class RealmSandboxFrame extends Component<Signature> {
         this.pendingCardUpdateFrame = undefined;
       }
     };
+  });
+
+  captureSurfacePresentation = modifier((element: HTMLElement) => {
+    let publish = (event: Event) => {
+      let presentation = (event as CustomEvent<SurfacePresentation>).detail;
+      if (!presentation) {
+        return;
+      }
+      this.post({ type: 'surface-presentation', presentation });
+    };
+    element.addEventListener(surfacePresentationEvent, publish);
+    return () => element.removeEventListener(surfacePresentationEvent, publish);
   });
 
   private post(message: Record<string, unknown>) {
@@ -621,6 +637,7 @@ class RealmSandboxFrame extends Component<Signature> {
       data-card-update-applied-revision={{this.appliedCardUpdateRevision}}
       data-card-can-write={{if this.canWrite 'true' 'false'}}
       {{this.connect}}
+      {{this.captureSurfacePresentation}}
       {{safeModifier 'observe-size' this.reportEmbeddedSize}}
     >
       {{#if this.card}}

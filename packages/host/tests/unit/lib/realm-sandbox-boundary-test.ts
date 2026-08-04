@@ -160,6 +160,72 @@ module('Unit | realm sandbox boundary', function () {
     );
   });
 
+  test('host persistence excludes non-card response projections from side-loaded data', function (assert) {
+    let card = {
+      title: 'Edited in the host',
+    } as unknown as BaseDef;
+    Object.defineProperty(card, opaqueRealmCardState, {
+      value: {
+        typeRef: {
+          module: 'https://realm.example/article',
+          name: 'Article',
+        } as ResolvedCodeRef,
+        principal: 'https://realm.example/',
+        document: {
+          data: {
+            type: 'card',
+            id: 'https://realm.example/Article/one',
+            attributes: { title: 'Original title' },
+            meta: {
+              adoptsFrom: {
+                module: 'https://realm.example/article',
+                name: 'Article',
+              } as ResolvedCodeRef,
+            },
+          },
+          included: [
+            {
+              type: 'card',
+              id: 'https://realm.example/Author/two',
+              attributes: { name: 'Ada' },
+              meta: {
+                adoptsFrom: {
+                  module: 'https://realm.example/author',
+                  name: 'Author',
+                } as ResolvedCodeRef,
+              },
+            },
+            {
+              type: 'isolated',
+              id: 'https://realm.example/Article/one',
+              attributes: { html: '<article>prerendered</article>' },
+              meta: {},
+            },
+          ],
+        },
+        snapshot: { title: 'Original title' },
+        presentation: {
+          headerColor: null,
+          prefersWideFormat: false,
+        },
+      },
+    });
+
+    assert.deepEqual(serializeOpaqueRealmCard(card)?.included, [
+      {
+        type: 'card',
+        id: rri('https://realm.example/Author/two'),
+        attributes: { name: 'Ada' },
+        meta: {
+          adoptsFrom: {
+            module: rri('https://realm.example/author'),
+            name: 'Author',
+          },
+        },
+      },
+    ]);
+  });
+
   test('host copy serialization makes opaque references absolute', function (assert) {
     let card = {} as BaseDef;
     Object.defineProperty(card, opaqueRealmCardState, {

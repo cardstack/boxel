@@ -75,6 +75,7 @@ module('Unit | realm sandbox iframe draft', function (hooks) {
       hasCustomIsolatedTemplate: true,
       authoredTemplateFormats: ['isolated'],
       headerColor: null,
+      prefersFullSandbox: false,
       prefersWideFormat: false,
       icon: null,
     };
@@ -123,6 +124,89 @@ module('Unit | realm sandbox iframe draft', function (hooks) {
         prefersWideFormat: true,
       },
       'the same inert presentation consumed by CardContainer is synchronized',
+    );
+  });
+
+  test('an authored full-sandbox preference only strengthens eligible format isolation', function (assert) {
+    let moduleURL = 'https://realm.example/full-sandbox-card.gts';
+    let service = getService('realm-sandbox') as RealmSandboxService;
+    let typeState: OpaqueRealmCardTypeState = {
+      typeRef: {
+        module: rri(moduleURL),
+        name: 'FullSandboxCard',
+      },
+      definitionKind: 'card',
+      ancestorTypes: [],
+      displayName: 'Full Sandbox Card',
+      fields: {},
+      hasCustomEditTemplate: true,
+      hasCustomIsolatedTemplate: true,
+      authoredTemplateFormats: ['isolated', 'fitted', 'edit'],
+      headerColor: null,
+      prefersFullSandbox: true,
+      prefersWideFormat: false,
+    };
+    class OpaqueCard {}
+    Object.defineProperty(OpaqueCard, opaqueRealmCardTypeState, {
+      value: typeState,
+    });
+    let card = new OpaqueCard() as unknown as BaseDef;
+    Object.defineProperty(card, opaqueRealmCardState, {
+      value: {
+        typeRef: typeState.typeRef,
+        principal: 'https://realm.example/',
+        document: { data: {} } as OpaqueRealmCardState['document'],
+        snapshot: {},
+        presentation: {
+          headerColor: null,
+          prefersWideFormat: false,
+        },
+      } satisfies OpaqueRealmCardState,
+    });
+    let internal = service as unknown as {
+      moduleClassifications: Map<string, CardSourceSandboxClassification>;
+      sandboxDecisionFor(
+        card: BaseDef,
+        format: CardSandboxRenderFormat,
+      ): { tier: 'compartment' | 'iframe'; reason: string };
+    };
+
+    assert.deepEqual(internal.sandboxDecisionFor(card, 'isolated'), {
+      tier: 'iframe',
+      reason: 'author-preference:prefersFullSandbox',
+    });
+    assert.deepEqual(internal.sandboxDecisionFor(card, 'embedded'), {
+      tier: 'iframe',
+      reason: 'author-preference:prefersFullSandbox',
+    });
+    assert.deepEqual(internal.sandboxDecisionFor(card, 'edit'), {
+      tier: 'iframe',
+      reason: 'author-preference:prefersFullSandbox',
+    });
+    assert.deepEqual(
+      internal.sandboxDecisionFor(card, 'fitted'),
+      {
+        tier: 'compartment',
+        reason: 'ses-only-format:fitted',
+      },
+      'the preference does not create iframe pills or fitted-gallery tiles',
+    );
+
+    typeState.prefersFullSandbox = false;
+    internal.moduleClassifications.set(moduleURL, {
+      tier: 'iframe',
+      reason: 'browser-runtime:three',
+      imports: ['three'],
+      signals: ['three'],
+      propagatesToImporters: true,
+    });
+    assert.deepEqual(
+      internal.sandboxDecisionFor(card, 'isolated'),
+      {
+        tier: 'iframe',
+        reason: 'browser-runtime:three',
+      },
+      'turning the preference off cannot weaken a Host-required iframe',
     );
   });
 

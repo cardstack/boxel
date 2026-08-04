@@ -288,6 +288,7 @@ module('Unit | realm compartment module runtime', function () {
         static displayName = 'Realm Article';
         static headerColor = '#123456';
         static icon = NetworkIcon;
+        static prefersFullSandbox = true;
         static prefersWideFormat = true;
         static notAllowed = () => globalThis;
       }
@@ -321,6 +322,7 @@ module('Unit | realm compartment module runtime', function () {
           module: '@cardstack/boxel-icons/network',
           name: 'default',
         },
+        prefersFullSandbox: true,
         prefersWideFormat: true,
       },
       'executable and unknown statics are omitted',
@@ -574,6 +576,46 @@ module('Unit | realm compartment module runtime', function () {
         browserTotal: 99,
       },
       'a Realm/index value crosses unchanged while an independent SES-safe branch still computes',
+    );
+  });
+
+  test('projects authored getters that consume linked-card identity data', async function (assert) {
+    let moduleID = 'https://realm.example/cards/coffee-bean.gts';
+    let source = await transpileJS(
+      `
+        import ImageDef from 'https://cardstack.com/base/image';
+        import { CardDef, field, linksTo } from 'https://cardstack.com/base/card-api';
+
+        export class CoffeeBean extends CardDef {
+          @field heroImage = linksTo(() => ImageDef);
+
+          get heroSrc() {
+            return this.heroImage?.url ?? undefined;
+          }
+        }
+      `,
+      '/coffee-bean.gts',
+    );
+    let runtime = runtimeFor({ [moduleID]: source });
+    let imageURL = 'https://realm.example/cards/assets/coffee/bean.png';
+
+    assert.deepEqual(
+      await runtime.evaluateCardProjection(moduleID, 'CoffeeBean', {
+        heroImage: {
+          id: imageURL,
+          sourceUrl: imageURL,
+          url: imageURL,
+        },
+      }),
+      {
+        heroImage: {
+          id: imageURL,
+          sourceUrl: imageURL,
+          url: imageURL,
+        },
+        heroSrc: imageURL,
+      },
+      'the getter runs without exposing the live Store relationship object',
     );
   });
 
@@ -1329,6 +1371,7 @@ module('Unit | realm compartment module runtime', function () {
         hasCustomEditTemplate: false,
         hasCustomIsolatedTemplate: true,
         authoredTemplateFormats: ['isolated'],
+        prefersFullSandbox: false,
         prefersWideFormat: false,
       },
       'trusted field identities cross as inert descriptors',

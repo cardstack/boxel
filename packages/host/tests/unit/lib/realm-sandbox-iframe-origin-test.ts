@@ -3,9 +3,28 @@ import { module, test } from 'qunit';
 import {
   allocateRealmSandboxIframeOrigin,
   isRealmSandboxIframeChildLocation,
+  realmSandboxIframeCapsuleKey,
 } from '@cardstack/host/lib/realm-sandbox-iframe-origin';
 
 module('Unit | realm sandbox iframe origin', function () {
+  test('keeps one capsule identity across presentation formats', function (assert) {
+    assert.strictEqual(
+      realmSandboxIframeCapsuleKey(undefined, 0),
+      realmSandboxIframeCapsuleKey(undefined, 0),
+      'canonical presentation changes reuse one capsule',
+    );
+    assert.notStrictEqual(
+      realmSandboxIframeCapsuleKey(undefined, 0),
+      realmSandboxIframeCapsuleKey(undefined, 1),
+      'Reload Card allocates a new capsule',
+    );
+    assert.notStrictEqual(
+      realmSandboxIframeCapsuleKey('preview-a', 0),
+      realmSandboxIframeCapsuleKey('preview-b', 0),
+      'independent Code previews do not share a capsule',
+    );
+  });
+
   test('allocates a nonce origin for a hosted renderer domain', function (assert) {
     let nonce = '0123456789abcdef0123456789abcdef';
     assert.strictEqual(

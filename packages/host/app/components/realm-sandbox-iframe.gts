@@ -11,7 +11,7 @@ import {
   CardContainer,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
-import { cn, eq } from '@cardstack/boxel-ui/helpers';
+import { cn, cssVar, eq } from '@cardstack/boxel-ui/helpers';
 
 import {
   CardContextName,
@@ -23,6 +23,7 @@ import {
 import {
   isRealmIframeSandboxOutbound,
   realmIframeSandboxProtocol,
+  sanitizeRealmSandboxContainerBackground,
 } from '@cardstack/host/lib/realm-iframe-sandbox-protocol';
 
 import type { RealmIframeSandboxRender } from '@cardstack/host/services/realm-sandbox';
@@ -74,6 +75,7 @@ export default class RealmSandboxIframe extends Component<Signature> {
   @tracked private appliedCardUpdateRevision = -1;
   @tracked private persistedCardUpdateRevision = -1;
   @tracked private cardUpdateError?: string;
+  @tracked private containerBackground?: string;
   private postToFrame?: (message: Record<string, unknown>) => void;
   private cardUpdateQueue = Promise.resolve();
   private loaderMetricToken = {};
@@ -230,6 +232,10 @@ export default class RealmSandboxIframe extends Component<Signature> {
         element.style.height = `${height}px`;
         receivedSize = true;
         markInteractive();
+      } else if (event.data.type === 'surface-presentation') {
+        this.containerBackground = sanitizeRealmSandboxContainerBackground(
+          event.data.presentation.containerBackground,
+        );
       } else if (event.data.type === 'card-update') {
         this.receivedCardUpdateRevision = event.data.revision;
         let update = event.data;
@@ -456,6 +462,9 @@ export default class RealmSandboxIframe extends Component<Signature> {
       data-boxel-card-id={{@sandbox.cardID}}
       data-boxel-card-format={{this.format}}
       data-card-sandbox-height-mode={{this.heightMode}}
+      style={{cssVar
+        realm-sandbox-container-background=this.containerBackground
+      }}
       ...attributes
     >
       {{#if this.isLoading}}
@@ -506,6 +515,10 @@ export default class RealmSandboxIframe extends Component<Signature> {
         width: 100%;
         min-height: 2.5rem;
         overflow: hidden;
+        background-color: var(
+          --realm-sandbox-container-background,
+          var(--background, var(--boxel-light))
+        );
       }
       .iframe-loading {
         position: absolute;

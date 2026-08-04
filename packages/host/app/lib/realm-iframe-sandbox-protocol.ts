@@ -83,6 +83,16 @@ export interface RealmIframeSandboxResize {
   height: number;
 }
 
+export interface RealmIframeSandboxSurfacePresentation {
+  containerBackground: string | null;
+}
+
+export interface RealmIframeSandboxSurfacePresentationUpdate {
+  protocol: typeof realmIframeSandboxProtocol;
+  type: 'surface-presentation';
+  presentation: RealmIframeSandboxSurfacePresentation;
+}
+
 export interface RealmIframeSandboxFetchRequest {
   protocol: typeof realmIframeSandboxProtocol;
   type: 'fetch-request';
@@ -131,6 +141,7 @@ export type RealmIframeSandboxOutbound =
   | RealmIframeSandboxListening
   | RealmIframeSandboxReady
   | RealmIframeSandboxResize
+  | RealmIframeSandboxSurfacePresentationUpdate
   | RealmIframeSandboxFetchRequest
   | RealmIframeSandboxCardUpdate;
 
@@ -224,6 +235,8 @@ export function isRealmIframeSandboxOutbound(
       );
     case 'resize':
       return finiteNumber(message.width) && finiteNumber(message.height);
+    case 'surface-presentation':
+      return isRealmIframeSandboxSurfacePresentation(message.presentation);
     case 'fetch-request':
       return (
         boundedString(message.requestId, 256) &&
@@ -239,6 +252,37 @@ export function isRealmIframeSandboxOutbound(
     default:
       return false;
   }
+}
+
+function isRealmIframeSandboxSurfacePresentation(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  let presentation = value as Record<string, unknown>;
+  return (
+    presentation.containerBackground === null ||
+    (typeof presentation.containerBackground === 'string' &&
+      sanitizeRealmSandboxContainerBackground(
+        presentation.containerBackground,
+      ) !== undefined)
+  );
+}
+
+export function sanitizeRealmSandboxContainerBackground(
+  value: string | null,
+): string | undefined {
+  let candidate = value?.trim();
+  if (
+    !candidate ||
+    candidate.length > 128 ||
+    /[;{}]/.test(candidate) ||
+    /(?:url|var|image|gradient|currentcolor)\s*\(/i.test(candidate) ||
+    candidate.toLowerCase() === 'currentcolor' ||
+    (globalThis.CSS?.supports && !globalThis.CSS.supports('color', candidate))
+  ) {
+    return undefined;
+  }
+  return candidate;
 }
 
 function isRealmIframeSandboxTypePresentation(

@@ -206,6 +206,25 @@ corresponding gate moves from follow-up to pre-merge work.
 - [ ] Add negative tests for encoded path escapes, redirects, oversized
       bodies/headers, unsupported methods, and cross-realm URLs.
 
+### Sandbox-scoped Store authorization
+
+- [ ] Define an immutable sandbox execution principal that binds the user
+      session, app/module identity, app installation, and sandbox instance.
+- [ ] Add a scoped Store facade whose effective authority is the intersection
+      of user permissions, app/sandbox policy, explicit grants, and operation.
+- [ ] Keep installed apps confined to their granted app realm by default.
+- [ ] Add a trusted Host chooser for granting exact cross-realm cards or
+      resources, analogous to selected-photo rather than whole-library access.
+- [ ] Make grants revocable and time/session bounded by default; persist them
+      only through an explicit app-install permission flow.
+- [ ] Enforce grants inside Store load, search, relationship-hydration, and
+      mutation paths before documents, metadata, or result counts materialize.
+- [ ] Add negative tests for guessed URLs, arbitrary ids, forward/reverse
+      relationship traversal, global search, stale grants, and user-permission
+      revocation.
+- [ ] Verify iframe origin and `prefersFullSandbox` never act as data-access
+      credentials; they are execution/transport properties only.
+
 ### CSS confinement
 
 - [x] Replace regex-only network checks with parsed CSS validation plus a

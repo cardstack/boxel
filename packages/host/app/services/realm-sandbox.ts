@@ -96,6 +96,7 @@ import {
   allocateRealmSandboxIframeOrigin,
   isRealmSandboxIframeChildLocation,
   newRealmSandboxIframeNonce,
+  realmSandboxIframeCapsuleKey,
 } from '@cardstack/host/lib/realm-sandbox-iframe-origin';
 import {
   isBaseRealmModule,
@@ -1476,6 +1477,7 @@ export default class RealmSandboxService extends Service {
       let hasCustomIsolatedTemplate =
         metadata?.hasCustomIsolatedTemplate === true;
       let authoredTemplateFormats = metadata?.authoredTemplateFormats;
+      let prefersFullSandbox = metadata?.prefersFullSandbox === true;
       let prefersWideFormat = metadata?.prefersWideFormat === true;
       fieldMetadata = metadata?.fields ?? {};
       trustedFieldTypes = await this.resolveTrustedFieldTypes(fieldMetadata);
@@ -1495,6 +1497,7 @@ export default class RealmSandboxService extends Service {
         hasCustomIsolatedTemplate,
         authoredTemplateFormats,
         headerColor,
+        prefersFullSandbox,
         prefersWideFormat,
         icon:
           (await this.resolveTrustedIcon(metadata?.icon)) ??
@@ -1522,6 +1525,10 @@ export default class RealmSandboxService extends Service {
 
         static get prefersWideFormat() {
           return mutableTypeState.prefersWideFormat;
+        }
+
+        static get prefersFullSandbox() {
+          return mutableTypeState.prefersFullSandbox;
         }
 
         static get hasCustomEditTemplate() {
@@ -1802,6 +1809,35 @@ export default class RealmSandboxService extends Service {
         },
         enumerable: true,
         configurable: true,
+      });
+    }
+    // Base's `cardTitle` is a computeVia field backed by `cardInfo.name`.
+    // The opaque constructor is intentionally created before inert Realm data
+    // is attached, so Base can cache its fallback title during construction.
+    // Do not execute the authored CardDef merely to recover presentation. When
+    // the serialized document does not carry an explicit cardTitle, expose the
+    // same Base fallback directly from the tracked JSON snapshot instead.
+    // This keeps the trusted stack header reactive to cardInfo edits and makes
+    // iframe-only cards title correctly before their child runtime is ready.
+    if (
+      typeState?.definitionKind === 'card' &&
+      !Object.prototype.hasOwnProperty.call(card, 'cardTitle')
+    ) {
+      Object.defineProperty(card, 'cardTitle', {
+        configurable: true,
+        enumerable: false,
+        get: () => {
+          this.opaqueDataRevisionFor(card).consume();
+          let cardInfo = state.snapshot.cardInfo;
+          let name =
+            typeof cardInfo === 'object' &&
+            cardInfo !== null &&
+            !Array.isArray(cardInfo) &&
+            typeof (cardInfo as Record<string, unknown>).name === 'string'
+              ? (cardInfo as Record<string, string>).name.trim()
+              : '';
+          return name || `Untitled ${typeState.displayName}`;
+        },
       });
     }
     return card;
@@ -2596,7 +2632,16 @@ export default class RealmSandboxService extends Service {
         ? options.codeRef
         : undefined;
     let envelopeKey = `${iframeFormat}|${options.field?.name ?? ''}|${resolvedCodeRef?.module ?? ''}#${resolvedCodeRef?.name ?? ''}|${options.codePreviewSandbox?.id ?? 'canonical'}|reload:${reloadRevision}`;
-    let targetOrigin = this.iframeSandboxOriginFor(card, envelopeKey);
+    // The iframe is a persistent execution capsule. Format, field, and
+    // component selection are presentation updates sent over its MessagePort,
+    // so they must not allocate a new nonce origin (and thereby navigate the
+    // iframe out from under the existing channel). An explicit Reload Card or
+    // a distinct Code preview still creates a new capsule.
+    let capsuleKey = realmSandboxIframeCapsuleKey(
+      options.codePreviewSandbox?.id,
+      reloadRevision,
+    );
+    let targetOrigin = this.iframeSandboxOriginFor(card, capsuleKey);
     if (!targetOrigin) {
       return undefined;
     }
@@ -3980,7 +4025,12 @@ export default class RealmSandboxService extends Service {
     codePreviewSandbox?: CodePreviewSandbox,
   ): { tier: CardRenderSandboxTier; reason: string } {
     let sourceDecision: { tier: CardRenderSandboxTier; reason: string };
-    if (codePreviewSandbox) {
+    if (getOpaqueRealmCardTypeState(card)?.prefersFullSandbox === true) {
+      sourceDecision = {
+        tier: 'iframe',
+        reason: 'author-preference:prefersFullSandbox',
+      };
+    } else if (codePreviewSandbox) {
       let sourceURL = codePreviewSandbox.sourceURL;
       sourceDecision = sourceURL
         ? this.moduleSandboxDecision(
@@ -4316,6 +4366,7 @@ export default class RealmSandboxService extends Service {
       let nextHasCustomIsolatedTemplate =
         metadata.hasCustomIsolatedTemplate === true;
       let nextHeaderColor = this.safeHeaderColor(metadata.headerColor);
+      let nextPrefersFullSandbox = metadata.prefersFullSandbox === true;
       let nextPrefersWideFormat = metadata.prefersWideFormat === true;
       let previousFieldMetadata = this.fieldMetadataByOpaqueType.get(key) ?? {};
       let previousFieldTypes = this.trustedFieldTypesByOpaqueType.get(key);
@@ -4335,6 +4386,7 @@ export default class RealmSandboxService extends Service {
           metadata.authoredTemplateFormats ?? [],
         ) ||
         typeState.headerColor !== nextHeaderColor ||
+        typeState.prefersFullSandbox !== nextPrefersFullSandbox ||
         typeState.prefersWideFormat !== nextPrefersWideFormat ||
         typeState.icon !== nextIcon;
       if (!fieldsChanged && !ancestryChanged && !presentationChanged) {
@@ -4349,6 +4401,7 @@ export default class RealmSandboxService extends Service {
       typeState.hasCustomIsolatedTemplate = nextHasCustomIsolatedTemplate;
       typeState.authoredTemplateFormats = metadata.authoredTemplateFormats;
       typeState.headerColor = nextHeaderColor;
+      typeState.prefersFullSandbox = nextPrefersFullSandbox;
       typeState.prefersWideFormat = nextPrefersWideFormat;
       typeState.icon = nextIcon;
       this.trustedFieldTypesByOpaqueType.set(key, trustedFieldTypes);
@@ -5916,6 +5969,7 @@ export default class RealmSandboxService extends Service {
       hasCustomIsolatedTemplate: metadata.hasCustomIsolatedTemplate,
       authoredTemplateFormats: metadata.authoredTemplateFormats,
       headerColor: this.safeHeaderColor(metadata.headerColor),
+      prefersFullSandbox: metadata.prefersFullSandbox,
       prefersWideFormat: metadata.prefersWideFormat,
     };
   }

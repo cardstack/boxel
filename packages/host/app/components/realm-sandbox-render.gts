@@ -3,16 +3,22 @@ import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { cached } from '@glimmer/tracking';
+import { tracked } from '@glimmer/tracking';
 
 import Modifier, {
   type ArgsFor,
   type NamedArgs,
   type PositionalArgs,
+  modifier,
 } from 'ember-modifier';
 import { consume } from 'ember-provide-consume-context';
 
 import { CardContainer } from '@cardstack/boxel-ui/components';
-import { cn, coalesce, eq } from '@cardstack/boxel-ui/helpers';
+import { cn, coalesce, cssVar, eq } from '@cardstack/boxel-ui/helpers';
+import {
+  surfacePresentationEvent,
+  type SurfacePresentation,
+} from '@cardstack/boxel-ui/surface';
 
 import {
   CardContextName,
@@ -25,6 +31,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import RealmSandboxTemplateIsland from '@cardstack/host/components/realm-sandbox-template-island';
+import { sanitizeRealmSandboxContainerBackground } from '@cardstack/host/lib/realm-iframe-sandbox-protocol';
 import RealmSandboxStyles from '@cardstack/host/modifiers/realm-sandbox-styles';
 import type RealmSandboxService from '@cardstack/host/services/realm-sandbox';
 
@@ -125,6 +132,7 @@ interface Signature {
 }
 
 export default class RealmSandboxRender extends Component<Signature> {
+  @tracked private containerBackground?: string;
   @consume(CardContextName) declare private cardContext:
     | CardContext
     | undefined;
@@ -274,6 +282,18 @@ export default class RealmSandboxRender extends Component<Signature> {
     this.args.viewCard(rri(cardURL.href), format, options);
   };
 
+  captureSurfacePresentation = modifier((element: Element) => {
+    let publish = (event: Event) => {
+      let value = (event as CustomEvent<SurfacePresentation>).detail
+        ?.containerBackground;
+      this.containerBackground = sanitizeRealmSandboxContainerBackground(
+        value ?? null,
+      );
+    };
+    element.addEventListener(surfacePresentationEvent, publish);
+    return () => element.removeEventListener(surfacePresentationEvent, publish);
+  });
+
   <template>
     {{#if @fieldBoundary}}
       {{! FieldDef templates ordinarily render directly inside Base's
@@ -361,6 +381,10 @@ export default class RealmSandboxRender extends Component<Signature> {
         data-test-card={{this.cardID}}
         data-test-card-format={{this.format}}
         data-test-field-component-card
+        style={{cssVar
+          realm-sandbox-container-background=this.containerBackground
+        }}
+        {{this.captureSurfacePresentation}}
         {{this.cardComponentModifier
           cardId=this.cardID
           format=this.format
@@ -432,6 +456,10 @@ export default class RealmSandboxRender extends Component<Signature> {
            size containment, so intrinsic card sizing remains available. */
         contain: content;
         isolation: isolate;
+        background-color: var(
+          --realm-sandbox-container-background,
+          var(--background, var(--boxel-light))
+        );
       }
       .realm-sandbox-render.isolated-format {
         height: 100%;

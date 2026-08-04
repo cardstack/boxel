@@ -1,5 +1,14 @@
 const sandboxNoncePattern = /^[a-f0-9]{32}$/;
 
+// A capsule survives presentation changes. Formats, delegated fields, and
+// component refs are messages within the capsule, not execution identities.
+export function realmSandboxIframeCapsuleKey(
+  codePreviewID: string | undefined,
+  reloadRevision: number,
+): string {
+  return `${codePreviewID ?? 'canonical'}|reload:${reloadRevision}`;
+}
+
 function parsedOrigin(value: string): URL | undefined {
   try {
     let url = new URL(value);

@@ -1549,10 +1549,7 @@ module('Acceptance | code submode | sandbox live reload', function (hooks) {
       .exists('the card menu identifies the effective execution mode');
     assert
       .dom('[data-test-boxel-menu-item-text="Execution: Capsule"]')
-      .includesText(
-        "This format's GTS module runs in an SES sandbox.",
-        'the status explains that execution mode applies to the current format module',
-      );
+      .hasText('Execution: Capsule', 'the temporary status stays concise');
     let menuLabels = Array.from(
       document.querySelectorAll<HTMLElement>(
         '[data-test-boxel-menu-item-text]',

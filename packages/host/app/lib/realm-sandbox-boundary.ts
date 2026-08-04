@@ -7,6 +7,7 @@ import type {
 } from '@cardstack/runtime-common';
 import {
   identifyCard,
+  isCardResource,
   moduleFrom,
   resolveRRIReference,
   rri,
@@ -57,6 +58,7 @@ export interface OpaqueRealmCardTypeState {
   hasCustomIsolatedTemplate: boolean;
   authoredTemplateFormats?: string[];
   headerColor: string | null;
+  prefersFullSandbox: boolean;
   prefersWideFormat: boolean;
 }
 
@@ -145,6 +147,19 @@ export function serializeOpaqueRealmCard(
     return undefined;
   }
   let document = structuredClone(state.document);
+  if (document.included) {
+    // Card fetches may include presentation resources (prerendered HTML,
+    // styles, and other index projections) alongside side-loaded cards.
+    // Those resources are valid response data but are not valid JSON:API
+    // card resources and must never be echoed into a create/PATCH document.
+    // Preserve only genuine linked cards that Store.save() may persist.
+    let includedCards = document.included.filter(isCardResource);
+    if (includedCards.length > 0) {
+      document.included = includedCards;
+    } else {
+      delete document.included;
+    }
+  }
   let omittedFields = new Set(opts?.omitFieldNames);
   let attributes = document.data.attributes;
   if (attributes) {

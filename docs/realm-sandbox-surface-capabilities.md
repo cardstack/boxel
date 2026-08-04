@@ -33,6 +33,7 @@ import {
   surfaceObserve,
   surfaceFocus,
   surfacePointer,
+  surfacePresentation,
   surfaceStyle,
   surfaceTransition,
   surfaceSchedule,
@@ -104,6 +105,7 @@ a Host-issued user-activation token from the triggering projected event.
 
 ```gts
 <article
+  {{surfacePresentation containerBackground='match'}}
   {{surfaceStyle
     backgroundColor=this.statusColor
     transform=this.positionTransform
@@ -111,6 +113,29 @@ a Host-issued user-activation token from the triggering projected event.
   {{surfaceTransition @model.id}}
 ></article>
 ```
+
+`surfacePresentation` is the first shipped capability in this proposed module
+family and is the transport-neutral counterpart to the existing CardDef
+`headerColor` presentation metadata. Both values travel through the same
+trusted, data-only presentation boundary, but they describe different
+Host-owned regions:
+
+- `headerColor` colors the Boxel card title bar and remains type metadata;
+- `containerBackground` colors the Host container behind the rendered format
+  and belongs to the mounted surface generation.
+
+The initial background contract accepts `transparent`, a validated solid CSS
+color, or `match`. With `match`, the trusted modifier reads the attached
+surface root's computed solid `background-color` and publishes only the
+canonical color value. Gradients, images, CSS variables, selectors, and
+URL-bearing values never cross the boundary. If the root has no opaque solid
+background, the Host keeps its ordinary container background.
+
+This is intentionally not body cloning. Cloning DOM or CSS would duplicate
+layout and asset behavior, cannot work across the intended unique iframe
+origins, and would expose far more structure than placement requires. The
+surface message carries one bounded presentation value and is revoked with the
+surface generation.
 
 `surfaceStyle` accepts a property bag, not arbitrary CSS text. The Host
 allowlists properties and validates each value. URL-bearing properties,
@@ -131,19 +156,20 @@ arguments and actions cross the boundary.
 
 ## Capability catalog
 
-| Capability           | Replaces                                                | Authority retained by Host                         |
-| -------------------- | ------------------------------------------------------- | -------------------------------------------------- |
-| `surface-root`       | ad hoc root discovery and DOM identity                  | surface id, generation, containment, teardown      |
-| `surface-lifecycle`  | lifecycle-only `ember-modifier` callbacks               | insertion/removal and cleanup invocation           |
-| `surface-observe`    | `ResizeObserver`, `IntersectionObserver`                | observer object, target element, throttling        |
-| `surface-focus`      | `element.focus()`, `scrollIntoView()`                   | focus target validation and focus policy           |
-| `surface-pointer`    | pointer listeners, pointer capture, drag modifiers      | live events/elements, capture, coalescing          |
-| `surface-style`      | dynamic `style={{...}}`, direct style mutation          | property/value validation and application          |
-| `surface-transition` | `viewTransitionName`, document transitions              | namespacing and transition lifecycle               |
-| `surface-schedule`   | `window.setTimeout`, `setInterval`, task delays         | timers, cancellation, quotas                       |
-| `surface-clipboard`  | `navigator.clipboard`                                   | permission and user-activation checks              |
-| `surface-haptics`    | `navigator.vibrate`                                     | availability, duration limits, user policy         |
-| `surface-slot`       | portals and `document.querySelector()` into Host chrome | Host layout, slot allowlist, contribution lifetime |
+| Capability             | Replaces                                                | Authority retained by Host                         |
+| ---------------------- | ------------------------------------------------------- | -------------------------------------------------- |
+| `surface-root`         | ad hoc root discovery and DOM identity                  | surface id, generation, containment, teardown      |
+| `surface-lifecycle`    | lifecycle-only `ember-modifier` callbacks               | insertion/removal and cleanup invocation           |
+| `surface-observe`      | `ResizeObserver`, `IntersectionObserver`                | observer object, target element, throttling        |
+| `surface-focus`        | `element.focus()`, `scrollIntoView()`                   | focus target validation and focus policy           |
+| `surface-pointer`      | pointer listeners, pointer capture, drag modifiers      | live events/elements, capture, coalescing          |
+| `surface-style`        | dynamic `style={{...}}`, direct style mutation          | property/value validation and application          |
+| `surface-presentation` | Host container color and other placement presentation   | bounded values for Host-owned chrome and backdrop  |
+| `surface-transition`   | `viewTransitionName`, document transitions              | namespacing and transition lifecycle               |
+| `surface-schedule`     | `window.setTimeout`, `setInterval`, task delays         | timers, cancellation, quotas                       |
+| `surface-clipboard`    | `navigator.clipboard`                                   | permission and user-activation checks              |
+| `surface-haptics`      | `navigator.vibrate`                                     | availability, duration limits, user policy         |
+| `surface-slot`         | portals and `document.querySelector()` into Host chrome | Host layout, slot allowlist, contribution lifetime |
 
 Network, persistence, Realm queries, AI proxy requests, and commands are not
 surface capabilities. They remain separate data capabilities because their
@@ -222,12 +248,13 @@ export class ImmersiveScene extends CardDef {
 }
 ```
 
-`prefersFullSandbox` is a static, literal descriptor captured without executing
-the card. It always means “run my authored renderer in an origin-isolated
-iframe,” even when source analysis would otherwise allow SES. Despite the word
-`prefers`, the Host treats `true` as a guarantee. If the requested format cannot
-be hosted in an iframe, the Host fails closed or renders a trusted Base
-fallback; it must not silently run the authored renderer in SES.
+`prefersFullSandbox` is strict per-CardDef metadata captured by the compartment
+introspection boundary. For iframe-capable authored formats (`isolated`,
+`embedded`, and `edit`), it means “run my renderer in an origin-isolated
+iframe,” even when source analysis would otherwise allow SES. Dense formats
+that intentionally cannot compose as iframe pills (`fitted`, `atom`, `head`,
+and `markdown`) retain their existing confined Capsule or trusted Base fallback
+path.
 
 This descriptor is deliberately asymmetric. A card can ask for more isolation,
 but `false` cannot weaken a decision made by source analysis, trusted package

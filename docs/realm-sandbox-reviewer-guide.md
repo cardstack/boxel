@@ -241,13 +241,30 @@ The Loader itself supports a `moduleDelegate`. The important property is not
 just caching performance: all realms see the intended Base class/function
 identity while user modules remain in their own graph and evaluator.
 
-### Why targeted invalidation matters
+### Loader separation is required; targeted invalidation is an optimization
 
-Replacing a realm Loader after every source change destroys unrelated module
-state and makes Workspace cards, Base templates, galleries, and other realms
-pay for a local edit. Targeted invalidation invalidates the changed module and
-its known consumers in the relevant graph. Trusted Base loaders remain immune
-to user-source churn.
+The important isolation property is the plural Loader topology. Replacing a
+user or preview Loader cannot replace the app-wide trusted Base Loader or a
+different realm's Loader. Therefore official Workspace/Base code does not need
+targeted invalidation to remain immune to user-source churn. A private Loader
+owned by one volatile preview graph may be discarded wholesale without
+affecting those trusted modules.
+
+This branch additionally implements targeted invalidation because its
+canonical SES runtime is shared per principal and its ordinary trusted-realm
+Loader is shared per trusted realm. Replacing either shared Loader for every
+source change would discard unrelated same-principal module state, warm
+templates, and long-running cards. The current implementation instead
+invalidates the changed module and its known consumers within the affected
+graph. That is a performance and continuity improvement over `main`, not the
+mechanism that protects Base or unrelated realms.
+
+Another valid architecture would retire the whole affected user-Loader
+generation, route new/affected consumers to a replacement, and retain the old
+generation until its existing consumers release it. That trades dependency-
+targeted cache mutation for generation/lifetime management; it is not
+automatically simpler. The invariant to review is blast-radius containment,
+not that every implementation must expose `invalidateModule()`.
 
 The implementation walks the dependencies already known to that Loader and
 removes only the affected cache keys:
@@ -280,7 +297,8 @@ invalidateModule(moduleIdentifier: string): number {
   evaluator without changing import semantics?
 - Is trusted Base identity delegated rather than copied into every realm?
 - Can a user-module invalidation reach Base or a different realm?
-- Does targeted invalidation include the changed module's actual consumers?
+- When a Loader is shared by multiple active user modules, does its update
+  strategy refresh actual consumers without remounting unrelated cards?
 
 Do not continue until the answers are clear. Every later layer relies on this
 separation.
@@ -461,6 +479,41 @@ purpose. `createFromSerialized` accepts an explicit definition Loader so
 materialization does not silently select the host's Loader. The branch also
 distinguishes host-record materialization from realm-execution materialization.
 
+Canonical ownership must not be confused with sandbox visibility. A sandboxed
+card must never receive the Store's ambient authority merely because the Store
+can see the user's data. Every sandbox-originated load, search, relationship
+hydration, and mutation needs to be evaluated through a scoped Store facade
+bound to an immutable sandbox execution identity and an explicit access grant.
+The effective authority is always an intersection:
+
+```text
+user authority
+  ∩ app/sandbox policy
+  ∩ explicitly granted cards or relationship roots
+  ∩ allowed operation (read, search, or write)
+```
+
+An app may receive an installation-level grant for its own realm. Access to a
+small subset of another realm should use a Host-owned chooser, analogous to
+iOS's selected-photos permission: the card asks the Host to select content,
+the user chooses exact cards or resources, and the Host records a revocable
+grant before returning inert links or opaque handles. Guessing a URL, receiving
+a relationship, or knowing a card id must not mint authority to the target
+realm, reverse relationships, or global search.
+
+The execution identity is not the iframe origin, a realm URL, or
+`prefersFullSandbox` alone. It needs to bind the current user session, app or
+module identity, app installation/grant, and sandbox instance (or another
+equally strong stable principal). The Host attaches that identity to Store and
+broker requests; card code must not be able to construct or edit it. Search
+filtering must happen in the Store/query path before results, counts, or
+relationship objects are materialized—not as a UI post-filter.
+
+This scoped Store authorization layer is a required follow-up. The current
+boundary deliberately omits the live Store and broad query helpers from user
+Capsules and iframe children, but that omission is not a complete authorization
+model for future app-scoped data access.
+
 This is why “one Store” and “multiple module runtimes” are compatible:
 
 ```text
@@ -468,7 +521,9 @@ realm document -> canonical Store record
                          |
                          +-> trusted host materialization
                          |
-                         +-> opaque state -> principal runtime materialization
+                         +-> scoped grant -> opaque state
+                                                |
+                                                +-> principal runtime materialization
 ```
 
 ### Delegated rendering
@@ -520,6 +575,12 @@ child is evaluated.
 - Does delegated child rendering preserve the child's own realm boundary?
 - Can the Store continue to reconcile relationships and updates without a
   parallel sandbox data store?
+- Does every sandbox-originated Store entry point carry an immutable execution
+  identity and an operation-specific grant?
+- Can a guessed URL, relationship traversal, result count, or reverse lookup
+  reveal anything outside that grant?
+- Is the grant intersected with the user's current authority, revocable, and
+  unable to amplify permissions?
 
 ## 6. Layer four: reconstruct rendering in the trusted host
 
