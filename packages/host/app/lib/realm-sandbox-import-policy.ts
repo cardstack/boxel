@@ -87,11 +87,14 @@ export const trustedSandboxPresentationSpecifierPrefixes = [
 ] as const;
 
 export const trustedSandboxRuntimeSpecifiers = [
+  '@ember/component',
   '@ember/object',
   '@ember/helper',
   '@ember/modifier',
   '@ember/component/template-only',
+  '@ember/template-factory',
   'ember-provide-consume-context',
+  '@glimmer/component',
   '@glimmer/tracking',
   '@ember/template',
   '@cardstack/runtime-common',

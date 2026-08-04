@@ -365,6 +365,41 @@ module('Unit | realm compartment module runtime', function () {
     );
   });
 
+  test('evaluates Base enumField specializations without executing the trusted Base module', async function (assert) {
+    let moduleID = 'https://realm.example/cards/proposal.gts';
+    let source = await transpileJS(
+      `
+        import StringField from 'https://cardstack.com/base/string';
+        import enumField from 'https://cardstack.com/base/enum';
+        import { CardDef, contains, field } from 'https://cardstack.com/base/card-api';
+
+        const StatusField = enumField(StringField, {
+          options: ['draft', 'sent', 'completed'],
+        });
+
+        export class Proposal extends CardDef {
+          @field status = contains(StatusField);
+        }
+      `,
+      '/proposal.gts',
+    );
+    let runtime = runtimeFor({ [moduleID]: source });
+
+    let metadata = await runtime.evaluateCardTypeMetadata(moduleID, 'Proposal');
+
+    assert.deepEqual(
+      JSON.parse(JSON.stringify(metadata.fields.status)),
+      {
+        kind: 'contains',
+        type: {
+          module: 'https://cardstack.com/base/string',
+          name: 'default',
+        },
+      },
+      'the anonymous enum specialization retains the trusted primitive field identity',
+    );
+  });
+
   test('evaluates nested and chained computeVia fields into an opaque JSON projection', async function (assert) {
     let moduleID = 'https://realm.example/cards/flight-plan.gts';
     let source = await transpileJS(

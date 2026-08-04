@@ -46,6 +46,22 @@ module('Unit | realm sandbox import policy', function () {
   test('canonicalizes transpiled package fake-origin imports', function (assert) {
     assert.strictEqual(
       trustedSandboxImportIdentity(
+        'https://packages/@glimmer/component',
+        (specifier) => specifier,
+      ),
+      '@glimmer/component',
+      'a compiler-emitted Glimmer component import maps to its explicit safe shim',
+    );
+    assert.strictEqual(
+      trustedSandboxImportIdentity(
+        'https://packages/@ember/template-factory',
+        (specifier) => specifier,
+      ),
+      '@ember/template-factory',
+      'a compiler-emitted template factory import maps to its explicit safe shim',
+    );
+    assert.strictEqual(
+      trustedSandboxImportIdentity(
         'https://packages/@ember/template',
         (specifier) => specifier,
       ),

@@ -17,9 +17,12 @@ import {
   GetCardContextName,
   GetCardsContextName,
   GetCardCollectionContextName,
+  PermissionsContextName,
   type getCard,
   type getCards,
   type getCardCollection,
+  type LooseSingleCardDocument,
+  type Permissions,
 } from '@cardstack/runtime-common';
 
 import HeadFormatPreview from '@cardstack/host/components/head-format-preview';
@@ -64,6 +67,8 @@ export default class CardRenderer extends Component<Signature> {
   @consume(CardContextName) declare private cardContext: CardContext;
   @consume(CardCrudFunctionsContextName)
   declare private cardCrudFunctions: CardCrudFunctions | undefined;
+  @consume(PermissionsContextName)
+  declare private permissions: Permissions | undefined;
   @consume(CodePreviewSandboxContextName)
   declare private codePreviewSandbox: CodePreviewSandbox | undefined;
   private interactivePreview = interactiveCodePreview(this, () => ({
@@ -108,6 +113,8 @@ export default class CardRenderer extends Component<Signature> {
         @format={{@format}}
         @sandbox={{this.iframeSandboxRender}}
         @displayContainer={{@displayContainer}}
+        @canWrite={{this.iframeCanWrite}}
+        @onCardDocumentUpdate={{this.applyIframeCardDocumentUpdate}}
         ...attributes
       />
     {{else if this.hasSandboxRenderSlots}}
@@ -350,6 +357,30 @@ export default class CardRenderer extends Component<Signature> {
   get viewCard() {
     return this.args.viewCard ?? this.cardCrudFunctions?.viewCard;
   }
+
+  get iframeCanWrite() {
+    return this.permissions?.canWrite === true;
+  }
+
+  readonly applyIframeCardDocumentUpdate = async (
+    document: LooseSingleCardDocument,
+  ) => {
+    if (this.permissions?.canWrite !== true) {
+      throw new Error('This realm is read-only');
+    }
+    let cardID = this.cardURL;
+    if (!cardID || document.data.id !== cardID) {
+      throw new Error('Iframe card update identity does not match');
+    }
+    let updated = await this.realmSandbox.updateOpaqueCardFromDocument(
+      this.args.card,
+      document,
+    );
+    if (!updated) {
+      throw new Error('Iframe card update was rejected');
+    }
+    await this.cardContext.store.save(cardID);
+  };
 
   get useTrustedBaseTemplate() {
     return Boolean(

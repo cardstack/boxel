@@ -107,6 +107,22 @@ const iframeGlobalSignals = [
   'window',
 ] as const;
 
+// Browser authority is often hidden behind a value whose DOM type appears
+// only in TypeScript syntax. `canvas.getContext()` is the canonical example:
+// stripping the `HTMLCanvasElement` annotation must not make the executable
+// member call look SES-compatible. Keep this list deliberately narrow. Each
+// method below either acquires a browser rendering capability or depends on a
+// live document-owned element in a way that our data-only SES shims cannot
+// reproduce.
+const iframeDOMMethodSignals = [
+  'getContext',
+  'requestPointerLock',
+  'setPointerCapture',
+  'showModal',
+  'toBlob',
+  'toDataURL',
+] as const;
+
 let lexerReady = Promise.resolve(init);
 
 function analyzeEmbeddedTemplates(source: string): {
@@ -263,21 +279,85 @@ function executableBrowserGlobals(source: string): string[] {
     // or `as HTMLElement` assertion does not request browser authority. Strip
     // type-only syntax before deciding whether the module needs an iframe.
     // We only pay for this parse when a possible browser global was found.
-    let executableSource = babel.transformSync(source, {
+    let unboundBrowserGlobals = new Set<string>();
+    let collectUnboundBrowserGlobals: babel.PluginObj = {
+      visitor: {
+        ReferencedIdentifier(path) {
+          let name = path.node.name;
+          if (
+            iframeGlobalSignals.includes(
+              name as (typeof iframeGlobalSignals)[number],
+            ) &&
+            !path.scope.hasBinding(name)
+          ) {
+            unboundBrowserGlobals.add(name);
+          }
+        },
+      },
+    };
+    babel.transformSync(source, {
       filename: 'sandbox-card.ts',
       babelrc: false,
       configFile: false,
       compact: true,
-      plugins: [[typescriptPlugin, { allowDeclareFields: true }]],
+      plugins: [
+        [typescriptPlugin, { allowDeclareFields: true }],
+        collectUnboundBrowserGlobals,
+      ],
       parserOpts: { plugins: ['decorators-legacy'] },
-    })?.code;
-    return executableSource
-      ? usedBrowserGlobals(executableSource)
-      : possibleSignals;
+    });
+    return iframeGlobalSignals.filter((signal) =>
+      unboundBrowserGlobals.has(signal),
+    );
   } catch {
     // Classification is a security boundary. Unknown or incomplete syntax
     // keeps the conservative result instead of silently gaining SES access.
     return possibleSignals;
+  }
+}
+
+function executableDOMMethodCalls(source: string): string[] {
+  let possibleSignals = iframeDOMMethodSignals.filter((method) =>
+    new RegExp(`\\.${method}\\s*\\(`).test(source),
+  );
+  if (possibleSignals.length === 0) {
+    return [];
+  }
+
+  try {
+    let calls = new Set<string>();
+    let collectCalls: babel.PluginObj = {
+      visitor: {
+        CallExpression(path) {
+          let callee = path.node.callee;
+          if (
+            babel.types.isMemberExpression(callee) &&
+            !callee.computed &&
+            babel.types.isIdentifier(callee.property) &&
+            iframeDOMMethodSignals.includes(
+              callee.property.name as (typeof iframeDOMMethodSignals)[number],
+            )
+          ) {
+            calls.add(callee.property.name);
+          }
+        },
+      },
+    };
+    babel.transformSync(source, {
+      filename: 'sandbox-card.ts',
+      babelrc: false,
+      configFile: false,
+      compact: true,
+      plugins: [[typescriptPlugin, { allowDeclareFields: true }], collectCalls],
+      parserOpts: { plugins: ['decorators-legacy'] },
+    });
+    return iframeDOMMethodSignals
+      .filter((method) => calls.has(method))
+      .map((method) => `dom-method:${method}`);
+  } catch {
+    // As with unbound globals, ambiguous executable syntax fails toward the
+    // stronger process boundary instead of silently receiving SES access.
+    return possibleSignals.map((method) => `dom-method:${method}`);
   }
 }
 
@@ -328,10 +408,12 @@ export async function classifyCardSourceForSandbox(
     .map(iframeImportSignal)
     .filter((signal): signal is string => Boolean(signal));
   let globalSignals = executableBrowserGlobals(javascript);
+  let domMethodSignals = executableDOMMethodCalls(javascript);
   let signals = [
     ...new Set([
       ...importSignals,
       ...globalSignals,
+      ...domMethodSignals,
       ...(dynamicInlineStyle ? ['dynamic-inline-style'] : []),
       ...(topLayerAttribute ? ['top-layer-markup'] : []),
       ...(unscopedStyle ? ['unscoped-style'] : []),
@@ -339,6 +421,7 @@ export async function classifyCardSourceForSandbox(
   ];
   let propagatesToImporters =
     importSignals.length > 0 ||
+    domMethodSignals.length > 0 ||
     dynamicInlineStyle ||
     topLayerAttribute ||
     unscopedStyle;

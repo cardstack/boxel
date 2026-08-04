@@ -12,6 +12,7 @@ export interface RealmIframeSandboxConnect {
   draft?: RealmIframeSandboxDraft;
   rootModuleURL: string;
   presentation: RealmIframeSandboxPresentation;
+  canWrite: boolean;
 }
 
 export interface RealmIframeSandboxPresentation {
@@ -92,16 +93,36 @@ export interface RealmIframeSandboxFetchResponse {
   error?: string;
 }
 
+// The child never receives Store, realm credentials, or a write-capable
+// fetch. It can only propose a fully data-only serialization of the card it
+// is already rendering. The parent revalidates identity and permission before
+// applying it to the canonical Store record.
+export interface RealmIframeSandboxCardUpdate {
+  protocol: typeof realmIframeSandboxProtocol;
+  type: 'card-update';
+  revision: number;
+  document: LooseSingleCardDocument;
+}
+
+export interface RealmIframeSandboxCardUpdateResult {
+  protocol: typeof realmIframeSandboxProtocol;
+  type: 'card-update-result';
+  revision: number;
+  error?: string;
+}
+
 export type RealmIframeSandboxOutbound =
   | RealmIframeSandboxListening
   | RealmIframeSandboxReady
   | RealmIframeSandboxResize
-  | RealmIframeSandboxFetchRequest;
+  | RealmIframeSandboxFetchRequest
+  | RealmIframeSandboxCardUpdate;
 
 export type RealmIframeSandboxInbound =
   | RealmIframeSandboxFetchResponse
   | RealmIframeSandboxDraft
-  | RealmIframeSandboxRenderUpdate;
+  | RealmIframeSandboxRenderUpdate
+  | RealmIframeSandboxCardUpdateResult;
 
 export function isRealmIframeSandboxConnect(
   value: unknown,
@@ -114,6 +135,7 @@ export function isRealmIframeSandboxConnect(
     message.protocol === realmIframeSandboxProtocol &&
     message.type === 'connect' &&
     boundedString(message.rootModuleURL, 8_192) &&
+    typeof message.canWrite === 'boolean' &&
     isRealmIframeSandboxPresentation(message.presentation)
   );
 }
@@ -146,6 +168,11 @@ export function isRealmIframeSandboxInbound(
         optionalBoundedString(message.error, 8_192) &&
         (message.response === undefined ||
           isIframeFetchResponse(message.response))
+      );
+    case 'card-update-result':
+      return (
+        safeRevision(message.revision) &&
+        optionalBoundedString(message.error, 8_192)
       );
     default:
       return false;
@@ -184,6 +211,11 @@ export function isRealmIframeSandboxOutbound(
         boundedString(message.url, 8_192) &&
         isIframeFetchInit(message.init)
       );
+    case 'card-update':
+      return (
+        safeRevision(message.revision) &&
+        isBoundedCardDocument(message.document)
+      );
     default:
       return false;
   }
@@ -217,6 +249,34 @@ function optionalBoundedString(
 
 function finiteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
+}
+
+function safeRevision(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+}
+
+function isBoundedCardDocument(
+  value: unknown,
+): value is LooseSingleCardDocument {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  let document = value as Record<string, unknown>;
+  if (typeof document.data !== 'object' || document.data === null) {
+    return false;
+  }
+  let data = document.data as Record<string, unknown>;
+  if (
+    data.type !== 'card' ||
+    (data.id !== undefined && !boundedString(data.id, 8_192))
+  ) {
+    return false;
+  }
+  try {
+    return JSON.stringify(value).length <= 2_000_000;
+  } catch {
+    return false;
+  }
 }
 
 function isIframeFetchInit(

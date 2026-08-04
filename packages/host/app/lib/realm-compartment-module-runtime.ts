@@ -488,6 +488,7 @@ export default class RealmCompartmentModuleRuntime {
     name: 'CardCrudFunctionsContext',
   });
   private cardAPIRuntimeFacade!: Record<string, unknown>;
+  private enumFieldRuntimeFacade!: Record<string, unknown>;
   private inertHostCommandFacades = new Map<string, Record<string, unknown>>();
   private trustedExports = new Map<string, object>();
   private fieldMetadataByPrototype = new WeakMap<
@@ -941,8 +942,10 @@ export default class RealmCompartmentModuleRuntime {
         }
         let facade = this.isCardAPIImport(trustedIdentity)
           ? this.cardAPIRuntimeFacade
-          : (this.explicitRuntimeFacades.get(trustedIdentity) ??
-            this.trustedModuleFacade(trustedIdentity));
+          : this.isBaseEnumImport(trustedIdentity)
+            ? this.enumFieldRuntimeFacade
+            : (this.explicitRuntimeFacades.get(trustedIdentity) ??
+              this.trustedModuleFacade(trustedIdentity));
         this.loader.shimModule(dependency, facade);
       }
     }
@@ -980,6 +983,20 @@ export default class RealmCompartmentModuleRuntime {
     }
     try {
       return /\/card-api(?:\.gts)?$/.test(new URL(moduleIdentifier).pathname);
+    } catch {
+      return false;
+    }
+  }
+
+  private isBaseEnumImport(moduleIdentifier: string): boolean {
+    if (
+      moduleIdentifier === '@cardstack/base/enum' ||
+      moduleIdentifier === 'https://cardstack.com/base/enum'
+    ) {
+      return true;
+    }
+    try {
+      return /\/enum(?:\.gts)?$/.test(new URL(moduleIdentifier).pathname);
     } catch {
       return false;
     }
@@ -1056,6 +1073,7 @@ export default class RealmCompartmentModuleRuntime {
       '@cardstack/base/card-api',
       this.cardAPIRuntimeFacade,
     );
+    this.enumFieldRuntimeFacade = this.enumFieldFacade();
     this.installExplicitRuntimeFacade(
       '@glimmer/component',
       Object.freeze({ default: this.componentBase() }),
@@ -1142,6 +1160,72 @@ export default class RealmCompartmentModuleRuntime {
       getMenuItems,
       realmURL,
       searchEntryWireQueryFromQuery: sandboxSearchEntryWireQueryFromQuery,
+    });
+  }
+
+  private enumFieldFacade() {
+    let normalizeOptions = (rawOptions: unknown[]) =>
+      (rawOptions ?? []).map((option) =>
+        option && typeof option === 'object' && 'value' in option
+          ? option
+          : Object.freeze({ value: option, label: String(option) }),
+      );
+    let enumField = (
+      Base: unknown,
+      config: {
+        options?: unknown;
+        defaultOptions?: unknown[];
+        displayName?: string;
+        icon?: unknown;
+      } = {},
+    ) => {
+      if (typeof Base !== 'function') {
+        throw new Error('enumField requires a FieldDef constructor');
+      }
+      let BaseField = Base as new (...args: unknown[]) => object;
+      class SandboxEnumField extends BaseField {
+        static configuration =
+          typeof config.options === 'function'
+            ? function (this: unknown) {
+                return {
+                  enum: {
+                    options: (
+                      config.options as (this: unknown) => unknown
+                    ).call(this),
+                  },
+                };
+              }
+            : Object.freeze({ enum: { options: config.options } });
+        static defaultOptions =
+          typeof config.options === 'function' &&
+          Array.isArray(config.defaultOptions) &&
+          config.defaultOptions.length > 0
+            ? config.defaultOptions
+            : undefined;
+        static displayName =
+          config.displayName ??
+          (Base as unknown as { displayName?: unknown }).displayName;
+        static icon =
+          config.icon ?? (Base as unknown as { icon?: unknown }).icon;
+      }
+      let identity =
+        this.trustedExportByValue.get(Base) ?? this.loader.identify(Base);
+      if (identity) {
+        // enumField creates an anonymous presentation specialization. Its
+        // persisted field type remains the trusted Base FieldDef while the
+        // compartment retains the enum configuration for authored logic.
+        this.trustedExportByValue.set(SandboxEnumField, identity);
+      }
+      return SandboxEnumField;
+    };
+    return Object.freeze({
+      default: enumField,
+      enumAllowedValues: (rawOptions: unknown[]) =>
+        normalizeOptions(rawOptions).map(
+          (option) => (option as { value: unknown }).value,
+        ),
+      enumConfig: (input: unknown) => input,
+      normalizeEnumOptions: normalizeOptions,
     });
   }
 
@@ -1964,11 +2048,14 @@ function defaultTrustedImport(moduleIdentifier: string): boolean {
     return false;
   }
   return (
+    moduleIdentifier === '@ember/component' ||
     moduleIdentifier === '@ember/object' ||
     moduleIdentifier === '@ember/helper' ||
     moduleIdentifier === '@ember/modifier' ||
     moduleIdentifier === '@ember/component/template-only' ||
+    moduleIdentifier === '@ember/template-factory' ||
     moduleIdentifier === 'ember-provide-consume-context' ||
+    moduleIdentifier === '@glimmer/component' ||
     moduleIdentifier === '@glimmer/tracking' ||
     moduleIdentifier === '@cardstack/runtime-common' ||
     moduleIdentifier.startsWith('https://cardstack.com/base/') ||

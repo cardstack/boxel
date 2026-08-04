@@ -52,6 +52,37 @@ module('Unit | realm sandbox source policy', function () {
     assert.deepEqual(result.signals, []);
   });
 
+  test('executable canvas and pointer methods select an iframe even when DOM names are type-only', async function (assert) {
+    let source = `
+      export class SignMaker {
+        canvas?: HTMLCanvasElement;
+        draw(canvas: HTMLCanvasElement, event: PointerEvent) {
+          canvas.setPointerCapture(event.pointerId);
+          canvas.getContext('2d')?.fillRect(0, 0, 10, 10);
+          return canvas.toDataURL('image/png');
+        }
+      }
+    `;
+    let authored = await classifyCardSourceForSandbox(source);
+
+    assert.strictEqual(authored.tier, 'iframe');
+    assert.deepEqual(authored.signals, [
+      'dom-method:getContext',
+      'dom-method:setPointerCapture',
+      'dom-method:toDataURL',
+    ]);
+    assert.true(
+      authored.propagatesToImporters,
+      'an imported canvas implementation carries its iframe requirement',
+    );
+
+    let compiled = await classifyCardSourceForSandbox(
+      await transpileJS(source, '/sign-maker.gts'),
+    );
+    assert.strictEqual(compiled.tier, 'iframe');
+    assert.deepEqual(compiled.signals, authored.signals);
+  });
+
   test('runtime DOM references still select an iframe when the module also has DOM types', async function (assert) {
     let result = await classifyCardSourceForSandbox(`
       interface Signature {
@@ -64,6 +95,18 @@ module('Unit | realm sandbox source policy', function () {
 
     assert.strictEqual(result.tier, 'iframe');
     assert.deepEqual(result.signals, ['HTMLElement']);
+  });
+
+  test('locally bound browser-named data does not select an iframe', async function (assert) {
+    let result = await classifyCardSourceForSandbox(`
+      export function readToolResult(source: string) {
+        let document = JSON.parse(source);
+        return document.title;
+      }
+    `);
+
+    assert.strictEqual(result.tier, 'compartment');
+    assert.deepEqual(result.signals, []);
   });
 
   test('Three.js imports select the isolated iframe', async function (assert) {

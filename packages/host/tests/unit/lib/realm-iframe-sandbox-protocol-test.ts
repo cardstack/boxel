@@ -2,6 +2,7 @@ import { module, test } from 'qunit';
 
 import {
   iframeFetchResponseLimitBytes,
+  isRealmIframeSandboxConnect,
   isRealmIframeSandboxInbound,
   isRealmIframeSandboxOutbound,
   realmIframeSandboxProtocol,
@@ -9,6 +10,16 @@ import {
 
 module('Unit | realm iframe sandbox protocol', function () {
   test('accepts well-formed renderer messages', function (assert) {
+    assert.true(
+      isRealmIframeSandboxConnect({
+        protocol: realmIframeSandboxProtocol,
+        type: 'connect',
+        rootModuleURL: 'https://realm.example/card.gts',
+        canWrite: true,
+        presentation: { format: 'edit', displayContainer: true },
+      }),
+      'write permission is an explicit capability bit on connect',
+    );
     assert.true(
       isRealmIframeSandboxInbound({
         protocol: realmIframeSandboxProtocol,
@@ -70,9 +81,47 @@ module('Unit | realm iframe sandbox protocol', function () {
       }),
       'a renderer can publish bounded inert type presentation',
     );
+    assert.true(
+      isRealmIframeSandboxOutbound({
+        protocol: realmIframeSandboxProtocol,
+        type: 'card-update',
+        revision: 1,
+        document: {
+          data: {
+            type: 'card',
+            id: 'https://realm.example/Card/sample',
+            attributes: { rating: 4 },
+            meta: {
+              adoptsFrom: {
+                module: 'https://realm.example/card.gts',
+                name: 'Card',
+              },
+            },
+          },
+        },
+      }),
+      'a bounded data-only card update may leave the child',
+    );
+    assert.true(
+      isRealmIframeSandboxInbound({
+        protocol: realmIframeSandboxProtocol,
+        type: 'card-update-result',
+        revision: 1,
+      }),
+      'the Host can acknowledge a persisted update',
+    );
   });
 
   test('rejects malformed and oversized renderer messages', function (assert) {
+    assert.false(
+      isRealmIframeSandboxConnect({
+        protocol: realmIframeSandboxProtocol,
+        type: 'connect',
+        rootModuleURL: 'https://realm.example/card.gts',
+        presentation: { format: 'edit', displayContainer: true },
+      }),
+      'connect cannot omit the Host permission decision',
+    );
     assert.false(
       isRealmIframeSandboxInbound({
         protocol: realmIframeSandboxProtocol,
@@ -151,6 +200,21 @@ module('Unit | realm iframe sandbox protocol', function () {
         },
       }),
       'type presentation strings are bounded',
+    );
+    assert.false(
+      isRealmIframeSandboxOutbound({
+        protocol: realmIframeSandboxProtocol,
+        type: 'card-update',
+        revision: 1,
+        document: {
+          data: {
+            type: 'card',
+            id: 'https://realm.example/Card/other',
+            attributes: { body: 'x'.repeat(2_000_001) },
+          },
+        },
+      }),
+      'card update documents are bounded',
     );
   });
 });

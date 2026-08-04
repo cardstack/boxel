@@ -1,0 +1,31 @@
+{
+  "$schema": "https://raw.githubusercontent.com/cloudflare/workers-sdk/main/packages/wrangler/config-schema.json",
+  "name": "boxel-sandbox-renderer-staging",
+  "main": "src/index.js",
+  "compatibility_date": "2026-08-04",
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [
+    {
+      "pattern": "boxelusercontent.dev",
+      "custom_domain": true,
+    },
+    {
+      "pattern": "*.boxelusercontent.dev/*",
+      "zone_name": "boxelusercontent.dev",
+    },
+  ],
+  "assets": {
+    "directory": "../dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": true,
+  },
+  "vars": {
+    "ALLOWED_PARENT_ORIGINS": "https://boxel-host-staging.stack.cards,https://*.boxel-host-preview.stack.cards,https://localhost:*",
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+  },
+}

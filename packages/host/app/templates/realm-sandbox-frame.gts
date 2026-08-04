@@ -11,9 +11,11 @@ import { safeModifier } from '@cardstack/boxel-ui/modifiers';
 
 import {
   CardContextName,
+  PermissionsContextName,
   SupportedMimeType,
   type Loader,
   type LooseSingleCardDocument,
+  type Permissions,
 } from '@cardstack/runtime-common';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
@@ -26,6 +28,7 @@ import RealmIframeMediaBridge from '@cardstack/host/lib/realm-iframe-media-bridg
 import {
   isRealmIframeSandboxInbound,
   isRealmIframeSandboxConnect,
+  isRealmIframeSandboxOutbound,
   realmIframeSandboxProtocol,
   type RealmIframeSandboxInbound,
   type RealmIframeSandboxDraft,
@@ -37,7 +40,12 @@ import type { RealmSandboxFrameModel } from '@cardstack/host/routes/realm-sandbo
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import type * as CardAPI from '@cardstack/base/card-api';
-import type { BaseDef, CardContext, Field } from '@cardstack/base/card-api';
+import type {
+  BaseDef,
+  CardContext,
+  CardDef,
+  Field,
+} from '@cardstack/base/card-api';
 
 interface Signature {
   Args: { model: RealmSandboxFrameModel };
@@ -66,11 +74,14 @@ class RealmSandboxFrame extends Component<Signature> {
   @tracked private error?: string;
   @tracked private showLoadingMessage = false;
   @tracked private presentation?: RealmIframeSandboxPresentation;
+  @tracked private canWrite = false;
+  @tracked private writeError?: string;
 
   private port?: MessagePort;
   private loader?: Loader;
   private fetchSequence = 0;
   private pendingFetches = new Map<string, PendingFetch>();
+  private inFlightBrokerFetches = new Map<string, Promise<Response>>();
   private compiledDrafts = new WeakMap<
     RealmIframeSandboxDraft,
     Promise<string>
@@ -82,11 +93,21 @@ class RealmSandboxFrame extends Component<Signature> {
   private mediaBridge?: RealmIframeMediaBridge;
   private latestDraftRevision = -1;
   private pendingDraft = Promise.resolve();
+  @tracked private cardUpdateRevision = 0;
+  @tracked private appliedCardUpdateRevision = -1;
+  private pendingCardUpdateFrame?: number;
+  private lastSerializedCard = '';
 
   @provide(CardContextName)
   // @ts-ignore "context is declared but not used"
   private get context(): CardContext {
     return { mode: 'host', submode: 'host' } as CardContext;
+  }
+
+  @provide(PermissionsContextName)
+  // @ts-ignore "permissions is declared but not used"
+  private get permissions(): Permissions {
+    return { canRead: true, canWrite: this.canWrite };
   }
 
   connect = modifier((element: HTMLElement) => {
@@ -128,6 +149,7 @@ class RealmSandboxFrame extends Component<Signature> {
       globalThis.removeEventListener('message', acceptCapabilityPort);
       this.port.addEventListener('message', this.receive);
       this.port.start();
+      this.canWrite = event.data.canWrite;
       heightService.start();
       this.mediaBridge = new RealmIframeMediaBridge(
         element,
@@ -146,6 +168,10 @@ class RealmSandboxFrame extends Component<Signature> {
       this.applyPresentation(event.data.presentation);
       void this.loadCard(event.data.document, event.data.draft);
     };
+    let recordCardEdit = () => this.scheduleCardDocumentUpdate();
+    element.addEventListener('input', recordCardEdit);
+    element.addEventListener('change', recordCardEdit);
+    element.addEventListener('click', recordCardEdit);
     globalThis.addEventListener('message', acceptCapabilityPort);
     announceListening();
     return () => {
@@ -165,6 +191,14 @@ class RealmSandboxFrame extends Component<Signature> {
         pending.reject(error);
       }
       this.pendingFetches.clear();
+      this.inFlightBrokerFetches.clear();
+      element.removeEventListener('input', recordCardEdit);
+      element.removeEventListener('change', recordCardEdit);
+      element.removeEventListener('click', recordCardEdit);
+      if (this.pendingCardUpdateFrame != null) {
+        globalThis.cancelAnimationFrame(this.pendingCardUpdateFrame);
+        this.pendingCardUpdateFrame = undefined;
+      }
     };
   });
 
@@ -184,13 +218,6 @@ class RealmSandboxFrame extends Component<Signature> {
   };
 
   private receive = (event: MessageEvent) => {
-    if (event.data?.type === 'fetch-response' && event.data.response) {
-      console.error('Child received iframe fetch response', {
-        valid: isRealmIframeSandboxInbound(event.data),
-        bodyType: event.data.response.body?.constructor?.name,
-        bodyLength: event.data.response.body?.byteLength,
-      });
-    }
     if (!isRealmIframeSandboxInbound(event.data)) {
       return;
     }
@@ -201,6 +228,11 @@ class RealmSandboxFrame extends Component<Signature> {
     }
     if (message.type === 'render') {
       this.applyPresentation(message.presentation);
+      return;
+    }
+    if (message.type === 'card-update-result') {
+      this.appliedCardUpdateRevision = message.revision;
+      this.writeError = message.error;
       return;
     }
     if (
@@ -234,14 +266,86 @@ class RealmSandboxFrame extends Component<Signature> {
     pending.resolve(response);
   };
 
+  private scheduleCardDocumentUpdate() {
+    if (
+      !this.canWrite ||
+      !this.card ||
+      !this.cardAPI ||
+      this.pendingCardUpdateFrame != null
+    ) {
+      return;
+    }
+    this.pendingCardUpdateFrame = globalThis.requestAnimationFrame(() => {
+      this.pendingCardUpdateFrame = undefined;
+      if (!this.card || !this.cardAPI) {
+        return;
+      }
+      try {
+        let document = this.cardAPI.serializeCard(this.card as CardDef, {
+          includeComputeds: false,
+          includeUnrenderedFields: true,
+          useAbsoluteURL: true,
+        });
+        let serialized = JSON.stringify(document);
+        if (serialized === this.lastSerializedCard) {
+          return;
+        }
+        this.lastSerializedCard = serialized;
+        this.writeError = undefined;
+        // `serializeCard()` is JSON-shaped, but individual field values can
+        // still carry realm-local prototypes. Normalize before crossing the
+        // MessagePort so only a deterministic, structured-clone-safe graph
+        // reaches the Host boundary.
+        let plainDocument = JSON.parse(serialized) as LooseSingleCardDocument;
+        let update = {
+          protocol: realmIframeSandboxProtocol,
+          type: 'card-update',
+          revision: ++this.cardUpdateRevision,
+          document: plainDocument,
+        } as const;
+        if (!isRealmIframeSandboxOutbound(update)) {
+          this.writeError = 'Card update failed protocol validation';
+          return;
+        }
+        this.port?.postMessage(update);
+      } catch (error) {
+        this.writeError =
+          error instanceof Error ? error.message : String(error);
+      }
+    });
+  }
+
   private brokerFetch = async (
     input: RequestInfo | URL,
     init?: RequestInit,
   ) => {
     let request = input instanceof Request ? input : new Request(input, init);
-    if (request.headers.get('accept') === 'image/*') {
-      console.error('Child requested iframe image', request.url);
+    let cacheKey = `${request.method}\n${request.url}\n${request.headers.get('accept') ?? ''}`;
+    let existing = this.inFlightBrokerFetches.get(cacheKey);
+    if (existing) {
+      return this.cloneBrokerResponse(await existing);
     }
+    let pending = this.uncachedBrokerFetch(request).finally(() =>
+      this.inFlightBrokerFetches.delete(cacheKey),
+    );
+    this.inFlightBrokerFetches.set(cacheKey, pending);
+    return this.cloneBrokerResponse(await pending);
+  };
+
+  private cloneBrokerResponse(response: Response) {
+    let clone = response.clone();
+    // Response.clone() does not preserve the configurable own `url` property
+    // that our synthetic transport installed. VirtualNetwork may need to
+    // rewrite this URL from a real endpoint back to its RRI alias, so retain a
+    // configurable value on every deduplicated caller response.
+    Object.defineProperty(clone, 'url', {
+      configurable: true,
+      value: response.url,
+    });
+    return clone;
+  }
+
+  private uncachedBrokerFetch = async (request: Request) => {
     let draft = this.activeDraft;
     if (draft && sameCodePreviewModuleURL(request.url, draft.sourceURL)) {
       let compiledSource = this.compiledDrafts.get(draft);
@@ -258,9 +362,6 @@ class RealmSandboxFrame extends Component<Signature> {
     let result = new Promise<Response>((resolve, reject) => {
       this.pendingFetches.set(requestId, { resolve, reject });
     });
-    if (request.headers.get('accept') === 'image/*') {
-      console.error('Child image broker port state', Boolean(this.port));
-    }
     this.post({
       type: 'fetch-request',
       requestId,
@@ -288,20 +389,20 @@ class RealmSandboxFrame extends Component<Signature> {
       this.document = loadedDocument;
       this.latestDraftRevision = draft?.revision ?? -1;
       await this.deserializeCard(loader, loadedDocument);
-      // Let Glimmer commit the authored template, then enqueue declarative
-      // media fetches before `ready`. The parent may react to presentation
-      // metadata by replacing render state, so capability requests discovered
-      // after `ready` could otherwise target a superseded MessagePort.
+      // `ready` means authored Glimmer DOM has committed and interaction can
+      // begin. Declarative media preparation is intentionally non-blocking:
+      // a large image/audio graph must not leave a complete card hidden behind
+      // the Host loading indicator.
       await new Promise<void>((resolve) =>
         globalThis.requestAnimationFrame(() => resolve()),
       );
-      await this.mediaBridge?.refresh();
       this.post({
         type: 'ready',
         cardID: this.args.model.cardID,
         typePresentation: this.typePresentationFor(this.card!),
         ...(draft ? { revision: draft.revision } : {}),
       });
+      void this.mediaBridge?.refresh();
     } catch (error) {
       this.error = error instanceof Error ? error.message : String(error);
       this.post({
@@ -339,6 +440,13 @@ class RealmSandboxFrame extends Component<Signature> {
     this.card = card;
     this.field = field;
     this.error = undefined;
+    this.lastSerializedCard = JSON.stringify(
+      api.serializeCard(card as CardDef, {
+        includeComputeds: false,
+        includeUnrenderedFields: true,
+        useAbsoluteURL: true,
+      }),
+    );
   }
 
   private cardAPI?: typeof CardAPI;
@@ -464,6 +572,9 @@ class RealmSandboxFrame extends Component<Signature> {
     <main
       class={{this.currentPresentation.format}}
       data-realm-sandbox-frame
+      data-card-update-revision={{this.cardUpdateRevision}}
+      data-card-update-applied-revision={{this.appliedCardUpdateRevision}}
+      data-card-can-write={{if this.canWrite 'true' 'false'}}
       {{this.connect}}
       {{safeModifier 'observe-size' this.reportEmbeddedSize}}
     >
@@ -482,6 +593,12 @@ class RealmSandboxFrame extends Component<Signature> {
         </div>
       {{else if this.showLoadingMessage}}
         <div class='realm-sandbox-frame-loading'>Loading sandboxed card…</div>
+      {{/if}}
+      {{#if this.writeError}}
+        <div class='realm-sandbox-frame-write-error' role='alert'>
+          Could not save this card:
+          {{this.writeError}}
+        </div>
       {{/if}}
     </main>
     <style scoped>
@@ -507,6 +624,19 @@ class RealmSandboxFrame extends Component<Signature> {
       }
       .realm-sandbox-frame-error {
         color: #b42318;
+      }
+      .realm-sandbox-frame-write-error {
+        position: sticky;
+        z-index: 2;
+        bottom: 0;
+        box-sizing: border-box;
+        padding: 0.5rem 0.75rem;
+        color: #7a271a;
+        background: #fef3f2;
+        border-top: 1px solid #fecdca;
+        font:
+          0.75rem/1.4 system-ui,
+          sans-serif;
       }
     </style>
   </template>

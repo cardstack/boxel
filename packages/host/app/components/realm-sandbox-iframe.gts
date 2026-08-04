@@ -3,12 +3,20 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import { modifier } from 'ember-modifier';
+import { consume } from 'ember-provide-consume-context';
 
 import {
   CardContainer,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
+
+import {
+  CardContextName,
+  PermissionsContextName,
+  type LooseSingleCardDocument,
+  type Permissions,
+} from '@cardstack/runtime-common';
 
 import {
   isRealmIframeSandboxOutbound,
@@ -18,7 +26,7 @@ import {
 import type { RealmIframeSandboxRender } from '@cardstack/host/services/realm-sandbox';
 import type RealmSandboxService from '@cardstack/host/services/realm-sandbox';
 
-import type { Format } from '@cardstack/base/card-api';
+import type { CardContext, Format } from '@cardstack/base/card-api';
 
 interface Signature {
   Element: HTMLElement;
@@ -26,6 +34,11 @@ interface Signature {
     format?: Format;
     sandbox: RealmIframeSandboxRender;
     displayContainer?: boolean;
+    canWrite?: boolean;
+    onCardDocumentUpdate?: (document: LooseSingleCardDocument) => Promise<void>;
+    // Retained for the delegated FieldDef seam. Root-card persistence uses the
+    // document update capability; a primitive delegated field may still emit
+    // its existing data-only set effect.
     set?: (value: unknown) => void;
   };
 }
@@ -35,9 +48,15 @@ interface Signature {
 // child document and never observe the iframe or its lifecycle protocol.
 export default class RealmSandboxIframe extends Component<Signature> {
   @service declare private realmSandbox: RealmSandboxService;
+  @consume(PermissionsContextName)
+  declare private permissions: Permissions | undefined;
+  @consume(CardContextName)
+  declare private cardContext: CardContext | undefined;
   @tracked private status = 'loading';
   @tracked private appliedDraftRevision = -1;
   @tracked private draftError?: string;
+  @tracked private appliedCardUpdateRevision = -1;
+  @tracked private cardUpdateError?: string;
   private postToFrame?: (message: Record<string, unknown>) => void;
   private loaderMetricToken = {};
   private connectionMetricToken = {};
@@ -53,6 +72,35 @@ export default class RealmSandboxIframe extends Component<Signature> {
 
   get isLoading() {
     return this.status === 'loading';
+  }
+
+  get canWrite() {
+    return this.args.canWrite ?? this.permissions?.canWrite === true;
+  }
+
+  private async applyCardDocumentUpdate(document: LooseSingleCardDocument) {
+    if (this.args.onCardDocumentUpdate) {
+      await this.args.onCardDocumentUpdate(document);
+      return;
+    }
+    if (!this.canWrite) {
+      throw new Error('This realm is read-only');
+    }
+    let cardID = this.args.sandbox.cardID;
+    if (!cardID || document.data.id !== cardID) {
+      throw new Error('Iframe card update identity does not match');
+    }
+    let updated = await this.realmSandbox.updateOpaqueCardFromDocument(
+      this.args.sandbox.card,
+      document,
+    );
+    if (!updated) {
+      throw new Error('Iframe card update was rejected');
+    }
+    if (!this.cardContext) {
+      throw new Error('Iframe card update has no Host Store context');
+    }
+    await this.cardContext.store.save(cardID);
   }
 
   get frameURL() {
@@ -85,15 +133,6 @@ export default class RealmSandboxIframe extends Component<Signature> {
       );
     this.postToFrame = post;
     let receive = async (event: MessageEvent) => {
-      if (
-        event.data?.type === 'fetch-request' &&
-        !isRealmIframeSandboxOutbound(event.data)
-      ) {
-        console.error(
-          'Host rejected iframe fetch request',
-          JSON.stringify(event.data),
-        );
-      }
       if (!isRealmIframeSandboxOutbound(event.data)) {
         return;
       }
@@ -113,21 +152,39 @@ export default class RealmSandboxIframe extends Component<Signature> {
       } else if (event.data.type === 'resize') {
         let height = Math.max(40, Math.min(2400, event.data.height));
         element.style.height = `${height}px`;
+      } else if (event.data.type === 'card-update') {
+        let error: string | undefined;
+        try {
+          if (!this.canWrite) {
+            throw new Error('This realm is read-only');
+          }
+          if (
+            this.args.sandbox.cardID &&
+            event.data.document.data.id !== this.args.sandbox.cardID
+          ) {
+            throw new Error('Iframe card update identity does not match');
+          }
+          await this.applyCardDocumentUpdate(event.data.document);
+        } catch (updateError) {
+          error =
+            updateError instanceof Error
+              ? updateError.message
+              : String(updateError);
+        }
+        post({
+          type: 'card-update-result',
+          revision: event.data.revision,
+          ...(error ? { error } : {}),
+        });
+        this.appliedCardUpdateRevision = event.data.revision;
+        this.cardUpdateError = error;
       } else if (event.data.type === 'fetch-request') {
-        console.error('Host received iframe fetch request', event.data.url);
         try {
           let response = await this.realmSandbox.fetchForIframe(
             this.args.sandbox,
             event.data.url,
             event.data.init,
           );
-          console.error('Host completed iframe fetch request', {
-            status: response.status,
-            bodyType:
-              response.body instanceof ArrayBuffer
-                ? `array-buffer:${response.body.byteLength}`
-                : typeof response.body,
-          });
           post(
             {
               type: 'fetch-response',
@@ -162,6 +219,7 @@ export default class RealmSandboxIframe extends Component<Signature> {
           document: this.args.sandbox.document,
           rootModuleURL: this.args.sandbox.rootModuleURL,
           presentation: this.args.sandbox.presentation,
+          canWrite: this.canWrite,
           draft: this.args.sandbox.draft
             ? {
                 protocol: realmIframeSandboxProtocol,
@@ -264,6 +322,9 @@ export default class RealmSandboxIframe extends Component<Signature> {
       data-card-sandbox-draft-revision={{@sandbox.draft.revision}}
       data-card-sandbox-applied-draft-revision={{this.appliedDraftRevision}}
       data-card-sandbox-draft-error={{this.draftError}}
+      data-card-sandbox-can-write={{if this.canWrite 'true' 'false'}}
+      data-card-sandbox-update-revision={{this.appliedCardUpdateRevision}}
+      data-card-sandbox-update-error={{this.cardUpdateError}}
       data-card-sandbox-code-preview-id={{@sandbox.codePreviewID}}
       data-card-sandbox-code-preview-loader={{if
         @sandbox.codePreviewID

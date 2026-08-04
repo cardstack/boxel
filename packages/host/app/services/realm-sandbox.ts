@@ -84,6 +84,11 @@ import {
 import realmSandboxDelegatedCardComponent from '@cardstack/host/lib/realm-sandbox-delegated-card-component';
 import realmSandboxFieldComponent from '@cardstack/host/lib/realm-sandbox-field-component';
 import {
+  allocateRealmSandboxIframeOrigin,
+  isRealmSandboxIframeChildLocation,
+  newRealmSandboxIframeNonce,
+} from '@cardstack/host/lib/realm-sandbox-iframe-origin';
+import {
   isBaseRealmModule,
   isCatalogRealmModule,
   isTrustedHostRealmModule,
@@ -368,6 +373,9 @@ interface PendingCodePreviewTemplate {
 }
 
 export interface RealmIframeSandboxRender {
+  // Host-only identity used to apply validated child data updates. This value
+  // is never included in the MessageChannel connect payload.
+  card: BaseDef;
   cardID?: string;
   document: LooseSingleCardDocument;
   format: Format;
@@ -390,6 +398,7 @@ export interface RealmIframeSandboxRender {
 }
 
 class StableRealmIframeSandboxRender implements RealmIframeSandboxRender {
+  card: BaseDef;
   @tracked document: LooseSingleCardDocument;
   @tracked format: Format;
   @tracked principal: string;
@@ -408,6 +417,7 @@ class StableRealmIframeSandboxRender implements RealmIframeSandboxRender {
   private pending?: RealmIframeSandboxRender;
 
   constructor(value: RealmIframeSandboxRender) {
+    this.card = value.card;
     this.cardID = value.cardID;
     this.document = value.document;
     this.format = value.format;
@@ -435,6 +445,7 @@ class StableRealmIframeSandboxRender implements RealmIframeSandboxRender {
       return;
     }
     this.cardID = value.cardID;
+    this.card = value.card;
     this.document = value.document;
     this.format = value.format;
     this.principal = value.principal;
@@ -969,6 +980,7 @@ export default class RealmSandboxService extends Service {
     BaseDef,
     Map<string, StableRealmIframeSandboxRender>
   >();
+  private iframeRenderOrigins = new WeakMap<BaseDef, Map<string, string>>();
   private cardReloadRevisions = new WeakMap<BaseDef, ReactiveRevision>();
   @tracked private metricsRevision = 0;
   private sandboxedCards = new WeakSet<object>();
@@ -2210,8 +2222,7 @@ export default class RealmSandboxService extends Service {
     }
     let state = getOpaqueRealmCardState(card);
     let cardID = 'id' in card ? (card.id as string | undefined) : undefined;
-    let targetOrigin = this.iframeSandboxOrigin();
-    if (!state || !cardID || !targetOrigin) {
+    if (!state || !cardID) {
       return undefined;
     }
     this.syncOpaqueCardPresentation(card, state);
@@ -2219,12 +2230,6 @@ export default class RealmSandboxService extends Service {
     if (!iframeFormat) {
       return undefined;
     }
-    let url = new URL('/_realm-sandbox-frame', targetOrigin);
-    url.searchParams.set('cardURL', cardID);
-    url.searchParams.set('parentOrigin', globalThis.location.origin);
-    url.searchParams.set('reload', String(reloadRevision));
-    this.metrics.executionTier = 'iframe';
-    this.metrics.executionReason = decision.reason;
     if (!isResolvedCodeRef(state.typeRef)) {
       return undefined;
     }
@@ -2235,7 +2240,19 @@ export default class RealmSandboxService extends Service {
       options.codeRef && isResolvedCodeRef(options.codeRef)
         ? options.codeRef
         : undefined;
+    let envelopeKey = `${iframeFormat}|${options.field?.name ?? ''}|${resolvedCodeRef?.module ?? ''}#${resolvedCodeRef?.name ?? ''}|${options.codePreviewSandbox?.id ?? 'canonical'}|reload:${reloadRevision}`;
+    let targetOrigin = this.iframeSandboxOriginFor(card, envelopeKey);
+    if (!targetOrigin) {
+      return undefined;
+    }
+    let url = new URL('/_realm-sandbox-frame', targetOrigin);
+    url.searchParams.set('cardURL', cardID);
+    url.searchParams.set('parentOrigin', globalThis.location.origin);
+    url.searchParams.set('reload', String(reloadRevision));
+    this.metrics.executionTier = 'iframe';
+    this.metrics.executionReason = decision.reason;
     let next: RealmIframeSandboxRender = {
+      card,
       cardID,
       document: state.document,
       format: iframeFormat,
@@ -2277,7 +2294,6 @@ export default class RealmSandboxService extends Service {
           }
         : {}),
     };
-    let envelopeKey = `${iframeFormat}|${options.field?.name ?? ''}|${resolvedCodeRef?.module ?? ''}#${resolvedCodeRef?.name ?? ''}|${options.codePreviewSandbox?.id ?? 'canonical'}|reload:${reloadRevision}`;
     let envelopes = this.iframeRenderEnvelopes.get(card);
     if (!envelopes) {
       envelopes = new Map();
@@ -2423,17 +2439,12 @@ export default class RealmSandboxService extends Service {
   }
 
   isIframeSandboxChild(): boolean {
-    try {
-      let targetOrigin = this.iframeSandboxOrigin();
-      return (
-        Boolean(targetOrigin) &&
-        globalThis.location.origin === targetOrigin &&
-        globalThis.self !== globalThis.top &&
-        new URL(globalThis.location.href).pathname === '/_realm-sandbox-frame'
-      );
-    } catch {
-      return false;
-    }
+    return isRealmSandboxIframeChildLocation(
+      config.realmSandboxIframeOrigin,
+      globalThis.location.origin,
+      globalThis.location.href,
+      globalThis.self !== globalThis.top,
+    );
   }
 
   safeIframeFormat(format: string | undefined): Format | undefined {
@@ -2442,20 +2453,28 @@ export default class RealmSandboxService extends Service {
       : undefined;
   }
 
-  private iframeSandboxOrigin(): string | undefined {
-    let configured = config.realmSandboxIframeOrigin;
-    if (typeof configured === 'string' && configured.length > 0) {
-      return new URL(configured).origin;
+  private iframeSandboxOriginFor(
+    card: BaseDef,
+    envelopeKey: string,
+  ): string | undefined {
+    let origins = this.iframeRenderOrigins.get(card);
+    if (!origins) {
+      origins = new Map();
+      this.iframeRenderOrigins.set(card, origins);
     }
-    if (globalThis.location.hostname === 'localhost') {
-      let url = new URL(globalThis.location.origin);
-      url.hostname = '127.0.0.1';
-      return url.origin;
+    let cached = origins.get(envelopeKey);
+    if (cached) {
+      return cached;
     }
-    if (globalThis.location.hostname === '127.0.0.1') {
-      return globalThis.location.origin;
+    let origin = allocateRealmSandboxIframeOrigin(
+      config.realmSandboxIframeOrigin,
+      globalThis.location.origin,
+      newRealmSandboxIframeNonce(),
+    );
+    if (origin) {
+      origins.set(envelopeKey, origin);
     }
-    return undefined;
+    return origin;
   }
 
   metricsSnapshot(): RealmSandboxMetrics {
