@@ -78,7 +78,13 @@ export default class MessageService extends Service {
       return;
     }
     let callbacks = this.listenerCallbacks.get(realmURL);
-    callbacks?.forEach((cb) => {
+    // Subscribers are allowed to tear themselves down while handling an
+    // event. Iterate a snapshot so removing an earlier callback cannot shift
+    // the live array and skip the next subscriber. This matters when a file
+    // resource and an AI correctness waiter observe the same final indexing
+    // acknowledgement: both must receive it even if the file resource is
+    // destroyed as part of its own update.
+    callbacks?.slice().forEach((cb) => {
       cb(event);
     });
   }

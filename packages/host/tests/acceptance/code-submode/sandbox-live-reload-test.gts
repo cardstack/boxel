@@ -220,7 +220,10 @@ export class Person extends CardDef {
   @field name = contains(StringField);
 
   static embedded = class Embedded extends Component<typeof this> {
-    <template><strong data-test-related-person>{{@model.name}}</strong></template>
+    <template><strong data-test-related-person data-test-related-person-format='embedded'>{{@model.name}}</strong></template>
+  };
+  static fitted = class Fitted extends Component<typeof this> {
+    <template><strong data-test-related-person data-test-related-person-format='fitted'>{{@model.name}}</strong></template>
   };
 }
 
@@ -239,7 +242,7 @@ export class Project extends CardDef {
           data-test-rerender-related-project
           {{on 'click' this.rerenderParent}}
         >Rerender parent {{this.parentRevision}}</button>
-        <@fields.owner @format='embedded' />
+        <@fields.owner />
         {{#each @model.reviewers as |_reviewer index|}}
           {{#let (get @fields.reviewers index) as |Reviewer|}}
             <Reviewer @format='embedded' />
@@ -833,6 +836,15 @@ module('Acceptance | code submode | sandbox live reload', function (hooks) {
     assert
       .dom('[data-test-related-person]')
       .exists({ count: 3 }, 'the owner and both reviewers render as cards');
+    assert
+      .dom('[data-test-related-person-format="fitted"]')
+      .exists(
+        { count: 1 },
+        'an implicit linksTo child uses Base fitted format',
+      );
+    assert
+      .dom('[data-test-related-person-format="embedded"]')
+      .exists({ count: 2 }, 'explicit linksToMany formats remain embedded');
     assert.dom('[data-test-related-project]').includesText('Avery Owner');
     assert.dom('[data-test-related-project]').includesText('Mina Reviewer');
     assert.dom('[data-test-related-project]').includesText('Theo Reviewer');

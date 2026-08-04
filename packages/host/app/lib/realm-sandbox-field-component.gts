@@ -559,8 +559,17 @@ export default function realmSandboxFieldComponent(
       case 'head':
         defaultFormat = containingFormat;
         break;
+      case 'isolated':
+      case 'embedded':
+      case 'fitted':
+        // Match Base FieldComponent's defaultFieldFormats contract: a CardDef
+        // reached through a field is a compact fitted child inside these
+        // containing formats. FieldDefs use embedded below, but linked cards
+        // must keep their established fitted navigation target.
+        defaultFormat = 'fitted';
+        break;
       default:
-        defaultFormat = 'embedded';
+        defaultFormat = 'fitted';
     }
     let resourceType = (
       trustedFieldType as (typeof BaseDef & { isFileDef?: boolean }) | undefined

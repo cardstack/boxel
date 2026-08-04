@@ -120,4 +120,30 @@ module('Integration | message service subscription', function (hooks) {
 
     assert.strictEqual(messageCount, messageCountAfterRender);
   });
+
+  test('a subscriber can unsubscribe during delivery without skipping later subscribers', function (assert) {
+    let messageService = getService('message-service');
+    let deliveries: string[] = [];
+    let unsubscribeFirst = messageService.subscribe(testRealmURL, () => {
+      deliveries.push('first');
+      unsubscribeFirst();
+    });
+    let unsubscribeSecond = messageService.subscribe(testRealmURL, () => {
+      deliveries.push('second');
+    });
+
+    messageService.relayRealmEvent({
+      eventName: 'index',
+      indexType: 'incremental-index-initiation',
+      updatedFile: 'index.json',
+      realmURL: testRealmURL,
+    });
+
+    assert.deepEqual(
+      deliveries,
+      ['first', 'second'],
+      'all subscribers present at the start of delivery receive the event',
+    );
+    unsubscribeSecond();
+  });
 });
