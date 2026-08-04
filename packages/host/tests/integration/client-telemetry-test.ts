@@ -1,5 +1,11 @@
+import { getOwner } from '@ember/owner';
+
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
+
+import { X_BOXEL_LOGGING_CORRELATION_ID_HEADER } from '@cardstack/runtime-common/prerender-headers';
+
+import { createServerRequestTimingMiddleware } from '@cardstack/host/services/client-telemetry';
 
 import type ClientTelemetryService from '@cardstack/host/services/client-telemetry';
 import type { ClientErrorEvent } from '@cardstack/host/services/client-telemetry';
@@ -521,5 +527,44 @@ module('Integration | Service | client-telemetry', function (hooks) {
       0,
       'the window error listeners are released with everything else',
     );
+  });
+
+  // Synapse's CORS allow-list is a fixed set, with no configuration knob and no
+  // Boxel header in it, so a Matrix request carrying one is rejected by the
+  // browser at preflight and never leaves the tab. Only the realm server reads
+  // the correlation id back out, so a Matrix request has nothing to gain by
+  // carrying it. Armed telemetry is the only state where the stamp happens at
+  // all, and no other suite runs in it — which is how stamping every request
+  // silently broke email registration everywhere while every test passed.
+  module('the correlation id stamp', function () {
+    async function stampedHeader(url: string): Promise<string | null> {
+      let svc = telemetry();
+      svc.enableForTest();
+      let middleware = createServerRequestTimingMiddleware(getOwner(svc)!);
+      let seen: string | null = null;
+      await middleware(new Request(url, { method: 'POST' }), async (req) => {
+        seen = req.headers.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER);
+        return new Response('{}', { status: 200 });
+      });
+      return seen;
+    }
+
+    test('is put on a realm-server request', async function (assert) {
+      assert.notStrictEqual(
+        await stampedHeader('https://realm.example/my-realm/_search'),
+        null,
+        'the realm server gets an id to join its logs on',
+      );
+    });
+
+    test('is kept off a Matrix request', async function (assert) {
+      assert.strictEqual(
+        await stampedHeader(
+          'https://matrix.example/_matrix/client/v3/register/email/requestToken',
+        ),
+        null,
+        'no custom header for Synapse to reject at preflight',
+      );
+    });
   });
 });
