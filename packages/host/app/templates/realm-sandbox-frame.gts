@@ -232,6 +232,13 @@ class RealmSandboxFrame extends Component<Signature> {
       this.applyPresentation(message.presentation);
       return;
     }
+    if (message.type === 'permissions') {
+      this.canWrite = message.canWrite;
+      if (message.canWrite) {
+        this.writeError = undefined;
+      }
+      return;
+    }
     if (message.type === 'card-update-result') {
       this.appliedCardUpdateRevision = message.revision;
       this.writeError = message.error;
@@ -309,7 +316,11 @@ class RealmSandboxFrame extends Component<Signature> {
           this.writeError = 'Card update failed protocol validation';
           return;
         }
-        this.port?.postMessage(update);
+        if (!this.port) {
+          this.writeError = 'Sandbox capability channel is unavailable';
+          return;
+        }
+        this.port.postMessage(update);
         this.postedCardUpdateRevision = update.revision;
         this.postedCardUpdateBytes = serialized.length;
       } catch (error) {

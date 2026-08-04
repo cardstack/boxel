@@ -1,5 +1,6 @@
 import { settled, waitUntil } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
 import { module, test } from 'qunit';
 
@@ -20,6 +21,10 @@ module('Integration | realm sandbox iframe', function (hooks) {
   setupRenderingTest(hooks);
 
   test('waits for readiness and applies inert child type presentation', async function (assert) {
+    class AuthorityState {
+      @tracked canWrite = true;
+    }
+    let authority = new AuthorityState();
     let receivedTypePresentation:
       | {
           displayName: string;
@@ -52,7 +57,7 @@ module('Integration | realm sandbox iframe', function (hooks) {
         <template>
           <RealmSandboxIframe
             @sandbox={{sandbox}}
-            @canWrite={{true}}
+            @canWrite={{authority.canWrite}}
             @onCardDocumentUpdate={{this.onCardDocumentUpdate}}
           />
         </template>
@@ -147,6 +152,41 @@ module('Integration | realm sandbox iframe', function (hooks) {
       'the child publishes only inert type presentation to its Host container',
     );
 
+    let permissionUpdates: unknown[] = [];
+    transferredPort?.addEventListener('message', (event) => {
+      if (event.data.type === 'permissions') {
+        permissionUpdates.push(event.data);
+      }
+    });
+    transferredPort?.start();
+    authority.canWrite = false;
+    await settled();
+    await waitUntil(() => permissionUpdates.length === 1);
+    assert.strictEqual(
+      connectCount,
+      1,
+      'permission settlement does not replace or close the capability port',
+    );
+    assert.deepEqual(permissionUpdates, [
+      {
+        protocol: realmIframeSandboxProtocol,
+        type: 'permissions',
+        canWrite: false,
+      },
+    ]);
+    authority.canWrite = true;
+    await settled();
+    await waitUntil(() => permissionUpdates.length === 2);
+    assert.deepEqual(
+      permissionUpdates[1],
+      {
+        protocol: realmIframeSandboxProtocol,
+        type: 'permissions',
+        canWrite: true,
+      },
+      'write authority can settle without remounting the renderer',
+    );
+
     let updateDocument: LooseSingleCardDocument = {
       data: {
         type: 'card' as const,
@@ -166,7 +206,6 @@ module('Integration | realm sandbox iframe', function (hooks) {
         updateResults.push(event.data);
       }
     });
-    transferredPort?.start();
     transferredPort?.postMessage({
       protocol: realmIframeSandboxProtocol,
       type: 'card-update',
@@ -183,8 +222,11 @@ module('Integration | realm sandbox iframe', function (hooks) {
       revision: 2,
       document: secondUpdateDocument,
     });
-    await new Promise<void>((resolve) =>
-      globalThis.requestAnimationFrame(() => resolve()),
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-card-sandbox-frame-status]')
+          ?.getAttribute('data-card-sandbox-received-update-revision') === '2',
     );
     assert
       .dom('[data-card-sandbox-frame-status]')

@@ -1,6 +1,8 @@
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+// @ts-ignore - @glimmer/validator is provided by Ember but has no direct types
+import { untrack } from '@glimmer/validator';
 
 import { modifier } from 'ember-modifier';
 import { consume } from 'ember-provide-consume-context';
@@ -41,6 +43,14 @@ interface Signature {
     // its existing data-only set effect.
     set?: (value: unknown) => void;
   };
+}
+
+function untrackedIframeModifier(
+  callback: (element: HTMLIFrameElement) => void | (() => void),
+) {
+  return modifier((element: HTMLIFrameElement) =>
+    untrack(() => callback(element)),
+  );
 }
 
 // This is deliberately a renderer transport, not a card-specific adapter.
@@ -123,7 +133,7 @@ export default class RealmSandboxIframe extends Component<Signature> {
     return url.href;
   }
 
-  connectFrame = modifier((element: HTMLIFrameElement) => {
+  connectFrame = untrackedIframeModifier((element: HTMLIFrameElement) => {
     // The target is required to be a distinct origin. credentialless prevents
     // accidental ambient-cookie authority from crossing into that origin.
     element.setAttribute('credentialless', '');
@@ -292,6 +302,15 @@ export default class RealmSandboxIframe extends Component<Signature> {
     };
   });
 
+  syncPermissions = modifier(
+    (_element: HTMLIFrameElement, [canWrite]: [boolean]) => {
+      this.postToFrame?.({
+        type: 'permissions',
+        canWrite,
+      });
+    },
+  );
+
   syncDraft = modifier(
     (
       _element: HTMLIFrameElement,
@@ -378,6 +397,7 @@ export default class RealmSandboxIframe extends Component<Signature> {
       {{/if}}
       <iframe
         {{this.connectFrame}}
+        {{this.syncPermissions this.canWrite}}
         {{this.syncPresentation
           @sandbox.presentation.format
           @sandbox.presentation.fieldName

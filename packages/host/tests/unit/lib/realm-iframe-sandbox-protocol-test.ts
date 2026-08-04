@@ -52,6 +52,14 @@ module('Unit | realm iframe sandbox protocol', function () {
       'format and presentation updates stay on the channel',
     );
     assert.true(
+      isRealmIframeSandboxInbound({
+        protocol: realmIframeSandboxProtocol,
+        type: 'permissions',
+        canWrite: false,
+      }),
+      'permission changes stay on the existing capability channel',
+    );
+    assert.true(
       isRealmIframeSandboxOutbound({
         protocol: realmIframeSandboxProtocol,
         type: 'resize',
@@ -147,6 +155,14 @@ module('Unit | realm iframe sandbox protocol', function () {
         },
       }),
       'iframe-only presentation updates reject composable SES formats',
+    );
+    assert.false(
+      isRealmIframeSandboxInbound({
+        protocol: realmIframeSandboxProtocol,
+        type: 'permissions',
+        canWrite: 'sometimes',
+      }),
+      'permission updates require an explicit boolean',
     );
     assert.false(
       isRealmIframeSandboxOutbound({

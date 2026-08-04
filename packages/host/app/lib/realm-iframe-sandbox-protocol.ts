@@ -28,6 +28,12 @@ export interface RealmIframeSandboxRenderUpdate {
   presentation: RealmIframeSandboxPresentation;
 }
 
+export interface RealmIframeSandboxPermissionsUpdate {
+  protocol: typeof realmIframeSandboxProtocol;
+  type: 'permissions';
+  canWrite: boolean;
+}
+
 export interface RealmIframeSandboxDraft {
   protocol: typeof realmIframeSandboxProtocol;
   type: 'draft';
@@ -122,6 +128,7 @@ export type RealmIframeSandboxInbound =
   | RealmIframeSandboxFetchResponse
   | RealmIframeSandboxDraft
   | RealmIframeSandboxRenderUpdate
+  | RealmIframeSandboxPermissionsUpdate
   | RealmIframeSandboxCardUpdateResult;
 
 export function isRealmIframeSandboxConnect(
@@ -162,6 +169,8 @@ export function isRealmIframeSandboxInbound(
       );
     case 'render':
       return isRealmIframeSandboxPresentation(message.presentation);
+    case 'permissions':
+      return typeof message.canWrite === 'boolean';
     case 'fetch-response':
       return (
         boundedString(message.requestId, 256) &&
