@@ -62,6 +62,185 @@ ${livePreviewSource.split('LivePreview').join('IframeLivePreview')}
 void sandboxDocument;
 `;
 
+const dormantBrowserAdapterSource = `
+export function browserTitle() {
+  return document.title;
+}
+`;
+
+const ordinaryLibrarySource = `
+import { browserTitle } from './dormant-browser-adapter';
+
+export const ordinaryLabel = 'COLD INTERACT RENDERED';
+export { browserTitle };
+`;
+
+const coldInteractSource = `
+import { CardDef, Component } from '@cardstack/base/card-api';
+import { ordinaryLabel } from './ordinary-library';
+
+export class ColdInteract extends CardDef {
+  static isolated = class Isolated extends Component<typeof this> {
+    <template>
+      <article data-test-cold-interact>{{ordinaryLabel}}</article>
+    </template>
+  };
+}
+`;
+
+const nestedFieldSource = `
+import { get } from '@ember/helper';
+import { on } from '@ember/modifier';
+import {
+  CardDef,
+  Component,
+  FieldDef,
+  contains,
+  containsMany,
+  field,
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+
+export class DetailField extends FieldDef {
+  @field label = contains(StringField);
+
+  static embedded = class Embedded extends Component<typeof this> {
+    update = () => this.args.set?.({ label: 'Nested authored field updated' });
+
+    <template>
+      <strong data-test-nested-field>{{@model.label}}</strong>
+      <button type='button' data-test-update-nested-field {{on 'click' this.update}}>
+        Update nested field
+      </button>
+    </template>
+  };
+}
+
+export class NestedFieldHost extends CardDef {
+  @field detail = contains(DetailField);
+  @field details = containsMany(DetailField);
+
+  static isolated = class Isolated extends Component<typeof this> {
+    <template>
+      <article data-test-nested-field-host>
+        <@fields.detail />
+        {{#each @model.details as |_detail index|}}
+          {{#let (get @fields.details index) as |Detail|}}
+            <Detail />
+          {{/let}}
+        {{/each}}
+      </article>
+    </template>
+  };
+}
+`;
+
+const computedProjectionSource = `
+import {
+  CardDef,
+  Component,
+  FieldDef,
+  contains,
+  field,
+} from '@cardstack/base/card-api';
+import NumberField from '@cardstack/base/number';
+
+export class CostInputs extends FieldDef {
+  @field units = contains(NumberField);
+  @field unitCost = contains(NumberField);
+  @field subtotal = contains(NumberField, {
+    computeVia: function () {
+      return this.units * this.unitCost;
+    },
+  });
+}
+
+export class ProfitProjection extends FieldDef {
+  @field revenue = contains(NumberField);
+  @field cost = contains(NumberField);
+  @field contribution = contains(NumberField, {
+    computeVia: function () {
+      return this.revenue - this.cost;
+    },
+  });
+
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      <strong data-test-computed-profit>{{@model.contribution}}</strong>
+    </template>
+  };
+}
+
+export class ComputedProjection extends CardDef {
+  @field revenue = contains(NumberField);
+  @field costs = contains(CostInputs);
+  @field totalCost = contains(NumberField, {
+    computeVia: function () {
+      return this.costs.subtotal;
+    },
+  });
+  @field profit = contains(ProfitProjection, {
+    computeVia: function () {
+      let profit = new ProfitProjection();
+      Object.assign(profit, {
+        revenue: this.revenue,
+        cost: this.totalCost,
+      });
+      return profit;
+    },
+  });
+
+  static isolated = class Isolated extends Component<typeof this> {
+    <template>
+      <article data-test-computed-projection>
+        <span data-test-computed-subtotal>{{@model.costs.subtotal}}</span>
+        <span data-test-computed-total>{{@model.totalCost}}</span>
+        <@fields.profit />
+      </article>
+    </template>
+  };
+}
+`;
+
+const relationshipSource = `
+import { get } from '@ember/helper';
+import {
+  CardDef,
+  Component,
+  contains,
+  field,
+  linksTo,
+  linksToMany,
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+
+export class Person extends CardDef {
+  @field name = contains(StringField);
+
+  static embedded = class Embedded extends Component<typeof this> {
+    <template><strong data-test-related-person>{{@model.name}}</strong></template>
+  };
+}
+
+export class Project extends CardDef {
+  @field owner = linksTo(Person);
+  @field reviewers = linksToMany(Person);
+
+  static isolated = class Isolated extends Component<typeof this> {
+    <template>
+      <article data-test-related-project>
+        <@fields.owner @format='embedded' />
+        {{#each @model.reviewers as |_reviewer index|}}
+          {{#let (get @fields.reviewers index) as |Reviewer|}}
+            <Reviewer @format='embedded' />
+          {{/let}}
+        {{/each}}
+      </article>
+    </template>
+  };
+}
+`;
+
 const compileBrokenLivePreviewSource = livePreviewSource.replace(
   '<strong>VERSION ONE</strong>',
   '<strong>{{</strong>',
@@ -145,6 +324,12 @@ module('Acceptance | code submode | sandbox live reload', function (hooks) {
           'realm.json': realmConfigCardJSON({ name: 'Hot Reload Test Realm' }),
           'live-preview-compartment.gts': livePreviewSource,
           'live-preview-iframe.gts': iframeLivePreviewSource,
+          'dormant-browser-adapter.ts': dormantBrowserAdapterSource,
+          'ordinary-library.ts': ordinaryLibrarySource,
+          'cold-interact.gts': coldInteractSource,
+          'nested-field.gts': nestedFieldSource,
+          'computed-projection.gts': computedProjectionSource,
+          'relationship.gts': relationshipSource,
           'live-preview-compartment-entry.json': {
             data: {
               type: 'card',
@@ -203,6 +388,103 @@ module('Acceptance | code submode | sandbox live reload', function (hooks) {
               },
             },
           },
+          'ColdInteract/sample.json': {
+            data: {
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}cold-interact`,
+                  name: 'ColdInteract',
+                },
+              },
+            },
+          },
+          'NestedFieldHost/sample.json': {
+            data: {
+              attributes: {
+                detail: { label: 'Nested authored field rendered' },
+                details: [
+                  { label: 'First indexed field rendered' },
+                  { label: 'Second indexed field rendered' },
+                ],
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}nested-field`,
+                  name: 'NestedFieldHost',
+                },
+              },
+            },
+          },
+          'ComputedProjection/sample.json': {
+            data: {
+              attributes: {
+                revenue: 300,
+                costs: { units: 4, unitCost: 25 },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}computed-projection`,
+                  name: 'ComputedProjection',
+                },
+              },
+            },
+          },
+          'Person/owner.json': {
+            data: {
+              attributes: { name: 'Avery Owner' },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}relationship`,
+                  name: 'Person',
+                },
+              },
+            },
+          },
+          'Person/reviewer-one.json': {
+            data: {
+              attributes: { name: 'Mina Reviewer' },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}relationship`,
+                  name: 'Person',
+                },
+              },
+            },
+          },
+          'Person/reviewer-two.json': {
+            data: {
+              attributes: { name: 'Theo Reviewer' },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}relationship`,
+                  name: 'Person',
+                },
+              },
+            },
+          },
+          'Project/sample.json': {
+            data: {
+              attributes: {},
+              relationships: {
+                owner: {
+                  links: { self: `${testRealmURL}Person/owner` },
+                },
+                'reviewers.0': {
+                  links: { self: `${testRealmURL}Person/reviewer-one` },
+                },
+                'reviewers.1': {
+                  links: { self: `${testRealmURL}Person/reviewer-two` },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}relationship`,
+                  name: 'Project',
+                },
+              },
+            },
+          },
         },
       });
     });
@@ -210,6 +492,128 @@ module('Acceptance | code submode | sandbox live reload', function (hooks) {
 
   hooks.afterEach(function () {
     config.realmSandboxIframeOrigin = originalIframeOrigin;
+  });
+
+  test('[COLD-INTERACT-01] an ordinary card renders when a transitive library contains a dormant browser adapter', async function (assert) {
+    await visitOperatorMode({
+      submode: 'interact',
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}ColdInteract/sample`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await waitFor('[data-test-cold-interact]');
+    assert.dom('[data-test-cold-interact]').hasText('COLD INTERACT RENDERED');
+    assert
+      .dom('[data-card-sandbox-loading]')
+      .doesNotExist('cold Interact reaches authored DOM instead of waiting');
+    assert
+      .dom('.realm-sandbox-iframe')
+      .doesNotExist('the dormant adapter remains confined and unused in SES');
+  });
+
+  test('[COLD-INTERACT-02] a user-authored contains FieldDef delegates its embedded template through SES', async function (assert) {
+    await visitOperatorMode({
+      submode: 'interact',
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}NestedFieldHost/sample`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await waitUntil(
+      () => document.querySelectorAll('[data-test-nested-field]').length === 3,
+    );
+    assert
+      .dom('[data-test-nested-field]')
+      .exists({ count: 3 }, 'singular and many FieldDefs all delegate');
+    assert
+      .dom('[data-test-nested-field-host]')
+      .includesText('First indexed field rendered');
+    assert
+      .dom('[data-test-nested-field-host]')
+      .includesText('Second indexed field rendered');
+    assert
+      .dom('[data-test-nested-field-host]')
+      .doesNotIncludeText('{"label"', 'the boundary does not stringify it');
+
+    await click('[data-test-update-nested-field]');
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-test-nested-field]')
+          ?.textContent?.includes('Nested authored field updated') === true,
+    );
+    assert
+      .dom('[data-test-nested-field]')
+      .includesText(
+        'Nested authored field updated',
+        'the existing @set contract crosses the delegated SES FieldDef boundary',
+      );
+    assert
+      .dom('.realm-sandbox-iframe')
+      .doesNotExist('a data-only field mutation remains in SES');
+  });
+
+  test('[COLD-INTERACT-02B] SES materializes nested, chained, and computed FieldDef projections', async function (assert) {
+    await visitOperatorMode({
+      submode: 'interact',
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}ComputedProjection/sample`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await waitFor('[data-test-computed-projection]');
+    assert.dom('[data-test-computed-subtotal]').hasText('100');
+    assert.dom('[data-test-computed-total]').hasText('100');
+    assert
+      .dom('[data-test-computed-profit]')
+      .hasText('200', 'the computed FieldDef result also materializes');
+    assert
+      .dom('[data-card-sandbox-loading]')
+      .doesNotExist('projection and template both settle into authored DOM');
+    assert
+      .dom('.realm-sandbox-iframe')
+      .doesNotExist('the SES-safe computed graph never opens an iframe');
+  });
+
+  test('[COLD-INTERACT-03] linksTo and linksToMany delegate loaded child cards through SES', async function (assert) {
+    await visitOperatorMode({
+      submode: 'interact',
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Project/sample`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await waitUntil(
+      () =>
+        document.querySelectorAll('[data-test-related-person]').length === 3,
+    );
+    assert
+      .dom('[data-test-related-person]')
+      .exists({ count: 3 }, 'the owner and both reviewers render as cards');
+    assert.dom('[data-test-related-project]').includesText('Avery Owner');
+    assert.dom('[data-test-related-project]').includesText('Mina Reviewer');
+    assert.dom('[data-test-related-project]').includesText('Theo Reviewer');
   });
 
   for (let sourceKind of ['ordinary', 'browser-runtime'] as const) {

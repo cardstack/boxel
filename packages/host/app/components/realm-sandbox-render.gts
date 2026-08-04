@@ -108,12 +108,14 @@ interface Signature {
     card: BaseDef;
     format?: Format;
     sandbox: NonNullable<ReturnType<RealmSandboxService['renderFor']>>;
-    model?: BaseDef | Record<string, unknown>;
+    model?: unknown;
     displayContainer?: boolean;
     field?: Field;
     fieldType?: FieldType;
     fieldName?: string;
     viewCard?: ViewCardFn;
+    fieldBoundary?: boolean;
+    set?: (value: unknown) => void;
   };
 }
 
@@ -130,14 +132,31 @@ export default class RealmSandboxRender extends Component<Signature> {
   // function stable while allowing the host provider's answer to change.
   readonly canWrite = () => this.permissions?.canWrite === true;
 
-  set = () => undefined;
+  // `@set` is an existing field-component capability. Keep the callback in
+  // the trusted Host and let the compartment emit only a data-only set effect.
+  // A stable wrapper avoids replacing the delegated render root when the
+  // parent field component rerenders.
+  readonly set = (value: unknown) => this.args.set?.(value);
+
+  // Existing cards use context.commandContext/toolContext to construct pure
+  // realm-authored Command subclasses. The compartment gets a presence token,
+  // never the Host ToolContext. Host command imports remain inert tokens and
+  // require a separate, explicitly reviewed effect capability to execute.
+  private readonly sandboxCommandContext = Object.freeze({});
 
   get component() {
     return this.args.sandbox.component;
   }
 
   get model() {
-    return this.args.model ?? this.args.sandbox.model;
+    // An authored FieldDef receives the actual field value as @model. The
+    // synthetic opaque FieldDef record exists only to select and evaluate its
+    // template; substituting that record changes primitive String/Number/etc.
+    // fields into `[object Object]`. `fieldBoundary` makes an explicit
+    // `undefined` value meaningful, so do not use nullish fallback there.
+    return this.args.fieldBoundary
+      ? this.args.model
+      : (this.args.model ?? this.args.sandbox.model);
   }
 
   get format() {
@@ -178,6 +197,8 @@ export default class RealmSandboxRender extends Component<Signature> {
       searchResultsComponent: context.searchResultsComponent,
       cardComponentModifier: context.cardComponentModifier,
       markdownEmbedChooser: context.markdownEmbedChooser,
+      commandContext: this.sandboxCommandContext,
+      toolContext: this.sandboxCommandContext,
       mode: context.mode,
       submode: context.submode,
     } as CardContext;
@@ -227,46 +248,14 @@ export default class RealmSandboxRender extends Component<Signature> {
   };
 
   <template>
-    <CardContainer
-      @displayBoundaries={{this.displayContainer}}
-      @isThemed={{if this.theme true false}}
-      @themeCss={{this.themeCss}}
-      @themeScope={{this.themeScope}}
-      class={{cn
-        'realm-sandbox-render'
-        'field-component-card'
-        (if (eq this.format 'isolated') 'isolated-format')
-        (if (eq this.format 'embedded') 'embedded-format')
-        (if (eq this.format 'fitted') 'fitted-format')
-        (if (eq this.format 'atom') 'atom-format')
-        (if (eq this.format 'edit') 'edit-format')
-        (if (eq this.format 'markdown') 'markdown-format')
-        (if
-          this.displayContainer
-          'display-container-true'
-          'display-container-false'
-        )
-      }}
-      data-boxel-card-id={{this.cardID}}
-      data-boxel-card-format={{this.format}}
-      {{! Keep the host renderer's observable card identity contract when the
-          authored component crosses the SES boundary. The ordinary
-          FieldComponent renderer exposes these same hooks; playground
-          selection and compatibility tests must not need to know which
-          renderer tier supplied the selected instance. }}
-      data-test-card={{this.cardID}}
-      data-test-card-format={{this.format}}
-      data-test-field-component-card
-      {{this.cardComponentModifier
-        cardId=this.cardID
-        format=this.format
-        fieldType=(coalesce @fieldType @field.fieldType)
-        fieldName=(coalesce @fieldName @field.name)
-      }}
-      ...attributes
-    >
+    {{#if @fieldBoundary}}
+      {{! FieldDef templates ordinarily render directly inside Base's
+          compound-field wrapper. Preserve that DOM and inheritance contract
+          when the authored template crosses SES: the host boundary remains
+          explicit, but it must not introduce a CardContainer that resets
+          typography, color, sizing, or container-query ancestry. }}
       <div
-        class='realm-sandbox-template-island'
+        class='realm-sandbox-template-island realm-sandbox-field-template-island'
         data-realm-sandbox-template-island
         {{RealmSandboxRelationshipContext
           card=@card
@@ -291,8 +280,76 @@ export default class RealmSandboxRender extends Component<Signature> {
           principal=@sandbox.principal
           markerBacked=@sandbox.markerBacked
         }}
+        ...attributes
       ></div>
-    </CardContainer>
+    {{else}}
+      <CardContainer
+        @displayBoundaries={{this.displayContainer}}
+        @isThemed={{if this.theme true false}}
+        @themeCss={{this.themeCss}}
+        @themeScope={{this.themeScope}}
+        class={{cn
+          'realm-sandbox-render'
+          'field-component-card'
+          (if (eq this.format 'isolated') 'isolated-format')
+          (if (eq this.format 'embedded') 'embedded-format')
+          (if (eq this.format 'fitted') 'fitted-format')
+          (if (eq this.format 'atom') 'atom-format')
+          (if (eq this.format 'edit') 'edit-format')
+          (if (eq this.format 'markdown') 'markdown-format')
+          (if
+            this.displayContainer
+            'display-container-true'
+            'display-container-false'
+          )
+        }}
+        data-boxel-card-id={{this.cardID}}
+        data-boxel-card-format={{this.format}}
+        {{! Keep the host renderer's observable card identity contract when the
+          authored component crosses the SES boundary. The ordinary
+          FieldComponent renderer exposes these same hooks; playground
+          selection and compatibility tests must not need to know which
+          renderer tier supplied the selected instance. }}
+        data-test-card={{this.cardID}}
+        data-test-card-format={{this.format}}
+        data-test-field-component-card
+        {{this.cardComponentModifier
+          cardId=this.cardID
+          format=this.format
+          fieldType=(coalesce @fieldType @field.fieldType)
+          fieldName=(coalesce @fieldName @field.name)
+        }}
+        ...attributes
+      >
+        <div
+          class='realm-sandbox-template-island'
+          data-realm-sandbox-template-island
+          {{RealmSandboxRelationshipContext
+            card=@card
+            getCard=this.getCard
+            cardContext=this.cardContext
+            canWrite=this.canWrite
+            viewCard=this.viewCard
+          }}
+          {{RealmSandboxStyles @sandbox.styles}}
+          {{RealmSandboxTemplateIsland
+            this.component
+            cardOrField=@card.constructor
+            model=this.model
+            fields=@sandbox.fields
+            context=this.context
+            format=this.format
+            set=this.set
+            viewCard=this.viewCard
+            onError=@sandbox.onError
+            onRendered=@sandbox.onRendered
+            card=@card
+            principal=@sandbox.principal
+            markerBacked=@sandbox.markerBacked
+          }}
+        ></div>
+      </CardContainer>
+    {{/if}}
 
     <style scoped>
       .realm-sandbox-render {

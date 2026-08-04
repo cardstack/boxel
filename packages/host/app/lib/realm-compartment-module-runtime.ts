@@ -37,12 +37,17 @@ export interface SandboxComponentInstanceDescriptor {
   actions: string[];
 }
 
-export interface SandboxComponentEffect {
-  type: 'view-card';
-  target: string;
-  format?: string;
-  options?: Record<string, unknown>;
-}
+export type SandboxComponentEffect =
+  | {
+      type: 'view-card';
+      target: string;
+      format?: string;
+      options?: Record<string, unknown>;
+    }
+  | {
+      type: 'set';
+      value: unknown;
+    };
 
 export interface SandboxComponentActionResult extends SandboxComponentInstanceDescriptor {
   effects: SandboxComponentEffect[];
@@ -89,6 +94,109 @@ export interface SandboxCardMethodResult {
 interface CapturedCardFieldMetadata {
   kind: SandboxCardFieldMetadata['kind'];
   card: object;
+  computeVia?: (this: Record<string, unknown>) => unknown;
+}
+
+interface SandboxCardFieldDefinition {
+  type: SandboxCardFieldMetadata['kind'];
+  card: object;
+  computeVia?: (this: Record<string, unknown>) => unknown;
+}
+
+function safeEventTarget(
+  target: EventTarget | null,
+): Record<string, unknown> | null {
+  if (typeof Element === 'undefined' || !(target instanceof Element)) {
+    return null;
+  }
+  let source = target as Element & {
+    checked?: unknown;
+    dataset?: DOMStringMap;
+    name?: unknown;
+    selectedIndex?: unknown;
+    type?: unknown;
+    value?: unknown;
+  };
+  let result: Record<string, unknown> = {
+    tagName: source.tagName,
+  };
+  for (let property of [
+    'checked',
+    'id',
+    'name',
+    'selectedIndex',
+    'type',
+    'value',
+  ] as const) {
+    let value = source[property];
+    if (
+      typeof value === 'string' ||
+      typeof value === 'number' ||
+      typeof value === 'boolean'
+    ) {
+      result[property] = value;
+    }
+  }
+  if (source.dataset) {
+    result.dataset = Object.fromEntries(Object.entries(source.dataset));
+  }
+  return result;
+}
+
+function safeEvent(event: Event): Record<string, unknown> {
+  let result: Record<string, unknown> = {
+    type: event.type,
+    bubbles: event.bubbles,
+    cancelable: event.cancelable,
+    composed: event.composed,
+    defaultPrevented: event.defaultPrevented,
+    target: safeEventTarget(event.target),
+    currentTarget: safeEventTarget(event.currentTarget),
+  };
+  for (let property of [
+    'altKey',
+    'button',
+    'buttons',
+    'clientX',
+    'clientY',
+    'code',
+    'ctrlKey',
+    'data',
+    'deltaMode',
+    'deltaX',
+    'deltaY',
+    'inputType',
+    'isPrimary',
+    'key',
+    'metaKey',
+    'pageX',
+    'pageY',
+    'pointerId',
+    'pointerType',
+    'repeat',
+    'screenX',
+    'screenY',
+    'shiftKey',
+  ] as const) {
+    let value = (event as unknown as Record<string, unknown>)[property];
+    if (
+      typeof value === 'string' ||
+      typeof value === 'number' ||
+      typeof value === 'boolean' ||
+      value === null
+    ) {
+      result[property] = value;
+    }
+  }
+  return result;
+}
+
+export function projectSandboxActionArguments(args: unknown[]): unknown[] {
+  return args.map((value) =>
+    typeof Event !== 'undefined' && value instanceof Event
+      ? safeEvent(value)
+      : value,
+  );
 }
 
 export interface CompartmentAmbientReport {
@@ -170,6 +278,7 @@ const lockdownMarker = Symbol.for('boxel.realm-compartment.lockdown');
 export const sandboxRealmURLArgument = '__boxelSandboxRealmURL';
 export const sandboxViewCardCapabilityArgument =
   '__boxelSandboxHasViewCardCapability';
+export const sandboxSetCapabilityArgument = '__boxelSandboxHasSetCapability';
 
 const staticAttributeOpcodes = new Set([14, 24]);
 const dynamicAttributeOpcodes = new Set([15, 16, 22, 23]);
@@ -243,6 +352,13 @@ function ensureLockdown() {
       errorTaming: 'unsafe',
       errorTrapping: 'none',
       unhandledRejectionTrapping: 'none',
+      // Existing cards use localeCompare/toLocaleString for presentation.
+      // SES's safe locale taming replaces those shared intrinsics with
+      // non-locale fallbacks (for example, 9035 instead of 9,035), which
+      // changes both sandbox output and the trusted Host after lockdown.
+      // Browser locale is presentation context, not Store/Realm authority;
+      // retain the platform methods for compatibility across both runtimes.
+      localeTaming: 'unsafe',
       // Monaco and other webpack/Rollup-produced host libraries assign an
       // own `constructor` while establishing generated prototype chains.
       // Endo documents override taming as a compatibility (not security)
@@ -567,6 +683,23 @@ export default class RealmCompartmentModuleRuntime {
     });
   }
 
+  async evaluateCardProjection(
+    moduleIdentifier: string,
+    exportName: string,
+    snapshot: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    let cardType = await this.importCardType(moduleIdentifier, exportName);
+    let CardType = cardType as unknown as new (
+      fields?: Record<string, unknown>,
+    ) => Record<string, unknown>;
+    let safeSnapshot = this.cloneIntoCompartment(this.jsonClone(snapshot)) as
+      | Record<string, unknown>
+      | undefined;
+    let instance = new CardType(safeSnapshot);
+    this.materializeComputedFields(instance, CardType);
+    return structuredClone(this.jsonClone(instance) as Record<string, unknown>);
+  }
+
   async hasModuleExport(
     moduleIdentifier: string,
     exportName: string,
@@ -711,7 +844,9 @@ export default class RealmCompartmentModuleRuntime {
       );
     }
     effects.length = 0;
-    let safeArgs = this.cloneIntoCompartment(this.jsonClone(args));
+    let safeArgs = this.cloneIntoCompartment(
+      this.jsonClone(projectSandboxActionArguments(args)),
+    );
     let finish = (returnValue: unknown): SandboxComponentActionResult => {
       let safeReturnValue: unknown;
       if (returnValue !== undefined) {
@@ -927,6 +1062,16 @@ export default class RealmCompartmentModuleRuntime {
       this.emberComponentFacade(),
     );
     this.installExplicitRuntimeFacade(
+      '@ember/component/template-only',
+      harden({
+        // A compiled <template> assigns its captured descriptor to the value
+        // returned by templateOnly(). The compartment only needs a fresh,
+        // constructable identity here; the host reifies the descriptor after
+        // it crosses the explicit template boundary.
+        default: () => this.componentBase(),
+      }),
+    );
+    this.installExplicitRuntimeFacade(
       '@ember/template-factory',
       this.templateFactoryFacade(),
     );
@@ -971,13 +1116,56 @@ export default class RealmCompartmentModuleRuntime {
     // These are pure data transforms plus inert realm/menu identity symbols.
     // Keep this list explicit: the full runtime-common namespace also contains
     // host/runtime facilities that realm-authored code must not receive.
+    let Command = this.sandboxCommandBase();
     return Object.freeze({
+      Command,
+      Tool: Command,
       baseRRI,
       codeRef,
       getMenuItems,
       realmURL,
       searchEntryWireQueryFromQuery: sandboxSearchEntryWireQueryFromQuery,
     });
+  }
+
+  private sandboxCommandBase() {
+    return class SandboxCommand {
+      static actionVerb = 'Apply';
+
+      ignoreInputFields = ['cardInfo'];
+      requireInputFields: string[] = [];
+      name = this.constructor.name;
+      description = '';
+
+      protected readonly toolContext: object;
+
+      constructor(toolContext: object) {
+        this.toolContext = toolContext;
+      }
+
+      protected get commandContext(): object {
+        return this.toolContext;
+      }
+
+      async execute(input?: unknown): Promise<unknown> {
+        let inputCard = input;
+        if (input !== undefined) {
+          let InputType = await (
+            this as unknown as {
+              getInputType(): Promise<
+                new (fields?: Record<string, unknown>) => unknown
+              >;
+            }
+          ).getInputType();
+          if (InputType && !(input instanceof InputType)) {
+            inputCard = new InputType(input as Record<string, unknown>);
+          }
+        }
+        return (
+          this as unknown as { run(inputValue: unknown): Promise<unknown> }
+        ).run(inputCard);
+      }
+    };
   }
 
   private decoratorFacade(moduleIdentifier: string, names: string[]) {
@@ -1114,7 +1302,17 @@ export default class RealmCompartmentModuleRuntime {
           // Once module evaluation finishes Loader can identify authored
           // types, and cardFieldMetadata converts it to an inert CodeRef. No
           // executable value crosses into the Host.
-          fields.set(name, { kind, card });
+          let computeVia = (definition as { computeVia?: unknown }).computeVia;
+          fields.set(name, {
+            kind,
+            card,
+            ...(typeof computeVia === 'function'
+              ? {
+                  computeVia:
+                    computeVia as CapturedCardFieldMetadata['computeVia'],
+                }
+              : {}),
+          });
         }
         let originalInitializer = initializer;
         return {
@@ -1148,12 +1346,41 @@ export default class RealmCompartmentModuleRuntime {
     let definition = (
       type: SandboxCardFieldMetadata['kind'],
       cardOrThunk: unknown,
-    ) => Object.freeze({ type, card: relationshipType(cardOrThunk) });
-    let contains = (card: unknown) => definition('contains', card);
-    let containsMany = (card: unknown) => definition('containsMany', card);
-    let linksTo = (cardOrThunk: unknown) => definition('linksTo', cardOrThunk);
-    let linksToMany = (cardOrThunk: unknown) =>
-      definition('linksToMany', cardOrThunk);
+      options?: { computeVia?: unknown },
+    ) => {
+      let computeVia = options?.computeVia;
+      let card = relationshipType(cardOrThunk);
+      if (
+        (typeof card !== 'object' || card === null) &&
+        typeof card !== 'function'
+      ) {
+        throw new Error(`Invalid ${type} field definition`);
+      }
+      return Object.freeze({
+        type,
+        card,
+        ...(typeof computeVia === 'function'
+          ? {
+              computeVia:
+                computeVia as SandboxCardFieldDefinition['computeVia'],
+            }
+          : {}),
+      }) satisfies SandboxCardFieldDefinition;
+    };
+    let contains = (card: unknown, options?: { computeVia?: unknown }) =>
+      definition('contains', card, options);
+    let containsMany = (card: unknown, options?: { computeVia?: unknown }) =>
+      definition('containsMany', card, options);
+    let linksTo = (cardOrThunk: unknown, options?: { computeVia?: unknown }) =>
+      definition('linksTo', cardOrThunk, options);
+    let linksToMany = (
+      cardOrThunk: unknown,
+      options?: { computeVia?: unknown },
+    ) => definition('linksToMany', cardOrThunk, options);
+    let getFields = (
+      value: unknown,
+      options?: { includeComputeds?: boolean },
+    ) => this.compartmentFieldMap(value, options?.includeComputeds !== false);
     let facade: Record<string, unknown> = {
       CardDef: SandboxCardDef,
       FieldDef: SandboxFieldDef,
@@ -1164,6 +1391,7 @@ export default class RealmCompartmentModuleRuntime {
       containsMany,
       linksTo,
       linksToMany,
+      getFields,
     };
     for (let [name, value] of Object.entries(facade)) {
       if (
@@ -1191,6 +1419,125 @@ export default class RealmCompartmentModuleRuntime {
     // subclassing expect writable prototype constructors; these tokens carry
     // no host authority and are private to this realm principal's runtime.
     return Object.freeze(facadeWithTypeTokens);
+  }
+
+  private compartmentFieldMap(
+    value: unknown,
+    includeComputeds: boolean,
+  ): Record<
+    string,
+    { fieldType: SandboxCardFieldMetadata['kind']; card: object }
+  > {
+    let prototype =
+      typeof value === 'function'
+        ? (value as { prototype?: object }).prototype
+        : value && typeof value === 'object'
+          ? Object.getPrototypeOf(value)
+          : undefined;
+    let result: Record<
+      string,
+      { fieldType: SandboxCardFieldMetadata['kind']; card: object }
+    > = Object.create(null);
+    while (prototype && prototype !== Object.prototype) {
+      for (let [name, field] of this.fieldMetadataByPrototype.get(prototype) ??
+        []) {
+        if (!includeComputeds && field.computeVia) {
+          continue;
+        }
+        result[name] ??= { fieldType: field.kind, card: field.card };
+      }
+      prototype = Object.getPrototypeOf(prototype) as object | null;
+    }
+    return result;
+  }
+
+  private materializeComputedFields(
+    instance: Record<string, unknown>,
+    CardType: new (fields?: Record<string, unknown>) => Record<string, unknown>,
+  ) {
+    let fields = new Map<string, CapturedCardFieldMetadata>();
+    let prototypes: object[] = [];
+    let prototype: object | null | undefined = CardType.prototype;
+    while (prototype && prototype !== Object.prototype) {
+      prototypes.unshift(prototype);
+      prototype = Object.getPrototypeOf(prototype) as object | null;
+    }
+    for (let currentPrototype of prototypes) {
+      for (let entry of this.fieldMetadataByPrototype.get(currentPrototype) ??
+        []) {
+        fields.set(entry[0], entry[1]);
+      }
+    }
+
+    let supplied = this.initialCardFieldsByInstance.get(instance) ?? {};
+    for (let [name, field] of fields) {
+      let hasSupplied = Object.prototype.hasOwnProperty.call(supplied, name);
+      let value = hasSupplied ? supplied[name] : undefined;
+      if (!hasSupplied && field.computeVia) {
+        try {
+          value = field.computeVia.call(instance);
+        } catch {
+          // Projection is best-effort per field. A branch that depends on
+          // unavailable browser authority must not erase independent computed
+          // values. If the Realm/index supplied a value, the hasSupplied path
+          // above keeps it without executing computeVia at all.
+          value = undefined;
+        }
+      }
+      instance[name] = this.materializeCompartmentFieldValue(value, field);
+    }
+  }
+
+  private materializeCompartmentFieldValue(
+    value: unknown,
+    field: CapturedCardFieldMetadata,
+  ): unknown {
+    if (
+      value == null ||
+      field.kind === 'linksTo' ||
+      field.kind === 'linksToMany'
+    ) {
+      return value;
+    }
+    if (field.kind === 'containsMany') {
+      return Array.isArray(value)
+        ? value.map((entry) =>
+            this.materializeCompartmentValue(entry, field.card),
+          )
+        : [];
+    }
+    return this.materializeCompartmentValue(value, field.card);
+  }
+
+  private materializeCompartmentValue(value: unknown, card: object): unknown {
+    if (!this.authoredDefinitionKind(card)) {
+      return value;
+    }
+    let CardType = card as new (
+      fields?: Record<string, unknown>,
+    ) => Record<string, unknown>;
+    let instance =
+      value instanceof CardType
+        ? (value as Record<string, unknown>)
+        : new CardType(
+            value !== null && typeof value === 'object' && !Array.isArray(value)
+              ? (value as Record<string, unknown>)
+              : { value },
+          );
+    this.materializeComputedFields(instance, CardType);
+    return instance;
+  }
+
+  private authoredDefinitionKind(card: object) {
+    let prototype = (card as { prototype?: object }).prototype;
+    while (prototype && prototype !== Object.prototype) {
+      let kind = this.definitionKindByPrototype.get(prototype);
+      if (kind) {
+        return kind;
+      }
+      prototype = Object.getPrototypeOf(prototype) as object | undefined;
+    }
+    return undefined;
   }
 
   private cardFieldMetadata(
@@ -1413,8 +1760,12 @@ export default class RealmCompartmentModuleRuntime {
     let grantsViewCard =
       typeof args.viewCard === 'function' ||
       args[sandboxViewCardCapabilityArgument] === true;
+    let grantsSet =
+      typeof args.set === 'function' ||
+      args[sandboxSetCapabilityArgument] === true;
     let clonedArgs = this.jsonClone(args);
     delete clonedArgs[sandboxViewCardCapabilityArgument];
+    delete clonedArgs[sandboxSetCapabilityArgument];
     let model = clonedArgs.model;
     let href: string | undefined;
     if (
@@ -1470,6 +1821,18 @@ export default class RealmCompartmentModuleRuntime {
         },
       );
     }
+    if (grantsSet && effects) {
+      compartmentArgs.set = harden((value: unknown): undefined => {
+        let safeValue = this.jsonClone(value);
+        if (value !== null && typeof value === 'object') {
+          let constructorFields = this.initialCardFieldsByInstance.get(value);
+          if (constructorFields) {
+            Object.assign(safeValue, this.jsonClone(constructorFields));
+          }
+        }
+        effects.push({ type: 'set', value: safeValue });
+      });
+    }
     let compartmentModel = compartmentArgs.model;
     if (
       href &&
@@ -1486,7 +1849,21 @@ export default class RealmCompartmentModuleRuntime {
   }
 
   private cloneIntoCompartment(value: unknown): unknown {
-    let json = JSON.stringify(value);
+    // This is a data boundary, but Compartment.evaluate still applies SES's
+    // mandatory source transforms to the expression below. Escape characters
+    // that can form HTML-comment tokens before embedding the JSON text in
+    // source. JSON.parse restores the original data inside the compartment.
+    // This keeps strings such as Mermaid's `-->` and authored `<!-- ... -->`
+    // comments from being mistaken for executable legacy HTML comments.
+    let json = JSON.stringify(value)
+      .split('<')
+      .join('\\u003c')
+      .split('>')
+      .join('\\u003e')
+      .split('\u2028')
+      .join('\\u2028')
+      .split('\u2029')
+      .join('\\u2029');
     return this.compartment.evaluate(`JSON.parse(${JSON.stringify(json)})`);
   }
 
@@ -1550,6 +1927,7 @@ function defaultTrustedImport(moduleIdentifier: string): boolean {
     moduleIdentifier === '@ember/object' ||
     moduleIdentifier === '@ember/helper' ||
     moduleIdentifier === '@ember/modifier' ||
+    moduleIdentifier === '@ember/component/template-only' ||
     moduleIdentifier === '@glimmer/tracking' ||
     moduleIdentifier === '@cardstack/runtime-common' ||
     moduleIdentifier.startsWith('https://cardstack.com/base/') ||

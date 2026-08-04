@@ -29,16 +29,19 @@ interface Signature {
   Element: HTMLElement;
   Args: {
     card?: BaseDef;
-    model?: BaseDef;
+    model?: unknown;
     codeRef?: CodeRef;
     format?: Format;
     displayContainer?: boolean;
+    fieldBoundary?: boolean;
+    set?: (value: unknown) => void;
   };
 }
 
-// This is the trusted implementation behind delegatedCardRenderComponent.
-// Base components can invoke the supplied component, but neither Base nor the
-// authored card receives the RealmSandboxService or any host authority.
+// Opaque synthetic definitions expose this component through their ordinary
+// static format slots. That lets trusted Base code keep calling its existing
+// getComponent(instance) helper without a paired Base deployment, while
+// neither Base nor the authored card receives RealmSandboxService authority.
 export default class RealmSandboxDelegatedRender extends Component<Signature> {
   @service declare private realmSandbox: RealmSandboxService;
   @consume(CardCrudFunctionsContextName)
@@ -53,7 +56,7 @@ export default class RealmSandboxDelegatedRender extends Component<Signature> {
   }
 
   private get card(): BaseDef {
-    let card = this.args.card ?? this.args.model;
+    let card = this.args.card ?? (this.args.model as BaseDef | undefined);
     if (!card) {
       throw new Error('Delegated sandbox render requires a card or field');
     }
@@ -89,6 +92,7 @@ export default class RealmSandboxDelegatedRender extends Component<Signature> {
         @format={{this.effectiveFormat}}
         @sandbox={{this.iframeSandboxRender}}
         @displayContainer={{@displayContainer}}
+        @set={{@set}}
         ...attributes
       />
     {{else if this.sandboxRender}}
@@ -96,8 +100,10 @@ export default class RealmSandboxDelegatedRender extends Component<Signature> {
         @card={{this.card}}
         @format={{this.effectiveFormat}}
         @sandbox={{this.sandboxRender}}
-        @model={{this.sandboxRender.model}}
+        @model={{@model}}
         @displayContainer={{@displayContainer}}
+        @fieldBoundary={{@fieldBoundary}}
+        @set={{@set}}
         @viewCard={{this.viewCard}}
         ...attributes
       />

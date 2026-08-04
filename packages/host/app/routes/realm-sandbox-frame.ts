@@ -8,6 +8,7 @@ import type RealmSandboxService from '@cardstack/host/services/realm-sandbox';
 import type { Format } from '@cardstack/base/card-api';
 
 export interface RealmSandboxFrameModel {
+  bootstrapID: string;
   cardID: string;
   format: Format;
   parentOrigin: string;
@@ -21,6 +22,7 @@ export default class RealmSandboxFrameRoute extends Route<RealmSandboxFrameModel
 
   queryParams = {
     cardURL: { refreshModel: true },
+    bootstrapID: { refreshModel: true },
     format: { refreshModel: true },
     parentOrigin: { refreshModel: true },
     fieldName: { refreshModel: true },
@@ -31,6 +33,7 @@ export default class RealmSandboxFrameRoute extends Route<RealmSandboxFrameModel
 
   model(params: {
     cardURL?: string;
+    bootstrapID?: string;
     format?: string;
     parentOrigin?: string;
     fieldName?: string;
@@ -48,6 +51,10 @@ export default class RealmSandboxFrameRoute extends Route<RealmSandboxFrameModel
       throw new Error('Realm iframe renderer received an invalid card URL');
     }
     let parentOrigin = new URL(String(params.parentOrigin ?? '')).origin;
+    let bootstrapID = String(params.bootstrapID ?? '');
+    if (bootstrapID.length === 0 || bootstrapID.length > 256) {
+      throw new Error('Realm iframe renderer received an invalid bootstrap ID');
+    }
     let codeRef =
       params.componentModule && params.componentName
         ? {
@@ -66,6 +73,7 @@ export default class RealmSandboxFrameRoute extends Route<RealmSandboxFrameModel
       throw new Error('Realm iframe renderer received an unsupported format');
     }
     return {
+      bootstrapID,
       cardID: cardURL.href,
       format,
       parentOrigin,

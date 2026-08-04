@@ -10,6 +10,7 @@ export interface RealmIframeSandboxConnect {
   type: 'connect';
   document?: LooseSingleCardDocument;
   draft?: RealmIframeSandboxDraft;
+  rootModuleURL: string;
   presentation: RealmIframeSandboxPresentation;
 }
 
@@ -40,11 +41,23 @@ export interface RealmIframeSandboxReady {
   cardID?: string;
   revision?: number;
   error?: string;
+  typePresentation?: RealmIframeSandboxTypePresentation;
+}
+
+// Presentation metadata is discovered by the isolated runtime after it has
+// loaded the real card definition. It is deliberately data-only: the parent
+// learns enough to size and label its trusted container without receiving the
+// constructor, component, or any executable authority from the iframe.
+export interface RealmIframeSandboxTypePresentation {
+  displayName: string;
+  headerColor: string | null;
+  prefersWideFormat: boolean;
 }
 
 export interface RealmIframeSandboxListening {
   protocol: typeof realmIframeSandboxProtocol;
   type: 'listening';
+  bootstrapID: string;
 }
 
 export interface RealmIframeSandboxResize {
@@ -70,7 +83,7 @@ export interface RealmIframeSandboxFetchResponse {
   type: 'fetch-response';
   requestId: string;
   response?: {
-    body: string | null;
+    body: string | ArrayBuffer | null;
     headers: [string, string][];
     status: number;
     statusText: string;
@@ -100,6 +113,7 @@ export function isRealmIframeSandboxConnect(
   return (
     message.protocol === realmIframeSandboxProtocol &&
     message.type === 'connect' &&
+    boundedString(message.rootModuleURL, 8_192) &&
     isRealmIframeSandboxPresentation(message.presentation)
   );
 }
@@ -150,7 +164,7 @@ export function isRealmIframeSandboxOutbound(
   }
   switch (message.type) {
     case 'listening':
-      return true;
+      return boundedString(message.bootstrapID, 256);
     case 'ready':
       return (
         optionalBoundedString(message.cardID, 8_192) &&
@@ -158,7 +172,9 @@ export function isRealmIframeSandboxOutbound(
           (typeof message.revision === 'number' &&
             Number.isSafeInteger(message.revision) &&
             message.revision >= 0)) &&
-        optionalBoundedString(message.error, 8_192)
+        optionalBoundedString(message.error, 8_192) &&
+        (message.typePresentation === undefined ||
+          isRealmIframeSandboxTypePresentation(message.typePresentation))
       );
     case 'resize':
       return finiteNumber(message.width) && finiteNumber(message.height);
@@ -171,6 +187,21 @@ export function isRealmIframeSandboxOutbound(
     default:
       return false;
   }
+}
+
+function isRealmIframeSandboxTypePresentation(
+  value: unknown,
+): value is RealmIframeSandboxTypePresentation {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  let presentation = value as Record<string, unknown>;
+  return (
+    boundedString(presentation.displayName, 1_024) &&
+    (presentation.headerColor === null ||
+      boundedString(presentation.headerColor, 128)) &&
+    typeof presentation.prefersWideFormat === 'boolean'
+  );
 }
 
 function boundedString(value: unknown, maxLength: number): value is string {
@@ -240,7 +271,11 @@ function isIframeFetchResponse(value: unknown): boolean {
   }
   let response = value as Record<string, unknown>;
   return (
-    (response.body === null || typeof response.body === 'string') &&
+    (response.body === null ||
+      (typeof response.body === 'string' &&
+        response.body.length <= iframeFetchResponseLimitBytes) ||
+      (response.body instanceof ArrayBuffer &&
+        response.body.byteLength <= iframeFetchResponseLimitBytes)) &&
     Array.isArray(response.headers) &&
     response.headers.length <= 256 &&
     response.headers.every(
@@ -258,3 +293,8 @@ function isIframeFetchResponse(value: unknown): boolean {
     boundedString(response.url, 8_192)
   );
 }
+
+// The channel is a capability boundary, not an unbounded object transport.
+// This matches the default Realm file limit and protects both the Host and the
+// credentialless child from a declared dependency returning an enormous body.
+export const iframeFetchResponseLimitBytes = 5 * 1024 * 1024;

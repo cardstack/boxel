@@ -4,6 +4,7 @@ import { decodeScopedCSSRequest } from '@cardstack/runtime-common';
 import { transpileJS } from '@cardstack/runtime-common/transpile';
 
 import RealmCompartmentModuleRuntime, {
+  projectSandboxActionArguments,
   sandboxRealmURLArgument,
 } from '@cardstack/host/lib/realm-compartment-module-runtime';
 import { validateCompartmentCSS } from '@cardstack/host/services/realm-sandbox';
@@ -58,6 +59,38 @@ function runtimeFor(sources: Record<string, string>) {
 }
 
 module('Unit | realm compartment module runtime', function () {
+  test('projects form and pointer event data without exposing DOM nodes', function (assert) {
+    let button = document.createElement('button');
+    button.dataset.rating = '5';
+    button.value = 'confirm';
+    let event = new MouseEvent('click', {
+      bubbles: true,
+      button: 0,
+      clientX: 42,
+      clientY: 24,
+      shiftKey: true,
+    });
+    Object.defineProperties(event, {
+      currentTarget: { value: button },
+      target: { value: button },
+    });
+
+    let [projected] = projectSandboxActionArguments([event]) as Array<
+      Record<string, unknown>
+    >;
+    let currentTarget = projected.currentTarget as Record<string, unknown>;
+
+    assert.deepEqual(currentTarget.dataset, { rating: '5' });
+    assert.strictEqual(currentTarget.value, 'confirm');
+    assert.strictEqual(projected.clientX, 42);
+    assert.strictEqual(projected.clientY, 24);
+    assert.true(projected.shiftKey);
+    assert.notOk(
+      currentTarget instanceof Element,
+      'the action receives inert data rather than the live DOM element',
+    );
+  });
+
   test('evaluates and caches a card module without browser authority', async function (assert) {
     let source = `
       import { CardDef, Component } from 'https://cardstack.com/base/card-api';
@@ -332,6 +365,121 @@ module('Unit | realm compartment module runtime', function () {
     );
   });
 
+  test('evaluates nested and chained computeVia fields into an opaque JSON projection', async function (assert) {
+    let moduleID = 'https://realm.example/cards/flight-plan.gts';
+    let source = await transpileJS(
+      `
+        import NumberField from 'https://cardstack.com/base/number';
+        import StringField from 'https://cardstack.com/base/string';
+        import { CardDef, FieldDef, contains, field } from 'https://cardstack.com/base/card-api';
+
+        export class CostInputs extends FieldDef {
+          @field units = contains(NumberField);
+          @field unitCost = contains(NumberField);
+          @field subtotal = contains(NumberField, {
+            computeVia: function () {
+              return this.units * this.unitCost;
+            },
+          });
+          @field subtotalLabel = contains(StringField, {
+            computeVia: function () {
+              return '$' + this.subtotal.toLocaleString('en-US');
+            },
+          });
+        }
+
+        export class FlightPlan extends CardDef {
+          @field route = contains(StringField);
+          @field taxRate = contains(NumberField);
+          @field costs = contains(CostInputs);
+          @field projectedCosts = contains(CostInputs, {
+            computeVia: function () {
+              return new CostInputs({ units: 2000, unitCost: 30 });
+            },
+          });
+          @field total = contains(NumberField, {
+            computeVia: function () {
+              return this.costs.subtotal * (1 + this.taxRate);
+            },
+          });
+          @field summary = contains(StringField, {
+            computeVia: function () {
+              return this.route + ' · ' + this.costs.subtotalLabel + ' · $' + this.total;
+            },
+          });
+        }
+      `,
+      '/flight-plan.gts',
+    );
+    let runtime = runtimeFor({ [moduleID]: source });
+
+    assert.deepEqual(
+      await runtime.evaluateCardProjection(moduleID, 'FlightPlan', {
+        route: 'ORD → LHR',
+        taxRate: 0.1,
+        costs: { units: 4, unitCost: 25 },
+      }),
+      {
+        route: 'ORD → LHR',
+        taxRate: 0.1,
+        costs: {
+          units: 4,
+          unitCost: 25,
+          subtotal: 100,
+          subtotalLabel: '$100',
+        },
+        projectedCosts: {
+          units: 2000,
+          unitCost: 30,
+          subtotal: 60000,
+          subtotalLabel: '$60,000',
+        },
+        total: 110.00000000000001,
+        summary: 'ORD → LHR · $100 · $110.00000000000001',
+      },
+      'only the computed JSON projection crosses out of the compartment',
+    );
+  });
+
+  test('keeps indexed computed values and isolates unavailable computed branches', async function (assert) {
+    let moduleID = 'https://realm.example/cards/index-backed.gts';
+    let source = await transpileJS(
+      `
+        import NumberField from 'https://cardstack.com/base/number';
+        import { CardDef, contains, field } from 'https://cardstack.com/base/card-api';
+
+        export class IndexBacked extends CardDef {
+          @field input = contains(NumberField);
+          @field safeTotal = contains(NumberField, {
+            computeVia: function () {
+              return this.input * 2;
+            },
+          });
+          @field browserTotal = contains(NumberField, {
+            computeVia: function () {
+              throw new Error('browser runtime required');
+            },
+          });
+        }
+      `,
+      '/index-backed.gts',
+    );
+    let runtime = runtimeFor({ [moduleID]: source });
+
+    assert.deepEqual(
+      await runtime.evaluateCardProjection(moduleID, 'IndexBacked', {
+        input: 8,
+        browserTotal: 99,
+      }),
+      {
+        input: 8,
+        safeTotal: 16,
+        browserTotal: 99,
+      },
+      'a Realm/index value crosses unchanged while an independent SES-safe branch still computes',
+    );
+  });
+
   test('reports the explicit card-or-field definition kind', async function (assert) {
     let moduleID = `${MODULE_ID}?definition-kind`;
     let source = `
@@ -567,6 +715,41 @@ module('Unit | realm compartment module runtime', function () {
     );
   });
 
+  test('preserves HTML-comment-shaped text in compartment component data', async function (assert) {
+    let moduleID = `${MODULE_ID}?component-html-comment-data`;
+    let source = `
+      import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+      import { setComponentTemplate } from '@ember/component';
+      import { createTemplateFactory } from '@ember/template-factory';
+      export class MarkdownCard extends CardDef {}
+      MarkdownCard.isolated = class Isolated extends Component {
+        get content() { return this.args.model.body.content; }
+      };
+      setComponentTemplate(createTemplateFactory({
+        id: 'markdown-isolated',
+        block: ${JSON.stringify(TEMPLATE_BLOCK)},
+        moduleName: ${JSON.stringify(moduleID)},
+        isStrictMode: true,
+      }), MarkdownCard.isolated);
+    `;
+    let runtime = runtimeFor({ [moduleID]: source });
+    let bundle = await runtime.evaluateTemplate(
+      moduleID,
+      'MarkdownCard',
+      'isolated',
+    );
+    let instance = bundle.templates[bundle.root]!.instance;
+    let content = 'graph LR; author --> sandbox\n<!-- authored note -->';
+
+    assert.strictEqual(
+      runtime.readComponentProperty(instance.handle, 'content', {
+        model: { body: { content } },
+      }),
+      content,
+      'JSON data round-trips without weakening source transforms or changing authored text',
+    );
+  });
+
   test('returns explicit viewCard effects without exposing the host callback', async function (assert) {
     let moduleID = `${MODULE_ID}?view-card-effect`;
     let source = `
@@ -650,6 +833,122 @@ module('Unit | realm compartment module runtime', function () {
       thirdResult.effects.map((effect) => effect.target),
       ['./third'],
       'each additional invocation chains behind the previous action tail',
+    );
+  });
+
+  test('returns an explicit delegated set effect without exposing the host callback', async function (assert) {
+    let moduleID = `${MODULE_ID}?set-effect`;
+    let source = `
+      import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+      import { setComponentTemplate } from '@ember/component';
+      import { createTemplateFactory } from '@ember/template-factory';
+      export class ArticleCard extends CardDef {}
+      ArticleCard.isolated = class Isolated extends Component {
+        update = () => this.args.set({ average: 5, count: 128 });
+      };
+      setComponentTemplate(createTemplateFactory({
+        id: 'set-effect-isolated',
+        block: ${JSON.stringify(TEMPLATE_BLOCK)},
+        moduleName: ${JSON.stringify(moduleID)},
+        isStrictMode: true,
+      }), ArticleCard.isolated);
+    `;
+    let runtime = runtimeFor({ [moduleID]: source });
+    let bundle = await runtime.evaluateTemplate(
+      moduleID,
+      'ArticleCard',
+      'isolated',
+    );
+    let hostCallbackCalled = false;
+    let live = runtime.instantiateComponent(
+      bundle.templates[bundle.root]!.instance.handle,
+      { set: () => (hostCallbackCalled = true) },
+    );
+
+    let updated = await runtime.invokeComponentAction(
+      live.handle,
+      'update',
+      [],
+    );
+
+    assert.false(hostCallbackCalled, 'the Host callback does not enter SES');
+    assert.deepEqual(updated.effects, [
+      { type: 'set', value: { average: 5, count: 128 } },
+    ]);
+  });
+
+  test('runs a pure authored Command with an inert sandbox command context', async function (assert) {
+    let moduleID = `${MODULE_ID}?pure-command`;
+    let source = `
+      import { Command } from '@cardstack/runtime-common';
+      import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+      import { setComponentTemplate } from '@ember/component';
+      import { createTemplateFactory } from '@ember/template-factory';
+
+      class SimulationInput extends CardDef {}
+      class SimulationResult extends CardDef {}
+      class SimulateUploadCommand extends Command {
+        async getInputType() { return SimulationInput; }
+        async run(input) {
+          return new SimulationResult({
+            receiptId: \`receipt:\${input.assetName}\`,
+            publicUrl: \`\${input.targetRealm}\${input.assetName.toLowerCase()}\`,
+          });
+        }
+      }
+
+      export class CommandLab extends CardDef {}
+      CommandLab.isolated = class Isolated extends Component {
+        receiptId = 'No receipt yet';
+        publicUrl = 'No URL yet';
+        runCommand = async () => {
+          let command = new SimulateUploadCommand(
+            this.args.context.commandContext,
+          );
+          let result = await command.execute({
+            assetName: 'Flight Plan',
+            targetRealm: 'https://realm.example/',
+          });
+          this.receiptId = result.receiptId;
+          this.publicUrl = result.publicUrl;
+        };
+      };
+      setComponentTemplate(createTemplateFactory({
+        id: 'pure-command-isolated',
+        block: ${JSON.stringify(TEMPLATE_BLOCK)},
+        moduleName: ${JSON.stringify(MODULE_ID)},
+        isStrictMode: true,
+      }), CommandLab.isolated);
+    `;
+    let runtime = runtimeFor({ [moduleID]: source });
+    let bundle = await runtime.evaluateTemplate(
+      moduleID,
+      'CommandLab',
+      'isolated',
+    );
+    let live = runtime.instantiateComponent(
+      bundle.templates[bundle.root]!.instance.handle,
+      { context: { commandContext: {} } },
+    );
+
+    let updated = await runtime.invokeComponentAction(
+      live.handle,
+      'runCommand',
+      [],
+    );
+
+    assert.deepEqual(
+      updated.state,
+      {
+        publicUrl: 'https://realm.example/flight plan',
+        receiptId: 'receipt:Flight Plan',
+      },
+      'the authored Command constructs typed input and returns typed result data entirely inside SES',
+    );
+    assert.deepEqual(
+      updated.effects,
+      [],
+      'pure commands do not receive or emit Host authority',
     );
   });
 
@@ -836,6 +1135,45 @@ module('Unit | realm compartment module runtime', function () {
       descriptor.stylesheets.every((stylesheet) =>
         stylesheet.endsWith('.glimmer-scoped.css'),
       ),
+    );
+  });
+
+  test('captures a top-level template-only component referenced by an authored template', async function (assert) {
+    let moduleID = 'https://realm.example/cards/template-only-rating';
+    let source = await transpileJS(
+      `
+        import type { TemplateOnlyComponent } from '@ember/component/template-only';
+        import { CardDef, Component } from '@cardstack/base/card-api';
+
+        const StarIcon: TemplateOnlyComponent<{ Args: { filled: boolean } }> =
+          <template><span data-filled={{@filled}}>★</span></template>;
+
+        export class RatingCard extends CardDef {
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <article><StarIcon @filled={{true}} /> Five stars</article>
+              <style scoped>article { color: gold; }</style>
+            </template>
+          };
+        }
+      `,
+      '/template-only-rating.gts',
+    );
+    let runtime = runtimeFor({ [moduleID]: source });
+
+    let bundle = await runtime.evaluateTemplate(
+      moduleID,
+      'RatingCard',
+      'isolated',
+    );
+
+    assert.strictEqual(Object.keys(bundle.templates).length, 2);
+    assert.true(bundle.templates[bundle.root]?.block.includes('Five stars'));
+    assert.true(
+      Object.values(bundle.templates).some((template) =>
+        template.block.includes('data-filled'),
+      ),
+      'the nested template-only component crosses as a captured descriptor',
     );
   });
 

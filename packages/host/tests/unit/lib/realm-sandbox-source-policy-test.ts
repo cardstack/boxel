@@ -30,6 +30,40 @@ module('Unit | realm sandbox source policy', function () {
 
     assert.strictEqual(result.tier, 'iframe');
     assert.deepEqual(result.signals, ['document']);
+    assert.false(
+      result.propagatesToImporters,
+      'a dormant browser adapter does not force every importer into an iframe',
+    );
+  });
+
+  test('DOM type annotations do not select an iframe', async function (assert) {
+    let result = await classifyCardSourceForSandbox(`
+      interface Signature {
+        Element: HTMLElement;
+      }
+      export class InteractiveCard {
+        change = (event: Event) => {
+          return (event.currentTarget as HTMLElement).dataset.rating;
+        };
+      }
+    `);
+
+    assert.strictEqual(result.tier, 'compartment');
+    assert.deepEqual(result.signals, []);
+  });
+
+  test('runtime DOM references still select an iframe when the module also has DOM types', async function (assert) {
+    let result = await classifyCardSourceForSandbox(`
+      interface Signature {
+        Element: HTMLElement;
+      }
+      export function isElement(value: unknown) {
+        return value instanceof HTMLElement;
+      }
+    `);
+
+    assert.strictEqual(result.tier, 'iframe');
+    assert.deepEqual(result.signals, ['HTMLElement']);
   });
 
   test('Three.js imports select the isolated iframe', async function (assert) {
@@ -40,6 +74,10 @@ module('Unit | realm sandbox source policy', function () {
 
     assert.strictEqual(result.tier, 'iframe');
     assert.deepEqual(result.signals, ['three']);
+    assert.true(
+      result.propagatesToImporters,
+      'a browser renderer package requirement follows the import graph',
+    );
   });
 
   test('custom modifiers select the isolated iframe because they receive DOM elements', async function (assert) {
@@ -50,6 +88,7 @@ module('Unit | realm sandbox source policy', function () {
 
     assert.strictEqual(result.tier, 'iframe');
     assert.deepEqual(result.signals, ['ember-modifier']);
+    assert.true(result.propagatesToImporters);
   });
 
   test('the trusted safe modifier remains in SES', async function (assert) {

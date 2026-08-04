@@ -616,20 +616,30 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return this.url;
   }
 
+  private get cardTypeDisplayName() {
+    if (!this.card) {
+      return undefined;
+    }
+    return (
+      this.cardTypeService.introspect(this.card)?.displayName ??
+      cardTypeDisplayName(this.card)
+    );
+  }
+
   private get headerType() {
     if (this.isIndexCard) {
       return 'Workspace';
-    } else if (this.card) {
-      return cardTypeDisplayName(this.card);
+    } else {
+      return this.cardTypeDisplayName;
     }
-    return undefined;
   }
 
   private get headerTitle() {
     let cardTitle = this.card?.cardTitle;
-    if (this.card && cardTitle?.startsWith('Untitled ')) {
+    let displayName = this.cardTypeDisplayName;
+    if (displayName && cardTitle?.startsWith('Untitled ')) {
       let strippedTitle = cardTitle.slice('Untitled '.length);
-      if (strippedTitle === cardTypeDisplayName(this.card)) {
+      if (strippedTitle === displayName) {
         return 'Untitled';
       }
     }

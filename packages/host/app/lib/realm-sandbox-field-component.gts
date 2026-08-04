@@ -38,6 +38,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
+import RealmSandboxDelegatedRender from '@cardstack/host/components/realm-sandbox-delegated-render';
 import {
   deferUntilIsolatedRenderCompletes,
   isInIsolatedRenderTransaction,
@@ -46,6 +47,7 @@ import {
   teardown,
 } from '@cardstack/host/lib/isolated-render';
 import type { SandboxCardFieldMetadata } from '@cardstack/host/lib/realm-compartment-module-runtime';
+import type RealmSandboxService from '@cardstack/host/services/realm-sandbox';
 import type { RealmSandboxRelationshipContext } from '@cardstack/host/services/realm-sandbox';
 import type StoreService from '@cardstack/host/services/store';
 
@@ -174,6 +176,7 @@ interface DeferredRelationshipSignature {
 // kind cross it; Store and loader authority remain inside HydratableCard.
 class DeferredRelationshipCard extends Modifier<DeferredRelationshipSignature> {
   @service declare private store: StoreService;
+  @service declare private realmSandbox: RealmSandboxService;
   private element?: HTMLDivElement;
   private args?: DeferredRelationshipSignature['Args']['Named'];
   private generation = 0;
@@ -238,6 +241,12 @@ class DeferredRelationshipCard extends Modifier<DeferredRelationshipSignature> {
     let card =
       isCardInstance(loaded) || isFileDefInstance(loaded) ? loaded : undefined;
     errorDoc ??= card ? undefined : (loaded as CardErrorJSONAPI);
+    if (card) {
+      await this.realmSandbox.prepareRender(card, this.args.format);
+    }
+    if (generation !== this.generation || !this.element || !this.args) {
+      return;
+    }
     renderWithArgs(
       HostRelationshipCard as any,
       this.element as any,
@@ -408,10 +417,106 @@ class DeferredTrustedField extends Modifier<DeferredTrustedFieldSignature> {
   }
 }
 
+interface DeferredSandboxFieldSignature {
+  Element: HTMLDivElement;
+  Args: {
+    Named: {
+      parentCard: BaseDef;
+      fieldName: string;
+      fieldType: ResolvedCodeRef;
+      value: unknown;
+      format: Format;
+      subscribeToData?: (render: () => void) => () => void;
+      set?: (value: unknown) => void;
+    };
+  };
+}
+
+// User-authored FieldDefs need the same explicit boundary as top-level cards.
+// The host turns the inert field value into an opaque FieldDef, then delegates
+// its authored template back through SES. No parent card, Store, or loader is
+// exposed to the field program.
+class DeferredSandboxField extends Modifier<DeferredSandboxFieldSignature> {
+  @service declare private realmSandbox: RealmSandboxService;
+  private element?: HTMLDivElement;
+  private args?: DeferredSandboxFieldSignature['Args']['Named'];
+  private generation = 0;
+  private unsubscribeFromData?: () => void;
+
+  constructor(owner: Owner, args: ArgsFor<DeferredSandboxFieldSignature>) {
+    super(owner, args);
+    registerDestructor(this, () => {
+      this.generation++;
+      this.unsubscribeFromData?.();
+      if (this.element) {
+        teardown(this.element as any);
+      }
+    });
+  }
+
+  modify(
+    element: HTMLDivElement,
+    _positional: never[],
+    args: DeferredSandboxFieldSignature['Args']['Named'],
+  ) {
+    this.element = element;
+    this.args = args;
+    if (!this.unsubscribeFromData && args.subscribeToData) {
+      this.unsubscribeFromData = args.subscribeToData(() =>
+        this.scheduleRender(),
+      );
+    }
+    this.scheduleRender();
+  }
+
+  private scheduleRender() {
+    this.generation++;
+    if (
+      isInIsolatedRenderTransaction() &&
+      deferUntilIsolatedRenderCompletes(() => this.renderField())
+    ) {
+      return;
+    }
+    scheduleOnce('afterRender', this, this.renderField);
+  }
+
+  private async renderField() {
+    if (!this.element || !this.args) {
+      return;
+    }
+    let generation = this.generation;
+    let field = await this.realmSandbox.createOpaqueFieldValue(
+      this.args.parentCard,
+      this.args.fieldName,
+      this.args.fieldType,
+      this.args.value,
+    );
+    await this.realmSandbox.prepareRender(field, this.args.format);
+    if (generation !== this.generation || !this.element || !this.args) {
+      return;
+    }
+    renderWithArgs(
+      RealmSandboxDelegatedRender as any,
+      this.element as any,
+      getOwner(this) as Owner,
+      {
+        card: field,
+        model: this.args.value,
+        format: this.args.format,
+        displayContainer: false,
+        fieldBoundary: true,
+        set: this.args.set,
+      },
+    );
+  }
+}
+
 export default function realmSandboxFieldComponent(
+  parentCard: BaseDef,
   snapshot: () => Record<string, unknown>,
   fieldName: string,
   trustedFieldType?: typeof BaseDef,
+  sandboxFieldType?: ResolvedCodeRef,
   containingFormat: Format = 'isolated',
   fieldKind: SandboxCardFieldMetadata['kind'] = 'contains',
   fieldTypeDisplayName?: string,
@@ -437,135 +542,205 @@ export default function realmSandboxFieldComponent(
     )?.isFileDef
       ? ('file-meta' as const)
       : ('card' as const);
-
-    return class RealmSandboxRelationshipField extends Component<{
-      Args: { displayContainer?: boolean; format?: Format };
-    }> {
-      get format() {
-        return this.args.format ?? defaultFormat;
-      }
-
-      get entries() {
-        let value = snapshot()[fieldName];
-        let values = Array.isArray(value) ? value : [value];
-        return values.flatMap((item) => {
-          if (typeof item === 'string') {
-            return [item];
-          }
-          if (typeof item !== 'object' || item === null) {
-            return [];
-          }
-          let record = item as Record<string, unknown>;
-          let id = record.id ?? record.url ?? record.sourceUrl;
-          return typeof id === 'string' ? [id] : [];
-        });
-      }
-
-      get relationshipContext() {
-        return getRelationshipContext?.();
-      }
-
-      get canWrite() {
-        return this.relationshipContext?.canWrite() === true;
-      }
-
-      get hasEntries() {
-        return this.entries.length > 0;
-      }
-
-      remove = () => {
-        setField?.(fieldName, fieldKind === 'linksToMany' ? [] : null);
-      };
-
-      add = () => this.chooseRelationship.perform();
-
-      private chooseRelationship = restartableTask(async () => {
-        let type = identifyCard(trustedFieldType) ?? baseCardRef;
-        let selected =
-          fieldKind === 'linksToMany'
-            ? await chooseCard(
-                { filter: { type } },
-                {
-                  multiSelect: true,
-                  title: fieldTypeDisplayName
-                    ? `Select 1 or more ${fieldTypeDisplayName} cards`
-                    : undefined,
-                },
-              )
-            : await chooseCard(
-                { filter: { type } },
-                {
-                  multiSelect: false,
-                  title: fieldTypeDisplayName
-                    ? `Choose a ${fieldTypeDisplayName} card`
-                    : undefined,
-                },
-              );
-        if (!selected) {
-          return;
+    let relationshipEntries = () => {
+      let value = snapshot()[fieldName];
+      let values = Array.isArray(value) ? value : [value];
+      return values.flatMap((item) => {
+        if (typeof item === 'string') {
+          return [item];
         }
-        let ids = Array.isArray(selected) ? selected : [selected];
-        let store = this.relationshipContext?.cardContext?.store;
-        if (!store) {
-          return;
+        if (typeof item !== 'object' || item === null) {
+          return [];
         }
-        let cards = await Promise.all(ids.map((id) => store.get(id)));
-        let values = cards.filter(isCardInstance);
-        setField?.(
-          fieldName,
-          fieldKind === 'linksToMany' ? values : (values[0] ?? null),
-        );
+        let record = item as Record<string, unknown>;
+        let id = record.id ?? record.url ?? record.sourceUrl;
+        return typeof id === 'string' ? [id] : [];
       });
+    };
+    let componentByIndex: BaseDefComponent[] = [];
+    let componentAt = (index: number): BaseDefComponent => {
+      let component = componentByIndex[index];
+      if (component) {
+        return component;
+      }
+      component = class RealmSandboxRelationshipValue extends Component<{
+        Args: { displayContainer?: boolean; format?: Format };
+      }> {
+        get format() {
+          return this.args.format ?? defaultFormat;
+        }
 
-      <template>
-        <div
-          class='realm-sandbox-relationship-field'
-          data-test-links-to-editor={{if (eq fieldKind 'linksTo') fieldName}}
-          data-test-links-to-many={{if (eq fieldKind 'linksToMany') fieldName}}
-        >
-          {{#if (and this.canWrite this.hasEntries)}}
-            <IconButton
-              @icon={{IconMinusCircle}}
-              @width='20px'
-              @height='20px'
-              aria-label='Remove'
-              data-test-remove-card
-              {{on 'click' this.remove}}
-            />
-          {{/if}}
-          {{#each this.entries key='@identity' as |cardId|}}
-            {{#if this.relationshipContext}}
-              <div
-                class='realm-sandbox-delegated-relationship'
-                {{DeferredRelationshipCard
-                  cardId=cardId
-                  format=this.format
-                  fieldType=fieldKind
-                  fieldName=fieldName
-                  resourceType=resourceType
-                  relationshipContext=this.relationshipContext
-                  subscribeToData=subscribeToData
-                }}
-              ></div>
+        get cardId() {
+          return relationshipEntries()[index];
+        }
+
+        get relationshipContext() {
+          return getRelationshipContext?.();
+        }
+
+        <template>
+          {{#let
+            this.relationshipContext this.cardId
+            as |relationshipContext cardId|
+          }}
+            {{#if relationshipContext}}
+              {{#if cardId}}
+                <div
+                  class='realm-sandbox-delegated-relationship'
+                  {{DeferredRelationshipCard
+                    cardId=cardId
+                    format=this.format
+                    fieldType=fieldKind
+                    fieldName=fieldName
+                    resourceType=resourceType
+                    relationshipContext=relationshipContext
+                    subscribeToData=subscribeToData
+                  }}
+                ></div>
+              {{/if}}
             {{/if}}
-          {{else}}
-            {{#if this.canWrite}}
-              <Button
-                @kind='secondary'
-                @size='tall'
-                @rectangular={{true}}
-                data-test-add-new={{fieldName}}
-                {{on 'click' this.add}}
-              >
-                Link
-              </Button>
+          {{/let}}
+        </template>
+      } as unknown as BaseDefComponent;
+      componentByIndex[index] = component;
+      return component;
+    };
+
+    let RelationshipField =
+      class RealmSandboxRelationshipField extends Component<{
+        Args: { displayContainer?: boolean; format?: Format };
+      }> {
+        get format() {
+          return this.args.format ?? defaultFormat;
+        }
+
+        get entries() {
+          return relationshipEntries();
+        }
+
+        get itemComponents() {
+          return this.entries.map((_, index) => componentAt(index));
+        }
+
+        get relationshipContext() {
+          return getRelationshipContext?.();
+        }
+
+        get canWrite() {
+          return this.relationshipContext?.canWrite() === true;
+        }
+
+        get hasEntries() {
+          return this.entries.length > 0;
+        }
+
+        remove = () => {
+          setField?.(fieldName, fieldKind === 'linksToMany' ? [] : null);
+        };
+
+        add = () => this.chooseRelationship.perform();
+
+        private chooseRelationship = restartableTask(async () => {
+          let type = identifyCard(trustedFieldType) ?? baseCardRef;
+          let selected =
+            fieldKind === 'linksToMany'
+              ? await chooseCard(
+                  { filter: { type } },
+                  {
+                    multiSelect: true,
+                    title: fieldTypeDisplayName
+                      ? `Select 1 or more ${fieldTypeDisplayName} cards`
+                      : undefined,
+                  },
+                )
+              : await chooseCard(
+                  { filter: { type } },
+                  {
+                    multiSelect: false,
+                    title: fieldTypeDisplayName
+                      ? `Choose a ${fieldTypeDisplayName} card`
+                      : undefined,
+                  },
+                );
+          if (!selected) {
+            return;
+          }
+          let ids = Array.isArray(selected) ? selected : [selected];
+          let store = this.relationshipContext?.cardContext?.store;
+          if (!store) {
+            return;
+          }
+          let cards = await Promise.all(ids.map((id) => store.get(id)));
+          let values = cards.filter(isCardInstance);
+          setField?.(
+            fieldName,
+            fieldKind === 'linksToMany' ? values : (values[0] ?? null),
+          );
+        });
+
+        <template>
+          <div
+            class='realm-sandbox-relationship-field'
+            data-test-links-to-editor={{if (eq fieldKind 'linksTo') fieldName}}
+            data-test-links-to-many={{if
+              (eq fieldKind 'linksToMany')
+              fieldName
+            }}
+          >
+            {{#if (and this.canWrite this.hasEntries)}}
+              <IconButton
+                @icon={{IconMinusCircle}}
+                @width='20px'
+                @height='20px'
+                aria-label='Remove'
+                data-test-remove-card
+                {{on 'click' this.remove}}
+              />
+            {{/if}}
+            {{#each this.itemComponents as |Item|}}
+              <Item @format={{this.format}} />
             {{else}}
-              - Empty -
-            {{/if}}
-          {{/each}}
-        </div>
-      </template>
-    } as unknown as BaseDefComponent;
+              {{#if this.canWrite}}
+                <Button
+                  @kind='secondary'
+                  @size='tall'
+                  @rectangular={{true}}
+                  data-test-add-new={{fieldName}}
+                  {{on 'click' this.add}}
+                >
+                  Link
+                </Button>
+              {{else}}
+                - Empty -
+              {{/if}}
+            {{/each}}
+          </div>
+        </template>
+      } as unknown as BaseDefComponent;
+    if (fieldKind !== 'linksToMany') {
+      return RelationshipField;
+    }
+    return new Proxy(RelationshipField, {
+      get(target, property, receiver) {
+        let length = relationshipEntries().length;
+        if (property === Symbol.iterator) {
+          return Array.from({ length }, (_, index) => componentAt(index))[
+            Symbol.iterator
+          ];
+        }
+        if (property === 'length') {
+          return length;
+        }
+        if (typeof property === 'string' && /^\d+$/.test(property)) {
+          let index = Number(property);
+          return index < length ? componentAt(index) : undefined;
+        }
+        return Reflect.get(target, property, receiver);
+      },
+      getPrototypeOf() {
+        return RelationshipField;
+      },
+    }) as BaseDefComponent;
   }
 
   if (trustedFieldType) {
@@ -668,6 +843,132 @@ export default function realmSandboxFieldComponent(
         {{/if}}
       </template>
     } as unknown as BaseDefComponent;
+  }
+
+  if (sandboxFieldType) {
+    let defaultFormat: Format;
+    switch (containingFormat) {
+      case 'edit':
+      case 'atom':
+      case 'markdown':
+      case 'head':
+        defaultFormat = containingFormat;
+        break;
+      default:
+        defaultFormat = 'embedded';
+    }
+    let componentByIndex: BaseDefComponent[] = [];
+    let componentAt = (index: number): BaseDefComponent => {
+      let component = componentByIndex[index];
+      if (component) {
+        return component;
+      }
+      component = class RealmSandboxCustomFieldValue extends Component<{
+        Args: { displayContainer?: boolean; format?: Format };
+      }> {
+        get format() {
+          return this.args.format ?? defaultFormat;
+        }
+
+        get value() {
+          let current = snapshot()[fieldName];
+          return Array.isArray(current) ? current[index] : current;
+        }
+
+        readonly set = (value: unknown) => {
+          if (fieldKind === 'containsMany') {
+            let current = snapshot()[fieldName];
+            let next = Array.isArray(current) ? [...current] : [];
+            next[index] = value;
+            setField?.(fieldName, next);
+          } else {
+            setField?.(fieldName, value);
+          }
+        };
+
+        <template>
+          <div
+            class='realm-sandbox-custom-field-value'
+            {{DeferredSandboxField
+              parentCard=parentCard
+              fieldName=fieldName
+              fieldType=sandboxFieldType
+              value=this.value
+              format=this.format
+              subscribeToData=subscribeToData
+              set=this.set
+            }}
+          ></div>
+        </template>
+      } as unknown as BaseDefComponent;
+      componentByIndex[index] = component;
+      return component;
+    };
+    let CustomField = class RealmSandboxCustomField extends Component<{
+      Element: HTMLDivElement;
+      Args: { displayContainer?: boolean; format?: Format };
+    }> {
+      get format() {
+        return this.args.format ?? defaultFormat;
+      }
+
+      get values() {
+        let value = snapshot()[fieldName];
+        return Array.isArray(value) ? value : [value];
+      }
+
+      get itemComponents() {
+        return this.values.map((_, index) => componentAt(index));
+      }
+
+      <template>
+        <div
+          class='compound-field
+            {{this.format}}-format realm-sandbox-custom-field'
+          data-test-compound-field-format={{this.format}}
+          data-test-compound-field-component
+          ...attributes
+        >
+          {{#each this.itemComponents as |Item|}}
+            <Item @format={{this.format}} />
+          {{/each}}
+        </div>
+
+        <style scoped>
+          .realm-sandbox-custom-field-value {
+            display: contents;
+          }
+          .realm-sandbox-custom-field.atom-format {
+            display: inline;
+          }
+        </style>
+      </template>
+    } as unknown as BaseDefComponent;
+    if (fieldKind !== 'containsMany') {
+      return CustomField;
+    }
+    return new Proxy(CustomField, {
+      get(target, property, receiver) {
+        let value = snapshot()[fieldName];
+        let length = Array.isArray(value) ? value.length : 0;
+        if (property === Symbol.iterator) {
+          return Array.from({ length }, (_, index) => componentAt(index))[
+            Symbol.iterator
+          ];
+        }
+        if (property === 'length') {
+          return length;
+        }
+        if (typeof property === 'string' && /^\d+$/.test(property)) {
+          let index = Number(property);
+          return index < length ? componentAt(index) : undefined;
+        }
+        return Reflect.get(target, property, receiver);
+      },
+      getPrototypeOf() {
+        return CustomField;
+      },
+    }) as BaseDefComponent;
   }
 
   return class RealmSandboxFieldValue extends Component {

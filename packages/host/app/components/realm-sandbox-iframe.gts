@@ -40,6 +40,7 @@ export default class RealmSandboxIframe extends Component<Signature> {
   private postToFrame?: (message: Record<string, unknown>) => void;
   private loaderMetricToken = {};
   private connectionMetricToken = {};
+  private readonly bootstrapID = globalThis.crypto.randomUUID();
 
   get format() {
     return this.args.format ?? 'isolated';
@@ -53,6 +54,12 @@ export default class RealmSandboxIframe extends Component<Signature> {
     return this.status === 'loading';
   }
 
+  get frameURL() {
+    let url = new URL(this.args.sandbox.url);
+    url.searchParams.set('bootstrapID', this.bootstrapID);
+    return url.href;
+  }
+
   connectFrame = modifier((element: HTMLIFrameElement) => {
     // The target is required to be a distinct origin. credentialless prevents
     // accidental ambient-cookie authority from crossing into that origin.
@@ -64,18 +71,36 @@ export default class RealmSandboxIframe extends Component<Signature> {
 
     let channel: MessageChannel | undefined;
     let connected = false;
-    let post = (message: Record<string, unknown>) =>
-      channel?.port1.postMessage({
-        protocol: realmIframeSandboxProtocol,
-        ...message,
-      });
+    let post = (
+      message: Record<string, unknown>,
+      transfer: Transferable[] = [],
+    ) =>
+      channel?.port1.postMessage(
+        {
+          protocol: realmIframeSandboxProtocol,
+          ...message,
+        },
+        transfer,
+      );
     this.postToFrame = post;
     let receive = async (event: MessageEvent) => {
+      if (
+        event.data?.type === 'fetch-request' &&
+        !isRealmIframeSandboxOutbound(event.data)
+      ) {
+        console.error(
+          'Host rejected iframe fetch request',
+          JSON.stringify(event.data),
+        );
+      }
       if (!isRealmIframeSandboxOutbound(event.data)) {
         return;
       }
       if (event.data.type === 'ready') {
         this.status = 'ready';
+        if (event.data.typePresentation) {
+          this.args.sandbox.onTypePresentation?.(event.data.typePresentation);
+        }
         if (typeof event.data.revision === 'number') {
           this.appliedDraftRevision = event.data.revision;
           this.draftError = event.data.error;
@@ -88,17 +113,28 @@ export default class RealmSandboxIframe extends Component<Signature> {
         let height = Math.max(40, Math.min(2400, event.data.height));
         element.style.height = `${height}px`;
       } else if (event.data.type === 'fetch-request') {
+        console.error('Host received iframe fetch request', event.data.url);
         try {
           let response = await this.realmSandbox.fetchForIframe(
             this.args.sandbox,
             event.data.url,
             event.data.init,
           );
-          post({
-            type: 'fetch-response',
-            requestId: event.data.requestId,
-            response,
+          console.error('Host completed iframe fetch request', {
+            status: response.status,
+            bodyType:
+              response.body instanceof ArrayBuffer
+                ? `array-buffer:${response.body.byteLength}`
+                : typeof response.body,
           });
+          post(
+            {
+              type: 'fetch-response',
+              requestId: event.data.requestId,
+              response,
+            },
+            response.body instanceof ArrayBuffer ? [response.body] : [],
+          );
         } catch (error) {
           post({
             type: 'fetch-response',
@@ -123,6 +159,7 @@ export default class RealmSandboxIframe extends Component<Signature> {
           protocol: realmIframeSandboxProtocol,
           type: 'connect',
           document: this.args.sandbox.document,
+          rootModuleURL: this.args.sandbox.rootModuleURL,
           presentation: this.args.sandbox.presentation,
           draft: this.args.sandbox.draft
             ? {
@@ -138,18 +175,22 @@ export default class RealmSandboxIframe extends Component<Signature> {
     };
     let receiveBootstrap = (event: MessageEvent) => {
       if (
-        event.source === element.contentWindow &&
         event.origin === this.args.sandbox.targetOrigin &&
         isRealmIframeSandboxOutbound(event.data) &&
-        event.data.type === 'listening'
+        event.data.type === 'listening' &&
+        event.data.bootstrapID === this.bootstrapID
       ) {
+        // A credentialless cross-origin frame's MessageEvent WindowProxy is
+        // not guaranteed to compare equal to a later contentWindow lookup.
+        // The source comparison is unnecessary: exact origin, protocol, and
+        // the per-render bootstrap ID bind this announcement to the iframe
+        // whose URL carried that unguessable ID. The capability port is then
+        // sent only to this component's own iframe.
         connect();
       }
     };
-    element.addEventListener('load', connect);
     globalThis.addEventListener('message', receiveBootstrap);
     return () => {
-      element.removeEventListener('load', connect);
       globalThis.removeEventListener('message', receiveBootstrap);
       channel?.port1.removeEventListener('message', receive);
       channel?.port1.close();
@@ -250,7 +291,7 @@ export default class RealmSandboxIframe extends Component<Signature> {
           @sandbox.draft.source
           @sandbox.draft.revision
         }}
-        src={{@sandbox.url}}
+        src={{this.frameURL}}
         title={{@sandbox.accessibleTitle}}
         sandbox='allow-scripts allow-same-origin'
         referrerpolicy='no-referrer'

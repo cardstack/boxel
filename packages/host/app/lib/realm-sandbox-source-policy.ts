@@ -1,3 +1,6 @@
+import * as babel from '@babel/core';
+// @ts-ignore no upstream types are available
+import typescriptPlugin from '@babel/plugin-transform-typescript';
 import * as ContentTag from 'content-tag';
 import { init, parse } from 'es-module-lexer';
 
@@ -17,6 +20,13 @@ export interface CardSourceSandboxClassification {
   reason: string;
   imports: string[];
   signals: string[];
+  // Some iframe requirements are part of an exported render surface and must
+  // follow a static import edge (for example Three.js or an unscoped template
+  // style). Ambient browser globals are different: a library may contain a
+  // dormant browser adapter that SES can safely leave unavailable. Promoting
+  // every importer for a mere `document` token makes otherwise SES-compatible
+  // cards depend on the hosted iframe service.
+  propagatesToImporters: boolean;
 }
 
 const iframeRenderFormats = new Set<string>(['isolated', 'embedded', 'edit']);
@@ -242,6 +252,35 @@ function usedBrowserGlobals(source: string): string[] {
   );
 }
 
+function executableBrowserGlobals(source: string): string[] {
+  let possibleSignals = usedBrowserGlobals(source);
+  if (possibleSignals.length === 0) {
+    return [];
+  }
+
+  try {
+    // Card source is TypeScript. A DOM name in an interface, type annotation,
+    // or `as HTMLElement` assertion does not request browser authority. Strip
+    // type-only syntax before deciding whether the module needs an iframe.
+    // We only pay for this parse when a possible browser global was found.
+    let executableSource = babel.transformSync(source, {
+      filename: 'sandbox-card.ts',
+      babelrc: false,
+      configFile: false,
+      compact: true,
+      plugins: [[typescriptPlugin, { allowDeclareFields: true }]],
+      parserOpts: { plugins: ['decorators-legacy'] },
+    })?.code;
+    return executableSource
+      ? usedBrowserGlobals(executableSource)
+      : possibleSignals;
+  } catch {
+    // Classification is a security boundary. Unknown or incomplete syntax
+    // keeps the conservative result instead of silently gaining SES access.
+    return possibleSignals;
+  }
+}
+
 export async function classifyCardSourceForSandbox(
   source: string,
 ): Promise<CardSourceSandboxClassification> {
@@ -263,6 +302,7 @@ export async function classifyCardSourceForSandbox(
       reason: 'source-parse-pending',
       imports: [],
       signals: [],
+      propagatesToImporters: false,
     };
   }
 
@@ -280,13 +320,14 @@ export async function classifyCardSourceForSandbox(
       reason: 'source-parse-pending',
       imports: [],
       signals: [],
+      propagatesToImporters: false,
     };
   }
 
   let importSignals = imports
     .map(iframeImportSignal)
     .filter((signal): signal is string => Boolean(signal));
-  let globalSignals = usedBrowserGlobals(javascript);
+  let globalSignals = executableBrowserGlobals(javascript);
   let signals = [
     ...new Set([
       ...importSignals,
@@ -296,12 +337,18 @@ export async function classifyCardSourceForSandbox(
       ...(unscopedStyle ? ['unscoped-style'] : []),
     ]),
   ];
+  let propagatesToImporters =
+    importSignals.length > 0 ||
+    dynamicInlineStyle ||
+    topLayerAttribute ||
+    unscopedStyle;
   if (signals.length > 0) {
     return {
       tier: 'iframe',
       reason: `browser-runtime:${signals.join(',')}`,
       imports,
       signals,
+      propagatesToImporters,
     };
   }
   return {
@@ -309,5 +356,6 @@ export async function classifyCardSourceForSandbox(
     reason: 'default-user-card',
     imports,
     signals: [],
+    propagatesToImporters: false,
   };
 }

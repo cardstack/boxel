@@ -466,42 +466,33 @@ realm document -> canonical Store record
 ### Delegated rendering
 
 Some Base behavior intentionally renders another card or field with more
-control than ordinary field delegation. Markdown is a representative case.
-The safe replacement is not to expose `getComponent(instance)` across the
-boundary. It is to preserve the intent as an explicit delegated-render
-capability.
+control than ordinary field delegation. Markdown is a representative case. It
+already calls the ordinary `getComponent(instance)` helper, and deployed Base
+code must not need a new symbol merely because the linked instance is opaque.
 
-`packages/base/card-api.gts` recognizes a
-`delegatedCardRenderComponent` on an opaque card. The host installs the trusted
-delegated component, and the normal `getComponent(card, field, options)` API
-uses it. Official Base code keeps its ergonomic API while the boundary decides
-how the child is rendered.
+The Host therefore constructs the opaque type with a compatibility shim on the
+static format slots Base already understands. An authored format returns the
+trusted `RealmSandboxDelegatedRender`; an unauthored format inherits the normal
+Base fallback. The opaque instance remains inert and the Host retains the
+authority to choose SES or iframe rendering.
 
 ```ts
-// packages/base/card-api.gts — boundary branch, abridged
-export function getComponent(
-  model: BaseDef,
-  field?: Field,
-  opts?: { componentCodeRef?: CodeRef },
-): BoxComponent {
-  if (!field) {
-    let delegated = (
-      model as BaseDef & {
-        [delegatedCardRenderComponent]?: BoxComponent;
-      }
-    )[delegatedCardRenderComponent];
-    if (delegated) {
-      return delegated;
-    }
-  }
-
-  // Existing trusted card and field behavior follows.
+// packages/host/app/services/realm-sandbox.ts — abridged
+for (let format of CARD_FORMATS) {
+  Object.defineProperty(OpaqueCard, format, {
+    get: () =>
+      authoredTemplateFormats.includes(format)
+        ? RealmSandboxDelegatedRender
+        : Reflect.get(TrustedBase, format),
+  });
 }
 ```
 
-This is a key architectural improvement: existing card code expresses “render
-this card,” not “give me its realm constructor and let me execute whatever I
-find there.”
+Existing Base `getComponent(instance)` follows its unchanged constructor and
+static-slot lookup. No delegation symbol, sandbox service, executable realm
+constructor, or new authored-card API crosses the boundary. Existing card code
+continues to express “render this card,” while the Host decides how the opaque
+child is evaluated.
 
 ### Review these files
 

@@ -26,8 +26,6 @@ import {
   assertIsSerializerName,
   baseRef,
   CardContextName,
-  delegatedCardRenderComponent,
-  delegatedCardRenderComponentFor,
   CardError,
   CodeRef,
   ToolContext,
@@ -390,9 +388,7 @@ export interface CardContext<T extends CardDef = CardDef> {
   // Validate a realm CodeRef without importing user-authored code into the
   // trusted Host graph. Sandboxed field portals provide this through their
   // owning realm compartment; ordinary trusted contexts may omit it.
-  validateCodeRef?: (
-    ref: CodeRef,
-  ) => Promise<ResolvedCodeRef | undefined>;
+  validateCodeRef?: (ref: CodeRef) => Promise<ResolvedCodeRef | undefined>;
   // Optional runtime mode/submode hints used by cards that render differently per context.
   mode?: 'host' | 'operator';
   submode?: 'interact' | 'code' | 'host';
@@ -4662,44 +4658,6 @@ function setField(instance: BaseDef, field: Field, value: any) {
   notifyCardTracking(instance);
 }
 
-// Host boundaries sometimes materialize an inert CardDef whose schema lives
-// outside this JavaScript realm. Such a card intentionally has no executable
-// field descriptors, but trusted Base edit templates still need the same
-// mutation notification contract as an ordinary CardDef. Keep that bridge
-// explicit and narrow: callers name one field and provide one value; no Store,
-// loader, or realm authority crosses the boundary.
-export function setCardFieldValue(
-  instance: BaseDef,
-  fieldName: string,
-  value: unknown,
-  opts: { notify?: boolean } = {},
-): void {
-  if (opts.notify === false) {
-    (instance as unknown as Record<string, unknown>)[fieldName] = value;
-    notifyCardTracking(instance);
-    return;
-  }
-  let field = getField(instance, fieldName);
-  if (field) {
-    // Opaque host records deliberately install inert own data properties over
-    // inherited Base fields. In that case an ordinary assignment cannot reach
-    // the prototype field setter, so preserve the explicit boundary's normal
-    // mutation notification contract here.
-    let ownDescriptor = Object.getOwnPropertyDescriptor(instance, fieldName);
-    if (ownDescriptor && 'value' in ownDescriptor) {
-      (instance as unknown as Record<string, unknown>)[fieldName] = value;
-      notifySubscribers(instance, fieldName, value);
-      notifyCardTracking(instance);
-      return;
-    }
-    (instance as unknown as Record<string, unknown>)[fieldName] = value;
-    return;
-  }
-  (instance as unknown as Record<string, unknown>)[fieldName] = value;
-  notifySubscribers(instance, fieldName, value);
-  notifyCardTracking(instance);
-}
-
 function notifySubscribers(
   instance: BaseDef,
   fieldName: string,
@@ -4781,30 +4739,6 @@ export function getComponent(
   field?: Field,
   opts?: { componentCodeRef?: CodeRef },
 ): BoxComponent {
-  // Opaque host records cannot expose their authored constructor or templates.
-  // Their trusted boundary adapter supplies a component explicitly, allowing
-  // Base features such as Markdown card embeds to delegate rendering without
-  // importing or introspecting user code in the host loader.
-  if (!field) {
-    let delegatedFor = (
-      model as BaseDef & {
-        [delegatedCardRenderComponentFor]?: (
-          componentCodeRef?: CodeRef,
-        ) => BoxComponent;
-      }
-    )[delegatedCardRenderComponentFor];
-    if (delegatedFor) {
-      return delegatedFor(opts?.componentCodeRef);
-    }
-    let delegated = (
-      model as BaseDef & {
-        [delegatedCardRenderComponent]?: BoxComponent;
-      }
-    )[delegatedCardRenderComponent];
-    if (delegated) {
-      return delegated;
-    }
-  }
   if (field) {
     return getBoxComponent(
       model.constructor as BaseDefConstructor,
@@ -4972,15 +4906,6 @@ declare module 'ember-provide-consume-context/context-registry' {
 
 function getStore(instance: BaseDef): CardStore {
   return stores.get(instance as BaseDef) ?? new FallbackCardStore();
-}
-
-// Wait for asynchronous work initiated by this card's own materializing Store.
-// Host renderers must not infer that Store from their Ember owner: prerender,
-// sandbox, and test-shim cards can cross owner boundaries while retaining the
-// Store that deserialized them. This narrow capability keeps that ownership
-// explicit without exposing the Store itself across the card boundary.
-export async function waitForCardLoads(instance: BaseDef): Promise<void> {
-  await getStore(instance).loaded();
 }
 
 // Resolve a (possibly relative or RRI) reference to a real, fetchable URL,

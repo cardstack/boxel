@@ -104,23 +104,6 @@ export const CardURLContextName = 'card-url-context';
 
 export const RealmURLContextName = 'realm-url-context';
 
-// A trusted host may attach a component at this symbol when a card record is
-// intentionally opaque and must delegate rendering across a sandbox boundary.
-// Base's getComponent() consumes the component without inspecting the authored
-// card constructor. The value is non-enumerable and never enters serialized
-// card data or compartment arguments.
-export const delegatedCardRenderComponent = Symbol.for(
-  'boxel-delegated-card-render-component',
-);
-
-// Some trusted renderers intentionally select a component other than the
-// card's default format component. Opaque cards expose that choice as a
-// factory so Base can preserve getComponent(instance, { componentCodeRef })
-// without recovering the authored constructor or a Loader.
-export const delegatedCardRenderComponentFor = Symbol.for(
-  'boxel-delegated-card-render-component-for',
-);
-
 export interface Permissions {
   readonly canRead: boolean;
   readonly canWrite: boolean;

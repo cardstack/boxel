@@ -769,6 +769,37 @@ harness, but it is not yet the complete interactive render protocol: actions,
 tracked state, modifiers, tasks, and DOM-dependent behavior still need named
 asynchronous adapters.
 
+### Computed projections stop at execution boundaries
+
+The host must not boot an iframe merely to discover a computed value. An
+iframe-selected format receives the Realm's serialized card document and the
+ordinary card runtime inside the iframe materializes that document for the
+actual render. The parent does not also import that card into SES or construct
+a second computed projection. Code that needs an iframe therefore has one
+execution boundary and one reason to start it: visible rendering.
+
+SES-selected authored formats may materialize `computeVia` into their opaque
+JSON model because the compartment and module graph are already required for
+the template. That projection is demand-driven and starts concurrently with
+template compilation. Base fallback templates remain on the trusted host path.
+
+Future pruning should follow authority and dependency boundaries, not an
+arbitrary object depth:
+
+1. Begin with fields read by the selected template and by their `computeVia`
+   dependency closure.
+2. Recurse through `contains` only while the referenced definition remains in
+   the same SES-safe graph.
+3. Stop at `linksTo`, `linksToMany`, and iframe-classified definitions. Keep the
+   Realm/index projection at those leaves; never instantiate more code to fill
+   them.
+4. If field usage is dynamic (`get`, `@fields`, helpers, getters) or the
+   dependency graph is uncertain, compute the whole SES-safe card rather than
+   guess. Correctness is the conservative fallback.
+
+This leaves room for dependency-aware pruning without making existing BXL and
+nested `FieldDef` cards depend on a brittle static-analysis heuristic.
+
 Each card has an independent View/Edit toggle:
 
 - **View** renders the card-produced display model.

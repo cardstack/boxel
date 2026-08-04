@@ -80,6 +80,7 @@ module('Unit | Service | realm sandbox styles', function (hooks) {
     let scoped = '[data-scopedcss-card-template]';
     let safe = `
       ${scoped}, article${scoped}:is(.featured, .selected) { color: rebeccapurple; }
+      .tile${scoped} .field-component-card.fitted-format { min-width: 0; }
       @media (min-width: 40rem) {
         .summary${scoped} { display: grid; }
       }
@@ -99,7 +100,7 @@ module('Unit | Service | realm sandbox styles', function (hooks) {
       `${scoped}, body { color: transparent; }`,
       `@media (min-width: 1px) { body { color: transparent; } }`,
       `${scoped} ~ * { visibility: hidden; }`,
-      `${scoped} body { visibility: hidden; }`,
+      `${scoped} + * { visibility: hidden; }`,
       `body:has(${scoped}) { visibility: hidden; }`,
     ]) {
       assert.throws(

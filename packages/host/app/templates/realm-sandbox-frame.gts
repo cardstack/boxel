@@ -22,6 +22,7 @@ import {
   sameCodePreviewModuleURL,
 } from '@cardstack/host/lib/code-preview-sandbox';
 import RealmIframeHeightService from '@cardstack/host/lib/realm-iframe-height-service';
+import RealmIframeMediaBridge from '@cardstack/host/lib/realm-iframe-media-bridge';
 import {
   isRealmIframeSandboxInbound,
   isRealmIframeSandboxConnect,
@@ -29,6 +30,7 @@ import {
   type RealmIframeSandboxInbound,
   type RealmIframeSandboxDraft,
   type RealmIframeSandboxPresentation,
+  type RealmIframeSandboxTypePresentation,
 } from '@cardstack/host/lib/realm-iframe-sandbox-protocol';
 
 import type { RealmSandboxFrameModel } from '@cardstack/host/routes/realm-sandbox-frame';
@@ -77,6 +79,7 @@ class RealmSandboxFrame extends Component<Signature> {
   private document?: LooseSingleCardDocument;
   private activeDraft?: RealmIframeSandboxDraft;
   private embeddedSize?: SafeElementSize;
+  private mediaBridge?: RealmIframeMediaBridge;
   private latestDraftRevision = -1;
   private pendingDraft = Promise.resolve();
 
@@ -95,6 +98,21 @@ class RealmSandboxFrame extends Component<Signature> {
     let heightService = new RealmIframeHeightService(element, (dimensions) =>
       this.post({ type: 'resize', ...dimensions }),
     );
+    let announceListening = () =>
+      globalThis.parent.postMessage(
+        {
+          protocol: realmIframeSandboxProtocol,
+          type: 'listening',
+          bootstrapID: this.args.model.bootstrapID,
+        },
+        this.args.model.parentOrigin,
+      );
+    // A warm iframe route can finish booting before the parent Glimmer
+    // modifier has installed its bootstrap listener (and before it observes
+    // the iframe load event). Keep advertising only the inert protocol marker
+    // until the origin-checked MessagePort arrives. This makes the handshake
+    // independent of module-cache timing without granting any capability.
+    let listeningTimer = globalThis.setInterval(announceListening, 250);
     let acceptCapabilityPort = (event: MessageEvent) => {
       if (
         event.source !== globalThis.parent ||
@@ -105,11 +123,18 @@ class RealmSandboxFrame extends Component<Signature> {
       ) {
         return;
       }
+      globalThis.clearInterval(listeningTimer);
       this.port = event.ports[0];
       globalThis.removeEventListener('message', acceptCapabilityPort);
       this.port.addEventListener('message', this.receive);
       this.port.start();
       heightService.start();
+      this.mediaBridge = new RealmIframeMediaBridge(
+        element,
+        this.brokerFetch,
+        event.data.rootModuleURL,
+      );
+      this.mediaBridge.start();
       if (this.embeddedSize) {
         this.post({ type: 'resize', ...this.embeddedSize });
       }
@@ -122,12 +147,12 @@ class RealmSandboxFrame extends Component<Signature> {
       void this.loadCard(event.data.document, event.data.draft);
     };
     globalThis.addEventListener('message', acceptCapabilityPort);
-    globalThis.parent.postMessage(
-      { protocol: realmIframeSandboxProtocol, type: 'listening' },
-      this.args.model.parentOrigin,
-    );
+    announceListening();
     return () => {
+      globalThis.clearInterval(listeningTimer);
       heightService.stop();
+      this.mediaBridge?.stop();
+      this.mediaBridge = undefined;
       globalThis.removeEventListener('message', acceptCapabilityPort);
       this.port?.removeEventListener('message', this.receive);
       this.port?.close();
@@ -159,6 +184,13 @@ class RealmSandboxFrame extends Component<Signature> {
   };
 
   private receive = (event: MessageEvent) => {
+    if (event.data?.type === 'fetch-response' && event.data.response) {
+      console.error('Child received iframe fetch response', {
+        valid: isRealmIframeSandboxInbound(event.data),
+        bodyType: event.data.response.body?.constructor?.name,
+        bodyLength: event.data.response.body?.byteLength,
+      });
+    }
     if (!isRealmIframeSandboxInbound(event.data)) {
       return;
     }
@@ -207,6 +239,9 @@ class RealmSandboxFrame extends Component<Signature> {
     init?: RequestInit,
   ) => {
     let request = input instanceof Request ? input : new Request(input, init);
+    if (request.headers.get('accept') === 'image/*') {
+      console.error('Child requested iframe image', request.url);
+    }
     let draft = this.activeDraft;
     if (draft && sameCodePreviewModuleURL(request.url, draft.sourceURL)) {
       let compiledSource = this.compiledDrafts.get(draft);
@@ -223,6 +258,9 @@ class RealmSandboxFrame extends Component<Signature> {
     let result = new Promise<Response>((resolve, reject) => {
       this.pendingFetches.set(requestId, { resolve, reject });
     });
+    if (request.headers.get('accept') === 'image/*') {
+      console.error('Child image broker port state', Boolean(this.port));
+    }
     this.post({
       type: 'fetch-request',
       requestId,
@@ -250,9 +288,18 @@ class RealmSandboxFrame extends Component<Signature> {
       this.document = loadedDocument;
       this.latestDraftRevision = draft?.revision ?? -1;
       await this.deserializeCard(loader, loadedDocument);
+      // Let Glimmer commit the authored template, then enqueue declarative
+      // media fetches before `ready`. The parent may react to presentation
+      // metadata by replacing render state, so capability requests discovered
+      // after `ready` could otherwise target a superseded MessagePort.
+      await new Promise<void>((resolve) =>
+        globalThis.requestAnimationFrame(() => resolve()),
+      );
+      await this.mediaBridge?.refresh();
       this.post({
         type: 'ready',
         cardID: this.args.model.cardID,
+        typePresentation: this.typePresentationFor(this.card!),
         ...(draft ? { revision: draft.revision } : {}),
       });
     } catch (error) {
@@ -372,9 +419,33 @@ class RealmSandboxFrame extends Component<Signature> {
             type: 'ready',
             cardID: this.args.model.cardID,
             revision: draft.revision,
+            typePresentation: this.typePresentationFor(this.card!),
           });
         }
       });
+  }
+
+  private typePresentationFor(
+    card: BaseDef,
+  ): RealmIframeSandboxTypePresentation {
+    let definition = card.constructor as unknown as Record<string, unknown>;
+    let rawDisplayName = definition.displayName;
+    let fallbackName = definition.name;
+    let displayName =
+      typeof rawDisplayName === 'string' && rawDisplayName.length > 0
+        ? rawDisplayName
+        : typeof fallbackName === 'string' && fallbackName.length > 0
+          ? fallbackName
+          : 'Card';
+    let rawHeaderColor = definition.headerColor;
+    return {
+      displayName: displayName.slice(0, 1_024),
+      headerColor:
+        typeof rawHeaderColor === 'string'
+          ? rawHeaderColor.slice(0, 128)
+          : null,
+      prefersWideFormat: definition.prefersWideFormat === true,
+    };
   }
 
   private async fetchCardDocument(loader: Loader) {
