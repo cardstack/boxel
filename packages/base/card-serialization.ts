@@ -284,8 +284,8 @@ export function serializeCardResource(
     usedLinksToFieldsOnly: !opts?.includeUnrenderedFields,
   });
   let overrides = getFieldOverrides(model);
-  // `serializeCardResource` is reachable from the recursive field-serialize
-  // symbol path without opts (e.g. callSerializeHook with no opts arg).
+  // `serializeCardResource` is reachable without opts — both directly and
+  // through the `serialize` symbol, whose `opts` parameter is optional.
   // That path doesn't read `opts.virtualNetwork`, so the synthesized
   // working opts can lack it; cast through SerializeOpts | undefined to
   // satisfy the required-VN type while preserving runtime behavior.

@@ -3140,6 +3140,76 @@ module('Integration | serialization', function (hooks) {
     assert.strictEqual(serialized.data.attributes?.firstBirthday, '2020-10-30');
   });
 
+  test('can serialize a computed field declared inside a composite field', async function (assert) {
+    // The same FieldDef reached two ways: `contains` and `containsMany` must
+    // agree on whether the computeds declared inside it are serialized.
+    class Probe extends FieldDef {
+      @field raw = contains(StringField);
+      @field innerComputed = contains(StringField, {
+        computeVia: function (this: Probe) {
+          return `inner:${this.raw ?? ''}`;
+        },
+      });
+      @field innerComputedMany = containsMany(StringField, {
+        computeVia: function (this: Probe) {
+          return [`many:${this.raw ?? ''}`, 'constant'];
+        },
+      });
+    }
+    class ComputedProbe extends CardDef {
+      @field inner = contains(Probe);
+      @field innerList = containsMany(Probe);
+    }
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { ComputedProbe, Probe },
+      },
+    });
+    let probe = new ComputedProbe({
+      inner: new Probe({ raw: 'hello' }),
+      innerList: [new Probe({ raw: 'listed' })],
+    });
+    let serialized = serializeCard(probe, {
+      includeComputeds: true,
+      includeUnrenderedFields: true,
+    });
+    assert.deepEqual(
+      serialized.data.attributes?.inner,
+      {
+        raw: 'hello',
+        innerComputed: 'inner:hello',
+        innerComputedMany: ['many:hello', 'constant'],
+      },
+      'computeds declared inside a contains composite field are serialized',
+    );
+    assert.deepEqual(
+      serialized.data.attributes?.innerList,
+      [
+        {
+          raw: 'listed',
+          innerComputed: 'inner:listed',
+          innerComputedMany: ['many:listed', 'constant'],
+        },
+      ],
+      'containsMany serializes the same nested computeds',
+    );
+
+    let withoutComputeds = serializeCard(probe, {
+      includeUnrenderedFields: true,
+    });
+    assert.deepEqual(
+      withoutComputeds.data.attributes?.inner,
+      { raw: 'hello' },
+      'without includeComputeds the nested computeds are still filtered out',
+    );
+    assert.deepEqual(
+      withoutComputeds.data.attributes?.innerList,
+      [{ raw: 'listed' }],
+      'containsMany also filters nested computeds without includeComputeds',
+    );
+  });
+
   test('can deserialize a computed field', async function (assert) {
     class Person extends CardDef {
       @field birthdate = contains(DateField);

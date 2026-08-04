@@ -1089,9 +1089,15 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
         return { attributes: { [this.name]: serialized } };
       }
     } else {
+      // `opts` reaches the nested resource so a composite field serializes the
+      // same way whether it is reached through `contains` or `containsMany` —
+      // most visibly `includeComputeds`, without which a computed declared
+      // inside a FieldDef is filtered out of the nested resource. `visited` is
+      // deliberately a fresh set here, matching the other three field
+      // serialize sites.
       let serialized: JSONAPISingleResourceDocument['data'] & {
         meta: Record<string, any>;
-      } = callSerializeHook(this.card, value, doc);
+      } = callSerializeHook(this.card, value, doc, undefined, opts);
       let resource: JSONAPIResource = {
         attributes: {
           [this.name]: serialized?.attributes,
