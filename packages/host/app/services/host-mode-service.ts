@@ -171,18 +171,35 @@ export default class HostModeService extends Service {
   // Goes through ember-window-mock's `window` so tests can intercept the
   // navigation.
   //
-  // `queryParams` is the transition target's query (from
-  // `transition.to.queryParams`) — NOT `window.location.search`, which
+  // `queryParams` is the transition target's query, already filtered to
+  // the params worth forwarding — NOT `window.location.search`, which
   // with HistoryLocation still shows the URL being navigated away from
   // while the transition is in flight. Matching serve-index's semantics,
   // it carries over only when the redirect target declares no query of
   // its own.
+  //
+  // A realm-relative target arrives already prefixed with the realm's
+  // mount pathname, so it is joined onto the host-mode origin by
+  // concatenation rather than `new URL(target, base)` — the latter
+  // resolves a leading-slash path against the origin ROOT, discarding
+  // any path the origin carries under `?hostModeOrigin=` simulation.
+  // This keeps redirect targets consistent with how the index route
+  // builds a routed card's URL from the same origin.
   redirectTo(target: string, queryParams?: Record<string, unknown>) {
-    let url = new URL(target, this.hostModeOrigin ?? window.location.origin);
+    let origin = this.hostModeOrigin ?? window.location.origin;
+    let url = /^https?:/i.test(target)
+      ? new URL(target)
+      : new URL(`${origin}${target.startsWith('/') ? '' : '/'}${target}`);
     if (!url.search && queryParams) {
       for (let [key, value] of Object.entries(queryParams)) {
-        if (value != null) {
-          url.searchParams.set(key, String(value));
+        if (value == null) {
+          continue;
+        }
+        // A repeated query param (`?tag=a&tag=b`) parses to an array;
+        // append each value so the target carries `tag=a&tag=b` like the
+        // server's verbatim search copy, not a collapsed `tag=a,b`.
+        for (let v of Array.isArray(value) ? value : [value]) {
+          url.searchParams.append(key, String(v));
         }
       }
     }

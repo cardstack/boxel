@@ -12,6 +12,7 @@ import { isFileDefInstance } from '@cardstack/runtime-common/code-ref';
 
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
+import { INDEX_QUERY_PARAMS } from '@cardstack/host/controllers/index';
 import type { StackItemType } from '@cardstack/host/lib/stack-item';
 
 import type BillingService from '@cardstack/host/services/billing-service';
@@ -92,16 +93,15 @@ export default class Card extends Route {
       // rule's target id directly; otherwise resolve the path as a card
       // URL under the host-mode origin. A redirect rule is never
       // rendered — navigate to its target instead, mirroring the 3xx
-      // the server answers for a full-page request to this path. The
-      // transition target's query params ride along so the two paths
-      // agree (`params` holds only the pathname).
+      // the server answers for a full-page request to this path, query
+      // string included (`params` holds only the pathname).
       let routed = this.hostModeService.resolveRoutedPath(
         normalizedPath || '/',
       );
       if (routed && 'redirectTo' in routed) {
         this.hostModeService.redirectTo(
           routed.redirectTo,
-          transition.to?.queryParams,
+          this.forwardableQueryParams(transition),
         );
         return;
       }
@@ -227,6 +227,30 @@ export default class Card extends Route {
 
       return;
     }
+  }
+
+  // Query params to carry onto a redirect rule's target, read from the
+  // transition rather than `window.location.search` — with
+  // HistoryLocation the location still points at the URL being navigated
+  // away from while the transition is in flight.
+  //
+  // The app's own params are dropped. The router hydrates every declared
+  // param onto `transition.to.queryParams` using its controller default
+  // whether or not it was in the URL, so forwarding them blind would
+  // append junk the server never sends (`debug=false` on every redirect)
+  // and would hand internal routing state — including the `sid` /
+  // `clientSecret` password-reset tokens — to an external target.
+  // Foreign params (`utm_source` and friends) are what a redirect is
+  // actually expected to preserve, and they pass through untouched.
+  private forwardableQueryParams(
+    transition: Transition,
+  ): Record<string, unknown> {
+    let queryParams = transition.to?.queryParams ?? {};
+    return Object.fromEntries(
+      Object.entries(queryParams).filter(
+        ([key]) => !INDEX_QUERY_PARAMS.includes(key),
+      ),
+    );
   }
 
   async afterModel(

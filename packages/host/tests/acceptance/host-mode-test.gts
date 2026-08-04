@@ -54,6 +54,31 @@ class StubCustomSubdomainHostModeService extends StubHostModeService {
   }
 }
 
+// The routing map normally arrives on the config meta tag the realm
+// server rewrites per request, which no test server emits — so stub the
+// getter that reads it. Paths and realm-relative targets are stored the
+// way the server injects them: prefixed with the realm's mount pathname,
+// which is `/test/` as this app sees it (`hostModeOrigin` absorbs the
+// `/user` segment above).
+class StubRoutingHostModeService extends StubHostModeService {
+  get hostRoutingMap() {
+    return [
+      { path: '/test/terms', id: `${testHostModeRealmURL}Pet/mango` },
+      { path: '/test/tos', redirectTo: '/test/terms', statusCode: 302 },
+      {
+        path: '/test/docs',
+        redirectTo: '/test/terms?section=intro',
+        statusCode: 302,
+      },
+      {
+        path: '/test/blog',
+        redirectTo: 'https://boxel.example/posts',
+        statusCode: 301,
+      },
+    ];
+  }
+}
+
 module('Acceptance | host mode tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -841,6 +866,92 @@ module('Acceptance | host mode tests', function (hooks) {
       end.remove();
       fakeContainer.remove();
     }
+  });
+
+  module('with redirect routing rules', function (hooks) {
+    // A full-page request to a redirect-ruled path never reaches the SPA
+    // — serve-index answers the 3xx first. These cover the other leg: an
+    // in-app transition, where the route has to perform the redirect
+    // itself. `window` is ember-window-mock, whose `location.replace`
+    // records the URL instead of navigating.
+    let hostOrigin = removeTrailingSlash(testHostModeRealmURLWithoutRealm);
+
+    hooks.beforeEach(function (this) {
+      let owner = getOwner(this)!;
+      let ownerWithUnregister = owner as {
+        unregister?: (fullName: string) => void;
+      };
+      ownerWithUnregister.unregister?.('service:host-mode-service');
+      owner.register('service:host-mode-service', StubRoutingHostModeService);
+    });
+
+    test('a serve rule still renders its target card', async function (assert) {
+      await visit('/test/terms');
+
+      assert
+        .dom(`[data-test-host-mode-card="${testHostModeRealmURL}Pet/mango"]`)
+        .exists('the rule’s target card renders at the routed path');
+    });
+
+    test('transitioning to a redirect rule replaces the location with its target', async function (assert) {
+      await visit('/test/tos');
+
+      assert.strictEqual(
+        window.location.href,
+        `${hostOrigin}/test/terms`,
+        'the realm-relative target is resolved against the host-mode origin',
+      );
+    });
+
+    test('a redirect rule may target an external URL', async function (assert) {
+      await visit('/test/blog');
+
+      assert.strictEqual(
+        window.location.href,
+        'https://boxel.example/posts',
+        'an external target is used verbatim',
+      );
+    });
+
+    test('the source query string carries onto the redirect target', async function (assert) {
+      // Regression guard for reading the query from the transition rather
+      // than `window.location.search`: mid-transition the location still
+      // holds the URL being navigated away from, so sourcing it there
+      // would drop `utm_source` (and could forward a stale query).
+      await visit('/test/tos?utm_source=newsletter');
+
+      assert.strictEqual(
+        window.location.href,
+        `${hostOrigin}/test/terms?utm_source=newsletter`,
+        'the inbound query is preserved, matching what serve-index does',
+      );
+    });
+
+    test('a target with its own query wins over the source query', async function (assert) {
+      await visit('/test/docs?section=appendix');
+
+      assert.strictEqual(
+        window.location.href,
+        `${hostOrigin}/test/terms?section=intro`,
+        'the declared target query is left alone, matching serve-index',
+      );
+    });
+
+    test("the app's own query params are not forwarded", async function (assert) {
+      // The router hydrates every declared query param onto
+      // `transition.to.queryParams` using its controller default, present
+      // in the URL or not. Forwarding those blind would append junk the
+      // server never sends (`debug=false` on every redirect) and would
+      // hand internal state — including the `sid` / `clientSecret`
+      // password-reset tokens — to an external target.
+      await visit('/test/blog?sid=secret-token&utm_source=newsletter');
+
+      assert.strictEqual(
+        window.location.href,
+        'https://boxel.example/posts?utm_source=newsletter',
+        'foreign params ride along; app-internal ones are dropped',
+      );
+    });
   });
 
   module('with a custom subdomain', function (hooks) {
