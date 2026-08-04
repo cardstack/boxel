@@ -1067,7 +1067,9 @@ module('Integration | Store', function (hooks) {
     let instance = (await storeService.get(
       `${testRealmURL}Person/hassan`,
     )) as any;
-    // compound scalar-plus-link mutation, matching the reported reproduction
+    // Mutate a scalar attribute and a relationship together: the two travel
+    // through different serialization paths, so a persist that awaited only one
+    // of them would still pass a scalar-only assertion.
     instance.name = 'Hassan Updated';
     instance.bestFriend = queenzy;
 
@@ -1077,9 +1079,10 @@ module('Integration | Store', function (hooks) {
       'add() resolves with the card instance',
     );
 
-    // No waitUntil here: if add() resolved before persistence completed (the
-    // reported bug), the durable resource would still hold the pre-mutation
-    // state. Reading the backing JSON immediately proves add() waited.
+    // Read the backing JSON with no waitUntil: that is what makes this an
+    // assertion about ordering rather than about eventual consistency. An
+    // add() that resolved before the PATCH landed would still see the
+    // pre-mutation state here.
     let file = await testRealmAdapter.openFile('Person/hassan.json');
     let fileJSON = JSON.parse(file!.content as string);
     assert.strictEqual(
@@ -1103,10 +1106,15 @@ module('Integration | Store', function (hooks) {
 
     let store = storeService as any;
     let gate = new Deferred<void>();
-    let originalPersist = store.persistAndUpdate.bind(store);
+    // Keep the unbound original and call it with an explicit receiver, so the
+    // stub can be removed rather than replaced. `persistAndUpdate` lives on the
+    // prototype, so deleting the shadowing own property below restores the
+    // method exactly — assigning a bound copy back would leave a permanent own
+    // property with a different identity and arity.
+    let originalPersist = store.persistAndUpdate;
     store.persistAndUpdate = async (...args: any[]) => {
       await gate.promise;
-      return await originalPersist(...args);
+      return await originalPersist.call(store, ...args);
     };
 
     try {
@@ -1131,7 +1139,7 @@ module('Integration | Store', function (hooks) {
       await addPromise;
       assert.true(resolved, 'add() resolves once persistence completes');
     } finally {
-      store.persistAndUpdate = originalPersist;
+      delete store.persistAndUpdate;
     }
 
     let file = await testRealmAdapter.openFile('Person/hassan.json');
@@ -1148,8 +1156,9 @@ module('Integration | Store', function (hooks) {
     )) as any;
     instance.name = 'Hassan Updated';
 
+    // Removed rather than reassigned in `finally`, for the reason given on the
+    // persistAndUpdate stub above.
     let store = storeService as any;
-    let originalSaveCardDocument = store.saveCardDocument.bind(store);
     store.saveCardDocument = async () => {
       throw new Error('intentional persistence failure');
     };
@@ -1158,7 +1167,7 @@ module('Integration | Store', function (hooks) {
     try {
       result = await storeService.add(instance);
     } finally {
-      store.saveCardDocument = originalSaveCardDocument;
+      delete store.saveCardDocument;
     }
 
     assert.false(
