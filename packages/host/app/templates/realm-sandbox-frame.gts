@@ -156,7 +156,7 @@ class RealmSandboxFrame extends Component<Signature> {
       this.mediaBridge = new RealmIframeMediaBridge(
         element,
         this.mediaFetch,
-        event.data.rootModuleURL,
+        event.data.document?.data.id ?? event.data.rootModuleURL,
       );
       this.mediaBridge.start();
       if (this.embeddedSize) {

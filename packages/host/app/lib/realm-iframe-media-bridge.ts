@@ -23,7 +23,7 @@ export default class RealmIframeMediaBridge {
   constructor(
     private root: HTMLElement,
     private fetch: CapabilityFetch,
-    private rootModuleURL: string,
+    private rootMediaURL: string,
   ) {}
 
   start() {
@@ -88,7 +88,7 @@ export default class RealmIframeMediaBridge {
     }
     let sourceURL: URL;
     try {
-      sourceURL = new URL(authoredSource, this.rootModuleURL);
+      sourceURL = new URL(authoredSource, this.mediaBaseURL(image));
     } catch {
       return Promise.resolve();
     }
@@ -100,6 +100,11 @@ export default class RealmIframeMediaBridge {
     }
 
     this.sourceByImage.set(image, sourceURL.href);
+    // Do not let the browser race the bounded Host fetch with an unauthenticated
+    // request relative to the iframe route. Some card components intentionally
+    // turn an image error into a permanent label-only fallback; once that
+    // handler fires, a later blob URL cannot recover the image.
+    image.removeAttribute('src');
     let generation = {};
     this.generationByImage.set(image, generation);
     let hydration = this.fetch(sourceURL, {
@@ -107,7 +112,9 @@ export default class RealmIframeMediaBridge {
     })
       .then(async (response) => {
         if (!response.ok) {
-          throw new Error(`Realm image returned ${response.status}`);
+          throw new Error(
+            `Realm image ${sourceURL.href} returned ${response.status}`,
+          );
         }
         let contentType = response.headers.get('content-type')?.toLowerCase();
         if (!contentType?.startsWith('image/')) {
@@ -133,8 +140,33 @@ export default class RealmIframeMediaBridge {
         // Keep the authored URL in place for a public resource. An allowed
         // private Realm asset is replaced above; a denied URL gains no Host
         // credential or error detail through this compatibility shim.
+        if (
+          this.generationByImage.get(image) === generation &&
+          image.isConnected
+        ) {
+          image.src = authoredSource;
+        }
       });
     this.hydrationByImage.set(image, hydration);
     return hydration;
+  }
+
+  private mediaBaseURL(image: HTMLImageElement): string {
+    // A linked card's URL fields are relative to that card instance, not the
+    // root definition module that happened to render it. CardRenderer keeps
+    // the owning card ID on the nearest container, so preserve that resource
+    // provenance across the iframe boundary when resolving declarative media.
+    // The Host-side media capability still enforces the actual fetch policy;
+    // this marker only supplies URL resolution context.
+    let owner = image.closest<HTMLElement>('[data-boxel-card-id]');
+    let ownerURL = owner?.dataset.boxelCardId;
+    if (ownerURL) {
+      try {
+        return new URL(ownerURL).href;
+      } catch {
+        // Fall back to the root card/module URL for malformed authored DOM.
+      }
+    }
+    return this.rootMediaURL;
   }
 }
