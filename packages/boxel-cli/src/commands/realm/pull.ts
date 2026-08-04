@@ -9,11 +9,14 @@ import type { RealmAuthenticator } from '../../lib/realm-authenticator.ts';
 import { resolveRealmAuthenticator } from '../../lib/auth-resolver.ts';
 import { resolveRealmIdentifier } from '../../lib/resolve-realm-identifier.ts';
 import { resolveRealmSecretSeed } from '../../lib/prompt.ts';
+import { reconcileSkillsMirror } from '../../lib/claude-skills-mirror.ts';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
 interface PullOptions extends SyncOptions {
   deleteLocal?: boolean;
+  /** Mirror the realm's `skills/` into `.claude/skills/`. On by default. */
+  claudeSkills?: boolean;
 }
 
 class RealmPuller extends RealmSyncBase {
@@ -163,6 +166,13 @@ class RealmPuller extends RealmSyncBase {
       }
     }
 
+    await reconcileSkillsMirror({
+      realmUrl: this.normalizedRealmUrl,
+      localDir: this.options.localDir,
+      dryRun: this.options.dryRun,
+      enabled: this.pullOptions.claudeSkills,
+    });
+
     console.log('Pull completed');
   }
 }
@@ -170,6 +180,13 @@ class RealmPuller extends RealmSyncBase {
 export interface PullCommandOptions {
   delete?: boolean;
   dryRun?: boolean;
+  /**
+   * Mirror the realm's `skills/` directory into the surrounding checkout's
+   * `.claude/skills/` so realm-authored skills are available to Claude Code.
+   * On by default; `--no-claude-skills` (or `BOXEL_DISABLE_CLAUDE_SKILLS_SYNC=1`) opts
+   * out.
+   */
+  claudeSkills?: boolean;
   profileManager?: ProfileManager;
   /**
    * Pre-resolved realm secret seed for administrative access. When set, the
@@ -198,6 +215,10 @@ export function registerPullCommand(realm: Command): void {
     .option('--delete', 'Delete local files that do not exist in the realm')
     .option('--dry-run', 'Show what would be done without making changes')
     .option(
+      '--no-claude-skills',
+      "Skip mirroring the realm's skills/ directory into the checkout's .claude/skills/ (env: BOXEL_DISABLE_CLAUDE_SKILLS_SYNC=1)",
+    )
+    .option(
       '--realm-secret-seed',
       'Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)',
     )
@@ -208,6 +229,7 @@ export function registerPullCommand(realm: Command): void {
         options: {
           delete?: boolean;
           dryRun?: boolean;
+          claudeSkills?: boolean;
           realmSecretSeed?: boolean;
         },
       ) => {
@@ -217,6 +239,7 @@ export function registerPullCommand(realm: Command): void {
         const result = await pull(realmUrl, localDir, {
           delete: options.delete,
           dryRun: options.dryRun,
+          claudeSkills: options.claudeSkills,
           realmSecretSeed,
         });
         if (result.error) {
@@ -258,6 +281,7 @@ export async function pull(
         localDir,
         deleteLocal: options.delete,
         dryRun: options.dryRun,
+        claudeSkills: options.claudeSkills,
       },
       authenticator,
     );
