@@ -1,4 +1,4 @@
-import { waitFor, click, fillIn } from '@ember/test-helpers';
+import { waitFor, click, fillIn, settled } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
 import { getService } from '@universal-ember/test-support';
@@ -402,6 +402,34 @@ module(
       assert
         .dom('[data-test-add-new="instance"]')
         .exists('switching back to card restores the chooser');
+    });
+
+    test('the shown editor follows the model when the rule changes elsewhere', async function (assert) {
+      // The same config card can be open in more than one place. The
+      // editor derives which target editor to show from the rule itself,
+      // so a change made elsewhere is reflected here; a copy of the
+      // choice held in component state would shadow it forever, and the
+      // next keystroke would write a `redirectTo` that silently beats
+      // the instance the other editor had chosen.
+      await renderRealmConfigEdit([{ path: '/tos', redirectTo: '/terms' }]);
+
+      assert
+        .dom('[data-test-redirect-input]')
+        .exists('starts on the redirect editor');
+
+      let store = getService('store');
+      let realmConfig = (await store.get(`${testRealmURL}realm`)) as any;
+      realmConfig.hostRoutingRules[0].redirectTo = undefined;
+      await settled();
+
+      assert
+        .dom('[data-test-redirect-input]')
+        .doesNotExist('clearing the target elsewhere flips this editor back');
+      assert
+        .dom(
+          '[data-test-routing-rule-kind] [data-test-boxel-radio-option-id="card"] input[type="radio"]',
+        )
+        .isChecked('the toggle follows the model rather than a stale copy');
     });
 
     test('warns when redirect rules loop back on themselves', async function (assert) {

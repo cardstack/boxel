@@ -38,7 +38,6 @@ import LinkIcon from '@cardstack/boxel-icons/link';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
-import { tracked } from '@glimmer/tracking';
 import { startCase } from 'lodash-es';
 import type { FieldsTypeFor } from './card-api';
 
@@ -76,13 +75,6 @@ class RoutingRuleAtom extends Component<typeof RoutingRuleField> {
 let routingRuleKindGroupNumber = 0;
 
 class RoutingRuleEdit extends Component<typeof RoutingRuleField> {
-  // Which target editor is showing. Backed by the data: a rule whose
-  // `redirectTo` is non-null (empty string included — `setKind` seeds
-  // '' so the choice survives a reload) is a redirect rule. The tracked
-  // override exists only so the toggle responds instantly while the
-  // model write settles.
-  @tracked private kindOverride: 'card' | 'redirect' | null = null;
-
   private kindItems: { id: 'card' | 'redirect'; text: string }[] = [
     { id: 'card', text: 'Render a card' },
     { id: 'redirect', text: 'Redirect' },
@@ -138,11 +130,16 @@ class RoutingRuleEdit extends Component<typeof RoutingRuleField> {
     this.args.model.path = `/${trimmed}`;
   }
 
+  // Which target editor is showing, derived from the data alone: a rule
+  // carrying a `redirectTo` is a redirect rule. `setKind` seeds an empty
+  // string when switching, which reads as a redirect (the field is unset
+  // as `undefined`, and `StringField` has no empty value that would
+  // blur the two) and so survives a reload. Deliberately not mirrored
+  // into component state: field writes notify Glimmer synchronously, so
+  // a copy would buy nothing and would go on shadowing the model after
+  // anything but this toggle changed it.
   get kind(): 'card' | 'redirect' {
-    return (
-      this.kindOverride ??
-      (this.args.model.redirectTo != null ? 'redirect' : 'card')
-    );
+    return this.args.model.redirectTo != null ? 'redirect' : 'card';
   }
 
   get isRedirect(): boolean {
@@ -154,7 +151,6 @@ class RoutingRuleEdit extends Component<typeof RoutingRuleField> {
   // but only a hand-edited realm.json can get into that state).
   @action
   setKind(kind: 'card' | 'redirect') {
-    this.kindOverride = kind;
     if (kind === 'redirect') {
       this.args.model.instance = undefined;
       if (this.args.model.redirectTo == null) {
