@@ -331,6 +331,14 @@ class RealmResource {
               ) {
                 this.refreshInfo();
               }
+              // Tile counts derive from the index, so any completed index makes
+              // them stale — no need to narrow to the config card as above, and
+              // no publish state to clobber. Marked rather than refetched here:
+              // the realm server has already dropped its own memo, and whoever
+              // is displaying the counts re-requests them on its next render
+              // (see `loadIndexCounts`). A realm nobody is looking at costs
+              // nothing.
+              this.realmService.markIndexCountsStale(this.realmURL);
               break;
             default:
               throw assertNever(data);
@@ -751,6 +759,11 @@ export default class RealmService extends Service {
   // ask on every render pass.
   private indexCountsByRealm = new TrackedMap<string, RealmIndexCounts>();
   private inFlightIndexCounts = new Set<string>();
+  // Realms whose displayed counts are known to be behind the index. Values stay
+  // in `indexCountsByRealm` so the tile keeps its numbers while a refetch is
+  // pending; `indexCountsEpoch` is what wakes the loader up.
+  private staleIndexCounts = new Set<string>();
+  @tracked private indexCountsEpoch = 0;
   // realmOf runs once per instance added to the store, so its per-call costs
   // multiply by instance count during large renders. RealmPaths is a pure
   // function of the realm URL string (cache entries never go stale), and a
@@ -865,15 +878,39 @@ export default class RealmService extends Service {
     return this.indexCountsByRealm.get(ensureTrailingSlash(String(realmURL)));
   }
 
-  // Fetches counts for the given realms, skipping any already loaded or in
-  // flight. Fire-and-forget by design: callers render first and let the numbers
-  // land, so nothing here should be awaited on a render path.
+  // Bumped whenever a realm's counts go stale. Consumers include this in what
+  // their loader reads, so a re-index re-triggers `loadIndexCounts` on the next
+  // render — otherwise a loader keyed only on *which* realms it wants would
+  // never re-run when the answer for those realms changed.
+  get indexCountsRevision(): number {
+    return this.indexCountsEpoch;
+  }
+
+  // Marks a realm's counts as needing a refetch, without clearing the values:
+  // the tile keeps showing the previous numbers until fresh ones land, rather
+  // than blanking its stats row on every write. Nothing is fetched here — see
+  // `indexCountsRevision`.
+  markIndexCountsStale(realmURL: string): void {
+    let key = ensureTrailingSlash(realmURL);
+    if (!this.indexCountsByRealm.has(key)) {
+      // Nobody has asked for this realm's counts, so there's nothing to
+      // refresh; a first request will read through to the server anyway.
+      return;
+    }
+    this.staleIndexCounts.add(key);
+    this.indexCountsEpoch++;
+  }
+
+  // Fetches counts for the given realms, skipping any already loaded-and-fresh
+  // or in flight. Fire-and-forget by design: callers render first and let the
+  // numbers land, so nothing here should be awaited on a render path.
   loadIndexCounts(realmURLs: string[]): void {
     let wanted = Array.from(
       new Set(realmURLs.map((realmURL) => ensureTrailingSlash(realmURL))),
     ).filter(
       (realmURL) =>
-        !this.indexCountsByRealm.has(realmURL) &&
+        (!this.indexCountsByRealm.has(realmURL) ||
+          this.staleIndexCounts.has(realmURL)) &&
         !this.inFlightIndexCounts.has(realmURL),
     );
     if (wanted.length === 0) {
@@ -889,14 +926,14 @@ export default class RealmService extends Service {
           return;
         }
         for (let entry of data) {
-          this.indexCountsByRealm.set(
-            ensureTrailingSlash(entry.id),
-            entry.attributes,
-          );
+          let key = ensureTrailingSlash(entry.id);
+          this.indexCountsByRealm.set(key, entry.attributes);
+          this.staleIndexCounts.delete(key);
         }
       } catch (error) {
-        // Leave the entries unset so a later attempt can retry; the tile just
-        // renders without a stats row until then.
+        // Leave the entries as they were — unset, or stale-but-displayed — so a
+        // later attempt retries. A realm omitted from the response (its counts
+        // were unavailable server-side) stays stale for the same reason.
         log.warn(`Failed to fetch realm index counts: ${error}`);
       } finally {
         for (let realmURL of wanted) {

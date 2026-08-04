@@ -207,8 +207,12 @@ export default class WorkspaceChooser extends Component<Signature> {
   // Favorites list so it runs after render and re-runs when the set of
   // favorites changes; `loadIndexCounts` is fire-and-forget and skips realms
   // already loaded or in flight, so the dashboard never waits on it.
+  // `revision` is passed but unread: ember-modifier re-runs a modifier when any
+  // argument changes, so taking it makes a re-index that marked counts stale
+  // re-trigger the load. Without it this would only re-run when *which* realms
+  // are favorited changes — never when the answer for those realms does.
   private trackFavoriteCounts = modifier(
-    (_el: HTMLElement, [urls]: [string]) => {
+    (_el: HTMLElement, [urls, _revision]: [string, number]) => {
       if (urls) {
         this.realm.loadIndexCounts(urls.split(' '));
       }
@@ -571,7 +575,10 @@ export default class WorkspaceChooser extends Component<Signature> {
               <div
                 class='workspace-list'
                 data-test-favorites-list
-                {{this.trackFavoriteCounts this.favoriteCountsKey}}
+                {{this.trackFavoriteCounts
+                  this.favoriteCountsKey
+                  this.realm.indexCountsRevision
+                }}
               >
                 {{#each this.favoriteRealmIdentifiers as |realmIdentifier i|}}
                   <Workspace

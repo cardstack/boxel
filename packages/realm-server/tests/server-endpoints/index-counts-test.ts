@@ -155,14 +155,21 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
         'realm-index-counts',
         'resource type is realm-index-counts',
       );
-      // The seeded realm has one instance, one module, and one plain file.
-      // The instance's own `.json` shares its url and is not double-counted.
+      // Two cards: `mango.json` plus the realm's own RealmConfig card at
+      // `realm.json`. One definition (`person.gts`) and one plain file
+      // (`notes.txt`) — note that neither card's `.json` lands in the file
+      // count, since an instance and its file row share a url.
       assertRealmIndexCounts(assert, byId.get(testRealm.url)!.attributes, {
-        cardCount: 1,
+        cardCount: 2,
         definitionCount: 1,
         fileCount: 1,
       });
-      assertRealmIndexCounts(assert, byId.get(secondaryRealm.url)!.attributes);
+      // The secondary realm holds only its RealmConfig card.
+      assertRealmIndexCounts(assert, byId.get(secondaryRealm.url)!.attributes, {
+        cardCount: 1,
+        definitionCount: 0,
+        fileCount: 0,
+      });
     });
 
     test('QUERY reflects a write once the realm re-indexes', async function (assert) {

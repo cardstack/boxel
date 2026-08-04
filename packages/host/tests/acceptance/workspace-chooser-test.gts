@@ -347,6 +347,77 @@ module('Acceptance | workspace-chooser', function (hooks) {
       );
     });
 
+    test('counts refresh after the realm re-indexes, without blanking first', async function (assert) {
+      await openChooserWithFavorite();
+
+      withIndexCounts(realmAURL, {
+        cardCount: 12,
+        fileCount: 34,
+        definitionCount: 5,
+      });
+      await settled();
+      assert.dom(favoriteStat('Cards')).hasText('Cards 12');
+
+      // Stand in for the realm server's answer changing after a write.
+      let realmService = getService('realm') as any;
+      let requestedRealms: string[][] = [];
+      let realmServerService = getService('realm-server') as any;
+      let originalFetch = realmServerService.fetchRealmIndexCounts;
+      realmServerService.fetchRealmIndexCounts = async (urls: string[]) => {
+        requestedRealms.push(urls);
+        return [
+          {
+            id: realmAURL,
+            attributes: { cardCount: 13, fileCount: 34, definitionCount: 5 },
+          },
+        ];
+      };
+
+      try {
+        realmService.markIndexCountsStale(realmAURL);
+        await settled();
+
+        assert.deepEqual(
+          requestedRealms,
+          [[realmAURL]],
+          'the stale realm is re-requested exactly once',
+        );
+        assert
+          .dom(favoriteStat('Cards'))
+          .hasText('Cards 13', 'the tile shows the refreshed count');
+      } finally {
+        realmServerService.fetchRealmIndexCounts = originalFetch;
+      }
+    });
+
+    test('marking a realm stale keeps its previous counts visible', async function (assert) {
+      await openChooserWithFavorite();
+
+      withIndexCounts(realmAURL, {
+        cardCount: 12,
+        fileCount: 34,
+        definitionCount: 5,
+      });
+      await settled();
+
+      // Hold the refetch open so we can observe the interim state: the tile must
+      // keep the old numbers rather than emptying its row on every write.
+      let realmServerService = getService('realm-server') as any;
+      let originalFetch = realmServerService.fetchRealmIndexCounts;
+      realmServerService.fetchRealmIndexCounts = () => new Promise(() => {});
+
+      try {
+        (getService('realm') as any).markIndexCountsStale(realmAURL);
+        await settled();
+
+        assert
+          .dom(favoriteStat('Cards'))
+          .hasText('Cards 12', 'stale counts stay on screen while refetching');
+      } finally {
+        realmServerService.fetchRealmIndexCounts = originalFetch;
+      }
+    });
+
     test('the metadata row is only on favorite tiles', async function (assert) {
       await openChooserWithFavorite();
 
