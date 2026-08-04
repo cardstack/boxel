@@ -335,6 +335,7 @@ const ALL_TEST_FILES: string[] = [
   './server-endpoints/skill-validation-test',
   './serve-index-test',
   './server-config-test',
+  './server-endpoints/index-counts-test',
   './server-endpoints/info-test',
   './server-endpoints/stripe-session-test',
   './server-endpoints/stripe-webhook-test',

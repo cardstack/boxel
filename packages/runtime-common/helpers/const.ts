@@ -28,18 +28,14 @@ export const testRealmInfo: RealmInfo = {
   includePrerenderedDefaultRealmIndex: null,
 };
 
-// The info endpoints (`/_info`, `/_federated-info`) serve `testRealmInfo`'s
-// shape plus these — realm-lifecycle timestamps and index counts, whose values
-// depend on realm contents and wall-clock time (see
-// `Realm#getDetailedRealmInfo`). A fixture can't pin them, so split them off
-// and assert them on their own terms.
-export const realmInfoExtraKeys = [
-  'createdAt',
-  'updatedAt',
-  'cardCount',
-  'fileCount',
-  'definitionCount',
-] as const;
+// `/_federated-info` serves `testRealmInfo`'s shape plus these realm-lifecycle
+// timestamps (see `Realm#getDetailedRealmInfo`); the per-realm `/_info` does
+// not. Their values depend on wall-clock time, so a fixture can't pin them —
+// split them off and assert them on their own terms.
+//
+// Index counts are NOT here: they have their own route,
+// `/_federated-index-counts`, and their own shape.
+export const realmInfoExtraKeys = ['createdAt', 'updatedAt'] as const;
 
 export function withoutRealmInfoExtras(
   attributes: Record<string, unknown>,

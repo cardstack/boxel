@@ -200,6 +200,25 @@ export default class WorkspaceChooser extends Component<Signature> {
     return this.filterByHosted(filtered);
   }
 
+  // Only favorited tiles render a Cards / Files / Definitions row, and the
+  // counts behind it are an aggregate over each realm's whole index — so they
+  // are requested here, for that set alone, rather than arriving with the realm
+  // info the chooser loads for every workspace. Installed as a modifier on the
+  // Favorites list so it runs after render and re-runs when the set of
+  // favorites changes; `loadIndexCounts` is fire-and-forget and skips realms
+  // already loaded or in flight, so the dashboard never waits on it.
+  private trackFavoriteCounts = modifier(
+    (_el: HTMLElement, [urls]: [string]) => {
+      if (urls) {
+        this.realm.loadIndexCounts(urls.split(' '));
+      }
+    },
+  );
+
+  private get favoriteCountsKey() {
+    return this.favoriteRealmIdentifiers.join(' ');
+  }
+
   private get userWorkspacesEmptyMessage(): string | null {
     if (
       this.sortOrder === 'hosted-only' &&
@@ -549,7 +568,11 @@ export default class WorkspaceChooser extends Component<Signature> {
                 data-test-favorites-empty
               >{{this.favoritesEmptyMessage}}</span>
             {{else}}
-              <div class='workspace-list' data-test-favorites-list>
+              <div
+                class='workspace-list'
+                data-test-favorites-list
+                {{this.trackFavoriteCounts this.favoriteCountsKey}}
+              >
                 {{#each this.favoriteRealmIdentifiers as |realmIdentifier i|}}
                   <Workspace
                     @realmIdentifier={{realmIdentifier}}

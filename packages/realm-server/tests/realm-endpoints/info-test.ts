@@ -232,18 +232,17 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         },
       });
 
-      // Read the counts off the realm directly rather than through `/_info`:
-      // that route deliberately serves the plain RealmInfo (see
-      // `Realm#realmInfo`), and the detailed variant reaches the UI via the
-      // realm server's `/_federated-info` — covered in
-      // `server-endpoints/info-test.ts`.
+      // Read the counts off the realm directly. Neither info route carries
+      // them: they reach the UI via the realm server's
+      // `/_federated-index-counts`, covered in
+      // `server-endpoints/index-counts-test.ts`.
       async function fetchCounts(): Promise<{
         cardCount: number;
         fileCount: number;
         definitionCount: number;
       }> {
         let { cardCount, fileCount, definitionCount } =
-          await testRealm.getDetailedRealmInfo();
+          await testRealm.getIndexCounts();
         return {
           cardCount: cardCount!,
           fileCount: fileCount!,
@@ -343,23 +342,45 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
 
       test('createdAt and updatedAt come from the realm registry', async function (assert) {
         let info = await testRealm.getDetailedRealmInfo();
-        assertRealmInfoExtras(assert, info as Record<string, unknown>);
+        assertRealmInfoExtras(
+          assert,
+          info as Record<string, unknown>,
+          'getDetailedRealmInfo',
+        );
       });
 
-      test('the plain /_info route omits the detailed extras', async function (assert) {
-        // Guards the fan-out contract above: `/_catalog-realms` issues one
-        // `_info` per publicly-readable realm, so this route must stay cheap.
+      test('/_info omits both the timestamps and the counts', async function (assert) {
+        // Guards the fan-out contract: `/_catalog-realms` issues one `_info`
+        // per publicly-readable realm and drops any non-200, so this route
+        // must stay cheap — no timestamps, and above all no index aggregate.
         let response = await request
           .post(new URL('_info', realmURL).pathname)
           .set('X-HTTP-Method-Override', 'QUERY')
           .set('Accept', 'application/vnd.api+json');
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
-        for (let key of realmInfoExtraKeys) {
+        for (let key of [
+          ...realmInfoExtraKeys,
+          'cardCount',
+          'fileCount',
+          'definitionCount',
+        ]) {
           assert.notOk(
             key in response.body.data.attributes,
             `/_info omits ${key}`,
           );
+        }
+      });
+
+      test('getDetailedRealmInfo carries no index counts', async function (assert) {
+        // The counts are the expensive half; the boot-time batch must not pay
+        // for them. See `Realm#getIndexCounts`.
+        let info = (await testRealm.getDetailedRealmInfo()) as Record<
+          string,
+          unknown
+        >;
+        for (let key of ['cardCount', 'fileCount', 'definitionCount']) {
+          assert.notOk(key in info, `getDetailedRealmInfo omits ${key}`);
         }
       });
     });

@@ -230,24 +230,17 @@ export type RealmInfo = {
   realmUserId?: string;
   publishable: boolean | null;
   lastPublishedAt: string | Record<string, string> | null;
-  // The fields below are served by the info endpoints only (`/_info` and the
-  // realm server's batch `/_federated-info`) — they are absent from the
-  // `meta.realmInfo` embedded in card responses. See
-  // `Realm#getDetailedRealmInfo` for why. Optional (rather than
-  // `| null`-only) so consumers reading a card's `meta.realmInfo` type-check
-  // without pretending the values are there.
+  // Realm lifecycle timestamps, from realm_registry. Served by the realm
+  // server's batch `/_federated-info` only — absent from the per-realm
+  // `/_info` and from the `meta.realmInfo` embedded in card responses. See
+  // `Realm#getDetailedRealmInfo` for why. Optional (rather than `| null`-only)
+  // so consumers reading a card's `meta.realmInfo` type-check without
+  // pretending the values are there.
   //
-  // Realm lifecycle timestamps, from realm_registry.
+  // The workspace-chooser tile counts are deliberately NOT here — see
+  // `RealmIndexCounts` and `Realm#getIndexCounts`.
   createdAt?: string | null;
   updatedAt?: string | null;
-  // Compact metadata for space-constrained tile UIs (e.g. the host
-  // workspace-chooser's favorite tiles). Best-effort as a group: null when
-  // the index tables aren't available (e.g. the sqlite adapter host tests
-  // use) or the query fails, so a gap here never blocks the rest of
-  // RealmInfo.
-  cardCount?: number | null;
-  fileCount?: number | null;
-  definitionCount?: number | null;
   // Opt-in to producing the full prerendered isolated HTML for the
   // realm's default index card (CardsGrid or Workspace). When
   // undefined / null / false the host's render route substitutes a
@@ -259,6 +252,19 @@ export type RealmInfo = {
   // the index's isolated HTML. Optional to avoid forcing every
   // RealmInfo fixture to update.
   includePrerenderedDefaultRealmIndex?: boolean | null;
+};
+
+// Counts behind a favorite workspace tile's Cards / Files / Definitions row.
+// Kept out of `RealmInfo` because they're the expensive half to compute — an
+// aggregate over every index row in the realm — and only favorited tiles
+// render them, so the host fetches them lazily from
+// `/_federated-index-counts` rather than at boot for every realm. A `null`
+// means "not available" (index tables missing, or the query failed) and the
+// tile drops that stat rather than showing a zero.
+export type RealmIndexCounts = {
+  cardCount: number | null;
+  fileCount: number | null;
+  definitionCount: number | null;
 };
 
 // Marker header the host SPA attaches to outbound _federated-search /
@@ -908,19 +914,23 @@ export class Realm {
   // bump on a config change. Recomputed lazily alongside the cached
   // realm info.
   #cachedRealmInfoHash: string | null = null;
-  // The info-endpoint-only extras (index counts + realm timestamps) served by
-  // `getDetailedRealmInfo`. Cached separately from `#cachedRealmInfo` rather
-  // than folded into it, because that object is hashed into the card+json
-  // ETag and these values move on every realm write — mixing them in would
-  // bust every card's cached representation whenever one card changed.
-  //
-  // Caching matters: `/_info` is hit often (the realm server's
-  // `/_catalog-realms` fans out to one `_info` per catalog realm on top of
-  // the host's own calls), and the count query aggregates every index row in
-  // the realm. Uncached, that took per-realm `_info` from a ~44ms median to
-  // ~200ms. Dropped by the same paths that drop `#cachedRealmInfo`, so the
-  // counts refresh on every index swap.
-  #cachedRealmInfoExtras: Partial<RealmInfo> | null = null;
+  // Realm lifecycle timestamps, served by `getDetailedRealmInfo` on top of the
+  // plain info. Cached separately from `#cachedRealmInfo` rather than folded
+  // into it, because that object is hashed into the card+json ETag and
+  // `updated_at` moves on every realm write — mixing it in would bust every
+  // card's cached representation whenever one card changed. A single indexed
+  // `realm_registry` row lookup, so cheap enough for the boot-time batch.
+  #cachedRegistryTimestamps: {
+    createdAt: string | null;
+    updatedAt: string | null;
+  } | null = null;
+  // Cards / files / definitions counts, served ONLY by the dedicated
+  // `/_federated-index-counts` route — the host requests them just for the
+  // realms whose tiles actually render a stats row (favorites). Kept off the
+  // realm-info path because this is the expensive half: an aggregate over
+  // every index row in the realm, versus a single row lookup for the
+  // timestamps above.
+  #cachedIndexCounts: RealmIndexCounts | null = null;
   // Cached host routing map, derived from the indexed RealmConfig card.
   // `getHostRoutingMap()` is called on every host-mode index request
   // (serve-index), so re-querying the index each time is wasteful — the map
@@ -6928,15 +6938,11 @@ export class Realm {
   // `index-query-engine.ts`).
   //
   // One query rather than three: they share a scan, and the counts are only
-  // ever consumed together. Wrapped in its own try/catch, separate from the
-  // metadata reads above, because boxel_index is absent from the sqlite
-  // adapter the host tests use — a missing-table failure here must leave
-  // showAsCatalog/publishable/createdAt/updatedAt intact.
-  private async getIndexCounts(): Promise<{
-    cardCount: number | null;
-    fileCount: number | null;
-    definitionCount: number | null;
-  }> {
+  // ever consumed together. Returns nulls rather than throwing on a query
+  // failure — boxel_index is absent from the sqlite adapter the host tests use,
+  // and a gap here should leave the tile without a stats row, not fail the
+  // request. Callers reach this through the memoizing `getIndexCounts()`.
+  private async queryIndexCounts(): Promise<RealmIndexCounts> {
     // Spelled as SUM(CASE ...) rather than COUNT(*) with a `::int` cast: the
     // cast is Postgres-only syntax. 1/0 flags rather than booleans for the
     // same reason — sqlite has no boolean type.
@@ -7083,7 +7089,8 @@ export class Realm {
   invalidateCachedRealmInfo(): void {
     this.#cachedRealmInfo = null;
     this.#cachedRealmInfoHash = null;
-    this.#cachedRealmInfoExtras = null;
+    this.#cachedRegistryTimestamps = null;
+    this.#cachedIndexCounts = null;
   }
 
   private async parseRealmInfo(): Promise<RealmInfo> {
@@ -7201,34 +7208,47 @@ export class Realm {
     return realmInfo;
   }
 
-  // RealmInfo plus the realm-lifecycle timestamps and index counts, for the
-  // info *endpoints* — this realm's `/_info` and the realm server's batch
-  // `/_federated-info`, which is what the host's workspace chooser actually
-  // reads. Public so that handler can reach it.
+  // RealmInfo plus the realm-lifecycle timestamps, for the realm server's batch
+  // `/_federated-info` — what the host loads once at boot for every realm.
+  // Public so that handler can reach it. Index counts are NOT included: they
+  // are the expensive half and only a favorited realm's tile renders them, so
+  // they have their own route (see `getIndexCounts`).
   //
   // Deliberately not folded into `parseRealmInfo()`/`getRealmInfo()`: that
   // result is embedded in every card response's `meta.realmInfo` and hashed
-  // into the card+json ETag, so the extras — which move on any ordinary realm
-  // write — would invalidate every card's cached representation in the realm
-  // each time one card changed, and cost extra queries on every card request.
-  // Keeping them here confines that cost to the info endpoints.
+  // into the card+json ETag, so `updated_at` — which moves on any ordinary
+  // realm write — would invalidate every card's cached representation in the
+  // realm each time one card changed.
   async getDetailedRealmInfo(): Promise<RealmInfo> {
-    let [info, extras] = await Promise.all([
+    let [info, timestamps] = await Promise.all([
       this.getRealmInfo(),
-      this.getRealmInfoExtras(),
+      this.getCachedRegistryTimestamps(),
     ]);
-    return { ...info, ...extras };
+    return { ...info, ...timestamps };
   }
 
-  private async getRealmInfoExtras(): Promise<Partial<RealmInfo>> {
-    if (!this.#cachedRealmInfoExtras) {
-      let [timestamps, counts] = await Promise.all([
-        this.getRegistryTimestamps(),
-        this.getIndexCounts(),
-      ]);
-      this.#cachedRealmInfoExtras = { ...timestamps, ...counts };
+  private async getCachedRegistryTimestamps(): Promise<{
+    createdAt: string | null;
+    updatedAt: string | null;
+  }> {
+    if (!this.#cachedRegistryTimestamps) {
+      this.#cachedRegistryTimestamps = await this.getRegistryTimestamps();
     }
-    return this.#cachedRealmInfoExtras;
+    return this.#cachedRegistryTimestamps;
+  }
+
+  // Cards / files / definitions for the workspace-chooser favorite tiles.
+  // Served by `/_federated-index-counts` and requested lazily, only for the
+  // realms whose tiles render a stats row — the underlying query aggregates
+  // every index row in the realm, so it must not sit on a path the host walks
+  // for every realm at boot. Memoized and dropped on index swap, so a realm
+  // whose tile is re-rendered repeatedly pays the aggregate once per
+  // generation. Public so the route handler can reach it.
+  async getIndexCounts(): Promise<RealmIndexCounts> {
+    if (!this.#cachedIndexCounts) {
+      this.#cachedIndexCounts = await this.queryIndexCounts();
+    }
+    return this.#cachedIndexCounts;
   }
 
   // Serves the plain `RealmInfo`, NOT `getDetailedRealmInfo`. This route is

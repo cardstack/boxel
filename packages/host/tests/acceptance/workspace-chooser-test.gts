@@ -61,6 +61,21 @@ function withUpdatedRealmInfo(
   };
 }
 
+// Tile counts are loaded lazily from `/_federated-index-counts` into a tracked
+// map on the realm service, keyed by realm URL. Seed that map directly so the
+// assertions don't depend on a fixture realm's incidental contents.
+function withIndexCounts(
+  realmURL: string,
+  counts: {
+    cardCount: number | null;
+    fileCount: number | null;
+    definitionCount: number | null;
+  },
+): void {
+  let realmService = getService('realm') as any;
+  realmService.indexCountsByRealm.set(realmURL, counts);
+}
+
 module('Acceptance | workspace-chooser', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -257,7 +272,7 @@ module('Acceptance | workspace-chooser', function (hooks) {
     test('renders Cards, Files and Definitions counts', async function (assert) {
       await openChooserWithFavorite();
 
-      let restore = withUpdatedRealmInfo(realmAURL, {
+      withIndexCounts(realmAURL, {
         cardCount: 12,
         fileCount: 34,
         definitionCount: 5,
@@ -272,14 +287,12 @@ module('Acceptance | workspace-chooser', function (hooks) {
           `[data-test-favorites-list] [data-test-workspace-stats="${realmAURL}"] [data-test-workspace-stat]`,
         )
         .exists({ count: 3 }, 'all three stats render');
-
-      restore();
     });
 
     test('omits a stat with no count rather than showing zero', async function (assert) {
       await openChooserWithFavorite();
 
-      let restore = withUpdatedRealmInfo(realmAURL, {
+      withIndexCounts(realmAURL, {
         cardCount: 7,
         fileCount: 0,
         definitionCount: null,
@@ -293,36 +306,51 @@ module('Acceptance | workspace-chooser', function (hooks) {
       assert
         .dom(favoriteStat('Definitions'))
         .doesNotExist('an unavailable count is dropped');
-
-      restore();
     });
 
-    test('omits the whole metadata row when no counts are available', async function (assert) {
+    test('keeps the stats row present, and its height, before counts arrive', async function (assert) {
+      // The row is rendered unconditionally so the numbers land in reserved
+      // space instead of growing the tile. Measure the row before any counts
+      // exist, then again once they do.
       await openChooserWithFavorite();
 
-      let restore = withUpdatedRealmInfo(realmAURL, {
-        cardCount: null,
-        fileCount: null,
-        definitionCount: null,
+      let rowSelector = `[data-test-favorites-list] [data-test-workspace-stats="${realmAURL}"]`;
+      assert
+        .dom(rowSelector)
+        .exists('the stats row is present before counts load');
+      assert
+        .dom(`${rowSelector} [data-test-workspace-stat]`)
+        .doesNotExist('but renders no stats yet');
+
+      let heightBefore = (
+        document.querySelector(rowSelector) as HTMLElement
+      ).getBoundingClientRect().height;
+      assert.ok(
+        heightBefore > 0,
+        `the empty row still reserves height, got ${heightBefore}px`,
+      );
+
+      withIndexCounts(realmAURL, {
+        cardCount: 12,
+        fileCount: 34,
+        definitionCount: 5,
       });
       await settled();
 
-      assert
-        .dom('[data-test-favorites-list] [data-test-workspace="Workspace A"]')
-        .exists('the favorited tile still renders');
-      assert
-        .dom(
-          `[data-test-favorites-list] [data-test-workspace-stats="${realmAURL}"]`,
-        )
-        .doesNotExist('no metadata row without any counts');
-
-      restore();
+      let heightAfter = (
+        document.querySelector(rowSelector) as HTMLElement
+      ).getBoundingClientRect().height;
+      assert.strictEqual(
+        heightAfter,
+        heightBefore,
+        `the row does not grow when counts arrive (${heightBefore}px -> ${heightAfter}px)`,
+      );
     });
 
     test('the metadata row is only on favorite tiles', async function (assert) {
       await openChooserWithFavorite();
 
-      let restore = withUpdatedRealmInfo(realmAURL, {
+      withIndexCounts(realmAURL, {
         cardCount: 12,
         fileCount: 34,
         definitionCount: 5,
@@ -334,8 +362,6 @@ module('Acceptance | workspace-chooser', function (hooks) {
           `[data-test-workspace-list] [data-test-workspace-stats="${realmAURL}"]`,
         )
         .doesNotExist('the Your Workspaces tile has no metadata row');
-
-      restore();
     });
   });
 

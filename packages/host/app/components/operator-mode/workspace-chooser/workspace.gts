@@ -130,31 +130,27 @@ export default class Workspace extends Component<Signature> {
                     class='tile-name'
                     data-test-workspace-name
                   >{{this.name}}</span>
-                  {{#if this.tileStats.length}}
-                    <div
-                      class='tile-metadata-row'
-                      data-test-workspace-stats={{@realmIdentifier}}
-                    >
-                      {{#each this.tileStats as |stat|}}
-                        <Tooltip @placement='top'>
-                          <:trigger>
-                            <span
-                              class='tile-stat'
-                              data-test-workspace-stat={{stat.label}}
-                            >
-                              <span
-                                class='tile-stat-label'
-                              >{{stat.label}}</span>
-                              <span
-                                class='tile-stat-number'
-                              >{{stat.count}}</span>
-                            </span>
-                          </:trigger>
-                          <:content>{{stat.label}} {{stat.count}}</:content>
-                        </Tooltip>
-                      {{/each}}
-                    </div>
-                  {{/if}}
+                  {{! Always rendered so the counts, which load after the tile,
+                      fill reserved space instead of growing it. }}
+                  <div
+                    class='tile-metadata-row'
+                    data-test-workspace-stats={{@realmIdentifier}}
+                  >
+                    {{#each this.tileStats as |stat|}}
+                      <Tooltip @placement='top'>
+                        <:trigger>
+                          <span
+                            class='tile-stat'
+                            data-test-workspace-stat={{stat.label}}
+                          >
+                            <span class='tile-stat-label'>{{stat.label}}</span>
+                            <span class='tile-stat-number'>{{stat.count}}</span>
+                          </span>
+                        </:trigger>
+                        <:content>{{stat.label}} {{stat.count}}</:content>
+                      </Tooltip>
+                    {{/each}}
+                  </div>
                 </div>
               </div>
             {{else}}
@@ -938,10 +934,16 @@ export default class Workspace extends Component<Signature> {
         overflow: hidden;
         overflow-wrap: anywhere;
       }
+      /* Height is reserved rather than derived from content: the counts are
+         fetched after the tile renders (favorites only), so a row that grew
+         when they landed would shift the tile's centered name. 1lh at the
+         stats' own font-size matches a populated row exactly. */
       .tile-metadata-row {
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-sm);
+        min-height: 1lh;
+        font-size: 0.75rem;
       }
       .tile-stat {
         display: flex;
@@ -1815,15 +1817,21 @@ export default class Workspace extends Component<Signature> {
   // template can emphasize the count with larger type than its unit label.
   // A stat with no count is dropped rather than rendered as "0" — that's
   // what gives each favorite tile its own mix of metadata instead of always
-  // showing all three. The counts are only served by the realm's `/_info`
-  // endpoint (see RealmInfo), so they're absent, not zero, on a realm whose
-  // info hasn't loaded yet.
+  // showing all three.
+  //
+  // Counts arrive on their own schedule: the chooser requests them for
+  // favorited realms only, after first render (see `trackFavoriteCounts` in
+  // ../workspace-chooser/index.gts). Empty until then, which is why the row
+  // reserves its height rather than being conditionally rendered.
   private get tileStats(): { label: string; count: number }[] {
-    let { cardCount, fileCount, definitionCount } = this.realmInfo;
+    let counts = this.realm.indexCounts(this.args.realmIdentifier);
+    if (!counts) {
+      return [];
+    }
     return [
-      { label: 'Cards', count: cardCount },
-      { label: 'Files', count: fileCount },
-      { label: 'Definitions', count: definitionCount },
+      { label: 'Cards', count: counts.cardCount },
+      { label: 'Files', count: counts.fileCount },
+      { label: 'Definitions', count: counts.definitionCount },
     ].filter((stat): stat is { label: string; count: number } => !!stat.count);
   }
 

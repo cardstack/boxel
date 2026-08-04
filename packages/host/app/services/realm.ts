@@ -20,7 +20,12 @@ import {
 } from 'ember-concurrency';
 import window from 'ember-window-mock';
 
-import { TrackedSet, TrackedObject, TrackedArray } from 'tracked-built-ins';
+import {
+  TrackedSet,
+  TrackedObject,
+  TrackedArray,
+  TrackedMap,
+} from 'tracked-built-ins';
 
 import type {
   Permissions,
@@ -38,6 +43,7 @@ import {
   ri,
   rri,
   SupportedMimeType,
+  type RealmIndexCounts,
   type RealmInfo,
   RealmPaths,
 } from '@cardstack/runtime-common';
@@ -739,6 +745,12 @@ export default class RealmService extends Service {
   private currentKnownRealms = new TrackedSet<string>();
   private reauthentications = new Map<string, Promise<string | undefined>>();
   private bulkInfoPromise: Promise<void> | undefined;
+  // Lazily-loaded tile counts, keyed by trailing-slashed realm URL. A
+  // TrackedMap so a tile re-renders when its counts land. `inFlightIndexCounts`
+  // dedupes concurrent requests for the same realm — the workspace chooser can
+  // ask on every render pass.
+  private indexCountsByRealm = new TrackedMap<string, RealmIndexCounts>();
+  private inFlightIndexCounts = new Set<string>();
   // realmOf runs once per instance added to the store, so its per-call costs
   // multiply by instance count during large renders. RealmPaths is a pure
   // function of the realm URL string (cache entries never go stale), and a
@@ -840,6 +852,58 @@ export default class RealmService extends Service {
         this.bulkInfoPromise = undefined;
       }
     }
+  }
+
+  // Cards / files / definitions for a realm, or `undefined` until they've been
+  // loaded. Held apart from `info` because they arrive on their own schedule:
+  // `info` is fetched for every realm at boot, while the counts are an
+  // aggregate over the realm's whole index and are only requested for realms
+  // whose tile actually shows a stats row (see `loadIndexCounts`).
+  indexCounts(
+    realmURL: RealmResourceIdentifier | string,
+  ): RealmIndexCounts | undefined {
+    return this.indexCountsByRealm.get(ensureTrailingSlash(String(realmURL)));
+  }
+
+  // Fetches counts for the given realms, skipping any already loaded or in
+  // flight. Fire-and-forget by design: callers render first and let the numbers
+  // land, so nothing here should be awaited on a render path.
+  loadIndexCounts(realmURLs: string[]): void {
+    let wanted = Array.from(
+      new Set(realmURLs.map((realmURL) => ensureTrailingSlash(realmURL))),
+    ).filter(
+      (realmURL) =>
+        !this.indexCountsByRealm.has(realmURL) &&
+        !this.inFlightIndexCounts.has(realmURL),
+    );
+    if (wanted.length === 0) {
+      return;
+    }
+    for (let realmURL of wanted) {
+      this.inFlightIndexCounts.add(realmURL);
+    }
+    (async () => {
+      try {
+        let data = await this.realmServer.fetchRealmIndexCounts(wanted);
+        if (this.isDestroyed) {
+          return;
+        }
+        for (let entry of data) {
+          this.indexCountsByRealm.set(
+            ensureTrailingSlash(entry.id),
+            entry.attributes,
+          );
+        }
+      } catch (error) {
+        // Leave the entries unset so a later attempt can retry; the tile just
+        // renders without a stats row until then.
+        log.warn(`Failed to fetch realm index counts: ${error}`);
+      } finally {
+        for (let realmURL of wanted) {
+          this.inFlightIndexCounts.delete(realmURL);
+        }
+      }
+    })();
   }
 
   private applyRealmInfo(realmURL: string, info: RealmInfo, isPublic: boolean) {

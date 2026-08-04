@@ -24,6 +24,7 @@ import {
   waitForReady as waitForReadyOperation,
   type RealmClient,
   type RealmIdentifier,
+  type RealmIndexCounts,
   type RealmInfo,
   type JWTPayload,
 } from '@cardstack/runtime-common';
@@ -776,6 +777,49 @@ export default class RealmServerService extends Service {
       data: { id: string; type: 'realm-info'; attributes: RealmInfo }[];
     };
     return { data: json.data ?? [], publicReadableRealms };
+  }
+
+  // Cards / files / definitions per realm, for the workspace chooser's favorite
+  // tiles. Deliberately separate from `fetchRealmInfos`: the counts are an
+  // aggregate over every index row in a realm, and only a favorited realm's
+  // tile renders them, so callers ask for the handful they need instead of
+  // paying it for every realm at boot.
+  async fetchRealmIndexCounts(
+    realmUrls: string[],
+  ): Promise<{ id: string; attributes: RealmIndexCounts }[]> {
+    if (realmUrls.length === 0) {
+      return [];
+    }
+
+    let uniqueRealmUrls = Array.from(new Set(realmUrls));
+    let realmServerURLs = this.getRealmServersForRealms(uniqueRealmUrls);
+    // TODO remove this assertion after multi-realm server/federated identity is supported
+    this.assertOwnRealmServer(realmServerURLs);
+    let [realmServerURL] = realmServerURLs;
+
+    await this.login();
+
+    let countsURL = new URL('_federated-index-counts', realmServerURL);
+    let response = await this.authedFetch(countsURL.href, {
+      method: 'QUERY',
+      headers: {
+        Accept: SupportedMimeType.JSONAPI,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ realms: uniqueRealmUrls }),
+    });
+
+    if (!response.ok) {
+      let responseText = await response.text();
+      throw new Error(
+        `Failed to fetch realm index counts: ${response.status} - ${responseText}`,
+      );
+    }
+
+    let json = (await response.json()) as {
+      data: { id: string; attributes: RealmIndexCounts }[];
+    };
+    return json.data ?? [];
   }
 
   async fetchCardTypeSummaries(
