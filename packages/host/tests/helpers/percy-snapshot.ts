@@ -38,13 +38,24 @@ export default async function percySnapshot(
   // This covers IBM Plex Sans, IBM Plex Mono (used by Monaco), IBM Plex Serif
   // and any future additions, without needing to keep the helper in sync.
   //
+  // What these waits do and don't buy: fonts loaded here affect the DOM that
+  // gets serialized, not the pixels Percy renders. Percy uploads a serialized
+  // copy of this page and re-renders it in its own browsers, where fonts
+  // resolve from what the *snapshot's captured resources* provide — see
+  // `discovery` in packages/host/.percy.js for the settings that govern that.
+  // Loading fonts here still matters because layout computed in this browser
+  // is serialized as-is: Monaco in particular measures character widths and
+  // writes absolute pixel offsets into the markup, so capturing before fonts
+  // settle bakes fallback-font geometry into the snapshot. Chasing a Percy
+  // font difference by strengthening the guards below will not help; look at
+  // whether the fonts were captured as snapshot resources instead.
+  //
   // `allSettled` (not `all`) because Chrome rejects FontFace.load() with a
   // generic `DOMException: A network error occurred.` when the font fetch
   // fails — typically a transient hiccup pulling a non-critical font over the
   // wire in CI. Letting that bubble out turns the *whole* test red with no URL
-  // attached. The hard-coded IBM Plex Sans `document.fonts.check` below stays
-  // the load-bearing assertion: if the font that actually moves Percy pixels
-  // is missing, fail there with a clear message.
+  // attached, so only a missing IBM Plex Sans — the family that drives layout
+  // everywhere — throws below; the rest warn.
   let faces = Array.from(document.fonts);
   const fontStart = performance.now();
   let fontResults = await Promise.allSettled(
@@ -68,8 +79,9 @@ export default async function percySnapshot(
   // .check(..., '')` below cannot be relied on to catch this: per the WHATWG
   // spec, `FontFaceSet.check` treats faces in `error` status as settled, and
   // with empty text it can still return `true` while the required face is
-  // actually unrenderable. Without this explicit guard, Percy would capture
-  // the page with a fallback font silently substituted.
+  // actually unrenderable. Failing here names the face and the fetch error,
+  // which is far easier to act on than the layout drift a fallback-font
+  // measurement would otherwise bake into the serialized markup.
   let failedRequired = failedFonts.find(
     ({ face }) => face?.family === 'IBM Plex Sans',
   );
@@ -90,8 +102,9 @@ export default async function percySnapshot(
 
   // Belt-and-suspenders: even if no Sans face entered the `error` status, the
   // page may still be missing a Sans weight (e.g. never declared, or evicted
-  // after a teardown). A capture without it shifts every text element by a
-  // fraction of a pixel and turns Percy red across the board.
+  // after a teardown). Text measured against a fallback face lands at
+  // different offsets, so serializing in that state misreports the layout of
+  // every element positioned from measured text.
   for (const weight of ['400', '500', '600', '700']) {
     const descriptor = `${weight} 1em IBM Plex Sans`;
     if (!document.fonts.check(descriptor, '')) {

@@ -133,6 +133,10 @@ sso:
   client_whitelist:
     - "https://localhost:4200/"
     - "http://localhost:4200/"
+    # boxel-cli's browser sign-in redirects to a loopback listener on an
+    # ephemeral port. Entries are matched with `str.startswith`, so the trailing
+    # colon (and no slash) is what lets one entry cover every port.
+    - "http://127.0.0.1:"
 oidc_providers:
   - idp_id: google
     idp_name: "Google"

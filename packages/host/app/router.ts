@@ -22,6 +22,9 @@ Router.map(function () {
   this.route('module', { path: '/module/:id/:nonce/:options' });
   this.route('connect', { path: '/connect/:origin' });
   this.route('standby', { path: '/_standby' });
+  // Where boxel-cli sends the browser to authorize a machine. Declared ahead
+  // of the `/*path` catch-all so the wildcard doesn't swallow it.
+  this.route('cli-auth');
   this.route('command-runner', {
     path: '/command-runner/:request_id/:nonce',
   });

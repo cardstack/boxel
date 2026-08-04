@@ -48,7 +48,15 @@ import {
   HtmlResourceType,
 } from './resource-types.ts';
 import { normalizeRelationships } from './relationship-utils.ts';
-import { normalizeRoutingPath } from './host-routing-validation.ts';
+import {
+  DEFAULT_REDIRECT_STATUS,
+  findRedirectCycles,
+  isRedirectRoutingRule,
+  normalizeRoutingPath,
+  parseRedirectStatusCode,
+  validateRedirectTarget,
+  type HostRoutingRule,
+} from './host-routing-validation.ts';
 import type { LocalPath } from './paths.ts';
 import { RealmPaths, ensureTrailingSlash, join } from './paths.ts';
 import type ms from 'ms';
@@ -886,7 +894,7 @@ export class Realm {
   // every index swap (full/incremental/publish) both locally and on peer
   // replicas via the realm_index_updated broadcast. `null` means "not yet
   // computed"; an empty array is a valid cached result (no routing rules).
-  #cachedHostRoutingMap: { path: string; id: string }[] | null = null;
+  #cachedHostRoutingMap: HostRoutingRule[] | null = null;
 
   // This loader is not meant to be used operationally, rather it serves as a
   // template that we clone for each indexing operation
@@ -6833,8 +6841,10 @@ export class Realm {
   // The `instance` field is `linksTo(CardDef)`, so the indexed
   // searchDoc flattens each rule's link as `{ id, ...flattened
   // linked-card attrs }`. We only need the absolute `id` here.
-  // Returns absolute URLs.
-  async getHostRoutingMap(): Promise<{ path: string; id: string }[]> {
+  // Returns absolute URLs. A rule may instead declare a redirect
+  // (`redirectTo` + optional `statusCode`); those surface as redirect
+  // entries in the map.
+  async getHostRoutingMap(): Promise<HostRoutingRule[]> {
     if (this.#cachedHostRoutingMap) {
       return this.#cachedHostRoutingMap;
     }
@@ -6851,7 +6861,7 @@ export class Realm {
       if (!Array.isArray(rules)) {
         return (this.#cachedHostRoutingMap = []);
       }
-      let map = rules.flatMap((rule) => {
+      let map = rules.flatMap((rule): HostRoutingRule[] => {
         if (!rule || typeof rule !== 'object') return [];
         let path = (rule as Record<string, unknown>).path;
         let instance = (rule as Record<string, unknown>).instance;
@@ -6865,6 +6875,35 @@ export class Realm {
         // the editor's duplicate detection so a '/pricing' + '/pricing/'
         // collision is flagged there. The realm-root rule '/' is preserved.
         let normalizedPath = normalizeRoutingPath(path);
+        let redirectTo = (rule as Record<string, unknown>).redirectTo;
+        if (typeof redirectTo === 'string' && redirectTo.trim()) {
+          // A redirect rule. A rule carrying both `redirectTo` and
+          // `instance` is only reachable by hand-editing realm.json —
+          // the editor clears one when the other is chosen — and the
+          // redirect wins as the more explicit declaration.
+          //
+          // Unless it doesn't hold up: an unusable target falls through
+          // to the instance below rather than taking the rule down with
+          // it, so a typo in a hand-added `redirectTo` leaves a route
+          // that was serving a card still serving it. With no usable
+          // instance either, the rule drops and the path resolves as if
+          // unrouted.
+          let target = redirectTo.trim();
+          let warning = validateRedirectTarget(target);
+          if (warning) {
+            this.#log.warn(
+              `ignoring invalid redirect target ${JSON.stringify(
+                target,
+              )} on host routing rule for path "${normalizedPath}": ${warning}`,
+            );
+          } else {
+            let statusCode =
+              parseRedirectStatusCode(
+                (rule as Record<string, unknown>).statusCode,
+              ) ?? DEFAULT_REDIRECT_STATUS;
+            return [{ path: normalizedPath, redirectTo: target, statusCode }];
+          }
+        }
         if (!instance || typeof instance !== 'object') return [];
         let id = (instance as Record<string, unknown>).id;
         if (typeof id !== 'string') return [];
@@ -6892,6 +6931,23 @@ export class Realm {
         }
         return [{ path: normalizedPath, id }];
       });
+      // Drop redirect rules that chain back on themselves. Serving them
+      // would bounce the client between URLs until it gives up, and a
+      // permanent 301 would keep doing so from cache after the config is
+      // fixed. Dropped, the path resolves like any unrouted one. Only
+      // the rules forming the ring go — a rule pointing INTO it resolves
+      // once the ring is gone.
+      let looping = new Set(findRedirectCycles(map));
+      if (looping.size > 0) {
+        for (let path of looping) {
+          this.#log.warn(
+            `dropping host routing rule for path "${path}" — its redirect target loops back to itself`,
+          );
+        }
+        map = map.filter(
+          (rule) => !(isRedirectRoutingRule(rule) && looping.has(rule.path)),
+        );
+      }
       return (this.#cachedHostRoutingMap = map);
     } catch (e) {
       this.#log.warn(
