@@ -3,12 +3,7 @@ const { module, test } = QUnit;
 import { basename } from 'path';
 import { getUserByMatrixUserId } from '@cardstack/billing/billing-queries';
 import { param, query } from '@cardstack/runtime-common';
-import {
-  assertRealmInfoExtras,
-  realmSecretSeed,
-  testRealmInfo,
-  withoutRealmInfoExtras,
-} from '../helpers/index.ts';
+import { realmSecretSeed, testRealmInfo } from '../helpers/index.ts';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.ts';
 import { setupServerEndpointsTest, testRealmURL } from './helpers.ts';
@@ -110,26 +105,17 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
         // `/_catalog-realms` forwards each realm's `/_info` attributes
-        // verbatim, so the endpoint-only extras ride along here too.
-        assert.deepEqual(
-          response.body.data.map(
-            (realm: { attributes: Record<string, unknown> }) => ({
-              ...realm,
-              attributes: withoutRealmInfoExtras(realm.attributes),
-            }),
-          ),
-          [
-            {
-              type: 'catalog-realm',
-              id: `${testRealmURL}`,
-              attributes: {
-                ...testRealmInfo,
-                showAsCatalog: true,
-              },
+        // verbatim, and that route serves the plain RealmInfo.
+        assert.deepEqual(response.body.data, [
+          {
+            type: 'catalog-realm',
+            id: `${testRealmURL}`,
+            attributes: {
+              ...testRealmInfo,
+              showAsCatalog: true,
             },
-          ],
-        );
-        assertRealmInfoExtras(assert, response.body.data[0].attributes);
+          },
+        ]);
       });
 
       test(`returns 200 with empty data if failed to fetch catalog realm's info`, async function (assert) {

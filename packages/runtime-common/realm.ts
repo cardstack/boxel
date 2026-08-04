@@ -7231,11 +7231,18 @@ export class Realm {
     return this.#cachedRealmInfoExtras;
   }
 
+  // Serves the plain `RealmInfo`, NOT `getDetailedRealmInfo`. This route is
+  // fanned out to internally: the realm server's `/_catalog-realms` handler
+  // issues one `_info` per publicly-readable realm and silently drops any
+  // realm whose response isn't a 200, then caches that list for the life of
+  // the process. Adding per-request index aggregation here put that cold
+  // fan-out at risk for no benefit — the workspace chooser reads its tile
+  // metadata from `/_federated-info`, which does serve the detailed variant.
   private async realmInfo(
     _request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    let realmInfo = await this.getDetailedRealmInfo();
+    let realmInfo = await this.parseRealmInfo();
 
     let doc = {
       data: {

@@ -11,8 +11,8 @@ import {
   closeServer,
   testRealmInfo,
   createJWT,
+  realmInfoExtraKeys,
   testRealmURLFor,
-  withoutRealmInfoExtras,
 } from '../helpers/index.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.ts';
@@ -69,12 +69,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         );
         let json = response.body;
         assert.deepEqual(
-          {
-            data: {
-              ...json.data,
-              attributes: withoutRealmInfoExtras(json.data.attributes),
-            },
-          },
+          json,
           {
             data: {
               id: realmURL.href,
@@ -86,7 +81,6 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           },
           '/_info response is correct',
         );
-        assertRealmInfoExtras(assert, json.data.attributes);
       });
     });
 
@@ -145,12 +139,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
         let json = response.body;
         assert.deepEqual(
-          {
-            data: {
-              ...json.data,
-              attributes: withoutRealmInfoExtras(json.data.attributes),
-            },
-          },
+          json,
           {
             data: {
               id: realmURL.href,
@@ -163,7 +152,6 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           },
           '/_info response is correct',
         );
-        assertRealmInfoExtras(assert, json.data.attributes);
       });
     });
 
@@ -194,12 +182,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
           let json = response.body;
           assert.deepEqual(
-            {
-              data: {
-                ...json.data,
-                attributes: withoutRealmInfoExtras(json.data.attributes),
-              },
-            },
+            json,
             {
               data: {
                 id: realmURL.href,
@@ -212,7 +195,6 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
             },
             '/_info response is correct',
           );
-          assertRealmInfoExtras(assert, json.data.attributes);
         });
       },
     );
@@ -250,18 +232,23 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         },
       });
 
+      // Read the counts off the realm directly rather than through `/_info`:
+      // that route deliberately serves the plain RealmInfo (see
+      // `Realm#realmInfo`), and the detailed variant reaches the UI via the
+      // realm server's `/_federated-info` — covered in
+      // `server-endpoints/info-test.ts`.
       async function fetchCounts(): Promise<{
         cardCount: number;
         fileCount: number;
         definitionCount: number;
       }> {
-        let response = await request
-          .post(new URL('_info', realmURL).pathname)
-          .set('X-HTTP-Method-Override', 'QUERY')
-          .set('Accept', 'application/vnd.api+json');
         let { cardCount, fileCount, definitionCount } =
-          response.body.data.attributes;
-        return { cardCount, fileCount, definitionCount };
+          await testRealm.getDetailedRealmInfo();
+        return {
+          cardCount: cardCount!,
+          fileCount: fileCount!,
+          definitionCount: definitionCount!,
+        };
       }
 
       test('counts each indexed file as exactly one of cards / files / definitions', async function (assert) {
@@ -354,14 +341,26 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         );
       });
 
-      test('createdAt and updatedAt are served from the realm registry', async function (assert) {
+      test('createdAt and updatedAt come from the realm registry', async function (assert) {
+        let info = await testRealm.getDetailedRealmInfo();
+        assertRealmInfoExtras(assert, info as Record<string, unknown>);
+      });
+
+      test('the plain /_info route omits the detailed extras', async function (assert) {
+        // Guards the fan-out contract above: `/_catalog-realms` issues one
+        // `_info` per publicly-readable realm, so this route must stay cheap.
         let response = await request
           .post(new URL('_info', realmURL).pathname)
           .set('X-HTTP-Method-Override', 'QUERY')
           .set('Accept', 'application/vnd.api+json');
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
-        assertRealmInfoExtras(assert, response.body.data.attributes);
+        for (let key of realmInfoExtraKeys) {
+          assert.notOk(
+            key in response.body.data.attributes,
+            `/_info omits ${key}`,
+          );
+        }
       });
     });
 
@@ -392,12 +391,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
         let json = response.body;
         assert.deepEqual(
-          {
-            data: {
-              ...json.data,
-              attributes: withoutRealmInfoExtras(json.data.attributes),
-            },
-          },
+          json,
           {
             data: {
               id: realmURL.href,
@@ -410,7 +404,6 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           },
           '/_info response is correct',
         );
-        assertRealmInfoExtras(assert, json.data.attributes);
       });
     });
   });
