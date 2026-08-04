@@ -2,10 +2,38 @@
 #MISE description="Seed this environment's index tables from the cached CI index"
 #MISE dir="packages/realm-server"
 
-set -euo pipefail
+# No `-e`: everything this task does is an optimization. Seeding the index makes
+# a shard boot faster, and failing to seed it only means the realms index from
+# scratch the way they always did — so a problem here must degrade rather than
+# take the shard down with it. Failures are reported and the task still exits 0.
+set -uo pipefail
 
 export PATH="./node_modules/.bin:$PATH"
 REPO_ROOT="$(cd "../.." && pwd)"
+
+skip() {
+  echo "::warning title=Index cache skipped::$1"
+  exit 0
+}
+
+# Wait for Postgres over TCP, not the default unix socket. The postgres image's
+# entrypoint initializes a new data directory by starting a *temporary* server
+# that listens on the socket only, running init, then shutting it down before
+# the real server comes up. A socket probe answers "ready" during that window,
+# and the next command lands mid-shutdown on `FATAL: the database system is
+# shutting down`. Only the real server listens on TCP, so this waits for the
+# one that is going to stay.
+wait_for_pg() {
+  _wfp_tries=60
+  while [ "$_wfp_tries" -gt 0 ]; do
+    if docker exec boxel-pg pg_isready -U postgres -h 127.0.0.1 >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+    _wfp_tries=$((_wfp_tries - 1))
+  done
+  return 1
+}
 
 # Brings the database up to the point where scripts/import-cached-index.sh can
 # load a snapshot into it: Postgres running, the per-environment database
@@ -20,11 +48,11 @@ REPO_ROOT="$(cd "../.." && pwd)"
 # fixed budget. Keeping the import in its own step means the services start
 # promptly once it is done, and its cost shows up as its own line in the CI
 # timing rather than hiding inside service startup.
-./scripts/start-pg.sh
+./scripts/start-pg.sh || skip "Postgres would not start; realms will index from scratch."
 echo "Waiting for Postgres to accept connections…"
-until docker exec boxel-pg pg_isready -U postgres >/dev/null 2>&1; do sleep 1; done
-"$REPO_ROOT/scripts/ensure-branch-db.sh"
-pnpm migrate
+wait_for_pg || skip "Postgres did not accept TCP connections within 60s; realms will index from scratch."
+"$REPO_ROOT/scripts/ensure-branch-db.sh" || skip "Could not create the environment database; realms will index from scratch."
+pnpm migrate || skip "Migrations failed against ${PGDATABASE:-boxel}; realms will index from scratch."
 
 # Ask for the host-scoped snapshot: a test stack serves base, skills and
 # openrouter, and the full snapshot's other realms are a few hundred MB this
@@ -56,10 +84,11 @@ TEST_DB="${PGDATABASE_TEST:-boxel_test}"
 if docker exec boxel-pg psql -U postgres -lqt | cut -d '|' -f 1 | grep -qw "$TEST_DB"; then
   echo "[ci:import-index] database '${TEST_DB}' already exists"
 else
-  docker exec boxel-pg createdb -U postgres "$TEST_DB"
+  docker exec boxel-pg createdb -U postgres "$TEST_DB" \
+    || skip "Could not create ${TEST_DB}; the test realms will index from scratch."
   echo "[ci:import-index] created database '${TEST_DB}'"
 fi
-PGDATABASE="$TEST_DB" pnpm migrate
+PGDATABASE="$TEST_DB" pnpm migrate || skip "Migrations failed against ${TEST_DB}; the test realms will index from scratch."
 
 if INDEX_CACHE_ARTIFACT=boxel-index-cache-test INDEX_CACHE_DB="$TEST_DB" \
   "$REPO_ROOT/scripts/import-cached-index.sh"; then
