@@ -619,8 +619,22 @@ export default class OperatorModeStateService extends Service {
       .map((stack) => stack[stack.length - 1]);
   }
 
+  // Opening a card that is already behind you in the trail is a navigation
+  // *back* to it — an in-page "up" link, or a second visit to the same page —
+  // so unwind to it rather than stacking another copy of a page the user is
+  // already inside. Pushing is only right for a card not yet on the trail.
   addToHostModeStack(cardId: string) {
-    this._state.hostModeStack.push(cardId);
+    if (cardId === this._state.hostModePrimaryCard) {
+      // the root: everything above it closes
+      this._state.hostModeStack.splice(0, this._state.hostModeStack.length);
+    } else {
+      let index = this._state.hostModeStack.indexOf(cardId);
+      if (index === -1) {
+        this._state.hostModeStack.push(cardId);
+      } else {
+        this._state.hostModeStack.splice(index + 1);
+      }
+    }
     this.schedulePersist();
   }
 
