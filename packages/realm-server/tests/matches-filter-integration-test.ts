@@ -357,6 +357,46 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('IndexQueryEngine emits the null-rejecting guard in its matches SQL', async function (assert) {
+      // The join-shape test below proves the guard *would* reduce the join, but
+      // it composes the predicate itself, so it can't catch IndexQueryEngine
+      // dropping the guard. This test closes that gap: it captures the SQL the
+      // engine actually emits for a `matches` search and asserts the guard is
+      // present, so a regression in the engine fails here rather than passing on
+      // a predicate the engine no longer produces.
+      let executed: string[] = [];
+      let originalExecute = dbAdapter.execute.bind(dbAdapter);
+      dbAdapter.execute = ((
+        sql: string,
+        opts?: Parameters<typeof originalExecute>[1],
+      ) => {
+        executed.push(sql);
+        return originalExecute(sql, opts);
+      }) as typeof dbAdapter.execute;
+      try {
+        await engine.searchCards(new URL(testRealmURL), {
+          filter: { matches: 'mango' },
+        });
+      } finally {
+        dbAdapter.execute = originalExecute;
+      }
+
+      let guard = `ph.markdown IS NOT NULL AND to_tsvector('english', markdown_search_text(ph.markdown))`;
+      let matchesSql = executed.filter((sql) =>
+        sql.includes('markdown_search_text(ph.markdown)'),
+      );
+      assert.ok(
+        matchesSql.length > 0,
+        'the engine ran a full-text matches query',
+      );
+      for (let sql of matchesSql) {
+        assert.ok(
+          sql.includes(guard),
+          `emitted matches SQL should include the null-rejecting guard; got: ${sql}`,
+        );
+      }
+    });
+
     test('the null-rejecting guard reduces the prerendered_html LEFT JOIN to an inner join', async function (assert) {
       // The engine attaches prerendered_html to boxel_index through a LEFT JOIN
       // (see `prerenderedJoin`) and runs the `matches` predicate against the
@@ -372,24 +412,33 @@ module(basename(import.meta.filename), function () {
       // realm B-tree plus a filter, so asserting the index name would be
       // dataset-dependent). The join type is the size-independent signal, so we
       // assert directly on it: the guarded predicate yields an inner join and the
-      // unguarded (pre-fix) predicate stays a left join. A regression that drops
-      // the guard fails here rather than silently reintroducing the slowdown.
+      // unguarded predicate stays a left join. A build that drops the guard fails
+      // here rather than silently reintroducing the slowdown.
       //
       // EXPLAIN's JSON output stringifies each join's planner-chosen strategy as
       // `"Join Type":"Inner"` / `"Join Type":"Left"`; this query has exactly one
       // join, so a substring check is unambiguous.
-      let tsPredicate = `to_tsvector('english', markdown_search_text(ph.markdown)) @@ websearch_to_tsquery('english', 'mango')`;
+      //
+      // The realm URL and query term are bound as parameters ($1/$2) rather than
+      // interpolated, so the SQL stays quoting-safe whatever their contents; only
+      // the predicate *shape* — which is test-controlled, not data — is composed
+      // inline.
+      let tsPredicate = `to_tsvector('english', markdown_search_text(ph.markdown)) @@ websearch_to_tsquery('english', $2)`;
       let joinShapeExplain = (predicate: string) =>
         `EXPLAIN (FORMAT JSON)
          SELECT i.url
          FROM boxel_index AS i
          LEFT JOIN prerendered_html AS ph
            ON ph.url = i.url AND ph.realm_url = i.realm_url AND ph.type = i.type
-         WHERE i.realm_url = '${testRealmURL}'
+         WHERE i.realm_url = $1
            AND ${predicate}`;
 
       let explainJoinShape = async (predicate: string) =>
-        JSON.stringify(await dbAdapter.execute(joinShapeExplain(predicate)));
+        JSON.stringify(
+          await dbAdapter.execute(joinShapeExplain(predicate), {
+            bind: [testRealmURL, 'mango'],
+          }),
+        );
 
       let guarded = await explainJoinShape(
         `ph.markdown IS NOT NULL AND ${tsPredicate}`,
