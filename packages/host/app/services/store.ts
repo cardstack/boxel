@@ -323,6 +323,22 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   protected renderContextBlocksPersistence() {
+    // In the dedicated prerender app (marked by the render route), block ALL
+    // persistence on EVERY store: a write from the prerender deadlocks the
+    // from-scratch index (the render holds the sole worker while the write
+    // takes the realm write lock and awaits a reindex that needs that worker),
+    // and the deadlocking writes come from the regular StoreService — not the
+    // render store — so an `isRenderStore` term cannot catch them.
+    //
+    // Everywhere else (notably host tests, which run in-browser index renders
+    // alongside an interactive app whose saves must keep working), only the
+    // render store during an active render is blocked. Gating the interactive
+    // store on __boxelRenderContext alone breaks it: card-prerender sets that
+    // global around every test-realm index render, silently dropping app saves
+    // that coincide with one.
+    if ((globalThis as any).__boxelPrerenderApp) {
+      return true;
+    }
     return (
       this.isRenderStore && Boolean((globalThis as any).__boxelRenderContext)
     );
@@ -2821,6 +2837,16 @@ export default class StoreService extends Service implements StoreInterface {
     idOrInstance: string | CardDef,
     opts?: { isImmediate?: true },
   ) {
+    // The render/index store renders read-only and must never persist. A save
+    // here would deadlock the from-scratch index: the render holds the sole
+    // worker while the write takes the realm write lock and awaits a reindex
+    // that needs that worker. (Canonicalizing card.id to RRI can make a
+    // freshly-deserialized instance look dirty — a field resolved against the
+    // RRI base differs from its on-disk URL form — which is what surfaces this
+    // otherwise-latent write on the index path.)
+    if (this.isRenderStore) {
+      return;
+    }
     let instance: CardDef | undefined;
     if (typeof idOrInstance === 'string') {
       let maybeInstance = this.peek(idOrInstance);
@@ -3145,7 +3171,10 @@ export default class StoreService extends Service implements StoreInterface {
       try {
         newDef = await loadCardDef(incomingDoc.data.meta.adoptsFrom, {
           loader: this.loaderService.loader,
-          relativeTo: new URL(instance.id),
+          // `instance.id` is canonical RRI for a mapped realm, which `new URL`
+          // cannot parse; `toURL` resolves an RRI to its real URL and passes a
+          // URL-form id through unchanged.
+          relativeTo: this.network.virtualNetwork.toURL(instance.id),
         });
       } catch (err: any) {
         // `loadCardDef` throws a 404 CardError when the resolved module lacks
@@ -3356,16 +3385,22 @@ export function asURL(
   urlOrDoc: string | LooseSingleCardDocument,
   vn: VirtualNetwork,
 ) {
-  if (typeof urlOrDoc !== 'string') {
-    return urlOrDoc.data.id;
+  let id =
+    typeof urlOrDoc === 'string' ? urlOrDoc.replace(/\.json$/, '') : undefined;
+  if (id === undefined) {
+    id = (urlOrDoc as LooseSingleCardDocument).data.id;
+    if (id == null) {
+      return undefined;
+    }
   }
-  let id = urlOrDoc.replace(/\.json$/, '');
-  // Locals stay as-is; remotes resolve through the VN to a normalized URL.
-  // Keying stays in URL form so it matches gc-card-store, which keys instances
-  // by their (URL-form) data.id. Flipping the store's canonical key to RRI is
-  // deferred — it needs gc-card-store keyed the same way and the URL
-  // normalization `toURL` provides here (see CS-11730).
-  return isLocalId(id) ? id : vn.toURL(id).href;
+  // The store keys every instance by the single canonical form that folds ALL
+  // spellings — RRI `card.id`, a link's virtual/url-mapped alias, and the real
+  // URL — onto one key (`toRealURLHref`), so a lookup by any of them lands on
+  // the same entry. `unresolveURL` cannot serve as the key: it leaves a
+  // virtual/url-mapped alias unchanged, so that spelling would split from the
+  // RRI and orphan an inflight-load deferred. gc-card-store and render-service
+  // key the same way. Locals stay as-is.
+  return isLocalId(id) ? id : vn.toRealURLHref(id);
 }
 
 function isSystemCardDefaultId(

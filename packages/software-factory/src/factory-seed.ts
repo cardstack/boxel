@@ -20,7 +20,11 @@ import {
   linkRelationshipToCard,
   toRealmRelativePath,
 } from './realm-operations.ts';
-import { readCard, writeCard } from './workspace-fs.ts';
+import {
+  readCard,
+  writeCard,
+  type WorkspaceReadResult,
+} from './workspace-fs.ts';
 
 /**
  * Infer the darkfactory module URL from a target realm URL.
@@ -50,6 +54,16 @@ export interface SeedIssueOptions {
    * issue loop starts picking issues.
    */
   workspaceDir: string;
+  /**
+   * Also seed a DESIGN-FOUNDATION issue (blockedBy bootstrap,
+   * blocking every implementation issue) that establishes the shared
+   * design language BEFORE any card is designed: overall look & feel →
+   * brand guide with guiding words + CSS variables → a one-sheet simple
+   * pass over every card in the family. Coherence first, detail later
+   * (operator directive 2026-07-17); per-card design turns consume its
+   * artifacts as binding context.
+   */
+  designFoundation?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -57,7 +71,43 @@ export interface SeedIssueOptions {
 // ---------------------------------------------------------------------------
 
 const SEED_ISSUE_PATH = 'Issues/bootstrap-seed';
+/**
+ * Realm-relative Project card path for a brief (no .json). The Project
+ * and Board are seeded MECHANICALLY before any agent turn — the tracker
+ * must exist from second zero so the board shows the seeds in progress;
+ * the bootstrap turn enriches the Project rather than creating it.
+ */
+export function projectPathForBrief(brief: { title: string }): string {
+  return `Projects/${briefSlug(brief.title)}`;
+}
+export function boardPathForBrief(brief: { title: string }): string {
+  return `Boards/${briefSlug(brief.title)}`;
+}
+
+function briefSlug(title: string): string {
+  let slug = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return slug || 'project';
+}
+
+function projectCodeForTitle(title: string): string {
+  let initials = title
+    .split(/[^a-zA-Z0-9]+/)
+    .filter(Boolean)
+    .map((w) => w[0].toUpperCase())
+    .join('')
+    .slice(0, 4);
+  return initials.length >= 2
+    ? initials
+    : (title.slice(0, 2) || 'PR').toUpperCase();
+}
 const SEED_ISSUE_FILE = `${SEED_ISSUE_PATH}.json`;
+export const ANALYSIS_ISSUE_PATH = 'Issues/port-analysis-seed';
+const ANALYSIS_ISSUE_FILE = `${ANALYSIS_ISSUE_PATH}.json`;
+export const DESIGN_FOUNDATION_ISSUE_PATH = 'Issues/design-foundation-seed';
+const DESIGN_FOUNDATION_ISSUE_FILE = `${DESIGN_FOUNDATION_ISSUE_PATH}.json`;
 
 // ---------------------------------------------------------------------------
 // Main
@@ -75,26 +125,164 @@ export async function createSeedIssue(
   brief: FactoryBrief,
   options: SeedIssueOptions,
 ): Promise<SeedIssueResult> {
-  let { darkfactoryModuleUrl, workspaceDir } = options;
+  let { darkfactoryModuleUrl, workspaceDir, designFoundation } = options;
 
   // The factory entrypoint pulls the target realm into `workspaceDir`
   // before calling us, so a pre-existing seed shows up locally.
   let existing = await readCard(workspaceDir, SEED_ISSUE_FILE);
-  if (existing.ok) {
-    log.info(`Seed issue already exists at ${SEED_ISSUE_FILE}`);
-    return { issueId: SEED_ISSUE_PATH, status: 'existing' };
-  }
-
-  // Anything other than "file missing" is a real problem — surface it.
-  if (existing.status !== 404) {
+  // Anything other than "found" or "file missing" is a real problem — surface it.
+  if (!existing.ok && existing.status !== 404) {
     throw new Error(
       `Failed to check for existing seed issue: ${existing.error ?? 'unknown error'}`,
     );
   }
 
+  // Seed the tracker surfaces before any issue: a Project stub (the
+  // bootstrap turn enriches it) and the IssueTracker board. Both are
+  // formulaic JSON — writing them here means the board exists from
+  // second zero (showing the seeds in progress) and every seed can carry
+  // its `project` relationship inline instead of being retro-linked
+  // after bootstrap. Create-if-missing: resumes and re-arms never
+  // clobber an enriched Project.
+  let projectPath = projectPathForBrief(brief);
+  let boardPath = boardPathForBrief(brief);
+  let existingProject = await readCard(workspaceDir, `${projectPath}.json`);
+  if (!existingProject.ok && existingProject.status === 404) {
+    let write = await writeCard(
+      workspaceDir,
+      `${projectPath}.json`,
+      JSON.stringify(
+        buildSeedProjectDocument(brief, darkfactoryModuleUrl),
+        null,
+        2,
+      ),
+    );
+    if (!write.ok) {
+      throw new Error(
+        `Failed to create seed Project card: ${write.error ?? 'unknown error'}`,
+      );
+    }
+    log.info(`Project card seeded: ${projectPath}`);
+  }
+  let existingBoard = await readCard(workspaceDir, `${boardPath}.json`);
+  if (!existingBoard.ok && existingBoard.status === 404) {
+    let write = await writeCard(
+      workspaceDir,
+      `${boardPath}.json`,
+      JSON.stringify(
+        buildSeedBoardDocument(brief, darkfactoryModuleUrl),
+        null,
+        2,
+      ),
+    );
+    if (!write.ok) {
+      throw new Error(
+        `Failed to create seed IssueTracker board: ${write.error ?? 'unknown error'}`,
+      );
+    }
+    log.info(`IssueTracker board seeded: ${boardPath}`);
+  }
+
+  // Resume vs re-arm. On a restart the entrypoint pulls the control realm
+  // into this workspace FIRST, so a seed a prior turn already completed is
+  // sitting here at status `done`. Blindly re-writing it to `backlog` makes
+  // the loop redo finished work — the operator watched the PORT-ANALYSIS
+  // issue re-run a repo study whose Knowledge Articles were already written
+  // (2026-07-17). So: if a done seed belongs to the CURRENT brief, leave it
+  // intact and let the loop resume from the board. Still overwrite when the
+  // brief CHANGED — that's the sequential multi-brief pass the LOCAL PATCH
+  // note below is about (a done seed from a *different* brief must re-arm).
+  let bootstrapResume = seedMatchesAndDone(existing, brief.sourceUrl);
+
   let document = buildSeedIssueDocument(brief, darkfactoryModuleUrl);
 
-  log.info(`Creating seed issue at ${SEED_ISSUE_FILE}`);
+  // GitHub-port flow: a PORT-ANALYSIS issue runs before bootstrap —
+  // it studies the source repo (README, screenshots, demo media, code
+  // layout) and writes the port-background Knowledge Article that
+  // bootstrap plans the card family from. Bootstrap is blockedBy it.
+  if (brief.githubRepoUrl) {
+    let existingAnalysis = await readCard(workspaceDir, ANALYSIS_ISSUE_FILE);
+    if (seedMatchesAndDone(existingAnalysis, brief.githubRepoUrl)) {
+      log.info(
+        `Port-analysis seed already done for ${brief.githubRepoUrl} — leaving it intact so the loop resumes from the board instead of re-running the repo study`,
+      );
+    } else {
+      let analysisDocument = buildAnalysisSeedIssueDocument(
+        brief,
+        darkfactoryModuleUrl,
+      );
+      let analysisWrite = await writeCard(
+        workspaceDir,
+        ANALYSIS_ISSUE_FILE,
+        JSON.stringify(analysisDocument, null, 2),
+      );
+      if (!analysisWrite.ok) {
+        throw new Error(
+          `Failed to create port-analysis seed issue: ${analysisWrite.error ?? 'unknown error'}`,
+        );
+      }
+      log.info(`Port-analysis seed issue created: ${ANALYSIS_ISSUE_PATH}`);
+    }
+  }
+
+  // Design-foundation phase : runs after bootstrap, before every
+  // implementation issue. Establishes the design language once so all
+  // per-card design turns inherit it — coherence first, detail later.
+  if (designFoundation) {
+    let existingFoundation = await readCard(
+      workspaceDir,
+      DESIGN_FOUNDATION_ISSUE_FILE,
+    );
+    // The foundation seed carries no brief token of its own, so tie its
+    // resume to bootstrap's: same brief + already done ⇒ keep it, don't
+    // re-arm. A changed brief re-arms bootstrap and the foundation with it.
+    if (bootstrapResume && isDone(existingFoundation)) {
+      log.info(
+        `Design-foundation seed already done — leaving it intact (resume, not re-arm)`,
+      );
+    } else {
+      let foundationDocument = buildDesignFoundationSeedIssueDocument(
+        brief,
+        darkfactoryModuleUrl,
+      );
+      let foundationWrite = await writeCard(
+        workspaceDir,
+        DESIGN_FOUNDATION_ISSUE_FILE,
+        JSON.stringify(foundationDocument, null, 2),
+      );
+      if (!foundationWrite.ok) {
+        throw new Error(
+          `Failed to create design-foundation seed issue: ${foundationWrite.error ?? 'unknown error'}`,
+        );
+      }
+      log.info(
+        `Design-foundation seed issue created: ${DESIGN_FOUNDATION_ISSUE_PATH}`,
+      );
+    }
+  }
+
+  // Bootstrap itself: a done seed for the current brief stays done so the
+  // loop picks up wherever the board left off.
+  if (bootstrapResume) {
+    log.info(
+      `Bootstrap seed already done for this brief — leaving it intact; the loop will resume from the board`,
+    );
+    return { issueId: SEED_ISSUE_PATH, status: 'existing' };
+  }
+
+  // LOCAL PATCH (CS-12192): the seed path is a realm-wide constant, so a
+  // second `factory:go` against an already-bootstrapped realm would find the
+  // *previous* run's stale seed here. We overwrite it with the current brief
+  // so each run bootstraps its own brief; `buildSeedIssueDocument` stamps
+  // status=backlog, re-arming a seed a prior brief left done/blocked. The
+  // resume guard above already spared a *matching-brief* done seed, so this
+  // path only fires for a new/changed brief or a never-completed seed. Not
+  // an upstream change.
+  log.info(
+    existing.ok
+      ? `Overwriting existing seed issue at ${SEED_ISSUE_FILE} with current brief`
+      : `Creating seed issue at ${SEED_ISSUE_FILE}`,
+  );
   let writeResult = await writeCard(
     workspaceDir,
     SEED_ISSUE_FILE,
@@ -107,7 +295,11 @@ export async function createSeedIssue(
     );
   }
 
-  log.info(`Seed issue created: ${SEED_ISSUE_PATH}`);
+  log.info(
+    existing.ok
+      ? `Seed issue overwritten: ${SEED_ISSUE_PATH}`
+      : `Seed issue created: ${SEED_ISSUE_PATH}`,
+  );
   return { issueId: SEED_ISSUE_PATH, status: 'created' };
 }
 
@@ -121,6 +313,13 @@ export interface LinkProjectToSeedIssueOptions {
   workspaceDir: string;
   /** From `inferDarkfactoryModuleUrl(realmUrl)`. */
   darkfactoryModuleUrl: string;
+  /**
+   * Realm-relative seed issue path WITHOUT the `.json` extension.
+   * Defaults to the bootstrap seed; pass the design-foundation or
+   * port-analysis seed path to wire those. A missing seed file is a
+   * no-op (returns false), so callers can link speculatively.
+   */
+  seedIssuePath?: string;
   /**
    * How many times to retry the Project search when it comes back empty.
    * The Project is synced to the realm fire-and-forget (no `waitForIndex`),
@@ -150,12 +349,17 @@ export async function linkProjectToSeedIssue(
 ): Promise<boolean> {
   let { client, realmUrl, workspaceDir, darkfactoryModuleUrl } = options;
   let issueTrackerModuleUrl = inferIssueTrackerModuleUrl(darkfactoryModuleUrl);
+  // Defaults to the bootstrap seed; callers pass the design-foundation or
+  // port-analysis seed path to wire those too — the project-scoped board
+  // only shows linked issues, and an unlinked seed is invisible on it even
+  // while the loop is actively working it.
+  let seedIssuePath = options.seedIssuePath ?? SEED_ISSUE_PATH;
 
   return linkRelationshipToCard({
     client,
     realmUrl,
     workspaceDir,
-    cardFile: SEED_ISSUE_FILE,
+    cardFile: `${seedIssuePath}.json`,
     relationshipKey: 'project',
     targetLabel: 'Project',
     search: () =>
@@ -170,13 +374,41 @@ export async function linkProjectToSeedIssue(
     // the agent encodes implementation-issue project links (`../Projects/<slug>`).
     buildLink: (id, realm) =>
       posix.relative(
-        posix.dirname(SEED_ISSUE_PATH),
+        posix.dirname(seedIssuePath),
         toRealmRelativePath(id, realm),
       ),
     log,
     searchRetries: options.searchRetries,
     searchRetryDelayMs: options.searchRetryDelayMs,
   });
+}
+
+// ---------------------------------------------------------------------------
+// Resume guard
+// ---------------------------------------------------------------------------
+
+/** True when a pulled seed card is present and its status is `done`. */
+function isDone(read: WorkspaceReadResult): boolean {
+  if (!read.ok || !read.document) return false;
+  let attrs = (
+    read.document.data as { attributes?: Record<string, unknown> } | undefined
+  )?.attributes;
+  return attrs?.status === 'done';
+}
+
+/**
+ * True when a pulled seed is `done` AND belongs to the CURRENT brief. The
+ * identity token (the brief's source/repo URL) is embedded verbatim in the
+ * seed's summary/description, so a substring check distinguishes "resume this
+ * brief" (keep the done seed) from "a prior brief left a done seed here"
+ * (re-arm — the sequential multi-brief pass). An empty token never matches.
+ */
+function seedMatchesAndDone(
+  read: WorkspaceReadResult,
+  identityToken: string,
+): boolean {
+  if (!identityToken || !isDone(read)) return false;
+  return JSON.stringify(read.document).includes(identityToken);
 }
 
 // ---------------------------------------------------------------------------
@@ -208,7 +440,34 @@ function buildSeedIssueDocument(
     ? adjustSeedInstructions(brief)
     : greenfieldSeedInstructions();
 
-  let description = [...briefHeader, ...instructions].join('\n');
+  let port = Boolean(brief.githubRepoUrl);
+  let portNote = port
+    ? [
+        `## Port background (read first)`,
+        ``,
+        `A PORT-ANALYSIS issue ran before this one. Its output — TWO`,
+        `Knowledge Articles linked on this issue via \`relatedKnowledge\` —`,
+        `is the AUTHORITATIVE background for this port:`,
+        ``,
+        `- **port-background** — feature inventory, screen catalogue, UX`,
+        `  flows, the "better than the original" rubric, and the proposed`,
+        `  Boxel card-family mapping.`,
+        `- **port-code-analysis** — the original's architecture, dependency`,
+        `  map with Boxel-side answers, specialized logic inventory (incl.`,
+        `  verbatim AI prompt templates), the data model as implemented,`,
+        `  and the PORTED TEST CONTRACT (assertions + fixtures mined from`,
+        `  the original's tests).`,
+        ``,
+        `Plan the card family from THESE articles, not just the README`,
+        `excerpt above. Carry the rubric into the Project's success`,
+        `criteria; quote the ported test contract in each implementation`,
+        `issue's acceptance criteria; use the mined fixtures as the shapes`,
+        `for sample instances.`,
+        ``,
+      ]
+    : [];
+
+  let description = [...briefHeader, ...portNote, ...instructions].join('\n');
 
   return {
     data: {
@@ -220,10 +479,173 @@ function buildSeedIssueDocument(
         issueType: 'bootstrap',
         status: 'backlog',
         priority: 'critical',
+        order: port ? 1 : 0,
+        acceptanceCriteria,
+        createdAt: now,
+        updatedAt: now,
+      },
+      relationships: {
+        project: {
+          links: { self: `../${projectPathForBrief(brief)}` },
+        },
+        // Under the port flow, bootstrap waits for the analysis issue.
+        ...(port
+          ? {
+              'blockedBy.0': {
+                links: { self: `../${ANALYSIS_ISSUE_PATH}` },
+              },
+            }
+          : {}),
+      },
+      meta: {
+        adoptsFrom: {
+          module: darkfactoryModuleUrl,
+          name: 'Issue',
+        },
+      },
+    },
+  };
+}
+
+/**
+ * The PORT-ANALYSIS seed issue (GitHub-port flow). The prompt template
+ * `issue-analysis.md` carries the full research protocol; the issue
+ * description carries the repo pointer and the acceptance contract.
+ */
+function buildAnalysisSeedIssueDocument(
+  brief: FactoryBrief,
+  darkfactoryModuleUrl: string,
+) {
+  let now = new Date().toISOString();
+  let description = [
+    `## Source application to analyze`,
+    ``,
+    `**Repository:** ${brief.githubRepoUrl}`,
+    `**Working title:** ${brief.title}`,
+    `**One-liner:** ${brief.contentSummary}`,
+    ``,
+    `Fully analyze this GitHub repository — clone it, read its media AND`,
+    `its code. Get INTO the source: how it works, what specialized logic`,
+    `and dependencies it relies on, what its tests pin down and what`,
+    `fixture data they use. Deliverables: TWO Knowledge Articles —`,
+    `\`Knowledge Articles/port-background.json\` (product view: features,`,
+    `screens, flows, better-than-the-original rubric, Boxel card-family`,
+    `mapping) and \`Knowledge Articles/port-code-analysis.json\``,
+    `(engineering view: architecture, dependency map with Boxel-side`,
+    `answers, specialized logic incl. verbatim AI prompts, real data`,
+    `model, ported test contract + fixtures) — both linked onto the`,
+    `bootstrap seed issue via \`relatedKnowledge\`.`,
+    ``,
+    `The full research protocol is in your turn instructions.`,
+  ].join('\n');
+
+  let acceptanceCriteria = [
+    '- [ ] Repository cloned; README and file tree analyzed (not just skimmed)',
+    '- [ ] Every screenshot/GIF/video referenced by the README downloaded and READ (or explicitly listed as unviewable with why)',
+    '- [ ] Feature inventory: every user-facing capability, named and described',
+    '- [ ] Screen catalogue: each view/screen with what it shows and its key affordances',
+    '- [ ] Dependency map: each meaningful dependency → its role → the Boxel-side answer (or NEEDS-HUMAN-DECISION)',
+    '- [ ] Specialized logic inventory: path + summary + port strategy per algorithm; AI prompt templates captured verbatim',
+    '- [ ] Data model as implemented in the code: entities, fields with types, relationships',
+    '- [ ] Ported test contract: assertions mined from the original tests per feature, fixture data captured for sample instances (or explicit "no tests" + contract derived from code)',
+    '- [ ] "Better than the original" rubric: measurable criteria the Boxel port must beat',
+    '- [ ] Boxel port mapping: proposed card family (CardDefs + links) with per-card format notes',
+    '- [ ] BOTH Knowledge Articles written and linked to the bootstrap issue via relatedKnowledge.0 / .1',
+  ].join('\n');
+
+  return {
+    data: {
+      type: 'card' as const,
+      attributes: {
+        issueId: 'PORT-0',
+        summary: `Analyze ${brief.githubRepoUrl} and write the port background`,
+        description,
+        issueType: 'analysis',
+        status: 'backlog',
+        priority: 'critical',
         order: 0,
         acceptanceCriteria,
         createdAt: now,
         updatedAt: now,
+      },
+      relationships: {
+        project: {
+          links: { self: `../${projectPathForBrief(brief)}` },
+        },
+      },
+      meta: {
+        adoptsFrom: {
+          module: darkfactoryModuleUrl,
+          name: 'Issue',
+        },
+      },
+    },
+  };
+}
+
+/**
+ * Build the DESIGN-FOUNDATION seed issue: the hierarchical design phase
+ * that runs after bootstrap and before every implementation issue.
+ * Coherence first, detail later — the per-card design turns consume its
+ * brand guide + tokens + family sheet as binding context.
+ */
+function buildDesignFoundationSeedIssueDocument(
+  _brief: FactoryBrief,
+  darkfactoryModuleUrl: string,
+) {
+  let now = new Date().toISOString();
+
+  let description = [
+    `Establish the shared design language for this build BEFORE any card`,
+    `is designed in detail. Work top-down:`,
+    ``,
+    `1. **Look & feel** — read the project's Knowledge Articles (port`,
+    `   background / brief context) and decide the overall visual`,
+    `   direction: mood, references, what this app should feel like.`,
+    `2. **Brand guide** — write \`Knowledge Articles/brand-guide.json\``,
+    `   (guiding words, palette, type, spacing, dos/don'ts) AND`,
+    `   \`design/tokens.css\` (the CSS custom properties every mockup and`,
+    `   .gts template will use).`,
+    `3. **Family coherence sheet** — \`design/family-sheet.html\`: a`,
+    `   SIMPLE version of every card in the domain side-by-side, linking`,
+    `   tokens.css. Screenshot it, critique for coherence, revise once.`,
+    ``,
+    `Detailed per-card design (fitted quanta, per-format matrices) happens`,
+    `later in each card's own design turn — those turns consume your`,
+    `artifacts as binding context. The full protocol is in your turn`,
+    `instructions.`,
+  ].join('\n');
+
+  let acceptanceCriteria = [
+    "- [ ] Brand guide Knowledge Article written: guiding words, palette, typography, spacing, dos/don'ts",
+    '- [ ] design/tokens.css written: the CSS custom properties (--*) all future mockups and templates use',
+    '- [ ] design/family-sheet.html: a simple rendering of EVERY card in the domain on one sheet, using tokens.css',
+    '- [ ] Family sheet screenshotted, critiqued for coherence, and revised at least once',
+  ].join('\n');
+
+  return {
+    data: {
+      type: 'card' as const,
+      attributes: {
+        issueId: 'DESIGN-0',
+        summary:
+          'Establish the design language: brand guide, tokens, family sheet',
+        description,
+        issueType: 'design',
+        status: 'backlog',
+        priority: 'critical',
+        order: 2,
+        acceptanceCriteria,
+        createdAt: now,
+        updatedAt: now,
+      },
+      relationships: {
+        project: {
+          links: { self: `../${projectPathForBrief(_brief)}` },
+        },
+        'blockedBy.0': {
+          links: { self: `../${SEED_ISSUE_PATH}` },
+        },
       },
       meta: {
         adoptsFrom: {
@@ -368,5 +790,215 @@ function adjustSeedInstructions(brief: FactoryBrief): {
     instructions,
     acceptanceCriteria,
     summary: 'Seed the source card and create adjustment issues',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Hardening issues
+// ---------------------------------------------------------------------------
+
+export interface CreateHardeningIssuesOptions {
+  darkfactoryModuleUrl: string;
+  workspaceDir: string;
+  /**
+   * The done implementation issues to harden — one hardening issue is
+   * written per entry. Each needs the issue's absolute card URL (`id`)
+   * and its display fields; the source card file is also read from the
+   * workspace to copy the `project` relationship so the hardening issue
+   * shows on the project-scoped board.
+   */
+  issues: {
+    id: string;
+    issueId?: string;
+    summary?: string;
+    acceptanceCriteria?: string;
+  }[];
+}
+
+/**
+ * Synthesize hardening issues — the QUnit test pass over shipped cards —
+ * one per done implementation issue. Written mechanically by the loop
+ * (no inference) when the run targets the hardening phase; the scheduler
+ * picks them up like any other issue. Idempotent: an existing hardening
+ * file for an issue is left untouched.
+ *
+ * Returns the realm-relative paths (without `.json`) of the files it
+ * created.
+ */
+export async function createHardeningIssues(
+  options: CreateHardeningIssuesOptions,
+): Promise<string[]> {
+  let { darkfactoryModuleUrl, workspaceDir, issues } = options;
+  let created: string[] = [];
+  let order = 1000; // after everything the bootstrap planned
+
+  for (let issue of issues) {
+    let slug = issueSlugFromId(issue.id);
+    if (!slug) {
+      log.warn(`Cannot derive a slug for hardening issue source: ${issue.id}`);
+      continue;
+    }
+    let hardenPath = `Issues/harden-${slug}`;
+    let hardenFile = `${hardenPath}.json`;
+
+    let existing = await readCard(workspaceDir, hardenFile);
+    if (existing.ok) {
+      continue;
+    }
+
+    // Copy the project relationship from the source issue so the
+    // hardening issue is visible on the project-scoped board.
+    let projectRelationship: unknown;
+    let sourceRead = await readCard(workspaceDir, `Issues/${slug}.json`);
+    if (sourceRead.ok && sourceRead.document) {
+      let data = sourceRead.document.data as
+        | { relationships?: { project?: unknown } }
+        | undefined;
+      projectRelationship = data?.relationships?.project;
+    }
+
+    let now = new Date().toISOString();
+    let displayName = issue.summary ?? slug;
+    let description = [
+      `Write QUnit tests for the shipped work of ${issue.issueId ?? slug}`,
+      `("${displayName}"). The card and its Spec/examples already exist in`,
+      `the workspace — read them first; do NOT redesign or modify the card`,
+      `itself unless a test exposes a real defect.`,
+      ``,
+      `Cover, in priority order:`,
+      `1. The issue's acceptance criteria (listed below when present).`,
+      `2. Field behavior: computed fields, defaults, edge values.`,
+      `3. Rendering: the card renders in isolated, embedded, and fitted`,
+      `   formats without errors.`,
+      ``,
+      ...(issue.acceptanceCriteria
+        ? [`Source acceptance criteria:`, ``, issue.acceptanceCriteria, ``]
+        : []),
+      `Test files are co-located with the card definition as`,
+      `\`<card-name>.test.gts\` and follow the QUnit conventions in your`,
+      `turn instructions. Keep all test data in browser memory — no realm`,
+      `writes from tests.`,
+    ].join('\n');
+
+    let document = {
+      data: {
+        type: 'card' as const,
+        attributes: {
+          issueId: `HARD-${issue.issueId ?? slug}`,
+          summary: `Harden: ${displayName}`,
+          description,
+          issueType: 'hardening',
+          status: 'backlog',
+          priority: 'medium',
+          order: order++,
+          acceptanceCriteria: [
+            '- [ ] `<card-name>.test.gts` written, co-located with the card definition',
+            "- [ ] Tests cover the source issue's acceptance criteria and field behavior",
+            '- [ ] `run_tests` passes',
+          ].join('\n'),
+          createdAt: now,
+          updatedAt: now,
+        },
+        relationships: {
+          'blockedBy.0': {
+            links: { self: `../Issues/${slug}` },
+          },
+          ...(projectRelationship
+            ? { project: projectRelationship as Record<string, unknown> }
+            : {}),
+        },
+        meta: {
+          adoptsFrom: {
+            module: darkfactoryModuleUrl,
+            name: 'Issue',
+          },
+        },
+      },
+    };
+
+    let write = await writeCard(
+      workspaceDir,
+      hardenFile,
+      JSON.stringify(document, null, 2),
+    );
+    if (!write.ok) {
+      log.warn(
+        `Failed to write hardening issue ${hardenFile}: ${write.error ?? 'unknown error'}`,
+      );
+      continue;
+    }
+    log.info(`Hardening issue created: ${hardenPath}`);
+    created.push(hardenPath);
+  }
+
+  return created;
+}
+
+/** `https://…/realm/Issues/sticky-note(.json)` → `sticky-note`. */
+function issueSlugFromId(id: string): string | undefined {
+  let tail = id.split('/').pop();
+  if (!tail) return undefined;
+  let slug = decodeURIComponent(tail).replace(/\.json$/i, '');
+  return slug || undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Seeded tracker surfaces
+// ---------------------------------------------------------------------------
+
+/**
+ * The Project stub the seeder writes before any agent turn. Mechanical
+ * fields only — the bootstrap turn enriches successCriteria/scope with
+ * judgment and links the Knowledge Articles it creates.
+ */
+function buildSeedProjectDocument(
+  brief: FactoryBrief,
+  darkfactoryModuleUrl: string,
+) {
+  return {
+    data: {
+      type: 'card' as const,
+      attributes: {
+        projectName: brief.title,
+        projectCode: projectCodeForTitle(brief.title),
+        projectStatus: 'active',
+        objective: brief.contentSummary,
+        scope: brief.content,
+        technicalContext: `Generated by factory:go from brief at ${brief.sourceUrl}`,
+      },
+      meta: {
+        adoptsFrom: {
+          module: darkfactoryModuleUrl,
+          name: 'Project',
+        },
+      },
+    },
+  };
+}
+
+/** The IssueTracker board, project-scoped, seeded alongside the Project. */
+function buildSeedBoardDocument(
+  brief: FactoryBrief,
+  darkfactoryModuleUrl: string,
+) {
+  return {
+    data: {
+      type: 'card' as const,
+      attributes: {
+        boardTitle: `${brief.title} Board`,
+        hideEmptyColumns: false,
+      },
+      relationships: {
+        project: {
+          links: { self: `../${projectPathForBrief(brief)}` },
+        },
+      },
+      meta: {
+        adoptsFrom: {
+          module: darkfactoryModuleUrl,
+          name: 'IssueTracker',
+        },
+      },
+    },
   };
 }

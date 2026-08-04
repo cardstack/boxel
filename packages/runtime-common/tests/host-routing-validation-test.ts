@@ -1,6 +1,12 @@
 import {
   findDuplicateRoutingPaths,
+  findRedirectCycles,
+  foreignQueryParams,
+  isExternalRedirectTarget,
   normalizeRoutingPath,
+  parseRedirectStatusCode,
+  resolveRedirectTarget,
+  validateRedirectTarget,
   validateRoutingPath,
 } from '../host-routing-validation.ts';
 import type { SharedTests } from '../helpers/index.ts';
@@ -8,6 +14,10 @@ import type { SharedTests } from '../helpers/index.ts';
 const INVALID_CHARS_MSG =
   'Path may only contain letters, numbers, /, -, _, ., ~, or %XX-encoded characters';
 const MISSING_SLASH_MSG = 'Path must start with /';
+const INVALID_TARGET_MSG =
+  'Redirect target must be a path starting with / or a full http(s) URL';
+const PROTOCOL_RELATIVE_MSG =
+  'Redirect target must start with a single /; use a full http(s) URL for an external target';
 
 const tests: SharedTests<unknown> = Object.freeze({
   'validateRoutingPath: no warning for empty or whitespace paths': async (
@@ -190,6 +200,312 @@ const tests: SharedTests<unknown> = Object.freeze({
       assert.strictEqual(normalizeRoutingPath('/a/b//'), '/a/b');
       assert.strictEqual(normalizeRoutingPath('/'), '/');
       assert.strictEqual(normalizeRoutingPath('//'), '/');
+    },
+
+  'validateRedirectTarget: no warning for empty or unset targets': async (
+    assert,
+  ) => {
+    assert.strictEqual(validateRedirectTarget(null), undefined);
+    assert.strictEqual(validateRedirectTarget(undefined), undefined);
+    assert.strictEqual(validateRedirectTarget(''), undefined);
+    assert.strictEqual(validateRedirectTarget('   '), undefined);
+  },
+
+  'validateRedirectTarget: accepts realm-relative paths, including query strings':
+    async (assert) => {
+      assert.strictEqual(validateRedirectTarget('/terms'), undefined);
+      assert.strictEqual(validateRedirectTarget('/blog/2024/post'), undefined);
+      assert.strictEqual(validateRedirectTarget('/terms?ref=tos'), undefined);
+      assert.strictEqual(validateRedirectTarget('  /terms  '), undefined);
+      assert.strictEqual(validateRedirectTarget('/'), undefined);
+    },
+
+  'validateRedirectTarget: accepts external http(s) URLs': async (assert) => {
+    assert.strictEqual(
+      validateRedirectTarget('https://example.com/page'),
+      undefined,
+    );
+    assert.strictEqual(validateRedirectTarget('http://example.com'), undefined);
+    assert.strictEqual(
+      validateRedirectTarget('https://example.com/page?x=1#frag'),
+      undefined,
+    );
+  },
+
+  'validateRedirectTarget: warns on non-http(s) schemes': async (assert) => {
+    assert.strictEqual(
+      validateRedirectTarget('javascript:alert(1)'),
+      INVALID_TARGET_MSG,
+    );
+    assert.strictEqual(
+      validateRedirectTarget('data:text/html,hi'),
+      INVALID_TARGET_MSG,
+    );
+    assert.strictEqual(
+      validateRedirectTarget('mailto:someone@example.com'),
+      INVALID_TARGET_MSG,
+    );
+  },
+
+  'validateRedirectTarget: warns on slash-less and protocol-relative targets':
+    async (assert) => {
+      assert.strictEqual(validateRedirectTarget('terms'), INVALID_TARGET_MSG);
+      assert.strictEqual(
+        validateRedirectTarget('example.com/terms'),
+        INVALID_TARGET_MSG,
+      );
+      // '//example.com/x' would otherwise resolve as the realm path
+      // '/example.com/x' (leading slashes collapse), which is unlikely to
+      // be what the author meant — steer them to a full URL.
+      assert.strictEqual(
+        validateRedirectTarget('//example.com/x'),
+        PROTOCOL_RELATIVE_MSG,
+      );
+    },
+
+  'findRedirectCycles: returns empty when there is nothing to loop': async (
+    assert,
+  ) => {
+    assert.deepEqual(findRedirectCycles(null), []);
+    assert.deepEqual(findRedirectCycles(undefined), []);
+    assert.deepEqual(findRedirectCycles([]), []);
+    assert.deepEqual(findRedirectCycles([{ path: '/terms' }]), []);
+    assert.deepEqual(
+      findRedirectCycles([{ path: '/tos', redirectTo: '/terms' }]),
+      [],
+      'a redirect to a path with no rule of its own terminates',
+    );
+  },
+
+  'findRedirectCycles: reports a self-redirect': async (assert) => {
+    assert.deepEqual(
+      findRedirectCycles([
+        { path: '/tos', redirectTo: '/tos' },
+        { path: '/terms' },
+      ]),
+      ['/tos'],
+    );
+  },
+
+  'findRedirectCycles: reports every path in a longer ring': async (assert) => {
+    assert.deepEqual(
+      findRedirectCycles([
+        { path: '/a', redirectTo: '/b' },
+        { path: '/b', redirectTo: '/a' },
+      ]),
+      ['/a', '/b'],
+    );
+    assert.deepEqual(
+      findRedirectCycles([
+        { path: '/a', redirectTo: '/b' },
+        { path: '/b', redirectTo: '/c' },
+        { path: '/c', redirectTo: '/a' },
+      ]),
+      ['/a', '/b', '/c'],
+    );
+  },
+
+  'findRedirectCycles: does not report paths that only lead into a ring':
+    async (assert) => {
+      // Dropping the ring is enough — '/x' then resolves like any
+      // redirect whose target has no rule.
+      assert.deepEqual(
+        findRedirectCycles([
+          { path: '/x', redirectTo: '/a' },
+          { path: '/a', redirectTo: '/b' },
+          { path: '/b', redirectTo: '/a' },
+        ]),
+        ['/a', '/b'],
+      );
+    },
+
+  'findRedirectCycles: an external target ends the chain': async (assert) => {
+    assert.deepEqual(
+      findRedirectCycles([
+        { path: '/a', redirectTo: 'https://example.com/a' },
+        { path: '/b', redirectTo: '/a' },
+      ]),
+      [],
+      'leaving the realm cannot loop back through the routing map',
+    );
+  },
+
+  'findRedirectCycles: a query or fragment on the target does not hide a loop':
+    async (assert) => {
+      assert.deepEqual(
+        findRedirectCycles([{ path: '/tos', redirectTo: '/tos?ref=1' }]),
+        ['/tos'],
+      );
+      assert.deepEqual(
+        findRedirectCycles([{ path: '/tos', redirectTo: '/tos#section' }]),
+        ['/tos'],
+      );
+    },
+
+  'findRedirectCycles: trailing slashes and whitespace do not hide a loop':
+    async (assert) => {
+      assert.deepEqual(
+        findRedirectCycles([{ path: '/tos', redirectTo: '/tos/' }]),
+        ['/tos'],
+      );
+      assert.deepEqual(
+        findRedirectCycles([{ path: '  /tos/  ', redirectTo: '  /tos  ' }]),
+        ['/tos'],
+      );
+    },
+
+  'findRedirectCycles: duplicate paths resolve to the first rule': async (
+    assert,
+  ) => {
+    // The routing map's `.find()` makes the second rule unreachable, so
+    // only the first one's target can form an edge.
+    assert.deepEqual(
+      findRedirectCycles([
+        { path: '/a', redirectTo: '/terms' },
+        { path: '/a', redirectTo: '/a' },
+      ]),
+      [],
+      'the shadowed self-redirect never resolves, so it cannot loop',
+    );
+    assert.deepEqual(
+      findRedirectCycles([
+        { path: '/a', redirectTo: '/a' },
+        { path: '/a', redirectTo: '/terms' },
+      ]),
+      ['/a'],
+      'the reachable rule is the looping one',
+    );
+  },
+
+  'findRedirectCycles: reports each looping path once across cycles': async (
+    assert,
+  ) => {
+    assert.deepEqual(
+      findRedirectCycles([
+        { path: '/a', redirectTo: '/b' },
+        { path: '/b', redirectTo: '/a' },
+        { path: '/c', redirectTo: '/c' },
+      ]),
+      ['/a', '/b', '/c'],
+    );
+  },
+
+  'resolveRedirectTarget: prefixes a realm-relative target with the mount pathname':
+    async (assert) => {
+      assert.strictEqual(
+        resolveRedirectTarget('/terms', '/sick-elk/'),
+        '/sick-elk/terms',
+      );
+      assert.strictEqual(
+        resolveRedirectTarget('/legal/terms?v=2', '/sick-elk/'),
+        '/sick-elk/legal/terms?v=2',
+        'a query on the target is carried along untouched',
+      );
+      assert.strictEqual(
+        resolveRedirectTarget('/terms', '/'),
+        '/terms',
+        'a realm mounted at the root adds nothing',
+      );
+    },
+
+  'resolveRedirectTarget: hands back an external target untouched': async (
+    assert,
+  ) => {
+    assert.strictEqual(
+      resolveRedirectTarget('https://example.com/landing', '/sick-elk/'),
+      'https://example.com/landing',
+    );
+    assert.strictEqual(
+      resolveRedirectTarget('HTTPS://example.com/x', '/sick-elk/'),
+      'HTTPS://example.com/x',
+      'the scheme test is case-insensitive',
+    );
+  },
+
+  'resolveRedirectTarget: collapses every leading slash': async (assert) => {
+    // Malformed targets are dropped when the map is built; this is the
+    // backstop that keeps the result from starting `//` and reading as
+    // protocol-relative.
+    assert.strictEqual(
+      resolveRedirectTarget('//example.com/x', '/sick-elk/'),
+      '/sick-elk/example.com/x',
+    );
+    assert.strictEqual(
+      resolveRedirectTarget('///terms', '/sick-elk/'),
+      '/sick-elk/terms',
+    );
+  },
+
+  'isExternalRedirectTarget: distinguishes http(s) targets from realm paths':
+    async (assert) => {
+      assert.true(isExternalRedirectTarget('https://example.com'));
+      assert.true(isExternalRedirectTarget('http://example.com'));
+      assert.true(isExternalRedirectTarget('HtTpS://example.com'));
+      assert.false(isExternalRedirectTarget('/terms'));
+      assert.false(isExternalRedirectTarget('//example.com'));
+    },
+
+  'foreignQueryParams: keeps params the host app does not own': async (
+    assert,
+  ) => {
+    assert.strictEqual(
+      foreignQueryParams('?utm_source=newsletter'),
+      'utm_source=newsletter',
+    );
+    assert.strictEqual(
+      foreignQueryParams('utm_source=newsletter&ref=twitter'),
+      'utm_source=newsletter&ref=twitter',
+      'the leading ? is optional',
+    );
+    assert.strictEqual(foreignQueryParams(''), '');
+  },
+
+  'foreignQueryParams: drops the host app’s own params': async (assert) => {
+    // `sid` / `clientSecret` are password-reset tokens and a redirect
+    // target may be an external site.
+    assert.strictEqual(
+      foreignQueryParams('?sid=abc&clientSecret=xyz&utm_source=newsletter'),
+      'utm_source=newsletter',
+    );
+    assert.strictEqual(
+      foreignQueryParams('?hostModeStack=%5B%5D&operatorModeState=%7B%7D'),
+      '',
+      'nothing survives when every param is the app’s own',
+    );
+    assert.strictEqual(
+      foreignQueryParams('?hostModeOrigin=https://evil.example'),
+      '',
+    );
+  },
+
+  'foreignQueryParams: preserves repeated keys as repeated keys': async (
+    assert,
+  ) => {
+    // Collapsing these to `tag=a,b` would diverge from what the server
+    // received and from what the SPA rebuilds.
+    assert.strictEqual(foreignQueryParams('?tag=a&tag=b'), 'tag=a&tag=b');
+    assert.strictEqual(
+      foreignQueryParams('?tag=a&sid=secret&tag=b'),
+      'tag=a&tag=b',
+    );
+  },
+
+  'parseRedirectStatusCode: coerces supported codes, rejects everything else':
+    async (assert) => {
+      assert.strictEqual(parseRedirectStatusCode(301), 301);
+      assert.strictEqual(parseRedirectStatusCode(302), 302);
+      assert.strictEqual(parseRedirectStatusCode('301'), 301);
+      assert.strictEqual(parseRedirectStatusCode(' 302 '), 302);
+      // The method-preserving codes are deliberately unsupported: routed
+      // paths only serve GET/HEAD, so 307/308 would behave identically
+      // to 302/301.
+      assert.strictEqual(parseRedirectStatusCode(307), undefined);
+      assert.strictEqual(parseRedirectStatusCode(308), undefined);
+      assert.strictEqual(parseRedirectStatusCode(200), undefined);
+      assert.strictEqual(parseRedirectStatusCode('perm'), undefined);
+      assert.strictEqual(parseRedirectStatusCode(''), undefined);
+      assert.strictEqual(parseRedirectStatusCode(null), undefined);
+      assert.strictEqual(parseRedirectStatusCode(undefined), undefined);
     },
 });
 

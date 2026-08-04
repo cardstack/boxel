@@ -531,26 +531,39 @@ module('factory-context-builder > buildForIssue > relationships', function () {
     assert.strictEqual(ctx.knowledge[1].id, 'ka-2');
   });
 
-  test('throws when issue has no linked project', async function (assert) {
+  test('an issue with no linked project gets a stub instead of killing the run', async function (assert) {
     let { config } = makeIssueConfig({ project: null });
     let builder = new ContextBuilder(config);
 
-    try {
-      await builder.buildForIssue({
-        issue: makeIssue({ id: 'orphan-issue' }),
-        targetRealm: 'https://example.test/target/',
-      });
-      assert.ok(false, 'should have thrown');
-    } catch (error) {
-      assert.ok(
-        (error as Error).message.includes('orphan-issue'),
-        'error mentions the issue id',
-      );
-      assert.ok(
-        (error as Error).message.includes('no linked project'),
-        'error explains the problem',
-      );
-    }
+    // Agent-authored issues (e.g. acceptance-walkthrough defect issues)
+    // may omit relationships entirely; throwing here took down a whole
+    // run over one unlinked issue (wardrobe, 2026-07-17).
+    let ctx = await builder.buildForIssue({
+      issue: makeIssue({ id: 'orphan-issue' }),
+      targetRealm: 'https://example.test/target/',
+    });
+
+    assert.strictEqual(
+      ctx.project.id,
+      'bootstrap-pending',
+      'context builds with the stub project rather than throwing',
+    );
+  });
+
+  test('analysis issue (PORT-0) with no linked project gets a stub project instead of throwing', async function (assert) {
+    let { config } = makeIssueConfig({ project: null });
+    let builder = new ContextBuilder(config);
+
+    let ctx = await builder.buildForIssue({
+      issue: makeIssue({ id: 'port-analysis-seed', issueType: 'analysis' }),
+      targetRealm: 'https://example.test/target/',
+    });
+
+    assert.strictEqual(
+      ctx.project.id,
+      'bootstrap-pending',
+      'analysis issues get the same project stub as bootstrap issues, since PORT-0 runs before any Project card exists',
+    );
   });
 });
 

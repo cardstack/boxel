@@ -1,0 +1,3309 @@
+import { registerDestructor } from '@ember/destroyable';
+import { tracked } from '@glimmer/tracking';
+import { htmlSafe } from '@ember/template';
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
+import {
+  CardDef,
+  FieldDef,
+  field,
+  contains,
+  containsMany,
+  Component,
+} from 'https://cardstack.com/base/card-api';
+import StringField from 'https://cardstack.com/base/string';
+import NumberField from 'https://cardstack.com/base/number';
+import BooleanField from 'https://cardstack.com/base/boolean';
+import DatetimeField from 'https://cardstack.com/base/datetime';
+
+/* =============================================================================
+ * Helpers — pure, no side effects, safe to call with undefined.
+ * ============================================================================= */
+
+function fmtMMSS(seconds: number | null | undefined): string {
+  if (seconds == null || !Number.isFinite(seconds)) return '—';
+  let s = Math.max(0, Math.floor(seconds));
+  let m = Math.floor(s / 60);
+  let r = s % 60;
+  return `${m.toString().padStart(2, '0')}:${r.toString().padStart(2, '0')}`;
+}
+
+function fmtShortMMSS(seconds: number | null | undefined): string {
+  // Same as fmtMMSS but drops leading zero on the minutes part when < 10.
+  // Used for narrow timeline segments where every pixel counts.
+  if (seconds == null || !Number.isFinite(seconds)) return '—';
+  let s = Math.max(0, Math.floor(seconds));
+  let m = Math.floor(s / 60);
+  let r = s % 60;
+  return `${m}:${r.toString().padStart(2, '0')}`;
+}
+
+function fmtNumber(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return '—';
+  return n.toLocaleString('en-US');
+}
+
+function fmtPercent(part: number, whole: number, decimals = 1): string {
+  if (!whole || !Number.isFinite(whole) || !Number.isFinite(part)) return '—';
+  return `${((part / whole) * 100).toFixed(decimals)}%`;
+}
+
+function fmtHitRate(fresh: number, cache: number): string {
+  let total = (fresh || 0) + (cache || 0);
+  if (total === 0) return '—';
+  return `${((cache / total) * 100).toFixed(3)}%`;
+}
+
+function capitalise(s: string | null | undefined): string {
+  if (!s) return '';
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/* Map turnType → the CSS class suffix used to color it. */
+function turnColorClass(turnType: string | null | undefined): string {
+  switch (turnType) {
+    case 'bootstrap':
+      return 'bootstrap';
+    case 'design':
+    case 'design-foundation':
+    case 'fix':
+      return 'design';
+    case 'build':
+      return 'build';
+    case 'review':
+      return 'review';
+    case 'harden':
+      return 'harden';
+    default:
+      return 'machinery';
+  }
+}
+
+/* Map phase.name → the CSS class suffix used to color its bar. */
+function phaseColorClass(name: string | null | undefined): string {
+  switch (name) {
+    case 'bootstrap':
+      return 'bootstrap';
+    case 'design':
+      return 'design';
+    case 'implementation':
+      return 'implementation';
+    case 'hardening':
+      return 'hardening';
+    default:
+      return 'polishing';
+  }
+}
+
+/* =============================================================================
+ * FieldDefs — interior helpers; none get their own Spec.
+ * ============================================================================= */
+
+export class RunConfigField extends FieldDef {
+  static displayName = 'Run configuration';
+  @field briefUrl = contains(StringField);
+  @field targetRealmUrl = contains(StringField);
+  @field controlRealmUrl = contains(StringField);
+  @field targetPhase = contains(StringField); // enum: design | implementation | hardening | polishing
+  @field factoryCommit = contains(StringField);
+  @field startedAt = contains(DatetimeField);
+  @field endedAt = contains(DatetimeField); // optional — empty while running
+  @field outcome = contains(StringField); // enum: running | completed | stopped | failed
+}
+
+export class TotalsField extends FieldDef {
+  static displayName = 'Run totals';
+  @field wallClockSeconds = contains(NumberField);
+  @field inferenceSeconds = contains(NumberField);
+  @field outputTokens = contains(NumberField);
+  @field freshInputTokens = contains(NumberField);
+  @field cacheReadTokens = contains(NumberField);
+  @field validationSeconds = contains(NumberField);
+  @field renderGateSeconds = contains(NumberField);
+  @field syncSeconds = contains(NumberField);
+  @field syncCallCount = contains(NumberField);
+  @field startupSeconds = contains(NumberField);
+}
+
+export class PhaseField extends FieldDef {
+  static displayName = 'Phase subtotal';
+  @field name = contains(StringField);
+  @field wallClockSeconds = contains(NumberField);
+}
+
+export class TurnField extends FieldDef {
+  static displayName = 'Turn';
+  @field issueId = contains(StringField);
+  @field issueTitle = contains(StringField);
+  @field turnType = contains(StringField);
+  @field model = contains(StringField);
+  @field effort = contains(StringField);
+  @field startedAt = contains(DatetimeField);
+  @field durationSeconds = contains(NumberField); // optional — empty for live turn
+  @field outputTokens = contains(NumberField);
+  @field freshInputTokens = contains(NumberField);
+  @field cacheReadTokens = contains(NumberField);
+  @field compacted = contains(BooleanField);
+}
+
+export class EventField extends FieldDef {
+  static displayName = 'Run event';
+  @field timestamp = contains(DatetimeField);
+  @field kind = contains(StringField);
+  @field detail = contains(StringField);
+}
+
+export class SkillContextField extends FieldDef {
+  static displayName = 'Skill in context';
+  @field name = contains(StringField);
+  @field phase = contains(StringField); // bootstrap | design | implementation | hardening | polishing
+  @field turnTypes = contains(StringField); // "design, build"
+  @field turnCount = contains(NumberField);
+  @field characters = contains(NumberField); // peak weight: body + references
+  @field referenceCount = contains(NumberField);
+  @field delivery = contains(StringField); // injected | inherited | mixed
+}
+
+export class BoardIssueField extends FieldDef {
+  static displayName = 'Board issue';
+  @field issueId = contains(StringField);
+  @field title = contains(StringField);
+  @field status = contains(StringField); // backlog | in_progress | blocked | review | done | running
+  @field started = contains(BooleanField);
+}
+
+export class IssueSummaryField extends FieldDef {
+  static displayName = 'Issue summary';
+  @field issueId = contains(StringField);
+  @field title = contains(StringField);
+  @field status = contains(StringField); // see BoardIssueField.status
+  @field iterationCount = contains(NumberField);
+  @field validationStepsRun = contains(NumberField);
+  @field validationPassed = contains(BooleanField);
+  /* Machinery wall clock attributed to this ticket. */
+  @field validationSeconds = contains(NumberField);
+  @field renderGateSeconds = contains(NumberField);
+  @field syncSeconds = contains(NumberField);
+  @field syncCallCount = contains(NumberField);
+}
+
+/* =============================================================================
+ * Derived-row shapes used by the isolated template.
+ * These are plain objects computed in getters — they are NOT card fields.
+ * ============================================================================= */
+
+interface DerivedTurn {
+  turn: TurnField;
+  colorClass: string;
+  isLive: boolean;
+  durationSeconds: number; // 0 for live turn (elapsed used instead)
+  durationDisplay: string;
+  narrowLabel: boolean; // true → print duration BELOW the segment instead of inside
+}
+
+/* One arc of a KPI donut. The circle is drawn with r = 15.9155 so its
+   circumference is ~100 — dash lengths are then percentages directly, no
+   per-slice trig. `offset` starts each arc where the previous one ended,
+   with 25 as the 12-o'clock origin. */
+interface DonutSlice {
+  label: string;
+  valueDisplay: string;
+  pctDisplay: string;
+  colorClass: string;
+  dash: string;
+  offset: string;
+}
+
+function buildDonut(
+  parts: { label: string; value: number; colorClass: string; valueDisplay: string }[],
+): DonutSlice[] {
+  let usable = parts.filter((p) => Number.isFinite(p.value) && p.value > 0);
+  let total = usable.reduce((sum, p) => sum + p.value, 0);
+  if (total <= 0) return [];
+  let cumulative = 0;
+  return usable.map((p) => {
+    let pct = (p.value / total) * 100;
+    let slice: DonutSlice = {
+      label: p.label,
+      valueDisplay: p.valueDisplay,
+      pctDisplay: `${Math.round(pct)}%`,
+      colorClass: p.colorClass,
+      dash: `${pct.toFixed(2)} ${(100 - pct).toFixed(2)}`,
+      offset: `${(125 - cumulative).toFixed(2)}`,
+    };
+    cumulative += pct;
+    return slice;
+  });
+}
+
+/* Ticket colors cycle through the data hues so each ticket owns one color
+   across the timeline, its legend entry, and the inference donut. */
+function ticketColorClass(index: number): string {
+  return `t${index % 5}`;
+}
+
+/* Ticket status → the pill's wording and color. The tracker's vocabulary
+   (backlog / in_progress / blocked / review / done) plus `running`, which
+   telemetry sets when a turn is in flight regardless of what the index
+   still says. An unknown or missing status renders no pill at all rather
+   than inventing one. */
+function statusPill(
+  status: string | null | undefined,
+): { label: string; className: string } | undefined {
+  switch (status) {
+    case 'running':
+      return { label: 'Running', className: 'rt-status--running' };
+    case 'in_progress':
+      return { label: 'In progress', className: 'rt-status--progress' };
+    case 'done':
+      return { label: 'Completed', className: 'rt-status--done' };
+    case 'backlog':
+      return { label: 'Backlog', className: 'rt-status--backlog' };
+    case 'blocked':
+      return { label: 'Blocked', className: 'rt-status--blocked' };
+    case 'review':
+      return { label: 'In review', className: 'rt-status--review' };
+    default:
+      return undefined;
+  }
+}
+
+/* How a skill reached the model: a fresh session pays to send it, a
+   forked/resumed one already carries it in its cached prefix. */
+function deliveryLabel(delivery: string | null | undefined): string {
+  switch (delivery) {
+    case 'inherited':
+      return 'Already in context';
+    case 'mixed':
+      return 'Loaded, then inherited';
+    default:
+      return 'Loaded into agent';
+  }
+}
+
+/* =============================================================================
+ * DonutTile — one KPI tile: headline number, a donut of its own composition,
+ * and a legend. Its own component (with its own scoped styles) because
+ * scoped CSS only reaches elements in the template that declares it; the
+ * isolated component's `.rt-kpi` rules would not apply here. The `--rt-*`
+ * custom properties still inherit down from `.rt`, so the palette is shared.
+ * The block content becomes the tile's footer line.
+ * ============================================================================= */
+
+const DonutTile: TemplateOnlyComponent<{
+  Args: {
+    eyebrow: string;
+    value: string | number;
+    /* Tint the headline number (used for the inference tile). */
+    lifted?: boolean;
+    slices: DonutSlice[];
+  };
+  Blocks: { default: [] };
+}> = <template>
+  <div class='tile'>
+    <div class='eyebrow'>{{@eyebrow}}</div>
+    <div class='body'>
+      <div class='figures'>
+        <div class='value {{if @lifted "value--lifted"}}'>{{@value}}</div>
+        <div class='foot'>{{yield}}</div>
+      </div>
+      {{#if @slices.length}}
+        <svg class='donut' viewBox='0 0 42 42' aria-hidden='true'>
+          {{! r = 15.9155 → circumference ≈ 100, so dash lengths are percents }}
+          <circle class='track' cx='21' cy='21' r='15.9155' />
+          {{#each @slices as |s|}}
+            <circle
+              class='arc hue--{{s.colorClass}}'
+              cx='21'
+              cy='21'
+              r='15.9155'
+              stroke-dasharray={{s.dash}}
+              stroke-dashoffset={{s.offset}}
+            ><title>{{s.label}} · {{s.valueDisplay}} · {{s.pctDisplay}}</title></circle>
+          {{/each}}
+        </svg>
+      {{/if}}
+    </div>
+    {{#if @slices.length}}
+      <div class='key'>
+        {{#each @slices as |s|}}
+          <span class='key-item'>
+            <span class='key-sq hue--{{s.colorClass}}'></span>
+            <span class='key-label'>{{s.label}}</span>
+            <span class='key-val'>{{s.valueDisplay}}</span>
+          </span>
+        {{/each}}
+      </div>
+    {{/if}}
+  </div>
+
+  <style scoped>
+    .tile {
+      background: var(--rt-surface, #fff);
+      border: 1px solid var(--rt-hairline, #e5e5e2);
+      border-radius: var(--rt-radius-lg, 10px);
+      padding: 18px 20px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-width: 0;
+    }
+    .eyebrow {
+      font-size: 10px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--rt-faint, #a3a3a0);
+    }
+    .body {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      /* The donut drops below the number rather than being overlapped by
+         it when the tile is too narrow for both. */
+      flex-wrap: wrap;
+    }
+    .figures {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      /* min-content, not 0: the headline number cannot wrap, so a 0 floor
+         lets flex squeeze the box under its own text, which then paints
+         over the donut. */
+      flex: 1 1 auto;
+      min-width: min-content;
+    }
+    .value {
+      font-size: 32px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1;
+      color: var(--rt-ink, #0a0a0a);
+      white-space: nowrap;
+    }
+    .value--lifted {
+      color: var(--rt-blue, #1e57b5);
+    }
+    .foot {
+      font-size: 12px;
+      color: var(--rt-muted, #737370);
+      line-height: 1.4;
+    }
+    .donut {
+      width: 54px;
+      height: 54px;
+      flex: 0 0 auto;
+    }
+    .track {
+      fill: none;
+      stroke: var(--rt-whisper, #f5f5f2);
+      stroke-width: 5;
+    }
+    .arc {
+      fill: none;
+      stroke-width: 5;
+    }
+    .key {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      font-size: 11px;
+      color: var(--rt-muted, #737370);
+    }
+    .key-item {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      min-width: 0;
+    }
+    .key-label {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .key-val {
+      margin-left: auto;
+      color: var(--rt-ink, #0a0a0a);
+      font-variant-numeric: tabular-nums;
+    }
+    .key-sq {
+      width: 7px;
+      height: 7px;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+    /* One hue map for both the arcs (stroke) and the legend chips
+       (background), so a slice and its key entry can never disagree. */
+    .hue--inference,
+    .hue--t1 {
+      stroke: var(--rt-blue, #1e57b5);
+      background: var(--rt-blue, #1e57b5);
+    }
+    .hue--machinery,
+    .hue--startup,
+    .hue--t4 {
+      stroke: var(--rt-slate, #64748b);
+      background: var(--rt-slate, #64748b);
+    }
+    .hue--unaccounted {
+      stroke: var(--rt-hairline, #e5e5e2);
+      background: var(--rt-hairline, #e5e5e2);
+    }
+    /* Clean turns are the good outcome, so an all-clean run reads as a
+       full green ring rather than an empty-looking gray one. */
+    .hue--clean {
+      stroke: var(--rt-green, #4d8b3d);
+      background: var(--rt-green, #4d8b3d);
+    }
+    .hue--validation,
+    .hue--t2 {
+      stroke: var(--rt-green, #4d8b3d);
+      background: var(--rt-green, #4d8b3d);
+    }
+    .hue--render,
+    .hue--compacted,
+    .hue--t3 {
+      stroke: var(--rt-pink, #c2185b);
+      background: var(--rt-pink, #c2185b);
+    }
+    .hue--sync,
+    .hue--t0 {
+      stroke: var(--rt-amber, #b7791f);
+      background: var(--rt-amber, #b7791f);
+    }
+    /* A tint, not the running blue itself: on the Total donut this sits next
+       to the inference blue, and the two solid blues were indistinguishable. */
+    .hue--live {
+      stroke: color-mix(in srgb, var(--rt-running, #2453ff) 40%, white);
+      background: color-mix(in srgb, var(--rt-running, #2453ff) 40%, white);
+    }
+  </style>
+</template>;
+
+/* =============================================================================
+ * Isolated component — the big one.
+ * ============================================================================= */
+
+class RunTelemetryIsolated extends Component<typeof RunTelemetry> {
+  @tracked nowMs = Date.now();
+  #ticker: ReturnType<typeof setInterval> | undefined;
+
+  constructor(owner: unknown, args: any) {
+    super(owner as any, args);
+    // Minimal client-side clock: one setInterval that updates a single
+    // tracked property. Only the TOTAL KPI number and the live timeline
+    // segment width consume this; the rest of the template stays stable.
+    this.#ticker = setInterval(() => {
+      this.nowMs = Date.now();
+    }, 1000);
+    registerDestructor(this, () => {
+      if (this.#ticker) clearInterval(this.#ticker);
+    });
+  }
+
+  get config(): RunConfigField | undefined {
+    return this.args.model?.config as RunConfigField | undefined;
+  }
+  get totals(): TotalsField | undefined {
+    return this.args.model?.totals as TotalsField | undefined;
+  }
+  get turns(): TurnField[] {
+    return (this.args.model?.turns as TurnField[] | undefined) ?? [];
+  }
+  get phases(): PhaseField[] {
+    return (this.args.model?.phases as PhaseField[] | undefined) ?? [];
+  }
+  get events(): EventField[] {
+    return (this.args.model?.events as EventField[] | undefined) ?? [];
+  }
+  get issues(): IssueSummaryField[] {
+    return (this.args.model?.issues as IssueSummaryField[] | undefined) ?? [];
+  }
+  get skills(): SkillContextField[] {
+    return (this.args.model?.skills as SkillContextField[] | undefined) ?? [];
+  }
+  get board(): BoardIssueField[] {
+    return (this.args.model?.board as BoardIssueField[] | undefined) ?? [];
+  }
+
+  /* Tickets on the board the run has not taken a turn on yet — they own no
+     turns, so nothing else in the card would mention them. */
+  get notStartedTickets() {
+    return this.board
+      .filter((b) => !b.started)
+      .map((b) => ({
+        issueId: b.issueId ?? '',
+        title: b.title ?? '',
+        pill: statusPill(b.status),
+      }));
+  }
+
+  get hasNotStartedTickets(): boolean {
+    return this.notStartedTickets.length > 0;
+  }
+
+  get outcome(): string {
+    return this.config?.outcome ?? '';
+  }
+  get isRunning(): boolean {
+    return this.outcome === 'running';
+  }
+
+  /* --------------------------- Clock / durations ------------------------- */
+
+  get startedAtMs(): number {
+    let s = this.config?.startedAt;
+    if (!s) return 0;
+    let d = new Date(s as unknown as string).getTime();
+    return Number.isFinite(d) ? d : 0;
+  }
+
+  get elapsedSeconds(): number {
+    if (!this.startedAtMs) return 0;
+    return Math.max(0, Math.floor((this.nowMs - this.startedAtMs) / 1000));
+  }
+
+  /* Wall-clock displayed by the TOTAL KPI:
+   *   - finished / stopped / failed: use totals.wallClockSeconds
+   *   - running:                     tick from Date.now() - startedAt
+   */
+  get wallClockDisplaySeconds(): number {
+    if (this.isRunning) {
+      return Math.max(this.elapsedSeconds, this.totals?.wallClockSeconds ?? 0);
+    }
+    return this.totals?.wallClockSeconds ?? 0;
+  }
+  get wallClockDisplay(): string {
+    return fmtMMSS(this.wallClockDisplaySeconds);
+  }
+
+  /* Timeline uses per-turn duration; live turn uses elapsed since its startedAt. */
+  turnElapsedSeconds(turn: TurnField): number {
+    let s = turn?.startedAt;
+    if (!s) return 0;
+    let started = new Date(s as unknown as string).getTime();
+    if (!Number.isFinite(started)) return 0;
+    return Math.max(0, Math.floor((this.nowMs - started) / 1000));
+  }
+
+  turnWeight(turn: TurnField): number {
+    let d = turn?.durationSeconds;
+    if (d == null) return this.turnElapsedSeconds(turn);
+    return d;
+  }
+
+  /* --------------------------- Header --------------------------------- */
+
+  get runIndex(): string {
+    // Best-effort: parse a numeric suffix out of the target-realm URL
+    // slug (e.g. "run-telemetry-v4" → "4"), else fall back to "1".
+    let url = this.config?.targetRealmUrl ?? '';
+    let m = /v(\d+)/i.exec(url as unknown as string);
+    if (m) return m[1];
+    return '1';
+  }
+  get eyebrowText(): string {
+    return `Run ${this.runIndex} · ${capitalise(this.config?.targetPhase)}`;
+  }
+
+  get headerTitle(): string {
+    let m = this.args.model as any;
+    let name = m?.cardInfo?.name;
+    if (name) return name as string;
+    if (m?.title) return m.title as string;
+    return 'Untitled Run Telemetry';
+  }
+
+  get subtitleParts() {
+    // Return a small structure the template can render as three inline
+    // pieces so the middle piece can be <strong>.
+    let issues = this.issues.length;
+    let turns = this.turns.length;
+    if (this.isRunning) {
+      return {
+        before: `${issues} issue${issues === 1 ? '' : 's'} started, ${turns} agent turn${turns === 1 ? '' : 's'} so far, `,
+        strong: this.wallClockDisplay,
+        after: ' elapsed on the wall clock.',
+      };
+    }
+    // Only tickets that actually ran a validation pipeline have a verdict;
+    // reading "every issue completed" off a default would be a fabrication.
+    let validated = this.issues.filter((i) => (i.validationStepsRun ?? 0) > 0);
+    let after: string;
+    if (validated.length === 0) {
+      after = ' — no validation pipeline ran.';
+    } else if (validated.every((i) => i.validationPassed)) {
+      after = ` with all ${validated.length} validated ticket${validated.length === 1 ? '' : 's'} passing.`;
+    } else {
+      after = ' with mixed validation outcomes.';
+    }
+    return {
+      before: `${issues} issue${issues === 1 ? '' : 's'}, ${turns} agent turn${turns === 1 ? '' : 's'}, done in `,
+      strong: fmtMMSS(this.totals?.wallClockSeconds),
+      after,
+    };
+  }
+
+  get startedAtDisplay(): string {
+    let s = this.config?.startedAt as unknown as string | undefined;
+    if (!s) return '—';
+    try {
+      let d = new Date(s);
+      return d.toLocaleString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour12: false,
+      });
+    } catch {
+      return '—';
+    }
+  }
+  get endedAtDisplay(): string {
+    let s = this.config?.endedAt as unknown as string | undefined;
+    if (!s) return '—';
+    try {
+      let d = new Date(s);
+      return d.toLocaleString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour12: false,
+      });
+    } catch {
+      return '—';
+    }
+  }
+
+  /* --------------------------- KPI row --------------------------------- */
+
+  get inferenceDisplay(): string {
+    return fmtMMSS(this.totals?.inferenceSeconds);
+  }
+  get inferencePercent(): string {
+    let wall = this.wallClockDisplaySeconds;
+    let inf = this.totals?.inferenceSeconds ?? 0;
+    if (!wall) return '—';
+    return `${Math.round((inf / wall) * 100)}%`;
+  }
+  get inferenceFootText(): string {
+    return `${this.inferencePercent} of wall clock · ${this.turns.length} turn${this.turns.length === 1 ? '' : 's'}`;
+  }
+
+  get machinerySeconds(): number {
+    let t = this.totals;
+    if (!t) return 0;
+    return (
+      (t.validationSeconds ?? 0) +
+      (t.renderGateSeconds ?? 0) +
+      (t.syncSeconds ?? 0) +
+      (t.startupSeconds ?? 0)
+    );
+  }
+  get machineryDisplay(): string {
+    return fmtMMSS(this.machinerySeconds);
+  }
+  /* Short by design: the tile's donut key already itemizes validation /
+     render / sync / startup, and repeating it here made the tile so tall
+     that the row could not hold four columns. */
+  get machineryFootText(): string {
+    let t = this.totals;
+    if (!t) return '';
+    let syncCalls = t.syncCallCount ?? 0;
+    let wall = this.wallClockDisplaySeconds;
+    let share = wall ? `${Math.round((this.machinerySeconds / wall) * 100)}%` : '—';
+    return `${share} of wall clock · ${syncCalls} sync${syncCalls === 1 ? '' : 's'}`;
+  }
+
+  get compactionCount(): number {
+    return this.turns.reduce((n, t) => n + (t.compacted ? 1 : 0), 0);
+  }
+  get compactionFootText(): string {
+    let n = this.compactionCount;
+    if (n === 0) return 'no context-window overflows';
+    return `${n} × ~17k fresh tokens re-ingested`;
+  }
+
+  /* --------------------------- KPI donuts ------------------------------ */
+
+  /* Wall clock split by where it went. The turn in flight gets its own
+     slice while the run is live — it is not "unaccounted", it is the thing
+     currently happening, and its elapsed time is the largest slice on a
+     mid-run card. What remains genuinely is unaccounted: orchestration
+     between spans (index settles, issue reads, run-log writes) that no
+     span covers, and folding it into the others would overstate them. */
+  get totalDonut(): DonutSlice[] {
+    let wall = this.wallClockDisplaySeconds;
+    let inference = this.totals?.inferenceSeconds ?? 0;
+    let machinery = this.machinerySeconds;
+    let live = this.issueGroupsForTimeline.reduce(
+      (sum, g) => sum + g.liveSeconds,
+      0,
+    );
+    let rest = Math.max(0, wall - inference - machinery - live);
+    return buildDonut([
+      {
+        label: 'Model inference',
+        value: inference,
+        colorClass: 'inference',
+        valueDisplay: fmtMMSS(inference),
+      },
+      {
+        label: 'Turn in flight',
+        value: live,
+        colorClass: 'live',
+        valueDisplay: fmtMMSS(live),
+      },
+      {
+        label: 'Machinery',
+        value: machinery,
+        colorClass: 'machinery',
+        valueDisplay: fmtMMSS(machinery),
+      },
+      {
+        label: 'Unaccounted',
+        value: rest,
+        colorClass: 'unaccounted',
+        valueDisplay: fmtMMSS(rest),
+      },
+    ]);
+  }
+
+  /* Inference split by ticket — the colors the timeline uses. Settled turns
+     only, so the slices add up to the number printed on the tile. */
+  get inferenceDonut(): DonutSlice[] {
+    return buildDonut(
+      this.issueGroupsForTimeline.map((g, i) => ({
+        label: g.label,
+        value: g.settledInferenceSeconds,
+        colorClass: ticketColorClass(i),
+        valueDisplay: fmtMMSS(g.settledInferenceSeconds),
+      })),
+    );
+  }
+
+  get machineryDonut(): DonutSlice[] {
+    let t = this.totals;
+    return buildDonut([
+      {
+        label: 'Validation',
+        value: t?.validationSeconds ?? 0,
+        colorClass: 'validation',
+        valueDisplay: fmtMMSS(t?.validationSeconds),
+      },
+      {
+        label: 'Render gate',
+        value: t?.renderGateSeconds ?? 0,
+        colorClass: 'render',
+        valueDisplay: fmtMMSS(t?.renderGateSeconds),
+      },
+      {
+        label: 'Sync',
+        value: t?.syncSeconds ?? 0,
+        colorClass: 'sync',
+        valueDisplay: fmtMMSS(t?.syncSeconds),
+      },
+      {
+        label: 'Startup',
+        value: t?.startupSeconds ?? 0,
+        colorClass: 'startup',
+        valueDisplay: fmtMMSS(t?.startupSeconds),
+      },
+    ]);
+  }
+
+  /* The compactions tile counts turns, so its donut shows what share of
+     turns paid a context-window re-ingest. */
+  get compactionDonut(): DonutSlice[] {
+    let compacted = this.compactionCount;
+    let clean = Math.max(0, this.turns.length - compacted);
+    return buildDonut([
+      {
+        label: 'Compacted',
+        value: compacted,
+        colorClass: 'compacted',
+        valueDisplay: `${compacted}`,
+      },
+      {
+        label: 'Clean',
+        value: clean,
+        colorClass: 'clean',
+        valueDisplay: `${clean}`,
+      },
+    ]);
+  }
+
+  /* --------------------------- Outcome badge --------------------------- */
+
+  get outcomeLabel(): string {
+    return capitalise(this.outcome || 'unknown');
+  }
+  get outcomeBadgeClass(): string {
+    switch (this.outcome) {
+      case 'completed':
+        return 'rt-badge--completed';
+      case 'running':
+        return 'rt-badge--running';
+      case 'stopped':
+        return 'rt-badge--stopped';
+      case 'failed':
+        return 'rt-badge--failed';
+      default:
+        return '';
+    }
+  }
+
+  /* --------------------------- Timeline -------------------------------- */
+
+  get timelineTotalWeight(): number {
+    let sum = 0;
+    for (let t of this.turns) sum += this.turnWeight(t);
+    return sum || 1;
+  }
+
+  get derivedTurns(): DerivedTurn[] {
+    return this.turns.map((turn) => {
+      let isLive = turn.durationSeconds == null;
+      let weight = this.turnWeight(turn);
+      // Threshold: segments < 3% of the timeline print label BELOW.
+      // 3% × 900px ≈ 27px — comfortably below the ~44px needed for "MM:SS".
+      let ratio = weight / this.timelineTotalWeight;
+      let narrow = ratio < 0.03;
+      let display = fmtShortMMSS(isLive ? this.turnElapsedSeconds(turn) : turn.durationSeconds);
+      return {
+        turn,
+        colorClass: isLive ? 'live' : turnColorClass(turn.turnType),
+        isLive,
+        durationSeconds: weight,
+        durationDisplay: display,
+        narrowLabel: narrow,
+      };
+    });
+  }
+
+  /* Group derivedTurns by ticket, preserving first-appearance order.
+     `label` is the grouping key: the board key when the turn carries one,
+     the issue title otherwise. Falling back to a single shared literal
+     would fold every ticket in the run into one band.
+
+     `weight` is the ticket's whole wall-clock cost — its turns plus the
+     validation / render / sync work the loop ran for it — so the timeline
+     and the per-ticket subtotals agree. */
+  get issueGroupsForTimeline() {
+    let byLabel = new Map<
+      string,
+      {
+        label: string;
+        issueId: string;
+        issueTitle: string;
+        turns: DerivedTurn[];
+        summary: IssueSummaryField | undefined;
+        inferenceSeconds: number;
+        /* Settled turns only — comparable with totals.inferenceSeconds,
+           which never counts a turn that hasn't closed. */
+        settledInferenceSeconds: number;
+        liveSeconds: number;
+        machinerySeconds: number;
+        weight: number;
+        hasLive: boolean;
+      }
+    >();
+    for (let dt of this.derivedTurns) {
+      let id = dt.turn.issueId ?? '';
+      let title = dt.turn.issueTitle ?? '';
+      let label = id || title || 'unattributed';
+      let g = byLabel.get(label);
+      if (!g) {
+        let summary = this.issues.find((i) => i.issueId === label);
+        let machinery =
+          (summary?.validationSeconds ?? 0) +
+          (summary?.renderGateSeconds ?? 0) +
+          (summary?.syncSeconds ?? 0);
+        g = {
+          label,
+          issueId: id,
+          issueTitle: title || label,
+          turns: [],
+          summary,
+          inferenceSeconds: 0,
+          settledInferenceSeconds: 0,
+          liveSeconds: 0,
+          machinerySeconds: machinery,
+          weight: machinery,
+          hasLive: false,
+        };
+        byLabel.set(label, g);
+      }
+      g.turns.push(dt);
+      g.inferenceSeconds += dt.durationSeconds;
+      g.weight += dt.durationSeconds;
+      if (dt.isLive) {
+        g.hasLive = true;
+        g.liveSeconds += dt.durationSeconds;
+      } else {
+        g.settledInferenceSeconds += dt.durationSeconds;
+      }
+    }
+    return Array.from(byLabel.values());
+  }
+
+  get timelineHint(): string {
+    let turns = this.turns.length;
+    let tickets = this.ticketSegments.length;
+    return `${turns} turn${turns === 1 ? '' : 's'} · ${tickets} ticket${tickets === 1 ? '' : 's'}`;
+  }
+
+  /* One timeline segment per ticket. Coloring by ticket rather than by turn
+     type is what makes the band readable: turn-type coloring repeated the
+     same hue for a ticket's design turn and another ticket's fix turn. */
+  get ticketSegments() {
+    let groups = this.issueGroupsForTimeline;
+    let total = groups.reduce((sum, g) => sum + g.weight, 0) || 1;
+    return groups.map((g, i) => {
+      let ratio = g.weight / total;
+      return {
+        label: g.label,
+        title: g.issueTitle,
+        pill: statusPill(g.summary?.status),
+        colorClass: g.hasLive ? 'live' : ticketColorClass(i),
+        weight: g.weight,
+        durationDisplay: fmtShortMMSS(g.weight),
+        narrowLabel: ratio < 0.06,
+        hasLive: g.hasLive,
+        tooltip: `${g.label} · ${g.issueTitle} · inference ${fmtMMSS(g.inferenceSeconds)} · machinery ${fmtMMSS(g.machinerySeconds)}`,
+      };
+    });
+  }
+
+  /* --------------------------- Axis marks ------------------------------ */
+
+  get axisMarks(): number[] {
+    let seconds = this.wallClockDisplaySeconds;
+    let mins = Math.max(1, Math.ceil(seconds / 60));
+    let step: number;
+    if (mins <= 5) step = 1;
+    else if (mins <= 15) step = 2;
+    else step = 5;
+    let marks: number[] = [];
+    for (let m = 0; m <= mins; m += step) marks.push(m);
+    if (marks[marks.length - 1] !== mins) marks.push(mins);
+    return marks;
+  }
+
+  /* --------------------------- Event ticks ----------------------------- */
+
+  get eventTicks() {
+    let started = this.startedAtMs;
+    let wall = this.totals?.wallClockSeconds || this.wallClockDisplaySeconds || 1;
+    let ticks = this.events
+      .map((ev, idx) => {
+        let ts = ev.timestamp as unknown as string | undefined;
+        if (!ts || !started) return null;
+        let ms = new Date(ts).getTime();
+        if (!Number.isFinite(ms)) return null;
+        let pct = ((ms - started) / 1000 / wall) * 100;
+        if (!Number.isFinite(pct)) return null;
+        pct = Math.max(0, Math.min(100, pct));
+        return {
+          idx,
+          leftPct: pct,
+          label: (ev.kind ?? '').replace(/-/g, ' '),
+          detail: ev.detail ?? '',
+          below: false as boolean,
+          // Labels at the extremes anchor inward so they aren't clipped.
+          edgeClass: pct < 6 ? 'rt-tl-event--start' : pct > 94 ? 'rt-tl-event--end' : '',
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null)
+      .sort((a, b) => a.leftPct - b.leftPct);
+
+    // Flip the SECOND of any pair that lies within 8% horizontally below
+    // the track so the labels don't overlap. Walk pairwise, respecting
+    // the previous element's placement.
+    let lastAbovePct: number | null = null;
+    let lastBelowPct: number | null = null;
+    for (let t of ticks) {
+      let collidesAbove = lastAbovePct != null && Math.abs(t.leftPct - lastAbovePct) < 8;
+      let collidesBelow = lastBelowPct != null && Math.abs(t.leftPct - lastBelowPct) < 8;
+      if (collidesAbove && !collidesBelow) {
+        t.below = true;
+        lastBelowPct = t.leftPct;
+      } else {
+        t.below = false;
+        lastAbovePct = t.leftPct;
+      }
+    }
+    return ticks;
+  }
+
+  /* --------------------------- Per-ticket breakdown -------------------- */
+
+  get issueRows() {
+    let totalRun = this.totals?.wallClockSeconds || this.wallClockDisplaySeconds || 1;
+    return this.issueGroupsForTimeline.map((g, index) => {
+      let issueSummary = g.summary;
+      let iterationCount = issueSummary?.iterationCount ?? 1;
+      let subtotalOutput = 0;
+      let subtotalCache = 0;
+      let subtotalFresh = 0;
+      let inferenceSeconds = 0;
+      let hasLive = false;
+      for (let dt of g.turns) {
+        subtotalOutput += dt.turn.outputTokens ?? 0;
+        subtotalCache += dt.turn.cacheReadTokens ?? 0;
+        subtotalFresh += dt.turn.freshInputTokens ?? 0;
+        if (dt.isLive) hasLive = true;
+        else inferenceSeconds += dt.turn.durationSeconds ?? 0;
+      }
+      let machinerySeconds = g.machinerySeconds;
+      let totalSeconds = inferenceSeconds + machinerySeconds;
+      let shareText = this.isRunning
+        ? hasLive
+          ? 'running now'
+          : `${fmtPercent(totalSeconds, totalRun)} of run so far`
+        : `${fmtPercent(totalSeconds, totalRun)} of run`;
+
+      let title = issueSummary?.title ?? g.issueTitle;
+      return {
+        issueId: g.issueId,
+        title,
+        pill: statusPill(issueSummary?.status),
+        colorClass: ticketColorClass(index),
+        // The board key prefixes the title only when the turns carried one.
+        heading: g.issueId && g.issueId !== title ? `${g.issueId} · ${title}` : title,
+        // Everything the factory did for this ticket, in order: the agent
+        // turns first, then the machinery those turns triggered.
+        activityRows: [
+          ...g.turns.map((dt) => this.turnRowFor(dt)),
+          ...this.mechanicsRowsFor(issueSummary),
+        ],
+        subtotal: {
+          turnCount: g.turns.length,
+          durationDisplay: fmtMMSS(totalSeconds),
+          outputDisplay: fmtNumber(subtotalOutput),
+          cacheDisplay: fmtNumber(subtotalCache),
+          hitRateDisplay: fmtHitRate(subtotalFresh, subtotalCache),
+        },
+        subtotalDurationDisplay: fmtMMSS(totalSeconds),
+        splitText: `${fmtMMSS(inferenceSeconds)} inference · ${fmtMMSS(machinerySeconds)} machinery`,
+        shareText,
+        hasLive,
+        iterationCount,
+        validationStepsRun: issueSummary?.validationStepsRun ?? 0,
+        validationPassed: issueSummary?.validationPassed ?? false,
+        ranValidation: (issueSummary?.validationStepsRun ?? 0) > 0,
+        emphasiseIterations: iterationCount > 2,
+      };
+    });
+  }
+
+  /* Non-inference work the loop did for one ticket. Rows appear only when
+     the phase actually ran, so an empty row never implies zero cost. */
+  mechanicsRowsFor(summary: IssueSummaryField | undefined) {
+    if (!summary) return [];
+    let steps = summary.validationStepsRun ?? 0;
+    let syncs = summary.syncCallCount ?? 0;
+    let rows: {
+      colorClass: string;
+      turnLabel: string;
+      compacted: boolean;
+      modelText: string;
+      durationDisplay: string;
+      outputDisplay: string;
+      cacheDisplay: string;
+      hitRateDisplay: string;
+      isLive: boolean;
+      isMechanics: boolean;
+    }[] = [];
+    let push = (label: string, detail: string, seconds: number | undefined) => {
+      rows.push({
+        colorClass: 'machinery',
+        turnLabel: label,
+        compacted: false,
+        modelText: detail,
+        durationDisplay: fmtMMSS(seconds),
+        outputDisplay: '—',
+        cacheDisplay: '—',
+        hitRateDisplay: '—',
+        isLive: false,
+        isMechanics: true,
+      });
+    };
+    if ((summary.validationSeconds ?? 0) > 0 || steps > 0) {
+      push(
+        'validation',
+        `${steps} step${steps === 1 ? '' : 's'} run`,
+        summary.validationSeconds,
+      );
+    }
+    if ((summary.renderGateSeconds ?? 0) > 0) {
+      push('render gate', 'card screenshots', summary.renderGateSeconds);
+    }
+    if ((summary.syncSeconds ?? 0) > 0 || syncs > 0) {
+      push(
+        'workspace sync',
+        `${syncs} push${syncs === 1 ? '' : 'es'}`,
+        summary.syncSeconds,
+      );
+    }
+    return rows;
+  }
+
+  turnRowFor(dt: DerivedTurn) {
+    let modelParts: string[] = [];
+    if (dt.turn.model) modelParts.push(dt.turn.model as unknown as string);
+    if (dt.turn.effort) modelParts.push(dt.turn.effort as unknown as string);
+    let modelText = modelParts.join(' · ');
+    let turnLabel = dt.isLive
+      ? `${dt.turn.turnType} · live`
+      : dt.turn.turnType ?? '';
+    return {
+      colorClass: dt.colorClass,
+      turnLabel,
+      compacted: !!dt.turn.compacted,
+      modelText,
+      durationDisplay: dt.isLive
+        ? `${fmtMMSS(this.turnElapsedSeconds(dt.turn))} →`
+        : fmtMMSS(dt.turn.durationSeconds),
+      outputDisplay: dt.isLive ? '—' : fmtNumber(dt.turn.outputTokens),
+      cacheDisplay: dt.isLive ? '—' : fmtNumber(dt.turn.cacheReadTokens),
+      hitRateDisplay: dt.isLive
+        ? '—'
+        : fmtHitRate(dt.turn.freshInputTokens ?? 0, dt.turn.cacheReadTokens ?? 0),
+      isLive: dt.isLive,
+      isMechanics: false,
+    };
+  }
+
+  get grandTotal() {
+    let output = 0;
+    let cache = 0;
+    let fresh = 0;
+    let inference = 0;
+    let liveTurns = 0;
+    for (let t of this.turns) {
+      output += t.outputTokens ?? 0;
+      cache += t.cacheReadTokens ?? 0;
+      fresh += t.freshInputTokens ?? 0;
+      if (t.durationSeconds != null) inference += t.durationSeconds;
+      else liveTurns += 1;
+    }
+    // Machinery only counts once here: the per-ticket rows already show it,
+    // and the grand row must add up to the same number they do.
+    let machinery = this.issueGroupsForTimeline.reduce(
+      (sum, g) => sum + g.machinerySeconds,
+      0,
+    );
+    return {
+      turnCount: this.turns.length,
+      issueCount: this.issues.length,
+      durationDisplay: fmtMMSS(inference + machinery),
+      outputDisplay: fmtNumber(output),
+      cacheDisplay: fmtNumber(cache),
+      hitRateDisplay: fmtHitRate(fresh, cache),
+      labelText: this.isRunning ? 'All issues · run so far' : 'All issues · run total',
+      metaText: `${this.turns.length} turn${this.turns.length === 1 ? '' : 's'} · ${this.issues.length} issue${this.issues.length === 1 ? '' : 's'}`,
+      hasLive: liveTurns > 0,
+    };
+  }
+
+  /* --------------------------- Token economics ------------------------- */
+
+  get tokenRows() {
+    return this.turns
+      .filter((t) => t.durationSeconds != null) // live turn omitted until settled
+      .map((t) => {
+        return {
+          colorClass: turnColorClass(t.turnType),
+          turnLabel: `${t.issueId ?? ''} · ${t.turnType ?? ''}`,
+          compacted: !!t.compacted,
+          freshDisplay: fmtNumber(t.freshInputTokens),
+          cacheDisplay: fmtNumber(t.cacheReadTokens),
+          hitRateDisplay: fmtHitRate(t.freshInputTokens ?? 0, t.cacheReadTokens ?? 0),
+        };
+      });
+  }
+
+  get tokenGrandTotal() {
+    let fresh = 0;
+    let cache = 0;
+    for (let t of this.turns) {
+      if (t.durationSeconds == null) continue;
+      fresh += t.freshInputTokens ?? 0;
+      cache += t.cacheReadTokens ?? 0;
+    }
+    return {
+      freshDisplay: fmtNumber(fresh),
+      cacheDisplay: fmtNumber(cache),
+      hitRateDisplay: fmtHitRate(fresh, cache),
+    };
+  }
+
+  get tokenCallout() {
+    // Find the settled turn with the highest fresh-input count.
+    let settled = this.turns.filter((t) => t.durationSeconds != null);
+    if (settled.length === 0) {
+      return {
+        leadStrong: 'No settled turns yet.',
+        leadRest: ' The callout will rewrite itself around the highest fresh-input turn once the run has more data.',
+      };
+    }
+    let ranked = settled.slice().sort(
+      (a, b) => (b.freshInputTokens ?? 0) - (a.freshInputTokens ?? 0),
+    );
+    let top = ranked[0];
+    let topFresh = top.freshInputTokens ?? 0;
+
+    // Compute the ratio against a "normal" turn (the median of the remaining
+    // settled turns, floored at 1 to avoid division by zero).
+    let others = ranked.slice(1);
+    let ratioText = '';
+    if (others.length > 0) {
+      let median =
+        others
+          .map((t) => t.freshInputTokens ?? 0)
+          .sort((a, b) => a - b)[Math.floor(others.length / 2)] || 1;
+      let ratio = topFresh / Math.max(1, median);
+      if (ratio >= 10) ratioText = ` — ~${Math.round(ratio)}× a normal turn`;
+    }
+
+    let isAnomaly = top.compacted || topFresh > 5000;
+    if (isAnomaly) {
+      let leadStrong = `${top.issueId ?? ''} ${top.turnType ?? ''} ${top.compacted ? 're-ingested' : 'consumed'} ${fmtNumber(topFresh)} fresh tokens${top.compacted ? ' after compaction' : ''}${ratioText}.`;
+      return {
+        leadStrong,
+        leadRest: ' Cached input is nearly free; fresh input and output are the spend.',
+      };
+    }
+    return {
+      leadStrong: `${top.issueId ?? ''} ${top.turnType ?? ''} carried the most fresh input at ${fmtNumber(topFresh)} tokens.`,
+      leadRest: ' Cached input is nearly free; fresh input and output are the spend.',
+    };
+  }
+
+  get hasTokenRows(): boolean {
+    return this.tokenRows.length > 0;
+  }
+
+  /* --------------------------- Phase subtotals ------------------------- */
+
+  get visiblePhases() {
+    let wall = this.totals?.wallClockSeconds || this.wallClockDisplaySeconds || 1;
+    return this.phases
+      .filter((p) => (p.wallClockSeconds ?? 0) > 0)
+      .map((p) => ({
+        name: p.name ?? '',
+        label: capitalise(p.name),
+        colorClass: phaseColorClass(p.name),
+        seconds: p.wallClockSeconds ?? 0,
+        secondsDisplay: fmtMMSS(p.wallClockSeconds),
+        pctDisplay: fmtPercent(p.wallClockSeconds ?? 0, wall),
+        widthPct: Math.min(100, ((p.wallClockSeconds ?? 0) / wall) * 100),
+      }));
+  }
+
+  get phaseSectionHint(): string {
+    return this.isRunning
+      ? `${this.visiblePhases.length} phase${this.visiblePhases.length === 1 ? '' : 's'} so far`
+      : `${this.visiblePhases.length} phase${this.visiblePhases.length === 1 ? '' : 's'} ran`;
+  }
+
+  /* --------------------------- Skills in context ----------------------- */
+
+  /* One block per lifecycle phase, listing the skills the agent's context
+     carried during that phase. The writer already orders rows by phase then
+     by weight, so grouping preserves its order. */
+  get skillPhaseGroups() {
+    let byPhase = new Map<
+      string,
+      {
+        phase: string;
+        label: string;
+        colorClass: string;
+        characters: number;
+        rows: {
+          name: string;
+          turnTypes: string;
+          turnCountDisplay: string;
+          charactersDisplay: string;
+          referencesDisplay: string;
+          deliveryLabel: string;
+          deliveryClass: string;
+        }[];
+      }
+    >();
+    for (let s of this.skills) {
+      let phase = s.phase ?? '';
+      let g = byPhase.get(phase);
+      if (!g) {
+        g = {
+          phase,
+          label: capitalise(phase),
+          colorClass: phaseColorClass(phase),
+          characters: 0,
+          rows: [],
+        };
+        byPhase.set(phase, g);
+      }
+      let turns = s.turnCount ?? 0;
+      let refs = s.referenceCount ?? 0;
+      g.characters += s.characters ?? 0;
+      g.rows.push({
+        name: s.name ?? '',
+        turnTypes: s.turnTypes ?? '',
+        turnCountDisplay: `${turns} turn${turns === 1 ? '' : 's'}`,
+        charactersDisplay: fmtNumber(s.characters),
+        referencesDisplay: refs === 0 ? '—' : fmtNumber(refs),
+        deliveryLabel: deliveryLabel(s.delivery),
+        deliveryClass: `rt-tag--${s.delivery ?? 'injected'}`,
+      });
+    }
+    return Array.from(byPhase.values()).map((g) => ({
+      ...g,
+      subtotalDisplay: `${g.rows.length} skill${g.rows.length === 1 ? '' : 's'} · ${fmtNumber(g.characters)} chars`,
+    }));
+  }
+
+  get hasSkillRows(): boolean {
+    return this.skills.length > 0;
+  }
+
+  get skillSectionHint(): string {
+    let names = new Set(this.skills.map((s) => s.name ?? ''));
+    return `${names.size} distinct skill${names.size === 1 ? '' : 's'} across ${this.skillPhaseGroups.length} phase${this.skillPhaseGroups.length === 1 ? '' : 's'}`;
+  }
+
+  /* --------------------------- Template -------------------------------- */
+
+  <template>
+    <div class='rt'>
+      {{! -- Section 1: Header ---------------------------------------- }}
+      <div class='rt-header'>
+        <div class='rt-eyebrow'>{{this.eyebrowText}}</div>
+        <h2 class='rt-title'>{{this.headerTitle}}</h2>
+        <div class='rt-sub'>
+          {{this.subtitleParts.before}}<strong>{{this.subtitleParts.strong}}</strong>{{this.subtitleParts.after}}
+        </div>
+        <div class='rt-config'>
+          <span class='rt-config-item'>
+            <span class='rt-config-key'>Target</span>
+            <span class='rt-config-val'>{{this.config.targetRealmUrl}}</span>
+          </span>
+          <span class='rt-config-item'>
+            <span class='rt-config-key'>Control</span>
+            <span class='rt-config-val'>{{this.config.controlRealmUrl}}</span>
+          </span>
+          <span class='rt-config-item'>
+            <span class='rt-config-key'>Commit</span>
+            <span class='rt-config-val'>{{this.config.factoryCommit}}</span>
+          </span>
+          <span class='rt-config-item'>
+            <span class='rt-config-key'>Started</span>
+            <span class='rt-config-val'>{{this.startedAtDisplay}}</span>
+          </span>
+          <span class='rt-config-item'>
+            <span class='rt-config-key'>Ended</span>
+            <span
+              class='rt-config-val {{if this.isRunning "rt-config-val--empty"}}'
+            >{{this.endedAtDisplay}}</span>
+          </span>
+        </div>
+      </div>
+
+      {{! -- Section 2: KPI dashboard row ---------------------------- }}
+      <div class='rt-kpi-row'>
+        <DonutTile
+          @eyebrow='Total'
+          @value={{this.wallClockDisplay}}
+          @slices={{this.totalDonut}}
+        >
+          <span class='rt-badge {{this.outcomeBadgeClass}}'>
+            {{this.outcomeLabel}}
+          </span>
+        </DonutTile>
+        <DonutTile
+          @eyebrow='Model inference'
+          @value={{this.inferenceDisplay}}
+          @lifted={{true}}
+          @slices={{this.inferenceDonut}}
+        >{{this.inferenceFootText}}</DonutTile>
+        <DonutTile
+          @eyebrow='Everything else'
+          @value={{this.machineryDisplay}}
+          @slices={{this.machineryDonut}}
+        >{{this.machineryFootText}}</DonutTile>
+        <DonutTile
+          @eyebrow='Compactions'
+          @value={{this.compactionCount}}
+          @slices={{this.compactionDonut}}
+        >{{this.compactionFootText}}</DonutTile>
+      </div>
+
+      {{! -- Section 3: Timeline ------------------------------------ }}
+      <div class='rt-section'>
+        <div class='rt-section-head'>
+          <h2 class='rt-section-title'>Timeline<span
+              class='rt-section-meta'
+            >{{this.timelineHint}}</span></h2>
+          <div class='rt-hint'>One band per ticket · widths proportional to
+            wall-clock seconds</div>
+        </div>
+
+        <div class='rt-tl-groups'>
+          {{#each this.ticketSegments as |seg|}}
+            <div class='rt-tl-group' style={{htmlSafeFlex seg.weight}}>
+              <div class='rt-tl-group-label'>{{seg.label}}</div>
+              <div class='rt-tl-group-rule'></div>
+            </div>
+          {{/each}}
+        </div>
+
+        <div class='rt-tl-track-wrap'>
+          <div class='rt-tl-track'>
+            {{#each this.ticketSegments as |seg|}}
+              <div
+                class='rt-tl-seg
+                  rt-tl-seg--{{seg.colorClass}}
+                  {{if seg.narrowLabel "rt-tl-seg--label-below"}}'
+                style={{htmlSafeFlex seg.weight}}
+                data-label={{seg.durationDisplay}}
+                title={{seg.tooltip}}
+              >
+                {{seg.durationDisplay}}
+              </div>
+            {{/each}}
+          </div>
+
+          {{#each this.eventTicks as |ev|}}
+            <div
+              class='rt-tl-event
+                {{ev.edgeClass}}
+                {{if ev.below "rt-tl-event--below"}}'
+              style={{htmlSafeLeft ev.leftPct}}
+              data-kind={{ev.label}}
+              title={{ev.detail}}
+            ></div>
+          {{/each}}
+        </div>
+
+        <div class='rt-tl-axis'>
+          {{#each this.axisMarks as |m|}}
+            <span>{{m}}</span>
+          {{/each}}
+        </div>
+
+        <div class='rt-legend'>
+          {{#each this.ticketSegments as |seg|}}
+            <div class='rt-legend-item'><span
+                class='rt-legend-sq rt-tl-seg--{{seg.colorClass}}'
+              ></span>{{seg.label}} · {{seg.title}}{{#if seg.pill}}<span
+                  class='rt-status {{seg.pill.className}}'
+                >{{seg.pill.label}}</span>{{/if}}</div>
+          {{/each}}
+        </div>
+
+        {{#if this.hasNotStartedTickets}}
+          <div class='rt-notstarted'>
+            <span class='rt-notstarted-lead'>Not started</span>
+            {{#each this.notStartedTickets as |t|}}
+              <span class='rt-notstarted-item'>{{t.issueId}} ·
+                {{t.title}}{{#if t.pill}}<span
+                    class='rt-status {{t.pill.className}}'
+                  >{{t.pill.label}}</span>{{/if}}</span>
+            {{/each}}
+          </div>
+        {{/if}}
+      </div>
+
+      {{! -- Section 4: Per-ticket breakdown ------------------------- }}
+      <div class='rt-section'>
+        <div class='rt-section-head'>
+          <h2 class='rt-section-title'>Per-ticket breakdown<span
+              class='rt-section-meta'
+            >what the factory did</span></h2>
+          <div class='rt-hint'>Agent turns and the machinery they triggered ·
+            durations in mm:ss</div>
+        </div>
+
+        {{#each this.issueRows as |row|}}
+          <div class='rt-issue'>
+            <div class='rt-issue-head'>
+              <h3 class='rt-issue-title'><span
+                  class='rt-skill-dot rt-tl-seg--{{row.colorClass}}'
+                ></span>{{row.heading}}{{#if row.pill}}<span
+                    class='rt-status {{row.pill.className}}'
+                  >{{row.pill.label}}</span>{{/if}}</h3>
+              <div class='rt-issue-stat'>
+                <strong>{{row.subtotalDurationDisplay}}</strong>
+                ·
+                {{row.splitText}}
+                ·
+                {{row.shareText}}
+              </div>
+            </div>
+
+            <table class='rt-table rt-table--activity'>
+              <thead>
+                <tr>
+                  <th class='rt-col-turn'>Activity</th>
+                  <th class='rt-col-model'>Detail</th>
+                  <th class='rt-col-num rt-col-dur'>Duration</th>
+                  <th class='rt-col-num rt-col-out'>Output tokens</th>
+                  <th class='rt-col-num rt-col-cache'>Cache read</th>
+                  <th class='rt-col-num rt-col-hit'>Hit rate</th>
+                </tr>
+              </thead>
+              <tbody>
+                {{#each row.activityRows as |arow|}}
+                  <tr class='{{if arow.isMechanics "rt-row--mechanics"}}'>
+                    <td class='rt-turn-name'>
+                      <span class='rt-row-dot rt-tl-seg--{{arow.colorClass}}'></span>
+                      <span>{{arow.turnLabel}}</span>
+                      {{#if arow.compacted}}<em class='rt-compact-tag'>(compacted)</em>{{/if}}
+                    </td>
+                    <td>{{arow.modelText}}</td>
+                    <td
+                      class='rt-num
+                        {{if arow.isLive "rt-num--live"}}'
+                    >{{arow.durationDisplay}}</td>
+                    <td
+                      class='rt-num
+                        {{if arow.isLive "rt-num--empty"}}'
+                    >{{arow.outputDisplay}}</td>
+                    <td
+                      class='rt-num
+                        {{if arow.isLive "rt-num--empty"}}'
+                    >{{arow.cacheDisplay}}</td>
+                    <td
+                      class='rt-num
+                        {{if arow.isLive "rt-num--empty"}}'
+                    >{{arow.hitRateDisplay}}</td>
+                  </tr>
+                {{/each}}
+                {{#unless row.hasLive}}
+                  <tr class='rt-subtotal'>
+                    <td>Subtotal</td>
+                    <td>{{row.subtotal.turnCount}}
+                      turn{{if (isNotOne row.subtotal.turnCount) 's'}}
+                      + machinery</td>
+                    <td class='rt-num'>{{row.subtotal.durationDisplay}}</td>
+                    <td class='rt-num'>{{row.subtotal.outputDisplay}}</td>
+                    <td class='rt-num'>{{row.subtotal.cacheDisplay}}</td>
+                    <td class='rt-num'>{{row.subtotal.hitRateDisplay}}</td>
+                  </tr>
+                {{/unless}}
+              </tbody>
+            </table>
+
+            <div class='rt-issue-foot'>
+              {{#if row.hasLive}}
+                In progress · validation deferred
+              {{else}}
+                {{#if row.emphasiseIterations}}
+                  <strong>{{row.iterationCount}} iterations</strong>
+                {{else}}
+                  {{row.iterationCount}}
+                  iteration{{if (isNotOne row.iterationCount) 's'}}
+                {{/if}}
+                ·
+                {{#if row.ranValidation}}
+                  {{row.validationStepsRun}}
+                  validation steps run ·
+                  <strong>{{if row.validationPassed 'passed' 'failed'}}</strong>
+                {{else}}
+                  no validation pipeline ran for this ticket
+                {{/if}}
+              {{/if}}
+            </div>
+          </div>
+        {{/each}}
+
+        <div class='rt-grand-wrap'>
+          <table class='rt-table rt-table--grand'>
+            <tbody>
+              <tr class='rt-total'>
+                <td class='rt-col-turn'>{{this.grandTotal.labelText}}</td>
+                <td class='rt-col-model'>{{this.grandTotal.metaText}}</td>
+                <td
+                  class='rt-col-num rt-col-dur'
+                >{{this.grandTotal.durationDisplay}}</td>
+                <td
+                  class='rt-col-num rt-col-out'
+                >{{this.grandTotal.outputDisplay}}</td>
+                <td
+                  class='rt-col-num rt-col-cache'
+                >{{this.grandTotal.cacheDisplay}}</td>
+                <td
+                  class='rt-col-num rt-col-hit'
+                >{{this.grandTotal.hitRateDisplay}}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {{! -- Section 5: Token economics ----------------------------- }}
+      <div class='rt-section'>
+        <div class='rt-section-head'>
+          <h2 class='rt-section-title'>Token economics<span
+              class='rt-section-meta'
+            >where the tokens went</span></h2>
+          <div class='rt-hint'>Compacted turns are the hit-rate outliers</div>
+        </div>
+
+        {{#if this.hasTokenRows}}
+          <table class='rt-table'>
+            <thead>
+              <tr>
+                <th class='rt-col-turn'>Turn</th>
+                <th class='rt-col-num rt-col-fresh'>Fresh input</th>
+                <th class='rt-col-num rt-col-cache'>Served from cache</th>
+                <th class='rt-col-num rt-col-hit'>Hit rate</th>
+              </tr>
+            </thead>
+            <tbody>
+              {{#each this.tokenRows as |row|}}
+                <tr class='{{if row.compacted "rt-subtotal"}}'>
+                  <td class='rt-turn-name'>
+                    <span class='rt-row-dot rt-tl-seg--{{row.colorClass}}'></span>
+                    <span>{{row.turnLabel}}</span>
+                    {{#if row.compacted}}<em class='rt-compact-tag'>(compacted)</em>{{/if}}
+                  </td>
+                  <td class='rt-num'>{{row.freshDisplay}}</td>
+                  <td class='rt-num'>{{row.cacheDisplay}}</td>
+                  <td class='rt-num'>{{row.hitRateDisplay}}</td>
+                </tr>
+              {{/each}}
+              <tr class='rt-total'>
+                <td>All turns · fresh vs cache</td>
+                <td class='rt-num'>{{this.tokenGrandTotal.freshDisplay}}</td>
+                <td class='rt-num'>{{this.tokenGrandTotal.cacheDisplay}}</td>
+                <td class='rt-num'>{{this.tokenGrandTotal.hitRateDisplay}}</td>
+              </tr>
+            </tbody>
+          </table>
+        {{else}}
+          <div class='rt-empty-note'>
+            No settled turns yet. Rows will populate as each turn finishes.
+          </div>
+        {{/if}}
+
+        <div class='rt-callout'>
+          <p class='rt-callout-lead'>
+            <strong>{{this.tokenCallout.leadStrong}}</strong>{{this.tokenCallout.leadRest}}
+          </p>
+        </div>
+      </div>
+
+      {{! -- Section 6: Phase subtotals ---------------------------- }}
+      <div class='rt-section'>
+        <div class='rt-section-head'>
+          <h2 class='rt-section-title'>Phase subtotals<span
+              class='rt-section-meta'
+            >{{this.phaseSectionHint}}</span></h2>
+          <div class='rt-hint'>{{if
+              this.isRunning
+              'Current phase is accumulating'
+              'Percent of wall clock'
+            }}</div>
+        </div>
+
+        <div class='rt-phases'>
+          {{#each this.visiblePhases as |p|}}
+            <div class='rt-phase-row'>
+              <div class='rt-phase-label'>{{p.label}}</div>
+              <div class='rt-phase-track'>
+                <div
+                  class='rt-phase-fill rt-phase-fill--{{p.colorClass}}'
+                  style={{htmlSafeWidth p.widthPct}}
+                ></div>
+              </div>
+              <div class='rt-phase-val'>{{p.secondsDisplay}}</div>
+              <div class='rt-phase-pct'>{{p.pctDisplay}}</div>
+            </div>
+          {{/each}}
+        </div>
+      </div>
+
+      {{! -- Section 7: Skills in context --------------------------- }}
+      <div class='rt-section'>
+        <div class='rt-section-head'>
+          <h2 class='rt-section-title'>Skills in context<span
+              class='rt-section-meta'
+            >{{this.skillSectionHint}}</span></h2>
+          <div class='rt-hint'>Characters are the peak body + references, re-sent
+            each turn</div>
+        </div>
+
+        {{#if this.hasSkillRows}}
+          {{#each this.skillPhaseGroups as |g|}}
+            <div class='rt-skill-group'>
+              <div class='rt-issue-head'>
+                <h3 class='rt-issue-title'><span
+                    class='rt-skill-dot rt-phase-fill--{{g.colorClass}}'
+                  ></span>{{g.label}}</h3>
+                <div class='rt-issue-stat'>{{g.subtotalDisplay}}</div>
+              </div>
+              <table class='rt-table rt-table--skills'>
+                <thead>
+                  <tr>
+                    <th class='rt-col-turn'>Skill</th>
+                    <th class='rt-col-model'>Carried by</th>
+                    <th class='rt-col-delivery'>Delivery</th>
+                    <th class='rt-col-num rt-col-turns'>Turns</th>
+                    <th class='rt-col-num rt-col-refs'>Refs</th>
+                    <th class='rt-col-num rt-col-chars'>Characters</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {{#each g.rows as |row|}}
+                    <tr>
+                      <td class='rt-turn-name'>{{row.name}}</td>
+                      <td>{{row.turnTypes}}</td>
+                      <td><span
+                          class='rt-tag {{row.deliveryClass}}'
+                        >{{row.deliveryLabel}}</span></td>
+                      <td class='rt-num'>{{row.turnCountDisplay}}</td>
+                      <td class='rt-num'>{{row.referencesDisplay}}</td>
+                      <td class='rt-num'>{{row.charactersDisplay}}</td>
+                    </tr>
+                  {{/each}}
+                </tbody>
+              </table>
+            </div>
+          {{/each}}
+        {{else}}
+          <div class='rt-empty-note'>
+            No turns have run yet. Each turn records the skills its context
+            carried.
+          </div>
+        {{/if}}
+      </div>
+    </div>
+
+    <style scoped>
+      /* -- Tokens ---------------------------------------------------- */
+      .rt {
+        /* Neutrals */
+        --rt-surface: #ffffff;
+        --rt-ink: #0a0a0a;
+        --rt-body: #4a4a48;
+        --rt-muted: #737370;
+        --rt-faint: #a3a3a0;
+        --rt-hairline: #e5e5e2;
+        --rt-whisper: #f5f5f2;
+
+        /* Data hues */
+        --rt-blue: #1e57b5;
+        --rt-green: #4d8b3d;
+        --rt-pink: #c2185b;
+        --rt-amber: #b7791f;
+        --rt-slate: #64748b;
+
+        /* Status */
+        --rt-running: #2453ff;
+        --rt-completed: #4d8b3d;
+        --rt-stopped: #a3a3a0;
+        --rt-failed: #c2185b;
+
+        /* Type */
+        --rt-font-sans:
+          -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto,
+          'Helvetica Neue', Arial, sans-serif;
+
+        /* Spacing */
+        --rt-space-xs: 4px;
+        --rt-space-sm: 8px;
+        --rt-space-md: 12px;
+        --rt-space-lg: 16px;
+        --rt-space-xl: 24px;
+        --rt-space-2xl: 32px;
+        --rt-space-3xl: 48px;
+
+        /* Radii */
+        --rt-radius-sm: 4px;
+        --rt-radius-lg: 12px;
+
+        background: var(--rt-surface);
+        color: var(--rt-body);
+        font-family: var(--rt-font-sans);
+        font-variant-numeric: tabular-nums;
+        padding: var(--rt-space-2xl);
+        display: flex;
+        flex-direction: column;
+        gap: var(--rt-space-3xl);
+      }
+
+      /* -- Reusable text roles ------------------------------------- */
+      .rt-eyebrow {
+        font-size: 11px;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--rt-faint);
+      }
+      .rt-title {
+        font-size: 22px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        line-height: 1.2;
+        color: var(--rt-ink);
+        margin: 0;
+      }
+      .rt-sub {
+        font-size: 14px;
+        color: var(--rt-body);
+        line-height: 1.5;
+      }
+      .rt-sub strong {
+        color: var(--rt-ink);
+        font-weight: 600;
+      }
+      .rt-hint {
+        font-size: 12px;
+        color: var(--rt-muted);
+      }
+
+      /* -- Section 1: Header --------------------------------------- */
+      .rt-header {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .rt-config {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 24px;
+        row-gap: 6px;
+        padding-top: 10px;
+        margin-top: 6px;
+        border-top: 1px solid var(--rt-hairline);
+        font-size: 12px;
+        color: var(--rt-muted);
+      }
+      .rt-config-item {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 6px;
+        min-width: 0;
+      }
+      .rt-config-key {
+        color: var(--rt-faint);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        font-size: 10px;
+        font-weight: 500;
+      }
+      .rt-config-val {
+        color: var(--rt-body);
+        max-width: 220px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .rt-config-val--empty {
+        color: var(--rt-faint);
+      }
+
+      /* -- Section 2: KPI row -------------------------------------- */
+      /* Four tiles across need ~1320px. The isolated card usually renders
+         in a modal well under that, where four columns squeeze each tile to
+         ~190px — narrower than one headline number plus its donut. Wrapping
+         to 2×2 keeps both readable. */
+      .rt-kpi-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: var(--rt-space-lg);
+      }
+      .rt-kpi {
+        background: var(--rt-surface);
+        border: 1px solid var(--rt-hairline);
+        border-radius: var(--rt-radius-lg);
+        padding: 18px 20px 16px;
+        display: flex;
+        flex-direction: column;
+        gap: var(--rt-space-md);
+        min-width: 0;
+      }
+      .rt-kpi-value {
+        font-size: 36px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        line-height: 1;
+        color: var(--rt-ink);
+      }
+      .rt-kpi-value--lifted {
+        color: var(--rt-blue);
+      }
+      .rt-kpi-foot {
+        font-size: 12px;
+        color: var(--rt-muted);
+        line-height: 1.4;
+      }
+
+      /* -- Sections shared ---------------------------------------- */
+      .rt-section {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+      /* Sections carry a real heading with a rule under it: at eyebrow size
+         the titles read as captions on the block above them rather than as
+         the start of a new section. */
+      .rt-section-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 4px 16px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid var(--rt-hairline);
+      }
+      .rt-section-title {
+        font-size: 16px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        color: var(--rt-ink);
+        margin: 0;
+      }
+      .rt-section-meta {
+        font-size: 12px;
+        font-weight: 400;
+        color: var(--rt-muted);
+        margin-left: 10px;
+      }
+      .rt-section-meta::before {
+        content: '· ';
+      }
+
+      /* -- Section 3: Timeline ------------------------------------ */
+      .rt-tl-groups {
+        display: flex;
+        gap: 3px;
+        align-items: flex-end;
+      }
+      .rt-tl-group {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+        min-width: 0;
+        overflow: hidden;
+        padding: 0 4px;
+      }
+      .rt-tl-group-label {
+        font-size: 10px;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--rt-faint);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+      }
+      .rt-tl-group-rule {
+        width: 100%;
+        height: 1px;
+        background: var(--rt-hairline);
+      }
+      .rt-tl-track-wrap {
+        position: relative;
+        padding: 20px 0;
+      }
+      .rt-tl-track {
+        display: flex;
+        gap: 3px;
+        height: 26px;
+        position: relative;
+        z-index: 1;
+      }
+      .rt-tl-seg {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0.02em;
+        border-radius: var(--rt-radius-sm);
+        min-width: 0;
+        padding: 0 6px;
+        box-sizing: border-box;
+        overflow: hidden;
+        white-space: nowrap;
+        position: relative;
+      }
+      .rt-tl-seg--bootstrap {
+        background: var(--rt-amber);
+      }
+      .rt-tl-seg--design {
+        background: var(--rt-blue);
+      }
+      .rt-tl-seg--build {
+        background: var(--rt-green);
+      }
+      .rt-tl-seg--review {
+        background: var(--rt-pink);
+      }
+      .rt-tl-seg--harden {
+        background: var(--rt-pink);
+      }
+      .rt-tl-seg--machinery {
+        background: var(--rt-slate);
+      }
+      /* Ticket hues — one per ticket, cycling. Same order as the KPI
+         donut's `hue--t*` map so a ticket keeps its color everywhere. */
+      .rt-tl-seg--t0 {
+        background: var(--rt-amber);
+      }
+      .rt-tl-seg--t1 {
+        background: var(--rt-blue);
+      }
+      .rt-tl-seg--t2 {
+        background: var(--rt-green);
+      }
+      .rt-tl-seg--t3 {
+        background: var(--rt-pink);
+      }
+      .rt-tl-seg--t4 {
+        background: var(--rt-slate);
+      }
+      .rt-tl-seg--live {
+        background: var(--rt-running);
+        animation: rt-pulse 1.6s ease-in-out infinite;
+      }
+      .rt-tl-seg--label-below {
+        color: transparent;
+        overflow: visible;
+      }
+      .rt-tl-seg--label-below::after {
+        content: attr(data-label);
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        margin-top: 4px;
+        font-size: 10px;
+        font-weight: 500;
+        color: var(--rt-body);
+        letter-spacing: 0.02em;
+        white-space: nowrap;
+      }
+      .rt-tl-event {
+        position: absolute;
+        width: 2px;
+        height: 10px;
+        background: var(--rt-ink);
+        z-index: 3;
+        top: 10px;
+      }
+      .rt-tl-event::after {
+        content: attr(data-kind);
+        position: absolute;
+        bottom: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        margin-bottom: 3px;
+        font-size: 9px;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--rt-body);
+        background: var(--rt-surface);
+        padding: 0 3px;
+        white-space: nowrap;
+      }
+      /* A tick at either end centers its label over the card's edge, where
+         it gets clipped. Anchor those labels inward instead. */
+      .rt-tl-event--start::after {
+        left: 0;
+        transform: none;
+      }
+      .rt-tl-event--end::after {
+        left: auto;
+        right: 0;
+        transform: none;
+      }
+      .rt-tl-event--below {
+        top: auto;
+        bottom: 10px;
+      }
+      .rt-tl-event--below::after {
+        bottom: auto;
+        top: 100%;
+        margin-bottom: 0;
+        margin-top: 3px;
+      }
+      .rt-tl-axis {
+        display: flex;
+        justify-content: space-between;
+        font-size: 10px;
+        color: var(--rt-faint);
+        letter-spacing: 0.04em;
+        padding-top: 4px;
+      }
+      .rt-legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 20px;
+        font-size: 12px;
+        color: var(--rt-body);
+        padding-top: 8px;
+        border-top: 1px solid var(--rt-hairline);
+        margin-top: 8px;
+      }
+      .rt-legend-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .rt-legend-sq {
+        width: 10px;
+        height: 10px;
+        border-radius: 2px;
+        flex-shrink: 0;
+      }
+
+      /* -- Section 4 & 5: Tables --------------------------------- */
+      /* Each ticket is its own bordered block. Without the border the foot
+         line of one ticket ran straight into the next ticket's heading, and
+         the whole section read as a single dense table. */
+      .rt-issue {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 16px 18px 14px;
+        border: 1px solid var(--rt-hairline);
+        border-radius: var(--rt-radius-lg);
+        background: var(--rt-surface);
+      }
+      .rt-issue-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 4px 16px;
+        padding-bottom: 4px;
+      }
+      .rt-issue-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--rt-ink);
+        margin: 0;
+        letter-spacing: -0.005em;
+      }
+      .rt-issue-stat {
+        font-size: 12px;
+        color: var(--rt-muted);
+      }
+      .rt-issue-stat strong {
+        color: var(--rt-ink);
+        font-weight: 600;
+      }
+      .rt-issue-foot {
+        font-size: 12px;
+        color: var(--rt-muted);
+        padding-top: 6px;
+      }
+      .rt-issue-foot strong {
+        color: var(--rt-ink);
+        font-weight: 600;
+      }
+
+      .rt-table {
+        border-collapse: collapse;
+        width: 100%;
+      }
+      .rt-table th {
+        font-size: 10px;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--rt-faint);
+        text-align: left;
+        padding: 8px 12px 8px 0;
+        border-bottom: 1px solid var(--rt-hairline);
+      }
+      .rt-table th.rt-col-num {
+        text-align: right;
+        padding-right: 0;
+      }
+      .rt-table td {
+        font-size: 13px;
+        color: var(--rt-body);
+        padding: 8px 12px 8px 0;
+        border-bottom: 1px solid var(--rt-hairline);
+      }
+      .rt-num {
+        text-align: right;
+        padding-right: 0 !important;
+      }
+      .rt-num--live {
+        color: var(--rt-running);
+        font-weight: 600;
+      }
+      .rt-num--empty {
+        color: var(--rt-faint);
+      }
+      .rt-table tr.rt-subtotal td {
+        font-weight: 600;
+        color: var(--rt-ink);
+      }
+      .rt-table tr.rt-total td {
+        font-weight: 600;
+        color: var(--rt-ink);
+        border-top: 1px solid var(--rt-ink);
+        border-bottom: none;
+        padding-top: 12px;
+      }
+      /* The run total is its own block, padded like a ticket so its columns
+         line up with the per-ticket tables above it. */
+      .rt-grand-wrap {
+        padding: 4px 18px 0;
+      }
+      .rt-table--grand {
+        margin-top: 0;
+      }
+      .rt-col-turn {
+        width: 42%;
+      }
+      .rt-col-model {
+        width: 18%;
+      }
+      /* Six-column tables: the shared widths above sum past 100% once a
+         sixth column joins, so each of those tables restates its own. */
+      .rt-table--activity .rt-col-turn {
+        width: 28%;
+      }
+      .rt-table--activity .rt-col-model {
+        width: 16%;
+      }
+      .rt-table--skills .rt-col-turn {
+        width: 26%;
+      }
+      .rt-table--skills .rt-col-model {
+        width: 16%;
+      }
+      .rt-table--skills .rt-col-refs {
+        width: 8%;
+      }
+      .rt-col-dur {
+        width: 12%;
+      }
+      .rt-col-out {
+        width: 14%;
+      }
+      .rt-col-cache {
+        width: 14%;
+      }
+      .rt-col-fresh {
+        width: 18%;
+      }
+      .rt-col-hit {
+        width: 16%;
+      }
+      .rt-turn-name {
+        color: var(--rt-ink);
+      }
+      .rt-turn-name .rt-row-dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 2px;
+        flex-shrink: 0;
+        vertical-align: -1px;
+        margin-right: 8px;
+      }
+      .rt-compact-tag {
+        font-style: normal;
+        color: var(--rt-muted);
+        font-size: 11px;
+        margin-left: 6px;
+        font-weight: 400;
+      }
+
+      .rt-callout {
+        background: var(--rt-whisper);
+        border-left: 3px solid var(--rt-blue);
+        padding: 16px 20px;
+        margin-top: 4px;
+      }
+      .rt-callout-lead {
+        font-size: 14px;
+        color: var(--rt-body);
+        line-height: 1.5;
+        margin: 0;
+      }
+      .rt-callout-lead strong {
+        color: var(--rt-ink);
+        font-weight: 600;
+      }
+      .rt-empty-note {
+        font-size: 13px;
+        color: var(--rt-muted);
+        padding: 8px 0;
+      }
+
+      /* -- Section 6: Phase subtotals ------------------------- */
+      .rt-phases {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .rt-phase-row {
+        display: grid;
+        grid-template-columns: 140px 1fr 84px 60px;
+        align-items: center;
+        gap: 16px;
+      }
+      .rt-phase-label {
+        font-size: 11px;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--rt-faint);
+      }
+      .rt-phase-track {
+        height: 6px;
+        background: var(--rt-hairline);
+        position: relative;
+        overflow: hidden;
+      }
+      .rt-phase-fill {
+        position: absolute;
+        top: 0;
+        left: 0;
+        bottom: 0;
+      }
+      .rt-phase-fill--bootstrap {
+        background: var(--rt-amber);
+      }
+      .rt-phase-fill--design {
+        background: var(--rt-blue);
+      }
+      .rt-phase-fill--implementation {
+        background: var(--rt-green);
+      }
+      .rt-phase-fill--hardening {
+        background: var(--rt-pink);
+      }
+      .rt-phase-fill--polishing {
+        background: var(--rt-slate);
+      }
+      .rt-phase-val {
+        text-align: right;
+        font-size: 13px;
+        color: var(--rt-ink);
+        font-weight: 600;
+      }
+      .rt-phase-pct {
+        text-align: right;
+        font-size: 12px;
+        color: var(--rt-muted);
+      }
+
+      /* -- Ticket status pills -------------------------------- */
+      .rt-status {
+        display: inline-block;
+        margin-left: 8px;
+        padding: 2px 7px;
+        border-radius: var(--rt-radius-sm);
+        font-size: 9px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        white-space: nowrap;
+        vertical-align: 1px;
+        color: white;
+        background: var(--rt-slate);
+      }
+      .rt-status--running {
+        background: var(--rt-running);
+        animation: rt-pulse 1.6s ease-in-out infinite;
+      }
+      .rt-status--progress {
+        background: var(--rt-blue);
+      }
+      .rt-status--done {
+        background: var(--rt-completed);
+      }
+      .rt-status--backlog {
+        background: var(--rt-whisper);
+        color: var(--rt-muted);
+      }
+      .rt-status--blocked {
+        background: var(--rt-failed);
+      }
+      .rt-status--review {
+        background: var(--rt-amber);
+      }
+
+      /* Board tickets this run has not reached. */
+      .rt-notstarted {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px 16px;
+        font-size: 12px;
+        color: var(--rt-muted);
+        padding-top: 8px;
+      }
+      .rt-notstarted-lead {
+        font-size: 10px;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--rt-faint);
+      }
+
+      /* Machinery rows read as supporting detail, not agent work. */
+      .rt-row--mechanics .rt-turn-name,
+      .rt-row--mechanics td {
+        color: var(--rt-muted);
+        font-style: italic;
+      }
+
+      /* -- Section 7: Skills in context ----------------------- */
+      .rt-col-delivery {
+        width: 20%;
+      }
+      .rt-tag {
+        display: inline-block;
+        padding: 2px 7px;
+        border-radius: var(--rt-radius-sm);
+        font-size: 10px;
+        font-weight: 500;
+        letter-spacing: 0.02em;
+        white-space: nowrap;
+        border: 1px solid var(--rt-hairline);
+        color: var(--rt-body);
+      }
+      /* Injected = this turn paid to send the skill; inherited = it rode
+         along in a forked session's cached prefix. */
+      .rt-tag--injected {
+        border-color: color-mix(in srgb, var(--rt-blue) 35%, transparent);
+        color: var(--rt-blue);
+      }
+      .rt-tag--inherited {
+        background: var(--rt-whisper);
+        color: var(--rt-muted);
+      }
+      .rt-tag--mixed {
+        border-color: color-mix(in srgb, var(--rt-amber) 40%, transparent);
+        color: var(--rt-amber);
+      }
+
+      /* Same bordered-block treatment as a ticket, so phases separate. */
+      .rt-skill-group {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 16px 18px 14px;
+        border: 1px solid var(--rt-hairline);
+        border-radius: var(--rt-radius-lg);
+        background: var(--rt-surface);
+      }
+      .rt-skill-dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 2px;
+        vertical-align: 1px;
+        margin-right: 8px;
+      }
+      .rt-col-turns {
+        width: 12%;
+      }
+      .rt-col-refs {
+        width: 10%;
+      }
+      .rt-col-chars {
+        width: 18%;
+      }
+
+      /* -- Outcome badge -------------------------------------- */
+      .rt-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 3px 9px;
+        border-radius: var(--rt-radius-sm);
+        font-size: 10px;
+        font-weight: 500;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: white;
+        background: var(--rt-slate);
+      }
+      .rt-badge--completed {
+        background: var(--rt-completed);
+      }
+      .rt-badge--running {
+        background: var(--rt-running);
+        position: relative;
+        padding-left: 18px;
+      }
+      .rt-badge--running::before {
+        content: '';
+        position: absolute;
+        left: 7px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: white;
+        animation: rt-pulse 1.6s ease-in-out infinite;
+      }
+      .rt-badge--stopped {
+        background: var(--rt-stopped);
+        color: var(--rt-ink);
+      }
+      .rt-badge--failed {
+        background: var(--rt-failed);
+      }
+
+      @keyframes rt-pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.55;
+        }
+      }
+    </style>
+  </template>
+}
+
+/* =============================================================================
+ * Embedded component — header + KPI row + phase bars only.
+ * ============================================================================= */
+
+class RunTelemetryEmbedded extends Component<typeof RunTelemetry> {
+  @tracked nowMs = Date.now();
+  #ticker: ReturnType<typeof setInterval> | undefined;
+
+  constructor(owner: unknown, args: any) {
+    super(owner as any, args);
+    this.#ticker = setInterval(() => {
+      this.nowMs = Date.now();
+    }, 1000);
+    registerDestructor(this, () => {
+      if (this.#ticker) clearInterval(this.#ticker);
+    });
+  }
+
+  get config(): RunConfigField | undefined {
+    return this.args.model?.config as RunConfigField | undefined;
+  }
+  get totals(): TotalsField | undefined {
+    return this.args.model?.totals as TotalsField | undefined;
+  }
+  get turns(): TurnField[] {
+    return (this.args.model?.turns as TurnField[] | undefined) ?? [];
+  }
+  get phases(): PhaseField[] {
+    return (this.args.model?.phases as PhaseField[] | undefined) ?? [];
+  }
+  get issues(): IssueSummaryField[] {
+    return (this.args.model?.issues as IssueSummaryField[] | undefined) ?? [];
+  }
+  get outcome(): string {
+    return this.config?.outcome ?? '';
+  }
+  get isRunning(): boolean {
+    return this.outcome === 'running';
+  }
+
+  get startedAtMs(): number {
+    let s = this.config?.startedAt as unknown as string | undefined;
+    if (!s) return 0;
+    let d = new Date(s).getTime();
+    return Number.isFinite(d) ? d : 0;
+  }
+  get elapsedSeconds(): number {
+    if (!this.startedAtMs) return 0;
+    return Math.max(0, Math.floor((this.nowMs - this.startedAtMs) / 1000));
+  }
+  get wallClockDisplaySeconds(): number {
+    if (this.isRunning) {
+      return Math.max(this.elapsedSeconds, this.totals?.wallClockSeconds ?? 0);
+    }
+    return this.totals?.wallClockSeconds ?? 0;
+  }
+  get wallClockDisplay(): string {
+    return fmtMMSS(this.wallClockDisplaySeconds);
+  }
+
+  get inferenceDisplay(): string {
+    return fmtMMSS(this.totals?.inferenceSeconds);
+  }
+  get inferencePercent(): string {
+    let wall = this.wallClockDisplaySeconds;
+    let inf = this.totals?.inferenceSeconds ?? 0;
+    if (!wall) return '—';
+    return `${Math.round((inf / wall) * 100)}%`;
+  }
+  get inferenceFootText(): string {
+    return `${this.inferencePercent} of wall clock · ${this.turns.length} turn${this.turns.length === 1 ? '' : 's'}`;
+  }
+
+  get machinerySeconds(): number {
+    let t = this.totals;
+    if (!t) return 0;
+    return (
+      (t.validationSeconds ?? 0) +
+      (t.renderGateSeconds ?? 0) +
+      (t.syncSeconds ?? 0) +
+      (t.startupSeconds ?? 0)
+    );
+  }
+  get machineryDisplay(): string {
+    return fmtMMSS(this.machinerySeconds);
+  }
+  get machineryFootText(): string {
+    let t = this.totals;
+    if (!t) return '';
+    let syncCalls = t.syncCallCount ?? 0;
+    return `validation ${fmtMMSS(t.validationSeconds)} · render ${fmtMMSS(t.renderGateSeconds)} · sync ${fmtMMSS(t.syncSeconds)} (${syncCalls})`;
+  }
+
+  get compactionCount(): number {
+    return this.turns.reduce((n, t) => n + (t.compacted ? 1 : 0), 0);
+  }
+  get compactionFootText(): string {
+    let n = this.compactionCount;
+    if (n === 0) return 'no context-window overflows';
+    return `${n} × ~17k fresh tokens re-ingested`;
+  }
+
+  get outcomeLabel(): string {
+    return capitalise(this.outcome || 'unknown');
+  }
+  get outcomeBadgeClass(): string {
+    switch (this.outcome) {
+      case 'completed':
+        return 'rt-badge--completed';
+      case 'running':
+        return 'rt-badge--running';
+      case 'stopped':
+        return 'rt-badge--stopped';
+      case 'failed':
+        return 'rt-badge--failed';
+      default:
+        return '';
+    }
+  }
+
+  get runIndex(): string {
+    let url = (this.config?.targetRealmUrl as unknown as string) ?? '';
+    let m = /v(\d+)/i.exec(url);
+    return m ? m[1] : '1';
+  }
+  get eyebrowText(): string {
+    return `Run ${this.runIndex} · ${capitalise(this.config?.targetPhase)}`;
+  }
+  get headerTitle(): string {
+    let m = this.args.model as any;
+    if (m?.cardInfo?.name) return m.cardInfo.name as string;
+    if (m?.title) return m.title as string;
+    return 'Untitled Run Telemetry';
+  }
+  get subtitleParts() {
+    let issues = this.issues.length;
+    let turns = this.turns.length;
+    if (this.isRunning) {
+      return {
+        before: `${issues} issue${issues === 1 ? '' : 's'} started, ${turns} agent turn${turns === 1 ? '' : 's'} so far, `,
+        strong: this.wallClockDisplay,
+        after: ' elapsed on the wall clock.',
+      };
+    }
+    // Only tickets that actually ran a validation pipeline have a verdict;
+    // reading "every issue completed" off a default would be a fabrication.
+    let validated = this.issues.filter((i) => (i.validationStepsRun ?? 0) > 0);
+    let after: string;
+    if (validated.length === 0) {
+      after = ' — no validation pipeline ran.';
+    } else if (validated.every((i) => i.validationPassed)) {
+      after = ` with all ${validated.length} validated ticket${validated.length === 1 ? '' : 's'} passing.`;
+    } else {
+      after = ' with mixed validation outcomes.';
+    }
+    return {
+      before: `${issues} issue${issues === 1 ? '' : 's'}, ${turns} agent turn${turns === 1 ? '' : 's'}, done in `,
+      strong: fmtMMSS(this.totals?.wallClockSeconds),
+      after,
+    };
+  }
+
+  get visiblePhases() {
+    let wall = this.totals?.wallClockSeconds || this.wallClockDisplaySeconds || 1;
+    return this.phases
+      .filter((p) => (p.wallClockSeconds ?? 0) > 0)
+      .map((p) => ({
+        name: p.name ?? '',
+        label: capitalise(p.name),
+        colorClass: phaseColorClass(p.name),
+        secondsDisplay: fmtMMSS(p.wallClockSeconds),
+        pctDisplay: fmtPercent(p.wallClockSeconds ?? 0, wall),
+        widthPct: Math.min(100, ((p.wallClockSeconds ?? 0) / wall) * 100),
+      }));
+  }
+
+  <template>
+    <div class='rt-embed'>
+      <div class='rt-header'>
+        <div class='rt-eyebrow'>{{this.eyebrowText}}</div>
+        <h2 class='rt-title'>{{this.headerTitle}}</h2>
+        <div class='rt-sub'>
+          {{this.subtitleParts.before}}<strong>{{this.subtitleParts.strong}}</strong>{{this.subtitleParts.after}}
+        </div>
+      </div>
+
+      <div class='rt-kpi-row'>
+        <div class='rt-kpi'>
+          <div class='rt-eyebrow'>Total</div>
+          <div class='rt-kpi-value'>{{this.wallClockDisplay}}</div>
+          <div class='rt-kpi-foot'>
+            <span class='rt-badge {{this.outcomeBadgeClass}}'>{{this.outcomeLabel}}</span>
+          </div>
+        </div>
+        <div class='rt-kpi'>
+          <div class='rt-eyebrow'>Model inference</div>
+          <div class='rt-kpi-value rt-kpi-value--lifted'>{{this.inferenceDisplay}}</div>
+          <div class='rt-kpi-foot'>{{this.inferenceFootText}}</div>
+        </div>
+        <div class='rt-kpi'>
+          <div class='rt-eyebrow'>Everything else</div>
+          <div class='rt-kpi-value'>{{this.machineryDisplay}}</div>
+          <div class='rt-kpi-foot'>{{this.machineryFootText}}</div>
+        </div>
+        <div class='rt-kpi'>
+          <div class='rt-eyebrow'>Compactions</div>
+          <div class='rt-kpi-value'>{{this.compactionCount}}</div>
+          <div class='rt-kpi-foot'>{{this.compactionFootText}}</div>
+        </div>
+      </div>
+
+      <div class='rt-phases'>
+        {{#each this.visiblePhases as |p|}}
+          <div class='rt-phase-row'>
+            <div class='rt-phase-label'>{{p.label}}</div>
+            <div class='rt-phase-track'>
+              <div
+                class='rt-phase-fill rt-phase-fill--{{p.colorClass}}'
+                style={{htmlSafeWidth p.widthPct}}
+              ></div>
+            </div>
+            <div class='rt-phase-val'>{{p.secondsDisplay}}</div>
+            <div class='rt-phase-pct'>{{p.pctDisplay}}</div>
+          </div>
+        {{/each}}
+      </div>
+    </div>
+
+    <style scoped>
+      .rt-embed {
+        --rt-surface: #ffffff;
+        --rt-ink: #0a0a0a;
+        --rt-body: #4a4a48;
+        --rt-muted: #737370;
+        --rt-faint: #a3a3a0;
+        --rt-hairline: #e5e5e2;
+        --rt-blue: #1e57b5;
+        --rt-green: #4d8b3d;
+        --rt-pink: #c2185b;
+        --rt-amber: #b7791f;
+        --rt-slate: #64748b;
+        --rt-running: #2453ff;
+        --rt-completed: #4d8b3d;
+        --rt-stopped: #a3a3a0;
+        --rt-failed: #c2185b;
+        --rt-font-sans:
+          -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto,
+          'Helvetica Neue', Arial, sans-serif;
+
+        background: var(--rt-surface);
+        color: var(--rt-body);
+        font-family: var(--rt-font-sans);
+        font-variant-numeric: tabular-nums;
+        padding: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+      .rt-header {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .rt-eyebrow {
+        font-size: 11px;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--rt-faint);
+      }
+      .rt-title {
+        font-size: 20px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        line-height: 1.2;
+        color: var(--rt-ink);
+        margin: 0;
+      }
+      .rt-sub {
+        font-size: 13px;
+        color: var(--rt-body);
+        line-height: 1.5;
+      }
+      .rt-sub strong {
+        color: var(--rt-ink);
+        font-weight: 600;
+      }
+      .rt-kpi-row {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+      }
+      .rt-kpi {
+        background: var(--rt-surface);
+        border: 1px solid var(--rt-hairline);
+        border-radius: 12px;
+        padding: 16px 18px 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        min-width: 0;
+      }
+      .rt-kpi-value {
+        font-size: 30px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        line-height: 1;
+        color: var(--rt-ink);
+      }
+      .rt-kpi-value--lifted {
+        color: var(--rt-blue);
+      }
+      .rt-kpi-foot {
+        font-size: 11px;
+        color: var(--rt-muted);
+        line-height: 1.4;
+      }
+      .rt-phases {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .rt-phase-row {
+        display: grid;
+        grid-template-columns: 120px 1fr 68px 52px;
+        align-items: center;
+        gap: 12px;
+      }
+      .rt-phase-label {
+        font-size: 11px;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--rt-faint);
+      }
+      .rt-phase-track {
+        height: 6px;
+        background: var(--rt-hairline);
+        position: relative;
+        overflow: hidden;
+      }
+      .rt-phase-fill {
+        position: absolute;
+        top: 0;
+        left: 0;
+        bottom: 0;
+      }
+      .rt-phase-fill--bootstrap {
+        background: var(--rt-amber);
+      }
+      .rt-phase-fill--design {
+        background: var(--rt-blue);
+      }
+      .rt-phase-fill--implementation {
+        background: var(--rt-green);
+      }
+      .rt-phase-fill--hardening {
+        background: var(--rt-pink);
+      }
+      .rt-phase-fill--polishing {
+        background: var(--rt-slate);
+      }
+      .rt-phase-val {
+        text-align: right;
+        font-size: 12px;
+        color: var(--rt-ink);
+        font-weight: 600;
+      }
+      .rt-phase-pct {
+        text-align: right;
+        font-size: 11px;
+        color: var(--rt-muted);
+      }
+      .rt-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 10px;
+        font-weight: 500;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: white;
+        background: var(--rt-slate);
+      }
+      .rt-badge--completed {
+        background: var(--rt-completed);
+      }
+      .rt-badge--running {
+        background: var(--rt-running);
+        position: relative;
+        padding-left: 16px;
+      }
+      .rt-badge--running::before {
+        content: '';
+        position: absolute;
+        left: 6px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: white;
+        animation: rt-pulse 1.6s ease-in-out infinite;
+      }
+      .rt-badge--stopped {
+        background: var(--rt-stopped);
+        color: var(--rt-ink);
+      }
+      .rt-badge--failed {
+        background: var(--rt-failed);
+      }
+      @keyframes rt-pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.55;
+        }
+      }
+    </style>
+  </template>
+}
+
+/* =============================================================================
+ * Fitted component — single tile quantum. Uses the host-provided
+ * fitted-card size container; the root .fit is a 100% × 100% grid.
+ * ============================================================================= */
+
+class RunTelemetryFitted extends Component<typeof RunTelemetry> {
+  @tracked nowMs = Date.now();
+  #ticker: ReturnType<typeof setInterval> | undefined;
+
+  constructor(owner: unknown, args: any) {
+    super(owner as any, args);
+    this.#ticker = setInterval(() => {
+      this.nowMs = Date.now();
+    }, 1000);
+    registerDestructor(this, () => {
+      if (this.#ticker) clearInterval(this.#ticker);
+    });
+  }
+
+  get config(): RunConfigField | undefined {
+    return this.args.model?.config as RunConfigField | undefined;
+  }
+  get totals(): TotalsField | undefined {
+    return this.args.model?.totals as TotalsField | undefined;
+  }
+  get turns(): TurnField[] {
+    return (this.args.model?.turns as TurnField[] | undefined) ?? [];
+  }
+  get issues(): IssueSummaryField[] {
+    return (this.args.model?.issues as IssueSummaryField[] | undefined) ?? [];
+  }
+  get outcome(): string {
+    return this.config?.outcome ?? '';
+  }
+  get isRunning(): boolean {
+    return this.outcome === 'running';
+  }
+  get startedAtMs(): number {
+    let s = this.config?.startedAt as unknown as string | undefined;
+    if (!s) return 0;
+    let d = new Date(s).getTime();
+    return Number.isFinite(d) ? d : 0;
+  }
+  get elapsedSeconds(): number {
+    if (!this.startedAtMs) return 0;
+    return Math.max(0, Math.floor((this.nowMs - this.startedAtMs) / 1000));
+  }
+  get wallClockDisplay(): string {
+    if (this.isRunning) {
+      return fmtMMSS(
+        Math.max(this.elapsedSeconds, this.totals?.wallClockSeconds ?? 0),
+      );
+    }
+    return fmtMMSS(this.totals?.wallClockSeconds);
+  }
+  get inferenceDisplay(): string {
+    return fmtMMSS(this.totals?.inferenceSeconds);
+  }
+  get runIndex(): string {
+    let url = (this.config?.targetRealmUrl as unknown as string) ?? '';
+    let m = /v(\d+)/i.exec(url);
+    return m ? m[1] : '1';
+  }
+  get eyebrowText(): string {
+    let base = `Run ${this.runIndex} · ${capitalise(this.config?.targetPhase)}`;
+    return this.isRunning ? `${base} · Live` : base;
+  }
+  get headerTitle(): string {
+    let m = this.args.model as any;
+    if (m?.cardInfo?.name) return m.cardInfo.name as string;
+    if (m?.title) return m.title as string;
+    return 'Untitled Run Telemetry';
+  }
+  get outcomeLabel(): string {
+    return capitalise(this.outcome || 'unknown');
+  }
+  get outcomeBadgeClass(): string {
+    switch (this.outcome) {
+      case 'completed':
+        return 'rt-badge--completed';
+      case 'running':
+        return 'rt-badge--running';
+      case 'stopped':
+        return 'rt-badge--stopped';
+      case 'failed':
+        return 'rt-badge--failed';
+      default:
+        return '';
+    }
+  }
+  get footMeta(): string {
+    return `${this.turns.length} turn${this.turns.length === 1 ? '' : 's'} · ${this.issues.length} issue${this.issues.length === 1 ? '' : 's'}`;
+  }
+
+  <template>
+    <div class='fit'>
+      <div class='fit-eyebrow {{if this.isRunning "fit-eyebrow--live"}}'>
+        {{this.eyebrowText}}
+      </div>
+      <div class='fit-title'>{{this.headerTitle}}</div>
+      <div class='fit-nums'>
+        <div class='fit-nums-cell'>
+          <div class='fit-nums-eyebrow'>Total</div>
+          <div class='fit-nums-value'>{{this.wallClockDisplay}}</div>
+        </div>
+        <div class='fit-nums-cell'>
+          <div class='fit-nums-eyebrow'>Inference</div>
+          <div class='fit-nums-value fit-nums-value--lifted'>{{this.inferenceDisplay}}</div>
+        </div>
+      </div>
+      <div class='fit-foot'>
+        <span class='fit-foot-meta'>{{this.footMeta}}</span>
+        <span class='rt-badge {{this.outcomeBadgeClass}}'>{{this.outcomeLabel}}</span>
+      </div>
+    </div>
+
+    <style scoped>
+      .fit {
+        width: 100%;
+        height: 100%;
+        display: grid;
+        grid-template-rows: auto auto minmax(0, 1fr) auto;
+        gap: 6px;
+        padding: 14px 14px 12px;
+        background: #ffffff;
+        color: #4a4a48;
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto,
+          'Helvetica Neue', Arial, sans-serif;
+        font-variant-numeric: tabular-nums;
+        overflow: hidden;
+      }
+      .fit-eyebrow {
+        font-size: 11px;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #a3a3a0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .fit-eyebrow--live {
+        color: #1e57b5;
+      }
+      .fit-title {
+        font-size: 15px;
+        font-weight: 600;
+        color: #0a0a0a;
+        line-height: 1.2;
+        letter-spacing: -0.01em;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      .fit-nums {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+        align-content: start;
+        padding-top: 4px;
+        overflow: hidden;
+      }
+      .fit-nums-cell {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        min-width: 0;
+        overflow: hidden;
+      }
+      .fit-nums-eyebrow {
+        font-size: 10px;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #a3a3a0;
+      }
+      .fit-nums-value {
+        font-size: 24px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        color: #0a0a0a;
+        line-height: 1;
+      }
+      .fit-nums-value--lifted {
+        color: #1e57b5;
+      }
+      .fit-foot {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-top: 1px solid #e5e5e2;
+        padding-top: 8px;
+        font-size: 11px;
+        color: #737370;
+        gap: 8px;
+        overflow: hidden;
+      }
+      .fit-foot-meta {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .rt-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 7px;
+        border-radius: 4px;
+        font-size: 9px;
+        font-weight: 500;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: white;
+        background: #64748b;
+        flex-shrink: 0;
+      }
+      .rt-badge--completed {
+        background: #4d8b3d;
+      }
+      .rt-badge--running {
+        background: #2453ff;
+        position: relative;
+        padding-left: 16px;
+      }
+      .rt-badge--running::before {
+        content: '';
+        position: absolute;
+        left: 6px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: white;
+        animation: rt-pulse 1.6s ease-in-out infinite;
+      }
+      .rt-badge--stopped {
+        background: #a3a3a0;
+        color: #0a0a0a;
+      }
+      .rt-badge--failed {
+        background: #c2185b;
+      }
+      @keyframes rt-pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.55;
+        }
+      }
+    </style>
+  </template>
+}
+
+/* =============================================================================
+ * Style helpers — return SafeString values so Glimmer accepts them in
+ * inline `style={{ }}` bindings without triggering the HTML-escape guard.
+ * ============================================================================= */
+
+function htmlSafeFlex(weight: number) {
+  return htmlSafe(`flex: ${Math.max(0, weight)};`);
+}
+function htmlSafeWidth(pct: number) {
+  let p = Math.max(0, Math.min(100, pct));
+  return htmlSafe(`width: ${p}%;`);
+}
+function htmlSafeLeft(pct: number) {
+  let p = Math.max(0, Math.min(100, pct));
+  return htmlSafe(`left: ${p}%;`);
+}
+function isNotOne(n: number): boolean {
+  return n !== 1;
+}
+
+/* =============================================================================
+ * The top-level CardDef.
+ * ============================================================================= */
+
+export class RunTelemetry extends CardDef {
+  static displayName = 'Run Telemetry';
+
+  @field config = contains(RunConfigField);
+  @field totals = contains(TotalsField);
+  @field phases = containsMany(PhaseField);
+  @field turns = containsMany(TurnField);
+  @field events = containsMany(EventField);
+  @field issues = containsMany(IssueSummaryField);
+  @field board = containsMany(BoardIssueField);
+  @field skills = containsMany(SkillContextField);
+
+  static isolated = RunTelemetryIsolated;
+  static embedded = RunTelemetryEmbedded;
+  static fitted = RunTelemetryFitted;
+}

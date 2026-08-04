@@ -65,6 +65,7 @@ import {
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_REALMS_EVENT_TYPE,
   APP_BOXEL_REALM_SERVERS_EVENT_TYPE,
+  REALMS_LIST_UPDATED_EVENT_TYPE,
   APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE,
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_LLM_MODE,
@@ -256,6 +257,11 @@ export default class MatrixService extends Service {
   #clientReadyDeferred = new Deferred<void>();
   #matrixSDK: ExtendedMatrixSDK | undefined;
   #eventBindings: [EmittedEvents, (...arg: any[]) => void][] | undefined;
+  // Whether the realm-server `realms-list-updated` subscription has been wired.
+  // The subscription lives on RealmServerService and survives logout (see
+  // RealmServerService.resetState), so it is wired once per app lifetime and is
+  // deliberately not cleared by resetState().
+  #realmsListUpdatedSubscribed = false;
   currentUserEventReadReceipts: TrackedMap<string, { readAt: Date }> =
     new TrackedMap();
 
@@ -528,6 +534,15 @@ export default class MatrixService extends Service {
     return (
       !this.session.isAuthenticated && Boolean(this.storage?.getItem('auth'))
     );
+  }
+
+  // Who the persisted auth belongs to, readable without booting a client — so a
+  // route outside the authenticated app (e.g. the CLI authorization page) can
+  // tell whose account this browser last signed in as. Deliberately narrower
+  // than `getAuth()`: knowing the user id shouldn't come with the ability to
+  // read the persisted access token.
+  get persistedUserId(): string | undefined {
+    return this.getAuth()?.user_id;
   }
 
   // Test-only diagnostic for the intermittent "operator-mode renders the login
@@ -1015,6 +1030,7 @@ export default class MatrixService extends Service {
       this.realmServer.setClient(this.client);
       if (isTesting()) console.warn('[start-phase] realmServer.login');
       await this.realmServer.login(registrationToken);
+      this.subscribeToRealmsListUpdatesOnce();
       this.saveAuth(auth);
       this.bindEventListeners();
 
@@ -1347,6 +1363,66 @@ export default class MatrixService extends Service {
         }
       }),
     );
+  }
+
+  // Wire the realm-server `realms-list-updated` push exactly once per app
+  // lifetime. The realm server emits it to the owner's session room whenever
+  // their set of accessible realms changes server-side (create/delete/archive/
+  // unarchive) — including from another tab, the CLI, or an AI agent — so a
+  // session viewing the workspace chooser updates live. Wired from the
+  // post-login path rather than the constructor so merely constructing this
+  // service never forces the lazy RealmServerService to instantiate (and fire
+  // its boot fetches). The subscription lives on RealmServerService and
+  // survives logout, hence the once guard.
+  private subscribeToRealmsListUpdatesOnce() {
+    if (this.#realmsListUpdatedSubscribed) {
+      return;
+    }
+    this.#realmsListUpdatedSubscribed = true;
+    this.realmServer.subscribeEvent(
+      REALMS_LIST_UPDATED_EVENT_TYPE,
+      this.refreshRealmsList.bind(this),
+    );
+  }
+
+  // React to a realm-server `realms-list-updated` push: re-derive the
+  // available-realms list so a session viewing the workspace chooser reflects a
+  // realm created/deleted/archived/unarchived out of band (another tab, the
+  // CLI, an AI agent) without a reload. Only trusted-server sessions need this —
+  // their list is assembled authoritatively from `_realm-auth`, so an
+  // out-of-band change reaches them through no other channel. Legacy sessions
+  // derive the list from `app.boxel.realms` account data, whose Matrix sync
+  // already delivers such changes (see the AccountData listener), so they are
+  // left to that path. Best-effort: a push must never crash the app, so
+  // assembly failures are logged and the current list is left intact.
+  //
+  // The archived list is a separate list on RealmServerService fed by a
+  // different endpoint (`_archived-realms`) that `_realm-auth` never touches, so
+  // re-deriving the active list alone would leave "Archived" stale: an
+  // out-of-band archive wouldn't appear there, and an out-of-band unarchive
+  // would leave the realm showing in both sections. Since one generic signal
+  // serves all four mutations, refresh the archived list here too — but only
+  // when it's already been fetched, so an owner who never opened "Archived"
+  // doesn't pay the fetch.
+  private async refreshRealmsList() {
+    if (!this.trustedRealmServersAuthoritative) {
+      return;
+    }
+    try {
+      let realmServers = await this.getRealmServersFromAccountData();
+      if (realmServers.length === 0) {
+        return;
+      }
+      await this.applyTrustedRealmServersAccountData(realmServers);
+      if (this.realmServer.isArchivedRealmsFetched) {
+        await this.realmServer.fetchArchivedRealms({ force: true });
+      }
+    } catch (err) {
+      console.error(
+        'Failed to refresh realms list after realms-list-updated event',
+        err,
+      );
+    }
   }
 
   // Re-assemble the available-realms list from a runtime

@@ -6,6 +6,7 @@ import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type
 import {
   FactoryEntrypointUsageError,
   buildFactoryEntrypointSummary,
+  buildModelPolicy,
   getFactoryEntrypointUsage,
   parseFactoryEntrypointArgs,
   runFactoryEntrypoint,
@@ -66,16 +67,17 @@ module('factory-entrypoint', function (hooks) {
       'https://realms.example.test/',
     ]);
 
-    assert.deepEqual(options, {
+    // Round-trip through JSON to drop undefined-valued optional flags, so
+    // this assertion pins the defined defaults without re-enumerating every
+    // optional flag the parser knows about.
+    assert.deepEqual(JSON.parse(JSON.stringify(options)), {
       briefUrl,
       targetRealm,
+      controlRealm: null,
       realmServerUrl: 'https://realms.example.test/',
       agent: 'claude',
-      openRouterModel: undefined,
-      openRouterApiKey: undefined,
-      debug: undefined,
       retryBlocked: true,
-      enableBoxelUiDiscovery: undefined,
+      enableBoxelUiDiscovery: true,
     });
   });
 
@@ -213,7 +215,9 @@ module('factory-entrypoint', function (hooks) {
       () => parseFactoryEntrypointArgs(['--target-realm', targetRealm]),
       (error: unknown) =>
         error instanceof FactoryEntrypointUsageError &&
-        error.message === 'Missing required --brief-url',
+        /Missing required input: pass --brief-url .* or --repo-url/.test(
+          error.message,
+        ),
     );
   });
 
@@ -741,6 +745,128 @@ module('factory-entrypoint', function (hooks) {
     assert.false(
       linkProjectCalled,
       'linkBootstrapIssueProject must not run for a pre-existing realm',
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildModelPolicy — review turn budget
+// ---------------------------------------------------------------------------
+
+module('factory-entrypoint > buildModelPolicy review budget', function () {
+  test('review turn is unbudgeted by default (inherits flagship)', function (assert) {
+    let policy = buildModelPolicy({});
+    assert.strictEqual(policy?.acceptance, undefined);
+  });
+
+  test('--review-model opts the review turn into a cheaper budget', function (assert) {
+    let policy = buildModelPolicy({ reviewModel: 'claude-sonnet-5' });
+    assert.deepEqual(policy?.acceptance, {
+      model: 'claude-sonnet-5',
+      effort: 'medium',
+    });
+  });
+
+  test('review-model inherit keeps the flagship, effort-only budgets effort', function (assert) {
+    let policy = buildModelPolicy({
+      reviewModel: 'inherit',
+      reviewEffort: 'low',
+    });
+    assert.deepEqual(policy?.acceptance, { effort: 'low' });
+  });
+});
+
+module('factory-entrypoint > buildModelPolicy bootstrap budget', function () {
+  test('bootstrap defaults to claude-sonnet-5 at medium', function (assert) {
+    let policy = buildModelPolicy({});
+    assert.deepEqual(policy?.bootstrap, {
+      model: 'claude-sonnet-5',
+      effort: 'medium',
+    });
+  });
+
+  test('bootstrap-model inherit keeps the session flagship', function (assert) {
+    let policy = buildModelPolicy({ bootstrapModel: 'inherit' });
+    assert.deepEqual(policy?.bootstrap, { effort: 'medium' });
+  });
+
+  test('fix policy exists by default (effort medium, inherit model)', function (assert) {
+    assert.deepEqual(buildModelPolicy({})?.fix, { effort: 'medium' });
+  });
+
+  test('design turns are unbudgeted by default (inherit the session flagship)', function (assert) {
+    assert.strictEqual(buildModelPolicy({})?.design, undefined);
+  });
+
+  test('--design-model budgets both design turn types', function (assert) {
+    let policy = buildModelPolicy({ designModel: 'claude-sonnet-5' });
+    assert.deepEqual(policy?.design, {
+      model: 'claude-sonnet-5',
+      effort: 'medium',
+    });
+  });
+
+  test('design-model inherit with an effort budgets effort only', function (assert) {
+    let policy = buildModelPolicy({
+      designModel: 'inherit',
+      designEffort: 'high',
+    });
+    assert.deepEqual(policy?.design, { effort: 'high' });
+  });
+
+  test('hardening turns default to claude-sonnet-5 at medium', function (assert) {
+    assert.deepEqual(buildModelPolicy({})?.harden, {
+      model: 'claude-sonnet-5',
+      effort: 'medium',
+    });
+  });
+
+  test('non-claude backends get no Anthropic model defaults', function (assert) {
+    // The sonnet defaults are Anthropic-SDK ids; on opencode/OpenRouter
+    // they would resolve to "Model not found". Effort budgets still apply;
+    // explicit flags still pass through.
+    let policy = buildModelPolicy({ agent: 'openrouter', phaseSplit: true });
+    assert.deepEqual(policy?.bootstrap, { effort: 'medium' });
+    assert.deepEqual(policy?.build, { effort: 'medium' });
+    assert.deepEqual(policy?.harden, { effort: 'medium' });
+
+    let explicit = buildModelPolicy({
+      agent: 'openrouter',
+      buildModel: 'anthropic/claude-sonnet-4',
+    });
+    assert.strictEqual(explicit?.bootstrap?.model, undefined);
+  });
+});
+
+module('factory-entrypoint > --to-phase phase parsing', function () {
+  let base = [
+    '--brief-url',
+    'https://realms.example.test/wiki/brief',
+    '--target-realm',
+    'https://realms.example.test/user/realm/',
+  ];
+
+  test('defaults to undefined (loop applies implementation)', function (assert) {
+    let options = parseFactoryEntrypointArgs([...base]);
+    assert.strictEqual(options.toPhase, undefined);
+  });
+
+  test('accepts each lifecycle phase', function (assert) {
+    for (let phase of [
+      'design',
+      'implementation',
+      'hardening',
+      'polishing',
+    ] as const) {
+      let options = parseFactoryEntrypointArgs([...base, '--to-phase', phase]);
+      assert.strictEqual(options.toPhase, phase);
+    }
+  });
+
+  test('rejects an unknown phase', function (assert) {
+    assert.throws(
+      () => parseFactoryEntrypointArgs([...base, '--to-phase', 'shipping']),
+      /Invalid --to-phase/,
     );
   });
 });

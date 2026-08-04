@@ -70,6 +70,8 @@ Manage saved profiles for different users/environments
 - `-n, --name <displayName>` — Display name (for add command)
 - `-m, --matrix-url <url>` — Matrix server URL (for add command with non-standard domains)
 - `-r, --realm-server-url <url>` — Realm server URL (for add command with non-standard domains)
+- `--no-browser` — Sign in with a username and password in the terminal instead of opening a browser (for add command)
+- `--host-url <url>` — Origin serving the browser sign-in page, when it is not the realm server (for add command)
 
 <!-- generated:commands:end -->
 
