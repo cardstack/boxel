@@ -295,6 +295,29 @@ module('Integration | Store', function (hooks) {
     assert.strictEqual(instance, undefined, 'instance is undefined');
   });
 
+  // A mapped realm's card ids are in prefix form, while the realm service keys
+  // its realms by URL. Resolving one against the other is cross-form, which
+  // only works when RealmPaths has the VirtualNetwork to normalize with —
+  // otherwise the id belongs to no realm, and callers that fall back to a
+  // default realm (or to undefined) degrade silently rather than erroring.
+  test('realmOf resolves a prefix-form id to its realm', async function (assert) {
+    getService('network').virtualNetwork.addRealmMapping(
+      '@test-prefix/',
+      testRealmURL,
+    );
+
+    assert.strictEqual(
+      realmService.realmOf(rri('@test-prefix/Person/hassan')),
+      testRealmURL,
+      'a prefix-form id resolves to the mapped realm',
+    );
+    assert.strictEqual(
+      realmService.realmOf(new URL(`${testRealmURL}Person/hassan`)),
+      testRealmURL,
+      'the URL form still resolves to the same realm',
+    );
+  });
+
   test<TestContextWithSave>('can use registered prefix ids across store APIs', async function (assert) {
     getService('network').virtualNetwork.addRealmMapping(
       '@test-prefix/',

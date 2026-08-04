@@ -1057,7 +1057,13 @@ export default class RealmService extends Service {
     for (const realm of this.realms.keys()) {
       let paths = this.realmPathsCache.get(realm);
       if (!paths) {
-        paths = new RealmPaths(new URL(realm));
+        // `realm` keys are URL-form while an id may be prefix form (a mapped
+        // realm's card ids are), and `inRealm` only matches across those two
+        // forms when it has a VirtualNetwork — without one it reports false and
+        // the id resolves to no realm at all. Caching stays safe because
+        // RealmPaths consults the VN's mappings at call time, so an entry built
+        // before a mapping registered still sees it.
+        paths = new RealmPaths(new URL(realm), this.network.virtualNetwork);
         this.realmPathsCache.set(realm, paths);
       }
       if (paths.inRealm(id)) {
