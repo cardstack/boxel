@@ -154,7 +154,7 @@ export function withContextualComponents<T extends object>(
     get(target, property, receiver) {
       if (
         typeof property === 'string' &&
-        Object.hasOwn(contextualComponents, property)
+        Object.prototype.hasOwnProperty.call(contextualComponents, property)
       ) {
         return contextualComponents[property];
       }

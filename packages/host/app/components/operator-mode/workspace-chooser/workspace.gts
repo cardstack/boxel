@@ -1783,5 +1783,5 @@ export function joinWithAnd(parts: string[]): string {
     return `${parts[0]} and ${parts[1]}`;
   }
 
-  return `${parts.slice(0, -1).join(', ')}, and ${parts.at(-1)}`;
+  return `${parts.slice(0, -1).join(', ')}, and ${parts[parts.length - 1]}`;
 }

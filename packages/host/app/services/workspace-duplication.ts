@@ -194,7 +194,7 @@ export default class WorkspaceDuplicationService extends Service {
       this.sourceRealmURL(sourceRealmIdentifier)
         .pathname.split('/')
         .filter(Boolean)
-        .at(-1) ?? 'workspace';
+        .slice(-1)[0] ?? 'workspace';
     let {
       name: sourceName,
       iconURL,

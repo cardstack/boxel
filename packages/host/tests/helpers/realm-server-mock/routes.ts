@@ -388,7 +388,7 @@ function registerAuthRoutes() {
       let namespace = new URL(normalizedRealmURL).pathname
         .split('/')
         .filter(Boolean)
-        .at(-2);
+        .slice(-2)[0];
       if (namespace !== 'testuser') {
         return new Response(
           JSON.stringify({

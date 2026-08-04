@@ -241,6 +241,132 @@ export class Project extends CardDef {
 }
 `;
 
+const formatCompatibilitySource = `
+import {
+  CardDef,
+  Component,
+  contains,
+  field,
+  linksTo,
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+
+export class FormatTarget extends CardDef {
+  @field label = contains(StringField);
+
+  static isolated = class Isolated extends Component<typeof this> {
+    <template><article class='format-proof' data-test-corpus-format='isolated'>{{@model.label}} isolated</article></template>
+  };
+  static embedded = class Embedded extends Component<typeof this> {
+    <template><span data-test-corpus-format='embedded'>{{@model.label}} embedded</span></template>
+  };
+  static fitted = class Fitted extends Component<typeof this> {
+    <template><span data-test-corpus-format='fitted'>{{@model.label}} fitted</span></template>
+  };
+  static atom = class Atom extends Component<typeof this> {
+    <template><span data-test-corpus-format='atom'>{{@model.label}} atom</span></template>
+  };
+  static edit = class Edit extends Component<typeof this> {
+    <template><label data-test-corpus-format='edit'>{{@model.label}} edit</label></template>
+  };
+  static head = class Head extends Component<typeof this> {
+    <template><meta data-test-corpus-format='head' name='format-proof' content={{@model.label}} /></template>
+  };
+  static markdown = class Markdown extends Component<typeof this> {
+    <template><code data-test-corpus-format='markdown'>{{@model.label}} markdown</code></template>
+  };
+}
+
+export class FormatCompatibility extends CardDef {
+  @field target = linksTo(FormatTarget);
+
+  static isolated = class Isolated extends Component<typeof this> {
+    <template>
+      <section data-test-format-compatibility>
+        <@fields.target @format='embedded' />
+        <@fields.target @format='fitted' />
+        <@fields.target @format='atom' />
+        <@fields.target @format='edit' />
+        <@fields.target @format='head' />
+        <@fields.target @format='markdown' />
+      </section>
+    </template>
+  };
+}
+`;
+
+const richMarkdownCompatibilitySource = `
+import {
+  CardDef,
+  Component,
+  contains,
+  field,
+} from '@cardstack/base/card-api';
+import { RichMarkdownField } from '@cardstack/base/rich-markdown';
+
+export class RichMarkdownCompatibility extends CardDef {
+  @field body = contains(RichMarkdownField);
+
+  static isolated = class Isolated extends Component<typeof this> {
+    <template>
+      <article data-test-rich-markdown-compatibility>
+        <@fields.body @format='embedded' />
+      </article>
+    </template>
+  };
+}
+`;
+
+const recursiveCompatibilitySource = `
+import {
+  CardDef,
+  Component,
+  FieldDef,
+  contains,
+  containsMany,
+  field,
+} from '@cardstack/base/card-api';
+import NumberField from '@cardstack/base/number';
+import StringField from '@cardstack/base/string';
+
+export class CommentField extends FieldDef {
+  @field body = contains(StringField);
+  @field replies = containsMany(() => CommentField);
+
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      <article data-test-recursive-comment>
+        <strong>{{@model.body}}</strong>
+        <@fields.replies @format='embedded' />
+      </article>
+    </template>
+  };
+}
+
+export class ExperienceRoot extends CardDef {
+  @field category = contains(StringField);
+}
+
+export class RecursiveCompatibility extends ExperienceRoot {
+  @field comments = containsMany(CommentField);
+  @field guesses = containsMany(NumberField);
+  @field attempts = contains(NumberField, {
+    computeVia: function () {
+      return this.guesses.length;
+    },
+  });
+
+  static isolated = class Isolated extends Component<typeof this> {
+    <template>
+      <section data-test-recursive-compatibility>
+        <h2>{{@model.category}} · {{@model.attempts}}</h2>
+        <@fields.comments @format='embedded' />
+      </section>
+    </template>
+  };
+}
+`;
+
 const compileBrokenLivePreviewSource = livePreviewSource.replace(
   '<strong>VERSION ONE</strong>',
   '<strong>{{</strong>',
@@ -330,6 +456,9 @@ module('Acceptance | code submode | sandbox live reload', function (hooks) {
           'nested-field.gts': nestedFieldSource,
           'computed-projection.gts': computedProjectionSource,
           'relationship.gts': relationshipSource,
+          'format-compatibility.gts': formatCompatibilitySource,
+          'rich-markdown-compatibility.gts': richMarkdownCompatibilitySource,
+          'recursive-compatibility.gts': recursiveCompatibilitySource,
           'live-preview-compartment-entry.json': {
             data: {
               type: 'card',
@@ -485,6 +614,74 @@ module('Acceptance | code submode | sandbox live reload', function (hooks) {
               },
             },
           },
+          'FormatTarget/sample.json': {
+            data: {
+              attributes: { label: 'FORMAT TARGET' },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}format-compatibility`,
+                  name: 'FormatTarget',
+                },
+              },
+            },
+          },
+          'FormatCompatibility/sample.json': {
+            data: {
+              attributes: {},
+              relationships: {
+                target: {
+                  links: { self: `${testRealmURL}FormatTarget/sample` },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}format-compatibility`,
+                  name: 'FormatCompatibility',
+                },
+              },
+            },
+          },
+          'RichMarkdownCompatibility/sample.json': {
+            data: {
+              attributes: {
+                body: {
+                  content:
+                    '## Boundary-safe document\n\n- one\n- two\n\n| Capability | Result |\n| --- | --- |\n| SES | pass |\n\n```mermaid\nflowchart LR\n  A --> B\n```',
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}rich-markdown-compatibility`,
+                  name: 'RichMarkdownCompatibility',
+                },
+              },
+            },
+          },
+          'RecursiveCompatibility/sample.json': {
+            data: {
+              attributes: {
+                category: 'Inherited category',
+                guesses: [4, 8, 15],
+                comments: [
+                  {
+                    body: 'Root comment',
+                    replies: [
+                      {
+                        body: 'Nested comment',
+                        replies: [{ body: 'Deep comment', replies: [] }],
+                      },
+                    ],
+                  },
+                ],
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}recursive-compatibility`,
+                  name: 'RecursiveCompatibility',
+                },
+              },
+            },
+          },
         },
       });
     });
@@ -614,6 +811,131 @@ module('Acceptance | code submode | sandbox live reload', function (hooks) {
     assert.dom('[data-test-related-project]').includesText('Avery Owner');
     assert.dom('[data-test-related-project]').includesText('Mina Reviewer');
     assert.dom('[data-test-related-project]').includesText('Theo Reviewer');
+  });
+
+  test('[CORPUS-01] all CardDef formats render without blanking a delegated parent', async function (assert) {
+    await visitOperatorMode({
+      submode: 'interact',
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}FormatCompatibility/sample`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await waitFor('[data-test-format-compatibility]');
+    // Base treats isolated as a top-level card format. The remaining formats
+    // are valid delegated relationship formats and must all cross the sandbox
+    // boundary without degrading to JSON.
+    for (let format of [
+      'embedded',
+      'fitted',
+      'atom',
+      'edit',
+      'head',
+      'markdown',
+    ]) {
+      await waitFor(`[data-test-corpus-format="${format}"]`);
+      assert
+        .dom(`[data-test-corpus-format="${format}"]`)
+        .exists(`${format} crossed the delegated card boundary`);
+    }
+    assert
+      .dom('[data-test-format-compatibility]')
+      .doesNotIncludeText('{"label"', 'no format degrades into opaque JSON');
+    assert
+      .dom('[data-card-sandbox-loading]')
+      .doesNotExist('all delegated format programs have settled');
+    assert
+      .dom('.realm-sandbox-iframe')
+      .doesNotExist('data-only authored formats remain in SES');
+
+    await visitOperatorMode({
+      submode: 'interact',
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}FormatTarget/sample`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+    await waitFor('[data-test-corpus-format="isolated"]');
+    assert
+      .dom('[data-test-corpus-format="isolated"]')
+      .includesText(
+        'FORMAT TARGET isolated',
+        'isolated renders as the top-level format',
+      );
+  });
+
+  test('[CORPUS-02] RichMarkdown inert HTML-comment-shaped text survives the trusted field portal', async function (assert) {
+    await visitOperatorMode({
+      submode: 'interact',
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}RichMarkdownCompatibility/sample`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await waitFor('[data-test-rich-markdown-compatibility]');
+    assert
+      .dom('[data-test-rich-markdown-compatibility]')
+      .includesText('Boundary-safe document');
+    assert
+      .dom('[data-test-rich-markdown-compatibility] ul li')
+      .exists({ count: 2 }, 'list structure renders instead of source text');
+    assert
+      .dom('[data-test-rich-markdown-compatibility] table')
+      .exists('the markdown table renders');
+    assert
+      .dom('[data-test-rich-markdown-compatibility]')
+      .includesText('A --> B', 'the exact inert Mermaid edge survives cloning');
+    assert.dom('[data-card-sandbox-loading]').doesNotExist();
+  });
+
+  test('[CORPUS-03] inherited fields, chained computeVia, and recursive containsMany compose in SES', async function (assert) {
+    await visitOperatorMode({
+      submode: 'interact',
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}RecursiveCompatibility/sample`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await waitFor('[data-test-recursive-compatibility]');
+    await waitFor('[data-test-recursive-comment]', { count: 3 });
+    assert
+      .dom('[data-test-recursive-compatibility] h2')
+      .hasText('Inherited category · 3');
+    assert
+      .dom('[data-test-recursive-comment]')
+      .exists({ count: 3 }, 'all recursive FieldDef levels delegate');
+    assert
+      .dom('[data-test-recursive-compatibility]')
+      .includesText('Root comment');
+    assert
+      .dom('[data-test-recursive-compatibility]')
+      .includesText('Nested comment');
+    assert
+      .dom('[data-test-recursive-compatibility]')
+      .includesText('Deep comment');
+    assert
+      .dom('[data-test-recursive-compatibility]')
+      .doesNotIncludeText('{"body"', 'recursive children never become JSON');
+    assert.dom('.realm-sandbox-iframe').doesNotExist();
   });
 
   for (let sourceKind of ['ordinary', 'browser-runtime'] as const) {

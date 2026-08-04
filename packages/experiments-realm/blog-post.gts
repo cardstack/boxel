@@ -710,7 +710,7 @@ export class BlogPost extends CardDef {
     }
 
     return titles.length > 2
-      ? `${titles.slice(0, -1).join(', ')}, and ${titles.at(-1)}`
+      ? `${titles.slice(0, -1).join(', ')}, and ${titles[titles.length - 1]}`
       : titles[0];
   }
 

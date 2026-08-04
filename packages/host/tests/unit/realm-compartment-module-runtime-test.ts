@@ -820,17 +820,23 @@ module('Unit | realm compartment module runtime', function () {
       third,
     ]);
     assert.deepEqual(
-      firstResult.effects.map((effect) => effect.target),
+      firstResult.effects.map((effect) =>
+        effect.type === 'view-card' ? effect.target : undefined,
+      ),
       ['./first'],
       'the first async invocation retains only its own effects',
     );
     assert.deepEqual(
-      secondResult.effects.map((effect) => effect.target),
+      secondResult.effects.map((effect) =>
+        effect.type === 'view-card' ? effect.target : undefined,
+      ),
       ['./second'],
       'an overlapping invocation waits for an isolated effect queue',
     );
     assert.deepEqual(
-      thirdResult.effects.map((effect) => effect.target),
+      thirdResult.effects.map((effect) =>
+        effect.type === 'view-card' ? effect.target : undefined,
+      ),
       ['./third'],
       'each additional invocation chains behind the previous action tail',
     );

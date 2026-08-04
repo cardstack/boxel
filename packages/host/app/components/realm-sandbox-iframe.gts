@@ -26,6 +26,7 @@ interface Signature {
     format?: Format;
     sandbox: RealmIframeSandboxRender;
     displayContainer?: boolean;
+    set?: (value: unknown) => void;
   };
 }
 

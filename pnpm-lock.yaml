@@ -2096,6 +2096,9 @@ importers:
       '@sqlite.org/sqlite-wasm':
         specifier: 'catalog:'
         version: 3.45.1-build1
+      '@types/babel__core':
+        specifier: 'catalog:'
+        version: 7.20.5
       '@types/flat':
         specifier: 'catalog:'
         version: 5.0.5
