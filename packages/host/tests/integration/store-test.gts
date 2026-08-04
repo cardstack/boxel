@@ -1621,6 +1621,49 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  // Loading is a read. Resolving a linksTo assigns the loaded target back onto
+  // the field, which notifies change subscribers — the same signal a user edit
+  // produces — so without care the mere act of viewing a card can dirty it and
+  // trigger an auto-save. That write is invisible to the user, bumps the
+  // instance's version, and schedules a reindex.
+  test<TestContextWithSave>('loading a card and resolving its linksTo issues no save', async function (assert) {
+    // Write the link unresolved on disk so loading takes the lazy link-load
+    // path (rather than the target already being in the identity map).
+    await testRealm.write(
+      'Person/hassan.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'Hassan' },
+          relationships: {
+            bestFriend: { links: { self: `${testRealmURL}Person/jade` } },
+          },
+          meta: {
+            adoptsFrom: { module: testRRI('person'), name: 'Person' },
+          },
+        },
+      }),
+    );
+
+    let saved: string[] = [];
+    this.onSave((url) => {
+      saved.push(url.href);
+    });
+
+    let instance = (await storeService.get(
+      `${testRealmURL}Person/hassan`,
+    )) as any;
+    // Drain the lazy link load, then let its field assignment settle.
+    await storeService.flush();
+    await settled();
+
+    assert.strictEqual(
+      instance.bestFriend?.name,
+      'Jade',
+      'the linksTo resolved (so the lazy-load path did run)',
+    );
+    assert.deepEqual(saved, [], 'no save was issued while loading');
+  });
+
   test('a concurrent field write during store.patch is not clobbered by the patch’s stale snapshot', async function (assert) {
     let targetId = `${testRealmURL}Person/hassan`;
     let instance = (await storeService.get(targetId)) as any;
