@@ -1129,7 +1129,7 @@ export default class Workspace extends Component<Signature> {
         left: 10px;
         right: 10px;
         height: 1px;
-        background: #e8e8e8;
+        background: var(--boxel-200);
         opacity: 0.75;
       }
       /* The last menu item normally rounds its bottom corners to match the

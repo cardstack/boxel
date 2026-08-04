@@ -250,10 +250,10 @@ module('Acceptance | workspace-chooser', function (hooks) {
   });
 
   // Only the enlarged favorite tiles carry a metadata row; the smaller Your
-  // Workspaces tiles show name + visibility instead. The counts come from the
-  // realm's `/_info` response (see RealmInfo's cardCount/fileCount/
-  // definitionCount), stubbed here so a fixture realm's incidental contents
-  // don't decide what the tile renders.
+  // Workspaces tiles show name + visibility instead. The counts arrive
+  // separately from the realm info, via `/_federated-index-counts`
+  // (`RealmIndexCounts`), and are seeded here by `withIndexCounts` so a fixture
+  // realm's incidental contents don't decide what the tile renders.
   module('favorite tile metadata', function () {
     // Favorites have to be set after the app boots — the matrix service is
     // reset during login, which would drop a pre-visit assignment.
