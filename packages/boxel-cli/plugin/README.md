@@ -48,8 +48,6 @@ Codex discovers the plugin through the marketplace manifest at
 Skills are invoked with the `$` prefix (`$boxel`, `$realm-sync`, …) or picked
 up implicitly by description match.
 
-Codex plugins have no commands slot, so `skills/` is the whole Codex surface.
-
 Without installing the plugin, a checkout also works directly: Codex reads
 skills from `~/.agents/skills` (or a project's `.agents/skills`), expecting
 `<name>/SKILL.md` one level down. Copy each skill in — Codex does not follow

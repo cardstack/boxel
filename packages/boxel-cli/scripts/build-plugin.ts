@@ -187,8 +187,6 @@ function rewriteSkillFile(skill: string, body: string): boolean {
  * two manifests can't drift: name/version/metadata come from the Claude
  * manifest (which the publish workflow bumps in both files), while the
  * description, `skills` pointer, and `interface` block are Codex-specific.
- *
- * Codex plugins have no commands slot, so `skills/` is their whole surface.
  */
 function syncCodexManifest(): boolean {
   const claude = JSON.parse(readFileSync(CLAUDE_MANIFEST_PATH, 'utf8'));
