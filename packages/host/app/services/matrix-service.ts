@@ -2052,6 +2052,11 @@ export default class MatrixService extends Service {
     clientSecret: string,
     sendAttempt: number,
   ) {
+    // The standalone /cli-auth route can reach registration before the SDK has
+    // finished loading (operator mode always boots first, so the register form
+    // is only reached once `ready` has resolved). Wait for it here so the client
+    // exists before the first registration request touches it.
+    await this.ready;
     return await this.client.requestEmailToken(
       'registration',
       email,
@@ -2456,6 +2461,9 @@ export default class MatrixService extends Service {
   }
 
   async registerRequest(data: MatrixSDK.RegisterRequest, kind?: string) {
+    // See requestRegisterEmailToken: registration can run before the SDK has
+    // loaded on the standalone /cli-auth route.
+    await this.ready;
     return await this.client.registerRequest(data, kind);
   }
 
@@ -2468,6 +2476,9 @@ export default class MatrixService extends Service {
   }
 
   async isUsernameAvailable(username: string) {
+    // See requestRegisterEmailToken: the username check runs while the register
+    // form is filled, which on /cli-auth can precede the SDK finishing loading.
+    await this.ready;
     return await this.client.isUsernameAvailable(username);
   }
 
@@ -3060,6 +3071,18 @@ export default class MatrixService extends Service {
   private clearAuth() {
     this.storage?.removeItem('auth');
     this.localPersistenceService.setCurrentRoomId(undefined);
+  }
+
+  // Drop this browser's persisted session locally, without the server-side
+  // logout() performs — that would revoke the device. The CLI-auth register
+  // flow uses this after handing the just-minted registration device to the
+  // CLI: the CLI is that device's sole owner, so the browser must not keep it
+  // as its own persisted session (a later browser-side logout would otherwise
+  // revoke the CLI's session too). Account-level bootstrap side-effects
+  // (personal realm, realm auth) stay put; only this browser's local link to
+  // the device is forgotten.
+  forgetPersistedSession() {
+    this.clearAuth();
   }
 
   async activateCodingSkill() {

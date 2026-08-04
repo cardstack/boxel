@@ -19,9 +19,11 @@ import AuthButton from './auth-button';
 import AuthContainer from './auth-container';
 import AuthFormField from './auth-form-field';
 import ForgotPassword from './forgot-password';
+import RegisterUser from './register-user';
 
 import type { AuthMode } from './auth';
 import type { ResetPasswordParams } from './forgot-password';
+import type { LoginResponse } from 'matrix-js-sdk';
 
 const { matrixURL } = ENV;
 const GOOGLE_IDP_ID = 'oidc-google';
@@ -37,14 +39,17 @@ interface LoginFlow {
   identity_providers?: { id: string }[];
 }
 
-// The page boxel-cli opens to authorize a machine. It offers the same two
-// choices as the web sign-in, and each finishes by handing a session to the
-// loopback listener the CLI is holding open:
+// The page boxel-cli opens to authorize a machine. It offers the same choices
+// as the web sign-in, and each finishes by handing a session to the loopback
+// listener the CLI is holding open:
 //
 //   Google   — Synapse redirects there itself with a single-use login token,
 //              which the CLI redeems.
 //   Password — this page signs in against the homeserver, producing a device
 //              that belongs to the CLI, and POSTs it over.
+//   Register — a brand-new user signs up through the same <RegisterUser> flow
+//              the web app uses (email verification, invite token, personal
+//              realm bootstrap); the device registration mints is POSTed over.
 //
 // Nothing here touches the browser's own session: the credential produced is
 // the CLI's, and this app stays signed in (or out) exactly as it was.
@@ -63,6 +68,14 @@ export default class CliAuth extends Component {
           @setMode={{this.setMode}}
           @nullifyResetPasswordParams={{this.nullifyResetPasswordParams}}
           @resetPasswordParams={{this.resetPasswordParams}}
+        />
+      {{else if this.registering}}
+        <span class='title'>Authorize Boxel CLI</span>
+        <p class='subtitle'>Create a Boxel account to give the Boxel CLI running
+          on this computer access to your workspaces.</p>
+        <RegisterUser
+          @setMode={{this.setMode}}
+          @onComplete={{this.onRegisterComplete}}
         />
       {{else}}
         <span class='title'>Authorize Boxel CLI</span>
@@ -143,6 +156,16 @@ export default class CliAuth extends Component {
               data-test-cli-auth-form-error
             >{{this.error}}</div>
           {{/if}}
+          <p class='register-prompt'>
+            <span class='register-prompt-text'>Don't have an account?</span>
+            <Button
+              type='button'
+              class='register-link'
+              @kind='link-primary'
+              data-test-cli-auth-register
+              {{on 'click' this.startRegister}}
+            >Create a new Boxel account</Button>
+          </p>
         </form>
       {{/if}}
     </AuthContainer>
@@ -217,6 +240,20 @@ export default class CliAuth extends Component {
         font: 500 var(--boxel-font-xs);
         margin: var(--boxel-sp-2xs) auto 0 auto;
       }
+      .register-prompt {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: var(--boxel-sp-3xs);
+        margin: var(--boxel-sp) 0 0;
+        font: 500 var(--boxel-font-sm);
+      }
+      .register-prompt-text {
+        color: var(--muted-foreground);
+      }
+      .register-link {
+        --host-outline-offset: 2px;
+      }
     </style>
   </template>
 
@@ -227,6 +264,7 @@ export default class CliAuth extends Component {
   @tracked private error: string | undefined;
   @tracked private googleSsoAvailable = false;
   @tracked private completed = false;
+  @tracked private registering = false;
   @tracked private resettingPassword = false;
   @tracked private resetPasswordParams: ResetPasswordParams | undefined;
   // True when this page load came from a reset email, which means the CLI has
@@ -261,10 +299,32 @@ export default class CliAuth extends Component {
     return this.resettingPassword || Boolean(this.resetPasswordParams);
   }
 
-  // ForgotPassword speaks in AuthMode, where 'login' means "done here". This
-  // page has only the one other state to return to.
+  // ForgotPassword and RegisterUser speak in AuthMode, where 'login' means
+  // "done here — return to the sign-in form". This page reads the other modes
+  // as which panel to show instead. The password form is the 'login' state.
   @action private setMode(mode: AuthMode) {
+    this.registering = mode === 'register';
     this.resettingPassword = mode === 'forgot-password';
+  }
+
+  @action private startRegister(ev: Event) {
+    ev.preventDefault();
+    this.registering = true;
+  }
+
+  // Registration bootstrapped a full account and minted one device; hand that
+  // device to the CLI, and forget it locally so this browser doesn't keep it as
+  // its own session (see MatrixService.forgetPersistedSession). The port and
+  // nonce are still in the URL, so `redirect` resolves exactly as it did before
+  // switching into register mode.
+  @action private onRegisterComplete(session: LoginResponse) {
+    let redirect = this.redirect;
+    if (!redirect) {
+      return;
+    }
+    this.completed = true;
+    this.matrixService.forgetPersistedSession();
+    this.deliver(redirect, session);
   }
 
   @action private nullifyResetPasswordParams() {
@@ -412,7 +472,7 @@ export default class CliAuth extends Component {
   // and a top-level navigation isn't subject to the private-network preflight
   // a cross-origin subresource request would need. It also keeps the access
   // token out of a URL.
-  private deliver(redirect: string, session: MatrixLoginResponse) {
+  private deliver(redirect: string, session: LoginResponse) {
     let state = new URL(redirect).searchParams.get('state') ?? '';
     let form = window.document.createElement('form');
     form.method = 'POST';
@@ -420,7 +480,9 @@ export default class CliAuth extends Component {
     for (let [name, value] of Object.entries({
       state,
       access_token: session.access_token,
-      device_id: session.device_id,
+      // Always present for both the password login and the registration device;
+      // `?? ''` only narrows away LoginResponse's optional typing.
+      device_id: session.device_id ?? '',
       user_id: session.user_id,
     })) {
       let input = window.document.createElement('input');

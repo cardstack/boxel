@@ -53,6 +53,12 @@ const { matrixServerName } = ENV;
 interface Signature {
   Args: {
     setMode: (mode: AuthMode) => void;
+    // When present, the freshly-minted session is handed here once the full
+    // bootstrap (personal realm, realm auth) has run, instead of the default
+    // operator-mode transition initializeNewUser performs on its own. The
+    // CLI-auth page uses this to POST the session to the waiting loopback
+    // listener.
+    onComplete?: (session: LoginResponse) => void;
   };
 }
 
@@ -772,6 +778,13 @@ export default class RegisterUser extends Component<Signature> {
         this.state.name,
         this.state.token,
       );
+
+      // The bootstrap above is account-level (personal realm, realm auth) and
+      // persists regardless of which device it ran on. Registration mints
+      // exactly one device; when a caller wants that device (rather than the
+      // browser keeping it), hand it over here — the operator-mode path leaves
+      // onComplete undefined and stays signed in as usual.
+      this.args.onComplete?.(auth as LoginResponse);
     }
   });
 

@@ -46,10 +46,10 @@ function sendRawRequest(port: number, target: string): Promise<string> {
 }
 
 describe('the wait for the browser', () => {
-  // A password reset mid-flow links back to the same listener, so the window
-  // has to outlast an email round trip.
-  it('lasts a quarter of an hour', () => {
-    expect(DEFAULT_TIMEOUT_MS).toBe(15 * 60 * 1000);
+  // A password reset or a sign-up mid-flow links back to the same listener, so
+  // the window has to outlast an interactive email round trip.
+  it('lasts half an hour', () => {
+    expect(DEFAULT_TIMEOUT_MS).toBe(30 * 60 * 1000);
   });
 
   it('is described in whichever unit the reader thinks in', () => {

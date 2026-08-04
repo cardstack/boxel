@@ -8,14 +8,16 @@ import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 import type { MatrixAuth } from './auth.ts';
 
-// Long enough to cover a password reset mid-flow: the reset email links back to
-// this page carrying the same port and nonce, so the authorization resumes only
-// while this listener is still up. The listener is bound to loopback and admits
-// exactly one nonce-matching callback, so waiting longer costs little.
-export const DEFAULT_TIMEOUT_MS = 15 * 60 * 1000;
+// Long enough to cover an interactive round-trip mid-flow: a password reset or
+// a sign-up both link an email back to this page carrying the same port and
+// nonce, so the authorization resumes only while this listener is still up, and
+// checking email + clicking through comfortably exceeds a few minutes. The
+// listener is bound to loopback and admits exactly one nonce-matching callback,
+// so waiting longer costs little.
+export const DEFAULT_TIMEOUT_MS = 30 * 60 * 1000;
 const CALLBACK_PATH = '/callback';
 
-// "15 minutes" rather than "900s", since the wait is long enough that seconds
+// "30 minutes" rather than "1800s", since the wait is long enough that seconds
 // stop being the unit anyone thinks in.
 export function describeDuration(ms: number): string {
   const seconds = Math.round(ms / 1000);
@@ -420,14 +422,16 @@ export async function browserLogin(
     const authUrl = buildCliAuthUrl(hostUrl, callback);
     const opened = await openBrowserFn(authUrl);
     if (opened) {
-      log('Opening your browser to sign in...');
+      log('Opening your browser to sign in or create an account...');
       log(`If it didn't open, visit:\n  ${authUrl}`);
     } else {
-      log(`Open this URL in your browser to sign in:\n  ${authUrl}`);
+      log(
+        `Open this URL in your browser to sign in or create an account:\n  ${authUrl}`,
+      );
     }
     log(
       `Waiting up to ${describeDuration(timeoutMs ?? DEFAULT_TIMEOUT_MS)} for ` +
-        'you to finish signing in. Press Ctrl-C to stop.',
+        'you to finish in the browser. Press Ctrl-C to stop.',
     );
 
     const result = await callback.waitForResult();
