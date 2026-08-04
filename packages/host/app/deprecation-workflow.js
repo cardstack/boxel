@@ -1,4 +1,7 @@
-import setupDeprecationWorkflow from 'ember-cli-deprecation-workflow';
+// The package root is its Node-side Ember CLI addon entry. Import the browser
+// runtime explicitly so production Vite builds (including the hosted iframe
+// renderer) never bundle `require('./package')` into the browser.
+import setupDeprecationWorkflow from 'ember-cli-deprecation-workflow/addon/index.js';
 
 setupDeprecationWorkflow({
   workflow: [

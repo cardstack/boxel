@@ -79,7 +79,8 @@ The iframe is a `CardRenderer` transport variant, not a card-specific wrapper:
 parent CardRenderer(card, field, codeRef, format)
   -> separate-origin sandboxed iframe
   -> serialized current-card bootstrap + native MessageChannel capability port
-  -> parent-authenticated, read-only card/module fetch broker
+  -> parent-authenticated, read-only module fetch broker
+  -> parent-validated, current-card update capability
   -> renderer-local Loader + unchanged card deserialization
   -> child CardRenderer(card, field, codeRef, format)
   -> authored Ember template + DOM/WebGL behavior
@@ -95,6 +96,34 @@ path and the realm server's read permissions, including explicitly imported
 cross-realm modules. Public external dependencies remain credentialless.
 Mutation, query, command, and AI authority remain separate named capabilities
 rather than being smuggled through fetch.
+
+### Read/write parity is a compatibility invariant
+
+Sandbox selection must not change field mutability. Given the same signed-in
+identity, realm, card, and format, native, SES, and iframe rendering have the
+same product-level contract:
+
+| Realm permission | Field definition         | Native, SES, and iframe expectation                           |
+| ---------------- | ------------------------ | ------------------------------------------------------------- |
+| writable         | ordinary mutable field   | editor is enabled and a write persists to the canonical card  |
+| writable         | computed/read-only field | value renders but no write control is offered                 |
+| read-only        | any field                | value renders; mutation UI is disabled and forged writes fail |
+
+`canWrite` is derived only from the Host's realm permission state. The iframe
+receives that boolean for presentation, but it receives no Store, credentials,
+or write-capable fetch. A data-only update crosses the private port; the Host
+rechecks permission and card identity, applies it to the existing canonical
+Store record, awaits persistence, and reports a distinct received, settled,
+and persisted revision. A writable field that becomes read-only merely because
+its renderer is SES or an iframe is a compatibility bug. A computed field that
+becomes writable, or any write accepted for a read-only realm, is a security
+bug.
+
+Iframe-local `computeVia` results are not accepted as canonical Host data. The
+child can use them for its live presentation, while the parent persists only
+authored fields and consumes the realm server/indexer's authoritative computed
+projection on acknowledgement. This avoids opening or executing an iframe just
+to compute Store data.
 
 The child does not immediately paint transport copy. “Loading sandboxed card”
 appears only after three seconds and errors remain immediate. This avoids a
@@ -1126,9 +1155,13 @@ The hosted renderer origin must:
 
 The host CSP must restrict `frame-src` to the environment's renderer wildcard.
 The renderer response must restrict `frame-ancestors` to the exact production
-or staging Boxel host and deny direct networking with `connect-src 'none'` by
-default. Cards may select an approved renderer identifier such as `three`; they
-must never select an arbitrary script or asset URL.
+or staging Boxel host. Its `connect-src 'self'` exists only so bundled runtime
+assets such as the content-tag WASM bootstrap can load from the nonce renderer
+origin; the edge must serve only immutable renderer assets there and reject
+API, auth, and external network endpoints. Inline build boot shims must be
+authorized with exact response-derived CSP hashes, not `unsafe-inline`. Cards
+may select an approved renderer identifier such as `three`; they must never
+select an arbitrary script or asset URL.
 
 ### Hosted renderer rollout plan
 
@@ -1145,9 +1178,9 @@ must never select an arbitrary script or asset URL.
 5. Define schemas and limits for renderer initialization, updates, asset reads,
    resize events, and teardown. Transfer data, never host objects, callbacks,
    credentials, stores, or DOM nodes.
-6. Route every renderer read or privileged operation through the host's
-   capability broker and realm authorization checks; keep renderer
-   `connect-src` denied.
+6. Route every realm read or privileged operation through the host's capability
+   broker and realm authorization checks. Restrict renderer `connect-src` to
+   its own immutable boot assets; never add realm or third-party origins.
 7. Add browser acceptance coverage proving two simultaneous renderer instances
    cannot observe each other's DOM, storage, channels, realm data, or network
    authority, including when `allow-same-origin` is enabled for an explicitly
@@ -1204,7 +1237,8 @@ still configured for local Synapse; staging must use
   renderer shell, port-backed Loader, unchanged card/FieldDef deserialization,
   and nested `CardRenderer` invocation.
 - `packages/host/app/lib/realm-iframe-sandbox-protocol.ts` — typed bootstrap,
-  read-only fetch, ready, and resize messages.
+  read-only module fetch, ready, resize, and permission-checked card update
+  messages.
 - `packages/host/app/lib/realm-iframe-height-service.ts` — renderer-owned
   intrinsic sizing across Ember renders, DOM mutations, fonts, and resizes.
 - `packages/host/workers/realm-isolation-spike.ts` — worker startup, SES

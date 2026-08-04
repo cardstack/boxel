@@ -36,13 +36,13 @@ hand-timed run.
 
 ## Initial observations (2026-08-04)
 
-| Card                 | Local result before optimization | Initial observation                                                                          |
-| -------------------- | -------------------------------- | -------------------------------------------------------------------------------------------- |
-| Scrabble Stream      | iframe pass                      | authored replay/board renders; cold graph is visibly slower than native                      |
-| Tier Maker           | iframe pass                      | authored tier UI renders; cold graph is visibly slower than native                           |
-| Assistant Run        | iframe pass                      | authored DOM appeared before the Host received `ready`; readiness was roughly 8 seconds cold |
-| Signet Proposal      | SES fail                         | header rendered but authored body stayed blank; classification/runtime compatibility bug     |
-| Invoice Billing Form | iframe pass                      | full delegated form rendered, but the large cold graph took long enough to look hung         |
+| Card                 | Local result before optimization | Initial observation                                                                                                               |
+| -------------------- | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Scrabble Stream      | iframe pass                      | authored replay/board renders; cold graph is visibly slower than native                                                           |
+| Tier Maker           | iframe pass                      | authored tier UI renders; cold graph is visibly slower than native                                                                |
+| Assistant Run        | iframe pass                      | authored DOM appeared before the Host received `ready`; readiness was roughly 8 seconds cold                                      |
+| Signet Proposal      | SES fail                         | header rendered but authored body stayed blank; classification/runtime compatibility bug                                          |
+| Invoice Billing Form | render pass; write fail          | full delegated form rendered and controls were enabled, but the first live update stalled before Host persistence acknowledgement |
 
 The first optimization target is therefore not a shorter loading message. It is
 to publish `ready` once Glimmer commits authored DOM, continue non-blocking media
@@ -58,7 +58,9 @@ modules across iframe instances without sharing realm authority.
 - `sandbox.loaderCacheHits`
 - `sandbox.formatSwitchToCommit`
 - `sandbox.writeIntentToLocalCommit`
+- `sandbox.writeIntentToHostReceipt`
 - `sandbox.localCommitToRealmAck`
+- `sandbox.realmAckToReloadedValue`
 - `sandbox.renderRootRetained`
 - active/cached SES runtimes and iframe documents by principal
 

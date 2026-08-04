@@ -375,11 +375,23 @@ export default class CardRenderer extends Component<Signature> {
     let updated = await this.realmSandbox.updateOpaqueCardFromDocument(
       this.args.card,
       document,
+      // An iframe owns its executable computed state. The Host applies only
+      // inert authored data here; the realm server's indexed acknowledgement
+      // refreshes the authoritative computed projection after persistence.
+      { recomputeProjection: false },
     );
     if (!updated) {
       throw new Error('Iframe card update was rejected');
     }
     await this.cardContext.store.save(cardID);
+    let saveError = this.cardContext.store.getSaveState(cardID)?.lastSaveError;
+    if (saveError) {
+      let message =
+        typeof (saveError as { message?: unknown }).message === 'string'
+          ? (saveError as { message: string }).message
+          : 'The card update could not be persisted';
+      throw new Error(message);
+    }
   };
 
   get useTrustedBaseTemplate() {

@@ -1377,7 +1377,10 @@ export interface AddOptions extends CreateOptions {
 export type StoreReadType = 'card' | 'file-meta';
 
 export interface Store {
-  save(id: string): void;
+  // Callers that need a persistence acknowledgement (for example a sandbox
+  // capability broker) may await this. Existing card code can continue to
+  // fire-and-forget the save exactly as before.
+  save(id: string): void | Promise<void>;
   create(
     doc: LooseSingleCardDocument,
     opts?: CreateOptions,

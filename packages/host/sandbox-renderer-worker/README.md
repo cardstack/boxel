@@ -19,7 +19,10 @@ The Worker:
   static assets;
 - strips request credentials and response cookies;
 - blocks auth service workers and API paths;
-- denies renderer networking with CSP;
+- permits only same-origin renderer-asset fetches with CSP (including the
+  transpiler WASM bootstrap) and denies external renderer networking;
+- hashes the exact inline boot shims found in the deployed Host document
+  instead of allowing arbitrary inline scripts;
 - restricts framing to staging, branch previews, and explicit local HTTPS
   development origins;
 - accepts only random nonce hostnames.
@@ -33,9 +36,16 @@ AAAA  *  100::  proxied
 `100::` is Cloudflare's reserved originless placeholder. Requests are handled
 by the Worker route and never reach it.
 
-Deploy the current Host build with:
+Build the same staging/production artifact used by the hosted Host, then deploy
+it with the Worker. Do not deploy `packages/host/dist`: that is commonly a
+development-mode build and can have a different module graph from the hosted
+parent.
 
 ```sh
+set -a
+source packages/host/config/staging.env
+set +a
+mise exec -- pnpm deploy:boxel-host build-only --verbose
 pnpm dlx wrangler@latest deploy \
   --config packages/host/sandbox-renderer-worker/wrangler.jsonc
 ```

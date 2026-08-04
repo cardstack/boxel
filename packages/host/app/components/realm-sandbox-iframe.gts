@@ -55,7 +55,9 @@ export default class RealmSandboxIframe extends Component<Signature> {
   @tracked private status = 'loading';
   @tracked private appliedDraftRevision = -1;
   @tracked private draftError?: string;
+  @tracked private receivedCardUpdateRevision = -1;
   @tracked private appliedCardUpdateRevision = -1;
+  @tracked private persistedCardUpdateRevision = -1;
   @tracked private cardUpdateError?: string;
   private postToFrame?: (message: Record<string, unknown>) => void;
   private loaderMetricToken = {};
@@ -93,6 +95,7 @@ export default class RealmSandboxIframe extends Component<Signature> {
     let updated = await this.realmSandbox.updateOpaqueCardFromDocument(
       this.args.sandbox.card,
       document,
+      { recomputeProjection: false },
     );
     if (!updated) {
       throw new Error('Iframe card update was rejected');
@@ -101,6 +104,14 @@ export default class RealmSandboxIframe extends Component<Signature> {
       throw new Error('Iframe card update has no Host Store context');
     }
     await this.cardContext.store.save(cardID);
+    let saveError = this.cardContext.store.getSaveState(cardID)?.lastSaveError;
+    if (saveError) {
+      let message =
+        typeof (saveError as { message?: unknown }).message === 'string'
+          ? (saveError as { message: string }).message
+          : 'The card update could not be persisted';
+      throw new Error(message);
+    }
   }
 
   get frameURL() {
@@ -153,6 +164,7 @@ export default class RealmSandboxIframe extends Component<Signature> {
         let height = Math.max(40, Math.min(2400, event.data.height));
         element.style.height = `${height}px`;
       } else if (event.data.type === 'card-update') {
+        this.receivedCardUpdateRevision = event.data.revision;
         let error: string | undefined;
         try {
           if (!this.canWrite) {
@@ -177,6 +189,9 @@ export default class RealmSandboxIframe extends Component<Signature> {
           ...(error ? { error } : {}),
         });
         this.appliedCardUpdateRevision = event.data.revision;
+        if (!error) {
+          this.persistedCardUpdateRevision = event.data.revision;
+        }
         this.cardUpdateError = error;
       } else if (event.data.type === 'fetch-request') {
         try {
@@ -323,7 +338,9 @@ export default class RealmSandboxIframe extends Component<Signature> {
       data-card-sandbox-applied-draft-revision={{this.appliedDraftRevision}}
       data-card-sandbox-draft-error={{this.draftError}}
       data-card-sandbox-can-write={{if this.canWrite 'true' 'false'}}
+      data-card-sandbox-received-update-revision={{this.receivedCardUpdateRevision}}
       data-card-sandbox-update-revision={{this.appliedCardUpdateRevision}}
+      data-card-sandbox-persisted-update-revision={{this.persistedCardUpdateRevision}}
       data-card-sandbox-update-error={{this.cardUpdateError}}
       data-card-sandbox-code-preview-id={{@sandbox.codePreviewID}}
       data-card-sandbox-code-preview-loader={{if

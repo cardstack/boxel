@@ -1,4 +1,4 @@
-import { settled } from '@ember/test-helpers';
+import { settled, waitUntil } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
 import { module, test } from 'qunit';
@@ -28,6 +28,10 @@ module('Integration | realm sandbox iframe', function (hooks) {
         }
       | undefined;
     let receivedCardUpdate: LooseSingleCardDocument | undefined;
+    let finishPersistence: (() => void) | undefined;
+    let persistence = new Promise<void>((resolve) => {
+      finishPersistence = resolve;
+    });
     let sandbox = {
       cardID: 'https://realm.example/BrowserCanvas/sample',
       document: { data: { type: 'card', attributes: {} } },
@@ -55,6 +59,7 @@ module('Integration | realm sandbox iframe', function (hooks) {
 
         onCardDocumentUpdate = async (document: LooseSingleCardDocument) => {
           receivedCardUpdate = document;
+          await persistence;
         };
       },
     );
@@ -168,7 +173,30 @@ module('Integration | realm sandbox iframe', function (hooks) {
       revision: 1,
       document: updateDocument,
     });
-    await settled();
+    await new Promise<void>((resolve) =>
+      globalThis.requestAnimationFrame(() => resolve()),
+    );
+    assert
+      .dom('[data-card-sandbox-frame-status]')
+      .hasAttribute(
+        'data-card-sandbox-received-update-revision',
+        '1',
+        'the Host records receipt before persistence settles',
+      );
+    assert
+      .dom('[data-card-sandbox-frame-status]')
+      .hasAttribute(
+        'data-card-sandbox-persisted-update-revision',
+        '-1',
+        'receipt is not mislabeled as persistence',
+      );
+    assert.strictEqual(
+      updateResult,
+      undefined,
+      'the child is not acknowledged before persistence settles',
+    );
+    finishPersistence?.();
+    await waitUntil(() => updateResult !== undefined);
     assert.deepEqual(
       receivedCardUpdate,
       updateDocument,
@@ -179,6 +207,13 @@ module('Integration | realm sandbox iframe', function (hooks) {
       type: 'card-update-result',
       revision: 1,
     });
+    assert
+      .dom('[data-card-sandbox-frame-status]')
+      .hasAttribute(
+        'data-card-sandbox-persisted-update-revision',
+        '1',
+        'the successful update is explicitly marked persisted',
+      );
   });
 
   test('preserves read-only realm authority across the iframe boundary', async function (assert) {
@@ -293,6 +328,13 @@ module('Integration | realm sandbox iframe', function (hooks) {
       .hasAttribute(
         'data-card-sandbox-update-error',
         'This realm is read-only',
+      );
+    assert
+      .dom('[data-card-sandbox-frame-status]')
+      .hasAttribute(
+        'data-card-sandbox-persisted-update-revision',
+        '-1',
+        'a rejected write is never marked persisted',
       );
   });
 });

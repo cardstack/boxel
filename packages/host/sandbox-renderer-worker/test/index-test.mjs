@@ -45,20 +45,31 @@ test('matches exact, preview wildcard, and port-qualified localhost parents', ()
 });
 
 test('adds restrictive renderer response policy and removes cookies', async () => {
-  let response = secureResponse(
-    new Response('<html></html>', {
-      headers: {
-        'content-type': 'text/html',
-        'set-cookie': 'session=secret',
+  let response = await secureResponse(
+    new Response(
+      '<html><script>globalThis.global = globalThis;</script></html>',
+      {
+        headers: {
+          'content-type': 'text/html',
+          'set-cookie': 'session=secret',
+        },
       },
-    }),
+    ),
     allowed,
     true,
   );
   assert.equal(response.headers.has('set-cookie'), false);
   assert.match(
     response.headers.get('content-security-policy'),
-    /connect-src 'none'/,
+    /connect-src 'self'/,
+  );
+  assert.match(
+    response.headers.get('content-security-policy'),
+    /script-src [^;]*'sha256-[A-Za-z0-9+/]+=*'/,
+  );
+  assert.doesNotMatch(
+    response.headers.get('content-security-policy'),
+    /script-src [^;]*unsafe-inline/,
   );
   assert.match(
     response.headers.get('content-security-policy'),

@@ -728,8 +728,8 @@ export default class StoreService extends Service implements StoreInterface {
     });
   }
 
-  save(id: string) {
-    this.doAutoSave(id, { isImmediate: true });
+  async save(id: string): Promise<void> {
+    await this.doAutoSave(id, { isImmediate: true });
   }
 
   async add<T extends CardDef>(
@@ -3048,7 +3048,7 @@ export default class StoreService extends Service implements StoreInterface {
   private doAutoSave(
     idOrInstance: string | CardDef,
     opts?: { isImmediate?: true },
-  ) {
+  ): Promise<void> | undefined {
     let instance: CardDef | undefined;
     if (typeof idOrInstance === 'string') {
       let maybeInstance = this.peek(idOrInstance);
@@ -3072,7 +3072,7 @@ export default class StoreService extends Service implements StoreInterface {
     autoSaveQueue.push({ ...opts });
     autoSaveState.isSaving = true;
     autoSaveState.lastSaveError = undefined;
-    this.drainAutoSaveQueue(queueName);
+    return this.drainAutoSaveQueue(queueName);
   }
 
   private async drainAutoSaveQueue(queueName: string) {

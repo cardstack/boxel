@@ -1842,6 +1842,7 @@ export default class RealmSandboxService extends Service {
   async updateOpaqueCardFromDocument(
     card: BaseDef,
     document: LooseSingleCardDocument,
+    options: { recomputeProjection?: boolean } = {},
   ): Promise<BaseDef | false> {
     let state = getOpaqueRealmCardState(card);
     if (!state || !isResolvedCodeRef(state.typeRef)) {
@@ -1887,7 +1888,10 @@ export default class RealmSandboxService extends Service {
       relativeURL,
       document,
     );
-    if (this.computedProjectionReady.has(card)) {
+    if (
+      options.recomputeProjection !== false &&
+      this.computedProjectionReady.has(card)
+    ) {
       nextSnapshot = await this.evaluateCardProjection(
         state.principal,
         currentModuleIdentifier,

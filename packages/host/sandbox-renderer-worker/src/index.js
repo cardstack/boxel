@@ -46,18 +46,22 @@ export function isAllowedParentOrigin(origin, configuredOrigins) {
   });
 }
 
-function rendererCSP(configuredOrigins) {
+function rendererCSP(configuredOrigins, inlineScriptHashes = []) {
   let frameAncestors = splitAllowedOrigins(configuredOrigins).join(' ');
+  let scriptHashes = inlineScriptHashes.join(' ');
   return [
     "default-src 'none'",
     "base-uri 'none'",
     "object-src 'none'",
     "form-action 'none'",
-    "connect-src 'none'",
+    // The bundled content-tag runtime loads its WASM with fetch(). Restrict
+    // that boot-time request to this nonce origin; the Worker exposes only
+    // immutable renderer assets here and rejects API/auth endpoints.
+    "connect-src 'self'",
     "frame-src 'none'",
     "worker-src 'none'",
     "manifest-src 'none'",
-    "script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval' blob:",
+    `script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval' blob:${scriptHashes ? ` ${scriptHashes}` : ''}`,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "font-src 'self' data:",
@@ -66,10 +70,46 @@ function rendererCSP(configuredOrigins) {
   ].join('; ');
 }
 
-export function secureResponse(response, configuredOrigins, isHTML) {
+function bytesToBase64(bytes) {
+  let binary = '';
+  for (let byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return btoa(binary);
+}
+
+async function inlineScriptHashes(html) {
+  let hashes = [];
+  let scriptPattern = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi;
+  for (let match of html.matchAll(scriptPattern)) {
+    let [, attributes, source] = match;
+    if (/\bsrc\s*=/i.test(attributes) || source.length === 0) {
+      continue;
+    }
+    let digest = await crypto.subtle.digest(
+      'SHA-256',
+      new TextEncoder().encode(source),
+    );
+    hashes.push(`'sha256-${bytesToBase64(new Uint8Array(digest))}'`);
+  }
+  return hashes;
+}
+
+export async function secureResponse(response, configuredOrigins, isHTML) {
   let headers = new Headers(response.headers);
+  let body = response.body;
+  let scriptHashes = [];
+  if (isHTML) {
+    let html = await response.text();
+    body = html;
+    scriptHashes = await inlineScriptHashes(html);
+    headers.delete('content-length');
+  }
   headers.delete('set-cookie');
-  headers.set('Content-Security-Policy', rendererCSP(configuredOrigins));
+  headers.set(
+    'Content-Security-Policy',
+    rendererCSP(configuredOrigins, scriptHashes),
+  );
   headers.set('Cross-Origin-Resource-Policy', 'same-origin');
   headers.set(
     'Permissions-Policy',
@@ -83,7 +123,7 @@ export function secureResponse(response, configuredOrigins, isHTML) {
     'Cache-Control',
     isHTML ? 'no-store' : 'public, max-age=31536000, immutable',
   );
-  return new Response(response.body, {
+  return new Response(body, {
     status: response.status,
     statusText: response.statusText,
     headers,
