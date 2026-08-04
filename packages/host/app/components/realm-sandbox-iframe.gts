@@ -60,6 +60,7 @@ export default class RealmSandboxIframe extends Component<Signature> {
   @tracked private persistedCardUpdateRevision = -1;
   @tracked private cardUpdateError?: string;
   private postToFrame?: (message: Record<string, unknown>) => void;
+  private cardUpdateQueue = Promise.resolve();
   private loaderMetricToken = {};
   private connectionMetricToken = {};
   private readonly bootstrapID = globalThis.crypto.randomUUID();
@@ -165,34 +166,38 @@ export default class RealmSandboxIframe extends Component<Signature> {
         element.style.height = `${height}px`;
       } else if (event.data.type === 'card-update') {
         this.receivedCardUpdateRevision = event.data.revision;
-        let error: string | undefined;
-        try {
-          if (!this.canWrite) {
-            throw new Error('This realm is read-only');
+        let update = event.data;
+        this.cardUpdateQueue = this.cardUpdateQueue.then(async () => {
+          let error: string | undefined;
+          try {
+            if (!this.canWrite) {
+              throw new Error('This realm is read-only');
+            }
+            if (
+              this.args.sandbox.cardID &&
+              update.document.data.id !== this.args.sandbox.cardID
+            ) {
+              throw new Error('Iframe card update identity does not match');
+            }
+            await this.applyCardDocumentUpdate(update.document);
+          } catch (updateError) {
+            error =
+              updateError instanceof Error
+                ? updateError.message
+                : String(updateError);
           }
-          if (
-            this.args.sandbox.cardID &&
-            event.data.document.data.id !== this.args.sandbox.cardID
-          ) {
-            throw new Error('Iframe card update identity does not match');
+          post({
+            type: 'card-update-result',
+            revision: update.revision,
+            ...(error ? { error } : {}),
+          });
+          this.appliedCardUpdateRevision = update.revision;
+          if (!error) {
+            this.persistedCardUpdateRevision = update.revision;
           }
-          await this.applyCardDocumentUpdate(event.data.document);
-        } catch (updateError) {
-          error =
-            updateError instanceof Error
-              ? updateError.message
-              : String(updateError);
-        }
-        post({
-          type: 'card-update-result',
-          revision: event.data.revision,
-          ...(error ? { error } : {}),
+          this.cardUpdateError = error;
         });
-        this.appliedCardUpdateRevision = event.data.revision;
-        if (!error) {
-          this.persistedCardUpdateRevision = event.data.revision;
-        }
-        this.cardUpdateError = error;
+        await this.cardUpdateQueue;
       } else if (event.data.type === 'fetch-request') {
         try {
           let response = await this.realmSandbox.fetchForIframe(

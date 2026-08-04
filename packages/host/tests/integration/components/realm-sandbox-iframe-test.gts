@@ -27,7 +27,7 @@ module('Integration | realm sandbox iframe', function (hooks) {
           prefersWideFormat: boolean;
         }
       | undefined;
-    let receivedCardUpdate: LooseSingleCardDocument | undefined;
+    let receivedCardUpdates: LooseSingleCardDocument[] = [];
     let finishPersistence: (() => void) | undefined;
     let persistence = new Promise<void>((resolve) => {
       finishPersistence = resolve;
@@ -58,7 +58,7 @@ module('Integration | realm sandbox iframe', function (hooks) {
         </template>
 
         onCardDocumentUpdate = async (document: LooseSingleCardDocument) => {
-          receivedCardUpdate = document;
+          receivedCardUpdates.push(document);
           await persistence;
         };
       },
@@ -160,10 +160,10 @@ module('Integration | realm sandbox iframe', function (hooks) {
         },
       },
     };
-    let updateResult: unknown;
+    let updateResults: unknown[] = [];
     transferredPort?.addEventListener('message', (event) => {
       if (event.data.type === 'card-update-result') {
-        updateResult = event.data;
+        updateResults.push(event.data);
       }
     });
     transferredPort?.start();
@@ -173,6 +173,16 @@ module('Integration | realm sandbox iframe', function (hooks) {
       revision: 1,
       document: updateDocument,
     });
+    let secondUpdateDocument = structuredClone(updateDocument);
+    secondUpdateDocument.data.attributes = {
+      title: 'Second iframe update',
+    };
+    transferredPort?.postMessage({
+      protocol: realmIframeSandboxProtocol,
+      type: 'card-update',
+      revision: 2,
+      document: secondUpdateDocument,
+    });
     await new Promise<void>((resolve) =>
       globalThis.requestAnimationFrame(() => resolve()),
     );
@@ -180,8 +190,8 @@ module('Integration | realm sandbox iframe', function (hooks) {
       .dom('[data-card-sandbox-frame-status]')
       .hasAttribute(
         'data-card-sandbox-received-update-revision',
-        '1',
-        'the Host records receipt before persistence settles',
+        '2',
+        'the Host records the latest receipt before persistence settles',
       );
     assert
       .dom('[data-card-sandbox-frame-status]')
@@ -191,28 +201,35 @@ module('Integration | realm sandbox iframe', function (hooks) {
         'receipt is not mislabeled as persistence',
       );
     assert.strictEqual(
-      updateResult,
-      undefined,
-      'the child is not acknowledged before persistence settles',
+      updateResults.length,
+      0,
+      'the child receives no acknowledgements before persistence settles',
     );
     finishPersistence?.();
-    await waitUntil(() => updateResult !== undefined);
+    await waitUntil(() => updateResults.length === 2);
     assert.deepEqual(
-      receivedCardUpdate,
-      updateDocument,
-      'the Host receives a data-only update for a writable card',
+      receivedCardUpdates,
+      [updateDocument, secondUpdateDocument],
+      'the Host persists rapid data-only updates in emitted order',
     );
-    assert.deepEqual(updateResult, {
-      protocol: realmIframeSandboxProtocol,
-      type: 'card-update-result',
-      revision: 1,
-    });
+    assert.deepEqual(updateResults, [
+      {
+        protocol: realmIframeSandboxProtocol,
+        type: 'card-update-result',
+        revision: 1,
+      },
+      {
+        protocol: realmIframeSandboxProtocol,
+        type: 'card-update-result',
+        revision: 2,
+      },
+    ]);
     assert
       .dom('[data-card-sandbox-frame-status]')
       .hasAttribute(
         'data-card-sandbox-persisted-update-revision',
-        '1',
-        'the successful update is explicitly marked persisted',
+        '2',
+        'the latest successful update is explicitly marked persisted',
       );
   });
 
