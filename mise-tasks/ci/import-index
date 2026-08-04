@@ -30,12 +30,40 @@ pnpm migrate
 # openrouter, and the full snapshot's other realms are a few hundred MB this
 # job would download and replay for rows it never reads. The import falls back
 # to the full snapshot when the scoped one is missing or expired.
-export INDEX_CACHE_ARTIFACT="${INDEX_CACHE_ARTIFACT:-boxel-index-cache-host}"
-
+#
 # A cache miss is not a failure: the realms simply index from scratch, which
 # is what they did before this task existed.
-if "$REPO_ROOT/scripts/import-cached-index.sh"; then
+if INDEX_CACHE_ARTIFACT="${INDEX_CACHE_ARTIFACT:-boxel-index-cache-host}" \
+  "$REPO_ROOT/scripts/import-cached-index.sh"; then
   echo "[ci:import-index] index cache imported — the boot index will reconcile only what this checkout changed"
 else
   echo "[ci:import-index] no index cache available — realms will index from scratch"
+fi
+
+# The live test realms (`/test/`, `/node-test/`) index into their own database,
+# which a shard waits on just as it waits on base and skills. Seed that one too,
+# or it stays the whole remaining cost of the boot.
+#
+# Its schema has to exist before the snapshot can load, and the test
+# realm-server's own `--migrateDB` runs far too late for that — hence creating
+# and migrating it here. `services/test-realms` creates the same database on its
+# way up, and both are idempotent.
+# Created by name rather than through ensure-branch-db.sh: that helper derives a
+# database name from a slug, and this is the one place that already knows the
+# exact name it is about to migrate and import into. Deriving it twice is how the
+# two drift apart.
+TEST_DB="${PGDATABASE_TEST:-boxel_test}"
+if docker exec boxel-pg psql -U postgres -lqt | cut -d '|' -f 1 | grep -qw "$TEST_DB"; then
+  echo "[ci:import-index] database '${TEST_DB}' already exists"
+else
+  docker exec boxel-pg createdb -U postgres "$TEST_DB"
+  echo "[ci:import-index] created database '${TEST_DB}'"
+fi
+PGDATABASE="$TEST_DB" pnpm migrate
+
+if INDEX_CACHE_ARTIFACT=boxel-index-cache-test INDEX_CACHE_DB="$TEST_DB" \
+  "$REPO_ROOT/scripts/import-cached-index.sh"; then
+  echo "[ci:import-index] test-realm index cache imported"
+else
+  echo "[ci:import-index] no test-realm index cache available — the test realms will index from scratch"
 fi
