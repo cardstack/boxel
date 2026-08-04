@@ -4,7 +4,6 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { cached } from '@glimmer/tracking';
 
-import { CardCrudFunctionsConsumer } from '@cardstack/base/field-component';
 import Modifier, {
   type ArgsFor,
   type NamedArgs,
@@ -17,6 +16,7 @@ import { cn, coalesce, eq } from '@cardstack/boxel-ui/helpers';
 
 import {
   CardContextName,
+  CardCrudFunctionsContextName,
   GetCardContextName,
   PermissionsContextName,
   rri,
@@ -32,6 +32,7 @@ import type {
   BaseDef,
   BaseDefConstructor,
   CardContext,
+  CardCrudFunctions,
   Field,
   FieldType,
   Format,
@@ -131,6 +132,8 @@ export default class RealmSandboxRender extends Component<Signature> {
   @consume(PermissionsContextName) declare private permissions:
     | Permissions
     | undefined;
+  @consume(CardCrudFunctionsContextName)
+  declare private cardCrudFunctions: CardCrudFunctions;
 
   // Permissions are a host capability, not ambient sandbox state. Keep the
   // function stable while allowing the host provider's answer to change.
@@ -291,22 +294,20 @@ export default class RealmSandboxRender extends Component<Signature> {
         ...attributes
       >
         {{#if this.trustedHostTemplate}}
-          <CardCrudFunctionsConsumer as |cardCrudFunctions|>
-            <this.component
-              @cardOrField={{this.cardOrField}}
-              @model={{this.model}}
-              @fields={{@sandbox.fields}}
-              @context={{this.context}}
-              @format={{this.format}}
-              @set={{this.set}}
-              @fieldName={{this.fieldName}}
-              @canEdit={{this.canEdit}}
-              @createCard={{cardCrudFunctions.createCard}}
-              @viewCard={{this.viewCard}}
-              @saveCard={{cardCrudFunctions.saveCard}}
-              @editCard={{cardCrudFunctions.editCard}}
-            />
-          </CardCrudFunctionsConsumer>
+          <this.component
+            @cardOrField={{this.cardOrField}}
+            @model={{this.model}}
+            @fields={{@sandbox.fields}}
+            @context={{this.context}}
+            @format={{this.format}}
+            @set={{this.set}}
+            @fieldName={{this.fieldName}}
+            @canEdit={{this.canEdit}}
+            @createCard={{this.cardCrudFunctions.createCard}}
+            @viewCard={{this.viewCard}}
+            @saveCard={{this.cardCrudFunctions.saveCard}}
+            @editCard={{this.cardCrudFunctions.editCard}}
+          />
         {{else}}
           <div
             class='realm-sandbox-authored-template-island'
@@ -380,22 +381,20 @@ export default class RealmSandboxRender extends Component<Signature> {
           {{RealmSandboxStyles @sandbox.styles}}
         >
           {{#if this.trustedHostTemplate}}
-            <CardCrudFunctionsConsumer as |cardCrudFunctions|>
-              <this.component
-                @cardOrField={{this.cardOrField}}
-                @model={{this.model}}
-                @fields={{@sandbox.fields}}
-                @context={{this.context}}
-                @format={{this.format}}
-                @set={{this.set}}
-                @fieldName={{this.fieldName}}
-                @canEdit={{this.canEdit}}
-                @createCard={{cardCrudFunctions.createCard}}
-                @viewCard={{this.viewCard}}
-                @saveCard={{cardCrudFunctions.saveCard}}
-                @editCard={{cardCrudFunctions.editCard}}
-              />
-            </CardCrudFunctionsConsumer>
+            <this.component
+              @cardOrField={{this.cardOrField}}
+              @model={{this.model}}
+              @fields={{@sandbox.fields}}
+              @context={{this.context}}
+              @format={{this.format}}
+              @set={{this.set}}
+              @fieldName={{this.fieldName}}
+              @canEdit={{this.canEdit}}
+              @createCard={{this.cardCrudFunctions.createCard}}
+              @viewCard={{this.viewCard}}
+              @saveCard={{this.cardCrudFunctions.saveCard}}
+              @editCard={{this.cardCrudFunctions.editCard}}
+            />
           {{else}}
             <div
               class='realm-sandbox-authored-template-island'
