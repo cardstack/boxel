@@ -1935,6 +1935,39 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         );
       });
 
+      test('a redirect rule does not hand the host app’s own query params to its target', async function (assert) {
+        // `sid` / `clientSecret` are password-reset tokens, and this
+        // target is a third-party site. The SPA drops the same list on
+        // its in-app navigation, so both answer the same URL.
+        let response = await request
+          .get(
+            `${publishedRealmPath}external?sid=secret-token&clientSecret=secret-secret&utm_source=newsletter`,
+          )
+          .set('Host', publishedRealmHost)
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 301);
+        assert.strictEqual(
+          response.headers['location'],
+          'https://example.com/landing?utm_source=newsletter',
+          'only the foreign param rides along',
+        );
+      });
+
+      test('a redirect rule drops a query string made up entirely of the host app’s params', async function (assert) {
+        let response = await request
+          .get(`${publishedRealmPath}tos?hostModeStack=%5B%5D`)
+          .set('Host', publishedRealmHost)
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 302);
+        assert.strictEqual(
+          response.headers['location'],
+          `http://${publishedRealmHost}${publishedRealmPath}terms`,
+          'no empty ? is appended when nothing survives filtering',
+        );
+      });
+
       test('a redirect rule may target an external URL with an explicit status code', async function (assert) {
         let response = await request
           .get(`${publishedRealmPath}external`)

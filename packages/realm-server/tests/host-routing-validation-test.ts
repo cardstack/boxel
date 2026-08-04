@@ -131,6 +131,20 @@ module(basename(import.meta.filename), function () {
     });
   });
 
+  module('foreignQueryParams', function () {
+    test('foreignQueryParams: keeps params the host app does not own', async function (assert) {
+      await runSharedTest(hostRoutingValidationTests, assert, {});
+    });
+
+    test('foreignQueryParams: drops the host app’s own params', async function (assert) {
+      await runSharedTest(hostRoutingValidationTests, assert, {});
+    });
+
+    test('foreignQueryParams: preserves repeated keys as repeated keys', async function (assert) {
+      await runSharedTest(hostRoutingValidationTests, assert, {});
+    });
+  });
+
   module('parseRedirectStatusCode', function () {
     test('parseRedirectStatusCode: coerces supported codes, rejects everything else', async function (assert) {
       await runSharedTest(hostRoutingValidationTests, assert, {});

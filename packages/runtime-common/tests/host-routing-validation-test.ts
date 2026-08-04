@@ -1,6 +1,7 @@
 import {
   findDuplicateRoutingPaths,
   findRedirectCycles,
+  foreignQueryParams,
   normalizeRoutingPath,
   parseRedirectStatusCode,
   validateRedirectTarget,
@@ -384,6 +385,51 @@ const tests: SharedTests<unknown> = Object.freeze({
         { path: '/c', redirectTo: '/c' },
       ]),
       ['/a', '/b', '/c'],
+    );
+  },
+
+  'foreignQueryParams: keeps params the host app does not own': async (
+    assert,
+  ) => {
+    assert.strictEqual(
+      foreignQueryParams('?utm_source=newsletter'),
+      'utm_source=newsletter',
+    );
+    assert.strictEqual(
+      foreignQueryParams('utm_source=newsletter&ref=twitter'),
+      'utm_source=newsletter&ref=twitter',
+      'the leading ? is optional',
+    );
+    assert.strictEqual(foreignQueryParams(''), '');
+  },
+
+  'foreignQueryParams: drops the host app’s own params': async (assert) => {
+    // `sid` / `clientSecret` are password-reset tokens and a redirect
+    // target may be an external site.
+    assert.strictEqual(
+      foreignQueryParams('?sid=abc&clientSecret=xyz&utm_source=newsletter'),
+      'utm_source=newsletter',
+    );
+    assert.strictEqual(
+      foreignQueryParams('?hostModeStack=%5B%5D&operatorModeState=%7B%7D'),
+      '',
+      'nothing survives when every param is the app’s own',
+    );
+    assert.strictEqual(
+      foreignQueryParams('?hostModeOrigin=https://evil.example'),
+      '',
+    );
+  },
+
+  'foreignQueryParams: preserves repeated keys as repeated keys': async (
+    assert,
+  ) => {
+    // Collapsing these to `tag=a,b` would diverge from what the server
+    // received and from what the SPA rebuilds.
+    assert.strictEqual(foreignQueryParams('?tag=a&tag=b'), 'tag=a&tag=b');
+    assert.strictEqual(
+      foreignQueryParams('?tag=a&sid=secret&tag=b'),
+      'tag=a&tag=b',
     );
   },
 

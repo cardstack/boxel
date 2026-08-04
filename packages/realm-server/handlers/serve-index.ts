@@ -7,6 +7,7 @@ import type {
   Realm,
 } from '@cardstack/runtime-common';
 import {
+  foreignQueryParams,
   hasExtension,
   isRedirectRoutingRule,
   logger,
@@ -408,7 +409,11 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
           // rule's own `path` is mounted; extra leading slashes are
           // collapsed so a target can never be read as protocol-
           // relative. The request's query string carries over unless
-          // the target declares its own.
+          // the target declares its own — minus the host app's own
+          // params, which a redirect has no business handing on: the
+          // target may be an external site, and `sid` / `clientSecret`
+          // are password-reset tokens. The SPA drops the same list on
+          // its in-app navigation, so both answer the same URL.
           let { redirectTo, statusCode } = matched.rule;
           let target: URL;
           if (/^https?:/i.test(redirectTo)) {
@@ -421,7 +426,10 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
             );
           }
           if (requestURL.search && !target.search) {
-            target.search = requestURL.search;
+            let forwarded = foreignQueryParams(requestURL.search);
+            if (forwarded) {
+              target.search = forwarded;
+            }
           }
           ctxt.redirect(target.href);
           ctxt.status = statusCode;

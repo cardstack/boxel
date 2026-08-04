@@ -11,6 +11,49 @@ const VALID_PATH_PATTERN = /^\/(?:[A-Za-z0-9._~/-]|%[0-9A-Fa-f]{2})*$/;
 // exclusively (card mutations live on the JSON API, not these URLs), so
 // the method-preserving codes (307/308) would behave identically to
 // their plain counterparts and just clutter the choice.
+// The host app's own query params — the routing state it reads off the
+// URL, as declared by its index controller. Shared so a redirect rule
+// can tell this internal state apart from foreign params that merely
+// ride along (`utm_source` and friends): a redirect carries the foreign
+// ones onto its target and drops these, on both the server's 3xx and the
+// SPA's in-app navigation.
+//
+// Two reasons they are dropped. Some are sensitive — `sid` and
+// `clientSecret` are password-reset tokens — and a redirect target may
+// be an external site, which would receive them in its own URL. The
+// rest are meaningless off the page that owns them. The client has a
+// third reason: its router hydrates every declared param onto the
+// transition using the controller's default, so forwarding blind would
+// append values that were never in the URL at all.
+export const HOST_APP_QUERY_PARAMS = [
+  'authRedirect',
+  'hostModeOrigin',
+  'hostModeStack',
+  'operatorModeState',
+  // `sid` and `clientSecret` come from the email verification process to
+  // reset a password
+  'sid',
+  'clientSecret',
+  'card',
+  'cardPath',
+  'debug',
+];
+
+/**
+ * Strips the host app's own query params from `search`, returning the
+ * remainder as a query string without its leading `?` (empty when
+ * nothing survives). Values round-trip through `URLSearchParams`, so
+ * repeated keys are preserved as repeated keys and encoding is
+ * normalized to its standard form.
+ */
+export function foreignQueryParams(search: string): string {
+  let params = new URLSearchParams(search);
+  for (let key of HOST_APP_QUERY_PARAMS) {
+    params.delete(key);
+  }
+  return params.toString();
+}
+
 export const REDIRECT_STATUS_CODES = [301, 302] as const;
 export type RedirectStatusCode = (typeof REDIRECT_STATUS_CODES)[number];
 
