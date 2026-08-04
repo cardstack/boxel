@@ -199,8 +199,12 @@ export default class ToolService extends Service {
       return clientRequestId;
     }
 
-    let deferred = new Deferred<void>();
-    this.aiAssistantInvalidations.get(key)?.deferred.fulfill();
+    // Keep the same completion promise when a newer patch supersedes an older
+    // one for this room and target. A correctness check may already be waiting
+    // on the older generation; resolving that promise here would let it inspect
+    // canonical source before the newer generation has been indexed.
+    let deferred =
+      this.aiAssistantInvalidations.get(key)?.deferred ?? new Deferred<void>();
     this.cleanupInvalidationWaiter(key);
     this.aiAssistantInvalidations.set(key, {
       clientRequestId,
@@ -238,6 +242,27 @@ export default class ToolService extends Service {
       timeoutId,
     });
     return clientRequestId;
+  }
+
+  cancelAiAssistantCardRequest(
+    roomId: string,
+    targetHref: string,
+    clientRequestId: string | undefined,
+  ) {
+    if (!roomId || !targetHref || !clientRequestId) {
+      return;
+    }
+    let normalizedTarget = targetHref.endsWith('.json')
+      ? targetHref.replace(/\.json$/, '')
+      : targetHref;
+    let key = `${roomId}::${normalizedTarget}`;
+    let current = this.aiAssistantInvalidations.get(key);
+    if (!current || current.clientRequestId !== clientRequestId) {
+      return;
+    }
+    this.cleanupInvalidationWaiter(key);
+    current.deferred.fulfill();
+    this.aiAssistantInvalidations.delete(key);
   }
 
   private cleanupInvalidationWaiter(key: string) {

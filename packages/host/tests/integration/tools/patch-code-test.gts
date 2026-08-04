@@ -164,6 +164,13 @@ export class Task extends CardDef {
     let lintStarted = new Deferred<void>();
     let releaseLint = new Deferred<void>();
     let locallyApplied = new Deferred<void>();
+    let trackedBeforeLocalApply = false;
+    let originalTrack =
+      toolService.trackAiAssistantCardRequest.bind(toolService);
+    toolService.trackAiAssistantCardRequest = (args) => {
+      trackedBeforeLocalApply = true;
+      return originalTrack(args);
+    };
     patchCodeCommand.onLocallyApplied = () => locallyApplied.fulfill();
 
     adapter.lintStub = async (
@@ -200,6 +207,10 @@ ${REPLACE_MARKER}`;
       await locallyApplied.promise;
 
       assert.true(
+        trackedBeforeLocalApply,
+        'the canonical invalidation is tracked before local completion is exposed',
+      );
+      assert.true(
         preview.source?.includes("displayName = 'Instant Task'"),
         'the preview receives the patch while lint is still pending',
       );
@@ -216,6 +227,7 @@ ${REPLACE_MARKER}`;
         'the preview advances to the linted generation before persistence',
       );
     } finally {
+      toolService.trackAiAssistantCardRequest = originalTrack;
       releaseLint.fulfill();
       realmSandbox.releaseCodePreviewSandbox(preview);
     }

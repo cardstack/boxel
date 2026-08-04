@@ -123,20 +123,31 @@ module('Integration | message service subscription', function (hooks) {
 
   test('a subscriber can unsubscribe during delivery without skipping later subscribers', function (assert) {
     let messageService = getService('message-service');
+    // Use an inert realm URL so this unit of delivery does not wake the
+    // integration realm's indexing subscribers and leave async work pending in
+    // teardown. Only the two subscriptions created by this test should observe
+    // this synthetic event.
+    let deliveryTestRealmURL = 'https://delivery-test.invalid/';
     let deliveries: string[] = [];
-    let unsubscribeFirst = messageService.subscribe(testRealmURL, () => {
-      deliveries.push('first');
-      unsubscribeFirst();
-    });
-    let unsubscribeSecond = messageService.subscribe(testRealmURL, () => {
-      deliveries.push('second');
-    });
+    let unsubscribeFirst = messageService.subscribe(
+      deliveryTestRealmURL,
+      () => {
+        deliveries.push('first');
+        unsubscribeFirst();
+      },
+    );
+    let unsubscribeSecond = messageService.subscribe(
+      deliveryTestRealmURL,
+      () => {
+        deliveries.push('second');
+      },
+    );
 
     messageService.relayRealmEvent({
       eventName: 'index',
       indexType: 'incremental-index-initiation',
       updatedFile: 'index.json',
-      realmURL: testRealmURL,
+      realmURL: deliveryTestRealmURL,
     });
 
     assert.deepEqual(
