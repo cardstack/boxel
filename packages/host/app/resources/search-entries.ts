@@ -726,9 +726,13 @@ export class SearchEntriesResource extends Resource<Args> {
       }
     }
 
-    // One RealmPaths per searched realm per build — not per entry.
+    // One RealmPaths per searched realm per build — not per entry. Each needs
+    // the VN: an entry's id is prefix form for a mapped realm while the realms
+    // are URL-form, and RealmPaths only compares across those forms when it can
+    // normalize with the VN. Without it no realm ever claims the id and the
+    // fallback below returns the entry's own url as if it were a realm url.
     let realmPaths = this.realmsToSearch.map(
-      (realm) => new RealmPaths(new URL(realm)),
+      (realm) => new RealmPaths(new URL(realm), this.network.virtualNetwork),
     );
     let realmUrlFor = (id: string): string => {
       let idRRI = rri(id);

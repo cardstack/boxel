@@ -1585,7 +1585,13 @@ export default class Workspace extends Component<Signature> {
     this.archiveError = undefined;
 
     try {
-      let realmPath = new RealmPaths(this.args.realmIdentifier);
+      // The VN lets this match a prefix-form card id against a URL-form realm
+      // identifier (or vice versa); without it an open card in a mapped realm
+      // never reads as belonging to this workspace.
+      let realmPath = new RealmPaths(
+        this.args.realmIdentifier,
+        this.network.virtualNetwork,
+      );
       let isActiveWorkspace =
         this.operatorModeStateService.realmURL === this.args.realmIdentifier ||
         this.operatorModeStateService
@@ -1693,7 +1699,13 @@ export default class Workspace extends Component<Signature> {
     this.deleteError = undefined;
 
     try {
-      let realmPath = new RealmPaths(this.args.realmIdentifier);
+      // The VN lets this match a prefix-form card id against a URL-form realm
+      // identifier (or vice versa); without it an open card in a mapped realm
+      // never reads as belonging to this workspace.
+      let realmPath = new RealmPaths(
+        this.args.realmIdentifier,
+        this.network.virtualNetwork,
+      );
       let isActiveWorkspace =
         this.operatorModeStateService.realmURL === this.args.realmIdentifier ||
         this.operatorModeStateService

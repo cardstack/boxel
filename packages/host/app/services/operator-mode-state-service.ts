@@ -404,7 +404,13 @@ export default class OperatorModeStateService extends Service {
     for (let item of items) {
       this.trimItemsFromStack(item);
     }
-    let realmPaths = new RealmPaths(new URL(cardRealmUrl));
+    // The VN is required here: `local` throws when the id doesn't read as
+    // inside the realm, and a mapped realm's card id is prefix form against a
+    // URL-form realm — a comparison RealmPaths can only make with the VN.
+    let realmPaths = new RealmPaths(
+      new URL(cardRealmUrl),
+      this.network.virtualNetwork,
+    );
     let cardPath = realmPaths.local(rri(`${cardId}.json`));
     this.recentFilesService.removeRecentFile(cardPath);
     this.recentCardsService.remove(cardId);
