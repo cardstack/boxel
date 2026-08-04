@@ -535,7 +535,9 @@ module('Integration | Service | client-telemetry', function (hooks) {
   // the correlation id back out, so a Matrix request has nothing to gain by
   // carrying it.
   // These tests explicitly arm telemetry and assert the header is stamped only
-  // on realm-server requests, not Synapse requests.
+  // on realm-server requests, not Synapse requests. Arming is what makes the
+  // boundary observable at all — a dormant instrument stamps nothing, so these
+  // assertions pass vacuously without it.
   module('the correlation id stamp', function () {
     async function stampedHeader(url: string): Promise<string | null> {
       let svc = telemetry();
