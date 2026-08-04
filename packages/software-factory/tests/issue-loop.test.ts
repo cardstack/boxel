@@ -18,6 +18,8 @@ import type { IssueStore } from '../src/issue-scheduler.ts';
 import {
   runIssueLoop,
   NoOpValidator,
+  decideSessionStrategy,
+  failureFingerprint,
   type IssueContextBuilderLike,
   type IssueLoopConfig,
   type Validator,
@@ -133,7 +135,9 @@ class MockLoopAgent implements LoopAgent {
       }
     }
 
-    return { status: 'done', toolCalls };
+    // A stable per-turn session id so the loop's inner-iteration chaining
+    // (resume the prior iteration's session) is observable in tests.
+    return { status: 'done', toolCalls, sessionId: `sess-${this.turnIndex}` };
   }
 
   get callCount(): number {
@@ -498,6 +502,52 @@ module('issue-loop > validation failure', function () {
     assert.false(
       contextBuilder.buildCalls[1].validationResults?.passed,
       'second iteration gets failing validation from first',
+    );
+  });
+
+  test('fix iterations chain the prior iteration session (no re-read)', async function (assert) {
+    let store = new MockIssueStore([
+      makeIssue({ id: 'iss-1', status: 'backlog', priority: 'high', order: 1 }),
+    ]);
+
+    let agent = new MockLoopAgent(
+      [
+        {
+          toolCalls: [
+            { tool: 'write_file', args: { path: 'c.gts', content: 'v1' } },
+          ],
+        },
+        {
+          toolCalls: [
+            { tool: 'write_file', args: { path: 'c.gts', content: 'v2' } },
+          ],
+          updateIssue: { id: 'iss-1', status: 'done' },
+        },
+      ],
+      store,
+    );
+
+    await runIssueLoop(
+      makeLoopConfig({
+        agent,
+        issueStore: store,
+        createValidator: () =>
+          new MockValidator([makeFailingValidation(), makePassingValidation()]),
+      }),
+    );
+
+    // Iteration 1 starts fresh (no prior session to chain).
+    assert.strictEqual(
+      agent.receivedContexts[0].resumeSession,
+      undefined,
+      'first iteration does not resume a session',
+    );
+    // Iteration 2 resumes iteration 1's session (sess-1) as a fork, so the
+    // files/edits it already read stay in context instead of being re-read.
+    assert.deepEqual(
+      agent.receivedContexts[1].resumeSession,
+      { sessionId: 'sess-1', fork: true },
+      'second iteration forks the first iteration session',
     );
   });
 });
@@ -1371,5 +1421,330 @@ module('issue-loop > project completion', function () {
       [],
       'project status NOT updated when issues blocked',
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Session-reuse decision
+// ---------------------------------------------------------------------------
+
+function failing(steps: Record<string, number>): ValidationResults {
+  let names = new Set(Object.keys(steps));
+  return {
+    passed: false,
+    steps: (['parse', 'lint', 'evaluate', 'instantiate', 'test'] as const).map(
+      (step) => ({
+        step,
+        passed: !names.has(step),
+        errors: names.has(step)
+          ? Array.from({ length: steps[step] }, () => ({
+              message: `${step} err`,
+            }))
+          : [],
+      }),
+    ),
+  };
+}
+
+module('issue-loop > failureFingerprint', function () {
+  test('empty for passing or missing results', function (assert) {
+    assert.deepEqual(failureFingerprint(undefined), {
+      steps: '',
+      errorCount: 0,
+    });
+    assert.deepEqual(failureFingerprint(makePassingValidation()), {
+      steps: '',
+      errorCount: 0,
+    });
+  });
+
+  test('sorted failing steps + total error count', function (assert) {
+    assert.deepEqual(failureFingerprint(failing({ test: 2, lint: 1 })), {
+      steps: 'lint,test',
+      errorCount: 3,
+    });
+  });
+});
+
+module('issue-loop > decideSessionStrategy', function () {
+  test('first turn is always fresh', function (assert) {
+    let d = decideSessionStrategy({
+      iteration: 1,
+      hasPriorSession: false,
+      chainDepth: 0,
+    });
+    assert.strictEqual(d.strategy, 'fresh');
+  });
+
+  test('no prior session is fresh even past iteration 1', function (assert) {
+    let d = decideSessionStrategy({
+      iteration: 3,
+      hasPriorSession: false,
+      chainDepth: 0,
+    });
+    assert.strictEqual(d.strategy, 'fresh');
+  });
+
+  test('continues while converging (fewer errors, same step)', function (assert) {
+    let d = decideSessionStrategy({
+      iteration: 3,
+      hasPriorSession: true,
+      chainDepth: 1,
+      previousFailure: failureFingerprint(failing({ lint: 3 })),
+      currentFailure: failureFingerprint(failing({ lint: 1 })),
+    });
+    assert.strictEqual(d.strategy, 'continue');
+  });
+
+  test('resets to fresh when the same failure repeats with no progress', function (assert) {
+    let same = failureFingerprint(failing({ lint: 2 }));
+    let d = decideSessionStrategy({
+      iteration: 3,
+      hasPriorSession: true,
+      chainDepth: 1,
+      previousFailure: same,
+      currentFailure: same,
+    });
+    assert.strictEqual(d.strategy, 'fresh');
+  });
+
+  test('resets to fresh at the chain cap', function (assert) {
+    let d = decideSessionStrategy({
+      iteration: 5,
+      hasPriorSession: true,
+      chainDepth: 3,
+      previousFailure: failureFingerprint(failing({ lint: 3 })),
+      currentFailure: failureFingerprint(failing({ test: 1 })),
+    });
+    assert.strictEqual(d.strategy, 'fresh');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase gating — issues beyond the run's target phase await an operator
+// ---------------------------------------------------------------------------
+
+module('issue-loop > tests always gate once written', function (hooks) {
+  let workspace: { dir: string; cleanup: () => void };
+
+  hooks.beforeEach(async function () {
+    let { mkdtemp } = await import('node:fs/promises');
+    let { tmpdir } = await import('node:os');
+    let { join } = await import('node:path');
+    let { rmSync } = await import('node:fs');
+    let dir = await mkdtemp(join(tmpdir(), 'issue-loop-tests-gate-'));
+    workspace = {
+      dir,
+      cleanup: () => rmSync(dir, { recursive: true, force: true }),
+    };
+  });
+  hooks.afterEach(function () {
+    workspace.cleanup();
+  });
+
+  async function runOneIssue(workspaceDir: string) {
+    let store = new MockIssueStore([
+      makeIssue({ id: 'iss-1', status: 'backlog', order: 1 }),
+    ]);
+    let agent = new MockLoopAgent(
+      [
+        {
+          toolCalls: [
+            { tool: 'write_file', args: { path: 'card.gts', content: 'v1' } },
+          ],
+          updateIssue: { id: 'iss-1', status: 'done' },
+        },
+      ],
+      store,
+    );
+    let captured: { includeTests?: boolean }[] = [];
+    await runIssueLoop(
+      makeLoopConfig({
+        agent,
+        issueStore: store,
+        workspaceDir,
+        createValidator: (_id, options) => {
+          captured.push(options ?? {});
+          return new MockValidator([makePassingValidation()]);
+        },
+      }),
+    );
+    return captured;
+  }
+
+  test('no test files in the workspace → test step stays off', async function (assert) {
+    let captured = await runOneIssue(workspace.dir);
+    assert.strictEqual(captured.length, 1);
+    assert.notOk(captured[0].includeTests, 'no tests to gate with');
+  });
+
+  test('a .test.gts in the workspace turns the test step on for any issue', async function (assert) {
+    let { writeFile } = await import('node:fs/promises');
+    let { join } = await import('node:path');
+    await writeFile(
+      join(workspace.dir, 'card.test.gts'),
+      'export function runTests() {}',
+    );
+    let captured = await runOneIssue(workspace.dir);
+    assert.strictEqual(captured.length, 1);
+    assert.true(
+      captured[0].includeTests,
+      'hardening-written tests gate subsequent issues',
+    );
+  });
+});
+
+module('issue-loop > phase gating', function () {
+  function makePolishStore(): MockIssueStore {
+    return new MockIssueStore([
+      makeIssue({ id: 'iss-1', status: 'backlog', priority: 'high', order: 1 }),
+      makeIssue({
+        id: 'iss-1-pass-2',
+        status: 'backlog',
+        priority: 'low',
+        order: 2,
+        issueType: 'enhancement',
+        summary: 'Pass 2 — polish',
+      }),
+    ]);
+  }
+
+  test('polishing-phase issues stay on the board by default', async function (assert) {
+    let store = makePolishStore();
+    let agent = new MockLoopAgent(
+      [
+        {
+          toolCalls: [
+            { tool: 'write_file', args: { path: 'card.gts', content: 'v1' } },
+          ],
+          updateIssue: { id: 'iss-1', status: 'done' },
+        },
+      ],
+      store,
+    );
+
+    let result = await runIssueLoop(
+      makeLoopConfig({ agent, issueStore: store }),
+    );
+
+    assert.strictEqual(result.outcome, 'all_issues_done');
+    assert.strictEqual(result.issueResults.length, 1, 'only iss-1 executed');
+    assert.strictEqual(result.issueResults[0].issueId, 'iss-1');
+    let polish = (await store.listIssues()).find(
+      (i) => i.id === 'iss-1-pass-2',
+    );
+    assert.strictEqual(
+      polish?.status,
+      'backlog',
+      'polish issue untouched, awaiting operator',
+    );
+  });
+
+  test('--to-phase polishing executes enhancement issues', async function (assert) {
+    let store = makePolishStore();
+    let agent = new MockLoopAgent(
+      [
+        {
+          toolCalls: [
+            { tool: 'write_file', args: { path: 'card.gts', content: 'v1' } },
+          ],
+          updateIssue: { id: 'iss-1', status: 'done' },
+        },
+        {
+          toolCalls: [
+            { tool: 'write_file', args: { path: 'card.gts', content: 'v2' } },
+          ],
+          updateIssue: { id: 'iss-1-pass-2', status: 'done' },
+        },
+      ],
+      store,
+    );
+
+    let result = await runIssueLoop(
+      makeLoopConfig({
+        agent,
+        issueStore: store,
+        toPhase: 'polishing',
+      }),
+    );
+
+    assert.strictEqual(result.outcome, 'all_issues_done');
+    assert.strictEqual(result.issueResults.length, 2, 'both issues executed');
+    assert.deepEqual(
+      result.issueResults.map((r) => r.issueId),
+      ['iss-1', 'iss-1-pass-2'],
+    );
+  });
+
+  test('hardening issues stay on the board at the default target', async function (assert) {
+    let store = new MockIssueStore([
+      makeIssue({ id: 'iss-1', status: 'done', order: 1 }),
+      makeIssue({
+        id: 'harden-iss-1',
+        status: 'backlog',
+        order: 2,
+        issueType: 'hardening',
+        summary: 'Harden: iss-1',
+      }),
+    ]);
+    let agent = new MockLoopAgent([], store);
+
+    let result = await runIssueLoop(
+      makeLoopConfig({ agent, issueStore: store }),
+    );
+
+    assert.strictEqual(result.issueResults.length, 0, 'nothing executed');
+    let harden = (await store.listIssues()).find(
+      (i) => i.id === 'harden-iss-1',
+    );
+    assert.strictEqual(harden?.status, 'backlog', 'hardening issue parked');
+  });
+
+  test('--to-phase hardening executes hardening issues but parks polish', async function (assert) {
+    let store = new MockIssueStore([
+      makeIssue({ id: 'iss-1', status: 'done', order: 1 }),
+      makeIssue({
+        id: 'harden-iss-1',
+        status: 'backlog',
+        order: 2,
+        issueType: 'hardening',
+        summary: 'Harden: iss-1',
+      }),
+      makeIssue({
+        id: 'iss-1-pass-2',
+        status: 'backlog',
+        order: 3,
+        issueType: 'enhancement',
+        summary: 'Pass 2 — polish',
+      }),
+    ]);
+    let agent = new MockLoopAgent(
+      [
+        {
+          toolCalls: [
+            {
+              tool: 'write_file',
+              args: { path: 'card.test.gts', content: 'tests' },
+            },
+          ],
+          updateIssue: { id: 'harden-iss-1', status: 'done' },
+        },
+      ],
+      store,
+    );
+
+    let result = await runIssueLoop(
+      makeLoopConfig({ agent, issueStore: store, toPhase: 'hardening' }),
+    );
+
+    assert.deepEqual(
+      result.issueResults.map((r) => r.issueId),
+      ['harden-iss-1'],
+      'hardening executed',
+    );
+    let polish = (await store.listIssues()).find(
+      (i) => i.id === 'iss-1-pass-2',
+    );
+    assert.strictEqual(polish?.status, 'backlog', 'polish still parked');
   });
 });

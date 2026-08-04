@@ -83,6 +83,12 @@ export interface CreateRealmResult {
 export interface PullOptions {
   /** Delete local files that don't exist in the realm (default: false). */
   delete?: boolean;
+  /**
+   * Mirror the realm's `skills/` directory into the surrounding checkout's
+   * `.claude/skills/` so realm-authored skills are available to Claude Code
+   * (default: true; `BOXEL_DISABLE_CLAUDE_SKILLS_SYNC=1` also disables it).
+   */
+  claudeSkills?: boolean;
 }
 
 export interface PullResult {
@@ -102,6 +108,12 @@ export interface SyncOptions {
   delete?: boolean;
   /** Preview without making changes. */
   dryRun?: boolean;
+  /**
+   * Mirror the realm's `skills/` directory into the surrounding checkout's
+   * `.claude/skills/` so realm-authored skills are available to Claude Code
+   * (default: true; `BOXEL_DISABLE_CLAUDE_SKILLS_SYNC=1` also disables it).
+   */
+  claudeSkills?: boolean;
   /**
    * Block on the realm-server until uploaded cards have been indexed,
    * not just durably written. Appends `?waitForIndex=true` to the
@@ -499,6 +511,7 @@ export class BoxelCLIClient {
   ): Promise<PullResult> {
     return realmPull(realmUrl, localDir, {
       delete: options?.delete,
+      claudeSkills: options?.claudeSkills,
       profileManager: this.pm,
     });
   }
@@ -519,6 +532,7 @@ export class BoxelCLIClient {
       preferNewest: options?.preferNewest,
       delete: options?.delete,
       dryRun: options?.dryRun,
+      claudeSkills: options?.claudeSkills,
       waitForIndex: options?.waitForIndex,
       profileManager: this.pm,
     });

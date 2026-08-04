@@ -56,6 +56,16 @@ BOXEL_PASSWORD=… boxel profile add \
   --realm-server-url https://realms.my.server/
 ```
 
+### Realm skills in Claude Code
+
+A realm's user-authored skills live in it as `skills/<name>/SKILL.md`. `boxel realm pull`, `sync`, and `watch` copy each one into `<local-dir>/.claude/skills/<realm>-<name>/`, so the same skill Boxel's AI assistant loads is available in a Claude Code session as `/<realm>-<name>`.
+
+The mirror always lands in the realm's own local directory; nothing is searched for up the tree. Claude Code loads nested `.claude/skills/` directories below the working directory, so a realm pulled into a subdirectory still surfaces its skills, directory-qualified when two skills share a name. The home directory itself is refused, since `~/.claude/skills` is Claude Code's personal scope.
+
+The copies are generated output, rewritten on every run: edit a skill in the realm checkout's `skills/` — that is what `push` and `sync` carry back to the realm — because an edit made under `.claude/skills/` is overwritten without warning. `.claude/skills/.boxel-skills-sync.json` records which entry names boxel wrote, so an entry whose realm-side skill is renamed or removed is deleted while a directory boxel did not write is left alone.
+
+Set `BOXEL_DISABLE_CLAUDE_SKILLS_SYNC=1`, or pass `--no-claude-skills`, to skip it.
+
 ## Development
 
 ### Building

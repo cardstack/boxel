@@ -20,6 +20,7 @@ import type { ProfileManager } from '../../../lib/profile-manager.ts';
 import type { RealmAuthenticator } from '../../../lib/realm-authenticator.ts';
 import { resolveRealmAuthenticator } from '../../../lib/auth-resolver.ts';
 import { resolveRealmSecretSeed } from '../../../lib/prompt.ts';
+import { reconcileSkillsMirror } from '../../../lib/claude-skills-mirror.ts';
 import {
   acquireWatchLock,
   releaseWatchLock,
@@ -69,6 +70,7 @@ export class RealmWatcher extends RealmSyncBase {
   readonly name: string;
   private readonly debounceMs: number;
   private readonly overwriteLocal: boolean;
+  private readonly claudeSkills: boolean;
   private readonly checkpointManager: CheckpointManager;
   private lastKnownMtimes = new Map<string, number>();
   private pendingChanges = new Map<string, PendingChange>();
@@ -78,11 +80,16 @@ export class RealmWatcher extends RealmSyncBase {
   constructor(
     spec: WatchRealmSpec,
     authenticator: RealmAuthenticator,
-    options: { debounceMs: number; overwriteLocal?: boolean },
+    options: {
+      debounceMs: number;
+      overwriteLocal?: boolean;
+      claudeSkills?: boolean;
+    },
   ) {
     super({ realmUrl: spec.realmUrl, localDir: spec.localDir }, authenticator);
     this.debounceMs = options.debounceMs;
     this.overwriteLocal = options.overwriteLocal ?? false;
+    this.claudeSkills = options.claudeSkills ?? true;
     this.checkpointManager = new CheckpointManager(spec.localDir);
     this.name = deriveRealmName(this.normalizedRealmUrl);
   }
@@ -151,6 +158,22 @@ export class RealmWatcher extends RealmSyncBase {
         this.lastKnownMtimes.set(file, mtime);
       }
     }
+
+    await this.reconcileSkills();
+  }
+
+  /**
+   * Refresh `.claude/skills/` from the local `skills/` directory. Run at
+   * startup so a realm that already has skills on disk exposes them
+   * immediately, and after any flush that touched `skills/` so a skill added,
+   * changed, or removed on the realm takes effect while the watcher runs.
+   */
+  private async reconcileSkills(): Promise<void> {
+    await reconcileSkillsMirror({
+      realmUrl: this.normalizedRealmUrl,
+      localDir: this.options.localDir,
+      enabled: this.claudeSkills,
+    });
   }
 
   /**
@@ -266,6 +289,10 @@ export class RealmWatcher extends RealmSyncBase {
       } else {
         this.lastKnownMtimes.set(file, info.mtime);
       }
+    }
+
+    if (changes.some((change) => change.file.startsWith('skills/'))) {
+      await this.reconcileSkills();
     }
 
     let checkpoint: Checkpoint | null = null;
@@ -415,6 +442,13 @@ export interface WatchRealmsOptions {
    * skipped with a warning instead of overwritten.
    */
   overwriteLocal?: boolean;
+  /**
+   * Mirror the realm's `skills/` directory into the surrounding checkout's
+   * `.claude/skills/` so realm-authored skills are available to Claude Code.
+   * On by default; `--no-claude-skills` (or `BOXEL_DISABLE_CLAUDE_SKILLS_SYNC=1`) opts
+   * out.
+   */
+  claudeSkills?: boolean;
 }
 
 export interface WatchRealmsResult {
@@ -493,6 +527,7 @@ export async function watchRealms(
     const watcher = new RealmWatcher(spec, authenticator, {
       debounceMs,
       overwriteLocal,
+      claudeSkills: options.claudeSkills,
     });
     try {
       await watcher.initialize();
@@ -732,6 +767,10 @@ export function registerStartCommand(watch: Command): void {
       '--overwrite-local',
       'Overwrite local files when the remote changes. Default: skip + warn when the local copy diverges from the sync manifest.',
     )
+    .option(
+      '--no-claude-skills',
+      "Skip mirroring the realm's skills/ directory into the checkout's .claude/skills/ (env: BOXEL_DISABLE_CLAUDE_SKILLS_SYNC=1)",
+    )
     .action(
       async (
         realmUrl: string,
@@ -741,6 +780,7 @@ export function registerStartCommand(watch: Command): void {
           debounce: number;
           realmSecretSeed?: boolean;
           overwriteLocal?: boolean;
+          claudeSkills?: boolean;
         },
       ) => {
         const realmSecretSeed = await resolveRealmSecretSeed(
@@ -751,6 +791,7 @@ export function registerStartCommand(watch: Command): void {
           debounceMs: options.debounce * 1000,
           realmSecretSeed,
           overwriteLocal: options.overwriteLocal === true,
+          claudeSkills: options.claudeSkills,
         });
         if (result.error) {
           console.error(`${FG_RED}Error:${RESET} ${result.error}`);

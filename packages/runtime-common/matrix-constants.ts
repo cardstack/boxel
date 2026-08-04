@@ -117,6 +117,13 @@ export const APP_BOXEL_CODE_PATCH_CORRECTNESS_REL_TYPE =
 export const APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE = 'app.boxel.debug';
 export const APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE =
   'app.boxel.realm-server-event';
+// `eventType` carried inside a realm-server-event body (see send-event.ts /
+// RealmServerService.handleEvent). Signals that the set of realms the user can
+// access changed server-side (a realm was created, deleted, archived, or
+// unarchived), so a session viewing the workspace chooser should re-derive its
+// list. Deliberately a bare signal — the host re-fetches authoritatively rather
+// than trusting any payload.
+export const REALMS_LIST_UPDATED_EVENT_TYPE = 'realms-list-updated';
 export const APP_BOXEL_ROOM_SKILLS_EVENT_TYPE = 'app.boxel.room.skills';
 export const APP_BOXEL_REALMS_EVENT_TYPE = 'app.boxel.realms';
 export const APP_BOXEL_REALM_SERVERS_EVENT_TYPE = 'app.boxel.realm-servers';

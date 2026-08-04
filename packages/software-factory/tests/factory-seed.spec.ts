@@ -1,4 +1,5 @@
-import { resolve } from 'node:path';
+import { readFile, writeFile } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
 
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
@@ -247,16 +248,30 @@ test('creates an adjust-flavored bootstrap seed when the brief carries a sourceC
   }
 });
 
-test('seed issue creation is idempotent', async ({ realm }) => {
+test('seed re-arms a pending seed and resumes a done same-brief seed', async ({
+  realm,
+}) => {
   let { cleanup, seedOptions } = buildSeedContext(realm);
 
   try {
     let result1 = await createSeedIssue(stickyNoteBrief, seedOptions);
     expect(result1.status).toBe('created');
 
+    // A seed that never reached `done` is re-armed with the current brief.
     let result2 = await createSeedIssue(stickyNoteBrief, seedOptions);
-    expect(result2.status).toBe('existing');
+    expect(result2.status).toBe('created');
     expect(result2.issueId).toBe(result1.issueId);
+
+    // A done seed belonging to the same brief is left intact so the loop
+    // resumes from the board instead of redoing finished work.
+    let seedFile = join(seedOptions.workspaceDir, `${result1.issueId}.json`);
+    let document = JSON.parse(await readFile(seedFile, 'utf8'));
+    document.data.attributes.status = 'done';
+    await writeFile(seedFile, JSON.stringify(document, null, 2));
+
+    let result3 = await createSeedIssue(stickyNoteBrief, seedOptions);
+    expect(result3.status).toBe('existing');
+    expect(result3.issueId).toBe(result1.issueId);
   } finally {
     cleanup();
   }

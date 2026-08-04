@@ -156,6 +156,7 @@ export default class HostModeContent extends Component<Signature> {
         top: var(--boxel-sp);
         left: var(--boxel-sp);
         z-index: 2;
+        max-width: calc(100% - 2 * var(--boxel-sp));
       }
 
       .host-mode-content.is-wide {
@@ -176,6 +177,16 @@ export default class HostModeContent extends Component<Signature> {
       .host-mode-content.is-wide .breadcrumb-container {
         top: var(--boxel-sp-lg);
         left: var(--boxel-sp-lg);
+        max-width: calc(100% - 2 * var(--boxel-sp-lg));
+      }
+
+      @media (max-width: 30rem) {
+        .breadcrumb-container,
+        .host-mode-content.is-wide .breadcrumb-container {
+          top: var(--boxel-sp-3xs);
+          left: var(--boxel-sp-3xs);
+          max-width: calc(100% - 2 * var(--boxel-sp-3xs));
+        }
       }
     </style>
   </template>
