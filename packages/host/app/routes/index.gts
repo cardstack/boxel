@@ -8,6 +8,10 @@ import { isTesting } from '@embroider/macros';
 import window from 'ember-window-mock';
 import stringify from 'safe-stable-stringify';
 
+import {
+  HOST_APP_QUERY_PARAMS,
+  isRedirectRoutingRule,
+} from '@cardstack/runtime-common';
 import { isFileDefInstance } from '@cardstack/runtime-common/code-ref';
 
 import { Submodes } from '@cardstack/host/components/submode-switcher';
@@ -76,23 +80,37 @@ export default class Card extends Route {
   // OperatorModeStateService.schedulePersist() is called (due to the fact we
   // care about the back button, see note at bottom). Because of that make sure
   // that there is as little async as possible in this model hook.
-  async model(params: {
-    authRedirect?: string;
-    cardPath?: string;
-    path: string;
-    operatorModeState: string;
-  }) {
+  async model(
+    params: {
+      authRedirect?: string;
+      cardPath?: string;
+      path: string;
+      operatorModeState: string;
+    },
+    transition: Transition,
+  ) {
     if (this.hostModeService.isActive) {
       let normalizedPath = params.path ?? '';
       // CS-10055: a routing rule in the realm config can map a bare path
-      // to a target card. When the path matches a rule, use the rule's
-      // target id directly; otherwise resolve the path as a card URL
-      // under the host-mode origin.
-      let routedId = this.hostModeService.resolveRoutedPath(
+      // to a target card. When the path matches a serve rule, use the
+      // rule's target id directly; otherwise resolve the path as a card
+      // URL under the host-mode origin. A redirect rule is never
+      // rendered — navigate to its target instead, mirroring the 3xx
+      // the server answers for a full-page request to this path, query
+      // string included (`params` holds only the pathname).
+      let routed = this.hostModeService.resolveRoutedPath(
         normalizedPath || '/',
       );
+      if (routed && isRedirectRoutingRule(routed)) {
+        this.hostModeService.redirectTo(
+          routed.redirectTo,
+          this.forwardableQueryParams(transition),
+        );
+        return;
+      }
       let cardUrl =
-        routedId ?? `${this.hostModeService.hostModeOrigin}/${normalizedPath}`;
+        routed?.id ??
+        `${this.hostModeService.hostModeOrigin}/${normalizedPath}`;
 
       return this.store.get(cardUrl);
     }
@@ -212,6 +230,29 @@ export default class Card extends Route {
 
       return;
     }
+  }
+
+  // Query params to carry onto a redirect rule's target, read from the
+  // transition rather than `window.location.search` — with
+  // HistoryLocation the location still points at the URL being navigated
+  // away from while the transition is in flight.
+  //
+  // The app's own params are dropped, matching what serve-index forwards
+  // on the equivalent HTTP redirect. On this side there is an extra
+  // reason to: the router hydrates every declared param onto
+  // `transition.to.queryParams` using its controller default whether or
+  // not it was in the URL, so forwarding them blind would append values
+  // that were never there (`debug=false` on every redirect). Foreign
+  // params (`utm_source` and friends) pass through untouched.
+  private forwardableQueryParams(
+    transition: Transition,
+  ): Record<string, unknown> {
+    let queryParams = transition.to?.queryParams ?? {};
+    return Object.fromEntries(
+      Object.entries(queryParams).filter(
+        ([key]) => !HOST_APP_QUERY_PARAMS.includes(key),
+      ),
+    );
   }
 
   async afterModel(
