@@ -79,6 +79,16 @@ class StubRoutingHostModeService extends StubHostModeService {
   }
 }
 
+// `hostModeOrigin` is visitor-controllable — it hands back the
+// `?hostModeOrigin=` query param verbatim whenever one is present — so a
+// redirect must never resolve a realm-relative target against it. This
+// stub returns an origin no redirect may land on.
+class StubHijackedOriginHostModeService extends StubRoutingHostModeService {
+  get hostModeOrigin() {
+    return 'https://attacker.example';
+  }
+}
+
 module('Acceptance | host mode tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -874,7 +884,11 @@ module('Acceptance | host mode tests', function (hooks) {
     // in-app transition, where the route has to perform the redirect
     // itself. `window` is ember-window-mock, whose `location.replace`
     // records the URL instead of navigating.
-    let hostOrigin = removeTrailingSlash(testHostModeRealmURLWithoutRealm);
+    //
+    // A realm-relative target resolves against the document's own
+    // origin, the way a browser resolves a `Location: /path` header.
+    // Read inside each test — the window mock is installed per-test, so
+    // capturing it out here would read the real page's origin instead.
 
     hooks.beforeEach(function (this) {
       let owner = getOwner(this)!;
@@ -898,7 +912,7 @@ module('Acceptance | host mode tests', function (hooks) {
 
       assert.strictEqual(
         window.location.href,
-        `${hostOrigin}/test/terms`,
+        `${window.location.origin}/test/terms`,
         'the realm-relative target is resolved against the host-mode origin',
       );
     });
@@ -922,7 +936,7 @@ module('Acceptance | host mode tests', function (hooks) {
 
       assert.strictEqual(
         window.location.href,
-        `${hostOrigin}/test/terms?utm_source=newsletter`,
+        `${window.location.origin}/test/terms?utm_source=newsletter`,
         'the inbound query is preserved, matching what serve-index does',
       );
     });
@@ -932,8 +946,36 @@ module('Acceptance | host mode tests', function (hooks) {
 
       assert.strictEqual(
         window.location.href,
-        `${hostOrigin}/test/terms?section=intro`,
+        `${window.location.origin}/test/terms?section=intro`,
         'the declared target query is left alone, matching serve-index',
+      );
+    });
+
+    test('a hijacked hostModeOrigin cannot steer the redirect', async function (assert) {
+      // `?hostModeOrigin=https://evil.example` sticks across in-app
+      // transitions (it is a declared query param), so resolving a
+      // realm-relative target against `hostModeOrigin` would turn every
+      // redirect rule into an open redirect to a visitor-chosen origin.
+      let owner = getOwner(this)!;
+      let ownerWithUnregister = owner as {
+        unregister?: (fullName: string) => void;
+      };
+      ownerWithUnregister.unregister?.('service:host-mode-service');
+      owner.register(
+        'service:host-mode-service',
+        StubHijackedOriginHostModeService,
+      );
+
+      await visit('/test/tos');
+
+      assert.strictEqual(
+        window.location.href,
+        `${window.location.origin}/test/terms`,
+        'the redirect stays on the document origin',
+      );
+      assert.notOk(
+        window.location.href.startsWith('https://attacker.example'),
+        'hostModeOrigin is not used as the redirect base',
       );
     });
 

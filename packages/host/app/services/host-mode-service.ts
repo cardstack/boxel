@@ -179,17 +179,17 @@ export default class HostModeService extends Service {
   // its own.
   //
   // A realm-relative target arrives already prefixed with the realm's
-  // mount pathname, so it is joined onto the host-mode origin by
-  // concatenation rather than `new URL(target, base)` — the latter
-  // resolves a leading-slash path against the origin ROOT, discarding
-  // any path the origin carries under `?hostModeOrigin=` simulation.
-  // This keeps redirect targets consistent with how the index route
-  // builds a routed card's URL from the same origin.
+  // mount pathname, and resolves against the document's own origin —
+  // what a browser does with a `Location: /path` header. Deliberately
+  // NOT `hostModeOrigin`: that returns the `?hostModeOrigin=` query
+  // param verbatim whenever it is present, which would let a visitor
+  // pick the origin this navigates to. The two are the same value in
+  // host mode anyway; only the simulation affordance separates them,
+  // and a simulated session should stay on the page it is running from.
   redirectTo(target: string, queryParams?: Record<string, unknown>) {
-    let origin = this.hostModeOrigin ?? window.location.origin;
     let url = /^https?:/i.test(target)
       ? new URL(target)
-      : new URL(`${origin}${target.startsWith('/') ? '' : '/'}${target}`);
+      : new URL(target, window.location.origin);
     if (!url.search && queryParams) {
       for (let [key, value] of Object.entries(queryParams)) {
         if (value == null) {
