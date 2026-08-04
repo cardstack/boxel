@@ -674,7 +674,7 @@ class Isolated extends Component<typeof Workspace> {
               {{/if}}
             {{else if (eq mod 'browse')}}
               {{#if this.browseVisible}}
-                <section class='zone'>
+                <section class='zone' data-test-browse>
                   <div class='section-head'>
                     <h2 class='section-title'>Browse</h2>
                     <p class='section-hint'>All cards and files in this space.</p>
@@ -688,6 +688,7 @@ class Isolated extends Component<typeof Workspace> {
                             <button
                               type='button'
                               class='type-chip'
+                              data-test-type-chip={{option.id}}
                               {{on 'click' (this.jumpToFilter option)}}
                             >
                               {{#if (this.iconHtml option)}}
@@ -696,9 +697,10 @@ class Isolated extends Component<typeof Workspace> {
                                   }}</span>
                               {{/if}}
                               {{option.displayName}}
-                              <span class='type-chip-count'>{{this.countFor
-                                  option
-                                }}</span>
+                              <span
+                                class='type-chip-count'
+                                data-test-type-chip-count
+                              >{{this.countFor option}}</span>
                             </button>
                           {{/each}}
                         </div>
@@ -712,6 +714,7 @@ class Isolated extends Component<typeof Workspace> {
                             <button
                               type='button'
                               class='type-chip'
+                              data-test-type-chip={{option.id}}
                               {{on 'click' (this.jumpToFilter option)}}
                             >
                               {{#if (this.iconHtml option)}}
@@ -720,9 +723,10 @@ class Isolated extends Component<typeof Workspace> {
                                   }}</span>
                               {{/if}}
                               {{option.displayName}}
-                              <span class='type-chip-count'>{{this.countFor
-                                  option
-                                }}</span>
+                              <span
+                                class='type-chip-count'
+                                data-test-type-chip-count
+                              >{{this.countFor option}}</span>
                             </button>
                           {{/each}}
                         </div>
@@ -2902,15 +2906,17 @@ class Isolated extends Component<typeof Workspace> {
     return htmlSafe(`--door-h: ${height}px`);
   }
 
-  // settings gates: unset booleans read as their defaults
+  // Settings gates. About and Browse show by default and are opt-out: an unset
+  // `hideAbout`/`hideBrowse` (BooleanField `emptyValue` is `false`) reads as
+  // "not hidden", so both surfaces appear until the administrator turns them
+  // off. (A "default-on" `showAbout`/`showBrowse` boolean could not express
+  // this — unset and explicit-off would both read as `false`.)
   private get aboutVisible() {
-    return (
-      Boolean(this.args.model.readme) && this.args.model.showReadme !== false
-    );
+    return Boolean(this.args.model.readme) && !this.args.model.hideAbout;
   }
 
   private get browseVisible() {
-    return this.hasInventory && this.args.model.showBrowse !== false;
+    return this.hasInventory && !this.args.model.hideBrowse;
   }
 
   @tracked private latest: { title: string; when?: string } | undefined;
@@ -3904,19 +3910,20 @@ export class Workspace extends CardDef {
             </div>
             <div class='setting'>
               <div class='setting-text'>
-                <span class='setting-label'>Show About</span>
-                <p class='setting-help'>Keep the About section visible below the
-                  pins. Turn off to keep Home to cards only.</p>
+                <span class='setting-label'>Hide About</span>
+                <p class='setting-help'>The About section shows below the pins by
+                  default. Turn on to keep Home to cards only.</p>
               </div>
-              <div class='setting-control'><@fields.showReadme /></div>
+              <div class='setting-control'><@fields.hideAbout /></div>
             </div>
             <div class='setting'>
               <div class='setting-text'>
-                <span class='setting-label'>Show Browse</span>
-                <p class='setting-help'>The inventory of card and file types,
-                  with counts, linking into the Library.</p>
+                <span class='setting-label'>Hide Browse</span>
+                <p class='setting-help'>Browse shows the inventory of card and
+                  file types, with counts, linking into the Library. Turn on to
+                  hide it.</p>
               </div>
-              <div class='setting-control'><@fields.showBrowse /></div>
+              <div class='setting-control'><@fields.hideBrowse /></div>
             </div>
             <div class='setting stack'>
               <div class='setting-text'>
@@ -4392,11 +4399,12 @@ export class Workspace extends CardDef {
 
   @field entryPoints = linksToMany(CardDef);
   @field readme = linksTo(MarkdownDef); // realm README shown on Home
-  // settings — every field wires to live behavior. Booleans
-  // read unset as their default (showReadme/showBrowse default ON,
-  // searchIncludesSystem defaults OFF).
-  @field showReadme = contains(BooleanField);
-  @field showBrowse = contains(BooleanField);
+  // settings — every field wires to live behavior. Booleans read unset as
+  // `false` (BooleanField `emptyValue`), so each is framed to make that the
+  // intended default: About and Browse are opt-out (hide*, default shown),
+  // system cards in search are opt-in (searchIncludesSystem, default off).
+  @field hideAbout = contains(BooleanField);
+  @field hideBrowse = contains(BooleanField);
   @field searchIncludesSystem = contains(BooleanField);
   @field defaultView = contains(StringField); // 'grid' | 'strip'
   @field workspace = linksTo(CardDef); // the realm's config card
