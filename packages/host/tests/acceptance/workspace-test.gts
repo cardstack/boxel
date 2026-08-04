@@ -99,6 +99,21 @@ module('Acceptance | workspace card', function (hooks) {
     assert.dom(`${STACK} .activity-pane`).exists('Activity pane renders');
   });
 
+  // Pills are matched by their visible label rather than by index, since the
+  // order of `_types` inventory isn't part of the contract. Asserts and then
+  // throws on a miss so a fixture that stops producing the type fails as a
+  // named assertion instead of a null dereference further down.
+  function findTypeChip(assert: Assert, label: string): HTMLElement {
+    let chip = [
+      ...document.querySelectorAll(`${STACK} [data-test-type-chip]`),
+    ].find((el) => el.textContent?.includes(label));
+    assert.ok(chip, `a pill for the ${label} card type is present`);
+    if (!(chip instanceof HTMLElement)) {
+      throw new Error(`no Browse pill labelled "${label}" was rendered`);
+    }
+    return chip;
+  }
+
   // The Home "Browse" module renders one pill per realm card/file type with
   // that type's instance count, and clicking a pill opens the Library filtered
   // to that type. It only renders once `_types` has reported inventory, so it
@@ -116,12 +131,9 @@ module('Acceptance | workspace card', function (hooks) {
         'the Home Browse module renders once the realm reports inventory',
       );
 
-    let noteChip = [
-      ...document.querySelectorAll(`${STACK} [data-test-type-chip]`),
-    ].find((el) => el.textContent?.includes('Note')) as HTMLElement | undefined;
-    assert.ok(noteChip, 'a pill for the Note card type is present');
+    let noteChip = findTypeChip(assert, 'Note');
     assert
-      .dom(noteChip!.querySelector('[data-test-type-chip-count]'))
+      .dom(noteChip.querySelector('[data-test-type-chip-count]'))
       .hasText('1', 'the Note pill shows its single-instance count');
   });
 
@@ -130,12 +142,14 @@ module('Acceptance | workspace card', function (hooks) {
     await click('[data-test-workspace-button="Unnamed Workspace"]');
     await waitFor(`${STACK} [data-test-browse]`);
 
-    let noteChip = [
-      ...document.querySelectorAll(`${STACK} [data-test-type-chip]`),
-    ].find((el) => el.textContent?.includes('Note')) as HTMLElement | undefined;
-    let noteTypeId = noteChip!.getAttribute('data-test-type-chip');
+    let noteChip = findTypeChip(assert, 'Note');
+    let noteTypeId = noteChip.getAttribute('data-test-type-chip');
+    // Without this the filter selector below interpolates to
+    // `[data-test-workspace-filter="null"]` and reports a missing element
+    // rather than a pill that carries no type id.
+    assert.ok(noteTypeId, 'the Note pill carries the type id it filters on');
 
-    await click(noteChip!);
+    await click(noteChip);
 
     assert
       .dom(`${STACK} nav.tabs .tab.active`)

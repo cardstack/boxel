@@ -2909,8 +2909,9 @@ class Isolated extends Component<typeof Workspace> {
   // Settings gates. About and Browse show by default and are opt-out: an unset
   // `hideAbout`/`hideBrowse` (BooleanField `emptyValue` is `false`) reads as
   // "not hidden", so both surfaces appear until the administrator turns them
-  // off. (A "default-on" `showAbout`/`showBrowse` boolean could not express
-  // this — unset and explicit-off would both read as `false`.)
+  // off. The negative naming is load-bearing, not a style choice — a
+  // `show`-prefixed boolean cannot express a default-on setting here, because
+  // an unset field and an explicitly-disabled one both read as `false`.
   private get aboutVisible() {
     return Boolean(this.args.model.readme) && !this.args.model.hideAbout;
   }
