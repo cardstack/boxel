@@ -41,7 +41,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         },
       });
 
-      // Each test owns a distinct realm URL so the jobs, generations and
+      // Each test owns a distinct realm URL so the jobs, index rows and
       // rendered rows it seeds can't be read by another test in this module.
       let realmCounter = 0;
       async function ownedRealm(): Promise<string> {
@@ -77,13 +77,21 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         return req;
       }
 
-      async function seedGeneration(realmURL: string, generation: number) {
+      // A live, non-errored index row — the unit the caught-up fallback
+      // checks: each such row must have HTML at or beyond its own generation.
+      async function seedIndexRow(realmURL: string, generation: number) {
         await query(dbAdapter, [
-          `INSERT INTO realm_generations (realm_url, current_generation) VALUES (`,
+          `INSERT INTO boxel_index (url, file_alias, realm_url, type, generation, is_deleted, has_error) VALUES (`,
+          param(`${realmURL}card`),
+          `,`,
+          param(`${realmURL}card`),
+          `,`,
           param(realmURL),
           `,`,
+          param('instance'),
+          `,`,
           param(generation),
-          `)`,
+          `, false, false)`,
         ] as Expression);
       }
 
@@ -314,12 +322,12 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       });
 
       // The index pass enqueues its render fire-and-forget, so there is a
-      // window with an empty lane and no rendered HTML for the current
-      // generation. Reporting `done` there would tell a publish it had finished
+      // window with an empty lane and an indexed row that has no rendered HTML
+      // yet. Reporting `done` there would tell a publish it had finished
       // before the page it published exists.
-      test('reports the render phase when the current generation has no rendered html yet', async function (assert) {
+      test('reports the render phase when an indexed row has no rendered html yet', async function (assert) {
         let realmURL = await ownedRealm();
-        await seedGeneration(realmURL, 3);
+        await seedIndexRow(realmURL, 3);
 
         let response = await getProgress(realmURL, { as: ownerUserId });
 
@@ -332,7 +340,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
 
       test('reports done once the lanes are clear and the html has landed', async function (assert) {
         let realmURL = await ownedRealm();
-        await seedGeneration(realmURL, 3);
+        await seedIndexRow(realmURL, 3);
         await seedRenderedHtml(realmURL, 3);
 
         let response = await getProgress(realmURL, { as: ownerUserId });
@@ -349,7 +357,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       // settled realm from reporting a stale pass.
       test('ignores the progress rows of jobs that have already finished', async function (assert) {
         let realmURL = await ownedRealm();
-        await seedGeneration(realmURL, 3);
+        await seedIndexRow(realmURL, 3);
         await seedRenderedHtml(realmURL, 3);
         let finishedJob = await insertJob(dbAdapter, {
           job_type: 'from-scratch-index',
