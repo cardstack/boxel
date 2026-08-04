@@ -194,11 +194,13 @@ export function resolveEnvironment(
   const matrixIdEnv = options.user
     ? getEnvironmentFromMatrixId(options.user)
     : 'unknown';
-  // BOXEL_ENVIRONMENT is read only where it could still decide something —
+  // BOXEL_ENVIRONMENT is read only where it could still decide something:
   // nothing higher has, and it has something left to give. With -u naming the
   // Matrix ID and both URLs overridden there is nothing left to fill, and a
-  // value that slugs to empty exits 1, which must not kill an invocation that
-  // already specified everything.
+  // value that slugs to empty exits 1 — which must not kill a scripted run
+  // that already specified everything. Without -u it stays in play even when
+  // both URLs are given, because `domain` is still open and no flag names it:
+  // the terminal sign-in path builds the Matrix ID as "@<username>:<domain>".
   const boxelEnvironment =
     presets.length === 0 &&
     matrixIdEnv === 'unknown' &&
