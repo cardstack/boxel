@@ -21,7 +21,11 @@ export default class RealmIframeHeightService {
   ) {}
 
   start() {
+    if (!this.stopped) {
+      return;
+    }
     this.stopped = false;
+    this.previous = undefined;
     this.resizeObserver = new ResizeObserver(this.schedule);
     this.resizeObserver.observe(this.element);
     this.resizeObserver.observe(document.documentElement);
@@ -41,6 +45,9 @@ export default class RealmIframeHeightService {
   }
 
   stop() {
+    if (this.stopped) {
+      return;
+    }
     this.stopped = true;
     this.resizeObserver?.disconnect();
     this.mutationObserver?.disconnect();

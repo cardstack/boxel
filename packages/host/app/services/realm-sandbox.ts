@@ -68,6 +68,7 @@ import RealmCompartmentModuleRuntime, {
   type SandboxTrustedExportIdentity,
 } from '@cardstack/host/lib/realm-compartment-module-runtime';
 import {
+  defaultRealmIframeHeightMode,
   iframeFetchResponseLimitBytes,
   type RealmIframeSandboxPresentation,
   type RealmIframeSandboxTypePresentation,
@@ -2193,6 +2194,25 @@ export default class RealmSandboxService extends Service {
     return !this.isRenderLoading(card, format);
   }
 
+  renderModeFor(
+    card: BaseDef,
+    format: Format | undefined,
+  ): 'trusted' | 'ses' | 'iframe' {
+    let effectiveFormat = format ?? 'isolated';
+    if (
+      !this.isTransparentSandboxEnabled() ||
+      !this.isSupportedFormat(format) ||
+      !getOpaqueRealmCardState(card) ||
+      this.usesInheritedBaseTemplate(card, effectiveFormat)
+    ) {
+      return 'trusted';
+    }
+    let decision = this.sandboxDecisionFor(card, effectiveFormat);
+    return decision.tier === 'iframe' && this.safeIframeFormat(effectiveFormat)
+      ? 'iframe'
+      : 'ses';
+  }
+
   iframeRenderFor(
     card: BaseDef,
     format: Format | undefined,
@@ -2269,6 +2289,7 @@ export default class RealmSandboxService extends Service {
         this.applyIframeTypePresentation(card, presentation),
       presentation: {
         format: iframeFormat,
+        heightMode: defaultRealmIframeHeightMode(iframeFormat),
         displayContainer: options.displayContainer !== false,
         ...(options.field ? { fieldName: options.field.name } : {}),
         ...(resolvedCodeRef
@@ -2317,6 +2338,7 @@ export default class RealmSandboxService extends Service {
     sandbox: RealmIframeSandboxRender,
     urlString: string,
     init: { method?: string; headers?: [string, string][] } = {},
+    purpose: 'module' | 'media' = 'module',
   ): Promise<RealmIframeFetchResult> {
     let url = new URL(urlString);
     if (!['https:', 'http:'].includes(url.protocol)) {
@@ -2327,6 +2349,7 @@ export default class RealmSandboxService extends Service {
       throw new Error('Iframe renderer fetch capability is read-only');
     }
     if (
+      purpose === 'module' &&
       sandbox.draft &&
       this.sameModuleURL(url.href, sandbox.draft.sourceURL)
     ) {
@@ -2338,7 +2361,7 @@ export default class RealmSandboxService extends Service {
         url: url.href,
       };
     }
-    if (!this.isIframeFetchAllowed(sandbox, url.href)) {
+    if (purpose === 'module' && !this.isIframeFetchAllowed(sandbox, url.href)) {
       throw new Error(`Iframe renderer denied undeclared module read: ${url}`);
     }
     let headers = new Headers();
@@ -2355,7 +2378,7 @@ export default class RealmSandboxService extends Service {
     // Public CDN dependencies use the credentialless virtual network fetch.
     let isRealmRead =
       isModuleWithinRealm(url.href, sandbox.principal) ||
-      Boolean(this.network.realm.realmOf(url));
+      (purpose === 'module' && Boolean(this.network.realm.realmOf(url)));
     let fetch = isRealmRead ? this.network.authedFetch : this.network.fetch;
     let response = await fetch(url, {
       method,
@@ -2365,7 +2388,10 @@ export default class RealmSandboxService extends Service {
       redirect: 'error',
     });
     let responseURL = response.url || url.href;
-    if (!this.isIframeFetchAllowed(sandbox, responseURL)) {
+    if (
+      purpose === 'module' &&
+      !this.isIframeFetchAllowed(sandbox, responseURL)
+    ) {
       throw new Error('Iframe renderer response escaped its module allowlist');
     }
     let contentLength = Number(response.headers.get('content-length'));
@@ -2379,6 +2405,13 @@ export default class RealmSandboxService extends Service {
       responseURL,
       response.headers.get('content-type'),
     );
+    if (
+      purpose === 'media' &&
+      response.ok &&
+      !response.headers.get('content-type')?.toLowerCase().startsWith('image/')
+    ) {
+      throw new Error('Iframe renderer media response was not an image');
+    }
     let body: string | ArrayBuffer | null = null;
     if (![204, 205, 304].includes(response.status)) {
       let bytes = await response.arrayBuffer();

@@ -1516,6 +1516,9 @@ module('Acceptance | code submode | sandbox live reload', function (hooks) {
     assert
       .dom('[data-test-boxel-menu-item-text="Reload Card"]')
       .exists('the sandboxed card menu exposes an explicit reload action');
+    assert
+      .dom('[data-test-boxel-menu-item-text="Renderer: Sandbox (SES)"]')
+      .exists('the card menu identifies the effective sandbox renderer');
     await click('[data-test-boxel-menu-item-text="Reload Card"]');
 
     await waitUntil(

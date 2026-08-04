@@ -9,7 +9,9 @@ const networkProtocols = new Set(['http:', 'https:']);
 // In a credentialless iframe an ordinary realm URL therefore loses the user's
 // Realm authorization even though the module graph itself loaded correctly.
 // This Host-owned child helper discovers image elements and resolves them
-// through the same allowlisted MessageChannel capability used by the Loader.
+// through a dedicated, bounded MessageChannel media capability. It is not the
+// Loader's executable-module capability: public media stays credentialless,
+// while only assets in the card's own Realm may receive Realm authorization.
 // Authored code never receives the capability or the authenticated response.
 export default class RealmIframeMediaBridge {
   private observer?: MutationObserver;

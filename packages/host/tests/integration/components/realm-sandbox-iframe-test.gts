@@ -46,7 +46,11 @@ module('Integration | realm sandbox iframe', function (hooks) {
       targetOrigin: 'https://iframe.example',
       url: 'about:blank',
       accessibleTitle: 'Browser Canvas sandboxed card',
-      presentation: { format: 'isolated', displayContainer: true },
+      presentation: {
+        format: 'isolated',
+        heightMode: 'allocated',
+        displayContainer: true,
+      },
       onTypePresentation: (presentation: typeof receivedTypePresentation) => {
         receivedTypePresentation = presentation;
       },
@@ -150,6 +154,18 @@ module('Integration | realm sandbox iframe', function (hooks) {
         prefersWideFormat: true,
       },
       'the child publishes only inert type presentation to its Host container',
+    );
+    transferredPort?.postMessage({
+      protocol: realmIframeSandboxProtocol,
+      type: 'resize',
+      width: 640,
+      height: 777,
+    });
+    await settled();
+    assert.notStrictEqual(
+      iframe.style.height,
+      '777px',
+      'an allocated iframe keeps the viewport height supplied by the Host',
     );
 
     let permissionUpdates: unknown[] = [];
@@ -275,6 +291,73 @@ module('Integration | realm sandbox iframe', function (hooks) {
       );
   });
 
+  test('applies child measurements only when content owns iframe height', async function (assert) {
+    let sandbox = {
+      cardID: 'https://realm.example/EmbeddedCard/sample',
+      document: { data: { type: 'card', attributes: {} } },
+      format: 'embedded',
+      principal: 'https://realm.example/',
+      rootModuleURL: 'https://realm.example/embedded-card.gts',
+      targetOrigin: 'https://iframe.example',
+      url: 'about:blank',
+      accessibleTitle: 'Embedded sandboxed card',
+      presentation: {
+        format: 'embedded',
+        heightMode: 'intrinsic',
+        displayContainer: true,
+      },
+    } as unknown as RealmIframeSandboxRender;
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><RealmSandboxIframe @sandbox={{sandbox}} /></template>
+      },
+    );
+
+    let iframe = document.querySelector(
+      '.realm-sandbox-iframe iframe',
+    ) as HTMLIFrameElement;
+    let bootstrapID = new URL(iframe.src).searchParams.get('bootstrapID');
+    let transferredPort: MessagePort | undefined;
+    Object.defineProperty(iframe.contentWindow, 'postMessage', {
+      configurable: true,
+      value: (
+        _message: unknown,
+        _targetOrigin: string,
+        transfer: Transferable[],
+      ) => {
+        transferredPort = transfer[0] as MessagePort;
+      },
+    });
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        origin: sandbox.targetOrigin,
+        data: {
+          protocol: realmIframeSandboxProtocol,
+          type: 'listening',
+          bootstrapID,
+        },
+      }),
+    );
+
+    transferredPort?.postMessage({
+      protocol: realmIframeSandboxProtocol,
+      type: 'resize',
+      width: 640,
+      height: 321,
+    });
+    await settled();
+
+    assert
+      .dom('[data-card-sandbox-height-mode]')
+      .hasAttribute('data-card-sandbox-height-mode', 'intrinsic');
+    assert.strictEqual(
+      iframe.style.height,
+      '321px',
+      'an intrinsic iframe accepts its measured content height',
+    );
+  });
+
   test('preserves read-only realm authority across the iframe boundary', async function (assert) {
     let updateAttempted = false;
     let sandbox = {
@@ -292,7 +375,11 @@ module('Integration | realm sandbox iframe', function (hooks) {
       targetOrigin: 'https://iframe.example',
       url: 'about:blank',
       accessibleTitle: 'Read-only sandboxed card',
-      presentation: { format: 'edit', displayContainer: true },
+      presentation: {
+        format: 'edit',
+        heightMode: 'intrinsic',
+        displayContainer: true,
+      },
     } as unknown as RealmIframeSandboxRender;
 
     await renderComponent(

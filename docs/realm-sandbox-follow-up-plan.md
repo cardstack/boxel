@@ -86,8 +86,9 @@ unrelated infrastructure or UX changes.
 - [ ] Test MarkdownField and delegated nested-card rendering across realm
       boundaries.
 - [ ] Test a DOM-heavy/Three.js-style card in the iframe tier.
-- [ ] Confirm iframe intrinsic height for isolated, embedded, and edit while
-      authored CSS still controls overflow.
+- [ ] Confirm intrinsic iframe height for embedded, atom, edit, and isolated;
+      confirm fitted receives an allocated viewport and child measurements do
+      not override Host sizing.
 - [ ] Rapidly switch preview formats and verify the warm two-format SES cache.
 - [ ] Rapidly navigate the file tree and Recent Files; Monaco must not wait for
       schema or preview loading.

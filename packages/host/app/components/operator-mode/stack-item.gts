@@ -691,6 +691,23 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }) ?? [],
     );
 
+    if (this.card) {
+      let mode = this.realmSandbox.renderModeFor(this.card, this.cardFormat);
+      let label =
+        mode === 'trusted'
+          ? 'Renderer: Trusted'
+          : mode === 'iframe'
+            ? 'Renderer: Sandbox (IFrame)'
+            : 'Renderer: Sandbox (SES)';
+      items.unshift(
+        new MenuItem({
+          label,
+          action: () => {},
+          header: true,
+        }),
+      );
+    }
+
     if (this.card && this.realmSandbox.isOpaqueCard(this.card)) {
       items.unshift(
         new MenuItem({

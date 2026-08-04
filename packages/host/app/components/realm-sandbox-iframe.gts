@@ -85,6 +85,10 @@ export default class RealmSandboxIframe extends Component<Signature> {
     return this.args.displayContainer !== false;
   }
 
+  get heightMode() {
+    return this.args.sandbox.presentation.heightMode;
+  }
+
   get isLoading() {
     return this.status === 'loading';
   }
@@ -185,6 +189,9 @@ export default class RealmSandboxIframe extends Component<Signature> {
           );
         }
       } else if (event.data.type === 'resize') {
+        if (this.heightMode !== 'intrinsic') {
+          return;
+        }
         let height = Math.max(40, Math.min(2400, event.data.height));
         element.style.height = `${height}px`;
       } else if (event.data.type === 'card-update') {
@@ -227,6 +234,7 @@ export default class RealmSandboxIframe extends Component<Signature> {
             this.args.sandbox,
             event.data.url,
             event.data.init,
+            event.data.purpose,
           );
           post(
             {
@@ -311,6 +319,17 @@ export default class RealmSandboxIframe extends Component<Signature> {
     },
   );
 
+  syncHeightMode = modifier(
+    (
+      element: HTMLIFrameElement,
+      [heightMode]: [RealmIframeSandboxRender['presentation']['heightMode']],
+    ) => {
+      if (heightMode === 'allocated') {
+        element.style.removeProperty('height');
+      }
+    },
+  );
+
   syncDraft = modifier(
     (
       _element: HTMLIFrameElement,
@@ -334,8 +353,16 @@ export default class RealmSandboxIframe extends Component<Signature> {
   syncPresentation = modifier(
     (
       _element: HTMLIFrameElement,
-      [format, fieldName, componentModule, componentName, displayContainer]: [
+      [
+        format,
+        heightMode,
+        fieldName,
+        componentModule,
+        componentName,
+        displayContainer,
+      ]: [
         Format,
+        RealmIframeSandboxRender['presentation']['heightMode'],
         string | undefined,
         string | undefined,
         string | undefined,
@@ -346,6 +373,7 @@ export default class RealmSandboxIframe extends Component<Signature> {
         type: 'render',
         presentation: {
           format,
+          heightMode,
           displayContainer,
           ...(fieldName ? { fieldName } : {}),
           ...(componentModule && componentName
@@ -369,6 +397,8 @@ export default class RealmSandboxIframe extends Component<Signature> {
         (if (eq this.format 'isolated') 'isolated-format')
         (if (eq this.format 'embedded') 'embedded-format')
         (if (eq this.format 'edit') 'edit-format')
+        (if (eq this.heightMode 'allocated') 'allocated-height')
+        (if (eq this.heightMode 'intrinsic') 'intrinsic-height')
       }}
       data-card-sandbox-frame-status={{this.status}}
       data-card-sandbox-draft-revision={{@sandbox.draft.revision}}
@@ -388,6 +418,7 @@ export default class RealmSandboxIframe extends Component<Signature> {
       }}
       data-boxel-card-id={{@sandbox.cardID}}
       data-boxel-card-format={{this.format}}
+      data-card-sandbox-height-mode={{this.heightMode}}
       ...attributes
     >
       {{#if this.isLoading}}
@@ -398,8 +429,10 @@ export default class RealmSandboxIframe extends Component<Signature> {
       <iframe
         {{this.connectFrame}}
         {{this.syncPermissions this.canWrite}}
+        {{this.syncHeightMode this.heightMode}}
         {{this.syncPresentation
           @sandbox.presentation.format
+          @sandbox.presentation.heightMode
           @sandbox.presentation.fieldName
           @sandbox.presentation.codeRef.module
           @sandbox.presentation.codeRef.name
@@ -442,13 +475,13 @@ export default class RealmSandboxIframe extends Component<Signature> {
         color-scheme: light dark;
         background: transparent;
       }
-      .isolated-format,
-      .isolated-format iframe {
+      .allocated-height,
+      .allocated-height iframe {
         height: 100%;
         min-height: 25rem;
       }
-      .embedded-format,
-      .embedded-format iframe {
+      .intrinsic-height,
+      .intrinsic-height iframe {
         height: auto;
       }
     </style>

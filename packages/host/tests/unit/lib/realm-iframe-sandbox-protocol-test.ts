@@ -1,6 +1,7 @@
 import { module, test } from 'qunit';
 
 import {
+  defaultRealmIframeHeightMode,
   iframeFetchResponseLimitBytes,
   isRealmIframeSandboxConnect,
   isRealmIframeSandboxInbound,
@@ -9,6 +10,14 @@ import {
 } from '@cardstack/host/lib/realm-iframe-sandbox-protocol';
 
 module('Unit | realm iframe sandbox protocol', function () {
+  test('defines format height ownership defaults', function (assert) {
+    assert.strictEqual(defaultRealmIframeHeightMode('embedded'), 'intrinsic');
+    assert.strictEqual(defaultRealmIframeHeightMode('atom'), 'intrinsic');
+    assert.strictEqual(defaultRealmIframeHeightMode('edit'), 'intrinsic');
+    assert.strictEqual(defaultRealmIframeHeightMode('isolated'), 'intrinsic');
+    assert.strictEqual(defaultRealmIframeHeightMode('fitted'), 'allocated');
+  });
+
   test('accepts well-formed renderer messages', function (assert) {
     assert.true(
       isRealmIframeSandboxConnect({
@@ -16,7 +25,11 @@ module('Unit | realm iframe sandbox protocol', function () {
         type: 'connect',
         rootModuleURL: 'https://realm.example/card.gts',
         canWrite: true,
-        presentation: { format: 'edit', displayContainer: true },
+        presentation: {
+          format: 'edit',
+          heightMode: 'allocated',
+          displayContainer: true,
+        },
       }),
       'write permission is an explicit capability bit on connect',
     );
@@ -41,6 +54,7 @@ module('Unit | realm iframe sandbox protocol', function () {
         type: 'render',
         presentation: {
           format: 'embedded',
+          heightMode: 'intrinsic',
           displayContainer: false,
           fieldName: 'description',
           codeRef: {
@@ -50,6 +64,18 @@ module('Unit | realm iframe sandbox protocol', function () {
         },
       }),
       'format and presentation updates stay on the channel',
+    );
+    assert.false(
+      isRealmIframeSandboxInbound({
+        protocol: realmIframeSandboxProtocol,
+        type: 'render',
+        presentation: {
+          format: 'isolated',
+          heightMode: 'content-decides',
+          displayContainer: true,
+        },
+      }),
+      'height ownership must be explicit and bounded',
     );
     assert.true(
       isRealmIframeSandboxInbound({
@@ -72,6 +98,7 @@ module('Unit | realm iframe sandbox protocol', function () {
         protocol: realmIframeSandboxProtocol,
         type: 'fetch-request',
         requestId: 'fetch-1',
+        purpose: 'module',
         url: 'https://realm.example/card.gts',
         init: { method: 'GET', headers: [['accept', 'text/plain']] },
       }),
@@ -126,7 +153,11 @@ module('Unit | realm iframe sandbox protocol', function () {
         protocol: realmIframeSandboxProtocol,
         type: 'connect',
         rootModuleURL: 'https://realm.example/card.gts',
-        presentation: { format: 'edit', displayContainer: true },
+        presentation: {
+          format: 'edit',
+          heightMode: 'allocated',
+          displayContainer: true,
+        },
       }),
       'connect cannot omit the Host permission decision',
     );
@@ -178,6 +209,7 @@ module('Unit | realm iframe sandbox protocol', function () {
         protocol: realmIframeSandboxProtocol,
         type: 'fetch-request',
         requestId: 'fetch-1',
+        purpose: 'module',
         url: 'https://realm.example/card.gts',
         init: { method: 'GET', headers: [['accept']] },
       }),
@@ -188,10 +220,22 @@ module('Unit | realm iframe sandbox protocol', function () {
         protocol: realmIframeSandboxProtocol,
         type: 'fetch-request',
         requestId: 'x'.repeat(257),
+        purpose: 'module',
         url: 'https://realm.example/card.gts',
         init: { method: 'GET', headers: [] },
       }),
       'request identifiers are bounded',
+    );
+    assert.false(
+      isRealmIframeSandboxOutbound({
+        protocol: realmIframeSandboxProtocol,
+        type: 'fetch-request',
+        requestId: 'fetch-1',
+        purpose: 'credentialed-arbitrary-fetch',
+        url: 'https://realm.example/card.gts',
+        init: { method: 'GET', headers: [] },
+      }),
+      'fetch purposes are an explicit closed set',
     );
     assert.false(
       isRealmIframeSandboxOutbound({

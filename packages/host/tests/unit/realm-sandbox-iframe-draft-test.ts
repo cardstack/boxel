@@ -168,6 +168,89 @@ module('Unit | realm sandbox iframe draft', function (hooks) {
     );
   });
 
+  test('allows public image media without widening module or credential authority', async function (assert) {
+    let sandbox = {
+      rootModuleURL: 'https://realm-a.example/cards/article.gts',
+      principal: 'https://realm-a.example/',
+    } as RealmIframeSandboxRender;
+    let service = getService('realm-sandbox') as RealmSandboxService;
+    let publicFetches = 0;
+    let authenticatedFetches = 0;
+    let internal = service as unknown as {
+      network: {
+        realm: { realmOf(url: URL): undefined };
+        fetch(url: URL): Promise<Response>;
+        authedFetch(url: URL): Promise<Response>;
+      };
+    };
+    internal.network = {
+      realm: { realmOf: () => undefined },
+      fetch: async () => {
+        publicFetches++;
+        return new Response(new Uint8Array([137, 80, 78, 71]), {
+          status: 200,
+          headers: { 'content-type': 'image/png' },
+        });
+      },
+      authedFetch: async () => {
+        authenticatedFetches++;
+        throw new Error('public media must not receive Realm credentials');
+      },
+    };
+
+    let response = await service.fetchForIframe(
+      sandbox,
+      'https://cdn.example/poster.png',
+      { headers: [['accept', 'image/*']] },
+      'media',
+    );
+
+    assert.strictEqual(response.status, 200);
+    assert.true(response.body instanceof ArrayBuffer);
+    assert.strictEqual(publicFetches, 1);
+    assert.strictEqual(authenticatedFetches, 0);
+    await assert.rejects(
+      service.fetchForIframe(sandbox, 'https://cdn.example/poster.png'),
+      /denied undeclared module read/,
+      'the same URL does not become an executable module dependency',
+    );
+  });
+
+  test('rejects a non-image response from the private media capability', async function (assert) {
+    let sandbox = {
+      rootModuleURL: 'https://realm-a.example/cards/article.gts',
+      principal: 'https://realm-a.example/',
+    } as RealmIframeSandboxRender;
+    let service = getService('realm-sandbox') as RealmSandboxService;
+    let internal = service as unknown as {
+      network: {
+        realm: { realmOf(url: URL): undefined };
+        fetch(url: URL): Promise<Response>;
+        authedFetch(url: URL): Promise<Response>;
+      };
+    };
+    let nonImage = async () =>
+      new Response('export const stolen = true;', {
+        status: 200,
+        headers: { 'content-type': 'application/javascript' },
+      });
+    internal.network = {
+      realm: { realmOf: () => undefined },
+      fetch: nonImage,
+      authedFetch: nonImage,
+    };
+
+    await assert.rejects(
+      service.fetchForIframe(
+        sandbox,
+        'https://cdn.example/not-an-image.js',
+        { headers: [['accept', 'image/*']] },
+        'media',
+      ),
+      /media response was not an image/,
+    );
+  });
+
   test('allows only a declared cross-realm module dependency', function (assert) {
     let rootModuleURL = 'https://realm-a.example/cards/article.gts';
     let dependencyURL = 'https://realm-b.example/shared/nav.gts';

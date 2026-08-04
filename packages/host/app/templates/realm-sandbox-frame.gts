@@ -26,6 +26,7 @@ import {
 import RealmIframeHeightService from '@cardstack/host/lib/realm-iframe-height-service';
 import RealmIframeMediaBridge from '@cardstack/host/lib/realm-iframe-media-bridge';
 import {
+  defaultRealmIframeHeightMode,
   isRealmIframeSandboxInbound,
   isRealmIframeSandboxConnect,
   isRealmIframeSandboxOutbound,
@@ -92,6 +93,7 @@ class RealmSandboxFrame extends Component<Signature> {
   private document?: LooseSingleCardDocument;
   private activeDraft?: RealmIframeSandboxDraft;
   private embeddedSize?: SafeElementSize;
+  private heightService?: RealmIframeHeightService;
   private mediaBridge?: RealmIframeMediaBridge;
   private latestDraftRevision = -1;
   private pendingDraft = Promise.resolve();
@@ -113,14 +115,13 @@ class RealmSandboxFrame extends Component<Signature> {
   }
 
   connect = modifier((element: HTMLElement) => {
-    // Every iframe format reports intrinsic dimensions. The parent format CSS
-    // remains authoritative for clipping, scrolling, and stretching. Embedded
-    // additionally uses the safe modifier below so nested FieldDef content is
-    // measured at the exact delegated root without giving authored code a DOM
-    // or MessagePort capability.
+    // Intrinsic frames report their content size to the Host. Allocated frames
+    // consume the viewport the Host gives them so docked panels and internal
+    // overflow do not inflate the iframe to its scroll height.
     let heightService = new RealmIframeHeightService(element, (dimensions) =>
       this.post({ type: 'resize', ...dimensions }),
     );
+    this.heightService = heightService;
     let announceListening = () =>
       globalThis.parent.postMessage(
         {
@@ -152,10 +153,9 @@ class RealmSandboxFrame extends Component<Signature> {
       this.port.addEventListener('message', this.receive);
       this.port.start();
       this.canWrite = event.data.canWrite;
-      heightService.start();
       this.mediaBridge = new RealmIframeMediaBridge(
         element,
-        this.brokerFetch,
+        this.mediaFetch,
         event.data.rootModuleURL,
       );
       this.mediaBridge.start();
@@ -179,6 +179,9 @@ class RealmSandboxFrame extends Component<Signature> {
     return () => {
       globalThis.clearInterval(listeningTimer);
       heightService.stop();
+      if (this.heightService === heightService) {
+        this.heightService = undefined;
+      }
       this.mediaBridge?.stop();
       this.mediaBridge = undefined;
       globalThis.removeEventListener('message', acceptCapabilityPort);
@@ -212,7 +215,7 @@ class RealmSandboxFrame extends Component<Signature> {
   }
 
   private reportEmbeddedSize = (dimensions: SafeElementSize) => {
-    if (this.currentPresentation.format !== 'embedded') {
+    if (this.currentPresentation.heightMode !== 'intrinsic') {
       return;
     }
     this.embeddedSize = dimensions;
@@ -330,17 +333,24 @@ class RealmSandboxFrame extends Component<Signature> {
     });
   }
 
-  private brokerFetch = async (
+  private brokerFetch = async (input: RequestInfo | URL, init?: RequestInit) =>
+    this.capabilityFetch('module', input, init);
+
+  private mediaFetch = async (input: RequestInfo | URL, init?: RequestInit) =>
+    this.capabilityFetch('media', input, init);
+
+  private capabilityFetch = async (
+    purpose: 'module' | 'media',
     input: RequestInfo | URL,
     init?: RequestInit,
   ) => {
     let request = input instanceof Request ? input : new Request(input, init);
-    let cacheKey = `${request.method}\n${request.url}\n${request.headers.get('accept') ?? ''}`;
+    let cacheKey = `${purpose}\n${request.method}\n${request.url}\n${request.headers.get('accept') ?? ''}`;
     let existing = this.inFlightBrokerFetches.get(cacheKey);
     if (existing) {
       return this.cloneBrokerResponse(await existing);
     }
-    let pending = this.uncachedBrokerFetch(request).finally(() =>
+    let pending = this.uncachedBrokerFetch(purpose, request).finally(() =>
       this.inFlightBrokerFetches.delete(cacheKey),
     );
     this.inFlightBrokerFetches.set(cacheKey, pending);
@@ -360,9 +370,16 @@ class RealmSandboxFrame extends Component<Signature> {
     return clone;
   }
 
-  private uncachedBrokerFetch = async (request: Request) => {
+  private uncachedBrokerFetch = async (
+    purpose: 'module' | 'media',
+    request: Request,
+  ) => {
     let draft = this.activeDraft;
-    if (draft && sameCodePreviewModuleURL(request.url, draft.sourceURL)) {
+    if (
+      purpose === 'module' &&
+      draft &&
+      sameCodePreviewModuleURL(request.url, draft.sourceURL)
+    ) {
       let compiledSource = this.compiledDrafts.get(draft);
       if (!compiledSource) {
         compiledSource = compileCodePreviewDraftSource(draft);
@@ -380,6 +397,7 @@ class RealmSandboxFrame extends Component<Signature> {
     this.post({
       type: 'fetch-request',
       requestId,
+      purpose,
       url: request.url,
       init: {
         method: request.method,
@@ -470,6 +488,7 @@ class RealmSandboxFrame extends Component<Signature> {
     return (
       this.presentation ?? {
         format: this.args.model.format,
+        heightMode: defaultRealmIframeHeightMode(this.args.model.format),
         fieldName: this.args.model.fieldName,
         codeRef: this.args.model.codeRef,
         displayContainer: this.args.model.displayContainer,
@@ -479,6 +498,7 @@ class RealmSandboxFrame extends Component<Signature> {
 
   private applyPresentation(presentation: RealmIframeSandboxPresentation) {
     this.presentation = presentation;
+    this.syncHeightMeasurement();
     if (this.card && this.cardAPI) {
       try {
         this.field = this.resolveFieldFor(this.card, this.cardAPI);
@@ -487,6 +507,14 @@ class RealmSandboxFrame extends Component<Signature> {
         this.field = undefined;
         this.error = error instanceof Error ? error.message : String(error);
       }
+    }
+  }
+
+  private syncHeightMeasurement() {
+    if (this.currentPresentation.heightMode === 'intrinsic') {
+      this.heightService?.start();
+    } else {
+      this.heightService?.stop();
     }
   }
 

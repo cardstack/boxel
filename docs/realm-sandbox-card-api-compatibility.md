@@ -126,9 +126,17 @@ This API is **not required for existing staging cards**:
   an allowlist.
 
 The iframe height service itself is transport owned by the renderer. Cards do
-not import it. The iframe shell uses `safeModifier('observe-size', ...)` (or an
-equivalent trusted Host observer) and reports intrinsic size over its private
-MessageChannel.
+not import it. Height ownership is explicit in the private protocol:
+
+- `intrinsic`: the child reports measured content size and the Host sizes the
+  iframe. This is the default for embedded, atom, edit, and isolated formats.
+- `allocated`: the Host supplies a viewport and ignores child resize reports;
+  the card controls internal overflow and docked panels. This is the fitted
+  default.
+
+The child only runs its document observer in intrinsic mode. In allocated mode
+the iframe viewport itself communicates the Host allocation without exposing
+the parent DOM, `window`, or `MessagePort` to authored code.
 
 ## Runtime bridges that cards do not import
 

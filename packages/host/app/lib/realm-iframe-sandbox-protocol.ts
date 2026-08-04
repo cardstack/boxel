@@ -5,6 +5,14 @@ import type { Format } from '@cardstack/base/card-api';
 
 export const realmIframeSandboxProtocol = 'boxel-realm-iframe-v1' as const;
 
+export type RealmIframeHeightMode = 'intrinsic' | 'allocated';
+
+export function defaultRealmIframeHeightMode(
+  format: Format,
+): RealmIframeHeightMode {
+  return format === 'fitted' ? 'allocated' : 'intrinsic';
+}
+
 export interface RealmIframeSandboxConnect {
   protocol: typeof realmIframeSandboxProtocol;
   type: 'connect';
@@ -17,6 +25,7 @@ export interface RealmIframeSandboxConnect {
 
 export interface RealmIframeSandboxPresentation {
   format: Format;
+  heightMode: RealmIframeHeightMode;
   fieldName?: string;
   codeRef?: ResolvedCodeRef;
   displayContainer: boolean;
@@ -78,6 +87,7 @@ export interface RealmIframeSandboxFetchRequest {
   protocol: typeof realmIframeSandboxProtocol;
   type: 'fetch-request';
   requestId: string;
+  purpose: 'module' | 'media';
   url: string;
   init: {
     method: string;
@@ -217,6 +227,7 @@ export function isRealmIframeSandboxOutbound(
     case 'fetch-request':
       return (
         boundedString(message.requestId, 256) &&
+        ['module', 'media'].includes(String(message.purpose)) &&
         boundedString(message.url, 8_192) &&
         isIframeFetchInit(message.init)
       );
@@ -243,6 +254,12 @@ function isRealmIframeSandboxTypePresentation(
       boundedString(presentation.headerColor, 128)) &&
     typeof presentation.prefersWideFormat === 'boolean'
   );
+}
+
+function isRealmIframeHeightMode(
+  value: unknown,
+): value is RealmIframeHeightMode {
+  return value === 'intrinsic' || value === 'allocated';
 }
 
 function boundedString(value: unknown, maxLength: number): value is string {
@@ -318,6 +335,7 @@ function isRealmIframeSandboxPresentation(
   let presentation = value as Record<string, unknown>;
   return (
     ['isolated', 'embedded', 'edit'].includes(String(presentation.format)) &&
+    isRealmIframeHeightMode(presentation.heightMode) &&
     typeof presentation.displayContainer === 'boolean' &&
     optionalBoundedString(presentation.fieldName, 1_024) &&
     (presentation.codeRef === undefined ||
