@@ -46,6 +46,11 @@ module(basename(import.meta.filename), function () {
 
           export class Person extends CardDef {
             @field firstName = contains(StringField);
+            static isolated = class Isolated extends Component<typeof this> {
+              <template>
+                <h1>Isolated Card Person: <@fields.firstName/></h1>
+              </template>
+            }
             static embedded = class Embedded extends Component<typeof this> {
               <template>
                 Embedded Card Person: <@fields.firstName/>
@@ -227,6 +232,23 @@ module(basename(import.meta.filename), function () {
           .replace(/\s+/g, ' ')
           .includes('Embedded Card Person: John'),
         'the embedded markup is served',
+      );
+    });
+
+    test('?format=isolated serves the isolated rendering', async function (assert) {
+      let response = await cardHtml('/john?format=isolated');
+      assert.strictEqual(response.status, 200);
+      let { data } = bodyOf(response);
+      let html = htmlResourceIn(
+        bodyOf(response),
+        data.relationships.html.data[0].id,
+      );
+      assert.strictEqual(html!.attributes.format, 'isolated');
+      assert.true(
+        (html!.attributes.html ?? '')
+          .replace(/\s+/g, ' ')
+          .includes('Isolated Card Person: John'),
+        'the isolated markup is served',
       );
     });
 
