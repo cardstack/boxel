@@ -96,7 +96,11 @@ import type { TempEvent } from '@cardstack/host/lib/matrix-classes/room';
 import Room from '@cardstack/host/lib/matrix-classes/room';
 import { getRandomBackgroundURL, iconURLFor } from '@cardstack/host/lib/utils';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
-import { clearLocalStorage } from '@cardstack/host/utils/local-storage-keys';
+import {
+  clearLocalStorage,
+  RealmServerSessionLocalStorageKey,
+  SessionLocalStorageKey,
+} from '@cardstack/host/utils/local-storage-keys';
 
 import { isSkillCard } from '../lib/file-def-manager';
 import { getSkillSourceTools, loadSkillSource } from '../lib/skill-tools';
@@ -3081,8 +3085,16 @@ export default class MatrixService extends Service {
   // revoke the CLI's session too). Account-level bootstrap side-effects
   // (personal realm, realm auth) stay put; only this browser's local link to
   // the device is forgotten.
+  //
+  // Storage-only, and all three keys of it. The realm tokens are persisted
+  // apart from the Matrix session, and a session-room claim inside the
+  // realm-server token is the identity a later realm-auth handshake adopts:
+  // leaving it behind hands the next account a session room belonging to this
+  // one, which it is not invited to and cannot join.
   forgetPersistedSession() {
     this.clearAuth();
+    window.localStorage.removeItem(RealmServerSessionLocalStorageKey);
+    window.localStorage.removeItem(SessionLocalStorageKey);
   }
 
   async activateCodingSkill() {

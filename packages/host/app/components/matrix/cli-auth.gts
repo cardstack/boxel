@@ -27,6 +27,9 @@ import type { LoginResponse } from 'matrix-js-sdk';
 
 const { matrixURL } = ENV;
 const GOOGLE_IDP_ID = 'oidc-google';
+// Carries "show the register form" across the reload that entering register
+// mode from a signed-in session performs.
+const REGISTER_PARAM = 'register';
 
 interface MatrixLoginResponse {
   access_token: string;
@@ -72,7 +75,13 @@ export default class CliAuth extends Component {
       {{else if this.registering}}
         <span class='title'>Authorize Boxel CLI</span>
         <p class='subtitle'>Create a Boxel account to give the Boxel CLI running
-          on this computer access to your workspaces.</p>
+          on this computer access to your workspaces.{{#if
+            this.endedSignedInSession
+          }}
+            <span data-test-cli-auth-signed-out-note>This browser has been
+              signed out of the account it was using; that account itself is
+              untouched.</span>
+          {{/if}}</p>
         <RegisterUser
           @setMode={{this.setMode}}
           @onComplete={{this.onRegisterComplete}}
@@ -265,6 +274,10 @@ export default class CliAuth extends Component {
   @tracked private googleSsoAvailable = false;
   @tracked private completed = false;
   @tracked private registering = false;
+  // True when entering register mode signed this browser out, which is worth
+  // saying out loud: the person did not ask to be signed out, they asked for a
+  // new account.
+  @tracked private endedSignedInSession = false;
   @tracked private resettingPassword = false;
   @tracked private resetPasswordParams: ResetPasswordParams | undefined;
   // True when this page load came from a reset email, which means the CLI has
@@ -293,6 +306,18 @@ export default class CliAuth extends Component {
       this.resetPasswordParams = { sid, clientSecret };
       this.resumedFromEmail = true;
     }
+
+    // The far side of the reload enterRegister() performs: come back up in
+    // register mode, and say why this browser is no longer signed in. Forget the
+    // session again here — a request already in flight when the reload started
+    // can land after the clearing that preceded it and persist a token again,
+    // and localStorage outlives the reload. Nothing of the old session is alive
+    // in this document to write another one.
+    if (params.get(REGISTER_PARAM)) {
+      this.matrixService.forgetPersistedSession();
+      this.registering = true;
+      this.endedSignedInSession = true;
+    }
   }
 
   private get showingPasswordReset() {
@@ -303,22 +328,63 @@ export default class CliAuth extends Component {
   // "done here — return to the sign-in form". This page reads the other modes
   // as which panel to show instead. The password form is the 'login' state.
   @action private setMode(mode: AuthMode) {
-    this.registering = mode === 'register';
+    if (mode === 'register') {
+      this.enterRegister();
+    } else {
+      this.registering = false;
+      // Leaving register mode drops the marker, so a refresh lands on the
+      // sign-in form rather than re-entering registration. The port and nonce
+      // stay, since the CLI is still waiting on them.
+      let url = new URL(window.location.href);
+      if (url.searchParams.has(REGISTER_PARAM)) {
+        url.searchParams.delete(REGISTER_PARAM);
+        window.history.replaceState(
+          {},
+          '',
+          url.pathname + url.search + url.hash,
+        );
+      }
+    }
     this.resettingPassword = mode === 'forgot-password';
   }
 
   @action private startRegister(ev: Event) {
     ev.preventDefault();
+    this.enterRegister();
+  }
+
+  // Registration bootstraps a brand-new account onto this page's Matrix client,
+  // so a session already held here has to be gone before it starts — otherwise
+  // the bootstrap runs across both identities, and the realm-auth handshake
+  // hands the new account a session room that belongs to the old one and cannot
+  // be joined, failing the bootstrap before the personal realm exists.
+  //
+  // Ending the session in place is not enough: requests already in flight under
+  // the old identity land after it and re-seed what they touch. So end it and
+  // reload — a fresh document starts with nothing of the old session in it,
+  // which is why registering works in a window that was never signed in. The
+  // port and nonce stay in the URL, so the CLI is still waiting on the other
+  // side of the reload. The account itself is untouched; only this browser
+  // forgets it.
+  private enterRegister() {
+    if (this.signedInUserId) {
+      this.matrixService.forgetPersistedSession();
+      let url = new URL(window.location.href);
+      url.searchParams.set(REGISTER_PARAM, 'true');
+      window.location.replace(url.href);
+      return;
+    }
     this.registering = true;
   }
 
   // Registration bootstrapped a full account and minted one device; hand that
   // device to the CLI, and forget it locally so this browser doesn't keep it as
-  // its own session (see MatrixService.forgetPersistedSession). The port and
-  // nonce are still in the URL, so `redirect` resolves exactly as it did before
-  // switching into register mode.
+  // its own session (see MatrixService.forgetPersistedSession). Reads the
+  // callback captured at page load rather than the URL: the bootstrap that
+  // precedes this refreshes routes, and a transition would take the port and
+  // nonce out of the URL before the hand-off got to read them.
   @action private onRegisterComplete(session: LoginResponse) {
-    let redirect = this.redirect;
+    let redirect = this.capturedRedirect;
     if (!redirect) {
       return;
     }
@@ -352,6 +418,11 @@ export default class CliAuth extends Component {
     let params = new URLSearchParams(window.location.search);
     return cliAuthLoopbackUrl(params.get('port'), params.get('state'));
   }
+
+  // The callback as of page load. Every path that finishes here keeps the port
+  // and nonce in the URL, but registration's bootstrap refreshes routes on its
+  // way out, so the hand-off cannot rely on the URL still holding them.
+  private capturedRedirect = this.redirect;
 
   private get redirectError(): string | undefined {
     if (!this.redirect) {
