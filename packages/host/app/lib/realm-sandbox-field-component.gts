@@ -226,6 +226,14 @@ class DeferredRelationshipCard extends Modifier<DeferredRelationshipSignature> {
     }
     let generation = this.generation;
     let { cardId, resourceType } = this.args;
+    // Relationship editors can remove a link between the modifier's
+    // `modify` and `afterRender` turns. Glimmer tears down the element shortly
+    // afterwards, but the named-args reference can already expose the new
+    // undefined value. Treat that transient state as an empty relationship;
+    // Store authority must never be invoked without an identity.
+    if (typeof cardId !== 'string' || cardId.length === 0) {
+      return;
+    }
     let errorDoc =
       resourceType === 'file-meta'
         ? this.store.peekError(cardId, { type: 'file-meta' })

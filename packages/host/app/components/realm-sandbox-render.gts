@@ -4,8 +4,12 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { cached } from '@glimmer/tracking';
 
-import Modifier from 'ember-modifier';
-
+import { CardCrudFunctionsConsumer } from '@cardstack/base/field-component';
+import Modifier, {
+  type ArgsFor,
+  type NamedArgs,
+  type PositionalArgs,
+} from 'ember-modifier';
 import { consume } from 'ember-provide-consume-context';
 
 import { CardContainer } from '@cardstack/boxel-ui/components';
@@ -26,13 +30,13 @@ import type RealmSandboxService from '@cardstack/host/services/realm-sandbox';
 
 import type {
   BaseDef,
+  BaseDefConstructor,
   CardContext,
   Field,
   FieldType,
   Format,
   ViewCardFn,
 } from '@cardstack/base/card-api';
-import type { ArgsFor, NamedArgs, PositionalArgs } from 'ember-modifier';
 
 const NoopCardComponentModifier = class extends Modifier<any> {
   modify() {}
@@ -148,6 +152,26 @@ export default class RealmSandboxRender extends Component<Signature> {
     return this.args.sandbox.component;
   }
 
+  get trustedHostTemplate() {
+    return this.args.sandbox.trustedHostTemplate;
+  }
+
+  get cardOrField() {
+    return this.args.card.constructor as BaseDefConstructor;
+  }
+
+  get fieldName() {
+    return this.args.fieldName ?? this.args.field?.name;
+  }
+
+  get canEdit() {
+    return (
+      this.permissions?.canWrite === true &&
+      !this.args.field?.computeVia &&
+      !this.args.field?.queryDefinition
+    );
+  }
+
   get model() {
     // An authored FieldDef receives the actual field value as @model. The
     // synthetic opaque FieldDef record exists only to select and evaluate its
@@ -256,7 +280,6 @@ export default class RealmSandboxRender extends Component<Signature> {
           typography, color, sizing, or container-query ancestry. }}
       <div
         class='realm-sandbox-template-island realm-sandbox-field-template-island'
-        data-realm-sandbox-template-island
         {{RealmSandboxRelationshipContext
           card=@card
           getCard=this.getCard
@@ -265,23 +288,47 @@ export default class RealmSandboxRender extends Component<Signature> {
           viewCard=this.viewCard
         }}
         {{RealmSandboxStyles @sandbox.styles}}
-        {{RealmSandboxTemplateIsland
-          this.component
-          cardOrField=@card.constructor
-          model=this.model
-          fields=@sandbox.fields
-          context=this.context
-          format=this.format
-          set=this.set
-          viewCard=this.viewCard
-          onError=@sandbox.onError
-          onRendered=@sandbox.onRendered
-          card=@card
-          principal=@sandbox.principal
-          markerBacked=@sandbox.markerBacked
-        }}
         ...attributes
-      ></div>
+      >
+        {{#if this.trustedHostTemplate}}
+          <CardCrudFunctionsConsumer as |cardCrudFunctions|>
+            <this.component
+              @cardOrField={{this.cardOrField}}
+              @model={{this.model}}
+              @fields={{@sandbox.fields}}
+              @context={{this.context}}
+              @format={{this.format}}
+              @set={{this.set}}
+              @fieldName={{this.fieldName}}
+              @canEdit={{this.canEdit}}
+              @createCard={{cardCrudFunctions.createCard}}
+              @viewCard={{this.viewCard}}
+              @saveCard={{cardCrudFunctions.saveCard}}
+              @editCard={{cardCrudFunctions.editCard}}
+            />
+          </CardCrudFunctionsConsumer>
+        {{else}}
+          <div
+            class='realm-sandbox-authored-template-island'
+            data-realm-sandbox-template-island
+            {{RealmSandboxTemplateIsland
+              this.component
+              cardOrField=@card.constructor
+              model=this.model
+              fields=@sandbox.fields
+              context=this.context
+              format=this.format
+              set=this.set
+              viewCard=this.viewCard
+              onError=@sandbox.onError
+              onRendered=@sandbox.onRendered
+              card=@card
+              principal=@sandbox.principal
+              markerBacked=@sandbox.markerBacked
+            }}
+          ></div>
+        {{/if}}
+      </div>
     {{else}}
       <CardContainer
         @displayBoundaries={{this.displayContainer}}
@@ -323,7 +370,6 @@ export default class RealmSandboxRender extends Component<Signature> {
       >
         <div
           class='realm-sandbox-template-island'
-          data-realm-sandbox-template-island
           {{RealmSandboxRelationshipContext
             card=@card
             getCard=this.getCard
@@ -332,22 +378,46 @@ export default class RealmSandboxRender extends Component<Signature> {
             viewCard=this.viewCard
           }}
           {{RealmSandboxStyles @sandbox.styles}}
-          {{RealmSandboxTemplateIsland
-            this.component
-            cardOrField=@card.constructor
-            model=this.model
-            fields=@sandbox.fields
-            context=this.context
-            format=this.format
-            set=this.set
-            viewCard=this.viewCard
-            onError=@sandbox.onError
-            onRendered=@sandbox.onRendered
-            card=@card
-            principal=@sandbox.principal
-            markerBacked=@sandbox.markerBacked
-          }}
-        ></div>
+        >
+          {{#if this.trustedHostTemplate}}
+            <CardCrudFunctionsConsumer as |cardCrudFunctions|>
+              <this.component
+                @cardOrField={{this.cardOrField}}
+                @model={{this.model}}
+                @fields={{@sandbox.fields}}
+                @context={{this.context}}
+                @format={{this.format}}
+                @set={{this.set}}
+                @fieldName={{this.fieldName}}
+                @canEdit={{this.canEdit}}
+                @createCard={{cardCrudFunctions.createCard}}
+                @viewCard={{this.viewCard}}
+                @saveCard={{cardCrudFunctions.saveCard}}
+                @editCard={{cardCrudFunctions.editCard}}
+              />
+            </CardCrudFunctionsConsumer>
+          {{else}}
+            <div
+              class='realm-sandbox-authored-template-island'
+              data-realm-sandbox-template-island
+              {{RealmSandboxTemplateIsland
+                this.component
+                cardOrField=@card.constructor
+                model=this.model
+                fields=@sandbox.fields
+                context=this.context
+                format=this.format
+                set=this.set
+                viewCard=this.viewCard
+                onError=@sandbox.onError
+                onRendered=@sandbox.onRendered
+                card=@card
+                principal=@sandbox.principal
+                markerBacked=@sandbox.markerBacked
+              }}
+            ></div>
+          {{/if}}
+        </div>
       </CardContainer>
     {{/if}}
 
@@ -399,6 +469,9 @@ export default class RealmSandboxRender extends Component<Signature> {
         vertical-align: middle;
       }
       .realm-sandbox-template-island {
+        display: contents;
+      }
+      .realm-sandbox-authored-template-island {
         display: contents;
       }
       .realm-sandbox-render.edit-format:has(.default-card-template.edit) {

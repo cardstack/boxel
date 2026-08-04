@@ -174,6 +174,7 @@ export interface RealmSandboxRender {
   styles: string[];
   principal: string;
   markerBacked: boolean;
+  trustedHostTemplate?: boolean;
   theme?: OpaqueRealmCardTheme;
   onError?: (error: unknown, component: BaseDefComponent) => void;
   onRendered?: (component: BaseDefComponent) => void;
@@ -193,6 +194,7 @@ class StableRealmSandboxRender implements RealmSandboxRender {
   @tracked styles: string[];
   @tracked principal: string;
   @tracked markerBacked: boolean;
+  @tracked trustedHostTemplate: boolean;
   @tracked theme?: OpaqueRealmCardTheme;
   onError?: (error: unknown, component: BaseDefComponent) => void;
   onRendered?: (component: BaseDefComponent) => void;
@@ -206,6 +208,7 @@ class StableRealmSandboxRender implements RealmSandboxRender {
     this.styles = value.styles;
     this.principal = value.principal;
     this.markerBacked = value.markerBacked;
+    this.trustedHostTemplate = value.trustedHostTemplate === true;
     this.theme = value.theme;
     this.onError = value.onError;
     this.onRendered = value.onRendered;
@@ -220,6 +223,7 @@ class StableRealmSandboxRender implements RealmSandboxRender {
       sameStyles(current.styles, value.styles) &&
       current.principal === value.principal &&
       current.markerBacked === value.markerBacked &&
+      current.trustedHostTemplate === (value.trustedHostTemplate === true) &&
       current.theme === value.theme &&
       current.onError === value.onError &&
       current.onRendered === value.onRendered
@@ -255,6 +259,9 @@ class StableRealmSandboxRender implements RealmSandboxRender {
       }
       if (this.markerBacked !== value.markerBacked) {
         this.markerBacked = value.markerBacked;
+      }
+      if (this.trustedHostTemplate !== (value.trustedHostTemplate === true)) {
+        this.trustedHostTemplate = value.trustedHostTemplate === true;
       }
       if (this.theme !== value.theme) {
         this.theme = value.theme;
@@ -2048,6 +2055,7 @@ export default class RealmSandboxService extends Service {
       styles: inertTemplate.styles,
       principal,
       markerBacked,
+      trustedHostTemplate: useBaseTemplate,
       theme: opaqueState.presentation.theme,
       ...(options.codePreviewSandbox
         ? {
@@ -5001,12 +5009,25 @@ export default class RealmSandboxService extends Service {
       this.opaqueDataRevisionFor(card).consume();
       return getOpaqueRealmCardState(card)?.snapshot ?? model;
     };
+    let setField = (name: string, value: unknown) => {
+      let metadata = fieldMetadata[name];
+      if (metadata?.kind === 'linksTo' || metadata?.kind === 'linksToMany') {
+        this.setOpaqueRelationshipPath(card, name, value);
+        return;
+      }
+      getOpaqueRealmCardState(card)?.setField?.(name, value);
+    };
     // Schema fields remain stable across data generations. Include optional
     // fields even when the current resource omits their value so data edits
     // never need to replace the component map or the rendered island.
     for (let name of new Set([
       ...Object.keys(fieldMetadata),
       ...Object.keys(model),
+      // `cardInfo` is an inherited Base field and is valid even when none of
+      // its optional values have been serialized yet. The default edit
+      // template always addresses its contextual children, so preserve that
+      // explicit boundary for blank and newly-created cards as well.
+      'cardInfo',
     ])) {
       if (name !== 'id') {
         fields[name] = realmSandboxFieldComponent(
@@ -5023,21 +5044,17 @@ export default class RealmSandboxService extends Service {
           format,
           fieldMetadata[name]?.kind,
           fieldMetadata[name]?.displayName,
-          getOpaqueRealmCardState(card)?.setField,
+          setField,
           () => this.relationshipContextFor(card),
           (ref) => this.validateCodeRef(card, ref),
           (render) => this.subscribeToOpaqueCardData(card, render),
         );
       }
     }
-    let cardInfo = model.cardInfo;
-    if (
-      typeof cardInfo === 'object' &&
-      cardInfo !== null &&
-      !Array.isArray(cardInfo)
-    ) {
-      let cardInfoFields = fields.cardInfo as BaseDefComponent &
-        Record<string, BaseDefComponent>;
+    let cardInfoFields = fields.cardInfo as
+      | (BaseDefComponent & Record<string, BaseDefComponent>)
+      | undefined;
+    if (cardInfoFields) {
       let cardInfoFieldType = trustedFieldTypes.cardInfo;
       let nestedComponents: Record<string, BaseDefComponent> = {};
       let setCardInfoField = (name: string, value: unknown) => {
@@ -5050,10 +5067,6 @@ export default class RealmSandboxService extends Service {
           nestedField?.fieldType === 'linksToMany'
         ) {
           this.setOpaqueRelationshipPath(card, `cardInfo.${name}`, value);
-          let cardID = getOpaqueRealmCardState(card)?.snapshot.id;
-          if (typeof cardID === 'string') {
-            this.relationshipContextFor(card)?.cardContext?.store.save(cardID);
-          }
           return;
         }
         let current = snapshot().cardInfo;
@@ -5096,15 +5109,20 @@ export default class RealmSandboxService extends Service {
         );
         contextualFields[`cardInfo.${name}`] = nestedComponents[name]!;
       }
-      // Match Base's contextual-field contract. Glimmer resolves
-      // `<@fields.cardInfo.theme />` through the component proxy, while the
-      // prototype hook preserves the template belonging to the cardInfo field
-      // component itself.
-      fields.cardInfo = withContextualComponents(
-        cardInfoFields,
-        nestedComponents,
-        cardInfoFields,
-      );
+      // Match Base's contextual-field contract without proxying a component
+      // definition. Glimmer treats component classes as opaque definitions;
+      // a Proxy can answer ordinary property reads while still losing the
+      // nested path during component resolution. Non-enumerable own
+      // capabilities preserve the component's identity and template while
+      // keeping generic schema enumeration free of synthetic fields such as
+      // "Card Info Theme".
+      for (let [name, component] of Object.entries(nestedComponents)) {
+        Object.defineProperty(cardInfoFields, name, {
+          configurable: true,
+          enumerable: false,
+          value: component,
+        });
+      }
     }
     // Ember's contextual-component path resolver may ask the outer fields
     // object for a dotted path in one operation. Base's ordinary field proxy
@@ -5239,12 +5257,6 @@ export default class RealmSandboxService extends Service {
     let projection = Array.isArray(value) ? value.map(project) : project(value);
     this.setSnapshotPath(state.snapshot, path, projection);
 
-    let root = path.split('.')[0];
-    if (root) {
-      state.setField?.(root, state.snapshot[root]);
-    }
-    this.bumpOpaqueData(card);
-
     let relationshipReference = (item: unknown): string | null => {
       let id =
         item !== null &&
@@ -5282,6 +5294,34 @@ export default class RealmSandboxService extends Service {
       state.document.data.relationships[path] = {
         links: { self: relationshipReference(value) },
       };
+    }
+    // Store.save() may serialize synchronously before its returned promise is
+    // observed. Update the relationship document first, then publish and
+    // persist the tracked root field exactly once. The previous order could
+    // save the old relationship and reconcile it back over the local edit.
+    let root = path.split('.')[0];
+    if (root) {
+      if (path === root) {
+        // A top-level relationship is represented only in JSON:API
+        // `relationships`. Publishing it through setOpaqueCardFieldValue()
+        // would also invent an attribute marker with the same name, yielding
+        // an invalid document and allowing a failed save to reconcile the old
+        // link over the optimistic edit.
+        (card as unknown as Record<string, unknown>)[root] =
+          state.snapshot[root];
+        this.bumpOpaqueData(card);
+        let cardID = state.snapshot.id;
+        if (typeof cardID === 'string') {
+          void this.relationshipContextFor(card)?.cardContext?.store.save(
+            cardID,
+          );
+        }
+      } else {
+        // A relationship nested inside a contains field (for example
+        // cardInfo.theme) still needs its containing attribute published, with
+        // the nested relationship pruned by serializeOpaqueRealmCard().
+        this.setOpaqueCardFieldValue(card, state, root, state.snapshot[root]);
+      }
     }
     return true;
   }

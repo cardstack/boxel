@@ -44,4 +44,35 @@ module('Unit | realm sandbox contextual fields', function () {
       'Glimmer-compatible dotted lookup still resolves',
     );
   });
+
+  test('nested capabilities can live on a component class without changing its identity', function (assert) {
+    class CardInfoComponent {}
+    let theme = { component: 'cardInfo.theme' };
+
+    Object.defineProperty(CardInfoComponent, 'theme', {
+      configurable: true,
+      enumerable: false,
+      value: theme,
+    });
+
+    assert.strictEqual(
+      (
+        CardInfoComponent as typeof CardInfoComponent & {
+          theme: typeof theme;
+        }
+      ).theme,
+      theme,
+      'segmented component lookup resolves from the original class',
+    );
+    assert.deepEqual(
+      Object.keys(CardInfoComponent),
+      [],
+      'the capability is not advertised as authored schema',
+    );
+    assert.strictEqual(
+      Object.getPrototypeOf(CardInfoComponent),
+      Function.prototype,
+      'the component definition retains its ordinary class identity',
+    );
+  });
 });
