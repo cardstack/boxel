@@ -476,6 +476,7 @@ module('Integration | preview', function (hooks) {
               @card={{field}}
               @format='embedded'
               @sandbox={{sandbox}}
+              @model={{sandbox.model}}
               @fieldBoundary={{true}}
               data-parent-scope='inherited'
             />
@@ -490,6 +491,7 @@ module('Integration | preview', function (hooks) {
       },
     );
 
+    await waitFor('[data-test-sandbox-field-template]');
     assert.dom('.realm-sandbox-render').doesNotExist();
     assert
       .dom('.realm-sandbox-field-template-island')
