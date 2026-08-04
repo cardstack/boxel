@@ -188,12 +188,25 @@ function rewriteSkillFile(skill: string, body: string): boolean {
  * manifest (which the publish workflow bumps in both files), while the
  * description, `skills` pointer, and `interface` block are Codex-specific.
  */
+const CLAUDE_DESCRIPTION_PREFIX = 'Claude Code skills';
+
 function syncCodexManifest(): boolean {
   const claude = JSON.parse(readFileSync(CLAUDE_MANIFEST_PATH, 'utf8'));
+  // Fail rather than let a reworded Claude description carry "Claude Code"
+  // into the Codex manifest, which a silent no-op replace would do.
+  if (!claude.description.startsWith(CLAUDE_DESCRIPTION_PREFIX)) {
+    throw new Error(
+      `Expected .claude-plugin/plugin.json description to start with ` +
+        `"${CLAUDE_DESCRIPTION_PREFIX}" so the Codex description can be derived ` +
+        `from it. Got: ${JSON.stringify(claude.description.slice(0, 60))}. ` +
+        `Update CLAUDE_DESCRIPTION_PREFIX in scripts/build-plugin.ts.`,
+    );
+  }
   const codex = {
     name: claude.name,
     version: claude.version,
-    description: claude.description.replace(/^Claude Code skills/, 'Skills'),
+    description:
+      'Skills' + claude.description.slice(CLAUDE_DESCRIPTION_PREFIX.length),
     skills: './skills/',
     author: claude.author,
     homepage: claude.homepage,
@@ -209,6 +222,11 @@ function syncCodexManifest(): boolean {
         'indexing diagnostics.',
       developerName: 'Cardstack',
       category: 'Developer Tools',
+      capabilities: ['Interactive', 'Read', 'Write'],
+      defaultPrompt: [
+        'Create a Boxel card for the data I describe',
+        'Pull my Boxel workspace down so I can edit it locally',
+      ],
       websiteURL: 'https://boxel.ai',
     },
   };
@@ -238,8 +256,8 @@ function main(): void {
   }
   console.log(
     changed === 0
-      ? 'Plugin synopsis already up to date.'
-      : `Plugin synopsis regenerated (${changed} file${changed === 1 ? '' : 's'} changed).`,
+      ? 'Plugin content already up to date.'
+      : `Plugin content regenerated (${changed} file${changed === 1 ? '' : 's'} changed).`,
   );
 }
 

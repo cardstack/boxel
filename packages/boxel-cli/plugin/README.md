@@ -45,8 +45,9 @@ Codex discovers the plugin through the marketplace manifest at
 /plugin install boxel-cli@cardstack-boxel
 ```
 
-Skills are invoked with the `$` prefix (`$boxel`, `$realm-sync`, …) or picked
-up implicitly by description match.
+In Codex the skills are namespaced `boxel-cli:<name>` — invoke one with the `$`
+prefix (`$boxel`, `$realm-sync`, …), or let Codex pick it up by description
+match. The `/boxel-cli:<name>` form in the tables below is Claude Code's.
 
 Without installing the plugin, a checkout also works directly: Codex reads
 skills from `~/.agents/skills` (or a project's `.agents/skills`), expecting
@@ -60,7 +61,8 @@ cp -R /path/to/boxel/packages/boxel-cli/plugin/skills/*/ ~/.agents/skills/
 
 ## What you get
 
-Skills appear under the `/boxel-cli:` namespace. Two surfaces:
+Skills appear under the `boxel-cli` namespace — written `/boxel-cli:<name>`
+below, which is how Claude Code invokes them. Two surfaces:
 
 ### CLI command skills
 
