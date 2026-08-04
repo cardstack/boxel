@@ -76,6 +76,8 @@ class RealmSandboxFrame extends Component<Signature> {
   @tracked private presentation?: RealmIframeSandboxPresentation;
   @tracked private canWrite = false;
   @tracked private writeError?: string;
+  @tracked private postedCardUpdateRevision = -1;
+  @tracked private postedCardUpdateBytes = 0;
 
   private port?: MessagePort;
   private loader?: Loader;
@@ -308,6 +310,8 @@ class RealmSandboxFrame extends Component<Signature> {
           return;
         }
         this.port?.postMessage(update);
+        this.postedCardUpdateRevision = update.revision;
+        this.postedCardUpdateBytes = serialized.length;
       } catch (error) {
         this.writeError =
           error instanceof Error ? error.message : String(error);
@@ -573,6 +577,8 @@ class RealmSandboxFrame extends Component<Signature> {
       class={{this.currentPresentation.format}}
       data-realm-sandbox-frame
       data-card-update-revision={{this.cardUpdateRevision}}
+      data-card-update-posted-revision={{this.postedCardUpdateRevision}}
+      data-card-update-posted-bytes={{this.postedCardUpdateBytes}}
       data-card-update-applied-revision={{this.appliedCardUpdateRevision}}
       data-card-can-write={{if this.canWrite 'true' 'false'}}
       {{this.connect}}

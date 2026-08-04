@@ -56,6 +56,8 @@ export default class RealmSandboxIframe extends Component<Signature> {
   @tracked private appliedDraftRevision = -1;
   @tracked private draftError?: string;
   @tracked private receivedCardUpdateRevision = -1;
+  @tracked private rawCardUpdateRevision = -1;
+  @tracked private cardUpdateProtocolError?: string;
   @tracked private appliedCardUpdateRevision = -1;
   @tracked private persistedCardUpdateRevision = -1;
   @tracked private cardUpdateError?: string;
@@ -145,7 +147,18 @@ export default class RealmSandboxIframe extends Component<Signature> {
       );
     this.postToFrame = post;
     let receive = async (event: MessageEvent) => {
+      let candidate = event.data as Record<string, unknown> | null;
+      if (candidate?.type === 'card-update') {
+        this.rawCardUpdateRevision =
+          typeof candidate.revision === 'number' ? candidate.revision : -1;
+      }
       if (!isRealmIframeSandboxOutbound(event.data)) {
+        if (candidate?.type === 'card-update') {
+          let document = candidate.document as
+            | { data?: { type?: unknown; id?: unknown } }
+            | undefined;
+          this.cardUpdateProtocolError = `Rejected card-update envelope (data.type=${String(document?.data?.type)}, id=${String(document?.data?.id)})`;
+        }
         return;
       }
       if (event.data.type === 'ready') {
@@ -343,10 +356,12 @@ export default class RealmSandboxIframe extends Component<Signature> {
       data-card-sandbox-applied-draft-revision={{this.appliedDraftRevision}}
       data-card-sandbox-draft-error={{this.draftError}}
       data-card-sandbox-can-write={{if this.canWrite 'true' 'false'}}
+      data-card-sandbox-raw-update-revision={{this.rawCardUpdateRevision}}
       data-card-sandbox-received-update-revision={{this.receivedCardUpdateRevision}}
       data-card-sandbox-update-revision={{this.appliedCardUpdateRevision}}
       data-card-sandbox-persisted-update-revision={{this.persistedCardUpdateRevision}}
       data-card-sandbox-update-error={{this.cardUpdateError}}
+      data-card-sandbox-update-protocol-error={{this.cardUpdateProtocolError}}
       data-card-sandbox-code-preview-id={{@sandbox.codePreviewID}}
       data-card-sandbox-code-preview-loader={{if
         @sandbox.codePreviewID

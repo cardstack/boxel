@@ -4,6 +4,8 @@ import test from 'node:test';
 import worker, {
   isAllowedParentOrigin,
   isSandboxHostname,
+  parentAssetPath,
+  rewriteBootstrapAssetURLs,
   secureResponse,
 } from '../src/index.js';
 
@@ -83,12 +85,15 @@ test('serves only the bootstrap document from nonce origins', async () => {
   let assetFetches = [];
   let env = {
     ALLOWED_PARENT_ORIGINS: allowed,
-    ASSETS: {
+    PARENT_ASSETS: {
       async fetch(request) {
         assetFetches.push(request);
-        return new Response('<html>renderer</html>', {
-          headers: { 'content-type': 'text/html' },
-        });
+        return new Response(
+          '<html><script type="module" src="/assets/main-current.js"></script></html>',
+          {
+            headers: { 'content-type': 'text/html' },
+          },
+        );
       },
     },
   };
@@ -111,9 +116,59 @@ test('serves only the bootstrap document from nonce origins', async () => {
   assert.equal(response.status, 200);
   assert.equal(assetFetches.length, 1);
   assert.equal(assetFetches[0].redirect, 'manual');
+  assert.equal(
+    new URL(assetFetches[0].url).origin,
+    'https://boxel-host-staging.stack.cards',
+  );
   assert.equal(assetFetches[0].headers.get('authorization'), null);
   assert.equal(assetFetches[0].headers.get('cookie'), null);
+  assert.ok(
+    (await response.text()).includes(
+      parentAssetPath(
+        'https://boxel-host-staging.stack.cards',
+        '/assets/main-current.js',
+      ),
+    ),
+  );
 
   response = await worker.fetch(new Request(`https://${host}/some-card`), env);
   assert.equal(response.status, 404);
+});
+
+test('proxies only content-addressed assets from the bootstrap parent build', async () => {
+  let parentOrigin = 'https://my-branch.boxel-host-preview.stack.cards';
+  let requestedURL;
+  let env = {
+    ALLOWED_PARENT_ORIGINS: allowed,
+    PARENT_ASSETS: {
+      async fetch(request) {
+        requestedURL = request.url;
+        return new Response('export default 1', {
+          headers: { 'content-type': 'text/javascript' },
+        });
+      },
+    },
+  };
+  let host = '0123456789abcdef0123456789abcdef.boxelusercontent.dev';
+  let path = parentAssetPath(parentOrigin, '/assets/main-current.js');
+  let response = await worker.fetch(
+    new Request(`https://${host}${path}`, {
+      headers: { authorization: 'Bearer secret', cookie: 'secret=1' },
+    }),
+    env,
+  );
+  assert.equal(response.status, 200);
+  assert.equal(requestedURL, `${parentOrigin}/assets/main-current.js`);
+  assert.equal(await response.text(), 'export default 1');
+
+  let rewritten = rewriteBootstrapAssetURLs(
+    '<script src="/assets/main.js"></script><link href="/assets/main.css">',
+    parentOrigin,
+  );
+  assert.match(rewritten, /_boxel-parent\/[^/]+\/assets\/main\.js/);
+  assert.match(rewritten, /_boxel-parent\/[^/]+\/assets\/main\.css/);
+  assert.match(
+    rewritten,
+    /globalThis\.__boxelAssetsURL="\/_boxel-parent\/[^/]+\/"/,
+  );
 });

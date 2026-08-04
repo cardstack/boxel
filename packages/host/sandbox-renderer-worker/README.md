@@ -15,8 +15,9 @@ renderers; it must never host login, realm, API, or other privileged endpoints.
 
 The Worker:
 
-- serves the Boxel build only through the renderer bootstrap route and its
-  static assets;
+- fetches the renderer bootstrap from the exact allowed Host origin that
+  created the iframe and proxies only that build's `/assets/` graph through
+  the nonce origin, preventing parent/child protocol version skew;
 - strips request credentials and response cookies;
 - blocks auth service workers and API paths;
 - permits only same-origin renderer-asset fetches with CSP (including the
@@ -36,16 +37,12 @@ AAAA  *  100::  proxied
 `100::` is Cloudflare's reserved originless placeholder. Requests are handled
 by the Worker route and never reach it.
 
-Build the same staging/production artifact used by the hosted Host, then deploy
-it with the Worker. Do not deploy `packages/host/dist`: that is commonly a
-development-mode build and can have a different module graph from the hosted
-parent.
+The Worker does not embed a Host build. Each validated bootstrap request is
+fetched credentiallessly from its exact parent preview origin, and its Vite
+asset URLs are rewritten into a nonce-origin proxy path. Deploying the Worker
+therefore does not need to be synchronized with every branch-preview build.
 
 ```sh
-set -a
-source packages/host/config/staging.env
-set +a
-mise exec -- pnpm deploy:boxel-host build-only --verbose
 pnpm dlx wrangler@latest deploy \
   --config packages/host/sandbox-renderer-worker/wrangler.jsonc
 ```

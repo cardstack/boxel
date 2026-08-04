@@ -1,5 +1,6 @@
 const nonceHostnamePattern = /^[a-f0-9]{32}\.boxelusercontent\.dev$/;
 const bootstrapPath = '/_realm-sandbox-frame';
+const parentAssetPrefix = '/_boxel-parent/';
 
 export function isSandboxHostname(hostname) {
   return nonceHostnamePattern.test(hostname.toLowerCase());
@@ -141,7 +142,7 @@ function json(body, status = 200) {
   });
 }
 
-function sanitizedAssetRequest(request) {
+function sanitizedAssetRequest(request, targetURL = request.url) {
   let headers = new Headers(request.headers);
   for (let name of [
     'authorization',
@@ -151,11 +152,72 @@ function sanitizedAssetRequest(request) {
   ]) {
     headers.delete(name);
   }
-  return new Request(request.url, {
+  return new Request(targetURL, {
     method: request.method,
     headers,
     redirect: 'manual',
   });
+}
+
+function encodeParentOrigin(origin) {
+  let bytes = new TextEncoder().encode(origin);
+  return bytesToBase64(bytes)
+    .replaceAll('+', '-')
+    .replaceAll('/', '_')
+    .replace(/=+$/, '');
+}
+
+function decodeParentOrigin(value) {
+  try {
+    let padded = value.replaceAll('-', '+').replaceAll('_', '/');
+    padded += '='.repeat((4 - (padded.length % 4)) % 4);
+    let binary = atob(padded);
+    return new TextDecoder().decode(
+      Uint8Array.from(binary, (character) => character.charCodeAt(0)),
+    );
+  } catch {
+    return undefined;
+  }
+}
+
+export function parentAssetPath(parentOrigin, assetPath) {
+  return `${parentAssetPrefix}${encodeParentOrigin(parentOrigin)}${assetPath}`;
+}
+
+export function rewriteBootstrapAssetURLs(html, parentOrigin) {
+  let prefix = `${parentAssetPrefix}${encodeParentOrigin(parentOrigin)}`;
+  // Vite's production entrypoint, module preloads, stylesheets, and all of
+  // their relative imports now stay on the nonce origin while being fetched
+  // from the exact build that served the parent. This prevents a branch
+  // preview parent from speaking a newer protocol to a stale renderer bundle.
+  let rewritten = html.replace(/(["'])\/assets\//g, `$1${prefix}/assets/`);
+  let assetsBootstrap = `<script>globalThis.__boxelAssetsURL=${JSON.stringify(`${prefix}/`)}</script>`;
+  return rewritten.includes('</head>')
+    ? rewritten.replace('</head>', `${assetsBootstrap}</head>`)
+    : `${assetsBootstrap}${rewritten}`;
+}
+
+function parentAssetRequest(url, configuredOrigins) {
+  if (!url.pathname.startsWith(parentAssetPrefix)) {
+    return undefined;
+  }
+  let remainder = url.pathname.slice(parentAssetPrefix.length);
+  let assetMarker = remainder.indexOf('/assets/');
+  if (assetMarker <= 0) {
+    return undefined;
+  }
+  let parentOrigin = decodeParentOrigin(remainder.slice(0, assetMarker));
+  let assetPath = remainder.slice(assetMarker);
+  if (
+    !parentOrigin ||
+    !isAllowedParentOrigin(parentOrigin, configuredOrigins) ||
+    !assetPath.startsWith('/assets/') ||
+    assetPath.includes('..')
+  ) {
+    return undefined;
+  }
+  let target = new URL(assetPath + url.search, parentOrigin);
+  return { parentOrigin, target };
 }
 
 export default {
@@ -180,6 +242,24 @@ export default {
       return json({ error: 'endpoint unavailable on renderer origin' }, 404);
     }
 
+    let parentFetch = env.PARENT_ASSETS?.fetch
+      ? env.PARENT_ASSETS.fetch.bind(env.PARENT_ASSETS)
+      : globalThis.fetch;
+    let parentAsset = parentAssetRequest(url, env.ALLOWED_PARENT_ORIGINS);
+    if (parentAsset) {
+      let response = await parentFetch(
+        sanitizedAssetRequest(request, parentAsset.target),
+      );
+      if (response.status >= 300 && response.status < 400) {
+        return json({ error: 'renderer asset redirects are unavailable' }, 502);
+      }
+      let contentType = response.headers.get('content-type') ?? '';
+      if (contentType.toLowerCase().startsWith('text/html')) {
+        return json({ error: 'renderer asset returned a document' }, 502);
+      }
+      return secureResponse(response, env.ALLOWED_PARENT_ORIGINS, false);
+    }
+
     let isBootstrap = url.pathname === bootstrapPath;
     if (isBootstrap) {
       let parentOrigin = url.searchParams.get('parentOrigin') ?? '';
@@ -192,17 +272,33 @@ export default {
       ) {
         return json({ error: 'invalid renderer bootstrap' }, 400);
       }
+      let upstreamURL = new URL(url.pathname + url.search, parentOrigin);
+      let response = await parentFetch(
+        sanitizedAssetRequest(request, upstreamURL),
+      );
+      if (response.status >= 300 && response.status < 400) {
+        return json(
+          { error: 'renderer bootstrap redirects are unavailable' },
+          502,
+        );
+      }
+      let contentType = response.headers.get('content-type') ?? '';
+      if (!contentType.toLowerCase().startsWith('text/html')) {
+        return json({ error: 'renderer bootstrap is not a document' }, 502);
+      }
+      let html = rewriteBootstrapAssetURLs(await response.text(), parentOrigin);
+      let headers = new Headers(response.headers);
+      headers.delete('content-length');
+      return secureResponse(
+        new Response(html, {
+          status: response.status,
+          statusText: response.statusText,
+          headers,
+        }),
+        env.ALLOWED_PARENT_ORIGINS,
+        true,
+      );
     }
-
-    let response = await env.ASSETS.fetch(sanitizedAssetRequest(request));
-    if (response.status >= 300 && response.status < 400) {
-      return json({ error: 'renderer asset redirects are unavailable' }, 502);
-    }
-    let contentType = response.headers.get('content-type') ?? '';
-    let isHTML = contentType.toLowerCase().startsWith('text/html');
-    if (isHTML && !isBootstrap) {
-      return json({ error: 'renderer documents are bootstrap-only' }, 404);
-    }
-    return secureResponse(response, env.ALLOWED_PARENT_ORIGINS, isHTML);
+    return json({ error: 'renderer documents are bootstrap-only' }, 404);
   },
 };
