@@ -91,6 +91,7 @@ export const trustedSandboxRuntimeSpecifiers = [
   '@ember/helper',
   '@ember/modifier',
   '@ember/component/template-only',
+  'ember-provide-consume-context',
   '@glimmer/tracking',
   '@ember/template',
   '@cardstack/runtime-common',

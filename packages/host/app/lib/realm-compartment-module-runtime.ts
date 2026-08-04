@@ -484,6 +484,9 @@ export default class RealmCompartmentModuleRuntime {
   >();
   private trustedModuleFacades = new Map<string, Record<string, unknown>>();
   private explicitRuntimeFacades = new Map<string, Record<string, unknown>>();
+  private cardCrudFunctionsContextName = Object.freeze({
+    name: 'CardCrudFunctionsContext',
+  });
   private cardAPIRuntimeFacade!: Record<string, unknown>;
   private inertHostCommandFacades = new Map<string, Record<string, unknown>>();
   private trustedExports = new Map<string, object>();
@@ -1087,6 +1090,19 @@ export default class RealmCompartmentModuleRuntime {
       '@glimmer/tracking',
       this.decoratorFacade('@glimmer/tracking', ['cached', 'tracked']),
     );
+    let provideConsumeContextFacade = this.provideConsumeContextFacade();
+    this.installExplicitRuntimeFacade(
+      'ember-provide-consume-context',
+      provideConsumeContextFacade,
+    );
+    // This historical package has a bare (non-@scope) specifier. Loader's
+    // URL normalization can make it realm-relative before AMD dependency
+    // registration sees it, so cover that equivalent spelling with the same
+    // inert facade. No realm source is fetched or trusted by this alias.
+    this.loader.shimModule(
+      new URL('ember-provide-consume-context', this.principal).href,
+      provideConsumeContextFacade,
+    );
     this.installExplicitRuntimeFacade(
       '@ember/helper',
       harden(
@@ -1120,12 +1136,36 @@ export default class RealmCompartmentModuleRuntime {
     return Object.freeze({
       Command,
       Tool: Command,
+      CardCrudFunctionsContextName: this.cardCrudFunctionsContextName,
       baseRRI,
       codeRef,
       getMenuItems,
       realmURL,
       searchEntryWireQueryFromQuery: sandboxSearchEntryWireQueryFromQuery,
     });
+  }
+
+  private provideConsumeContextFacade() {
+    let consume = (contextName: unknown) => {
+      if (contextName !== this.cardCrudFunctionsContextName) {
+        throw new Error('Sandbox context is not available');
+      }
+      return (
+        _target: object,
+        _property: string,
+        descriptor: PropertyDescriptor,
+      ): PropertyDescriptor => ({
+        configurable: descriptor.configurable,
+        enumerable: descriptor.enumerable,
+        get(this: { args?: Record<string, unknown> }) {
+          let viewCard = this.args?.viewCard;
+          return Object.freeze({
+            ...(typeof viewCard === 'function' ? { viewCard } : {}),
+          });
+        },
+      });
+    };
+    return Object.freeze({ consume });
   }
 
   private sandboxCommandBase() {
@@ -1928,6 +1968,7 @@ function defaultTrustedImport(moduleIdentifier: string): boolean {
     moduleIdentifier === '@ember/helper' ||
     moduleIdentifier === '@ember/modifier' ||
     moduleIdentifier === '@ember/component/template-only' ||
+    moduleIdentifier === 'ember-provide-consume-context' ||
     moduleIdentifier === '@glimmer/tracking' ||
     moduleIdentifier === '@cardstack/runtime-common' ||
     moduleIdentifier.startsWith('https://cardstack.com/base/') ||

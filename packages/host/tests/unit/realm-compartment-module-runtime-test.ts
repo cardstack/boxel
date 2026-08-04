@@ -842,6 +842,63 @@ module('Unit | realm compartment module runtime', function () {
     );
   });
 
+  test('adapts the CardCrudFunctions consume context to the explicit viewCard capability', async function (assert) {
+    let moduleID = `${MODULE_ID}?card-crud-context`;
+    let source = await transpileJS(
+      `
+        import { action } from '@ember/object';
+        import { on } from '@ember/modifier';
+        import { consume } from 'ember-provide-consume-context';
+        import {
+          CardDef,
+          Component,
+          type CardCrudFunctions,
+        } from '@cardstack/base/card-api';
+        import { CardCrudFunctionsContextName } from '@cardstack/runtime-common';
+
+        export class ContextNavigationCard extends CardDef {
+          static isolated = class Isolated extends Component<typeof this> {
+            @consume(CardCrudFunctionsContextName)
+            cardCrudFunctions: CardCrudFunctions | undefined;
+
+            @action viewTarget() {
+              this.cardCrudFunctions?.viewCard?.(
+                new URL('./target-card', import.meta.url),
+              );
+            }
+
+            <template>
+              <button type='button' {{on 'click' this.viewTarget}}>View</button>
+            </template>
+          };
+        }
+      `,
+      '/context-navigation-card.gts',
+    );
+    let runtime = runtimeFor({ [moduleID]: source });
+    let bundle = await runtime.evaluateTemplate(
+      moduleID,
+      'ContextNavigationCard',
+      'isolated',
+    );
+    let live = runtime.instantiateComponent(
+      bundle.templates[bundle.root]!.instance.handle,
+      { viewCard: () => undefined },
+    );
+    let updated = await runtime.invokeComponentAction(
+      live.handle,
+      'viewTarget',
+      [],
+    );
+
+    assert.deepEqual(updated.effects, [
+      {
+        type: 'view-card',
+        target: 'https://realm.example/cards/target-card',
+      },
+    ]);
+  });
+
   test('returns an explicit delegated set effect without exposing the host callback', async function (assert) {
     let moduleID = `${MODULE_ID}?set-effect`;
     let source = `
