@@ -116,6 +116,7 @@ module('Acceptance | workspace card', function (hooks) {
     // picker stays interactive and offers other reachable realms.
     await waitFor('[data-test-realm-picker] [data-test-boxel-picker-trigger]');
     await click('[data-test-realm-picker] [data-test-boxel-picker-trigger]');
+    await waitFor('[data-test-boxel-picker-option-row]');
     assert
       .dom(`[data-test-boxel-picker-option-row="${baseRealm.url}"]`)
       .exists('a realm other than the workspace realm is selectable');
