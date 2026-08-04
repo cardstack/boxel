@@ -72,15 +72,11 @@ class RoutingRuleAtom extends Component<typeof RoutingRuleField> {
   </template>
 }
 
-let routingRuleKindGroupNumber = 0;
-
 class RoutingRuleEdit extends Component<typeof RoutingRuleField> {
   private kindItems: { id: 'card' | 'redirect'; text: string }[] = [
     { id: 'card', text: 'Render a card' },
     { id: 'redirect', text: 'Redirect' },
   ];
-
-  private kindRadioGroup = `__routing_rule_kind${routingRuleKindGroupNumber++}__`;
 
   private statusCodeOptions = [...REDIRECT_STATUS_CODES];
 
@@ -205,10 +201,11 @@ class RoutingRuleEdit extends Component<typeof RoutingRuleField> {
   <template>
     <div class='routing-rule-edit' data-test-routing-rule-edit>
       <div class='kind-toggle' data-test-routing-rule-kind>
+        {{! RadioInput names the group after itself when @name is absent,
+            which is what keeps each rule's pair of radios independent. }}
         <RadioInput
           @items={{this.kindItems}}
           @groupDescription='Routing rule target'
-          name='{{this.kindRadioGroup}}'
           @checkedId={{this.kind}}
           @spacing='compact'
           @hideBorder={{true}}
