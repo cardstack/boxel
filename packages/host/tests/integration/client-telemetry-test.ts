@@ -533,9 +533,9 @@ module('Integration | Service | client-telemetry', function (hooks) {
   // Boxel header in it, so a Matrix request carrying one is rejected by the
   // browser at preflight and never leaves the tab. Only the realm server reads
   // the correlation id back out, so a Matrix request has nothing to gain by
-  // carrying it. Armed telemetry is the only state where the stamp happens at
-  // all, and no other suite runs in it — which is how stamping every request
-  // silently broke email registration everywhere while every test passed.
+  // carrying it.
+  // These tests explicitly arm telemetry and assert the header is stamped only
+  // on realm-server requests, not Synapse requests.
   module('the correlation id stamp', function () {
     async function stampedHeader(url: string): Promise<string | null> {
       let svc = telemetry();
