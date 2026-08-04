@@ -79,7 +79,7 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
               @cardTitle={{@model.cardTitle}}
               @cardDescription={{@model.cardDescription}}
               @cardThumbnailURL={{@model.cardThumbnailURL}}
-              @icon={{@model.constructor.icon}}
+              @icon={{@cardOrField.icon}}
             />
           {{else if @fields.cardInfo}}
             <CardInfoTemplates.edit
