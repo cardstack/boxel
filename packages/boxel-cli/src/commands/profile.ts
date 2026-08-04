@@ -179,14 +179,14 @@ export function resolveEnvironment(
     ? validateUrl(options.hostUrl, '--host-url')
     : undefined;
 
-  const presets = (['staging', 'production', 'local'] as const).filter(
+  const presets = (['production', 'staging', 'local'] as const).filter(
     (name) => options[name],
   );
   if (presets.length > 1) {
     console.error(
-      `${FG_RED}Error:${RESET} Pass at most one of ${presets
+      `${FG_RED}Error:${RESET} Pass at most one of --production, --staging, --local (got ${presets
         .map((name) => `--${name}`)
-        .join(', ')}.`,
+        .join(', ')}).`,
     );
     process.exit(1);
   }
@@ -491,9 +491,11 @@ async function addProfile(
   useBrowser = true,
 ): Promise<void> {
   console.log(`\n${BOLD}Add New Profile${RESET}\n`);
-  // The environment comes from flags rather than a prompt, so name it: the
-  // only other clue is the URL the browser opens, and the terminal path gives
-  // none at all.
+  // The environment comes from flags rather than a prompt, so name it. The
+  // realm server identifies it — that's the host every later command talks to,
+  // and how `profile list` labels a profile. The sign-in page can be served
+  // from somewhere else (local dev splits the two across ports); the browser
+  // path prints the URL it actually opens.
   console.log(
     `${DIM}Environment: ${new URL(environment.realmServerUrl).host}${RESET}`,
   );

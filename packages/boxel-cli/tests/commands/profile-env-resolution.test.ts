@@ -149,7 +149,7 @@ describe('resolveEnvironment', () => {
     );
     expect(exit).toHaveBeenCalledWith(1);
     expect(error.mock.calls.join('\n')).toMatch(
-      /at most one of --staging, --local/,
+      /at most one of --production, --staging, --local \(got --staging, --local\)/,
     );
   });
 
