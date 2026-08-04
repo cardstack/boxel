@@ -188,12 +188,7 @@ function rewriteSkillFile(skill: string, body: string): boolean {
  * manifest (which the publish workflow bumps in both files), while the
  * description, `skills` pointer, and `interface` block are Codex-specific.
  *
- * Codex plugins have no commands slot, so `plugin/commands/` is Claude-only.
- * Codex converts a plugin's commands to skills at install time, but that
- * conversion drops any command whose generated skill exceeds 4000 bytes, so the
- * largest workflows do not reach Codex. Restaging them here is not the fix:
- * `plugin/commands/` is imported from `cardstack/boxel-skills`, which owns the
- * skill-versus-command split. They reach Codex once they are skills upstream.
+ * Codex plugins have no commands slot, so `skills/` is their whole surface.
  */
 function syncCodexManifest(): boolean {
   const claude = JSON.parse(readFileSync(CLAUDE_MANIFEST_PATH, 'utf8'));
