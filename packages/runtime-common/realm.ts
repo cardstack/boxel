@@ -908,6 +908,19 @@ export class Realm {
   // bump on a config change. Recomputed lazily alongside the cached
   // realm info.
   #cachedRealmInfoHash: string | null = null;
+  // The info-endpoint-only extras (index counts + realm timestamps) served by
+  // `getDetailedRealmInfo`. Cached separately from `#cachedRealmInfo` rather
+  // than folded into it, because that object is hashed into the card+json
+  // ETag and these values move on every realm write — mixing them in would
+  // bust every card's cached representation whenever one card changed.
+  //
+  // Caching matters: `/_info` is hit often (the realm server's
+  // `/_catalog-realms` fans out to one `_info` per catalog realm on top of
+  // the host's own calls), and the count query aggregates every index row in
+  // the realm. Uncached, that took per-realm `_info` from a ~44ms median to
+  // ~200ms. Dropped by the same paths that drop `#cachedRealmInfo`, so the
+  // counts refresh on every index swap.
+  #cachedRealmInfoExtras: Partial<RealmInfo> | null = null;
   // Cached host routing map, derived from the indexed RealmConfig card.
   // `getHostRoutingMap()` is called on every host-mode index request
   // (serve-index), so re-querying the index each time is wasteful — the map
@@ -7070,6 +7083,7 @@ export class Realm {
   invalidateCachedRealmInfo(): void {
     this.#cachedRealmInfo = null;
     this.#cachedRealmInfoHash = null;
+    this.#cachedRealmInfoExtras = null;
   }
 
   private async parseRealmInfo(): Promise<RealmInfo> {
@@ -7199,12 +7213,22 @@ export class Realm {
   // each time one card changed, and cost extra queries on every card request.
   // Keeping them here confines that cost to the info endpoints.
   async getDetailedRealmInfo(): Promise<RealmInfo> {
-    let [info, timestamps, counts] = await Promise.all([
+    let [info, extras] = await Promise.all([
       this.getRealmInfo(),
-      this.getRegistryTimestamps(),
-      this.getIndexCounts(),
+      this.getRealmInfoExtras(),
     ]);
-    return { ...info, ...timestamps, ...counts };
+    return { ...info, ...extras };
+  }
+
+  private async getRealmInfoExtras(): Promise<Partial<RealmInfo>> {
+    if (!this.#cachedRealmInfoExtras) {
+      let [timestamps, counts] = await Promise.all([
+        this.getRegistryTimestamps(),
+        this.getIndexCounts(),
+      ]);
+      this.#cachedRealmInfoExtras = { ...timestamps, ...counts };
+    }
+    return this.#cachedRealmInfoExtras;
   }
 
   private async realmInfo(
