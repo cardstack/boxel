@@ -17,6 +17,7 @@ import {
   cardDefComputedFields,
   DEFAULT_REDIRECT_STATUS,
   findDuplicateRoutingPaths,
+  findRedirectCycles,
   getField,
   getFieldIcon,
   REDIRECT_STATUS_CODES,
@@ -449,6 +450,14 @@ class RealmConfigEdit extends Component<typeof RealmConfig> {
     return findDuplicateRoutingPaths(this.args.model.hostRoutingRules);
   }
 
+  // Redirect rules that chain back on themselves. The realm drops these
+  // when it reads the config — a served loop would bounce visitors until
+  // the browser gave up — so the path silently stops routing until the
+  // owner breaks the ring.
+  get redirectLoopPaths(): string[] {
+    return findRedirectCycles(this.args.model.hostRoutingRules);
+  }
+
   // Routing rules whose linked target card no longer exists. The
   // `instance` linksTo resolves to a terminal broken-link state once the
   // editor has tried to load it ('not-found' for a 404, 'error' for an
@@ -510,6 +519,19 @@ class RealmConfigEdit extends Component<typeof RealmConfig> {
                 >
                   These paths point to a card that no longer exists:
                   {{#each this.danglingRoutingRulePaths as |p i|}}
+                    {{#if i}}, {{/if}}<code>{{p}}</code>
+                  {{/each}}
+                </div>
+              {{/if}}
+              {{#if this.redirectLoopPaths.length}}
+                <div
+                  class='warning'
+                  role='status'
+                  data-test-redirect-loop-warning
+                >
+                  These redirects loop back on themselves and will not be
+                  applied:
+                  {{#each this.redirectLoopPaths as |p i|}}
                     {{#if i}}, {{/if}}<code>{{p}}</code>
                   {{/each}}
                 </div>

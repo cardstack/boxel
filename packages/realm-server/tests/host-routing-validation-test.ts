@@ -93,6 +93,44 @@ module(basename(import.meta.filename), function () {
     });
   });
 
+  module('findRedirectCycles', function () {
+    test('findRedirectCycles: returns empty when there is nothing to loop', async function (assert) {
+      await runSharedTest(hostRoutingValidationTests, assert, {});
+    });
+
+    test('findRedirectCycles: reports a self-redirect', async function (assert) {
+      await runSharedTest(hostRoutingValidationTests, assert, {});
+    });
+
+    test('findRedirectCycles: reports every path in a longer ring', async function (assert) {
+      await runSharedTest(hostRoutingValidationTests, assert, {});
+    });
+
+    test('findRedirectCycles: does not report paths that only lead into a ring', async function (assert) {
+      await runSharedTest(hostRoutingValidationTests, assert, {});
+    });
+
+    test('findRedirectCycles: an external target ends the chain', async function (assert) {
+      await runSharedTest(hostRoutingValidationTests, assert, {});
+    });
+
+    test('findRedirectCycles: a query or fragment on the target does not hide a loop', async function (assert) {
+      await runSharedTest(hostRoutingValidationTests, assert, {});
+    });
+
+    test('findRedirectCycles: trailing slashes and whitespace do not hide a loop', async function (assert) {
+      await runSharedTest(hostRoutingValidationTests, assert, {});
+    });
+
+    test('findRedirectCycles: duplicate paths resolve to the first rule', async function (assert) {
+      await runSharedTest(hostRoutingValidationTests, assert, {});
+    });
+
+    test('findRedirectCycles: reports each looping path once across cycles', async function (assert) {
+      await runSharedTest(hostRoutingValidationTests, assert, {});
+    });
+  });
+
   module('parseRedirectStatusCode', function () {
     test('parseRedirectStatusCode: coerces supported codes, rejects everything else', async function (assert) {
       await runSharedTest(hostRoutingValidationTests, assert, {});

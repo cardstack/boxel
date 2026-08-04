@@ -404,6 +404,45 @@ module(
         .exists('switching back to card restores the chooser');
     });
 
+    test('warns when redirect rules loop back on themselves', async function (assert) {
+      // The realm drops looping rules when it reads the config, so
+      // without this banner the path would just stop routing with no
+      // explanation.
+      await renderRealmConfigEdit([
+        { path: '/tos', redirectTo: '/tos' },
+        { path: '/a', redirectTo: '/b' },
+        { path: '/b', redirectTo: '/a' },
+        { path: '/fine', redirectTo: '/terms' },
+      ]);
+
+      assert
+        .dom('[data-test-redirect-loop-warning]')
+        .exists('the redirect-loop banner is shown');
+      assert
+        .dom('[data-test-redirect-loop-warning]')
+        .containsText('/tos', 'the banner names the self-redirect');
+      assert
+        .dom('[data-test-redirect-loop-warning]')
+        .containsText('/a', 'the banner names both halves of the ring');
+      assert
+        .dom('[data-test-redirect-loop-warning]')
+        .doesNotContainText(
+          '/fine',
+          'a terminating redirect is not flagged as a loop',
+        );
+    });
+
+    test('no redirect-loop warning for rules that terminate', async function (assert) {
+      await renderRealmConfigEdit([
+        { path: '/tos', redirectTo: '/terms' },
+        { path: '/blog', redirectTo: 'https://example.com/blog' },
+      ]);
+
+      assert
+        .dom('[data-test-redirect-loop-warning]')
+        .doesNotExist('no banner when nothing loops');
+    });
+
     test('typing into the path input always stores a leading slash', async function (assert) {
       await renderRealmConfigEdit([{}]);
 

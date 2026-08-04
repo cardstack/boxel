@@ -65,6 +65,11 @@ function makeRoutingFixture(): Record<
             },
             { path: '/bad-redirect', redirectTo: 'javascript:alert(1)' },
             { path: '/ambiguous', redirectTo: '/elsewhere' },
+            // Loops — dropped so they can't bounce a client until it
+            // gives up: a self-redirect and a two-rule ring.
+            { path: '/self', redirectTo: '/self' },
+            { path: '/ring-a', redirectTo: '/ring-b' },
+            { path: '/ring-b', redirectTo: '/ring-a' },
           ],
         },
         relationships: {
@@ -135,7 +140,26 @@ module(basename(import.meta.filename), function () {
           },
           { path: '/ambiguous', redirectTo: '/elsewhere', statusCode: 302 },
         ],
-        'relative reference resolved against the realm root; cross-realm rule filtered; trailing-slash rule normalized to /trailing; redirect rules surface with their (default) status; the invalid javascript: target is dropped; a rule with both targets resolves as a redirect',
+        'relative reference resolved against the realm root; cross-realm rule filtered; trailing-slash rule normalized to /trailing; redirect rules surface with their (default) status; the invalid javascript: target is dropped; a rule with both targets resolves as a redirect; self-redirect and ring rules dropped',
+      );
+    });
+
+    test('drops redirect rules that loop, keeping the rest of the map', async function (assert) {
+      let map = await testRealm.getHostRoutingMap();
+      let paths = map.map((rule) => rule.path);
+
+      assert.false(paths.includes('/self'), 'the self-redirect is dropped');
+      assert.false(
+        paths.includes('/ring-a'),
+        'the first half of the two-rule ring is dropped',
+      );
+      assert.false(
+        paths.includes('/ring-b'),
+        'the second half of the two-rule ring is dropped',
+      );
+      assert.true(
+        paths.includes('/tos'),
+        'a terminating redirect rule is unaffected',
       );
     });
 

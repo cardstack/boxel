@@ -1,5 +1,6 @@
 import {
   findDuplicateRoutingPaths,
+  findRedirectCycles,
   normalizeRoutingPath,
   parseRedirectStatusCode,
   validateRedirectTarget,
@@ -258,6 +259,133 @@ const tests: SharedTests<unknown> = Object.freeze({
         PROTOCOL_RELATIVE_MSG,
       );
     },
+
+  'findRedirectCycles: returns empty when there is nothing to loop': async (
+    assert,
+  ) => {
+    assert.deepEqual(findRedirectCycles(null), []);
+    assert.deepEqual(findRedirectCycles(undefined), []);
+    assert.deepEqual(findRedirectCycles([]), []);
+    assert.deepEqual(findRedirectCycles([{ path: '/terms' }]), []);
+    assert.deepEqual(
+      findRedirectCycles([{ path: '/tos', redirectTo: '/terms' }]),
+      [],
+      'a redirect to a path with no rule of its own terminates',
+    );
+  },
+
+  'findRedirectCycles: reports a self-redirect': async (assert) => {
+    assert.deepEqual(
+      findRedirectCycles([
+        { path: '/tos', redirectTo: '/tos' },
+        { path: '/terms' },
+      ]),
+      ['/tos'],
+    );
+  },
+
+  'findRedirectCycles: reports every path in a longer ring': async (assert) => {
+    assert.deepEqual(
+      findRedirectCycles([
+        { path: '/a', redirectTo: '/b' },
+        { path: '/b', redirectTo: '/a' },
+      ]),
+      ['/a', '/b'],
+    );
+    assert.deepEqual(
+      findRedirectCycles([
+        { path: '/a', redirectTo: '/b' },
+        { path: '/b', redirectTo: '/c' },
+        { path: '/c', redirectTo: '/a' },
+      ]),
+      ['/a', '/b', '/c'],
+    );
+  },
+
+  'findRedirectCycles: does not report paths that only lead into a ring':
+    async (assert) => {
+      // Dropping the ring is enough — '/x' then resolves like any
+      // redirect whose target has no rule.
+      assert.deepEqual(
+        findRedirectCycles([
+          { path: '/x', redirectTo: '/a' },
+          { path: '/a', redirectTo: '/b' },
+          { path: '/b', redirectTo: '/a' },
+        ]),
+        ['/a', '/b'],
+      );
+    },
+
+  'findRedirectCycles: an external target ends the chain': async (assert) => {
+    assert.deepEqual(
+      findRedirectCycles([
+        { path: '/a', redirectTo: 'https://example.com/a' },
+        { path: '/b', redirectTo: '/a' },
+      ]),
+      [],
+      'leaving the realm cannot loop back through the routing map',
+    );
+  },
+
+  'findRedirectCycles: a query or fragment on the target does not hide a loop':
+    async (assert) => {
+      assert.deepEqual(
+        findRedirectCycles([{ path: '/tos', redirectTo: '/tos?ref=1' }]),
+        ['/tos'],
+      );
+      assert.deepEqual(
+        findRedirectCycles([{ path: '/tos', redirectTo: '/tos#section' }]),
+        ['/tos'],
+      );
+    },
+
+  'findRedirectCycles: trailing slashes and whitespace do not hide a loop':
+    async (assert) => {
+      assert.deepEqual(
+        findRedirectCycles([{ path: '/tos', redirectTo: '/tos/' }]),
+        ['/tos'],
+      );
+      assert.deepEqual(
+        findRedirectCycles([{ path: '  /tos/  ', redirectTo: '  /tos  ' }]),
+        ['/tos'],
+      );
+    },
+
+  'findRedirectCycles: duplicate paths resolve to the first rule': async (
+    assert,
+  ) => {
+    // The routing map's `.find()` makes the second rule unreachable, so
+    // only the first one's target can form an edge.
+    assert.deepEqual(
+      findRedirectCycles([
+        { path: '/a', redirectTo: '/terms' },
+        { path: '/a', redirectTo: '/a' },
+      ]),
+      [],
+      'the shadowed self-redirect never resolves, so it cannot loop',
+    );
+    assert.deepEqual(
+      findRedirectCycles([
+        { path: '/a', redirectTo: '/a' },
+        { path: '/a', redirectTo: '/terms' },
+      ]),
+      ['/a'],
+      'the reachable rule is the looping one',
+    );
+  },
+
+  'findRedirectCycles: reports each looping path once across cycles': async (
+    assert,
+  ) => {
+    assert.deepEqual(
+      findRedirectCycles([
+        { path: '/a', redirectTo: '/b' },
+        { path: '/b', redirectTo: '/a' },
+        { path: '/c', redirectTo: '/c' },
+      ]),
+      ['/a', '/b', '/c'],
+    );
+  },
 
   'parseRedirectStatusCode: coerces supported codes, rejects everything else':
     async (assert) => {

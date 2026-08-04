@@ -50,6 +50,8 @@ import {
 import { normalizeRelationships } from './relationship-utils.ts';
 import {
   DEFAULT_REDIRECT_STATUS,
+  findRedirectCycles,
+  isRedirectRoutingRule,
   normalizeRoutingPath,
   parseRedirectStatusCode,
   validateRedirectTarget,
@@ -6923,6 +6925,23 @@ export class Realm {
         }
         return [{ path: normalizedPath, id }];
       });
+      // Drop redirect rules that chain back on themselves. Serving them
+      // would bounce the client between URLs until it gives up, and a
+      // permanent 301 would keep doing so from cache after the config is
+      // fixed. Dropped, the path resolves like any unrouted one. Only
+      // the rules forming the ring go — a rule pointing INTO it resolves
+      // once the ring is gone.
+      let looping = new Set(findRedirectCycles(map));
+      if (looping.size > 0) {
+        for (let path of looping) {
+          this.#log.warn(
+            `dropping host routing rule for path "${path}" — its redirect target loops back to itself`,
+          );
+        }
+        map = map.filter(
+          (rule) => !(isRedirectRoutingRule(rule) && looping.has(rule.path)),
+        );
+      }
       return (this.#cachedHostRoutingMap = map);
     } catch (e) {
       this.#log.warn(

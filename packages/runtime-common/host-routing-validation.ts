@@ -160,6 +160,72 @@ export function parseRedirectStatusCode(
 }
 
 /**
+ * Returns the paths whose redirect rules chain back on themselves, in
+ * the order the cycles were discovered — a self-redirect
+ * (`/tos` → `/tos`) or a longer ring (`/a` → `/b` → `/a`). Left
+ * unguarded, each one answers a redirect to a URL that matches the same
+ * rule again, so the client bounces until it gives up
+ * (`ERR_TOO_MANY_REDIRECTS`) — and a permanent 301 keeps doing so from
+ * cache after the rule is fixed.
+ *
+ * Only realm-relative targets form edges: an external `http(s)` target
+ * leaves the realm, so it ends the chain. Targets are compared by
+ * pathname in normalized form, so a query string or a trailing slash on
+ * the target doesn't disguise a loop. Paths that merely *lead into* a
+ * cycle are not reported — dropping the ring itself is enough to make
+ * them resolve.
+ *
+ * A realm cannot reach its own paths through an external URL as far as
+ * this can tell (the published host isn't known here), so a target
+ * spelled as a full URL back to the same site stays undetected.
+ */
+export function findRedirectCycles(
+  rules:
+    | ReadonlyArray<{ path?: string | null; redirectTo?: string | null }>
+    | null
+    | undefined,
+): string[] {
+  if (!rules) return [];
+  // path -> the path it redirects to. Duplicate paths keep the first
+  // rule, matching how the routing map's `.find()` resolves them.
+  let edges = new Map<string, string>();
+  for (let rule of rules) {
+    let path = rule?.path?.trim();
+    let target = rule?.redirectTo?.trim();
+    if (!path || !target || ABSOLUTE_URL_PATTERN.test(target)) continue;
+    let from = normalizeRoutingPath(path);
+    if (edges.has(from)) continue;
+    // Compare pathnames only: the target's own query/fragment doesn't
+    // change which rule the redirected request matches.
+    let targetPath = target.split('#')[0].split('?')[0];
+    edges.set(from, normalizeRoutingPath(targetPath));
+  }
+
+  let cyclic: string[] = [];
+  let seenCyclic = new Set<string>();
+  for (let start of edges.keys()) {
+    // Walk the chain from `start`, recording visit order, until it ends
+    // (no outgoing edge) or revisits a node on this walk.
+    let positions = new Map<string, number>();
+    let chain: string[] = [];
+    let node: string | undefined = start;
+    while (node !== undefined && !positions.has(node)) {
+      positions.set(node, chain.length);
+      chain.push(node);
+      node = edges.get(node);
+    }
+    if (node === undefined) continue; // chain terminated, no loop
+    for (let i = positions.get(node)!; i < chain.length; i++) {
+      if (!seenCyclic.has(chain[i])) {
+        seenCyclic.add(chain[i]);
+        cyclic.push(chain[i]);
+      }
+    }
+  }
+  return cyclic;
+}
+
+/**
  * Returns the set of non-empty paths that appear on more than one
  * routing rule, in insertion order. Empty paths are ignored — they
  * represent rules whose path field hasn't been filled in yet.
