@@ -2,8 +2,10 @@ import {
   findDuplicateRoutingPaths,
   findRedirectCycles,
   foreignQueryParams,
+  isExternalRedirectTarget,
   normalizeRoutingPath,
   parseRedirectStatusCode,
+  resolveRedirectTarget,
   validateRedirectTarget,
   validateRoutingPath,
 } from '../host-routing-validation.ts';
@@ -387,6 +389,61 @@ const tests: SharedTests<unknown> = Object.freeze({
       ['/a', '/b', '/c'],
     );
   },
+
+  'resolveRedirectTarget: prefixes a realm-relative target with the mount pathname':
+    async (assert) => {
+      assert.strictEqual(
+        resolveRedirectTarget('/terms', '/sick-elk/'),
+        '/sick-elk/terms',
+      );
+      assert.strictEqual(
+        resolveRedirectTarget('/legal/terms?v=2', '/sick-elk/'),
+        '/sick-elk/legal/terms?v=2',
+        'a query on the target is carried along untouched',
+      );
+      assert.strictEqual(
+        resolveRedirectTarget('/terms', '/'),
+        '/terms',
+        'a realm mounted at the root adds nothing',
+      );
+    },
+
+  'resolveRedirectTarget: hands back an external target untouched': async (
+    assert,
+  ) => {
+    assert.strictEqual(
+      resolveRedirectTarget('https://example.com/landing', '/sick-elk/'),
+      'https://example.com/landing',
+    );
+    assert.strictEqual(
+      resolveRedirectTarget('HTTPS://example.com/x', '/sick-elk/'),
+      'HTTPS://example.com/x',
+      'the scheme test is case-insensitive',
+    );
+  },
+
+  'resolveRedirectTarget: collapses every leading slash': async (assert) => {
+    // Malformed targets are dropped when the map is built; this is the
+    // backstop that keeps the result from starting `//` and reading as
+    // protocol-relative.
+    assert.strictEqual(
+      resolveRedirectTarget('//example.com/x', '/sick-elk/'),
+      '/sick-elk/example.com/x',
+    );
+    assert.strictEqual(
+      resolveRedirectTarget('///terms', '/sick-elk/'),
+      '/sick-elk/terms',
+    );
+  },
+
+  'isExternalRedirectTarget: distinguishes http(s) targets from realm paths':
+    async (assert) => {
+      assert.true(isExternalRedirectTarget('https://example.com'));
+      assert.true(isExternalRedirectTarget('http://example.com'));
+      assert.true(isExternalRedirectTarget('HtTpS://example.com'));
+      assert.false(isExternalRedirectTarget('/terms'));
+      assert.false(isExternalRedirectTarget('//example.com'));
+    },
 
   'foreignQueryParams: keeps params the host app does not own': async (
     assert,

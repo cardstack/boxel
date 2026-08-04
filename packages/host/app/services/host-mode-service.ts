@@ -5,8 +5,10 @@ import { tracked } from '@glimmer/tracking';
 import window from 'ember-window-mock';
 
 import {
+  isExternalRedirectTarget,
   normalizeRoutingPath,
   sanitizeHeadHTML,
+  type HostRoutingRule,
 } from '@cardstack/runtime-common';
 
 import config from '@cardstack/host/config/environment';
@@ -34,14 +36,6 @@ interface PublishedRealmMetadata {
   publishedAt: number;
   currentCardUrlString: string | undefined;
 }
-
-// The host-scoped form of a routing rule as the realm-server injects it
-// into the config meta tag: every path (and any realm-relative redirect
-// target) is already prefixed with the realm's mount pathname, so a
-// redirect target can be handed straight to a location change.
-export type HostScopedRoutingRule =
-  | { path: string; id: string }
-  | { path: string; redirectTo: string; statusCode: number };
 
 export default class HostModeService extends Service {
   @service declare hostModeStateService: HostModeStateService;
@@ -130,10 +124,13 @@ export default class HostModeService extends Service {
   // per-request when the request hits a realm whose config card has
   // hostRoutingRules — so the first-render decision in the index route
   // is synchronous and the field is part of the typed config surface
-  // rather than a window global.
-  get hostRoutingMap(): HostScopedRoutingRule[] {
+  // rather than a window global. The rules arrive host-scoped — every
+  // path, and any realm-relative redirect target, already carries the
+  // realm's mount pathname — so a target can go straight to a location
+  // change without the SPA knowing where the realm is mounted.
+  get hostRoutingMap(): HostRoutingRule[] {
     let map = (config as { hostRoutingMap?: unknown }).hostRoutingMap;
-    return Array.isArray(map) ? (map as HostScopedRoutingRule[]) : [];
+    return Array.isArray(map) ? (map as HostRoutingRule[]) : [];
   }
 
   // Returns the routing rule matching `path`, else null. A serve rule
@@ -154,7 +151,7 @@ export default class HostModeService extends Service {
   // trailing slashes, preserves the root `/`) before comparing, so
   // `/realm` ↔ `/realm/` resolve and the client agrees with how the server
   // map builder and the editor normalize.
-  resolveRoutedPath(path: string): HostScopedRoutingRule | null {
+  resolveRoutedPath(path: string): HostRoutingRule | null {
     let normalized = path.startsWith('/') ? path : `/${path}`;
     let canonical = normalizeRoutingPath(normalized);
     let rule = this.hostRoutingMap.find(
@@ -187,7 +184,7 @@ export default class HostModeService extends Service {
   // host mode anyway; only the simulation affordance separates them,
   // and a simulated session should stay on the page it is running from.
   redirectTo(target: string, queryParams?: Record<string, unknown>) {
-    let url = /^https?:/i.test(target)
+    let url = isExternalRedirectTarget(target)
       ? new URL(target)
       : new URL(target, window.location.origin);
     if (!url.search && queryParams) {

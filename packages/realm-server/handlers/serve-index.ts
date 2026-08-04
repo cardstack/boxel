@@ -13,6 +13,7 @@ import {
   logger,
   param,
   query,
+  resolveRedirectTarget,
   sanitizeHeadHTMLToString,
 } from '@cardstack/runtime-common';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
@@ -404,27 +405,23 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
           // A declared redirect rule. Redirect straight to the
           // declared target from either trailing-slash form of the
           // matched path — canonicalizing first would cost the client a
-          // second hop for no benefit. A realm-relative target resolves
-          // against the realm's mount pathname, mirroring how the
-          // rule's own `path` is mounted; extra leading slashes are
-          // collapsed so a target can never be read as protocol-
-          // relative. The request's query string carries over unless
-          // the target declares its own — minus the host app's own
-          // params, which a redirect has no business handing on: the
-          // target may be an external site, and `sid` / `clientSecret`
-          // are password-reset tokens. The SPA drops the same list on
-          // its in-app navigation, so both answer the same URL.
+          // second hop for no benefit. `resolveRedirectTarget` is shared
+          // with the routing map injected further down, so the URL a
+          // full-page visitor is sent to and the one an in-app
+          // transition resolves cannot drift apart. The request's query
+          // string carries over unless the target declares its own —
+          // minus the host app's own params, which a redirect has no
+          // business handing on: the target may be an external site, and
+          // `sid` / `clientSecret` are password-reset tokens. The SPA
+          // drops the same list on its in-app navigation.
           let { redirectTo, statusCode } = matched.rule;
-          let target: URL;
-          if (/^https?:/i.test(redirectTo)) {
-            target = new URL(redirectTo);
-          } else {
-            let realmPathname = new URL(matched.realm.url).pathname;
-            target = new URL(
-              realmPathname + redirectTo.replace(/^\/+/, ''),
-              requestURL,
-            );
-          }
+          let target = new URL(
+            resolveRedirectTarget(
+              redirectTo,
+              new URL(matched.realm.url).pathname,
+            ),
+            requestURL,
+          );
           if (requestURL.search && !target.search) {
             let forwarded = foreignQueryParams(requestURL.search);
             if (forwarded) {
@@ -564,10 +561,12 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
           // A redirect rule's realm-relative target is prefixed the same
           // way as its path, so the SPA can hand the value straight to a
           // location change without knowing the realm's mount point.
-          let redirectTo = /^https?:/i.test(rule.redirectTo)
-            ? rule.redirectTo
-            : realmPathname + rule.redirectTo.replace(/^\/+/, '');
-          return { path, redirectTo, statusCode: rule.statusCode };
+          // Same helper the `Location` header above goes through.
+          return {
+            path,
+            redirectTo: resolveRedirectTarget(rule.redirectTo, realmPathname),
+            statusCode: rule.statusCode,
+          };
         }
         return { path, id: rule.id };
       });

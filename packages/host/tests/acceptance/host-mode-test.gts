@@ -12,7 +12,7 @@ import { getPageTitle } from 'ember-page-title/test-support';
 import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
-import { Deferred } from '@cardstack/runtime-common';
+import { Deferred, type HostRoutingRule } from '@cardstack/runtime-common';
 
 import HostModeService from '@cardstack/host/services/host-mode-service';
 import type StoreService from '@cardstack/host/services/store';
@@ -61,7 +61,7 @@ class StubCustomSubdomainHostModeService extends StubHostModeService {
 // which is `/test/` as this app sees it (`hostModeOrigin` absorbs the
 // `/user` segment above).
 class StubRoutingHostModeService extends StubHostModeService {
-  get hostRoutingMap() {
+  get hostRoutingMap(): HostRoutingRule[] {
     return [
       { path: '/test/terms', id: `${testHostModeRealmURL}Pet/mango` },
       { path: '/test/tos', redirectTo: '/test/terms', statusCode: 302 },

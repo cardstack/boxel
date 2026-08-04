@@ -8,7 +8,10 @@ import { isTesting } from '@embroider/macros';
 import window from 'ember-window-mock';
 import stringify from 'safe-stable-stringify';
 
-import { HOST_APP_QUERY_PARAMS } from '@cardstack/runtime-common';
+import {
+  HOST_APP_QUERY_PARAMS,
+  isRedirectRoutingRule,
+} from '@cardstack/runtime-common';
 import { isFileDefInstance } from '@cardstack/runtime-common/code-ref';
 
 import { Submodes } from '@cardstack/host/components/submode-switcher';
@@ -98,7 +101,7 @@ export default class Card extends Route {
       let routed = this.hostModeService.resolveRoutedPath(
         normalizedPath || '/',
       );
-      if (routed && 'redirectTo' in routed) {
+      if (routed && isRedirectRoutingRule(routed)) {
         this.hostModeService.redirectTo(
           routed.redirectTo,
           this.forwardableQueryParams(transition),

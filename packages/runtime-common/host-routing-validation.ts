@@ -82,6 +82,43 @@ export function isRedirectRoutingRule(
   return 'redirectTo' in rule;
 }
 
+const EXTERNAL_TARGET_PATTERN = /^https?:/i;
+
+/**
+ * Whether a redirect target leaves the realm. External targets are used
+ * verbatim; everything else is a path within the realm.
+ */
+export function isExternalRedirectTarget(target: string): boolean {
+  return EXTERNAL_TARGET_PATTERN.test(target);
+}
+
+/**
+ * The host-scoped form of a redirect target: what the browser should end
+ * up at, expressed the way the realm is actually mounted. An external
+ * target is handed back untouched; a realm-relative one is joined onto
+ * `realmPathname` (which ends in `/`), the same prefixing a rule's own
+ * `path` gets, so `/terms` under a realm mounted at `/sick-elk/` becomes
+ * `/sick-elk/terms`.
+ *
+ * Every leading slash is collapsed, not just the first, so the result
+ * can never start `//` and be read as protocol-relative. Malformed
+ * targets are already dropped when the routing map is built; this is the
+ * backstop.
+ *
+ * Shared because the server needs this twice — once for the `Location`
+ * header it answers, once for the routing map it injects for the SPA —
+ * and the two answering different URLs would send a full-page visitor
+ * and an in-app one to different places.
+ */
+export function resolveRedirectTarget(
+  redirectTo: string,
+  realmPathname: string,
+): string {
+  return isExternalRedirectTarget(redirectTo)
+    ? redirectTo
+    : `${realmPathname}${redirectTo.replace(/^\/+/, '')}`;
+}
+
 /**
  * Canonical form of a routing rule path: a trailing slash is stripped so
  * `/pricing/` and `/pricing` compare and match identically, with the realm

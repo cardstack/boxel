@@ -131,6 +131,24 @@ module(basename(import.meta.filename), function () {
     });
   });
 
+  module('resolveRedirectTarget', function () {
+    test('resolveRedirectTarget: prefixes a realm-relative target with the mount pathname', async function (assert) {
+      await runSharedTest(hostRoutingValidationTests, assert, {});
+    });
+
+    test('resolveRedirectTarget: hands back an external target untouched', async function (assert) {
+      await runSharedTest(hostRoutingValidationTests, assert, {});
+    });
+
+    test('resolveRedirectTarget: collapses every leading slash', async function (assert) {
+      await runSharedTest(hostRoutingValidationTests, assert, {});
+    });
+
+    test('isExternalRedirectTarget: distinguishes http(s) targets from realm paths', async function (assert) {
+      await runSharedTest(hostRoutingValidationTests, assert, {});
+    });
+  });
+
   module('foreignQueryParams', function () {
     test('foreignQueryParams: keeps params the host app does not own', async function (assert) {
       await runSharedTest(hostRoutingValidationTests, assert, {});
