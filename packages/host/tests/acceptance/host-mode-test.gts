@@ -876,6 +876,9 @@ module('Acceptance | host mode tests', function (hooks) {
         'an unversioned island is never adopted speculatively',
       );
       assert.dom('[data-host-mode-card-scroll-container]').exists();
+      assert
+        .dom(`[data-host-mode-card="${testHostModeRealmURL}Pet/mango"]`)
+        .exists('the prerender handoff preserves the host card identity');
       assert.dom('.message').doesNotExist();
     } finally {
       start.remove();

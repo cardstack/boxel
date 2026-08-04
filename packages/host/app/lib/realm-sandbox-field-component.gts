@@ -179,6 +179,8 @@ class DeferredRelationshipCard extends Modifier<DeferredRelationshipSignature> {
   @service declare private realmSandbox: RealmSandboxService;
   private element?: HTMLDivElement;
   private args?: DeferredRelationshipSignature['Args']['Named'];
+  private renderKey?: string;
+  private relationshipContext?: RealmSandboxRelationshipContext;
   private generation = 0;
   private subscribeToData?: (render: () => void) => () => void;
   private unsubscribe?: () => void;
@@ -199,14 +201,29 @@ class DeferredRelationshipCard extends Modifier<DeferredRelationshipSignature> {
     _positional: never[],
     args: DeferredRelationshipSignature['Args']['Named'],
   ) {
+    let renderKey = [
+      args.cardId,
+      args.format,
+      args.fieldType,
+      args.fieldName,
+      args.resourceType,
+    ].join('|');
+    let needsRender =
+      element !== this.element ||
+      renderKey !== this.renderKey ||
+      args.relationshipContext !== this.relationshipContext;
     this.element = element;
     this.args = args;
+    this.renderKey = renderKey;
+    this.relationshipContext = args.relationshipContext;
     if (this.subscribeToData !== args.subscribeToData) {
       this.unsubscribe?.();
       this.subscribeToData = args.subscribeToData;
       this.unsubscribe = args.subscribeToData?.(() => this.scheduleRender());
     }
-    this.scheduleRender();
+    if (needsRender) {
+      this.scheduleRender();
+    }
   }
 
   private scheduleRender() {

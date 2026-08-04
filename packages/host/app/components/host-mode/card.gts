@@ -316,6 +316,8 @@ export default class HostModeCard extends Component<Signature> {
           class='card'
           data-boxel-card-island-slot
           data-host-mode-card-scroll-container
+          data-host-mode-card={{@cardId}}
+          data-test-host-mode-card={{@cardId}}
           {{this.mountPrerenderedIsland}}
           {{this.rehydratePrerenderedIsland
             this.card

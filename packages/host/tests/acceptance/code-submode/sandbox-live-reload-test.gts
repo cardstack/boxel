@@ -203,7 +203,9 @@ export class ComputedProjection extends CardDef {
 `;
 
 const relationshipSource = `
+import { tracked } from '@glimmer/tracking';
 import { get } from '@ember/helper';
+import { on } from '@ember/modifier';
 import {
   CardDef,
   Component,
@@ -227,8 +229,16 @@ export class Project extends CardDef {
   @field reviewers = linksToMany(Person);
 
   static isolated = class Isolated extends Component<typeof this> {
+    @tracked parentRevision = 0;
+    rerenderParent = () => this.parentRevision++;
+
     <template>
       <article data-test-related-project>
+        <button
+          type='button'
+          data-test-rerender-related-project
+          {{on 'click' this.rerenderParent}}
+        >Rerender parent {{this.parentRevision}}</button>
         <@fields.owner @format='embedded' />
         {{#each @model.reviewers as |_reviewer index|}}
           {{#let (get @fields.reviewers index) as |Reviewer|}}
@@ -800,6 +810,21 @@ module('Acceptance | code submode | sandbox live reload', function (hooks) {
         ],
       ],
     });
+
+    await waitFor('[data-test-rerender-related-project]');
+    let rerenderButton = document.querySelector<HTMLButtonElement>(
+      '[data-test-rerender-related-project]',
+    );
+    if (!rerenderButton) {
+      throw new Error('could not find the relationship rerender fixture');
+    }
+    // Exercise the async portal while unrelated tracked parent state changes.
+    // The modifier must not treat each parent render as a new card generation
+    // and starve the in-flight Store load.
+    for (let i = 0; i < 5; i++) {
+      rerenderButton.click();
+      await Promise.resolve();
+    }
 
     await waitUntil(
       () =>
