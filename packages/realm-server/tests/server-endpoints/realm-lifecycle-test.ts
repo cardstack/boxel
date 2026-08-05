@@ -270,7 +270,15 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
             JSON.stringify({
               data: {
                 type: 'realm',
-                attributes: { ...testRealmInfo, endpoint },
+                attributes: {
+                  ...testRealmInfo,
+                  endpoint,
+                  // `testRealmInfo` carries `backgroundURL: null` / `iconURL:
+                  // null`, which create-realm rejects (present but not a
+                  // string). Send strings like the sibling create-realm test.
+                  backgroundURL: 'http://example.com/background.jpg',
+                  iconURL: 'http://example.com/icon.jpg',
+                },
               },
             }),
           );

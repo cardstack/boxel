@@ -435,13 +435,16 @@ class RealmResource {
       // only the federated `/_info` batch carries them — the per-realm
       // `/_info` fallback below is the lean variant without timestamps. Ask
       // the batch for just this realm first; it populates `this.info` via
-      // `applyRealmInfo` when the realm is on our own realm server, and
-      // no-ops for a federated realm (logged) or before the matrix client
-      // exists (the batch needs a realm-server session), in which case we
-      // fall through.
-      await this.realmService.prefetchRealmInfos([this.realmURL]);
-      if (this.info) {
-        return;
+      // `applyRealmInfo` when the realm is on our own realm server, and no-ops
+      // for a federated realm (logged), in which case we fall through. Gated on
+      // a matrix client because the batch logs in to the realm server; without
+      // one (anonymous sessions, much of the test surface) we skip straight to
+      // the token-authenticated per-realm `/_info` below.
+      if (this.realmServer.hasClient) {
+        await this.realmService.prefetchRealmInfos([this.realmURL]);
+        if (this.info) {
+          return;
+        }
       }
       let { info, isPublic } = await this.fetchInfoFromServer();
       this.info = new TrackedObject({ ...info, isIndexing: false, isPublic });
@@ -949,6 +952,14 @@ export default class RealmService extends Service {
       }
     | undefined
   > {
+    // The federated-info fetch below logs in to the realm server, which needs a
+    // matrix client. Skip entirely when there isn't one (anonymous sessions,
+    // and much of the test surface) rather than let `login()` reject: this runs
+    // fire-and-forget on index completion, so a rejection would surface as an
+    // unhandled error rather than being awaited anywhere.
+    if (!this.realmServer.hasClient) {
+      return undefined;
+    }
     try {
       let { data } = await this.realmServer.fetchRealmInfos([realmURL]);
       let key = ensureTrailingSlash(realmURL);
