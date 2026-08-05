@@ -22,10 +22,13 @@ export function createJWT(
 export function retrieveTokenClaim(
   authorizationString: string,
   secretSeed: string,
-) {
+): RealmServerTokenClaim & { iat: number; exp: number } {
   let tokenString = authorizationString.replace('Bearer ', '');
   try {
-    return verify(tokenString, secretSeed) as RealmServerTokenClaim;
+    return verify(tokenString, secretSeed) as RealmServerTokenClaim & {
+      iat: number;
+      exp: number;
+    };
   } catch (e) {
     if (e instanceof TokenExpiredError) {
       throw new AuthenticationError(AuthenticationErrorMessages.TokenExpired);

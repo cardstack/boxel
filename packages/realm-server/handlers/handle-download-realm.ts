@@ -3,12 +3,16 @@ import type { DBAdapter } from '@cardstack/runtime-common';
 import {
   ensureTrailingSlash,
   fetchUserPermissions,
+  isSessionRevoked,
   logger,
   param,
   query,
   PUBLISHED_DIRECTORY_NAME,
 } from '@cardstack/runtime-common';
-import { AuthenticationError } from '@cardstack/runtime-common/router';
+import {
+  AuthenticationError,
+  AuthenticationErrorMessages,
+} from '@cardstack/runtime-common/router';
 import { parseRealmsParam } from '@cardstack/runtime-common/search-utils';
 import { verifyURLSignature } from '@cardstack/runtime-common/url-signature-node';
 import archiver from 'archiver';
@@ -143,6 +147,11 @@ export default function handleDownloadRealm({
     } else {
       try {
         let token = retrieveTokenClaim(authorization, realmSecretSeed);
+        if (await isSessionRevoked(dbAdapter, token.user, token.iat)) {
+          throw new AuthenticationError(
+            AuthenticationErrorMessages.SessionRevoked,
+          );
+        }
         let permissions = await fetchUserPermissions(dbAdapter, {
           userId: token.user,
           onlyOwnRealms: false,
