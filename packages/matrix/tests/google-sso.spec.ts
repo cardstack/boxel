@@ -5,10 +5,10 @@ import { appURL } from '../support/isolated-realm-server.ts';
 import {
   createSubscribedUser,
   getExternalIdsForIdp,
-  setRealmRedirects,
   setupPermissions,
   subjectFor,
   updateSynapseUser,
+  withTracedContext,
 } from '../helpers/index.ts';
 
 // Synapse surfaces the `google` provider to clients — and stores its
@@ -117,19 +117,14 @@ test.describe('Google sign-in (mock OIDC)', () => {
     // A separate context is the second device: its own cookie jar, so the mock
     // IdP prompts again instead of reusing the first sign-in's session, and the
     // host cannot carry over any client-side state.
-    let context = await browser.newContext();
-    let otherPage = await context.newPage();
-    try {
-      await setRealmRedirects(otherPage);
+    await withTracedContext(browser, 'second-device', async (otherPage) => {
       await signInWithGoogle(otherPage, {
         sub: otherSub,
         email: otherEmail,
         name: 'Second User',
       });
       await expectSignedInAs(otherPage, `@${other.username}:localhost`);
-    } finally {
-      await context.close().catch(() => {});
-    }
+    });
 
     // Each account is linked to exactly the subject claim it presented.
     expect(await getExternalIdsForIdp(credentials.userId, GOOGLE_IDP)).toEqual([
