@@ -7,6 +7,7 @@ import {
   getExternalIdsForIdp,
   setRealmRedirects,
   setupPermissions,
+  subjectFor,
   updateSynapseUser,
 } from '../helpers/index.ts';
 
@@ -18,17 +19,6 @@ interface GoogleIdentity {
   sub: string;
   email: string;
   name: string;
-}
-
-// A subject claim has to be unique per test *attempt*, not just per test. One
-// Synapse instance serves the whole run and CI retries twice, so a subject that
-// signed in on an earlier attempt is already in `user_external_ids` — and
-// Synapse short-circuits on that row, logging the retry into the previous
-// attempt's account before the email-linking path runs. Deriving it from the
-// generated (UUID-suffixed) username keeps every attempt a fresh identity, so a
-// retry can actually recover from a flake instead of failing on stale state.
-function subjectFor(username: string): string {
-  return `google-oauth2|${username}`;
 }
 
 // Drives one sign-in from the host's Google button through the mock IdP's
@@ -102,14 +92,11 @@ test.describe('Google sign-in (mock OIDC)', () => {
     await expectSignedInAs(page, `@${username}:localhost`);
   });
 
-  // Two people signing in from two devices, which is the shape the wrong-account
-  // incident took. Landing in the right account is necessary but not sufficient
-  // as an assertion: the identity Synapse *stored* for each of them is what a
-  // later sign-in gets matched against, so a session that looks correct here can
-  // still have written a row that hands the account to somebody else next time.
-  // Hence the external-id assertions — they are what fail when
-  // `get_remote_user_id` is a coroutine function and the stored id is a repr
-  // carrying a heap address rather than the subject claim.
+  // Two people signing in from two devices. The identity Synapse *stores* is what
+  // the next sign-in gets matched against, so landing in the right account is not
+  // enough — a correct-looking session can still write a row that hands the
+  // account to somebody else. Hence assertions on the stored external ids rather
+  // than on the session alone.
   test('each Google identity signs in to its own account and is stored under its own subject claim', async ({
     browser,
     page,
