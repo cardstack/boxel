@@ -2,6 +2,7 @@ import {
   AuthenticationError,
   AuthenticationErrorMessages,
 } from '@cardstack/runtime-common/router';
+import { SESSION_TOKEN_TTL } from '@cardstack/runtime-common';
 import jsonwebtoken from 'jsonwebtoken';
 const { JsonWebTokenError, sign, TokenExpiredError, verify } = jsonwebtoken;
 
@@ -15,7 +16,7 @@ export function createJWT(
   secretSeed: string,
 ): string {
   return sign(claims, secretSeed, {
-    expiresIn: '7d',
+    expiresIn: SESSION_TOKEN_TTL,
   });
 }
 

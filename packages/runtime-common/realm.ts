@@ -96,6 +96,7 @@ import {
   isSessionRevoked,
   isRealmArchived,
   baseRealm,
+  SESSION_TOKEN_TTL,
   maybeURL,
   insertPermissions,
   maybeHandleScopedCSSRequest,
@@ -2952,7 +2953,7 @@ export class Realm {
               realm: this.url,
               realmServerURL: this.#realmServerURL,
             },
-            '7d',
+            SESSION_TOKEN_TTL,
             this.#realmSecretSeed,
           );
         },

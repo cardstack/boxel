@@ -11,6 +11,14 @@ import type { RealmPermissions } from './index.ts';
 export const baseRealm = new RealmPaths(new URL('https://cardstack.com/base/'));
 
 /**
+ * Lifetime of the session tokens a browser holds — both the realm-server
+ * session and the per-realm sessions. These are stateless bearer tokens, so
+ * apart from an operator revocation the TTL is the only thing bounding how long
+ * a leaked one stays useful. Clients re-mint transparently when it lapses.
+ */
+export const SESSION_TOKEN_TTL = '24h';
+
+/**
  * The base realm's canonical RRI prefix. Use this when building code
  * refs that should match what `Loader.identify` / `identifyCard` emit
  * for base-realm classes (which canonicalise via `vn.unresolveURL`

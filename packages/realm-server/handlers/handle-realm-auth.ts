@@ -7,6 +7,7 @@ import {
   param,
   query,
   separatedByCommas,
+  SESSION_TOKEN_TTL,
   SupportedMimeType,
   upsertSessionRoom,
   type Expression,
@@ -175,7 +176,7 @@ export default function handleRealmAuth({
             sessionRoom,
             realmServerURL: serverURL,
           },
-          '7d',
+          SESSION_TOKEN_TTL,
           realmSecretSeed,
         );
       } catch (error) {
