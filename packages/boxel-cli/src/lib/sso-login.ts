@@ -27,23 +27,92 @@ export class SsoTimeoutError extends Error {
   }
 }
 
-function successPage(): string {
+// The host app's Boxel mark, inlined with its brand teal baked in: this page is
+// served from a loopback listener with no other assets to reference.
+const BOXEL_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 22" width="22" height="22"><path fill="#00ffba" d="M17 22H5a5.006 5.006 0 0 1-5-5V5a5.006 5.006 0 0 1 5-5h12a5.005 5.005 0 0 1 5 5v12a5.006 5.006 0 0 1-5 5M3.271 2.425a.907.907 0 0 0-.682 1.515 1 1 0 0 0 .047.052L5.85 7.18a1.68 1.68 0 0 1 .433 1.039v5.566a1.68 1.68 0 0 1-.433 1.039l-3.215 3.188a1 1 0 0 0-.049.057.923.923 0 0 0 .7 1.509.9.9 0 0 0 .673-.3l3.15-3.128a1.7 1.7 0 0 1 1.042-.429h5.7a1.7 1.7 0 0 1 1.042.429l3.187 3.16a1 1 0 0 0 .051.045.9.9 0 0 0 .58.213.924.924 0 0 0 .7-1.508l-.037-.041-.007-.007-.036-.037-3.179-3.152a1.68 1.68 0 0 1-.432-1.039V8.219a1.68 1.68 0 0 1 .433-1.039l3.118-3.092a.923.923 0 0 0-.559-1.645.9.9 0 0 0-.492.148.6.6 0 0 0-.139.1l-3.187 3.16a1.7 1.7 0 0 1-1.042.429h-5.7a1.7 1.7 0 0 1-1.042-.429L3.922 2.694l-.053-.047a.92.92 0 0 0-.598-.222" transform="translate(0 -.001)"/><path fill="#00ffba" d="M1.117 0H4.97a1.117 1.117 0 0 1 1.117 1.117V4.97A1.117 1.117 0 0 1 4.97 6.087H1.117A1.117 1.117 0 0 1 0 4.97V1.117A1.117 1.117 0 0 1 1.117 0" transform="translate(7.968 8.018)"/></svg>`;
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// Styled to match the host app's auth screens (AuthContainer + the cli-auth
+// page's finished state): the same dark shell, logo placement, type scale, and
+// measure, so finishing here doesn't feel like leaving the product. All of it
+// is inlined because nothing else is served from this address.
+function page(title: string, bodyHtml: string): string {
   return `<!doctype html>
-<html><head><meta charset="utf-8"><title>Boxel CLI</title></head>
-<body style="font-family: system-ui, sans-serif; text-align: center; padding: 4rem;">
-<h1>You're signed in</h1>
-<p>Return to your terminal to continue. You can close this tab.</p>
-</body></html>`;
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Boxel CLI</title>
+<style>
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    background-color: #191624;
+    color: #fff;
+    font: 0.875rem/1.4 'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif;
+  }
+  .logo {
+    position: absolute;
+    top: 1.33rem;
+    left: 1.33rem;
+    width: 2rem;
+    height: 2rem;
+  }
+  .logo svg {
+    width: 100%;
+    height: 100%;
+  }
+  main {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    box-sizing: border-box;
+    min-height: 100dvh;
+    max-width: 25rem;
+    margin: 0 auto;
+    padding: 1.33rem;
+  }
+  h1 {
+    margin: 0 0 0.75rem;
+    font-size: 1.25rem;
+    font-weight: 600;
+    line-height: 1.4;
+  }
+  p {
+    margin: 0 0 1.33rem;
+  }
+</style>
+</head>
+<body>
+<div class="logo" aria-hidden="true">${BOXEL_LOGO_SVG}</div>
+<main>
+<h1>${title}</h1>
+${bodyHtml}
+</main>
+</body>
+</html>`;
+}
+
+function successPage(): string {
+  return page(
+    'You’re signed in',
+    `<p>Return to your terminal to continue. You can close this tab.</p>`,
+  );
 }
 
 function errorPage(message: string): string {
-  return `<!doctype html>
-<html><head><meta charset="utf-8"><title>Boxel CLI</title></head>
-<body style="font-family: system-ui, sans-serif; text-align: center; padding: 4rem;">
-<h1>Sign-in failed</h1>
-<p>${message}</p>
-<p>Return to your terminal for details.</p>
-</body></html>`;
+  return page(
+    'Sign-in failed',
+    `<p>${escapeHtml(message)}</p>
+<p>Return to your terminal for details.</p>`,
+  );
 }
 
 // A session the authorizing page logged in for and handed over directly, as
