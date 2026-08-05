@@ -9,11 +9,11 @@
 import GlimmerComponent from '@glimmer/component';
 
 import { eq } from '@cardstack/boxel-ui/helpers';
+// The boxel-ui icon barrel is a single module already in every card's
+// dependency graph, so a glyph taken from it costs nothing extra.
+import { Warning } from '@cardstack/boxel-ui/icons';
 
-import FileIcon from '@cardstack/boxel-icons/file';
-import TriangleAlertIcon from '@cardstack/boxel-icons/triangle-alert';
-
-import { iconFor } from './file-presentation';
+import { fileIconFor } from './file-presentation';
 import type { FileFormat, FileViewModel } from './file-view-model';
 
 import type { ComponentLike } from '@glint/template';
@@ -81,7 +81,7 @@ export class FilePreviewStage extends GlimmerComponent<StageSignature> {
   }
 
   get icon() {
-    return iconFor(this.model?.previewKind, this.model?.family);
+    return fileIconFor(this.model);
   }
 
   get srcTag() {
@@ -145,7 +145,7 @@ export class FilePreviewStage extends GlimmerComponent<StageSignature> {
         </div>
       {{else if (eq this.state 'failed')}}
         <div class='state-pane'>
-          <TriangleAlertIcon
+          <Warning
             class='warn-icon'
             width='24'
             height='24'
@@ -155,7 +155,7 @@ export class FilePreviewStage extends GlimmerComponent<StageSignature> {
         </div>
       {{else if (eq this.state 'unsupported')}}
         <div class='state-pane'>
-          <FileIcon width='28' height='28' aria-hidden='true' />
+          <this.icon width='28' height='28' aria-hidden='true' />
           <span class='pane-label'>Unsupported · generic</span>
         </div>
       {{else if (eq this.state 'empty')}}
@@ -204,8 +204,9 @@ export class FilePreviewStage extends GlimmerComponent<StageSignature> {
         letter-spacing: 0.1em;
         text-transform: uppercase;
       }
+      /* The glyph paints with `fill`, so tint it rather than setting `color`. */
       .warn-icon {
-        color: var(--fd-warn, #e8710a);
+        fill: var(--fd-warn, #e8710a);
       }
       .skeleton-bar {
         width: 62%;

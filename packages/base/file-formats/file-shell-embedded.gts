@@ -8,8 +8,8 @@ import { htmlSafe } from '@ember/template';
 import {
   boundedVideoFrameAspectRatio,
   containEmbeddedInteraction,
+  fileIconFor,
   humanSize,
-  iconFor,
   shortDate,
 } from './file-presentation';
 import {
@@ -29,7 +29,7 @@ interface FileEmbeddedShellSignature {
 
 export class FileEmbeddedShell extends GlimmerComponent<FileEmbeddedShellSignature> {
   get icon() {
-    return iconFor(this.args.model?.previewKind, this.args.model?.family);
+    return fileIconFor(this.args.model);
   }
 
   get nameHead() {

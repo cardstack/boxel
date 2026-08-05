@@ -38,11 +38,12 @@ export {
 export {
   boundedVideoFrameAspectRatio,
   containEmbeddedInteraction,
+  fileIconFor,
   formatClock,
   humanSize,
-  iconFor,
   relativeDate,
   shortDate,
+  type FileIconComponent,
 } from './file-presentation';
 
 export {

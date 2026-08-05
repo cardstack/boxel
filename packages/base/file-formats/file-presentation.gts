@@ -2,60 +2,26 @@
 // count, or a date reads identically in atom, fitted, embedded, and isolated.
 import { modifier } from 'ember-modifier';
 
-import BoxIcon from '@cardstack/boxel-icons/box';
-import BracesIcon from '@cardstack/boxel-icons/braces';
 import FileIcon from '@cardstack/boxel-icons/file';
-import FileArchiveIcon from '@cardstack/boxel-icons/file-archive';
-import FileCodeIcon from '@cardstack/boxel-icons/file-code';
-import FileSpreadsheetIcon from '@cardstack/boxel-icons/file-spreadsheet';
-import FileTextIcon from '@cardstack/boxel-icons/file-text';
-import FileTypeDocIcon from '@cardstack/boxel-icons/file-type-doc';
-import FileTypePdfIcon from '@cardstack/boxel-icons/file-type-pdf';
-import FilmIcon from '@cardstack/boxel-icons/film';
-import ImageIcon from '@cardstack/boxel-icons/image';
-import MusicIcon from '@cardstack/boxel-icons/music';
-import PresentationIcon from '@cardstack/boxel-icons/presentation';
-import TableIcon from '@cardstack/boxel-icons/table';
-import TypeIcon from '@cardstack/boxel-icons/type';
 
-type IconComponent = typeof FileIcon;
+import type { ComponentLike } from '@glint/template';
 
-const FAMILY_ICONS: Record<string, IconComponent> = {
-  image: ImageIcon,
-  audio: MusicIcon,
-  // MIDI is music data, not an encoded-audio subtype, but it shares the glyph.
-  music: MusicIcon,
-  video: FilmIcon,
-  // HTML is a browser document rather than a generic text leaf.
-  web: FileCodeIcon,
-  document: FileTextIcon,
-  code: FileCodeIcon,
-  data: TableIcon,
-  pdf: FileTypePdfIcon,
-  office: FileTypeDocIcon,
-  archive: FileArchiveIcon,
-  font: TypeIcon,
-  model: BoxIcon,
-  generic: FileIcon,
-};
+// Structurally the same as card-api's `CardOrFieldTypeIcon`, restated here so
+// the shells need nothing from card-api — not even a type. card-api imports the
+// format templates, so the dependency only runs the other way.
+export type FileIconComponent = ComponentLike<{ Element: SVGSVGElement }>;
 
-// A preview kind is narrower than a family, so it wins where it differs.
-const PREVIEW_ICONS: Record<string, IconComponent> = {
-  json: BracesIcon,
-  csv: TableIcon,
-  schema: FileCodeIcon,
-  html: FileCodeIcon,
-  docx: FileTypeDocIcon,
-  slide: PresentationIcon,
-  sheet: FileSpreadsheetIcon,
-};
-
-export function iconFor(previewKind?: string, family?: string): IconComponent {
-  return (
-    (previewKind ? PREVIEW_ICONS[previewKind] : undefined) ??
-    (family ? FAMILY_ICONS[family] : undefined) ??
-    FileIcon
-  );
+// The glyph comes from the file's own class, which already declares
+// `static icon` — `AudioDef` names the music glyph, `PngDef` the PNG one. Two
+// reasons the shells read it from there rather than keeping a family→glyph map:
+// a family that adds itself doesn't have to also edit a shared registry, and
+// each glyph's module stays out of card-api's dependency graph, which every
+// card in every realm inherits. `FileDef`'s own generic icon is the fallback
+// for a file whose family hasn't landed a subclass yet.
+export function fileIconFor(
+  source?: { icon?: FileIconComponent } | null,
+): FileIconComponent {
+  return source?.icon ?? FileIcon;
 }
 
 // Preserve the source's authored shape until honoring it would make the player

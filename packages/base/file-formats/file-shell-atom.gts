@@ -3,7 +3,7 @@
 // renderer and takes no more vertical space than the text around it.
 import GlimmerComponent from '@glimmer/component';
 
-import { iconFor } from './file-presentation';
+import { fileIconFor } from './file-presentation';
 import type { FileViewModel } from './file-view-model';
 
 interface FileAtomShellSignature {
@@ -15,7 +15,7 @@ interface FileAtomShellSignature {
 
 export class FileAtomShell extends GlimmerComponent<FileAtomShellSignature> {
   get icon() {
-    return iconFor(this.args.model?.previewKind, this.args.model?.family);
+    return fileIconFor(this.args.model);
   }
 
   get baseName() {

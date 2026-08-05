@@ -7,7 +7,11 @@
 // projection time means a family preview component physically cannot receive
 // more than a fitted cell can afford to render.
 
-import { formatClock } from './file-presentation';
+import {
+  fileIconFor,
+  formatClock,
+  type FileIconComponent,
+} from './file-presentation';
 import {
   profileForFile,
   type FileFamily,
@@ -59,6 +63,8 @@ export interface FileModelLike {
 // class, so a family declares them once rather than per format.
 export interface FileProfileSource {
   displayName?: string;
+  // `static icon`, which every FileDef subclass already declares.
+  icon?: FileIconComponent;
   fileKind?: string;
   fileFamily?: string;
   previewKind?: string;
@@ -79,6 +85,7 @@ export function fileProfileSource(
 export interface FileViewModel {
   id?: string;
   source: FileModelLike;
+  icon: FileIconComponent;
   name: string;
   baseName: string;
   extension: string;
@@ -424,6 +431,7 @@ export function fileViewModel(
     // The FileDef itself, so a family preview or the isolated inspector can
     // reach a field this shared projection doesn't know about.
     source: file,
+    icon: fileIconFor(profileSource),
     name,
     baseName,
     extension,

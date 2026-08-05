@@ -9,16 +9,21 @@ import { htmlSafe } from '@ember/template';
 import { tracked } from '@glimmer/tracking';
 
 import { copyCardURLToClipboard, eq, gt } from '@cardstack/boxel-ui/helpers';
-
-import CircleDashedIcon from '@cardstack/boxel-icons/circle-dashed';
-import DiamondIcon from '@cardstack/boxel-icons/diamond';
-import LayersIcon from '@cardstack/boxel-icons/layers';
-import MathFunctionIcon from '@cardstack/boxel-icons/math-function';
+// Provenance markers come from the boxel-ui icon barrel, a single module every
+// card already depends on: `Folder` for a fact the realm supplied, `IconSearch`
+// for one a parser read out of the bytes, `IconInherit` for one derived from
+// those, and `IconCircle` for one that is absent.
+import {
+  Folder,
+  IconCircle,
+  IconInherit,
+  IconSearch,
+} from '@cardstack/boxel-ui/icons';
 
 import {
   boundedVideoFrameAspectRatio,
+  fileIconFor,
   humanSize,
-  iconFor,
   shortDate,
 } from './file-presentation';
 import {
@@ -50,7 +55,7 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
   copyFeedbackTimer?: ReturnType<typeof setTimeout>;
 
   get icon() {
-    return iconFor(this.args.model?.previewKind, this.args.model?.family);
+    return fileIconFor(this.args.model);
   }
 
   get downloadName() {
@@ -286,7 +291,7 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
         <span class='ext-pill'>.{{@model.extension}}</span>
         {{#if @model.title}}
           <span class='iso-title'>
-            <DiamondIcon width='10' height='10' aria-hidden='true' />
+            <IconSearch width='10' height='10' aria-hidden='true' />
             “{{@model.title}}”
           </span>
         {{/if}}
@@ -362,7 +367,7 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
             <div class='insp-row'>
               <dt>Kind</dt>
               <dd>{{@model.kind}}</dd>
-              <span class='mark' title='Realm-provided'><LayersIcon
+              <span class='mark' title='Realm-provided'><Folder
                   width='11'
                   height='11'
                   aria-hidden='true'
@@ -372,7 +377,7 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
               <div class='insp-row'>
                 <dt>Size</dt>
                 <dd>{{this.size}}</dd>
-                <span class='mark' title='Realm-provided'><LayersIcon
+                <span class='mark' title='Realm-provided'><Folder
                     width='11'
                     height='11'
                     aria-hidden='true'
@@ -383,7 +388,7 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
               <div class='insp-row'>
                 <dt>Created</dt>
                 <dd>{{this.created}}</dd>
-                <span class='mark' title='Realm-provided'><LayersIcon
+                <span class='mark' title='Realm-provided'><Folder
                     width='11'
                     height='11'
                     aria-hidden='true'
@@ -394,7 +399,7 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
               <div class='insp-row'>
                 <dt>Modified</dt>
                 <dd>{{this.modified}}</dd>
-                <span class='mark' title='Realm-provided'><LayersIcon
+                <span class='mark' title='Realm-provided'><Folder
                     width='11'
                     height='11'
                     aria-hidden='true'
@@ -413,7 +418,7 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
                     class='{{if row.mono "mono"}}'
                     title={{row.value}}
                   >{{row.value}}</dd>
-                  <span class='mark' title='Parsed from the file'><DiamondIcon
+                  <span class='mark' title='Parsed from the file'><IconSearch
                       width='11'
                       height='11'
                       aria-hidden='true'
@@ -457,9 +462,9 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
                   <span
                     class='mark'
                     title='Computed from parser output'
-                  ><MathFunctionIcon
-                      width='11'
-                      height='11'
+                  ><IconInherit
+                      width='13'
+                      height='13'
                       aria-hidden='true'
                     /></span>
                 </div>
@@ -516,25 +521,25 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
           {{/if}}
 
           <div class='legend'>
-            <span class='legend-item'><DiamondIcon
+            <span class='legend-item'><IconSearch
                 width='10'
                 height='10'
                 aria-hidden='true'
               />
               extracted</span>
-            <span class='legend-item'><LayersIcon
+            <span class='legend-item'><Folder
                 width='10'
                 height='10'
                 aria-hidden='true'
               />
               realm</span>
-            <span class='legend-item'><MathFunctionIcon
-                width='10'
-                height='10'
+            <span class='legend-item'><IconInherit
+                width='12'
+                height='12'
                 aria-hidden='true'
               />
               computed</span>
-            <span class='legend-item'><CircleDashedIcon
+            <span class='legend-item'><IconCircle
                 width='10'
                 height='10'
                 aria-hidden='true'
@@ -851,6 +856,9 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
         border-radius: 5px;
         border: 1px solid var(--border);
         color: var(--muted-foreground);
+        /* Some barrel glyphs paint from `--icon-color` rather than
+           `currentColor`, so hand them the inherited color explicitly. */
+        --icon-color: currentColor;
       }
       .legend {
         margin-top: 16px;
@@ -869,6 +877,7 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
         letter-spacing: 0.05em;
         text-transform: uppercase;
         color: var(--muted-foreground);
+        --icon-color: currentColor;
       }
     </style>
   </template>

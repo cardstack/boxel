@@ -4665,6 +4665,14 @@ module(`Integration | realm indexing`, function (hooks) {
         .sort()
         // Exclude synthetic imports that encapsulate scoped CSS
         .filter((ref) => !ref.includes('glimmer-scoped.css')),
+      // This list is also the guard on how wide every card's dependency graph
+      // is: `card-api` statically imports FileDef's format templates, so
+      // anything the shared file-format shells import lands here — and
+      // therefore in the deps of every card in every realm, whether or not it
+      // ever renders a file. Growth here is a real cost (module loads per cold
+      // prerender, bytes per index row), so treat an addition as a decision
+      // rather than a snapshot to re-record. A family's own glyph belongs on
+      // its subclass's `static icon`, not in a shared map.
       [
         '@cardstack/base/-private',
         '@cardstack/base/card-api',
@@ -4730,41 +4738,23 @@ module(`Integration | realm indexing`, function (hooks) {
         `${iconsBase}@cardstack/boxel-icons/v1/icons/align-left`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/arrow-left`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/bell`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/box`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/braces`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/captions`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/circle-dashed`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/clipboard-copy`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/code`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/diamond`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/eye`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/file`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/file-archive`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/file-code`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/file-pencil`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/file-spreadsheet`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/file-text`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/file-type-doc`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/file-type-pdf`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/film`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/folder-pen`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/hash`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/image`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/import`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/layers`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/letter-case`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/link`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/link-off`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/math-function`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/music`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/notepad-text`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/palette`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/presentation`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/rectangle-ellipsis`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/table`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/trash-2`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/triangle-alert`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/type`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/wand`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/x`,
         // Module deps are stored in canonical (deployment-independent) form,
@@ -4857,6 +4847,14 @@ module(`Integration | realm indexing`, function (hooks) {
         .sort()
         // Exclude synthetic imports that encapsulate scoped CSS
         .filter((ref) => !ref.includes('glimmer-scoped.css')),
+      // This list is also the guard on how wide every card's dependency graph
+      // is: `card-api` statically imports FileDef's format templates, so
+      // anything the shared file-format shells import lands here — and
+      // therefore in the deps of every card in every realm, whether or not it
+      // ever renders a file. Growth here is a real cost (module loads per cold
+      // prerender, bytes per index row), so treat an addition as a decision
+      // rather than a snapshot to re-record. A family's own glyph belongs on
+      // its subclass's `static icon`, not in a shared map.
       [
         '@cardstack/base/-private',
         '@cardstack/base/boolean',
@@ -4927,48 +4925,30 @@ module(`Integration | realm indexing`, function (hooks) {
         `${iconsBase}@cardstack/boxel-icons/v1/icons/apps`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/arrow-left`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/bell`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/box`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/braces`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/book-open-text`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/box-model`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/captions`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/circle-dashed`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/clipboard-copy`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/code`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/diamond`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/eye`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/file`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/file-archive`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/file-code`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/file-pencil`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/file-spreadsheet`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/file-text`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/file-type-doc`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/file-type-pdf`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/film`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/folder-pen`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/git-branch`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/hash`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/image`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/import`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/layers`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/layers-subtract`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/layout-list`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/letter-case`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/link`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/link-off`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/math-function`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/music`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/notepad-text`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/palette`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/presentation`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/rectangle-ellipsis`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/table`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/stack`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/toggle-left`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/trash-2`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/triangle-alert`,
-        `${iconsBase}@cardstack/boxel-icons/v1/icons/type`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/wand`,
         `${iconsBase}@cardstack/boxel-icons/v1/icons/x`,
         // Module deps are stored in canonical (deployment-independent) form,

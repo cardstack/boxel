@@ -1,3 +1,4 @@
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import type { RenderingTestContext } from '@ember/test-helpers';
 
 import GlimmerComponent from '@glimmer/component';
@@ -13,6 +14,14 @@ import { setupRenderingTest } from '../../helpers/setup';
 
 import type * as CardApiModule from '@cardstack/base/card-api';
 import type { FilePreviewSignature } from '@cardstack/base/file-formats/file-preview-stage';
+
+// Stands in for a family's own glyph, which a FileDef subclass declares as
+// `static icon`. Annotated the way the boxel-icons modules are: `ComponentLike`
+// is the consumer-side type and doesn't carry the element through
+// `...attributes` when used on a definition.
+const ReportIcon: TemplateOnlyComponent<{ Element: SVGSVGElement }> = <template>
+  <svg data-test-report-icon viewBox='0 0 24 24' ...attributes></svg>
+</template>;
 
 module('Integration | FileDef format templates', function (hooks) {
   setupRenderingTest(hooks);
@@ -156,6 +165,43 @@ module('Integration | FileDef format templates', function (hooks) {
       .dom('[data-test-report-preview]')
       .containsText('Report preview for report.pdf in embedded');
     assert.dom('[data-test-file-no-preview]').doesNotExist();
+  });
+
+  // The shells read the glyph from the class rather than from a family→glyph
+  // map, which is what keeps each family's icon module out of card-api's
+  // dependency graph — and so out of every card's. If a shell ever goes back to
+  // a central map, this fails.
+  test("the shells take their glyph from the file class's static icon", async function (assert) {
+    class ReportDef extends FileDef {
+      static displayName = 'Report';
+      static icon = ReportIcon;
+    }
+    let file = new ReportDef({
+      id: 'http://example.com/docs/report.pdf',
+      url: 'http://example.com/docs/report.pdf',
+      name: 'report.pdf',
+      contentType: 'application/pdf',
+    });
+
+    await renderCard(loader, file, 'atom');
+    assert.dom('[data-test-file-atom] [data-test-report-icon]').exists();
+
+    await renderCard(loader, file, 'fitted');
+    assert.dom('[data-test-file-fitted] [data-test-report-icon]').exists();
+
+    await renderCard(loader, file, 'embedded');
+    assert.dom('[data-test-file-embedded] [data-test-report-icon]').exists();
+
+    await renderCard(loader, file, 'isolated');
+    assert.dom('[data-test-file-isolated] [data-test-report-icon]').exists();
+  });
+
+  // A family that hasn't declared its own glyph inherits FileDef's, so a shell
+  // always has something to draw.
+  test('a file class with no icon of its own falls back to the generic glyph', async function (assert) {
+    await renderCard(loader, makeFile(), 'atom');
+    assert.dom('[data-test-file-atom] svg').exists();
+    assert.dom('[data-test-file-atom] [data-test-report-icon]').doesNotExist();
   });
 
   test('a zero-byte file reports the empty state in both the chip and the stage', async function (assert) {

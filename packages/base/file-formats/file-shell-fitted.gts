@@ -9,7 +9,7 @@
 // component ever sees the data.
 import GlimmerComponent from '@glimmer/component';
 
-import { humanSize, iconFor, relativeDate } from './file-presentation';
+import { fileIconFor, humanSize, relativeDate } from './file-presentation';
 import {
   FilePreviewStage,
   type FilePreviewComponent,
@@ -37,7 +37,7 @@ const STATE_LABELS: Record<string, string> = {
 
 export class FileFittedShell extends GlimmerComponent<FileFittedShellSignature> {
   get icon() {
-    return iconFor(this.args.model?.previewKind, this.args.model?.family);
+    return fileIconFor(this.args.model);
   }
 
   // A sparse or still-loading FileDef must still show something identifying.
