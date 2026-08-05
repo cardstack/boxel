@@ -106,6 +106,17 @@ const exposeAudioElement = modifier(
   },
 );
 
+// `FontFaceSet`'s `add` and `delete` are declared in TypeScript's
+// `dom.iterable` lib, where the interface extends `Set<FontFace>`; plain `dom`
+// declares it as a bare `EventTarget`. Several Node-side packages type-check
+// this module with an explicit narrow `lib`, so reach the two members through a
+// structural type here rather than widening those packages' configuration for
+// one browser-only primitive.
+interface FontFaceRegistry {
+  add(font: FontFace): unknown;
+  delete(font: FontFace): unknown;
+}
+
 // Loads a linked font face onto the caller's exact element. The face is removed
 // from the document on teardown so a long-lived page doesn't accumulate one
 // registration per render.
@@ -125,6 +136,7 @@ export const applyFileFont = modifier(
     let cancelled = false;
     let loadedFace: FontFace | undefined;
     let resolvedFamily = familyName || 'Boxel linked file specimen';
+    let registry = document.fonts as unknown as FontFaceRegistry;
     let face = new FontFace(resolvedFamily, cssURL(resourceURL));
     void face
       .load()
@@ -133,7 +145,7 @@ export const applyFileFont = modifier(
           return;
         }
         loadedFace = font;
-        document.fonts.add(font);
+        registry.add(font);
         element.style.fontFamily = `"${resolvedFamily}", var(--font-sans)`;
       })
       .catch(() => {
@@ -144,7 +156,7 @@ export const applyFileFont = modifier(
       cancelled = true;
       element.style.removeProperty('font-family');
       if (loadedFace) {
-        document.fonts.delete(loadedFace);
+        registry.delete(loadedFace);
       }
     };
   },
