@@ -35,6 +35,7 @@ export default class RecentFilesService extends Service {
   @service declare private session: SessionService;
 
   @tracked declare recentFiles: TrackedArray<RecentFile>;
+  private cursorPersistenceTimer?: ReturnType<typeof setTimeout>;
 
   constructor(owner: Owner) {
     super(owner);
@@ -149,11 +150,34 @@ export default class RecentFilesService extends Service {
     if (existingIndex > -1) {
       this.recentFiles[existingIndex].cursorPosition = cursorPosition ?? null;
       this.recentFiles[existingIndex].timestamp = Date.now();
-      this.persistRecentFiles();
+      this.scheduleRecentFilesPersistence();
     }
   }
 
+  flushPendingPersistence() {
+    if (this.cursorPersistenceTimer == null) {
+      return;
+    }
+    clearTimeout(this.cursorPersistenceTimer);
+    this.cursorPersistenceTimer = undefined;
+    this.persistRecentFiles();
+  }
+
+  private scheduleRecentFilesPersistence() {
+    if (this.cursorPersistenceTimer != null) {
+      clearTimeout(this.cursorPersistenceTimer);
+    }
+    this.cursorPersistenceTimer = setTimeout(() => {
+      this.cursorPersistenceTimer = undefined;
+      this.persistRecentFiles();
+    }, 250);
+  }
+
   private persistRecentFiles() {
+    if (this.cursorPersistenceTimer != null) {
+      clearTimeout(this.cursorPersistenceTimer);
+      this.cursorPersistenceTimer = undefined;
+    }
     window.localStorage.setItem(
       RecentFiles,
       JSON.stringify(
@@ -214,6 +238,11 @@ export default class RecentFilesService extends Service {
         console.log('Error restoring recent files', e);
       }
     }
+  }
+
+  willDestroy() {
+    this.flushPendingPersistence();
+    super.willDestroy();
   }
 }
 

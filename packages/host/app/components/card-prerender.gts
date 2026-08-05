@@ -40,6 +40,7 @@ import {
 
 import { readFileAsText as _readFileAsText } from '@cardstack/runtime-common/stream';
 
+import { buildCardIslandContext } from '../lib/card-island-context';
 import {
   buildModuleModel,
   type ModuleModelContext,
@@ -64,6 +65,7 @@ import type { Model as HtmlRouteModel } from '../routes/render/html';
 import type LoaderService from '../services/loader-service';
 import type LocalIndexer from '../services/local-indexer';
 import type NetworkService from '../services/network';
+import type RealmSandboxService from '../services/realm-sandbox';
 import type RenderService from '../services/render-service';
 import type RenderStoreService from '../services/render-store';
 
@@ -73,6 +75,7 @@ export default class CardPrerender extends Component {
   @service declare private network: NetworkService;
   @service declare private router: RouterService;
   @service declare private renderService: RenderService;
+  @service declare private realmSandbox: RealmSandboxService;
   @service declare private localIndexer: LocalIndexer;
   @service declare private loaderService: LoaderService;
   #nonce = 0;
@@ -743,12 +746,36 @@ export default class CardPrerender extends Component {
       } else {
         captureMode = 'outerHTML';
       }
-      let captured = await this.renderService.renderCardComponent(
-        component,
-        captureMode,
-        format,
-        this.waitForLinkedData,
-      );
+      let captured =
+        format === 'isolated' &&
+        this.realmSandbox.isOpaqueCard(routeInfo.attributes.instance)
+          ? await (async () => {
+              // A CardIsland is a low-level Glimmer root. Start it only after
+              // this card/format's SES template is installed so a late
+              // template-revision acknowledgement cannot rerender the root
+              // outside renderCardIsland's authored-error boundary.
+              await this.realmSandbox.prepareRender(
+                routeInfo.attributes.instance,
+                format,
+              );
+              return await this.renderService.renderCardIsland(
+                {
+                  card: routeInfo.attributes.instance,
+                  format,
+                  ...buildCardIslandContext(
+                    this.store,
+                    routeInfo.attributes.instance,
+                  ),
+                },
+                this.waitForLinkedData,
+              );
+            })()
+          : await this.renderService.renderCardComponent(
+              component,
+              captureMode,
+              format,
+              this.waitForLinkedData,
+            );
 
       if (typeof captured !== 'string') {
         return null;

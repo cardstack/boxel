@@ -13,6 +13,7 @@ import { bool, or } from '../../helpers/truth-helpers.ts';
 import setCssVar from '../../modifiers/set-css-var.ts';
 import ContextButton from '../context-button/index.gts';
 import BoxelDropdown from '../dropdown/index.gts';
+import LoadingIndicator from '../loading-indicator/index.gts';
 import Menu from '../menu/index.gts';
 import RealmIcon, { type RealmDisplayInfo } from '../realm-icon/index.gts';
 import SelectionMenu from '../selection-menu/index.gts';
@@ -35,6 +36,7 @@ interface Signature {
     finishEditingShortcutHint?: string;
     headerColor?: string;
     isExpanded?: boolean;
+    isLoading?: boolean;
     isSaving?: boolean;
     isTopCard?: boolean;
     lastSavedMessage?: string;
@@ -98,6 +100,16 @@ export default class CardHeader extends Component<Signature> {
                   {{@realmInfo.name}}
                 </:content>
               </Tooltip>
+            {{/if}}
+            {{#if @isLoading}}
+              <span
+                class='interactive-loading-indicator'
+                aria-label='Loading interactive card'
+                title='Loading interactive card'
+                data-card-interactive-loading
+              >
+                <LoadingIndicator />
+              </span>
             {{/if}}
           </div>
 
@@ -312,6 +324,12 @@ export default class CardHeader extends Component<Signature> {
         }
         .card-title-text {
           font: 500 var(--boxel-font-sm);
+        }
+        .interactive-loading-indicator {
+          display: inline-flex;
+          align-items: center;
+          margin-left: var(--boxel-sp-2xs);
+          --boxel-loading-indicator-size: var(--boxel-icon-xs);
         }
 
         .card-type-display-name > :deep(svg) {

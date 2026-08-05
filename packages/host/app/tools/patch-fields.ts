@@ -1,11 +1,6 @@
 import { service } from '@ember/service';
 
 import type { ToolContext } from '@cardstack/runtime-common';
-import {
-  generateJsonSchemaForCardType,
-  basicMappings,
-} from '@cardstack/runtime-common/helpers/ai';
-import { Loader } from '@cardstack/runtime-common/loader';
 
 import { FieldPathParser } from '../lib/field-path-parser';
 import HostBaseTool from '../lib/host-base-tool';
@@ -13,6 +8,7 @@ import HostBaseTool from '../lib/host-base-tool';
 import type { ValidateFieldPathResult } from '../lib/field-path-parser';
 
 import type CardService from '../services/card-service';
+import type CardTypeService from '../services/card-type-service';
 import type StoreService from '../services/store';
 import type { CardDef } from '@cardstack/base/card-api';
 import type * as BaseToolModule from '@cardstack/base/command';
@@ -27,6 +23,7 @@ export default class PatchFieldsTool extends HostBaseTool<
 > {
   @service declare private store: StoreService;
   @service declare private cardService: CardService;
+  @service declare private cardTypeService: CardTypeService;
 
   description = `Update specific fields of a card instance. Supports nested field paths using dot notation (e.g., "address.state") and array indices (e.g., "tags[0]"). Multiple fields can be updated in a single operation. Uses partial success model - valid field updates will be applied even if some fields fail validation.`;
 
@@ -71,18 +68,9 @@ export default class PatchFieldsTool extends HostBaseTool<
 
   private async validatedFieldPath(
     fieldPath: string[],
-    cardType: typeof CardDef,
+    card: CardDef | typeof CardDef,
   ): Promise<ValidateFieldPathResult> {
-    // Load card-api dynamically to get getFields function
-    const cardApi = await this.loaderService.loader.import<
-      typeof import('@cardstack/base/card-api')
-    >('@cardstack/base/card-api');
-
-    return FieldPathParser.validatedFieldPath(
-      fieldPath,
-      cardType,
-      cardApi.getFields,
-    );
+    return this.cardTypeService.validateFieldPath(card, fieldPath);
   }
 
   protected async run(
@@ -115,8 +103,6 @@ export default class PatchFieldsTool extends HostBaseTool<
       // Start with a deep copy of the data node (attributes and relationships)
       const workingData = JSON.parse(JSON.stringify(currentDoc.data));
 
-      let cardType = currentCard.constructor as typeof CardDef;
-
       // Apply each field update, collecting successes and failures
       const successfulUpdates: string[] = [];
       const fieldErrors: Record<string, string> = {};
@@ -128,7 +114,7 @@ export default class PatchFieldsTool extends HostBaseTool<
           // Validate the field path exists on the card type
           let validatedFieldPath = await this.validatedFieldPath(
             parsedPath,
-            cardType,
+            currentCard as CardDef,
           );
           if (!validatedFieldPath.isValid) {
             throw new Error(
@@ -211,28 +197,10 @@ export default class PatchFieldsTool extends HostBaseTool<
   async getInputJsonSchema(): Promise<any> {
     // If we have a cardType configured, generate a detailed schema based on that card type
     let configuredCardType = this.configuration?.cardType;
-    let loaderForSchema =
-      (configuredCardType && Loader.getLoaderFor(configuredCardType)) ??
-      this.loaderService.loader;
 
     if (configuredCardType) {
-      const cardApi = await loaderForSchema.import<
-        typeof import('@cardstack/base/card-api')
-      >('@cardstack/base/card-api');
-      const cardFields = cardApi.getFields(configuredCardType, {
-        usedLinksToFieldsOnly: false,
-      });
-      let loaderFromFirstField = Object.values(cardFields)
-        .map((field) => Loader.getLoaderFor(field.card))
-        .find(Boolean);
-      const mappings = await basicMappings(
-        loaderFromFirstField ?? loaderForSchema,
-      );
-      const cardTypeSchema = generateJsonSchemaForCardType(
-        configuredCardType,
-        cardApi,
-        mappings,
-      );
+      const cardTypeSchema =
+        await this.cardTypeService.patchSchema(configuredCardType);
 
       // Create field updates schema based on the card type's attributes
       const fieldUpdatesProperties: Record<string, any> = {};

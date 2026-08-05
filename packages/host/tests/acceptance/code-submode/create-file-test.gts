@@ -921,6 +921,114 @@ export class TrèsTestCard extends CardDef {
         .hasAttribute('title', `${cardDefFieldCount} fields`);
     });
 
+    test<TestContextWithSave>('new card definition opens from its acknowledged source and uses the trusted Base fallback', async function (assert) {
+      let fileName = 'new-card-read-after-write-race';
+      let newFileURL = `${testRealmURL}${fileName}.gts`;
+
+      let network = getService('network');
+      let originalAuthedFetch = network.authedFetch;
+      let executableProbeAttempts = 0;
+      let transientExecutable404sRemaining = 2;
+      Object.defineProperty(network, 'authedFetch', {
+        configurable: true,
+        value: async (...args: Parameters<typeof originalAuthedFetch>) => {
+          let [input, init] = args;
+          let requestURL = input instanceof Request ? input.url : String(input);
+          let headers = new Headers(
+            input instanceof Request ? input.headers : init?.headers,
+          );
+          let method =
+            input instanceof Request ? input.method : (init?.method ?? 'GET');
+
+          if (
+            requestURL === newFileURL &&
+            method === 'GET' &&
+            headers.get('Accept') === '*/*'
+          ) {
+            executableProbeAttempts++;
+            if (transientExecutable404sRemaining-- > 0) {
+              return new Response(
+                JSON.stringify({
+                  errors: [
+                    {
+                      status: 404,
+                      title: 'Not Found',
+                      id: newFileURL,
+                    },
+                  ],
+                }),
+                {
+                  status: 404,
+                  headers: { 'content-type': 'application/vnd.api+json' },
+                },
+              );
+            }
+          }
+
+          return originalAuthedFetch(...args);
+        },
+      });
+
+      try {
+        await visitOperatorMode();
+        await openNewFileModal('Card Definition');
+        await fillIn('[data-test-display-name-field]', 'New Card Race');
+        await fillIn('[data-test-file-name-field]', fileName);
+        await click('[data-test-create-definition]');
+        await waitFor('[data-test-create-file-modal]', { count: 0 });
+
+        assert
+          .dom('[data-test-card-url-bar-error]')
+          .doesNotExist('the acknowledged creation is not shown as missing');
+        assert.ok(
+          getMonacoContent().includes('export class NewCardRace'),
+          'Monaco opens directly from the acknowledged source body',
+        );
+        assert
+          .dom('[data-test-card-url-bar-input]')
+          .hasValue(newFileURL, 'code mode navigates to the created file');
+
+        assert.true(
+          executableProbeAttempts >= 3,
+          'the executable boundary retried the two simulated cross-node 404s',
+        );
+
+        await waitFor('[data-test-card-schema="New Card Race"]');
+        assert
+          .dom('[data-test-syntax-error]')
+          .doesNotExist(
+            'transient executable 404s are not reported as authored syntax',
+          );
+        assert
+          .dom('[data-test-module-inspector-view="schema"]')
+          .exists('the new stub exposes the schema pane');
+        assert
+          .dom('[data-test-module-inspector-view="preview"]')
+          .exists('the new stub exposes the preview pane');
+        assert
+          .dom('[data-test-module-inspector-view="spec"]')
+          .exists('the new stub exposes the spec pane just like main');
+        assert.ok(
+          getMonacoContent().includes('export class NewCardRace'),
+          'the acknowledged Monaco buffer remains mounted across retries',
+        );
+
+        await click('[data-test-module-inspector-view="preview"]');
+        await waitFor('[data-test-base-template="isolated"]');
+        assert
+          .dom('[data-test-base-template="isolated"]')
+          .exists(
+            'a definition without an authored template uses the trusted Base blank-slate view',
+          );
+        assert
+          .dom('[data-card-sandbox-loading]')
+          .doesNotExist('the inherited Base template does not wait on SES');
+      } finally {
+        delete (network as { authedFetch?: typeof originalAuthedFetch })
+          .authedFetch;
+      }
+    });
+
     test<TestContextWithSave>('can create a new card definition in same realm as inherited definition', async function (assert) {
       assert.expect(1);
       await visitOperatorMode();
@@ -1584,7 +1692,7 @@ export class TestCard extends Animal {
       });
     });
 
-    test('code submode recovers when a newly-created file arrives via a realm index/incremental event', async function (assert) {
+    test('[ERR-01] code submode recovers when a newly-created file arrives via a realm index/incremental event', async function (assert) {
       let newFilePath = 'ai-created-card.gts';
       let newFileUrl = `${testRealmURL}${newFilePath}`;
       let newFileSource = `

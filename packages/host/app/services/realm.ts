@@ -91,6 +91,8 @@ export type EnhancedRealmInfo = RealmInfo & {
   isPublic: boolean;
 };
 
+export type RealmWritability = 'pending' | 'read-only' | 'writable';
+
 export interface PrivateDependencyReference {
   dependency: string;
   realmURL: string;
@@ -184,6 +186,10 @@ class RealmResource {
 
   get isLoggedIn() {
     return this.auth.type === 'logged-in';
+  }
+
+  get isLoginPending() {
+    return this.loggingIn !== undefined;
   }
 
   get url(): string {
@@ -753,6 +759,10 @@ export default class RealmService extends Service {
   // so an unchanged blob is never re-parsed or re-walked; a later write (a newly
   // seeded realm session) changes the string and re-runs the walk.
   private lastRestoredSessionsString: string | null = null;
+  private lastSettledWritability = new WeakMap<
+    RealmResource,
+    Exclude<RealmWritability, 'pending'>
+  >();
 
   @tracked private identifyRealmTracker = 0;
 
@@ -775,6 +785,7 @@ export default class RealmService extends Service {
     this.realmPathsCache.clear();
     this.realmOfCache.clear();
     this.lastRestoredSessionsString = null;
+    this.lastSettledWritability = new WeakMap();
   }
 
   async waitForBulkInfoIfNeeded(): Promise<void> {
@@ -1000,6 +1011,51 @@ export default class RealmService extends Service {
     return this.knownRealm(url)?.canWrite ?? false;
   };
 
+  // Unlike canWrite(), this preserves the distinction between a settled
+  // read-only realm and the short discovery/login window where no decision is
+  // available yet. Fast code-mode navigation must not flash a read-only state
+  // merely because it now renders before realm authentication finishes.
+  writability = (url: string): RealmWritability => {
+    let resource = this.knownRealm(url);
+    if (!resource) {
+      // info() starts realm discovery and establishes the tracked dependency
+      // that will invalidate this answer when the realm becomes known.
+      this.info(url);
+      return 'pending';
+    }
+
+    // Consume tracked auth before inspecting the in-flight marker. Completing
+    // login updates auth and therefore invalidates consumers even though the
+    // shared login Promise itself is deliberately not tracked.
+    let canWrite = resource.canWrite;
+    let lastSettled = this.lastSettledWritability.get(resource);
+    if (resource.isLoginPending) {
+      return lastSettled ?? 'pending';
+    }
+    // A restored realm token already contains the authoritative write claim;
+    // realm-info discovery should not temporarily make Monaco read-only.
+    if (resource.isLoggedIn) {
+      let result: Exclude<RealmWritability, 'pending'> = canWrite
+        ? 'writable'
+        : 'read-only';
+      this.lastSettledWritability.set(resource, result);
+      return result;
+    }
+    if (!resource.info) {
+      resource
+        .fetchInfo()
+        .catch((error: unknown) =>
+          this.swallowBackgroundInfoError(url, 'fetchInfo', error),
+        );
+      return lastSettled ?? 'pending';
+    }
+    let result: Exclude<RealmWritability, 'pending'> = canWrite
+      ? 'writable'
+      : 'read-only';
+    this.lastSettledWritability.set(resource, result);
+    return result;
+  };
+
   isRealmOwner = (url: string): boolean => {
     return this.knownRealm(url)?.isRealmOwner ?? false;
   };
@@ -1015,7 +1071,13 @@ export default class RealmService extends Service {
         return self.canRead(url);
       },
       get canWrite() {
-        return self.canWrite(url);
+        // Field components consume this object independently from Code
+        // mode's editor chrome. Use the same stabilized decision as the
+        // editor so a session reset/re-auth window cannot briefly disable an
+        // already writable form while Monaco remains editable. The realm
+        // server is still authoritative for every write; once login settles,
+        // a revoked permission becomes read-only here as well.
+        return self.writability(url) === 'writable';
       },
     };
   };

@@ -6,6 +6,11 @@ import { modifier } from 'ember-modifier';
 
 import { findDisallowedHeadTags } from '@cardstack/runtime-common';
 
+import RealmSandboxRender from '@cardstack/host/components/realm-sandbox-render';
+import type RealmSandboxService from '@cardstack/host/services/realm-sandbox';
+
+import type { BaseDef, Format, ViewCardFn } from '@cardstack/base/card-api';
+
 import type { ComponentLike } from '@glint/template';
 
 type HeadPreviewData = {
@@ -22,13 +27,48 @@ type HeadPreviewData = {
 interface Signature {
   Element: any;
   Args: {
-    renderedCard: ComponentLike<{ Args: { displayContainer?: boolean } }>;
+    renderedCard: ComponentLike<{
+      Args: { displayContainer?: boolean; format?: Format };
+    }>;
+    card?: BaseDef;
+    sandbox?: NonNullable<ReturnType<RealmSandboxService['renderFor']>>;
+    viewCard?: ViewCardFn;
     cardURL?: string;
   };
 }
 
 export default class HeadFormatPreview extends Component<Signature> {
   @tracked private headMarkup = '';
+
+  private get analyzedHeadMarkup() {
+    // SES head templates render literal tags as inert custom elements so none
+    // of them can fetch, execute, or apply CSS in the shared Host document.
+    // Restore names only as text before parsing in a detached DOMParser.
+    return (
+      this.headMarkup
+        .replace(/(<\/?)(boxel-head-tag-)([a-z0-9-]+)/gi, '$1$3')
+        // Glimmer serialization markers are comments in ordinary HTML, but
+        // title/style/script are raw-text elements: reparsing their innerHTML
+        // would turn the markers into visible text. They are renderer metadata,
+        // not authored head content, so remove them at this explicit boundary.
+        .replace(/<!--%[+-]b:\d+%-->/g, '')
+    );
+  }
+
+  private get captureRevision() {
+    // StableRealmSandboxRender intentionally preserves its envelope identity
+    // across data generations. Its tracked model identity is the explicit
+    // signal that the hidden head DOM has been refreshed.
+    return this.args.sandbox?.model;
+  }
+
+  private get sandboxRenders(): NonNullable<Signature['Args']['sandbox']>[] {
+    return this.args.sandbox ? [this.args.sandbox] : [];
+  }
+
+  private get sandboxCard(): BaseDef {
+    return this.args.card!;
+  }
 
   captureHeadMarkup = modifier((element: HTMLElement) => {
     let pendingUpdate = false;
@@ -154,7 +194,7 @@ export default class HeadFormatPreview extends Component<Signature> {
     if (!this.headMarkup) {
       return undefined;
     }
-    return this.parseHead(this.headMarkup);
+    return this.parseHead(this.analyzedHeadMarkup);
   }
 
   @cached
@@ -266,7 +306,7 @@ export default class HeadFormatPreview extends Component<Signature> {
     if (!doc) {
       return [];
     }
-    return findDisallowedHeadTags(this.headMarkup, doc);
+    return findDisallowedHeadTags(this.analyzedHeadMarkup, doc);
   }
 
   private get disallowedTagList(): string {
@@ -362,8 +402,25 @@ export default class HeadFormatPreview extends Component<Signature> {
   }
 
   <template>
-    <div hidden aria-hidden='true' {{this.captureHeadMarkup}}>
-      <@renderedCard @displayContainer={{false}} />
+    <div
+      hidden
+      aria-hidden='true'
+      {{this.captureHeadMarkup this.captureRevision}}
+    >
+      {{#if @sandbox}}
+        {{#each this.sandboxRenders key='@identity' as |sandbox|}}
+          <RealmSandboxRender
+            @card={{this.sandboxCard}}
+            @format='head'
+            @sandbox={{sandbox}}
+            @model={{sandbox.model}}
+            @displayContainer={{false}}
+            @viewCard={{@viewCard}}
+          />
+        {{/each}}
+      {{else}}
+        <@renderedCard @format='head' @displayContainer={{false}} />
+      {{/if}}
     </div>
 
     <div class='social-preview-container'>

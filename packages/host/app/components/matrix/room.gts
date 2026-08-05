@@ -1907,7 +1907,15 @@ export default class Room extends Component<Signature> {
   private get readyCodePatches() {
     let lastMessage = this.messages[this.messages.length - 1];
     if (!lastMessage || !lastMessage.htmlParts) return [];
-    return this.toolService.getReadyCodePatches(lastMessage.htmlParts);
+    let readyCodePatches = this.toolService.getReadyCodePatches(
+      lastMessage.htmlParts,
+    );
+    // Act owns completed patches as soon as they stream. Never paint the
+    // manual Accept All bar in the debounce window before ToolService begins
+    // applying them.
+    return readyCodePatches.filter(
+      (codeData) => !this.toolService.shouldAutoApplyCodePatch(codeData),
+    );
   }
 
   private get generatingResults() {

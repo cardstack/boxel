@@ -381,6 +381,21 @@ export interface CardContext<T extends CardDef = CardDef> {
   // operator-mode; absent in contexts with no chooser modal (prerender,
   // freestyle), so consumers guard on it.
   markdownEmbedChooser?: MarkdownEmbedChooser;
+  // Explicit nested-render capability. Sandboxed cards and trusted field
+  // portals use isolated Glimmer roots, so local tracked state cannot assume
+  // that the host renderer owns their rerender loop.
+  requestRender?: () => void;
+  // Host-owned UI modules used by trusted Base/catalog field components.
+  // Sandboxed realm code never receives this capability object.
+  trustedUI?: {
+    loadCodeMirror?: () => Promise<unknown>;
+    loadKatex?: () => Promise<unknown>;
+    loadMermaid?: () => Promise<unknown>;
+  };
+  // Validate a realm CodeRef without importing user-authored code into the
+  // trusted Host graph. Sandboxed field portals provide this through their
+  // owning realm compartment; ordinary trusted contexts may omit it.
+  validateCodeRef?: (ref: CodeRef) => Promise<ResolvedCodeRef | undefined>;
   // Optional runtime mode/submode hints used by cards that render differently per context.
   mode?: 'host' | 'operator';
   submode?: 'interact' | 'code' | 'host';
@@ -420,6 +435,14 @@ const inflightLinkLoads = initSharedState(
 );
 
 export function instanceOf(instance: BaseDef, clazz: typeof BaseDef): boolean {
+  // Dynamically constructed host adapters (for example an opaque sandbox
+  // record) can be a genuine JavaScript subclass without having an exported
+  // module identity of their own. Honor that native relationship first. The
+  // code-ref walk below remains necessary for equivalent definitions loaded
+  // through different Loader graphs, where `instanceof` is false.
+  if (instance instanceof (clazz as any)) {
+    return true;
+  }
   let instanceClazz: typeof BaseDef | null = instance.constructor;
   let codeRefInstance: CodeRef | undefined;
   let codeRefClazz = identifyCard(clazz);
@@ -3299,6 +3322,11 @@ export class CardDef extends BaseDef {
   }
 
   static prefersWideFormat = false; // whether the card is full-width in the stack
+  // A one-way request for the strongest available renderer isolation. The
+  // Host forces iframe-capable authored formats into a full Sandbox. Compact
+  // formats that cannot compose as iframes remain on their confined Capsule
+  // or trusted Base fallback path. `false` never weakens Host policy.
+  static prefersFullSandbox = false;
   static headerColor: string | null = null; // set string color value if the stack-item header has a background color
 
   constructor(
@@ -4135,6 +4163,11 @@ export async function createFromSerialized<T extends BaseDefConstructor>(
   opts?: DeserializeOpts & {
     store?: CardStore;
     dependencyTrackingContext?: RuntimeDependencyTrackingContext;
+    // The Card API itself is shared from the app-wide Base loader, while the
+    // card definition may belong to a realm-specific loader. Supplying the
+    // definition loader keeps authored modules in that realm's cache without
+    // re-evaluating Base for every realm.
+    loader?: Loader;
   },
 ): Promise<BaseInstanceType<T>> {
   let store = opts?.store ?? new FallbackCardStore();
@@ -4148,11 +4181,12 @@ export async function createFromSerialized<T extends BaseDefConstructor>(
     consumerKind: isFileMetaResource(resource) ? 'file' : 'instance',
   });
   let context = opts?.dependencyTrackingContext ?? defaultContext;
+  let definitionLoader = opts?.loader ?? myLoader();
   let {
     meta: { adoptsFrom },
   } = resource;
   let card: typeof BaseDef | undefined = await loadCardDef(adoptsFrom, {
-    loader: myLoader(),
+    loader: definitionLoader,
     relativeTo,
     dependencyTrackingContext: context,
   });
@@ -4280,13 +4314,15 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
   resource: LooseCardResource;
   doc: LooseSingleCardDocument | CardDocument;
   store: CardStore;
-  opts?: DeserializeOpts;
+  opts?: DeserializeOpts & { loader?: Loader };
 }): Promise<BaseInstanceType<T>> {
   // because our store uses a tracked map for its identity map all the assembly
   // work that we are doing to deserialize the instance below is "live". so we
   // add the actual instance silently in a non-tracked way and only track it at
   // the very end.
   let card = Reflect.getPrototypeOf(instance)!.constructor as T;
+  let definitionLoader =
+    opts?.loader ?? Loader.getLoaderFor(card) ?? myLoader();
   if (resource.id != null) {
     if (isFileMetaResource(resource) || isFileDef(card)) {
       store.setFileMetaNonTracked(resource.id, instance as FileDef);
@@ -4397,7 +4433,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
       return false;
     }
     let override = await loadCardDef(overrideMeta.adoptsFrom, {
-      loader: myLoader(),
+      loader: definitionLoader,
       // A field override's module ref is relative to this resource's own id, the
       // same rule as adoptsFrom; instanceRelativeTo already resolves to the
       // instance's own id when saved, with resource.id as the fallback.

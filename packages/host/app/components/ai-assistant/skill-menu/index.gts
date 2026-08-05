@@ -1,6 +1,7 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import { tracked } from '@glimmer/tracking';
@@ -17,7 +18,11 @@ import { chooseCard, chooseFile } from '@cardstack/runtime-common';
 import SkillToggle from '@cardstack/host/components/ai-assistant/skill-menu/skill-toggle';
 import PillMenu from '@cardstack/host/components/pill-menu';
 
+import { buildFileTreeQuery } from '@cardstack/host/resources/file-tree-from-index';
 import type { RoomSkill } from '@cardstack/host/resources/room';
+
+import type FileTreeQueryCacheService from '@cardstack/host/services/file-tree-query-cache';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import type { FileDef } from '@cardstack/base/file-api';
 
@@ -42,6 +47,10 @@ interface Signature {
 }
 
 export default class AiAssistantSkillMenu extends Component<Signature> {
+  @service('file-tree-query-cache')
+  declare private fileTreeQueryCache: FileTreeQueryCacheService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+
   <template>
     <PillMenu
       class='skill-menu'
@@ -163,6 +172,13 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
   private setExpanded(isExpanded: boolean) {
     this.isExpanded = isExpanded;
     if (isExpanded) {
+      let realmURL = this.operatorModeStateService.realmURL;
+      if (realmURL) {
+        this.fileTreeQueryCache.prefetch(
+          realmURL,
+          buildFileTreeQuery(markdownDefRef, { kind: 'skill' }),
+        );
+      }
       this.args.onExpand?.();
     } else {
       this.args.onCollapse?.();

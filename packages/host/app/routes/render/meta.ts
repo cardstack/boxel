@@ -9,7 +9,6 @@ import { isEqual } from 'lodash-es';
 import type { CodeRef } from '@cardstack/runtime-common';
 import {
   baseRef,
-  beginRuntimeDependencyTrackingSession,
   identifyCard,
   internalKeyFor,
   logger,
@@ -24,6 +23,8 @@ import {
   type PrerenderMetaDiagnostics,
   type RenderError,
 } from '@cardstack/runtime-common';
+
+import { getOpaqueRealmCardTypeState } from '@cardstack/host/lib/realm-sandbox-boundary';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
@@ -268,7 +269,7 @@ export default class RenderMetaRoute extends Route<Model> {
     try {
       let serializeStart = performance.now();
       let vn = this.network.virtualNetwork;
-      serialized = api.serializeCard(instance, {
+      serialized = (await this.cardService.serializeCard(instance, {
         includeComputeds: true,
         // A query-backed field is resolved live and the index can't invalidate
         // it, so its serialized value would always be stale — and deep-
@@ -283,7 +284,7 @@ export default class RenderMetaRoute extends Route<Model> {
             vn.toURL(instance.id),
             instance[realmURL],
           ),
-      }) as SingleCardDocument;
+      })) as SingleCardDocument;
       serializeMs = performance.now() - serializeStart;
       // Emulate the on-disk file serialization: a card file holds only the
       // card's own resource — relationship slots keep their `links` but drop
@@ -305,9 +306,14 @@ export default class RenderMetaRoute extends Route<Model> {
     }
 
     let Klass = getClass(instance);
-
-    let types = getTypes(Klass);
-    let displayNames = getDisplayNames(Klass);
+    let opaqueType = getOpaqueRealmCardTypeState(instance);
+    // A sandboxed instance deliberately has an inert constructor. Its exact
+    // type and display name cross through the explicit metadata record rather
+    // than being rediscovered by walking executable prototypes.
+    let types = opaqueType ? [opaqueType.typeRef] : getTypes(Klass);
+    let displayNames = opaqueType
+      ? [opaqueType.displayName]
+      : getDisplayNames(Klass);
     // Add a "pseudo field" to the search doc for the card type. We use the
     // "_" prefix to make a decent attempt to not pollute the userland
     // namespace for cards
@@ -387,21 +393,15 @@ export default class RenderMetaRoute extends Route<Model> {
     // `cardRender`, so this one transition also produces the file row's
     // extract. It runs only now — the card payload above is fully
     // materialized and its dependency snapshot taken, so nothing the extract
-    // does can leak into the card row. The extract gets a fresh tracking
-    // session: the tracker is session-scoped and a snapshot reads the whole
-    // session, so sharing the card's session would fold the hydration graph
-    // into the file row's deps. The instance id is the canonical (extension-
-    // less) card URL; the extract targets the `.json` file that stores it,
-    // the same URL a standalone render.file-extract receives.
+    // does can leak into the card row. `runFileExtract` owns the fresh
+    // tracking session that keeps the card hydration graph out of the file
+    // row. The instance id is the canonical (extension-less) card URL; the
+    // extract targets the `.json` file that stores it, the same URL a
+    // standalone render.file-extract receives.
     let fileURL = renderModel.cardId.endsWith('.json')
       ? renderModel.cardId
       : `${renderModel.cardId}.json`;
     let extractStart = performance.now();
-    beginRuntimeDependencyTrackingSession({
-      sessionKey: `${renderModel.cardId}|${renderModel.nonce}|file-extract`,
-      rootURL: fileURL,
-      rootKind: 'file',
-    });
     this.#authGuard.register();
     let extractResult: FileDefExtractResult;
     try {

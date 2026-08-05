@@ -4,8 +4,11 @@ import Service, { service } from '@ember/service';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
+  canonicalModuleKey,
   formattedError,
+  identifyCard,
   isJsonContentType,
+  normalizeCodeRef,
   SupportedMimeType,
   type CardDocument,
   type SingleCardDocument,
@@ -17,6 +20,11 @@ import {
 import type { AtomicOperation } from '@cardstack/runtime-common/atomic-document';
 import { createAtomicDocument } from '@cardstack/runtime-common/atomic-document';
 import { validateWriteSize } from '@cardstack/runtime-common/write-size-validation';
+
+import {
+  getOpaqueRealmCardTypeState,
+  serializeOpaqueRealmCard,
+} from '@cardstack/host/lib/realm-sandbox-boundary';
 
 import LimitedSet from '../lib/limited-set';
 
@@ -65,6 +73,11 @@ export default class CardService extends Service {
   @service declare private session: SessionService;
 
   private subscriber: CardSaveSubscriber | undefined;
+  // Source writes for one URL are canonical generations and must reach the
+  // realm in invocation order. In particular, a slow earlier AI/Monaco POST
+  // must not complete after a newer write and make the realm index advertise
+  // stale source. Failures release the queue so later edits can still save.
+  private sourceWriteTails = new Map<string, Promise<void>>();
   // This error will be used by check-correctness command to report size limit errors
   private sizeLimitError = new Map<string, Error>();
   // For tracking requests during the duration of this service. Used for being able to tell when to ignore an incremental indexing realm event.
@@ -89,10 +102,15 @@ export default class CardService extends Service {
   }
 
   async getAPI(): Promise<typeof CardAPI> {
-    let loader = this.loaderService.loader;
+    let loader = this.loaderService.baseLoader;
     if (!this.loaderToCardAPILoadingCache.has(loader)) {
+      // This is Host infrastructure borrowing the one shared Base namespace,
+      // not a card consuming Base. Authored card modules record their own
+      // direct card-api edge through the realm loader.
       let apiPromise = loader.import<typeof CardAPI>(
         '@cardstack/base/card-api',
+        undefined,
+        { trackDependencies: false },
       );
       this.loaderToCardAPILoadingCache.set(loader, apiPromise);
       return apiPromise;
@@ -101,10 +119,14 @@ export default class CardService extends Service {
   }
 
   async getSearchable(): Promise<typeof Searchable> {
-    let loader = this.loaderService.loader;
+    let loader = this.loaderService.baseLoader;
     if (!this.loaderToSearchableLoadingCache.has(loader)) {
+      // Search-doc generation records searchable explicitly in render.meta;
+      // do not make a cold service initialization claim Base's whole graph.
       let searchablePromise = loader.import<typeof Searchable>(
         '@cardstack/base/searchable',
+        undefined,
+        { trackDependencies: false },
       );
       this.loaderToSearchableLoadingCache.set(loader, searchablePromise);
       return searchablePromise;
@@ -118,6 +140,11 @@ export default class CardService extends Service {
     this.loaderToCardAPILoadingCache = new WeakMap();
     this.loaderToSearchableLoadingCache = new WeakMap();
     this.sizeLimitError.clear();
+    this.sourceWriteTails.clear();
+  }
+
+  createClientRequestId(type: SaveType): string {
+    return `${type}:${uuidv4()}`;
   }
 
   // used for tests only!
@@ -234,14 +261,48 @@ export default class CardService extends Service {
     card: CardDef,
     opts?: SerializeOpts & { withIncluded?: true },
   ): Promise<LooseSingleCardDocument> {
-    let api = await this.getAPI();
-    let serialized = api.serializeCard(card, {
-      ...opts,
+    let serialized = serializeOpaqueRealmCard(card, {
+      useAbsoluteURL: opts?.useAbsoluteURL,
+      omitFieldNames: this.opaqueFieldNamesToOmit(card, opts?.omitFields),
     });
+    if (!serialized) {
+      let api = await this.getAPI();
+      serialized = api.serializeCard(card, {
+        ...opts,
+      });
+    }
     if (!opts?.withIncluded) {
       delete serialized.included;
     }
     return serialized;
+  }
+
+  private opaqueFieldNamesToOmit(
+    card: CardDef,
+    omitFields: SerializeOpts['omitFields'],
+  ): string[] | undefined {
+    let typeState = getOpaqueRealmCardTypeState(card);
+    if (!typeState || !omitFields?.length) {
+      return undefined;
+    }
+    let omittedTypes = omitFields
+      .map((fieldType) => identifyCard(fieldType))
+      .filter((ref) => ref != null)
+      .map((ref) => normalizeCodeRef(ref));
+    if (omittedTypes.length === 0) {
+      return undefined;
+    }
+    let moduleKey = (module: string) =>
+      canonicalModuleKey(module, this.network.virtualNetwork);
+    return Object.entries(typeState.fields)
+      .filter(([, field]) =>
+        omittedTypes.some(
+          (omitted) =>
+            omitted.name === field.type.name &&
+            moduleKey(omitted.module) === moduleKey(field.type.module),
+        ),
+      )
+      .map(([name]) => name);
   }
 
   async getSource(url: RealmResourceIdentifier | URL) {
@@ -257,7 +318,31 @@ export default class CardService extends Service {
     };
   }
 
-  async saveSource(
+  saveSource(
+    url: URL,
+    content: string,
+    type: SaveType,
+    options?: SaveSourceOptions,
+  ) {
+    let key = url.href;
+    let previous = this.sourceWriteTails.get(key) ?? Promise.resolve();
+    let operation = previous
+      .catch(() => undefined)
+      .then(() => this.performSaveSource(url, content, type, options));
+    let tail = operation.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.sourceWriteTails.set(key, tail);
+    void tail.then(() => {
+      if (this.sourceWriteTails.get(key) === tail) {
+        this.sourceWriteTails.delete(key);
+      }
+    });
+    return operation;
+  }
+
+  private async performSaveSource(
     url: URL,
     content: string,
     type: SaveType,
@@ -268,7 +353,8 @@ export default class CardService extends Service {
         ? 'card'
         : 'file';
       this.validateSizeLimit(url.href, content, sizeType);
-      let clientRequestId = options?.clientRequestId ?? `${type}:${uuidv4()}`;
+      let clientRequestId =
+        options?.clientRequestId ?? this.createClientRequestId(type);
       this.clientRequestIds.add(clientRequestId);
 
       let response = await this.network.authedFetch(url, {
@@ -289,12 +375,9 @@ export default class CardService extends Service {
       }
       this.subscriber?.(url, content);
 
-      if (
-        options?.resetLoader &&
-        this.loaderService.loader.isModuleLoaded(url.href)
-      ) {
-        this.loaderService.resetLoader({
-          reason: 'source-write',
+      if (options?.resetLoader && this.loaderService.isModuleLoaded(url.href)) {
+        this.loaderService.invalidateModule(url.href, {
+          clearFetchCache: true,
           codeChange: true,
         });
       }

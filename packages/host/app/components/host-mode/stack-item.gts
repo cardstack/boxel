@@ -1,5 +1,6 @@
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { service } from '@ember/service';
 import type { SafeString } from '@ember/template';
 import { htmlSafe } from '@ember/template';
 
@@ -12,6 +13,7 @@ import { ContextButton } from '@cardstack/boxel-ui/components';
 import { and, bool } from '@cardstack/boxel-ui/helpers';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
+import type CardTypeService from '@cardstack/host/services/card-type-service';
 
 import HostModeCard from './card';
 
@@ -26,6 +28,8 @@ interface Signature {
 }
 
 export default class HostModeStackItem extends Component<Signature> {
+  @service declare private cardTypeService: CardTypeService;
+
   @tracked private animationType:
     | 'opening'
     | 'closing'
@@ -107,11 +111,8 @@ export default class HostModeStackItem extends Component<Signature> {
     if (!this.card) {
       return false;
     }
-    let { constructor } = this.card;
     return Boolean(
-      constructor &&
-      'prefersWideFormat' in constructor &&
-      constructor.prefersWideFormat,
+      this.cardTypeService.introspect(this.card)?.prefersWideFormat,
     );
   }
 

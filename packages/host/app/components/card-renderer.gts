@@ -1,29 +1,47 @@
+import { service } from '@ember/service';
+import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
+import { cached } from '@glimmer/tracking';
 
 import { provide, consume } from 'ember-provide-consume-context';
 
+import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
 import {
   CardContextName,
+  CardCrudFunctionsContextName,
   DefaultFormatsContextName,
   CardURLContextName,
   GetCardContextName,
   GetCardsContextName,
   GetCardCollectionContextName,
+  PermissionsContextName,
   type getCard,
   type getCards,
   type getCardCollection,
+  type LooseSingleCardDocument,
+  type Permissions,
 } from '@cardstack/runtime-common';
 
 import HeadFormatPreview from '@cardstack/host/components/head-format-preview';
+import RealmSandboxIframe from '@cardstack/host/components/realm-sandbox-iframe';
+import RealmSandboxRender from '@cardstack/host/components/realm-sandbox-render';
+import { CodePreviewSandboxContextName } from '@cardstack/host/lib/code-preview-sandbox';
+import type CodePreviewSandbox from '@cardstack/host/lib/code-preview-sandbox';
+import interactiveCodePreview from '@cardstack/host/resources/interactive-code-preview';
+import type RealmSandboxService from '@cardstack/host/services/realm-sandbox';
+import type { RealmSandboxRender as RealmSandboxRenderEnvelope } from '@cardstack/host/services/realm-sandbox';
 
 import type {
   BaseDef,
+  CardCrudFunctions,
   Format,
   Field,
+  FieldType,
   CardContext,
+  ViewCardFn,
 } from '@cardstack/base/card-api';
 
 interface Signature {
@@ -32,17 +50,38 @@ interface Signature {
     card: BaseDef;
     format?: Format;
     field?: Field;
+    fieldType?: FieldType;
+    fieldName?: string;
     codeRef?: ResolvedCodeRef;
     displayContainer?: boolean;
+    viewCard?: ViewCardFn;
   };
 }
 
 export default class CardRenderer extends Component<Signature> {
+  @service declare private realmSandbox: RealmSandboxService;
   @consume(GetCardContextName) declare private getCard: getCard;
   @consume(GetCardsContextName) declare private getCards: getCards;
   @consume(GetCardCollectionContextName)
   declare private getCardCollection: getCardCollection;
   @consume(CardContextName) declare private cardContext: CardContext;
+  @consume(CardCrudFunctionsContextName)
+  declare private cardCrudFunctions: CardCrudFunctions | undefined;
+  @consume(PermissionsContextName)
+  declare private permissions: Permissions | undefined;
+  @consume(CodePreviewSandboxContextName)
+  declare private codePreviewSandbox: CodePreviewSandbox | undefined;
+  private interactivePreview = interactiveCodePreview(this, () => ({
+    card: this.args.card,
+    enabled: !this.providedCodePreviewAppliesToCard,
+  }));
+  private sandboxRenderIDs = new WeakMap<object, number>();
+  private nextSandboxRenderID = 0;
+  private recentSandboxRenders: Array<{
+    sandbox: RealmSandboxRenderEnvelope;
+    format: Format;
+  }> = [];
+  private recentSandboxCard?: BaseDef;
 
   @provide(DefaultFormatsContextName)
   // @ts-ignore "defaultFormat is declared but not used"
@@ -64,21 +103,330 @@ export default class CardRenderer extends Component<Signature> {
     {{#if (eq @format 'head')}}
       <HeadFormatPreview
         @renderedCard={{this.renderedCard}}
+        @card={{@card}}
+        @sandbox={{this.headSandboxRender}}
+        @viewCard={{this.viewCard}}
         @cardURL={{this.cardURL}}
       />
+    {{else if this.iframeSandboxRender}}
+      <RealmSandboxIframe
+        @format={{@format}}
+        @sandbox={{this.iframeSandboxRender}}
+        @displayContainer={{@displayContainer}}
+        @canWrite={{this.iframeCanWrite}}
+        @onCardDocumentUpdate={{this.applyIframeCardDocumentUpdate}}
+        ...attributes
+      />
+    {{else if this.hasSandboxRenderSlots}}
+      {{#each this.sandboxRenderSlots key='key' as |slot|}}
+        <div
+          class='realm-sandbox-render-slot'
+          data-realm-sandbox-render-slot={{slot.key}}
+          data-realm-sandbox-render-slot-active={{if
+            slot.active
+            'true'
+            'false'
+          }}
+          hidden={{if slot.active false true}}
+          inert={{if slot.active false true}}
+        >
+          <RealmSandboxRender
+            @card={{@card}}
+            @format={{slot.format}}
+            @sandbox={{slot.sandbox}}
+            @model={{slot.sandbox.model}}
+            @displayContainer={{@displayContainer}}
+            @field={{@field}}
+            @fieldType={{@fieldType}}
+            @fieldName={{@fieldName}}
+            @viewCard={{this.viewCard}}
+            ...attributes
+          />
+        </div>
+      {{/each}}
+    {{else if this.sandboxRenderLoading}}
+      <div
+        class='realm-sandbox-loading'
+        data-card-sandbox-loading
+        ...attributes
+      >
+        <LoadingIndicator />
+      </div>
     {{else}}
       <this.renderedCard
         @displayContainer={{@displayContainer}}
+        @fieldType={{@fieldType}}
+        @fieldName={{@fieldName}}
         ...attributes
       />
     {{/if}}
+    {{#if this.showSandboxDiagnostics}}
+      <span
+        hidden
+        data-card-sandbox-diagnostics
+        data-card-sandbox-tier={{this.sandboxMetrics.executionTier}}
+        data-card-sandbox-reason={{this.sandboxMetrics.executionReason}}
+        data-card-sandbox-render-requests={{this.sandboxMetrics.renderRequests}}
+        data-card-sandboxed={{this.sandboxMetrics.sandboxedCards}}
+        data-card-sandbox-fallbacks={{this.sandboxMetrics.fallbackCards}}
+        data-card-sandbox-principals={{this.sandboxMetrics.activePrincipals}}
+        data-card-sandbox-template-hits={{this.sandboxMetrics.templateCacheHits}}
+        data-card-sandbox-template-misses={{this.sandboxMetrics.templateCacheMisses}}
+        data-card-sandbox-template-ms={{this.sandboxMetrics.templateCloneTimeMs}}
+        data-card-sandbox-snapshot-ms={{this.sandboxMetrics.snapshotTimeMs}}
+        data-card-sandbox-fallback-reasons={{this.sandboxFallbackReasons}}
+        data-card-sandbox-omitted-fields={{this.sandboxOmittedFields}}
+        data-card-sandbox-compartments={{this.sandboxMetrics.activeCompartments}}
+        data-card-sandbox-code-preview-loaders={{this.sandboxMetrics.activeCodePreviewLoaders}}
+        data-card-sandbox-code-preview-id={{this.effectiveCodePreviewSandbox.id}}
+        data-card-sandbox-code-preview-revision={{this.effectiveCodePreviewSandbox.revision}}
+        data-card-sandbox-compartment-rendered={{this.sandboxMetrics.compartmentRenderedCards}}
+        data-card-sandbox-compartment-hits={{this.sandboxMetrics.compartmentTemplateCacheHits}}
+        data-card-sandbox-compartment-misses={{this.sandboxMetrics.compartmentTemplateCacheMisses}}
+        data-card-sandbox-compartment-ms={{this.sandboxMetrics.compartmentEvaluationTimeMs}}
+        data-card-sandbox-compartment-errors={{this.sandboxCompartmentErrors}}
+      ></span>
+    {{/if}}
+
+    <style scoped>
+      .realm-sandbox-loading {
+        display: grid;
+        place-items: center;
+        width: 100%;
+        min-height: 10rem;
+      }
+      .realm-sandbox-render-slot:not([hidden]) {
+        display: contents;
+      }
+    </style>
   </template>
 
-  get renderedCard() {
-    return this.args.card.constructor.getComponent(
+  @cached get renderedCard() {
+    return this.realmSandbox.componentFor(
       this.args.card,
       this.args.field,
       this.args.codeRef ? { componentCodeRef: this.args.codeRef } : undefined,
     );
+  }
+
+  @cached get sandboxRender() {
+    if (this.usesTrustedFieldWrapper) {
+      return undefined;
+    }
+    return this.realmSandbox.renderFor(this.args.card, this.args.format, {
+      useBaseTemplate: this.useTrustedBaseTemplate,
+      codePreviewSandbox: this.effectiveCodePreviewSandbox,
+      codeRef: this.args.codeRef,
+      // A Code-mode renderer must be ready to adopt its first volatile source
+      // generation even while Monaco is displaying the card instance JSON.
+      // The host-owned context is the mode capability; it does not grant the
+      // selected JSON file executable authority.
+      markerBacked: this.codePreviewSandbox != null,
+    });
+  }
+
+  get sandboxRenderSlots() {
+    if (this.recentSandboxCard !== this.args.card) {
+      // The two-slot cache accelerates format switches for one card program.
+      // A type-changing adoptsFrom edit replaces the opaque Store record; an
+      // island belonging to that previous record is neither a reusable format
+      // nor valid preview DOM, so evict it synchronously with the identity
+      // change.
+      // eslint-disable-next-line ember/no-side-effects
+      this.recentSandboxCard = this.args.card;
+      // eslint-disable-next-line ember/no-side-effects
+      this.recentSandboxRenders = [];
+    }
+    let active = this.sandboxRender;
+    if (!active) {
+      return this.codePreviewSandbox
+        ? this.recentSandboxRenders.map((entry, index) =>
+            this.sandboxRenderSlot(entry.sandbox, entry.format, index === 0),
+          )
+        : [];
+    }
+
+    // Interact can render the same Store card in several places at once, so
+    // its renderer stays single-slot. One mounted Code preview owns its
+    // private sandbox and can safely retain two format islands locally.
+    if (!this.codePreviewSandbox) {
+      return [this.sandboxRenderSlot(active, this.args.format ?? 'isolated')];
+    }
+
+    // This is a non-reactive, component-local LRU. The reactive format/render
+    // args are what invalidate this getter; updating the plain cache cannot
+    // schedule another render or create a feedback loop.
+    // eslint-disable-next-line ember/no-side-effects
+    this.recentSandboxRenders = [
+      { sandbox: active, format: this.args.format ?? 'isolated' },
+      ...this.recentSandboxRenders.filter((entry) => entry.sandbox !== active),
+    ].slice(0, 2);
+    return this.recentSandboxRenders.map((entry) =>
+      this.sandboxRenderSlot(
+        entry.sandbox,
+        entry.format,
+        entry.sandbox === active,
+      ),
+    );
+  }
+
+  get hasSandboxRenderSlots() {
+    // Ask the slot getter so a card identity change clears the two-format LRU
+    // before this conditional chooses the sandbox branch. Looking only at the
+    // previous cache length can select an empty, stale branch for one render
+    // when code mode switches from a CardDef to a FieldDef.
+    return this.sandboxRenderSlots.length > 0;
+  }
+
+  private sandboxRenderSlot(
+    sandbox: RealmSandboxRenderEnvelope,
+    format: Format,
+    active = true,
+  ) {
+    let key = this.sandboxRenderIDs.get(sandbox);
+    if (key == null) {
+      key = ++this.nextSandboxRenderID;
+      this.sandboxRenderIDs.set(sandbox, key);
+    }
+    return { active, format, key: `ses-${key}`, sandbox };
+  }
+
+  get sandboxRenderLoading() {
+    if (this.usesTrustedFieldWrapper) {
+      return false;
+    }
+    // An opaque card must never fall through to `renderedCard` while its
+    // compartment template is being evaluated. The loading counter is
+    // deliberately published on a later render boundary, so the first getter
+    // pass can observe no envelope before that tracked revision changes. Keep
+    // the boundary fail-closed based on card authority as well as load state.
+    return (
+      (this.usesRealmSandbox && !this.sandboxRender) ||
+      this.realmSandbox.isRenderLoading(this.args.card, this.args.format)
+    );
+  }
+
+  private get headSandboxRender() {
+    // The ordinary sandbox branch consumes this loading revision through its
+    // spinner conditional. Head format renders through HeadFormatPreview, so
+    // explicitly consume it here to replace the trusted fallback as soon as
+    // the compartment template becomes available.
+    void this.sandboxRenderLoading;
+    if (this.usesTrustedFieldWrapper) {
+      return undefined;
+    }
+    return this.realmSandbox.renderFor(this.args.card, 'head', {
+      useBaseTemplate: this.useTrustedBaseTemplate,
+      // A JSON draft mutates the canonical opaque Store record; it does not
+      // supply executable module source. Only route head rendering through a
+      // volatile preview runtime when the edited GTS module owns this card.
+      codePreviewSandbox: this.providedCodePreviewAppliesToCard
+        ? this.codePreviewSandbox
+        : undefined,
+      codeRef: this.args.codeRef,
+      markerBacked: this.providedCodePreviewAppliesToCard,
+      stableEnvelope: false,
+    });
+  }
+
+  @cached get iframeSandboxRender() {
+    if (this.usesTrustedFieldWrapper) {
+      return undefined;
+    }
+    return this.realmSandbox.iframeRenderFor(this.args.card, this.args.format, {
+      field: this.args.field,
+      codeRef: this.args.codeRef,
+      displayContainer: this.args.displayContainer,
+      codePreviewSandbox: this.effectiveCodePreviewSandbox,
+    });
+  }
+
+  private get effectiveCodePreviewSandbox() {
+    return this.providedCodePreviewAppliesToCard
+      ? this.codePreviewSandbox
+      : this.interactivePreview.preview;
+  }
+
+  private get providedCodePreviewAppliesToCard() {
+    return this.realmSandbox.codePreviewAppliesToCard(
+      this.codePreviewSandbox,
+      this.args.card,
+    );
+  }
+
+  get viewCard() {
+    return this.args.viewCard ?? this.cardCrudFunctions?.viewCard;
+  }
+
+  get iframeCanWrite() {
+    return this.permissions?.canWrite === true;
+  }
+
+  readonly applyIframeCardDocumentUpdate = async (
+    document: LooseSingleCardDocument,
+  ) => {
+    if (this.permissions?.canWrite !== true) {
+      throw new Error('This realm is read-only');
+    }
+    let cardID = this.cardURL;
+    if (!cardID || document.data.id !== cardID) {
+      throw new Error('Iframe card update identity does not match');
+    }
+    let updated = await this.realmSandbox.updateOpaqueCardFromDocument(
+      this.args.card,
+      document,
+      // An iframe owns its executable computed state. The Host applies only
+      // inert authored data here; the realm server's indexed acknowledgement
+      // refreshes the authoritative computed projection after persistence.
+      { recomputeProjection: false },
+    );
+    if (!updated) {
+      throw new Error('Iframe card update was rejected');
+    }
+    await this.cardContext.store.save(cardID);
+    let saveError = this.cardContext.store.getSaveState(cardID)?.lastSaveError;
+    if (saveError) {
+      let message =
+        typeof (saveError as { message?: unknown }).message === 'string'
+          ? (saveError as { message: string }).message
+          : 'The card update could not be persisted';
+      throw new Error(message);
+    }
+  };
+
+  get useTrustedBaseTemplate() {
+    return Boolean(
+      this.args.codeRef &&
+      !this.realmSandbox.shouldUseOpaqueCard(this.args.codeRef),
+    );
+  }
+
+  get sandboxMetrics() {
+    this.realmSandbox.isTransparentSandboxEnabled();
+    return this.realmSandbox.metricsSnapshot();
+  }
+
+  get usesRealmSandbox() {
+    return this.realmSandbox.isOpaqueCard(this.args.card);
+  }
+
+  private get usesTrustedFieldWrapper() {
+    return this.realmSandbox.isOpaqueField(this.args.card);
+  }
+
+  get showSandboxDiagnostics() {
+    return isTesting() && this.usesRealmSandbox;
+  }
+
+  get sandboxFallbackReasons() {
+    return JSON.stringify(this.sandboxMetrics.fallbackReasons);
+  }
+
+  get sandboxOmittedFields() {
+    return JSON.stringify(this.sandboxMetrics.omittedFields);
+  }
+
+  get sandboxCompartmentErrors() {
+    return JSON.stringify(this.sandboxMetrics.compartmentErrors);
   }
 }

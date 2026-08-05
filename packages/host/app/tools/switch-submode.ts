@@ -8,6 +8,8 @@ import HostBaseTool from '../lib/host-base-tool';
 
 import WriteTextFileTool from './write-text-file';
 
+import type { Submode } from '../components/submode-switcher';
+
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type StoreService from '../services/store';
 import type * as BaseToolModule from '@cardstack/base/command';
@@ -54,28 +56,34 @@ export default class SwitchSubmodeTool extends HostBaseTool<
   protected async run(
     input: BaseToolModule.SwitchSubmodeInput,
   ): Promise<BaseToolModule.SwitchSubmodeResult | undefined> {
+    // Tool input can be a live CardDef facade. Snapshot primitives before any
+    // navigation await: changing routes may update the facade while this
+    // command is still running.
+    let submode = input.submode as Submode;
+    let codePathInput = input.codePath;
+    let createFile = input.createFile;
+    let previousSubmode = this.operatorModeStateService.state.submode;
     let resultCard: BaseToolModule.SwitchSubmodeResult | undefined;
-    switch (input.submode) {
+    // Commit the mode before scheduling code-path navigation. Otherwise the
+    // first query-param transition can rehydrate the old mode while the
+    // coding-skill activation is still awaiting Matrix.
+    await this.operatorModeStateService.updateSubmode(submode);
+    switch (submode) {
       case Submodes.Interact:
         await this.operatorModeStateService.updateCodePath(null);
         break;
       case Submodes.Code: {
         let lastId = this.lastCardInRightMostStack;
         let codePath =
-          input.codePath ??
+          codePathInput ??
           (lastId
             ? this.lastStackItem?.type === 'file'
               ? lastId
               : lastId + '.json'
             : null);
         let codeRRI = codePath ? rri(codePath) : null;
-        let currentSubmode = this.operatorModeStateService.state.submode;
         let finalCodePath = codeRRI;
-        if (
-          codeRRI &&
-          input.createFile &&
-          currentSubmode === Submodes.Interact
-        ) {
+        if (codeRRI && createFile && previousSubmode === Submodes.Interact) {
           let writeTextFileCommand = new WriteTextFileTool(this.toolContext);
           let writeResult = await writeTextFileCommand.execute({
             path: codeRRI,
@@ -96,10 +104,9 @@ export default class SwitchSubmodeTool extends HostBaseTool<
         break;
       }
       default:
-        throw new Error(`invalid submode specified: ${input.submode}`);
+        throw new Error(`invalid submode specified: ${submode}`);
     }
 
-    await this.operatorModeStateService.updateSubmode(input.submode);
     if (this.operatorModeStateService.workspaceChooserOpened) {
       this.operatorModeStateService.closeWorkspaceChooser();
     }

@@ -12,7 +12,7 @@ import type { BaseDef } from '@cardstack/base/card-api';
 
 interface Args {
   named: {
-    definition: typeof BaseDef;
+    card: BaseDef | typeof BaseDef;
   };
 }
 
@@ -22,23 +22,28 @@ export class CardType extends Resource<Args> {
   ready: Promise<void> | undefined;
 
   modify(_positional: never[], named: Args['named']) {
-    let { definition } = named;
-    this.ready = this.assembleType.perform(definition);
+    let { card } = named;
+    this.ready = this.assembleType.perform(card);
   }
 
   get isLoading() {
     return this.assembleType.isRunning;
   }
 
-  private assembleType = restartableTask(async (card: typeof BaseDef) => {
-    this.type = await this.cardTypeService.assembleType(card);
-  });
+  private assembleType = restartableTask(
+    async (card: BaseDef | typeof BaseDef) => {
+      this.type = await this.cardTypeService.assembleType(card);
+    },
+  );
 }
 
-export function getCardType(parent: object, card: () => typeof BaseDef) {
+export function getCardType(
+  parent: object,
+  card: () => BaseDef | typeof BaseDef,
+) {
   return CardType.from(parent, () => ({
     named: {
-      definition: card(),
+      card: card(),
     },
   })) as CardType;
 }

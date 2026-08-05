@@ -54,6 +54,7 @@ import {
 } from '@cardstack/host/resources/module-contents';
 
 import { getResolvedCodeRefFromType } from '@cardstack/host/services/card-type-service';
+import type CardTypeService from '@cardstack/host/services/card-type-service';
 import type NetworkService from '@cardstack/host/services/network';
 import type RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
@@ -113,6 +114,7 @@ interface Signature {
 
 export default class DetailPanel extends Component<Signature> {
   @service declare private network: NetworkService;
+  @service declare private cardTypeService: CardTypeService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
   @service declare private toolService: ToolService;
@@ -126,8 +128,7 @@ export default class DetailPanel extends Component<Signature> {
   // for card instances, we don't have that information at hand so we load it here
   @use private cardInstanceType = resource(() => {
     if (this.args.cardInstance !== undefined) {
-      let cardDefinition = this.args.cardInstance.constructor as typeof BaseDef;
-      return getCardType(this, () => cardDefinition);
+      return getCardType(this, () => this.args.cardInstance!);
     }
     return undefined;
   });
@@ -170,8 +171,7 @@ export default class DetailPanel extends Component<Signature> {
   @use private fileDefInstanceType = resource(() => {
     let fileDefInstance = this.fileDefResource?.value;
     if (fileDefInstance !== undefined) {
-      let cardDefinition = fileDefInstance.constructor as typeof BaseDef;
-      return getCardType(this, () => cardDefinition);
+      return getCardType(this, () => fileDefInstance);
     }
     return undefined;
   });
@@ -371,10 +371,9 @@ export default class DetailPanel extends Component<Signature> {
       throw new Error('must have a selected card instance');
     }
     let id: NewFileType = 'duplicate-instance';
-    let cardDef = Reflect.getPrototypeOf(this.args.cardInstance)!
-      .constructor as typeof CardDef;
+    let cardDef = this.cardTypeService.introspect(this.args.cardInstance);
     this.args.createFile(
-      { id, displayName: capitalize(cardDef.displayName || 'Instance') },
+      { id, displayName: capitalize(cardDef?.displayName || 'Instance') },
       undefined,
       this.args.cardInstance,
     );

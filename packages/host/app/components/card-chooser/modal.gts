@@ -306,6 +306,7 @@ export default class CardChooserModal extends Component<Signature> {
       preselectConsumingRealm?: boolean;
       lockConsumingRealm?: boolean;
       preselectedCardUrls?: string[];
+      title?: string;
     },
   ): Promise<undefined | string | string[]> {
     let result = await this._chooseCard.perform(
@@ -347,6 +348,7 @@ export default class CardChooserModal extends Component<Signature> {
         preselectConsumingRealm?: boolean;
         lockConsumingRealm?: boolean;
         preselectedCardUrls?: string[];
+        title?: string;
       } = {},
     ) => {
       await this.realmServer.ready;
@@ -373,11 +375,13 @@ export default class CardChooserModal extends Component<Signature> {
         void prefetchRealmInfo;
       }
       this.stateId++;
-      let title = await chooseCardTitle(
-        query.filter,
-        this.loaderService.loader,
-        opts?.multiSelect,
-      );
+      let title =
+        opts.title ??
+        (await chooseCardTitle(
+          query.filter,
+          this.loaderService.loader,
+          opts?.multiSelect,
+        ));
       let request = new TrackedObject<Request>({
         deferred: new Deferred(),
         opts,

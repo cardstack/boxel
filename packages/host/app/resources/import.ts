@@ -21,7 +21,13 @@ interface Args {
 
 export type LoadResult =
   | { module: object }
-  | { error: { type: 'runtime' | 'compile'; message: string } };
+  | {
+      error: {
+        type: 'runtime' | 'compile';
+        message: string;
+        status?: number;
+      };
+    };
 
 export async function loadModule(
   url: string,
@@ -32,6 +38,8 @@ export async function loadModule(
     let m = await loader.import<object>(url);
     return { module: m };
   } catch (err: any) {
+    let failedStatus =
+      typeof err?.status === 'number' ? (err.status as number) : undefined;
     let errResponse = await fetch(url, {
       headers: { 'content-type': 'text/javascript' },
     });
@@ -51,6 +59,7 @@ export async function loadModule(
         error: {
           type: 'compile',
           message,
+          status: errResponse.status,
         },
       };
     } else {
@@ -64,6 +73,7 @@ ${url}:
 ${err}
 
 Check console log for more details`,
+          status: failedStatus,
         },
       };
     }

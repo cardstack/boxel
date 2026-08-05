@@ -1,21 +1,39 @@
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
+import type Owner from '@ember/owner';
 import Service from '@ember/service';
-import { click, waitFor } from '@ember/test-helpers';
+import { click, settled, waitFor } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
+import { surfacePresentation } from '@cardstack/boxel-ui/surface';
+
+import { ri, rri } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
+import RealmSandboxDelegatedRender from '@cardstack/host/components/realm-sandbox-delegated-render';
+import RealmSandboxRender from '@cardstack/host/components/realm-sandbox-render';
+import {
+  getOpaqueRealmCardState,
+  opaqueRealmCardState,
+} from '@cardstack/host/lib/realm-sandbox-boundary';
+
+import type RealmSandboxService from '@cardstack/host/services/realm-sandbox';
 
 import { percySnapshot, testRealmURL } from '../../helpers';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
-import type { Format } from '@cardstack/base/card-api';
+import type {
+  BaseDef,
+  BaseDefComponent,
+  Format,
+  ViewCardFn,
+} from '@cardstack/base/card-api';
 
 let cardApi: typeof import('@cardstack/base/card-api');
 let string: typeof import('@cardstack/base/string');
@@ -55,6 +73,829 @@ module('Integration | preview', function (hooks) {
     );
     await waitFor('[data-test-firstName]'); // we need to wait for the card instance to load
     assert.dom('[data-test-firstName]').hasText('Mango');
+  });
+
+  test('trusts Base and Catalog Realm types and sandboxes user realm types', function (assert) {
+    let sandbox = getService('realm-sandbox');
+    let loaderService = getService('loader-service');
+
+    assert.false(
+      sandbox.shouldUseOpaqueCard({
+        module: rri('https://cardstack.com/base/card-api'),
+        name: 'CardDef',
+      }),
+      'Base Realm definitions stay on the trusted host runtime',
+    );
+    assert.false(
+      sandbox.shouldUseOpaqueCard({
+        module: rri('@cardstack/catalog/fields/workflow'),
+        name: 'WorkflowField',
+      }),
+      'Catalog Realm definitions stay on the trusted host runtime',
+    );
+    assert.true(
+      sandbox.shouldUseOpaqueCard({
+        module: rri(`${testRealmURL}article-card`),
+        name: 'ArticleCard',
+      }),
+      'ordinary realm definitions become opaque sandbox records',
+    );
+
+    let catalogRef = {
+      module: rri('@cardstack/catalog/fields/workflow'),
+      name: 'WorkflowField',
+    };
+    let catalogLoader = sandbox.loaderForTrustedCard(catalogRef);
+    assert.notStrictEqual(
+      loaderService.baseLoader,
+      loaderService.loader,
+      'Base has a loader separate from the host authored-module loader',
+    );
+    assert.strictEqual(
+      sandbox.loaderForTrustedCard({
+        module: rri('https://cardstack.com/base/card-api'),
+        name: 'CardDef',
+      }),
+      loaderService.baseLoader,
+      'Base cards use the app-wide Base loader',
+    );
+    assert.strictEqual(
+      sandbox.loaderForTrustedCard(catalogRef),
+      catalogLoader,
+      'trusted realm cards reuse one loader for their realm',
+    );
+    assert.notStrictEqual(
+      catalogLoader,
+      loaderService.baseLoader,
+      'a non-Base trusted realm does not evaluate into the Base loader',
+    );
+  });
+
+  test('deserializes a regular realm card without importing its type into the host', async function (assert) {
+    let moduleURL = `${testRealmURL}authoritative-sandbox-card`;
+    let id = `${testRealmURL}authoritative-sandbox-instance`;
+    let resource = {
+      id: rri(id),
+      type: 'card' as const,
+      attributes: {
+        title: 'Opaque until the compartment renders it',
+        count: 3,
+      },
+      meta: {
+        adoptsFrom: {
+          module: rri(moduleURL),
+          name: 'AuthoritativeSandboxCard',
+        },
+        realmURL: ri(testRealmURL),
+      },
+    };
+    let doc = { data: resource };
+
+    assert.false(loader.isModuleLoaded(moduleURL));
+    let card = await getService('store').add(doc, {
+      doNotPersist: true,
+      relativeTo: new URL(id),
+    });
+
+    assert.false(
+      loader.isModuleLoaded(moduleURL),
+      'Store did not evaluate the realm module in the host Loader',
+    );
+    assert.strictEqual(
+      (card as unknown as { title: string }).title,
+      resource.attributes.title,
+    );
+    let snapshot = getOpaqueRealmCardState(card)?.snapshot;
+    assert.deepEqual(
+      Object.fromEntries(Object.entries(snapshot ?? {})),
+      {
+        id: rri(id),
+        title: resource.attributes.title,
+        count: 3,
+      },
+      'the enumerable opaque snapshot remains plain card data',
+    );
+    assert.strictEqual(
+      (snapshot?.constructor as { displayName?: string }).displayName,
+      'AuthoritativeSandboxCard',
+      'templates receive inert constructor presentation metadata',
+    );
+    assert.false(
+      Object.keys(snapshot ?? {}).includes('constructor'),
+      'constructor metadata does not enter JSON-only compartment args',
+    );
+  });
+
+  test('older Base getComponent renders an opaque authored format through the ordinary static slot', async function (assert) {
+    let moduleURL = `${testRealmURL}opaque-delegated-card`;
+    let id = `${testRealmURL}OpaqueDelegatedCard/sample`;
+    let sandbox = getService('realm-sandbox') as RealmSandboxService;
+    let privateSandbox = sandbox as unknown as {
+      loadCardTypeMetadata: RealmSandboxService['introspectOpaqueCardType'];
+    };
+    let originalMetadataLoader = privateSandbox.loadCardTypeMetadata;
+    privateSandbox.loadCardTypeMetadata = (async () => ({
+      definitionKind: 'card',
+      ancestorTypes: [],
+      displayName: 'Opaque Delegated Card',
+      fields: {},
+      headerColor: null,
+      hasCustomEditTemplate: false,
+      hasCustomIsolatedTemplate: true,
+      authoredTemplateFormats: ['isolated'],
+      prefersFullSandbox: false,
+      prefersWideFormat: false,
+    })) as unknown as typeof privateSandbox.loadCardTypeMetadata;
+
+    let card: BaseDef;
+    try {
+      card = await sandbox.createOpaqueCard(
+        {
+          id: rri(id),
+          type: 'card',
+          attributes: { title: 'Rendered through unchanged Base' },
+          meta: {
+            adoptsFrom: {
+              module: rri(moduleURL),
+              name: 'OpaqueDelegatedCard',
+            },
+            realmURL: ri(testRealmURL),
+          },
+        },
+        new URL(id),
+      );
+    } finally {
+      privateSandbox.loadCardTypeMetadata = originalMetadataLoader;
+    }
+
+    assert.strictEqual(
+      (
+        card.constructor as typeof BaseDef & {
+          isolated: { name?: string };
+        }
+      ).isolated.name,
+      RealmSandboxDelegatedRender.name,
+      'the Host shim occupies the existing static format seam',
+    );
+    assert.false(
+      Object.getOwnPropertySymbols(card).some((symbol) =>
+        String(symbol).includes('delegated-card-render-component'),
+      ),
+      'the opaque instance has no symbol that requires newer Base code',
+    );
+
+    class InertTemplate extends GlimmerComponent<{
+      Args: { model: { title: string } };
+    }> {
+      readonly trustedHostTemplate = true;
+
+      <template>
+        <p data-test-older-base-opaque-delegate>{{@model.title}}</p>
+      </template>
+    }
+    let inertRender = {
+      component: InertTemplate as unknown as BaseDefComponent,
+      model: { title: 'Rendered through unchanged Base' },
+      fields: {},
+      styles: [],
+      principal: testRealmURL,
+      markerBacked: false,
+    } as NonNullable<ReturnType<RealmSandboxService['renderFor']>>;
+    let originalRenderFor = sandbox.renderFor;
+    let originalIframeRenderFor = sandbox.iframeRenderFor;
+    let originalIsRenderLoading = sandbox.isRenderLoading;
+    sandbox.renderFor = ((candidate: BaseDef) =>
+      candidate === card
+        ? inertRender
+        : originalRenderFor.call(
+            sandbox,
+            candidate,
+            undefined,
+            {},
+          )) as typeof sandbox.renderFor;
+    sandbox.iframeRenderFor = ((candidate: BaseDef) =>
+      candidate === card
+        ? undefined
+        : originalIframeRenderFor.call(
+            sandbox,
+            candidate,
+            undefined,
+          )) as typeof sandbox.iframeRenderFor;
+    sandbox.isRenderLoading = ((candidate: BaseDef) =>
+      candidate === card
+        ? false
+        : originalIsRenderLoading.call(
+            sandbox,
+            candidate,
+            undefined,
+          )) as typeof sandbox.isRenderLoading;
+
+    try {
+      let BaseComponent = cardApi.getComponent(card);
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template><BaseComponent @format='isolated' /></template>
+        },
+      );
+      await waitFor('[data-test-older-base-opaque-delegate]');
+      assert
+        .dom('[data-test-older-base-opaque-delegate]')
+        .hasText('Rendered through unchanged Base');
+    } finally {
+      sandbox.renderFor = originalRenderFor;
+      sandbox.iframeRenderFor = originalIframeRenderFor;
+      sandbox.isRenderLoading = originalIsRenderLoading;
+    }
+  });
+
+  test('opaque cards derive their trusted header title from cardInfo.name', async function (assert) {
+    let moduleURL = `${testRealmURL}opaque-titled-card`;
+    let id = `${testRealmURL}OpaqueTitledCard/sample`;
+    let sandbox = getService('realm-sandbox') as RealmSandboxService;
+    let privateSandbox = sandbox as unknown as {
+      loadCardTypeMetadata: RealmSandboxService['introspectOpaqueCardType'];
+    };
+    let originalMetadataLoader = privateSandbox.loadCardTypeMetadata;
+    privateSandbox.loadCardTypeMetadata = (async () => ({
+      definitionKind: 'card',
+      ancestorTypes: [],
+      displayName: 'Opaque Titled Card',
+      fields: {},
+      headerColor: null,
+      hasCustomEditTemplate: false,
+      hasCustomIsolatedTemplate: true,
+      authoredTemplateFormats: ['isolated'],
+      prefersFullSandbox: false,
+      prefersWideFormat: false,
+    })) as unknown as typeof privateSandbox.loadCardTypeMetadata;
+
+    let card: BaseDef & {
+      cardInfo: { name: string };
+      cardTitle: string;
+    };
+    try {
+      card = (await sandbox.createOpaqueCard(
+        {
+          id: rri(id),
+          type: 'card',
+          attributes: { cardInfo: { name: 'Named before iframe ready' } },
+          meta: {
+            adoptsFrom: {
+              module: rri(moduleURL),
+              name: 'OpaqueTitledCard',
+            },
+            realmURL: ri(testRealmURL),
+          },
+        },
+        new URL(id),
+      )) as typeof card;
+    } finally {
+      privateSandbox.loadCardTypeMetadata = originalMetadataLoader;
+    }
+
+    assert.strictEqual(
+      card.cardTitle,
+      'Named before iframe ready',
+      'the Host header uses inert cardInfo presentation without evaluating user code',
+    );
+    card.cardInfo.name = 'Renamed card';
+    assert.strictEqual(
+      card.cardTitle,
+      'Renamed card',
+      'the title remains reactive to writable cardInfo updates',
+    );
+  });
+
+  test('rejects an unsafe included theme without rejecting the opaque card', async function (assert) {
+    let moduleURL = `${testRealmURL}themed-sandbox-card`;
+    let id = `${testRealmURL}themed-sandbox-instance`;
+    let themeID = `${testRealmURL}Theme/network-bearing`;
+    let card = await getService('store').add(
+      {
+        data: {
+          id: rri(id),
+          type: 'card' as const,
+          attributes: { title: 'The card remains available' },
+          relationships: {
+            'cardInfo.theme': {
+              data: { id: rri(themeID), type: 'card' as const },
+              links: { self: themeID },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: rri(moduleURL),
+              name: 'ThemedSandboxCard',
+            },
+            realmURL: ri(testRealmURL),
+          },
+        },
+        included: [
+          {
+            id: rri(themeID),
+            type: 'card' as const,
+            attributes: {
+              cssVariables:
+                ':root { --safe-color: #123456; --font: url(https://tracker.invalid/font.woff2); }',
+            },
+            meta: {
+              adoptsFrom: {
+                module: rri('https://cardstack.com/base/card-api'),
+                name: 'Theme',
+              },
+            },
+          },
+        ],
+      },
+      {
+        doNotPersist: true,
+        relativeTo: new URL(id),
+      },
+    );
+
+    assert.strictEqual(
+      (card as unknown as { title: string }).title,
+      'The card remains available',
+      'invalid optional presentation does not abort Store materialization',
+    );
+    assert.strictEqual(
+      getOpaqueRealmCardState(card)?.presentation.theme,
+      undefined,
+      'network-bearing theme CSS never crosses the sandbox boundary',
+    );
+  });
+
+  test('renders an inert compartment template with trusted scoped styles', async function (assert) {
+    let { CardDef } = cardApi;
+    class TestCard extends CardDef {}
+    class InertTemplate extends GlimmerComponent<{
+      Args: { model: { title: string } };
+    }> {
+      readonly trustedHostTemplate = true;
+
+      <template>
+        <p class='sandbox-style-proof' data-test-sandbox-style-proof>
+          {{@model.title}}
+        </p>
+      </template>
+    }
+    let card = new TestCard({});
+    let sandbox = {
+      component: InertTemplate as unknown as BaseDefComponent,
+      model: { title: 'Compartment template' },
+      fields: {},
+      styles: ['.sandbox-style-proof { color: rgb(1 2 3); }'],
+      principal: testRealmURL,
+      markerBacked: false,
+      theme: {
+        css: ':root { --background: #f7f8fa; --foreground: #16161a; }',
+        id: `${testRealmURL}Theme/editorial`,
+        scope: `${testRealmURL}Theme/editorial-test-scope`,
+      },
+    };
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <RealmSandboxRender
+            @card={{card}}
+            @format='fitted'
+            @sandbox={{sandbox}}
+          />
+        </template>
+      },
+    );
+
+    assert
+      .dom('[data-test-sandbox-style-proof]')
+      .hasText('Compartment template');
+    assert
+      .dom(document.head.querySelector('[data-realm-sandbox-stylesheet]'))
+      .includesText('.sandbox-style-proof { color: rgb(1 2 3); }');
+    assert
+      .dom('.realm-sandbox-render')
+      .hasClass('boxel-card-container--themed')
+      .hasAttribute(
+        'data-boxel-theme-scope',
+        `${testRealmURL}Theme/editorial-test-scope`,
+      );
+    let containerStyle = getComputedStyle(
+      document.querySelector('.realm-sandbox-render')!,
+    );
+    assert.strictEqual(containerStyle.containerName, 'fitted-card');
+    assert.strictEqual(containerStyle.containerType, 'size');
+    assert.strictEqual(containerStyle.minHeight, '40px');
+    assert.strictEqual(containerStyle.maxHeight, '600px');
+    assert.strictEqual(containerStyle.overflow, 'hidden');
+    assert.strictEqual(
+      containerStyle.contain,
+      'content',
+      'the host box traps positioned descendants and clips authored paint',
+    );
+    assert.strictEqual(
+      containerStyle.isolation,
+      'isolate',
+      'authored blending and z-index stay in the card stacking context',
+    );
+    assert
+      .dom('[data-boxel-theme-style]')
+      .includesText('--background: #f7f8fa');
+  });
+
+  test('applies bounded surface presentation to the SES Host container', async function (assert) {
+    let { CardDef } = cardApi;
+    class TestCard extends CardDef {}
+    class InertTemplate extends GlimmerComponent {
+      readonly trustedHostTemplate = true;
+
+      <template>
+        <article
+          data-test-surface-presentation
+          {{surfacePresentation containerBackground='#07142d'}}
+        >
+          Presented surface
+        </article>
+      </template>
+    }
+    let card = new TestCard({});
+    let sandbox = {
+      component: InertTemplate as unknown as BaseDefComponent,
+      model: {},
+      fields: {},
+      styles: [],
+      principal: testRealmURL,
+      markerBacked: false,
+    };
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <RealmSandboxRender
+            @card={{card}}
+            @format='embedded'
+            @sandbox={{sandbox}}
+          />
+        </template>
+      },
+    );
+    await settled();
+
+    assert.strictEqual(
+      getComputedStyle(document.querySelector('.realm-sandbox-render')!)
+        .backgroundColor,
+      'rgb(7, 20, 45)',
+      'the Host owns the outer paint while the surface publishes one inert color',
+    );
+  });
+
+  test('renders a sandboxed FieldDef inside the ordinary compound-field inheritance boundary', async function (assert) {
+    let { FieldDef } = cardApi;
+    class TestField extends FieldDef {
+      static displayName = 'Sandbox boundary test field';
+      testMarker = true;
+    }
+    class InertFieldTemplate extends GlimmerComponent<{
+      Args: { model: { label: string } };
+    }> {
+      testMarker = true;
+
+      <template>
+        <article data-test-sandbox-field-template>{{@model.label}}</article>
+      </template>
+    }
+    let field = new TestField();
+    let sandbox = {
+      component: InertFieldTemplate as unknown as BaseDefComponent,
+      model: { label: 'Delegated field' },
+      fields: {},
+      styles: [
+        '[data-test-sandbox-field-template] { background: rgb(4 5 6); }',
+      ],
+      principal: testRealmURL,
+      markerBacked: false,
+    };
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <div class='compound-field embedded-format sandbox-field-parent'>
+            <RealmSandboxRender
+              @card={{field}}
+              @format='embedded'
+              @sandbox={{sandbox}}
+              @model={{sandbox.model}}
+              @fieldBoundary={{true}}
+              data-parent-scope='inherited'
+            />
+          </div>
+          <style scoped>
+            .sandbox-field-parent {
+              color: rgb(1 2 3);
+              font-family: monospace;
+            }
+          </style>
+        </template>
+      },
+    );
+
+    await waitFor('[data-test-sandbox-field-template]');
+    assert.dom('.realm-sandbox-render').doesNotExist();
+    assert
+      .dom('.realm-sandbox-field-template-island')
+      .hasAttribute('data-parent-scope', 'inherited');
+    assert.dom('[data-test-sandbox-field-template]').hasText('Delegated field');
+    let fieldStyle = getComputedStyle(
+      document.querySelector('[data-test-sandbox-field-template]')!,
+    );
+    assert.strictEqual(fieldStyle.color, 'rgb(1, 2, 3)');
+    assert.true(fieldStyle.fontFamily.includes('monospace'));
+    assert.strictEqual(fieldStyle.backgroundColor, 'rgb(4, 5, 6)');
+  });
+
+  test('passes the actual primitive field value through a sandboxed FieldDef boundary', async function (assert) {
+    let { FieldDef } = cardApi;
+    class TestField extends FieldDef {}
+    class PrimitiveFieldTemplate extends GlimmerComponent<{
+      Args: { model: string; set?: (value: string) => void };
+    }> {
+      update = () => this.args.set?.('done');
+
+      <template>
+        <strong data-test-sandbox-primitive-field>{{@model}}</strong>
+        <button
+          type='button'
+          data-test-set-sandbox-primitive-field
+          {{on 'click' this.update}}
+        >Update</button>
+      </template>
+    }
+    let field = new TestField();
+    let received: unknown;
+    let sandbox = {
+      component: PrimitiveFieldTemplate as unknown as BaseDefComponent,
+      // This is the synthetic opaque record used to select the authored
+      // FieldDef program. It must not replace the field's ordinary @model.
+      model: { value: 'doing' },
+      fields: {},
+      styles: [],
+      principal: testRealmURL,
+      markerBacked: false,
+    };
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        set = (value: unknown) => (received = value);
+
+        <template>
+          <RealmSandboxRender
+            @card={{field}}
+            @format='edit'
+            @sandbox={{sandbox}}
+            @model='doing'
+            @fieldBoundary={{true}}
+            @set={{this.set}}
+          />
+        </template>
+      },
+    );
+
+    await waitFor('[data-test-sandbox-primitive-field]');
+    assert
+      .dom('[data-test-sandbox-primitive-field]')
+      .hasText('doing', 'the authored editor receives the primitive value');
+    assert
+      .dom('[data-test-sandbox-primitive-field]')
+      .doesNotIncludeText('[object Object]');
+
+    await click('[data-test-set-sandbox-primitive-field]');
+    assert.strictEqual(
+      received,
+      'done',
+      'the existing @set capability returns through the same boundary',
+    );
+  });
+
+  test('[SOAK-03] rendered cross-realm navigation releases departed runtimes and styles', async function (assert) {
+    let { CardDef } = cardApi;
+    class TestCard extends CardDef {}
+    let templateForNavigation = () =>
+      class InertTemplate extends GlimmerComponent<{
+        Args: { model: { navigation: number } };
+      }> {
+        <template>
+          <p data-test-rendered-soak>{{@model.navigation}}</p>
+        </template>
+      };
+    let realmSandbox = getService('realm-sandbox') as unknown as {
+      compartmentRuntimeFor(principal: string): unknown;
+      evictIdleRealmRuntimes(): void;
+      metricsSnapshot(): {
+        activeCompartments: number;
+        activeCompartmentLoads: number;
+        cachedCompartmentTemplates: number;
+      };
+    };
+    let collectGarbage = (globalThis as typeof globalThis & { gc?: () => void })
+      .gc;
+    let memory = (
+      performance as Performance & {
+        memory?: { usedJSHeapSize: number };
+      }
+    ).memory;
+    let warmHeap: number | undefined;
+
+    let driver!: TestDriver;
+    class TestDriver extends GlimmerComponent {
+      @tracked renderState?: {
+        card: BaseDef;
+        sandbox: {
+          component: BaseDefComponent;
+          model: { navigation: number };
+          fields: Record<string, BaseDefComponent>;
+          styles: string[];
+          principal: string;
+          markerBacked: boolean;
+        };
+      };
+
+      constructor(owner: Owner, args: Record<string, never>) {
+        super(owner, args);
+        driver = this;
+      }
+
+      navigate(
+        card: BaseDef,
+        sandbox: NonNullable<this['renderState']>['sandbox'],
+      ) {
+        this.renderState = { card, sandbox };
+      }
+
+      clear() {
+        this.renderState = undefined;
+      }
+
+      <template>
+        {{#if this.renderState}}
+          <RealmSandboxRender
+            @card={{this.renderState.card}}
+            @format='fitted'
+            @sandbox={{this.renderState.sandbox}}
+          />
+        {{/if}}
+      </template>
+    }
+
+    await renderComponent(TestDriver);
+    for (let navigation = 0; navigation < 512; navigation++) {
+      let principal = `https://rendered-realm-${navigation}.example/`;
+      let card = new TestCard({});
+      Object.defineProperty(card, opaqueRealmCardState, {
+        value: {
+          typeRef: { module: `${principal}card`, name: 'Card' },
+          principal,
+          document: { data: { type: 'card' } },
+          snapshot: {},
+          presentation: { headerColor: null, prefersWideFormat: false },
+        },
+      });
+      realmSandbox.compartmentRuntimeFor(principal);
+      driver.navigate(card, {
+        component: templateForNavigation() as unknown as BaseDefComponent,
+        model: { navigation },
+        fields: {},
+        styles: [
+          `[data-scopedcss-render-soak-${navigation % 8}] { color: rgb(${navigation % 255} 0 0); }`,
+        ],
+        principal,
+        markerBacked: false,
+      });
+      await settled();
+      realmSandbox.evictIdleRealmRuntimes();
+
+      if (navigation % 64 === 0) {
+        assert.dom('[data-test-rendered-soak]').hasText(String(navigation));
+        assert.strictEqual(
+          realmSandbox.metricsSnapshot().activeCompartments,
+          1,
+          `navigation ${navigation} retains only its rendered realm`,
+        );
+        assert.strictEqual(
+          document.querySelectorAll('[data-realm-sandbox-stylesheet]').length,
+          1,
+          `navigation ${navigation} retains one authored stylesheet`,
+        );
+      }
+      if (navigation === 63 && collectGarbage && memory) {
+        collectGarbage();
+        collectGarbage();
+        warmHeap = memory.usedJSHeapSize;
+      }
+    }
+
+    driver.clear();
+    await settled();
+    realmSandbox.evictIdleRealmRuntimes();
+    let final = realmSandbox.metricsSnapshot();
+    assert.strictEqual(final.activeCompartments, 0, 'all runtimes exit');
+    assert.strictEqual(final.activeCompartmentLoads, 0, 'no loads remain');
+    assert.strictEqual(
+      final.cachedCompartmentTemplates,
+      0,
+      'no templates remain',
+    );
+    assert.strictEqual(
+      document.querySelectorAll('[data-realm-sandbox-stylesheet]').length,
+      0,
+      'all rendered sandbox styles exit',
+    );
+    if (warmHeap != null && collectGarbage && memory) {
+      collectGarbage();
+      collectGarbage();
+      let growth = memory.usedJSHeapSize - warmHeap;
+      let growthMB = (growth / 1024 / 1024).toFixed(2);
+      console.log(
+        `REALM_SANDBOX_RENDER_SOAK navigations=512 heap_growth_mb=${growthMB} active_compartments=${final.activeCompartments} active_loads=${final.activeCompartmentLoads} cached_templates=${final.cachedCompartmentTemplates}`,
+      );
+      assert.true(
+        growth <= 16 * 1024 * 1024,
+        `rendered steady-state heap grows by at most 16 MiB (actual ${growthMB} MiB)`,
+      );
+    }
+  });
+
+  test('routes sandbox navigation through a realm-relative viewCard capability', async function (assert) {
+    let { CardDef } = cardApi;
+    class TestCard extends CardDef {}
+    class InertNavigation extends GlimmerComponent<{
+      Args: {
+        viewCard: (
+          target: Parameters<ViewCardFn>[0],
+          format?: Parameters<ViewCardFn>[1],
+          optionsOrEvent?: Parameters<ViewCardFn>[2] | Event,
+        ) => void;
+      };
+    }> {
+      target = new URL(
+        'Article/one',
+        testRealmURL,
+      ) as Parameters<ViewCardFn>[0];
+      outsideTarget = new URL(
+        'https://other-realm.example/Article/two',
+      ) as Parameters<ViewCardFn>[0];
+
+      <template>
+        <button
+          type='button'
+          data-test-sandbox-view-card
+          {{on 'click' (fn @viewCard this.target 'isolated')}}
+        >
+          Open card
+        </button>
+        <button
+          type='button'
+          data-test-sandbox-view-card-outside-realm
+          {{on 'click' (fn @viewCard this.outsideTarget 'isolated')}}
+        >
+          Open outside-realm card
+        </button>
+      </template>
+    }
+    let card = new TestCard({});
+    let sandbox = {
+      component: InertNavigation as unknown as BaseDefComponent,
+      model: {},
+      fields: {},
+      styles: [],
+      principal: testRealmURL,
+      markerBacked: false,
+    };
+    let calls: Array<Parameters<ViewCardFn>> = [];
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        viewCard: ViewCardFn = (...args) => calls.push(args);
+
+        <template>
+          <RealmSandboxRender
+            @card={{card}}
+            @sandbox={{sandbox}}
+            @viewCard={{this.viewCard}}
+          />
+        </template>
+      },
+    );
+
+    await click('[data-test-sandbox-view-card]');
+    assert.strictEqual(calls.length, 1);
+    assert.strictEqual(calls[0]?.[0], rri(`${testRealmURL}Article/one`));
+    assert.strictEqual(calls[0]?.[1], 'isolated');
+
+    await click('[data-test-sandbox-view-card-outside-realm]');
+    assert.strictEqual(
+      calls.length,
+      1,
+      'the host boundary rejects a cross-realm navigation effect',
+    );
   });
 
   test('renders head meta tags preview for a card head format', async function (assert) {

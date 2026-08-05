@@ -538,7 +538,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
   });
 
   test<TestContextWithSave>('card instance change made in monaco editor is auto-saved', async function (assert) {
-    assert.expect(4);
+    assert.expect(5);
 
     let expected: LooseSingleCardDocument = {
       data: {
@@ -569,6 +569,9 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     assert
       .dom('[data-test-code-mode-card-renderer-body] [data-test-field="name"]')
       .containsText('Mango');
+    let renderedIsland = find(
+      '[data-test-code-mode-card-renderer-body] [data-realm-sandbox-template-island]',
+    );
 
     this.onSave((url, content) => {
       if (typeof content !== 'string') {
@@ -584,6 +587,13 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     assert
       .dom('[data-test-code-mode-card-renderer-body] [data-test-field="name"]')
       .containsText('MangoXXX');
+    assert.strictEqual(
+      find(
+        '[data-test-code-mode-card-renderer-body] [data-realm-sandbox-template-island]',
+      ),
+      renderedIsland,
+      'data-only updates preserve the sandbox island DOM identity',
+    );
   });
 
   test('changing a card instance adoptsFrom in the editor re-renders it as the new type after indexing', async function (assert) {

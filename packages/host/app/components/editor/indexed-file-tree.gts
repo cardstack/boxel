@@ -6,7 +6,6 @@ import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 
-import { restartableTask, timeout } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
 import { TrackedSet } from 'tracked-built-ins';
 
@@ -76,11 +75,15 @@ export default class IndexedFileTree extends Component<Signature> {
         @relativePath=''
         @cursorPath={{this.cursorPath}}
       />
-      {{#if this.showMask}}
+      {{#if this.showEmptyState}}
+        <p class='empty-state' data-test-file-tree-empty>
+          No matching files in this workspace
+        </p>
+      {{/if}}
+      {{#if this.showInitialLoadingMask}}
         <div class='mask' data-test-file-tree-mask>
-          {{#if this.fileTree.isLoading}}
-            <LoadingIndicator />
-          {{/if}}
+          <LoadingIndicator />
+          <span>Loading files&hellip;</span>
         </div>
       {{/if}}
     </nav>
@@ -96,6 +99,17 @@ export default class IndexedFileTree extends Component<Signature> {
         display: flex;
         align-items: center;
         justify-content: center;
+        flex-direction: column;
+        gap: var(--boxel-sp-xs);
+        color: var(--boxel-600);
+        font: var(--boxel-font-sm);
+      }
+      .empty-state {
+        margin: 0;
+        padding: var(--boxel-sp-sm);
+        color: var(--boxel-600);
+        font: var(--boxel-font-sm);
+        text-align: center;
       }
       nav {
         position: relative;
@@ -115,31 +129,28 @@ export default class IndexedFileTree extends Component<Signature> {
   );
   private localOpenDirs = new TrackedSet<string>();
   @tracked private selectedFile?: LocalPath;
-  @tracked private maskDismissed = false;
   @tracked private cursorPath?: string;
   private typeAheadBuffer = '';
   private typeAheadTimer?: ReturnType<typeof setTimeout>;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
-    this.hideMask.perform();
     registerDestructor(this, () => {
       clearTimeout(this.typeAheadTimer);
     });
   }
 
-  private get showMask(): boolean {
-    if (this.fileTree.isLoading) {
-      return true;
-    }
-    return !this.maskDismissed;
+  // Never hide a populated tree while its sparse index refreshes. File
+  // selection is host-owned navigation and must remain available regardless
+  // of source, schema, SES, iframe, or preview work. The mask is only useful
+  // for the very first query when there is literally nothing to display.
+  private get showInitialLoadingMask(): boolean {
+    return this.fileTree.isLoading && this.fileTree.entries.length === 0;
   }
 
-  private hideMask = restartableTask(async () => {
-    // fine tuned to coincide with debounce in RestoreScrollPosition modifier
-    await timeout(300);
-    this.maskDismissed = true;
-  });
+  private get showEmptyState(): boolean {
+    return !this.fileTree.isLoading && this.fileTree.entries.length === 0;
+  }
 
   private get effectiveOpenDirs(): Set<string> {
     if (this.args.openDirs) {

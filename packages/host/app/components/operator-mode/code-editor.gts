@@ -15,6 +15,7 @@ import {
 } from 'ember-concurrency';
 
 import perform from 'ember-concurrency/helpers/perform';
+import { modifier } from 'ember-modifier';
 
 import { isEqual } from 'lodash-es';
 
@@ -34,7 +35,9 @@ import {
 } from '@cardstack/runtime-common';
 import { getName } from '@cardstack/runtime-common/schema-analysis-plugin';
 
+import type { PreparedCodePreviewCommit } from '@cardstack/host/lib/code-preview-sandbox';
 import monacoModifier from '@cardstack/host/modifiers/monaco';
+import type { MonacoContentChangeOrigin } from '@cardstack/host/modifiers/monaco';
 import {
   isReady,
   type FileResource,
@@ -68,6 +71,16 @@ interface Signature {
     saveSourceOnClose: (url: URL, content: string) => void;
     selectDeclaration: (declaration: ModuleDeclaration) => void;
     onFileSave: (status: 'started' | 'finished') => void;
+    onContentChange?: (
+      url: string,
+      content: string,
+      origin: MonacoContentChangeOrigin,
+    ) => void;
+    prepareSourceCommit?: (
+      url: string,
+      content: string,
+      saveType: SaveType,
+    ) => PreparedCodePreviewCommit | undefined;
     onSetup: (
       updateCursorByName: (name: string, fieldName?: string) => void,
     ) => void;
@@ -112,6 +125,7 @@ export default class CodeEditor extends Component<Signature> {
 
     registerDestructor(this, () => {
       this.saveUnsavedSourceOnClose();
+      this.recentFilesService.flushPendingPersistence();
       this.formatActionDisposable?.dispose();
       this.formatActionDisposable = undefined;
       this.formatContextKey = undefined;
@@ -124,14 +138,41 @@ export default class CodeEditor extends Component<Signature> {
 
   private onEditorDispose = () => {
     this.saveUnsavedSourceOnClose();
+    this.recentFilesService.flushPendingPersistence();
   };
 
-  private get isReady() {
-    return this.maybeMonacoSDK && isReady(this.args.file);
+  private get editorIsReady() {
+    return Boolean(this.maybeMonacoSDK);
   }
 
-  private get isLoading() {
-    return this.loadMonaco.isRunning || this.args.moduleAnalysis?.isLoading;
+  private get editorContent() {
+    return isReady(this.args.file) ? this.args.file.content : '';
+  }
+
+  private get editorContentIdentity() {
+    return isReady(this.args.file) ? this.args.file.url : undefined;
+  }
+
+  private get sourceIsLoading() {
+    let selectedURL = this.operatorModeStateService.state.codePath?.href;
+    if (!this.args.file || this.args.file.state === 'loading') {
+      return true;
+    }
+    return Boolean(
+      selectedURL &&
+      isReady(this.args.file) &&
+      this.args.file.url !== selectedURL,
+    );
+  }
+
+  private get editorIsReadOnly() {
+    return (
+      this.args.isReadOnly || !isReady(this.args.file) || this.sourceIsLoading
+    );
+  }
+
+  private get isBinaryFile() {
+    return isReady(this.args.file) && this.args.file.isBinary;
   }
 
   private get declarations() {
@@ -157,6 +198,24 @@ export default class CodeEditor extends Component<Signature> {
       `cannot access file contents ${this.codePath} before file is open`,
     );
   }
+
+  // CodeEditor intentionally stays mounted while file resources change so
+  // Monaco is not coupled to source, analysis, SES, or iframe latency. Save a
+  // pending buffer against the old URL before the modifier receives the new
+  // route, then let the existing Monaco model accept the next file's content.
+  private syncCodePath = modifier(
+    (_element: HTMLElement, [codePath]: [URL | null]) => {
+      if (this.codePath?.href === codePath?.href) {
+        return;
+      }
+      this.saveUnsavedSourceOnClose();
+      this.codePath = codePath;
+      this.hasUnsavedSourceChanges = false;
+      this.hasSavedUnsavedSourceOnClose = false;
+      this.formattingError = undefined;
+      this.updateFormatActionAvailability();
+    },
+  );
 
   @cached
   private get initialMonacoCursorPosition() {
@@ -339,8 +398,12 @@ export default class CodeEditor extends Component<Signature> {
       return;
     }
 
-    // intentionally not awaiting this
-    this.syncWithStore.perform(content);
+    // JSON previews are driven by the canonical Store record. Finish that
+    // in-memory update before this generation is considered settled; the
+    // network save remains debounced below. Opaque sandbox cards need this
+    // explicit ordering because their render model is a Store-owned snapshot,
+    // not an executable CardDef instance that Monaco can mutate directly.
+    await this.syncWithStore.perform(content);
 
     await timeout(this.environmentService.autoSaveDelayMs);
     this.args.onWriteError?.(undefined);
@@ -353,6 +416,15 @@ export default class CodeEditor extends Component<Signature> {
     this.hasUnsavedSourceChanges = false;
     this.hasSavedUnsavedSourceOnClose = false;
   });
+
+  private contentChanging = (
+    content: string,
+    origin: MonacoContentChangeOrigin,
+  ) => {
+    if (isReady(this.args.file)) {
+      this.args.onContentChange?.(this.args.file.url, content, origin);
+    }
+  };
 
   private canSyncWithStore(content: string): boolean {
     if (!isReady(this.args.file) || !this.args.file.url.endsWith('.json')) {
@@ -460,14 +532,21 @@ export default class CodeEditor extends Component<Signature> {
       return;
     }
 
-    // flush the loader so that the preview (when card instance data is shown),
-    // or schema editor (when module code is shown) gets refreshed on save
+    let commit = this.args.prepareSourceCommit?.(file.url, content, saveType);
+    // The canonical loader still needs the persisted module invalidated, but
+    // an active Code preview has already rendered this source revision. Its
+    // Store refresh is deferred so the mounted preview is not replaced by the
+    // POST response and then replaced again by the realm event.
     return file
       .write(content, {
         flushLoader: hasExecutableExtension(file.name),
+        deferStoreRefresh: commit?.shouldDeferStoreRefresh,
         saveType,
+        clientRequestId: commit?.clientRequestId,
       })
+      .then(() => commit?.persisted())
       .catch((error) => {
+        commit?.failed(error);
         // Task cancellations are expected when the restartable contentChangedTask is
         // performed again while still running - this is normal behaviour, not an error
         if (didCancel(error)) {
@@ -519,9 +598,10 @@ export default class CodeEditor extends Component<Signature> {
   }
 
   private get language(): string | undefined {
-    if (this.codePath) {
+    let codePath = this.operatorModeStateService.state.codePath;
+    if (codePath) {
       const editorLanguages = this.monacoSDK.languages.getLanguages();
-      let extension = '.' + this.codePath.href.split('.').pop();
+      let extension = '.' + codePath.href.split('.').pop();
       let language = editorLanguages.find((lang) =>
         lang.extensions?.find((ext) => ext === extension),
       );
@@ -614,10 +694,13 @@ export default class CodeEditor extends Component<Signature> {
   }
 
   <template>
-    {{#if this.isReady}}
-      {{#if this.readyFile.isBinary}}
+    <div
+      class='code-editor-shell'
+      {{this.syncCodePath this.operatorModeStateService.state.codePath}}
+    >
+      {{#if this.isBinaryFile}}
         <BinaryFileInfo @readyFile={{this.readyFile}} />
-      {{else}}
+      {{else if this.editorIsReady}}
         <div class='monaco-wrapper'>
           {{#if this.isFormatting}}
             <div
@@ -638,32 +721,48 @@ export default class CodeEditor extends Component<Signature> {
             </div>
           {{/if}}
           <div
-            class='monaco-container {{if @isReadOnly "readonly"}}'
+            class='monaco-container {{if this.editorIsReadOnly "readonly"}}'
             data-test-editor
             data-test-percy-hide
             data-monaco-container-operator-mode
             {{monacoModifier
-              content=this.readyFile.content
+              content=this.editorContent
+              contentIdentity=this.editorContentIdentity
               contentChanged=(perform this.contentChangedTask)
+              contentChanging=this.contentChanging
               monacoSDK=this.monacoSDK
               language=this.language
               initialCursorPosition=this.initialMonacoCursorPosition
               onCursorPositionChange=this.onCursorPositionChange
               onSetup=this.setupFormatAction
               onDispose=this.onEditorDispose
-              readOnly=@isReadOnly
+              readOnly=this.editorIsReadOnly
               editorDisplayOptions=(hash lineNumbersMinChars=3 fontSize=12)
             }}
           ></div>
+          {{#if this.sourceIsLoading}}
+            <div
+              class='source-loading'
+              data-test-source-loading
+              role='status'
+              aria-label='Loading source'
+            >
+              <LoadingIndicator @color='var(--boxel-light)' />
+            </div>
+          {{/if}}
+        </div>
+      {{else}}
+        <div class='loading'>
+          <LoadingIndicator />
         </div>
       {{/if}}
-    {{else if this.isLoading}}
-      <div class='loading'>
-        <LoadingIndicator />
-      </div>
-    {{/if}}
+    </div>
 
     <style scoped>
+      .code-editor-shell {
+        height: 100%;
+        min-height: 0;
+      }
       .monaco-wrapper {
         position: relative;
         height: 100%;
@@ -690,6 +789,16 @@ export default class CodeEditor extends Component<Signature> {
         background: rgba(220, 53, 69, 0.9);
         color: white;
         max-width: 60ch;
+      }
+
+      .source-loading {
+        position: absolute;
+        inset: 0;
+        z-index: 2;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgb(37 35 45 / 55%);
       }
 
       .monaco-container {

@@ -5,6 +5,7 @@ import { baseRRI, type CodeRef } from '@cardstack/runtime-common';
 
 import {
   fileTreeFromIndex,
+  invalidatesFileTree,
   type FileTreeFromIndexResource,
   type FileTreeNode,
 } from '@cardstack/host/resources/file-tree-from-index';
@@ -122,6 +123,58 @@ module('Integration | file-tree-from-index resource', function (hooks) {
         'skills/realm-sync/SKILL.md',
       ],
       'all markdown files are in the tree when unscoped',
+    );
+  });
+
+  test('distinguishes its initial request from a settled empty result', async function (assert) {
+    let tree = getTreeForTest(
+      getService('loader-service'),
+      () => markdownRef,
+      () => ({ kind: 'does-not-exist' }),
+    );
+
+    assert.true(tree.isLoading, 'the first render reports loading');
+    await tree.loaded;
+
+    assert.false(tree.isLoading, 'the completed empty query is settled');
+    assert.true(tree.hasLoaded, 'the resource records a completed query');
+    assert.deepEqual(tree.entries, [], 'the settled result is empty');
+  });
+
+  test('refreshes only for incremental invalidations inside its realm', function (assert) {
+    assert.true(
+      invalidatesFileTree(
+        {
+          eventName: 'index',
+          indexType: 'incremental',
+          invalidations: [`${testRealmURL}notes/new.md`],
+          realmURL: testRealmURL,
+        },
+        testRealmURL,
+      ),
+    );
+    assert.false(
+      invalidatesFileTree(
+        {
+          eventName: 'index',
+          indexType: 'incremental',
+          invalidations: ['https://another-realm.example/new.md'],
+          realmURL: testRealmURL,
+        },
+        testRealmURL,
+      ),
+      'another realm cannot trigger a full search/sort',
+    );
+    assert.false(
+      invalidatesFileTree(
+        {
+          eventName: 'index',
+          indexType: 'full',
+          realmURL: testRealmURL,
+        },
+        testRealmURL,
+      ),
+      'full-index chatter is not treated as an incremental file update',
     );
   });
 });

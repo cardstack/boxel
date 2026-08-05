@@ -1,9 +1,4 @@
-import type Owner from '@ember/owner';
-
-import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
-
-import { restartableTask, timeout } from 'ember-concurrency';
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import type { LocalPath } from '@cardstack/runtime-common';
 
@@ -14,6 +9,7 @@ interface Signature {
     realmURL: string;
     selectedFile?: LocalPath;
     openDirs?: LocalPath[];
+    onFileIntent?: (entryPath: LocalPath) => void;
     onFileSelected?: (entryPath: LocalPath) => Promise<void>;
     onDirectorySelected?: (entryPath: LocalPath) => void;
     onDeleteFile?: (entryPath: LocalPath) => void;
@@ -21,49 +17,26 @@ interface Signature {
   };
 }
 
-export default class FileTree extends Component<Signature> {
-  <template>
-    <nav>
-      <Directory
-        @relativePath=''
-        @realmURL={{@realmURL}}
-        @selectedFile={{@selectedFile}}
-        @openDirs={{@openDirs}}
-        @onFileSelected={{@onFileSelected}}
-        @onDirectorySelected={{@onDirectorySelected}}
-        @onDeleteFile={{@onDeleteFile}}
-        @scrollPositionKey={{@scrollPositionKey}}
-      />
-      {{#if this.showMask}}
-        <div class='mask' data-test-file-tree-mask></div>
-      {{/if}}
-    </nav>
+const FileTree: TemplateOnlyComponent<Signature> = <template>
+  <nav>
+    <Directory
+      @relativePath=''
+      @realmURL={{@realmURL}}
+      @selectedFile={{@selectedFile}}
+      @openDirs={{@openDirs}}
+      @onFileIntent={{@onFileIntent}}
+      @onFileSelected={{@onFileSelected}}
+      @onDirectorySelected={{@onDirectorySelected}}
+      @onDeleteFile={{@onDeleteFile}}
+      @scrollPositionKey={{@scrollPositionKey}}
+    />
+  </nav>
 
-    <style scoped>
-      .mask {
-        position: absolute;
-        top: 0;
-        left: 0;
-        background-color: white;
-        height: 100%;
-        width: 100%;
-      }
-      nav {
-        position: relative;
-      }
-    </style>
-  </template>
+  <style scoped>
+    nav {
+      position: relative;
+    }
+  </style>
+</template>;
 
-  @tracked private showMask = true;
-
-  constructor(owner: Owner, args: Signature['Args']) {
-    super(owner, args);
-    this.hideMask.perform();
-  }
-
-  private hideMask = restartableTask(async () => {
-    // fine tuned to coincide with debounce in RestoreScrollPosition modifier
-    await timeout(300);
-    this.showMask = false;
-  });
-}
+export default FileTree;

@@ -15,6 +15,7 @@ import {
   withCachedRealmSetup,
   devSkillId,
   envSkillId,
+  sourceCodeEditingSkillUrl,
 } from '../../helpers';
 import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -60,8 +61,8 @@ module('Integration | tools | load-default-skills', function (hooks) {
 
     assert.deepEqual(
       await matrixService.loadDefaultSkills('code'),
-      [devSkillId, envSkillId],
-      'code mode falls back to the dev/env skill cards',
+      [devSkillId, envSkillId, sourceCodeEditingSkillUrl],
+      'code mode includes the source-editing contract at room creation',
     );
     assert.deepEqual(
       await matrixService.loadDefaultSkills('interact'),
@@ -98,8 +99,8 @@ module('Integration | tools | load-default-skills', function (hooks) {
     // resolves each id kind-agnostically via `loadSkillSource`.
     assert.deepEqual(
       await matrixService.loadDefaultSkills('code'),
-      [skillCard, skillFileA, skillFileB],
-      'configured skill cards and skill files both win in code mode',
+      [skillCard, skillFileA, skillFileB, sourceCodeEditingSkillUrl],
+      'configured Code-mode skills retain the source-editing contract',
     );
     assert.deepEqual(
       await matrixService.loadDefaultSkills('interact'),
@@ -118,8 +119,8 @@ module('Integration | tools | load-default-skills', function (hooks) {
 
     assert.deepEqual(
       await matrixService.loadDefaultSkills('code'),
-      [skillCard],
-      'a card-only default-skill list is used verbatim',
+      [skillCard, sourceCodeEditingSkillUrl],
+      'a card-only Code-mode default still receives source editing',
     );
   });
 });

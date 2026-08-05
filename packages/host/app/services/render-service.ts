@@ -23,9 +23,22 @@ import {
   type SingleFileMetaDocument,
 } from '@cardstack/runtime-common';
 
-import config from '@cardstack/host/config/environment';
+import { escapeHtml } from '@cardstack/runtime-common/helpers/html';
 
-import { render, teardown } from '../lib/isolated-render';
+import CardIsland, {
+  type CardIslandArgs,
+} from '@cardstack/host/components/card-island';
+import config from '@cardstack/host/config/environment';
+import { CARD_ISLAND_PROTOCOL_VERSION } from '@cardstack/host/lib/card-island-protocol';
+import { isTrustedRealmCardDefinition } from '@cardstack/host/lib/realm-sandbox-boundary';
+
+import {
+  captureIsolatedRenderErrors,
+  render,
+  prerenderWithArgs,
+  settleDeferredIsolatedRenders,
+  teardown,
+} from '../lib/isolated-render';
 
 import type CardService from './card-service';
 import type LoaderService from './loader-service';
@@ -46,6 +59,7 @@ import type { Tokenizer } from '@simple-dom/parser';
 
 const ELEMENT_NODE_TYPE = 1;
 const TEXT_NODE_TYPE = 3;
+const COMMENT_NODE_TYPE = 8;
 const MAX_ASYNC_RENDER_PASSES = 3;
 const { environment } = config;
 
@@ -226,6 +240,52 @@ export default class RenderService extends Service {
     }
   }
 
+  async renderCardIsland(
+    args: CardIslandArgs,
+    waitForAsync?: () => Promise<void>,
+  ): Promise<string> {
+    // Glimmer resets its process-global tracking stack when a low-level render
+    // throws. Callers can enter this async API from a tracked host computation,
+    // so yield before starting CardIsland's independent renderer. This makes
+    // the sandbox boundary an actual transaction boundary: an authored SES
+    // error can recover its own tracking state without erasing the host frame
+    // that initiated prerendering.
+    await Promise.resolve();
+    let element = getIsolatedRenderElement(this.document);
+    let renderIsland = async (): Promise<'serialized' | 'rendered'> => {
+      return captureIsolatedRenderErrors(async () => {
+        let mode = prerenderWithArgs(
+          CardIsland as any,
+          element,
+          this.owner,
+          args as unknown as Record<string, unknown>,
+          isTrustedRealmCardDefinition(args.card),
+        );
+        await settleDeferredIsolatedRenders();
+        return mode;
+      });
+    };
+    try {
+      if (waitForAsync) {
+        for (let i = 0; i < MAX_ASYNC_RENDER_PASSES; i++) {
+          await renderIsland();
+          await waitForAsync();
+        }
+      }
+      let serializationMode = await renderIsland();
+      let serializer = new Serializer(voidMap);
+      let html = serializer.serialize(element);
+      let captured = parseCardHtml(html, 'innerHTML');
+      let cardURL =
+        'id' in args.card && typeof args.card.id === 'string'
+          ? ` data-boxel-card-url="${escapeHtml(args.card.id)}"`
+          : '';
+      return `<div data-boxel-card-island data-boxel-card-island-protocol="${CARD_ISLAND_PROTOCOL_VERSION}" data-boxel-card-format="${escapeHtml(args.format)}" data-boxel-card-island-serialization="${serializationMode}"${cardURL}>${captured}</div>`;
+    } finally {
+      clearIsolatedRenderElement(element);
+    }
+  }
+
   render = (component: ComponentLike): string => {
     let element = getIsolatedRenderElement(this.document);
     try {
@@ -269,6 +329,14 @@ export function parseCardHtml(
     return parts.join('');
   }
 
+  if (capture === 'innerHTML' && hasSerializationBoundary(fragment)) {
+    let serializedChildren: string[] = [];
+    for (let child = fragment.firstChild; child; child = child.nextSibling) {
+      serializedChildren.push(serializer.serialize(child));
+    }
+    return serializedChildren.join('').trim();
+  }
+
   let parts: string[] = [];
   for (let node = fragment.firstChild; node; node = node.nextSibling) {
     if (capture === 'innerHTML') {
@@ -288,6 +356,18 @@ export function parseCardHtml(
     return parts.join('').trim();
   }
   throw new Error(`unable to determine HTML for card. found HTML:\n${html}`);
+}
+
+function hasSerializationBoundary(element: SimpleNode): boolean {
+  for (let child = element.firstChild; child; child = child.nextSibling) {
+    if (
+      child.nodeType === COMMENT_NODE_TYPE &&
+      child.nodeValue?.startsWith('%+b:')
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function collectTextContent(node: SimpleNode): string {

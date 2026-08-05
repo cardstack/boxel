@@ -80,6 +80,7 @@ export default class Menu extends Component<Signature> {
                   boxel-menu__item--checked=menuItem.checked
                   boxel-menu__item--disabled=menuItem.disabled
                   boxel-menu__item--header=menuItem.header
+                  boxel-menu__item--status=menuItem.status
                 }}
                 data-test-boxel-menu-item
                 data-test-boxel-menu-item-selected={{menuItem.checked}}
@@ -92,7 +93,7 @@ export default class Menu extends Component<Signature> {
                   role='menuitem'
                   data-test-boxel-menu-item-text={{menuItem.label}}
                   {{on 'click' (fn this.invokeMenuItemAction menuItem.action)}}
-                  disabled={{menuItem.disabled}}
+                  disabled={{if menuItem.status true menuItem.disabled}}
                 >
                   <span class='menu-item'>
                     {{#if menuItem.icon}}
@@ -250,6 +251,27 @@ export default class Menu extends Component<Signature> {
           font-weight: 700;
         }
         .boxel-menu__item--header .check-icon {
+          display: none;
+        }
+
+        /* Compact, inert metadata that explains the context for the actions
+           below it without competing with them. */
+        .boxel-menu__item--status,
+        .boxel-menu__item--status.boxel-menu__item:hover {
+          background-color: transparent;
+          color: var(--boxel-dark-50);
+          cursor: default;
+          font: 500 var(--boxel-font-xs);
+          letter-spacing: var(--boxel-lsp-lg);
+        }
+        .boxel-menu__item--status .boxel-menu__item__content {
+          padding-block: var(--boxel-sp-2xs);
+          pointer-events: none;
+        }
+        .boxel-menu__item--status .menu-item {
+          text-transform: none;
+        }
+        .boxel-menu__item--status .check-icon {
           display: none;
         }
 

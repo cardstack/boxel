@@ -11,6 +11,7 @@ import {
   maybeHandleScopedCSSRequest,
   authorizationMiddleware,
   clearFetchCache,
+  clearFetchCacheFor,
   clearInjectedScopedCSS,
   logger,
 } from '@cardstack/runtime-common';
@@ -19,6 +20,7 @@ import { Loader } from '@cardstack/runtime-common/loader';
 
 import config from '@cardstack/host/config/environment';
 import { clearKnownFileMetaUrls } from '@cardstack/host/lib/known-file-meta-urls';
+import { isBaseRealmModule } from '@cardstack/host/lib/realm-sandbox-import-policy';
 
 import { authErrorEventMiddleware } from '../utils/auth-error-guard';
 import { scheduleNativeTimeout } from '../utils/render-timer-stub';
@@ -36,7 +38,12 @@ export default class LoaderService extends Service {
   @service declare private network: NetworkService;
   @service declare private session: SessionService;
 
+  // Base is official code and has one module graph for the whole app/session.
+  // Realm loaders delegate Base imports here so CardDef/FieldDef identity is
+  // stable across cards from every realm.
+  @tracked public baseLoader = this.makeBaseLoader();
   @tracked public loader = this.makeInstance();
+  private realmLoaders = new Map<string, Loader>();
   private resetTime: number | undefined;
 
   // Modules flushed from the loader because their own source changed. A flush
@@ -64,6 +71,8 @@ export default class LoaderService extends Service {
     registerDestructor(this, () => {
       this.resetState();
       this.loader?.dispose();
+      this.baseLoader?.dispose();
+      this.disposeRealmLoaders();
     });
   }
 
@@ -75,9 +84,7 @@ export default class LoaderService extends Service {
     this.resetTime = undefined;
     log.debug(`resetting loader for session boundary (${reason ?? ''})`);
     this.clearSessionCaches();
-    let previous = this.loader;
-    this.loader = previous ? Loader.cloneLoader(previous) : this.makeInstance();
-    previous?.dispose();
+    this.replaceLoaderGraphs();
   }
 
   // Whether this module was among those a code change flushed out of the
@@ -88,6 +95,58 @@ export default class LoaderService extends Service {
   public wasModuleFlushedForCodeChange(moduleIdentifier: string): boolean {
     let key = this.loader?.moduleKey(moduleIdentifier);
     return key ? this.flushedForCodeChange.has(key) : false;
+  }
+
+  // The realm index event for this source generation has arrived. Targeted
+  // invalidation records are per module (unlike the old whole-loader snapshot)
+  // and can be consumed independently without disturbing writes still waiting
+  // for their own acknowledgement.
+  public acknowledgeModuleInvalidation(moduleIdentifier: string): void {
+    let key = this.loader?.moduleKey(moduleIdentifier);
+    if (key) {
+      this.flushedForCodeChange.delete(key);
+    }
+  }
+
+  // Loader topology is intentionally plural. Invalidation callers must ask
+  // the service rather than inspecting the legacy host loader directly or a
+  // Base/trusted-realm module can remain live after its source changes.
+  public isModuleLoaded(moduleIdentifier: string): boolean {
+    return this.allLoaders().some((loader) =>
+      loader.isModuleLoaded(moduleIdentifier),
+    );
+  }
+
+  // Evict one changed module and the already-known modules that depend on it
+  // without replacing any Loader object. This is the normal source-change
+  // path. In particular, user-realm changes never dispose Base or trusted
+  // realm graphs, so long-running workspace/card UI keeps its class identity
+  // and module cache.
+  public invalidateModule(
+    moduleIdentifier: string,
+    options?: { clearFetchCache?: boolean; codeChange?: boolean },
+  ): { invalidated: number; wasLoaded: boolean } {
+    if (options?.clearFetchCache) {
+      clearFetchCacheFor(moduleIdentifier);
+    }
+
+    let loaders = this.loadersForModuleInvalidation(moduleIdentifier);
+    let wasLoaded = loaders.some((loader) =>
+      loader.isModuleLoaded(moduleIdentifier),
+    );
+    let invalidated = 0;
+    for (let loader of loaders) {
+      invalidated += loader.invalidateModule(moduleIdentifier);
+    }
+
+    if (options?.codeChange && (wasLoaded || invalidated > 0)) {
+      let key = this.loader.moduleKey(moduleIdentifier);
+      if (key) {
+        this.flushedForCodeChange.add(key);
+      }
+    }
+
+    return { invalidated, wasLoaded };
   }
 
   // Called whenever the loader is actually replaced. A code-change flush makes
@@ -102,8 +161,10 @@ export default class LoaderService extends Service {
     codeChange: boolean | undefined,
   ) {
     if (codeChange) {
-      for (let key of previous?.loadedModuleKeys ?? []) {
-        this.flushedForCodeChange.add(key);
+      for (let loader of this.allLoaders(previous)) {
+        for (let key of loader.loadedModuleKeys) {
+          this.flushedForCodeChange.add(key);
+        }
       }
     } else {
       this.flushedForCodeChange.clear();
@@ -127,8 +188,7 @@ export default class LoaderService extends Service {
       log.debug(`resetting loader (clearFetchCache, ${options.reason ?? ''})`);
       clearFetchCache();
       this.recordLoaderReplacement(this.loader, options.codeChange);
-      this.loader?.dispose();
-      this.loader = this.makeInstance();
+      this.replaceLoaderGraphs();
       return;
     }
 
@@ -144,12 +204,7 @@ export default class LoaderService extends Service {
       // caching when rebuilding the loader state
       let previous = this.loader;
       this.recordLoaderReplacement(previous, options?.codeChange);
-      if (previous) {
-        this.loader = Loader.cloneLoader(previous);
-        previous.dispose();
-      } else {
-        this.loader = this.makeInstance();
-      }
+      this.replaceLoaderGraphs();
     }
     // A debounced call returns without replacing the loader, so nothing was
     // flushed: no records are written, and none are dropped — the live loader
@@ -157,6 +212,83 @@ export default class LoaderService extends Service {
   }
 
   private makeInstance() {
+    return this.makeLoader(
+      this.network.virtualNetwork,
+      true,
+      this.delegateBaseModules(),
+    );
+  }
+
+  private makeBaseLoader() {
+    return this.makeLoader(this.network.virtualNetwork, true);
+  }
+
+  // One ordinary (non-SES) loader per trusted realm. All cards and card types
+  // from that realm share its module cache. Base imports are borrowed from the
+  // app-wide Base loader instead of being evaluated again in the realm loader.
+  loaderForTrustedRealm(realmURL: string | URL): Loader {
+    let key = withTrailingSlash(String(realmURL));
+    let existing = this.realmLoaders.get(key);
+    if (existing) {
+      return existing;
+    }
+    let loader = this.makeLoader(
+      this.network.virtualNetwork,
+      true,
+      this.delegateBaseModules(),
+    );
+    this.realmLoaders.set(key, loader);
+    return loader;
+  }
+
+  get trustedRealmLoaderCount(): number {
+    return this.realmLoaders.size;
+  }
+
+  private delegateBaseModules() {
+    return async (moduleIdentifier: string) => {
+      if (
+        isBaseRealmModule(moduleIdentifier) ||
+        isBaseRealmModule(this.network.resolveImport(moduleIdentifier))
+      ) {
+        let module = await this.baseLoader.import<Record<string, unknown>>(
+          moduleIdentifier,
+          undefined,
+          { trackDependencies: false },
+        );
+        // The realm loader owns the direct edge to this delegated module, but
+        // the shared Base loader owns everything beneath it. Copying Base's
+        // transitive closure here makes the authored realm graph depend on
+        // whichever one-time Base modules happened to be evaluated when the
+        // namespace was borrowed. Besides bloating every card's invalidation
+        // set, that makes cold fused prerenders disagree with equivalent warm
+        // split visits. Keep the trusted graph behind this explicit loader
+        // boundary instead.
+        return { module };
+      }
+      return undefined;
+    };
+  }
+
+  // Creates a renderer-local Loader whose network boundary is supplied by the
+  // caller. The iframe renderer uses this with a MessagePort-backed fetch so
+  // authored modules never need the child's Matrix session or parent secrets.
+  createDetachedLoader(rootFetch: typeof globalThis.fetch) {
+    let virtualNetwork = this.network.createVirtualNetwork(rootFetch);
+    return this.makeLoader(virtualNetwork, false);
+  }
+
+  private makeLoader(
+    virtualNetwork: NetworkService['virtualNetwork'],
+    includeAuthorization: boolean,
+    moduleDelegate?: (moduleIdentifier: string) => Promise<
+      | {
+          module: Record<string, unknown>;
+          consumedModules?: Iterable<string>;
+        }
+      | undefined
+    >,
+  ) {
     let middlewareStack: FetcherMiddlewareHandler[] = [];
     middlewareStack.push(async (req, next) => {
       return (await maybeHandleScopedCSSRequest(req)) || next(req);
@@ -178,14 +310,12 @@ export default class LoaderService extends Service {
       return response;
     });
 
-    middlewareStack.push(authorizationMiddleware(this.realm));
-    middlewareStack.push(authErrorEventMiddleware());
-    let fetch = fetcher(
-      this.network.fetch,
-      middlewareStack,
-      this.network.virtualNetwork,
-    );
-    let loader = new Loader(fetch, this.network.resolveImport, {
+    if (includeAuthorization) {
+      middlewareStack.push(authorizationMiddleware(this.realm));
+      middlewareStack.push(authErrorEventMiddleware());
+    }
+    let fetch = fetcher(virtualNetwork.fetch, middlewareStack, virtualNetwork);
+    let loader = new Loader(fetch, virtualNetwork.resolveImport, {
       // Route the loader's transient-5xx retry backoff sleep through
       // scheduleNativeTimeout so it bypasses the render-timer-stub during
       // prerender. Outside prerender this falls back to the native
@@ -194,9 +324,51 @@ export default class LoaderService extends Service {
         new Promise<void>((resolve) =>
           scheduleNativeTimeout(() => resolve(), ms),
         ),
-      virtualNetwork: this.network.virtualNetwork,
+      virtualNetwork,
+      moduleDelegate,
     });
     return loader;
+  }
+
+  private replaceLoaderGraphs() {
+    let previousLoader = this.loader;
+    let previousBaseLoader = this.baseLoader;
+    this.disposeRealmLoaders();
+    this.baseLoader = this.makeBaseLoader();
+    this.loader = this.makeInstance();
+    previousLoader?.dispose();
+    previousBaseLoader?.dispose();
+  }
+
+  private disposeRealmLoaders() {
+    for (let loader of this.realmLoaders.values()) {
+      loader.dispose();
+    }
+    this.realmLoaders.clear();
+  }
+
+  private allLoaders(hostLoader = this.loader): Loader[] {
+    return [hostLoader, this.baseLoader, ...this.realmLoaders.values()].filter(
+      (loader, index, loaders): loader is Loader =>
+        Boolean(loader) && loaders.indexOf(loader) === index,
+    );
+  }
+
+  private loadersForModuleInvalidation(moduleIdentifier: string): Loader[] {
+    let resolved = this.network.resolveImport(moduleIdentifier);
+    if (isBaseRealmModule(moduleIdentifier) || isBaseRealmModule(resolved)) {
+      // Trusted realm loaders borrow Base exports. Their dependency graphs can
+      // therefore contain cards that must be reevaluated when Base itself
+      // changes. This path is reserved for an actual Base invalidation.
+      return this.allLoaders();
+    }
+
+    // A trusted-realm loader may import a readable dependency from a different
+    // realm. Realm ownership therefore cannot identify every consumer. Ask
+    // each non-Base loader to invalidate its already-known dependency closure;
+    // unrelated loaders retain their object and every unrelated module, while
+    // cross-realm importers cannot keep a stale evaluation alive.
+    return [this.loader, ...this.realmLoaders.values()];
   }
 
   private clearSessionCaches() {
@@ -207,6 +379,10 @@ export default class LoaderService extends Service {
     clearInjectedScopedCSS();
     clearKnownFileMetaUrls();
   }
+}
+
+function withTrailingSlash(url: string): string {
+  return url.endsWith('/') ? url : `${url}/`;
 }
 
 declare module '@ember/service' {

@@ -614,7 +614,8 @@ export class MockClient implements ExtendedClient {
         },
         oldState: {},
         getLastActiveTimestamp: () =>
-          this.serverState.getRoomEvents(roomId!).at(-1)?.origin_server_ts ?? 0,
+          this.serverState.getRoomEvents(roomId!).slice(-1)[0]
+            ?.origin_server_ts ?? 0,
         getLiveTimeline: () => {
           return {
             getState: (_direction: MatrixSDK.Direction) =>

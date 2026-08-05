@@ -10,6 +10,8 @@ import type { VirtualNetwork } from './virtual-network.ts';
 import type { RenderRouteOptions } from './render-route-options.ts';
 import type { Definition } from './definitions.ts';
 import type { ErrorEntry } from './error.ts';
+import { executableExtensions } from './executable-extensions.ts';
+import { isNode } from './environment.ts';
 import { rri, type RealmResourceIdentifier } from './realm-identifiers.ts';
 
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
@@ -1090,6 +1092,7 @@ export {
   isRetryableStatus,
   DEFAULT_TRANSIENT_RETRY_DELAYS_MS,
 } from './loader.ts';
+export type { ModuleEvaluator, ModuleRegistration } from './loader.ts';
 export {
   cardTypeDisplayName,
   cardTypeIcon,
@@ -1107,7 +1110,7 @@ export * from './publishability.ts';
 export * from './pr-manifest.ts';
 export * from './file-def-code-ref.ts';
 
-export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
+export { executableExtensions };
 // Extensions covered by the realm-wide pre-warm sweep that primes the
 // modules cache before the visit loop. This is an optimization, not a
 // correctness gate: a `.ts` / `.js` file CAN host a `CardDef`
@@ -1129,10 +1132,7 @@ export * from './db-queries/realm-permission-queries.ts';
 export * from './db-queries/session-room-queries.ts';
 export * from './db-queries/user-queries.ts';
 
-// From https://github.com/iliakan/detect-node
-export const isNode =
-  Object.prototype.toString.call((globalThis as any).process) ===
-  '[object process]';
+export { isNode };
 
 export { SupportedMimeType, isJsonContentType } from './supported-mime-type.ts';
 export {
@@ -1232,6 +1232,8 @@ export type CreateNewCard = (
 ) => Promise<string | undefined>;
 
 interface CardChooserOpts {
+  /** Host-computed label for an opaque card type. */
+  title?: string;
   offerToCreate?: {
     ref: CodeRef;
     relativeTo: RealmResourceIdentifier | URL | undefined;
@@ -1375,7 +1377,10 @@ export interface AddOptions extends CreateOptions {
 export type StoreReadType = 'card' | 'file-meta';
 
 export interface Store {
-  save(id: string): void;
+  // Callers that need a persistence acknowledgement (for example a sandbox
+  // capability broker) may await this. Existing card code can continue to
+  // fire-and-forget the save exactly as before.
+  save(id: string): void | Promise<void>;
   create(
     doc: LooseSingleCardDocument,
     opts?: CreateOptions,

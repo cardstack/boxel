@@ -444,6 +444,9 @@ export class SearchResource<
             if (this.#previousQuery === undefined) {
               return;
             }
+            if (this.runtimeStore.isCodePreviewCommitAcknowledgement(event)) {
+              return;
+            }
             // Re-run on incremental index events (the search doc changed)
             // and on prerender_html events. The latter matter even to
             // structured queries: this search excludes rows with an

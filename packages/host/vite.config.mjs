@@ -13,6 +13,43 @@ import { fileURLToPath } from 'node:url';
 import { scopedCSS } from 'glimmer-scoped-css/rollup';
 import { boxelUIChecksumPlugin } from './lib/build/boxel-ui-checksum-plugin.mjs';
 
+const CONFIG_META_NAME = '@cardstack/host/config/environment';
+
+// Embroider's classic compatibility prebuild stores content-for output in a
+// worktree-wide node_modules/.embroider file. Running host tests while the
+// staging-backed Vite server is alive can replace that file with a test/local
+// build, causing the already-running app to start serving localhost Matrix and
+// realm URLs. The staging launcher marks its process, and this post transform
+// refreshes the app config from the launcher's environment for every document
+// response. `/tests` deliberately keeps Ember's test config.
+function stagingBackendConfigMeta(mode) {
+  return {
+    name: 'boxel-staging-backend-config-meta',
+    enforce: 'post',
+    transformIndexHtml(html, context) {
+      if (
+        process.env.BOXEL_STAGING_BACKEND !== 'true' ||
+        context.path.startsWith('/tests')
+      ) {
+        return html;
+      }
+
+      let environment = require('./config/environment')(mode);
+      let encoded = encodeURIComponent(JSON.stringify(environment));
+      let metaPattern = new RegExp(
+        `<meta name=["']${CONFIG_META_NAME}["'] content=["'][^"']*["']\\s*/?>`,
+      );
+      let replacement = `<meta name="${CONFIG_META_NAME}" content="${encoded}" />`;
+      if (!metaPattern.test(html)) {
+        throw new Error(
+          `Cannot refresh staging backend config: ${CONFIG_META_NAME} meta tag is missing`,
+        );
+      }
+      return html.replace(metaPattern, replacement);
+    },
+  };
+}
+
 // Local HTTPS dev access: the realm-server speaks HTTPS+HTTP/2 in local
 // dev (see `infra:ensure-dev-cert`), and the browser hits both Vite and
 // the realm-server in the same page. Mixing schemes triggers CORS
@@ -280,6 +317,7 @@ export default defineConfig(({ mode }) => ({
     scopedCSS(),
     classicEmberSupport(),
     ember(),
+    stagingBackendConfigMeta(mode),
     quietOptimizedDepSourcemapWarnings(),
     // extra plugins here
     babel({

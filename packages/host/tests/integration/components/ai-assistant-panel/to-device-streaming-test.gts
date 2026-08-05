@@ -5,6 +5,11 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
+import {
+  REPLACE_MARKER,
+  SEARCH_MARKER,
+  SEPARATOR_MARKER,
+} from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import {
@@ -16,6 +21,7 @@ import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type ToolService from '@cardstack/host/services/tool-service';
 
 import {
   testRealmURL,
@@ -161,6 +167,78 @@ module(
       assert
         .dom('[data-test-message-idx="0"]')
         .containsText('They mentioned they like small dogs.');
+    });
+
+    test('Act applies a completed streamed code patch before the final room edit', async function (assert) {
+      let roomId = await renderAiAssistantPanel();
+      await click('[data-test-llm-mode-option="act"]');
+      await waitFor('[data-test-llm-mode-option="act"].selected');
+
+      let eventId = sendPlaceholder(roomId);
+      await waitFor(`[data-test-room="${roomId}"] [data-test-message-idx="0"]`);
+
+      let toolService = getService('tool-service') as ToolService;
+      let originalPatchCode = toolService.patchCode;
+      let calls: Array<{ fileUrl: string | null; indexes: number[] }> = [];
+      let releasePatch!: () => void;
+      let holdPatch = new Promise<void>((resolve) => {
+        releasePatch = resolve;
+      });
+      toolService.patchCode = async (_roomId, fileUrl, patches) => {
+        calls.push({
+          fileUrl,
+          indexes: patches.map((patch) => patch.codeBlockIndex),
+        });
+        await holdPatch;
+        for (let patch of patches) {
+          toolService.executedToolRequestIds.add(
+            `${patch.eventId}:${patch.codeBlockIndex}`,
+          );
+        }
+      };
+
+      let patchPrefix = `\`\`\`
+${testRealmURL}live-source.gts
+${SEARCH_MARKER}
+old text
+${SEPARATOR_MARKER}
+new text`;
+
+      try {
+        preview(roomId, eventId, 0, patchPrefix);
+        await settled();
+        assert.strictEqual(
+          calls.length,
+          0,
+          'an incomplete block is never applied',
+        );
+
+        preview(
+          roomId,
+          eventId,
+          1,
+          `${patchPrefix}\n${REPLACE_MARKER}\n\`\`\``,
+        );
+        await waitUntil(() => calls.length === 1);
+
+        assert.deepEqual(
+          calls,
+          [{ fileUrl: `${testRealmURL}live-source.gts`, indexes: [0] }],
+          'the completed block enters PatchCodeTool immediately',
+        );
+        assert.false(
+          matrixService.roomResources.get(roomId)!.messages[0]
+            .isStreamingOfEventFinished,
+          'the persisted final room edit has not arrived yet',
+        );
+        assert
+          .dom('[data-test-accept-all]')
+          .doesNotExist('Act never presents a manual Accept All action');
+      } finally {
+        releasePatch();
+        await settled();
+        toolService.patchCode = originalPatchCode;
+      }
     });
 
     test('previews accumulate full state and bump the message updated timestamp', async function (assert) {

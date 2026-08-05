@@ -1,16 +1,43 @@
+import { getOwner } from '@ember/application';
 import { on } from '@ember/modifier';
 import { cancel, next, scheduleOnce } from '@ember/runloop';
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { cached } from '@glimmer/tracking';
 
 import { modifier } from 'ember-modifier';
+import { consume } from 'ember-provide-consume-context';
 
 import { BoxelButton, CardContainer } from '@cardstack/boxel-ui/components';
 import { bool, cn } from '@cardstack/boxel-ui/helpers';
 
+import {
+  CardContextName,
+  CardCrudFunctionsContextName,
+  GetCardCollectionContextName,
+  GetCardContextName,
+  GetCardsContextName,
+  type getCard as GetCard,
+  type getCardCollection as GetCardCollection,
+  type getCards as GetCards,
+} from '@cardstack/runtime-common';
+
+import CardIsland from '@cardstack/host/components/card-island';
 import CardRenderer from '@cardstack/host/components/card-renderer';
 import CardError from '@cardstack/host/components/operator-mode/card-error';
+import { cardIslandCompatibilityFailure } from '@cardstack/host/lib/card-island-protocol';
+import {
+  discardSuspendedSerializedComponent,
+  hasSerializedComponent,
+  rehydrateWithArgs,
+  renderWithArgs,
+  suspendSerializedComponent,
+  teardown,
+} from '@cardstack/host/lib/isolated-render';
 import { getCard } from '@cardstack/host/resources/card-resource';
+import type RealmSandboxService from '@cardstack/host/services/realm-sandbox';
+
+import type { CardContext, CardCrudFunctions } from '@cardstack/base/card-api';
 
 interface Signature {
   Element: HTMLElement;
@@ -23,6 +50,16 @@ interface Signature {
 }
 
 export default class HostModeCard extends Component<Signature> {
+  @service declare private realmSandbox: RealmSandboxService;
+  @consume(GetCardContextName) declare private getCardForContext: GetCard;
+  @consume(GetCardsContextName) declare private getCards: GetCards;
+  @consume(GetCardCollectionContextName)
+  declare private getCardCollection: GetCardCollection;
+  @consume(CardContextName) declare private cardContext: CardContext;
+  @consume(CardCrudFunctionsContextName)
+  declare private cardCrudFunctions: CardCrudFunctions | undefined;
+  private mountedPrerenderedIsland?: HTMLElement;
+
   @cached
   get cardResource() {
     if (!this.args.cardId) {
@@ -61,6 +98,146 @@ export default class HostModeCard extends Component<Signature> {
       !this.args.cardId && !this.card && !this.cardError && !this.isLoading
     );
   }
+
+  private get prerenderedIsland(): HTMLElement | undefined {
+    if (
+      typeof document === 'undefined' ||
+      !this.args.isPrimary ||
+      !this.args.cardId
+    ) {
+      return undefined;
+    }
+    let island = this.mountedPrerenderedIsland;
+    if (!island?.isConnected) {
+      let start = document.getElementById('boxel-isolated-start');
+      let candidate = start?.nextElementSibling;
+      island = candidate?.hasAttribute('data-boxel-card-island')
+        ? (candidate as HTMLElement)
+        : undefined;
+    }
+    if (!island) {
+      return undefined;
+    }
+    let prerenderedURL = island.dataset.boxelCardUrl;
+    if (
+      !prerenderedURL ||
+      normalizeCardID(prerenderedURL) !== normalizeCardID(this.args.cardId)
+    ) {
+      return undefined;
+    }
+    return island;
+  }
+
+  get hasPrerenderedIsland() {
+    return Boolean(this.prerenderedIsland);
+  }
+
+  get prerenderedIslandHydrationReady() {
+    return Boolean(
+      this.card &&
+      this.realmSandbox.isCardIslandHydrationReady(this.card, 'isolated'),
+    );
+  }
+
+  mountPrerenderedIsland = modifier((element: HTMLElement) => {
+    let island = this.prerenderedIsland;
+    if (island && island.parentElement !== element) {
+      element.appendChild(island);
+    }
+    this.mountedPrerenderedIsland = island;
+  });
+
+  rehydratePrerenderedIsland = modifier(
+    (element: HTMLElement, [card, hydrationReady]: [this['card'], boolean]) => {
+      if (!card || !hydrationReady) {
+        let waitingIsland = element.querySelector<HTMLElement>(
+          ':scope > [data-boxel-card-island]',
+        );
+        if (waitingIsland) {
+          waitingIsland.dataset.boxelCardIslandHandoff = 'waiting';
+        }
+        return;
+      }
+      let island = element.querySelector<HTMLElement>(
+        ':scope > [data-boxel-card-island]',
+      );
+      if (!island) {
+        return;
+      }
+      delete island.dataset.boxelCardIslandHandoff;
+      let args = {
+        card,
+        format: 'isolated',
+        getCard: this.getCardForContext,
+        getCards: this.getCards,
+        getCardCollection: this.getCardCollection,
+        context: this.cardContext,
+        cardCrudFunctions: this.cardCrudFunctions,
+      };
+
+      let compatibilityFailure = cardIslandCompatibilityFailure(
+        island,
+        'isolated',
+      );
+      if (compatibilityFailure) {
+        renderWithArgs(CardIsland as any, island as any, getOwner(this)!, args);
+        island.dataset.boxelCardIslandStatus = 'replaced';
+        island.dataset.boxelCardIslandReason = compatibilityFailure;
+        return () => teardown(island as any);
+      }
+
+      let nestedSandboxIslands: HTMLElement[] = [];
+      try {
+        if (!hasSerializedComponent(island as any)) {
+          renderWithArgs(
+            CardIsland as any,
+            island as any,
+            getOwner(this)!,
+            args,
+          );
+          island.dataset.boxelCardIslandStatus = 'replaced';
+          island.dataset.boxelCardIslandReason = 'missing-boundary';
+          return () => teardown(island as any);
+        }
+        nestedSandboxIslands = Array.from(
+          island.querySelectorAll<HTMLElement>(
+            '[data-realm-sandbox-template-island]',
+          ),
+        );
+        for (let nestedIsland of nestedSandboxIslands) {
+          suspendSerializedComponent(nestedIsland as any);
+        }
+        rehydrateWithArgs(
+          CardIsland as any,
+          island as any,
+          getOwner(this)!,
+          args,
+        );
+        island.dataset.boxelCardIslandStatus = 'rehydrated';
+        delete island.dataset.boxelCardIslandReason;
+      } catch (error) {
+        renderWithArgs(CardIsland as any, island as any, getOwner(this)!, args);
+        island.dataset.boxelCardIslandStatus = 'replaced';
+        island.dataset.boxelCardIslandReason = 'rehydration-error';
+        console.warn('Card island rehydration failed; replaced its DOM', error);
+      } finally {
+        for (let nestedIsland of nestedSandboxIslands) {
+          // Nested SES activation is deliberately deferred until the outer
+          // Host Mode transaction has committed. Its task was queued during
+          // rehydrateWithArgs(), so leave the parked marker nodes available
+          // through that task and discard only if no nested owner resumed
+          // them. Discarding synchronously here turns a compatible handoff
+          // into a fresh render and loses authored DOM identity.
+          setTimeout(
+            () => discardSuspendedSerializedComponent(nestedIsland as any),
+            0,
+          );
+        }
+      }
+
+      return () => teardown(island as any);
+    },
+  );
 
   // Reads a scroll offset stashed by removeIsolatedMarkup in a <meta> element
   // and applies it once the primary card's content has rendered and the
@@ -134,6 +311,19 @@ export default class HostModeCard extends Component<Signature> {
         {{else}}
           <CardError @error={{this.cardError}} @hideHeader={{true}} />
         {{/if}}
+      {{else if this.hasPrerenderedIsland}}
+        <div
+          class='card'
+          data-boxel-card-island-slot
+          data-host-mode-card-scroll-container
+          data-host-mode-card={{@cardId}}
+          data-test-host-mode-card={{@cardId}}
+          {{this.mountPrerenderedIsland}}
+          {{this.rehydratePrerenderedIsland
+            this.card
+            this.prerenderedIslandHydrationReady
+          }}
+        ></div>
       {{else if this.card}}
         <CardRenderer
           class='card'
@@ -182,6 +372,10 @@ export default class HostModeCard extends Component<Signature> {
         gap: var(--boxel-sp);
       }
 
+      [data-boxel-card-island] {
+        display: contents;
+      }
+
       .not-found {
         display: flex;
         flex-direction: column;
@@ -227,4 +421,8 @@ export default class HostModeCard extends Component<Signature> {
       }
     </style>
   </template>
+}
+
+function normalizeCardID(cardID: string): string {
+  return cardID.replace(/\.json$/, '');
 }

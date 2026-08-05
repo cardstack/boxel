@@ -5,8 +5,10 @@ import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 
 import Component from '@glimmer/component';
+import { cached } from '@glimmer/tracking';
 
-import Modifier from 'ember-modifier';
+import RefreshCw from '@cardstack/boxel-icons/refresh-cw';
+import Modifier, { modifier } from 'ember-modifier';
 import { consume, provide } from 'ember-provide-consume-context';
 
 import {
@@ -14,7 +16,14 @@ import {
   BoxelButton,
   CardContainer,
 } from '@cardstack/boxel-ui/components';
-import { and, eq, not, or, toMenuItems } from '@cardstack/boxel-ui/helpers';
+import {
+  and,
+  eq,
+  MenuItem,
+  not,
+  or,
+  toMenuItems,
+} from '@cardstack/boxel-ui/helpers';
 import { Eye, IconCode } from '@cardstack/boxel-ui/icons';
 
 import {
@@ -22,7 +31,6 @@ import {
   cardTypeDisplayName,
   cardTypeIcon,
   getMenuItems,
-  identifyCard,
   isCardInstance,
   isFileDefInstance,
   isResolvedCodeRef,
@@ -39,13 +47,18 @@ import {
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
 import Overlays from '@cardstack/host/components/operator-mode/overlays';
+import { CodePreviewSandboxContextName } from '@cardstack/host/lib/code-preview-sandbox';
+import type CodePreviewSandbox from '@cardstack/host/lib/code-preview-sandbox';
 
 import ElementTracker, {
   type RenderedCardForOverlayActions,
 } from '@cardstack/host/resources/element-tracker';
+import type CardTypeService from '@cardstack/host/services/card-type-service';
+import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import type RealmService from '@cardstack/host/services/realm';
+import type RealmSandboxService from '@cardstack/host/services/realm-sandbox';
 import type ToolService from '@cardstack/host/services/tool-service';
 
 import FormatChooser from '../code-submode/format-chooser';
@@ -75,9 +88,14 @@ interface Signature {
 
 export default class PreviewPanel extends Component<Signature> {
   @consume(CardContextName) declare private cardContext: CardContext;
+  @consume(CodePreviewSandboxContextName)
+  declare private codePreviewSandbox: CodePreviewSandbox | undefined;
   @service declare private toolService: ToolService;
+  @service declare private cardTypeService: CardTypeService;
+  @service declare private network: NetworkService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
+  @service declare private realmSandbox: RealmSandboxService;
 
   private scrollPositions = new Map<string, number>();
   private cardTracker = new ElementTracker();
@@ -131,14 +149,31 @@ export default class PreviewPanel extends Component<Signature> {
   };
 
   private editTemplate = () => {
-    const type = identifyCard(this.args.card.constructor as any);
-    if (type && isResolvedCodeRef(type)) {
-      const gtsFileUrl = type.module.endsWith('.gts')
-        ? type.module
-        : `${type.module}.gts`;
-      this.operatorModeStateService.updateCodePath(new URL(gtsFileUrl));
+    let url = this.editTemplateURL;
+    if (url) {
+      this.operatorModeStateService.updateCodePath(url);
     }
   };
+
+  @cached
+  private get editTemplateURL(): URL | undefined {
+    const type = this.cardTypeService.introspect(this.args.card)?.typeRef;
+    if (!type || !isResolvedCodeRef(type)) {
+      return undefined;
+    }
+    return this.network.virtualNetwork.resolveURL(
+      type.module.endsWith('.gts') ? type.module : `${type.module}.gts`,
+      this.cardId,
+    );
+  }
+
+  private prefetchEditTemplate = modifier(
+    (_element: HTMLElement, [url]: [URL | undefined]) => {
+      if (url) {
+        void this.operatorModeStateService.prefetchCodePath(url);
+      }
+    },
+  );
 
   private get realmInfo() {
     if (!this.cardId) {
@@ -148,17 +183,31 @@ export default class PreviewPanel extends Component<Signature> {
   }
 
   private get contextMenuItems() {
-    if (!this.args.card || !(getMenuItems in this.args.card)) {
-      return [];
+    let items =
+      this.args.card && getMenuItems in this.args.card
+        ? toMenuItems(
+            (this.args.card as CardDef)[getMenuItems]({
+              canEdit: this.cardId ? this.realm.canWrite(this.cardId) : false,
+              cardCrudFunctions: {},
+              menuContext: 'code-mode-preview',
+              toolContext: this.toolService.toolContext,
+            }),
+          )
+        : [];
+    if (this.realmSandbox.isOpaqueCard(this.args.card)) {
+      items.unshift(
+        new MenuItem({
+          label: 'Reload Card',
+          icon: RefreshCw,
+          action: () =>
+            this.realmSandbox.reloadCard(
+              this.args.card,
+              this.codePreviewSandbox,
+            ),
+        }),
+      );
     }
-    return toMenuItems(
-      (this.args.card as CardDef)[getMenuItems]({
-        canEdit: this.cardId ? this.realm.canWrite(this.cardId) : false,
-        cardCrudFunctions: {},
-        menuContext: 'code-mode-preview',
-        toolContext: this.toolService.toolContext,
-      }),
-    );
+    return items;
   }
 
   private get canEditCard() {
@@ -186,8 +235,9 @@ export default class PreviewPanel extends Component<Signature> {
       return fileDefFormats;
     }
     if (this.isCard) {
-      const ctor = (this.args.card as CardDef).constructor as typeof CardDef;
-      const hasCustomEdit = ctor.hasCustomEditTemplate;
+      const hasCustomEdit =
+        this.cardTypeService.introspect(this.args.card)
+          ?.hasCustomEditTemplate === true;
       // Insert 'form' (toggle standard view) right after 'edit' ONLY
       // when this card has a custom edit template. Note: a card that
       // shares the same component for edit and isolated (e.g.
@@ -256,7 +306,10 @@ export default class PreviewPanel extends Component<Signature> {
   }
 
   <template>
-    <div class='preview-buttons'>
+    <div
+      class='preview-buttons'
+      {{this.prefetchEditTemplate this.editTemplateURL}}
+    >
       <BoxelButton
         @kind='secondary-light'
         @size='small'
@@ -340,6 +393,7 @@ export default class PreviewPanel extends Component<Signature> {
               @card={{@card}}
               @format={{this.effectiveFormat}}
               @codeRef={{this.effectiveCodeRef}}
+              @viewCard={{@viewCard}}
             />
           {{/if}}
         </CardContainer>

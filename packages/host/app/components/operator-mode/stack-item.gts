@@ -16,6 +16,7 @@ import { tracked, cached } from '@glimmer/tracking';
 
 import DeselectIcon from '@cardstack/boxel-icons/deselect';
 import Maximize from '@cardstack/boxel-icons/maximize';
+import RefreshCw from '@cardstack/boxel-icons/refresh-cw';
 import SelectAllIcon from '@cardstack/boxel-icons/select-all';
 import { restartableTask, timeout, dropTask } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
@@ -83,9 +84,11 @@ import DeleteModal from './delete-modal';
 import OperatorModeOverlays from './operator-mode-overlays';
 
 import type CardService from '../../services/card-service';
+import type CardTypeService from '../../services/card-type-service';
 import type NetworkService from '../../services/network';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RealmService from '../../services/realm';
+import type RealmSandboxService from '../../services/realm-sandbox';
 import type StoreService from '../../services/store';
 import type {
   CardContext,
@@ -135,9 +138,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
   declare private cardCrudFunctions: CardCrudFunctions;
 
   @service declare private cardService: CardService;
+  @service declare private cardTypeService: CardTypeService;
   @service declare private network: NetworkService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
+  @service declare private realmSandbox: RealmSandboxService;
   @service declare private store: StoreService;
 
   @tracked private selectedCards = new TrackedSet<string>();
@@ -611,20 +616,30 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return this.url;
   }
 
+  private get cardTypeDisplayName() {
+    if (!this.card) {
+      return undefined;
+    }
+    return (
+      this.cardTypeService.introspect(this.card)?.displayName ??
+      cardTypeDisplayName(this.card)
+    );
+  }
+
   private get headerType() {
     if (this.isIndexCard) {
       return 'Workspace';
-    } else if (this.card) {
-      return cardTypeDisplayName(this.card);
+    } else {
+      return this.cardTypeDisplayName;
     }
-    return undefined;
   }
 
   private get headerTitle() {
     let cardTitle = this.card?.cardTitle;
-    if (this.card && cardTitle?.startsWith('Untitled ')) {
+    let displayName = this.cardTypeDisplayName;
+    if (displayName && cardTitle?.startsWith('Untitled ')) {
       let strippedTitle = cardTitle.slice('Untitled '.length);
-      if (strippedTitle === cardTypeDisplayName(this.card)) {
+      if (strippedTitle === displayName) {
         return 'Untitled';
       }
     }
@@ -676,18 +691,61 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }) ?? [],
     );
 
+    let leadingItems: MenuItem[] = [];
+
+    if (this.card) {
+      let mode = this.realmSandbox.renderModeFor(this.card, this.cardFormat);
+      let label =
+        mode === 'direct'
+          ? 'Execution: Direct'
+          : mode === 'sandbox'
+            ? 'Execution: Sandbox'
+            : 'Execution: Capsule';
+      leadingItems.push(
+        new MenuItem({
+          label,
+          action: () => {},
+          status: true,
+        }),
+      );
+    }
+
+    for (let label of ['Copy Card URL', 'Copy as Markdown']) {
+      let copyItemIndex = items.findIndex((item) => item.label === label);
+      if (copyItemIndex > -1) {
+        leadingItems.push(...items.splice(copyItemIndex, 1));
+      }
+    }
+
+    if (this.card && this.realmSandbox.isOpaqueCard(this.card)) {
+      leadingItems.push(
+        new MenuItem({
+          label: 'Reload Card',
+          icon: RefreshCw,
+          action: () => this.card && this.realmSandbox.reloadCard(this.card),
+        }),
+      );
+    }
+
+    items.unshift(...leadingItems);
+
     if (this.isTopCard) {
       let expandItem = new MenuItem({
         label: this.isExpanded ? 'Restore Width' : 'Expand to Full Width',
         icon: Maximize,
         action: this.toggleExpanded,
       });
-      let copyAsMarkdownIndex = items.findIndex(
-        (item) => item.label === 'Copy as Markdown',
+      let insertAfterIndex = items.findIndex(
+        (item) => item.label === 'Reload Card',
       );
+      if (insertAfterIndex === -1) {
+        insertAfterIndex = items.findIndex(
+          (item) => item.label === 'Copy as Markdown',
+        );
+      }
 
-      if (copyAsMarkdownIndex > -1) {
-        items.splice(copyAsMarkdownIndex + 1, 0, expandItem);
+      if (insertAfterIndex > -1) {
+        items.splice(insertAfterIndex + 1, 0, expandItem);
       } else {
         items.push(expandItem);
       }
@@ -731,11 +789,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
     if (!this.card) {
       return false;
     }
-    let { constructor } = this.card;
-    return Boolean(
-      constructor &&
-      'prefersWideFormat' in constructor &&
-      constructor.prefersWideFormat,
+    return (
+      this.cardTypeService.introspect(this.card)?.prefersWideFormat === true
     );
   }
 
@@ -907,6 +962,13 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return this.isFileCard ? 'isolated' : this.args.item.format;
   }
 
+  private get isInteractiveCardLoading() {
+    return Boolean(
+      this.card &&
+      this.realmSandbox.isIframeInteractiveLoading(this.card, this.cardFormat),
+    );
+  }
+
   private get defaultCodeRef() {
     return this.args.item.useBaseTemplate ? baseCardRef : undefined;
   }
@@ -1068,6 +1130,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                   @cardTypeDisplayName={{this.headerType}}
                   @cardTypeIcon={{cardTypeIcon this.card}}
                   @cardTitle={{this.headerTitle}}
+                  @isLoading={{this.isInteractiveCardLoading}}
                   @isSaving={{this.cardResource.autoSaveState.isSaving}}
                   @isTopCard={{this.isTopCard}}
                   @lastSavedMessage={{this.cardResource.autoSaveState.lastSavedErrorMsg}}
@@ -1091,6 +1154,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                 @cardTypeDisplayName={{this.headerType}}
                 @cardTypeIcon={{cardTypeIcon this.card}}
                 @cardTitle={{this.headerTitle}}
+                @isLoading={{this.isInteractiveCardLoading}}
                 @isSaving={{this.cardResource.autoSaveState.isSaving}}
                 @isTopCard={{this.isTopCard}}
                 @lastSavedMessage={{this.cardResource.autoSaveState.lastSavedErrorMsg}}

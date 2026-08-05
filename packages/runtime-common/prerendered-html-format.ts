@@ -1,4 +1,5 @@
 export const PRERENDERED_HTML_FORMATS = [
+  'isolated',
   'embedded',
   'fitted',
   'atom',

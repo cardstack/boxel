@@ -34,6 +34,7 @@ import CheckCorrectnessTool from '@cardstack/host/tools/check-correctness';
 import PatchCodeTool from '@cardstack/host/tools/patch-code';
 
 import LimitedSet from '../lib/limited-set';
+import { isCompleteSearchReplaceBlock } from '../lib/search-replace-block-parsing';
 import {
   CHECK_CORRECTNESS_COMMAND_NAME,
   isAutoExecutableTool,
@@ -46,6 +47,7 @@ import type RealmServerService from './realm-server';
 import type SessionService from './session';
 import type StoreService from './store';
 import type { CodeData } from '../lib/formatted-message/utils';
+import type { Message } from '../lib/matrix-classes/message';
 import type MessageCodePatchResult from '../lib/matrix-classes/message-code-patch-result';
 import type MessageTool from '../lib/matrix-classes/message-tool';
 import type { RoomResource } from '../resources/room';
@@ -94,6 +96,7 @@ export default class ToolService extends Service {
   // released; the manual "Try Anyway" path bypasses them.
   claimedToolRequestIds = new Set<string>();
   acceptingAllRoomIds = new TrackedSet<string>();
+  private pendingLocalCodePatchesByRoom = new Map<string, Set<string>>();
   private aiAssistantClientRequestIdsByRoom = new Map<
     string,
     LimitedSet<string>
@@ -116,6 +119,7 @@ export default class ToolService extends Service {
   // resource to fold the event's finalized content into its Message.
   private toolFinalizationRetries = new Map<string, number>();
   private codePatchProcessingEventQueue: string[] = [];
+  private codePatchProcessingByMessage = new Map<string, Promise<void>>();
   private flushToolProcessingQueue: Promise<void> | undefined;
   private flushCodePatchProcessingQueue: Promise<void> | undefined;
 
@@ -129,6 +133,7 @@ export default class ToolService extends Service {
     this.executedToolRequestIds.clear();
     this.claimedToolRequestIds.clear();
     this.acceptingAllRoomIds.clear();
+    this.pendingLocalCodePatchesByRoom.clear();
     this.aiAssistantClientRequestIdsByRoom.clear();
     for (let invalidation of this.aiAssistantInvalidations.values()) {
       invalidation.deferred.fulfill();
@@ -140,6 +145,7 @@ export default class ToolService extends Service {
     this.toolProcessingEventQueue = [];
     this.toolFinalizationRetries.clear();
     this.codePatchProcessingEventQueue = [];
+    this.codePatchProcessingByMessage.clear();
     this.flushToolProcessingQueue = undefined;
     this.flushCodePatchProcessingQueue = undefined;
   }
@@ -193,8 +199,12 @@ export default class ToolService extends Service {
       return clientRequestId;
     }
 
-    let deferred = new Deferred<void>();
-    this.aiAssistantInvalidations.get(key)?.deferred.fulfill();
+    // Keep the same completion promise when a newer patch supersedes an older
+    // one for this room and target. A correctness check may already be waiting
+    // on the older generation; resolving that promise here would let it inspect
+    // canonical source before the newer generation has been indexed.
+    let deferred =
+      this.aiAssistantInvalidations.get(key)?.deferred ?? new Deferred<void>();
     this.cleanupInvalidationWaiter(key);
     this.aiAssistantInvalidations.set(key, {
       clientRequestId,
@@ -232,6 +242,27 @@ export default class ToolService extends Service {
       timeoutId,
     });
     return clientRequestId;
+  }
+
+  cancelAiAssistantCardRequest(
+    roomId: string,
+    targetHref: string,
+    clientRequestId: string | undefined,
+  ) {
+    if (!roomId || !targetHref || !clientRequestId) {
+      return;
+    }
+    let normalizedTarget = targetHref.endsWith('.json')
+      ? targetHref.replace(/\.json$/, '')
+      : targetHref;
+    let key = `${roomId}::${normalizedTarget}`;
+    let current = this.aiAssistantInvalidations.get(key);
+    if (!current || current.clientRequestId !== clientRequestId) {
+      return;
+    }
+    this.cleanupInvalidationWaiter(key);
+    current.deferred.fulfill();
+    this.aiAssistantInvalidations.delete(key);
   }
 
   private cleanupInvalidationWaiter(key: string) {
@@ -630,60 +661,140 @@ export default class ToolService extends Service {
           }
           continue;
         }
-        if (message.agentId !== this.matrixService.agentId) {
-          // This code patch was sent by another agent, so we will not auto-execute it
-          continue;
-        }
-
-        // Get the LLM mode that was active when this message was created
-        let activeModeAtMessageTime = roomResource.getActiveLLMModeForMessage(
-          message.eventId,
-        );
-        // Only auto-apply if in 'act' mode
-        if (activeModeAtMessageTime !== 'act') {
-          let llmModeEvents = roomResource.llmModeEvents;
-          if (
-            isTesting() &&
-            llmModeEvents.some((e) => (e as any).content?.mode === 'act')
-          ) {
-            // The room has used 'act' mode, so a non-'act' resolution here is
-            // worth recording: it pins the message against every mode
-            // transition — the data needed to explain an auto-apply that
-            // didn't fire.
-            console.log(
-              `[code-patch-autoapply] event ${eventId} resolved to LLM mode "${activeModeAtMessageTime}" at message timestamp ${message.created.getTime()}; mode transitions: ${JSON.stringify(
-                llmModeEvents.map((e) => ({
-                  ts: e.origin_server_ts,
-                  mode: (e as any).content?.mode,
-                })),
-              )}`,
-            );
-          }
-          continue;
-        }
-
-        // Auto-apply all ready code patches from this message
-        if (message.htmlParts) {
-          let readyCodePatches = this.getReadyCodePatches(message.htmlParts);
-          let uniqueFiles = new Set(
-            readyCodePatches.map((patch) => patch.fileUrl),
-          );
-
-          if (readyCodePatches.length > 0 || uniqueFiles.size > 0) {
-            // This is an "accept all" operation - multiple patches OR patches across multiple files
-            this.acceptingAllRoomIds.add(roomId!);
-            try {
-              await this.executeReadyCodePatches(roomId!, message.htmlParts);
-            } finally {
-              this.acceptingAllRoomIds.delete(roomId!);
-            }
-          }
-        }
+        await this.processCodePatchesForMessage(roomId!, message);
       }
       finishedProcessingCodePatches!();
     } finally {
       toolProcessingWaiter.endAsync(waiterToken);
     }
+  }
+
+  // Streaming responses can expose a complete search/replace block before the
+  // message itself is finished. Serialize work per message so every newly
+  // completed block is claimed once, in order, while later accumulated chunks
+  // can still contribute additional blocks.
+  processCodePatchesForMessage(
+    roomId: string,
+    message: Message,
+  ): Promise<void> {
+    let key = `${roomId}|${message.eventId}`;
+    let previous = this.codePatchProcessingByMessage.get(key);
+    let processing = (previous ?? Promise.resolve())
+      .catch(() => undefined)
+      .then(() => this.applyReadyCodePatchesForMessage(roomId, message));
+    this.codePatchProcessingByMessage.set(key, processing);
+    void processing.then(
+      () => {
+        if (this.codePatchProcessingByMessage.get(key) === processing) {
+          this.codePatchProcessingByMessage.delete(key);
+        }
+      },
+      () => {
+        if (this.codePatchProcessingByMessage.get(key) === processing) {
+          this.codePatchProcessingByMessage.delete(key);
+        }
+      },
+    );
+    return processing;
+  }
+
+  private async applyReadyCodePatchesForMessage(
+    roomId: string,
+    message: Message,
+  ) {
+    if (!this.shouldAutoApplyCodePatches(message)) {
+      let roomResource = this.matrixService.roomResources.get(roomId);
+      let activeModeAtMessageTime = roomResource?.getActiveLLMModeForMessage(
+        message.eventId,
+      );
+      let llmModeEvents = roomResource?.llmModeEvents ?? [];
+      if (
+        roomResource &&
+        isTesting() &&
+        llmModeEvents.some((e) => (e as any).content?.mode === 'act')
+      ) {
+        console.log(
+          `[code-patch-autoapply] event ${message.eventId} resolved to LLM mode "${activeModeAtMessageTime}" at message timestamp ${message.created.getTime()}; mode transitions: ${JSON.stringify(
+            llmModeEvents.map((e) => ({
+              ts: e.origin_server_ts,
+              mode: (e as any).content?.mode,
+            })),
+          )}`,
+        );
+      }
+      return;
+    }
+
+    if (!message.htmlParts) {
+      return;
+    }
+    let readyCodePatches = this.getReadyCodePatches(message.htmlParts);
+    if (readyCodePatches.length === 0) {
+      return;
+    }
+
+    this.beginLocalCodePatchBatch(roomId, readyCodePatches);
+    try {
+      await this.executeReadyCodePatches(roomId, message.htmlParts);
+    } finally {
+      this.finishLocalCodePatchBatch(roomId, readyCodePatches);
+    }
+  }
+
+  private beginLocalCodePatchBatch(roomId: string, patches: CodeData[]) {
+    let pending = this.pendingLocalCodePatchesByRoom.get(roomId);
+    if (!pending) {
+      pending = new Set();
+      this.pendingLocalCodePatchesByRoom.set(roomId, pending);
+    }
+    for (let patch of patches) {
+      pending.add(`${patch.eventId}:${patch.codeBlockIndex}`);
+    }
+    this.acceptingAllRoomIds.add(roomId);
+  }
+
+  private finishLocalCodePatchBatch(roomId: string, patches: CodeData[]) {
+    for (let patch of patches) {
+      this.finishLocalCodePatch(
+        roomId,
+        `${patch.eventId}:${patch.codeBlockIndex}`,
+      );
+    }
+  }
+
+  private finishLocalCodePatch(roomId: string, requestId: string) {
+    let pending = this.pendingLocalCodePatchesByRoom.get(roomId);
+    if (!pending) {
+      return;
+    }
+    pending.delete(requestId);
+    if (pending.size === 0) {
+      this.pendingLocalCodePatchesByRoom.delete(roomId);
+      this.acceptingAllRoomIds.delete(roomId);
+    }
+  }
+
+  shouldAutoApplyCodePatches(message: Message): boolean {
+    let roomResource = this.matrixService.roomResources.get(message.roomId);
+    return Boolean(
+      roomResource &&
+      message.agentId === this.matrixService.agentId &&
+      roomResource.getActiveLLMModeForMessage(message.eventId) === 'act',
+    );
+  }
+
+  shouldAutoApplyCodePatch(codeData: CodeData): boolean {
+    if (
+      !codeData.fileUrl ||
+      !isCompleteSearchReplaceBlock(codeData.searchReplaceBlock)
+    ) {
+      return false;
+    }
+    let roomResource = this.matrixService.roomResources.get(codeData.roomId);
+    let message = roomResource?.messages.find(
+      (candidate) => candidate.eventId === codeData.eventId,
+    );
+    return Boolean(message && this.shouldAutoApplyCodePatches(message));
   }
 
   // Pre-rename spelling of `toolContext`: realm content constructs tools with
@@ -1006,6 +1117,18 @@ export default class ToolService extends Service {
 
     try {
       let patchCodeCommand = new PatchCodeTool(this.toolContext);
+      patchCodeCommand.onLocallyApplied = ({ results }) => {
+        for (let i = 0; i < codeDataItems.length; i++) {
+          let codeData = codeDataItems[i];
+          let result = results[i];
+          let requestId = `${codeData.eventId}:${codeData.codeBlockIndex}`;
+          if (result?.status === 'applied') {
+            this.executedToolRequestIds.add(requestId);
+          }
+          this.currentlyExecutingToolRequestIds.delete(requestId);
+          this.finishLocalCodePatch(roomId, requestId);
+        }
+      };
 
       let patchCodeResult = await patchCodeCommand.execute({
         fileIdentifier: fileUrl,
@@ -1106,12 +1229,20 @@ export default class ToolService extends Service {
     }
 
     for (let [fileUrl, codeDataItems] of Object.entries(grouped)) {
-      let patchItems = codeDataItems.map((codeData) => ({
-        searchReplaceBlock: codeData.searchReplaceBlock,
-        eventId: codeData.eventId,
-        codeBlockIndex: codeData.codeBlockIndex,
-      }));
-      await this.patchCode(roomId, fileUrl, patchItems);
+      // A complete search/replace block is one source generation and one
+      // persistence transaction. Do not collapse multiple newly-complete
+      // blocks from the same streaming update into one batch: publishing each
+      // one through PatchCodeTool is what opens/advances the module's volatile
+      // source and lets the preview render each coherent intermediate state.
+      for (let codeData of codeDataItems) {
+        await this.patchCode(roomId, fileUrl, [
+          {
+            searchReplaceBlock: codeData.searchReplaceBlock,
+            eventId: codeData.eventId,
+            codeBlockIndex: codeData.codeBlockIndex,
+          },
+        ]);
+      }
     }
   };
 

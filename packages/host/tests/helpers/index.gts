@@ -122,6 +122,7 @@ export {
   skillFileURL,
   devSkillId,
   envSkillId,
+  sourceCodeEditingSkillUrl,
 } from '@cardstack/host/lib/utils';
 
 const { sqlSchema } = ENV;

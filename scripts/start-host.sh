@@ -18,4 +18,11 @@ source "$ENV_FILE"
 set +a
 
 pnpm install
-pnpm --filter @cardstack/host start
+if [ "$ENV" = "staging" ]; then
+  # Re-apply staging after any mise/shell activation and provision the local
+  # HTTPS endpoint used by the iframe renderer. Two Vite hosts from the same
+  # worktree are unsupported because they share generated config/cache state.
+  pnpm --filter @cardstack/host start:staging
+else
+  pnpm --filter @cardstack/host start
+fi

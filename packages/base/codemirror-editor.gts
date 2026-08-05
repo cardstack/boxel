@@ -256,6 +256,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
   private _pendingTargets: CardWidgetTarget[] = [];
   private _slotUpdatePending = false;
   private _currentLivePreview: boolean | undefined;
+  private requestRender = () => this.cardContext?.requestRender?.();
 
   get livePreview(): boolean {
     return this.args.livePreview !== false;
@@ -271,13 +272,27 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
   }
 
   private async _loadCodeMirror() {
-    let loadCodeMirror = (globalThis as any).__loadCodeMirror;
+    let loadCodeMirror =
+      this.cardContext?.trustedUI?.loadCodeMirror ??
+      (globalThis as any).__loadCodeMirror;
     if (typeof loadCodeMirror !== 'function') {
-      this._isLoaded = true;
+      scheduleOnce('afterRender', this, this.finishCodeMirrorLoad, null);
       return;
     }
-    this._cm = await loadCodeMirror();
+    let context = await loadCodeMirror();
+    scheduleOnce('afterRender', this, this.finishCodeMirrorLoad, context);
+  }
+
+  private finishCodeMirrorLoad(context: CodeMirrorContext | null) {
+    if (isDestroying(this) || isDestroyed(this)) {
+      return;
+    }
+    // A cached loader can resolve in the same microtask as the initial render.
+    // Publish the tracked result after that render so Glimmer has installed the
+    // consumer and reliably replaces the loading state.
+    this._cm = context;
     this._isLoaded = true;
+    this.cardContext?.requestRender?.();
   }
 
   // ── Card search logic ────────────────────────────────────────────────────
@@ -288,6 +303,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     this._cardSearchText = '';
     this._cardSearchIndex = 0;
     this._updateMenuCoords();
+    this.requestRender();
     scheduleOnce('afterRender', this, this._focusSearchInput);
   };
 
@@ -369,6 +385,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
   _handleCardSearchInput = (event: Event) => {
     this._cardSearchText = (event.target as HTMLInputElement).value;
     this._cardSearchIndex = 0;
+    this.requestRender();
   };
 
   _handleCardSearchKeydown = (evt: Event) => {
@@ -383,6 +400,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
       let max = this.cardSearchResults.length;
       if (max > 0) {
         this._cardSearchIndex = (this._cardSearchIndex + 1) % max;
+        this.requestRender();
       }
       return;
     }
@@ -391,6 +409,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
       let max = this.cardSearchResults.length;
       if (max > 0) {
         this._cardSearchIndex = (this._cardSearchIndex - 1 + max) % max;
+        this.requestRender();
       }
       return;
     }
@@ -407,6 +426,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
         this._formatPickerCardUrl = text;
         this._formatPickerCardTitle = labelFromUrl(text);
         this._cardSearchMode = false;
+        this.requestRender();
         return;
       }
       // Otherwise select the highlighted search result
@@ -424,6 +444,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     this._formatPickerCardUrl = card.id;
     this._formatPickerCardTitle = (card as any).title ?? labelFromUrl(card.id);
     this._cardSearchMode = false;
+    this.requestRender();
   };
 
   _dismissCardSearch = () => {
@@ -431,6 +452,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     this._cardSearchText = '';
     this._cardSearchIndex = 0;
     this._menuCoords = null;
+    this.requestRender();
     this.editorView?.focus();
   };
 
@@ -444,6 +466,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     let prev = this._selectionInfo;
     if (prev && sameToolbarState(prev, info)) return;
     this._selectionInfo = info;
+    this.requestRender();
   };
 
   /**
@@ -679,10 +702,12 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
 
   _toggleEmbedPopover = () => {
     this._embedPopoverOpen = !this._embedPopoverOpen;
+    this.requestRender();
   };
 
   _openEmbedChooser = async (defaultTab: 'card' | 'file') => {
     this._embedPopoverOpen = false;
+    this.requestRender();
     let chooser = this.cardContext?.markdownEmbedChooser;
     if (!chooser) {
       // No chooser provided (e.g. card running outside the host) — warn and
@@ -850,6 +875,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     this._cardSearchMode = false;
     this._cardSearchText = '';
     this._menuCoords = null;
+    this.requestRender();
 
     view.focus();
 
@@ -868,6 +894,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     this._formatPickerCardUrl = null;
     this._formatPickerCardTitle = null;
     this._menuCoords = null;
+    this.requestRender();
     this.editorView?.focus();
   };
 
@@ -1014,6 +1041,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     }
 
     this._widgetTargets = pending;
+    this.requestRender();
   };
 
   getCardComponent = (card: BaseDef) => getComponent(card);

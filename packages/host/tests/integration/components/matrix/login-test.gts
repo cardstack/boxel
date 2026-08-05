@@ -143,7 +143,7 @@ module('Integration | Component | matrix/login', function (hooks) {
         'loginWithToken received the URL token',
       );
       assert.true(startCalled, 'matrixService.start was invoked');
-      let cleanupUrl = replaceStateUrls.at(-1);
+      let cleanupUrl = replaceStateUrls[replaceStateUrls.length - 1];
       let cleanupHasLoginToken =
         cleanupUrl != null &&
         new URLSearchParams(new URL(cleanupUrl, 'http://x').search).has(

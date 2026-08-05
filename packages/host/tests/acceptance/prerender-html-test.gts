@@ -544,6 +544,20 @@ module('Acceptance | prerender | html', function (hooks) {
   test('prerender isolated html', async function (assert) {
     let url = `${testRealmURL}Cat/paper.json`;
     await visit(renderPath(url, '/html/isolated/0'));
+    let island = document.querySelector<HTMLElement>(
+      `[data-boxel-card-island][data-boxel-card-url="${testRealmURL}Cat/paper"]`,
+    );
+    assert.ok(island, 'isolated render has a stable card-island boundary');
+    assert.strictEqual(
+      island?.dataset.boxelCardIslandProtocol,
+      '1',
+      'isolated render declares its rehydration protocol',
+    );
+    assert.strictEqual(
+      island?.dataset.boxelCardFormat,
+      'isolated',
+      'isolated render declares the serialized format',
+    );
     assert
       .dom(
         `[data-test-card="${testRealmURL}Cat/paper"][data-test-card-format="isolated"] [data-test-field="cardInfo-name"]`,

@@ -1,14 +1,21 @@
 import type Owner from '@ember/owner';
 import { tracked } from '@glimmer/tracking';
-import { Component, primitive, FieldDef } from './card-api';
+import {
+  type CardContext,
+  Component,
+  primitive,
+  FieldDef,
+} from './card-api';
 import { restartableTask } from 'ember-concurrency';
 import { consume } from 'ember-provide-consume-context';
 import {
   type ResolvedCodeRef,
   isUrlLike,
+  CardContextName,
   CardURLContextName,
   fieldSerializer,
   CodeRefSerializer,
+  type CodeRef,
 } from '@cardstack/runtime-common';
 import { not } from '@cardstack/boxel-ui/helpers';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
@@ -26,14 +33,17 @@ class BaseView extends Component<typeof CodeRefField> {
 }
 
 class EditView extends Component<typeof CodeRefField> {
+  @consume(CardContextName) declare cardContext: CardContext | undefined;
   @consume(CardURLContextName) declare cardURL: string | undefined;
   @tracked validationState: 'initial' | 'valid' | 'invalid' = 'initial';
+  @tracked hasValidated = false;
+  private validationGeneration = 0;
   @tracked private maybeCodeRef: string | undefined =
     CodeRefSerializer.queryableValue(this.args.model ?? undefined);
 
   <template>
     <BoxelInput
-      data-test-hasValidated={{this.setIfValid.isIdle}}
+      data-test-hasValidated={{if this.hasValidated true}}
       @value={{this.maybeCodeRef}}
       @state={{this.validationState}}
       @onInput={{this.onInput}}
@@ -44,18 +54,40 @@ class EditView extends Component<typeof CodeRefField> {
   constructor(owner: Owner, args: any) {
     super(owner, args);
     if (this.maybeCodeRef != null) {
-      this.setIfValid.perform(this.maybeCodeRef, { checkOnly: true });
+      this.performValidation(this.maybeCodeRef, { checkOnly: true });
     }
   }
 
   private onInput = (inputVal: string) => {
     this.maybeCodeRef = inputVal;
-    this.setIfValid.perform(this.maybeCodeRef);
+    this.performValidation(this.maybeCodeRef);
   };
+
+  private performValidation(
+    maybeCodeRef: string,
+    opts?: { checkOnly?: true },
+  ) {
+    let generation = ++this.validationGeneration;
+    this.hasValidated = false;
+    this.cardContext?.requestRender?.();
+    let validation = this.setIfValid.perform(maybeCodeRef, opts);
+    let finish = () => {
+      if (generation === this.validationGeneration) {
+        this.hasValidated = true;
+        this.cardContext?.requestRender?.();
+      }
+    };
+    void validation.then(finish, finish);
+  }
+
+  private setValidationState(state: 'initial' | 'valid' | 'invalid') {
+    this.validationState = state;
+    this.cardContext?.requestRender?.();
+  }
 
   private setIfValid = restartableTask(
     async (maybeCodeRef: string, opts?: { checkOnly?: true }) => {
-      this.validationState = 'initial';
+      this.setValidationState('initial');
       if (maybeCodeRef.length === 0) {
         if (!opts?.checkOnly) {
           this.args.set(undefined);
@@ -65,7 +97,7 @@ class EditView extends Component<typeof CodeRefField> {
 
       let parts = maybeCodeRef.split('/');
       if (parts.length < 2) {
-        this.validationState = 'invalid';
+        this.setValidationState('invalid');
         return;
       }
 
@@ -75,17 +107,22 @@ class EditView extends Component<typeof CodeRefField> {
         module = new URL(module, new URL(this.cardURL)).href;
       }
       try {
-        let code = (await import(module))[name];
-        if (code) {
-          this.validationState = 'valid';
+        let ref = { module, name } as CodeRef;
+        let validatedRef = this.cardContext?.validateCodeRef
+          ? await this.cardContext.validateCodeRef(ref)
+          : (await import(module))[name]
+            ? (ref as ResolvedCodeRef)
+            : undefined;
+        if (validatedRef) {
+          this.setValidationState('valid');
           if (!opts?.checkOnly) {
-            this.args.set({ module, name });
+            this.args.set(validatedRef);
           }
         } else {
-          this.validationState = 'invalid';
+          this.setValidationState('invalid');
         }
-      } catch (err) {
-        this.validationState = 'invalid';
+      } catch {
+        this.setValidationState('invalid');
       }
     },
   );

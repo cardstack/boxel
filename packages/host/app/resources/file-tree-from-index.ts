@@ -1,13 +1,12 @@
 import { registerDestructor } from '@ember/destroyable';
 import { service } from '@ember/service';
 import { buildWaiter } from '@ember/test-waiters';
-import { cached } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 
-import { restartableTask } from 'ember-concurrency';
+import { restartableTask, timeout } from 'ember-concurrency';
 import { Resource } from 'ember-modify-based-class-resource';
 
 import { isEqual } from 'lodash-es';
-import { TrackedArray } from 'tracked-built-ins';
 
 import {
   ensureTrailingSlash,
@@ -17,10 +16,23 @@ import {
   type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
 
+import type FileTreeQueryCacheService from '../services/file-tree-query-cache';
 import type StoreService from '../services/store';
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 const waiter = buildWaiter('file-tree-from-index-resource:search-waiter');
+
+export function invalidatesFileTree(
+  event: RealmEventContent,
+  realmURL: string,
+): boolean {
+  return (
+    event.eventName === 'index' &&
+    'indexType' in event &&
+    event.indexType === 'incremental' &&
+    event.invalidations.some((url) => url.startsWith(realmURL))
+  );
+}
 
 interface Args {
   named: {
@@ -39,8 +51,32 @@ export interface FileTreeNode {
   children?: Map<string, FileTreeNode>;
 }
 
+export function buildFileTreeQuery(
+  fileTypeFilter?: CodeRef,
+  fileFieldFilter?: Record<string, unknown>,
+): SearchEntryWireQuery {
+  let eq =
+    fileFieldFilter && Object.keys(fileFieldFilter).length > 0
+      ? Object.fromEntries(
+          Object.entries(fileFieldFilter).map(([field, value]) => [
+            `item.${field}`,
+            value,
+          ]),
+        )
+      : undefined;
+  return {
+    filter: {
+      'item.on': fileTypeFilter ?? baseFileRef,
+      ...(eq ? { eq } : {}),
+    },
+    fields: { entry: ['item.name'] },
+  };
+}
+
 export class FileTreeFromIndexResource extends Resource<Args> {
   @service declare private store: StoreService;
+  @service('file-tree-query-cache')
+  declare private queryCache: FileTreeQueryCacheService;
 
   // Use private fields to avoid Glimmer autotracking - this prevents the error:
   // "You attempted to update `realmURL` but it had already been used previously in the same computation"
@@ -50,7 +86,8 @@ export class FileTreeFromIndexResource extends Resource<Args> {
   #subscription: { realmURL: string; unsubscribe: () => void } | undefined;
   // @ts-ignore we use this.loaded for test instrumentation.
   private loaded: Promise<void> | undefined;
-  private _fileURLs = new TrackedArray<string>();
+  @tracked private _fileURLs: readonly string[] = [];
+  private hasCompletedSearch = false;
 
   constructor(owner: object) {
     super(owner);
@@ -77,13 +114,13 @@ export class FileTreeFromIndexResource extends Resource<Args> {
         unsubscribe: subscribeToRealm(
           normalizedURL,
           (event: RealmEventContent) => {
-            if (
-              event.eventName !== 'index' ||
-              ('indexType' in event && event.indexType !== 'incremental')
-            ) {
+            if (this.store.isCodePreviewCommitAcknowledgement(event)) {
               return;
             }
-            this.search.perform();
+            if (!invalidatesFileTree(event, normalizedURL)) {
+              return;
+            }
+            this.search.perform(true);
           },
         ),
       };
@@ -92,24 +129,45 @@ export class FileTreeFromIndexResource extends Resource<Args> {
     if (unchanged) {
       return;
     }
-    this.loaded = this.search.perform();
+    let cached = this.queryCache.peek(normalizedURL, this.query);
+    if (cached) {
+      // Replace the collection rather than mutating a tracked array. This
+      // resource can be modified while its entries are being consumed by a
+      // file chooser render; an in-place splice creates a backtracking render
+      // and can lock up navigation.
+      this._fileURLs = cached;
+    }
+    this.hasCompletedSearch = cached != null;
+    this.loaded = this.search.perform(false);
   }
 
   get isLoading(): boolean {
-    return this.search.isRunning;
+    // Cover the render-to-task microtask gap as well as the running request.
+    // Otherwise a newly-created chooser briefly looks like a settled empty
+    // tree before its first search task starts.
+    return !this.hasCompletedSearch || this.search.isRunning;
   }
 
-  private search = restartableTask(async () => {
+  get hasLoaded(): boolean {
+    return this.hasCompletedSearch;
+  }
+
+  private search = restartableTask(async (coalesce = false) => {
+    if (coalesce) {
+      await timeout(16);
+    }
     let realmURL = this.#realmURL;
     if (!realmURL) {
       return;
     }
     let token = waiter.beginAsync();
     try {
-      let { data } = await this.store.searchEntries(this.query, [realmURL]);
-      let fileURLs = data.map((entry) => entry.id).filter(Boolean);
-      this._fileURLs.splice(0, this._fileURLs.length, ...fileURLs);
+      let fileURLs = await this.queryCache.load(realmURL, this.query, {
+        force: coalesce,
+      });
+      this._fileURLs = fileURLs;
     } finally {
+      this.hasCompletedSearch = true;
       waiter.endAsync(token);
     }
   });
@@ -118,24 +176,7 @@ export class FileTreeFromIndexResource extends Resource<Args> {
   // ids. The fieldset pins the leanest projection the wire grammar offers (a
   // single-field sparse item) rather than full serializations or renderings.
   private get query(): SearchEntryWireQuery {
-    let fieldFilter = this.#fileFieldFilter;
-    let eq =
-      fieldFilter && Object.keys(fieldFilter).length > 0
-        ? Object.fromEntries(
-            // Field paths in the entry wire grammar are `item.`-prefixed.
-            Object.entries(fieldFilter).map(([field, value]) => [
-              `item.${field}`,
-              value,
-            ]),
-          )
-        : undefined;
-    return {
-      filter: {
-        'item.on': this.#fileTypeFilter ?? baseFileRef,
-        ...(eq ? { eq } : {}),
-      },
-      fields: { entry: ['item.name'] },
-    };
+    return buildFileTreeQuery(this.#fileTypeFilter, this.#fileFieldFilter);
   }
 
   @cached
@@ -148,7 +189,9 @@ export class FileTreeFromIndexResource extends Resource<Args> {
     return this.sortEntries(tree);
   }
 
-  private buildTreeFromFileURLs(fileURLs: string[]): Map<string, FileTreeNode> {
+  private buildTreeFromFileURLs(
+    fileURLs: readonly string[],
+  ): Map<string, FileTreeNode> {
     let root = new Map<string, FileTreeNode>();
 
     for (let fileURL of fileURLs) {

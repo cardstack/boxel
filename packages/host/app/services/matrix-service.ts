@@ -2150,17 +2150,22 @@ export default class MatrixService extends Service {
       .map((skill) => skill?.id)
       .filter((id): id is NonNullable<typeof id> => Boolean(id));
     if (configuredIds.length) {
-      return configuredIds;
+      return submode === 'code'
+        ? Array.from(new Set([...configuredIds, sourceCodeEditingSkillUrl]))
+        : configuredIds;
     }
 
     let interactModeDefaultSkills = [envSkillId];
 
-    // Code editing is covered by the code-mode entry-point skill (see
-    // activateCodingSkill), so source-code-editing is no longer pushed here.
-    // The two remaining defaults are still legacy pushed cards (full body in
-    // every prompt); they move to markdown + on-demand references once the
-    // bot supports commands on markdown skills, after which this list shrinks.
-    let codeModeDefaultSkills = [devSkillId, envSkillId];
+    // This must be part of room creation, not only the transition performed by
+    // activateCodingSkill(). A user can create an assistant while Code mode is
+    // already active; that room still needs the search/replace contract before
+    // its first Act response streams.
+    let codeModeDefaultSkills = [
+      devSkillId,
+      envSkillId,
+      sourceCodeEditingSkillUrl,
+    ];
 
     return submode === 'code'
       ? codeModeDefaultSkills
@@ -3000,12 +3005,11 @@ export default class MatrixService extends Service {
     }
 
     // Queue code patches for processing
-    if (
-      event.type === 'm.room.message' &&
-      event.content?.body &&
-      event.content?.isStreamingFinished
-    ) {
-      // Check if the message contains code patches by looking for search/replace blocks
+    if (event.type === 'm.room.message' && event.content?.body) {
+      // A complete edit block is an Act-mode boundary even while the rest of
+      // the response is still streaming. ToolService deduplicates already
+      // applying/applied block indexes, so later accumulated m.replace events
+      // can safely contribute the next completed block.
       let body = event.content.body as string;
       if (
         body.includes(SEARCH_MARKER) &&
@@ -3076,7 +3080,9 @@ export default class MatrixService extends Service {
       // Dual-path window: the legacy card skills activate alongside the
       // markdown source-code-editing skill. All are pushed for now; the
       // on-demand entry point returns as a catalog listing.
-      skillCardIdsToActivate: [...defaultSkillIds, sourceCodeEditingSkillUrl],
+      skillCardIdsToActivate: Array.from(
+        new Set([...defaultSkillIds, sourceCodeEditingSkillUrl]),
+      ),
     });
   }
 

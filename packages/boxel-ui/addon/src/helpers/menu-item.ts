@@ -17,6 +17,7 @@ export interface MenuItemOptions {
   inactive?: boolean;
   label: string;
   postscript?: string;
+  status?: boolean;
   subtext?: string;
   subtextComponent?: ComponentLike;
   tags?: string[];
@@ -36,6 +37,7 @@ export class MenuItem {
   id?: string;
   subtext?: string;
   postscript?: string;
+  status: boolean;
   subtextComponent?: ComponentLike;
   tags: string[];
   isDivider = false;
@@ -53,6 +55,7 @@ export class MenuItem {
     this.inactive = options.inactive;
     this.subtext = options.subtext;
     this.postscript = options.postscript;
+    this.status = options.status || false;
     this.subtextComponent = options.subtextComponent;
     this.tags = options.tags || [];
   }

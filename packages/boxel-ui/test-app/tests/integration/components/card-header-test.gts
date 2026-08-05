@@ -87,4 +87,30 @@ module('Integration | Component | card-header', function (hooks) {
       )}px, with: ${offsetWithMenu.toFixed(1)}px)`,
     );
   });
+
+  test('shows interactive loading progress to the right of the realm icon', async function (assert) {
+    await render(
+      <template>
+        <CardHeader
+          @cardTitle='A Hydrating Card'
+          @isLoading={{true}}
+          @realmInfo={{realmInfo}}
+        />
+      </template>,
+    );
+
+    assert
+      .dom('[data-card-interactive-loading]')
+      .exists('the header exposes the existing Boxel loading indicator');
+    assert
+      .dom('[data-card-interactive-loading] [data-test-loading-indicator]')
+      .exists();
+    assert.strictEqual(
+      document
+        .querySelector('[data-test-card-header-realm-icon]')
+        ?.closest('.realm-icon-container')?.lastElementChild,
+      document.querySelector('[data-card-interactive-loading]'),
+      'the loading indicator follows the realm icon in its identity group',
+    );
+  });
 });

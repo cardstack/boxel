@@ -124,6 +124,7 @@ import type MessageService from './message-service';
 import type NetworkService from './network';
 import type OperatorModeStateService from './operator-mode-state-service';
 import type RealmService from './realm';
+import type RealmSandboxService from './realm-sandbox';
 import type RealmServerService from './realm-server';
 import type SessionService from './session';
 import type ToolService from './tool-service';
@@ -142,6 +143,13 @@ let waiter = buildWaiter('store-service');
 
 const realmEventsLogger = logger('realm:events');
 const storeLogger = logger('store');
+
+// Deserialization serves two security domains. The interactive host keeps
+// user-realm cards opaque, while realm execution (indexing, prerendering, and
+// validation) needs the real card definition. Callers that require executable
+// semantics must opt into that purpose instead of relying on constructor
+// introspection to happen incidentally.
+export type CardMaterializationPurpose = 'host-record' | 'realm-execution';
 
 // Companion to `jobIdHeader()` (re-exported from
 // `../lib/prerender-fetch-headers`). Policy is two-state, gated by
@@ -237,6 +245,7 @@ export default class StoreService extends Service implements StoreInterface {
   @service declare private session: SessionService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realmServer: RealmServerService;
+  @service declare private realmSandbox: RealmSandboxService;
   private subscriptions: Map<string, { unsubscribe: () => void }> = new Map();
   private cardInvalidationSubscribers: Map<string, Set<() => void>> = new Map();
   private referenceCount: ReferenceCount = new Map();
@@ -306,6 +315,8 @@ export default class StoreService extends Service implements StoreInterface {
   private searchCacheGeneration = 0;
   private store: CardStore;
   protected isRenderStore = false;
+  protected cardMaterializationPurpose: CardMaterializationPurpose =
+    'host-record';
 
   // This is used for tests
   private onSaveSubscriber: CardSaveSubscriber | undefined;
@@ -733,8 +744,8 @@ export default class StoreService extends Service implements StoreInterface {
     });
   }
 
-  save(id: string) {
-    this.doAutoSave(id, { isImmediate: true });
+  async save(id: string): Promise<void> {
+    await this.doAutoSave(id, { isImmediate: true });
   }
 
   async add<T extends CardDef>(
@@ -877,6 +888,10 @@ export default class StoreService extends Service implements StoreInterface {
       isNonPresentLink: api.isNonPresentLink,
       getCardMeta: api.getCardMeta as CardAPIForMatching['getCardMeta'],
       primitive: api.primitive,
+      isInstanceOf: (instance, ref) =>
+        this.realmSandbox.opaqueCardIsInstanceOf(instance, ref),
+      resolveQueryablePath: (instance, path) =>
+        this.realmSandbox.resolveOpaqueQueryablePath(instance, path),
       virtualNetwork: this.network.virtualNetwork,
     };
   }
@@ -1091,7 +1106,18 @@ export default class StoreService extends Service implements StoreInterface {
       doc.data.meta = merge(doc.data.meta, patch.meta);
     }
     let api = await this.cardService.getAPI();
-    await api.updateFromSerialized(instance, doc, this.store);
+    let opaqueUpdate = await this.realmSandbox.updateOpaqueCardFromDocument(
+      instance,
+      doc,
+    );
+    if (opaqueUpdate === false) {
+      await api.updateFromSerialized(instance, doc, this.store);
+    } else if (opaqueUpdate !== instance) {
+      await this.stopAutoSaving(instance);
+      instance = opaqueUpdate as T;
+      this.setIdentityContext(instance);
+      await this.startAutoSaving(instance);
+    }
     let shouldPersist = !opts?.doNotPersist;
     let shouldAwaitPersist = shouldPersist && !opts?.doNotWaitForPersist;
     let persistedResult: CardDef | CardErrorJSONAPI | undefined = instance;
@@ -1806,6 +1832,7 @@ export default class StoreService extends Service implements StoreInterface {
       doc,
       relativeTo,
       dependencyTrackingContext,
+      'realm-execution',
     );
   }
 
@@ -1814,14 +1841,55 @@ export default class StoreService extends Service implements StoreInterface {
     doc: LooseSingleCardDocument | CardDocument,
     relativeTo?: RealmResourceIdentifier | URL | undefined,
     dependencyTrackingContext?: RuntimeDependencyTrackingContext,
+    purpose: CardMaterializationPurpose = this.cardMaterializationPurpose,
   ): Promise<T> {
     let api = await this.cardService.getAPI();
+    if (
+      purpose === 'host-record' &&
+      this.realmSandbox.shouldUseOpaqueCard(
+        resource.meta?.adoptsFrom,
+        relativeTo,
+      )
+    ) {
+      await this.materializeTrustedIncludedRelationships(
+        doc,
+        dependencyTrackingContext,
+      );
+      // Match card-api's normal deserializer identity behavior. A no-cache
+      // reload may materialize a fresh opaque facade, but one remote URL must
+      // keep one local identity or the Store correctly rejects the duplicate.
+      // Error entries also reserve that identity even though they do not expose
+      // the CardDef localId symbol themselves.
+      let existing = resource.id ? this.store.getCard(resource.id) : undefined;
+      let existingLocalId = resource.id
+        ? (existing?.[localIdSymbol] ?? this.store.getLocalId(resource.id))
+        : undefined;
+      return await this.realmSandbox.createOpaqueCard<T>(
+        resource,
+        relativeTo,
+        doc,
+        existingLocalId,
+        (id, fieldType) => {
+          let isFileType = Boolean(
+            (fieldType as typeof BaseDef & { isFileDef?: boolean }).isFileDef,
+          );
+          return isFileType
+            ? this.store.getFileMeta(id)
+            : this.store.getCard(id);
+        },
+      );
+    }
     let shouldStubTimers =
       this.renderContextBlocksPersistence() && !isTesting();
+    let definitionLoader = this.realmSandbox.loaderForTrustedCard(
+      resource.meta?.adoptsFrom,
+      relativeTo,
+    );
     let performCreate = async () =>
       (await api.createFromSerialized(resource, doc, relativeTo, {
         store: this.store,
         dependencyTrackingContext,
+        loader: definitionLoader,
       })) as T;
     // Time the deserialize and report it (no-op when telemetry is disabled).
     let telemetry = this.#clientTelemetry();
@@ -1837,6 +1905,32 @@ export default class StoreService extends Service implements StoreInterface {
       });
     }
     return card;
+  }
+
+  private async materializeTrustedIncludedRelationships(
+    doc: LooseSingleCardDocument | CardDocument,
+    dependencyTrackingContext?: RuntimeDependencyTrackingContext,
+  ): Promise<void> {
+    let fileResources = (doc.included ?? []).filter(isFileMetaResource);
+    if (fileResources.length === 0) {
+      return;
+    }
+    let api = await this.cardService.getAPI();
+    for (let resource of fileResources) {
+      if (!resource.id || this.store.getFileMeta(resource.id)) {
+        continue;
+      }
+      await api.createFromSerialized(
+        resource,
+        { data: resource },
+        rri(resource.id),
+        {
+          store: this.store,
+          dependencyTrackingContext,
+          loader: this.loaderService.baseLoader,
+        },
+      );
+    }
   }
 
   // Defensive lookup of the telemetry service — never forces the hooked path
@@ -1916,6 +2010,22 @@ export default class StoreService extends Service implements StoreInterface {
     );
   }
 
+  // Realm subscriptions are owned by several resources, but the active Code
+  // preview and its save IDs belong to this Store's application boundary.
+  // Route every subscriber through this single acknowledgement decision so a
+  // matching autosave cannot refresh the Store in one place and a live search
+  // in another.
+  isCodePreviewCommitAcknowledgement(event: RealmEventContent): boolean {
+    return (
+      event.eventName === 'index' &&
+      event.indexType === 'incremental' &&
+      this.realmSandbox.isCodePreviewCommitAcknowledgement(
+        event.clientRequestId ?? undefined,
+        event.invalidations as string[],
+      )
+    );
+  }
+
   private handleInvalidations = (event: RealmEventContent) => {
     if (event.eventName !== 'index') {
       return;
@@ -1958,28 +2068,124 @@ export default class StoreService extends Service implements StoreInterface {
       ? this.cardService.clientRequestIds.has(event.clientRequestId)
       : false;
 
-    // The invalidation triggers a rebuild when it touches an already-loaded
-    // executable module: the loader must be flushed so the updated code is
-    // picked up before the open card graph re-runs. Net-new modules that were
-    // never loaded don't need one. `isModuleLoaded` alone can't answer that,
-    // because a loader the code change already flushed carries no loaded
-    // modules and so reports every module as net-new. Two flushes beat this
-    // event to the punch: a rebuild already in flight (fold every further
-    // executable invalidation into it), and the flush a local write or an open
-    // editor performed for this very module the moment it was rewritten.
-    let executableInvalidations = invalidations.filter(hasExecutableExtension);
-    let alreadyFlushed = new Set(
-      executableInvalidations.filter((i) =>
-        this.loaderService.wasModuleFlushedForCodeChange(i),
+    // Code mode has already rendered this exact source revision from Monaco.
+    // Its matching realm event confirms persistence; treating it as a second
+    // code change would rebuild the loader and Store around the mounted
+    // preview, briefly replacing both the preview and permission inputs with
+    // loading state before rendering the same revision again.
+    let acknowledgedInvalidations = ownWrite
+      ? this.realmSandbox.codePreviewCommitAcknowledgedInvalidations(
+          event.clientRequestId ?? undefined,
+          invalidations,
+        )
+      : new Set<string>();
+    if (acknowledgedInvalidations.size > 0) {
+      for (let invalidation of [...acknowledgedInvalidations].filter(
+        hasExecutableExtension,
+      )) {
+        this.loaderService.acknowledgeModuleInvalidation(invalidation);
+      }
+    }
+
+    let remainingInvalidations = invalidations.filter(
+      (url) => !acknowledgedInvalidations.has(url),
+    );
+    if (remainingInvalidations.length === 0) {
+      telemetry?.recordEvent({
+        event_type: 'realm-event',
+        realm: event.realmURL,
+        index_type: 'incremental',
+        invalidations_count: invalidations.length,
+        invalidated_ids: invalidations.slice(0, 50),
+        reloads_triggered: 0,
+        own_write: true,
+        processing_ms:
+          processingStart !== undefined
+            ? Math.round(performance.now() - processingStart)
+            : 0,
+        event_args: eventArgs(),
+      });
+      return;
+    }
+
+    let executableInvalidations = remainingInvalidations.filter(
+      hasExecutableExtension,
+    );
+    // Out-of-band writers (notably boxel-cli agents and another browser tab)
+    // have no local commit acknowledgement. Advance every displayed module
+    // independently; one undisplayed module in the same event must not force
+    // the displayed cards off their private SES/iframe HMR path.
+    let hmrHandled = !ownWrite
+      ? this.realmSandbox.handleExternalModuleInvalidationPartition(
+          executableInvalidations,
+        )
+      : new Set<string>();
+    let retainedModuleInvalidations = new Set([
+      ...acknowledgedInvalidations,
+      ...hmrHandled,
+    ]);
+    let remainingExecutableInvalidations = executableInvalidations.filter(
+      (url) => !hmrHandled.has(url),
+    );
+
+    // Realm trust decides where new code may execute. It must not erase the
+    // fact that an older/native consumer may already hold this module in a
+    // trusted Loader graph (including a graph a local code write just
+    // invalidated). In that case the trusted graph still needs its legacy
+    // Store rebuild while the sandbox graph is invalidated independently.
+    let loadedByTrustedHost = new Set(
+      remainingExecutableInvalidations.filter((url) =>
+        this.loaderService.isModuleLoaded(url),
       ),
     );
+    let flushedByTrustedHost = new Set(
+      remainingExecutableInvalidations.filter((url) =>
+        this.loaderService.wasModuleFlushedForCodeChange(url),
+      ),
+    );
+    let requiresTrustedStoreRebuild = (url: string) =>
+      !this.realmSandbox.isSandboxedUserModule(url) ||
+      loadedByTrustedHost.has(url) ||
+      flushedByTrustedHost.has(url);
+
+    // Opaque user cards keep their canonical Store data while source code is
+    // invalidated in the realm compartment. There is no executable CardDef
+    // class in the host Store to rebuild, so replacing the Store and every
+    // Loader graph here is both unnecessary and visibly disruptive.
+    let sandboxedUserInvalidations = remainingExecutableInvalidations.filter(
+      (url) => !requiresTrustedStoreRebuild(url),
+    );
+    for (let sourceURL of sandboxedUserInvalidations) {
+      this.realmSandbox.invalidateCanonicalSandboxModule(sourceURL);
+      this.loaderService.invalidateModule(sourceURL, {
+        clearFetchCache: true,
+      });
+    }
+
+    // Trusted/Base definitions still materialize executable classes in Store.
+    // Invalidate just the changed Loader modules (and known dependants), then
+    // reestablish Store references only if one of those modules was live.
+    let trustedExecutableInvalidations =
+      remainingExecutableInvalidations.filter(requiresTrustedStoreRebuild);
+    let alreadyFlushed = new Set(
+      trustedExecutableInvalidations.filter((i) => flushedByTrustedHost.has(i)),
+    );
+    let loadedTrustedInvalidations = new Set(
+      trustedExecutableInvalidations.filter((i) => loadedByTrustedHost.has(i)),
+    );
+    for (let sourceURL of trustedExecutableInvalidations) {
+      this.loaderService.invalidateModule(sourceURL, {
+        clearFetchCache: true,
+      });
+    }
     let needsRebuild =
-      executableInvalidations.length > 0 &&
+      trustedExecutableInvalidations.length > 0 &&
       (this.rebuildForCodeChange.isRunning ||
         alreadyFlushed.size > 0 ||
-        executableInvalidations.some((i) =>
-          this.loaderService.loader.isModuleLoaded(i),
-        ));
+        loadedTrustedInvalidations.size > 0);
+    for (let sourceURL of executableInvalidations) {
+      this.loaderService.acknowledgeModuleInvalidation(sourceURL);
+    }
 
     let reloadsTriggered = 0;
     if (needsRebuild) {
@@ -1993,8 +2199,9 @@ export default class StoreService extends Service implements StoreInterface {
       if (telemetry?.isEnabled) {
         this.#accumulatePendingRebuild(
           event.realmURL,
-          executableInvalidations,
+          trustedExecutableInvalidations,
           alreadyFlushed,
+          loadedTrustedInvalidations,
         );
       }
       this.rebuildForCodeChange.perform();
@@ -2003,7 +2210,11 @@ export default class StoreService extends Service implements StoreInterface {
       // reference, so running that loop too would only re-fetch cards the
       // rebuild is about to discard.
     } else {
-      reloadsTriggered = this.#reloadInvalidatedInstances(event, invalidations);
+      reloadsTriggered = this.#reloadInvalidatedInstances(
+        event,
+        remainingInvalidations,
+        retainedModuleInvalidations,
+      );
     }
 
     if (telemetry?.isEnabled) {
@@ -2030,6 +2241,7 @@ export default class StoreService extends Service implements StoreInterface {
   #reloadInvalidatedInstances(
     event: IncrementalIndexEventContent,
     invalidations: string[],
+    acknowledgedModules: Set<string> = new Set(),
   ): number {
     let reloadsTriggered = 0;
     for (let invalidation of invalidations) {
@@ -2053,6 +2265,29 @@ export default class StoreService extends Service implements StoreInterface {
       let instance = this.peekError(invalidation) ?? this.peek(invalidation);
       if (instance) {
         if (isCardInstance(instance)) {
+          // A source write invalidates every instance that adopts that module,
+          // even though their JSON data did not change. The volatile sandbox
+          // has already adopted the new program and its opaque facade is the
+          // stable data identity for the mounted preview. Reloading that
+          // facade would cross back through loadCardDef, rebuild the inert
+          // instance, and visibly remount the preview after autosave. Keep
+          // processing unrelated sibling invalidations, but treat dependent
+          // opaque instances as part of the source acknowledgement.
+          let isAcknowledgedDependent = false;
+          for (let moduleURL of acknowledgedModules) {
+            if (
+              this.realmSandbox.isOpaqueCardDefinedByModule(instance, moduleURL)
+            ) {
+              isAcknowledgedDependent = true;
+              break;
+            }
+          }
+          if (isAcknowledgedDependent) {
+            realmEventsLogger.debug(
+              `acknowledging dependent opaque card ${invalidation} without reloading`,
+            );
+            continue;
+          }
           // The invalidation id is the canonical remote id for this card. When
           // the server has just assigned a remote id to a locally-created
           // instance, this event is the first the store hears of it: the
@@ -2216,6 +2451,7 @@ export default class StoreService extends Service implements StoreInterface {
     realm: string,
     executableInvalidations: string[],
     alreadyFlushed: Set<string>,
+    loadedBeforeInvalidation: Set<string>,
   ) {
     let pending = (this.#pendingRebuild ??= {
       realm,
@@ -2231,17 +2467,17 @@ export default class StoreService extends Service implements StoreInterface {
       pending.triggerModules.add(module);
       // A module the code change already flushed was loaded and the rebuild
       // will re-fetch it, even though the flushed loader no longer reports it.
-      if (
-        alreadyFlushed.has(module) ||
-        this.loaderService.loader.isModuleLoaded(module)
-      ) {
+      if (alreadyFlushed.has(module) || loadedBeforeInvalidation.has(module)) {
         pending.modulesRefetched.add(module);
       }
     }
   }
 
-  // Coalesced client rebuild: flush the loader, reset the store, and re-fetch
-  // every live card reference. `keepLatest` bounds a write burst to one
+  // Coalesced trusted-code rebuild: the changed modules were already evicted
+  // in place above. Reset the Store and re-fetch every live card reference so
+  // executable trusted CardDef instances adopt the new class generation while
+  // preserving the Loader objects and all unrelated module graphs.
+  // `keepLatest` bounds a write burst to one
   // in-flight rebuild plus one pending — intermediate events collapse into the
   // pending slot — so a burst of rapid executable invalidations costs at most 2
   // rebuilds regardless of its length. The final rebuild re-fetches current
@@ -2255,14 +2491,6 @@ export default class StoreService extends Service implements StoreInterface {
     let rebuildStart =
       telemetry?.isEnabled && pending ? performance.now() : undefined;
 
-    // When this reset actually replaces the loader — it is debounce-eligible,
-    // so it may not — it also drops the flush records that armed this rebuild:
-    // a plain replacement supersedes them. Records that outlive a debounced
-    // reset cost at most one extra rebuild later, whose own reset drops them.
-    // A code-change flush landing *during* the re-fetch below writes fresh
-    // records against the new loader, so the invalidation still to come for
-    // that write finds them.
-    this.loaderService.resetLoader();
     this.store.reset();
     let cardsReloaded: number | undefined;
     try {
@@ -2836,7 +3064,7 @@ export default class StoreService extends Service implements StoreInterface {
   private doAutoSave(
     idOrInstance: string | CardDef,
     opts?: { isImmediate?: true },
-  ) {
+  ): Promise<void> | undefined {
     // The render/index store renders read-only and must never persist. A save
     // here would deadlock the from-scratch index: the render holds the sole
     // worker while the write takes the realm write lock and awaits a reindex
@@ -2870,7 +3098,7 @@ export default class StoreService extends Service implements StoreInterface {
     autoSaveQueue.push({ ...opts });
     autoSaveState.isSaving = true;
     autoSaveState.lastSaveError = undefined;
-    this.drainAutoSaveQueue(queueName);
+    return this.drainAutoSaveQueue(queueName);
   }
 
   private async drainAutoSaveQueue(queueName: string) {
@@ -3049,7 +3277,12 @@ export default class StoreService extends Service implements StoreInterface {
 
         // send doc over the wire with absolute URL's. The realm server will convert
         // to relative URL's as it serializes the cards
-        let realmURL = instance[realmURLSymbol];
+        // An explicit create/copy destination is authoritative. In
+        // particular, a sandboxed card can execute code from its source realm
+        // while its newly copied data belongs to another realm.
+        let realmURL = opts?.realm
+          ? new URL(opts.realm)
+          : instance[realmURLSymbol];
         // in the case where we get no realm URL from the card, we are dealing with
         // a new card instance that does not have a realm URL yet.
         if (!realmURL) {
@@ -3156,6 +3389,29 @@ export default class StoreService extends Service implements StoreInterface {
         ${JSON.stringify(incomingDoc, null, 2)}`,
         );
       }
+
+      // User-realm records remain opaque during reloads too. This is also the
+      // safe type-change path: updateOpaqueCardFromDocument rebuilds exactly
+      // this facade when adoptsFrom changes, instead of importing either the
+      // old or new user-authored CardDef into the trusted Host loader.
+      // Opaque projections expose Base field accessors for trusted edit UI.
+      // Reconciling server state through those accessors can legitimately
+      // emit field-change notifications, but those notifications are not a
+      // local edit and must not feed the just-read document back into
+      // autosave. Detach only this record's subscriber for the reconciliation;
+      // reloadTask restores it after the update (or replaces the record).
+      this.cardApiCache?.unsubscribeFromChanges(
+        instance,
+        this.onInstanceUpdated,
+      );
+      let opaqueUpdate = await this.realmSandbox.updateOpaqueCardFromDocument(
+        instance,
+        incomingDoc,
+      );
+      if (opaqueUpdate !== false) {
+        return opaqueUpdate as CardDef;
+      }
+      this.cardApiCache?.subscribeToChanges(instance, this.onInstanceUpdated);
 
       // Scenario: a saved card instance changes its type — its JSON
       // `meta.adoptsFrom` is edited to point at a different card definition

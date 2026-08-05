@@ -133,14 +133,27 @@ Some markdown content.`,
   });
 
   test('file def instance is editable in code mode', async function (assert) {
+    let readOnlyIndicatorAppeared = false;
+    let observer = new MutationObserver(() => {
+      if (document.querySelector('[data-test-realm-indicator-not-writable]')) {
+        readOnlyIndicatorAppeared = true;
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}FileLinkCard/notes.md`,
     });
 
     await waitFor('[data-test-editor]');
+    observer.disconnect();
     assert
       .dom('[data-test-realm-indicator-not-writable]')
       .doesNotExist('read-only indicator is not shown for file def instance');
+    assert.false(
+      readOnlyIndicatorAppeared,
+      'read-only indicator never flashes while file metadata settles',
+    );
   });
 });

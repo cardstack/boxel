@@ -1450,7 +1450,7 @@ ${REPLACE_MARKER}
     matrixServer.fetchMatrixHostedFile = originalFetchMatrixHostedFile;
   });
 
-  test('LLM mode event controls auto-apply of code patches with timestamp checking', async function (assert) {
+  test('[HMR-02] LLM mode event controls auto-apply of code patches with timestamp checking', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}hello.txt`,
@@ -1670,7 +1670,7 @@ ${REPLACE_MARKER}
     );
   });
 
-  test<TestContextWithSave>('automatic Accept All spinner appears in Act mode for multiple patches', async function (assert) {
+  test<TestContextWithSave>('Act auto-applies multiple patches without requiring Accept', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}hello.txt`,
@@ -1684,8 +1684,7 @@ ${REPLACE_MARKER}
       .dom('[data-test-llm-mode-option="act"]')
       .hasClass('selected', 'LLM mode is set to act');
 
-    // Send multiple code patches that should auto-apply in Act mode
-    // This will trigger an "accept all" operation and should show the spinner
+    // Send multiple code patches that should auto-apply in Act mode.
     let codeBlock = `\`\`\`
 http://test-realm/test/hello.txt
 ${SEARCH_MARKER}
@@ -1727,20 +1726,23 @@ ${REPLACE_MARKER}
       },
     });
 
-    // Wait for the patches to be processed - the spinner should appear during automatic execution
-    // This test should FAIL until we implement the ToolService state tracking
+    // Automatic execution may show progress, but must never present a manual
+    // approval action.
     await waitFor(
       '[data-test-ai-assistant-action-bar] [data-test-loading-indicator]',
       {
         timeout: 2000,
       },
     );
+    assert
+      .dom('[data-test-accept-all]')
+      .doesNotExist('Act does not require an Accept action');
 
-    // Assert that the spinner is visible during automatic accept-all execution
+    // Assert that progress is visible during automatic execution.
     assert
       .dom('[data-test-ai-assistant-action-bar] [data-test-loading-indicator]')
       .exists(
-        'Loading indicator appears during automatic accept-all in Act mode',
+        'Loading indicator appears during automatic execution in Act mode',
       );
 
     // Assert that the action bar shows the correct text

@@ -2,6 +2,7 @@ import {
   CardContext,
   CardDef,
   BaseDef,
+  getComponent as getCardComponent,
 } from '@cardstack/base/card-api';
 import { tracked } from '@glimmer/tracking';
 import { TrackedMap } from 'tracked-built-ins';
@@ -356,7 +357,7 @@ export class TaskPlanner extends GlimmerComponent<TaskPlannerArgs> {
 
   getComponent(item: DndItem) {
     let cardOrField = item as BaseDef;
-    return cardOrField.constructor.getComponent(cardOrField);
+    return getCardComponent(cardOrField);
   }
 
   removeFileExtension(cardUrl: string) {

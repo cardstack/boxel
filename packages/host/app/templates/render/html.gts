@@ -18,6 +18,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import SearchResults from '@cardstack/host/components/search/search-results';
+import { CARD_ISLAND_PROTOCOL_VERSION } from '@cardstack/host/lib/card-island-protocol';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 import type RenderStoreService from '@cardstack/host/services/render-store';
@@ -93,7 +94,22 @@ class RenderHtmlTemplate extends Component<Signature> {
         attribute gives the prerender extraction a tight target so surrounding
         route-template whitespace does not leak into the captured markdown.
         Only applies when format === 'markdown'; other formats are unaffected. }}
-    {{#if (eq @model.format 'markdown')}}
+    {{#if (eq @model.format 'isolated')}}
+      {{! The realm server already executes card code in an isolated headless
+          browser context. Render the canonical, host-loaded component there;
+          the interactive host applies SES or iframe isolation when it adopts
+          this boundary. Waiting for a second realm fetch from an SES runtime
+          here would deadlock the realm's own indexing transaction. }}
+      <div
+        data-boxel-card-island
+        data-boxel-card-island-protocol={{CARD_ISLAND_PROTOCOL_VERSION}}
+        data-boxel-card-format={{@model.format}}
+        data-boxel-card-url={{@model.instance.id}}
+        data-boxel-card-island-serialization='rendered'
+      >
+        <@model.Component @format={{@model.format}} />
+      </div>
+    {{else if (eq @model.format 'markdown')}}
       <div data-markdown-render-container class='markdown-render-container'>
         <@model.Component @format={{@model.format}} />
       </div>

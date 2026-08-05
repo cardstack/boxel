@@ -3261,24 +3261,23 @@ module('Integration | Store', function (hooks) {
     );
   });
 
-  // Count full rebuilds by the loader flush each one performs: the coalesced
-  // rebuild calls resetLoader exactly once, and nothing else flushes the loader
-  // in these tests, so resetLoader-call-count == rebuild-count.
+  // Count the Store graph resets that constitute a trusted-code rebuild. The
+  // targeted invalidation architecture deliberately preserves Loader identity,
+  // so replacing the Loader is no longer an observable proxy for a rebuild.
   function countRebuilds() {
     let count = 0;
-    let original = loaderService.resetLoader;
-    loaderService.resetLoader = function (
-      options?: Parameters<LoaderService['resetLoader']>[0],
-    ) {
+    let cardStore = (storeService as any).store;
+    let original = cardStore.reset;
+    cardStore.reset = function () {
       count++;
-      return original.call(loaderService, options);
-    } as LoaderService['resetLoader'];
+      return original.call(cardStore);
+    };
     return {
       get count() {
         return count;
       },
       restore() {
-        loaderService.resetLoader = original;
+        cardStore.reset = original;
       },
     };
   }
@@ -3394,6 +3393,42 @@ module('Integration | Store', function (hooks) {
     assert.true(
       isCardInstance(storeService.peek(hassan)),
       'the card is re-established after the single rebuild',
+    );
+  });
+
+  test('[HMR-04] an out-of-band write claimed by a displayed module keeps Store data mounted', async function (assert) {
+    let hassan = `${testRealmURL}Person/hassan`;
+    await renderCard(hassan);
+    let instanceBeforeWrite = storeService.peek(hassan);
+    let realmSandbox = getService('realm-sandbox');
+    let originalHandler =
+      realmSandbox.handleExternalModuleInvalidationPartition;
+    realmSandbox.handleExternalModuleInvalidationPartition = (invalidations) =>
+      new Set(invalidations);
+
+    let rebuilds = countRebuilds();
+    try {
+      (storeService as any).handleInvalidations({
+        eventName: 'index',
+        indexType: 'incremental',
+        realmURL: testRealmURL,
+        invalidations: [`${testRealmURL}person.gts`],
+      } as RealmEventContent);
+      await settled();
+    } finally {
+      rebuilds.restore();
+      realmSandbox.handleExternalModuleInvalidationPartition = originalHandler;
+    }
+
+    assert.strictEqual(
+      rebuilds.count,
+      0,
+      'the shared realm loader and Store graph are not rebuilt',
+    );
+    assert.strictEqual(
+      storeService.peek(hassan),
+      instanceBeforeWrite,
+      'the card keeps the same Store-backed data identity',
     );
   });
 

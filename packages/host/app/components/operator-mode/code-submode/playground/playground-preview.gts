@@ -16,7 +16,12 @@ import FittedFormatGallery from '@cardstack/host/components/operator-mode/previe
 import MarkdownPreview from '@cardstack/host/components/operator-mode/preview-panel/markdown-preview';
 import type { EnhancedRealmInfo } from '@cardstack/host/services/realm';
 
-import type { CardDef, FieldDef, Format } from '@cardstack/base/card-api';
+import type {
+  CardDef,
+  FieldDef,
+  Format,
+  ViewCardFn,
+} from '@cardstack/base/card-api';
 import type { FileDef } from '@cardstack/base/file-api';
 
 interface Signature {
@@ -34,6 +39,7 @@ interface Signature {
     contextMenuItems?: MenuItem[];
     onEdit?: () => void;
     onFinishEditing?: () => void;
+    viewCard?: ViewCardFn;
   };
 }
 function fileDefName(card: CardDef | FieldDef | FileDef) {
@@ -41,47 +47,57 @@ function fileDefName(card: CardDef | FieldDef | FileDef) {
 }
 
 const PlaygroundPreview: TemplateOnlyComponent<Signature> = <template>
-  {{#if (or (eq @format 'isolated') (eq @format 'edit'))}}
+  {{#if
+    (or
+      (or (eq @format 'isolated') (eq @format 'edit')) (eq @format 'embedded')
+    )
+  }}
     <CardContainer
       class={{if
         @isFieldDef
         'field-preview-container'
-        'full-height-preview isolated-and-edit-preview'
+        (if
+          (eq @format 'embedded')
+          'preview-container'
+          'full-height-preview isolated-and-edit-preview'
+        )
       }}
     >
       {{#unless @isFieldDef}}
-        <CardHeader
-          class='preview-header'
-          @cardTypeDisplayName={{cardTypeDisplayName @card}}
-          @cardTypeIcon={{cardTypeIcon @card}}
-          @cardTitle={{if
-            (isCardInstance @card)
-            @card.cardTitle
-            (if @isFileDef (fileDefName @card) undefined)
-          }}
-          @realmInfo={{@realmInfo}}
-          @onEdit={{@onEdit}}
-          @onFinishEditing={{@onFinishEditing}}
-          @isTopCard={{true}}
-          @moreOptionsMenuItems={{@contextMenuItems}}
-        />
+        {{#unless (eq @format 'embedded')}}
+          <CardHeader
+            class='preview-header'
+            @cardTypeDisplayName={{cardTypeDisplayName @card}}
+            @cardTypeIcon={{cardTypeIcon @card}}
+            @cardTitle={{if
+              (isCardInstance @card)
+              @card.cardTitle
+              (if @isFileDef (fileDefName @card) undefined)
+            }}
+            @realmInfo={{@realmInfo}}
+            @onEdit={{@onEdit}}
+            @onFinishEditing={{@onFinishEditing}}
+            @isTopCard={{true}}
+            @moreOptionsMenuItems={{@contextMenuItems}}
+          />
+        {{/unless}}
       {{/unless}}
       <CardRenderer
         class='preview'
         @card={{@card}}
         @format={{@format}}
         @codeRef={{@codeRef}}
+        @viewCard={{@viewCard}}
       />
-    </CardContainer>
-  {{else if (eq @format 'embedded')}}
-    <CardContainer
-      class={{if @isFieldDef 'field-preview-container' 'preview-container'}}
-    >
-      <CardRenderer class='preview' @card={{@card}} @format={{@format}} />
     </CardContainer>
   {{else if (eq @format 'head')}}
     <CardContainer class='preview-container'>
-      <CardRenderer class='preview' @card={{@card}} @format={{@format}} />
+      <CardRenderer
+        class='preview'
+        @card={{@card}}
+        @format={{@format}}
+        @viewCard={{@viewCard}}
+      />
     </CardContainer>
   {{else if (eq @format 'atom')}}
     <div class='atom-preview-container' data-test-atom-preview>Lorem ipsum dolor
@@ -91,6 +107,7 @@ const PlaygroundPreview: TemplateOnlyComponent<Signature> = <template>
         @card={{@card}}
         @format={{@format}}
         @displayContainer={{unless @isFieldDef false}}
+        @viewCard={{@viewCard}}
       />
       tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim
       veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea

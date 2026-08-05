@@ -13,6 +13,7 @@ import {
   type CardContext,
   type CreateCardFn,
   FieldsTypeFor,
+  getComponent,
 } from '@cardstack/base/card-api';
 import { CardContainer } from '@cardstack/boxel-ui/components';
 import { and, bool, cn } from '@cardstack/boxel-ui/helpers';
@@ -558,5 +559,5 @@ export class CardsGrid extends GlimmerComponent<{
     </style>
   </template>
 
-  getComponent = (card: CardDef) => card.constructor.getComponent(card);
+  getComponent = (card: CardDef) => getComponent(card);
 }

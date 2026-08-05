@@ -1,6 +1,7 @@
 import {
   type Box,
   type Field,
+  type FieldType,
   type Format,
   type FieldsTypeFor,
   type BaseDef,
@@ -45,6 +46,8 @@ export interface BoxComponentSignature {
     Named: {
       format?: Format;
       displayContainer?: boolean;
+      fieldType?: FieldType;
+      fieldName?: string;
       typeConstraint?: ResolvedCodeRef;
       /**
        * Only honoured by the `linksTo` editor today — the
@@ -375,8 +378,8 @@ export function getBoxComponent(
                           {{context.cardComponentModifier
                             card=card
                             format=effectiveFormats.cardDef
-                            fieldType=field.fieldType
-                            fieldName=field.name
+                            fieldType=(coalesce @fieldType field.fieldType)
+                            fieldName=(coalesce @fieldName field.name)
                           }}
                           data-boxel-card-id={{card.id}}
                           data-boxel-card-format={{effectiveFormats.cardDef}}

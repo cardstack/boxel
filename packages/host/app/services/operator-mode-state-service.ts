@@ -25,9 +25,9 @@ import {
   isLocalId,
   localId as localIdSymbol,
   Deferred,
-  SupportedMimeType,
   internalKeyFor,
   realmURL as realmURLSymbol,
+  SupportedMimeType,
 } from '@cardstack/runtime-common';
 
 import type { Submode } from '@cardstack/host/components/submode-switcher';
@@ -37,6 +37,7 @@ import { StackItem, type StackItemType } from '@cardstack/host/lib/stack-item';
 import {
   file,
   isReady,
+  type InitialFileContent,
   type FileResource,
 } from '@cardstack/host/resources/file';
 import { maybe } from '@cardstack/host/resources/maybe';
@@ -60,6 +61,7 @@ import { removeCardJsonExtension } from '../utils/search/types';
 
 import type CardService from './card-service';
 import type CodeSemanticsService from './code-semantics-service';
+import type CodeSourceCacheService from './code-source-cache';
 import type ErrorDisplayService from './error-display';
 import type MatrixService from './matrix-service';
 import type NetworkService from './network';
@@ -166,6 +168,13 @@ export default class OperatorModeStateService extends Service {
     workspaceChooserOpened: false,
   });
   private cachedRealmURL: URL | null = null;
+  private pendingOpenFileSeed:
+    | (InitialFileContent & { url: string })
+    | undefined;
+  private codeSelectionHistory = new Map<
+    string,
+    { codeSelection: string; fieldSelection?: string }
+  >();
   private openFileSubscribers: OpenFileSubscriber[] = [];
   private cardTitles = new TrackedMap<string, string>();
 
@@ -221,6 +230,7 @@ export default class OperatorModeStateService extends Service {
   @tracked expandedCardHeaderElement: HTMLElement | null = null;
 
   @service declare private cardService: CardService;
+  @service declare private codeSourceCache: CodeSourceCacheService;
   @service declare private codeSemanticsService: CodeSemanticsService;
   @service declare private errorDisplay: ErrorDisplayService;
   @service declare private loaderService: LoaderService;
@@ -324,6 +334,8 @@ export default class OperatorModeStateService extends Service {
     });
     this.cachedRealmURL = null;
     this.openFileSubscribers = [];
+    this.pendingOpenFileSeed = undefined;
+    this.codeSelectionHistory.clear();
     this.cardTitles = new TrackedMap();
     this.moduleInspectorHistory = {};
     this.profileSettingsOpen = false;
@@ -783,7 +795,12 @@ export default class OperatorModeStateService extends Service {
     if (codeRef && isResolvedCodeRef(codeRef)) {
       //(possibly) in a different module
       this._state.codeSelection = codeRef.name;
-      await this.updateCodePath(codeRef.module);
+      this.rememberCodeSelection(codeRef.module, codeRef.name);
+      await this.updateCodePath(
+        await this.determineCanonicalCodePath(
+          this.network.virtualNetwork.toURL(codeRef.module),
+        ),
+      );
     } else if (
       codeRef &&
       'type' in codeRef &&
@@ -793,14 +810,41 @@ export default class OperatorModeStateService extends Service {
     ) {
       this._state.fieldSelection = codeRef.field;
       this._state.codeSelection = codeRef.card.name;
-      await this.updateCodePath(codeRef.card.module);
+      this.rememberCodeSelection(
+        codeRef.card.module,
+        codeRef.card.name,
+        codeRef.field,
+      );
+      await this.updateCodePath(
+        await this.determineCanonicalCodePath(
+          this.network.virtualNetwork.toURL(codeRef.card.module),
+        ),
+      );
     } else if (localName && onLocalSelection) {
       //in the same module
       this._state.codeSelection = localName;
       this._state.fieldSelection = fieldName;
+      if (this._state.codePath) {
+        this.rememberCodeSelection(this._state.codePath, localName, fieldName);
+      }
       this.schedulePersist();
       onLocalSelection(localName, fieldName);
     }
+  }
+
+  private rememberCodeSelection(
+    module: RealmResourceIdentifier | URL,
+    codeSelection: string,
+    fieldSelection?: string,
+  ) {
+    let moduleURL =
+      typeof module === 'string'
+        ? this.network.virtualNetwork.toURL(module)
+        : module;
+    this.codeSelectionHistory.set(moduleURL.href, {
+      codeSelection,
+      fieldSelection,
+    });
   }
 
   get codePathRelativeToRealm() {
@@ -833,6 +877,11 @@ export default class OperatorModeStateService extends Service {
     await this.updateCodePath(fileUrl);
   };
 
+  onFileIntent = (entryPath: LocalPath) => {
+    let fileURL = new RealmPaths(new URL(this.realmURL)).fileURL(entryPath);
+    void this.prefetchCodePath(fileURL);
+  };
+
   async updateCodePath(
     codePath: RealmResourceIdentifier | URL | null,
     moduleInspectorView?: ModuleInspectorView,
@@ -841,19 +890,35 @@ export default class OperatorModeStateService extends Service {
       typeof codePath === 'string'
         ? this.network.virtualNetwork.toURL(codePath)
         : codePath;
-    let canonicalCodePath = await this.determineCanonicalCodePath(codePathURL);
-    this._state.codePath = canonicalCodePath;
+    if (
+      this.pendingOpenFileSeed &&
+      this.pendingOpenFileSeed.url !== codePathURL?.href
+    ) {
+      this.pendingOpenFileSeed = undefined;
+    }
+    // Selecting a file is a navigation concern. Commit it immediately so the
+    // host-owned editor can mount while the file request, module analysis, and
+    // sandbox preview proceed independently.
+    this._state.codePath = codePathURL;
     this.updateOpenDirsForNestedPath();
     this.schedulePersist();
 
     moduleInspectorView =
       moduleInspectorView ??
-      this.moduleInspectorHistory[canonicalCodePath?.href ?? ''] ??
+      this.moduleInspectorHistory[codePathURL?.href ?? ''] ??
       DEFAULT_MODULE_INSPECTOR_VIEW;
 
     this.updateModuleInspectorView(moduleInspectorView);
 
     this.specPanelService.setSelection(null);
+  }
+
+  prefetchCodePath(codePath: URL) {
+    return this.codeSourceCache.prefetch(codePath);
+  }
+
+  seedOpenFile(url: URL, initial: InitialFileContent) {
+    this.pendingOpenFileSeed = { url: url.href, ...initial };
   }
 
   persistModuleInspectorView(
@@ -869,24 +934,15 @@ export default class OperatorModeStateService extends Service {
     }
   }
 
-  private async determineCanonicalCodePath(codePath: URL | null) {
-    if (!codePath) {
-      return codePath;
-    }
-
-    let response;
+  private async determineCanonicalCodePath(codePath: URL) {
     try {
-      response = await this.network.authedFetch(codePath, {
+      let response = await this.network.authedFetch(codePath, {
         method: 'HEAD',
         headers: { Accept: SupportedMimeType.CardSource },
       });
-
-      if (response.ok) {
-        return new URL(response.url);
-      }
-
-      return codePath;
-    } catch (_e) {
+      await response.body?.cancel();
+      return response.ok ? new URL(response.url) : codePath;
+    } catch {
       return codePath;
     }
   }
@@ -1106,6 +1162,20 @@ export default class OperatorModeStateService extends Service {
       ]),
     );
 
+    let rememberedSelection = rawState.codePath
+      ? this.codeSelectionHistory.get(new URL(rawState.codePath).href)
+      : undefined;
+    let codeSelection =
+      rawState.codeSelection ?? rememberedSelection?.codeSelection;
+    let fieldSelection =
+      rawState.fieldSelection ?? rememberedSelection?.fieldSelection;
+    if (rawState.codePath && codeSelection) {
+      this.codeSelectionHistory.set(new URL(rawState.codePath).href, {
+        codeSelection,
+        fieldSelection,
+      });
+    }
+
     let newState: OperatorModeState = new TrackedObject({
       stacks: new TrackedArray([]),
       submode: rawState.submode ?? Submodes.Interact,
@@ -1118,8 +1188,8 @@ export default class OperatorModeStateService extends Service {
       ),
       fileView: rawState.fileView ?? 'inspector',
       openDirs,
-      codeSelection: rawState.codeSelection,
-      fieldSelection: rawState.fieldSelection,
+      codeSelection,
+      fieldSelection,
       aiAssistantOpen:
         rawState.aiAssistantOpen ?? readPersistedAiAssistantOpen(),
       moduleInspector:
@@ -1322,8 +1392,19 @@ export default class OperatorModeStateService extends Service {
       return undefined;
     }
 
+    let initial =
+      this.pendingOpenFileSeed?.url === codePath.href
+        ? this.pendingOpenFileSeed
+        : undefined;
+
     return file(context, () => ({
       url: codePath!.href,
+      initial,
+      onInitialSettled: () => {
+        if (this.pendingOpenFileSeed === initial) {
+          this.pendingOpenFileSeed = undefined;
+        }
+      },
       onStateChange: (state: FileResource['state']) => {
         if (state === 'ready') {
           this.cachedRealmURL = new URL(this.readyFile.realmURL);

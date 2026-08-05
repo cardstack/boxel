@@ -937,7 +937,7 @@ module('Acceptance | operator mode tests', function (hooks) {
   });
 
   module('2 stacks', function () {
-    test('Toggling submode will open code submode and toggling back will restore the stack', async function (assert) {
+    test('[NAV-03] Toggling submode will open code submode and toggling back will restore the stack', async function (assert) {
       await visitOperatorMode({
         stacks: [
           [

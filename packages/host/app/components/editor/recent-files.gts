@@ -10,9 +10,6 @@ import { RealmPaths } from '@cardstack/runtime-common';
 import type RealmService from '@cardstack/host/services/realm';
 import type { RecentFile } from '@cardstack/host/services/recent-files-service';
 
-import WithLoadedRealm from '../with-loaded-realm';
-
-import type CardService from '../../services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RecentFilesService from '../../services/recent-files-service';
 
@@ -21,9 +18,7 @@ interface Args {
 }
 
 export default class RecentFiles extends Component<Args> {
-  @service declare cardService: CardService;
   @service declare recentFilesService: RecentFilesService;
-  @service declare operatorModeStateService: OperatorModeStateService;
 
   <template>
     <ul class='recent-files' data-test-recent-files>
@@ -50,13 +45,17 @@ interface FileArgs {
 }
 
 class File extends Component<FileArgs> {
-  @service declare cardService: CardService;
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare realm: RealmService;
 
   @action
   async openFile() {
     await this.operatorModeStateService.updateCodePath(new URL(this.fullUrl));
+  }
+
+  @action
+  prefetchFile() {
+    void this.operatorModeStateService.prefetchCodePath(this.fullUrl);
   }
 
   get realmPaths() {
@@ -73,6 +72,13 @@ class File extends Component<FileArgs> {
     return (
       this.operatorModeStateService.state.codePath?.href === this.fullUrl.href
     );
+  }
+
+  get realmMeta() {
+    // RealmService returns a tracked placeholder immediately and refreshes it
+    // when realm metadata arrives. Recent files only need URL/file metadata;
+    // they must never wait for a card, schema, sandbox, or iframe loader.
+    return this.realm.meta(this.args.recentFile.realmURL.href);
   }
 
   get fileName() {
@@ -93,20 +99,19 @@ class File extends Component<FileArgs> {
   <template>
     {{#unless this.isSelected}}
       {{! template-lint-disable require-presentational-children }}
-      <WithLoadedRealm @realmURL={{@recentFile.realmURL.href}} as |realm|>
-        <li
-          class='recent-file'
-          data-test-recent-file={{this.fullUrl.href}}
-          role='button'
-          {{on 'click' this.openFile}}
-        >
-          <RealmIcon @realmInfo={{realm.info}} />
-          <span class='file-name'>{{this.fileName}}</span>
-          {{#if this.fileExtension}}
-            <span class='file-extension'>{{this.fileExtension}}</span>
-          {{/if}}
-        </li>
-      </WithLoadedRealm>
+      <li
+        class='recent-file'
+        data-test-recent-file={{this.fullUrl.href}}
+        role='button'
+        {{on 'pointerenter' this.prefetchFile}}
+        {{on 'click' this.openFile}}
+      >
+        <RealmIcon @realmInfo={{this.realmMeta.info}} />
+        <span class='file-name'>{{this.fileName}}</span>
+        {{#if this.fileExtension}}
+          <span class='file-extension'>{{this.fileExtension}}</span>
+        {{/if}}
+      </li>
     {{/unless}}
     <style scoped>
       .recent-file {

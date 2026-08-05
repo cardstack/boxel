@@ -66,6 +66,7 @@ import ElementTracker, {
 } from '@cardstack/host/resources/element-tracker';
 
 import type AiAssistantPanelService from '@cardstack/host/services/ai-assistant-panel-service';
+import type CardTypeService from '@cardstack/host/services/card-type-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type NetworkService from '@cardstack/host/services/network';
@@ -125,6 +126,7 @@ export default class PlaygroundPanel extends Component<Signature> {
   @consume(GetCardContextName) declare private getCard: getCard;
   @consume(CardContextName) declare private cardContext: CardContext;
   @service declare private aiAssistantPanelService: AiAssistantPanelService;
+  @service declare private cardTypeService: CardTypeService;
   @service declare private toolService: ToolService;
   @service declare private loaderService: LoaderService;
   @service declare private matrixService: MatrixService;
@@ -164,8 +166,9 @@ export default class PlaygroundPanel extends Component<Signature> {
     if (this.args.isFieldDef) {
       return fieldDefFormats;
     }
-    const ctor = this.card?.constructor as typeof CardDef | undefined;
-    if (!ctor) return undefined;
+    if (!this.card) return undefined;
+    const introspection = this.cardTypeService.introspect(this.card);
+    if (!introspection) return undefined;
     const cardAvailableFormats: Format[] = [];
     for (const f of cardDefFormats) {
       cardAvailableFormats.push(f);
@@ -174,7 +177,7 @@ export default class PlaygroundPanel extends Component<Signature> {
      custom edit is the SAME component as isolated (e.g. Polymorph).
      The trigger is `hasCustomEditTemplate` (= edit !== CardDef.edit),
      not whether edit === isolated. If no custom edit, omit form. */
-      if (f === 'edit' && ctor.hasCustomEditTemplate) {
+      if (f === 'edit' && introspection.hasCustomEditTemplate) {
         cardAvailableFormats.push('form');
       }
     }
@@ -336,11 +339,8 @@ export default class PlaygroundPanel extends Component<Signature> {
     if (this.format !== 'isolated' && this.format !== 'edit') {
       return true;
     }
-    let { constructor } = this.card;
-    return Boolean(
-      constructor &&
-      'prefersWideFormat' in constructor &&
-      constructor.prefersWideFormat,
+    return (
+      this.cardTypeService.introspect(this.card)?.prefersWideFormat === true
     );
   }
 
@@ -1134,6 +1134,7 @@ export default class PlaygroundPanel extends Component<Signature> {
                     @card={{card}}
                     @format={{this.effectiveFormat}}
                     @codeRef={{this.effectiveCodeRef}}
+                    @viewCard={{@viewCard}}
                     @realmInfo={{this.realmInfo}}
                     @contextMenuItems={{unless
                       @isFileDef

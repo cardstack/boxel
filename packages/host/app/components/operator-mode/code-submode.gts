@@ -47,20 +47,27 @@ import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analy
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import CodeSubmodeEditorIndicator from '@cardstack/host/components/operator-mode/code-submode/editor-indicator';
 import ModuleInspector from '@cardstack/host/components/operator-mode/code-submode/module-inspector';
-
 import consumeContext from '@cardstack/host/helpers/consume-context';
+import CodePreviewSandbox, {
+  CodePreviewSandboxContextName,
+  sameCodePreviewModuleURL,
+} from '@cardstack/host/lib/code-preview-sandbox';
+import type { MonacoContentChangeOrigin } from '@cardstack/host/modifiers/monaco';
+
 import type { FileResource } from '@cardstack/host/resources/file';
 import type {
   ModuleDeclaration,
   State as ModuleState,
 } from '@cardstack/host/resources/module-contents';
 import type CardService from '@cardstack/host/services/card-service';
+import type { SaveType } from '@cardstack/host/services/card-service';
 import type CodeSemanticsService from '@cardstack/host/services/code-semantics-service';
 import type FileUploadService from '@cardstack/host/services/file-upload';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
 import type RealmService from '@cardstack/host/services/realm';
+import type RealmSandboxService from '@cardstack/host/services/realm-sandbox';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
@@ -100,6 +107,8 @@ interface Signature {
     saveSourceOnClose: (url: URL, content: string) => void;
   };
 }
+
+const loadingEditorFile: FileResource = { state: 'loading' };
 
 type PanelWidths = {
   rightPanel: number;
@@ -152,6 +161,7 @@ export default class CodeSubmode extends Component<Signature> {
   @service declare private playgroundPanelService: PlaygroundPanelService;
   @service declare private recentFilesService: RecentFilesService;
   @service declare private realm: RealmService;
+  @service declare private realmSandbox: RealmSandboxService;
   @service declare private specPanelService: SpecPanelService;
   @service declare private store: StoreService;
 
@@ -170,6 +180,13 @@ export default class CodeSubmode extends Component<Signature> {
     | undefined;
 
   private createFileModal: CreateFileModal | undefined;
+  private codePreviewSandbox = new CodePreviewSandbox();
+
+  @provide(CodePreviewSandboxContextName)
+  // @ts-ignore consumed by CardRenderer descendants in the Code preview
+  private get codePreviewSandboxContext() {
+    return this.codePreviewSandbox;
+  }
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -216,6 +233,8 @@ export default class CodeSubmode extends Component<Signature> {
     registerDestructor(this, () => {
       this.operatorModeStateService.unsubscribeFromOpenFileStateChanges(this);
       this.codeSemanticsService.clearOnModuleEditCallback(this.onModuleEdit);
+      this.settleDeferredCodePreviewModule();
+      this.realmSandbox.releaseCodePreviewSandbox(this.codePreviewSandbox);
     });
   }
 
@@ -278,6 +297,10 @@ export default class CodeSubmode extends Component<Signature> {
     return this.codeSemanticsService.currentOpenFile;
   }
 
+  private get editorFile(): FileResource {
+    return this.currentOpenFile ?? loadingEditorFile;
+  }
+
   private get isReady() {
     return this.codeSemanticsService.isReady;
   }
@@ -299,15 +322,23 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   @action private onModuleEdit(state: ModuleState) {
+    let selectedDeclaration = this.selectedDeclaration;
+    if (
+      !selectedDeclaration ||
+      state.declarations.some(
+        (declaration) =>
+          declaration.localName === selectedDeclaration.localName,
+      )
+    ) {
+      return;
+    }
+
     let editedDeclaration = state.declarations.find(
       (newDeclaration: ModuleDeclaration) => {
-        return this.selectedDeclaration
-          ? this.selectedDeclaration.localName !== newDeclaration.localName &&
-              isEquivalentBodyPosition(
-                this.selectedDeclaration.path,
-                newDeclaration.path,
-              )
-          : false;
+        return isEquivalentBodyPosition(
+          selectedDeclaration.path,
+          newDeclaration.path,
+        );
       },
     );
     if (editedDeclaration) {
@@ -322,7 +353,9 @@ export default class CodeSubmode extends Component<Signature> {
 
     return {
       declarations: this.codeSemanticsService.getDeclarations(file, isModule),
-      moduleError: this.codeSemanticsService.getModuleError(file, isModule),
+      moduleError:
+        this.codePreviewSandbox.moduleError ??
+        this.codeSemanticsService.getModuleError(file, isModule),
       isLoading: this.codeSemanticsService.getIsLoading(file, isModule),
     };
   }
@@ -388,6 +421,51 @@ export default class CodeSubmode extends Component<Signature> {
   @action
   private onSourceFileSave(status: 'started' | 'finished') {
     this.sourceFileIsSaving = status === 'started';
+  }
+
+  @action
+  private updateCodePreview(
+    sourceURL: string,
+    source: string,
+    origin: MonacoContentChangeOrigin,
+  ) {
+    if (
+      this.codePreviewSandbox.sourceURL &&
+      !sameCodePreviewModuleURL(this.codePreviewSandbox.sourceURL, sourceURL)
+    ) {
+      this.settleDeferredCodePreviewModule();
+    }
+    if (origin === 'user') {
+      this.realmSandbox.publishCodePreviewSource(
+        this.codePreviewSandbox,
+        sourceURL,
+        source,
+      );
+    } else {
+      this.realmSandbox.seedCodePreviewSource(
+        this.codePreviewSandbox,
+        sourceURL,
+        source,
+      );
+    }
+  }
+
+  private settleDeferredCodePreviewModule() {
+    this.realmSandbox.settleDeferredCodePreviewModule(this.codePreviewSandbox);
+  }
+
+  @action
+  private prepareSourceCommit(
+    sourceURL: string,
+    source: string,
+    saveType: SaveType,
+  ) {
+    return this.realmSandbox.prepareCodePreviewCommit(
+      this.codePreviewSandbox,
+      sourceURL,
+      source,
+      saveType,
+    );
   }
 
   @action
@@ -572,16 +650,25 @@ export default class CodeSubmode extends Component<Signature> {
       }
 
       this.isCreateModalOpen = true;
-      let url = await this.createFileModal.createNewFile(
+      let createdFile = await this.createFileModal.createNewFile(
         fileType,
         new URL(destinationRealm),
         definitionClass,
         sourceInstance,
       );
       this.isCreateModalOpen = false;
-      if (url) {
-        await this.operatorModeStateService.updateCodePath(url);
+      if (createdFile) {
+        if (createdFile.source) {
+          this.operatorModeStateService.seedOpenFile(
+            createdFile.url,
+            createdFile.source,
+          );
+        }
+        // updateCodePath commits navigation immediately. That can destroy and
+        // cancel this component-owned task before the next statement runs, so
+        // establish the intended edit destination first.
         this.setCardPreviewFormat('edit');
+        await this.operatorModeStateService.updateCodePath(createdFile.url);
       }
     },
   );
@@ -719,16 +806,31 @@ export default class CodeSubmode extends Component<Signature> {
     return state;
   });
 
+  private get realmWritability() {
+    return this.realm.writability(
+      this.isReady
+        ? this.readyFile.url
+        : (this.codePath?.href ?? this.realmURL),
+    );
+  }
+
   get isReadOnly() {
+    return this.realmWritability !== 'writable';
+  }
+
+  private get showReadOnlyIndicator() {
     return (
-      !this.realm.canWrite(this.readyFile.url) ||
-      this.fileDefResource?.isLoading
+      this.realmWritability === 'read-only' && !this.fileDefResource?.isLoading
     );
   }
 
   @provide(PermissionsContextName)
   get permissions() {
-    return this.realm.permissions(this.readyFile.url);
+    return this.realm.permissions(
+      this.isReady
+        ? this.readyFile.url
+        : (this.codePath?.href ?? this.realmURL),
+    );
   }
 
   get itemToDeleteId() {
@@ -827,6 +929,7 @@ export default class CodeSubmode extends Component<Signature> {
                           @realmURL={{this.realmURL}}
                           @selectedFile={{this.operatorModeStateService.codePathRelativeToRealm}}
                           @openDirs={{this.operatorModeStateService.currentRealmOpenDirs}}
+                          @onFileIntent={{this.operatorModeStateService.onFileIntent}}
                           @onFileSelected={{this.operatorModeStateService.onFileSelected}}
                           @onDirectorySelected={{this.operatorModeStateService.toggleOpenDir}}
                           @onDeleteFile={{if
@@ -865,28 +968,24 @@ export default class CodeSubmode extends Component<Signature> {
                 @minSize={{20}}
               >
                 <InnerContainer class='monaco-editor-panel'>
+                  <CodeEditor
+                    @file={{this.editorFile}}
+                    @moduleAnalysis={{this.moduleAnalysis}}
+                    @selectedDeclaration={{this.selectedDeclaration}}
+                    @saveSourceOnClose={{@saveSourceOnClose}}
+                    @selectDeclaration={{this.selectDeclaration}}
+                    @onFileSave={{this.onSourceFileSave}}
+                    @onContentChange={{this.updateCodePreview}}
+                    @prepareSourceCommit={{this.prepareSourceCommit}}
+                    @onWriteError={{this.onWriteError}}
+                    @onSetup={{this.setupCodeEditor}}
+                    @isReadOnly={{this.isReadOnly}}
+                  />
                   {{#if this.isReady}}
-                    <CodeEditor
-                      @file={{this.currentOpenFile}}
-                      @moduleAnalysis={{this.moduleAnalysis}}
-                      @selectedDeclaration={{this.selectedDeclaration}}
-                      @saveSourceOnClose={{@saveSourceOnClose}}
-                      @selectDeclaration={{this.selectDeclaration}}
-                      @onFileSave={{this.onSourceFileSave}}
-                      @onWriteError={{this.onWriteError}}
-                      @onSetup={{this.setupCodeEditor}}
-                      @isReadOnly={{this.isReadOnly}}
-                    />
-
                     <CodeSubmodeEditorIndicator
                       @isSaving={{this.isSaving}}
-                      @isReadOnly={{this.isReadOnly}}
+                      @isReadOnly={{this.showReadOnlyIndicator}}
                       @errorMessage={{this.writeError}}
-                    />
-                  {{else if this.isLoading}}
-                    <LoadingIndicator
-                      @color='var(--boxel-light)'
-                      class='loading-indicator'
                     />
                   {{/if}}
                 </InnerContainer>

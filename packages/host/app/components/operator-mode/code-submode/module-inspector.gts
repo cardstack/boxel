@@ -658,6 +658,14 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
               @cardOrField={{@selectedCardOrField.cardOrField}}
               @viewCard={{this.viewCardInCodeSubmode}}
             />
+            {{#if @moduleAnalysis.moduleError}}
+              <div class='module-preview-error' data-test-module-preview-error>
+                <SyntaxErrorDisplay
+                  @syntaxErrors={{@moduleAnalysis.moduleError.message}}
+                  @errorType={{@moduleAnalysis.moduleError.type}}
+                />
+              </div>
+            {{/if}}
           {{else if (eq this.activePanel 'spec')}}
             <SpecPreview
               @selectedDeclaration={{@selectedDeclaration}}
@@ -713,9 +721,21 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       }
 
       .module-inspector-content {
+        position: relative;
         overflow: auto;
         height: 100%;
         background-color: var(--boxel-light);
+      }
+
+      .module-preview-error {
+        position: absolute;
+        right: var(--boxel-sp);
+        bottom: var(--boxel-sp);
+        left: var(--boxel-sp);
+        z-index: 10;
+        max-height: 45%;
+        overflow: auto;
+        margin: 0;
       }
 
       .module-inspector-content.error {

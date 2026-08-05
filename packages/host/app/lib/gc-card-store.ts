@@ -363,6 +363,10 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     return this.#idResolver.getRemoteIds(localId);
   }
 
+  getLocalId(remoteId: string) {
+    return this.#idResolver.getLocalId(remoteId.replace(/\.json$/, ''));
+  }
+
   setCard(id: string, instance: CardDef): void {
     this.setCardItem(id, instance);
   }
