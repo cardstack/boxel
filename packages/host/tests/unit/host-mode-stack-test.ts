@@ -1,6 +1,9 @@
 import { module, test } from 'qunit';
 
-import { unwindOrPush } from '@cardstack/host/utils/host-mode-stack';
+import {
+  removeTopmost,
+  unwindOrPush,
+} from '@cardstack/host/utils/host-mode-stack';
 
 module('Unit | host-mode-stack | unwindOrPush', function () {
   test('pushes a card that is not on the trail', function (assert) {
@@ -49,5 +52,38 @@ module('Unit | host-mode-stack | unwindOrPush', function () {
     let stack = ['b'];
     unwindOrPush(stack, 'c', null);
     assert.deepEqual(stack, ['b', 'c']);
+  });
+});
+
+module('Unit | host-mode-stack | removeTopmost', function () {
+  test('removes the card and reports the change', function (assert) {
+    let stack = ['b', 'c'];
+    assert.true(removeTopmost(stack, 'b'));
+    assert.deepEqual(stack, ['c']);
+  });
+
+  test('reports no change when the card is absent', function (assert) {
+    let stack = ['b'];
+    assert.false(removeTopmost(stack, 'c'));
+    assert.deepEqual(stack, ['b'], 'the trail is untouched');
+  });
+
+  test('removes the topmost copy of a duplicated card', function (assert) {
+    // Closing targets the copy on screen — the stack's top card. Removing the
+    // first copy instead would leave the visible card in place and silently
+    // drop one the user was not acting on.
+    let stack = ['a', 'b', 'a'];
+    assert.true(removeTopmost(stack, 'a'));
+    assert.deepEqual(stack, ['a', 'b']);
+  });
+
+  test('closing a whole trail of duplicates from the top down empties it', function (assert) {
+    // What a breadcrumb click does: close every card above the crumb, lowest
+    // id first, one call each.
+    let stack = ['a', 'b', 'a', 'b'];
+    for (let cardId of ['b', 'a', 'b']) {
+      removeTopmost(stack, cardId);
+    }
+    assert.deepEqual(stack, ['a'], 'unwinds to the clicked crumb');
   });
 });

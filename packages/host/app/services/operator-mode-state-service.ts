@@ -50,7 +50,7 @@ import type RealmServer from '@cardstack/host/services/realm-server';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
-import { unwindOrPush } from '../utils/host-mode-stack';
+import { removeTopmost, unwindOrPush } from '../utils/host-mode-stack';
 import {
   AiAssistantOpen,
   ModuleInspectorSelections,
@@ -636,9 +636,7 @@ export default class OperatorModeStateService extends Service {
   }
 
   removeFromHostModeStack(cardId: string) {
-    let index = this._state.hostModeStack.findIndex((item) => item === cardId);
-    if (index !== -1) {
-      this._state.hostModeStack.splice(index, 1);
+    if (removeTopmost(this._state.hostModeStack, cardId)) {
       this.schedulePersist();
     }
   }

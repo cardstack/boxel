@@ -795,31 +795,6 @@ module('Acceptance | host mode tests', function (hooks) {
     );
   });
 
-  test('viewing a card already in the trail unwinds to it', async function (assert) {
-    let firstStackCardId = `${testHostModeRealmURL}ViewCardDemo/secondary`;
-    let secondStackCardId = `${testHostModeRealmURL}ViewCardDemo/tertiary`;
-    let hostModeStackValue = encodeURIComponent(
-      JSON.stringify([firstStackCardId, secondStackCardId]),
-    );
-
-    await visit(
-      `/test/ViewCardDemo/index.json?hostModeStack=${hostModeStackValue}`,
-    );
-
-    let primaryCardSelector = `[data-test-host-mode-card="${testHostModeRealmURL}ViewCardDemo/index"]`;
-    let secondStackSelector = `[data-test-host-mode-stack-item="${secondStackCardId}"]`;
-    await waitFor(secondStackSelector);
-    await waitFor(`${primaryCardSelector} [data-test-view-card-demo-button]`);
-
-    // the primary card targets secondary, which is already below tertiary
-    await click(`${primaryCardSelector} [data-test-view-card-demo-button]`);
-
-    await waitUntil(() => !document.querySelector(secondStackSelector));
-    assert
-      .dom(`[data-test-host-mode-stack-item="${firstStackCardId}"]`)
-      .exists('unwinds to the card, leaving it on top of the trail');
-  });
-
   // The unwind by the route a visitor can take: the scrim covers the primary
   // card, so only a stack item's own button is genuinely clickable.
   test('viewing a card below it in the trail unwinds to that card', async function (assert) {
@@ -855,7 +830,6 @@ module('Acceptance | host mode tests', function (hooks) {
     );
   });
 
-  // Regression cover for scoping dismiss to the scrim (CS-12434).
   test('clicking the scrim closes the top card of the trail', async function (assert) {
     let firstStackCardId = `${testHostModeRealmURL}ViewCardDemo/secondary`;
     let secondStackCardId = `${testHostModeRealmURL}ViewCardDemo/tertiary`;
@@ -878,6 +852,51 @@ module('Acceptance | host mode tests', function (hooks) {
     assert
       .dom(`[data-test-host-mode-stack-item="${firstStackCardId}"]`)
       .exists('only the top card closes');
+  });
+
+  // `hostModeStack` is taken from the URL verbatim, so the same card can appear
+  // twice in one trail. Closing has to act on the copy on screen — the top card
+  // — or the click appears to do nothing while a buried card disappears.
+  test('closing a card that appears twice in the trail closes the visible copy', async function (assert) {
+    let repeatedCardId = `${testHostModeRealmURL}ViewCardDemo/secondary`;
+    let middleCardId = `${testHostModeRealmURL}ViewCardDemo/tertiary`;
+    let hostModeStackValue = encodeURIComponent(
+      JSON.stringify([repeatedCardId, middleCardId, repeatedCardId]),
+    );
+
+    await visit(
+      `/test/ViewCardDemo/index.json?hostModeStack=${hostModeStackValue}`,
+    );
+
+    await waitFor('[data-test-host-mode-stack-item-index="2"]');
+
+    await click('[data-test-host-mode-stack] .inner');
+
+    await waitUntil(
+      () =>
+        !document.querySelector('[data-test-host-mode-stack-item-index="2"]'),
+    );
+    assert
+      .dom('[data-test-host-mode-stack-item-index="1"]')
+      .hasAttribute(
+        'data-test-host-mode-stack-item',
+        middleCardId,
+        'the card below the closed copy becomes the top of the trail',
+      );
+    assert
+      .dom('[data-test-host-mode-stack-item-index="0"]')
+      .hasAttribute(
+        'data-test-host-mode-stack-item',
+        repeatedCardId,
+        'the buried copy survives',
+      );
+    assert.strictEqual(
+      new URL(currentURL()!, 'http://localhost').searchParams.get(
+        'hostModeStack',
+      ),
+      JSON.stringify([repeatedCardId, middleCardId]),
+      'the persisted trail lost the top copy, not the bottom one',
+    );
   });
 
   test('stack state persists in query parameter', async function (assert) {
