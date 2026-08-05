@@ -56,6 +56,34 @@ const VALID_JPEG_4x5 = new Uint8Array([
   0x00, 0x02, 0x11, 0x03, 0x11, 0x00, 0x3f, 0x00, 0x3a, 0x03, 0x15, 0x4d, 0xff, 0xd9,
 ]);
 
+// An EXIF APP1 segment declaring a Canon EOS R5, orientation 6, 1/250s at ƒ/1.4,
+// ISO 400, 50mm, sRGB. Spliced in after SOI below so the same JPEG exercises
+// both the dimension read and the metadata read. Byte-level parsing is covered
+// in `unit/image-metadata-extractor-test`; this fixture exists to prove the
+// values survive the whole extract → search_doc → file-meta path.
+// prettier-ignore
+const EXIF_APP1_SEGMENT = new Uint8Array([
+  0xff, 0xe1, 0x00, 0xb3, 0x45, 0x78, 0x69, 0x66, 0x00, 0x00, 0x49, 0x49, 0x2a, 0x00, 0x08, 0x00,
+  0x00, 0x00, 0x04, 0x00, 0x0f, 0x01, 0x02, 0x00, 0x06, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00,
+  0x10, 0x01, 0x02, 0x00, 0x0d, 0x00, 0x00, 0x00, 0x86, 0x00, 0x00, 0x00, 0x12, 0x01, 0x03, 0x00,
+  0x01, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x69, 0x87, 0x04, 0x00, 0x01, 0x00, 0x00, 0x00,
+  0x3e, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05, 0x00, 0x9a, 0x82, 0x05, 0x00, 0x01, 0x00,
+  0x00, 0x00, 0x93, 0x00, 0x00, 0x00, 0x9d, 0x82, 0x05, 0x00, 0x01, 0x00, 0x00, 0x00, 0x9b, 0x00,
+  0x00, 0x00, 0x27, 0x88, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x90, 0x01, 0x00, 0x00, 0x0a, 0x92,
+  0x05, 0x00, 0x01, 0x00, 0x00, 0x00, 0xa3, 0x00, 0x00, 0x00, 0x01, 0xa0, 0x03, 0x00, 0x01, 0x00,
+  0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x43, 0x61, 0x6e, 0x6f, 0x6e, 0x00,
+  0x43, 0x61, 0x6e, 0x6f, 0x6e, 0x20, 0x45, 0x4f, 0x53, 0x20, 0x52, 0x35, 0x00, 0x01, 0x00, 0x00,
+  0x00, 0xfa, 0x00, 0x00, 0x00, 0x0e, 0x00, 0x00, 0x00, 0x0a, 0x00, 0x00, 0x00, 0x32, 0x00, 0x00,
+  0x00, 0x01, 0x00, 0x00, 0x00,
+]);
+
+// EXIF must precede the frame header, so the segment goes directly after SOI.
+const JPEG_WITH_EXIF_4x5 = new Uint8Array([
+  ...VALID_JPEG_4x5.subarray(0, 2),
+  ...EXIF_APP1_SEGMENT,
+  ...VALID_JPEG_4x5.subarray(2),
+]);
+
 module('Acceptance | jpg image def', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -141,6 +169,7 @@ module('Acceptance | jpg image def', function (hooks) {
           ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'sample.jpg': VALID_JPEG_4x5,
           'renderable.jpg': VALID_JPEG_4x5,
+          'with-exif.jpg': JPEG_WITH_EXIF_4x5,
           'not-a-jpg.jpg': 'This is plain text, not a JPEG file.',
         },
       }),
@@ -169,6 +198,106 @@ module('Acceptance | jpg image def', function (hooks) {
     assert.ok(
       String(result.searchDoc?.contentType).includes('jpeg'),
       'sets jpeg content type',
+    );
+  });
+
+  test('carries EXIF and color facts through extract into the search doc', async function (assert) {
+    let url = makeFileURL('with-exif.jpg');
+    await visit(
+      fileExtractPath(url, {
+        fileExtract: true,
+        fileDefCodeRef: jpgDefCodeRef(),
+      }),
+    );
+
+    let result = await captureFileExtractResult('ready');
+    assert.strictEqual(result.status, 'ready');
+    assert.notOk(
+      result.mismatch,
+      'an EXIF segment ahead of the frame header does not break the dimension read',
+    );
+    assert.strictEqual(result.searchDoc?.width, 4, 'still extracts the width');
+    assert.strictEqual(
+      result.searchDoc?.height,
+      5,
+      'still extracts the height',
+    );
+
+    let exif = result.searchDoc?.exif;
+    assert.strictEqual(exif?.capture?.make, 'Canon');
+    assert.strictEqual(exif?.capture?.cameraModel, 'Canon EOS R5');
+    assert.strictEqual(exif?.capture?.iso, 400);
+    assert.strictEqual(
+      exif?.capture?.exposureTime?.displayText,
+      '1/250 s',
+      'a nested compound value three levels deep survives the extract',
+    );
+    assert.strictEqual(exif?.capture?.focalLength?.value, 50);
+    assert.deepEqual(exif?.capture?.orientation, {
+      code: '6',
+      scheme: 'exif-orientation',
+    });
+
+    assert.deepEqual(
+      result.searchDoc?.colorProfile,
+      {
+        colorSpace: { code: 'ycbcr', scheme: 'color-space' },
+        bitDepth: 8,
+        channels: 3,
+        hasAlpha: false,
+      },
+      "the frame header's color model outranks the EXIF sRGB tag",
+    );
+  });
+
+  test('a JPEG with no EXIF gains no exif attribute at all', async function (assert) {
+    let url = makeFileURL('sample.jpg');
+    await visit(
+      fileExtractPath(url, {
+        fileExtract: true,
+        fileDefCodeRef: jpgDefCodeRef(),
+      }),
+    );
+
+    let result = await captureFileExtractResult('ready');
+    assert.strictEqual(
+      result.searchDoc?.exif,
+      undefined,
+      'an absent optional structure leaves no empty object in the index row',
+    );
+    assert.strictEqual(
+      result.searchDoc?.colorProfile?.bitDepth,
+      8,
+      'the color profile still comes from the frame header',
+    );
+  });
+
+  test('indexing stores the EXIF metadata and file meta serves it', async function (assert) {
+    let fileURL = new URL('with-exif.jpg', testRealmURL);
+    let fileEntry = await realm.realmIndexQueryEngine.file(fileURL);
+
+    assert.strictEqual(
+      fileEntry?.searchDoc?.exif?.capture?.make,
+      'Canon',
+      'the index row holds the extracted camera make',
+    );
+
+    let network = getService('network') as NetworkService;
+    let response = await network.virtualNetwork.fetch(fileURL, {
+      headers: { Accept: SupportedMimeType.FileMeta },
+    });
+    assert.true(response.ok, 'file meta request succeeds');
+
+    let body = await response.json();
+    assert.strictEqual(
+      body?.data?.attributes?.exif?.capture?.cameraModel,
+      'Canon EOS R5',
+      'file meta serves the nested compound attribute',
+    );
+    assert.strictEqual(
+      body?.data?.attributes?.colorProfile?.colorSpace?.code,
+      'ycbcr',
+      'file meta serves the coded color-space value',
     );
   });
 
