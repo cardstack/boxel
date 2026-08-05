@@ -861,11 +861,11 @@ export class IndexQueryEngine {
     // File-only columns the assembly loop reads to build a `file` row's
     // resource + native renderings. Each is gated on `i.type = 'file'` so a
     // mixed query never drags a card row's (potentially multi-megabyte)
-    // `search_doc` / `isolated_html` / `markdown`: within a `(url, type)`
-    // group the type is constant, so the CASE yields the value for a file
-    // group and NULL for an instance group (which the assembly loop ignores
-    // — it only calls `fileEntryFromResult` on `file` rows). Appended to
-    // either projection only when file rows are in scope.
+    // `search_doc` — the only large column in this fragment: within a
+    // `(url, type)` group the type is constant, so the CASE yields the value
+    // for a file group and NULL for an instance group (which the assembly loop
+    // ignores — it only calls `fileEntryFromResult` on `file` rows). Appended
+    // to either projection only when file rows are in scope.
     let fileOnly = (col: string) =>
       `ANY_VALUE(CASE WHEN i.type = 'file' THEN ${col} END)`;
     // Only the columns the file-row assembly actually reads
