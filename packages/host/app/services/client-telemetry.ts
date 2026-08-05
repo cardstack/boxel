@@ -1344,6 +1344,16 @@ export default class ClientTelemetryService
 // attempts.
 const requestAttemptCounts = new WeakMap<Request, number>();
 
+// A Matrix client-server API call, which is served by Synapse rather than the
+// realm server. Recognized by path, so it holds for any homeserver origin.
+function isMatrixRequest(req: Request): boolean {
+  try {
+    return new URL(req.url).pathname.startsWith('/_matrix/');
+  } catch {
+    return false;
+  }
+}
+
 export function createServerRequestTimingMiddleware(
   owner: Owner,
 ): FetcherMiddlewareHandler {
@@ -1371,7 +1381,14 @@ export function createServerRequestTimingMiddleware(
     // the server is the same one recorded on the event below.
     let attempt = (requestAttemptCounts.get(req) ?? 0) + 1;
     requestAttemptCounts.set(req, attempt);
-    if (!req.headers.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER)) {
+    // Only the realm server reads this id back out. Synapse ignores it, and its
+    // CORS allow-list is a fixed set that a custom header is not in — so
+    // stamping a Matrix request makes the browser reject the preflight and the
+    // request never leaves.
+    if (
+      !isMatrixRequest(req) &&
+      !req.headers.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER)
+    ) {
       try {
         req.headers.set(X_BOXEL_LOGGING_CORRELATION_ID_HEADER, uuidv4());
       } catch {

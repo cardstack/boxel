@@ -7,6 +7,7 @@ import {
   getUsernameFromMatrixId,
 } from '../lib/profile-manager.ts';
 import { prompt, promptPassword } from '../lib/prompt.ts';
+import { SsoTimeoutError, browserLogin } from '../lib/sso-login.ts';
 import {
   FG_GREEN,
   FG_YELLOW,
@@ -24,18 +25,31 @@ export interface ProfileCommandOptions {
   name?: string;
   matrixUrl?: string;
   realmServerUrl?: string;
+  // Commander sets this to false for `--no-browser`. Undefined means the
+  // default: sign in through the browser.
+  browser?: boolean;
+  hostUrl?: string;
+  staging?: boolean;
+  production?: boolean;
+  local?: boolean;
 }
 
 interface EnvironmentDefaults {
   domain: string;
   matrixUrl: string;
   realmServerUrl: string;
+  // Only set where the app is served from a different origin than the realm
+  // server. Deployed environments serve both from one, so the sign-in page is
+  // reachable at realmServerUrl and this stays unset. Local dev splits them
+  // across ports, and the origin matters: the browser session lives in
+  // origin-scoped storage, so a page loaded from the realm server's port
+  // wouldn't see the session established on the app's.
+  appUrl?: string;
 }
 
-const MENU_ENVIRONMENTS: Record<
-  'staging' | 'production' | 'local',
-  EnvironmentDefaults
-> = {
+type PresetName = 'staging' | 'production' | 'local';
+
+const ENVIRONMENTS: Record<PresetName, EnvironmentDefaults> = {
   staging: {
     domain: 'stack.cards',
     matrixUrl: 'https://matrix-staging.stack.cards',
@@ -50,14 +64,16 @@ const MENU_ENVIRONMENTS: Record<
     domain: 'localhost',
     matrixUrl: 'http://localhost:8008',
     realmServerUrl: 'https://localhost:4201/',
+    // The host vite dev server, which is where local dev signs in.
+    appUrl: 'https://localhost:4200/',
   },
 };
 
-// Validate and normalize a Matrix or realm-server URL provided by the user
-// (via --matrix-url / --realm-server-url or the interactive Custom prompt).
-// Returns the trimmed input on success; exits 1 with a clear message
-// otherwise. Without this, downstream code (fetch, realm auth, etc.) would
-// throw on invalid input far away from where the value was entered.
+// Validate and normalize a URL provided by the user via --matrix-url,
+// --realm-server-url, or --host-url. Returns the trimmed input on success;
+// exits 1 with a clear message otherwise. Without this, downstream code
+// (fetch, realm auth, etc.) would throw on invalid input far away from where
+// the value was entered.
 function validateUrl(input: string, label: string): string {
   const trimmed = input.trim();
   let parsed: URL;
@@ -108,6 +124,124 @@ export function resolveBoxelEnvironment(): EnvironmentDefaults | null {
   };
 }
 
+// Which rule picked the environment. Only 'default' means nothing in the
+// invocation named one, which is the signal `profile add` uses to tell an
+// unstated environment (sign in to production) apart from a stated one.
+export type EnvironmentSource =
+  | 'flag'
+  | 'matrix-id'
+  | 'boxel-environment'
+  | 'default';
+
+export interface ResolvedEnvironment {
+  environment: EnvironmentDefaults;
+  source: EnvironmentSource;
+  // The validated URL flags on their own, before the environment filled in
+  // whatever they left out.
+  overrides: { matrixUrl?: string; realmServerUrl?: string; appUrl?: string };
+}
+
+// The Matrix ID domain for a homeserver reachable at `matrixUrl`, used when a
+// bare --matrix-url is the only thing said about where the account lives. A
+// leading "matrix"-ish label is dropped because that is how a homeserver
+// delegates a shorter server name — matrix.boxel.ai serves boxel.ai, and
+// matrix-staging.stack.cards serves stack.cards.
+function domainFromMatrixUrl(matrixUrl: string): string {
+  // validateUrl already parsed this, so the constructor can't throw. The
+  // fallback covers a parseable URL with an empty hostname ("http:///path").
+  const { hostname } = new URL(matrixUrl);
+  return hostname.replace(/^matrix[^.]*\./, '') || 'custom';
+}
+
+// Decide which environment `profile add` targets, so the interactive and
+// non-interactive paths share one answer. Precedence:
+//
+//   1. --matrix-url / --realm-server-url / --host-url (per-field override)
+//   2. --staging / --local / --production
+//   3. the -u Matrix ID's domain, when it's one we recognize
+//   4. BOXEL_ENVIRONMENT
+//   5. production
+//
+// A recognized Matrix ID domain outranks BOXEL_ENVIRONMENT because the mise
+// tasks export that variable, so it lingers in a shell: letting it win would
+// point a profile for @user:boxel.ai at matrix.<slug>.localhost, leaving the
+// profile's Matrix ID and URLs describing different environments.
+export function resolveEnvironment(
+  options: ProfileCommandOptions,
+): ResolvedEnvironment {
+  const matrixUrl = options.matrixUrl
+    ? validateUrl(options.matrixUrl, '--matrix-url')
+    : undefined;
+  const realmServerUrl = options.realmServerUrl
+    ? validateUrl(options.realmServerUrl, '--realm-server-url')
+    : undefined;
+  const appUrl = options.hostUrl
+    ? validateUrl(options.hostUrl, '--host-url')
+    : undefined;
+
+  const presets = (['production', 'staging', 'local'] as const).filter(
+    (name) => options[name],
+  );
+  if (presets.length > 1) {
+    console.error(
+      `${FG_RED}Error:${RESET} Pass at most one of --production, --staging, --local (got ${presets
+        .map((name) => `--${name}`)
+        .join(', ')}).`,
+    );
+    process.exit(1);
+  }
+
+  const matrixIdEnv = options.user
+    ? getEnvironmentFromMatrixId(options.user)
+    : 'unknown';
+  // BOXEL_ENVIRONMENT is read only where it could still decide something:
+  // nothing higher has, and it has something left to give. With -u naming the
+  // Matrix ID and both URLs overridden there is nothing left to fill, and a
+  // value that slugs to empty exits 1 — which must not kill a scripted run
+  // that already specified everything. Without -u it stays in play even when
+  // both URLs are given, because `domain` is still open and no flag names it:
+  // the terminal sign-in path builds the Matrix ID as "@<username>:<domain>".
+  const boxelEnvironment =
+    presets.length === 0 &&
+    matrixIdEnv === 'unknown' &&
+    (!options.user || !matrixUrl || !realmServerUrl)
+      ? resolveBoxelEnvironment()
+      : null;
+
+  let base: EnvironmentDefaults;
+  let source: EnvironmentSource;
+  if (presets.length === 1) {
+    base = ENVIRONMENTS[presets[0]];
+    source = 'flag';
+  } else if (matrixIdEnv !== 'unknown') {
+    base = ENVIRONMENTS[matrixIdEnv];
+    source = 'matrix-id';
+  } else if (boxelEnvironment) {
+    base = boxelEnvironment;
+    source = 'boxel-environment';
+  } else {
+    base = ENVIRONMENTS.production;
+    source = 'default';
+  }
+
+  return {
+    source,
+    overrides: { matrixUrl, realmServerUrl, appUrl },
+    environment: {
+      // With nothing else naming an environment, --matrix-url is all we know
+      // about where the account lives, so the Matrix ID domain comes from it
+      // rather than from production's boxel.ai.
+      domain:
+        source === 'default' && matrixUrl
+          ? domainFromMatrixUrl(matrixUrl)
+          : base.domain,
+      matrixUrl: matrixUrl ?? base.matrixUrl,
+      realmServerUrl: realmServerUrl ?? base.realmServerUrl,
+      appUrl: appUrl ?? base.appUrl,
+    },
+  };
+}
+
 export async function profileCommand(
   subcommand?: string,
   arg?: string,
@@ -122,40 +256,32 @@ export async function profileCommand(
 
     case 'add': {
       const password = options?.password || process.env.BOXEL_PASSWORD;
+      const { environment, source, overrides } = resolveEnvironment(
+        options ?? {},
+      );
+      if (source === 'boxel-environment') {
+        console.log(
+          `${DIM}Using BOXEL_ENVIRONMENT=${process.env.BOXEL_ENVIRONMENT}${RESET}`,
+        );
+      }
       if (options?.user && password) {
-        const matrixUrl = options.matrixUrl
-          ? validateUrl(options.matrixUrl, '--matrix-url')
-          : undefined;
-        const realmServerUrl = options.realmServerUrl
-          ? validateUrl(options.realmServerUrl, '--realm-server-url')
-          : undefined;
-        // BOXEL_ENVIRONMENT only fills in URLs when (a) at least one flag is
-        // missing, AND (b) the Matrix ID's domain isn't a known standard
-        // (stack.cards / boxel.ai / localhost). Otherwise an unrelated
-        // BOXEL_ENVIRONMENT in the shell would silently produce a profile
-        // whose Matrix ID and URLs disagree — and an invalid env value
-        // (e.g. one that slugs to empty) would kill a fully-specified
-        // invocation where the env was meant to be overridden anyway.
-        const matrixIdEnv = getEnvironmentFromMatrixId(options.user);
-        const isStandardDomain = matrixIdEnv !== 'unknown';
-        const needsEnvDefaults =
-          !isStandardDomain && (!matrixUrl || !realmServerUrl);
-        const envDefaults = needsEnvDefaults ? resolveBoxelEnvironment() : null;
-        if (envDefaults) {
-          console.log(
-            `${DIM}Using BOXEL_ENVIRONMENT=${process.env.BOXEL_ENVIRONMENT}${RESET}`,
-          );
-        }
+        // A -u Matrix ID whose domain we don't recognize, with nothing else
+        // naming an environment, is a mistake rather than a request for
+        // production: pass only what the caller actually specified so
+        // ProfileManager raises its "Unknown domain ... provide explicit
+        // --matrix-url and --realm-server-url" error, instead of trying to
+        // log in to boxel.ai as an account that can't live there.
+        const urls = source === 'default' ? overrides : environment;
         await addProfileNonInteractive(
           manager,
           options.user,
           password,
           options.name,
-          matrixUrl ?? envDefaults?.matrixUrl,
-          realmServerUrl ?? envDefaults?.realmServerUrl,
+          urls.matrixUrl,
+          urls.realmServerUrl,
         );
       } else {
-        await addProfile(manager, resolveBoxelEnvironment());
+        await addProfile(manager, environment, options?.browser !== false);
       }
       break;
     }
@@ -241,79 +367,92 @@ async function listProfiles(manager: ProfileManager): Promise<void> {
   }
 }
 
-async function promptEnvironmentMenu(): Promise<{
-  domain: string;
-  matrixUrl: string;
-  realmServerUrl: string;
-}> {
-  console.log(`Which environment?`);
-  console.log(`  ${FG_CYAN}1${RESET}) Staging (realms-staging.stack.cards)`);
-  console.log(`  ${FG_MAGENTA}2${RESET}) Production (app.boxel.ai)`);
-  console.log(`  ${FG_GREEN}3${RESET}) Local (localhost:4201)`);
-  console.log(`  ${FG_YELLOW}4${RESET}) Custom (enter your own URLs)`);
-
-  const envChoice = await prompt('\nChoice [1/2/3/4]: ');
-
-  if (envChoice === '4') {
-    const matrixUrlInput = await prompt('Matrix server URL: ');
-    if (!matrixUrlInput) {
-      console.error(`${FG_RED}Error:${RESET} Matrix server URL is required.`);
-      process.exit(1);
-    }
-    const matrixUrl = validateUrl(matrixUrlInput, 'Matrix server URL');
-    const realmServerUrlInput = await prompt('Realm server URL: ');
-    if (!realmServerUrlInput) {
-      console.error(`${FG_RED}Error:${RESET} Realm server URL is required.`);
-      process.exit(1);
-    }
-    const realmServerUrl = validateUrl(realmServerUrlInput, 'Realm server URL');
-    // matrixUrl is already validated by validateUrl above, so new URL won't
-    // throw — the hostname fallback is just for the unlikely edge case of
-    // a parseable URL with empty hostname (e.g. "http:///path").
-    const defaultDomain = new URL(matrixUrl).hostname || 'custom';
-    const domainInput = await prompt(
-      `Domain for Matrix ID [${defaultDomain}]: `,
-    );
-    return {
-      domain: domainInput || defaultDomain,
-      matrixUrl,
-      realmServerUrl,
-    };
+// Returns false when the user declined to replace an existing profile.
+async function confirmOverwrite(
+  manager: ProfileManager,
+  matrixId: string,
+): Promise<boolean> {
+  if (!manager.getProfile(matrixId)) {
+    return true;
   }
-
-  if (envChoice === '3') {
-    return { ...MENU_ENVIRONMENTS.local };
+  console.log(`\n${FG_YELLOW}Profile ${matrixId} already exists.${RESET}`);
+  const overwrite = await prompt('Overwrite? [y/N]: ');
+  if (overwrite.toLowerCase() !== 'y') {
+    console.log('Cancelled.');
+    return false;
   }
-  if (envChoice === '2') {
-    return { ...MENU_ENVIRONMENTS.production };
-  }
-  return { ...MENU_ENVIRONMENTS.staging };
+  return true;
 }
 
-async function addProfile(
+async function promptDisplayName(matrixId: string): Promise<string> {
+  const defaultDisplayName = `${getUsernameFromMatrixId(matrixId)} \u00b7 ${getDomainFromMatrixId(matrixId)}`;
+  const displayNameInput = await prompt(
+    `Display name [${defaultDisplayName}]: `,
+  );
+  return displayNameInput || defaultDisplayName;
+}
+
+// `usePassword` is distinct from `cancelled`: the first means the browser path
+// couldn't finish and the caller should ask for a password instead, the second
+// means the user chose to stop and nothing more should be asked.
+type AddProfileOutcome =
+  | { status: 'added'; matrixId: string }
+  | { status: 'cancelled' }
+  | { status: 'usePassword' };
+
+// Browser sign-in. The authorization page offers both a password form and a
+// Google button, and reports back whichever account the user signed in as — so
+// unlike the terminal password path there is nothing to ask for up front.
+async function addProfileViaBrowser(
   manager: ProfileManager,
-  envDefaults?: EnvironmentDefaults | null,
-): Promise<void> {
-  console.log(`\n${BOLD}Add New Profile${RESET}\n`);
-
-  let domain: string;
-  let defaultMatrixUrl: string;
-  let defaultRealmUrl: string;
-
-  if (envDefaults) {
-    console.log(
-      `${DIM}Using BOXEL_ENVIRONMENT=${process.env.BOXEL_ENVIRONMENT}${RESET}`,
-    );
-    domain = envDefaults.domain;
-    defaultMatrixUrl = envDefaults.matrixUrl;
-    defaultRealmUrl = envDefaults.realmServerUrl;
-  } else {
-    const menuResult = await promptEnvironmentMenu();
-    domain = menuResult.domain;
-    defaultMatrixUrl = menuResult.matrixUrl;
-    defaultRealmUrl = menuResult.realmServerUrl;
+  matrixUrl: string,
+  hostUrl: string,
+  realmServerUrl: string,
+): Promise<AddProfileOutcome> {
+  let auth;
+  try {
+    auth = await browserLogin({ matrixUrl, hostUrl });
+  } catch (err) {
+    if (err instanceof SsoTimeoutError) {
+      console.log(`\n${FG_YELLOW}${err.message}${RESET}`);
+      return { status: 'usePassword' };
+    }
+    throw err;
   }
 
+  // The page can sign in as an account other than the one the user expected —
+  // a Google identity whose verified email matches no existing account gets a
+  // brand-new one. Naming it before anything is written makes that visible
+  // rather than silent.
+  console.log(
+    `\n${FG_GREEN}✓${RESET} Signed in as ${formatProfileBadge(auth.userId)}`,
+  );
+  const proceed = await prompt('Save this profile? [Y/n]: ');
+  if (proceed.toLowerCase() === 'n') {
+    console.log('Cancelled.');
+    return { status: 'cancelled' };
+  }
+
+  if (!(await confirmOverwrite(manager, auth.userId))) {
+    return { status: 'cancelled' };
+  }
+
+  const displayName = await promptDisplayName(auth.userId);
+  await manager.addProfileWithAuth(
+    auth.userId,
+    auth,
+    displayName,
+    realmServerUrl,
+  );
+  return { status: 'added', matrixId: auth.userId };
+}
+
+async function addProfileViaPassword(
+  manager: ProfileManager,
+  domain: string,
+  matrixUrl: string,
+  realmServerUrl: string,
+): Promise<AddProfileOutcome> {
   console.log(`\nEnter your Boxel username (without @ or domain)`);
   console.log(`${DIM}Example: ctse, aallen90${RESET}`);
   const username = await prompt('Username: ');
@@ -325,13 +464,8 @@ async function addProfile(
 
   const matrixId = `@${username}:${domain}`;
 
-  if (manager.getProfile(matrixId)) {
-    console.log(`\n${FG_YELLOW}Profile ${matrixId} already exists.${RESET}`);
-    const overwrite = await prompt('Overwrite? [y/N]: ');
-    if (overwrite.toLowerCase() !== 'y') {
-      console.log('Cancelled.');
-      return;
-    }
+  if (!(await confirmOverwrite(manager, matrixId))) {
+    return { status: 'cancelled' };
   }
 
   const password = await promptPassword('Password: ');
@@ -341,19 +475,58 @@ async function addProfile(
     process.exit(1);
   }
 
-  const defaultDisplayName = `${username} \u00b7 ${domain}`;
-  const displayNameInput = await prompt(
-    `Display name [${defaultDisplayName}]: `,
-  );
-  const displayName = displayNameInput || defaultDisplayName;
+  const displayName = await promptDisplayName(matrixId);
 
   await manager.addProfile(
     matrixId,
     password,
     displayName,
-    defaultMatrixUrl,
-    defaultRealmUrl,
+    matrixUrl,
+    realmServerUrl,
   );
+  return { status: 'added', matrixId };
+}
+
+async function addProfile(
+  manager: ProfileManager,
+  environment: EnvironmentDefaults,
+  useBrowser = true,
+): Promise<void> {
+  console.log(`\n${BOLD}Add New Profile${RESET}\n`);
+  // The environment comes from flags rather than a prompt, so name it. The
+  // realm server identifies it — that's the host every later command talks to,
+  // and how `profile list` labels a profile. The sign-in page can be served
+  // from somewhere else (local dev splits the two across ports); the browser
+  // path prints the URL it actually opens.
+  console.log(
+    `${DIM}Environment: ${new URL(environment.realmServerUrl).host}${RESET}`,
+  );
+
+  // The realm server serves the app, so it serves the sign-in page too wherever
+  // the two share an origin — which is everywhere except local dev.
+  let outcome: AddProfileOutcome = useBrowser
+    ? await addProfileViaBrowser(
+        manager,
+        environment.matrixUrl,
+        environment.appUrl ?? environment.realmServerUrl,
+        environment.realmServerUrl,
+      )
+    : { status: 'usePassword' };
+
+  if (outcome.status === 'usePassword') {
+    outcome = await addProfileViaPassword(
+      manager,
+      environment.domain,
+      environment.matrixUrl,
+      environment.realmServerUrl,
+    );
+  }
+
+  if (outcome.status !== 'added') {
+    return;
+  }
+
+  const matrixId = outcome.matrixId;
 
   console.log(
     `\n${FG_GREEN}\u2713${RESET} Profile created: ${formatProfileBadge(matrixId)}`,

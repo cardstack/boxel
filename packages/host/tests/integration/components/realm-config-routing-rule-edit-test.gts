@@ -1,4 +1,4 @@
-import { waitFor, click, fillIn } from '@ember/test-helpers';
+import { waitFor, click, fillIn, settled } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
 import { getService } from '@universal-ember/test-support';
@@ -422,6 +422,138 @@ module(
       } finally {
         (globalThis as any)._CARDSTACK_CARD_CHOOSER = originalChooser;
       }
+    });
+
+    test('a rule with a redirect target renders the redirect editor', async function (assert) {
+      await renderRealmConfigEdit([
+        { path: '/tos', redirectTo: '/terms', statusCode: 301 },
+      ]);
+
+      assert
+        .dom(
+          '[data-test-routing-rule-kind] [data-test-boxel-radio-option-id="redirect"] input[type="radio"]',
+        )
+        .isChecked('the kind toggle reflects the stored redirect');
+      assert
+        .dom('[data-test-redirect-input]')
+        .hasValue('/terms', 'the stored target is shown');
+      assert
+        .dom('[data-test-status-code-select]')
+        .containsText('301', 'the stored status code is selected');
+      assert
+        .dom('[data-test-add-new="instance"]')
+        .doesNotExist('the card chooser is not shown for a redirect rule');
+    });
+
+    test('switching a rule to a redirect swaps the target editor and validates the target', async function (assert) {
+      await renderRealmConfigEdit([{ path: '/docs' }]);
+
+      assert
+        .dom('[data-test-redirect-input]')
+        .doesNotExist('a card rule shows no redirect editor');
+
+      await click(
+        '[data-test-routing-rule-kind] [data-test-boxel-radio-option-id="redirect"] input[type="radio"]',
+      );
+      assert.dom('[data-test-redirect-input]').exists();
+      assert
+        .dom('[data-test-add-new="instance"]')
+        .doesNotExist('the card chooser is replaced by the redirect editor');
+
+      await fillIn('[data-test-redirect-input]', 'terms');
+      assert
+        .dom('[data-test-redirect-warning]')
+        .containsText(
+          'Redirect target must be a path starting with / or a full http(s) URL',
+          'a slash-less target warns',
+        );
+
+      await fillIn('[data-test-redirect-input]', 'https://example.com/terms');
+      assert
+        .dom('[data-test-redirect-warning]')
+        .doesNotExist('an external http(s) URL is allowed');
+
+      await fillIn('[data-test-redirect-input]', '/terms');
+      assert
+        .dom('[data-test-redirect-warning]')
+        .doesNotExist('a realm-relative path is allowed');
+
+      await click(
+        '[data-test-routing-rule-kind] [data-test-boxel-radio-option-id="card"] input[type="radio"]',
+      );
+      assert
+        .dom('[data-test-redirect-input]')
+        .doesNotExist('switching back to card removes the redirect editor');
+      assert
+        .dom('[data-test-add-new="instance"]')
+        .exists('switching back to card restores the chooser');
+    });
+
+    test('the shown editor follows the model when the rule changes elsewhere', async function (assert) {
+      // The same config card can be open in more than one place. The
+      // editor derives which target editor to show from the rule itself,
+      // so a change made elsewhere is reflected here; a copy of the
+      // choice held in component state would shadow it forever, and the
+      // next keystroke would write a `redirectTo` that silently beats
+      // the instance the other editor had chosen.
+      await renderRealmConfigEdit([{ path: '/tos', redirectTo: '/terms' }]);
+
+      assert
+        .dom('[data-test-redirect-input]')
+        .exists('starts on the redirect editor');
+
+      let store = getService('store');
+      let realmConfig = (await store.get(`${testRealmURL}realm`)) as any;
+      realmConfig.hostRoutingRules[0].redirectTo = undefined;
+      await settled();
+
+      assert
+        .dom('[data-test-redirect-input]')
+        .doesNotExist('clearing the target elsewhere flips this editor back');
+      assert
+        .dom(
+          '[data-test-routing-rule-kind] [data-test-boxel-radio-option-id="card"] input[type="radio"]',
+        )
+        .isChecked('the toggle follows the model rather than a stale copy');
+    });
+
+    test('warns when redirect rules loop back on themselves', async function (assert) {
+      // The realm drops looping rules when it reads the config, so
+      // without this banner the path would just stop routing with no
+      // explanation.
+      await renderRealmConfigEdit([
+        { path: '/tos', redirectTo: '/tos' },
+        { path: '/a', redirectTo: '/b' },
+        { path: '/b', redirectTo: '/a' },
+        { path: '/fine', redirectTo: '/terms' },
+      ]);
+
+      assert
+        .dom('[data-test-redirect-loop-warning]')
+        .exists('the redirect-loop banner is shown');
+      assert
+        .dom('[data-test-redirect-loop-warning]')
+        .containsText('/tos', 'the banner names the self-redirect');
+      assert
+        .dom('[data-test-redirect-loop-warning]')
+        .containsText('/a', 'the banner names both halves of the ring');
+      assert
+        .dom('[data-test-redirect-loop-warning]')
+        .doesNotContainText(
+          '/fine',
+          'a terminating redirect is not flagged as a loop',
+        );
+    });
+
+    test('no redirect-loop warning for rules that terminate', async function (assert) {
+      await renderRealmConfigEdit([
+        { path: '/tos', redirectTo: '/terms' },
+        { path: '/blog', redirectTo: 'https://example.com/blog' },
+      ]);
+
+      assert
+        .dom('[data-test-redirect-loop-warning]')
+        .doesNotExist('no banner when nothing loops');
     });
 
     test('typing into the path input always stores a leading slash', async function (assert) {

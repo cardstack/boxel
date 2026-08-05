@@ -33,12 +33,24 @@ boxel --help
 boxel --version
 ```
 
+### Choosing an environment for `boxel profile add`
+
+`boxel profile add` targets **production**. Whichever environment it lands on is resolved the same way for the interactive and non-interactive paths, in this order:
+
+1. `--matrix-url` / `--realm-server-url` / `--host-url` — a per-field override on top of whatever the following rules chose.
+2. `--staging` or `--local` (`--production` is the default, accepted so a script can say so explicitly). Passing more than one exits with an error.
+3. The domain of the `-u` Matrix ID: `boxel.ai`, `stack.cards`, or `localhost`. Any other domain requires `--matrix-url` and `--realm-server-url`.
+4. `BOXEL_ENVIRONMENT` (see below).
+5. Production.
+
+A recognized `-u` domain deliberately outranks `BOXEL_ENVIRONMENT`: the mise tasks export that variable, so it lingers in a shell, and letting it win would write a profile whose Matrix ID and URLs describe different environments.
+
 ### Environment variables
 
 These are read by `boxel profile add`:
 
 - `BOXEL_PASSWORD` — password for non-interactive profile creation. Preferred over `-p/--password`, which exposes the password in shell history and process listings.
-- `BOXEL_ENVIRONMENT` — env-mode slug (typically a branch name) for per-branch local dev. Interpreted like `scripts/env-slug.sh`: the value is slugified (lowercased, `/` → `-`, other chars stripped) and URLs are derived as `https://matrix.<slug>.localhost` and `https://realm-server.<slug>.localhost/`. Overridden by `--matrix-url` / `--realm-server-url` if those flags are provided. Values that slugify to empty (e.g. `!!!`) exit with an error.
+- `BOXEL_ENVIRONMENT` — env-mode slug (typically a branch name) for per-branch local dev. Interpreted like `scripts/env-slug.sh`: the value is slugified (lowercased, `/` → `-`, other chars stripped) and URLs are derived as `https://matrix.<slug>.localhost` and `https://realm-server.<slug>.localhost/`. Overridden per the precedence above. Values that slugify to empty (e.g. `!!!`) exit with an error — but only when the variable is actually consulted, so a fully-specified invocation is unaffected.
 
 Example — create a profile for a branch running in env mode:
 
