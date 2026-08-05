@@ -105,9 +105,21 @@ export async function getExternalIdsForIdp(
 ): Promise<string[]> {
   let { adminAccessToken } = getMatrixTestContext();
   let externalIds = await getUserExternalIds(adminAccessToken, userId);
+  // Sorted: the admin API reports rows in database order, so an account with
+  // more than one linked identity would make assertions order-dependent.
   return externalIds
     .filter((entry) => entry.auth_provider === authProvider)
-    .map((entry) => entry.external_id);
+    .map((entry) => entry.external_id)
+    .sort();
+}
+
+// The subject claim to present to the mock identity provider. One Synapse
+// instance serves the whole run, so a subject reused across attempts matches the
+// `user_external_ids` row an earlier attempt left behind and signs the retry
+// into that account. Deriving it from the UUID-suffixed username keeps every
+// attempt a fresh identity.
+export function subjectFor(username: string): string {
+  return `google-oauth2|${username}`;
 }
 
 async function registerRealmRedirect(

@@ -1,7 +1,11 @@
 import { expect, test } from './fixtures.ts';
-import { getMatrixTestContext } from '../helpers/index.ts';
+import {
+  createSubscribedUser,
+  getMatrixTestContext,
+  subjectFor,
+  updateSynapseUser,
+} from '../helpers/index.ts';
 import { appURL } from '../support/isolated-realm-server.ts';
-import { createSubscribedUser, updateSynapseUser } from '../helpers/index.ts';
 import { browserLogin } from '../../boxel-cli/src/lib/sso-login.ts';
 
 // The realm server serves the host app, so /cli-auth lives at its root. Taken
@@ -76,9 +80,10 @@ test.describe('boxel-cli browser authorization', () => {
       openBrowserFn: async (authUrl) => {
         await page.goto(authUrl);
         await page.locator('[data-test-cli-auth-google]').click();
-        // The mock OIDC provider's interactive login form: `username` becomes
-        // the sub, and `claims` carries the verified email.
-        await page.locator('input[name="username"]').fill('google-oauth2|cli');
+        // The mock provider's login form: its `username` field becomes the sub,
+        // and `claims` carries the verified email. See `subjectFor` for why the
+        // sub is derived rather than fixed.
+        await page.locator('input[name="username"]').fill(subjectFor(username));
         await page.locator('textarea[name="claims"]').fill(
           JSON.stringify({
             email: userEmail,
