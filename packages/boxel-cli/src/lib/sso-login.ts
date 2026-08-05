@@ -401,6 +401,116 @@ export function openBrowser(url: string): Promise<boolean> {
   });
 }
 
+// Copies text through the platform's clipboard tool. Best-effort in the same
+// way as openBrowser: reports failure rather than throwing, so the caller can
+// tell the user to copy by hand. Linux offers no single tool, so the common
+// ones are tried in turn.
+export async function copyToClipboard(text: string): Promise<boolean> {
+  const candidates: [string, string[]][] =
+    process.platform === 'darwin'
+      ? [['pbcopy', []]]
+      : process.platform === 'win32'
+        ? [['clip', []]]
+        : [
+            ['wl-copy', []],
+            ['xclip', ['-selection', 'clipboard']],
+            ['xsel', ['--clipboard', '--input']],
+          ];
+
+  for (const [command, args] of candidates) {
+    const copied = await new Promise<boolean>((resolve) => {
+      try {
+        const child = spawn(command, args, {
+          stdio: ['pipe', 'ignore', 'ignore'],
+        });
+        child.once('error', () => resolve(false));
+        child.once('close', (code) => resolve(code === 0));
+        // A missing tool surfaces as an error on the child and EPIPE here;
+        // swallow the latter so the attempt reports false instead of crashing.
+        child.stdin.once('error', () => {});
+        child.stdin.end(text);
+      } catch {
+        resolve(false);
+      }
+    });
+    if (copied) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// What the copy-key watcher needs from stdin, so tests can hand in a stand-in.
+type KeyInput = NodeJS.EventEmitter & {
+  isTTY?: boolean;
+  readableFlowing: boolean | null;
+  setRawMode?: (mode: boolean) => void;
+  resume(): void;
+  pause(): void;
+};
+
+export interface CopyKeyWatchOptions {
+  log?: (message: string) => void;
+  copyFn?: (text: string) => Promise<boolean>;
+  stdin?: KeyInput;
+  exit?: (code?: number) => void;
+}
+
+// While the CLI waits on the browser, `c` copies the authorization URL — for
+// anyone whose default browser isn't the one they want to finish in. Raw mode
+// is what makes single keypresses visible, and it also swallows Ctrl-C, so
+// Ctrl-C is re-implemented here; the waiting message promises both keys.
+//
+// Returns a stop function, or undefined when stdin is not a TTY (piped input
+// has no keys to press).
+export function watchForCopyKey(
+  url: string,
+  options?: CopyKeyWatchOptions,
+): (() => void) | undefined {
+  const {
+    log = console.log,
+    copyFn = copyToClipboard,
+    stdin = process.stdin as KeyInput,
+    exit = process.exit,
+  } = options ?? {};
+
+  if (!stdin.isTTY || !stdin.setRawMode) {
+    return undefined;
+  }
+
+  const wasFlowing = stdin.readableFlowing;
+  const stop = () => {
+    stdin.removeListener('data', onData);
+    stdin.setRawMode?.(false);
+    if (!wasFlowing) {
+      stdin.pause();
+    }
+  };
+
+  const onData = (chunk: Buffer | string) => {
+    const input = chunk.toString();
+    if (input.includes('\u0003')) {
+      stop();
+      exit(130);
+      return;
+    }
+    if (input.toLowerCase().includes('c')) {
+      void copyFn(url).then((copied) =>
+        log(
+          copied
+            ? 'Copied the sign-in URL to your clipboard.'
+            : 'No clipboard tool answered; copy the URL printed above instead.',
+        ),
+      );
+    }
+  };
+
+  stdin.setRawMode(true);
+  stdin.on('data', onData);
+  stdin.resume();
+  return stop;
+}
+
 export const CLI_AUTH_PATH = 'cli-auth';
 
 // The host app's authorization page, which offers the same sign-in choices as
@@ -459,6 +569,7 @@ export interface BrowserLoginOptions {
   openBrowserFn?: (url: string) => Promise<boolean>;
   // Where to tell the user what's happening. Injected so tests stay quiet.
   log?: (message: string) => void;
+  copyToClipboardFn?: (text: string) => Promise<boolean>;
 }
 
 // Sign in through the browser. The authorization page decides how the user
@@ -475,9 +586,11 @@ export async function browserLogin(
     fetchFn = fetch,
     openBrowserFn = openBrowser,
     log = console.log,
+    copyToClipboardFn = copyToClipboard,
   } = options;
 
   const callback = await startLoopbackCallback({ timeoutMs });
+  let stopCopyKey: (() => void) | undefined;
   try {
     const authUrl = buildCliAuthUrl(hostUrl, callback);
     const opened = await openBrowserFn(authUrl);
@@ -489,9 +602,13 @@ export async function browserLogin(
         `Open this URL in your browser to sign in or create an account:\n  ${authUrl}`,
       );
     }
+    stopCopyKey = watchForCopyKey(authUrl, { log, copyFn: copyToClipboardFn });
     log(
       `Waiting up to ${describeDuration(timeoutMs ?? DEFAULT_TIMEOUT_MS)} for ` +
-        'you to finish in the browser. Press Ctrl-C to stop.',
+        'you to finish in the browser. ' +
+        (stopCopyKey
+          ? 'Press c to copy the URL, or Ctrl-C to stop.'
+          : 'Press Ctrl-C to stop.'),
     );
 
     const result = await callback.waitForResult();
@@ -501,6 +618,7 @@ export async function browserLogin(
     await verifySession(matrixUrl, result.session, fetchFn);
     return { ...result.session, matrixUrl };
   } finally {
+    stopCopyKey?.();
     callback.close();
   }
 }
