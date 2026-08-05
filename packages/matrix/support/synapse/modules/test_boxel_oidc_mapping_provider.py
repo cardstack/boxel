@@ -7,6 +7,7 @@ relies on. They import the real `synapse.*` types, so they must run inside the
 pinned Synapse image (see scripts/test-oidc-mapping-provider.sh).
 """
 
+import inspect
 import unittest
 from unittest.mock import AsyncMock, Mock
 
@@ -90,6 +91,41 @@ class MapUserAttributesTests(unittest.IsolatedAsyncioTestCase):
         provider = make_provider(existing_users=["alice", "alice1", "alice2"])
         result = await provider.map_user_attributes(userinfo(), {}, 0)
         self.assertEqual(result["localpart"], "alice3")
+
+
+class InterfaceShapeTests(unittest.TestCase):
+    """Guards on which methods Synapse awaits and which it does not.
+
+    Synapse calls `get_remote_user_id` without awaiting it and uses the return
+    value as the `external_id` that Google identities are matched against. If
+    it is a coroutine function, the stored id becomes the coroutine's repr —
+    which embeds a reused heap address — and colliding reprs log a signing-in
+    user into somebody else's account, skipping `map_user_attributes` and every
+    check it performs. `map_user_attributes` and `get_extra_attributes` are
+    awaited, so they must stay `async`.
+    """
+
+    def test_get_remote_user_id_is_not_a_coroutine_function(self):
+        self.assertFalse(
+            inspect.iscoroutinefunction(
+                BoxelOidcMappingProvider.get_remote_user_id
+            )
+        )
+
+    def test_get_remote_user_id_returns_the_sub_as_a_plain_string(self):
+        provider = make_provider()
+        result = provider.get_remote_user_id(userinfo(sub="google-oauth2|42"))
+        self.assertIsInstance(result, str)
+        self.assertEqual(result, "google-oauth2|42")
+
+    def test_awaited_methods_stay_coroutine_functions(self):
+        for name in ("map_user_attributes", "get_extra_attributes"):
+            with self.subTest(method=name):
+                self.assertTrue(
+                    inspect.iscoroutinefunction(
+                        getattr(BoxelOidcMappingProvider, name)
+                    )
+                )
 
 
 if __name__ == "__main__":
