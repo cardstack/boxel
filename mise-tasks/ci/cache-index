@@ -65,6 +65,11 @@ ensure_services_running() {
 
 cleanup() {
   echo "Stopping services..."
+  # Test realms are started later in the run, so this may be unset.
+  if [ -n "${TEST_SERVICES_PID:-}" ]; then
+    kill "$TEST_SERVICES_PID" 2>/dev/null || true
+    wait "$TEST_SERVICES_PID" 2>/dev/null || true
+  fi
   kill "$SERVICES_PID" 2>/dev/null || true
   wait "$SERVICES_PID" 2>/dev/null || true
 }
@@ -93,7 +98,58 @@ while kill -0 "$WAIT_ON_PID" 2>/dev/null; do
 done
 wait "$WAIT_ON_PID"
 
-echo "All realms ready. Dumping index tables..."
+echo "All realms ready."
+
+# Bring up the live test realms (`/test/`, `/node-test/`) once the dev stack is
+# serving. They run in their own realm-server process against their own
+# database ($PGDATABASE_TEST), and a test shard waits on their readiness too —
+# so without them in the cache they are the whole remaining cost of a shard's
+# boot.
+#
+# Started after the dev readiness wait rather than alongside it: the test realms
+# resolve `https://cardstack.com/base/` to the dev server's base realm, so their
+# index needs base already being served. This mirrors the two phases
+# `start-server-and-test` gives them in test-services/host.
+echo "Starting test realms..."
+NODE_NO_WARNINGS=1 run-p -ln start:worker-test start:test-realms &
+TEST_SERVICES_PID=$!
+
+ensure_test_services_running() {
+  if ! kill -0 "$TEST_SERVICES_PID" 2>/dev/null; then
+    wait "$TEST_SERVICES_PID"
+    echo "Test realm services exited unexpectedly."
+    exit 1
+  fi
+}
+
+cleanup_test_services() {
+  kill "$TEST_SERVICES_PID" 2>/dev/null || true
+  wait "$TEST_SERVICES_PID" 2>/dev/null || true
+}
+
+TEST_HOST="${REALM_TEST_URL#*://}"
+case "$REALM_TEST_URL" in
+  https://*) TEST_READY_SCHEME="https-get" ;;
+  *)         TEST_READY_SCHEME="http-get"  ;;
+esac
+TEST_READINESS_URLS=""
+for realm in test node-test; do
+  TEST_READINESS_URLS="${TEST_READINESS_URLS:+${TEST_READINESS_URLS}|}${TEST_READY_SCHEME}://${TEST_HOST}/${realm}/${READY_PATH}"
+done
+
+echo "Waiting for test realm readiness..."
+NODE_TLS_REJECT_UNAUTHORIZED=0 \
+  wait-on -t 1800000 $(echo "$TEST_READINESS_URLS" | tr '|' ' ') &
+TEST_WAIT_ON_PID=$!
+
+while kill -0 "$TEST_WAIT_ON_PID" 2>/dev/null; do
+  ensure_services_running
+  ensure_test_services_running
+  sleep 1
+done
+wait "$TEST_WAIT_ON_PID"
+
+echo "Test realms ready. Dumping index tables..."
 # Tables that make up the cache. This is the single source of truth: the same
 # list drives pg_dump's -t args and the completeness check in the separate
 # "Verify index cache" CI step (via the sidecar written below). Keep the
@@ -213,3 +269,35 @@ gzip "$HOST_DUMP"
 
 echo "Host-scoped index cache created at ${HOST_DUMP}.gz"
 ls -lh "${HOST_DUMP}.gz"
+
+# The live test realms live in their own database, so they need their own
+# snapshot. No realm filter: that database holds `/test/` and `/node-test/` and
+# nothing else, so a plain data-only pg_dump is the whole of it.
+TEST_DUMP=/tmp/boxel-index-cache-test.sql
+TEST_DB="${PGDATABASE_TEST:-boxel_test}"
+
+echo "Dumping test-realm index cache from database ${TEST_DB}..."
+
+# Both realms must have indexed something. An empty snapshot would still import
+# and verify cleanly while quietly returning every consumer to indexing from
+# scratch — the same silent-no-op this guard prevents on the host-scoped dump.
+for realm in test node-test; do
+  row_count=$(docker exec boxel-pg psql -U postgres -d "$TEST_DB" -tAc \
+    "SELECT count(*) FROM boxel_index WHERE realm_url LIKE '%/${realm}/'")
+  if [ "$row_count" -eq 0 ]; then
+    echo "::error title=Test index cache empty::No boxel_index rows for realm '/${realm}/' in ${TEST_DB}. Either the realm did not index in this job, or its realm_url no longer ends in '/${realm}/' — compare against the mount paths in mise-tasks/services/test-realms."
+    exit 1
+  fi
+  echo "  /${realm}/: ${row_count} boxel_index rows"
+done
+
+docker exec boxel-pg pg_dump -U postgres --data-only \
+  "${DUMP_ARGS[@]}" \
+  "$TEST_DB" > "$TEST_DUMP"
+
+printf '%s\n' "${CACHE_TABLES[@]}" > /tmp/boxel-index-cache-test.tables
+
+gzip "$TEST_DUMP"
+
+echo "Test-realm index cache created at ${TEST_DUMP}.gz"
+ls -lh "${TEST_DUMP}.gz"
