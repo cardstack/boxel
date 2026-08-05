@@ -123,7 +123,9 @@ export class FileEmbeddedShell extends GlimmerComponent<FileEmbeddedShellSignatu
             {{#if this.modified}}· modified {{this.modified}}{{/if}}
           </span>
         </div>
-        <span class='ext-pill'>.{{@model.extension}}</span>
+        {{#if @model.extension}}
+          <span class='ext-pill'>.{{@model.extension}}</span>
+        {{/if}}
       </header>
       <div
         class='emb-body'

@@ -13,6 +13,7 @@ import {
   type FileIconComponent,
 } from './file-presentation';
 import {
+  extensionOfFile,
   profileForFile,
   type FileFamily,
   type PreviewAdapter,
@@ -312,14 +313,18 @@ export function fileViewModel(
   let contentType = file.contentType;
   let profile = profileForFile({ name, contentType });
 
+  // Share the registry's rule so the pill and the routing can't describe the
+  // same file differently. It yields '' for a name with no dot (`LICENSE`) and
+  // for a dotfile, whose leading dot starts the name rather than an extension.
   let extension = String(
-    file.fileExtension ?? name.split('.').pop() ?? 'file',
+    file.fileExtension ?? extensionOfFile({ name }),
   ).toUpperCase();
-  // Only strip a trailing extension that the name actually ends with, so a
-  // file called `README` keeps its whole name.
-  let suffix = name.toLowerCase().endsWith(`.${extension.toLowerCase()}`)
-    ? extension.length + 1
-    : 0;
+  // Strip only a trailing extension the name actually ends with, so `README`
+  // and `.gitignore` each keep their whole name.
+  let suffix =
+    extension && name.toLowerCase().endsWith(`.${extension.toLowerCase()}`)
+      ? extension.length + 1
+      : 0;
   let baseName = suffix ? name.slice(0, -suffix) : name;
 
   let family = profileSource?.fileFamily ?? profile.family;

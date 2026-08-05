@@ -187,7 +187,9 @@ export class FileFittedShell extends GlimmerComponent<FileFittedShellSignature> 
               data-test-file-state-chip
             >{{this.stateChip}}</span>
           {{/if}}
-          <span class='ext-pill pill-inline'>.{{@model.extension}}</span>
+          {{#if @model.extension}}
+            <span class='ext-pill pill-inline'>.{{@model.extension}}</span>
+          {{/if}}
         </div>
         <div class='row-sub'>
           <span class='sub-left'>
@@ -204,7 +206,9 @@ export class FileFittedShell extends GlimmerComponent<FileFittedShellSignature> 
                 class='state-chip chip-sub {{if this.isWarnState "warn"}}'
               >{{this.stateChip}}</span>
             {{/if}}
-            <span class='ext-pill pill-sub'>.{{@model.extension}}</span>
+            {{#if @model.extension}}
+              <span class='ext-pill pill-sub'>.{{@model.extension}}</span>
+            {{/if}}
           </span>
         </div>
         <div class='row-type'>
@@ -218,7 +222,9 @@ export class FileFittedShell extends GlimmerComponent<FileFittedShellSignature> 
                 class='state-chip chip-type {{if this.isWarnState "warn"}}'
               >{{this.stateChip}}</span>
             {{/if}}
-            <span class='ext-pill pill-type'>.{{@model.extension}}</span>
+            {{#if @model.extension}}
+              <span class='ext-pill pill-type'>.{{@model.extension}}</span>
+            {{/if}}
           </span>
         </div>
         <div class='row-facts'>

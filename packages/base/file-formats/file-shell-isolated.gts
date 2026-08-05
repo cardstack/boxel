@@ -288,7 +288,9 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
       <header class='iso-bar'>
         <this.icon class='iso-icon' width='19' height='19' aria-hidden='true' />
         <h1 class='iso-name'>{{@model.baseName}}</h1>
-        <span class='ext-pill'>.{{@model.extension}}</span>
+        {{#if @model.extension}}
+          <span class='ext-pill'>.{{@model.extension}}</span>
+        {{/if}}
         {{#if @model.title}}
           <span class='iso-title'>
             <IconSearch width='10' height='10' aria-hidden='true' />

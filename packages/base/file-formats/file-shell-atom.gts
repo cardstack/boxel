@@ -28,7 +28,9 @@ export class FileAtomShell extends GlimmerComponent<FileAtomShellSignature> {
     <span class='ft-atom' title={{@model.name}} data-test-file-atom>
       <this.icon width='14' height='14' aria-hidden='true' />
       <span class='atom-name'>{{this.baseName}}</span>
-      <span class='atom-ext'>.{{@model.extension}}</span>
+      {{#if @model.extension}}
+        <span class='atom-ext'>.{{@model.extension}}</span>
+      {{/if}}
     </span>
     <style scoped>
       .ft-atom {

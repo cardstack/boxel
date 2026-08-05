@@ -18,6 +18,7 @@ module('Unit | file-formats', function (hooks) {
 
   let loader: Loader;
   let profileForFile: typeof FileTypeProfileModule.profileForFile;
+  let extensionOfFile: typeof FileTypeProfileModule.extensionOfFile;
   let contentTypeForFile: typeof FileTypeProfileModule.contentTypeForFile;
   let fileViewModel: typeof FileViewModelModule.fileViewModel;
   let FITTED_TEXT_CHARACTER_BUDGET: number;
@@ -32,7 +33,7 @@ module('Unit | file-formats', function (hooks) {
     let viewModelModule = await loader.import<typeof FileViewModelModule>(
       '@cardstack/base/file-formats/file-view-model',
     );
-    ({ profileForFile, contentTypeForFile } = profileModule);
+    ({ profileForFile, contentTypeForFile, extensionOfFile } = profileModule);
     ({
       fileViewModel,
       FITTED_TEXT_CHARACTER_BUDGET,
@@ -116,13 +117,43 @@ module('Unit | file-formats', function (hooks) {
       assert.strictEqual(vm.kind, 'PDF document');
     });
 
-    // A name with no extension must keep all of itself.
-    test('leaves an extensionless name intact', function (assert) {
+    // A name with no extension has no extension — not one equal to the whole
+    // name, which would put a `.LICENSE` pill next to `LICENSE`.
+    test('leaves an extensionless name intact and reports no extension', function (assert) {
       let vm = fileViewModel({
         url: 'http://test.com/LICENSE',
         name: 'LICENSE',
       });
       assert.strictEqual(vm.baseName, 'LICENSE');
+      assert.strictEqual(vm.extension, '');
+    });
+
+    // A dotfile's leading dot doesn't introduce an extension either, and the
+    // name must survive whole rather than being consumed as a suffix.
+    test('treats a dotfile as an extensionless name', function (assert) {
+      let vm = fileViewModel({
+        url: 'http://test.com/.gitignore',
+        name: '.gitignore',
+      });
+      assert.strictEqual(vm.baseName, '.gitignore');
+      assert.strictEqual(vm.extension, '');
+    });
+
+    // The projection and the taxonomy registry have to agree, or the pill and
+    // the routing describe the same file differently.
+    test('derives the extension the same way the taxonomy registry does', function (assert) {
+      for (let name of [
+        'report.pdf',
+        'q3.final.pdf',
+        'LICENSE',
+        '.gitignore',
+      ]) {
+        assert.strictEqual(
+          fileViewModel({ name }).extension.toLowerCase(),
+          extensionOfFile({ name }),
+          `${name} agrees with extensionOfFile`,
+        );
+      }
     });
 
     test('derives the name from the URL when the file has none', function (assert) {
