@@ -24,6 +24,19 @@ class MockLocalIndexer extends Service {
   url = new URL(testRealmURL);
 }
 
+function containsExecutableValue(value: unknown): boolean {
+  if (typeof value === 'function') {
+    return true;
+  }
+  if (Array.isArray(value)) {
+    return value.some(containsExecutableValue);
+  }
+  if (value && typeof value === 'object') {
+    return Object.values(value).some(containsExecutableValue);
+  }
+  return false;
+}
+
 module('Integration | preview', function (hooks) {
   let loader: Loader;
   setupRenderingTest(hooks);
@@ -55,6 +68,201 @@ module('Integration | preview', function (hooks) {
     );
     await waitFor('[data-test-firstName]'); // we need to wait for the card instance to load
     assert.dom('[data-test-firstName]').hasText('Mango');
+  });
+
+  test('Direct runtime keeps component definitions local and emits a cloneable semantic record', async function (assert) {
+    let { field, contains, CardDef, CardInfoField, Component } = cardApi;
+    let { default: StringField } = string;
+
+    class RuntimeCard extends CardDef {
+      static displayName = 'Runtime Card';
+      static headerColor = '#112233';
+      static prefersWideFormat = true;
+
+      @field firstName = contains(StringField, {
+        description: 'The name shown by the card',
+        configuration: function (this: RuntimeCard) {
+          return { label: `Name for ${this.firstName}` };
+        },
+      });
+      @field greeting = contains(StringField, {
+        computeVia: function (this: RuntimeCard) {
+          return `Hello, ${this.firstName}`;
+        },
+      });
+
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <div data-test-runtime-card><@fields.greeting /></div>
+        </template>
+      };
+    }
+    loader.shimModule(`${testRealmURL}direct-runtime-card`, { RuntimeCard });
+
+    let card = new RuntimeCard({
+      firstName: 'Mango',
+      cardInfo: new CardInfoField({
+        name: 'Mango Runtime',
+        summary: 'A Direct runtime fixture',
+        cardThumbnailURL: 'https://example.com/mango.png',
+      }),
+    });
+    let runtime = getService('direct-boxel-runtime').runtime;
+
+    let firstSlot = runtime.getRenderSlot(card);
+    let secondSlot = runtime.getRenderSlot(card);
+    let record = await runtime.buildRenderRecord(card, {
+      writableFields: new Set(['firstName', 'greeting']),
+    });
+
+    assert.strictEqual(
+      firstSlot,
+      secondSlot,
+      'the Direct runtime preserves render-slot identity',
+    );
+    assert.strictEqual(firstSlot.owner, 'direct');
+    assert.strictEqual(
+      typeof firstSlot.component,
+      'function',
+      'the Host-local render slot owns the executable component',
+    );
+    assert.deepEqual(
+      structuredClone(record),
+      record,
+      'the semantic record is structured-cloneable',
+    );
+    assert.false(
+      containsExecutableValue(record),
+      'the semantic record does not contain executable values',
+    );
+    assert.strictEqual(record.boxel.boxelKind, 'card');
+    assert.strictEqual(record.boxel.presentation.displayName, 'Runtime Card');
+    assert.strictEqual(record.boxel.presentation.headerColor, '#112233');
+    assert.true(record.boxel.presentation.prefersWideFormat);
+    assert.strictEqual(record.presentation.title, 'Mango Runtime');
+    assert.strictEqual(record.presentation.summary, 'A Direct runtime fixture');
+    assert.strictEqual(
+      record.presentation.thumbnailURL,
+      'https://example.com/mango.png',
+    );
+
+    let firstName = record.instance.fields.find(
+      (field) => field.fieldName === 'firstName',
+    );
+    let greeting = record.instance.fields.find(
+      (field) => field.fieldName === 'greeting',
+    );
+    assert.deepEqual(firstName?.resolvedConfiguration, {
+      label: 'Name for Mango',
+    });
+    assert.deepEqual(firstName?.presentation, {
+      description: 'The name shown by the card',
+    });
+    assert.true(firstName?.writable, 'explicitly granted field is writable');
+    assert.strictEqual(greeting?.value, 'Hello, Mango');
+    assert.false(
+      greeting?.writable,
+      'a computed field remains read-only even when included in the grant',
+    );
+
+    let isolated = record.boxel.formats.find(
+      (format) => format.format === 'isolated',
+    );
+    let edit = record.boxel.formats.find((format) => format.format === 'edit');
+    assert.strictEqual(isolated?.provider.kind, 'authored');
+    assert.strictEqual(edit?.provider.kind, 'trusted-base');
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><CardRenderer @card={{card}} /></template>
+      },
+    );
+    await waitFor('[data-test-runtime-card]');
+    assert
+      .dom('[data-test-runtime-card]')
+      .hasText('Hello, Mango', 'CardRenderer renders the Direct-owned slot');
+  });
+
+  test('Direct runtime preserves main glimmer-scoped-css confinement', async function (assert) {
+    let { CardDef, Component } = cardApi;
+
+    class ScopedRuntimeCard extends CardDef {
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <div
+            class='direct-runtime-css-canary'
+            data-test-direct-runtime-css-canary
+          >
+            Scoped card content
+          </div>
+          <style scoped>
+            .direct-runtime-css-canary {
+              outline: 7px solid rgb(1, 2, 3);
+            }
+          </style>
+        </template>
+      };
+    }
+    loader.shimModule(`${testRealmURL}direct-runtime-scoped-card`, {
+      ScopedRuntimeCard,
+    });
+
+    let card = new ScopedRuntimeCard({});
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <div class='direct-runtime-css-canary' data-test-host-css-canary>
+            Host content
+          </div>
+          <CardRenderer @card={{card}} />
+        </template>
+      },
+    );
+    await waitFor('[data-test-direct-runtime-css-canary]');
+
+    let cardCanary = document.querySelector<HTMLElement>(
+      '[data-test-direct-runtime-css-canary]',
+    );
+    let hostCanary = document.querySelector<HTMLElement>(
+      '[data-test-host-css-canary]',
+    );
+    assert.ok(cardCanary, 'the Direct-owned card component rendered');
+    assert.ok(hostCanary, 'the Host canary rendered outside the card');
+
+    let scopeAttribute = Array.from(cardCanary?.attributes ?? [])
+      .map((attribute) => attribute.localName)
+      .find((attributeName) => attributeName.startsWith('data-scopedcss-'));
+    assert.ok(
+      scopeAttribute,
+      'main glimmer-scoped-css annotated the Direct-owned card element',
+    );
+    assert.false(
+      hostCanary?.hasAttribute(scopeAttribute ?? ''),
+      'the Host element does not receive the authored scope attribute',
+    );
+    assert.strictEqual(
+      getComputedStyle(cardCanary!).outlineWidth,
+      '7px',
+      'the authored rule applies inside the Direct render slot',
+    );
+    assert.strictEqual(
+      getComputedStyle(hostCanary!).outlineWidth,
+      '0px',
+      'the same class name cannot leak the authored rule into Host chrome',
+    );
+
+    let scopedStyle = Array.from(
+      document.querySelectorAll<HTMLStyleElement>(
+        'style[data-boxel-scoped-css]',
+      ),
+    ).find((style) => style.textContent?.includes(scopeAttribute ?? ''));
+    assert.ok(scopedStyle, 'the canonical scoped stylesheet was installed');
+    assert.true(
+      scopedStyle?.textContent?.includes(
+        `.direct-runtime-css-canary[${scopeAttribute}]`,
+      ),
+      'the installed selector is attribute-scoped rather than global',
+    );
   });
 
   test('renders head meta tags preview for a card head format', async function (assert) {

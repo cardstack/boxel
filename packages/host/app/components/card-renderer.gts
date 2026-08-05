@@ -1,3 +1,4 @@
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import { provide, consume } from 'ember-provide-consume-context';
@@ -18,6 +19,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import HeadFormatPreview from '@cardstack/host/components/head-format-preview';
+import type DirectBoxelRuntimeService from '@cardstack/host/services/direct-boxel-runtime';
 
 import type {
   BaseDef,
@@ -38,6 +40,8 @@ interface Signature {
 }
 
 export default class CardRenderer extends Component<Signature> {
+  @service declare private directBoxelRuntime: DirectBoxelRuntimeService;
+
   @consume(GetCardContextName) declare private getCard: getCard;
   @consume(GetCardsContextName) declare private getCards: getCards;
   @consume(GetCardCollectionContextName)
@@ -75,10 +79,10 @@ export default class CardRenderer extends Component<Signature> {
   </template>
 
   get renderedCard() {
-    return this.args.card.constructor.getComponent(
+    return this.directBoxelRuntime.runtime.getRenderSlot(
       this.args.card,
       this.args.field,
       this.args.codeRef ? { componentCodeRef: this.args.codeRef } : undefined,
-    );
+    ).component;
   }
 }

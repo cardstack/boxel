@@ -194,6 +194,7 @@ import {
   peekAtField,
   propagateRealmContext,
   realmContext,
+  resolveFieldConfiguration,
   setFieldDescription,
   setRealmContextOnField,
   type BrokenLinkFinding,
@@ -242,6 +243,7 @@ export {
   primitive,
   realmURL,
   relativeTo,
+  resolveFieldConfiguration,
   serialize,
   serializeCard,
   serializeFileDef,
@@ -2486,6 +2488,12 @@ export class BaseDef {
   static data?: Record<string, any>; // TODO probably refactor this away all together
   static displayName = 'Base';
   static icon: CardOrFieldTypeIcon;
+  /**
+   * Requests the stronger origin-isolated Sandbox boundary for authored
+   * rendering. Host policy may always choose a stronger boundary, while this
+   * hint can never request trusted Direct execution.
+   */
+  static prefersFullSandbox = false;
 
   static getDisplayName(instance: BaseDef) {
     return instance.constructor.displayName;

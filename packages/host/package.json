@@ -77,6 +77,7 @@
     "@simple-dom/serializer": "catalog:",
     "@simple-dom/void-map": "catalog:",
     "@sqlite.org/sqlite-wasm": "catalog:",
+    "@types/babel__core": "catalog:",
     "@types/flat": "catalog:",
     "@types/htmlbars-inline-precompile": "catalog:",
     "@types/indefinite": "catalog:",
@@ -140,6 +141,7 @@
     "ember-test-selectors": "^6.0.0",
     "ember-velcro": "^2.1.3",
     "ember-window-mock": "^1.0.1",
+    "es-module-lexer": "^1.7.0",
     "eslint": "catalog:",
     "eslint-config-prettier": "catalog:",
     "eslint-plugin-ember": "catalog:",
@@ -194,6 +196,7 @@
   "dependencies": {
     "ember-modify-based-class-resource": "catalog:",
     "reactiveweb": "catalog:",
+    "ses": "2.2.0",
     "unique-names-generator": "^4.7.1"
   },
   "engines": {

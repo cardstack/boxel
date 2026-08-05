@@ -1,4 +1,9 @@
-import setupDeprecationWorkflow from 'ember-cli-deprecation-workflow';
+// The classic addon package root is its Node-only Ember CLI build hook. Vite's
+// production resolver does not apply the classic addon's runtime remapping, so
+// importing the root bundles `index.js` and crashes in the browser while
+// evaluating `window.require('./package')`. Import the addon's browser module
+// explicitly; development and production then execute the same code.
+import setupDeprecationWorkflow from 'ember-cli-deprecation-workflow/addon/index.js';
 
 setupDeprecationWorkflow({
   workflow: [

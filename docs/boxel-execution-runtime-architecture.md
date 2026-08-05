@@ -1427,6 +1427,10 @@ accidental POC implementation detail is not a goal.
 Add versioned `BoxelRuntime` records, `ResolvedField`, stable Boxel/render-slot
 identity, and `buildBoxelRenderRecord()` without changing visible rendering.
 Implement `DirectBoxelRuntime` over the existing trusted Loader and Card API.
+Direct rendering must continue through main's canonical `transpileJS()` and
+Loader pipeline, including the existing `glimmer-scoped-css` transform. The
+runtime adapter owns execution and semantic projection; it does not introduce
+another stylesheet compiler, registry, or selector-rewriting path.
 
 The canonical pipeline includes:
 
