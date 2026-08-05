@@ -20,8 +20,6 @@ import {
   type RuntimeHandle,
 } from '@cardstack/runtime-common';
 
-import TrustedBaseFormat from '@cardstack/host/components/trusted-base-format';
-
 import { buildBoxelRenderRecord } from './boxel-render-record';
 import {
   RuntimeHandleRegistry,
@@ -33,7 +31,7 @@ import {
 import {
   createCapsuleRenderSlot,
   createTrustedBaseRenderSlot,
-  type CapsuleRenderSlot,
+  type CapsuleRuntimeRenderSlot,
 } from './capsule-component';
 import { DefaultCapsuleComponentRuntime } from './capsule-component-runtime';
 
@@ -60,10 +58,20 @@ interface CapsuleInstanceState {
   projection?: Record<string, unknown>;
 }
 
-const trustedBaseFallbackRef: CodeRef = {
-  module: 'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
-  name: 'CardDef',
-};
+function trustedBaseFallbackRef(
+  definitionKind: CapsuleCardTypeMetadata['definitionKind'],
+): CodeRef {
+  let name =
+    definitionKind === 'field'
+      ? 'FieldDef'
+      : definitionKind === 'file'
+        ? 'FileDef'
+        : 'CardDef';
+  return {
+    module: 'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
+    name,
+  };
+}
 
 /**
  * Boxel's semantic adapter over one principal-owned SES Capsule.
@@ -79,10 +87,8 @@ export default class CapsuleBoxelRuntime implements BoxelRuntime {
     'capsule-instance',
   );
   private componentRuntime: DefaultCapsuleComponentRuntime;
-  private renderSlots = new Map<
-    BoxelInstanceHandle,
-    Map<string, Promise<CapsuleRenderSlot>>
-  >();
+  private metadata = new Map<string, Promise<CapsuleCardTypeMetadata>>();
+  private renderSlots = new Map<string, Promise<CapsuleRuntimeRenderSlot>>();
 
   constructor(
     readonly evaluator: CapsuleModuleEvaluator,
@@ -160,9 +166,11 @@ export default class CapsuleBoxelRuntime implements BoxelRuntime {
     card: BoxelInstanceHandle,
   ): Promise<BoxelRenderRecord> {
     let instance = this.instances.get(card);
+    let projection = await this.projectionFor(instance);
     return buildBoxelRenderRecord({
       boxel: await this.descriptionFor(instance.type),
       instanceId: instance.resource.id ?? null,
+      model: cloneJSONRecord(projection),
       fields: await this.fieldsFor(instance),
       presentation: await this.presentationFor(instance),
     });
@@ -183,21 +191,18 @@ export default class CapsuleBoxelRuntime implements BoxelRuntime {
   getRenderSlot(
     card: BoxelInstanceHandle,
     format: string,
-  ): Promise<CapsuleRenderSlot> {
-    let byFormat = this.renderSlots.get(card);
-    if (!byFormat) {
-      byFormat = new Map();
-      this.renderSlots.set(card, byFormat);
-    }
-    let existing = byFormat.get(format);
+  ): Promise<CapsuleRuntimeRenderSlot> {
+    let instance = this.instances.get(card);
+    let key = typeKey(instance.type, format);
+    let existing = this.renderSlots.get(key);
     if (existing) {
       return existing;
     }
-    let slot = this.renderSlotFor(this.instances.get(card), format);
-    byFormat.set(format, slot);
+    let slot = this.renderSlotFor(instance, format);
+    this.renderSlots.set(key, slot);
     void slot.catch(() => {
-      if (byFormat?.get(format) === slot) {
-        byFormat.delete(format);
+      if (this.renderSlots.get(key) === slot) {
+        this.renderSlots.delete(key);
       }
     });
     return slot;
@@ -206,12 +211,21 @@ export default class CapsuleBoxelRuntime implements BoxelRuntime {
   private async renderSlotFor(
     instance: CapsuleInstanceState,
     format: string,
-  ): Promise<CapsuleRenderSlot> {
+  ): Promise<CapsuleRuntimeRenderSlot> {
     let metadata = await this.metadataFor(instance.type);
     if (!metadata.authoredTemplateFormats.includes(format)) {
-      return createTrustedBaseRenderSlot(TrustedBaseFormat);
+      return createTrustedBaseRenderSlot(
+        trustedBaseFallbackRef(metadata.definitionKind),
+      );
     }
-    let bundle = await this.templateForHandle(instance, format);
+    let bundle: CapsuleTemplateBundle;
+    try {
+      bundle = await this.templateForHandle(instance, format);
+    } catch (error) {
+      throw new Error(
+        `Unable to capture ${instance.type.module}#${instance.type.name} ${format} template: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
     return createCapsuleRenderSlot(
       this.componentRuntime,
       bundle,
@@ -270,7 +284,6 @@ export default class CapsuleBoxelRuntime implements BoxelRuntime {
     if (handle.startsWith('capsule-type:')) {
       this.types.release(handle);
     } else if (handle.startsWith('capsule-instance:')) {
-      this.renderSlots.delete(handle as BoxelInstanceHandle);
       this.instances.release(handle);
     }
   }
@@ -278,6 +291,7 @@ export default class CapsuleBoxelRuntime implements BoxelRuntime {
   destroy(): void {
     this.types.clear();
     this.instances.clear();
+    this.metadata.clear();
     this.renderSlots.clear();
     this.componentRuntime.destroy();
     this.evaluator.destroy();
@@ -286,10 +300,24 @@ export default class CapsuleBoxelRuntime implements BoxelRuntime {
   private async metadataFor(
     type: CapsuleTypeState,
   ): Promise<CapsuleCardTypeMetadata> {
-    return (type.metadata ??= await this.evaluator.evaluateCardTypeMetadata(
-      type.module,
-      type.name,
-    ));
+    if (type.metadata) {
+      return type.metadata;
+    }
+    let key = typeKey(type);
+    let metadata = this.metadata.get(key);
+    if (!metadata) {
+      metadata = this.evaluator.evaluateCardTypeMetadata(
+        type.module,
+        type.name,
+      );
+      this.metadata.set(key, metadata);
+      void metadata.catch(() => {
+        if (this.metadata.get(key) === metadata) {
+          this.metadata.delete(key);
+        }
+      });
+    }
+    return (type.metadata = await metadata);
   }
 
   private async descriptionFor(
@@ -322,7 +350,10 @@ export default class CapsuleBoxelRuntime implements BoxelRuntime {
       if (!formats.some((item) => item.format === format)) {
         formats.push({
           format,
-          provider: { kind: 'trusted-base', ref: trustedBaseFallbackRef },
+          provider: {
+            kind: 'trusted-base',
+            ref: trustedBaseFallbackRef(metadata.definitionKind),
+          },
         });
       }
     }
@@ -383,6 +414,10 @@ export default class CapsuleBoxelRuntime implements BoxelRuntime {
   }
 }
 
+function typeKey(type: CapsuleTypeState, format?: string): string {
+  return `${type.module}#${type.name}${format ? `:${format}` : ''}`;
+}
+
 function trustedIdentityRef(identity: {
   module: string;
   name: string;
@@ -432,13 +467,15 @@ function snapshotFromResource(
           )
         : relationship.data;
       if (Array.isArray(data)) {
-        snapshot[fieldName] = data.map((identifier) =>
-          projectRelationship(identifier),
+        setSnapshotPath(
+          snapshot,
+          fieldName,
+          data.map((identifier) => projectRelationship(identifier)),
         );
       } else if (data) {
-        snapshot[fieldName] = projectRelationship(data);
+        setSnapshotPath(snapshot, fieldName, projectRelationship(data));
       } else {
-        snapshot[fieldName] = data ?? null;
+        setSnapshotPath(snapshot, fieldName, data ?? null);
       }
     }
     return snapshot;
@@ -467,6 +504,34 @@ function snapshotFromResource(
   return project(resource);
 }
 
+/**
+ * JSON:API relationship keys preserve the complete Boxel field path. Rebuild
+ * that path in the bounded model instead of exposing a literal dotted key.
+ * This is what makes nested links such as `cardInfo.guide` visible to authored
+ * Capsule getters without transferring a live Store-backed object graph.
+ */
+function setSnapshotPath(
+  snapshot: Record<string, unknown>,
+  fieldPath: string,
+  value: unknown,
+): void {
+  let segments = fieldPath.split('.');
+  let target = snapshot;
+  for (let segment of segments.slice(0, -1)) {
+    let existing = target[segment];
+    if (
+      existing === null ||
+      typeof existing !== 'object' ||
+      Array.isArray(existing)
+    ) {
+      existing = {};
+      target[segment] = existing;
+    }
+    target = existing as Record<string, unknown>;
+  }
+  target[segments[segments.length - 1]!] = value;
+}
+
 function resolvedField(
   fieldName: string,
   metadata: CapsuleCardFieldMetadata,
@@ -491,6 +556,12 @@ function cloneJSONValue(value: unknown): JSONValue {
     return null;
   }
   return structuredClone(value) as JSONValue;
+}
+
+function cloneJSONRecord(
+  value: Record<string, unknown>,
+): Record<string, JSONValue> {
+  return structuredClone(value) as Record<string, JSONValue>;
 }
 
 function stringOrNull(value: unknown): string | null {

@@ -121,20 +121,22 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
         if (!generation) {
           return;
         }
-        state.model = Object.fromEntries(
-          generation.renderRecord.instance.fields.map((field) => [
-            field.fieldName,
-            field.value,
-          ]),
-        );
-        if (generation.renderRecord.instance.id) {
-          state.model.id = generation.renderRecord.instance.id;
+        state.model = generation.renderRecord.instance.model;
+        let [fields, slot] = await Promise.all([
+          this.boxelExecution.fieldPortalsFor(card),
+          session.getRenderSlot(format ?? 'isolated'),
+        ]);
+        if (slot.owner === 'trusted-base') {
+          slot = this.boxelExecution.trustedBaseRenderSlotFor(
+            card,
+            slot.componentCodeRef,
+          );
         }
-        state.fields = await this.boxelExecution.fieldPortalsFor(card);
-        state.slot = await session.getRenderSlot(format ?? 'isolated');
-        if (state.slot.owner !== 'sandbox') {
+        state.fields = fields;
+        state.slot = slot;
+        if (slot.owner !== 'sandbox') {
           state.surface = this.boxelExecution.registerSurface(
-            state.slot.owner,
+            slot.owner,
             this.surfaceId,
           );
         }
@@ -241,6 +243,10 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
     return this.state.snapshot.error?.stack;
   }
 
+  private get executionReason(): string | undefined {
+    return this.state.snapshot.current?.lease.decision.reason;
+  }
+
   <template>
     {{#if this.headComponent}}
       <HeadFormatPreview
@@ -253,6 +259,7 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
       <div
         class='boxel-execution-capsule-slot'
         data-boxel-execution='capsule'
+        data-boxel-execution-reason={{this.executionReason}}
         {{surfaceElement this.capsuleSurface}}
         ...attributes
       >
@@ -269,6 +276,7 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
       <div
         class='boxel-execution-sandbox-slot'
         data-boxel-execution='sandbox'
+        data-boxel-execution-reason={{this.executionReason}}
         {{boxelSandboxSlot this.sandboxSlot}}
         ...attributes
       ></div>
@@ -276,6 +284,7 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
       <div
         class='boxel-execution-direct-slot'
         data-boxel-execution='direct'
+        data-boxel-execution-reason={{this.executionReason}}
         {{surfaceElement this.directSurface}}
         ...attributes
       >

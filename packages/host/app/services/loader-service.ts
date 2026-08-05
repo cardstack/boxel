@@ -18,6 +18,7 @@ import {
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import config from '@cardstack/host/config/environment';
+import { installBoxelLoaderCompatibilityModules } from '@cardstack/host/lib/boxel-loader-compatibility';
 import { clearKnownFileMetaUrls } from '@cardstack/host/lib/known-file-meta-urls';
 
 import { authErrorEventMiddleware } from '../utils/auth-error-guard';
@@ -196,6 +197,7 @@ export default class LoaderService extends Service {
         ),
       virtualNetwork: this.network.virtualNetwork,
     });
+    installBoxelLoaderCompatibilityModules(loader);
     return loader;
   }
 

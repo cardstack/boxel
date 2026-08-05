@@ -56,6 +56,12 @@ Freeze means:
   architecture. Tests, fixtures, policies, and hard-won edge cases are ported
   more aggressively than orchestration code.
 
+The canonical exploratory oracle is the staging-backed
+[Sandbox Compatibility Corpus](https://realms-staging.stack.cards/ctse/sandbox-compatibility-corpus-20260803/index).
+Runtime work must exercise that same Realm through both the deployed Host and
+the branch's local Host; synthetic fixtures remain the deterministic CI layer,
+not a replacement for this real-card comparison.
+
 The new main-based branch is delivered as a sequence of independently
 reviewable vertical slices. The smallest architectural slice—versioned Boxel
 records, canonical projection, and a Direct adapter—should be roughly
@@ -503,12 +509,12 @@ does not inherit parent credentials, Store access, or parent-origin storage.
 The Host client implements the common runtime contract as asynchronous
 transport operations.
 
-### Trusted Base components are portals
+### Trusted Cardstack components are one-way portals
 
-Base components are arbitrary, evolving Ember/Glimmer/TypeScript programs.
-They cannot be reproduced by copying static properties or proxying every
-method. The boundary therefore treats an approved Base component as an atomic
-trusted portal:
+Components exported from `@cardstack/*`, Base, and Catalog are arbitrary,
+evolving Ember/Glimmer/TypeScript programs. They cannot be reproduced by
+copying static properties or proxying every method. The boundary therefore
+treats an approved trusted component as an atomic Host-owned portal:
 
 ```ts
 interface TrustedComponentReference {
@@ -518,9 +524,14 @@ interface TrustedComponentReference {
 }
 ```
 
-When a Capsule template invokes that reference, Host Glimmer resolves and
-runs the real component from the shared trusted module graph. Only its inputs
-and outputs are mediated:
+When a Capsule template invokes that reference, the Capsule holds only an
+inert module/export token. Host Glimmer resolves that token and runs the real
+component from the shared trusted module graph. A Sandbox uses the equivalent
+protocol reference and mounts the trusted child through a Host-owned slot.
+Trust is deliberately one-way: trusted components may be composed into any
+Capsule or Sandbox presentation, but authored constructors, closures,
+services, Store objects, DOM nodes, and browser events cannot flow back into
+the trusted module graph. Only projected inputs and named effects cross:
 
 ```ts
 interface TrustedFieldInvocation {
@@ -533,9 +544,9 @@ interface TrustedFieldInvocation {
 }
 ```
 
-The Base component may use any trusted Host service internally. It must not
+The trusted component may use any trusted Host service internally. It must not
 receive an authored function, live card instance, Store, or DOM value from the
-Capsule.
+Capsule or Sandbox.
 
 ### Server indexing and prerender
 

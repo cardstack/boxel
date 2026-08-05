@@ -109,6 +109,17 @@ export default class DirectBoxelRuntime implements BoxelRuntime {
     return asBoxelInstanceHandle(this.instances.add(instance));
   }
 
+  /**
+   * Retain the canonical Store-backed instance for a trusted Direct render.
+   *
+   * Direct must preserve the Store's identity map, lazy relationships, and
+   * mutation contexts. Re-deserializing into Card API's fallback store would
+   * create a visually similar but semantically incomplete clone.
+   */
+  retainCanonicalInstance(instance: BaseDef): BoxelInstanceHandle {
+    return asBoxelInstanceHandle(this.instances.addDistinct(instance));
+  }
+
   async describeBoxel(boxel: BoxelTypeHandle): Promise<BoxelDescription> {
     let api = await this.getCardAPI();
     return this.describeBoxelType(this.types.get(boxel), api);
@@ -194,9 +205,21 @@ export default class DirectBoxelRuntime implements BoxelRuntime {
         : cardOrHandle;
     let boxel = this.describeBoxelType(card.constructor, api);
     let fields = this.resolveFields(card, api, options.writableFields);
+    let model = JSON.parse(
+      JSON.stringify(
+        Object.fromEntries(
+          fields.map((field) => [field.fieldName, field.value]),
+        ),
+      ),
+    ) as Record<string, JSONValue>;
+    let id = boxelId(card);
+    if (id) {
+      model.id = id;
+    }
     return buildBoxelRenderRecord({
       boxel,
-      instanceId: boxelId(card),
+      instanceId: id,
+      model,
       fields,
       presentation: instancePresentation(card, api),
     });

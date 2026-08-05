@@ -14,6 +14,7 @@ import {
   type BoxelInstanceHandle,
 } from '@cardstack/runtime-common';
 
+import { installBoxelLoaderCompatibilityModules } from '@cardstack/host/lib/boxel-loader-compatibility';
 import DirectBoxelRuntime from '@cardstack/host/lib/direct-boxel-runtime';
 import type { SandboxRenderTarget } from '@cardstack/host/lib/sandbox-render-transport';
 import { installSandboxRuntimeHost } from '@cardstack/host/lib/sandbox-runtime-host';
@@ -84,6 +85,7 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
       this.loader = new Loader(fetch, this.network.resolveImport, {
         virtualNetwork: this.network.virtualNetwork,
       });
+      installBoxelLoaderCompatibilityModules(this.loader);
       this.runtime = new DirectBoxelRuntime(
         () => this.loader!.import('@cardstack/base/card-api'),
         () => this.loader!,

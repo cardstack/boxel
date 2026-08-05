@@ -79,6 +79,7 @@ export default class Menu extends Component<Signature> {
                   boxel-menu__item--has-icon=(if menuItem.icon true false)
                   boxel-menu__item--checked=menuItem.checked
                   boxel-menu__item--disabled=menuItem.disabled
+                  boxel-menu__item--eyebrow=menuItem.eyebrow
                   boxel-menu__item--header=menuItem.header
                 }}
                 data-test-boxel-menu-item
@@ -226,6 +227,28 @@ export default class Menu extends Component<Signature> {
         .boxel-menu__item--disabled.boxel-menu__item:hover {
           background-color: initial;
           opacity: 0.4;
+        }
+
+        /* Eyebrow items are compact, inert context labels. Unlike header
+           items, they do not imply selection and do not use an accent fill. */
+        .boxel-menu__item--eyebrow,
+        .boxel-menu__item--eyebrow.boxel-menu__item:hover {
+          background: transparent;
+          color: var(--boxel-500);
+          cursor: default;
+        }
+        .boxel-menu__item--eyebrow .boxel-menu__item__content {
+          padding-block: var(--boxel-sp-xxs);
+          pointer-events: none;
+        }
+        .boxel-menu__item--eyebrow .menu-item {
+          font-size: 0.6875rem;
+          font-weight: 700;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+        }
+        .boxel-menu__item--eyebrow .check-icon {
+          display: none;
         }
 
         /* Header item — inert, teal background. Used as a contextual title

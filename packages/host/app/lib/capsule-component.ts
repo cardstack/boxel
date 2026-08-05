@@ -3,13 +3,21 @@ import {
   setComponentManager,
   setComponentTemplate,
 } from '@ember/component';
+import { helper } from '@ember/component/helper';
+import { htmlSafe } from '@ember/template';
 import { createTemplateFactory } from '@ember/template-factory';
 
-import { decodeScopedCSSRequest } from '@cardstack/runtime-common';
+import {
+  decodeScopedCSSRequest,
+  type CodeRef,
+} from '@cardstack/runtime-common';
 
 import type { BoxelRenderRecord } from '@cardstack/runtime-common';
 
-import { validateCapsuleStylesheet } from './capsule-css-policy';
+import {
+  confineCapsuleStylesheet,
+  validateCapsuleInlineStyle,
+} from './capsule-css-policy';
 
 import type {
   CapsuleComponentDefinition,
@@ -47,10 +55,34 @@ export interface CapsuleRenderSlot {
   readonly stylesheets: string[];
 }
 
+export interface TrustedBaseRenderSlot {
+  readonly owner: 'trusted-base';
+  readonly componentCodeRef: CodeRef;
+}
+
+const trustedCSSVarHelper = helper(function (
+  _params,
+  values: Record<string, string | number | (() => string) | undefined>,
+) {
+  let declarations: string[] = [];
+  for (let [name, rawValue] of Object.entries(values)) {
+    let value = typeof rawValue === 'function' ? rawValue() : rawValue;
+    if (value === undefined || value === '') {
+      continue;
+    }
+    declarations.push(`--${name}: ${String(value)}`);
+  }
+  return htmlSafe(validateCapsuleInlineStyle(declarations.join('; ')));
+});
+
+export type CapsuleRuntimeRenderSlot =
+  | CapsuleRenderSlot
+  | TrustedBaseRenderSlot;
+
 export function createTrustedBaseRenderSlot(
-  component: CapsuleComponent,
-): CapsuleRenderSlot {
-  return { owner: 'capsule', component, stylesheets: [] };
+  componentCodeRef: CodeRef,
+): TrustedBaseRenderSlot {
+  return { owner: 'trusted-base', componentCodeRef };
 }
 
 class _CapsuleComponent {
@@ -160,6 +192,13 @@ export async function createCapsuleRenderSlot(
         return definition;
       }
       case 'trusted-export': {
+        if (isTrustedCSSVarReference(reference)) {
+          // Reify Boxel's custom-property helper as a Host-owned, validated
+          // capability. The authored template gets the normal Glimmer helper
+          // contract, while a dynamic value cannot smuggle a network-bearing
+          // declaration into the shared document.
+          return trustedCSSVarHelper;
+        }
         let module = moduleCache.get(reference.module);
         if (!module) {
           module = await loadTrustedModule(reference.module);
@@ -201,6 +240,17 @@ export async function createCapsuleRenderSlot(
   };
 }
 
+function isTrustedCSSVarReference(
+  reference: Extract<CapsuleScopeReference, { kind: 'trusted-export' }>,
+): boolean {
+  let module = reference.module.split('?')[0]?.split('#')[0] ?? '';
+  return (
+    (module === '@cardstack/boxel-ui/helpers' && reference.name === 'cssVar') ||
+    (module.endsWith('@cardstack/boxel-ui/helpers/css-var') &&
+      (reference.name === 'default' || reference.name === 'cssVar'))
+  );
+}
+
 function validateTemplateDescriptor(
   descriptor: CapsuleTemplateDescriptor,
 ): void {
@@ -224,8 +274,7 @@ function decodedStylesheets(bundle: CapsuleTemplateBundle): string[] {
   for (let descriptor of Object.values(bundle.templates)) {
     for (let request of descriptor.stylesheets) {
       let css = decodeScopedCSSRequest(request).css;
-      validateCapsuleStylesheet(css);
-      result.add(css);
+      result.add(confineCapsuleStylesheet(css));
     }
   }
   return [...result];

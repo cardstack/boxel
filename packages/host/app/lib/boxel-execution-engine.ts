@@ -18,11 +18,16 @@ import type {
   BoxelRuntimeRouteInput,
 } from './boxel-runtime-router';
 import type CapsuleBoxelRuntime from './capsule-boxel-runtime';
-import type { CapsuleRenderSlot } from './capsule-component';
+import type {
+  CapsuleRenderSlot,
+  TrustedBaseRenderSlot,
+} from './capsule-component';
 import type { DirectRenderSlot } from './direct-boxel-runtime';
 import type DirectBoxelRuntime from './direct-boxel-runtime';
 import type { SandboxRenderSlot } from './sandbox-runtime-process';
 import type SandboxRuntimeProcess from './sandbox-runtime-process';
+
+import type { BaseDef } from '@cardstack/base/card-api';
 
 export interface BoxelExecutionRequest {
   /** Viewer/app execution principal, never inferred from the Realm URL. */
@@ -37,6 +42,11 @@ export interface BoxelExecutionRequest {
   document: LooseSingleCardDocument;
   relativeTo?: RealmResourceIdentifier;
   purpose: MaterializationPurpose;
+  /**
+   * Host-only canonical value used exclusively by Direct. It is never passed
+   * to Capsule or Sandbox runtimes and never crosses an execution boundary.
+   */
+  canonicalCard?: BaseDef;
   /** A Host-known stronger-boundary request, if already available. */
   prefersFullSandbox?: boolean;
 }
@@ -53,6 +63,7 @@ export type BoxelExecutionStatus = 'idle' | 'loading' | 'ready' | 'error';
 export type BoxelExecutionRenderSlot =
   | DirectRenderSlot
   | CapsuleRenderSlot
+  | TrustedBaseRenderSlot
   | SandboxRenderSlot;
 
 export interface BoxelExecutionSessionSnapshot {
@@ -220,12 +231,17 @@ export class BoxelExecutionSession {
     }
     let card: BoxelInstanceHandle | undefined;
     try {
-      card = await lease.runtime.createFromSerialized(
-        request.resource,
-        request.document,
-        request.relativeTo,
-        request.purpose,
-      );
+      card =
+        lease.runtime.mode === 'direct' && request.canonicalCard
+          ? (lease.runtime as DirectBoxelRuntime).retainCanonicalInstance(
+              request.canonicalCard,
+            )
+          : await lease.runtime.createFromSerialized(
+              request.resource,
+              request.document,
+              request.relativeTo,
+              request.purpose,
+            );
       this.assertCurrent(generation);
       let renderRecord = await lease.runtime.buildRenderRecord(card);
       this.assertCurrent(generation);

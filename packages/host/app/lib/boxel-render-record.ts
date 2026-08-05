@@ -1,6 +1,7 @@
 import {
   BOXEL_EXECUTION_PROTOCOL_VERSION,
   type BoxelDescription,
+  type JSONValue,
   type BoxelRenderRecord,
   type InstancePresentation,
   type ResolvedField,
@@ -9,6 +10,7 @@ import {
 export interface BuildBoxelRenderRecordInput {
   boxel: BoxelDescription;
   instanceId: string | null;
+  model: Record<string, JSONValue>;
   fields: ResolvedField[];
   presentation: InstancePresentation;
 }
@@ -28,6 +30,7 @@ export function buildBoxelRenderRecord(
     boxel: input.boxel,
     instance: {
       id: input.instanceId,
+      model: input.model,
       fields: input.fields,
     },
     presentation: input.presentation,

@@ -7,6 +7,7 @@ import { tracked } from '@glimmer/tracking';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
+import { relativeTo, rri } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
@@ -208,6 +209,7 @@ module('Integration | preview', function (hooks) {
       name: 'Ada',
       details: new AuthoredDetails(),
     });
+    card[relativeTo] = rri(`${testRealmURL}BoundaryCard/one`);
     let direct = getService('direct-boxel-runtime').runtime;
     let directFields = direct.getRenderSlot(card)
       .component as unknown as Record<string, unknown>;
@@ -222,6 +224,11 @@ module('Integration | preview', function (hooks) {
       fields.details,
       directFields.details,
       'an authored FieldDef cannot reuse the Host Direct renderer',
+    );
+    assert.strictEqual(
+      (fields.details as unknown as { relativeTo?: string }).relativeTo,
+      `${testRealmURL}BoundaryCard/one`,
+      'the authored portal preserves the canonical relative module base',
     );
   });
 

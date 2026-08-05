@@ -82,6 +82,17 @@ export class RuntimeHandleRegistry<T extends object> {
     return handle;
   }
 
+  /**
+   * Register a distinct lease for an object that may already have another
+   * live handle. This is used when multiple mounted Direct surfaces retain the
+   * same canonical Store instance and must be released independently.
+   */
+  addDistinct(value: T): RuntimeHandle {
+    let handle = `${this.prefix}:${++this.nextHandle}` as RuntimeHandle;
+    this.values.set(handle, value);
+    return handle;
+  }
+
   get(handle: RuntimeHandle): T {
     let value = this.values.get(handle);
     if (!value) {

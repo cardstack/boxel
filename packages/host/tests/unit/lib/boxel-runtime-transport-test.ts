@@ -66,7 +66,11 @@ class TestRuntime implements BoxelRuntime {
     return {
       protocolVersion: BOXEL_EXECUTION_PROTOCOL_VERSION,
       boxel: await this.describeBoxel(),
-      instance: { id: 'https://example.test/Person/1', fields: [] },
+      instance: {
+        id: 'https://example.test/Person/1',
+        model: {},
+        fields: [],
+      },
       presentation: {
         title: 'Ada',
         summary: null,

@@ -41,8 +41,8 @@ import { cn, cssVar, optional, not } from '@cardstack/boxel-ui/helpers';
 
 import { IconLink, IconTrash } from '@cardstack/boxel-ui/icons';
 
-import type { ToolContext } from '@cardstack/runtime-common';
 import {
+  type ToolContext,
   type Permissions,
   type getCard,
   type getCards,
@@ -64,6 +64,7 @@ import {
   baseCardRef,
 } from '@cardstack/runtime-common';
 
+import type { BoxelExecutionMode } from '@cardstack/host/lib/boxel-runtime';
 import {
   stackItemTypeToStoreReadType,
   type StackItem,
@@ -141,6 +142,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   @service declare private store: StoreService;
 
   @tracked private selectedCards = new TrackedSet<string>();
+  @tracked private executionMode: BoxelExecutionMode | undefined;
 
   private normalizeCardId(cardDefOrId: CardDefOrId): string {
     if (typeof cardDefOrId === 'string') {
@@ -676,6 +678,14 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }) ?? [],
     );
 
+    items.unshift(
+      new MenuItem({
+        label: `Execution: ${executionModeLabel(this.executionMode)}`,
+        action: () => undefined,
+        eyebrow: true,
+      }),
+    );
+
     if (this.isTopCard) {
       let expandItem = new MenuItem({
         label: this.isExpanded ? 'Restore Width' : 'Expand to Full Width',
@@ -860,6 +870,22 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   private setupContentEl = (el: HTMLElement) => {
     this.contentEl = el;
+    let updateExecutionMode = () => {
+      let executionElement = el.querySelector<HTMLElement>(
+        '[data-boxel-execution="direct"], [data-boxel-execution="capsule"], [data-boxel-execution="sandbox"]',
+      );
+      let mode = executionElement?.dataset.boxelExecution;
+      this.executionMode = isBoxelExecutionMode(mode) ? mode : undefined;
+    };
+    let observer = new MutationObserver(updateExecutionMode);
+    observer.observe(el, {
+      attributes: true,
+      attributeFilter: ['data-boxel-execution'],
+      childList: true,
+      subtree: true,
+    });
+    scheduleOnce('afterRender', this, updateExecutionMode);
+    return () => observer.disconnect();
   };
 
   private setupContainerEl = (el: HTMLElement) => {
@@ -1398,7 +1424,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
 interface ContentElementSignature {
   Args: {
     Named: {
-      onSetup: (element: HTMLElement) => void;
+      onSetup: (element: HTMLElement) => void | (() => void);
     };
   };
 }
@@ -1408,6 +1434,25 @@ class ContentElement extends Modifier<ContentElementSignature> {
     _positional: [],
     { onSetup }: ContentElementSignature['Args']['Named'],
   ) {
-    onSetup(element);
+    return onSetup(element);
+  }
+}
+
+function isBoxelExecutionMode(
+  value: string | undefined,
+): value is BoxelExecutionMode {
+  return value === 'direct' || value === 'capsule' || value === 'sandbox';
+}
+
+function executionModeLabel(mode: BoxelExecutionMode | undefined): string {
+  switch (mode) {
+    case 'direct':
+      return 'Direct';
+    case 'capsule':
+      return 'Capsule';
+    case 'sandbox':
+      return 'Sandbox';
+    default:
+      return 'Loading';
   }
 }

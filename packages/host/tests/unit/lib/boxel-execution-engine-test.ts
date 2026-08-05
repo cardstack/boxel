@@ -59,6 +59,8 @@ class TestRuntime {
   disposed: string[] = [];
   failBuild = false;
   prefersFullSandbox = false;
+  createdFromSerialized = 0;
+  retainedCanonical?: object;
   private nextInstance = 0;
 
   constructor(readonly mode: BoxelRuntime['mode']) {}
@@ -71,6 +73,11 @@ class TestRuntime {
     throw new Error('not used');
   }
   async createFromSerialized(): Promise<BoxelInstanceHandle> {
+    this.createdFromSerialized++;
+    return `${this.mode}-instance:${++this.nextInstance}` as BoxelInstanceHandle;
+  }
+  retainCanonicalInstance(instance: object): BoxelInstanceHandle {
+    this.retainedCanonical = instance;
     return `${this.mode}-instance:${++this.nextInstance}` as BoxelInstanceHandle;
   }
   async describeBoxel(): Promise<never> {
@@ -158,7 +165,7 @@ function renderRecord(
       },
       executionHints: { prefersFullSandbox },
     },
-    instance: { id: resource.id ?? null, fields: [] },
+    instance: { id: resource.id ?? null, model: {}, fields: [] },
     presentation: {
       title: `${mode} title`,
       summary: null,
@@ -279,6 +286,56 @@ module('Unit | Boxel execution engine', function () {
     }
   });
 
+  test('Direct retains the canonical Store instance while boundaries materialize projections', async function (assert) {
+    let direct = new TestRuntime('direct');
+    let capsule = new TestRuntime('capsule');
+    let sandbox = new TestRuntime('sandbox');
+    let router = new BoxelRuntimeRouter(
+      direct as unknown as DirectBoxelRuntime,
+      () => capsule as unknown as CapsuleBoxelRuntime,
+      () => sandbox as unknown as SandboxRuntimeProcess,
+    );
+    let engine = new BoxelExecutionEngine(router, async () => capsuleSource);
+    let canonicalCard = {};
+    let directSession = engine.createSession();
+    let capsuleSession = engine.createSession();
+
+    await directSession.update({
+      ...executionRequest(),
+      trusted: true,
+      canonicalCard: canonicalCard as never,
+    });
+    await capsuleSession.update({
+      ...executionRequest(),
+      canonicalCard: canonicalCard as never,
+    });
+
+    assert.strictEqual(
+      direct.retainedCanonical,
+      canonicalCard,
+      'trusted Direct rendering preserves the Store-owned object identity',
+    );
+    assert.strictEqual(
+      direct.createdFromSerialized,
+      0,
+      'Direct does not create a fallback-store clone',
+    );
+    assert.strictEqual(
+      capsule.createdFromSerialized,
+      1,
+      'Capsule still materializes only the serialized projection',
+    );
+    assert.strictEqual(
+      capsule.retainedCanonical,
+      undefined,
+      'the canonical Store object never enters the Capsule runtime',
+    );
+
+    await directSession.destroy();
+    await capsuleSession.destroy();
+    engine.destroy();
+  });
+
   test('mixed delegated boundaries keep independent runtime and lifecycle ownership', async function (assert) {
     let direct = new TestRuntime('direct');
     let capsule = new TestRuntime('capsule');
@@ -348,6 +405,36 @@ module('Unit | Boxel execution engine', function () {
     `);
     assert.strictEqual(typeOnly.tier, 'capsule');
 
+    let trustedCSSVariable = await classifyBoxelSource(`
+      import { CardDef } from '@cardstack/base/card-api';
+      import { cssVar } from '@cardstack/boxel-ui/helpers';
+      export class Example extends CardDef {
+        static isolated = class {
+          <template>
+            <section style={{cssVar example-accent=@model.accent}}></section>
+          </template>
+        };
+      }
+    `);
+    assert.strictEqual(
+      trustedCSSVariable.tier,
+      'capsule',
+      'the trusted custom-property helper does not require a browser process',
+    );
+
+    let arbitraryDynamicStyle = await classifyBoxelSource(`
+      import { CardDef } from '@cardstack/base/card-api';
+      export class Example extends CardDef {
+        static isolated = class {
+          <template>
+            <section style={{@model.style}}></section>
+          </template>
+        };
+      }
+    `);
+    assert.strictEqual(arbitraryDynamicStyle.tier, 'sandbox');
+    assert.true(arbitraryDynamicStyle.signals.includes('dynamic-inline-style'));
+
     let browser = await classifyBoxelSource(`
       import { CardDef } from '@cardstack/base/card-api';
       export class Example extends CardDef {
@@ -372,6 +459,34 @@ module('Unit | Boxel execution engine', function () {
         bindings: [{ exportName: 'Scene', formats: ['isolated'] }],
       },
     ]);
+
+    let globalStyle = await classifyBoxelSource(`
+      import { CardDef } from '@cardstack/base/card-api';
+      export class Example extends CardDef {
+        static isolated = class {
+          <template>
+            <section>Example</section>
+            <style scoped>:global(.operator-mode) { font-size: 8rem; }</style>
+          </template>
+        };
+      }
+    `);
+    assert.strictEqual(globalStyle.tier, 'sandbox');
+    assert.true(globalStyle.signals.includes('global-style-selector'));
+
+    let globalRegistration = await classifyBoxelSource(`
+      import { CardDef } from '@cardstack/base/card-api';
+      export class Example extends CardDef {
+        static isolated = class {
+          <template>
+            <section>Example</section>
+            <style scoped>@font-face { font-family: CardFont; src: local(Arial); }</style>
+          </template>
+        };
+      }
+    `);
+    assert.strictEqual(globalRegistration.tier, 'sandbox');
+    assert.true(globalRegistration.signals.includes('document-global-style'));
   });
 
   test('module graph classification propagates authored browser dependencies and stops at trusted modules', async function (assert) {
@@ -387,6 +502,7 @@ module('Unit | Boxel execution engine', function () {
       `,
     };
     let loads: string[] = [];
+    let resolutions: string[] = [];
     let classifier = new BoxelModuleGraphClassifier({
       loadSource: async (identifier) => {
         loads.push(identifier);
@@ -396,10 +512,12 @@ module('Unit | Boxel execution engine', function () {
         }
         return source;
       },
-      resolveImport: (specifier, relativeTo) =>
-        specifier.startsWith('.')
+      resolveImport: (specifier, relativeTo) => {
+        resolutions.push(specifier);
+        return specifier.startsWith('.')
           ? new URL(specifier, relativeTo).href
-          : specifier,
+          : specifier;
+      },
       isTrustedModule: (identifier) =>
         identifier.startsWith('https://cardstack.com/base/'),
     });
@@ -415,6 +533,53 @@ module('Unit | Boxel execution engine', function () {
     assert.false(
       loads.includes('https://cardstack.com/base/card-api'),
       'trusted imports are semantic leaves and are never fetched as authored source',
+    );
+    assert.false(
+      resolutions.includes('https://cardstack.com/base/card-api'),
+      'trusted imports do not trigger package resolution or eager module evaluation',
+    );
+  });
+
+  test('module graph classification reuses unchanged supplied source and replaces changed source', async function (assert) {
+    let moduleIdentifier = 'https://example.test/entry.gts';
+    let dependencyIdentifier = 'https://example.test/dependency.gts';
+    let dependencyLoads = 0;
+    let classifier = new BoxelModuleGraphClassifier({
+      loadSource: async (identifier) => {
+        if (identifier !== dependencyIdentifier) {
+          throw new Error('not found');
+        }
+        dependencyLoads++;
+        return `export default class Dependency {}`;
+      },
+      resolveImport: (specifier, relativeTo) =>
+        new URL(specifier, relativeTo).href,
+      isTrustedModule: () => false,
+    });
+    let source = `
+      import Dependency from './dependency.gts';
+      export class Example extends Dependency {}
+    `;
+
+    // eslint-disable-next-line ember/no-string-prototype-extensions -- this is the graph classifier API, not Ember.String.classify
+    await classifier.classify(moduleIdentifier, source);
+    // eslint-disable-next-line ember/no-string-prototype-extensions -- this is the graph classifier API, not Ember.String.classify
+    await classifier.classify(moduleIdentifier, source);
+    assert.strictEqual(
+      dependencyLoads,
+      1,
+      'an unchanged editor or Store snapshot reuses its module graph',
+    );
+
+    // eslint-disable-next-line ember/no-string-prototype-extensions -- this is the graph classifier API, not Ember.String.classify
+    await classifier.classify(
+      moduleIdentifier,
+      `${source}\nexport const revision = 2;`,
+    );
+    assert.strictEqual(
+      dependencyLoads,
+      2,
+      'a changed source snapshot replaces the cached graph',
     );
   });
 

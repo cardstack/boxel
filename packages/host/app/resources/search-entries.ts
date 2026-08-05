@@ -41,6 +41,8 @@ import {
   type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
 
+import { validateSharedDocumentScopedCSSRequest } from '@cardstack/host/lib/capsule-css-policy';
+
 import { knownFileMetaUrls } from '../lib/known-file-meta-urls';
 import { normalizeRealms } from '../lib/realm-utils';
 import { searchErrorEntry } from '../lib/search-error-entry';
@@ -697,7 +699,19 @@ export class SearchEntriesResource extends Resource<Args> {
   private async loadStylesheets(doc: EntryCollectionDocument) {
     let hrefs = (doc.included ?? [])
       .filter(isCssResource)
-      .map((resource) => resource.attributes.href);
+      .map((resource) => resource.attributes.href)
+      .filter((href) => {
+        try {
+          validateSharedDocumentScopedCSSRequest(href);
+          return true;
+        } catch {
+          // Search HTML is still useful when an authored stylesheet cannot
+          // safely share the Host document. The live Boxel will render in its
+          // isolated execution mode; do not make file/search navigation fail
+          // because its prerender presentation was omitted.
+          return false;
+        }
+      });
     await Promise.all(
       hrefs.map((href) => this.loaderService.loader.import(href)),
     );

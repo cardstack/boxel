@@ -57,6 +57,8 @@ const compiledLiteralStyleElement =
   /\[\s*10\s*,\s*(?:["']style["']|\\["']style\\["'])\s*\]/i;
 const compiledDynamicInlineStyleAttribute =
   /\[\s*(?:15|16|22|23)\s*,\s*(?:5|\\*["']style\\*["'])\s*,/i;
+const authoredDocumentGlobalStyle =
+  /(?:@(?:font-face|font-feature-values|font-palette-values|property|counter-style|color-profile|page|viewport|(?:-moz-)?document|namespace|view-transition|position-try|scroll-timeline|custom-media|custom-selector)\b|@layer\b(?!\s*\{)|\bview-transition-(?:name|class)\s*:)/i;
 const topLayerAttributeName =
   '(?:command|commandfor|popover|popovertarget|popovertargetaction)';
 const authoredTopLayerAttribute = new RegExp(
@@ -151,15 +153,29 @@ let lexerReady = Promise.resolve(init);
 function analyzeEmbeddedTemplates(source: string): {
   javascript: string;
   hasDynamicInlineStyle: boolean;
+  hasDocumentGlobalStyle: boolean;
+  hasGlobalStyleSelector: boolean;
   hasTopLayerAttribute: boolean;
   hasUnscopedStyle: boolean;
 } {
   let characters = Array.from(source);
   let hasDynamicInlineStyle = false;
+  let hasDocumentGlobalStyle = false;
+  let hasGlobalStyleSelector = false;
   let hasTopLayerAttribute = false;
   let hasUnscopedStyle = false;
   for (let match of new ContentTag.Preprocessor().parse(source)) {
-    hasDynamicInlineStyle ||= /\sstyle\s*=\s*{{/i.test(match.contents);
+    // Boxel UI's cssVar helper is a trusted, declaration-only presentation
+    // primitive. It does not require a browser-global runtime and is resolved
+    // by reference in the Host when a Capsule template is reified. Keep every
+    // other dynamic style expression on the stronger Sandbox path; the
+    // Capsule evaluator independently verifies that the helper reference
+    // actually came from the trusted Boxel UI module.
+    for (let style of match.contents.matchAll(
+      /\sstyle\s*=\s*{{\s*([^\s}]+)/gi,
+    )) {
+      hasDynamicInlineStyle ||= style[1] !== 'cssVar';
+    }
     for (let tag of match.contents.matchAll(/<[^>]+>/g)) {
       hasTopLayerAttribute ||= authoredTopLayerAttribute.test(tag[0]);
     }
@@ -170,6 +186,8 @@ function analyzeEmbeddedTemplates(source: string): {
         hasUnscopedStyle = true;
       }
     }
+    hasGlobalStyleSelector ||= /:global\s*\(/i.test(match.contents);
+    hasDocumentGlobalStyle ||= authoredDocumentGlobalStyle.test(match.contents);
     for (
       let index = match.range.startChar;
       index < match.range.endChar;
@@ -184,6 +202,8 @@ function analyzeEmbeddedTemplates(source: string): {
   return {
     javascript: characters.join(''),
     hasDynamicInlineStyle,
+    hasDocumentGlobalStyle,
+    hasGlobalStyleSelector,
     hasTopLayerAttribute,
     hasUnscopedStyle,
   };
@@ -530,11 +550,15 @@ export async function classifyBoxelSource(
 ): Promise<BoxelSourceClassification> {
   let javascript: string;
   let dynamicInlineStyle = compiledDynamicInlineStyleAttribute.test(source);
+  let documentGlobalStyle = false;
+  let globalStyleSelector = false;
   let topLayerAttribute = compiledTopLayerAttribute.test(source);
   let unscopedStyle = hasCompiledUnscopedStyle(source);
   try {
     let templateAnalysis = analyzeEmbeddedTemplates(source);
     dynamicInlineStyle ||= templateAnalysis.hasDynamicInlineStyle;
+    documentGlobalStyle ||= templateAnalysis.hasDocumentGlobalStyle;
+    globalStyleSelector ||= templateAnalysis.hasGlobalStyleSelector;
     topLayerAttribute ||= templateAnalysis.hasTopLayerAttribute;
     unscopedStyle ||= templateAnalysis.hasUnscopedStyle;
     javascript = templateAnalysis.javascript;
@@ -581,6 +605,8 @@ export async function classifyBoxelSource(
       ...globalSignals,
       ...domMethodSignals,
       ...(dynamicInlineStyle ? ['dynamic-inline-style'] : []),
+      ...(documentGlobalStyle ? ['document-global-style'] : []),
+      ...(globalStyleSelector ? ['global-style-selector'] : []),
       ...(topLayerAttribute ? ['top-layer-markup'] : []),
       ...(unscopedStyle ? ['unscoped-style'] : []),
     ]),
@@ -590,6 +616,8 @@ export async function classifyBoxelSource(
     importSignals.length > 0 ||
     domMethodSignals.length > 0 ||
     dynamicInlineStyle ||
+    documentGlobalStyle ||
+    globalStyleSelector ||
     topLayerAttribute ||
     unscopedStyle;
   if (signals.length > 0) {
@@ -631,6 +659,7 @@ export interface BoxelModuleGraphClassifierOptions {
  */
 export class BoxelModuleGraphClassifier {
   private cache = new Map<string, Promise<BoxelSourceClassification>>();
+  private entrySources = new Map<string, string>();
   private dependencies = new Map<string, Set<string>>();
 
   constructor(private readonly options: BoxelModuleGraphClassifierOptions) {}
@@ -639,12 +668,16 @@ export class BoxelModuleGraphClassifier {
     moduleIdentifier: string,
     source?: string,
   ): Promise<BoxelSourceClassification> {
-    let cacheKey = source === undefined ? moduleIdentifier : undefined;
-    if (cacheKey) {
-      let existing = this.cache.get(cacheKey);
-      if (existing) {
-        return existing;
-      }
+    let existing = this.cache.get(moduleIdentifier);
+    if (
+      existing &&
+      (source === undefined ||
+        this.entrySources.get(moduleIdentifier) === source)
+    ) {
+      return existing;
+    }
+    if (existing) {
+      this.invalidate(moduleIdentifier);
     }
     let observedDependencies = new Set<string>();
     let classification = this.classifyGraph(
@@ -652,16 +685,18 @@ export class BoxelModuleGraphClassifier {
       source,
       observedDependencies,
     );
-    if (cacheKey) {
-      this.cache.set(cacheKey, classification);
-      this.dependencies.set(cacheKey, observedDependencies);
-      void classification.catch(() => {
-        if (this.cache.get(cacheKey) === classification) {
-          this.cache.delete(cacheKey);
-          this.dependencies.delete(cacheKey);
-        }
-      });
+    this.cache.set(moduleIdentifier, classification);
+    if (source !== undefined) {
+      this.entrySources.set(moduleIdentifier, source);
     }
+    this.dependencies.set(moduleIdentifier, observedDependencies);
+    void classification.catch(() => {
+      if (this.cache.get(moduleIdentifier) === classification) {
+        this.cache.delete(moduleIdentifier);
+        this.entrySources.delete(moduleIdentifier);
+        this.dependencies.delete(moduleIdentifier);
+      }
+    });
     return classification;
   }
 
@@ -670,11 +705,13 @@ export class BoxelModuleGraphClassifier {
       for (let [entry, dependencies] of this.dependencies) {
         if (entry === moduleIdentifier || dependencies.has(moduleIdentifier)) {
           this.cache.delete(entry);
+          this.entrySources.delete(entry);
           this.dependencies.delete(entry);
         }
       }
     } else {
       this.cache.clear();
+      this.entrySources.clear();
       this.dependencies.clear();
     }
   }
@@ -708,6 +745,18 @@ export class BoxelModuleGraphClassifier {
       let own = await classifyBoxelSource(source);
       let dependencies: string[] = [];
       for (let specifier of own.imports) {
+        // Trusted package imports are already canonical execution leaves. Do
+        // not ask VirtualNetwork to resolve them: resolving an async package
+        // shim can evaluate the trusted Base module merely to discover its
+        // URL, which turns classification into an eager module load (and can
+        // pull in unrelated transitive network dependencies). The runtime
+        // resolves the reference only if the authored template actually uses
+        // that trusted export.
+        if (this.options.isTrustedModule(specifier)) {
+          observedDependencies.add(specifier);
+          dependencies.push(specifier);
+          continue;
+        }
         let dependency: string;
         try {
           dependency = this.options.resolveImport(specifier, identifier);

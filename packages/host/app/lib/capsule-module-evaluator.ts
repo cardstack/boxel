@@ -3,14 +3,37 @@ import 'ses';
 import { isTesting } from '@embroider/macros';
 
 import {
+  bfmRefFormatAndSize,
+  bfmResolvedEmbedStyle,
+  cardTypeName,
+  extractMermaidBlocks,
+  fileNameFromUrl,
+  processKatexPlaceholders,
+  replaceMermaidSvgs,
+  resolveRRIReference,
+  trimJsonExtension,
+} from '@cardstack/runtime-common';
+import {
+  CardContextName,
+  CardCrudFunctionsContextName,
+  CardURLContextName,
+  CommandContextName,
+  DefaultFormatsContextName,
+  GetCardCollectionContextName,
+  GetCardContextName,
+  GetCardsContextName,
+  PermissionsContextName,
+  RealmURLContextName,
   baseRRI,
   getMenuItems,
   realmURL,
 } from '@cardstack/runtime-common/constants';
 import { Loader } from '@cardstack/runtime-common/loader';
-import { codeRef } from '@cardstack/runtime-common/realm-identifiers';
+import { PACKAGES_FAKE_ORIGIN } from '@cardstack/runtime-common/package-shim-handler';
+import { codeRef, rri } from '@cardstack/runtime-common/realm-identifiers';
 import type { VirtualNetwork } from '@cardstack/runtime-common/virtual-network';
 
+import { installBoxelLoaderCompatibilityModules } from '@cardstack/host/lib/boxel-loader-compatibility';
 import { capsuleSearchEntryWireQueryFromQuery } from '@cardstack/host/lib/capsule-runtime-helpers';
 
 import { createCapsuleCompartment } from '../../workers/capsule-module-registration-evaluator';
@@ -218,8 +241,10 @@ export interface CompartmentAmbientReport {
   localStorage: string;
   fetch: string;
   XMLHttpRequest: string;
+  Intl: string;
   URL: string;
   URLSearchParams: string;
+  structuredClone: string;
 }
 
 interface TemplateFactoryDescriptor {
@@ -236,7 +261,8 @@ interface TemplateFactoryResult {
 
 interface CapturedTemplate {
   descriptor: Omit<CapsuleTemplateDescriptor, 'scope' | 'instance'>;
-  scope: unknown[];
+  scope: () => unknown[];
+  trusted: boolean;
 }
 
 function templateContainsLiteralElement(
@@ -306,6 +332,7 @@ const topLayerAttributeNames = new Set([
 function validateTemplateDOMPolicy(
   value: unknown,
   validateInlineStyle: ((style: string) => void) | undefined,
+  isTrustedDynamicInlineStyle: ((expression: unknown) => boolean) | undefined,
 ): void {
   if (!Array.isArray(value)) {
     return;
@@ -334,12 +361,18 @@ function validateTemplateDOMPolicy(
     }
     validateInlineStyle(attributeValue);
   } else if (isStyleAttribute && dynamicAttributeOpcodes.has(Number(opcode))) {
-    throw new Error(
-      'Capsule templates cannot use dynamic inline styles; use <style scoped> or an iframe-rendered format',
-    );
+    if (!isTrustedDynamicInlineStyle?.(attributeValue)) {
+      throw new Error(
+        'Capsule templates cannot use dynamic inline styles except the trusted Boxel cssVar helper; use <style scoped> or an iframe-rendered format',
+      );
+    }
   }
   for (let entry of value) {
-    validateTemplateDOMPolicy(entry, validateInlineStyle);
+    validateTemplateDOMPolicy(
+      entry,
+      validateInlineStyle,
+      isTrustedDynamicInlineStyle,
+    );
   }
 }
 
@@ -491,6 +524,20 @@ function safeURLGlobals(): Record<string, unknown> {
   };
 }
 
+function safeStructuredClone(): typeof structuredClone {
+  let hostStructuredClone = globalThis.structuredClone;
+  return harden((value: unknown, options?: StructuredSerializeOptions) => {
+    if (options !== undefined) {
+      // A Capsule receives value-copying semantics, not authority to transfer
+      // or detach Host-owned buffers and message ports.
+      throw new TypeError(
+        'Capsule structuredClone does not support transfer options',
+      );
+    }
+    return hostStructuredClone(value);
+  }) as typeof structuredClone;
+}
+
 export default class CapsuleModuleEvaluator {
   private templateByComponent = new WeakMap<object, CapturedTemplate>();
   private trustedExportByValue = new WeakMap<
@@ -499,9 +546,6 @@ export default class CapsuleModuleEvaluator {
   >();
   private trustedModuleFacades = new Map<string, Record<string, unknown>>();
   private explicitRuntimeFacades = new Map<string, Record<string, unknown>>();
-  private cardCrudFunctionsContextName = Object.freeze({
-    name: 'CardCrudFunctionsContext',
-  });
   private cardAPIRuntimeFacade!: Record<string, unknown>;
   private enumFieldRuntimeFacade!: Record<string, unknown>;
   private inertHostCommandFacades = new Map<string, Record<string, unknown>>();
@@ -538,6 +582,7 @@ export default class CapsuleModuleEvaluator {
   private moduleEvaluations = 0;
   private moduleCacheHits = 0;
   private evaluatingStylesheets: string[] = [];
+  private evaluatingModuleIdentifier: string | undefined;
   private compartment: Compartment;
   private loader: Loader;
   private moduleEvaluator: ReturnType<
@@ -562,6 +607,14 @@ export default class CapsuleModuleEvaluator {
 
     let globals: Record<string, unknown> = {
       dt7948: decoratorRuntime,
+      // Locale formatting is pure presentation behavior. Base fields use
+      // Intl directly, and exposing the hardened namespace conveys no Store,
+      // network, DOM, or Host-service authority.
+      Intl: harden(globalThis.Intl),
+      // structuredClone is a pure data operation used by authored BXL helpers.
+      // Expose the copy operation while deliberately withholding transfer
+      // semantics, which could otherwise detach Host-owned capabilities.
+      structuredClone: safeStructuredClone(),
       ...safeURLGlobals(),
     };
     if (options.documentFacade) {
@@ -584,8 +637,10 @@ export default class CapsuleModuleEvaluator {
         localStorage: typeof localStorage,
         fetch: typeof fetch,
         XMLHttpRequest: typeof XMLHttpRequest,
+        Intl: typeof Intl,
         URL: typeof URL,
-        URLSearchParams: typeof URLSearchParams
+        URLSearchParams: typeof URLSearchParams,
+        structuredClone: typeof structuredClone
       })`) as CompartmentAmbientReport,
     );
 
@@ -597,6 +652,7 @@ export default class CapsuleModuleEvaluator {
       // trusted-runtime convenience and must never cross into realm code.
       moduleMeta: (moduleIdentifier) => harden({ url: moduleIdentifier }),
     });
+    installBoxelLoaderCompatibilityModules(this.loader);
     this.installRuntimeFacades();
   }
 
@@ -976,7 +1032,10 @@ export default class CapsuleModuleEvaluator {
           );
           continue;
         }
-        let trustedIdentity = this.trustedImportIdentity(dependency);
+        let trustedIdentity = this.trustedDependencyIdentity(
+          dependency,
+          moduleIdentifier,
+        );
         if (!trustedIdentity) {
           continue;
         }
@@ -995,14 +1054,59 @@ export default class CapsuleModuleEvaluator {
       dependencyList: registration.dependencyList,
       implementation: (...dependencies: unknown[]) => {
         let previousStylesheets = this.evaluatingStylesheets;
+        let previousModuleIdentifier = this.evaluatingModuleIdentifier;
         this.evaluatingStylesheets = stylesheets;
+        this.evaluatingModuleIdentifier = moduleIdentifier;
         try {
+          for (let [
+            index,
+            dependency,
+          ] of registration.dependencyList.entries()) {
+            let trustedIdentity = this.trustedDependencyIdentity(
+              dependency,
+              moduleIdentifier,
+            );
+            if (trustedIdentity) {
+              this.rememberTrustedDependencyExports(
+                trustedIdentity,
+                dependencies[index],
+              );
+            }
+          }
           implementation(...dependencies);
         } finally {
           this.evaluatingStylesheets = previousStylesheets;
+          this.evaluatingModuleIdentifier = previousModuleIdentifier;
         }
       },
     };
+  }
+
+  private rememberTrustedDependencyExports(
+    moduleIdentifier: string,
+    namespace: unknown,
+  ): void {
+    if (
+      (typeof namespace !== 'object' || namespace === null) &&
+      typeof namespace !== 'function'
+    ) {
+      return;
+    }
+    for (let name of Reflect.ownKeys(namespace)) {
+      if (typeof name !== 'string') {
+        continue;
+      }
+      let value = Reflect.get(namespace, name);
+      if (
+        (typeof value === 'object' && value !== null) ||
+        typeof value === 'function'
+      ) {
+        this.trustedExportByValue.set(value, {
+          module: moduleIdentifier,
+          name,
+        });
+      }
+    }
   }
 
   private isHostCommandImport(moduleIdentifier: string): boolean {
@@ -1114,12 +1218,39 @@ export default class CapsuleModuleEvaluator {
         : undefined;
   }
 
+  private trustedDependencyIdentity(
+    dependency: string,
+    relativeTo: string,
+  ): string | undefined {
+    let identity = this.trustedImportIdentity(dependency);
+    if (
+      identity ||
+      (!dependency.startsWith('.') && !dependency.startsWith('/'))
+    ) {
+      return identity;
+    }
+    try {
+      return this.trustedImportIdentity(new URL(dependency, relativeTo).href);
+    } catch {
+      return undefined;
+    }
+  }
+
   private async importCardType(
     moduleIdentifier: string,
     exportName: string,
   ): Promise<Record<string, unknown>> {
-    let module =
-      await this.loader.import<Record<string, unknown>>(moduleIdentifier);
+    let module: Record<string, unknown>;
+    try {
+      module =
+        await this.loader.import<Record<string, unknown>>(moduleIdentifier);
+    } catch (error) {
+      let importError = new Error(
+        `Unable to import Capsule Boxel ${exportName} from ${JSON.stringify(moduleIdentifier)}`,
+      );
+      (importError as Error & { cause?: unknown }).cause = error;
+      throw importError;
+    }
     let cardType = module[exportName];
     if (
       (typeof cardType !== 'object' || cardType === null) &&
@@ -1219,15 +1350,40 @@ export default class CapsuleModuleEvaluator {
     // Keep this list explicit: the full runtime-common namespace also contains
     // host/runtime facilities that realm-authored code must not receive.
     let Command = this.capsuleCommandBase();
+    let buildWaiter = () =>
+      Object.freeze({
+        beginAsync: () => undefined,
+        endAsync: (_token: unknown) => undefined,
+      });
     return Object.freeze({
       Command,
       Tool: Command,
-      CardCrudFunctionsContextName: this.cardCrudFunctionsContextName,
+      CardContextName,
+      CardCrudFunctionsContextName,
+      CardURLContextName,
+      CommandContextName,
+      DefaultFormatsContextName,
+      GetCardCollectionContextName,
+      GetCardContextName,
+      GetCardsContextName,
+      PermissionsContextName,
+      RealmURLContextName,
       baseRRI,
+      bfmRefFormatAndSize,
+      bfmResolvedEmbedStyle,
+      buildWaiter,
+      cardTypeName,
       codeRef,
+      extractMermaidBlocks,
+      fileNameFromUrl,
       getMenuItems,
+      processKatexPlaceholders,
       realmURL,
+      replaceMermaidSvgs,
+      resolveRRIReference,
+      rri,
       searchEntryWireQueryFromQuery: capsuleSearchEntryWireQueryFromQuery,
+      trimJsonExtension,
     });
   }
 
@@ -1299,25 +1455,106 @@ export default class CapsuleModuleEvaluator {
 
   private provideConsumeContextFacade() {
     let consume = (contextName: unknown) => {
-      if (contextName !== this.cardCrudFunctionsContextName) {
-        throw new Error('Capsule context is not available');
-      }
       return (
         _target: object,
         _property: string,
         descriptor: PropertyDescriptor,
       ): PropertyDescriptor => ({
-        configurable: descriptor.configurable,
-        enumerable: descriptor.enumerable,
+        configurable: descriptor?.configurable ?? true,
+        enumerable: descriptor?.enumerable ?? true,
         get(this: { args?: Record<string, unknown> }) {
-          let viewCard = this.args?.viewCard;
-          return Object.freeze({
-            ...(typeof viewCard === 'function' ? { viewCard } : {}),
-          });
+          let args = this.args ?? {};
+          if (contextName === CardContextName) {
+            // The live Store, loader, and Host services never cross the
+            // Capsule boundary. Base consumers merge this inert projection
+            // with their own defaults.
+            return Object.freeze({});
+          }
+          if (contextName === CardCrudFunctionsContextName) {
+            let viewCard = args.viewCard;
+            return Object.freeze({
+              ...(typeof viewCard === 'function' ? { viewCard } : {}),
+            });
+          }
+          if (contextName === CardURLContextName) {
+            let model = args.model;
+            let modelID =
+              typeof model === 'object' &&
+              model !== null &&
+              'id' in model &&
+              typeof model.id === 'string'
+                ? model.id
+                : undefined;
+            let renderRecord = args.renderRecord;
+            let renderedID =
+              typeof renderRecord === 'object' &&
+              renderRecord !== null &&
+              'instance' in renderRecord &&
+              typeof renderRecord.instance === 'object' &&
+              renderRecord.instance !== null &&
+              'id' in renderRecord.instance &&
+              typeof renderRecord.instance.id === 'string'
+                ? renderRecord.instance.id
+                : undefined;
+            return modelID ?? renderedID;
+          }
+          if (contextName === DefaultFormatsContextName) {
+            let format =
+              typeof args.format === 'string' ? args.format : 'isolated';
+            if (format === 'edit') {
+              return Object.freeze({ cardDef: 'edit', fieldDef: 'edit' });
+            }
+            if (
+              format === 'atom' ||
+              format === 'head' ||
+              format === 'markdown'
+            ) {
+              return Object.freeze({ cardDef: format, fieldDef: format });
+            }
+            return Object.freeze({ cardDef: format, fieldDef: 'embedded' });
+          }
+          if (contextName === PermissionsContextName) {
+            return Object.freeze({
+              canRead: true,
+              canWrite: typeof args.set === 'function',
+            });
+          }
+          if (contextName === RealmURLContextName) {
+            let model = args.model;
+            let projectedRealmURL =
+              typeof model === 'object' && model !== null
+                ? (model as Record<PropertyKey, unknown>)[realmURL]
+                : undefined;
+            let href =
+              typeof projectedRealmURL === 'object' &&
+              projectedRealmURL !== null &&
+              'href' in projectedRealmURL &&
+              typeof projectedRealmURL.href === 'string'
+                ? projectedRealmURL.href
+                : undefined;
+            return href === undefined ? undefined : Object.freeze({ href });
+          }
+          // Context tokens alone carry no authority. A context that has not
+          // been projected across this boundary must remain unavailable, but
+          // it must not prevent a trusted Base module from being defined.
+          return undefined;
         },
       });
     };
-    return Object.freeze({ consume });
+    let provide = (
+      _contextName: unknown,
+    ): ((
+      target: object,
+      property: string,
+      descriptor: PropertyDescriptor,
+    ) => PropertyDescriptor) => {
+      return (
+        _target: object,
+        _property: string,
+        descriptor: PropertyDescriptor,
+      ) => descriptor;
+    };
+    return Object.freeze({ consume, provide });
   }
 
   private capsuleCommandBase() {
@@ -1755,6 +1992,27 @@ export default class CapsuleModuleEvaluator {
               : { value },
           );
     this.materializeComputedFields(instance, CardType);
+    // A contained authored FieldDef remains executable only in this Capsule,
+    // but its public getters are part of the inert value projected to the
+    // renderer. Materialize them recursively before the root instance is
+    // JSON-cloned; otherwise nested semantics such as `priceLabel` disappear
+    // even though the underlying contained data arrived intact.
+    let projection = this.jsonClone(instance) as Record<string, unknown>;
+    this.materializeAuthoredGetters(
+      instance,
+      Object.getPrototypeOf(instance) as object | undefined,
+      projection,
+    );
+    for (let [name, projectedValue] of Object.entries(projection)) {
+      if (Object.prototype.hasOwnProperty.call(instance, name)) {
+        continue;
+      }
+      Object.defineProperty(instance, name, {
+        configurable: true,
+        enumerable: true,
+        value: projectedValue,
+      });
+    }
     return instance;
   }
 
@@ -1856,12 +2114,17 @@ export default class CapsuleModuleEvaluator {
     ) {
       throw new Error('Card template descriptor has an invalid shape');
     }
-    let block = JSON.parse(descriptor.block) as unknown;
-    validateTemplateDOMPolicy(block, this.options.validateInlineStyle);
-    let scope = descriptor.scope?.() ?? [];
-    if (!Array.isArray(scope)) {
-      throw new Error('Card template descriptor has an invalid scope');
-    }
+    // Base, Catalog, Boxel UI, and framework shims are Host-trusted modules.
+    // Their templates still execute inside the Capsule so authored code can
+    // compose them, but their ordinary Glimmer features are not authored
+    // authority and must not be rejected by the authored-template policy.
+    // The compiled scoped stylesheet registry remains responsible for
+    // confining any styles that these trusted components install.
+    let templateOwnerIsTrusted =
+      (this.evaluatingModuleIdentifier !== undefined &&
+        this.trustedImportIdentity(this.evaluatingModuleIdentifier) !==
+          undefined) ||
+      this.trustedImportIdentity(descriptor.moduleName) !== undefined;
     return {
       descriptor: {
         id: descriptor.id,
@@ -1870,7 +2133,13 @@ export default class CapsuleModuleEvaluator {
         isStrictMode: descriptor.isStrictMode === true,
         stylesheets: [...this.evaluatingStylesheets],
       },
-      scope,
+      // Glimmer intentionally keeps scope lazy. A scope closure can reference
+      // bindings declared later in the module, so invoking it from
+      // setComponentTemplate() changes valid Ember initialization order into
+      // a temporal-dead-zone failure. Resolve it only when building the
+      // boundary bundle, after Loader evaluation has completed.
+      scope: descriptor.scope ?? (() => []),
+      trusted: templateOwnerIsTrusted,
     };
   }
 
@@ -1922,6 +2191,17 @@ export default class CapsuleModuleEvaluator {
       let id = `component-${nextId++}`;
       ids.set(component, id);
       let block = JSON.parse(captured.descriptor.block) as unknown;
+      let scope = captured.scope();
+      if (!Array.isArray(scope)) {
+        throw new Error('Card template descriptor has an invalid scope');
+      }
+      if (!captured.trusted) {
+        validateTemplateDOMPolicy(
+          block,
+          this.options.validateInlineStyle,
+          (expression) => this.isTrustedCSSVarExpression(expression, scope),
+        );
+      }
       if (
         !inertHeadElements &&
         templateContainsLiteralElement(block, 'style')
@@ -1938,13 +2218,61 @@ export default class CapsuleModuleEvaluator {
         scope: [],
         instance: this.componentInstanceDescriptor(component),
       };
-      templates[id].scope = captured.scope.map((value) =>
-        this.scopeReference(value, visit),
-      );
+      templates[id].scope = scope.map((value, index) => {
+        try {
+          return this.scopeReference(value, visit);
+        } catch (error) {
+          let description =
+            typeof value === 'function'
+              ? `function ${value.name || '<anonymous>'}`
+              : typeof value === 'symbol'
+                ? String(value)
+                : typeof value;
+          throw new Error(
+            `Template ${captured.descriptor.id} scope[${index}] (${description}) cannot cross the Capsule boundary: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      });
       return id;
     };
     let rootId = visit(root);
     return harden({ root: rootId, templates });
+  }
+
+  private isTrustedCSSVarExpression(
+    expression: unknown,
+    scope: unknown[],
+  ): boolean {
+    if (
+      !Array.isArray(expression) ||
+      expression[0] !== 28 ||
+      !Array.isArray(expression[1]) ||
+      expression[1][0] !== 32 ||
+      typeof expression[1][1] !== 'number'
+    ) {
+      return false;
+    }
+    let helper = scope[expression[1][1]];
+    if (
+      (typeof helper !== 'object' || helper === null) &&
+      typeof helper !== 'function'
+    ) {
+      return false;
+    }
+    let identity =
+      this.trustedExportByValue.get(helper as object) ??
+      this.loader.identify(helper) ??
+      Loader.identify(helper);
+    if (!identity || !this.trustedImportIdentity(identity.module)) {
+      return false;
+    }
+    let module = identity.module.split('?')[0]?.split('#')[0] ?? '';
+    return (
+      (module === '@cardstack/boxel-ui/helpers' &&
+        identity.name === 'cssVar') ||
+      (module.endsWith('@cardstack/boxel-ui/helpers/css-var') &&
+        (identity.name === 'default' || identity.name === 'cssVar'))
+    );
   }
 
   private componentBase() {
@@ -1969,11 +2297,11 @@ export default class CapsuleModuleEvaluator {
       this.handleByComponent.set(component, handle);
       this.componentByHandle.set(handle, component);
     }
-    let instance = new (component as new (
-      owner: undefined,
-      args: Record<string, unknown>,
-    ) => Record<string, unknown>)(undefined, this.componentArgs({}));
-    return this.describeComponentInstance(handle, instance);
+    // Template capture is definition work. Constructing the component here
+    // would run authored field initializers before Glimmer supplies @model and
+    // the other real render arguments. The component manager instantiates this
+    // handle later and returns the complete state/getter/action shape then.
+    return harden({ handle, state: {}, getters: [], actions: [] });
   }
 
   private describeComponentInstance(
@@ -2142,17 +2470,27 @@ export default class CapsuleModuleEvaluator {
       if (this.capturedTemplateForComponent(component)) {
         return harden({ kind: 'component', component: visit(component) });
       }
-      let identity = this.trustedExportByValue.get(component);
-      if (identity) {
+      let identity =
+        this.trustedExportByValue.get(component) ??
+        this.loader.identify(component) ??
+        Loader.identify(component);
+      if (identity && this.trustedImportIdentity(identity.module)) {
         return harden({
           kind: 'trusted-export',
           module: identity.module,
           name: identity.name,
         });
       }
+      if (identity) {
+        throw new Error(
+          `template scope references untrusted export ${identity.module}#${identity.name}`,
+        );
+      }
     }
     if (typeof value === 'function' || typeof value === 'symbol') {
-      throw new Error('Template scope contains an ungranted executable value');
+      throw new Error(
+        'template scope contains an executable value without a trusted module identity',
+      );
     }
     return harden({ kind: 'value', value: this.jsonClone(value) });
   }
@@ -2197,11 +2535,9 @@ function defaultTrustedImport(moduleIdentifier: string): boolean {
     moduleIdentifier === '@glimmer/component' ||
     moduleIdentifier === '@glimmer/tracking' ||
     moduleIdentifier === '@cardstack/runtime-common' ||
+    moduleIdentifier.startsWith('@cardstack/') ||
+    moduleIdentifier.startsWith(`${PACKAGES_FAKE_ORIGIN}@cardstack/`) ||
     moduleIdentifier.startsWith('https://cardstack.com/base/') ||
-    moduleIdentifier.startsWith('@cardstack/base/') ||
-    moduleIdentifier.startsWith('https://cardstack.com/catalog/') ||
-    moduleIdentifier.startsWith('@cardstack/catalog/') ||
-    moduleIdentifier.startsWith('@cardstack/boxel-icons/') ||
-    moduleIdentifier.startsWith('@cardstack/boxel-ui/')
+    moduleIdentifier.startsWith('https://cardstack.com/catalog/')
   );
 }

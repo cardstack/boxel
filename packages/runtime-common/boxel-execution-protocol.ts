@@ -259,6 +259,12 @@ export interface BoxelRenderRecord {
   boxel: BoxelDescription;
   instance: {
     id: string | null;
+    /**
+     * Cloneable public model consumed by authored renderers. This includes
+     * declared field values plus JSON-safe getters evaluated by the runtime
+     * that owns the executable definition.
+     */
+    model: Record<string, JSONValue>;
     fields: ResolvedField[];
   };
   presentation: InstancePresentation;

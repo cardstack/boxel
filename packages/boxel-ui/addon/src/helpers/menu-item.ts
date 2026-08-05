@@ -10,6 +10,7 @@ export interface MenuItemOptions {
   checked?: boolean;
   dangerous?: boolean;
   disabled?: boolean;
+  eyebrow?: boolean;
   header?: boolean;
   icon?: Icon;
   iconURL?: string;
@@ -28,6 +29,7 @@ export class MenuItem {
   dangerous: boolean;
   checked: boolean;
   disabled: boolean;
+  eyebrow: boolean;
   header: boolean;
   icon: Icon | undefined;
   iconURL: string | undefined;
@@ -47,6 +49,7 @@ export class MenuItem {
     this.dangerous = options.dangerous || false;
     this.checked = options.checked || false;
     this.disabled = options.disabled || false;
+    this.eyebrow = options.eyebrow || false;
     this.header = options.header || false;
     this.icon = options.icon || undefined;
     this.iconURL = options.iconURL || undefined;
