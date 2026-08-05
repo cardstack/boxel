@@ -169,6 +169,83 @@ describe('ProfileManager', () => {
     await expect(manager.getOrRefreshServerToken()).resolves.toBe(freshToken);
   });
 
+  // Consumers that receive the bare token can't notice a 401 and re-mint, so
+  // they ask for a longer lifetime. The cached token stays on the short default,
+  // because the CLI's own fetch wrappers do recover and shouldn't inherit a
+  // lifetime chosen for something that can't.
+  it('mintExtendedServerToken asks for an extended lifetime and leaves the cache alone', async () => {
+    await manager.addProfileWithAuth(
+      '@bob:stack.cards',
+      fakeAuth('@bob:stack.cards', 'https://matrix-staging.stack.cards'),
+    );
+    manager.setRealmServerToken('cached-short-token');
+
+    let sessionBodies: any[] = [];
+    const fetchStub = vi.fn(async (input: any, init: any) => {
+      const url = typeof input === 'string' ? input : input.url;
+      if (url.includes('/openid/request_token')) {
+        return new Response(JSON.stringify({ token: 'oid' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.includes('/_server-session')) {
+        sessionBodies.push(JSON.parse(init.body));
+        return new Response(null, {
+          status: 201,
+          headers: { authorization: 'extended-jwt' },
+        });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchStub);
+    try {
+      const token = await manager.mintExtendedServerToken();
+
+      expect(token).toBe('extended-jwt');
+      expect(sessionBodies).toHaveLength(1);
+      expect(sessionBodies[0].lifetime).toBe('extended');
+      expect(manager.getRealmServerToken()).toBe('cached-short-token');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('getOrRefreshServerToken does not ask for an extended lifetime', async () => {
+    await manager.addProfileWithAuth(
+      '@bob:stack.cards',
+      fakeAuth('@bob:stack.cards', 'https://matrix-staging.stack.cards'),
+    );
+
+    let sessionBodies: any[] = [];
+    const fetchStub = vi.fn(async (input: any, init: any) => {
+      const url = typeof input === 'string' ? input : input.url;
+      if (url.includes('/openid/request_token')) {
+        return new Response(JSON.stringify({ token: 'oid' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.includes('/_server-session')) {
+        sessionBodies.push(JSON.parse(init.body));
+        return new Response(null, {
+          status: 201,
+          headers: { authorization: 'short-jwt' },
+        });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchStub);
+    try {
+      await manager.getOrRefreshServerToken();
+
+      expect(sessionBodies).toHaveLength(1);
+      expect(sessionBodies[0].lifetime).toBeUndefined();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('addProfileWithAuth clears cached realm tokens when matrixUrl changes', async () => {
     await manager.addProfileWithAuth(
       '@bob:stack.cards',

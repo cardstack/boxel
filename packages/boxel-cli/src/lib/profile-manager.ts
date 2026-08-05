@@ -553,6 +553,30 @@ export class ProfileManager implements RealmAuthenticator {
     return this.fetchRealmServerTokenWithReauth();
   }
 
+  // Mint a long-lived realm-server token for a consumer that will hold the bare
+  // string and cannot re-mint when it lapses. Deliberately not cached: the
+  // cached slot feeds the CLI's own fetch wrappers, which recover from a 401 and
+  // so should keep taking the shorter default rather than inherit this one's
+  // lifetime.
+  async mintExtendedServerToken(): Promise<string> {
+    const matrixAuth = this.getStoredMatrixAuth();
+    const active = this.getActiveProfile()!;
+    const realmServerUrl = active.profile.realmServerUrl.replace(/\/$/, '');
+    try {
+      return await fetchRealmServerToken(matrixAuth, realmServerUrl, {
+        extendedLifetime: true,
+      });
+    } catch (e) {
+      if (!(e instanceof MatrixAuthError)) {
+        throw e;
+      }
+      const freshAuth = await this.reAuthenticate();
+      return fetchRealmServerToken(freshAuth, realmServerUrl, {
+        extendedLifetime: true,
+      });
+    }
+  }
+
   private findRealmTokenForUrl(url: string): string | undefined {
     let active = this.getActiveProfile();
     if (!active?.profile.realmTokens) {

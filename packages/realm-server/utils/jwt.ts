@@ -14,10 +14,9 @@ export interface RealmServerTokenClaim {
 export function createJWT(
   claims: RealmServerTokenClaim,
   secretSeed: string,
+  expiresIn: jsonwebtoken.SignOptions['expiresIn'] = SESSION_TOKEN_TTL,
 ): string {
-  return sign(claims, secretSeed, {
-    expiresIn: SESSION_TOKEN_TTL,
-  });
+  return sign(claims, secretSeed, { expiresIn });
 }
 
 export function retrieveTokenClaim(
