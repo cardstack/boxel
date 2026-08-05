@@ -3302,17 +3302,14 @@ class Isolated extends Component<typeof Workspace> {
       }
     } else {
       let specId = await chooseCard(
-        // Constrain the interactive Spec query too.
+        // Offer Specs from every realm the user can reach — the new card is
+        // created in this Workspace's realm regardless of where its Spec lives.
         {
           filter: {
             on: specRef,
             every: [{ eq: { isCard: true } }],
           },
           page: { size: SEARCH_PAGE_SIZE }, // Keep chooser result pages bounded.
-        },
-        {
-          consumingRealm: this.args.model[realmURL], // Scope the chooser to this Card Grid's realm.
-          lockConsumingRealm: true, // Prevent broadening into other realms.
         },
       );
 
