@@ -22,14 +22,16 @@ export default class HostModeStack extends Component<Signature> {
     }
   }
 
-  // Dismiss is scoped to the scrim, not "anywhere but the stack": click-outside
-  // also closed the card an unwinding navigation had just opened (CS-12434).
+  // Dismiss belongs to the scrim alone: a document-wide click-outside also
+  // fires for the click that navigated the stack, closing the card it just
+  // opened. Tests for a click inside a card rather than target ===
+  // currentTarget, since `.inner` fills the scrim and takes background clicks.
   @action
   onScrimClick(event: Event) {
     let target = event.target;
     if (
       target instanceof Element &&
-      target.closest('.host-mode-stack-item') !== null
+      target.closest('[data-host-mode-stack-item]') !== null
     ) {
       return;
     }

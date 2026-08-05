@@ -783,8 +783,13 @@ module('Acceptance | host mode tests', function (hooks) {
         'the whole trail unwinds to the root rather than stacking the primary card again',
       );
     assert.dom(primaryCardSelector).exists();
+    // currentURL, not window.location: the latter is the test runner's own URL
+    // and never carries the app's query params, so asserting null against it
+    // would pass whether or not the param was cleared.
     assert.strictEqual(
-      new URL(window.location.href).searchParams.get('hostModeStack'),
+      new URL(currentURL()!, 'http://localhost').searchParams.get(
+        'hostModeStack',
+      ),
       null,
       'the emptied stack drops out of the query param',
     );
@@ -841,8 +846,6 @@ module('Acceptance | host mode tests', function (hooks) {
     assert
       .dom(belowSelector)
       .exists('unwinds to the targeted card rather than stacking a copy');
-    // currentURL, not window.location: the latter is the test runner's own URL
-    // and never carries the app's query params.
     assert.strictEqual(
       new URL(currentURL()!, 'http://localhost').searchParams.get(
         'hostModeStack',
@@ -867,7 +870,9 @@ module('Acceptance | host mode tests', function (hooks) {
     let secondStackSelector = `[data-test-host-mode-stack-item="${secondStackCardId}"]`;
     await waitFor(secondStackSelector);
 
-    await click('[data-test-host-mode-stack]');
+    // `.inner` fills the scrim, so this — not the scrim element itself — is what
+    // a real background click in a browser actually targets.
+    await click('[data-test-host-mode-stack] .inner');
 
     await waitUntil(() => !document.querySelector(secondStackSelector));
     assert
@@ -891,39 +896,11 @@ module('Acceptance | host mode tests', function (hooks) {
 
     assert.strictEqual(currentURL(), '/test/Pet/mango.json');
     assert.strictEqual(
-      new URL(window.location.href).searchParams.get('hostModeStack'),
+      new URL(currentURL()!, 'http://localhost').searchParams.get(
+        'hostModeStack',
+      ),
       null,
     );
-  });
-
-  test('clicking the stack backdrop closes the top card', async function (assert) {
-    let hostModeStackValue = encodeURIComponent(
-      JSON.stringify([`${testHostModeRealmURL}index`]),
-    );
-    await visit(`/test/Pet/mango.json?hostModeStack=${hostModeStackValue}`);
-
-    // Wait for stack item to appear
-    await waitFor(
-      `[data-test-host-mode-stack-item="${testHostModeRealmURL}index"]`,
-    );
-
-    // Verify stack item exists
-    assert
-      .dom(`[data-test-host-mode-stack-item="${testHostModeRealmURL}index"]`)
-      .exists();
-
-    // Click outside the stack items (on the stack backdrop area)
-    await click('[data-test-host-mode-stack]');
-
-    // Stack item should be removed
-    await waitUntil(() => {
-      return !document.querySelector(
-        `[data-test-host-mode-stack-item="${testHostModeRealmURL}index"]`,
-      );
-    });
-    assert
-      .dom(`[data-test-host-mode-stack-item="${testHostModeRealmURL}index"]`)
-      .doesNotExist();
   });
 
   test('clicking on a stack card does not close it', async function (assert) {

@@ -9,6 +9,8 @@ import stringify from 'safe-stable-stringify';
 
 import { TrackedArray } from 'tracked-built-ins';
 
+import { unwindOrPush } from '../utils/host-mode-stack';
+
 import type RealmService from './realm';
 import type SessionService from './session';
 
@@ -94,22 +96,8 @@ export default class HostModeStateService extends Service {
     this.schedulePersist();
   }
 
-  // Opening a card that is already behind you in the trail is a navigation
-  // *back* to it — an in-page "up" link, or a second visit to the same page —
-  // so unwind to it rather than stacking another copy of a page the user is
-  // already inside. Pushing is only right for a card not yet on the trail.
   pushCard(cardId: string) {
-    if (cardId === this.primaryCardItem) {
-      // the root: everything above it closes
-      this.stackCardItems.splice(0, this.stackCardItems.length);
-    } else {
-      let index = this.stackCardItems.indexOf(cardId);
-      if (index === -1) {
-        this.stackCardItems.push(cardId);
-      } else {
-        this.stackCardItems.splice(index + 1);
-      }
-    }
+    unwindOrPush(this.stackCardItems, cardId, this.primaryCardItem);
     this.schedulePersist();
   }
 

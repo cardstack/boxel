@@ -50,6 +50,7 @@ import type RealmServer from '@cardstack/host/services/realm-server';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
+import { unwindOrPush } from '../utils/host-mode-stack';
 import {
   AiAssistantOpen,
   ModuleInspectorSelections,
@@ -158,7 +159,9 @@ export default class OperatorModeStateService extends Service {
     submode: Submodes.Interact,
     codePath: null,
     hostModePrimaryCard: null,
-    hostModeStack: [],
+    // TrackedArray like the ones restoreState installs, so mutations before the
+    // first restore are reactive too
+    hostModeStack: new TrackedArray<string>([]),
     openDirs: new TrackedMap<string, string[]>(),
     aiAssistantOpen: readPersistedAiAssistantOpen(),
     newFileDropdownOpen: false,
@@ -624,17 +627,11 @@ export default class OperatorModeStateService extends Service {
   // so unwind to it rather than stacking another copy of a page the user is
   // already inside. Pushing is only right for a card not yet on the trail.
   addToHostModeStack(cardId: string) {
-    if (cardId === this._state.hostModePrimaryCard) {
-      // the root: everything above it closes
-      this._state.hostModeStack.splice(0, this._state.hostModeStack.length);
-    } else {
-      let index = this._state.hostModeStack.indexOf(cardId);
-      if (index === -1) {
-        this._state.hostModeStack.push(cardId);
-      } else {
-        this._state.hostModeStack.splice(index + 1);
-      }
-    }
+    unwindOrPush(
+      this._state.hostModeStack,
+      cardId,
+      this._state.hostModePrimaryCard,
+    );
     this.schedulePersist();
   }
 
