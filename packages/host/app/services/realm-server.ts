@@ -162,6 +162,14 @@ export default class RealmServerService extends Service {
     this._ready.fulfill();
   }
 
+  // Whether a matrix client has been handed to this service yet. Until it
+  // has, `login()` (and everything that needs a realm-server session) cannot
+  // succeed, so pre-login callers can check this instead of attempting a
+  // doomed login.
+  get hasClient(): boolean {
+    return Boolean(this.client);
+  }
+
   setClient(client: ExtendedClient) {
     this.client = client;
     this.token =
@@ -1032,10 +1040,14 @@ export default class RealmServerService extends Service {
   }
 
   private loginTask = task(async () => {
-    if (!this.client) {
-      throw new Error(`Cannot login to realm server without matrix client`);
-    }
+    // `loggingIn` must be cleared on every exit — including the no-client
+    // throw — or each later `login()` call awaits this already-rejected
+    // instance instead of performing a fresh attempt, and login stays broken
+    // even once the client exists.
     try {
+      if (!this.client) {
+        throw new Error(`Cannot login to realm server without matrix client`);
+      }
       let realmAuthClient = new RealmAuthClient(
         this.url,
         this.client,
@@ -1049,6 +1061,12 @@ export default class RealmServerService extends Service {
       let token = await realmAuthClient.getJWT();
       this.token = token;
     } catch (e: any) {
+      if (!this.client) {
+        // Precondition failure rather than an auth failure: the caller ran
+        // ahead of `setClient`. Propagate it so the caller hears about it —
+        // there is no session to fall back to.
+        throw e;
+      }
       console.error(
         `RealmServerService - failed to login to realm: ${e.message}`,
         e,

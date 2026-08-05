@@ -426,7 +426,9 @@ class RealmResource {
       // `/_info` fallback below is the lean variant without timestamps. Ask
       // the batch for just this realm first; it populates `this.info` via
       // `applyRealmInfo` when the realm is on our own realm server, and
-      // no-ops (logged) for a federated realm, in which case we fall through.
+      // no-ops for a federated realm (logged) or before the matrix client
+      // exists (the batch needs a realm-server session), in which case we
+      // fall through.
       await this.realmService.prefetchRealmInfos([this.realmURL]);
       if (this.info) {
         return;
@@ -839,6 +841,15 @@ export default class RealmService extends Service {
   async prefetchRealmInfos(realmUrls: string[]): Promise<void> {
     let uniqueRealmUrls = Array.from(new Set(realmUrls));
     if (uniqueRealmUrls.length === 0) {
+      return;
+    }
+
+    // The federated `/_info` batch authenticates with a realm-server session,
+    // which can't be minted until the matrix client exists. On the pre-login
+    // path (app boot, anonymous access) this is a no-op and callers fall
+    // through to their lean per-realm fetches; the post-login boot re-runs
+    // the batch for every available realm.
+    if (!this.realmServer.hasClient) {
       return;
     }
 

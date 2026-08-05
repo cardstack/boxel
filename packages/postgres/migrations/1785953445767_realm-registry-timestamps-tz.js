@@ -1,5 +1,3 @@
-/* eslint-disable camelcase */
-
 exports.shorthands = undefined;
 
 // realm_registry.created_at / updated_at were `timestamp` (without time zone),
