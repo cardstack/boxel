@@ -1,6 +1,6 @@
-# `boxel-cli` Claude Code plugin
+# `boxel-cli` agent plugin
 
-Claude Code skills for working with Boxel realms via [`@cardstack/boxel-cli`](https://www.npmjs.com/package/@cardstack/boxel-cli).
+Agent skills for working with Boxel realms via [`@cardstack/boxel-cli`](https://www.npmjs.com/package/@cardstack/boxel-cli). Packaged for both Claude Code (`.claude-plugin/`) and OpenAI Codex (`.codex-plugin/`); the two manifests share the same `skills/` directory.
 
 ## Prerequisites
 
@@ -20,16 +20,14 @@ The plugin documents commands in `@cardstack/boxel-cli >= 0.0.1`. Newer plugin v
 
 ## Install
 
-### External users (marketplace)
+### Claude Code
 
 ```text
 /plugin marketplace add cardstack/boxel
 /plugin install boxel-cli
 ```
 
-### Internal / development (`--plugin-dir`)
-
-From a checkout of `cardstack/boxel`:
+For internal development, from a checkout of `cardstack/boxel`:
 
 ```bash
 claude --plugin-dir packages/boxel-cli/plugin
@@ -37,9 +35,34 @@ claude --plugin-dir packages/boxel-cli/plugin
 
 `/reload-plugins` picks up local edits without restarting Claude Code.
 
+### OpenAI Codex
+
+Codex discovers the plugin through the marketplace manifest at
+`.agents/plugins/marketplace.json` in the repo root:
+
+```text
+/plugin marketplace add cardstack/boxel
+/plugin install boxel-cli@cardstack-boxel
+```
+
+In Codex the skills are namespaced `boxel-cli:<name>` — invoke one with the `$`
+prefix (`$boxel`, `$realm-sync`, …), or let Codex pick it up by description
+match. The `/boxel-cli:<name>` form in the tables below is Claude Code's.
+
+Without installing the plugin, a checkout also works directly: Codex reads
+skills from `~/.agents/skills` (or a project's `.agents/skills`), expecting
+`<name>/SKILL.md` one level down. Copy each skill in — Codex does not follow
+symlinked skill directories:
+
+```bash
+mkdir -p ~/.agents/skills
+cp -R /path/to/boxel/packages/boxel-cli/plugin/skills/*/ ~/.agents/skills/
+```
+
 ## What you get
 
-Skills appear under the `/boxel-cli:` namespace. Two surfaces:
+Skills appear under the `boxel-cli` namespace — written `/boxel-cli:<name>`
+below, which is how Claude Code invokes them. Two surfaces:
 
 ### CLI command skills
 
