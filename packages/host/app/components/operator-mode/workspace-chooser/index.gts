@@ -315,17 +315,25 @@ export default class WorkspaceChooser extends Component<Signature> {
         this.workspaceTileGap = gap;
       }
     };
-    let ro: ResizeObserver | undefined;
-    if (typeof ResizeObserver !== 'undefined') {
-      ro = new ResizeObserver(measure);
-      ro.observe(el);
+    // `observe()` delivers an initial callback with the element's current
+    // size, so this covers the first measurement too — and it lands after the
+    // render transaction commits, keeping these tracked writes out of a
+    // transaction the Favorites block's `@enlargedWidth={{favoritesTileWidthPx}}`
+    // already read this frame. A synchronous `measure()` here would write
+    // `workspaceTileWidth` after that read and trip Ember's backtracking-
+    // rerender assertion for any user who opens the chooser with a favorite.
+    // The observer also supersedes a window 'resize' listener: anything that
+    // changes the viewport width also changes `el.clientWidth`, and it
+    // additionally catches a scrollbar appearing or a surrounding panel
+    // resizing, which a 'resize' event misses.
+    if (typeof ResizeObserver === 'undefined') {
+      // Never measured: `tilesPerRow` falls back to 3 and `favoritesSlotWidth`
+      // to null, so the favorite tile keeps its static CSS width.
+      return;
     }
-    window.addEventListener('resize', measure);
-    measure();
-    return () => {
-      ro?.disconnect();
-      window.removeEventListener('resize', measure);
-    };
+    let ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
   });
 
   // The keyboard-selected tile, identified by its position in the flat,
@@ -385,6 +393,14 @@ export default class WorkspaceChooser extends Component<Signature> {
     }
     if (this.userWorkspacesCount > 0) {
       return this.userWorkspacesNavBase;
+    }
+    // No favorites and no user workspaces (new user, or everything
+    // archived/filtered). "New Workspace" is at index 0, and landing the
+    // selection there would make the first Enter create a workspace — the
+    // hazard above. Prefer the first catalog when one is shown; only fall
+    // back to 0 when there is genuinely nothing else to land on.
+    if (this.renderedCatalogCount > 0) {
+      return this.catalogNavBase;
     }
     return 0;
   }

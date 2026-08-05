@@ -931,6 +931,10 @@ export class Realm {
   // every index row in the realm, versus a single row lookup for the
   // timestamps above.
   #cachedIndexCounts: RealmIndexCounts | null = null;
+  // The in-flight `queryIndexCounts()` promise, so concurrent
+  // `/_federated-index-counts` callers share one aggregate instead of each
+  // running the full per-url scan. Nulled once it settles (and on index swap).
+  #indexCountsPromise: Promise<RealmIndexCounts> | null = null;
   // Cached host routing map, derived from the indexed RealmConfig card.
   // `getHostRoutingMap()` is called on every host-mode index request
   // (serve-index), so re-querying the index each time is wasteful — the map
@@ -1505,6 +1509,7 @@ export class Realm {
         // replicas via NOTIFY realm_index_updated so their #inFlightSearch
         // maps don't coalesce post-update callers into pre-update promises.
         await this.clearRealmIndexCachesAndBroadcast();
+        await this.touchSourceRealmUpdatedAt();
         await this.handleExecutableInvalidations(invalidatedURLs);
         for (let invalidatedURL of invalidatedURLs) {
           invalidations.add(invalidatedURL.href);
@@ -1555,6 +1560,7 @@ export class Realm {
       clientRequestId: opts?.clientRequestId ?? null,
       onInvalidation: async (invalidatedURLs: URL[], meta) => {
         await this.clearRealmIndexCachesAndBroadcast();
+        await this.touchSourceRealmUpdatedAt();
         await this.handleExecutableInvalidations(invalidatedURLs);
         for (let invalidatedURL of invalidatedURLs) {
           invalidations.add(invalidatedURL.href);
@@ -6918,6 +6924,30 @@ export class Realm {
     }
   }
 
+  // Advance `realm_registry.updated_at` when this realm's content changes, so
+  // the workspace chooser's "Updated" footer tracks real activity. Scoped to
+  // `kind = 'source'`: source rows are the only ones a user writes to, while
+  // published rows carry publish-time semantics via `last_published_at` and
+  // bootstrap rows never change. Called from the incremental-index invalidation
+  // hook — once per write batch, not once per file — so the cost is one cheap
+  // single-row UPDATE per write. Best-effort: a failed touch must not fail the
+  // index that triggered it. The surrounding index swap already dropped
+  // `#cachedRegistryTimestamps` (via `invalidateCachedRealmInfo`), so the next
+  // `getRegistryTimestamps` re-reads the advanced value.
+  private async touchSourceRealmUpdatedAt(): Promise<void> {
+    try {
+      await query(this.#dbAdapter, [
+        `UPDATE realm_registry SET updated_at = now() WHERE url =`,
+        param(this.url),
+        `AND kind = 'source'`,
+      ]);
+    } catch (error) {
+      this.#log.warn(
+        `Failed to advance realm_registry.updated_at for ${this.url}: ${error}`,
+      );
+    }
+  }
+
   // Cards / files / definitions for the tile-metadata row (see
   // workspace-chooser). "Definitions" are the modules that can declare a card
   // or field (.gts/.ts/.gjs/.js); "files" is everything else — assets, docs,
@@ -7091,6 +7121,9 @@ export class Realm {
     this.#cachedRealmInfoHash = null;
     this.#cachedRegistryTimestamps = null;
     this.#cachedIndexCounts = null;
+    // Drop any in-flight aggregate too, so a request that overlapped the swap
+    // doesn't repopulate the cache with pre-swap counts.
+    this.#indexCountsPromise = null;
   }
 
   private async parseRealmInfo(): Promise<RealmInfo> {
@@ -7216,9 +7249,9 @@ export class Realm {
   //
   // Deliberately not folded into `parseRealmInfo()`/`getRealmInfo()`: that
   // result is embedded in every card response's `meta.realmInfo` and hashed
-  // into the card+json ETag, so `updated_at` — which moves on any ordinary
-  // realm write — would invalidate every card's cached representation in the
-  // realm each time one card changed.
+  // into the card+json ETag, so `updated_at` — which `touchSourceRealmUpdatedAt`
+  // advances on every write to a source realm — would invalidate every card's
+  // cached representation in the realm each time one card changed.
   async getDetailedRealmInfo(): Promise<RealmInfo> {
     let [info, timestamps] = await Promise.all([
       this.getRealmInfo(),
@@ -7245,10 +7278,27 @@ export class Realm {
   // whose tile is re-rendered repeatedly pays the aggregate once per
   // generation. Public so the route handler can reach it.
   async getIndexCounts(): Promise<RealmIndexCounts> {
-    if (!this.#cachedIndexCounts) {
-      this.#cachedIndexCounts = await this.queryIndexCounts();
+    if (this.#cachedIndexCounts) {
+      return this.#cachedIndexCounts;
     }
-    return this.#cachedIndexCounts;
+    if (!this.#indexCountsPromise) {
+      this.#indexCountsPromise = this.queryIndexCounts().finally(() => {
+        this.#indexCountsPromise = null;
+      });
+    }
+    let counts = await this.#indexCountsPromise;
+    // Don't memoize a failed query — `queryIndexCounts` returns an all-`null`
+    // triple on error, and caching that would suppress this realm's counts
+    // until its next index swap. Leaving it uncached lets the next request
+    // retry; a real (even all-zero) result is safe to memoize.
+    if (
+      counts.cardCount !== null ||
+      counts.fileCount !== null ||
+      counts.definitionCount !== null
+    ) {
+      this.#cachedIndexCounts = counts;
+    }
+    return counts;
   }
 
   // Serves the plain `RealmInfo`, NOT `getDetailedRealmInfo`. This route is

@@ -92,6 +92,12 @@ const sessionWaiter = buildWaiter('realm:session-login');
 // placeholder without duplicating the literal string.
 export const UNKNOWN_REALM_NAME = 'Unknown Workspace';
 
+// How long `loadIndexCounts` waits before re-waking consumers to retry realms
+// left stale by a failed/omitted fetch. Long enough that a persistently failing
+// realm polls slowly rather than hot-looping; short enough that a transient blip
+// recovers without a reload.
+const INDEX_COUNTS_RETRY_MS = 5000;
+
 export type EnhancedRealmInfo = RealmInfo & {
   isIndexing: boolean;
   isPublic: boolean;
@@ -410,6 +416,18 @@ class RealmResource {
         return;
       }
       await this.realmService.waitForBulkInfoIfNeeded();
+      if (this.info) {
+        return;
+      }
+      // A realm that wasn't part of the boot-time batch (e.g. a workspace
+      // created mid-session) still needs its lifecycle timestamps: the
+      // workspace chooser's menu footer and its createdAt sort read them, and
+      // only the federated `/_info` batch carries them — the per-realm
+      // `/_info` fallback below is the lean variant without timestamps. Ask
+      // the batch for just this realm first; it populates `this.info` via
+      // `applyRealmInfo` when the realm is on our own realm server, and
+      // no-ops (logged) for a federated realm, in which case we fall through.
+      await this.realmService.prefetchRealmInfos([this.realmURL]);
       if (this.info) {
         return;
       }
@@ -892,9 +910,15 @@ export default class RealmService extends Service {
   // `indexCountsRevision`.
   markIndexCountsStale(realmURL: string): void {
     let key = ensureTrailingSlash(realmURL);
-    if (!this.indexCountsByRealm.has(key)) {
+    if (
+      !this.indexCountsByRealm.has(key) &&
+      !this.inFlightIndexCounts.has(key)
+    ) {
       // Nobody has asked for this realm's counts, so there's nothing to
-      // refresh; a first request will read through to the server anyway.
+      // refresh; a first request will read through to the server anyway. An
+      // in-flight request, though, was computed against the pre-swap index, so
+      // it still counts as displayed data that just went stale — mark it so
+      // `loadIndexCounts` refetches rather than storing that response as fresh.
       return;
     }
     this.staleIndexCounts.add(key);
@@ -917,6 +941,11 @@ export default class RealmService extends Service {
       return;
     }
     for (let realmURL of wanted) {
+      // We're now servicing this realm's staleness. If a fresh index swap
+      // marks it stale again while the request is in flight, `markIndexCountsStale`
+      // re-adds it below and the retry picks it up — so its pre-swap response
+      // isn't stored as if it were current.
+      this.staleIndexCounts.delete(realmURL);
       this.inFlightIndexCounts.add(realmURL);
     }
     (async () => {
@@ -925,22 +954,73 @@ export default class RealmService extends Service {
         if (this.isDestroyed) {
           return;
         }
+        let returned = new Set<string>();
         for (let entry of data) {
           let key = ensureTrailingSlash(entry.id);
+          returned.add(key);
           this.indexCountsByRealm.set(key, entry.attributes);
-          this.staleIndexCounts.delete(key);
+        }
+        // A realm we asked for but the server left out couldn't compute its
+        // counts (its `getIndexCounts` threw). Mark it stale so a later pass
+        // retries rather than leaving the tile blank for the session.
+        for (let realmURL of wanted) {
+          if (!returned.has(realmURL)) {
+            this.staleIndexCounts.add(realmURL);
+          }
         }
       } catch (error) {
-        // Leave the entries as they were — unset, or stale-but-displayed — so a
-        // later attempt retries. A realm omitted from the response (its counts
-        // were unavailable server-side) stays stale for the same reason.
+        // Transient failure (offline, 5xx): keep the tiles as they were and
+        // mark every realm we were fetching stale so the retry below tries
+        // again rather than the numbers never arriving.
         log.warn(`Failed to fetch realm index counts: ${error}`);
+        if (!this.isDestroyed) {
+          for (let realmURL of wanted) {
+            this.staleIndexCounts.add(realmURL);
+          }
+        }
       } finally {
-        for (let realmURL of wanted) {
-          this.inFlightIndexCounts.delete(realmURL);
+        if (!this.isDestroyed) {
+          for (let realmURL of wanted) {
+            this.inFlightIndexCounts.delete(realmURL);
+          }
+          // Anything still stale — re-marked mid-flight, omitted by the server,
+          // or a failed request — needs another attempt. Wake consumers after a
+          // short delay so a persistent failure polls slowly instead of hot-
+          // looping the request on every render.
+          if (wanted.some((realmURL) => this.staleIndexCounts.has(realmURL))) {
+            this.scheduleIndexCountsRetry();
+          }
         }
       }
     })();
+  }
+
+  private indexCountsRetryTimer: ReturnType<typeof setTimeout> | undefined;
+
+  // Wakes the index-count loaders once, after a delay, so realms left stale by
+  // a failed/omitted fetch (or re-marked mid-flight) get another attempt. The
+  // delay is what keeps a persistently failing realm to a slow poll rather than
+  // a per-render hot loop; a successful retry clears the staleness and the
+  // chain stops on its own.
+  private scheduleIndexCountsRetry(): void {
+    if (this.indexCountsRetryTimer != null || this.isDestroyed) {
+      return;
+    }
+    this.indexCountsRetryTimer = setTimeout(() => {
+      this.indexCountsRetryTimer = undefined;
+      if (this.isDestroyed || this.staleIndexCounts.size === 0) {
+        return;
+      }
+      this.indexCountsEpoch++;
+    }, INDEX_COUNTS_RETRY_MS);
+  }
+
+  willDestroy(): void {
+    super.willDestroy();
+    if (this.indexCountsRetryTimer != null) {
+      clearTimeout(this.indexCountsRetryTimer);
+      this.indexCountsRetryTimer = undefined;
+    }
   }
 
   private applyRealmInfo(realmURL: string, info: RealmInfo, isPublic: boolean) {

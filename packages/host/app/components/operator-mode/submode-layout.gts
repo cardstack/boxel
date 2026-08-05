@@ -676,10 +676,14 @@ export default class SubmodeLayout extends Component<Signature> {
       }
 
       .submode-layout-top-bar-center {
-        position: absolute;
-        left: 50%;
-        top: 50%;
-        transform: translate(-50%, -50%);
+        /* Stays in flow as a flex child rather than absolutely positioned:
+           `flex: 1` reserves the middle track between the workspace button and
+           the profile controls, so the centered content (the portaled
+           expanded-card-header pill) can neither slide under those controls at
+           narrow widths nor intercept clicks meant for them. The pill itself is
+           held to `max-width: 50rem` and `margin: 0 auto` by
+           `.expanded-card-header-slot`, keeping it centered within this track. */
+        flex: 1;
         display: flex;
         justify-content: center;
         min-width: 0;

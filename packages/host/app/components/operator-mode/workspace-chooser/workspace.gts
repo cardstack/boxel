@@ -692,6 +692,15 @@ export default class Workspace extends Component<Signature> {
         color: var(--boxel-dark);
         --icon-color: var(--boxel-dark);
       }
+      /* Keyboard reveal: the button is `opacity: 0` until hover/open, but it
+         stays focusable, so a keyboard user tabbing through the tile would
+         otherwise land on a fully transparent control with no visible focus.
+         Revealing on `:focus-within` keeps it discoverable without a pointer. */
+      .tile-menu-btn:focus-within {
+        opacity: 1;
+        background: rgba(0 0 0 / 40%);
+        backdrop-filter: blur(6px);
+      }
       .tile-menu-btn:has([aria-expanded='true']) {
         opacity: 1;
         background: var(--boxel-highlight);
@@ -710,6 +719,11 @@ export default class Workspace extends Component<Signature> {
         top: 0.5rem;
         left: calc(0.5rem + var(--boxel-button-xs) + var(--boxel-sp-3xs));
         z-index: 3;
+        /* The bar overlays the tile's own open-workspace button. Let clicks on
+           its inert areas fall through to that button (rather than dying on
+           this strip); the tooltip triggers below re-enable pointer events for
+           themselves so hovering the icons still surfaces their tooltips. */
+        pointer-events: none;
         box-sizing: border-box;
         height: var(--boxel-button-xs);
         display: flex;
@@ -725,12 +739,17 @@ export default class Workspace extends Component<Signature> {
         display: flex;
         align-items: center;
         color: var(--boxel-teal);
+        /* Re-enable pointer events so this icon's tooltip still opens on hover
+           (see `.tile-status-bar { pointer-events: none }`). */
+        pointer-events: auto;
       }
       .tile-status-visibility {
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-6xs);
         --icon-color: var(--boxel-light);
+        /* Re-enable pointer events for this tooltip trigger (see above). */
+        pointer-events: auto;
       }
       .tile-status-label {
         font-size: var(--boxel-font-size-2xs);
