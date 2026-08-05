@@ -153,14 +153,21 @@ Dense professional layouts with thoughtful scaling:
 
 Implementation tip: Define local CSS variables at the component root, referencing theme tokens directly — no hardcoded fallbacks (the `--boxel-*` tokens are always defined).
 
+The same hoisting applies to raw metric values that don't map to a theme token: hardcoded font-sizes, widths/heights, and border-radii belong in component-prefixed custom properties declared once on the component root (the `--fc-*` variables on `FittedCard` are the reference style), not scattered as literals through child selectors.
+
 ```css
 .component {
   --card-padding: var(--boxel-sp);
   --card-radius: var(--boxel-border-radius-sm);
   --card-shadow: var(--boxel-box-shadow);
+  --card-thumb-size: 3.75rem; /* raw metric, hoisted and named */
   padding: var(--card-padding);
   border-radius: var(--card-radius);
   box-shadow: var(--card-shadow);
+}
+.component .thumb {
+  width: var(--card-thumb-size);
+  height: var(--card-thumb-size);
 }
 ```
 

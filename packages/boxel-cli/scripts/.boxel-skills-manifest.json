@@ -1,5 +1,5 @@
 {
-  "version": "v0.0.30",
+  "version": "v0.1.0",
   "skills": [
     "boxel",
     "boxel-create-edit-cards",
@@ -18,23 +18,5 @@
     "ember-best-practices",
     "glossary.md",
     "source-code-editing"
-  ],
-  "commands": [
-    "boxel-add-field.md",
-    "boxel-add-file-field.md",
-    "boxel-build-from-pattern.md",
-    "boxel-create-card.md",
-    "boxel-create-instance.md",
-    "boxel-debug-runtime.md",
-    "boxel-design-card.md",
-    "boxel-develop-theme.md",
-    "boxel-edit-template.md",
-    "boxel-install-listing.md",
-    "boxel-migrate-schema.md",
-    "boxel-preview-card.md",
-    "boxel-search-cards.md",
-    "boxel-submit-listing.md",
-    "boxel-sync-workspace.md",
-    "distill-learnings.md"
   ]
 }
