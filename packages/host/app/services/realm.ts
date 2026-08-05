@@ -98,11 +98,6 @@ export const UNKNOWN_REALM_NAME = 'Unknown Workspace';
 // recovers without a reload.
 const INDEX_COUNTS_RETRY_MS = 5000;
 
-// Debounce for the per-realm timestamp refresh fired on index completion, so a
-// burst of writes coalesces into a single federated-info fetch rather than one
-// per incremental index.
-const REFRESH_TIMESTAMPS_DEBOUNCE_MS = 1000;
-
 export type EnhancedRealmInfo = RealmInfo & {
   isIndexing: boolean;
   isPublic: boolean;
@@ -342,11 +337,18 @@ class RealmResource {
               ) {
                 this.refreshInfo();
               }
-              // Any completed index may have advanced this realm's `updated_at`
-              // (a write to a source realm does), so refresh the footer's
-              // timestamps. Timestamp-only and debounced, so unlike the rename
-              // refresh above it's safe to run on every completion.
-              this.refreshTimestamps();
+              // A write to a source realm advances its `updated_at` server-side
+              // (see Realm#touchSourceRealmUpdatedAt), so reflect that in the
+              // chooser footer immediately rather than waiting for a reload.
+              // Optimistic and client-clock based — no round-trip, so it can't
+              // fail, log, or fire a stray request mid-test; the next federated
+              // info load reconciles it with the authoritative value. Scoped to
+              // incremental indexes: full/copy re-indexes are rebuilds, not user
+              // writes, and only source realms actually move (a non-source realm
+              // would self-correct on that next load).
+              if (data.indexType === 'incremental' && this.info) {
+                this.info.updatedAt = new Date().toISOString();
+              }
               // Tile counts derive from the index, so any completed index makes
               // them stale — no need to narrow to the config card as above, and
               // no publish state to clobber. Marked rather than refetched here:
@@ -540,37 +542,6 @@ class RealmResource {
       isPublic,
       lastPublishedAt: this.info.lastPublishedAt,
     });
-  });
-
-  private refreshTimestamps() {
-    return this.refreshTimestampsTask.perform();
-  }
-
-  // `updated_at` advances server-side on any write to a source realm, so
-  // refresh just the lifecycle timestamps on index completion — the workspace
-  // chooser's menu footer then tracks real activity without a reload. Kept
-  // separate from `refreshInfo` and scoped to the two timestamp fields so it
-  // can't clobber the name or the client-managed publish state a full refresh
-  // has to guard. Debounced so a burst of writes coalesces into one fetch, and
-  // a no-op for a realm whose info isn't loaded (nothing is displaying it) or
-  // one not on our own realm server (federated realms don't surface these).
-  private refreshTimestampsTask = restartableTask(async () => {
-    if (!this.info) {
-      return;
-    }
-    await rawTimeout(REFRESH_TIMESTAMPS_DEBOUNCE_MS);
-    let timestamps = await this.realmService.fetchRealmTimestamps(
-      this.realmURL,
-    );
-    if (!timestamps || !this.info) {
-      return;
-    }
-    if (timestamps.createdAt !== undefined) {
-      this.info.createdAt = timestamps.createdAt;
-    }
-    if (timestamps.updatedAt !== undefined) {
-      this.info.updatedAt = timestamps.updatedAt;
-    }
   });
 
   async fetchRealmPermissions() {
@@ -937,42 +908,6 @@ export default class RealmService extends Service {
       if (this.bulkInfoPromise === bulkPromise) {
         this.bulkInfoPromise = undefined;
       }
-    }
-  }
-
-  // The realm-lifecycle timestamps for a single realm, read fresh from the
-  // federated-info batch (the authoritative source that carries them). Used to
-  // live-refresh the chooser footer after a write. Returns undefined when the
-  // realm isn't on our own realm server (federated realms don't surface these)
-  // or the request fails, so callers leave the displayed values untouched.
-  async fetchRealmTimestamps(realmURL: string): Promise<
-    | {
-        createdAt?: string | null;
-        updatedAt?: string | null;
-      }
-    | undefined
-  > {
-    // The federated-info fetch below logs in to the realm server, which needs a
-    // matrix client. Skip entirely when there isn't one (anonymous sessions,
-    // and much of the test surface) rather than let `login()` reject: this runs
-    // fire-and-forget on index completion, so a rejection would surface as an
-    // unhandled error rather than being awaited anywhere.
-    if (!this.realmServer.hasClient) {
-      return undefined;
-    }
-    try {
-      let { data } = await this.realmServer.fetchRealmInfos([realmURL]);
-      let key = ensureTrailingSlash(realmURL);
-      let entry =
-        data.find((d) => ensureTrailingSlash(d.id) === key) ?? data[0];
-      if (!entry) {
-        return undefined;
-      }
-      let { createdAt, updatedAt } = entry.attributes;
-      return { createdAt, updatedAt };
-    } catch (error) {
-      log.warn(`Failed to refresh realm timestamps for ${realmURL}: ${error}`);
-      return undefined;
     }
   }
 
