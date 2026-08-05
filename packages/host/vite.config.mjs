@@ -274,6 +274,19 @@ export default defineConfig(({ mode }) => ({
       { find: /^util$/, replacement: require.resolve('util/') },
       // recast's main.js eagerly requires 'fs'; we stub it for the browser.
       { find: 'fs', replacement: require.resolve('./lib/empty-fs.js') },
+      // @percy/ember's package root is its Node-only Ember CLI build hook
+      // (broccoli + window.require('./package')), which crashes in the
+      // browser when Vite bundles it. Point the bare import at the addon's
+      // browser module and supply the build-generated env module ourselves.
+      {
+        find: /^@percy\/ember$/,
+        replacement:
+          require.resolve('@percy/ember/addon-test-support/@percy/ember/index.js'),
+      },
+      {
+        find: '@percy/ember/env',
+        replacement: require.resolve('./lib/percy-ember-env.js'),
+      },
     ],
   },
   plugins: [
