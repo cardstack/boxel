@@ -20,6 +20,17 @@ interface GoogleIdentity {
   name: string;
 }
 
+// A subject claim has to be unique per test *attempt*, not just per test. One
+// Synapse instance serves the whole run and CI retries twice, so a subject that
+// signed in on an earlier attempt is already in `user_external_ids` — and
+// Synapse short-circuits on that row, logging the retry into the previous
+// attempt's account before the email-linking path runs. Deriving it from the
+// generated (UUID-suffixed) username keeps every attempt a fresh identity, so a
+// retry can actually recover from a flake instead of failing on stale state.
+function subjectFor(username: string): string {
+  return `google-oauth2|${username}`;
+}
+
 // Drives one sign-in from the host's Google button through the mock IdP's
 // interactive login form and back. `sub` is what the mock echoes as the subject
 // claim, so each caller controls the identity being presented.
@@ -81,7 +92,7 @@ test.describe('Google sign-in (mock OIDC)', () => {
     // Synapse advertises the oidc-google IdP, so signing in through it already
     // exercises the login-flow detection.
     await signInWithGoogle(page, {
-      sub: 'google-oauth2|returning',
+      sub: subjectFor(username),
       email: userEmail,
       name: 'Returning Google User',
     });
@@ -110,8 +121,8 @@ test.describe('Google sign-in (mock OIDC)', () => {
     });
     await setupPermissions(other.credentials.userId, `${appURL}/`);
 
-    let sub = 'google-oauth2|first-identity';
-    let otherSub = 'google-oauth2|second-identity';
+    let sub = subjectFor(username);
+    let otherSub = subjectFor(other.username);
 
     await signInWithGoogle(page, { sub, email: userEmail, name: 'First User' });
     await expectSignedInAs(page, `@${username}:localhost`);
