@@ -215,6 +215,9 @@ export class BoxelExecutionSession {
       prefersFullSandbox,
     };
     let lease = this.router.route(route);
+    if (lease.runtime.mode === 'sandbox') {
+      (lease.runtime as SandboxRuntimeProcess).allowModules(source.moduleGraph);
+    }
     let card: BoxelInstanceHandle | undefined;
     try {
       card = await lease.runtime.createFromSerialized(

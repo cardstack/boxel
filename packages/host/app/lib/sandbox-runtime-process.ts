@@ -20,6 +20,8 @@ import type SurfaceService from '@cardstack/host/services/surface-service';
 import type { SurfaceExecutionIdentity } from '@cardstack/host/services/surface-service';
 
 import SandboxBoxelRuntimeClient from './sandbox-boxel-runtime-client';
+import { SandboxFetchServer } from './sandbox-fetch-transport';
+import SandboxModuleAuthority from './sandbox-module-authority';
 import { SandboxRenderClient } from './sandbox-render-transport';
 import { SandboxSurfaceServer } from './sandbox-surface-transport';
 
@@ -59,6 +61,11 @@ export interface SandboxRuntimeProcessOptions {
   childURL: string;
   childOrigin: string;
   surfaceService: SurfaceService;
+  fetch: typeof globalThis.fetch;
+  /** Collapses virtual Realm aliases onto the exact URL fetched by the Host. */
+  resolveModuleURL: (identifier: string) => string;
+  /** Trusted framework modules are leaves of the authored module graph. */
+  isTrustedModuleURL: (identifier: string) => boolean;
   identity: SurfaceExecutionIdentity;
   connectTimeout?: number;
 }
@@ -81,18 +88,29 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
   private readonly bootstrapId = randomBootstrapId();
   private readonly client: Promise<SandboxBoxelRuntimeClient>;
   private surfaceServer?: SandboxSurfaceServer;
+  private fetchServer?: SandboxFetchServer;
   private renderClient?: SandboxRenderClient;
   private renderedCard?: BoxelInstanceHandle;
   private cancelConnection?: (error: Error) => void;
   private closed = false;
+  private readonly moduleAuthority: SandboxModuleAuthority;
 
   constructor(private readonly options: SandboxRuntimeProcessOptions) {
     this.surface = options.surfaceService.register(options.identity);
+    this.moduleAuthority = new SandboxModuleAuthority(
+      options.resolveModuleURL,
+      options.isTrustedModuleURL,
+    );
     this.client = this.connect();
   }
 
   loadBoxel(ref: CodeRef): Promise<BoxelTypeHandle> {
     return this.withClient((client) => client.loadBoxel(ref));
+  }
+
+  /** Adds the exact static module graph authorized for this process. */
+  allowModules(moduleIdentifiers: readonly string[]): void {
+    this.moduleAuthority.allow(moduleIdentifiers);
   }
 
   createFromSerialized(
@@ -159,6 +177,9 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
     if (!this.renderClient) {
       throw new Error('Sandbox render transport is unavailable');
     }
+    this.options.surfaceService.layout(this.surface, {
+      heightMode: format === 'fitted' ? 'allocated' : 'intrinsic',
+    });
     await this.renderClient.render(card, format);
     this.renderedCard = card;
     return {
@@ -179,12 +200,15 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
     this.cancelConnection = undefined;
     this.surfaceServer?.destroy();
     this.surfaceServer = undefined;
+    this.fetchServer?.destroy();
+    this.fetchServer = undefined;
     this.renderClient?.destroy();
     this.renderClient = undefined;
     this.renderedCard = undefined;
     this.options.surfaceService.release(this.surface);
     void this.client.then((client) => client.destroy()).catch(() => undefined);
     this.options.iframe.src = 'about:blank';
+    this.options.iframe.remove();
   }
 
   private withClient<T>(
@@ -243,6 +267,8 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
         this.renderClient = undefined;
         this.surfaceServer?.destroy();
         this.surfaceServer = undefined;
+        this.fetchServer?.destroy();
+        this.fetchServer = undefined;
         reject(error);
       };
       let receiveControl = (event: MessageEvent<unknown>) => {
@@ -262,13 +288,17 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
       };
       let receive = (event: MessageEvent<unknown>) => {
         if (
-          event.source !== iframe.contentWindow ||
           event.origin !== childOrigin ||
           !isSandboxListening(event.data) ||
           event.data.bootstrapId !== this.bootstrapId
         ) {
           return;
         }
+        // A credentialless cross-origin iframe's WindowProxy is not required
+        // to compare equal to a later `contentWindow` lookup. Exact origin,
+        // protocol, and the per-process unguessable bootstrap id bind this
+        // inert announcement to the child. Authority is transferred only to
+        // this iframe's current `contentWindow` over the private port below.
         let channel = new MessageChannel();
         controlPort = channel.port1;
         client = new SandboxBoxelRuntimeClient(channel.port1);
@@ -277,6 +307,13 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
           channel.port1,
           this.options.surfaceService,
           this.surface,
+        );
+        this.fetchServer = new SandboxFetchServer(
+          channel.port1,
+          this.options.fetch,
+          (url) => this.moduleAuthority.has(url),
+          (url, contentType, body) =>
+            this.moduleAuthority.observe(url, contentType, body),
         );
         let connect: SandboxConnect = {
           protocol: bootstrapProtocol,

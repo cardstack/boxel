@@ -139,6 +139,7 @@ export default class HostModeCard extends Component<Signature> {
           class='card'
           @card={{this.card}}
           @format='isolated'
+          @execution='auto'
           data-host-mode-card-scroll-container
           data-test-host-mode-card={{@cardId}}
         />

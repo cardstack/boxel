@@ -29,6 +29,7 @@ const capsuleSource: BoxelSourceClassification = {
   reason: 'default-user-card',
   imports: [],
   signals: [],
+  moduleGraph: [],
   propagatesToImporters: false,
 };
 
@@ -37,6 +38,7 @@ const sandboxSource: BoxelSourceClassification = {
   reason: 'browser-runtime:document',
   imports: [],
   signals: ['document'],
+  moduleGraph: [],
   propagatesToImporters: false,
 };
 
@@ -96,11 +98,20 @@ class TestRuntime {
     this.disposed.push(handle);
   }
 
+  allowModules(): void {}
+
   getRenderSlotForHandle() {
     return { owner: 'direct' as const, component: {} as never };
   }
 
   async getRenderSlot() {
+    if (this.mode === 'sandbox') {
+      return {
+        owner: 'sandbox' as const,
+        iframe: document.createElement('iframe'),
+        surface: 'surface:test' as never,
+      };
+    }
     return {
       owner: 'capsule' as const,
       component: {} as never,
@@ -200,6 +211,132 @@ module('Unit | Boxel execution engine', function () {
       { mode: 'capsule', reason: 'ses-only-format:fitted' },
       'compact composition formats never create inline iframes',
     );
+    for (let format of ['atom', 'head', 'markdown']) {
+      assert.deepEqual(
+        decideBoxelExecution(policy({ source: sandboxSource, format })),
+        { mode: 'capsule', reason: `ses-only-format:${format}` },
+        `${format} remains composable without an inline iframe`,
+      );
+    }
+    for (let format of ['isolated', 'embedded', 'edit']) {
+      assert.deepEqual(
+        decideBoxelExecution(policy({ source: sandboxSource, format })),
+        { mode: 'sandbox', reason: 'browser-runtime:document' },
+        `${format} may use the origin-isolated browser runtime`,
+      );
+    }
+  });
+
+  test('one semantic fixture crosses Direct, Capsule, and Sandbox through the same session contract', async function (assert) {
+    let direct = new TestRuntime('direct');
+    let capsule = new TestRuntime('capsule');
+    let sandbox = new TestRuntime('sandbox');
+    let router = new BoxelRuntimeRouter(
+      direct as unknown as DirectBoxelRuntime,
+      () => capsule as unknown as CapsuleBoxelRuntime,
+      () => sandbox as unknown as SandboxRuntimeProcess,
+    );
+    let engine = new BoxelExecutionEngine(router, async (_module, source) =>
+      source === 'sandbox' ? sandboxSource : capsuleSource,
+    );
+
+    try {
+      let cases = [
+        {
+          expected: 'direct',
+          request: { ...executionRequest(), trusted: true },
+        },
+        { expected: 'capsule', request: executionRequest() },
+        {
+          expected: 'sandbox',
+          request: executionRequest('sandbox'),
+        },
+      ] as const;
+
+      for (let fixture of cases) {
+        let session = engine.createSession();
+        let generation = await session.update(fixture.request);
+        assert.strictEqual(
+          generation?.lease.runtime.mode,
+          fixture.expected,
+          `${fixture.expected} owns semantic materialization`,
+        );
+        assert.deepEqual(
+          structuredClone(generation?.renderRecord),
+          generation?.renderRecord,
+          `${fixture.expected} returns the same cloneable record shape`,
+        );
+        let slot = await session.getRenderSlot('isolated');
+        assert.strictEqual(
+          slot.owner,
+          fixture.expected,
+          `${fixture.expected} owns its render effect`,
+        );
+        await session.destroy();
+      }
+    } finally {
+      engine.destroy();
+    }
+  });
+
+  test('mixed delegated boundaries keep independent runtime and lifecycle ownership', async function (assert) {
+    let direct = new TestRuntime('direct');
+    let capsule = new TestRuntime('capsule');
+    let sandbox = new TestRuntime('sandbox');
+    let router = new BoxelRuntimeRouter(
+      direct as unknown as DirectBoxelRuntime,
+      () => capsule as unknown as CapsuleBoxelRuntime,
+      () => sandbox as unknown as SandboxRuntimeProcess,
+    );
+    let engine = new BoxelExecutionEngine(router, async (_module, source) =>
+      source === 'sandbox' ? sandboxSource : capsuleSource,
+    );
+    let trustedBaseField = engine.createSession();
+    let authoredParent = engine.createSession();
+    let browserDependentChild = engine.createSession();
+
+    try {
+      await trustedBaseField.update({
+        ...executionRequest(),
+        surfaceId: 'surface:base-field',
+        trusted: true,
+      });
+      await authoredParent.update({
+        ...executionRequest(),
+        surfaceId: 'surface:parent',
+      });
+      await browserDependentChild.update({
+        ...executionRequest('sandbox'),
+        surfaceId: 'surface:child',
+      });
+
+      assert.deepEqual(
+        [
+          trustedBaseField.snapshot.current?.lease.runtime.mode,
+          authoredParent.snapshot.current?.lease.runtime.mode,
+          browserDependentChild.snapshot.current?.lease.runtime.mode,
+        ],
+        ['direct', 'capsule', 'sandbox'],
+        'a composed graph may cross Host, Capsule, and Sandbox boundaries',
+      );
+
+      await browserDependentChild.destroy();
+      assert.strictEqual(
+        authoredParent.snapshot.status,
+        'ready',
+        'releasing the nested browser process does not invalidate its parent',
+      );
+      assert.strictEqual(
+        trustedBaseField.snapshot.status,
+        'ready',
+        'trusted Base remains immune to authored child lifecycle',
+      );
+    } finally {
+      await trustedBaseField.destroy();
+      await authoredParent.destroy();
+      await browserDependentChild.destroy();
+      engine.destroy();
+    }
   });
 
   test('source classification distinguishes type references from browser authority', async function (assert) {

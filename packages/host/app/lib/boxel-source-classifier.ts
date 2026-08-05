@@ -20,6 +20,8 @@ export interface BoxelSourceClassification {
   reason: string;
   imports: string[];
   signals: string[];
+  /** Resolved modules admitted to a stronger runtime's read capability. */
+  moduleGraph: string[];
   // Some iframe requirements are part of an exported render surface and must
   // follow a static import edge (for example Three.js or an unscoped template
   // style). Ambient browser globals are different: a library may contain a
@@ -544,6 +546,7 @@ export async function classifyBoxelSource(
       reason: 'source-parse-pending',
       imports: [],
       signals: [],
+      moduleGraph: [],
       propagatesToImporters: false,
     };
   }
@@ -562,6 +565,7 @@ export async function classifyBoxelSource(
       reason: 'source-parse-pending',
       imports: [],
       signals: [],
+      moduleGraph: [],
       propagatesToImporters: false,
     };
   }
@@ -594,6 +598,7 @@ export async function classifyBoxelSource(
       reason: `browser-runtime:${signals.join(',')}`,
       imports,
       signals,
+      moduleGraph: [],
       propagatesToImporters,
       ...(liftedImports.length > 0 ? { formatOnlyImports: liftedImports } : {}),
     };
@@ -603,6 +608,7 @@ export async function classifyBoxelSource(
     reason: 'default-user-card',
     imports,
     signals: [],
+    moduleGraph: [],
     propagatesToImporters: false,
     ...(liftedImports.length > 0 ? { formatOnlyImports: liftedImports } : {}),
   };
@@ -700,10 +706,7 @@ export class BoxelModuleGraphClassifier {
         return unavailableClassification(`module-load:${identifier}`);
       }
       let own = await classifyBoxelSource(source);
-      if (own.tier === 'sandbox') {
-        return own;
-      }
-
+      let dependencies: string[] = [];
       for (let specifier of own.imports) {
         let dependency: string;
         try {
@@ -711,10 +714,26 @@ export class BoxelModuleGraphClassifier {
         } catch {
           return unavailableClassification(`module-resolve:${specifier}`);
         }
+        observedDependencies.add(dependency);
+        dependencies.push(dependency);
+      }
+      if (own.tier === 'sandbox') {
+        // The stronger boundary is already decided, but the Sandbox loader
+        // still needs the complete, statically observed module graph. Walk
+        // authored dependencies for authority discovery without allowing a
+        // dependency to weaken or otherwise replace the root decision.
+        for (let dependency of dependencies) {
+          if (!this.options.isTrustedModule(dependency)) {
+            await visit(dependency);
+          }
+        }
+        return own;
+      }
+
+      for (let dependency of dependencies) {
         if (this.options.isTrustedModule(dependency)) {
           continue;
         }
-        observedDependencies.add(dependency);
         let dependencyClassification = await visit(dependency);
         if (
           dependencyClassification.tier === 'sandbox' &&
@@ -725,6 +744,7 @@ export class BoxelModuleGraphClassifier {
             reason: `dependency-runtime:${dependency}`,
             imports: own.imports,
             signals: dependencyClassification.signals,
+            moduleGraph: [],
             propagatesToImporters: true,
             ...(own.formatOnlyImports
               ? { formatOnlyImports: own.formatOnlyImports }
@@ -735,7 +755,11 @@ export class BoxelModuleGraphClassifier {
       return own;
     };
 
-    return visit(moduleIdentifier, entrySource);
+    let result = await visit(moduleIdentifier, entrySource);
+    return {
+      ...result,
+      moduleGraph: [moduleIdentifier, ...observedDependencies],
+    };
   }
 }
 
@@ -745,6 +769,7 @@ function capsuleClassification(): BoxelSourceClassification {
     reason: 'trusted-or-visited-module',
     imports: [],
     signals: [],
+    moduleGraph: [],
     propagatesToImporters: false,
   };
 }
@@ -755,6 +780,7 @@ function unavailableClassification(reason: string): BoxelSourceClassification {
     reason,
     imports: [],
     signals: [reason],
+    moduleGraph: [],
     propagatesToImporters: true,
   };
 }

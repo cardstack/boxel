@@ -1,0 +1,242 @@
+const requestKind = 'boxel-sandbox-fetch-request' as const;
+const responseKind = 'boxel-sandbox-fetch-response' as const;
+const maxModuleBytes = 8 * 1024 * 1024;
+const forwardedRequestHeaders = new Set([
+  'accept',
+  'if-modified-since',
+  'if-none-match',
+]);
+const forwardedResponseHeaders = new Set([
+  'cache-control',
+  'content-type',
+  'etag',
+  'last-modified',
+]);
+
+interface SandboxFetchRequest {
+  kind: typeof requestKind;
+  requestId: string;
+  url: string;
+  headers: [string, string][];
+}
+
+interface SandboxFetchResponse {
+  kind: typeof responseKind;
+  requestId: string;
+  ok: boolean;
+  response?: {
+    status: number;
+    statusText: string;
+    url: string;
+    headers: [string, string][];
+    body: ArrayBuffer;
+  };
+  error?: string;
+}
+
+interface PendingFetch {
+  resolve(response: Response): void;
+  reject(error: Error): void;
+}
+
+/** Child-side fetch function backed only by the private Sandbox port. */
+export class SandboxFetchClient {
+  private nextRequest = 0;
+  private pending = new Map<string, PendingFetch>();
+
+  constructor(private readonly port: MessagePort) {
+    port.addEventListener('message', this.receive);
+  }
+
+  fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    let request = input instanceof Request ? input : new Request(input, init);
+    if (request.method !== 'GET') {
+      throw new Error('The Sandbox module loader only supports GET');
+    }
+    let requestId = `module:${++this.nextRequest}`;
+    let message: SandboxFetchRequest = {
+      kind: requestKind,
+      requestId,
+      url: request.url,
+      headers: [...request.headers.entries()],
+    };
+    return new Promise<Response>((resolve, reject) => {
+      this.pending.set(requestId, { resolve, reject });
+      try {
+        this.port.postMessage(message);
+      } catch (error) {
+        this.pending.delete(requestId);
+        reject(asError(error));
+      }
+    });
+  };
+
+  destroy(): void {
+    this.port.removeEventListener('message', this.receive);
+    for (let pending of this.pending.values()) {
+      pending.reject(new Error('Sandbox module fetch was destroyed'));
+    }
+    this.pending.clear();
+  }
+
+  private receive = (event: MessageEvent<unknown>) => {
+    let message = event.data;
+    if (!isFetchResponse(message)) {
+      return;
+    }
+    let pending = this.pending.get(message.requestId);
+    if (!pending) {
+      return;
+    }
+    this.pending.delete(message.requestId);
+    if (!message.ok || !message.response) {
+      pending.reject(new Error(message.error ?? 'Sandbox module fetch failed'));
+      return;
+    }
+    let response = new Response(message.response.body, {
+      status: message.response.status,
+      statusText: message.response.statusText,
+      headers: message.response.headers,
+    });
+    Object.defineProperty(response, 'url', {
+      configurable: true,
+      value: message.response.url,
+    });
+    pending.resolve(response);
+  };
+}
+
+/**
+ * Parent-side module read capability.
+ *
+ * The Sandbox receives no ambient credentials. Every read is checked against
+ * the statically classified module graph before the Host performs an
+ * authenticated fetch. This is an execution-internal capability, not a
+ * general authored-card network API.
+ */
+export class SandboxFetchServer {
+  constructor(
+    private readonly port: MessagePort,
+    private readonly fetch: typeof globalThis.fetch,
+    private readonly isAllowed: (url: string) => boolean,
+    private readonly observeModule?: (
+      url: string,
+      contentType: string | null,
+      body: ArrayBuffer,
+    ) => Promise<void>,
+  ) {
+    port.addEventListener('message', this.receive);
+  }
+
+  destroy(): void {
+    this.port.removeEventListener('message', this.receive);
+  }
+
+  private receive = (event: MessageEvent<unknown>) => {
+    let request = event.data;
+    if (!isFetchRequest(request)) {
+      return;
+    }
+    void this.respond(request);
+  };
+
+  private async respond(request: SandboxFetchRequest): Promise<void> {
+    let message: SandboxFetchResponse;
+    try {
+      if (!this.isAllowed(request.url)) {
+        throw new Error(`Sandbox module read is outside its classified graph`);
+      }
+      let headers = new Headers();
+      for (let [name, value] of request.headers) {
+        if (forwardedRequestHeaders.has(name.toLowerCase())) {
+          headers.set(name, value);
+        }
+      }
+      let response = await this.fetch(request.url, {
+        method: 'GET',
+        headers,
+        credentials: 'omit',
+        referrerPolicy: 'no-referrer',
+        redirect: 'error',
+      });
+      if (!this.isAllowed(response.url || request.url)) {
+        throw new Error('Sandbox module response escaped its classified graph');
+      }
+      let body = await response.arrayBuffer();
+      if (body.byteLength > maxModuleBytes) {
+        throw new Error('Sandbox module response exceeds the size limit');
+      }
+      await this.observeModule?.(
+        response.url || request.url,
+        response.headers.get('content-type'),
+        body,
+      );
+      message = {
+        kind: responseKind,
+        requestId: request.requestId,
+        ok: true,
+        response: {
+          status: response.status,
+          statusText: response.statusText,
+          url: response.url,
+          headers: [...response.headers.entries()].filter(([name]) =>
+            forwardedResponseHeaders.has(name.toLowerCase()),
+          ),
+          body,
+        },
+      };
+    } catch (error) {
+      message = {
+        kind: responseKind,
+        requestId: request.requestId,
+        ok: false,
+        error: asError(error).message,
+      };
+    }
+    this.port.postMessage(
+      message,
+      message.response ? [message.response.body] : [],
+    );
+  }
+}
+
+function isFetchRequest(value: unknown): value is SandboxFetchRequest {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'kind' in value &&
+    value.kind === requestKind &&
+    'requestId' in value &&
+    typeof value.requestId === 'string' &&
+    value.requestId.length > 0 &&
+    value.requestId.length <= 256 &&
+    'url' in value &&
+    typeof value.url === 'string' &&
+    'headers' in value &&
+    Array.isArray(value.headers) &&
+    value.headers.length <= 32 &&
+    value.headers.every(
+      (header) =>
+        Array.isArray(header) &&
+        header.length === 2 &&
+        header.every((part) => typeof part === 'string' && part.length <= 8192),
+    )
+  );
+}
+
+function isFetchResponse(value: unknown): value is SandboxFetchResponse {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'kind' in value &&
+    value.kind === responseKind &&
+    'requestId' in value &&
+    typeof value.requestId === 'string' &&
+    'ok' in value &&
+    typeof value.ok === 'boolean'
+  );
+}
+
+function asError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
+}

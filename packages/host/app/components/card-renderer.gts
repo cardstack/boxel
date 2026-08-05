@@ -8,6 +8,7 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
 import {
   CardContextName,
+  CardCrudFunctionsContextName,
   DefaultFormatsContextName,
   CardURLContextName,
   GetCardContextName,
@@ -18,6 +19,7 @@ import {
   type getCardCollection,
 } from '@cardstack/runtime-common';
 
+import BoxelExecutionRenderer from '@cardstack/host/components/boxel-execution-renderer';
 import HeadFormatPreview from '@cardstack/host/components/head-format-preview';
 import type DirectBoxelRuntimeService from '@cardstack/host/services/direct-boxel-runtime';
 
@@ -26,6 +28,7 @@ import type {
   Format,
   Field,
   CardContext,
+  CardCrudFunctions,
 } from '@cardstack/base/card-api';
 
 interface Signature {
@@ -36,6 +39,7 @@ interface Signature {
     field?: Field;
     codeRef?: ResolvedCodeRef;
     displayContainer?: boolean;
+    execution?: 'auto' | 'direct';
   };
 }
 
@@ -47,6 +51,8 @@ export default class CardRenderer extends Component<Signature> {
   @consume(GetCardCollectionContextName)
   declare private getCardCollection: getCardCollection;
   @consume(CardContextName) declare private cardContext: CardContext;
+  @consume(CardCrudFunctionsContextName)
+  declare private cardCrudFunctions: CardCrudFunctions | undefined;
 
   @provide(DefaultFormatsContextName)
   // @ts-ignore "defaultFormat is declared but not used"
@@ -65,7 +71,15 @@ export default class CardRenderer extends Component<Signature> {
   }
 
   <template>
-    {{#if (eq @format 'head')}}
+    {{#if this.usesExecutionRuntime}}
+      <BoxelExecutionRenderer
+        @card={{@card}}
+        @format={{@format}}
+        @displayContainer={{@displayContainer}}
+        @viewCard={{this.viewCard}}
+        ...attributes
+      />
+    {{else if (eq @format 'head')}}
       <HeadFormatPreview
         @renderedCard={{this.renderedCard}}
         @cardURL={{this.cardURL}}
@@ -84,5 +98,17 @@ export default class CardRenderer extends Component<Signature> {
       this.args.field,
       this.args.codeRef ? { componentCodeRef: this.args.codeRef } : undefined,
     ).component;
+  }
+
+  private get viewCard() {
+    return this.cardCrudFunctions?.viewCard;
+  }
+
+  private get usesExecutionRuntime(): boolean {
+    return (
+      this.args.execution === 'auto' &&
+      this.args.field === undefined &&
+      this.args.codeRef === undefined
+    );
   }
 }

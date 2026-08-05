@@ -1148,6 +1148,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
               @card={{this.card}}
               @format={{this.cardFormat}}
               @codeRef={{this.defaultCodeRef}}
+              @execution='auto'
             />
             <OperatorModeOverlays
               @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}

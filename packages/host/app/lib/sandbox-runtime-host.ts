@@ -1,6 +1,7 @@
 import { BOXEL_EXECUTION_TRANSPORT_VERSION } from '@cardstack/runtime-common';
 
 import SandboxBoxelRuntimeServer from './sandbox-boxel-runtime-server';
+import { SandboxFetchClient } from './sandbox-fetch-transport';
 import {
   SandboxRenderServer,
   type SandboxRenderTarget,
@@ -30,7 +31,9 @@ export interface SandboxRuntimeHost {
 export function installSandboxRuntimeHost(options: {
   parentOrigin: string;
   bootstrapId: string;
-  createRuntime: () => BoxelRuntime | Promise<BoxelRuntime>;
+  createRuntime: (
+    fetch: typeof globalThis.fetch,
+  ) => BoxelRuntime | Promise<BoxelRuntime>;
   createRenderTarget: (
     runtime: BoxelRuntime,
     surface: SandboxSurfaceClient,
@@ -87,8 +90,10 @@ export function installSandboxRuntimeHost(options: {
       let runtimeServer: SandboxBoxelRuntimeServer | undefined;
       let surface: SandboxSurfaceClient | undefined;
       let renderServer: SandboxRenderServer | undefined;
+      let fetchClient: SandboxFetchClient | undefined;
       try {
-        let createdRuntime = await options.createRuntime();
+        fetchClient = new SandboxFetchClient(port);
+        let createdRuntime = await options.createRuntime(fetchClient.fetch);
         runtime = createdRuntime;
         let createdRuntimeServer = new SandboxBoxelRuntimeServer(
           port,
@@ -111,6 +116,7 @@ export function installSandboxRuntimeHost(options: {
             createdSurface.destroy();
             createdRenderServer.destroy();
             createdRuntimeServer.destroy();
+            fetchClient?.destroy();
             if (
               'destroy' in createdRuntime &&
               typeof createdRuntime.destroy === 'function'
@@ -124,6 +130,7 @@ export function installSandboxRuntimeHost(options: {
         renderServer?.destroy();
         surface?.destroy();
         runtimeServer?.destroy();
+        fetchClient?.destroy();
         if (
           runtime &&
           'destroy' in runtime &&

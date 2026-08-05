@@ -110,6 +110,7 @@ export interface BoxelRuntimeFailure {
     name: string;
     message: string;
     code?: string;
+    stack?: string;
   };
 }
 

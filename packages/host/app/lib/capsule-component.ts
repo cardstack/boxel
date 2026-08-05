@@ -7,6 +7,10 @@ import { createTemplateFactory } from '@ember/template-factory';
 
 import { decodeScopedCSSRequest } from '@cardstack/runtime-common';
 
+import type { BoxelRenderRecord } from '@cardstack/runtime-common';
+
+import { validateCapsuleStylesheet } from './capsule-css-policy';
+
 import type {
   CapsuleComponentDefinition,
   CapsuleComponentInstanceHandle,
@@ -19,12 +23,21 @@ import type {
   CapsuleTemplateBundle,
   CapsuleTemplateDescriptor,
 } from './capsule-module-evaluator';
+import type { BoxComponent, ViewCardFn } from '@cardstack/base/card-api';
 import type { ComponentLike } from '@glint/template';
 
 type ComponentManager = ReturnType<Parameters<typeof setComponentManager>[0]>;
 
 export type CapsuleComponent = ComponentLike<{
-  Args: Record<string, unknown>;
+  Args: {
+    model?: Record<string, unknown>;
+    displayContainer?: boolean;
+    viewCard?: ViewCardFn;
+    set?: (value: unknown) => unknown;
+    format?: string;
+    renderRecord?: BoxelRenderRecord;
+    fields?: Record<string, BoxComponent>;
+  };
   Element: Element;
 }>;
 
@@ -32,6 +45,12 @@ export interface CapsuleRenderSlot {
   readonly owner: 'capsule';
   readonly component: CapsuleComponent;
   readonly stylesheets: string[];
+}
+
+export function createTrustedBaseRenderSlot(
+  component: CapsuleComponent,
+): CapsuleRenderSlot {
+  return { owner: 'capsule', component, stylesheets: [] };
 }
 
 class _CapsuleComponent {
@@ -210,15 +229,6 @@ function decodedStylesheets(bundle: CapsuleTemplateBundle): string[] {
     }
   }
   return [...result];
-}
-
-function validateCapsuleStylesheet(css: string): void {
-  if (!/\[data-scopedcss-[a-z0-9-]+/i.test(css)) {
-    throw new Error('Capsule stylesheet is missing its compiled scope');
-  }
-  if (/@(?:import|namespace|charset)\b/i.test(css)) {
-    throw new Error('Capsule stylesheet contains a global at-rule');
-  }
 }
 
 interface RetainedStyle {

@@ -1,19 +1,28 @@
-import { scheduleOnce } from '@ember/runloop';
+import { join, scheduleOnce } from '@ember/runloop';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import { modifier } from 'ember-modifier';
+import { provide } from 'ember-provide-consume-context';
 
-import type { BoxelInstanceHandle } from '@cardstack/runtime-common';
+import {
+  DefaultFormatsContextName,
+  Loader,
+  fetcher,
+  maybeHandleScopedCSSRequest,
+  type BoxelInstanceHandle,
+} from '@cardstack/runtime-common';
 
+import DirectBoxelRuntime from '@cardstack/host/lib/direct-boxel-runtime';
 import type { SandboxRenderTarget } from '@cardstack/host/lib/sandbox-render-transport';
 import { installSandboxRuntimeHost } from '@cardstack/host/lib/sandbox-runtime-host';
 import { connectSandboxSurface } from '@cardstack/host/lib/sandbox-surface-transport';
 import type { SandboxSurfaceClient } from '@cardstack/host/lib/sandbox-surface-transport';
 import type { BoxelSandboxRuntimeModel } from '@cardstack/host/routes/boxel-sandbox-runtime';
-import type DirectBoxelRuntimeService from '@cardstack/host/services/direct-boxel-runtime';
+import type NetworkService from '@cardstack/host/services/network';
 
+import type { Format } from '@cardstack/base/card-api';
 import type { ComponentLike } from '@glint/template';
 
 interface Signature {
@@ -40,43 +49,78 @@ const attachSurface = modifier<{
  * the parent Host.
  */
 export default class BoxelSandboxRuntime extends Component<Signature> {
-  @service declare private directBoxelRuntime: DirectBoxelRuntimeService;
+  @service declare private network: NetworkService;
 
   @tracked private renderedComponent?: ComponentLike<SandboxComponentSignature>;
-  @tracked private format = 'isolated';
+  @tracked private format: Format = 'isolated';
   @tracked private surface?: SandboxSurfaceClient;
   @tracked private error?: Error;
 
   private abortBootstrap = new AbortController();
+  private loader?: Loader;
+  private runtime?: DirectBoxelRuntime;
+  private moduleFetchHandler?: (request: Request) => Promise<Response>;
+
+  @provide(DefaultFormatsContextName)
+  // @ts-ignore "defaultFormat is declared but not used"
+  private get defaultFormat() {
+    return { cardDef: this.format, fieldDef: this.format };
+  }
 
   private runtimeHost = installSandboxRuntimeHost({
     parentOrigin: this.args.model.parentOrigin,
     bootstrapId: this.args.model.bootstrapId,
-    createRuntime: () => this.directBoxelRuntime.runtime,
+    createRuntime: (moduleFetch) => {
+      this.moduleFetchHandler = (request) => moduleFetch(request);
+      this.network.mount(this.moduleFetchHandler);
+      let fetch = fetcher(
+        this.network.fetch,
+        [
+          async (request, next) =>
+            (await maybeHandleScopedCSSRequest(request)) || next(request),
+        ],
+        this.network.virtualNetwork,
+      );
+      this.loader = new Loader(fetch, this.network.resolveImport, {
+        virtualNetwork: this.network.virtualNetwork,
+      });
+      this.runtime = new DirectBoxelRuntime(
+        () => this.loader!.import('@cardstack/base/card-api'),
+        () => this.loader!,
+      );
+      return this.runtime;
+    },
     createRenderTarget: (_runtime, surface) => {
-      this.surface = surface;
+      join(() => (this.surface = surface));
       return this.renderTarget;
     },
     signal: this.abortBootstrap.signal,
   }).catch((error) => {
     if (!this.abortBootstrap.signal.aborted) {
-      this.error = asError(error);
+      join(() => (this.error = asError(error)));
     }
     return undefined;
   });
 
   private renderTarget: SandboxRenderTarget = {
     render: async (card: BoxelInstanceHandle, format: string) => {
-      let slot = this.directBoxelRuntime.runtime.getRenderSlotForHandle(card);
-      this.format = format;
-      this.renderedComponent =
-        slot.component as ComponentLike<SandboxComponentSignature>;
-      this.error = undefined;
+      if (!this.runtime) {
+        throw new Error('Sandbox runtime is unavailable');
+      }
+      let slot = this.runtime.getRenderSlotForHandle(card);
+      join(() => {
+        this.format = format as Format;
+        this.renderedComponent =
+          slot.component as ComponentLike<SandboxComponentSignature>;
+        this.error = undefined;
+      });
       await afterRender();
     },
     clear: async () => {
-      this.renderedComponent = undefined;
-      this.error = undefined;
+      join(() => {
+        this.renderedComponent = undefined;
+        this.error = undefined;
+      });
       await afterRender();
     },
   };
@@ -85,18 +129,27 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
     super.willDestroy();
     this.abortBootstrap.abort();
     void this.runtimeHost.then((host) => host?.destroy());
+    this.loader?.dispose();
+    if (this.moduleFetchHandler) {
+      this.network.virtualNetwork.unmount(this.moduleFetchHandler);
+      this.moduleFetchHandler = undefined;
+    }
+    this.loader = undefined;
+    this.runtime = undefined;
   }
 
   <template>
-    {{#if this.surface}}
+    {{#if this.error}}
+      <p class='boxel-sandbox-runtime__error' role='alert'>
+        {{this.error.message}}
+      </p>
+    {{else if this.surface}}
       <main
         class='boxel-sandbox-runtime'
         data-boxel-sandbox-runtime
         {{attachSurface this.surface}}
       >
-        {{#if this.error}}
-          <p role='alert'>{{this.error.message}}</p>
-        {{else if this.renderedComponent}}
+        {{#if this.renderedComponent}}
           <this.renderedComponent @format={{this.format}} />
         {{/if}}
       </main>
@@ -111,6 +164,14 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
 
       .boxel-sandbox-runtime {
         min-height: 100%;
+      }
+
+      .boxel-sandbox-runtime__error {
+        margin: 1rem;
+        color: #b42318;
+        font:
+          0.875rem/1.4 system-ui,
+          sans-serif;
       }
     </style>
   </template>

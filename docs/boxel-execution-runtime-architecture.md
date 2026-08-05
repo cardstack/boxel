@@ -1526,6 +1526,56 @@ plus focused protocol, security, visual, and interaction tests. This is the
 first milestone called a useful new execution runtime; it is not yet full
 editing or HMR parity.
 
+#### Phase 2 implementation ledger
+
+Phase 2 is implemented on `codex/boxel-execution-runtime-architecture` as one
+vertical system, not as three independent prototypes:
+
+1. **Rendering is wired through the Host boundary.** Ordinary card render
+   entry points use `BoxelExecutionRenderer`, which asks `BoxelExecutionService`
+   for one execution session and mounts the selected Direct, Capsule, or
+   Sandbox-owned render slot. Indexed HTML is an inert, non-interactive loading
+   placeholder; it is never treated as the live renderer.
+2. **Capsule is end to end.** Authored modules evaluate in retained SES
+   compartments without browser globals, produce cloneable type and instance
+   records, retain authored component state, and emit only explicitly granted
+   effects. Trusted Glimmer managers render the resulting component and scoped
+   styles in the Host document.
+3. **Sandbox is end to end.** Browser-dependent formats run in a credentialless
+   iframe on the configured Sandbox origin. A transferred private
+   `MessageChannel` carries versioned render and Surface messages. Authored
+   module fetches are Host-brokered, GET-only, recursively admitted from literal
+   imports, bounded in size, and cancelled when the process is destroyed.
+4. **Composition crosses mixed tiers.** `BoxelFieldPortal` is the Host-owned
+   invocation capability for nested authored FieldDefs, CardDefs, and FileDefs.
+   It recursively routes contained and linked Boxels through the same engine;
+   trusted Base fields stay native. Child process teardown does not invalidate
+   its Capsule parent or the Direct Base runtime.
+5. **Format routing is explicit.** Isolated, embedded, and edit may use the
+   iframe Sandbox when the module requires browser authority. Fitted, atom,
+   head, and Markdown stay Capsule-rendered so compact composition never
+   creates inline iframes. Missing authored formats use a Host-owned Base
+   fallback over the same record instead of executing authored code Direct.
+6. **One contract is exercised in all three tiers.** Acceptance coverage sends
+   the same resource and render request through Direct, Capsule, and Sandbox and
+   verifies the selected owner and cloneable render-record shape. Layered
+   integration coverage adds getters and `computeVia`, field configuration,
+   linked snapshots, scoped CSS, retained actions, nested mixed boundaries,
+   Surface presentation/layout/observation, and the seven format decisions.
+7. **Security and lifecycle are evidence, not assumptions.** Tests cover ambient
+   browser denial in Capsule, stylesheet confinement, exact recursive Sandbox
+   module authority, header stripping, origin and protocol validation,
+   credentialless iframe construction, last-known-good retention, deterministic
+   Surface release, iframe removal, and runtime eviction. No runtime request or
+   record contains a live Store, Loader, service, CardDef instance, or Host DOM
+   object.
+
+`data-boxel-execution` on the mounted slot is a temporary development and test
+diagnostic (`direct`, `capsule`, `sandbox`, or `prerender`), not a card-author
+API. The runtime, not URL state or authored input, remains authoritative. Full
+mutation parity, source volatility, and HMR intentionally begin in Phase 3 and
+Phase 4.
+
 ### Phase 3: make editing canonical across every adapter
 
 Implement the companion mutation protocol: write grants,

@@ -40,6 +40,7 @@ export default config as {
   resolvedSkillsRealmURL: string;
   resolvedOpenRouterRealmURL: string | undefined;
   resolvedTestRealmURL: string;
+  boxelSandboxRuntimeURL?: string;
   hostsOwnAssets: boolean;
   realmsServed?: string[];
   logLevels: string;

@@ -183,6 +183,48 @@ module('Integration | preview', function (hooks) {
       .hasText('Hello, Mango', 'CardRenderer renders the Direct-owned slot');
   });
 
+  test('Capsule field portals keep Base native and route authored FieldDefs through an explicit boundary', async function (assert) {
+    let { field, contains, CardDef, Component, FieldDef } = cardApi;
+    let { default: StringField } = string;
+
+    class AuthoredDetails extends FieldDef {
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <span>authored details</span>
+        </template>
+      };
+    }
+
+    class BoundaryCard extends CardDef {
+      @field name = contains(StringField);
+      @field details = contains(AuthoredDetails);
+    }
+
+    loader.shimModule(`${testRealmURL}boundary-card`, {
+      AuthoredDetails,
+      BoundaryCard,
+    });
+    let card = new BoundaryCard({
+      name: 'Ada',
+      details: new AuthoredDetails(),
+    });
+    let direct = getService('direct-boxel-runtime').runtime;
+    let directFields = direct.getRenderSlot(card)
+      .component as unknown as Record<string, unknown>;
+    let fields = await getService('boxel-execution').fieldPortalsFor(card);
+
+    assert.strictEqual(
+      fields.name,
+      directFields.name,
+      'a trusted Base StringField remains a native Host portal',
+    );
+    assert.notStrictEqual(
+      fields.details,
+      directFields.details,
+      'an authored FieldDef cannot reuse the Host Direct renderer',
+    );
+  });
+
   test('Direct runtime preserves main glimmer-scoped-css confinement', async function (assert) {
     let { CardDef, Component } = cardApi;
 

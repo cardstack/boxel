@@ -1,5 +1,6 @@
 import {
   BOXEL_EXECUTION_PROTOCOL_VERSION,
+  codeRefWithAbsoluteIdentifier,
   normalizeCodeRef,
   type BoxelDescription,
   type BoxelInstanceHandle,
@@ -19,6 +20,8 @@ import {
   type RuntimeHandle,
 } from '@cardstack/runtime-common';
 
+import TrustedBaseFormat from '@cardstack/host/components/trusted-base-format';
+
 import { buildBoxelRenderRecord } from './boxel-render-record';
 import {
   RuntimeHandleRegistry,
@@ -29,6 +32,7 @@ import {
 } from './boxel-runtime';
 import {
   createCapsuleRenderSlot,
+  createTrustedBaseRenderSlot,
   type CapsuleRenderSlot,
 } from './capsule-component';
 import { DefaultCapsuleComponentRuntime } from './capsule-component-runtime';
@@ -107,8 +111,13 @@ export default class CapsuleBoxelRuntime implements BoxelRuntime {
     if (!ref) {
       throw new Error('Cannot create a Capsule Boxel without adoptsFrom');
     }
-    let { module, name } = normalizeCodeRef(ref);
-    let type: CapsuleTypeState = { ref, module, name };
+    let resolvedRef = codeRefWithAbsoluteIdentifier(ref, relativeTo, undefined);
+    let { module, name } = normalizeCodeRef(resolvedRef);
+    let type: CapsuleTypeState = {
+      ref: resolvedRef,
+      module,
+      name,
+    };
     let instance: CapsuleInstanceState = {
       type,
       resource: structuredClone(resource),
@@ -184,13 +193,7 @@ export default class CapsuleBoxelRuntime implements BoxelRuntime {
     if (existing) {
       return existing;
     }
-    let slot = this.templateFor(card, format).then((bundle) =>
-      createCapsuleRenderSlot(
-        this.componentRuntime,
-        bundle,
-        this.loadTrustedModule,
-      ),
-    );
+    let slot = this.renderSlotFor(this.instances.get(card), format);
     byFormat.set(format, slot);
     void slot.catch(() => {
       if (byFormat?.get(format) === slot) {
@@ -198,6 +201,33 @@ export default class CapsuleBoxelRuntime implements BoxelRuntime {
       }
     });
     return slot;
+  }
+
+  private async renderSlotFor(
+    instance: CapsuleInstanceState,
+    format: string,
+  ): Promise<CapsuleRenderSlot> {
+    let metadata = await this.metadataFor(instance.type);
+    if (!metadata.authoredTemplateFormats.includes(format)) {
+      return createTrustedBaseRenderSlot(TrustedBaseFormat);
+    }
+    let bundle = await this.templateForHandle(instance, format);
+    return createCapsuleRenderSlot(
+      this.componentRuntime,
+      bundle,
+      this.loadTrustedModule,
+    );
+  }
+
+  private templateForHandle(
+    instance: CapsuleInstanceState,
+    format: string,
+  ): Promise<CapsuleTemplateBundle> {
+    return this.evaluator.evaluateTemplate(
+      instance.type.module,
+      instance.type.name,
+      format,
+    );
   }
 
   async serializeCard(
@@ -321,7 +351,7 @@ export default class CapsuleBoxelRuntime implements BoxelRuntime {
     return (instance.projection ??= await this.evaluator.evaluateCardProjection(
       instance.type.module,
       instance.type.name,
-      snapshotFromResource(instance.resource),
+      snapshotFromResource(instance.resource, instance.document),
     ));
   }
 
@@ -365,16 +395,76 @@ function trustedIdentityRef(identity: {
 
 function snapshotFromResource(
   resource: LooseCardResource,
+  document: LooseSingleCardDocument,
 ): Record<string, unknown> {
-  let snapshot: Record<string, unknown> = {
-    ...(resource.attributes ?? {}),
-  };
-  for (let [fieldName, relationship] of Object.entries(
-    resource.relationships ?? {},
-  )) {
-    snapshot[fieldName] = relationship;
+  let included = new Map<string, LooseCardResource>();
+  for (let candidate of document.included ?? []) {
+    if (
+      candidate &&
+      typeof candidate === 'object' &&
+      'type' in candidate &&
+      candidate.type === 'card' &&
+      'id' in candidate &&
+      typeof candidate.id === 'string'
+    ) {
+      included.set(candidate.id, candidate as LooseCardResource);
+    }
   }
-  return snapshot;
+
+  let visiting = new Set<string>();
+  let project = (candidate: LooseCardResource): Record<string, unknown> => {
+    let snapshot: Record<string, unknown> = {
+      ...(candidate.attributes ?? {}),
+    };
+    if (candidate.id) {
+      snapshot.id = candidate.id;
+    }
+    for (let [fieldName, relationship] of Object.entries(
+      candidate.relationships ?? {},
+    )) {
+      let data = Array.isArray(relationship)
+        ? relationship.flatMap((entry) =>
+            Array.isArray(entry.data)
+              ? entry.data
+              : entry.data
+                ? [entry.data]
+                : [],
+          )
+        : relationship.data;
+      if (Array.isArray(data)) {
+        snapshot[fieldName] = data.map((identifier) =>
+          projectRelationship(identifier),
+        );
+      } else if (data) {
+        snapshot[fieldName] = projectRelationship(data);
+      } else {
+        snapshot[fieldName] = data ?? null;
+      }
+    }
+    return snapshot;
+  };
+  let projectRelationship = (identifier: {
+    id?: string;
+    lid?: string;
+    type: string;
+  }): Record<string, unknown> => {
+    let id = identifier.id ?? identifier.lid;
+    if (!id) {
+      return {};
+    }
+    let linked = included.get(id);
+    if (!linked || visiting.has(id)) {
+      return { id };
+    }
+    visiting.add(id);
+    try {
+      return project(linked);
+    } finally {
+      visiting.delete(id);
+    }
+  };
+
+  return project(resource);
 }
 
 function resolvedField(

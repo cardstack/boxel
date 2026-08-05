@@ -2,7 +2,17 @@ import 'ses';
 
 import { module, test } from 'qunit';
 
+import { normalizeCodeRef } from '@cardstack/runtime-common';
+import type {
+  LooseCardResource,
+  LooseSingleCardDocument,
+  RealmResourceIdentifier,
+} from '@cardstack/runtime-common';
+
+import CapsuleBoxelRuntime from '@cardstack/host/lib/capsule-boxel-runtime';
 import CapsuleModuleEvaluator, {
+  capsuleSetCapabilityArgument,
+  capsuleViewCardCapabilityArgument,
   ensureCapsuleLockdown,
 } from '@cardstack/host/lib/capsule-module-evaluator';
 
@@ -117,6 +127,163 @@ module('Unit | Capsule module registration', function () {
       });
     } finally {
       evaluator.destroy();
+    }
+  });
+
+  test('Capsule components retain state and emit only granted Host effects', async function (assert) {
+    let source = `
+      import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+      import { setComponentTemplate } from '@ember/component';
+      import { createTemplateFactory } from '@ember/template-factory';
+
+      export class CounterCard extends CardDef {}
+      CounterCard.isolated = class Counter extends Component {
+        constructor(owner, args) {
+          super(owner, args);
+          this.count = 0;
+        }
+
+        increment() {
+          this.count++;
+          this.args.viewCard('https://example.test/Card/two', 'isolated');
+          this.args.set(this.count);
+          return this.count;
+        }
+      };
+      setComponentTemplate(createTemplateFactory({
+        id: 'counter-isolated',
+        block: ${JSON.stringify(isolatedBlock)},
+        moduleName: ${JSON.stringify(moduleId)},
+        isStrictMode: true,
+      }), CounterCard.isolated);
+    `;
+    let evaluator = evaluatorFor({ [moduleId]: source });
+    try {
+      let bundle = await evaluator.evaluateTemplate(
+        moduleId,
+        'CounterCard',
+        'isolated',
+      );
+      let component = bundle.templates[bundle.root]!.instance;
+      let instance = evaluator.instantiateComponent(component.handle, {
+        [capsuleViewCardCapabilityArgument]: true,
+        [capsuleSetCapabilityArgument]: true,
+      });
+
+      let first = await evaluator.invokeComponentAction(
+        instance.handle,
+        'increment',
+        [],
+      );
+      let second = await evaluator.invokeComponentAction(
+        instance.handle,
+        'increment',
+        [],
+      );
+
+      assert.strictEqual(first.returnValue, 1);
+      assert.strictEqual(second.returnValue, 2);
+      assert.strictEqual(second.state.count, 2, 'state stays in the Capsule');
+      assert.deepEqual(first.effects, [
+        {
+          type: 'view-card',
+          target: 'https://example.test/Card/two',
+          format: 'isolated',
+        },
+        { type: 'set', value: 1 },
+      ]);
+
+      let ungranted = evaluator.instantiateComponent(component.handle, {});
+      assert.throws(
+        () =>
+          evaluator.invokeComponentAction(ungranted.handle, 'increment', []),
+        /viewCard is not a function/,
+        'the same authored method receives no ambient Host capability',
+      );
+    } finally {
+      evaluator.destroy();
+    }
+  });
+
+  test('Capsule projects linked snapshots and getters while Base owns missing formats', async function (assert) {
+    let source = `
+      import { CardDef } from 'https://cardstack.com/base/card-api';
+
+      export class Flight extends CardDef {
+        get cardTitle() {
+          return this.route.origin + ' → ' + this.route.destination;
+        }
+
+        get projectedCost() {
+          return this.route.baseCost * this.scenario.costFactor;
+        }
+      }
+    `;
+    let evaluator = evaluatorFor({ [moduleId]: source });
+    let runtime = new CapsuleBoxelRuntime(evaluator);
+    let ref = {
+      module: '../../article.js' as RealmResourceIdentifier,
+      name: 'Flight',
+    };
+    let resource = {
+      type: 'card',
+      id: 'https://example.test/Flight/one',
+      attributes: {},
+      relationships: {
+        route: { data: { type: 'card', id: 'route:ord-lhr' } },
+        scenario: { data: { type: 'card', id: 'scenario:base' } },
+      },
+      meta: { adoptsFrom: ref },
+    } as LooseCardResource;
+    let document = {
+      data: resource,
+      included: [
+        {
+          type: 'card',
+          id: 'route:ord-lhr',
+          attributes: {
+            origin: 'ORD',
+            destination: 'LHR',
+            baseCost: 1200,
+          },
+        },
+        {
+          type: 'card',
+          id: 'scenario:base',
+          attributes: { costFactor: 1.25 },
+        },
+      ],
+    } as unknown as LooseSingleCardDocument;
+
+    try {
+      let card = await runtime.createFromSerialized(
+        resource,
+        document,
+        resource.id as RealmResourceIdentifier,
+        'host-display',
+      );
+      let record = await runtime.buildRenderRecord(card);
+      let serialized = await runtime.serializeCard(card);
+      let slot = await runtime.getRenderSlot(card, 'isolated');
+
+      assert.strictEqual(record.presentation.title, 'ORD → LHR');
+      assert.strictEqual(
+        normalizeCodeRef(record.boxel.ref).module,
+        moduleId,
+        'portable relative adoptsFrom is resolved at the execution boundary',
+      );
+      assert.strictEqual(
+        serialized.data.attributes?.projectedCost,
+        1500,
+        'authored getters execute in the Capsule over a bounded linked snapshot',
+      );
+      assert.strictEqual(
+        slot.owner,
+        'capsule',
+        'the missing authored format resolves to a Host-owned Base fallback without direct execution',
+      );
+    } finally {
+      runtime.destroy();
     }
   });
 });

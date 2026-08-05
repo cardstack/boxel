@@ -11,9 +11,10 @@ own pass criteria include "a passing placeholder, raw JSON dump, blank panel,
 or inert control is a failure even when no exception was thrown" — a claim that
 can only be settled by mounting the real Boxel and looking at what it produced.
 
-**Location.** `https://realms-staging.stack.cards/ctse/execution-runtime-suite/`
-(single realm for now; the Studio / Partner / Lab realm split arrives with use
-case 5).
+**Location.** Studio lane:
+`https://realms-staging.stack.cards/ctse/execution-runtime-suite/`.
+Partner lane: `https://realms-staging.stack.cards/ctse/execution-runtime-partner/`
+(created for use case 5). The Lab lane arrives with use case 9.
 
 ## Built on the current API
 
@@ -61,10 +62,24 @@ use-case-1/release-schema.ts  the readable schema Release publishes to a Guide
 use-case-2/catalog-metadata.gts   contained metadata + field configuration
 use-case-2/guided-card-info.gts   CardInfoField subclass — the guide attachment
 use-case-2/release-guide.gts      Guide card, cascade, bxl evaluation, GuidePanel
+use-case-3/release-theme.gts      poster tokens — CSSValueField + TypographyField
+use-case-3/deluxe-release.gts     DeluxeRelease extends Release; enums, images, tags
+suite/interaction-script.gts      InteractionStep fixture + step runner (added by case 4)
+use-case-4/playback-group.ts      playback-group registry — the surfacePlayback seam
+use-case-4/track.gts              Track + MusicPlayer
+use-case-5/playlist.gts           Playlist — relationship states, cross-realm, query fields
+assets/                           real image and audio files, typed by the realm from their bytes
 ```
 
-Nothing above `use-case-1/` knows anything about music releases. Cases 2–12 add
-subject modules and fixture JSON; they do not add harness code.
+Nothing above `use-case-1/` knows anything about music releases.
+
+Cases 2 and 3 added subject modules and fixture JSON only. **Case 4 broke
+that**, and the earlier claim that it would hold through case 12 was wrong:
+interactive evidence is a claim about what happens _after_ a user acts, and
+nothing in the harness acted on anything. `suite/interaction-script.gts` and a
+fifth lane on `SuiteCase` are the addition. Expect the same for a genuinely new
+kind of evidence — the rule is that a case may not need a _bespoke case
+component_, not that the vocabulary is frozen.
 
 ## Assertions are data, not code
 
@@ -138,20 +153,48 @@ a per-install target, not a timer: the prerenderer blocks `setTimeout`
 outright, and `scheduleOnce` cannot dedupe an inline closure (realm lint
 enforces this — `ember/no-incorrect-calls-with-inline-anonymous-functions`).
 
+### InteractionStep
+
+`{ action, target, expected, attribute, settleMs, claim }`. Actions: `click`,
+`assert-text`, `assert-absent`, `assert-name`, `assert-attr`, `assert-count`,
+`assert-advanced`, `set-range`. `target` is a CSS selector resolved **inside
+the mounted subject**, never globally, and `assert-name` computes the
+accessible name the way a control is actually announced (`aria-label`, then
+`aria-labelledby`, then text).
+
+Two constraints, both load-bearing:
+
+- **Operator-triggered, never automatic.** A script runs when someone presses
+  Run. Auto-running would put a click — and the state change it causes —
+  inside the render that produced the element being clicked, which is the same
+  re-entrancy that overflowed the stack when the visual modifier took an object
+  argument. It would also be meaningless in the prerenderer, which never clicks
+  and blocks the timers a media element needs.
+- **Pending until run.** A green row for a click nobody made would be worse
+  than no row.
+
+Steps run in order against one captured pane element, with `assert-advanced`
+carrying a value forward between two readings. Known limit: the runner captures
+**pane 0**, so a script drives the first declared expectation's mount. Asserting
+against the embedded mount needs the runner to take a pane index.
+
 ### ExpectedRoute — **the seam**
 
 `{ format, lane, expectedTier, capabilities[], observedTier, note }`.
 
 `lane` ∈ `official | studio | partner | lab`; `expectedTier` ∈
-`direct | capsule | sandbox`. `observedTier` is **unset today**, and every
-route therefore reports `pending`. An unrouted boundary is never a pass — the
-case's overall verdict is `pending` while any route lacks a trace.
+`direct | capsule | sandbox`. The Phase 2 Host now marks every live mount with
+`data-boxel-execution='direct|capsule|sandbox'` (and marks an inert indexed-HTML
+placeholder as `prerender`). The realm fixture still needs a small adapter that
+copies the live value into `observedTier`; until that adapter is installed, its
+persisted route rows correctly remain `pending`. An unrouted boundary is never
+a pass — the case's overall verdict is `pending` while any route lacks a trace.
 
-**What the runtime must supply.** For each mounted render slot, write the
-selected tier back to the matching route's `observedTier`. The suite compares
-and reports `pass` / `fail` with the mismatch spelled out. That is the entire
-contract on the harness side; the runtime does not need to know about probes,
-expectations, cases, or the command.
+**What the harness adapter must supply.** For each mounted render slot, observe
+the Host diagnostic and write the selected tier back to the matching route's
+`observedTier`. The suite compares and reports `pass` / `fail` with the mismatch
+spelled out. That is the entire contract on the harness side; the execution
+runtime does not know about probes, expectations, cases, or the command.
 
 The composition-suite document lists a wider trace record (source generation
 and hash, parent/child slot ids, Store revision, granted capabilities, mount
@@ -274,7 +317,8 @@ seam, and it is now much smaller than a missing feature.
 
 ## Verdicts
 
-A case's isolated view rolls up three lanes: semantic, visual, boundary. The
+A case's isolated view rolls up four lanes: semantic, visual, interactive and
+boundary. The
 overall verdict is `fail` if any lane has a failure, `pending` if any lane has
 a pending check, and `pass` only when every declared check is answered and
 green. `RunCaseCommand` evaluates the semantic probes headlessly and persists
@@ -304,6 +348,226 @@ The routes are all `pending` by design.
 computed that read the clock would render differently in the indexer than in
 the browser and the suite would stop being deterministic. `catalogStamp` is an
 ordinary getter chained onto it.
+
+## Use case 3 — what is currently covered
+
+`DeluxeRelease extends Release` and redeclares **one** format. `embedded`,
+`fitted`, `atom`, `head` and `markdown` render through the parent's templates
+against the child's data; `isolated` is the poster. Inherited computeds
+recompute (`availabilityStatus`), and case 2's guide attachment survives the
+subclass because `cardInfo` is inherited whole.
+
+Overriding a format requires a loose annotation **on the parent**:
+`static isolated: BaseDefComponent = ReleaseIsolated`. Without it the parent's
+static is inferred as the concrete `typeof ReleaseIsolated` and no subclass can
+override it — annotating the child does not help. This is how Base's own cards
+declare formats, so it is the idiom rather than a workaround.
+
+Three deliberately different enum shapes:
+
+| Field          | Shape                                                                                                                            |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `stage`        | static rich options with labels **and** icons                                                                                    |
+| `pressingTier` | options resolved from owner state — `lathe` is offered only when `catalog.pressingRun` ≤ 500, and the label interpolates the run |
+| `sleeveFinish` | per-use `enumConfig` narrowing the FieldDef's five finishes to three                                                             |
+
+The enum edge cases are real data rather than staged: `DeluxeRelease/corridor-tapes`
+has `stage` unset, and `pressingTier` holding `lathe` — a value **outside its
+own option list**, because the run grew past 500 after the value was entered.
+
+**Images are real files.** `assets/*.png` and `assets/*.webp` are pushed like
+any other realm file; the realm types them as `PngDef` / `WebpDef` from the
+bytes and extracts intrinsic dimensions. `linksTo(ImageDef)` therefore links to
+a **file path**, not to an authored instance, and the subtype resolves
+polymorphically — the field never names it. `coverImageKind` /
+`sleeveImageKind` store what resolved so a probe can assert it without
+mounting anything.
+
+The broken half of the URL/ImageDef pair is genuinely broken:
+`insertImageURL` on `night-sessions` points at a file that is not there, and
+`CoverArt` sets its `broken` flag from the `error` event rather than guessing
+from the URL. A fallback that has never failed proves nothing. The fallback is
+mounted only when a source was **declared** — an empty placeholder for artwork
+that was never meant to exist reads as a defect, not as a fallback.
+
+Note that realm asset URLs are authenticated: an unauthenticated `curl` returns
+401 while the host and prerenderer load the bytes. Verify artwork through the
+indexed `url` / `width` / `contentType`, not through a raw fetch.
+
+**Theme and brand guide keep one canonical token source.**
+`BrandGuide/night-sessions` is a local **instance** adopting the trusted
+`BrandGuide` definition — not a subclass — linked through `cardInfo.theme`. It
+computes functional CSS variables from its own palette:
+
+```
+--background: var(--sleeve-paper);   --moon-gold: #F2C14E;
+--foreground: var(--corridor-ink);   --theme-heading-font-family: Playfair Display;
+--primary:    var(--moon-gold);
+```
+
+`ReleaseTheme` maps poster roles onto those tokens and copies none of them.
+Its `allTokensDerived` computed reports `derived` / `has-literals`, so a
+hard-coded colour — the thing that would survive a theme relink — is data a
+probe can catch rather than something review has to notice.
+`BrandGuide/night-sessions-rotated` is the relink target, linked live from
+`corridor-tapes`.
+
+39 semantic probes, 4 visual expectations and 5 expected routes are authored.
+The routes are all `pending` by design.
+
+## Use case 4 — what is currently covered
+
+`Track` links a real MP3 — pushed like any other file, typed `Mp3Def` from its
+bytes, with `duration` extracted (18.207s) — plus the case-3 cover art **by
+link**, not by copy. `MusicPlayer` holds `@tracked` play state, current time,
+duration and volume; `Track` declares isolated, embedded, fitted (a bounded
+mini-player that drops the transport entirely below the strip quantum, where no
+control could be hit) and atom (a non-playing identity pill).
+
+`edit` is deliberately **not** overridden. The spec requires that editing Track
+metadata does not duplicate audio bytes into card JSON, and the default editor
+— which edits the _link_ — is the evidence.
+
+### Three silent failures a naive player has
+
+Corrected against two existing workspace realms rather than discovered by
+testing, which is the cheaper order:
+
+1. **A native media element cannot authenticate.** `<audio src={realmURL}>`
+   issues its own request and cannot attach the realm bearer token, so
+   realm-hosted media 401s and the player does nothing visible. The player
+   fetches with `credentials: 'include'` and hands the element an object URL,
+   keeping the canonical URL as the fallback. `ctse/filedef-developer-handoff`
+   ships this as `FileAudio` with `@loadAsBlob={{true}}`; prefer that component
+   unless a custom transport is required, as it is here.
+2. **An interactive child must swallow its own clicks.** Rendered embedded, the
+   host tracks an ancestor element for click-to-open, so pressing play
+   navigates instead. The guard has to live **inside** the player — a wrapper
+   in the parent is an ancestor of the tracked element and sees the click too
+   late. Bubble phase, attached via a modifier, so the player's own handlers
+   have already run. `ctse/interaction-lab` benches E (❌ overlay) and K (✅
+   child-owned guard) settle this.
+3. **Media needs an unconditional caption track.** Realm lint reads the
+   template AST, so a `<track>` behind a conditional does not satisfy
+   `require-media-caption`.
+
+### The surfacePlayback seam
+
+There is no capability plane, so this is the third refactor seam alongside
+`ExpectedRoute.observedTier`. Two halves, both narrow on purpose:
+
+- The player touches exactly one ambient thing — the media element it rendered
+  itself, held through a component-local ref. Never `document`, `window` or
+  `navigator`. Swapping in a capability plane replaces that ref and five
+  commands rather than rewriting the component.
+- `use-case-4/playback-group.ts` is a module-scoped registry with no DOM and no
+  Store handle. Two surfaces sharing a `playbackGroup` converge through it. Its
+  `applying` latch drops re-entrant broadcasts, so A→B does not echo B→A — the
+  same class of bug as the render loop, guarded the same way, by making the
+  re-entrant path a no-op rather than hoping it settles.
+
+### A bug the suite caught in its own subject
+
+`durationLabel` first existed as a computed field and indexed as `--:--` on
+both fixtures, although the linked `Mp3Def` carries `duration: 18.2`. A
+`computeVia` that reads a linked card's **class** resolves at index time
+(`audioKind` correctly reported `MP3 Audio`); one that reads a linked card's
+**field value** does not. Duration is read at render time now. The rule:
+`computeVia` may traverse a `linksTo` for identity, but must not depend on the
+linked card's data.
+
+18 semantic probes, 16 interaction steps, 4 visual expectations and 4 expected
+routes are authored. The routes are all `pending` by design, and the
+interaction steps are `pending` until run.
+
+## Use case 5 — what is currently covered
+
+The first case that crosses a realm boundary, and the first whose graph is
+deeper than a pair.
+
+### A relationship slot has five states
+
+Reading the field alone collapses four distinct failures into `undefined`.
+`getRelationshipMembershipState(instance, fieldName)` reports `present`,
+`not-loaded`, `error`, `not-found` and `not-set`, and each renders as itself: a
+spinner at stable height, a bounded error row, a bounded unavailable row, an
+empty slot.
+
+Two requirements come with it, both easy to miss:
+
+1. **The template must ALSO read the field.** The membership getter is a _pure
+   read_ — it entangles but never triggers `lazilyLoadLink`. Read only the
+   membership and a `not-loaded` slot never starts loading, leaving a spinner
+   that never resolves. `touchLinks` exists solely to perform that read and is
+   called from `rows` so a later "remove unused getter" cleanup cannot quietly
+   break it.
+2. **`{{#each}}` must key on `reference`, never on the envelope.** The getter
+   returns a fresh envelope on every call, so envelope identity is not stable
+   across renders — keying on it re-creates every row each render and discards
+   focus and in-row state.
+
+### The hole
+
+`Playlist/night-sessions-set` authors four slots and slot 3 points at a card
+that does not exist. The indexed result:
+
+```
+trackCount: 4
+tracks.0 -> corridor-take-one       present
+tracks.1 -> licensed-interlude      present (Partner realm)
+tracks.2 -> withdrawn-take-nine     BROKEN — holds its place
+tracks.3 -> ferry-terminal-encore   present, trackNumber still 14
+```
+
+An unloadable entry is `undefined` **in place**, so the array length is
+unchanged and position 4 is still position 4. Rows are numbered from the
+membership index. `.filter(Boolean)` is confined to the running-time aggregate,
+where dropping entries is what the aggregate means — applying it to the rows
+would renumber everything after the break and a listener would click the wrong
+track. Every row carries the same `min-height` for the same reason.
+
+### Cross-realm
+
+`Track/licensed-interlude` lives in the Partner realm and **adopts this realm's
+Track module**, so the module reference and the instance reference cross in
+opposite directions. Both resolve and index cleanly, and a computed declared
+here (`audioKind`) evaluates against Partner data.
+
+`recentTracks` is query-backed with `$REALM`, sort and page, scoped to _this_
+realm on purpose: linking one Partner card explicitly is not the same as being
+able to search that realm, and the query field is where that distinction is
+visible. Membership is `undefined` while the search is in flight — distinct
+from an empty result, and rendered differently.
+
+### What is declared, not enforced
+
+The **grant** is the honest gap. There is no per-card grant mechanism today.
+The Partner realm is real and the link resolves, but "unreadable before an
+explicit grant, readable after, without granting search over the realm" is a
+route that reports `pending`. Same for query-fields-omitted-from-PATCH — case 7
+is the first position that can test it.
+
+### A cross-case assertion
+
+The interaction script presses play on a **Track mounted inside the Playlist**.
+If the host swallowed that click to navigate, the control name would not change
+— so case 4's child-owned click containment is now tested under the nesting
+condition it exists for.
+
+16 semantic probes, 11 interaction steps, 4 visual expectations and 5 expected
+routes are authored.
+
+## Expected indexing findings
+
+`boxel realm indexing-errors` is no longer expected to be empty on the Studio
+realm. Use case 5 requires a broken link, and the realm correctly reports it:
+
+```
+[instance] .../Playlist/night-sessions-set.json  1 broken: tracks→.../Track/withdrawn-take-nine
+```
+
+That exact finding, and only that one, is the healthy state. Anything else is
+real.
 
 ## Adding a case
 

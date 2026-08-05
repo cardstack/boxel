@@ -315,7 +315,7 @@ export default class DirectBoxelRuntime implements BoxelRuntime {
         kind: field.fieldType,
         value: projectValue(api.peekAtField(instance, fieldName)),
         resolvedConfiguration:
-          projectJSONValue(api.resolveFieldConfiguration(field, instance)) ??
+          projectJSONValue(resolveFieldConfiguration(api, field, instance)) ??
           null,
         presentation,
         writable:
@@ -323,6 +323,73 @@ export default class DirectBoxelRuntime implements BoxelRuntime {
       };
     });
   }
+}
+
+/**
+ * Field configuration became a public Card API operation after some deployed
+ * Base realm versions. Keep its execution with the runtime that owns the live
+ * Field and instance, while retaining compatibility with those older Base
+ * modules. This mirrors Base's shallow merge semantics; it does not transfer
+ * either configuration provider across an execution boundary.
+ */
+function resolveFieldConfiguration(
+  api: typeof CardAPI,
+  field: Field<BaseDefConstructor>,
+  instance: BaseDef,
+): unknown {
+  let publicResolver = (
+    api as typeof CardAPI & {
+      resolveFieldConfiguration?: (
+        field: Field<BaseDefConstructor>,
+        instance: BaseDef,
+      ) => unknown;
+    }
+  ).resolveFieldConfiguration;
+  if (publicResolver) {
+    return publicResolver(field, instance);
+  }
+
+  let fromType = evaluateConfiguration(
+    (field.card as typeof field.card & { configuration?: unknown })
+      .configuration,
+    instance,
+  );
+  let fromUsage = evaluateConfiguration(
+    (field as typeof field & { configuration?: unknown }).configuration,
+    instance,
+  );
+  return mergeConfigurations(fromType, fromUsage);
+}
+
+function evaluateConfiguration(value: unknown, instance: BaseDef): unknown {
+  return typeof value === 'function'
+    ? (value as (this: BaseDef) => unknown).call(instance)
+    : value;
+}
+
+function mergeConfigurations(typeValue: unknown, usageValue: unknown): unknown {
+  if (!isPlainObject(typeValue)) {
+    return usageValue ?? typeValue;
+  }
+  if (!isPlainObject(usageValue)) {
+    return usageValue ?? typeValue;
+  }
+
+  let result: Record<string, unknown> = { ...typeValue };
+  for (let [key, value] of Object.entries(usageValue)) {
+    if (value === undefined) {
+      continue;
+    }
+    result[key] =
+      isPlainObject(value) && isPlainObject(result[key])
+        ? { ...result[key], ...value }
+        : value;
+  }
+  return result;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
 function requiredCodeRef(boxelType: BaseDefConstructor): CodeRef {

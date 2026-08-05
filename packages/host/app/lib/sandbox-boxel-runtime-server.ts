@@ -144,6 +144,7 @@ function projectedError(error: unknown): {
   name: string;
   message: string;
   code?: string;
+  stack?: string;
 } {
   if (error instanceof Error) {
     let code = (error as Error & { code?: unknown }).code;
@@ -151,6 +152,7 @@ function projectedError(error: unknown): {
       name: error.name,
       message: error.message,
       ...(typeof code === 'string' ? { code } : {}),
+      ...(typeof error.stack === 'string' ? { stack: error.stack } : {}),
     };
   }
   return {

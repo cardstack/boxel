@@ -1184,14 +1184,11 @@ export default class CapsuleModuleEvaluator {
       'ember-provide-consume-context',
       provideConsumeContextFacade,
     );
-    // This historical package has a bare (non-@scope) specifier. Loader's
-    // URL normalization can make it realm-relative before AMD dependency
-    // registration sees it, so cover that equivalent spelling with the same
-    // inert facade. No realm source is fetched or trusted by this alias.
-    this.loader.shimModule(
-      new URL('ember-provide-consume-context', this.principal).href,
-      provideConsumeContextFacade,
-    );
+    // The Capsule is retained by viewer principal and may execute modules
+    // from more than one data Realm. A principal is deliberately not a URL,
+    // so it must never be used as a module-resolution base. The canonical
+    // bare specifier above is the explicit facade identity; Loader resolves
+    // authored imports through the Host-supplied resolver before evaluation.
     this.installExplicitRuntimeFacade(
       '@ember/helper',
       harden(

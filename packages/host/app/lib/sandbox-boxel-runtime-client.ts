@@ -162,6 +162,9 @@ export default class SandboxBoxelRuntimeClient implements BoxelRuntime {
         response.error?.message ?? 'Sandbox runtime failed',
       );
       error.name = response.error?.name ?? 'SandboxRuntimeError';
+      if (response.error?.stack) {
+        error.stack = response.error.stack;
+      }
       pending.reject(error);
     }
   };
@@ -200,6 +203,7 @@ function isBoxelRuntimeResponse(value: unknown): value is BoxelRuntimeResponse {
         'name' in value.error &&
         typeof value.error.name === 'string' &&
         'message' in value.error &&
-        typeof value.error.message === 'string')
+        typeof value.error.message === 'string' &&
+        (!('stack' in value.error) || typeof value.error.stack === 'string'))
   );
 }

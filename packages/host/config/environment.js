@@ -176,6 +176,10 @@ module.exports = function (environment) {
       process.env.RESOLVED_SKILLS_REALM_URL || defaults.skillsRealmURL,
     resolvedOpenRouterRealmURL:
       process.env.RESOLVED_OPENROUTER_REALM_URL || defaults.openRouterRealmURL,
+    // A Sandbox child must be served from an origin distinct from the Host.
+    // Local development derives user.localhost from the active Host port when
+    // this is absent; hosted builds must supply the deployed runtime origin.
+    boxelSandboxRuntimeURL: process.env.BOXEL_SANDBOX_RUNTIME_URL || undefined,
     // The live test realm-server's /test/ realm — used by host tests
     // that load source modules from it via
     // `tests/helpers#testModuleRealm`. Derived from BOXEL_ENVIRONMENT via
