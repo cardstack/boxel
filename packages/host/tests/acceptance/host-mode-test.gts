@@ -815,6 +815,66 @@ module('Acceptance | host mode tests', function (hooks) {
       .exists('unwinds to the card, leaving it on top of the trail');
   });
 
+  // The unwind by the route a visitor can take: the scrim covers the primary
+  // card, so only a stack item's own button is genuinely clickable.
+  test('viewing a card below it in the trail unwinds to that card', async function (assert) {
+    let belowCardId = `${testHostModeRealmURL}ViewCardDemo/secondary`;
+    // index sits above secondary in the trail and targets it
+    let topCardId = `${testHostModeRealmURL}ViewCardDemo/index`;
+    let hostModeStackValue = encodeURIComponent(
+      JSON.stringify([belowCardId, topCardId]),
+    );
+
+    // tertiary as primary keeps both stack cards off the root, so this takes the
+    // unwind branch rather than the close-everything one.
+    await visit(
+      `/test/ViewCardDemo/tertiary.json?hostModeStack=${hostModeStackValue}`,
+    );
+
+    let topSelector = `[data-test-host-mode-stack-item="${topCardId}"]`;
+    let belowSelector = `[data-test-host-mode-stack-item="${belowCardId}"]`;
+    await waitFor(`${topSelector} [data-test-view-card-demo-button]`);
+
+    await click(`${topSelector} [data-test-view-card-demo-button]`);
+
+    await waitUntil(() => !document.querySelector(topSelector));
+    assert
+      .dom(belowSelector)
+      .exists('unwinds to the targeted card rather than stacking a copy');
+    // currentURL, not window.location: the latter is the test runner's own URL
+    // and never carries the app's query params.
+    assert.strictEqual(
+      new URL(currentURL()!, 'http://localhost').searchParams.get(
+        'hostModeStack',
+      ),
+      JSON.stringify([belowCardId]),
+      'the unwound trail is what persists to the query param',
+    );
+  });
+
+  // Regression cover for scoping dismiss to the scrim (CS-12434).
+  test('clicking the scrim closes the top card of the trail', async function (assert) {
+    let firstStackCardId = `${testHostModeRealmURL}ViewCardDemo/secondary`;
+    let secondStackCardId = `${testHostModeRealmURL}ViewCardDemo/tertiary`;
+    let hostModeStackValue = encodeURIComponent(
+      JSON.stringify([firstStackCardId, secondStackCardId]),
+    );
+
+    await visit(
+      `/test/ViewCardDemo/index.json?hostModeStack=${hostModeStackValue}`,
+    );
+
+    let secondStackSelector = `[data-test-host-mode-stack-item="${secondStackCardId}"]`;
+    await waitFor(secondStackSelector);
+
+    await click('[data-test-host-mode-stack]');
+
+    await waitUntil(() => !document.querySelector(secondStackSelector));
+    assert
+      .dom(`[data-test-host-mode-stack-item="${firstStackCardId}"]`)
+      .exists('only the top card closes');
+  });
+
   test('stack state persists in query parameter', async function (assert) {
     let hostModeStackValue = encodeURIComponent(
       JSON.stringify([`${testHostModeRealmURL}index`]),
