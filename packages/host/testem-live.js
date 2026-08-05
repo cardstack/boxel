@@ -12,10 +12,17 @@ const realmURLs = process.env.REALM_URL
   ? [process.env.REALM_URL]
   : DEFAULT_REALM_URLS;
 
+// Optional QUnit filter (plain substring or /regex/) so a caller can run a
+// subset of the realm's tests — e.g. content-only catalog PRs run just the
+// real-catalog-app smoke test.
+const filterParam = process.env.LIVE_TEST_FILTER
+  ? `&filter=${encodeURIComponent(process.env.LIVE_TEST_FILTER)}`
+  : '';
+
 const config = {
   test_page: realmURLs.map(
     (url) =>
-      `tests/index.html?liveTest=true&realmURL=${encodeURIComponent(url)}&hidepassed`,
+      `tests/index.html?liveTest=true&realmURL=${encodeURIComponent(url)}&hidepassed${filterParam}`,
   ),
   disable_watching: true,
   browser_timeout: 120,
