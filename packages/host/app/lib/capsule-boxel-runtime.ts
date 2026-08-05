@@ -176,18 +176,6 @@ export default class CapsuleBoxelRuntime implements BoxelRuntime {
     });
   }
 
-  async templateFor(
-    card: BoxelInstanceHandle,
-    format: string,
-  ): Promise<CapsuleTemplateBundle> {
-    let instance = this.instances.get(card);
-    return this.evaluator.evaluateTemplate(
-      instance.type.module,
-      instance.type.name,
-      format,
-    );
-  }
-
   getRenderSlot(
     card: BoxelInstanceHandle,
     format: string,

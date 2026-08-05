@@ -1,7 +1,5 @@
 import 'ses';
 
-import { isTesting } from '@embroider/macros';
-
 import {
   bfmRefFormatAndSize,
   bfmResolvedEmbedStyle,
@@ -85,17 +83,6 @@ export interface CapsuleTemplateBundle {
 export interface CapsuleTrustedExportIdentity {
   module: string;
   name: string;
-}
-
-interface CapsuleFormatReference {
-  kind: 'capsule-format-reference';
-  module: string;
-  name: string;
-}
-
-export interface CapsuleFormatOnlyImportDescriptor {
-  module: string;
-  exports: string[];
 }
 
 export interface CapsuleCardFieldMetadata {
@@ -549,10 +536,6 @@ export default class CapsuleModuleEvaluator {
   private cardAPIRuntimeFacade!: Record<string, unknown>;
   private enumFieldRuntimeFacade!: Record<string, unknown>;
   private inertHostCommandFacades = new Map<string, Record<string, unknown>>();
-  private formatOnlyModuleFacades = new Map<
-    string,
-    Record<string, CapsuleFormatReference>
-  >();
   private trustedExports = new Map<string, object>();
   private fieldMetadataByPrototype = new WeakMap<
     object,
@@ -677,11 +660,6 @@ export default class CapsuleModuleEvaluator {
       );
     }
     let component = cardType[format] ?? cardType.isolated;
-    if (this.isFormatReference(component)) {
-      throw new Error(
-        `Compartment format ${format} is delegated to ${component.module}#${component.name}`,
-      );
-    }
     if (
       (typeof component !== 'object' || component === null) &&
       typeof component !== 'function'
@@ -698,28 +676,6 @@ export default class CapsuleModuleEvaluator {
     return structuredClone(
       this.bundleFor(component as object, format === 'head'),
     );
-  }
-
-  // QUnit realm adapters install live class objects with Loader.shimModule().
-  // Those fixtures intentionally have no source text for SES to evaluate and
-  // therefore cannot participate in template capture. Keep this escape hatch
-  // test-only: production modules must always cross the explicit template
-  // bundle boundary above.
-  async trustedTestShimComponent(
-    moduleIdentifier: string,
-    exportName: string,
-    format: string,
-  ): Promise<unknown> {
-    if (!isTesting()) {
-      return undefined;
-    }
-    let module =
-      await this.loader.import<Record<string, unknown>>(moduleIdentifier);
-    if (!this.loader.isModuleShimmed(moduleIdentifier)) {
-      return undefined;
-    }
-    let cardType = module[exportName] as Record<string, unknown> | undefined;
-    return cardType?.[format] ?? cardType?.isolated;
   }
 
   async evaluateCardTypeMetadata(
@@ -791,15 +747,6 @@ export default class CapsuleModuleEvaluator {
     return structuredClone(projection);
   }
 
-  async hasModuleExport(
-    moduleIdentifier: string,
-    exportName: string,
-  ): Promise<boolean> {
-    let module =
-      await this.loader.import<Record<string, unknown>>(moduleIdentifier);
-    return Object.prototype.hasOwnProperty.call(module, exportName);
-  }
-
   async invokeCardMethod(
     moduleIdentifier: string,
     exportName: string,
@@ -863,13 +810,6 @@ export default class CapsuleModuleEvaluator {
 
   invalidateModule(moduleIdentifier: string) {
     return this.loader.invalidateModule(moduleIdentifier);
-  }
-
-  installFormatOnlyImport(descriptor: CapsuleFormatOnlyImportDescriptor) {
-    this.loader.shimModule(
-      descriptor.module,
-      this.formatOnlyModuleFacade(descriptor),
-    );
   }
 
   destroy() {
@@ -1176,37 +1116,6 @@ export default class CapsuleModuleEvaluator {
     harden(facade);
     this.inertHostCommandFacades.set(moduleIdentifier, facade);
     return facade;
-  }
-
-  private formatOnlyModuleFacade(
-    descriptor: CapsuleFormatOnlyImportDescriptor,
-  ): Record<string, CapsuleFormatReference> {
-    let cacheKey = `${descriptor.module}#${[...descriptor.exports].sort().join(',')}`;
-    let cached = this.formatOnlyModuleFacades.get(cacheKey);
-    if (cached) {
-      return cached;
-    }
-    let facade = Object.fromEntries(
-      descriptor.exports.map((name) => [
-        name,
-        harden({
-          kind: 'capsule-format-reference',
-          module: descriptor.module,
-          name,
-        }) satisfies CapsuleFormatReference,
-      ]),
-    );
-    harden(facade);
-    this.formatOnlyModuleFacades.set(cacheKey, facade);
-    return facade;
-  }
-
-  private isFormatReference(value: unknown): value is CapsuleFormatReference {
-    return (
-      typeof value === 'object' &&
-      value !== null &&
-      (value as { kind?: unknown }).kind === 'capsule-format-reference'
-    );
   }
 
   private trustedImportIdentity(moduleIdentifier: string): string | undefined {

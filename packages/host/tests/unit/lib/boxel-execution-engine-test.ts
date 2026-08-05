@@ -453,12 +453,6 @@ module('Unit | Boxel execution engine', function () {
     `);
     assert.strictEqual(externalRenderer.tier, 'sandbox');
     assert.true(externalRenderer.signals.includes('three'));
-    assert.deepEqual(externalRenderer.formatOnlyImports, [
-      {
-        specifier: 'three',
-        bindings: [{ exportName: 'Scene', formats: ['isolated'] }],
-      },
-    ]);
 
     let globalStyle = await classifyBoxelSource(`
       import { CardDef } from '@cardstack/base/card-api';

@@ -5,14 +5,13 @@ import {
   SandboxSurfaceClient,
   SandboxSurfaceServer,
 } from '@cardstack/host/lib/sandbox-surface-transport';
-import { LocalSurfaceClient } from '@cardstack/host/lib/surface-client';
 
 import type SurfaceService from '@cardstack/host/services/surface-service';
 
 module('Unit | Service | surface-service', function (hooks) {
   setupTest(hooks);
 
-  test('local and sandbox clients target the same Host-owned surface', async function (assert) {
+  test('direct service calls and the sandbox client target the same Host-owned surface', async function (assert) {
     let service = this.owner.lookup(
       'service:surface-service',
     ) as SurfaceService;
@@ -24,7 +23,6 @@ module('Unit | Service | surface-service', function (hooks) {
     let element = document.createElement('div');
     document.body.appendChild(element);
     let detach = service.attach(handle, element);
-    let local = new LocalSurfaceClient(service, handle);
     let channel = new MessageChannel();
     let sandbox = new SandboxSurfaceClient(channel.port1, handle);
     let server = new SandboxSurfaceServer(channel.port2, service, handle);
@@ -32,7 +30,7 @@ module('Unit | Service | surface-service', function (hooks) {
     channel.port2.start();
 
     try {
-      await local.present({ headerColor: '#112233' });
+      service.present(handle, { headerColor: '#112233' });
       assert.strictEqual(
         element.style.getPropertyValue('--boxel-surface-header-color'),
         '#112233',

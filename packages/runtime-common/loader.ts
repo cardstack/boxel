@@ -125,16 +125,26 @@ function evaluateModuleInCurrentRealm(
   source: string,
   moduleIdentifier: string,
 ): ModuleRegistration {
-  let registration: ModuleRegistration | undefined;
-  let define = (_mid: string, dependencyList: string[], impl: Function) => {
-    registration = { dependencyList, implementation: impl };
+  type DefineFunc = ((
+    mid: string,
+    dependencyList: string[],
+    impl: Function,
+  ) => void) & {
+    registration?: ModuleRegistration;
   };
-  void define;
+
+  // this local is here for the evals to see. We're sticking the registration
+  // onto the function itself because that's a convenient way to ensure that
+  // build tools like Rollup don't optimize it away. Rollup violates the JS
+  // spec by removing a local that's visible to `eval`.
+  let define = ((_mid: string, dependencyList: string[], impl: Function) => {
+    define.registration = { dependencyList, implementation: impl };
+  }) as DefineFunc;
   eval(source);
-  if (!registration) {
+  if (!define.registration) {
     throw new Error(`Module ${moduleIdentifier} did not register itself`);
   }
-  return registration;
+  return define.registration;
 }
 
 // Transient upstream statuses that we briefly retry on module-source fetches
@@ -226,7 +236,6 @@ export class Loader {
   private modules = new Map<string, Module>();
 
   private moduleShims = new Map<string, Record<string, any>>();
-  private fetchedModuleShims = new Set<string>();
   private moduleCanonicalURLs = new Map<string, string>();
   // Cache the flattened dependency sets for evaluated modules. Once a module is
   // evaluated its consumedModules never change, so the result of
@@ -283,7 +292,6 @@ export class Loader {
     // entry can't outlive the spelling it was keyed under.
     this.unsubscribeMappingChange = this.virtualNetwork?.onMappingChange(() => {
       this.modules.clear();
-      this.fetchedModuleShims.clear();
       this.moduleCanonicalURLs.clear();
       this.knownDepsCache.clear();
     });
@@ -381,21 +389,6 @@ export class Loader {
     });
   }
 
-  isModuleShimmed(moduleIdentifier: string): boolean {
-    try {
-      moduleIdentifier = this.resolveImport(moduleIdentifier);
-      return (
-        this.moduleShims.has(moduleIdentifier) ||
-        this.fetchedModuleShims.has(this.moduleCacheKey(moduleIdentifier))
-      );
-    } catch (error) {
-      if (error instanceof TypeError) {
-        return false;
-      }
-      throw error;
-    }
-  }
-
   /**
    * Invalidates one module and only already-known reverse dependants. This is
    * the primitive that lets a retained Capsule update authored code without
@@ -439,7 +432,6 @@ export class Loader {
         removed++;
       }
       this.moduleCanonicalURLs.delete(key);
-      this.fetchedModuleShims.delete(key);
     }
     this.knownDepsCache.clear();
     return removed;
@@ -1158,7 +1150,6 @@ export class Loader {
     this.setCanonicalModuleURL(moduleIdentifier, canonicalURL);
 
     if (loaded.type === 'shimmed') {
-      this.fetchedModuleShims.add(this.moduleCacheKey(moduleIdentifier));
       this.captureIdentitiesOfModuleExports(loaded.module, moduleIdentifier);
 
       this.setModule(moduleIdentifier, {
