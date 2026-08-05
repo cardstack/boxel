@@ -4,6 +4,7 @@ import {
   loginUser,
   getAllRoomEvents,
   getJoinedRooms,
+  getUserExternalIds,
   registerUser,
   type SynapseInstance,
   sync,
@@ -93,6 +94,20 @@ export async function updateSynapseUser(
 ) {
   let { adminAccessToken } = getMatrixTestContext();
   await updateUser(adminAccessToken, userId, options);
+}
+
+// The SSO identities linked to an account, narrowed to one IdP. Returns the
+// bare external ids, which for an OIDC provider are the values its mapping
+// provider derived from the `sub` claim.
+export async function getExternalIdsForIdp(
+  userId: string,
+  authProvider: string,
+): Promise<string[]> {
+  let { adminAccessToken } = getMatrixTestContext();
+  let externalIds = await getUserExternalIds(adminAccessToken, userId);
+  return externalIds
+    .filter((entry) => entry.auth_provider === authProvider)
+    .map((entry) => entry.external_id);
 }
 
 async function registerRealmRedirect(
