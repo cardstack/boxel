@@ -309,6 +309,7 @@ module('Unit | audio metadata extractors', function (hooks) {
   let loader: Loader;
   let extractWavEncoding: typeof WavModule.extractWavEncoding;
   let extractWavTags: typeof WavModule.extractWavTags;
+  let extractWavFromStream: typeof WavModule.extractWavFromStream;
   let extractFlacEncoding: typeof FlacModule.extractFlacEncoding;
   let extractFlacTags: typeof FlacModule.extractFlacTags;
   let extractOggEncoding: typeof OggModule.extractOggEncoding;
@@ -324,9 +325,10 @@ module('Unit | audio metadata extractors', function (hooks) {
 
   hooks.beforeEach(async function () {
     loader = getService('loader-service').loader;
-    ({ extractWavEncoding, extractWavTags } = await loader.import<
-      typeof WavModule
-    >('@cardstack/base/wav-meta-extractor'));
+    ({ extractWavEncoding, extractWavTags, extractWavFromStream } =
+      await loader.import<typeof WavModule>(
+        '@cardstack/base/wav-meta-extractor',
+      ));
     ({ extractFlacEncoding, extractFlacTags } = await loader.import<
       typeof FlacModule
     >('@cardstack/base/flac-meta-extractor'));
@@ -1332,6 +1334,183 @@ module('Unit | audio metadata extractors', function (hooks) {
         extractMp3Envelope(new Uint8Array(256).fill(0x41), 8),
         undefined,
       );
+    });
+  });
+
+  module('WAV single-pass streaming', function () {
+    // A WAVE file with real 16-bit PCM, so the envelope is computed from actual
+    // samples rather than a stand-in.
+    function buildWavWithPcm(
+      frames: number[][],
+      options: {
+        sampleRate?: number;
+        channels?: number;
+        infoEntries?: [string, string][];
+        trailingInfo?: boolean;
+      } = {},
+    ): Uint8Array {
+      let sampleRate = options.sampleRate ?? 8000;
+      let channels = options.channels ?? 1;
+      let bitsPerSample = 16;
+      let byteRate = (sampleRate * channels * bitsPerSample) / 8;
+      let fmtBody = [
+        ...uint16le(1),
+        ...uint16le(channels),
+        ...uint32le(sampleRate),
+        ...uint32le(byteRate),
+        ...uint16le((channels * bitsPerSample) / 8),
+        ...uint16le(bitsPerSample),
+      ];
+      let pcm: number[] = [];
+      for (let frame of frames) {
+        for (let sample of frame) {
+          let clamped = Math.max(-1, Math.min(1, sample));
+          let value = Math.round(clamped * 32767);
+          pcm.push(...uint16le(value < 0 ? value + 65536 : value));
+        }
+      }
+      let infoChunk: number[] = [];
+      if (options.infoEntries?.length) {
+        let infoBody = [...ascii('INFO')];
+        for (let [id, value] of options.infoEntries) {
+          infoBody.push(...riffChunk(id, [...ascii(value), 0]));
+        }
+        infoChunk = riffChunk('LIST', infoBody);
+      }
+      let chunks = [
+        ...riffChunk('fmt ', fmtBody),
+        ...(options.trailingInfo ? [] : infoChunk),
+        ...riffChunk('data', pcm),
+        ...(options.trailingInfo ? infoChunk : []),
+      ];
+      let payload = [...ascii('WAVE'), ...chunks];
+      return new Uint8Array([
+        ...ascii('RIFF'),
+        ...uint32le(payload.length),
+        ...payload,
+      ]);
+    }
+
+    // Hand the reader a stream that yields small chunks, so frames land across
+    // chunk boundaries — the case a buffered reader never exercises.
+    function chunkedStream(
+      bytes: Uint8Array,
+      chunkSize: number,
+    ): ReadableStream<Uint8Array> {
+      let offset = 0;
+      return new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (offset >= bytes.length) {
+            controller.close();
+            return;
+          }
+          let end = Math.min(offset + chunkSize, bytes.length);
+          controller.enqueue(bytes.slice(offset, end));
+          offset = end;
+        },
+      });
+    }
+
+    function silentThenLoud(total: number): number[][] {
+      return Array.from({ length: total }, (_, index) => [
+        index < total / 2 ? 0 : 1,
+      ]);
+    }
+
+    test('derives duration, encoding, and envelope from one pass', async function (assert) {
+      let bytes = buildWavWithPcm(silentThenLoud(8000), { sampleRate: 8000 });
+      let result = await extractWavFromStream(bytes, 8);
+
+      assert.strictEqual(
+        result.duration,
+        1,
+        '8000 mono frames at 8 kHz is 1 s',
+      );
+      assert.strictEqual(result.encoding?.sampleRateHz, 8000);
+      assert.strictEqual(result.encoding?.bitDepth, 16);
+      assert.strictEqual(result.envelope?.bars.length, 8);
+    });
+
+    test('the envelope tracks the real signal', async function (assert) {
+      let result = await extractWavFromStream(
+        buildWavWithPcm(silentThenLoud(8000)),
+        8,
+      );
+      let bars = result.envelope!.bars;
+      assert.strictEqual(bars[0], 0, 'the silent half reads as silent');
+      assert.true(bars[7]! > 0.99, 'the loud half reaches full scale');
+    });
+
+    test('peak and RMS are real amplitudes, needing no normalization', async function (assert) {
+      // A constant half-scale signal: RMS and peak should both be ~0.5, unlike
+      // MP3's side-info proxy where only relative height is meaningful.
+      let frames = Array.from({ length: 4000 }, () => [0.5]);
+      let result = await extractWavFromStream(buildWavWithPcm(frames), 8);
+      assert.true(Math.abs(result.envelope!.peak - 0.5) < 0.001);
+      assert.true(Math.abs(result.envelope!.rms - 0.5) < 0.001);
+    });
+
+    test('a frame split across stream chunks is not dropped or misread', async function (assert) {
+      let bytes = buildWavWithPcm(silentThenLoud(4000), { channels: 2 });
+      let whole = await extractWavFromStream(bytes, 8);
+      // 7 is deliberately coprime with the 4-byte stereo frame, so almost every
+      // chunk boundary falls inside a frame.
+      let chunked = await extractWavFromStream(chunkedStream(bytes, 7), 8);
+
+      assert.deepEqual(
+        chunked.envelope?.bars,
+        whole.envelope?.bars,
+        'chunking the stream does not change the envelope',
+      );
+      assert.strictEqual(chunked.duration, whole.duration);
+    });
+
+    test('reads LIST-INFO written before the payload', async function (assert) {
+      let result = await extractWavFromStream(
+        buildWavWithPcm(silentThenLoud(800), {
+          infoEntries: [['INAM', 'Leading Tag']],
+        }),
+        8,
+      );
+      assert.strictEqual(result.tags?.trackTitle, 'Leading Tag');
+    });
+
+    test('reads LIST-INFO written after the payload', async function (assert) {
+      // Some encoders put the tag block at the end, past the audio.
+      let result = await extractWavFromStream(
+        buildWavWithPcm(silentThenLoud(800), {
+          infoEntries: [['INAM', 'Trailing Tag']],
+          trailingInfo: true,
+        }),
+        8,
+      );
+      assert.strictEqual(result.tags?.trackTitle, 'Trailing Tag');
+    });
+
+    test('stops folding PCM at the declared data size', async function (assert) {
+      // Trailing bytes past `data` must not be read as samples, or a tag block
+      // at the end would show up as a burst of noise in the envelope.
+      let result = await extractWavFromStream(
+        buildWavWithPcm(
+          Array.from({ length: 800 }, () => [0]),
+          { infoEntries: [['INAM', 'x']], trailingInfo: true },
+        ),
+        4,
+      );
+      assert.deepEqual(
+        result.envelope?.bars,
+        [0, 0, 0, 0],
+        'a silent file stays silent despite trailing chunk bytes',
+      );
+    });
+
+    test('a non-WAVE buffer yields no duration rather than throwing', async function (assert) {
+      let result = await extractWavFromStream(
+        new Uint8Array(256).fill(0x41),
+        8,
+      );
+      assert.strictEqual(result.duration, undefined);
+      assert.strictEqual(result.envelope, undefined);
     });
   });
 });
