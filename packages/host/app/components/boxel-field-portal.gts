@@ -1,8 +1,10 @@
 import Component from '@glimmer/component';
 
+import Modifier from 'ember-modifier';
 import { consume } from 'ember-provide-consume-context';
 
 import {
+  CardContextName,
   DefaultFormatsContextName,
   isBaseDefInstance,
   isCardInstance,
@@ -11,7 +13,14 @@ import {
 
 import BoxelExecutionRenderer from '@cardstack/host/components/boxel-execution-renderer';
 
-import type { BaseDef, FieldFormats, Format } from '@cardstack/base/card-api';
+import type {
+  BaseDef,
+  CardContext,
+  CardDef,
+  FieldFormats,
+  FieldType,
+  Format,
+} from '@cardstack/base/card-api';
 import type { ComponentLike } from '@glint/template';
 
 interface Signature {
@@ -23,6 +32,29 @@ interface Signature {
 
 type PortalComponent = ComponentLike<Signature>;
 
+/** What the Host knows about the field this portal renders. */
+export interface PortalFieldMeta {
+  fieldType: FieldType | undefined;
+  fieldName: string | undefined;
+}
+
+/**
+ * Matches `DEFAULT_CARD_CONTEXT`'s no-op in `@cardstack/base`: when no
+ * operator-mode context provides a real `cardComponentModifier`, tracking
+ * silently registers nothing.
+ */
+class NoOpModifier extends Modifier<{
+  Args: { Named: Record<string, unknown> };
+}> {
+  modify() {}
+}
+
+function cardIdOf(instance: BaseDef | undefined): string | undefined {
+  return instance && isCardInstance(instance)
+    ? ((instance as CardDef).id as string | undefined)
+    : undefined;
+}
+
 /**
  * Host-owned portal for a field whose renderer is authored outside Base.
  *
@@ -30,13 +62,26 @@ type PortalComponent = ComponentLike<Signature>;
  * the narrow invocation capability placed in `@fields`; nested Boxels cross
  * the same execution router as a top-level card, while non-Boxel values are
  * represented as inert text.
+ *
+ * RP-11.5: on main, every nested card render passes through
+ * `field-component.gts`, whose `CardContainer` carries the operator-mode
+ * DOM contract — the injected `cardComponentModifier` (ElementTracker
+ * registration, which is what overlays/adorn discover cards through) and
+ * the `data-boxel-card-id`/`data-test-card` attributes. This portal
+ * replaces that chrome for authored fields, so it must re-stamp the same
+ * contract on its rendered root or every overlay-eligible nested card
+ * silently disappears from operator mode.
  */
 class BoxelFieldPortal extends Component<Signature> {
   static value: unknown;
   static relativeTo: RealmResourceIdentifier | undefined;
+  static fieldMeta: PortalFieldMeta | undefined;
 
   @consume(DefaultFormatsContextName)
   declare private defaultFormats: FieldFormats | undefined;
+
+  @consume(CardContextName)
+  declare private cardContext: CardContext | undefined;
 
   private get value(): unknown {
     return (this.constructor as typeof BoxelFieldPortal).value;
@@ -44,6 +89,18 @@ class BoxelFieldPortal extends Component<Signature> {
 
   private get relativeTo(): RealmResourceIdentifier | undefined {
     return (this.constructor as typeof BoxelFieldPortal).relativeTo;
+  }
+
+  private get fieldMeta(): PortalFieldMeta | undefined {
+    return (this.constructor as typeof BoxelFieldPortal).fieldMeta;
+  }
+
+  private get fieldType(): FieldType | undefined {
+    return this.fieldMeta?.fieldType;
+  }
+
+  private get fieldName(): string | undefined {
+    return this.fieldMeta?.fieldName;
   }
 
   private get boxel(): BaseDef | undefined {
@@ -67,6 +124,24 @@ class BoxelFieldPortal extends Component<Signature> {
     return this.boxel && isCardInstance(this.boxel)
       ? defaults.cardDef
       : defaults.fieldDef;
+  }
+
+  /**
+   * Real tracking only for card instances — main never registers FieldDef
+   * compounds with the ElementTracker either, and an entry without a
+   * card identity would break overlay consumers downstream.
+   */
+  private get cardComponentModifier() {
+    let tracksCards = this.boxel
+      ? isCardInstance(this.boxel)
+      : Boolean(this.boxels?.every((instance) => isCardInstance(instance)));
+    return tracksCards
+      ? (this.cardContext?.cardComponentModifier ?? NoOpModifier)
+      : NoOpModifier;
+  }
+
+  private get cardId(): string | undefined {
+    return cardIdOf(this.boxel);
   }
 
   private get displayValue(): string {
@@ -94,6 +169,17 @@ class BoxelFieldPortal extends Component<Signature> {
         @format={{this.format}}
         @displayContainer={{false}}
         @relativeTo={{this.relativeTo}}
+        {{this.cardComponentModifier
+          card=this.boxel
+          format=this.format
+          fieldType=this.fieldType
+          fieldName=this.fieldName
+        }}
+        data-boxel-card-id={{this.cardId}}
+        data-boxel-card-format={{this.format}}
+        data-test-card={{this.cardId}}
+        data-test-card-format={{this.format}}
+        data-test-field-component-card
         ...attributes
       />
     {{else if this.boxels}}
@@ -103,6 +189,17 @@ class BoxelFieldPortal extends Component<Signature> {
           @format={{this.format}}
           @displayContainer={{false}}
           @relativeTo={{this.relativeTo}}
+          {{this.cardComponentModifier
+            card=boxel
+            format=this.format
+            fieldType=this.fieldType
+            fieldName=this.fieldName
+          }}
+          data-boxel-card-id={{cardIdOf boxel}}
+          data-boxel-card-format={{this.format}}
+          data-test-card={{cardIdOf boxel}}
+          data-test-card-format={{this.format}}
+          data-test-field-component-card
           ...attributes
         />
       {{/each}}
@@ -117,10 +214,12 @@ class BoxelFieldPortal extends Component<Signature> {
 export function createBoxelFieldPortal(
   value: unknown,
   relativeTo?: RealmResourceIdentifier,
+  fieldMeta?: PortalFieldMeta,
 ): PortalComponent {
   let target = class extends BoxelFieldPortal {
     static value = value;
     static relativeTo = relativeTo;
+    static fieldMeta = fieldMeta;
   } as unknown as PortalComponent;
 
   if (!Array.isArray(value)) {
@@ -148,7 +247,7 @@ export function createBoxelFieldPortal(
     if (existing) {
       return existing;
     }
-    let portal = createBoxelFieldPortal(value[index], relativeTo);
+    let portal = createBoxelFieldPortal(value[index], relativeTo, fieldMeta);
     itemPortals.set(index, portal);
     return portal;
   };

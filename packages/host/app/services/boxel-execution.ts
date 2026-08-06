@@ -568,6 +568,12 @@ export default class BoxelExecutionService extends Service {
           portal = createBoxelFieldPortal(
             api.peekAtField(card, property),
             executionRelativeTo(card),
+            // RP-11.5: the portal re-stamps field-component.gts's DOM
+            // contract (ElementTracker registration + data attributes),
+            // which needs the field's identity — without it, overlays
+            // cannot classify the entry (linksTo vs linksToMany vs
+            // contains) and operator-mode adornments skip the card.
+            { fieldType: field.fieldType, fieldName: field.name },
           );
           authored.set(property, portal);
         }

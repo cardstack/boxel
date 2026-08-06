@@ -1,3 +1,4 @@
+import { registerDestructor } from '@ember/destroyable';
 import { fn } from '@ember/helper';
 import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
@@ -840,12 +841,16 @@ export default class OperatorModeStackItem extends Component<Signature> {
         //    and some elements get removed before their animations complete
         // 2. Tests running with animation-duration: 0s can cause
         //    animations to abort before they're properly tracked
-        if (e.name === 'AbortError') {
-          this.clearAnimationType(animationName);
-          resolve?.();
-        } else {
+        if (e.name !== 'AbortError') {
           console.error(e);
         }
+        // Whatever went wrong with the animation, the item's lifecycle must
+        // still settle: startAnimation's awaited promise otherwise never
+        // resolves, its dropTask stays "running" forever, and every future
+        // close click on this item is silently dropped — a permanently dead
+        // close button over a purely cosmetic failure.
+        this.clearAnimationType(animationName);
+        resolve?.();
       });
   }
 
@@ -1434,7 +1439,14 @@ class ContentElement extends Modifier<ContentElementSignature> {
     _positional: [],
     { onSetup }: ContentElementSignature['Args']['Named'],
   ) {
-    return onSetup(element);
+    // A class-based modifier's modify() return value is ignored (unlike a
+    // function modifier) — the teardown must be registered explicitly, or
+    // setupContentEl's MutationObserver outlives the stack item for the
+    // app's lifetime.
+    let teardown = onSetup(element);
+    if (typeof teardown === 'function') {
+      registerDestructor(this, teardown);
+    }
   }
 }
 

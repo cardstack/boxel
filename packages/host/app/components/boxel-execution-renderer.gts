@@ -2,7 +2,7 @@ import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { provide } from 'ember-provide-consume-context';
+import { consume, provide } from 'ember-provide-consume-context';
 import { resource, use } from 'ember-resources';
 import { TrackedObject } from 'tracked-built-ins';
 
@@ -10,6 +10,7 @@ import { CardContainer } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
+  CardContextName,
   DefaultFormatsContextName,
   type RealmResourceIdentifier,
   type SurfaceHandle,
@@ -35,6 +36,7 @@ import type BoxelExecutionService from '@cardstack/host/services/boxel-execution
 import type {
   BaseDef,
   BoxComponent,
+  CardContext,
   FieldFormats,
   Format,
   ViewCardFn,
@@ -98,6 +100,9 @@ class DefaultFormatsProvider extends Component<DefaultFormatsProviderSignature> 
 
 export default class BoxelExecutionRenderer extends Component<Signature> {
   @service declare private boxelExecution: BoxelExecutionService;
+
+  @consume(CardContextName)
+  declare private hostCardContext: CardContext | undefined;
 
   private readonly surfaceId: string;
 
@@ -488,6 +493,35 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
    * per RP-8.4's boundary rules), or a themed card silently loses its
    * theme.
    */
+  /**
+   * The narrow presentation-capability projection handed to the Capsule as
+   * `@context` (RP-11.5): operator mode's ElementTracker modifier — how
+   * overlays/adorn discover rendered cards, including an authored app
+   * card's own `format: 'data'` grid tiles — and the search rendering
+   * surface. Never the live Host CardContext: no Store, loader, or service
+   * authority crosses; the Capsule's `@consume` facade re-plucks exactly
+   * these keys (capsule-module-evaluator.ts) so nothing else could ride
+   * along even if this projection grew.
+   */
+  private get capsuleContextProjection(): unknown {
+    let context = this.hostCardContext;
+    if (!context) {
+      return undefined;
+    }
+    return Object.freeze({
+      ...(context.cardComponentModifier
+        ? { cardComponentModifier: context.cardComponentModifier }
+        : {}),
+      ...(context.searchResultsComponent
+        ? { searchResultsComponent: context.searchResultsComponent }
+        : {}),
+    });
+  }
+
+  private get effectiveFormat(): Format {
+    return this.args.format ?? 'isolated';
+  }
+
   private get themePresentation() {
     let presentation = this.state.snapshot.current?.renderRecord.presentation;
     return {
@@ -515,6 +549,10 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
         class='boxel-execution-capsule-slot'
         data-boxel-execution='capsule'
         data-boxel-execution-reason={{this.executionReason}}
+        data-boxel-card-id={{this.cardURL}}
+        data-boxel-card-format={{this.effectiveFormat}}
+        data-test-card={{this.cardURL}}
+        data-test-card-format={{this.effectiveFormat}}
         {{surfaceElement this.capsuleSurface}}
         ...attributes
       >
@@ -526,6 +564,7 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
             @renderRecord={{this.state.snapshot.current.renderRecord}}
             @displayContainer={{@displayContainer}}
             @viewCard={{@viewCard}}
+            @context={{this.capsuleContextProjection}}
           />
         </DefaultFormatsProvider>
       </CardContainer>
@@ -535,6 +574,10 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
           {{if this.sandboxBooting "is-booting"}}'
         data-boxel-execution='sandbox'
         data-boxel-execution-reason={{this.executionReason}}
+        data-boxel-card-id={{this.cardURL}}
+        data-boxel-card-format={{this.effectiveFormat}}
+        data-test-card={{this.cardURL}}
+        data-test-card-format={{this.effectiveFormat}}
         {{boxelSandboxSlot this.sandboxSlot}}
         ...attributes
       >

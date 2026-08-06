@@ -1362,8 +1362,24 @@ export default class CapsuleModuleEvaluator {
           let args = this.args ?? {};
           if (contextName === CardContextName) {
             // The live Store, loader, and Host services never cross the
-            // Capsule boundary. Base consumers merge this inert projection
-            // with their own defaults.
+            // Capsule boundary. What DOES cross is the narrow presentation
+            // projection the Host passed as `@context` (see
+            // boxel-execution-renderer.gts): the ElementTracker's
+            // cardComponentModifier (operator-mode overlays/adorn discover
+            // rendered cards through it — a frozen empty object here made
+            // every app-card grid tile invisible to them) and the search
+            // rendering surface. Only those two known capabilities are
+            // plucked; everything else on the arg is ignored, so no Store,
+            // loader, or service authority can ride along.
+            let context = args.context;
+            if (typeof context === 'object' && context !== null) {
+              let { cardComponentModifier, searchResultsComponent } =
+                context as Record<string, unknown>;
+              return Object.freeze({
+                ...(cardComponentModifier ? { cardComponentModifier } : {}),
+                ...(searchResultsComponent ? { searchResultsComponent } : {}),
+              });
+            }
             return Object.freeze({});
           }
           if (contextName === CardCrudFunctionsContextName) {

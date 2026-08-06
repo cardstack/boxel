@@ -46,6 +46,10 @@ export type CapsuleComponent = ComponentLike<{
     format?: string;
     renderRecord?: BoxelRenderRecord;
     fields?: Record<string, BoxComponent>;
+    // The Host-computed presentation-capability projection the Capsule's
+    // `@consume(CardContextName)` facade hands back to authored code —
+    // never the live Host CardContext (see capsule-module-evaluator.ts).
+    context?: unknown;
   };
   Element: Element;
 }>;

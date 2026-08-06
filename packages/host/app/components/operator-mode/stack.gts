@@ -92,7 +92,15 @@ export default class OperatorModeStack extends Component<Signature> {
       animations.push(nextTopItemAPI.startAnimation('movingForward'));
     }
 
-    await Promise.all(animations);
+    // The animations are cosmetic; the close is not. A dropped or wedged
+    // animation task (its dropTask refuses a second perform while an
+    // earlier instance is still settling) must never gate dismissal, so the
+    // wait is bounded to the animation's own timescale and any rejection
+    // (task cancellation included) is absorbed.
+    await Promise.race([
+      Promise.all(animations).catch(() => undefined),
+      new Promise((resolve) => setTimeout(resolve, 1000)),
+    ]);
 
     await Promise.all(itemsToDismiss.map((i) => this.args.close(i)));
   });
