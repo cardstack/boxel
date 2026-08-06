@@ -1,16 +1,15 @@
 {
   "schemaVersion": "1.0.0",
+  "projectName": "@cardstack/boxel-ui",
   "packages": [
     {
-      "name": "ember-cli",
-      "version": "4.12.1",
+      "name": "@ember/addon-blueprint",
+      "version": "0.18.0",
       "blueprints": [
         {
-          "name": "addon",
-          "outputRepo": "https://github.com/ember-cli/ember-addon-output",
-          "codemodsSource": "ember-addon-codemods-manifest@1",
+          "name": "@ember/addon-blueprint",
           "isBaseBlueprint": true,
-          "options": ["--no-welcome"]
+          "options": ["--pnpm", "--typescript"]
         }
       ]
     }
