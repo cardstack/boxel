@@ -1491,7 +1491,20 @@ module('Integration | Store', function (hooks) {
     let originalError = console.error;
     let captured: unknown[] = [];
     console.error = (...args: unknown[]) => {
-      captured.push(args);
+      // Scope the count to the invalidation-subscriber errors this test is
+      // about. Setup can emit unrelated console.error noise whose timing is not
+      // fixed relative to this window — e.g. the fixture realm has no
+      // SystemCard, so matrix-service's async load of it 404s and reports here
+      // — and that must not race into the assertion. Forward everything else so
+      // genuine problems still surface.
+      if (
+        typeof args[0] === 'string' &&
+        args[0].includes('card invalidation subscriber')
+      ) {
+        captured.push(args);
+      } else {
+        originalError(...args);
+      }
     };
 
     let secondFired = 0;
@@ -1535,7 +1548,20 @@ module('Integration | Store', function (hooks) {
     let originalError = console.error;
     let captured: unknown[] = [];
     console.error = (...args: unknown[]) => {
-      captured.push(args);
+      // Scope the count to the invalidation-subscriber errors this test is
+      // about. Setup can emit unrelated console.error noise whose timing is not
+      // fixed relative to this window — e.g. the fixture realm has no
+      // SystemCard, so matrix-service's async load of it 404s and reports here
+      // — and that must not race into the assertion. Forward everything else so
+      // genuine problems still surface.
+      if (
+        typeof args[0] === 'string' &&
+        args[0].includes('card invalidation subscriber')
+      ) {
+        captured.push(args);
+      } else {
+        originalError(...args);
+      }
     };
 
     let secondFired = 0;
