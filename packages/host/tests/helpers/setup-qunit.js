@@ -46,7 +46,17 @@ export function setupQUnit() {
   // are tracked with a simple depth counter so we only probe top-level ones.
   let usedAtModuleStart = null;
   let moduleDepth = 0;
+  // MEASUREMENT BRANCH — NOT FOR MERGE. The forced-GC cycles are disabled so
+  // a CI run on this branch prices the memory instrumentation: compare its
+  // host shard times against a run of the same base commit with the cycles
+  // enabled. The heap readings below still happen (they are cheap), so the
+  // shape of the probe output is unchanged, but the reported deltas are
+  // meaningless without the GC and the memory-baseline check will disagree
+  // with the committed baseline. Restore before doing anything else with
+  // this branch.
+  const FORCED_GC_DISABLED_FOR_MEASUREMENT = true;
   async function settledGc() {
+    if (FORCED_GC_DISABLED_FOR_MEASUREMENT) return;
     if (typeof globalThis.gc !== 'function') return;
     for (let i = 0; i < 3; i++) {
       globalThis.gc();
@@ -122,7 +132,10 @@ export function setupQUnit() {
     } catch (_) {
       /* ignore */
     }
-    if (typeof globalThis.gc === 'function') {
+    if (
+      !FORCED_GC_DISABLED_FOR_MEASUREMENT &&
+      typeof globalThis.gc === 'function'
+    ) {
       globalThis.gc();
       globalThis.gc();
     }
