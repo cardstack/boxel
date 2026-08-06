@@ -1,6 +1,6 @@
 import 'ses';
 
-import { waitFor } from '@ember/test-helpers';
+import { waitFor, waitUntil } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
 import { getService } from '@universal-ember/test-support';
@@ -438,6 +438,167 @@ module('Integration | rp-conformance', function (hooks) {
     } finally {
       await session.destroy();
     }
+  });
+
+  // "Identity map: same canonical id + assignable class ⇒ the same instance
+  // object, updated in place; a class mismatch constructs fresh."
+  test('RP-8.2: the identity map reuses one instance per canonical id for assignable classes and constructs fresh on a mismatch', async function (assert) {
+    let idX = `${testRealmURL}Gadget/identity-probe`;
+    let first = await createGadget({
+      id: idX,
+      attributes: { name: 'First' },
+    });
+    let second = await createGadget({
+      id: idX,
+      attributes: { name: 'Second' },
+    });
+    assert.strictEqual(
+      second,
+      first,
+      'the same canonical id and class yield the same instance object',
+    );
+    assert.strictEqual(
+      (first as unknown as { name?: string }).name,
+      'Second',
+      'the shared instance is updated in place, not replaced',
+    );
+
+    let asAncestor = await createFromResource({
+      id: idX,
+      attributes: {},
+      meta: { adoptsFrom: { module: baseCardApiModule, name: 'CardDef' } },
+    });
+    assert.strictEqual(
+      asAncestor,
+      first,
+      'an assignable (ancestor) class keeps the cached instance',
+    );
+
+    let idY = `${testRealmURL}Gadget/mismatch-probe`;
+    let plain = await createFromResource({
+      id: idY,
+      attributes: {},
+      meta: { adoptsFrom: { module: baseCardApiModule, name: 'CardDef' } },
+    });
+    let specialized = await createGadget({
+      id: idY,
+      attributes: { name: 'Fresh' },
+    });
+    assert.notStrictEqual(
+      specialized,
+      plain,
+      'a class the cached instance is not assignable to constructs a fresh instance',
+    );
+  });
+
+  // "Side-loaded resources enter only via resourceFrom(doc, id) matching
+  // data.id ...; an absent included entry yields not-loaded."
+  test('RP-8.3: a side-loaded resource resolves synchronously from the document, while an absent included entry yields not-loaded', async function (assert) {
+    let api = await getService('loader-service').loader.import<
+      typeof CardAPIModule
+    >('@cardstack/base/card-api');
+
+    // No included entry for the referenced id: the relationship is
+    // not-loaded (a pure-read observation; nothing has been fetched yet).
+    let unloaded = await createGadget({
+      relationships: { partner: { links: { self: friendId } } },
+    });
+    assert.strictEqual(
+      api.getRelationshipMembershipState(unloaded, 'partner').membership?.[0]
+        ?.kind,
+      'not-loaded',
+      'an absent included entry yields the not-loaded state',
+    );
+
+    // The same reference with the resource side-loaded in `included`
+    // (matched by data.id) materializes during deserialization: the link is
+    // present synchronously, before any fetch could have completed.
+    let store = getService('store');
+    let resource: LooseCardResource = {
+      attributes: { name: 'Widget' },
+      relationships: { partner: { links: { self: friendId } } },
+      meta: { adoptsFrom: { module: testRRI('gadget'), name: 'Gadget' } },
+    };
+    let withIncluded = await store.__dangerousCreateFromSerialized(
+      resource,
+      {
+        data: resource,
+        included: [
+          {
+            type: 'card',
+            id: friendId,
+            attributes: { cardInfo: { name: 'Linked Friend' } },
+            meta: {
+              adoptsFrom: { module: baseCardApiModule, name: 'CardDef' },
+            },
+          },
+        ],
+      } as unknown as Parameters<
+        typeof store.__dangerousCreateFromSerialized
+      >[1],
+      new URL(testRealmURL),
+    );
+    let partner = (withIncluded as unknown as { partner?: CardDef }).partner;
+    assert.ok(
+      partner,
+      'the side-loaded resource is present synchronously after deserialization',
+    );
+    assert.strictEqual(partner?.id, friendId);
+    assert.strictEqual(
+      api.getRelationshipMembershipState(withIncluded, 'partner')
+        .membership?.[0]?.kind,
+      'present',
+      'the side-loaded relationship reads as present',
+    );
+  });
+
+  // "An execution document carries absolute/canonical module identities and
+  // explicit included resources; a consumer never derives a module base from
+  // an instance id."
+  test('RP-8.4: the execution document carries absolute module identities and explicit included resources', async function (assert) {
+    let card = await createGadget({
+      relationships: { partner: { links: { self: friendId } } },
+    });
+    // Reading the link starts its load (RP-7.2); wait for the target so the
+    // serialized execution document can side-load it.
+    (card as unknown as { partner?: unknown }).partner;
+    await waitUntil(
+      () =>
+        Boolean((card as unknown as { partner?: unknown }).partner) === true,
+      { timeout: 10000 },
+    );
+
+    let boxelExecution = getService('boxel-execution');
+    let request = await boxelExecution.requestFor(
+      card,
+      'isolated',
+      boxelExecution.surfaceId(),
+    );
+
+    let rootAdoptsFrom = request.document.data?.meta?.adoptsFrom as
+      | { module?: string }
+      | undefined;
+    assert.strictEqual(
+      rootAdoptsFrom?.module,
+      testRRI('gadget'),
+      "the primary resource's adoptsFrom module is absolute/canonical, never relative to the instance id",
+    );
+    let included = request.document.included ?? [];
+    let partnerResource = included.find(
+      (candidate) => candidate.id === friendId,
+    );
+    assert.ok(
+      partnerResource,
+      'the loaded link target crosses as an explicit included resource',
+    );
+    let partnerAdoptsFrom = partnerResource?.meta?.adoptsFrom as
+      | { module?: string }
+      | undefined;
+    assert.strictEqual(
+      partnerAdoptsFrom?.module,
+      baseCardApiModule,
+      "the included resource's module identity is absolute/canonical too",
+    );
   });
 
   test('RP-2.4: an explicit renderable root format sets the rendered format', async function (assert) {

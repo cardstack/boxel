@@ -4,9 +4,14 @@
 // Direction 1 (always an error): a conformance test cites an RP id that does
 // not exist in docs/boxel-rendering-protocol.md — the test is asserting a
 // statement the spec no longer makes.
-// Direction 2 (report by default, error with --strict): a spec statement has
-// no citing conformance test. Strict mode is the NORMATIVE-status gate; until
-// then the coverage report shows how far the suite has grown.
+// Direction 2 (ratcheted): a spec statement has no citing conformance test.
+// The uncovered count may never rise above the recorded ceiling below; when a
+// suite lands coverage, lower the ceiling in the same commit. --strict is the
+// NORMATIVE-status gate: zero uncovered outside the exempt sections.
+//
+// Exempt sections (never require citations): RP-0 is meta — its statements
+// are enforced by this script and CI, not by QUnit tests; RP-17 states what
+// is deferred — its statements become coverable only when un-deferred.
 //
 // A conformance test participates by starting its title with one or more RP
 // ids: test('RP-2.4, RP-2.6: unknown formats fall back ...', ...). Only test
@@ -21,6 +26,13 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const specPath = join(repoRoot, 'docs', 'boxel-rendering-protocol.md');
 const testRoots = [join(repoRoot, 'packages', 'host', 'tests')];
 const strict = process.argv.includes('--strict');
+
+// Coverage ratchet: the number of coverable statements still uncovered may
+// not exceed this. Lower it in the same commit that lands new coverage; it
+// only ever goes down.
+const uncoveredCeiling = 26;
+const exemptSections = new Set(['RP-0', 'RP-17']);
+const isExempt = (id) => exemptSections.has(id.split('.')[0]);
 
 const spec = readFileSync(specPath, 'utf8');
 const specIds = new Set(
@@ -77,13 +89,18 @@ for (let root of testRoots) {
   }
 }
 
-const uncovered = [...specIds].filter((id) => !citedIds.has(id)).sort();
+const uncovered = [...specIds]
+  .filter((id) => !citedIds.has(id) && !isExempt(id))
+  .sort();
+const exemptCount = [...specIds].filter(isExempt).length;
 const skippedOnly = [...skippedIds.keys()]
   .filter((id) => !citedIds.has(id))
   .sort();
 
 console.log(
-  `spec statements: ${specIds.size}; covered by conformance tests: ${citedIds.size}; uncovered: ${uncovered.length}` +
+  `spec statements: ${specIds.size} (${exemptCount} exempt: meta/deferred); ` +
+    `covered by conformance tests: ${citedIds.size}; ` +
+    `uncovered: ${uncovered.length} (ceiling: ${uncoveredCeiling})` +
     (skippedOnly.length > 0
       ? ` (${skippedOnly.length} cited only by skipped tests)`
       : ''),
@@ -109,6 +126,25 @@ if (uncovered.length > 0 && (strict || process.env.RP_BIJECTION_VERBOSE)) {
   }
 }
 
-if (badCitations.length > 0 || (strict && uncovered.length > 0)) {
+let ratchetBroken = uncovered.length > uncoveredCeiling;
+if (ratchetBroken) {
+  console.error(
+    `\nCoverage ratchet broken: ${uncovered.length} uncovered exceeds the ` +
+      `ceiling of ${uncoveredCeiling}. New or newly-uncited spec statements ` +
+      `need conformance tests (or the spec change should carry them).`,
+  );
+} else if (uncovered.length < uncoveredCeiling) {
+  console.log(
+    `\nRatchet can tighten: uncovered is ${uncovered.length}, ceiling is ` +
+      `${uncoveredCeiling}. Lower uncoveredCeiling in this script in the ` +
+      `commit that landed the coverage.`,
+  );
+}
+
+if (
+  badCitations.length > 0 ||
+  ratchetBroken ||
+  (strict && uncovered.length > 0)
+) {
   process.exit(1);
 }

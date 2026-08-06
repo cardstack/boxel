@@ -74,8 +74,14 @@ invalidateModule`, `BoxelExecutionService.invalidate`) — zero consumers;
    word-boundary regex gate costs at worst one extra parse.
 10. **F10 — `MaterializationPurpose` is 60% unproduced** (only
     `host-display` / `interactive-edit` are ever created; nothing reads it).
-    Prune or annotate as protocol-reserved. Same family: `invokeCardMethod`
-    (~60 lines, no product callers — the deferred BXL-command seam).
+    RESOLVED as protocol-reserved, keep: the frozen branch's CI collapse
+    (one `could not identify card` indexing failure taking down 19/20 host
+    shards) is empirical evidence the indexing-vs-interactive
+    materialization split must be encoded before the Sandbox tier reaches
+    the store — see
+    [boxel-frozen-branch-parity-audit.md](boxel-frozen-branch-parity-audit.md)
+    N6. Same family: `invokeCardMethod` (~60 lines, no product callers —
+    the deferred BXL-command seam).
 11. **F11 — duplicated pending-relationship predicate** in
     `boxel-projection.ts` (two spellings, one meaning).
 12. **F12 — blast radius**: shared-file touches are individually defensible
