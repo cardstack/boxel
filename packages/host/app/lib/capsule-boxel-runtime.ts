@@ -1,6 +1,8 @@
 import {
   BOXEL_EXECUTION_PROTOCOL_VERSION,
   codeRefWithAbsoluteIdentifier,
+  fieldDefFormats,
+  formats as renderableFormats,
   normalizeCodeRef,
   type BoxelDescription,
   type BoxelInstanceHandle,
@@ -35,6 +37,8 @@ import {
 } from './capsule-component';
 import { DefaultCapsuleComponentRuntime } from './capsule-component-runtime';
 
+import type { HostBoxelProjection } from './boxel-projection';
+
 import type CapsuleModuleEvaluator from './capsule-module-evaluator';
 import type {
   CapsuleCardFieldMetadata,
@@ -56,6 +60,7 @@ interface CapsuleInstanceState {
   relativeTo: RealmResourceIdentifier | undefined;
   purpose: MaterializationPurpose;
   projection?: Record<string, unknown>;
+  hostProjection?: HostBoxelProjection;
 }
 
 function trustedBaseFallbackRef(
@@ -146,7 +151,7 @@ export default class CapsuleBoxelRuntime implements BoxelRuntime {
       let type = this.types.get(boxel);
       let metadata = await this.metadataFor(type);
       return Object.entries(metadata.fields).map(([fieldName, field]) =>
-        resolvedField(fieldName, field, null, false),
+        resolvedField(fieldName, field, null),
       );
     }
     let instance = this.instances.get(boxel);
@@ -162,17 +167,43 @@ export default class CapsuleBoxelRuntime implements BoxelRuntime {
     );
   }
 
+  /**
+   * Adopt the Host's semantic projection of the canonical instance.
+   *
+   * Trusted-Base semantics (descriptions, resolved configuration, linked
+   * value references, presentation) materialize exactly once, Host-side, and
+   * cross this adapter as data (RP-5.4). The Capsule evaluator continues to
+   * own authored execution: templates, getters, computeVia, and actions.
+   */
+  adoptHostProjection(
+    card: BoxelInstanceHandle,
+    projection: HostBoxelProjection,
+  ): void {
+    let instance = this.instances.get(card);
+    instance.hostProjection = structuredClone(projection);
+  }
+
   async buildRenderRecord(
     card: BoxelInstanceHandle,
   ): Promise<BoxelRenderRecord> {
     let instance = this.instances.get(card);
     let projection = await this.projectionFor(instance);
+    let host = instance.hostProjection;
+    if (host) {
+      return buildBoxelRenderRecord({
+        boxel: host.boxel,
+        instanceId: host.instanceId,
+        fields: host.fields,
+        presentation: host.presentation,
+        modelExtensions: cloneJSONRecord(projection),
+      });
+    }
     return buildBoxelRenderRecord({
       boxel: await this.descriptionFor(instance.type),
       instanceId: instance.resource.id ?? null,
-      model: cloneJSONRecord(projection),
       fields: await this.fieldsFor(instance),
       presentation: await this.presentationFor(instance),
+      modelExtensions: cloneJSONRecord(projection),
     });
   }
 
@@ -320,31 +351,7 @@ export default class CapsuleBoxelRuntime implements BoxelRuntime {
         isComputed: field.isComputed,
       }),
     );
-    let formats = metadata.authoredTemplateFormats.map(
-      (format): FormatDescription => ({
-        format,
-        provider: { kind: 'authored', ref: type.ref },
-      }),
-    );
-    for (let format of [
-      'isolated',
-      'embedded',
-      'fitted',
-      'atom',
-      'edit',
-      'head',
-      'markdown',
-    ]) {
-      if (!formats.some((item) => item.format === format)) {
-        formats.push({
-          format,
-          provider: {
-            kind: 'trusted-base',
-            ref: trustedBaseFallbackRef(metadata.definitionKind),
-          },
-        });
-      }
-    }
+    let formats = formatDescriptionsFor(type, metadata);
     return {
       protocolVersion: BOXEL_EXECUTION_PROTOCOL_VERSION,
       requiredFeatures: [],
@@ -377,14 +384,16 @@ export default class CapsuleBoxelRuntime implements BoxelRuntime {
   private async fieldsFor(
     instance: CapsuleInstanceState,
   ): Promise<ResolvedField[]> {
+    if (instance.hostProjection) {
+      return structuredClone(instance.hostProjection.fields);
+    }
     let metadata = await this.metadataFor(instance.type);
     let projection = await this.projectionFor(instance);
     return Object.entries(metadata.fields).map(([fieldName, field]) =>
       resolvedField(
         fieldName,
         field,
-        cloneJSONValue(projection[fieldName]),
-        !field.isComputed && instance.purpose === 'interactive-edit',
+        projectedFieldValue(field, projection[fieldName]),
       ),
     );
   }
@@ -400,6 +409,43 @@ export default class CapsuleBoxelRuntime implements BoxelRuntime {
       theme: boxelReferenceOrNull(projection.cardTheme),
     };
   }
+}
+
+/**
+ * Assemble the format inventory in the shared pipeline's shape and order:
+ * iterate the renderable inventory, attribute each authored format to the
+ * evaluated type, and fall back to the trusted Base provider for the formats
+ * that tier of definition declares (RP-2.2, RP-2.3). This mirrors Direct's
+ * prototype-chain discovery over the declared vocabulary instead of a
+ * hard-coded format list.
+ */
+function formatDescriptionsFor(
+  type: CapsuleTypeState,
+  metadata: CapsuleCardTypeMetadata,
+): FormatDescription[] {
+  let trusted =
+    metadata.definitionKind === 'field'
+      ? fieldDefFormats
+      : metadata.definitionKind === 'file'
+        ? renderableFormats.filter((format) => format !== 'head')
+        : renderableFormats;
+  return renderableFormats.flatMap((format): FormatDescription[] => {
+    if (metadata.authoredTemplateFormats.includes(format)) {
+      return [{ format, provider: { kind: 'authored', ref: type.ref } }];
+    }
+    if (trusted.includes(format)) {
+      return [
+        {
+          format,
+          provider: {
+            kind: 'trusted-base',
+            ref: trustedBaseFallbackRef(metadata.definitionKind),
+          },
+        },
+      ];
+    }
+    return [];
+  });
 }
 
 function typeKey(type: CapsuleTypeState, format?: string): string {
@@ -520,11 +566,17 @@ function setSnapshotPath(
   target[segments[segments.length - 1]!] = value;
 }
 
+/**
+ * The Host-less fallback projection of one field, shaped identically to the
+ * shared pipeline's `ResolvedField`. Configuration and field descriptions
+ * require the canonical instance, so without an adopted Host projection they
+ * resolve to their empty values; writability always requires an explicit Host
+ * grant and therefore defaults to false (RP-9.1).
+ */
 function resolvedField(
   fieldName: string,
   metadata: CapsuleCardFieldMetadata,
   value: JSONValue | BoxelValueReference | BoxelValueReference[],
-  writable: boolean,
 ): ResolvedField {
   return {
     fieldName,
@@ -532,11 +584,78 @@ function resolvedField(
     kind: metadata.kind,
     value,
     resolvedConfiguration: null,
-    presentation: metadata.displayName
-      ? { displayName: metadata.displayName }
-      : {},
-    writable,
+    presentation: {},
+    writable: false,
   };
+}
+
+/**
+ * Project a bounded evaluator value into the record's canonical value shape:
+ * nested Boxel values cross as `BoxelValueReference` references, never
+ * expanded object graphs (RP-14.1). Without the canonical instance the
+ * declared field type stands in for the runtime class, and a composite is
+ * recognized by its object shape; the adopted Host projection supplies the
+ * exact reference for every production render.
+ */
+function projectedFieldValue(
+  metadata: CapsuleCardFieldMetadata,
+  value: unknown,
+): JSONValue | BoxelValueReference | BoxelValueReference[] {
+  if (metadata.kind === 'linksTo') {
+    return referenceFor(metadata, value);
+  }
+  if (metadata.kind === 'linksToMany') {
+    if (!Array.isArray(value)) {
+      return value === undefined || value === null
+        ? null
+        : cloneJSONValue(value);
+    }
+    return value.map(
+      (entry) => referenceFor(metadata, entry) ?? nullReference(metadata),
+    );
+  }
+  if (isCompositeSnapshot(value)) {
+    return referenceFor(metadata, value);
+  }
+  if (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.every(isCompositeSnapshot)
+  ) {
+    return value.map(
+      (entry) => referenceFor(metadata, entry) ?? nullReference(metadata),
+    );
+  }
+  return cloneJSONValue(value);
+}
+
+function referenceFor(
+  metadata: CapsuleCardFieldMetadata,
+  value: unknown,
+): BoxelValueReference | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  let id =
+    typeof value === 'object' && 'id' in (value as Record<string, unknown>)
+      ? (value as Record<string, unknown>).id
+      : null;
+  return {
+    $boxel: {
+      id: typeof id === 'string' ? id : null,
+      type: trustedIdentityRef(metadata.type),
+    },
+  };
+}
+
+function nullReference(
+  metadata: CapsuleCardFieldMetadata,
+): BoxelValueReference {
+  return { $boxel: { id: null, type: trustedIdentityRef(metadata.type) } };
+}
+
+function isCompositeSnapshot(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function cloneJSONValue(value: unknown): JSONValue {

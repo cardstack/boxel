@@ -23,6 +23,10 @@ import BoxelExecutionEngine, {
   type BoxelExecutionRequest,
   type BoxelExecutionSession,
 } from '@cardstack/host/lib/boxel-execution-engine';
+import {
+  projectBoxelExecutionDocument,
+  projectHostBoxelSemantics,
+} from '@cardstack/host/lib/boxel-projection';
 import type { BoxelExecutionMode } from '@cardstack/host/lib/boxel-runtime';
 import BoxelRuntimeRouter from '@cardstack/host/lib/boxel-runtime-router';
 import { BoxelModuleGraphClassifier } from '@cardstack/host/lib/boxel-source-classifier';
@@ -117,13 +121,12 @@ export default class BoxelExecutionService extends Service {
       }),
       this.cardService.getAPI(),
     ]);
-    let resource = document.data;
-    if (!resource) {
+    if (!document.data) {
       throw new Error('Cannot execute a Boxel without a serialized resource');
     }
-    projectTrustedBoxelSemantics(
+    let projectedDocument = projectBoxelExecutionDocument(
       card,
-      resource.attributes ?? (resource.attributes = {}),
+      document as LooseSingleCardDocument,
       api,
       (identifier) => this.isTrustedModule(identifier),
     );
@@ -134,11 +137,12 @@ export default class BoxelExecutionService extends Service {
       format: format ?? 'isolated',
       moduleIdentifier,
       source,
-      resource,
-      document: document as LooseSingleCardDocument,
+      resource: projectedDocument.data,
+      document: projectedDocument,
       relativeTo: relativeTo ?? executionRelativeTo(card),
       purpose: format === 'edit' ? 'interactive-edit' : 'host-display',
       canonicalCard: card,
+      hostProjection: projectHostBoxelSemantics(card, api),
     };
   }
 
@@ -546,229 +550,6 @@ function executionRelativeTo(
   return 'id' in card && typeof card.id === 'string'
     ? (card.id as RealmResourceIdentifier)
     : undefined;
-}
-
-/**
- * Add JSON-safe semantics supplied by trusted Boxel types to the bounded
- * execution snapshot. Authored getters and computeVia functions still execute
- * only in their selected runtime; this walk merely lets nested trusted Base
- * values retain public getter semantics such as CurrencyField.symbol.
- *
- * The Store-backed instance never crosses the boundary. Only values whose
- * constructors resolve to a trusted module are evaluated, and only cloneable
- * results are copied into the request document.
- */
-function projectTrustedBoxelSemantics(
-  boxel: BaseDef,
-  snapshot: Record<string, unknown>,
-  api: typeof import('@cardstack/base/card-api'),
-  isTrustedModule: (identifier: string) => boolean,
-  visited = new WeakSet<object>(),
-  declaredType?: BaseDefConstructor,
-): void {
-  if (visited.has(boxel)) {
-    return;
-  }
-  visited.add(boxel);
-
-  let fields = (
-    declaredType
-      ? api.getFields(declaredType, { includeComputeds: false })
-      : api.getFields(boxel, { includeComputeds: false })
-  ) as Record<string, Field<BaseDefConstructor>>;
-  for (let [fieldName, field] of Object.entries(fields)) {
-    if (field.fieldType !== 'contains' && field.fieldType !== 'containsMany') {
-      continue;
-    }
-    let projectedValue = snapshot[fieldName];
-    let liveValue: unknown;
-    if (declaredType) {
-      // Trusted nested projection uses a deliberately inert receiver rather
-      // than a live Base instance. Its own values are the bounded snapshot;
-      // asking Base to peek can throw for declared defaults that are absent.
-      liveValue = snapshot[fieldName];
-    } else {
-      liveValue = api.peekAtField(boxel, fieldName) as unknown;
-    }
-    if (field.fieldType === 'containsMany') {
-      if (!Array.isArray(liveValue) || !Array.isArray(projectedValue)) {
-        continue;
-      }
-      for (let [index, entry] of liveValue.entries()) {
-        projectNestedBoxelSemantics(
-          entry,
-          projectedValue[index],
-          field.card,
-          api,
-          isTrustedModule,
-          visited,
-        );
-      }
-    } else {
-      projectNestedBoxelSemantics(
-        liveValue,
-        projectedValue,
-        field.card,
-        api,
-        isTrustedModule,
-        visited,
-      );
-    }
-  }
-}
-
-function projectNestedBoxelSemantics(
-  boxel: unknown,
-  snapshot: unknown,
-  boxelType: BaseDefConstructor,
-  api: typeof import('@cardstack/base/card-api'),
-  isTrustedModule: (identifier: string) => boolean,
-  visited: WeakSet<object>,
-): void {
-  if (
-    !boxel ||
-    typeof boxel !== 'object' ||
-    !snapshot ||
-    typeof snapshot !== 'object' ||
-    Array.isArray(snapshot)
-  ) {
-    return;
-  }
-  // Field metadata is the canonical type identity. Values produced by Base
-  // deserialization may be wrapped or subclassed, so their runtime
-  // `constructor` is not a reliable Loader lookup key.
-  let identity = Loader.identify(boxelType);
-  let projected = snapshot as Record<string, unknown>;
-  if (!identity || !isTrustedModule(identity.module)) {
-    // Authored FieldDefs are structural waypoints, not trusted semantic
-    // owners. Traverse their declared contained fields so trusted Base values
-    // below them are not pruned, but never evaluate an authored getter or
-    // computeVia in the Host.
-    projectTrustedBoxelSemantics(
-      boxel as BaseDef,
-      projected,
-      api,
-      isTrustedModule,
-      visited,
-    );
-    return;
-  }
-  // Evaluate trusted Base semantics against the bounded snapshot itself. A
-  // deserialized nested value can be a wrapper whose own constructor is not
-  // the declared Field type; the field prototype is the stable semantic
-  // contract. Do not run its constructor or pass the live Store object.
-  let receiver = Object.create(boxelType.prototype) as Record<string, unknown>;
-  for (let [name, value] of Object.entries(projected)) {
-    // Define inert own data directly. Assignment would invoke Base's field
-    // setters and reject the intentionally plain nested boundary records.
-    Object.defineProperty(receiver, name, {
-      configurable: true,
-      enumerable: true,
-      value,
-      writable: true,
-    });
-  }
-  projectTrustedBoxelSemantics(
-    receiver as unknown as BaseDef,
-    projected,
-    api,
-    isTrustedModule,
-    visited,
-    boxelType,
-  );
-  projectTrustedGetters(receiver, boxelType, projected, isTrustedModule);
-}
-
-function projectTrustedGetters(
-  boxel: object,
-  boxelType: BaseDefConstructor,
-  snapshot: Record<string, unknown>,
-  isTrustedModule: (identifier: string) => boolean,
-): void {
-  let prototype = boxelType.prototype as object | null;
-  let declaredType: BaseDefConstructor | undefined = boxelType;
-  while (prototype && prototype !== Object.prototype) {
-    let constructor = (prototype as { constructor?: { prototype?: object } })
-      .constructor;
-    let identity =
-      (declaredType ? Loader.identify(declaredType) : undefined) ??
-      (constructor ? Loader.identify(constructor) : undefined);
-    if (!identity || !isTrustedModule(identity.module)) {
-      break;
-    }
-    for (let name of Object.getOwnPropertyNames(prototype)) {
-      if (
-        name === 'constructor' ||
-        Object.prototype.hasOwnProperty.call(snapshot, name)
-      ) {
-        continue;
-      }
-      let getter = Object.getOwnPropertyDescriptor(prototype, name)?.get;
-      if (!getter) {
-        continue;
-      }
-      try {
-        let projected = cloneBoundaryValue(getter.call(boxel));
-        if (projected !== boundaryValueUnavailable) {
-          snapshot[name] = projected;
-        }
-      } catch {
-        // One optional trusted getter must not erase independent semantics.
-      }
-    }
-    declaredType = undefined;
-    prototype = Object.getPrototypeOf(prototype) as object | null;
-  }
-}
-
-const boundaryValueUnavailable = Symbol('boundary-value-unavailable');
-
-function cloneBoundaryValue(
-  value: unknown,
-  seen = new WeakSet<object>(),
-): unknown | typeof boundaryValueUnavailable {
-  if (
-    value === null ||
-    typeof value === 'string' ||
-    typeof value === 'boolean'
-  ) {
-    return value;
-  }
-  if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : null;
-  }
-  if (value === undefined) {
-    return boundaryValueUnavailable;
-  }
-  if (value instanceof URL) {
-    return value.href;
-  }
-  if (typeof value !== 'object' || seen.has(value)) {
-    return boundaryValueUnavailable;
-  }
-  if (Loader.identify(value.constructor)) {
-    return boundaryValueUnavailable;
-  }
-  seen.add(value);
-  if (Array.isArray(value)) {
-    let result: unknown[] = [];
-    for (let item of value) {
-      let projected = cloneBoundaryValue(item, seen);
-      if (projected === boundaryValueUnavailable) {
-        return boundaryValueUnavailable;
-      }
-      result.push(projected);
-    }
-    return result;
-  }
-  let result: Record<string, unknown> = {};
-  for (let [key, item] of Object.entries(value)) {
-    let projected = cloneBoundaryValue(item, seen);
-    if (projected !== boundaryValueUnavailable) {
-      result[key] = projected;
-    }
-  }
-  return result;
 }
 
 function isURLWithin(identifier: string, root: string): boolean {

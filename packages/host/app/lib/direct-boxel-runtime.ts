@@ -1,20 +1,8 @@
 import {
-  BOXEL_EXECUTION_PROTOCOL_VERSION,
-  getAncestor,
-  identifyCard,
-  isBaseDefInstance,
-  isFieldDef,
-  isFileDef,
   loadCardDef,
-  moduleFrom,
   type BoxelDescription,
-  type BoxelKind,
   type BoxelRenderRecord,
-  type BoxelValueReference,
   type CodeRef,
-  type FieldDescription,
-  type FormatDescription,
-  type InstancePresentation,
   type JSONValue,
   type Loader,
   type LooseCardResource,
@@ -27,6 +15,11 @@ import {
   type BoxelTypeHandle,
 } from '@cardstack/runtime-common';
 
+import {
+  describeBoxelType,
+  projectHostBoxelSemantics,
+  resolveBoxelFields,
+} from './boxel-projection';
 import { buildBoxelRenderRecord } from './boxel-render-record';
 import {
   RuntimeHandleRegistry,
@@ -68,8 +61,10 @@ type GetLoader = () => Loader;
  * Trusted, in-process implementation of Boxel's semantic runtime.
  *
  * Cloneable descriptions and values leave this class through
- * `buildRenderRecord()`. Glimmer component definitions are retained in a
- * Host-local `DirectRenderSlot` and never appear in that boundary record.
+ * `buildRenderRecord()`, whose inputs come from the shared Host projection
+ * pipeline in `boxel-projection.ts`. Glimmer component definitions are
+ * retained in a Host-local `DirectRenderSlot` and never appear in that
+ * boundary record.
  */
 export default class DirectBoxelRuntime implements BoxelRuntime {
   readonly mode = 'direct' as const;
@@ -122,7 +117,7 @@ export default class DirectBoxelRuntime implements BoxelRuntime {
 
   async describeBoxel(boxel: BoxelTypeHandle): Promise<BoxelDescription> {
     let api = await this.getCardAPI();
-    return this.describeBoxelType(this.types.get(boxel), api);
+    return describeBoxelType(this.types.get(boxel), api);
   }
 
   async getFields(
@@ -132,7 +127,7 @@ export default class DirectBoxelRuntime implements BoxelRuntime {
     let instance = boxel.startsWith('direct-type:')
       ? new (this.types.get(boxel))()
       : this.instances.get(boxel);
-    return this.resolveFields(instance, api, undefined);
+    return resolveBoxelFields(instance, api);
   }
 
   async getField(
@@ -203,26 +198,11 @@ export default class DirectBoxelRuntime implements BoxelRuntime {
       typeof cardOrHandle === 'string'
         ? this.instances.get(cardOrHandle)
         : cardOrHandle;
-    let boxel = this.describeBoxelType(card.constructor, api);
-    let fields = this.resolveFields(card, api, options.writableFields);
-    let model = JSON.parse(
-      JSON.stringify(
-        Object.fromEntries(
-          fields.map((field) => [field.fieldName, field.value]),
-        ),
-      ),
-    ) as Record<string, JSONValue>;
-    let id = boxelId(card);
-    if (id) {
-      model.id = id;
-    }
-    return buildBoxelRenderRecord({
-      boxel,
-      instanceId: id,
-      model,
-      fields,
-      presentation: instancePresentation(card, api),
-    });
+    return buildBoxelRenderRecord(
+      projectHostBoxelSemantics(card, api, {
+        writableFields: options.writableFields,
+      }),
+    );
   }
 
   async serializeCard(
@@ -271,340 +251,4 @@ export default class DirectBoxelRuntime implements BoxelRuntime {
       this.instances.release(handle);
     }
   }
-
-  private describeBoxelType(
-    boxelType: BaseDefConstructor,
-    api: typeof CardAPI,
-  ): BoxelDescription {
-    let ref = requiredCodeRef(boxelType);
-    let fields = Object.entries(
-      api.getFields(boxelType, { includeComputeds: true }),
-    ).map(([fieldName, field]): FieldDescription => {
-      return {
-        fieldName,
-        fieldType: requiredCodeRef(field.card),
-        kind: field.fieldType,
-        isComputed: Boolean(field.computeVia),
-      };
-    });
-
-    return {
-      protocolVersion: BOXEL_EXECUTION_PROTOCOL_VERSION,
-      requiredFeatures: [],
-      ref,
-      boxelKind: boxelKind(boxelType),
-      ancestors: ancestorRefs(boxelType),
-      fields,
-      formats: formatDescriptions(boxelType, api.formats),
-      presentation: {
-        displayName:
-          typeof boxelType.displayName === 'string'
-            ? boxelType.displayName
-            : boxelType.name,
-        headerColor:
-          typeof (boxelType as typeof boxelType & { headerColor?: unknown })
-            .headerColor === 'string'
-            ? (boxelType as typeof boxelType & { headerColor: string })
-                .headerColor
-            : null,
-        prefersWideFormat:
-          (boxelType as typeof boxelType & { prefersWideFormat?: unknown })
-            .prefersWideFormat === true,
-      },
-      executionHints: {
-        prefersFullSandbox:
-          (boxelType as typeof boxelType & { prefersFullSandbox?: unknown })
-            .prefersFullSandbox === true,
-      },
-    };
-  }
-
-  private resolveFields(
-    instance: BaseDef,
-    api: typeof CardAPI,
-    writableFields: ReadonlySet<string> | undefined,
-  ): ResolvedField[] {
-    return Object.entries(
-      api.getFields(instance, { includeComputeds: true }),
-    ).map(([fieldName, field]): ResolvedField => {
-      let description = api.getFieldDescription(instance, fieldName);
-      let presentation: Record<string, JSONValue> = {};
-      if (description) {
-        presentation.description = description;
-      }
-      return {
-        fieldName,
-        fieldType: requiredCodeRef(field.card),
-        kind: field.fieldType,
-        value: projectValue(api.peekAtField(instance, fieldName)),
-        resolvedConfiguration:
-          projectJSONValue(resolveFieldConfiguration(api, field, instance)) ??
-          null,
-        presentation,
-        writable:
-          !field.computeVia && (writableFields?.has(fieldName) ?? false),
-      };
-    });
-  }
-}
-
-/**
- * Field configuration became a public Card API operation after some deployed
- * Base realm versions. Keep its execution with the runtime that owns the live
- * Field and instance, while retaining compatibility with those older Base
- * modules. This mirrors Base's shallow merge semantics; it does not transfer
- * either configuration provider across an execution boundary.
- */
-function resolveFieldConfiguration(
-  api: typeof CardAPI,
-  field: Field<BaseDefConstructor>,
-  instance: BaseDef,
-): unknown {
-  let publicResolver = (
-    api as typeof CardAPI & {
-      resolveFieldConfiguration?: (
-        field: Field<BaseDefConstructor>,
-        instance: BaseDef,
-      ) => unknown;
-    }
-  ).resolveFieldConfiguration;
-  if (publicResolver) {
-    return publicResolver(field, instance);
-  }
-
-  let fromType = evaluateConfiguration(
-    (field.card as typeof field.card & { configuration?: unknown })
-      .configuration,
-    instance,
-  );
-  let fromUsage = evaluateConfiguration(
-    (field as typeof field & { configuration?: unknown }).configuration,
-    instance,
-  );
-  return mergeConfigurations(fromType, fromUsage);
-}
-
-function evaluateConfiguration(value: unknown, instance: BaseDef): unknown {
-  return typeof value === 'function'
-    ? (value as (this: BaseDef) => unknown).call(instance)
-    : value;
-}
-
-function mergeConfigurations(typeValue: unknown, usageValue: unknown): unknown {
-  if (!isPlainObject(typeValue)) {
-    return usageValue ?? typeValue;
-  }
-  if (!isPlainObject(usageValue)) {
-    return usageValue ?? typeValue;
-  }
-
-  let result: Record<string, unknown> = { ...typeValue };
-  for (let [key, value] of Object.entries(usageValue)) {
-    if (value === undefined) {
-      continue;
-    }
-    result[key] =
-      isPlainObject(value) && isPlainObject(result[key])
-        ? { ...result[key], ...value }
-        : value;
-  }
-  return result;
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-}
-
-function requiredCodeRef(boxelType: BaseDefConstructor): CodeRef {
-  let ref = identifyCard(boxelType);
-  if (!ref) {
-    throw new Error(
-      `Cannot describe Boxel type '${boxelType.name}' before it has a code reference`,
-    );
-  }
-  return ref;
-}
-
-function boxelKind(boxelType: BaseDefConstructor): BoxelKind {
-  if (isFileDef(boxelType)) {
-    return 'file';
-  }
-  if (isFieldDef(boxelType)) {
-    return 'field';
-  }
-  return 'card';
-}
-
-function ancestorRefs(boxelType: BaseDefConstructor): CodeRef[] {
-  let result: CodeRef[] = [];
-  let current = getAncestor(boxelType);
-  while (current) {
-    let ref = identifyCard(current);
-    if (ref) {
-      result.push(ref);
-    }
-    current = getAncestor(current);
-  }
-  return result;
-}
-
-function formatDescriptions(
-  boxelType: BaseDefConstructor,
-  knownFormats: string[],
-): FormatDescription[] {
-  return knownFormats.flatMap((format): FormatDescription[] => {
-    let provider = formatProvider(boxelType, format);
-    if (!provider) {
-      return [];
-    }
-    let ref = identifyCard(provider);
-    if (!ref) {
-      return [];
-    }
-    return [
-      {
-        format,
-        provider: {
-          kind: isTrustedBaseRef(ref) ? 'trusted-base' : 'authored',
-          ref,
-        },
-      },
-    ];
-  });
-}
-
-function formatProvider(
-  boxelType: BaseDefConstructor,
-  format: string,
-): BaseDefConstructor | undefined {
-  let current: BaseDefConstructor | undefined = boxelType;
-  while (current) {
-    if (Object.prototype.hasOwnProperty.call(current, format)) {
-      return current;
-    }
-    current = getAncestor(current);
-  }
-  return undefined;
-}
-
-function isTrustedBaseRef(ref: CodeRef): boolean {
-  let module = moduleFrom(ref);
-  return (
-    module.startsWith('@cardstack/base/') ||
-    module.startsWith('https://cardstack.com/base/')
-  );
-}
-
-function instancePresentation(
-  instance: BaseDef,
-  api: typeof CardAPI,
-): InstancePresentation {
-  return {
-    title: stringField(instance, 'cardTitle', api),
-    summary: stringField(instance, 'cardDescription', api),
-    thumbnailURL: stringField(instance, 'cardThumbnailURL', api),
-    theme: boxelReference(fieldValue(instance, 'cardTheme', api)),
-  };
-}
-
-function stringField(
-  instance: BaseDef,
-  fieldName: string,
-  api: typeof CardAPI,
-): string | null {
-  let value = fieldValue(instance, fieldName, api);
-  return typeof value === 'string' ? value : null;
-}
-
-function fieldValue(
-  instance: BaseDef,
-  fieldName: string,
-  api: typeof CardAPI,
-): unknown {
-  if (!(fieldName in api.getFields(instance, { includeComputeds: true }))) {
-    return undefined;
-  }
-  return api.peekAtField(instance, fieldName);
-}
-
-function projectValue(
-  value: unknown,
-): JSONValue | BoxelValueReference | BoxelValueReference[] {
-  if (isBaseDefInstance(value)) {
-    return boxelReference(value)!;
-  }
-  if (Array.isArray(value) && value.every(isBaseDefInstance)) {
-    return value.map((item) => boxelReference(item)!);
-  }
-  return projectJSONValue(value) ?? null;
-}
-
-function boxelReference(value: unknown): BoxelValueReference | null {
-  if (!isBaseDefInstance(value)) {
-    return null;
-  }
-  let ref = identifyCard(value.constructor as BaseDefConstructor);
-  if (!ref) {
-    return null;
-  }
-  return {
-    $boxel: {
-      id: boxelId(value),
-      type: ref,
-    },
-  };
-}
-
-function boxelId(value: BaseDef): string | null {
-  for (let key of ['id', 'url', 'sourceUrl']) {
-    let candidate = (value as unknown as Record<string, unknown>)[key];
-    if (typeof candidate === 'string') {
-      return candidate;
-    }
-  }
-  return null;
-}
-
-function projectJSONValue(
-  value: unknown,
-  seen = new WeakSet<object>(),
-): JSONValue | undefined {
-  if (
-    value === null ||
-    typeof value === 'string' ||
-    typeof value === 'boolean'
-  ) {
-    return value;
-  }
-  if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : null;
-  }
-  if (value instanceof URL) {
-    return value.href;
-  }
-  if (value instanceof Date) {
-    return value.toISOString();
-  }
-  if (Array.isArray(value)) {
-    return value.map((item) => projectJSONValue(item, seen) ?? null);
-  }
-  if (typeof value !== 'object' || value === undefined) {
-    return undefined;
-  }
-  if (isBaseDefInstance(value)) {
-    return boxelReference(value) as unknown as JSONValue;
-  }
-  if (seen.has(value)) {
-    return null;
-  }
-  seen.add(value);
-  let result: Record<string, JSONValue> = {};
-  for (let [key, item] of Object.entries(value)) {
-    let projected = projectJSONValue(item, seen);
-    if (projected !== undefined) {
-      result[key] = projected;
-    }
-  }
-  seen.delete(value);
-  return result;
 }

@@ -20,6 +20,7 @@ import {
   type BoxelSourceClassification,
 } from './boxel-source-classifier';
 
+import type { HostBoxelProjection } from './boxel-projection';
 import type { MaterializationPurpose } from './boxel-runtime';
 import type BoxelRuntimeRouter from './boxel-runtime-router';
 import type {
@@ -56,6 +57,14 @@ export interface BoxelExecutionRequest {
    * to Capsule or Sandbox runtimes and never crosses an execution boundary.
    */
   canonicalCard?: BaseDef;
+  /**
+   * The Host's cloneable semantic projection of the canonical instance,
+   * produced by the shared pipeline in `boxel-projection.ts`. A Capsule
+   * adopts it so trusted-Base semantics materialize once, Host-side, and
+   * cross as data; the Sandbox child re-derives the same shapes from the
+   * projected document with its child-local Base (RP-14.4).
+   */
+  hostProjection?: HostBoxelProjection;
   /** A Host-known stronger-boundary request, if already available. */
   prefersFullSandbox?: boolean;
 }
@@ -251,6 +260,12 @@ export class BoxelExecutionSession {
               request.relativeTo,
               request.purpose,
             );
+      if (request.hostProjection && lease.runtime.mode === 'capsule') {
+        (lease.runtime as CapsuleBoxelRuntime).adoptHostProjection(
+          card,
+          request.hostProjection,
+        );
+      }
       this.assertCurrent(generation);
       let renderRecord = await lease.runtime.buildRenderRecord(card);
       // Semantic-record admission (RP-14.3): an unsupported protocol version
