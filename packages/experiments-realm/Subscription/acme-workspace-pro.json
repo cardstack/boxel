@@ -1,0 +1,29 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "planName": "Workspace Pro — Annual",
+      "price": { "amount": 5880, "currency": { "code": "USD" } },
+      "billingCycle": "yearly",
+      "startDate": "2026-07-15",
+      "status": "active",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "customer": {
+        "links": { "self": "../Customer/acme-industries" }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../blocks/commerce/subscription",
+        "name": "Subscription"
+      }
+    }
+  }
+}

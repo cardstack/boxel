@@ -1,0 +1,45 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "invoiceNumber": "INV-2026-041",
+      "issueDate": "2026-07-15",
+      "dueDate": "2026-08-14",
+      "status": "sent",
+      "lineItems": [
+        {
+          "description": "Workspace Pro seats (10)",
+          "quantity": 10,
+          "unitPrice": { "amount": 49, "currency": { "code": "USD" } }
+        },
+        {
+          "description": "Onboarding workshop",
+          "quantity": 1,
+          "unitPrice": { "amount": 800, "currency": { "code": "USD" } }
+        },
+        {
+          "description": "Priority support add-on",
+          "quantity": 12,
+          "unitPrice": { "amount": 25, "currency": { "code": "USD" } }
+        }
+      ],
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "customer": {
+        "links": { "self": "../Customer/acme-industries" }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../blocks/commerce/invoice",
+        "name": "Invoice"
+      }
+    }
+  }
+}
