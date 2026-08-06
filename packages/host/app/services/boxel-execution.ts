@@ -12,6 +12,7 @@ import {
   normalizeCodeRef,
   relativeTo as relativeToSymbol,
   type CodeRef,
+  type JSONValue,
   type LooseSingleCardDocument,
   type PrerenderedHtmlFormat,
   type RealmResourceIdentifier,
@@ -25,6 +26,7 @@ import BoxelExecutionEngine, {
   type BoxelExecutionSession,
 } from '@cardstack/host/lib/boxel-execution-engine';
 import {
+  createLiveBoxelModel,
   projectBoxelExecutionDocument,
   projectHostBoxelSemantics,
 } from '@cardstack/host/lib/boxel-projection';
@@ -98,6 +100,19 @@ export default class BoxelExecutionService extends Service {
   private nextSurface = 0;
   private nextLocalBoxel = 0;
   private sandboxCreationCount = 0;
+  /** Set on first `requestFor()`; see `liveModelFor()`. */
+  private cardAPI?: Awaited<ReturnType<CardService['getAPI']>>;
+  /**
+   * RP-20.2: one tracked version cell per canonical instance — the bridge
+   * from card-api's imperative `subscribeToChanges` notifications into
+   * Glimmer autotracking for the live model's reads. The subscriber is a
+   * PURE OBSERVER by contract: it bumps this cell and (async, idempotent)
+   * re-grows the recursive subscription to cover newly-assigned nested
+   * compounds — it never reads or writes the instance, never reprojects,
+   * never touches the store (the sync root-cause lesson,
+   * docs/boxel-sync-root-cause-2026-08-06.md).
+   */
+  private instanceVersions = new WeakMap<BaseDef, { v: number }>();
   /**
    * Volatile promotion (docs/boxel-volatile-execution-plan.md): one-way for
    * the life of this service (tab) — no lease, no timer, no demotion. The
@@ -291,6 +306,9 @@ export default class BoxelExecutionService extends Service {
       }),
       this.cardService.getAPI(),
     ]);
+    // Captured for the synchronous live-model reads (`liveModelFor`) —
+    // every render that needs it necessarily passed through here first.
+    this.cardAPI = api;
     if (!document.data) {
       throw new Error('Cannot execute a Boxel without a serialized resource');
     }
@@ -337,6 +355,55 @@ export default class BoxelExecutionService extends Service {
         ensureRelationshipLoaded: (reference) => this.store.get(reference),
       }),
     };
+  }
+
+  /**
+   * RP-20.2/RP-20.5: the live `@model` for a mounted generation — main's
+   * sync pattern (shared instance + autotracked reads) expressed through
+   * the projection boundary. Property reads project the canonical
+   * instance's current value as cloneable data; because the reads are
+   * tracked, every mounted view of this instance re-renders in place on
+   * any mutation, with no subscription pipeline at all. `fallback` is the
+   * materialize-time record model (instance id, RP-4.4 extensions, and
+   * the pending-relationship values only materialize could resolve).
+   */
+  liveModelFor(
+    card: BaseDef,
+    fallback: Record<string, unknown>,
+  ): Record<string, unknown> {
+    if (!this.cardAPI) {
+      return fallback;
+    }
+    let cell = this.instanceVersionCellFor(card, this.cardAPI);
+    return createLiveBoxelModel(
+      card,
+      this.cardAPI,
+      fallback as Record<string, JSONValue>,
+      () => cell.v,
+    );
+  }
+
+  private instanceVersionCellFor(
+    card: BaseDef,
+    api: NonNullable<typeof this.cardAPI>,
+  ): { v: number } {
+    let cell = this.instanceVersions.get(card);
+    if (!cell) {
+      let created = new TrackedObject({ v: 0 });
+      cell = created;
+      this.instanceVersions.set(card, created);
+      let subscriber = () => {
+        created.v++;
+        // A mutation may have assigned a brand-new nested compound;
+        // subscribeToChanges is recursive but only over values present at
+        // subscription time. Re-subscribing is idempotent per (instance,
+        // subscriber) and grows coverage. Deferred off the notify path so
+        // the subscriber itself stays a bump-only observer.
+        queueMicrotask(() => api.subscribeToChanges(card, subscriber));
+      };
+      api.subscribeToChanges(card, subscriber);
+    }
+    return cell;
   }
 
   /**

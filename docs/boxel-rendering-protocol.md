@@ -697,3 +697,66 @@ untouched, and a stable consumer of the same module receives zero
 notifications during another session's draft cycle. Drafts are visible
 only inside the volatile session's own render until an ordinary commit
 (save → realm invalidation) updates stable consumers once.
+
+## RP-20 Rehydration continuity v1
+
+What a mounted card is guaranteed across an ordinary data update (an
+auto-save echo, a store instance re-set, a relationship settling): the
+user perceives a live document being edited, never a page reloading. The
+observable bar is: no flash, no scroll reset, no image loss, no lost
+in-card state. These statements exist because every one of them was
+violated in practice by a single root cause — the renderer's resource
+accidentally tracking the instance's own fields, so every save re-booted
+the session.
+
+**RP-20.1** A data-only instance update never re-instantiates the render
+session or its presentation slot. The renderer resource's tracked
+dependency set is exactly three reads: the card's identity (the argument
+reference), the requested format, and the module's volatility cell — an
+instance's own tracked fields are never among them (the async
+materialization pipeline is explicitly untracked). Observable: across an
+update, the slot element and its rendered content keep DOM identity, and
+the loading/placeholder branch is never re-entered.
+
+**RP-20.2** Data updates reach the mounted component the way main does
+it: `@model` is a LIVE read-through projection of the canonical instance
+(`createLiveBoxelModel`) — property reads are autotracked (via
+`peekAtField`), return only cloneable projected values, and re-render
+each binding in place on mutation. There is no delivery pipeline to
+build or order: the framework's render pass is the pipeline. Two
+structural invariants bound it. **One writer:** a model read may never
+mutate an instance, trigger a relationship lazy-load, or dirty anything
+— relationships are observed via `getRelationshipMembershipState` only;
+a subtree still pending at read time answers with the materialize-time
+fallback value (never regressing to absent), and loading remains
+materialize's and settlement's job. **No parallel channel:** the
+session's subscription carries only what genuinely changes what is
+mounted — status, and generation replacement for format/routing changes,
+relationship settlement (RP-7.3), source drafts (RP-18), and promotion
+(RP-19.3).
+
+**RP-20.3** Because the DOM survives (RP-20.1), user view state anchored
+to it survives too: scroll positions inside the card, focus, and
+uncommitted in-card component state are retained across a data update.
+
+**RP-20.4** Declarative media never blanks on rehydration. The Sandbox
+media bridge caches one authorized blob per resolved source URL for the
+bridge's lifetime: a re-created `<img>` with an already-hydrated source
+swaps in synchronously with no second fetch; concurrent requests for the
+same source share one fetch. Cache entries are revoked only at bridge
+teardown.
+
+**RP-20.5** Cross-surface synchronization is a core Boxel guarantee no
+execution tier may break: every mounted view of one canonical instance —
+any format, any surface, any tier — observes a data mutation from any
+same-client source, with component stability throughout (the acceptance
+bar: a sentence typed into a text field lands intact — same element, same
+focus — while every other view of the card updates live). Per tier:
+Direct reads the live instance (Glimmer tracking); Capsule reads the
+live model projection (RP-20.2 — the same autotracking, expressed
+through the projection boundary); the Sandbox child's OWN mutations
+re-render natively inside its document. GAP (v1): a parent-side mutation does not yet cross into an
+already-mounted Sandbox child — that push (an `updateInstance` wire
+operation deserializing into the child's copy, guarded by revision
+counters against child↔parent echo loops) is the remaining delivery leg,
+tracked with RP-17.1's save/index arbitration.

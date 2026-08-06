@@ -130,6 +130,92 @@ interface PendingRelationship {
 }
 
 /**
+ * RP-20.2's live model — main's pattern, translated. On main, N views of
+ * one card stay in sync because they all READ the same live instance's
+ * tracked fields; Glimmer autotracking re-renders each binding in place on
+ * any field set. There is no delivery pipeline to build or serialize —
+ * the framework's render pass IS the pipeline. This proxy gives a Capsule
+ * `@model` exactly that property: every property read projects the
+ * canonical instance's CURRENT value (a tracked read via `peekAtField`,
+ * so the binding re-renders on mutation), returning only cloneable
+ * projected data — never a live instance.
+ *
+ * Reads are DELIBERATELY PURE (the sync root-cause lesson,
+ * docs/boxel-sync-root-cause-2026-08-06.md): no relationship getter reads
+ * (the lazy-load trigger stays materialize's job), no write-backs, no
+ * settle registration. A relationship subtree still pending at read time
+ * answers with the materialize-time `fallback` value rather than
+ * regressing to absent; settlement republishes a full generation through
+ * the session as before. `fallback` also carries what only materialize
+ * can compute: the instance id and RP-4.4 model extensions.
+ *
+ * Purity is a tested contract (rp-continuity): reads fire zero
+ * `subscribeToChanges` notifications and dirty nothing.
+ */
+export function createLiveBoxelModel(
+  instance: BaseDef,
+  api: CardAPIModule,
+  fallback: Record<string, JSONValue>,
+  /**
+   * A tracked read consumed by every property access — the bridge from
+   * card-api's imperative change notifications (`subscribeToChanges`) into
+   * Glimmer autotracking. `peekAtField` alone tracks a TrackedArray's item
+   * mutations but NOT the field slot itself, so a save echo that replaces
+   * a whole array/composite would freeze the model mid-word without this.
+   * The cell's writer must be a pure observer: bump-only, no reads of the
+   * instance, nothing else.
+   */
+  version?: () => unknown,
+): Record<string, JSONValue> {
+  let readField = (fieldName: string): JSONValue | undefined => {
+    // Establishes the version dependency BEFORE the value read, so a
+    // notification arriving between the two invalidates this frame.
+    version?.();
+    let field = api.getFields(instance, { includeComputeds: true })[fieldName];
+    if (!field) {
+      return fallback[fieldName];
+    }
+    let sawPending = false;
+    let value = projectValue(
+      instance,
+      fieldName,
+      field.fieldType,
+      api,
+      () => {
+        sawPending = true;
+      },
+      undefined,
+      undefined,
+      true,
+    );
+    return sawPending && fieldName in fallback
+      ? fallback[fieldName]
+      : (value as JSONValue);
+  };
+  let allKeys = () => [
+    ...new Set([
+      ...Object.keys(fallback),
+      ...Object.keys(api.getFields(instance, { includeComputeds: true })),
+    ]),
+  ];
+  return new Proxy({} as Record<string, JSONValue>, {
+    get: (_target, property) =>
+      typeof property === 'string' ? readField(property) : undefined,
+    has: (_target, property) =>
+      typeof property === 'string' && allKeys().includes(property),
+    ownKeys: () => allKeys(),
+    getOwnPropertyDescriptor: (_target, property) =>
+      typeof property === 'string' && allKeys().includes(property)
+        ? {
+            configurable: true,
+            enumerable: true,
+            value: readField(property),
+          }
+        : undefined,
+  });
+}
+
+/**
  * Project the cloneable semantic record inputs from a canonical instance.
  *
  * This is the one pipeline behind `buildBoxelRenderRecord()`: it executes with
@@ -927,6 +1013,7 @@ function projectValue(
   onPending: ((pending: PendingRelationship) => void) | undefined,
   seen = new WeakSet<object>(),
   ensureLoaded?: (reference: string) => Promise<unknown>,
+  pure = false,
 ): JSONValue | BoxelValueReference | BoxelValueReference[] {
   if (fieldType === 'linksTo' || fieldType === 'linksToMany') {
     let present = presentRelationshipValues(
@@ -935,6 +1022,7 @@ function projectValue(
       api,
       onPending,
       ensureLoaded,
+      pure,
     );
     if (fieldType === 'linksToMany') {
       let projected = present.map(
@@ -945,6 +1033,7 @@ function projectValue(
             onPending,
             seen,
             ensureLoaded,
+            pure,
           ) as JSONValue,
       );
       return projected;
@@ -956,6 +1045,7 @@ function projectValue(
           onPending,
           seen,
           ensureLoaded,
+          pure,
         ) as JSONValue)
       : null;
   }
@@ -963,11 +1053,11 @@ function projectValue(
   if (fieldType === 'containsMany') {
     return Array.isArray(value)
       ? value.map((entry) =>
-          projectExpandedValue(entry, api, onPending, seen, ensureLoaded),
+          projectExpandedValue(entry, api, onPending, seen, ensureLoaded, pure),
         )
       : [];
   }
-  return projectExpandedValue(value, api, onPending, seen, ensureLoaded);
+  return projectExpandedValue(value, api, onPending, seen, ensureLoaded, pure);
 }
 
 /**
@@ -993,8 +1083,15 @@ function presentRelationshipValues(
   api: CardAPIModule,
   onPending: ((pending: PendingRelationship) => void) | undefined,
   ensureLoaded?: (reference: string) => Promise<unknown>,
+  pure = false,
 ): CardDef[] {
-  void (instance as unknown as Record<string, unknown>)[fieldName];
+  if (!pure) {
+    // The lazy-load trigger (RP-7.2) — materialize-time only. A pure
+    // refresh read (RP-20.2) must never start a load: materialize already
+    // triggered every load on this same instance, so membership below is
+    // readable without it.
+    void (instance as unknown as Record<string, unknown>)[fieldName];
+  }
   let { isLoading, membership } = api.getRelationshipMembershipState(
     instance as unknown as CardDef,
     fieldName,
@@ -1008,7 +1105,7 @@ function presentRelationshipValues(
   ) {
     onPending({ instance, fieldName });
   }
-  if (ensureLoaded) {
+  if (ensureLoaded && !pure) {
     for (let entry of notLoaded) {
       void ensureLoaded(entry.reference).then((resolved) => {
         if (!isBaseDefInstance(resolved)) {
@@ -1056,6 +1153,7 @@ function projectExpandedValue(
   onPending: ((pending: PendingRelationship) => void) | undefined,
   seen: WeakSet<object>,
   ensureLoaded?: (reference: string) => Promise<unknown>,
+  pure = false,
 ): JSONValue {
   if (!isBaseDefInstance(value)) {
     return projectJSONValue(value) ?? null;
@@ -1080,6 +1178,7 @@ function projectExpandedValue(
         onPending,
         seen,
         ensureLoaded,
+        pure,
       ) as JSONValue;
     }
     return result;

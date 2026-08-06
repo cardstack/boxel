@@ -23,7 +23,17 @@ export default class SandboxMediaBridge {
   private sourceByImage = new WeakMap<HTMLImageElement, string>();
   private hydrationByImage = new WeakMap<HTMLImageElement, Promise<void>>();
   private generationByImage = new WeakMap<HTMLImageElement, object>();
-  private objectURLByImage = new Map<HTMLImageElement, string>();
+  /**
+   * Blob URLs cached by RESOLVED source href for this bridge's lifetime —
+   * a re-rendered card recreates its `<img>` elements, and without the
+   * cache each recreation would strip the src and wait a full authorized
+   * round-trip again: a visible blink on every update (rehydration
+   * continuity, RP-20.4). A cache hit hydrates synchronously. Shared by
+   * every image with the same source (a grid of identical logos fetches
+   * once), revoked only at stop().
+   */
+  private objectURLByHref = new Map<string, string>();
+  private inFlightByHref = new Map<string, Promise<string>>();
 
   constructor(
     private root: HTMLElement,
@@ -62,10 +72,11 @@ export default class SandboxMediaBridge {
   stop() {
     this.observer?.disconnect();
     this.observer = undefined;
-    for (let objectURL of this.objectURLByImage.values()) {
+    for (let objectURL of this.objectURLByHref.values()) {
       URL.revokeObjectURL(objectURL);
     }
-    this.objectURLByImage.clear();
+    this.objectURLByHref.clear();
+    this.inFlightByHref.clear();
   }
 
   private hydrateNode(node: Node): Promise<void>[] {
@@ -104,6 +115,13 @@ export default class SandboxMediaBridge {
     }
 
     this.sourceByImage.set(image, sourceURL.href);
+    // RP-20.4: an already-hydrated source swaps in synchronously — a
+    // recreated image never blanks for a resource this bridge has.
+    let cached = this.objectURLByHref.get(sourceURL.href);
+    if (cached) {
+      image.src = cached;
+      return Promise.resolve();
+    }
     // Do not let the browser race the bounded Host fetch with an
     // unauthenticated request relative to the iframe route. Some card
     // components intentionally turn an image error into a permanent
@@ -112,26 +130,14 @@ export default class SandboxMediaBridge {
     image.removeAttribute('src');
     let generation = {};
     this.generationByImage.set(image, generation);
-    let hydration = this.fetchMedia(sourceURL.href)
-      .then(async (response) => {
-        if (!response.ok) {
-          throw new Error(
-            `Sandbox media ${sourceURL.href} returned ${response.status}`,
-          );
-        }
-        let blob = await response.blob();
+    let hydration = this.objectURLFor(sourceURL.href)
+      .then((objectURL) => {
         if (
           this.generationByImage.get(image) !== generation ||
           !image.isConnected
         ) {
           return;
         }
-        let previousObjectURL = this.objectURLByImage.get(image);
-        if (previousObjectURL) {
-          URL.revokeObjectURL(previousObjectURL);
-        }
-        let objectURL = URL.createObjectURL(blob);
-        this.objectURLByImage.set(image, objectURL);
         image.src = objectURL;
       })
       .catch((error) => {
@@ -148,6 +154,29 @@ export default class SandboxMediaBridge {
       });
     this.hydrationByImage.set(image, hydration);
     return hydration;
+  }
+
+  /** One authorized fetch per source, shared by every interested image. */
+  private objectURLFor(href: string): Promise<string> {
+    let inFlight = this.inFlightByHref.get(href);
+    if (inFlight) {
+      return inFlight;
+    }
+    let fetching = this.fetchMedia(href)
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error(`Sandbox media ${href} returned ${response.status}`);
+        }
+        let blob = await response.blob();
+        let objectURL = URL.createObjectURL(blob);
+        this.objectURLByHref.set(href, objectURL);
+        return objectURL;
+      })
+      .finally(() => {
+        this.inFlightByHref.delete(href);
+      });
+    this.inFlightByHref.set(href, fetching);
+    return fetching;
   }
 
   private mediaBaseURL(image: HTMLImageElement): string | undefined {

@@ -2,6 +2,9 @@ import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
+// @ts-ignore — @glimmer/validator is provided by Ember but has no own types
+import { untrack } from '@glimmer/validator';
+
 import { consume, provide } from 'ember-provide-consume-context';
 import { resource, use } from 'ember-resources';
 import { TrackedObject } from 'tracked-built-ins';
@@ -146,25 +149,30 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
 
   @use private execution = resource(({ on }) => {
     let session = this.boxelExecution.createSession();
+    let card = this.args.card;
+    let format = this.args.format;
+    let relativeTo = this.args.relativeTo;
     let state = new TrackedObject<ExecutionRendererState>({
       snapshot: session.snapshot,
     });
     let unsubscribe = session.subscribe((snapshot) => {
       state.snapshot = snapshot;
       if (snapshot.current) {
-        // RP-7.3: a relationship that settles after first paint republishes
-        // a fresh generation through this same subscription
-        // (`watchForSettle` in boxel-execution-engine.ts) — same component
-        // definition, updated per-instance data. `@model` must track every
-        // generation this way, not just the first one materialized below,
-        // or a field that resolves later (a themed card's `cardInfo.theme`,
-        // a `linksToMany` like `reviewers`) never reaches the rendered
-        // component even though the render record itself settled.
-        state.model = snapshot.current.renderRecord.instance.model;
+        // RP-20.2/RP-20.5: `@model` is a LIVE read-through projection of
+        // the canonical instance (main's sync pattern: shared instance +
+        // autotracked reads), seeded with this generation's record model as
+        // fallback (instance id, RP-4.4 extensions, pending-relationship
+        // values). Every mounted view of this instance re-renders in place
+        // on any mutation with no delivery machinery at all. RP-7.3 settle
+        // republishes still land here as fresh generations — same
+        // subscription, fresh fallback — so late-resolving relationships
+        // reach the render exactly as before.
+        state.model = this.boxelExecution.liveModelFor(
+          card,
+          snapshot.current.renderRecord.instance.model,
+        );
       }
     });
-    let card = this.args.card;
-    let format = this.args.format;
     let active = true;
     // Volatile promotion (docs/boxel-volatile-execution-plan.md): read
     // isVolatile() SYNCHRONOUSLY, here in this resource's own tracking
@@ -179,160 +187,92 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
     if (moduleIdentifier) {
       this.boxelExecution.isVolatile(moduleIdentifier);
     }
-    void (async () => {
-      try {
-        let request = await this.boxelExecution.requestFor(
-          card,
-          format,
-          this.surfaceId,
-          this.args.relativeTo,
-        );
-        let source = await this.boxelExecution.classifyForExecution(
-          request.moduleIdentifier,
-          request.source,
-        );
-        if (!active) {
-          return;
-        }
-        let reservation = this.boxelExecution.reserveSandboxProcess(
-          request.principal,
-          request.surfaceId,
-          request.trusted,
-          request.format,
-          source,
-          this.boxelExecution.isVolatile(request.moduleIdentifier),
-        );
-        // RP-15.3: a Sandbox bootstrap failure must fail closed no matter
-        // which of its two possible paths it takes — a connect (or later
-        // render) failure the process itself observes and reports via
-        // onMountFailed, or a rejection that surfaces through
-        // materialize()'s own await of the SAME live client, inside
-        // session.update() below, before onMountFailed's listener ever
-        // gets a chance to fire. Both must converge on the identical
-        // fail-closed behavior: clear the (now-invalid) reservation slot
-        // so the template falls through past the stale sandbox branch to
-        // whatever presentation the session's own error state calls for.
-        // Registered once, immediately after the reservation exists —
-        // onMountFailed never re-arms after firing, so this single
-        // registration covers both the window while materialize() is
-        // still in flight and any later failure once this generation is
-        // fully live.
-        let mountFailureWatched = false;
-        if (reservation) {
-          // The prerendered placeholder exists to cover a Sandbox's boot
-          // time, and only for surfaces big enough to make a boot gap
-          // visible — an isolated (or edit) stack card. It is fetched
-          // exactly once per Sandbox render, here, after classification has
-          // actually decided Sandbox: fetching it for every card render
-          // (Capsule included) costs a network round-trip per card for a
-          // placeholder that is never shown. The isolated prerender is used
-          // even for edit-format renders — the index has no edit HTML, and
-          // a recognizable snapshot of the card beats a blank box.
-          let effectiveFormat = format ?? 'isolated';
-          if (effectiveFormat === 'isolated' || effectiveFormat === 'edit') {
-            void this.boxelExecution
-              .prerenderedComponentFor(card, 'isolated')
-              .then((placeholder) => {
-                if (active && placeholder) {
-                  state.placeholder = placeholder;
-                }
-              });
-          }
-          on.cleanup(reservation.release);
-          let { process } = reservation;
-          state.slot = {
-            owner: 'sandbox',
-            iframe: process.iframe,
-            surface: process.surface,
-            process,
-          };
-          let stopWatchingMountFailure = process.onMountFailed((error) => {
+    // RP-20.1: this resource's tracked dependency set is EXACTLY the three
+    // reads above — the card's identity (the `args.card` reference), the
+    // requested format, and the module's volatility cell. Nothing below may
+    // add to it: the synchronous prefix of the async pipeline (everything
+    // up to its first await) otherwise still runs inside this tracking
+    // frame, and `requestFor`/serialization read the instance's TRACKED
+    // FIELDS — which a store save re-sets on the echo. Without this
+    // untrack, every auto-save invalidated the whole resource: session
+    // destroyed, slot torn down, focus lost mid-keystroke. Data updates
+    // instead arrive in place through the session's own subscription
+    // (RP-20.2: the engine's instance watch republishes the current
+    // generation with a refreshed model; the subscribe callback above
+    // already consumes it).
+    untrack(
+      () =>
+        void (async () => {
+          try {
+            let request = await this.boxelExecution.requestFor(
+              card,
+              format,
+              this.surfaceId,
+              relativeTo,
+            );
+            let source = await this.boxelExecution.classifyForExecution(
+              request.moduleIdentifier,
+              request.source,
+            );
             if (!active) {
               return;
             }
-            state.slot = undefined;
-            state.snapshot = {
-              ...session.snapshot,
-              status: 'error',
-              error,
-            };
-          });
-          on.cleanup(stopWatchingMountFailure);
-          mountFailureWatched = true;
-          // Ember must actually paint the slot this assignment causes
-          // before the presentation slot modifier can call mount() on it —
-          // wait for that so materialize() (below) never asks for a client
-          // before mount() has at least started connecting one.
-          await process.whenMounted();
-          if (!active) {
-            return;
-          }
-        }
-        let generation = await session.update(request);
-        if (!generation) {
-          // materialize() needed the reserved Sandbox process's live
-          // client; if that connection failed, the rejection propagated
-          // here — through update()'s own catch, which already updated
-          // state.snapshot via session.subscribe's notify — rather than
-          // through the onMountFailed listener above. state.slot was set
-          // early (before materialize() ever ran) and update() has no way
-          // to know that, so it is left stale here unless cleared
-          // explicitly: without this, the template's sandbox branch would
-          // keep outranking the error presentation the snapshot already
-          // calls for.
-          if (active) {
-            state.slot = undefined;
-          }
-          return;
-        }
-        // `state.model` is kept in sync by the `session.subscribe` callback
-        // above, which already ran synchronously for this generation as
-        // part of `session.update()`'s own `notify()` — no separate
-        // assignment needed here.
-        let [fields, slot] = await Promise.all([
-          this.boxelExecution.fieldPortalsFor(card),
-          session.getRenderSlot(format ?? 'isolated'),
-        ]);
-        if (slot.owner === 'trusted-base') {
-          slot = this.boxelExecution.trustedBaseRenderSlotFor(
-            card,
-            slot.componentCodeRef,
-          );
-        }
-        state.fields = fields;
-        state.slot = slot;
-        if (slot.owner !== 'sandbox') {
-          state.surface = this.boxelExecution.registerSurface(
-            slot.owner,
-            this.surfaceId,
-          );
-        } else {
-          // Fires once — immediately if this process (retained across
-          // format switches by surface identity) has already painted
-          // before, otherwise the first time its child reports a render
-          // with real visible output. Either way, that's the signal to
-          // stop showing the prerendered placeholder over the iframe.
-          let stopWatchingPaint = slot.process.onFirstPaint(() => {
-            if (active) {
-              state.sandboxPainted = true;
-            }
-          });
-          // getRenderSlot() no longer awaits the full handshake first (it
-          // can't: the iframe needs this slot's element to exist before it
-          // can even start booting), so a failed connect (most commonly
-          // the timeout) is no longer a thrown rejection this async
-          // block's own try/catch would see — it surfaces through
-          // onMountFailed instead. Normally that listener was ALREADY
-          // registered right after the reservation above (it never
-          // re-arms after firing, so one registration covers this
-          // process's whole lifecycle) — this second registration exists
-          // only for the rarer case where no reservation was made at all
-          // (classification decided non-Sandbox, but materialize()'s own
-          // prefersFullSandbox escalation chose Sandbox anyway), so this
-          // is the first and only chance to watch it.
-          let stopWatchingMountFailure = mountFailureWatched
-            ? undefined
-            : slot.process.onMountFailed((error) => {
+            let reservation = this.boxelExecution.reserveSandboxProcess(
+              request.principal,
+              request.surfaceId,
+              request.trusted,
+              request.format,
+              source,
+              this.boxelExecution.isVolatile(request.moduleIdentifier),
+            );
+            // RP-15.3: a Sandbox bootstrap failure must fail closed no matter
+            // which of its two possible paths it takes — a connect (or later
+            // render) failure the process itself observes and reports via
+            // onMountFailed, or a rejection that surfaces through
+            // materialize()'s own await of the SAME live client, inside
+            // session.update() below, before onMountFailed's listener ever
+            // gets a chance to fire. Both must converge on the identical
+            // fail-closed behavior: clear the (now-invalid) reservation slot
+            // so the template falls through past the stale sandbox branch to
+            // whatever presentation the session's own error state calls for.
+            // Registered once, immediately after the reservation exists —
+            // onMountFailed never re-arms after firing, so this single
+            // registration covers both the window while materialize() is
+            // still in flight and any later failure once this generation is
+            // fully live.
+            let mountFailureWatched = false;
+            if (reservation) {
+              // The prerendered placeholder exists to cover a Sandbox's boot
+              // time, and only for surfaces big enough to make a boot gap
+              // visible — an isolated (or edit) stack card. It is fetched
+              // exactly once per Sandbox render, here, after classification has
+              // actually decided Sandbox: fetching it for every card render
+              // (Capsule included) costs a network round-trip per card for a
+              // placeholder that is never shown. The isolated prerender is used
+              // even for edit-format renders — the index has no edit HTML, and
+              // a recognizable snapshot of the card beats a blank box.
+              let effectiveFormat = format ?? 'isolated';
+              if (
+                effectiveFormat === 'isolated' ||
+                effectiveFormat === 'edit'
+              ) {
+                void this.boxelExecution
+                  .prerenderedComponentFor(card, 'isolated')
+                  .then((placeholder) => {
+                    if (active && placeholder) {
+                      state.placeholder = placeholder;
+                    }
+                  });
+              }
+              on.cleanup(reservation.release);
+              let { process } = reservation;
+              state.slot = {
+                owner: 'sandbox',
+                iframe: process.iframe,
+                surface: process.surface,
+                process,
+              };
+              let stopWatchingMountFailure = process.onMountFailed((error) => {
                 if (!active) {
                   return;
                 }
@@ -343,32 +283,119 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
                   error,
                 };
               });
-          // An explicit hard reload (session.reloadSandbox(), dossier step
-          // 6) remints this process's child from scratch — unlike ordinary
-          // HMR (session.pushDraft()), which never re-arms onFirstPaint by
-          // design (RP-15.3's placeholder is retained, not re-entered, for
-          // an in-place edit). A reload is exactly the case that DOES need
-          // the placeholder back: the new child hasn't painted anything
-          // yet, so this state must invalidate before its next paint.
-          let stopWatchingReload = slot.process.onReload(() => {
-            if (active) {
-              state.sandboxPainted = false;
+              on.cleanup(stopWatchingMountFailure);
+              mountFailureWatched = true;
+              // Ember must actually paint the slot this assignment causes
+              // before the presentation slot modifier can call mount() on it —
+              // wait for that so materialize() (below) never asks for a client
+              // before mount() has at least started connecting one.
+              await process.whenMounted();
+              if (!active) {
+                return;
+              }
             }
-          });
-          on.cleanup(stopWatchingPaint);
-          if (stopWatchingMountFailure) {
-            on.cleanup(stopWatchingMountFailure);
+            let generation = await session.update(request);
+            if (!generation) {
+              // materialize() needed the reserved Sandbox process's live
+              // client; if that connection failed, the rejection propagated
+              // here — through update()'s own catch, which already updated
+              // state.snapshot via session.subscribe's notify — rather than
+              // through the onMountFailed listener above. state.slot was set
+              // early (before materialize() ever ran) and update() has no way
+              // to know that, so it is left stale here unless cleared
+              // explicitly: without this, the template's sandbox branch would
+              // keep outranking the error presentation the snapshot already
+              // calls for.
+              if (active) {
+                state.slot = undefined;
+              }
+              return;
+            }
+            // `state.model` is kept in sync by the `session.subscribe` callback
+            // above, which already ran synchronously for this generation as
+            // part of `session.update()`'s own `notify()` — no separate
+            // assignment needed here.
+            let [fields, slot] = await Promise.all([
+              this.boxelExecution.fieldPortalsFor(card),
+              session.getRenderSlot(format ?? 'isolated'),
+            ]);
+            if (slot.owner === 'trusted-base') {
+              slot = this.boxelExecution.trustedBaseRenderSlotFor(
+                card,
+                slot.componentCodeRef,
+              );
+            }
+            state.fields = fields;
+            state.slot = slot;
+            if (slot.owner !== 'sandbox') {
+              state.surface = this.boxelExecution.registerSurface(
+                slot.owner,
+                this.surfaceId,
+              );
+            } else {
+              // Fires once — immediately if this process (retained across
+              // format switches by surface identity) has already painted
+              // before, otherwise the first time its child reports a render
+              // with real visible output. Either way, that's the signal to
+              // stop showing the prerendered placeholder over the iframe.
+              let stopWatchingPaint = slot.process.onFirstPaint(() => {
+                if (active) {
+                  state.sandboxPainted = true;
+                }
+              });
+              // getRenderSlot() no longer awaits the full handshake first (it
+              // can't: the iframe needs this slot's element to exist before it
+              // can even start booting), so a failed connect (most commonly
+              // the timeout) is no longer a thrown rejection this async
+              // block's own try/catch would see — it surfaces through
+              // onMountFailed instead. Normally that listener was ALREADY
+              // registered right after the reservation above (it never
+              // re-arms after firing, so one registration covers this
+              // process's whole lifecycle) — this second registration exists
+              // only for the rarer case where no reservation was made at all
+              // (classification decided non-Sandbox, but materialize()'s own
+              // prefersFullSandbox escalation chose Sandbox anyway), so this
+              // is the first and only chance to watch it.
+              let stopWatchingMountFailure = mountFailureWatched
+                ? undefined
+                : slot.process.onMountFailed((error) => {
+                    if (!active) {
+                      return;
+                    }
+                    state.slot = undefined;
+                    state.snapshot = {
+                      ...session.snapshot,
+                      status: 'error',
+                      error,
+                    };
+                  });
+              // An explicit hard reload (session.reloadSandbox(), dossier step
+              // 6) remints this process's child from scratch — unlike ordinary
+              // HMR (session.pushDraft()), which never re-arms onFirstPaint by
+              // design (RP-15.3's placeholder is retained, not re-entered, for
+              // an in-place edit). A reload is exactly the case that DOES need
+              // the placeholder back: the new child hasn't painted anything
+              // yet, so this state must invalidate before its next paint.
+              let stopWatchingReload = slot.process.onReload(() => {
+                if (active) {
+                  state.sandboxPainted = false;
+                }
+              });
+              on.cleanup(stopWatchingPaint);
+              if (stopWatchingMountFailure) {
+                on.cleanup(stopWatchingMountFailure);
+              }
+              on.cleanup(stopWatchingReload);
+            }
+          } catch (error) {
+            state.snapshot = {
+              ...session.snapshot,
+              status: 'error',
+              error: error instanceof Error ? error : new Error(String(error)),
+            };
           }
-          on.cleanup(stopWatchingReload);
-        }
-      } catch (error) {
-        state.snapshot = {
-          ...session.snapshot,
-          status: 'error',
-          error: error instanceof Error ? error : new Error(String(error)),
-        };
-      }
-    })();
+        })(),
+    );
     on.cleanup(() => {
       active = false;
       unsubscribe();

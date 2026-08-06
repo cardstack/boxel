@@ -89,7 +89,14 @@ class CapsuleComponentContext {
   update(descriptor: CapsuleComponentInstanceDescriptor): void {
     this.installShape(descriptor);
     this.state = descriptor.state;
-    this.revision++;
+    // Deferred out of the render frame: with the live `@model` (RP-20.2) an
+    // argument update can now arrive DURING a render pass — the manager
+    // re-projects args whose values changed with the instance — and a
+    // synchronous bump here would update a tag this same render already
+    // consumed (Glimmer's backtracking assertion). `this.state` is already
+    // swapped above, so the deferred invalidation only schedules the
+    // re-read; readers never observe stale state.
+    queueMicrotask(() => this.revision++);
   }
 
   readState(name: string, fallback?: unknown): unknown {
