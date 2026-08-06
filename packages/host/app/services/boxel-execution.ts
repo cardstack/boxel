@@ -97,6 +97,7 @@ export default class BoxelExecutionService extends Service {
   >();
   private nextSurface = 0;
   private nextLocalBoxel = 0;
+  private sandboxCreationCount = 0;
   /**
    * Volatile promotion (docs/boxel-volatile-execution-plan.md): one-way for
    * the life of this service (tab) — no lease, no timer, no demotion. The
@@ -608,6 +609,16 @@ export default class BoxelExecutionService extends Service {
     if (typeof document === 'undefined') {
       throw new Error('Sandbox rendering requires a browser document');
     }
+    // Parent-side counterpart of the child's own boot breadcrumbs
+    // ([sandbox-child] route model resolved / listening posted): a Sandbox
+    // process being created more than once for the same surface in quick
+    // succession is the signature of a remint loop (a renderer resource
+    // re-instantiating on every tick of some tracked state), and only this
+    // side knows the surface identity that ties the boots together.
+    console.warn('[sandbox-parent] process created', {
+      surfaceId: surfaceIdentity,
+      priorCreationsThisSession: this.sandboxCreationCount++,
+    });
     let childURL = this.sandboxChildURL;
     return new SandboxRuntimeProcess({
       childURL,
