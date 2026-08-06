@@ -1,11 +1,15 @@
-// Browser-only enrichment: decode the audio and reduce it to a bounded
-// amplitude envelope.
+// Decode audio and reduce it to a bounded amplitude envelope.
 //
-// Unlike everything else in the `*-meta-extractor` modules, this cannot be done
-// by reading a header — it needs a real decoder, which means Web Audio. That is
-// available because the extract pass runs in the prerenderer's headless Chrome,
-// but it is the one audio fact that can legitimately be unavailable, so failure
-// is recorded on the field rather than thrown.
+// This is the fallback path, used by the formats that genuinely need a decoder:
+// FLAC, Ogg, and M4A. It relies on Web Audio, which is available because the
+// extract pass runs in the prerenderer's headless Chrome — but it is the one
+// audio fact that can legitimately be unavailable, so failure is recorded on the
+// field rather than thrown.
+//
+// MP3 does not come through here. Its envelope is read straight from quantizer
+// gains in each frame's side info, with no decoder and flat memory; see
+// `extractMp3Envelope`. The reduction below is still what defines what a bar
+// means, and both paths produce the same `WaveformMetadata` shape.
 //
 // The envelope is deliberately *not* a downsample of the opening seconds. It is
 // resampled across the whole signal, so a waveform drawn from it is recognizably
@@ -20,15 +24,27 @@ export const WAVEFORM_BAR_COUNT = 96;
 // algorithm changes so a consumer can tell an old envelope from a new one.
 export const WAVEFORM_ALGORITHM = 'rms-peak-v1';
 
+// The envelope MP3 produces by reading quantizer gains out of frame side info
+// rather than decoding. Recorded distinctly because its bars are normalized to
+// the track's own peak rather than being calibrated amplitudes, so a consumer
+// comparing two files can tell it apart from a decoded envelope.
+export const WAVEFORM_ALGORITHM_SIDE_INFO = 'mp3-side-info-v1';
+
 // Refuse to decode past this, measured on the *encoded* size because that is
 // what's known before committing to a decode.
 //
-// The number that matters is the decoded one, and it is much larger: float PCM
-// costs `duration × sampleRate × channels × 4` bytes, so a five-minute 44.1 kHz
-// stereo track is ~106 MB decoded from ~7 MB of MP3 — a factor of fifteen. This
-// runs inside the shared prerender pool during indexing, alongside every other
-// render, so the ceiling is set to admit ordinary music and speech while
-// refusing hour-long masters that would decode to gigabytes.
+// This applies to FLAC, Ogg, and M4A — the formats that still need a real
+// decoder. MP3 no longer does: it reads its envelope out of frame side info
+// (see `extractMp3Envelope`) and streams with flat memory, which is why it is
+// exempt. That matters because MP3 was by far the worst case here, at roughly
+// twenty times the encoded size once decoded to float PCM against four to six
+// for the rest.
+//
+// The number that matters is still the decoded one: float PCM costs
+// `duration x sampleRate x channels x 4` bytes. A 16 MB FLAC is around three
+// minutes, decoding to ~60 MB inside the shared prerender pool alongside every
+// other render — enough for ordinary music and speech while refusing masters
+// that would decode to gigabytes.
 //
 // Over the ceiling is not a failure: the file still indexes with every
 // header-derived fact intact and records `skipped`, so a renderer can tell

@@ -1,16 +1,24 @@
-import { readFirstBytes } from '@cardstack/runtime-common';
+import {
+  byteStreamToUint8Array,
+  readFirstBytes,
+} from '@cardstack/runtime-common';
 import FileAudioIcon from '@cardstack/boxel-icons/file-audio';
 import AudioDef, {
   audioAttributes,
-  waveformFor,
   type AudioAttributes,
 } from './audio-file-def';
 import type { ByteStream, SerializedFile } from './file-api';
 import {
   extractMp3Duration,
   extractMp3Encoding,
+  extractMp3Envelope,
   extractMp3Tags,
 } from './mp3-meta-extractor';
+import {
+  WAVEFORM_ALGORITHM_SIDE_INFO,
+  WAVEFORM_BAR_COUNT,
+} from './audio-waveform';
+import type { WaveformMetadata } from './audio-waveform';
 
 // ID3v2 tags can be large (embedded artwork). 1 MB covers virtually all
 // real-world files while still bounding worst-case memory at extract time.
@@ -36,8 +44,60 @@ export class Mp3Def extends AudioDef {
       ...audioAttributes(
         extractMp3Encoding(bytes),
         extractMp3Tags(bytes),
-        await waveformFor(getStream, base.contentSize),
+        await this.readWaveform(getStream),
       ),
     };
+  }
+
+  // MP3 never needs a decoder for its envelope. Every frame's side info states
+  // a quantizer gain per granule, which is an amplitude scale readable by
+  // walking frame headers — so the whole file streams through without any
+  // decoded audio ever being resident.
+  //
+  // That matters most here: float PCM costs roughly twenty times the encoded
+  // size for a 128 kbps stream, making MP3 the worst case for a full decode by a
+  // wide margin. This path is flat in memory regardless of duration, so it runs
+  // with no size ceiling at all.
+  //
+  // Falling back to a real decode when the side-info walk finds nothing would
+  // reintroduce exactly the cost this avoids, so a file that yields no frames
+  // reports the failure instead.
+  private static async readWaveform(
+    getStream: () => Promise<ByteStream>,
+  ): Promise<WaveformMetadata> {
+    try {
+      let bytes = await byteStreamToUint8Array(await getStream());
+      let envelope = extractMp3Envelope(bytes, WAVEFORM_BAR_COUNT);
+      if (!envelope) {
+        return {
+          decodeStatus: 'failed',
+          decodeError: 'No readable MPEG frames to derive an envelope from',
+        };
+      }
+      return {
+        decodeStatus: 'ok',
+        algorithm: WAVEFORM_ALGORITHM_SIDE_INFO,
+        barsJson: JSON.stringify(envelope.bars),
+        barCount: envelope.bars.length,
+        ...(envelope.durationSeconds === undefined
+          ? {}
+          : { durationSeconds: envelope.durationSeconds }),
+        ...(envelope.sampleRateHz === undefined
+          ? {}
+          : { sampleRateHz: envelope.sampleRateHz }),
+        // A quantizer scale carries no calibrated amplitude, so the envelope is
+        // normalized to the track's own peak and the absolute figures are left
+        // unset rather than reported on a scale that isn't comparable with a
+        // decoded one.
+      };
+    } catch (error) {
+      return {
+        decodeStatus: 'failed',
+        decodeError:
+          error instanceof Error
+            ? error.message
+            : `Could not read audio bytes: ${String(error)}`,
+      };
+    }
   }
 }

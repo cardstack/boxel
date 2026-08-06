@@ -20,6 +20,7 @@ import type * as Id3Module from '@cardstack/base/id3v2-parser';
 import type * as MidiModule from '@cardstack/base/midi-meta-extractor';
 import type * as Mp3Module from '@cardstack/base/mp3-meta-extractor';
 import type * as OggModule from '@cardstack/base/ogg-meta-extractor';
+import type * as StreamingEnvelopeModule from '@cardstack/base/streaming-envelope';
 import type * as VorbisModule from '@cardstack/base/vorbis-comment-parser';
 import type * as WavModule from '@cardstack/base/wav-meta-extractor';
 
@@ -313,6 +314,8 @@ module('Unit | audio metadata extractors', function (hooks) {
   let extractOggEncoding: typeof OggModule.extractOggEncoding;
   let extractOggTags: typeof OggModule.extractOggTags;
   let extractMp3Encoding: typeof Mp3Module.extractMp3Encoding;
+  let extractMp3Envelope: typeof Mp3Module.extractMp3Envelope;
+  let StreamingEnvelope: typeof StreamingEnvelopeModule.StreamingEnvelope;
   let parseId3v2Tags: typeof Id3Module.parseId3v2Tags;
   let parseVorbisComments: typeof VorbisModule.parseVorbisComments;
   let analyzeDecodedAudio: typeof AudioWaveformModule.analyzeDecodedAudio;
@@ -330,9 +333,12 @@ module('Unit | audio metadata extractors', function (hooks) {
     ({ extractOggEncoding, extractOggTags } = await loader.import<
       typeof OggModule
     >('@cardstack/base/ogg-meta-extractor'));
-    ({ extractMp3Encoding } = await loader.import<typeof Mp3Module>(
-      '@cardstack/base/mp3-meta-extractor',
-    ));
+    ({ extractMp3Encoding, extractMp3Envelope } = await loader.import<
+      typeof Mp3Module
+    >('@cardstack/base/mp3-meta-extractor'));
+    ({ StreamingEnvelope } = await loader.import<
+      typeof StreamingEnvelopeModule
+    >('@cardstack/base/streaming-envelope'));
     ({ parseId3v2Tags } = await loader.import<typeof Id3Module>(
       '@cardstack/base/id3v2-parser',
     ));
@@ -1152,6 +1158,179 @@ module('Unit | audio metadata extractors', function (hooks) {
       assert.true(
         midi.noteCount! >= 1,
         'a partial track still reports what was readable rather than throwing',
+      );
+    });
+  });
+
+  module('streaming envelope', function () {
+    test('holds its bar count however many units arrive', function (assert) {
+      // The point of the doubling accumulator: memory and output stay fixed even
+      // though the total is unknown while pushing.
+      for (let units of [4, 100, 10_000]) {
+        let envelope = new StreamingEnvelope(16);
+        for (let index = 0; index < units; index++) {
+          envelope.push(0.25, 1);
+        }
+        assert.strictEqual(
+          envelope.bars().length,
+          16,
+          `${units} units still reduce to 16 bars`,
+        );
+      }
+    });
+
+    test('places signal by position, not by arrival order', function (assert) {
+      // Silence for the first three quarters, then full amplitude. A producer
+      // that mis-tracked position would smear this across every bar.
+      let envelope = new StreamingEnvelope(8);
+      for (let index = 0; index < 3000; index++) {
+        envelope.push(0, 1);
+      }
+      for (let index = 0; index < 1000; index++) {
+        envelope.push(1, 1);
+      }
+      let bars = envelope.bars();
+      assert.strictEqual(bars[0], 0, 'the silent opening reads as silent');
+      assert.strictEqual(
+        bars[7],
+        1,
+        'the loud ending reaches the final bar rather than being folded away',
+      );
+    });
+
+    test('survives many folds without losing the shape', function (assert) {
+      // Far more units than the fine-bucket capacity, forcing repeated folds.
+      let envelope = new StreamingEnvelope(4);
+      let total = 100_000;
+      for (let index = 0; index < total; index++) {
+        envelope.push(index < total / 2 ? 0 : 1, 1);
+      }
+      let bars = envelope.bars();
+      assert.strictEqual(bars[0], 0);
+      assert.strictEqual(bars[1], 0);
+      assert.strictEqual(
+        bars[3],
+        1,
+        'the second half is still loud after folding',
+      );
+    });
+
+    test('reports the peak it was told about', function (assert) {
+      let envelope = new StreamingEnvelope(4);
+      envelope.push(0.01, 1, 0.1);
+      envelope.push(0.81, 1, 0.9);
+      envelope.push(0.04, 1, 0.2);
+      assert.strictEqual(envelope.peak, 0.9);
+    });
+
+    test('an accumulator nothing was pushed to is empty, not zero-filled', function (assert) {
+      let envelope = new StreamingEnvelope(8);
+      assert.true(envelope.isEmpty);
+      assert.deepEqual(envelope.bars(), []);
+    });
+  });
+
+  module('MP3 envelope from side info', function () {
+    // Build a frame whose side info carries a chosen global_gain in every
+    // granule, so the envelope has a known shape without any real audio.
+    function frameWithGain(gain: number): number[] {
+      // MPEG-1 Layer III, 128 kbps, 44.1 kHz, joint stereo, no CRC.
+      let header = [0xff, 0xfb, 0x90, 0x40];
+      // 144 * 128000 / 44100 = 417 bytes, no padding.
+      let length = 417;
+      let body = new Array(length - 4).fill(0);
+      // Stereo MPEG-1 side info: main_data_begin(9) + private(3) + scfsi(8) = 20
+      // bits, then four 59-bit granule/channel blocks with global_gain 21 bits in.
+      let base = 20;
+      for (let block = 0; block < 4; block++) {
+        let bitOffset = base + block * 59 + 21;
+        for (let bit = 0; bit < 8; bit++) {
+          let value = (gain >> (7 - bit)) & 1;
+          let absolute = bitOffset + bit;
+          let byteIndex = absolute >> 3;
+          if (value) {
+            body[byteIndex] |= 1 << (7 - (absolute & 7));
+          }
+        }
+      }
+      return [...header, ...body];
+    }
+
+    test('reads a gain out of every granule of every frame', function (assert) {
+      // Four frames, two granules x two channels each.
+      let bytes = new Uint8Array([
+        ...frameWithGain(200),
+        ...frameWithGain(200),
+        ...frameWithGain(200),
+        ...frameWithGain(200),
+      ]);
+      let envelope = extractMp3Envelope(bytes, 8);
+      assert.strictEqual(
+        envelope?.granuleCount,
+        16,
+        'four frames yield sixteen granule gains',
+      );
+      assert.strictEqual(envelope?.frameCount, 4);
+      assert.strictEqual(envelope?.sampleRateHz, 44100);
+    });
+
+    test('a louder passage produces taller bars than a quieter one', function (assert) {
+      // global_gain is logarithmic, so a higher value is a larger amplitude.
+      let quiet = Array.from({ length: 8 }, () => frameWithGain(150)).flat();
+      let loud = Array.from({ length: 8 }, () => frameWithGain(210)).flat();
+      let envelope = extractMp3Envelope(new Uint8Array([...quiet, ...loud]), 4);
+      let bars = envelope!.bars;
+      assert.true(
+        bars[0]! < bars[3]!,
+        'the quiet opening reads lower than the loud ending',
+      );
+      assert.strictEqual(
+        bars[3],
+        1,
+        'bars are normalized to the track peak, so the loudest reaches 1',
+      );
+    });
+
+    test('derives a duration from granule count without needing a Xing header', function (assert) {
+      // Each granule is 576 samples; 16 granules at 44.1 kHz is ~0.209 s.
+      let bytes = new Uint8Array(
+        Array.from({ length: 4 }, () => frameWithGain(180)).flat(),
+      );
+      let envelope = extractMp3Envelope(bytes, 8);
+      assert.strictEqual(
+        envelope?.durationSeconds,
+        Math.round((16 * 576 * 1000) / 44100) / 1000,
+      );
+    });
+
+    test('skips a leading ID3v2 tag', function (assert) {
+      let tag = buildId3v2([['TIT2', latin1Frame('Tagged')]]);
+      let bytes = new Uint8Array([
+        ...tag,
+        ...frameWithGain(190),
+        ...frameWithGain(190),
+      ]);
+      assert.strictEqual(extractMp3Envelope(bytes, 4)?.granuleCount, 8);
+    });
+
+    test('resynchronizes past a corrupt frame rather than stopping', function (assert) {
+      let bytes = new Uint8Array([
+        ...frameWithGain(190),
+        ...new Array(64).fill(0x41), // garbage between frames
+        ...frameWithGain(190),
+      ]);
+      let envelope = extractMp3Envelope(bytes, 4);
+      assert.strictEqual(
+        envelope?.frameCount,
+        2,
+        'a single corrupt run does not cost the rest of the file',
+      );
+    });
+
+    test('a file with no frames yields nothing rather than throwing', function (assert) {
+      assert.strictEqual(
+        extractMp3Envelope(new Uint8Array(256).fill(0x41), 8),
+        undefined,
       );
     });
   });
