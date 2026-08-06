@@ -260,9 +260,16 @@ module('Integration | rp-sandbox', function (hooks) {
     // eagerly kicks off, can reject in a microtask before bootstrap ever
     // reaches 'ready'. Posting that immediately would race the parent's own
     // bootstrap-vs-failure handling, so it is held until release().
-    let reporter = installSandboxRuntimeErrorReporter(channel.port1);
+    // A private EventTarget stands in for the child window: dispatching a
+    // real ErrorEvent on `window` would also reach the test runner's own
+    // global error handler and fail the test from outside.
+    let childEvents = new EventTarget();
+    let reporter = installSandboxRuntimeErrorReporter(
+      channel.port1,
+      childEvents,
+    );
     try {
-      window.dispatchEvent(
+      childEvents.dispatchEvent(
         new ErrorEvent('error', {
           error: new Error('boom during bootstrap'),
           message: 'boom during bootstrap',
@@ -289,7 +296,7 @@ module('Integration | rp-sandbox', function (hooks) {
 
       // A runtime-error is a terminal, once-only signal: neither a second
       // pre-release failure nor a post-release one reopens it.
-      window.dispatchEvent(
+      childEvents.dispatchEvent(
         new ErrorEvent('error', {
           error: new Error('after release'),
           message: 'after release',
@@ -317,8 +324,12 @@ module('Integration | rp-sandbox', function (hooks) {
     channel.port2.start();
     channel.port1.start();
 
-    let reporter = installSandboxRuntimeErrorReporter(channel.port1);
-    window.dispatchEvent(
+    let childEvents = new EventTarget();
+    let reporter = installSandboxRuntimeErrorReporter(
+      channel.port1,
+      childEvents,
+    );
+    childEvents.dispatchEvent(
       new ErrorEvent('error', { error: new Error('boom'), message: 'boom' }),
     );
     await new Promise((resolve) => setTimeout(resolve, 0));

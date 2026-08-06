@@ -125,6 +125,14 @@ export class BoxelExecutionSession {
    * whatever is left so a closed session never republishes.
    */
   private settleWatchers = new Set<AbortController>();
+  /**
+   * The request that produced `currentGeneration` — retained only for
+   * `pushDraft()`'s authority-growth step (`documentDeclaredModules`), which
+   * needs the same resource/document `materialize()` used, not for
+   * `update()`'s own control flow. Always set alongside `currentGeneration`
+   * so the two stay a consistent snapshot.
+   */
+  private lastRequest?: BoxelExecutionRequest;
 
   constructor(
     private readonly router: BoxelRuntimeRouter,
@@ -170,6 +178,93 @@ export class BoxelExecutionSession {
     }
   }
 
+  /**
+   * Sandbox HMR (RP-17.1's un-deferral for this tier): pushes an edited
+   * module's unsaved source against the currently mounted generation. This
+   * is the one public entry seam both the future code-mode wiring and the
+   * volatile-execution workstream (`docs/boxel-volatile-execution-plan.md`
+   * — direction only, not implemented by this method) are expected to
+   * consume; it does no UI wiring of its own.
+   *
+   * Only meaningful for a session whose current generation is Sandbox —
+   * Capsule/Direct HMR are out of scope for this extraction (dossier §4).
+   * Classification is re-run here (the same pure, memoized step `update()`
+   * already performs for a fresh render) so authority can grow with the
+   * draft's own module graph before its source is ever admitted (edge case
+   * 8, `SandboxRuntimeProcess.pushDraft`'s doc comment) — this session
+   * never routes to a different runtime for a draft push, unlike an
+   * ordinary `update()`, since the whole point is to keep updating the
+   * SAME live process without disturbing its identity (RP-15.3).
+   */
+  async pushDraft(
+    moduleIdentifier: string,
+    source: string,
+  ): Promise<{ generation: number; ok: boolean; error?: Error }> {
+    this.assertOpen();
+    let current = this.currentGeneration;
+    let request = this.lastRequest;
+    if (!current || !request) {
+      return {
+        generation: 0,
+        ok: false,
+        error: new Error(
+          'Boxel execution session has no ready generation to push a draft against',
+        ),
+      };
+    }
+    if (current.lease.runtime.mode !== 'sandbox') {
+      return {
+        generation: 0,
+        ok: false,
+        error: new Error(
+          `Sandbox HMR draft push is not supported for the '${current.lease.runtime.mode}' execution tier`,
+        ),
+      };
+    }
+    let classification: BoxelSourceClassification;
+    try {
+      classification = await this.classifySource(moduleIdentifier, source);
+    } catch (error) {
+      return { generation: 0, ok: false, error: asError(error) };
+    }
+    // A draft that raced a session teardown or a newer update() while
+    // classifying must not apply against a generation/runtime this session
+    // no longer owns.
+    if (this.closed || current !== this.currentGeneration) {
+      return {
+        generation: 0,
+        ok: false,
+        error: new Error(
+          'Boxel execution session generation changed while classifying the draft',
+        ),
+      };
+    }
+    let sandbox = current.lease.runtime as SandboxRuntimeProcess;
+    return sandbox.pushDraft({
+      moduleIdentifier,
+      source,
+      moduleGraph: classification.moduleGraph,
+      documentDeclaredModules: documentDeclaredModules(request),
+    });
+  }
+
+  /**
+   * Explicit hard reload (dossier step 6) — distinct from `pushDraft`'s
+   * ordinary HMR: remints the current generation's Sandbox process from
+   * scratch (new bootstrapId, cleared draft overrides, reset module
+   * authority) rather than surgically invalidating one module. A no-op for
+   * a session with no current generation, or one not currently on the
+   * Sandbox tier.
+   */
+  reloadSandbox(): void {
+    this.assertOpen();
+    let current = this.currentGeneration;
+    if (!current || current.lease.runtime.mode !== 'sandbox') {
+      return;
+    }
+    (current.lease.runtime as SandboxRuntimeProcess).reloadSandbox();
+  }
+
   async update(
     request: BoxelExecutionRequest,
   ): Promise<BoxelExecutionGeneration | undefined> {
@@ -180,7 +275,21 @@ export class BoxelExecutionSession {
     let generation = ++this.requestedGeneration;
     this.status = 'loading';
     this.error = undefined;
-    this.notify();
+    // Only broadcast this "now loading" transition when there is no
+    // current generation yet — a genuinely first/cold load. A REPLACE
+    // (a format switch, or RP-7.3's settle-triggered republish) leaves
+    // `currentGeneration` populated as last-known-good throughout —
+    // notifying here too would push that exact same, already-observed
+    // generation to subscribers a second time under a misleading
+    // "something changed" signal, before the real new generation (or a
+    // failure) ever arrives. No production consumer of this session's
+    // `status` distinguishes a mid-replace 'loading' from the 'ready' it
+    // briefly interrupts, so skipping it costs nothing observable while
+    // dedicating the render-record sequence a subscriber that DOES pay
+    // attention to `current` to exactly one entry per real generation.
+    if (!this.currentGeneration) {
+      this.notify();
+    }
 
     let candidate: BoxelExecutionGeneration | undefined;
     try {
@@ -205,6 +314,7 @@ export class BoxelExecutionSession {
       this.assertCurrent(generation);
       let previous = this.currentGeneration;
       this.currentGeneration = candidate;
+      this.lastRequest = request;
       candidate = undefined;
       this.status = 'ready';
       this.error = undefined;

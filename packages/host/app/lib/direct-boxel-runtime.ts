@@ -75,6 +75,21 @@ export default class DirectBoxelRuntime implements BoxelRuntime {
     BaseDef,
     Map<Field<BaseDefConstructor> | undefined, Map<string, DirectRenderSlot>>
   >();
+  /**
+   * Sandbox HMR: the exact arguments used to create each live instance,
+   * retained for `redeserialize()`. Only the Sandbox child's own
+   * `DirectBoxelRuntime` ever calls `redeserialize`; on the Host's own
+   * Direct tier this map is simply unused (trusted modules use ordinary
+   * Ember reactivity, not module invalidation).
+   */
+  private creationArgs = new Map<
+    BoxelInstanceHandle,
+    {
+      resource: LooseCardResource;
+      document: LooseSingleCardDocument;
+      relativeTo: RealmResourceIdentifier | undefined;
+    }
+  >();
 
   constructor(
     private getCardAPI: GetCardAPI,
@@ -110,7 +125,37 @@ export default class DirectBoxelRuntime implements BoxelRuntime {
       document,
       relativeTo,
     );
-    return asBoxelInstanceHandle(this.instances.add(instance));
+    let handle = asBoxelInstanceHandle(this.instances.add(instance));
+    this.creationArgs.set(handle, { resource, document, relativeTo });
+    return handle;
+  }
+
+  /**
+   * Sandbox HMR: re-derives the instance at `handle` from the identical
+   * serialized document used to create it, replacing it under the SAME
+   * handle (`RuntimeHandleRegistry.replace`) — every consumer that already
+   * holds this handle (the parent's session, an in-flight RPC) keeps
+   * working unchanged. Callers are expected to have just invalidated and
+   * re-imported the edited module first (`Loader.invalidateModule`); this
+   * method only re-runs deserialization, it does not touch module state.
+   * Data state survives because it is re-derived from the identical
+   * document, not copied from the old instance — only the instance's
+   * class/component identity can change.
+   */
+  async redeserialize(handle: BoxelInstanceHandle): Promise<void> {
+    let args = this.creationArgs.get(handle);
+    if (!args) {
+      throw new Error(
+        `Cannot redeserialize unknown Boxel instance handle '${handle}'`,
+      );
+    }
+    let api = await this.getCardAPI();
+    let instance = await api.createFromSerialized(
+      args.resource,
+      args.document,
+      args.relativeTo,
+    );
+    this.instances.replace(handle, instance);
   }
 
   /**
@@ -259,6 +304,7 @@ export default class DirectBoxelRuntime implements BoxelRuntime {
       this.types.release(handle);
     } else if (handle.startsWith('direct-instance:')) {
       this.instances.release(handle);
+      this.creationArgs.delete(handle as BoxelInstanceHandle);
     }
   }
 }

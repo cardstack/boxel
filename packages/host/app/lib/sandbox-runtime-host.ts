@@ -148,6 +148,15 @@ export function installSandboxRuntimeHost(options: {
         console.warn('[sandbox-child] createRenderTarget completed');
         let createdRenderServer = new SandboxRenderServer(port, renderTarget);
         renderServer = createdRenderServer;
+        // Sandbox HMR (RP-17.1 un-deferral): gives the target a live check
+        // against every generation this server has SEEN ARRIVE — not just
+        // ones already dispatched through its own serialized queue — so it
+        // can bail out of an in-flight render/draft early once a newer one
+        // is already queued behind it (dossier: "re-check generation
+        // post-await").
+        renderTarget.setStaleCheck?.((generation) =>
+          createdRenderServer.isStale(generation),
+        );
         postControl(port, { type: 'ready' });
         // Breadcrumb 4/7: bootstrap fully completed and 'ready' is on the
         // wire. Everything from here on is RPC-driven — no more of the
@@ -340,6 +349,11 @@ export interface SandboxRuntimeErrorReporter {
  */
 export function installSandboxRuntimeErrorReporter(
   port: MessagePort,
+  // The event source is the child window in production. Injectable so a
+  // test can drive the reporter from its own EventTarget without dispatching
+  // real ErrorEvents on `window`, which the test runner's global error
+  // handler would (correctly) also observe and fail the test on.
+  events: EventTarget = globalThis,
 ): SandboxRuntimeErrorReporter {
   let released = false;
   let reported = false;
@@ -370,14 +384,15 @@ export function installSandboxRuntimeErrorReporter(
       held = { error };
     }
   };
-  let onWindowError = (event: ErrorEvent) => {
-    report(event.error ?? new Error(event.message));
+  let onWindowError = (event: Event) => {
+    let errorEvent = event as ErrorEvent;
+    report(errorEvent.error ?? new Error(errorEvent.message));
   };
-  let onUnhandledRejection = (event: PromiseRejectionEvent) => {
-    report(event.reason);
+  let onUnhandledRejection = (event: Event) => {
+    report((event as PromiseRejectionEvent).reason);
   };
-  globalThis.addEventListener('error', onWindowError);
-  globalThis.addEventListener('unhandledrejection', onUnhandledRejection);
+  events.addEventListener('error', onWindowError);
+  events.addEventListener('unhandledrejection', onUnhandledRejection);
   return {
     release() {
       released = true;
@@ -386,11 +401,8 @@ export function installSandboxRuntimeErrorReporter(
       }
     },
     stop() {
-      globalThis.removeEventListener('error', onWindowError);
-      globalThis.removeEventListener(
-        'unhandledrejection',
-        onUnhandledRejection,
-      );
+      events.removeEventListener('error', onWindowError);
+      events.removeEventListener('unhandledrejection', onUnhandledRejection);
     },
   };
 }

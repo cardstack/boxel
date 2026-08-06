@@ -69,6 +69,17 @@ export default class SandboxModuleAuthority {
     }
   }
 
+  /**
+   * Discards every admitted URL. Used only by an explicit hard reload
+   * (`SandboxRuntimeProcess.reloadSandbox()`) — an ordinary HMR draft push
+   * only ever grows this set (see `allow()`), never shrinks it, matching
+   * "never widen beyond the literal reachable graph" without also having
+   * to track and revoke URLs a since-edited module no longer imports.
+   */
+  reset(): void {
+    this.modules.clear();
+  }
+
   private add(identifier: string): void {
     let canonical = canonicalModuleURL(identifier);
     if (canonical) {

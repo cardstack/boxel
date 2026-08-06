@@ -93,6 +93,26 @@ export class RuntimeHandleRegistry<T extends object> {
     return handle;
   }
 
+  /**
+   * Sandbox HMR: rebinds an already-issued handle to a new value, in place.
+   * Every consumer still holding this handle (the parent's session, an
+   * in-flight RPC) keeps working unchanged after this call — only what the
+   * handle resolves to changes. Used when a module invalidation means the
+   * old value's class identity is stale but its handle must survive (see
+   * `DirectBoxelRuntime.redeserialize`). Throws for an unknown handle: a
+   * caller old enough to still hold a handle this registry never issued (or
+   * already released) has a real bug, not a case to silently no-op.
+   */
+  replace(handle: RuntimeHandle, value: T): void {
+    let previous = this.values.get(handle);
+    if (!previous) {
+      throw new Error(`Unknown or released ${this.prefix} handle '${handle}'`);
+    }
+    this.handles.delete(previous);
+    this.values.set(handle, value);
+    this.handles.set(value, handle);
+  }
+
   get(handle: RuntimeHandle): T {
     let value = this.values.get(handle);
     if (!value) {

@@ -1222,10 +1222,12 @@ module('Unit | Boxel execution engine settle republish', function () {
         [[], [{ id: 'https://example.test/Reviewer/a', name: 'Ada' }]],
         'subscribers observe exactly the absent-then-settled sequence, never an intermediate or duplicate generation',
       );
+      // Snapshot at assertion time: the array is live and the finally
+      // block's destroy() will push more before QUnit serializes a failure.
       assert.deepEqual(
-        capsule.disposed,
-        [],
-        'the settle-triggered generation swap is the same atomic replacement update() already performs; nothing is disposed early',
+        [...capsule.disposed],
+        ['capsule-instance:1'],
+        'the settle-triggered generation swap is the same atomic replacement update() already performs: the superseded generation is disposed after the swap — and only it',
       );
     } finally {
       unsubscribe();

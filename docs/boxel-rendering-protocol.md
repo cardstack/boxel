@@ -302,7 +302,12 @@ Instances register mid-deserialization (untracked) so cyclic `included`
 graphs resolve, and are promoted to tracked only when complete
 (`card-api.gts:4248-4304, 4613-4615`). One instance is keyed under its
 localId and every known remote id; a remote id claimed by a second local id
-is a hard error.
+is a hard error. Layering note (informative): "constructs fresh" is the
+card-api layer's behavior; through the Host store, the fresh instance's new
+local id immediately trips the second-local-id hard error at registration —
+so the only Store-level observable of a mismatch sequence is that error,
+whose diagnostic names both local ids. A NORMATIVE revision should state
+this composition explicitly.
 
 **RP-8.3** Side-loaded resources enter only via `resourceFrom(doc, id)`
 matching `data.id` (never `links.self`); an absent `included` entry yields
@@ -586,12 +591,13 @@ DEFERRED (RP-9 list). Each future capability enters as its own spec section
 
 **RP-17.1 DEFERRED** (targeted at a future protocol version, in rough
 order): mutation beyond RP-9.8's v1 (write grants, edit sessions,
-optimistic overlays, structured rejection); HMR/source volatility
-(generations, DOM adoption, acknowledgements); the remaining `surface*`
-capabilities (pointer, focus, style, transition, schedule, clipboard,
-haptics, slot, playback, viewport, canvas); BXL authorization projection;
-Guides; annotations/collaboration; Realm Script and async AI; the
-`metadata` and `form` formats.
+optimistic overlays, structured rejection); Capsule-tier HMR (DOM adoption
+across component programs) and save/index acknowledgement arbitration —
+Sandbox-tier source volatility is un-deferred as RP-18; the remaining
+`surface*` capabilities (pointer, focus, style, transition, schedule,
+clipboard, haptics, slot, playback, viewport, canvas); BXL authorization
+projection; Guides; annotations/collaboration; Realm Script and async AI;
+the `metadata` and `form` formats.
 
 **RP-17.2 EXCLUDED** (denied by design; conformance tests assert denial):
 unrestricted clipboard read; arbitrary navigator APIs; arbitrary DOM/CSS
@@ -607,4 +613,55 @@ change): the `head` cascade for contained FieldDefs (RP-2.9); the
 clientRequestId set's echo-eviction edge (RP-9.6); `@model`/`@fields`
 transiently `undefined` during render is a branch-added tolerance in the
 default templates, not main behavior — the spec decision (guarantee
-non-null vs. mandate guarding) is owed before NORMATIVE status.
+non-null vs. mandate guarding) is owed before NORMATIVE status; the fields
+proxy's `ownKeys` trap (RP-1.2) appends declared field names to the
+component class's own built-in keys without deduplication, so a field
+named `name`, `length`, or `prototype` violates the JS proxy invariant
+(`TypeError: trap returned duplicate entries`) on any enumeration —
+`field-component.gts` needs a dedupe before NORMATIVE status.
+
+## RP-18 Source volatility v1 (Sandbox tier)
+
+Un-defers RP-17.1's "HMR/source volatility" for the Sandbox tier only.
+Capsule-tier HMR (DOM adoption) and save/index acknowledgement arbitration
+remain deferred (RP-17.1). The entry seam is
+`BoxelExecutionSession.pushDraft(moduleIdentifier, source)`; the explicit
+hard reload is `reloadSandbox()`.
+
+**RP-18.1** Every render-family request on one Sandbox process (render,
+clear, draft alike) carries one process-monotonic `generation`, which the
+child echoes on the matching response. Parent draft/render state
+transitions only on a matching echoed generation; a response from an older
+generation is a no-op, never an error surface.
+
+**RP-18.2** The child drops a request whose generation is not newer than
+the latest it has observed, and abandons in-flight work the moment a newer
+generation supersedes it — re-checking after every await, so a burst of
+rapid edits never resurrects stale output. A dropped generation is
+reported as dropped, not as a failure.
+
+**RP-18.3** A `draft` control message carries only the edited module's
+exact URL. The draft's source crosses through the module-read channel's
+per-URL override, matched by exact URL only — never a pattern. Before each
+draft render, the authority re-allows exactly the draft's own module graph
+plus the document-declared modules; admission never widens beyond the
+literal reachable graph.
+
+**RP-18.4** A draft invalidates only the edited module in the child's
+loader and re-derives the card from the same document object: instance
+data state survives the generation; only module and component identity
+change.
+
+**RP-18.5** A failed generation — compile-time or render-time — leaves the
+previous successful render mounted (last-known-good) with the failure
+carried alongside as state; the next successful generation recovers
+without a remount.
+
+**RP-18.6** No draft generation ever changes iframe identity (RP-15.3).
+Only the explicit hard reload remints the process — new bootstrap
+identity, draft overrides cleared, module authority reset, and any
+placeholder keyed on the old identity invalidated.
+
+**RP-18.7** An ordinary draft never re-enters the placeholder: the live
+render (or its last-known-good) remains the visible content across
+generations.

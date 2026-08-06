@@ -1,5 +1,7 @@
 import { module, test } from 'qunit';
 
+import { BOXEL_EXECUTION_TRANSPORT_VERSION } from '@cardstack/runtime-common';
+
 import {
   SandboxRenderClient,
   SandboxRenderServer,
@@ -15,12 +17,13 @@ module('Unit | Sandbox render transport', function () {
         calls.push({ card, format });
       },
       clear: () => {},
+      draft: () => {},
     };
     let server = new SandboxRenderServer(channel.port1, target);
     let client = new SandboxRenderClient(channel.port2);
 
     try {
-      await client.render('card:one' as never, 'isolated');
+      await client.render('card:one' as never, 'isolated', 1);
       assert.deepEqual(calls, [{ card: 'card:one', format: 'isolated' }]);
     } finally {
       client.destroy();
@@ -43,7 +46,7 @@ module('Unit | Sandbox render transport', function () {
 
     try {
       await assert.rejects(
-        client.render('card:one' as never, 'isolated'),
+        client.render('card:one' as never, 'isolated', 1),
         /timed out after 20ms/,
         'the render fails closed instead of hanging forever',
       );
@@ -60,7 +63,7 @@ module('Unit | Sandbox render transport', function () {
     // the explicit failPending() call below should settle the request.
     let client = new SandboxRenderClient(channel.port2, 60_000);
 
-    let pending = client.render('card:one' as never, 'isolated');
+    let pending = client.render('card:one' as never, 'isolated', 1);
     let settledEarly = false;
     pending.catch(() => (settledEarly = true));
 
@@ -85,13 +88,14 @@ module('Unit | Sandbox render transport', function () {
       // loses the race with the bounded timeout.
       render: () => new Promise((resolve) => setTimeout(resolve, 40)),
       clear: () => {},
+      draft: () => {},
     };
     let server = new SandboxRenderServer(channel.port1, target);
     let client = new SandboxRenderClient(channel.port2, 10);
 
     try {
       await assert.rejects(
-        client.render('card:one' as never, 'isolated'),
+        client.render('card:one' as never, 'isolated', 1),
         /timed out after 10ms/,
       );
       // Let the server's late response arrive; it must not throw or resolve
@@ -109,16 +113,193 @@ module('Unit | Sandbox render transport', function () {
   test('destroy rejects every pending render and stops accepting new ones', async function (assert) {
     let channel = new MessageChannel();
     let client = new SandboxRenderClient(channel.port2, 60_000);
-    let pending = client.render('card:one' as never, 'isolated');
+    let pending = client.render('card:one' as never, 'isolated', 1);
 
     client.destroy();
 
     await assert.rejects(pending, /Sandbox render client was destroyed/);
     await assert.rejects(
-      client.render('card:two' as never, 'isolated'),
+      client.render('card:two' as never, 'isolated', 2),
       /Sandbox render client is closed/,
     );
     channel.port1.close();
     channel.port2.close();
+  });
+
+  test('RP-15.3: draft() sends the edited module URL and its echoed generation through the same request/response channel as render/clear', async function (assert) {
+    let channel = new MessageChannel();
+    let drafted: { url: string; generation: number }[] = [];
+    let target: SandboxRenderTarget = {
+      render: () => {},
+      clear: () => {},
+      draft: (url, generation) => {
+        drafted.push({ url, generation });
+      },
+    };
+    let server = new SandboxRenderServer(channel.port1, target);
+    let client = new SandboxRenderClient(channel.port2);
+
+    try {
+      await client.draft('https://realm.example/card.gts', 7);
+      assert.deepEqual(drafted, [
+        { url: 'https://realm.example/card.gts', generation: 7 },
+      ]);
+    } finally {
+      client.destroy();
+      server.destroy();
+      channel.port1.close();
+      channel.port2.close();
+    }
+  });
+
+  test('RP-15.3: a generation still queued when a strictly newer one arrives is dropped — never dispatched, echoed back with dropped:true — while an older generation already running completes normally', async function (assert) {
+    // The dossier's "drop generation <= latest on arrival": three render
+    // requests fire back-to-back. Generation 1 is already dispatched
+    // (running, mid-await) by the time 2 and 3 arrive, so it completes
+    // normally regardless. Generation 2 is still queued (never dispatched)
+    // when 3 arrives — it must be skipped entirely, not merely raced.
+    // Generation 3, the latest, always runs.
+    let channel = new MessageChannel();
+    let ran: number[] = [];
+    let target: SandboxRenderTarget = {
+      render: async (_card, _format, generation) => {
+        ran.push(generation);
+        if (generation === 1) {
+          // Holds the queue open just long enough for generations 2 and 3
+          // to both arrive before generation 1 finishes.
+          await new Promise((resolve) => setTimeout(resolve, 30));
+        }
+      },
+      clear: () => {},
+      draft: () => {},
+    };
+    let server = new SandboxRenderServer(channel.port1, target);
+    let client = new SandboxRenderClient(channel.port2);
+
+    try {
+      let first = client.render('card:one' as never, 'isolated', 1);
+      let second = client.render('card:one' as never, 'isolated', 2);
+      let third = client.render('card:one' as never, 'isolated', 3);
+
+      await first;
+      let secondError: Error | undefined;
+      try {
+        await second;
+      } catch (error) {
+        secondError = error as Error;
+      }
+      assert.ok(
+        secondError,
+        'a superseded generation rejects rather than silently hanging',
+      );
+      assert.strictEqual(
+        secondError?.name,
+        'SandboxGenerationSuperseded',
+        'the response is distinguishably flagged dropped, not a genuine render failure',
+      );
+      await third;
+
+      assert.deepEqual(
+        ran,
+        [1, 3],
+        'generation 2 never actually ran — it never reached the target at all',
+      );
+    } finally {
+      client.destroy();
+      server.destroy();
+      channel.port1.close();
+      channel.port2.close();
+    }
+  });
+
+  test('RP-15.3: a render-family request with a missing, negative, or non-integer generation is ignored rather than dispatched', async function (assert) {
+    let channel = new MessageChannel();
+    let dispatched: unknown[] = [];
+    let target: SandboxRenderTarget = {
+      render: (card, format, generation) => {
+        dispatched.push({ card, format, generation });
+      },
+      clear: (generation) => {
+        dispatched.push({ clear: generation });
+      },
+      draft: (url, generation) => {
+        dispatched.push({ url, generation });
+      },
+    };
+    let server = new SandboxRenderServer(channel.port1, target);
+    channel.port2.start();
+
+    try {
+      let base = {
+        kind: 'boxel-sandbox-render-request',
+        transportVersion: BOXEL_EXECUTION_TRANSPORT_VERSION,
+        operation: 'clear' as const,
+      };
+      channel.port2.postMessage({ ...base, requestId: 'missing' });
+      channel.port2.postMessage({
+        ...base,
+        requestId: 'negative',
+        generation: -1,
+      });
+      channel.port2.postMessage({
+        ...base,
+        requestId: 'fractional',
+        generation: 1.5,
+      });
+      channel.port2.postMessage({
+        ...base,
+        requestId: 'not-a-number',
+        generation: '1',
+      });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      assert.deepEqual(
+        dispatched,
+        [],
+        'every malformed generation was rejected by the envelope validator before ever reaching the queue',
+      );
+    } finally {
+      server.destroy();
+      channel.port1.close();
+      channel.port2.close();
+    }
+  });
+
+  test('RP-15.3: a draft request with a missing or over-long URL is ignored rather than dispatched', async function (assert) {
+    let channel = new MessageChannel();
+    let dispatched: unknown[] = [];
+    let target: SandboxRenderTarget = {
+      render: () => {},
+      clear: () => {},
+      draft: (url) => {
+        dispatched.push(url);
+      },
+    };
+    let server = new SandboxRenderServer(channel.port1, target);
+    channel.port2.start();
+
+    try {
+      channel.port2.postMessage({
+        kind: 'boxel-sandbox-render-request',
+        transportVersion: BOXEL_EXECUTION_TRANSPORT_VERSION,
+        requestId: 'empty-url',
+        generation: 1,
+        operation: 'draft',
+        url: '',
+      });
+      channel.port2.postMessage({
+        kind: 'boxel-sandbox-render-request',
+        transportVersion: BOXEL_EXECUTION_TRANSPORT_VERSION,
+        requestId: 'huge-url',
+        generation: 2,
+        operation: 'draft',
+        url: 'https://realm.example/' + 'a'.repeat(5000),
+      });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      assert.deepEqual(dispatched, []);
+    } finally {
+      server.destroy();
+      channel.port1.close();
+      channel.port2.close();
+    }
   });
 });

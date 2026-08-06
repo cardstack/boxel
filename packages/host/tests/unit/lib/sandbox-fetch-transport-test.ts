@@ -218,6 +218,154 @@ module('Unit | Sandbox module fetch transport', function () {
     );
   });
 
+  test('RP-15.3: a draft override serves the unsaved edit instead of the realm, keyed by exact URL, and never reaches the network for that URL', async function (assert) {
+    let channel = new MessageChannel();
+    let networkRequests: string[] = [];
+    let drafts = new Map<string, string>([
+      ['https://realm.example/card.gts', 'export const answer = 43; // edited'],
+    ]);
+    let allowed = new Set([
+      'https://realm.example/card.gts',
+      'https://realm.example/sibling.gts',
+    ]);
+    let server = new SandboxFetchServer(
+      channel.port1,
+      async (input) => {
+        networkRequests.push(String(input));
+        return new Response('export const answer = 42; // saved', {
+          status: 200,
+          headers: { 'content-type': 'text/javascript' },
+        });
+      },
+      (url) => allowed.has(url),
+      undefined,
+      (url) => drafts.get(url),
+    );
+    let client = new SandboxFetchClient(channel.port2);
+    channel.port1.start();
+    channel.port2.start();
+
+    try {
+      let draft = await client.fetch('https://realm.example/card.gts');
+      assert.strictEqual(
+        await draft.text(),
+        'export const answer = 43; // edited',
+        'a URL with a draft override serves the unsaved edit',
+      );
+      assert.deepEqual(
+        networkRequests,
+        [],
+        'the drafted URL never reaches the network — the override is served without an authenticated fetch',
+      );
+
+      let sibling = await client.fetch('https://realm.example/sibling.gts');
+      assert.strictEqual(
+        await sibling.text(),
+        'export const answer = 42; // saved',
+        'a URL with no draft override still falls through to the network — the override is exact-URL only, never pattern-matched',
+      );
+      assert.deepEqual(networkRequests, ['https://realm.example/sibling.gts']);
+
+      drafts.set(
+        'https://realm.example/card.gts',
+        'export const answer = 44; // edited again',
+      );
+      let second = await client.fetch('https://realm.example/card.gts');
+      assert.strictEqual(
+        await second.text(),
+        'export const answer = 44; // edited again',
+        'a later draft for the same URL replaces the previous one',
+      );
+    } finally {
+      client.destroy();
+      server.destroy();
+      channel.port1.close();
+      channel.port2.close();
+    }
+  });
+
+  test('RP-15.3: a draft override still fails closed for a URL outside the classified graph', async function (assert) {
+    let channel = new MessageChannel();
+    let drafts = new Map<string, string>([
+      ['https://realm.example/outside.gts', 'export const x = 1;'],
+    ]);
+    let server = new SandboxFetchServer(
+      channel.port1,
+      async () => new Response('unreachable'),
+      () => false,
+      undefined,
+      (url) => drafts.get(url),
+    );
+    let client = new SandboxFetchClient(channel.port2);
+    channel.port1.start();
+    channel.port2.start();
+
+    try {
+      await assert.rejects(
+        client.fetch('https://realm.example/outside.gts'),
+        /outside its classified graph/,
+        'a draft entry does not bypass the authority check — it still has to be an admitted URL',
+      );
+    } finally {
+      client.destroy();
+      server.destroy();
+      channel.port1.close();
+      channel.port2.close();
+    }
+  });
+
+  test('RP-15.3: a new import introduced only by an edited (not the original) source is admitted once its graph is re-allowed — Sandbox HMR authority growth', async function (assert) {
+    // Edge case 8: "new imports added mid-session must be admitted through
+    // the same observe()-grown mechanism as initial load." allow() is
+    // additive (a Set), so re-calling it with the draft's own classified
+    // module graph before admitting its source (SandboxRuntimeProcess.
+    // pushDraft) is sufficient — this proves that growth actually reaches a
+    // module the ORIGINAL (pre-edit) source never imported.
+    let authority = new SandboxModuleAuthority(
+      (identifier) => identifier,
+      () => false,
+    );
+    // The original source's own classified graph — no reference to the
+    // helper module the edit is about to introduce.
+    authority.allow(['https://realm.example/card.gts']);
+    assert.false(
+      authority.has('https://realm.example/color-helpers.gts'),
+      'a module the original source never imported starts out ungranted',
+    );
+
+    // The edited source now imports a sibling helper — classification of
+    // the DRAFT (not the original) discovers it, and the Host re-allows the
+    // draft's own module graph before ever admitting its source (mirrors
+    // SandboxRuntimeProcess.pushDraft's authority-growth step).
+    authority.allow([
+      'https://realm.example/card.gts',
+      'https://realm.example/color-helpers.gts',
+    ]);
+    assert.true(
+      authority.has('https://realm.example/color-helpers.gts'),
+      'the import the edit alone introduced is admitted once its graph is re-allowed',
+    );
+    assert.true(
+      authority.has('https://realm.example/card.gts'),
+      'growth is additive — the original grant is never revoked by a later allow()',
+    );
+  });
+
+  test('RP-15.3: reset() discards every admitted URL — only an explicit hard reload calls it, never an ordinary draft push', async function (assert) {
+    let authority = new SandboxModuleAuthority(
+      (identifier) => identifier,
+      () => false,
+    );
+    authority.allow(['https://realm.example/card.gts']);
+    assert.true(authority.has('https://realm.example/card.gts'));
+
+    authority.reset();
+    assert.false(
+      authority.has('https://realm.example/card.gts'),
+      'reset() clears even a grant made before it was called',
+    );
+  });
+
   test('teardown rejects pending reads and releases the port listener', async function (assert) {
     let channel = new MessageChannel();
     let client = new SandboxFetchClient(channel.port2);

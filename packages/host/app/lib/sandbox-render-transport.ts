@@ -7,8 +7,34 @@ import {
 } from '@cardstack/runtime-common';
 
 export interface SandboxRenderTarget {
-  render(card: BoxelInstanceHandle, format: string): void | Promise<void>;
-  clear(): void | Promise<void>;
+  render(
+    card: BoxelInstanceHandle,
+    format: string,
+    generation: number,
+  ): void | Promise<void>;
+  clear(generation: number): void | Promise<void>;
+  /**
+   * Sandbox HMR (RP-17.1 un-deferral): re-derive the currently rendered
+   * card after `url`'s module has been invalidated and its draft source
+   * admitted through the fetch channel's override — see
+   * `SandboxRuntimeProcess`'s draft override map. `generation` is this
+   * draft's echoed sequence number; the target should re-check it (via
+   * `setStaleCheck`, if it registers one) after its own internal awaits so
+   * a draft superseded mid-flight doesn't apply stale output.
+   */
+  draft(url: string, generation: number): void | Promise<void>;
+  /**
+   * Called once, right after this target's `SandboxRenderServer` is
+   * constructed, with a live check against every generation the server has
+   * SEEN ARRIVE — not just ones already dispatched through this target's
+   * own serialized queue. A target's `render`/`draft` implementation can
+   * call this after an internal await to bail out early once a newer
+   * generation is already queued behind it, rather than finishing
+   * pointless work only to have it immediately superseded (dossier:
+   * "re-check generation post-await"). Optional: a target that never
+   * awaits internally has nothing to gain from it.
+   */
+  setStaleCheck?(isStale: (generation: number) => boolean): void;
 }
 
 interface PendingRenderRequest {
@@ -40,12 +66,21 @@ export class SandboxRenderClient {
     port.start();
   }
 
-  render(card: BoxelInstanceHandle, format: string): Promise<void> {
-    return this.request({ operation: 'render', card, format });
+  render(
+    card: BoxelInstanceHandle,
+    format: string,
+    generation: number,
+  ): Promise<void> {
+    return this.request({ operation: 'render', card, format, generation });
   }
 
-  clear(): Promise<void> {
-    return this.request({ operation: 'clear' });
+  clear(generation: number): Promise<void> {
+    return this.request({ operation: 'clear', generation });
+  }
+
+  /** Sandbox HMR — see `SandboxRenderTarget.draft`. */
+  draft(url: string, generation: number): Promise<void> {
+    return this.request({ operation: 'draft', url, generation });
   }
 
   /**
@@ -85,11 +120,15 @@ export class SandboxRenderClient {
     body:
       | Pick<
           Extract<SandboxRenderRequest, { operation: 'render' }>,
-          'operation' | 'card' | 'format'
+          'operation' | 'card' | 'format' | 'generation'
         >
       | Pick<
           Extract<SandboxRenderRequest, { operation: 'clear' }>,
-          'operation'
+          'operation' | 'generation'
+        >
+      | Pick<
+          Extract<SandboxRenderRequest, { operation: 'draft' }>,
+          'operation' | 'url' | 'generation'
         >,
   ): Promise<void> {
     if (this.closed) {
@@ -172,10 +211,36 @@ export class SandboxRenderClient {
   }
 }
 
-/** Child-side serial dispatcher for one persistent rendered island. */
+/** Marks a request that was never (or only partly) run because a newer
+ * generation had already superseded it by dispatch time — distinct from a
+ * genuine render/draft failure so the response can flag `dropped: true`. */
+class SandboxGenerationSuperseded extends Error {
+  constructor(generation: number, latest: number) {
+    super(
+      `Sandbox generation ${generation} was superseded by generation ${latest}`,
+    );
+    this.name = 'SandboxGenerationSuperseded';
+  }
+}
+
+/**
+ * Child-side serial dispatcher for one persistent rendered island.
+ *
+ * RP-17.1's HMR un-deferral: every request carries a monotonic `generation`
+ * (see `SandboxRenderRequest`'s doc comment). This server tracks the
+ * highest generation it has SEEN ARRIVE (updated the moment a message is
+ * received, before it is even queued) and refuses to dispatch a queued
+ * request whose generation has since been superseded — dossier step 2's
+ * "drop generation <= latest on arrival." `setStaleCheck` exposes that same
+ * live check to the target so it can also re-check after its own internal
+ * awaits ("re-check generation post-await"), since a request already
+ * dispatched keeps running to completion inside this server's serialized
+ * queue regardless of what arrives after it.
+ */
 export class SandboxRenderServer {
   private closed = false;
   private queue = Promise.resolve();
+  private latestGenerationSeen = -1;
 
   constructor(
     private readonly port: MessagePort,
@@ -183,6 +248,11 @@ export class SandboxRenderServer {
   ) {
     port.addEventListener('message', this.receive);
     port.start();
+  }
+
+  /** True once a strictly newer generation than `generation` has arrived. */
+  isStale(generation: number): boolean {
+    return generation < this.latestGenerationSeen;
   }
 
   destroy(): void {
@@ -198,6 +268,9 @@ export class SandboxRenderServer {
     if (!isSandboxRenderRequest(request)) {
       return;
     }
+    if (request.generation > this.latestGenerationSeen) {
+      this.latestGenerationSeen = request.generation;
+    }
     // MessagePort preserves order. Keep async template resolution ordered too,
     // so an older render cannot become visible after a newer selection.
     this.queue = this.queue
@@ -208,22 +281,43 @@ export class SandboxRenderServer {
           this.respond(request, {
             ok: false,
             error: projectedError(error),
+            ...(error instanceof SandboxGenerationSuperseded
+              ? { dropped: true as const }
+              : {}),
           }),
       );
   };
 
   private dispatch(request: SandboxRenderRequest): void | Promise<void> {
     assertBoxelExecutionTransportVersion(request.transportVersion);
-    return request.operation === 'render'
-      ? this.target.render(request.card, request.format)
-      : this.target.clear();
+    if (this.isStale(request.generation)) {
+      throw new SandboxGenerationSuperseded(
+        request.generation,
+        this.latestGenerationSeen,
+      );
+    }
+    switch (request.operation) {
+      case 'render':
+        return this.target.render(
+          request.card,
+          request.format,
+          request.generation,
+        );
+      case 'clear':
+        return this.target.clear(request.generation);
+      case 'draft':
+        return this.target.draft(request.url, request.generation);
+    }
   }
 
   private respond(
     request: SandboxRenderRequest,
     result:
       | Pick<Extract<SandboxRenderResponse, { ok: true }>, 'ok'>
-      | Pick<Extract<SandboxRenderResponse, { ok: false }>, 'ok' | 'error'>,
+      | Pick<
+          Extract<SandboxRenderResponse, { ok: false }>,
+          'ok' | 'error' | 'dropped'
+        >,
   ): void {
     if (this.closed) {
       return;
@@ -232,9 +326,23 @@ export class SandboxRenderServer {
       kind: 'boxel-sandbox-render-response',
       transportVersion: BOXEL_EXECUTION_TRANSPORT_VERSION,
       requestId: request.requestId,
+      generation: request.generation,
       ...result,
     } satisfies SandboxRenderResponse);
   }
+}
+
+// Bounded, non-negative integer: the wire's monotonic generation sequence
+// number (see SandboxRenderRequest's doc comment). The upper bound is
+// generous — Number.MAX_SAFE_INTEGER — since this is a defensive envelope
+// check, not a realistic session-length limit.
+function isValidGeneration(value: unknown): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isInteger(value) &&
+    value >= 0 &&
+    value <= Number.MAX_SAFE_INTEGER
+  );
 }
 
 function isSandboxRenderRequest(value: unknown): value is SandboxRenderRequest {
@@ -249,6 +357,8 @@ function isSandboxRenderRequest(value: unknown): value is SandboxRenderRequest {
     typeof value.requestId !== 'string' ||
     value.requestId.length === 0 ||
     value.requestId.length > 256 ||
+    !('generation' in value) ||
+    !isValidGeneration(value.generation) ||
     !('operation' in value)
   ) {
     return false;
@@ -261,32 +371,44 @@ function isSandboxRenderRequest(value: unknown): value is SandboxRenderRequest {
       'format' in value &&
       typeof value.format === 'string' &&
       value.format.length > 0 &&
-      value.format.length <= 128)
+      value.format.length <= 128) ||
+    (value.operation === 'draft' &&
+      'url' in value &&
+      typeof value.url === 'string' &&
+      value.url.length > 0 &&
+      value.url.length <= 4096)
   );
 }
 
 function isSandboxRenderResponse(
   value: unknown,
 ): value is SandboxRenderResponse {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    !('kind' in value) ||
+    value.kind !== 'boxel-sandbox-render-response' ||
+    !('transportVersion' in value) ||
+    typeof value.transportVersion !== 'number' ||
+    !('requestId' in value) ||
+    typeof value.requestId !== 'string' ||
+    !('generation' in value) ||
+    !isValidGeneration(value.generation) ||
+    !('ok' in value) ||
+    typeof value.ok !== 'boolean'
+  ) {
+    return false;
+  }
   return (
-    typeof value === 'object' &&
-    value !== null &&
-    'kind' in value &&
-    value.kind === 'boxel-sandbox-render-response' &&
-    'transportVersion' in value &&
-    typeof value.transportVersion === 'number' &&
-    'requestId' in value &&
-    typeof value.requestId === 'string' &&
-    'ok' in value &&
-    typeof value.ok === 'boolean' &&
-    (value.ok ||
-      ('error' in value &&
-        typeof value.error === 'object' &&
-        value.error !== null &&
-        'name' in value.error &&
-        typeof value.error.name === 'string' &&
-        'message' in value.error &&
-        typeof value.error.message === 'string'))
+    value.ok ||
+    ('error' in value &&
+      typeof value.error === 'object' &&
+      value.error !== null &&
+      'name' in value.error &&
+      typeof value.error.name === 'string' &&
+      'message' in value.error &&
+      typeof value.error.message === 'string' &&
+      (!('dropped' in value) || typeof value.dropped === 'boolean'))
   );
 }
 

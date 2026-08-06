@@ -83,6 +83,39 @@ export interface SandboxRenderSlot {
   readonly process: SandboxRuntimeProcess;
 }
 
+/**
+ * Sandbox HMR generation state (RP-17.1's un-deferral for this tier).
+ * Transitions only when a `pushDraft()` call's own echoed generation still
+ * matches the latest one issued (`SandboxRuntimeProcess.pushDraft`'s doc
+ * comment) — a late ack from a since-superseded draft is a no-op, never
+ * rolling this backward. `lastKnownGoodGeneration` is the last generation
+ * that actually applied; a `'failed'` phase leaves it untouched, so the
+ * previously-mounted render stays authoritative (RP-15.3's
+ * retained-placeholder spirit) while `error` surfaces alongside it.
+ */
+export interface SandboxDraftState {
+  phase: 'idle' | 'pending' | 'acked' | 'failed';
+  generation: number;
+  lastKnownGoodGeneration?: number;
+  error?: Error;
+}
+
+export interface SandboxPushDraftOptions {
+  /** The edited module's own identifier, not yet resolved to a fetch URL. */
+  moduleIdentifier: string;
+  source: string;
+  /** The draft's own classified module graph (authority growth, edge case 8). */
+  moduleGraph: readonly string[];
+  /** Document-declared relationship modules (edge case 9). */
+  documentDeclaredModules: readonly string[];
+}
+
+export interface SandboxPushDraftResult {
+  generation: number;
+  ok: boolean;
+  error?: Error;
+}
+
 function createDetachedSandboxIframe(): HTMLIFrameElement {
   let iframe = document.createElement('iframe');
   iframe.className = 'boxel-sandbox-process';
@@ -129,6 +162,38 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
   private cancelConnection?: (error: Error) => void;
   private closed = false;
   private readonly moduleAuthority: SandboxModuleAuthority;
+  /**
+   * RP-17.1 HMR un-deferral: a monotonic sequence number bumped for every
+   * render-family request this process issues (render, clear, and draft
+   * alike) — see `SandboxRenderRequest`'s doc comment. Never reused across
+   * mounts; only `reloadSandbox()` starts a process over from a fresh
+   * child, and even then this counter itself keeps climbing (there is no
+   * reason to reset it — the child's own `latestGenerationSeen` resets
+   * naturally because it is a brand new child).
+   */
+  private nextGeneration = 0;
+  /**
+   * The generation `pushDraft()` most recently issued — distinct from
+   * `nextGeneration` (which every render-family call bumps) so an ordinary
+   * render/format-switch interleaved with an in-flight draft cannot make
+   * that draft's own ack look stale. Only a NEWER draft can supersede a
+   * draft's own generation-state tracking.
+   */
+  private lastIssuedDraftGeneration = 0;
+  private _draftState: SandboxDraftState = { phase: 'idle', generation: 0 };
+  private draftStateListeners = new Set<(state: SandboxDraftState) => void>();
+  /**
+   * Sandbox HMR draft override, keyed by exact fetch URL — never
+   * pattern-matched (the frozen branch's private Monaco-buffer rule).
+   * Consulted by `SandboxFetchServer` before the network. A later draft for
+   * the same URL replaces the entry; nothing but an explicit
+   * `reloadSandbox()` clears it — in particular, a later CANONICAL
+   * (persisted/SSE) fetch does NOT silently clear it this round. SSE/save
+   * arbitration against a live draft is explicitly deferred (dossier §4)
+   * until a Sandbox-tier save path exists.
+   */
+  private readonly draftOverrides = new Map<string, string>();
+  private reloadListeners = new Set<() => void>();
 
   constructor(private readonly options: SandboxRuntimeProcessOptions) {
     this.surface = options.surfaceService.register(options.identity);
@@ -136,6 +201,45 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
       options.resolveModuleURL,
       options.isTrustedModuleURL,
     );
+  }
+
+  /** Readable Sandbox HMR generation state — see `SandboxDraftState`. */
+  get draftState(): SandboxDraftState {
+    return this._draftState;
+  }
+
+  /** Whether a draft override is currently active for the exact URL `url`. */
+  hasDraftOverride(url: string): boolean {
+    return this.draftOverrides.has(url);
+  }
+
+  /** Whether `url` is currently admitted by this process's module authority — diagnostic/test surface (RP-18.6: reloadSandbox() resets this to nothing granted). */
+  isModuleAdmitted(url: string): boolean {
+    return this.moduleAuthority.has(url);
+  }
+
+  /** Calls back on every Sandbox HMR generation-state transition. */
+  onDraftStateChange(callback: (state: SandboxDraftState) => void): () => void {
+    this.draftStateListeners.add(callback);
+    return () => {
+      this.draftStateListeners.delete(callback);
+    };
+  }
+
+  /**
+   * Calls back once per `reloadSandbox()` call — the signal a consumer with
+   * state keyed on this process's old identity (most concretely: the Host
+   * renderer's `sandboxPainted`/placeholder-handoff flag, which otherwise
+   * has no reason to ever flip back once set — RP-15.3's placeholder is
+   * retained across ordinary HMR precisely so it must NOT re-enter, but a
+   * hard reload is exactly the case that DOES need it back) must
+   * invalidate before this process's next paint.
+   */
+  onReload(callback: () => void): () => void {
+    this.reloadListeners.add(callback);
+    return () => {
+      this.reloadListeners.delete(callback);
+    };
   }
 
   /** The iframe currently owned by this process — detached until `mount()`. */
@@ -351,7 +455,7 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
 
   async dispose(handle: RuntimeHandle): Promise<void> {
     if (handle === this.renderedCard) {
-      await this.renderClient?.clear();
+      await this.renderClient?.clear(++this.nextGeneration);
       this.renderedCard = undefined;
     }
     return this.withClient((client) => client.dispose(handle));
@@ -410,15 +514,131 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
     this.options.surfaceService.release(this.surface);
   }
 
+  /**
+   * Sandbox HMR (RP-17.1 un-deferral): pushes an edited module's unsaved
+   * source and asks the child to invalidate-and-rerender the currently
+   * mounted card against it (dossier step 2). Growing the module authority
+   * with the draft's own classified graph BEFORE admitting its source (edge
+   * case 8) means a brand-new import the edit introduces is already granted
+   * by the time the child's fetch server would ask for it.
+   *
+   * The RETURNED promise always reflects the wire outcome of THIS specific
+   * call — a caller that awaits its own push always learns whether ITS push
+   * applied. Whether this call's outcome also updates the shared
+   * `draftState` is a separate question: only if `generation` still equals
+   * `lastIssuedDraftGeneration` when the response arrives (nothing newer
+   * was pushed in the meantime) — a late ack from an older, already-
+   * superseded draft is a no-op there, never rolling that shared state
+   * backward (dossier §3.2/3.6).
+   */
+  async pushDraft(
+    options: SandboxPushDraftOptions,
+  ): Promise<SandboxPushDraftResult> {
+    if (this.closed) {
+      return {
+        generation: this._draftState.generation,
+        ok: false,
+        error: new Error('Sandbox runtime process is closed'),
+      };
+    }
+    let url = this.options.resolveModuleURL(options.moduleIdentifier);
+    let generation = ++this.nextGeneration;
+    this.lastIssuedDraftGeneration = generation;
+    this.moduleAuthority.allow([
+      ...options.moduleGraph,
+      ...options.documentDeclaredModules,
+    ]);
+    this.draftOverrides.set(url, options.source);
+    this.setDraftState({
+      phase: 'pending',
+      generation,
+      lastKnownGoodGeneration: this._draftState.lastKnownGoodGeneration,
+    });
+    try {
+      await this.client;
+      if (!this.renderClient) {
+        throw new Error('Sandbox render transport is unavailable');
+      }
+      await this.renderClient.draft(url, generation);
+      if (generation === this.lastIssuedDraftGeneration) {
+        this.setDraftState({
+          phase: 'acked',
+          generation,
+          lastKnownGoodGeneration: generation,
+        });
+      }
+      return { generation, ok: true };
+    } catch (error) {
+      let err = asError(error);
+      if (generation === this.lastIssuedDraftGeneration) {
+        this.setDraftState({
+          phase: 'failed',
+          generation,
+          lastKnownGoodGeneration: this._draftState.lastKnownGoodGeneration,
+          error: err,
+        });
+      }
+      return { generation, ok: false, error: err };
+    }
+  }
+
+  /**
+   * Explicit hard reload — distinct from ordinary HMR (`pushDraft`): remints
+   * this process's child from scratch. Stays the SAME retained object (the
+   * runtime router keeps its lease; nothing re-routes) but tears down and
+   * re-establishes the live iframe/connection exactly like an ordinary
+   * unmount+remount, which already mints a fresh, still-detached iframe and
+   * a new `bootstrapId` on its next `connect()` (RP-15.3's "never
+   * re-parented" is honored the same way: this never moves the iframe, it
+   * replaces it). Additionally clears draft overrides and resets the module
+   * authority to a clean slate (no residual grants from the pre-reload
+   * session) and notifies `onReload` listeners so a consumer with state
+   * keyed on the old identity (the Host renderer's placeholder-handoff
+   * flag) knows to invalidate it before this process's next paint.
+   */
+  reloadSandbox(): void {
+    if (this.closed) {
+      return;
+    }
+    let wasMounted = this.mounted;
+    let parent = wasMounted ? this._iframe.parentElement : null;
+    this.unmount();
+    this.draftOverrides.clear();
+    this.moduleAuthority.reset();
+    // Bumped (not merely copied from `nextGeneration`) so a draft already
+    // in flight when reload happens — its `generation` is necessarily
+    // `<= nextGeneration` at the moment it was issued — can never match
+    // this new value once it finally settles (rejected by the very
+    // unmount() above) and tries to update draftState. Without this, a
+    // same-numbered late failure could overwrite the freshly-reset 'idle'
+    // phase right back to 'failed'.
+    this.lastIssuedDraftGeneration = ++this.nextGeneration;
+    this.setDraftState({ phase: 'idle', generation: this.nextGeneration });
+    for (let listener of [...this.reloadListeners]) {
+      listener();
+    }
+    if (wasMounted && parent) {
+      this.mount(parent);
+    }
+  }
+
+  private setDraftState(state: SandboxDraftState): void {
+    this._draftState = state;
+    for (let listener of [...this.draftStateListeners]) {
+      listener(state);
+    }
+  }
+
   private async requestRender(
     card: BoxelInstanceHandle,
     format: string,
   ): Promise<void> {
+    let generation = ++this.nextGeneration;
     await this.client;
     if (!this.renderClient) {
       throw new Error('Sandbox render transport is unavailable');
     }
-    await this.renderClient.render(card, format);
+    await this.renderClient.render(card, format, generation);
     this.renderedCard = card;
   }
 
@@ -559,6 +779,7 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
           (url) => this.moduleAuthority.has(url),
           (url, contentType, body) =>
             this.moduleAuthority.observe(url, contentType, body),
+          (url) => this.draftOverrides.get(url),
         );
         // Independent of, and outlives, the bootstrap-scoped receiveControl
         // above (which cleanupBootstrap detaches once the handshake
@@ -653,6 +874,10 @@ function runtimeControlError(error: { name: string; message: string }): Error {
   let result = new Error(error.message);
   result.name = error.name;
   return result;
+}
+
+function asError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
 }
 
 function randomBootstrapId(): string {

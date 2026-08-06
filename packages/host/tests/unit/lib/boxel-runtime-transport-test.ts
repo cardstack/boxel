@@ -223,14 +223,15 @@ module('Unit | Boxel runtime transport', function () {
       clear() {
         rendered.push('clear');
       },
+      draft() {},
     });
     let client = new SandboxRenderClient(channel.port1);
 
     try {
-      let first = client.render(instanceHandle, 'isolated');
-      let second = client.render(instanceHandle, 'embedded');
+      let first = client.render(instanceHandle, 'isolated', 1);
+      let second = client.render(instanceHandle, 'embedded', 2);
       await Promise.all([first, second]);
-      await client.clear();
+      await client.clear(3);
       assert.deepEqual(rendered, [
         `${instanceHandle}:isolated`,
         `${instanceHandle}:embedded`,
@@ -253,12 +254,13 @@ module('Unit | Boxel runtime transport', function () {
         throw error;
       },
       clear() {},
+      draft() {},
     });
     let client = new SandboxRenderClient(channel.port1);
 
     try {
       await assert.rejects(
-        client.render(instanceHandle, 'isolated'),
+        client.render(instanceHandle, 'isolated', 1),
         /renderer rejected the format/,
       );
     } finally {

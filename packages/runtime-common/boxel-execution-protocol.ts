@@ -120,12 +120,27 @@ export type BoxelRuntimeResponse = BoxelRuntimeSuccess | BoxelRuntimeFailure;
  * Rendering is a process-local effect, not part of the cloneable semantic
  * BoxelRuntime API. The Host may select an opaque child-owned instance and a
  * format, but the component definition and DOM remain in the Sandbox.
+ *
+ * `generation` (RP-17.1's HMR un-deferral for the Sandbox tier) is a
+ * monotonic sequence number the Host bumps for every render-family request
+ * it issues on one process (render, clear, and `draft` alike) — never reused
+ * across processes or reset except by an explicit hard reload. The child
+ * echoes it back on the matching response and uses it to drop a request
+ * that arrives (or is still in flight) after a newer one has already
+ * superseded it, so a burst of rapid edits or format switches never
+ * resurrects stale output. `draft` carries only the edited module's exact
+ * URL, not its source — the source crosses separately, through the
+ * existing module-fetch channel's per-URL draft override (see
+ * `SandboxRuntimeProcess`'s draft override map), keeping this control
+ * message small and reusing the one channel that already carries module
+ * bytes rather than duplicating that payload here.
  */
 export type SandboxRenderRequest =
   | {
       kind: 'boxel-sandbox-render-request';
       transportVersion: number;
       requestId: string;
+      generation: number;
       operation: 'render';
       card: BoxelInstanceHandle;
       format: string;
@@ -134,7 +149,16 @@ export type SandboxRenderRequest =
       kind: 'boxel-sandbox-render-request';
       transportVersion: number;
       requestId: string;
+      generation: number;
       operation: 'clear';
+    }
+  | {
+      kind: 'boxel-sandbox-render-request';
+      transportVersion: number;
+      requestId: string;
+      generation: number;
+      operation: 'draft';
+      url: string;
     };
 
 export type SandboxRenderResponse =
@@ -142,17 +166,29 @@ export type SandboxRenderResponse =
       kind: 'boxel-sandbox-render-response';
       transportVersion: number;
       requestId: string;
+      generation: number;
       ok: true;
     }
   | {
       kind: 'boxel-sandbox-render-response';
       transportVersion: number;
       requestId: string;
+      generation: number;
       ok: false;
       error: {
         name: string;
         message: string;
       };
+      /**
+       * True when the child chose not to run this generation at all (or
+       * abandoned it mid-flight) because a newer one already superseded it
+       * — informational, not a genuine render/draft failure. The parent's
+       * own generation bookkeeping (comparing this response's `generation`
+       * against the latest one it has issued) is what actually decides
+       * whether to surface an error; this flag only distinguishes "chose
+       * not to run it" from "ran it and it threw."
+       */
+      dropped?: boolean;
     };
 
 export function assertBoxelExecutionTransportVersion(version: number): void {

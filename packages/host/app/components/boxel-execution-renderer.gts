@@ -190,6 +190,22 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
           request.format,
           source,
         );
+        // RP-15.3: a Sandbox bootstrap failure must fail closed no matter
+        // which of its two possible paths it takes — a connect (or later
+        // render) failure the process itself observes and reports via
+        // onMountFailed, or a rejection that surfaces through
+        // materialize()'s own await of the SAME live client, inside
+        // session.update() below, before onMountFailed's listener ever
+        // gets a chance to fire. Both must converge on the identical
+        // fail-closed behavior: clear the (now-invalid) reservation slot
+        // so the template falls through past the stale sandbox branch to
+        // whatever presentation the session's own error state calls for.
+        // Registered once, immediately after the reservation exists —
+        // onMountFailed never re-arms after firing, so this single
+        // registration covers both the window while materialize() is
+        // still in flight and any later failure once this generation is
+        // fully live.
+        let mountFailureWatched = false;
         if (reservation) {
           on.cleanup(reservation.release);
           let { process } = reservation;
@@ -199,6 +215,19 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
             surface: process.surface,
             process,
           };
+          let stopWatchingMountFailure = process.onMountFailed((error) => {
+            if (!active) {
+              return;
+            }
+            state.slot = undefined;
+            state.snapshot = {
+              ...session.snapshot,
+              status: 'error',
+              error,
+            };
+          });
+          on.cleanup(stopWatchingMountFailure);
+          mountFailureWatched = true;
           // Ember must actually paint the slot this assignment causes
           // before the presentation slot modifier can call mount() on it —
           // wait for that so materialize() (below) never asks for a client
@@ -210,6 +239,19 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
         }
         let generation = await session.update(request);
         if (!generation) {
+          // materialize() needed the reserved Sandbox process's live
+          // client; if that connection failed, the rejection propagated
+          // here — through update()'s own catch, which already updated
+          // state.snapshot via session.subscribe's notify — rather than
+          // through the onMountFailed listener above. state.slot was set
+          // early (before materialize() ever ran) and update() has no way
+          // to know that, so it is left stale here unless cleared
+          // explicitly: without this, the template's sandbox branch would
+          // keep outranking the error presentation the snapshot already
+          // calls for.
+          if (active) {
+            state.slot = undefined;
+          }
           return;
         }
         // `state.model` is kept in sync by the `session.subscribe` callback
@@ -244,29 +286,49 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
               state.sandboxPainted = true;
             }
           });
-          // The Sandbox slot now resolves (and mounts) before the child has
-          // necessarily connected — getRenderSlot() no longer awaits the
-          // full handshake first (it can't: the iframe needs this slot's
-          // element to exist before it can even start booting). A failed
-          // connect (most commonly the timeout) is therefore no longer a
-          // thrown rejection this async block's own try/catch would see —
-          // it surfaces here instead. Clearing state.slot falls the
-          // template through past the (now-stale) sandbox branch to the
-          // ordinary error presentation, and tears down the failed process
-          // via the slot modifier's own teardown.
-          let stopWatchingMountFailure = slot.process.onMountFailed((error) => {
-            if (!active) {
-              return;
+          // getRenderSlot() no longer awaits the full handshake first (it
+          // can't: the iframe needs this slot's element to exist before it
+          // can even start booting), so a failed connect (most commonly
+          // the timeout) is no longer a thrown rejection this async
+          // block's own try/catch would see — it surfaces through
+          // onMountFailed instead. Normally that listener was ALREADY
+          // registered right after the reservation above (it never
+          // re-arms after firing, so one registration covers this
+          // process's whole lifecycle) — this second registration exists
+          // only for the rarer case where no reservation was made at all
+          // (classification decided non-Sandbox, but materialize()'s own
+          // prefersFullSandbox escalation chose Sandbox anyway), so this
+          // is the first and only chance to watch it.
+          let stopWatchingMountFailure = mountFailureWatched
+            ? undefined
+            : slot.process.onMountFailed((error) => {
+                if (!active) {
+                  return;
+                }
+                state.slot = undefined;
+                state.snapshot = {
+                  ...session.snapshot,
+                  status: 'error',
+                  error,
+                };
+              });
+          // An explicit hard reload (session.reloadSandbox(), dossier step
+          // 6) remints this process's child from scratch — unlike ordinary
+          // HMR (session.pushDraft()), which never re-arms onFirstPaint by
+          // design (RP-15.3's placeholder is retained, not re-entered, for
+          // an in-place edit). A reload is exactly the case that DOES need
+          // the placeholder back: the new child hasn't painted anything
+          // yet, so this state must invalidate before its next paint.
+          let stopWatchingReload = slot.process.onReload(() => {
+            if (active) {
+              state.sandboxPainted = false;
             }
-            state.slot = undefined;
-            state.snapshot = {
-              ...session.snapshot,
-              status: 'error',
-              error,
-            };
           });
           on.cleanup(stopWatchingPaint);
-          on.cleanup(stopWatchingMountFailure);
+          if (stopWatchingMountFailure) {
+            on.cleanup(stopWatchingMountFailure);
+          }
+          on.cleanup(stopWatchingReload);
         }
       } catch (error) {
         state.snapshot = {

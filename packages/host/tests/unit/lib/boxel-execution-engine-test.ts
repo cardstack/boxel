@@ -113,6 +113,36 @@ class TestRuntime {
     this.allowedModules = moduleIdentifiers;
   }
 
+  // Sandbox HMR (RP-17.1's un-deferral) test surface — only meaningfully
+  // used when mode === 'sandbox'. A fake stand-in for
+  // SandboxRuntimeProcess.pushDraft/reloadSandbox so BoxelExecutionSession's
+  // OWN orchestration (classification, mode gating, request retention, the
+  // teardown/newer-update race guard) can be tested without a real iframe.
+  pushDraftCalls: {
+    moduleIdentifier: string;
+    source: string;
+    moduleGraph: readonly string[];
+    documentDeclaredModules: readonly string[];
+  }[] = [];
+  pushDraftResult: { generation: number; ok: boolean; error?: Error } = {
+    generation: 1,
+    ok: true,
+  };
+  async pushDraft(options: {
+    moduleIdentifier: string;
+    source: string;
+    moduleGraph: readonly string[];
+    documentDeclaredModules: readonly string[];
+  }): Promise<{ generation: number; ok: boolean; error?: Error }> {
+    this.pushDraftCalls.push(options);
+    return this.pushDraftResult;
+  }
+
+  reloadCalls = 0;
+  reloadSandbox(): void {
+    this.reloadCalls++;
+  }
+
   getRenderSlotForHandle() {
     return { owner: 'direct' as const, component: {} as never };
   }
@@ -943,6 +973,188 @@ module('Unit | Boxel execution engine', function () {
     await directSession.destroy();
     await capsuleSession.destroy();
     await sandboxSession.destroy();
+    engine.destroy();
+  });
+
+  test('RP-15.3: pushDraft() classifies the edit and delegates to the Sandbox process with its module graph plus document-declared modules — the authority-growth step, edge case 8', async function (assert) {
+    let direct = new TestRuntime('direct');
+    let capsule = new TestRuntime('capsule');
+    let sandbox = new TestRuntime('sandbox');
+    let router = new BoxelRuntimeRouter(
+      direct as unknown as DirectBoxelRuntime,
+      () => capsule as unknown as CapsuleBoxelRuntime,
+      () => sandbox as unknown as SandboxRuntimeProcess,
+    );
+    let classifyCalls: { moduleIdentifier: string; source: string }[] = [];
+    let draftClassification: BoxelSourceClassification = {
+      ...sandboxSource,
+      moduleGraph: [
+        'https://example.test/card',
+        'https://example.test/newly-imported-helper',
+      ],
+    };
+    let engine = new BoxelExecutionEngine(
+      router,
+      async (moduleIdentifier, source) => {
+        classifyCalls.push({ moduleIdentifier, source });
+        return source === 'sandbox' ? sandboxSource : draftClassification;
+      },
+    );
+    let session = engine.createSession();
+    await session.update(executionRequest('sandbox'));
+
+    let result = await session.pushDraft(
+      'https://example.test/card',
+      'edited source',
+    );
+
+    assert.true(result.ok);
+    assert.strictEqual(result.generation, sandbox.pushDraftResult.generation);
+    assert.strictEqual(
+      classifyCalls[classifyCalls.length - 1]?.source,
+      'edited source',
+      'the draft source is classified — the same pure step update() itself performs — before being pushed',
+    );
+    assert.strictEqual(sandbox.pushDraftCalls.length, 1);
+    assert.deepEqual(
+      sandbox.pushDraftCalls[0],
+      {
+        moduleIdentifier: 'https://example.test/card',
+        source: 'edited source',
+        moduleGraph: draftClassification.moduleGraph,
+        // modulesConsumedInMeta (resource-types.ts) always includes the
+        // primary resource's own adoptsFrom module — here the same URL as
+        // the module being edited, since that's what this fixture's
+        // `resource.meta.adoptsFrom` names.
+        documentDeclaredModules: ['https://example.test/card'],
+      },
+      "the draft's own classified module graph is threaded through for authority growth — never the original (pre-edit) source's graph",
+    );
+
+    await session.destroy();
+    engine.destroy();
+  });
+
+  test('RP-15.3: pushDraft() fails without touching any runtime when the session has no ready generation, or when the current generation is not Sandbox', async function (assert) {
+    let direct = new TestRuntime('direct');
+    let capsule = new TestRuntime('capsule');
+    let sandbox = new TestRuntime('sandbox');
+    let router = new BoxelRuntimeRouter(
+      direct as unknown as DirectBoxelRuntime,
+      () => capsule as unknown as CapsuleBoxelRuntime,
+      () => sandbox as unknown as SandboxRuntimeProcess,
+    );
+    let engine = new BoxelExecutionEngine(router, async () => capsuleSource);
+    let session = engine.createSession();
+
+    let beforeReady = await session.pushDraft(
+      'https://example.test/card',
+      'edited source',
+    );
+    assert.false(beforeReady.ok);
+    assert.true(beforeReady.error?.message.includes('no ready generation'));
+
+    await session.update(executionRequest());
+    assert.strictEqual(session.snapshot.current?.lease.runtime, capsule);
+
+    let wrongTier = await session.pushDraft(
+      'https://example.test/card',
+      'edited source',
+    );
+    assert.false(wrongTier.ok);
+    assert.true(wrongTier.error?.message.includes("'capsule' execution tier"));
+    assert.strictEqual(
+      sandbox.pushDraftCalls.length,
+      0,
+      'a draft push against a non-Sandbox generation never reaches any runtime',
+    );
+
+    await session.destroy();
+    engine.destroy();
+  });
+
+  test('RP-15.3: pushDraft() that races a newer update() while classifying does not apply against a generation the session no longer owns', async function (assert) {
+    let direct = new TestRuntime('direct');
+    let capsule = new TestRuntime('capsule');
+    let sandbox = new TestRuntime('sandbox');
+    let router = new BoxelRuntimeRouter(
+      direct as unknown as DirectBoxelRuntime,
+      () => capsule as unknown as CapsuleBoxelRuntime,
+      () => sandbox as unknown as SandboxRuntimeProcess,
+    );
+    let releaseClassify!: (classification: BoxelSourceClassification) => void;
+    let slowClassify = new Promise<BoxelSourceClassification>((resolve) => {
+      releaseClassify = resolve;
+    });
+    let engine = new BoxelExecutionEngine(router, async (_module, source) => {
+      if (source === 'slow-draft') {
+        return slowClassify;
+      }
+      return source === 'sandbox' ? sandboxSource : capsuleSource;
+    });
+    let session = engine.createSession();
+    await session.update(executionRequest('sandbox'));
+
+    let racedDraft = session.pushDraft(
+      'https://example.test/card',
+      'slow-draft',
+    );
+    // A newer, unrelated update() supersedes the generation the draft above
+    // was classifying against — a second Sandbox render for a DIFFERENT
+    // reason (a format switch, a fresh navigation), not a competing draft.
+    await session.update(executionRequest('sandbox'));
+    releaseClassify(sandboxSource);
+
+    let result = await racedDraft;
+    assert.false(
+      result.ok,
+      'a draft that finishes classifying only after its generation was superseded never applies',
+    );
+    assert.true(result.error?.message.includes('generation changed'));
+    assert.strictEqual(
+      sandbox.pushDraftCalls.length,
+      0,
+      'the superseded draft never reaches the runtime at all',
+    );
+
+    await session.destroy();
+    engine.destroy();
+  });
+
+  test("RP-15.3: reloadSandbox() delegates to the current Sandbox generation's process, and is a no-op for a non-Sandbox generation or no generation at all", async function (assert) {
+    let direct = new TestRuntime('direct');
+    let capsule = new TestRuntime('capsule');
+    let sandbox = new TestRuntime('sandbox');
+    let router = new BoxelRuntimeRouter(
+      direct as unknown as DirectBoxelRuntime,
+      () => capsule as unknown as CapsuleBoxelRuntime,
+      () => sandbox as unknown as SandboxRuntimeProcess,
+    );
+    let engine = new BoxelExecutionEngine(router, async (_module, source) =>
+      source === 'sandbox' ? sandboxSource : capsuleSource,
+    );
+    let session = engine.createSession();
+
+    session.reloadSandbox();
+    assert.strictEqual(
+      sandbox.reloadCalls,
+      0,
+      'no generation yet — nothing to reload',
+    );
+
+    await session.update(executionRequest());
+    session.reloadSandbox();
+    assert.strictEqual(
+      sandbox.reloadCalls,
+      0,
+      'the current generation is Capsule, not Sandbox — reloadSandbox() only ever targets the Sandbox tier',
+    );
+
+    await session.update(executionRequest('sandbox'));
+    session.reloadSandbox();
+    assert.strictEqual(sandbox.reloadCalls, 1);
+
+    await session.destroy();
     engine.destroy();
   });
 });

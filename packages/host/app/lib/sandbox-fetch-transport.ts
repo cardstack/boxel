@@ -126,6 +126,16 @@ export class SandboxFetchServer {
       contentType: string | null,
       body: ArrayBuffer,
     ) => Promise<void>,
+    /**
+     * Sandbox HMR (RP-17.1 un-deferral): an unsaved draft, keyed by its
+     * exact fetch URL — never pattern-matched, mirroring the frozen
+     * branch's private Monaco-buffer rule. Consulted before the network on
+     * every read; a hit serves the draft's source text as a synthesized
+     * response instead of the realm's persisted (saved) source, without
+     * this server having to know anything about draft lifecycle beyond
+     * "does one exist for this exact URL right now."
+     */
+    private readonly getDraftOverride?: (url: string) => string | undefined,
   ) {
     port.addEventListener('message', this.receive);
   }
@@ -149,6 +159,31 @@ export class SandboxFetchServer {
         throw new Error(
           `Sandbox module read is outside its classified graph: ${request.url}`,
         );
+      }
+      let draftSource = this.getDraftOverride?.(request.url);
+      if (draftSource !== undefined) {
+        let body = new TextEncoder().encode(draftSource).buffer;
+        // The draft's own newly-introduced imports (edge case 8/§3) are
+        // admitted the same way any other observed response's imports are
+        // — the Host also independently re-allows the draft's classified
+        // module graph before ever setting this override (see
+        // BoxelExecutionSession.pushDraft), so this call is defense in
+        // depth, not the sole admission path.
+        await this.observeModule?.(request.url, 'text/javascript', body);
+        message = {
+          kind: responseKind,
+          requestId: request.requestId,
+          ok: true,
+          response: {
+            status: 200,
+            statusText: 'OK',
+            url: request.url,
+            headers: [['content-type', 'text/javascript']],
+            body,
+          },
+        };
+        this.port.postMessage(message, [body]);
+        return;
       }
       let headers = new Headers();
       for (let [name, value] of request.headers) {

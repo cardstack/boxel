@@ -313,6 +313,18 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
   private reportRenderDiagnostic?: (
     diagnostic: SandboxRenderDiagnostic,
   ) => void;
+  /** The handle currently mounted — Sandbox HMR's `draft()` re-derives it. */
+  private renderedCardHandle?: BoxelInstanceHandle;
+  /**
+   * RP-17.1 HMR un-deferral: a live check against every generation the
+   * parent-facing `SandboxRenderServer` has seen arrive, not just ones
+   * already dispatched — wired in by `sandbox-runtime-host.ts` right after
+   * that server is constructed (`SandboxRenderTarget.setStaleCheck`'s doc
+   * comment). `render`/`draft` re-check it after each internal await so a
+   * generation superseded mid-flight bails out rather than applying stale
+   * output.
+   */
+  private isGenerationStale?: (generation: number) => boolean;
 
   /**
    * A stable (class-field, bound once) reference passed to `attachSurface`
@@ -369,13 +381,21 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
   });
 
   private renderTarget: SandboxRenderTarget = {
-    render: async (card: BoxelInstanceHandle, format: string) => {
+    render: async (
+      card: BoxelInstanceHandle,
+      format: string,
+      generation: number,
+    ) => {
       // Breadcrumb 6/7: the render-transport dispatcher (sandbox-render-
       // transport.ts, parent-owned) called this the moment it received the
       // render request off the wire — this is the earliest point in the
       // sandboxed render path this component itself can observe, so it
       // stands in for "render request received".
-      console.warn('[sandbox-child] render begun', { card, format });
+      console.warn('[sandbox-child] render begun', {
+        card,
+        format,
+        generation,
+      });
       if (!this.runtime) {
         throw new Error('Sandbox runtime is unavailable');
       }
@@ -397,6 +417,12 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
       if (root) {
         await whenNonzeroSize(root);
       }
+      // RP-17.1 HMR un-deferral: re-check after the await above — a newer
+      // render/draft may already be queued behind this one.
+      if (this.isGenerationStale?.(generation)) {
+        return;
+      }
+      this.renderedCardHandle = card;
       let slot = this.runtime.getRenderSlotForHandle(card);
       join(() => {
         this.format = format as Format;
@@ -405,23 +431,80 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
         this.error = undefined;
       });
       await afterRender();
+      if (this.isGenerationStale?.(generation)) {
+        return;
+      }
       // Breadcrumb 7/7: the Glimmer flush this awaited has committed —
       // report what actually landed in the DOM. The render-response ack
       // (sandbox-render-transport.ts) only proves this promise resolved,
       // not that anything visible came out of it.
-      let diagnostic = measureRenderedOutput(
-        document.querySelector('[data-boxel-sandbox-runtime]'),
-        format,
-      );
+      let diagnostic = measureRenderedOutput(root, format);
       console.warn('[sandbox-child] render completed', diagnostic);
       this.reportRenderDiagnostic?.(diagnostic);
     },
-    clear: async () => {
+    clear: async (generation: number) => {
+      if (this.isGenerationStale?.(generation)) {
+        return;
+      }
       join(() => {
         this.renderedComponent = undefined;
         this.error = undefined;
       });
+      this.renderedCardHandle = undefined;
       await afterRender();
+    },
+    draft: async (url: string, generation: number) => {
+      // Sandbox HMR (RP-17.1 un-deferral, dossier step 2): invalidate only
+      // the edited module (Loader.invalidateModule is already surgical —
+      // reverse dependants only, everything else stays cached) and
+      // re-derive the currently mounted card from the SAME serialized
+      // document (DirectBoxelRuntime.redeserialize) — data state survives;
+      // only module/component identity changes. Never touches
+      // this.renderedComponent/this.error before that succeeds, so a
+      // failure here (a syntax error in the edit, a throwing class body)
+      // leaves the last-known-good render exactly as it was — this method
+      // simply rethrows, and SandboxRenderServer's own queue turns that
+      // into an `ok:false` ack without this component ever clearing
+      // anything. The child never re-enters the placeholder for an
+      // ordinary HMR generation either: `this.painted`
+      // (sandbox-runtime-process.ts) is untouched by any of this, so
+      // onFirstPaint (already fired once) never re-arms.
+      console.warn('[sandbox-child] draft begun', { url, generation });
+      if (!this.runtime || !this.renderedCardHandle) {
+        throw new Error(
+          'Sandbox draft requires an already-rendered card to redraft',
+        );
+      }
+      this.loader?.invalidateModule(url);
+      await this.runtime.redeserialize(this.renderedCardHandle);
+      if (this.isGenerationStale?.(generation)) {
+        return;
+      }
+      let slot = this.runtime.getRenderSlotForHandle(this.renderedCardHandle);
+      let root = document.querySelector<HTMLElement>(
+        '[data-boxel-sandbox-runtime]',
+      );
+      if (root) {
+        await whenNonzeroSize(root);
+      }
+      if (this.isGenerationStale?.(generation)) {
+        return;
+      }
+      join(() => {
+        this.renderedComponent =
+          slot.component as ComponentLike<SandboxComponentSignature>;
+        this.error = undefined;
+      });
+      await afterRender();
+      if (this.isGenerationStale?.(generation)) {
+        return;
+      }
+      let diagnostic = measureRenderedOutput(root, this.format);
+      console.warn('[sandbox-child] draft completed', diagnostic);
+      this.reportRenderDiagnostic?.(diagnostic);
+    },
+    setStaleCheck: (isStale) => {
+      this.isGenerationStale = isStale;
     },
   };
 

@@ -21,6 +21,33 @@ function fakeSurfaceService(): {
   return { service, surface, released };
 }
 
+function createTestRuntime(
+  overrides: {
+    service?: SurfaceService;
+    connectTimeout?: number;
+    resolveModuleURL?: (identifier: string) => string;
+  } = {},
+): SandboxRuntimeProcess {
+  let { service } = overrides.service
+    ? { service: overrides.service }
+    : fakeSurfaceService();
+  return new SandboxRuntimeProcess({
+    childURL: 'https://sandbox.example.test/_boxel-sandbox-runtime',
+    childOrigin: 'https://sandbox.example.test',
+    surfaceService: service,
+    fetch: globalThis.fetch,
+    resolveModuleURL:
+      overrides.resolveModuleURL ?? ((identifier) => identifier),
+    isTrustedModuleURL: () => false,
+    identity: {
+      mode: 'sandbox',
+      principal: 'user:test',
+      surfaceId: 'sandbox-test',
+    },
+    connectTimeout: overrides.connectTimeout ?? 30,
+  });
+}
+
 module('Unit | Sandbox runtime process', function () {
   test('creates its iframe detached — never appended anywhere until mount()', function (assert) {
     let { service } = fakeSurfaceService();
@@ -364,5 +391,214 @@ module('Unit | Sandbox runtime process', function () {
       settled,
       'a reservation awaiting whenMounted() on a process that never mounts is released once the process is destroyed, rather than hanging forever',
     );
+  });
+
+  test('RP-15.3: pushDraft() on a closed process fails immediately and never touches draftState', async function (assert) {
+    let runtime = createTestRuntime();
+    runtime.destroy();
+
+    let before = runtime.draftState;
+    let result = await runtime.pushDraft({
+      moduleIdentifier: 'https://realm.example/card.gts',
+      source: 'export default class {}',
+      moduleGraph: [],
+      documentDeclaredModules: [],
+    });
+
+    assert.false(result.ok);
+    assert.strictEqual(
+      result.error?.message,
+      'Sandbox runtime process is closed',
+    );
+    assert.strictEqual(
+      runtime.draftState,
+      before,
+      'a pre-flight rejection on a closed process never mutates draftState at all',
+    );
+  });
+
+  test('RP-15.3: pushDraft() never touches the mounted iframe\'s identity — RP-15.3\'s "never re-parented" holds even when the draft cannot complete', async function (assert) {
+    let runtime = createTestRuntime({ connectTimeout: 30 });
+    let slotElement = document.createElement('div');
+    document.body.append(slotElement);
+
+    try {
+      runtime.mount(slotElement);
+      let iframeBeforeDraft = runtime.iframe;
+      let srcBeforeDraft = iframeBeforeDraft.getAttribute('src');
+      let parentBeforeDraft = iframeBeforeDraft.parentElement;
+
+      let result = await runtime.pushDraft({
+        moduleIdentifier: 'https://realm.example/card.gts',
+        source: 'export default class {}',
+        moduleGraph: [],
+        documentDeclaredModules: [],
+      });
+
+      assert.false(
+        result.ok,
+        'the draft cannot complete without a live child connection in this test harness',
+      );
+      assert.strictEqual(
+        runtime.iframe,
+        iframeBeforeDraft,
+        'pushDraft() never mints, replaces, or re-mounts the iframe — the exact identity a real HMR generation must preserve',
+      );
+      assert.strictEqual(
+        runtime.iframe.parentElement,
+        parentBeforeDraft,
+        'and never re-parents it either',
+      );
+      assert.strictEqual(
+        runtime.iframe.getAttribute('src'),
+        srcBeforeDraft,
+        'nor does it reload it — pushDraft carries its source through the fetch-channel override, not a navigation',
+      );
+    } finally {
+      runtime.destroy();
+      slotElement.remove();
+    }
+  });
+
+  test('RP-15.3: a draft override is set immediately (before the wire round-trip settles) and survives an unmount/remount, but not a reloadSandbox()', async function (assert) {
+    let runtime = createTestRuntime({ connectTimeout: 30 });
+    let slotElement = document.createElement('div');
+    document.body.append(slotElement);
+
+    try {
+      runtime.mount(slotElement);
+      let url = 'https://realm.example/card.gts';
+      assert.false(runtime.hasDraftOverride(url));
+
+      let pushed = runtime.pushDraft({
+        moduleIdentifier: url,
+        source: 'export default class {}',
+        moduleGraph: [],
+        documentDeclaredModules: [],
+      });
+      assert.true(
+        runtime.hasDraftOverride(url),
+        'the override is set synchronously, before the wire round-trip even begins — a fetch that races the in-flight push must already see it',
+      );
+
+      runtime.unmount();
+      assert.true(
+        runtime.hasDraftOverride(url),
+        "an ordinary unmount (slot teardown, format switch) reuses this process's already-accumulated state — it must not silently revert to canonical source",
+      );
+
+      runtime.mount(slotElement);
+      runtime.reloadSandbox();
+      assert.false(
+        runtime.hasDraftOverride(url),
+        'only an explicit hard reload clears draft overrides',
+      );
+
+      await pushed;
+    } finally {
+      runtime.destroy();
+      slotElement.remove();
+    }
+  });
+
+  // False positive (qunit/resolve-async): onReload()'s returned unsubscribe
+  // function is a plain Web-API-style callback registration, not an
+  // assert.async()/done() pair — every actual async operation in this test
+  // is a properly-awaited pushDraft().
+  // eslint-disable-next-line qunit/resolve-async
+  test('RP-15.3: reloadSandbox() resets draftState to idle and notifies onReload — the signal a placeholder-handoff flag keyed on the old identity must invalidate on', async function (assert) {
+    let runtime = createTestRuntime({ connectTimeout: 30 });
+    let slotElement = document.createElement('div');
+    document.body.append(slotElement);
+
+    try {
+      runtime.mount(slotElement);
+      await runtime.pushDraft({
+        moduleIdentifier: 'https://realm.example/card.gts',
+        source: 'export default class {}',
+        moduleGraph: [],
+        documentDeclaredModules: [],
+      });
+      assert.strictEqual(runtime.draftState.phase, 'failed');
+
+      let reloadCount = 0;
+      let stop = runtime.onReload(() => {
+        reloadCount++;
+      });
+      let iframeBeforeReload = runtime.iframe;
+
+      runtime.reloadSandbox();
+
+      assert.strictEqual(
+        reloadCount,
+        1,
+        'onReload fires exactly once per reloadSandbox() call',
+      );
+      assert.strictEqual(
+        runtime.draftState.phase,
+        'idle',
+        'reloadSandbox() resets generation state — this is not an ordinary HMR generation',
+      );
+      assert.notStrictEqual(
+        runtime.iframe,
+        iframeBeforeReload,
+        'reloadSandbox() remints the iframe — same unmount+mint machinery as an ordinary remount, giving it a fresh bootstrapId for free',
+      );
+      assert.strictEqual(
+        runtime.iframe.parentElement,
+        slotElement,
+        'a process that was mounted before reloadSandbox() is automatically remounted into the SAME slot element — never a different one',
+      );
+
+      stop();
+    } finally {
+      runtime.destroy();
+      slotElement.remove();
+    }
+  });
+
+  test('RP-15.3: reloadSandbox() on an unmounted process still clears state — nothing to remount, but the next mount() starts clean', async function (assert) {
+    let runtime = createTestRuntime({ connectTimeout: 30 });
+    let slotElement = document.createElement('div');
+    document.body.append(slotElement);
+
+    try {
+      runtime.mount(slotElement);
+      await runtime.pushDraft({
+        moduleIdentifier: 'https://realm.example/card.gts',
+        source: 'export default class {}',
+        moduleGraph: [],
+        documentDeclaredModules: [],
+      });
+      runtime.unmount();
+      assert.true(runtime.hasDraftOverride('https://realm.example/card.gts'));
+
+      runtime.reloadSandbox();
+      assert.false(runtime.hasDraftOverride('https://realm.example/card.gts'));
+      assert.strictEqual(runtime.draftState.phase, 'idle');
+      assert.false(
+        runtime.iframe.isConnected,
+        'nothing to remount into — reloadSandbox() does not mount an unmounted process',
+      );
+    } finally {
+      runtime.destroy();
+      slotElement.remove();
+    }
+  });
+
+  test('RP-15.3: reloadSandbox() and destroy() are both no-ops after the process is already closed', function (assert) {
+    let runtime = createTestRuntime();
+    runtime.destroy();
+    let stateBefore = runtime.draftState;
+
+    runtime.reloadSandbox();
+    assert.strictEqual(
+      runtime.draftState,
+      stateBefore,
+      'reloadSandbox() on a closed process does nothing',
+    );
+
+    runtime.destroy();
+    assert.ok(true, 'a second destroy() does not throw');
   });
 });
