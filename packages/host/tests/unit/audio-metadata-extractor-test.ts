@@ -17,6 +17,7 @@ import type * as AudioFileDefModule from '@cardstack/base/audio-file-def';
 import type * as AudioWaveformModule from '@cardstack/base/audio-waveform';
 import type * as FlacModule from '@cardstack/base/flac-meta-extractor';
 import type * as Id3Module from '@cardstack/base/id3v2-parser';
+import type * as MidiModule from '@cardstack/base/midi-meta-extractor';
 import type * as Mp3Module from '@cardstack/base/mp3-meta-extractor';
 import type * as OggModule from '@cardstack/base/ogg-meta-extractor';
 import type * as VorbisModule from '@cardstack/base/vorbis-comment-parser';
@@ -316,6 +317,7 @@ module('Unit | audio metadata extractors', function (hooks) {
   let parseVorbisComments: typeof VorbisModule.parseVorbisComments;
   let analyzeDecodedAudio: typeof AudioWaveformModule.analyzeDecodedAudio;
   let audioAttributes: typeof AudioFileDefModule.audioAttributes;
+  let extractMidiMetadata: typeof MidiModule.extractMidiMetadata;
 
   hooks.beforeEach(async function () {
     loader = getService('loader-service').loader;
@@ -342,6 +344,9 @@ module('Unit | audio metadata extractors', function (hooks) {
     ));
     ({ audioAttributes } = await loader.import<typeof AudioFileDefModule>(
       '@cardstack/base/audio-file-def',
+    ));
+    ({ extractMidiMetadata } = await loader.import<typeof MidiModule>(
+      '@cardstack/base/midi-meta-extractor',
     ));
   });
 
@@ -873,6 +878,280 @@ module('Unit | audio metadata extractors', function (hooks) {
       assert.false(
         attributes.encoding?.isVariableBitrate,
         'knowing a stream is constant-rate is a fact worth persisting',
+      );
+    });
+  });
+
+  module('MIDI', function () {
+    // ---- SMF fixtures ----
+
+    // MIDI's variable-length quantity: seven bits per byte, high bit set on all
+    // but the last.
+    function vlq(value: number): number[] {
+      let out = [value & 0x7f];
+      let rest = value >>> 7;
+      while (rest > 0) {
+        out.unshift((rest & 0x7f) | 0x80);
+        rest >>>= 7;
+      }
+      return out;
+    }
+
+    function trackChunk(events: number[]): number[] {
+      // Every track must end with an end-of-track meta event.
+      let body = [...events, 0x00, 0xff, 0x2f, 0x00];
+      return [...ascii('MTrk'), ...uint32be(body.length), ...body];
+    }
+
+    function buildMidi(
+      tracks: number[][],
+      options: { format?: number; division?: number } = {},
+    ): Uint8Array {
+      let chunks = tracks.flatMap((events) => trackChunk(events));
+      return new Uint8Array([
+        ...ascii('MThd'),
+        ...uint32be(6),
+        ...uint16le(0).reverse(), // placeholder, overwritten below
+        ...uint16le(0).reverse(),
+        ...uint16le(0).reverse(),
+        ...chunks,
+      ]).map((byte, index) => {
+        // Rewrite the three header fields big-endian.
+        let format = options.format ?? 1;
+        let division = options.division ?? 480;
+        if (index === 8) return (format >>> 8) & 0xff;
+        if (index === 9) return format & 0xff;
+        if (index === 10) return (tracks.length >>> 8) & 0xff;
+        if (index === 11) return tracks.length & 0xff;
+        if (index === 12) return (division >>> 8) & 0xff;
+        if (index === 13) return division & 0xff;
+        return byte;
+      });
+    }
+
+    // A note-on/note-off pair at the given tick offsets.
+    function note(
+      channel: number,
+      pitch: number,
+      velocity = 64,
+      deltaOn = 0,
+      deltaOff = 480,
+    ): number[] {
+      return [
+        ...vlq(deltaOn),
+        0x90 | channel,
+        pitch,
+        velocity,
+        ...vlq(deltaOff),
+        0x80 | channel,
+        pitch,
+        0,
+      ];
+    }
+
+    function tempoEvent(bpm: number, delta = 0): number[] {
+      let microseconds = Math.round(60_000_000 / bpm);
+      return [
+        ...vlq(delta),
+        0xff,
+        0x51,
+        0x03,
+        (microseconds >>> 16) & 0xff,
+        (microseconds >>> 8) & 0xff,
+        microseconds & 0xff,
+      ];
+    }
+
+    test('reads the header and counts the notes that actually sound', function (assert) {
+      let midi = extractMidiMetadata(
+        buildMidi([[...note(0, 60), ...note(0, 64), ...note(0, 67)]], {
+          format: 0,
+          division: 480,
+        }),
+      );
+      assert.strictEqual(midi.format, 0);
+      assert.strictEqual(midi.ppq, 480);
+      assert.strictEqual(midi.noteCount, 3);
+      assert.strictEqual(midi.fileTrackCount, 1);
+      assert.strictEqual(midi.trackCount, 1);
+    });
+
+    test('a note-on with zero velocity is a note-off, not a second note', function (assert) {
+      // The conventional note-off encoding. Counting it would double every note.
+      let events = [...vlq(0), 0x90, 60, 64, ...vlq(480), 0x90, 60, 0];
+      assert.strictEqual(extractMidiMetadata(buildMidi([events])).noteCount, 1);
+    });
+
+    test('distinguishes tracks that sound from tracks the header declares', function (assert) {
+      // A format 1 file conventionally opens with a conductor track carrying only
+      // tempo and meter, which should not be counted as sounding.
+      let midi = extractMidiMetadata(
+        buildMidi([tempoEvent(120), [...note(0, 60)]]),
+      );
+      assert.strictEqual(midi.fileTrackCount, 2);
+      assert.strictEqual(
+        midi.trackCount,
+        1,
+        'the conductor track declares no notes so it does not count as sounding',
+      );
+    });
+
+    test('derives duration by walking the tempo map, not by averaging', function (assert) {
+      // One quarter note at 480 ppq and 120 BPM is exactly half a second.
+      let midi = extractMidiMetadata(
+        buildMidi([[...tempoEvent(120), ...note(0, 60, 64, 0, 480)]], {
+          division: 480,
+        }),
+      );
+      assert.strictEqual(midi.durationSeconds, 0.5);
+    });
+
+    test('a tempo change partway through changes the derived duration', function (assert) {
+      // Half a second at 120 BPM, then a quarter note at 240 BPM (0.25 s).
+      let events = [
+        ...tempoEvent(120),
+        ...note(0, 60, 64, 0, 480),
+        ...tempoEvent(240),
+        ...note(0, 62, 64, 0, 480),
+      ];
+      let midi = extractMidiMetadata(buildMidi([events], { division: 480 }));
+      assert.strictEqual(
+        midi.durationSeconds,
+        0.75,
+        'a piece that speeds up is not reported at its opening tempo',
+      );
+      assert.strictEqual(midi.tempoMap?.length, 2);
+      assert.true(midi.tempoMap?.[0]?.startsWith('120 BPM'));
+      assert.true(midi.tempoMap?.[1]?.startsWith('240 BPM'));
+    });
+
+    test('reads time and key signatures', function (assert) {
+      let events = [
+        ...vlq(0),
+        0xff,
+        0x58,
+        0x04,
+        6,
+        3,
+        24,
+        8, // 6/8
+        ...vlq(0),
+        0xff,
+        0x59,
+        0x02,
+        0xfd,
+        1, // three flats, minor → C minor
+        ...note(0, 60),
+      ];
+      let midi = extractMidiMetadata(buildMidi([events]));
+      assert.deepEqual(midi.timeSignatures, ['6/8']);
+      assert.deepEqual(
+        midi.keySignatures,
+        ['C minor'],
+        'a signed accidental count and a minor flag name the key',
+      );
+    });
+
+    test('reports the pitch range in note names', function (assert) {
+      let midi = extractMidiMetadata(
+        buildMidi([[...note(0, 60), ...note(0, 72)]]),
+      );
+      assert.strictEqual(
+        midi.pitchRange,
+        'C4–C5',
+        'MIDI note 60 is middle C, conventionally written C4',
+      );
+    });
+
+    test('percussion is flagged and kept out of the pitch range', function (assert) {
+      // Channel 10 (index 9) is percussion, where a note number names a drum
+      // rather than a pitch — folding it into the range would be meaningless.
+      let midi = extractMidiMetadata(
+        buildMidi([[...note(0, 60), ...note(9, 35), ...note(9, 81)]]),
+      );
+      assert.true(midi.hasPercussion);
+      assert.strictEqual(midi.pitchRange, 'C4–C4');
+    });
+
+    test('collects program changes excluding the percussion channel', function (assert) {
+      let events = [
+        ...vlq(0),
+        0xc0,
+        40, // channel 1, violin
+        ...vlq(0),
+        0xc9,
+        16, // channel 10, a drum kit rather than an instrument
+        ...note(0, 60),
+      ];
+      let midi = extractMidiMetadata(buildMidi([events]));
+      assert.deepEqual(midi.programs, [40]);
+    });
+
+    test('reports channels as the numbers a musician uses, counting from one', function (assert) {
+      let midi = extractMidiMetadata(
+        buildMidi([[...note(0, 60), ...note(3, 64)]]),
+      );
+      assert.deepEqual(midi.channels, [1, 4]);
+    });
+
+    test('follows running status, which real files rely on', function (assert) {
+      // Three notes sharing one status byte — the compression every sequencer
+      // emits. Mishandling it would lose all but the first.
+      let events = [
+        ...vlq(0),
+        0x90,
+        60,
+        64, // explicit status
+        ...vlq(10),
+        62,
+        64, // running status
+        ...vlq(10),
+        64,
+        64, // running status
+      ];
+      assert.strictEqual(extractMidiMetadata(buildMidi([events])).noteCount, 3);
+    });
+
+    test('skips a SysEx event without desynchronizing the walk', function (assert) {
+      let events = [
+        ...vlq(0),
+        0xf0,
+        0x04,
+        0x7e,
+        0x7f,
+        0x09,
+        0x01, // a GM reset
+        ...note(0, 60),
+      ];
+      assert.strictEqual(extractMidiMetadata(buildMidi([events])).noteCount, 1);
+    });
+
+    test('a SMPTE-timed file reads its notes but declares no ppq', function (assert) {
+      // A negative division is timecode, where ticks do not convert to musical
+      // time — so reporting a ppq would be meaningless.
+      let midi = extractMidiMetadata(
+        buildMidi([[...note(0, 60)]], { division: 0xe728 }),
+      );
+      assert.strictEqual(midi.ppq, undefined);
+      assert.strictEqual(midi.durationSeconds, undefined);
+      assert.strictEqual(midi.noteCount, 1);
+    });
+
+    test('a non-MIDI file is reported as a content mismatch', function (assert) {
+      assert.throws(
+        () => extractMidiMetadata(new Uint8Array(64).fill(0x41)),
+        /MThd/,
+        'the extractor falls back to the base FileDef rather than inventing metadata',
+      );
+    });
+
+    test('a truncated track yields the events it did read', function (assert) {
+      let full = buildMidi([[...note(0, 60), ...note(0, 64)]]);
+      let truncated = full.subarray(0, full.length - 6);
+      let midi = extractMidiMetadata(truncated);
+      assert.true(
+        midi.noteCount! >= 1,
+        'a partial track still reports what was readable rather than throwing',
       );
     });
   });

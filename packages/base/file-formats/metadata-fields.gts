@@ -22,6 +22,7 @@ import MapPinIcon from '@cardstack/boxel-icons/map-pin';
 import PaletteIcon from '@cardstack/boxel-icons/palette';
 import RulerIcon from '@cardstack/boxel-icons/ruler';
 import TagIcon from '@cardstack/boxel-icons/tag';
+import KeyboardMusicIcon from '@cardstack/boxel-icons/keyboard-music';
 import TagsIcon from '@cardstack/boxel-icons/tags';
 
 import FileInfoIcon from '@cardstack/boxel-icons/file-info';
@@ -33,6 +34,7 @@ import {
   StringField,
   TextAreaField,
   contains,
+  containsMany,
   field,
 } from '../card-api';
 import BooleanField from '../boolean';
@@ -761,6 +763,119 @@ export class WaveformMetadataField extends FieldDef {
         }
         .decode-error {
           color: var(--destructive, var(--foreground));
+        }
+      </style>
+    </template>
+  };
+}
+
+// What a MIDI file will play. Symbolic performance data, not encoded audio —
+// there is no sample rate or amplitude here, because a MIDI file has no sound
+// until a synthesizer gives it one. That's why it is a family of its own rather
+// than a variety of `MediaEncodingField`.
+export class MidiMetadataField extends FieldDef {
+  static displayName = 'MIDI Metadata';
+  static icon = KeyboardMusicIcon;
+
+  // 0 = single track, 1 = simultaneous tracks, 2 = independent sequences.
+  @field format = contains(NumberField);
+  // Ticks per quarter note. Unset for a file timed in SMPTE timecode instead,
+  // where ticks don't convert to musical time.
+  @field ppq = contains(NumberField);
+  @field durationSeconds = contains(NumberField);
+  // What the header declares, which is usually more than actually sound: a
+  // format 1 file's first track conventionally holds only tempo and meter.
+  @field fileTrackCount = contains(NumberField);
+  @field trackCount = contains(NumberField);
+  @field noteCount = contains(NumberField);
+  @field tempoMap = containsMany(StringField);
+  @field timeSignatures = containsMany(StringField);
+  @field keySignatures = containsMany(StringField);
+  // General MIDI program numbers, excluding the percussion channel where a
+  // program names a drum kit rather than an instrument.
+  @field programs = containsMany(NumberField);
+  @field channels = containsMany(NumberField);
+  @field pitchRange = contains(StringField);
+  @field hasPercussion = contains(BooleanField);
+
+  static embedded = class Embedded extends Component<
+    typeof MidiMetadataField
+  > {
+    <template>
+      <dl class='metadata-rows'>
+        {{#if @model.trackCount}}
+          <div class='row'><dt>Tracks</dt><dd>{{@model.trackCount}}{{#if
+                @model.fileTrackCount
+              }}
+                of
+                {{@model.fileTrackCount}}{{/if}}</dd></div>
+        {{/if}}
+        {{#if @model.noteCount}}
+          <div class='row'><dt>Notes</dt><dd>{{@model.noteCount}}</dd></div>
+        {{/if}}
+        {{#if @model.durationSeconds}}
+          <div class='row'><dt>Duration</dt><dd>{{@model.durationSeconds}} s</dd></div>
+        {{/if}}
+        {{#if @model.keySignatures.length}}
+          <div class='row'><dt>Key</dt><dd class='list'>{{#each
+                @model.keySignatures as |key|
+              }}<span>{{key}}</span>{{/each}}</dd></div>
+        {{/if}}
+        {{#if @model.timeSignatures.length}}
+          <div class='row'><dt>Meter</dt><dd class='list'>{{#each
+                @model.timeSignatures as |meter|
+              }}<span>{{meter}}</span>{{/each}}</dd></div>
+        {{/if}}
+        {{#if @model.pitchRange}}
+          <div class='row'><dt>Range</dt><dd>{{@model.pitchRange}}</dd></div>
+        {{/if}}
+        {{#if @model.tempoMap.length}}
+          <div class='row'><dt>Tempo</dt><dd class='list'>{{#each
+                @model.tempoMap as |tempo|
+              }}<span>{{tempo}}</span>{{/each}}</dd></div>
+        {{/if}}
+        {{#if @model.channels.length}}
+          <div class='row'><dt>Channels</dt><dd class='list'>{{#each
+                @model.channels as |channel|
+              }}<span>{{channel}}</span>{{/each}}</dd></div>
+        {{/if}}
+        <div class='row'><dt>Percussion</dt><dd>{{if
+              @model.hasPercussion
+              'Yes'
+              'No'
+            }}</dd></div>
+      </dl>
+      <style scoped>
+        .metadata-rows {
+          margin: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 0.3125rem;
+          font-size: 0.75rem;
+        }
+        .row {
+          display: flex;
+          gap: 0.625rem;
+          align-items: baseline;
+        }
+        dt {
+          flex: 0 0 5.75rem;
+          font-family: var(--font-mono);
+          font-size: 0.5625rem;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          color: var(--muted-foreground);
+        }
+        dd {
+          margin: 0;
+          min-width: 0;
+          overflow-wrap: anywhere;
+        }
+        /* Several values on one row read as a list, not a run-on string. */
+        .list {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.125rem 0.5rem;
         }
       </style>
     </template>
