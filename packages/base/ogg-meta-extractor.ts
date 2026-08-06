@@ -1,4 +1,11 @@
+import {
+  channelModeForCount,
+  prunedEncoding,
+  type AudioEncoding,
+  type MediaTags,
+} from './audio-metadata';
 import { FileContentMismatchError } from './file-api';
+import { parseVorbisComments } from './vorbis-comment-parser';
 
 // Ogg page capture pattern: "OggS"
 const OGGS = [0x4f, 0x67, 0x67, 0x53];
@@ -285,4 +292,94 @@ export async function extractOggDurationFromStream(
 
   let playable = Math.max(0, granule - preSkipSamples);
   return { duration: playable / outputSampleRate };
+}
+
+// Ogg carries its comment block in the second packet of the logical stream, on a
+// page after the identification header. Rather than reassemble packets, scan the
+// read window for the comment magic — both codecs prefix theirs distinctively,
+// and a scan is robust to the page boundaries a comment block may straddle.
+const VORBIS_COMMENT_MAGIC = [0x03, 0x76, 0x6f, 0x72, 0x62, 0x69, 0x73]; // "\x03vorbis"
+const OPUS_TAGS_MAGIC = [0x4f, 0x70, 0x75, 0x73, 0x54, 0x61, 0x67, 0x73]; // "OpusTags"
+
+function indexOfMagic(
+  bytes: Uint8Array,
+  magic: readonly number[],
+  from = 0,
+): number | undefined {
+  let limit = bytes.length - magic.length;
+  for (let offset = from; offset <= limit; offset++) {
+    if (matchBytes(bytes, offset, magic)) {
+      return offset;
+    }
+  }
+  return undefined;
+}
+
+// The identification header states the channel count and sample rate. Opus always
+// decodes to 48 kHz regardless of what it was captured at, so that is what gets
+// reported — it is the rate any consumer will actually receive.
+export function extractOggEncoding(
+  bytes: Uint8Array,
+): AudioEncoding | undefined {
+  if (!matchBytes(bytes, 0, OGGS)) {
+    return undefined;
+  }
+  let view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let dataOffset: number;
+  try {
+    dataOffset = firstPageDataOffset(bytes);
+  } catch {
+    return undefined;
+  }
+
+  if (matchBytes(bytes, dataOffset, VORBIS_ID_MAGIC)) {
+    // 7 bytes magic, 4 version, 1 channels, 4 sample rate, then three bitrate
+    // fields (maximum, nominal, minimum) as signed 32-bit little-endian.
+    if (dataOffset + 28 > bytes.length) {
+      return undefined;
+    }
+    let channels = bytes[dataOffset + 11]!;
+    let sampleRate = view.getUint32(dataOffset + 12, true);
+    let nominalBitrate = view.getInt32(dataOffset + 20, true);
+    return prunedEncoding({
+      container: 'Ogg',
+      audioCodec: 'Vorbis',
+      sampleRateHz: sampleRate > 0 ? sampleRate : undefined,
+      // Vorbis states a nominal rate; zero or negative means "not declared".
+      bitrateBps: nominalBitrate > 0 ? nominalBitrate : undefined,
+      isVariableBitrate: true,
+      channels: channels > 0 ? channels : undefined,
+      channelMode: channelModeForCount(channels > 0 ? channels : undefined),
+    });
+  }
+
+  if (matchBytes(bytes, dataOffset, OPUS_ID_MAGIC)) {
+    if (dataOffset + 10 > bytes.length) {
+      return undefined;
+    }
+    let channels = bytes[dataOffset + 9]!;
+    return prunedEncoding({
+      container: 'Ogg',
+      audioCodec: 'Opus',
+      sampleRateHz: OPUS_OUTPUT_SAMPLE_RATE,
+      isVariableBitrate: true,
+      channels: channels > 0 ? channels : undefined,
+      channelMode: channelModeForCount(channels > 0 ? channels : undefined),
+    });
+  }
+
+  return undefined;
+}
+
+export function extractOggTags(bytes: Uint8Array): MediaTags | undefined {
+  let vorbisAt = indexOfMagic(bytes, VORBIS_COMMENT_MAGIC);
+  if (vorbisAt !== undefined) {
+    return parseVorbisComments(bytes, vorbisAt + VORBIS_COMMENT_MAGIC.length)
+      ?.tags;
+  }
+  let opusAt = indexOfMagic(bytes, OPUS_TAGS_MAGIC);
+  if (opusAt !== undefined) {
+    return parseVorbisComments(bytes, opusAt + OPUS_TAGS_MAGIC.length)?.tags;
+  }
+  return undefined;
 }

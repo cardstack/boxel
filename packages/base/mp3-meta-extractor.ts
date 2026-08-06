@@ -1,4 +1,11 @@
+import {
+  prunedEncoding,
+  type AudioEncoding,
+  type ChannelMode,
+  type MediaTags,
+} from './audio-metadata';
 import { FileContentMismatchError } from './file-api';
+import { parseId3v2Tags } from './id3v2-parser';
 
 // MPEG audio frame sync: 11 bits set (0xFFE..). In practice the next bits
 // disambiguate MPEG version / layer, so we match the first byte as 0xFF and
@@ -201,4 +208,179 @@ export function extractMp3Duration(bytes: Uint8Array): { duration: number } {
   return {
     duration: (totalFrames * header.samplesPerFrame) / header.sampleRate,
   };
+}
+
+// Bitrate index → kbps, keyed by MPEG version and layer. Index 0 means "free
+// format" and 15 is reserved, so both are left as gaps rather than filled in.
+const BITRATE_KBPS: Record<string, (number | undefined)[]> = {
+  // MPEG 1
+  '3-3': [
+    undefined,
+    32,
+    64,
+    96,
+    128,
+    160,
+    192,
+    224,
+    256,
+    288,
+    320,
+    352,
+    384,
+    416,
+    448,
+    undefined,
+  ], // Layer I
+  '3-2': [
+    undefined,
+    32,
+    48,
+    56,
+    64,
+    80,
+    96,
+    112,
+    128,
+    160,
+    192,
+    224,
+    256,
+    320,
+    384,
+    undefined,
+  ], // Layer II
+  '3-1': [
+    undefined,
+    32,
+    40,
+    48,
+    56,
+    64,
+    80,
+    96,
+    112,
+    128,
+    160,
+    192,
+    224,
+    256,
+    320,
+    undefined,
+  ], // Layer III
+  // MPEG 2 and 2.5 share one table
+  '2-3': [
+    undefined,
+    32,
+    48,
+    56,
+    64,
+    80,
+    96,
+    112,
+    128,
+    144,
+    160,
+    176,
+    192,
+    224,
+    256,
+    undefined,
+  ],
+  '2-2': [
+    undefined,
+    8,
+    16,
+    24,
+    32,
+    40,
+    48,
+    56,
+    64,
+    80,
+    96,
+    112,
+    128,
+    144,
+    160,
+    undefined,
+  ],
+  '2-1': [
+    undefined,
+    8,
+    16,
+    24,
+    32,
+    40,
+    48,
+    56,
+    64,
+    80,
+    96,
+    112,
+    128,
+    144,
+    160,
+    undefined,
+  ],
+};
+
+const CHANNEL_MODES: Record<number, { mode: ChannelMode; channels: number }> = {
+  0: { mode: 'stereo', channels: 2 },
+  1: { mode: 'joint-stereo', channels: 2 },
+  2: { mode: 'dual-mono', channels: 2 },
+  3: { mode: 'mono', channels: 1 },
+};
+
+const LAYER_NAMES: Record<number, string> = {
+  [LAYER_I]: 'MPEG Layer I',
+  [LAYER_II]: 'MPEG Layer II',
+  [LAYER_III]: 'MP3 (MPEG Layer III)',
+};
+
+function bitrateTableKey(version: number, layer: number): string {
+  // MPEG 2.5 uses MPEG 2's bitrate table.
+  let versionKey = version === MPEG_VERSION_1 ? '3' : '2';
+  return `${versionKey}-${layer}`;
+}
+
+// The first MPEG frame header states the sample rate, channel mode, layer, and
+// that frame's bitrate. Whether the bitrate describes the file depends on
+// whether a Xing/Info/VBRI header is present — the same header the duration
+// reader looks for — so that determination is reported rather than assumed.
+export function extractMp3Encoding(
+  bytes: Uint8Array,
+): AudioEncoding | undefined {
+  let frameOffset = findFrameSync(bytes, id3v2TagSize(bytes));
+  if (frameOffset === undefined) {
+    return undefined;
+  }
+  let header = parseFrameHeader(bytes, frameOffset);
+  if (!header) {
+    return undefined;
+  }
+  let b2 = bytes[frameOffset + 2]!;
+  let b3 = bytes[frameOffset + 3]!;
+  let bitrateIndex = (b2 >> 4) & 0x0f;
+  let bitrateKbps =
+    BITRATE_KBPS[bitrateTableKey(header.version, header.layer)]?.[bitrateIndex];
+  let channelMode = CHANNEL_MODES[(b3 >> 6) & 0x03];
+  // A Xing/Info/VBRI header is what an encoder writes when the bitrate varies.
+  let isVariableBitrate = findVbrTotalFrames(bytes, frameOffset) !== undefined;
+
+  return prunedEncoding({
+    container: 'MPEG',
+    audioCodec: LAYER_NAMES[header.layer],
+    sampleRateHz: header.sampleRate,
+    bitrateBps: bitrateKbps === undefined ? undefined : bitrateKbps * 1000,
+    isVariableBitrate,
+    // MP3 is a lossy transform codec with no stored sample width, so bitDepth
+    // stays unset rather than being filled with a plausible 16.
+    channels: channelMode?.channels,
+    channelMode: channelMode?.mode,
+  });
+}
+
+export function extractMp3Tags(bytes: Uint8Array): MediaTags | undefined {
+  return parseId3v2Tags(bytes);
 }

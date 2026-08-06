@@ -1,8 +1,16 @@
 import { readFirstBytes } from '@cardstack/runtime-common';
 import FileAudioIcon from '@cardstack/boxel-icons/file-audio';
-import AudioDef from './audio-file-def';
+import AudioDef, {
+  audioAttributes,
+  waveformFor,
+  type AudioAttributes,
+} from './audio-file-def';
 import type { ByteStream, SerializedFile } from './file-api';
-import { extractWavDuration } from './wav-meta-extractor';
+import {
+  extractWavDuration,
+  extractWavEncoding,
+  extractWavTags,
+} from './wav-meta-extractor';
 
 // A WAVE file's `fmt ` and `data` chunk headers normally sit within the first
 // few hundred bytes, but BWF metadata (bext, LIST/INFO, iXML) can push `data`
@@ -18,8 +26,8 @@ export class WavDef extends AudioDef {
   static async extractAttributes(
     url: string,
     getStream: () => Promise<ByteStream>,
-    options: { contentHash?: string } = {},
-  ): Promise<SerializedFile<{ duration: number }>> {
+    options: { contentHash?: string; contentSize?: number } = {},
+  ): Promise<SerializedFile<{ duration: number } & AudioAttributes>> {
     let base = await super.extractAttributes(url, getStream, options);
     let bytes = await readFirstBytes(await getStream(), WAV_MAX_HEADER_BYTES);
     let { duration } = extractWavDuration(bytes);
@@ -27,6 +35,11 @@ export class WavDef extends AudioDef {
     return {
       ...base,
       duration,
+      ...audioAttributes(
+        extractWavEncoding(bytes),
+        extractWavTags(bytes),
+        await waveformFor(getStream, base.contentSize),
+      ),
     };
   }
 }
