@@ -1,0 +1,50 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "orderNumber": "ORD-2026-107",
+      "orderDate": "2026-07-14",
+      "status": "shipped",
+      "shippingAddress": {
+        "addressLine1": "Acme Warehouse 3",
+        "addressLine2": "Persiaran Perindustrian",
+        "city": "Shah Alam",
+        "state": "Selangor",
+        "postalCode": "40150",
+        "country": { "name": "Malaysia", "code": "MY" }
+      },
+      "lineItems": [
+        {
+          "description": "Hardware security keys",
+          "quantity": 10,
+          "unitPrice": { "amount": 55, "currency": { "code": "USD" } }
+        },
+        {
+          "description": "USB-C docking stations",
+          "quantity": 4,
+          "unitPrice": { "amount": 189, "currency": { "code": "USD" } }
+        }
+      ],
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "customer": {
+        "links": { "self": "../Customer/acme-industries" }
+      },
+      "invoice": {
+        "links": { "self": "../Invoice/inv-2026-041" }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../blocks/commerce/order",
+        "name": "Order"
+      }
+    }
+  }
+}
