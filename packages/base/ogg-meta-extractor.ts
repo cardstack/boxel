@@ -172,7 +172,12 @@ export function extractOggDuration(bytes: Uint8Array): { duration: number } {
 
 // Enough of the file's start to cover the first page header (27 bytes + up to
 // 255 lacing values) plus the Vorbis/Opus identification packet that follows.
-const OGG_HEAD_BYTES = 4096;
+// Sized for the metadata read rather than the duration read. Parsing the first
+// page needs only a few hundred bytes, but the comment block sits a page or two
+// further in — and retaining that much here means the def gets duration,
+// encoding, and tags from this single walk instead of taking a second stream,
+// which the extract runner would satisfy by re-fetching the whole file.
+const OGG_HEAD_BYTES = 65_536;
 
 // The final page's "OggS" sits at most one max-size Ogg page (27 + 255 +
 // 255*255 = 65307 bytes) before EOF in a well-formed stream. A tail window at
@@ -201,11 +206,16 @@ function concatParts(parts: Uint8Array[], length: number): Uint8Array {
 // tail window, letting the audio payload in between stream past without being
 // buffered, so peak memory is ~`OGG_TAIL_BYTES` rather than the whole file. A
 // `Uint8Array` input (already-buffered bytes) is parsed directly.
+// Returns the retained head alongside the duration so one pass serves every
+// reader: `extractOggEncoding` and `extractOggTags` both work off `head`.
 export async function extractOggDurationFromStream(
   stream: ReadableStream<Uint8Array> | Uint8Array,
-): Promise<{ duration: number }> {
+): Promise<{ duration: number; head: Uint8Array }> {
   if (stream instanceof Uint8Array) {
-    return extractOggDuration(stream);
+    return {
+      ...extractOggDuration(stream),
+      head: stream.subarray(0, Math.min(stream.length, OGG_HEAD_BYTES)),
+    };
   }
 
   let reader = stream.getReader();
@@ -291,7 +301,7 @@ export async function extractOggDurationFromStream(
   );
 
   let playable = Math.max(0, granule - preSkipSamples);
-  return { duration: playable / outputSampleRate };
+  return { duration: playable / outputSampleRate, head };
 }
 
 // Ogg carries its comment block in the second packet of the logical stream, on a

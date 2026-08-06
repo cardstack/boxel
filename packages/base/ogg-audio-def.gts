@@ -1,5 +1,4 @@
 import FileAudioIcon from '@cardstack/boxel-icons/file-audio';
-import { readFirstBytes } from '@cardstack/runtime-common';
 import AudioDef, {
   audioAttributes,
   waveformFor,
@@ -11,12 +10,6 @@ import {
   extractOggEncoding,
   extractOggTags,
 } from './ogg-meta-extractor';
-
-// The identification header sits on the first page and the comment block on the
-// next one or two, so a 64 KB window reaches both without touching the audio
-// payload. Read separately from the duration walk above, which streams and keeps
-// no such buffer.
-const OGG_METADATA_WINDOW_BYTES = 65_536;
 
 export class OggDef extends AudioDef {
   static displayName = 'OGG Audio';
@@ -36,19 +29,18 @@ export class OggDef extends AudioDef {
     // from `options` (supplied by the indexer) without re-reading, so when
     // those are present the stream is consumed exactly once — by this walk.
     let base = await super.extractAttributes(url, getStream, options);
-    let { duration } = await extractOggDurationFromStream(await getStream());
-
-    let header = await readFirstBytes(
+    // One walk yields duration and the head the metadata readers need, so this
+    // costs a single stream rather than the two a separate header read would.
+    let { duration, head } = await extractOggDurationFromStream(
       await getStream(),
-      OGG_METADATA_WINDOW_BYTES,
     );
 
     return {
       ...base,
       duration,
       ...audioAttributes(
-        extractOggEncoding(header),
-        extractOggTags(header),
+        extractOggEncoding(head),
+        extractOggTags(head),
         await waveformFor(getStream, base.contentSize),
       ),
     };

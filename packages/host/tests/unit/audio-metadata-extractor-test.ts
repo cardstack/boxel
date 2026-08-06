@@ -24,6 +24,26 @@ import type * as StreamingEnvelopeModule from '@cardstack/base/streaming-envelop
 import type * as VorbisModule from '@cardstack/base/vorbis-comment-parser';
 import type * as WavModule from '@cardstack/base/wav-meta-extractor';
 
+// Hand a reader a stream that yields small chunks, so a frame or sample lands
+// across chunk boundaries — the case a buffered reader never exercises.
+function chunkedStream(
+  bytes: Uint8Array,
+  chunkSize: number,
+): ReadableStream<Uint8Array> {
+  let offset = 0;
+  return new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (offset >= bytes.length) {
+        controller.close();
+        return;
+      }
+      let end = Math.min(offset + chunkSize, bytes.length);
+      controller.enqueue(bytes.slice(offset, end));
+      offset = end;
+    },
+  });
+}
+
 function ascii(text: string): number[] {
   return [...text].map((c) => c.charCodeAt(0));
 }
@@ -107,6 +127,7 @@ function buildFlac(
     bitsPerSample?: number;
   } = {},
   comments?: [string, string][],
+  seekPoints = 0,
 ): Uint8Array {
   let sampleRate = streamInfo.sampleRate ?? 44100;
   let channels = streamInfo.channels ?? 2;
@@ -133,13 +154,25 @@ function buildFlac(
   let hasComments = comments !== undefined;
   let out = [
     ...ascii('fLaC'),
-    // STREAMINFO header: type 0, not last when a comment block follows.
+    // STREAMINFO header: type 0, not last when another block follows.
     hasComments ? 0x00 : 0x80,
     0x00,
     0x00,
     0x22,
     ...block,
   ];
+  if (seekPoints > 0) {
+    // A SEEKTABLE (type 3) of 18 bytes per point, which most rippers write and
+    // which sits ahead of the comment block.
+    let length = seekPoints * 18;
+    out.push(
+      0x03,
+      (length >>> 16) & 0xff,
+      (length >>> 8) & 0xff,
+      length & 0xff,
+      ...new Array(length).fill(0),
+    );
+  }
   if (comments) {
     let body = vorbisCommentBody(comments);
     out.push(
@@ -252,16 +285,20 @@ function buildId3v2(
   majorVersion = 3,
 ): Uint8Array {
   let body: number[] = [];
+  // Appended rather than spread: a frame carrying artwork runs to hundreds of
+  // thousands of bytes, and `push(...payload)` exceeds the argument limit.
+  let append = (values: number[]) => {
+    for (let value of values) {
+      body.push(value);
+    }
+  };
   for (let [id, payload] of frames) {
-    body.push(
-      ...ascii(id),
-      ...(majorVersion >= 4
-        ? syncsafe(payload.length)
-        : uint32be(payload.length)),
-      0,
-      0, // frame flags
-      ...payload,
+    append(ascii(id));
+    append(
+      majorVersion >= 4 ? syncsafe(payload.length) : uint32be(payload.length),
     );
+    append([0, 0]); // frame flags
+    append(payload);
   }
   // Trailing padding, which the walk must treat as the end of the frames.
   body.push(0, 0, 0, 0);
@@ -312,10 +349,12 @@ module('Unit | audio metadata extractors', function (hooks) {
   let extractWavFromStream: typeof WavModule.extractWavFromStream;
   let extractFlacEncoding: typeof FlacModule.extractFlacEncoding;
   let extractFlacTags: typeof FlacModule.extractFlacTags;
+  let FLAC_METADATA_WINDOW_BYTES: number;
   let extractOggEncoding: typeof OggModule.extractOggEncoding;
   let extractOggTags: typeof OggModule.extractOggTags;
   let extractMp3Encoding: typeof Mp3Module.extractMp3Encoding;
   let extractMp3Envelope: typeof Mp3Module.extractMp3Envelope;
+  let extractMp3EnvelopeFromStream: typeof Mp3Module.extractMp3EnvelopeFromStream;
   let StreamingEnvelope: typeof StreamingEnvelopeModule.StreamingEnvelope;
   let parseId3v2Tags: typeof Id3Module.parseId3v2Tags;
   let parseVorbisComments: typeof VorbisModule.parseVorbisComments;
@@ -329,15 +368,17 @@ module('Unit | audio metadata extractors', function (hooks) {
       await loader.import<typeof WavModule>(
         '@cardstack/base/wav-meta-extractor',
       ));
-    ({ extractFlacEncoding, extractFlacTags } = await loader.import<
-      typeof FlacModule
-    >('@cardstack/base/flac-meta-extractor'));
+    ({ extractFlacEncoding, extractFlacTags, FLAC_METADATA_WINDOW_BYTES } =
+      await loader.import<typeof FlacModule>(
+        '@cardstack/base/flac-meta-extractor',
+      ));
     ({ extractOggEncoding, extractOggTags } = await loader.import<
       typeof OggModule
     >('@cardstack/base/ogg-meta-extractor'));
-    ({ extractMp3Encoding, extractMp3Envelope } = await loader.import<
-      typeof Mp3Module
-    >('@cardstack/base/mp3-meta-extractor'));
+    ({ extractMp3Encoding, extractMp3Envelope, extractMp3EnvelopeFromStream } =
+      await loader.import<typeof Mp3Module>(
+        '@cardstack/base/mp3-meta-extractor',
+      ));
     ({ StreamingEnvelope } = await loader.import<
       typeof StreamingEnvelopeModule
     >('@cardstack/base/streaming-envelope'));
@@ -487,6 +528,36 @@ module('Unit | audio metadata extractors', function (hooks) {
       assert.strictEqual(tags?.year, 1994);
       assert.strictEqual(tags?.track, '3');
       assert.strictEqual(tags?.scheme, 'vorbis-comment');
+    });
+
+    test('finds tags behind a seek table, which the old window truncated', function (assert) {
+      // A 1000-point SEEKTABLE puts the comment block ~18 KB into the file. The
+      // read window used to be 256 bytes, so tags on any ripper-written file
+      // silently came back empty — a short window yields no tags rather than an
+      // error, which is what made it invisible.
+      let bytes = buildFlac(
+        {},
+        [
+          ['TITLE', 'Behind A Seek Table'],
+          ['ARTIST', 'A Pianist'],
+        ],
+        1000,
+      );
+      assert.true(
+        bytes.length > 18_000,
+        'the fixture really does push the comment block deep',
+      );
+      let windowed = bytes.subarray(0, FLAC_METADATA_WINDOW_BYTES);
+      assert.strictEqual(
+        extractFlacTags(windowed)?.trackTitle,
+        'Behind A Seek Table',
+        'the window reaches the comment block',
+      );
+      assert.strictEqual(
+        extractFlacTags(bytes.subarray(0, 256)),
+        undefined,
+        'and the old 256-byte window demonstrably did not',
+      );
     });
 
     test('a FLAC with no comment block produces no tags', function (assert) {
@@ -1335,6 +1406,49 @@ module('Unit | audio metadata extractors', function (hooks) {
         undefined,
       );
     });
+
+    test('the streaming scan agrees with the buffered one', async function (assert) {
+      // The streaming walk keeps only a rolling few frames, so neither the
+      // decoded audio nor the encoded file is ever fully resident. It has to
+      // reach the same answer regardless of how the bytes are chunked, including
+      // when a frame straddles a boundary.
+      let bytes = new Uint8Array([
+        ...Array.from({ length: 6 }, () => frameWithGain(150)).flat(),
+        ...Array.from({ length: 6 }, () => frameWithGain(205)).flat(),
+      ]);
+      let buffered = extractMp3Envelope(bytes, 8);
+
+      for (let chunkSize of [13, 417, 1000]) {
+        let streamed = await extractMp3EnvelopeFromStream(
+          chunkedStream(bytes, chunkSize),
+          8,
+        );
+        assert.deepEqual(
+          streamed?.bars,
+          buffered?.bars,
+          `chunks of ${chunkSize} bytes produce the same envelope`,
+        );
+        assert.strictEqual(streamed?.granuleCount, buffered?.granuleCount);
+        assert.strictEqual(streamed?.frameCount, buffered?.frameCount);
+      }
+    });
+
+    test('the streaming scan skips a large ID3v2 tag without buffering it', async function (assert) {
+      // Artwork can make the tag megabytes; it is skipped by count rather than
+      // accumulated.
+      let artwork = new Array(200_000).fill(0x00);
+      let tag = buildId3v2([['APIC', artwork]]);
+      let bytes = new Uint8Array([
+        ...tag,
+        ...frameWithGain(190),
+        ...frameWithGain(190),
+      ]);
+      let streamed = await extractMp3EnvelopeFromStream(
+        chunkedStream(bytes, 4096),
+        4,
+      );
+      assert.strictEqual(streamed?.granuleCount, 8);
+    });
   });
 
   module('WAV single-pass streaming', function () {
@@ -1389,26 +1503,6 @@ module('Unit | audio metadata extractors', function (hooks) {
         ...uint32le(payload.length),
         ...payload,
       ]);
-    }
-
-    // Hand the reader a stream that yields small chunks, so frames land across
-    // chunk boundaries — the case a buffered reader never exercises.
-    function chunkedStream(
-      bytes: Uint8Array,
-      chunkSize: number,
-    ): ReadableStream<Uint8Array> {
-      let offset = 0;
-      return new ReadableStream<Uint8Array>({
-        pull(controller) {
-          if (offset >= bytes.length) {
-            controller.close();
-            return;
-          }
-          let end = Math.min(offset + chunkSize, bytes.length);
-          controller.enqueue(bytes.slice(offset, end));
-          offset = end;
-        },
-      });
     }
 
     function silentThenLoud(total: number): number[][] {

@@ -639,3 +639,200 @@ export function extractMp3Envelope(
     ...(durationSeconds === undefined ? {} : { durationSeconds }),
   };
 }
+
+// Scan an MP3 off the stream, so neither decoded audio nor the encoded file is
+// ever fully resident.
+//
+// The buffered `extractMp3Envelope` above removed the decode, which was the
+// large cost — but it still needed every byte at once. Frames are
+// self-delimiting (each header states its own length), so the walk only ever
+// needs the frame it is on: this keeps a rolling buffer of a few frames and
+// discards what it has passed.
+export async function extractMp3EnvelopeFromStream(
+  stream: ReadableStream<Uint8Array> | Uint8Array,
+  barCount: number,
+): Promise<Mp3Envelope | undefined> {
+  if (stream instanceof Uint8Array) {
+    return extractMp3Envelope(stream, barCount);
+  }
+
+  let envelope = new StreamingEnvelope(barCount);
+  // The largest a Layer III frame can be: 144 * 320000 / 32000 + 1.
+  const MAX_FRAME_BYTES = 1441;
+  // Enough to hold a frame plus whatever partial frame follows it.
+  const WINDOW_BYTES = MAX_FRAME_BYTES * 4;
+
+  let buffer: Uint8Array<ArrayBufferLike> = new Uint8Array(0);
+  let granuleCount = 0;
+  let frameCount = 0;
+  let sampleRate: number | undefined;
+  // An ID3v2 tag precedes the audio and can be megabytes with artwork, so it is
+  // skipped by count rather than buffered.
+  let tagBytesRemaining: number | undefined;
+  let started = false;
+
+  let reader = stream.getReader();
+  try {
+    for (;;) {
+      let { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      if (!value || value.length === 0) {
+        continue;
+      }
+
+      let incoming: Uint8Array<ArrayBufferLike> = value;
+      if (!started) {
+        // Determine the ID3v2 size from the first bytes, once.
+        buffer =
+          buffer.length === 0
+            ? incoming.slice()
+            : concatBytes(buffer, incoming);
+        if (buffer.length < 10) {
+          continue;
+        }
+        tagBytesRemaining = id3v2TagSize(buffer);
+        started = true;
+        incoming = buffer;
+        buffer = new Uint8Array(0);
+      }
+
+      if (tagBytesRemaining !== undefined && tagBytesRemaining > 0) {
+        let skip = Math.min(tagBytesRemaining, incoming.length);
+        tagBytesRemaining -= skip;
+        incoming = incoming.subarray(skip);
+        if (incoming.length === 0) {
+          continue;
+        }
+      }
+
+      buffer =
+        buffer.length === 0 ? incoming.slice() : concatBytes(buffer, incoming);
+
+      // Consume every frame fully contained in the buffer, then keep the
+      // remainder for the next chunk.
+      let consumed = 0;
+      for (;;) {
+        let progress = readOneFrame(buffer, consumed, envelope);
+        if (!progress) {
+          break;
+        }
+        consumed = progress.nextOffset;
+        granuleCount += progress.granules;
+        if (progress.granules > 0) {
+          frameCount++;
+        }
+        sampleRate ??= progress.sampleRate;
+      }
+      buffer = consumed > 0 ? buffer.slice(consumed) : buffer;
+      // A buffer that has grown past the window without yielding a frame is
+      // desynchronized garbage; keep only the tail so a later sync can be found.
+      if (buffer.length > WINDOW_BYTES) {
+        buffer = buffer.slice(buffer.length - MAX_FRAME_BYTES);
+      }
+    }
+  } finally {
+    await reader.cancel().catch(() => {
+      // Already drained or released; cancelling is a no-op.
+    });
+  }
+
+  if (granuleCount === 0 || envelope.isEmpty) {
+    return undefined;
+  }
+
+  let peak = envelope.peak;
+  let bars = envelope.bars();
+  let normalized =
+    peak > 0
+      ? bars.map((bar) => Math.round((bar / peak) * 10000) / 10000)
+      : bars;
+  let durationSeconds =
+    sampleRate && sampleRate > 0
+      ? Math.round(((granuleCount * SAMPLES_PER_GRANULE) / sampleRate) * 1000) /
+        1000
+      : undefined;
+
+  return {
+    bars: normalized,
+    granuleCount,
+    frameCount,
+    ...(sampleRate === undefined ? {} : { sampleRateHz: sampleRate }),
+    ...(durationSeconds === undefined ? {} : { durationSeconds }),
+  };
+}
+
+function concatBytes(left: Uint8Array, right: Uint8Array): Uint8Array {
+  let out = new Uint8Array(left.length + right.length);
+  out.set(left, 0);
+  out.set(right, left.length);
+  return out;
+}
+
+// Read the single frame at `offset`, folding its gains into `envelope`. Returns
+// undefined when the buffer doesn't yet hold a whole frame, which tells the
+// caller to wait for more bytes rather than resynchronize.
+function readOneFrame(
+  bytes: Uint8Array,
+  offset: number,
+  envelope: StreamingEnvelope,
+):
+  | { nextOffset: number; granules: number; sampleRate: number | undefined }
+  | undefined {
+  if (offset + 4 > bytes.length) {
+    return undefined;
+  }
+  let atSync =
+    bytes[offset] === FRAME_SYNC_FIRST &&
+    (bytes[offset + 1]! & FRAME_SYNC_SECOND_MASK) === FRAME_SYNC_SECOND_MASK;
+  let header = atSync ? parseFrameHeader(bytes, offset) : undefined;
+  if (!header) {
+    let resync = findFrameSync(bytes, offset + 1);
+    if (resync === undefined) {
+      return undefined;
+    }
+    return { nextOffset: resync, granules: 0, sampleRate: undefined };
+  }
+
+  let b1 = bytes[offset + 1]!;
+  let b2 = bytes[offset + 2]!;
+  let b3 = bytes[offset + 3]!;
+  let bitrateKbps =
+    BITRATE_KBPS[bitrateTableKey(header.version, header.layer)]?.[
+      (b2 >> 4) & 0x0f
+    ];
+  let length = frameLengthBytes(
+    header.version,
+    header.layer,
+    bitrateKbps ?? 0,
+    header.sampleRate,
+    ((b2 >> 1) & 0x01) === 1,
+  );
+  if (length === undefined || length < 4) {
+    return { nextOffset: offset + 1, granules: 0, sampleRate: undefined };
+  }
+  if (offset + length > bytes.length) {
+    // The frame straddles the end of what has arrived.
+    return undefined;
+  }
+
+  let channelCount = ((b3 >> 6) & 0x03) === 3 ? 1 : 2;
+  let granules = 0;
+  for (let gain of frameGlobalGains(
+    bytes,
+    offset,
+    header.version,
+    channelCount,
+    (b1 & 0x01) === 0,
+  )) {
+    let amplitude = 2 ** ((gain - GLOBAL_GAIN_BIAS) / 4);
+    envelope.push(amplitude * amplitude, 1, amplitude);
+    granules++;
+  }
+  return {
+    nextOffset: offset + length,
+    granules,
+    sampleRate: header.sampleRate,
+  };
+}

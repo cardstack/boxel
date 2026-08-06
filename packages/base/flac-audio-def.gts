@@ -7,14 +7,15 @@ import AudioDef, {
 } from './audio-file-def';
 import type { ByteStream, SerializedFile } from './file-api';
 import {
+  FLAC_METADATA_WINDOW_BYTES,
   extractFlacDuration,
   extractFlacEncoding,
   extractFlacTags,
 } from './flac-meta-extractor';
 
-// "fLaC" marker (4) + STREAMINFO block header (4) + STREAMINFO data (34) = 42.
-// Round up to leave room for stream-chunking artefacts.
-const FLAC_MAX_HEADER_BYTES = 256;
+// The encoding read needs only STREAMINFO, 42 bytes in — but the tag read needs
+// the VORBIS_COMMENT block, which sits behind whatever other metadata blocks the
+// encoder wrote. See `FLAC_METADATA_WINDOW_BYTES` for why that is much further.
 
 export class FlacDef extends AudioDef {
   static displayName = 'FLAC Audio';
@@ -27,7 +28,10 @@ export class FlacDef extends AudioDef {
     options: { contentHash?: string; contentSize?: number } = {},
   ): Promise<SerializedFile<{ duration: number } & AudioAttributes>> {
     let base = await super.extractAttributes(url, getStream, options);
-    let bytes = await readFirstBytes(await getStream(), FLAC_MAX_HEADER_BYTES);
+    let bytes = await readFirstBytes(
+      await getStream(),
+      FLAC_METADATA_WINDOW_BYTES,
+    );
     let { duration } = extractFlacDuration(bytes);
 
     return {

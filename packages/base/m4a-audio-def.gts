@@ -1,5 +1,4 @@
 import FileAudioIcon from '@cardstack/boxel-icons/file-audio';
-import { readFirstBytes } from '@cardstack/runtime-common';
 import AudioDef, {
   audioAttributes,
   waveformFor,
@@ -11,12 +10,6 @@ import {
   extractM4aEncoding,
   extractM4aTags,
 } from './m4a-meta-extractor';
-
-// `moov` holds both the sample entry and the iTunes atoms, and in a
-// faststart-arranged file it precedes `mdat`. 256 KB covers a typical `moov`
-// including cover art. A file that interleaves `moov` after a large `mdat` simply
-// yields no metadata here rather than pulling the whole payload into memory.
-const M4A_METADATA_WINDOW_BYTES = 262_144;
 
 export class M4aDef extends AudioDef {
   static displayName = 'M4A Audio';
@@ -36,19 +29,18 @@ export class M4aDef extends AudioDef {
     // without re-reading, so when those are present the stream is consumed
     // exactly once — by this walk.
     let base = await super.extractAttributes(url, getStream, options);
-    let { duration } = await extractM4aDurationFromStream(await getStream());
-
-    let header = await readFirstBytes(
+    // The same walk hands back the `moov` box, which is all the encoding and tag
+    // readers need — so this costs one stream rather than two.
+    let { duration, moov } = await extractM4aDurationFromStream(
       await getStream(),
-      M4A_METADATA_WINDOW_BYTES,
     );
 
     return {
       ...base,
       duration,
       ...audioAttributes(
-        extractM4aEncoding(header),
-        extractM4aTags(header),
+        extractM4aEncoding(moov),
+        extractM4aTags(moov),
         await waveformFor(getStream, base.contentSize),
       ),
     };

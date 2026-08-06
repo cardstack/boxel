@@ -328,11 +328,16 @@ function durationFromMoovBox(moovBytes: Uint8Array): { duration: number } {
 // directly. Works for both fast-start files (`moov` near the start, where the
 // walk stops early) and iPhone / Voice Memo files (`moov` at the end, where
 // the preceding `mdat` is skipped chunk by chunk).
+// Returns the retained `moov` box alongside the duration. It is the only part of
+// the file the metadata readers need — `extractM4aEncoding` and
+// `extractM4aTags` scan for `moov` from offset zero, and a lone moov box is one
+// at offset zero — so one walk serves all three and the def needs no second
+// stream, which the extract runner would satisfy by re-fetching the whole file.
 export async function extractM4aDurationFromStream(
   stream: ReadableStream<Uint8Array> | Uint8Array,
-): Promise<{ duration: number }> {
+): Promise<{ duration: number; moov: Uint8Array }> {
   if (stream instanceof Uint8Array) {
-    return extractM4aDuration(stream);
+    return { ...extractM4aDuration(stream), moov: stream };
   }
 
   let reader = new ChunkReader(stream);
@@ -407,7 +412,7 @@ export async function extractM4aDurationFromStream(
           moovBytes.set(largeSize, BOX_HEADER_BYTES);
         }
         moovBytes.set(payload, headerSize);
-        return durationFromMoovBox(moovBytes);
+        return { ...durationFromMoovBox(moovBytes), moov: moovBytes };
       }
 
       if (size === 0) {

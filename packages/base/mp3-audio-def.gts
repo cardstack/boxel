@@ -1,7 +1,4 @@
-import {
-  byteStreamToUint8Array,
-  readFirstBytes,
-} from '@cardstack/runtime-common';
+import { readFirstBytes } from '@cardstack/runtime-common';
 import FileAudioIcon from '@cardstack/boxel-icons/file-audio';
 import AudioDef, {
   audioAttributes,
@@ -11,7 +8,7 @@ import type { ByteStream, SerializedFile } from './file-api';
 import {
   extractMp3Duration,
   extractMp3Encoding,
-  extractMp3Envelope,
+  extractMp3EnvelopeFromStream,
   extractMp3Tags,
 } from './mp3-meta-extractor';
 import {
@@ -51,8 +48,10 @@ export class Mp3Def extends AudioDef {
 
   // MP3 never needs a decoder for its envelope. Every frame's side info states
   // a quantizer gain per granule, which is an amplitude scale readable by
-  // walking frame headers — so the whole file streams through without any
-  // decoded audio ever being resident.
+  // walking frame headers — and because frames are self-delimiting, the walk
+  // streams: it keeps a rolling buffer of a few frames and discards what it has
+  // passed, so neither decoded audio nor the encoded file is ever fully
+  // resident.
   //
   // That matters most here: float PCM costs roughly twenty times the encoded
   // size for a 128 kbps stream, making MP3 the worst case for a full decode by a
@@ -66,8 +65,10 @@ export class Mp3Def extends AudioDef {
     getStream: () => Promise<ByteStream>,
   ): Promise<WaveformMetadata> {
     try {
-      let bytes = await byteStreamToUint8Array(await getStream());
-      let envelope = extractMp3Envelope(bytes, WAVEFORM_BAR_COUNT);
+      let envelope = await extractMp3EnvelopeFromStream(
+        await getStream(),
+        WAVEFORM_BAR_COUNT,
+      );
       if (!envelope) {
         return {
           decodeStatus: 'failed',

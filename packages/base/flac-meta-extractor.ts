@@ -99,6 +99,21 @@ export function extractFlacDuration(bytes: Uint8Array): { duration: number } {
 
 const VORBIS_COMMENT_BLOCK_TYPE = 4;
 
+// How much of the file the tag read needs.
+//
+// STREAMINFO is only 42 bytes in, but VORBIS_COMMENT is not: metadata blocks
+// appear in whatever order the encoder wrote them, and a SEEKTABLE — which most
+// rippers emit — sits ahead of the comments at 18 bytes per seek point, putting
+// them tens of kilobytes deep. A realistic tag set is itself well over half a
+// kilobyte once a vendor string, MusicBrainz ids, and ReplayGain values are
+// counted.
+//
+// A window that falls short doesn't error, it just silently yields no tags, so
+// this is sized to clear an ordinary seek table and comment block by a wide
+// margin. A file with cover art ahead of its comments can still exceed it; the
+// cost of missing that is tags, not correctness.
+export const FLAC_METADATA_WINDOW_BYTES = 1_048_576;
+
 // Guards the walk when a block length is garbage. A real file has a handful.
 const MAX_METADATA_BLOCKS = 128;
 
