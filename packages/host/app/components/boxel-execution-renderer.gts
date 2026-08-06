@@ -68,6 +68,24 @@ type HeadComponent = ComponentLike<{
   };
 }>;
 
+interface DefaultFormatsProviderSignature {
+  Args: { value: FieldFormats };
+  Blocks: { default: [] };
+}
+
+class DefaultFormatsProvider extends Component<DefaultFormatsProviderSignature> {
+  @provide(DefaultFormatsContextName)
+  // @ts-ignore "value is declared but consumed through context"
+  private get value(): FieldFormats {
+    return this.args.value;
+  }
+
+  <template>
+    {{! template-lint-disable no-yield-only }}
+    {{yield}}
+  </template>
+}
+
 export default class BoxelExecutionRenderer extends Component<Signature> {
   @service declare private boxelExecution: BoxelExecutionService;
 
@@ -78,17 +96,37 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
     this.surfaceId = this.boxelExecution.surfaceId();
   }
 
+  /**
+   * RP-1.5: the render entry seeds both default-format axes from the caller's
+   * format, exactly as main's `CardRenderer` does. The root component reads
+   * the `cardDef` axis; nested levels re-derive their own cascade (RP-2.6).
+   */
   @provide(DefaultFormatsContextName)
   // @ts-ignore "defaultFormats is declared but consumed through context"
   private get defaultFormats(): FieldFormats {
     let format = this.args.format ?? 'isolated';
-    if (format === 'edit') {
-      return { cardDef: 'edit', fieldDef: 'edit' };
+    return { cardDef: format, fieldDef: format };
+  }
+
+  /**
+   * RP-2.6: on main, a card template's children resolve their formats from
+   * the child-format cascade the Base card wrapper provides. The Capsule slot
+   * mounts the authored format component without that wrapper, so the
+   * renderer supplies the same cascade to the `@fields` portals the authored
+   * template invokes.
+   */
+  private get capsuleChildFormats(): FieldFormats {
+    let format = this.args.format ?? 'isolated';
+    switch (format) {
+      case 'edit':
+        return { cardDef: 'edit', fieldDef: 'edit' };
+      case 'atom':
+      case 'head':
+      case 'markdown':
+        return { cardDef: format, fieldDef: format };
+      default:
+        return { cardDef: 'fitted', fieldDef: 'embedded' };
     }
-    if (format === 'atom' || format === 'head' || format === 'markdown') {
-      return { cardDef: format, fieldDef: format };
-    }
-    return { cardDef: format, fieldDef: 'embedded' };
   }
 
   @use private execution = resource(({ on }) => {
@@ -263,14 +301,16 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
         {{surfaceElement this.capsuleSurface}}
         ...attributes
       >
-        <this.capsuleComponent
-          @model={{this.state.model}}
-          @fields={{this.state.fields}}
-          @format={{@format}}
-          @renderRecord={{this.state.snapshot.current.renderRecord}}
-          @displayContainer={{@displayContainer}}
-          @viewCard={{@viewCard}}
-        />
+        <DefaultFormatsProvider @value={{this.capsuleChildFormats}}>
+          <this.capsuleComponent
+            @model={{this.state.model}}
+            @fields={{this.state.fields}}
+            @format={{@format}}
+            @renderRecord={{this.state.snapshot.current.renderRecord}}
+            @displayContainer={{@displayContainer}}
+            @viewCard={{@viewCard}}
+          />
+        </DefaultFormatsProvider>
       </div>
     {{else if this.sandboxSlot}}
       <div

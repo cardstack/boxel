@@ -1,0 +1,467 @@
+import 'ses';
+
+import { waitFor } from '@ember/test-helpers';
+import GlimmerComponent from '@glimmer/component';
+
+import { getService } from '@universal-ember/test-support';
+import { module, test } from 'qunit';
+
+import { rri, type LooseCardResource } from '@cardstack/runtime-common';
+
+import CardRenderer from '@cardstack/host/components/card-renderer';
+
+import {
+  testRealmURL,
+  testRRI,
+  setupCardLogs,
+  setupIntegrationTestRealm,
+  setupLocalIndexing,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
+  cleanWhiteSpace,
+} from '../../helpers';
+import { setupMockMatrix } from '../../helpers/mock-matrix';
+import { renderComponent } from '../../helpers/render-component';
+import { setupRenderingTest } from '../../helpers/setup';
+
+import type { BaseDef, CardDef, Format } from '@cardstack/base/card-api';
+import type * as CardAPIModule from '@cardstack/base/card-api';
+
+const baseCardApiModule = rri('https://cardstack.com/base/card-api');
+const friendId = `${testRealmURL}Friend/buddy`;
+
+// An authored realm module: served as source to the loader, so the
+// classifier routes every render of it to the Capsule tier (RP-6.1 R4).
+const gadgetSource = `
+  import {
+    CardDef,
+    FieldDef,
+    Component,
+    contains,
+    field,
+    linksTo,
+  } from 'https://cardstack.com/base/card-api';
+  import StringField from 'https://cardstack.com/base/string';
+
+  export class BadgeField extends FieldDef {
+    static displayName = 'Badge';
+    @field label = contains(StringField);
+    static embedded = class Embedded extends Component<typeof BadgeField> {
+      <template>
+        <span data-test-badge data-test-badge-format={{@format}}>
+          {{if @model 'badge-present' 'badge-missing'}}
+        </span>
+      </template>
+    };
+  }
+
+  export class Gadget extends CardDef {
+    static displayName = 'Gadget';
+    @field name = contains(StringField);
+    @field badge = contains(BadgeField);
+    @field partner = linksTo(CardDef);
+    @field summary = contains(StringField, {
+      computeVia: function () {
+        return this.name + ' online';
+      },
+    });
+    @field blank = contains(StringField, {
+      computeVia: function () {
+        return undefined;
+      },
+    });
+    static isolated = class Isolated extends Component<typeof Gadget> {
+      <template>
+        <div data-test-gadget>
+          <span data-test-gadget-name><@fields.name /></span>
+          <span data-test-unknown-format><@fields.name
+              @format='banana'
+            /></span>
+          <span data-test-computed><@fields.summary /></span>
+          <span data-test-blank>[<@fields.blank />]</span>
+          <div data-test-badge-slot><@fields.badge /></div>
+          <div data-test-partner-slot><@fields.partner /></div>
+        </div>
+      </template>
+    };
+  }
+`;
+
+const explosiveSource = `
+  import {
+    CardDef,
+    Component,
+    contains,
+    field,
+  } from 'https://cardstack.com/base/card-api';
+  import StringField from 'https://cardstack.com/base/string';
+
+  export class Explosive extends CardDef {
+    static displayName = 'Explosive';
+    @field boom = contains(StringField, {
+      computeVia: function () {
+        throw new Error('conformance-fixture-compute-error');
+      },
+    });
+    static isolated = class Isolated extends Component<typeof Explosive> {
+      <template><div data-test-explosive><@fields.boom /></div></template>
+    };
+  }
+`;
+
+async function renderThroughExecutionRenderer(card: BaseDef, format?: Format) {
+  await renderComponent(
+    class TestDriver extends GlimmerComponent {
+      <template>
+        <CardRenderer @card={{card}} @format={{format}} @execution='auto' />
+      </template>
+    },
+  );
+}
+
+module('Integration | rp-conformance', function (hooks) {
+  setupRenderingTest(hooks);
+  setupLocalIndexing(hooks);
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
+    activeRealms: [testRealmURL],
+    autostart: true,
+  });
+  setupRealmCacheTeardown(hooks);
+
+  hooks.beforeEach(async function () {
+    await withCachedRealmSetup(async () =>
+      setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'gadget.gts': gadgetSource,
+          'explosive.gts': explosiveSource,
+          'Friend/buddy.json': {
+            data: {
+              attributes: {
+                cardInfo: { name: 'Linked Friend' },
+              },
+              meta: {
+                adoptsFrom: { module: baseCardApiModule, name: 'CardDef' },
+              },
+            },
+          },
+        },
+      }),
+    );
+  });
+
+  setupCardLogs(hooks, async () =>
+    getService('loader-service').loader.import('@cardstack/base/card-api'),
+  );
+
+  async function createFromResource(
+    resource: LooseCardResource,
+  ): Promise<CardDef> {
+    let store = getService('store');
+    return await store.__dangerousCreateFromSerialized(
+      resource,
+      { data: resource },
+      new URL(testRealmURL),
+    );
+  }
+
+  async function createGadget(
+    overrides: Partial<LooseCardResource> = {},
+  ): Promise<CardDef> {
+    return await createFromResource({
+      attributes: { name: 'Widget' },
+      meta: { adoptsFrom: { module: testRRI('gadget'), name: 'Gadget' } },
+      ...overrides,
+    });
+  }
+
+  test('RP-6.1, RP-6.4: a trusted Base module mounts in the Direct tier with the tier stamped as a diagnostic', async function (assert) {
+    let card = await createFromResource({
+      attributes: { cardInfo: { name: 'Trusted Fixture' } },
+      meta: { adoptsFrom: { module: baseCardApiModule, name: 'CardDef' } },
+    });
+
+    await renderThroughExecutionRenderer(card, 'isolated');
+    await waitFor('[data-boxel-execution="direct"]', { timeout: 10000 });
+
+    assert
+      .dom('[data-boxel-execution="direct"]')
+      .hasAttribute(
+        'data-boxel-execution-reason',
+        'trusted-boxel-module',
+        'the routing decision is stamped alongside the tier',
+      );
+    assert
+      .dom(
+        '[data-boxel-execution="direct"] [data-test-base-template="isolated"]',
+      )
+      .exists('the trusted Base default template renders inside the slot');
+    assert
+      .dom('[data-boxel-execution="direct"]')
+      .containsText('Trusted Fixture', 'visible output is the card content');
+    assert
+      .dom('[data-boxel-execution="capsule"]')
+      .doesNotExist('a trusted module never mounts in an authored tier');
+  });
+
+  test('RP-6.1, RP-6.4: an authored realm module mounts in the Capsule tier with the tier stamped as a diagnostic', async function (assert) {
+    let card = await createGadget();
+
+    await renderThroughExecutionRenderer(card, 'isolated');
+    await waitFor('[data-boxel-execution="capsule"] [data-test-gadget]', {
+      timeout: 10000,
+    });
+
+    assert
+      .dom('[data-boxel-execution="capsule"]')
+      .hasAttribute(
+        'data-boxel-execution-reason',
+        'default-user-card',
+        'the routing decision is stamped alongside the tier',
+      );
+    assert
+      .dom('[data-test-gadget-name]')
+      .hasText('Widget', 'the authored isolated template renders its content');
+    assert
+      .dom('[data-boxel-execution="direct"]')
+      .doesNotExist('authored code never routes Direct');
+  });
+
+  test('RP-2.4: an unknown field format is silently ignored and the ambient defaults win', async function (assert) {
+    let card = await createGadget();
+
+    await renderThroughExecutionRenderer(card, 'isolated');
+    await waitFor('[data-test-unknown-format]', { timeout: 10000 });
+
+    assert
+      .dom('[data-test-unknown-format]')
+      .hasText(
+        'Widget',
+        'the field still renders its value in the ambient default format',
+      );
+    assert
+      .dom('[data-test-unknown-format] input')
+      .doesNotExist('the unknown format is not treated as an edit request');
+  });
+
+  test('RP-2.6: a contained field renders embedded inside an isolated card', async function (assert) {
+    let card = await createGadget();
+
+    await renderThroughExecutionRenderer(card, 'isolated');
+    await waitFor('[data-test-badge-slot] [data-test-badge]', {
+      timeout: 10000,
+    });
+
+    assert
+      .dom('[data-test-badge-slot] [data-test-badge]')
+      .hasAttribute(
+        'data-test-badge-format',
+        'embedded',
+        'the child-format cascade resolves a nested FieldDef to embedded',
+      );
+  });
+
+  test('RP-3.3: a contains composite value is never null', async function (assert) {
+    // The instance document carries no `badge` attribute at all; the field
+    // must still materialize as a fresh instance rather than null/undefined.
+    let card = await createGadget();
+
+    await renderThroughExecutionRenderer(card, 'isolated');
+    await waitFor('[data-test-badge-slot] [data-test-badge]', {
+      timeout: 10000,
+    });
+
+    assert
+      .dom('[data-test-badge-slot] [data-test-badge]')
+      .hasText(
+        'badge-present',
+        'an undeclared contains composite renders a fresh empty instance',
+      );
+  });
+
+  test('RP-4.1, RP-4.3: computeVia is function-form and an undefined compute falls back to emptyValue', async function (assert) {
+    let card = await createGadget();
+
+    await renderThroughExecutionRenderer(card, 'isolated');
+    await waitFor('[data-test-computed]', { timeout: 10000 });
+
+    assert
+      .dom('[data-test-computed]')
+      .hasText(
+        'Widget online',
+        'a function-form computeVia renders its derived value',
+      );
+    let blank = document.querySelector('[data-test-blank]');
+    assert.strictEqual(
+      (blank?.textContent ?? '').replace(/\s+/g, ''),
+      '[]',
+      'a compute returning undefined renders the field emptyValue (nothing)',
+    );
+  });
+
+  test('RP-2.6, RP-7.2, RP-7.3: an unloaded link reads undefined synchronously, renders absent rather than a spinner, and settles to the loaded card in the cascade format', async function (assert) {
+    let card = await createGadget({
+      relationships: { partner: { links: { self: friendId } } },
+    });
+    let api = await getService('loader-service').loader.import<
+      typeof CardAPIModule
+    >('@cardstack/base/card-api');
+
+    // The getter is the lazy-load trigger: it returns undefined synchronously
+    // and starts the fetch; loading is observable only via membership state.
+    assert.strictEqual(
+      (card as unknown as { partner?: unknown }).partner,
+      undefined,
+      'reading an unloaded link returns undefined synchronously',
+    );
+    assert.true(
+      api.getRelationshipMembershipState(card, 'partner').isLoading,
+      'the read starts the load, observable only via membership state',
+    );
+
+    await renderThroughExecutionRenderer(card, 'isolated');
+    await waitFor(`[data-test-partner-slot] [data-test-card="${friendId}"]`, {
+      timeout: 10000,
+    });
+
+    assert
+      .dom(`[data-test-partner-slot] [data-test-card="${friendId}"]`)
+      .containsText(
+        'Linked Friend',
+        'the loaded link renders through the normal setter path',
+      );
+    assert
+      .dom(`[data-test-partner-slot] [data-test-card="${friendId}"]`)
+      .hasAttribute(
+        'data-test-card-format',
+        'fitted',
+        'a linked CardDef inside an isolated template renders fitted (the RP-2.6 cascade)',
+      );
+    assert
+      .dom('[data-test-partner-slot] [aria-busy]')
+      .doesNotExist('link loading never presents a spinner');
+  });
+
+  test('RP-10.2, RP-10.3: a card renders statically with no card context or CRUD functions provided', async function (assert) {
+    // This module provides no CardContext, CardCrudFunctions, or permissions
+    // providers anywhere, so this render is the degraded-context contract.
+    let card = await createGadget();
+
+    await renderThroughExecutionRenderer(card, 'isolated');
+    await waitFor('[data-test-gadget]', { timeout: 10000 });
+
+    assert
+      .dom('[data-test-gadget]')
+      .exists('the card renders statically without any CRUD or card context');
+    assert
+      .dom('[data-test-gadget-name]')
+      .hasText('Widget', 'content is unaffected by the absent context plane');
+  });
+
+  test('RP-4.5, RP-11.4: a throwing computeVia fails the render and chrome presents the error', async function (assert) {
+    let card = await createFromResource({
+      attributes: {},
+      meta: { adoptsFrom: { module: testRRI('explosive'), name: 'Explosive' } },
+    });
+
+    await renderThroughExecutionRenderer(card, 'isolated');
+    await waitFor('.boxel-execution-error', { timeout: 10000 });
+
+    assert
+      .dom('.boxel-execution-error')
+      .hasAttribute('role', 'alert', 'chrome owns the error presentation');
+    assert
+      .dom('.boxel-execution-error')
+      .containsText('Unable to render this card');
+    assert
+      .dom('.boxel-execution-error')
+      .containsText(
+        'conformance-fixture-compute-error',
+        'the underlying failure is surfaced by chrome, not the card',
+      );
+    assert
+      .dom('[data-test-explosive]')
+      .doesNotExist('no card content renders around the failure');
+  });
+
+  test('RP-14.4, RP-15.4: Direct and Capsule produce deep-equal semantic records for the same fixture', async function (assert) {
+    let card = await createGadget({
+      relationships: { partner: { links: { self: friendId } } },
+    });
+
+    let boxelExecution = getService('boxel-execution');
+    let session = boxelExecution.createSession();
+    try {
+      let request = await boxelExecution.requestFor(
+        card,
+        'isolated',
+        boxelExecution.surfaceId(),
+      );
+      let generation = await session.update(request);
+      assert.ok(generation, 'the session produced a ready generation');
+      assert.strictEqual(
+        generation!.lease.decision.mode,
+        'capsule',
+        'the authored fixture routed to the Capsule tier',
+      );
+      let capsuleRecord = generation!.renderRecord;
+      let directRecord = await getService(
+        'direct-boxel-runtime',
+      ).runtime.buildRenderRecord(card);
+
+      assert.deepEqual(
+        structuredClone(capsuleRecord),
+        capsuleRecord,
+        'the semantic record is structured-cloneable',
+      );
+      assert.deepEqual(
+        capsuleRecord.boxel,
+        directRecord.boxel,
+        'BoxelDescription is identical across Direct and Capsule',
+      );
+      assert.deepEqual(
+        capsuleRecord.instance.fields,
+        directRecord.instance.fields,
+        'ResolvedField projections are identical across Direct and Capsule',
+      );
+      assert.strictEqual(
+        capsuleRecord.instance.id,
+        directRecord.instance.id,
+        'instance identity is identical across tiers',
+      );
+      assert.deepEqual(
+        capsuleRecord.presentation,
+        directRecord.presentation,
+        'instance presentation is identical across tiers',
+      );
+    } finally {
+      await session.destroy();
+    }
+  });
+
+  test('RP-2.4: an explicit renderable root format sets the rendered format', async function (assert) {
+    let card = await createFromResource({
+      attributes: { cardInfo: { name: 'Trusted Fixture' } },
+      meta: { adoptsFrom: { module: baseCardApiModule, name: 'CardDef' } },
+    });
+
+    await renderThroughExecutionRenderer(card, 'embedded');
+    await waitFor('[data-test-field-component-card]', { timeout: 10000 });
+
+    assert
+      .dom('[data-test-field-component-card]')
+      .hasAttribute(
+        'data-boxel-card-format',
+        'embedded',
+        'an explicit member of the renderable inventory wins',
+      );
+    assert.ok(
+      cleanWhiteSpace(
+        document.querySelector('[data-test-field-component-card]')
+          ?.textContent ?? '',
+      ).includes('Trusted Fixture'),
+      'the embedded template renders the card content',
+    );
+  });
+});

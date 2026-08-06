@@ -61,9 +61,8 @@ focus across re-renders; every tier must preserve it.
 axes from the caller's format (`card-renderer.gts:41-61`). The only
 format it special-cases is `head` (RP-2.9). It has **no** error or loading
 branch: error/loading presentation is chrome's job (RP-11.4).
-_Conformance note:_ the branch's `BoxelExecutionRenderer` currently seeds
-`{cardDef: format, fieldDef: 'embedded'}` for isolated/embedded/fitted
-roots — a divergence from main that must be corrected or specified.
+`BoxelExecutionRenderer` seeds identically; the rp-equivalence suite holds
+it to this statement.
 
 **RP-1.6** `@displayContainer` is a pure pass-through; `undefined` means
 `true`, only an explicit `false` suppresses the container
