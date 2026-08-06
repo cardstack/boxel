@@ -441,8 +441,10 @@ module('Integration | rp-conformance', function (hooks) {
   });
 
   // "Identity map: same canonical id + assignable class ⇒ the same instance
-  // object, updated in place; a class mismatch constructs fresh."
-  test('RP-8.2: the identity map reuses one instance per canonical id for assignable classes and constructs fresh on a mismatch', async function (assert) {
+  // object, updated in place; ... One instance is keyed under its localId and
+  // every known remote id; a remote id claimed by a second local id is a hard
+  // error."
+  test('RP-8.2: the identity map reuses one instance per canonical id for assignable classes, and a remote id claimed by a second local id is a hard error', async function (assert) {
     let idX = `${testRealmURL}Gadget/identity-probe`;
     let first = await createGadget({
       id: idX,
@@ -474,20 +476,26 @@ module('Integration | rp-conformance', function (hooks) {
       'an assignable (ancestor) class keeps the cached instance',
     );
 
+    // A class the cached instance is not assignable to takes the
+    // construct-fresh branch at the card-api layer, and the fresh instance's
+    // new local id then claims a remote id the store already keys under the
+    // original local id. Through the Host store the observable outcome of
+    // that sequence is exactly the statement's hard error — the diagnostic
+    // itself names both local ids, evidence that a fresh instance was
+    // constructed and its registration refused.
     let idY = `${testRealmURL}Gadget/mismatch-probe`;
-    let plain = await createFromResource({
+    await createFromResource({
       id: idY,
       attributes: {},
       meta: { adoptsFrom: { module: baseCardApiModule, name: 'CardDef' } },
     });
-    let specialized = await createGadget({
-      id: idY,
-      attributes: { name: 'Fresh' },
-    });
-    assert.notStrictEqual(
-      specialized,
-      plain,
-      'a class the cached instance is not assignable to constructs a fresh instance',
+    await assert.rejects(
+      createGadget({
+        id: idY,
+        attributes: { name: 'Fresh' },
+      }),
+      /conflicting instance id in store/,
+      'a second local id claiming an already-keyed remote id is a hard error',
     );
   });
 
@@ -511,12 +519,20 @@ module('Integration | rp-conformance', function (hooks) {
     );
 
     // The same reference with the resource side-loaded in `included`
-    // (matched by data.id) materializes during deserialization: the link is
-    // present synchronously, before any fetch could have completed.
+    // materializes during deserialization: the link is present
+    // synchronously, before any fetch could have completed. Side-loading is
+    // keyed by resource linkage — the relationship's `data.id` matching the
+    // included entry's `data.id` (never `links.self`) — so the relationship
+    // carries both, exactly as a realm-served document does.
     let store = getService('store');
     let resource: LooseCardResource = {
       attributes: { name: 'Widget' },
-      relationships: { partner: { links: { self: friendId } } },
+      relationships: {
+        partner: {
+          links: { self: friendId },
+          data: { type: 'card', id: friendId },
+        },
+      },
       meta: { adoptsFrom: { module: testRRI('gadget'), name: 'Gadget' } },
     };
     let withIncluded = await store.__dangerousCreateFromSerialized(
@@ -594,10 +610,20 @@ module('Integration | rp-conformance', function (hooks) {
     let partnerAdoptsFrom = partnerResource?.meta?.adoptsFrom as
       | { module?: string }
       | undefined;
+    // The canonical spelling of a registered realm's module is its scoped
+    // identifier (the opaque RealmResourceIdentifier form RP-8.1 mandates),
+    // so derive the expectation from the live VirtualNetwork mapping rather
+    // than assuming the raw URL spelling.
+    let canonicalBaseModule =
+      getService('network').virtualNetwork.unresolveURL(baseCardApiModule);
     assert.strictEqual(
       partnerAdoptsFrom?.module,
-      baseCardApiModule,
-      "the included resource's module identity is absolute/canonical too",
+      canonicalBaseModule,
+      "the included resource's module identity is the absolute/canonical form",
+    );
+    assert.false(
+      (partnerAdoptsFrom?.module ?? '.').startsWith('.'),
+      "the included module identity is never spelled relative to the delivering document's instance ids",
     );
   });
 

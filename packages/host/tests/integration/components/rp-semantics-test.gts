@@ -914,20 +914,29 @@ module('Integration | rp-semantics', function (hooks) {
   // serialized ..., unreachable via <@fields.x/>, reachable only as
   // @model.x. A computeVia field is a real field."
   test('RP-4.4: a plain class getter is not a field, while a computeVia field is', function (assert) {
+    // Deliberately no field named 'name' here: the fields proxy's ownKeys
+    // trap (base field-component.gts) appends declared field names to the
+    // component class's own keys, and a function class already owns a
+    // built-in 'name' property — a field spelled 'name' makes the trap
+    // return duplicate entries, which the proxy invariant rejects with a
+    // TypeError. That is a main-behavior artifact of the legacy fields
+    // proxy, not part of RP-4.4's sentence, so this fixture stays off the
+    // colliding spelling ('length' and 'prototype' would collide the same
+    // way).
     class Speaker extends CardDef {
       static displayName = 'Speaker';
-      @field name = contains(StringField);
+      @field alias = contains(StringField);
       @field loud = contains(StringField, {
         computeVia: function (this: Speaker) {
-          return (this.name ?? '').toUpperCase();
+          return (this.alias ?? '').toUpperCase();
         },
       });
       get quiet() {
-        return `(${this.name})`;
+        return `(${this.alias})`;
       }
     }
     loader.shimModule(`${testRealmURL}rp44-cards`, { Speaker });
-    let card = new Speaker({ name: 'Ada' });
+    let card = new Speaker({ alias: 'Ada' });
 
     let descriptors = getFields(card, { includeComputeds: true }) as Record<
       string,
