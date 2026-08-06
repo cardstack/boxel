@@ -174,13 +174,6 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
     if (moduleIdentifier) {
       this.boxelExecution.isVolatile(moduleIdentifier);
     }
-    void this.boxelExecution
-      .prerenderedComponentFor(card, format)
-      .then((placeholder) => {
-        if (active && placeholder) {
-          state.placeholder = placeholder;
-        }
-      });
     void (async () => {
       try {
         let request = await this.boxelExecution.requestFor(
@@ -221,6 +214,25 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
         // fully live.
         let mountFailureWatched = false;
         if (reservation) {
+          // The prerendered placeholder exists to cover a Sandbox's boot
+          // time, and only for surfaces big enough to make a boot gap
+          // visible — an isolated (or edit) stack card. It is fetched
+          // exactly once per Sandbox render, here, after classification has
+          // actually decided Sandbox: fetching it for every card render
+          // (Capsule included) costs a network round-trip per card for a
+          // placeholder that is never shown. The isolated prerender is used
+          // even for edit-format renders — the index has no edit HTML, and
+          // a recognizable snapshot of the card beats a blank box.
+          let effectiveFormat = format ?? 'isolated';
+          if (effectiveFormat === 'isolated' || effectiveFormat === 'edit') {
+            void this.boxelExecution
+              .prerenderedComponentFor(card, 'isolated')
+              .then((placeholder) => {
+                if (active && placeholder) {
+                  state.placeholder = placeholder;
+                }
+              });
+          }
           on.cleanup(reservation.release);
           let { process } = reservation;
           state.slot = {
@@ -383,13 +395,16 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
   }
 
   /**
-   * RP-15.3: shown overlaid on top of the (mounted, booting-or-live, never
-   * hidden) Sandbox iframe until its child reports a real painted render.
-   * Only meaningful once the Sandbox slot itself exists — before that, the
-   * ordinary placeholder branch further down already covers the wait.
+   * RP-15.3: while the Sandbox child is booting (mounted but not yet
+   * painted), the slot's visible content is the in-flow placeholder (or a
+   * plain loading box), which SIZES the slot; the iframe sits absolutely
+   * behind it at opacity 0 — it keeps real layout geometry (the placeholder
+   * sized box) so it can boot and measure correctly, it just isn't shown
+   * until its child reports a real painted render. After a hard reload
+   * (onReload) this state re-enters until the reminted child paints.
    */
-  private get showSandboxPlaceholderOverlay(): boolean {
-    return Boolean(this.state.placeholder) && !this.state.sandboxPainted;
+  private get sandboxBooting(): boolean {
+    return !this.state.sandboxPainted;
   }
 
   private get renderedComponent() {
@@ -516,26 +531,38 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
       </CardContainer>
     {{else if this.sandboxSlot}}
       <div
-        class='boxel-execution-sandbox-slot'
+        class='boxel-execution-sandbox-slot
+          {{if this.sandboxBooting "is-booting"}}'
         data-boxel-execution='sandbox'
         data-boxel-execution-reason={{this.executionReason}}
         {{boxelSandboxSlot this.sandboxSlot}}
         ...attributes
       >
         {{! RP-15.3: the iframe the modifier above mounts into this element
-          is never display:none'd — it needs real layout to boot and paint
-          correctly. This overlay sits ON TOP of it (never behind, never
-          hiding it) until the child's own first-render diagnostic confirms
-          real output landed; see showSandboxPlaceholderOverlay. }}
-        {{#if this.showSandboxPlaceholderOverlay}}
-          <div
-            class='boxel-execution-placeholder boxel-execution-placeholder--overlay'
-            aria-label='Loading interactive card'
-            aria-busy='true'
-            data-boxel-execution='prerender'
-          >
-            <this.state.placeholder />
-          </div>
+          is never display:none'd — it needs real layout geometry to boot
+          and measure correctly. While booting it is absolutely positioned
+          at opacity 0 BEHIND this in-flow placeholder, which is what sizes
+          the slot (so the box appears instantly at the prerender's real
+          height, with no white gap and no reflow when the live child takes
+          over). The child's own first-render diagnostic confirms real
+          output landed; see sandboxBooting. }}
+        {{#if this.sandboxBooting}}
+          {{#if this.state.placeholder}}
+            <div
+              class='boxel-execution-placeholder boxel-execution-placeholder--boot'
+              aria-label='Loading interactive card'
+              aria-busy='true'
+              data-boxel-execution='prerender'
+            >
+              <this.state.placeholder />
+            </div>
+          {{else}}
+            <div
+              class='boxel-execution-sandbox-boot'
+              aria-label='Loading interactive card'
+              aria-busy='true'
+            ></div>
+          {{/if}}
         {{/if}}
       </div>
     {{else if this.hasDirectRendering}}
@@ -581,11 +608,16 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
       .boxel-execution-sandbox-slot {
         min-width: 0;
         width: 100%;
-        /* Anchors .boxel-execution-placeholder--overlay, which sits ON TOP
-          of the mounted iframe (a sibling in the DOM, appended by the
-          boxelSandboxSlot modifier — never removed by this component's own
-          rerenders) until the child's first paint. */
+        min-height: 2.5rem;
+        /* Anchors the absolutely-positioned booting iframe (a sibling in
+          the DOM, appended by the boxelSandboxSlot modifier — never removed
+          by this component's own rerenders). The slot's HEIGHT is owned by
+          the surface-* API: SurfaceService.applyLayout sets an explicit
+          clamped height from the child's intrinsic report (or `100%` in
+          allocated mode); while booting it is auto — sized by the in-flow
+          placeholder. */
         position: relative;
+        overflow: hidden;
       }
 
       .boxel-execution-capsule-slot {
@@ -598,16 +630,38 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
         width: 100%;
       }
 
-      .boxel-execution-sandbox-slot > :global(iframe) {
+      /* The iframe is appended by the boxelSandboxSlot modifier, not this
+        template, so it carries no scoped-css attribute — and the scoped-css
+        compiler treats any selector containing `:global()` as fully global,
+        silently DROPPING scoped compound parts before it (a bare
+        `> :global(iframe)` here compiled to a global `iframe` rule that
+        styled every iframe on the page). The whole selector must live
+        inside `:global()`. */
+      :global(.boxel-execution-sandbox-slot > iframe) {
         border: 0;
         display: block;
-        min-height: inherit;
         width: 100%;
+        height: 100%;
+        min-height: inherit;
+        transition: opacity 120ms ease-out;
       }
 
-      .boxel-execution-placeholder--overlay {
+      :global(.boxel-execution-sandbox-slot.is-booting > iframe) {
         position: absolute;
         inset: 0;
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .boxel-execution-placeholder--boot {
+        position: relative;
+        z-index: 1;
+        width: 100%;
+        pointer-events: none;
+      }
+
+      .boxel-execution-sandbox-boot {
+        min-height: 3rem;
       }
 
       .boxel-execution-loading {

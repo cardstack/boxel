@@ -19,6 +19,19 @@ export type SurfaceHandle = string & {
 
 export type SurfaceHeightMode = 'intrinsic' | 'allocated';
 
+/**
+ * The single authority for which height mode a render format gets. Fitted
+ * cards live in tiles whose size the tile owner allocates; every other
+ * format flows at its content's intrinsic height (the child reports it, the
+ * Host applies it, and the surrounding stack scrolls — the same reading
+ * experience as an in-document card). Both sides of the Sandbox boundary
+ * derive from this one function so the parent's Surface layout and the
+ * child's decision to measure never disagree.
+ */
+export function surfaceHeightModeFor(format: string): SurfaceHeightMode {
+  return format === 'fitted' ? 'allocated' : 'intrinsic';
+}
+
 export interface SurfacePresentation {
   headerColor?: string | null;
   containerBackground?: string | null;

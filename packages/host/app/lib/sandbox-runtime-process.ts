@@ -5,6 +5,7 @@ import {
   type BoxelRenderRecord,
   type BoxelTypeHandle,
   type CodeRef,
+  surfaceHeightModeFor,
   type JSONValue,
   type LooseCardResource,
   type LooseSingleCardDocument,
@@ -479,7 +480,7 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
       throw new Error('Sandbox runtime process is closed');
     }
     this.options.surfaceService.layout(this.surface, {
-      heightMode: format === 'fitted' ? 'allocated' : 'intrinsic',
+      heightMode: surfaceHeightModeFor(format),
     });
     if (this.mounted) {
       await this.requestRender(card, format);

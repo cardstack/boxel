@@ -146,9 +146,26 @@ export default class SurfaceService extends Service {
     if (!element) {
       return;
     }
-    element.dataset.boxelSurfaceHeightMode = registration.layout.heightMode;
-    let minimumHeight = registration.layout.minimumHeight;
-    element.style.minHeight = minimumHeight ? `${minimumHeight}px` : '';
+    let { heightMode, minimumHeight } = registration.layout;
+    element.dataset.boxelSurfaceHeightMode = heightMode;
+    if (heightMode === 'allocated') {
+      // The surface's owner (a fitted tile, a grid cell) allocates the box;
+      // the surface fills whatever it was given and never influences it.
+      element.style.height = '100%';
+      element.style.minHeight = '';
+      return;
+    }
+    // Intrinsic: the surface is exactly as tall as its content, which only
+    // the renderer inside can measure (for a Sandbox, the parent cannot see
+    // into the iframe). Until the first report arrives the element keeps
+    // its natural height — sized by the in-flow placeholder while booting —
+    // and each report then sets an EXPLICIT height, not a min-height: the
+    // content measurement is scroll-height based (viewport-independent), so
+    // one report converges instead of ratcheting against the current box.
+    element.style.height = minimumHeight
+      ? `${clampIntrinsicHeight(minimumHeight)}px`
+      : '';
+    element.style.minHeight = '';
   }
 
   private installObservers(registration: SurfaceRegistration): void {
@@ -204,6 +221,16 @@ export default class SurfaceService extends Service {
 
 function finiteDimension(value: number): number {
   return Number.isFinite(value) ? Math.max(0, value) : 0;
+}
+
+/**
+ * Bounds an intrinsic-height report before it reaches CSS: a floor so a
+ * transiently-empty measurement can't collapse the surface to nothing, and
+ * a ceiling so a runaway child (or a genuinely enormous card) can't grow
+ * the host page without bound — past it, the child's own document scrolls.
+ */
+function clampIntrinsicHeight(height: number): number {
+  return Math.max(40, Math.min(2400, Math.ceil(height)));
 }
 
 function sanitizePresentation(

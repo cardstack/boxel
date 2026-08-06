@@ -12,6 +12,7 @@ import {
   Loader,
   fetcher,
   maybeHandleScopedCSSRequest,
+  surfaceHeightModeFor,
   type BoxelInstanceHandle,
   type ModuleEvaluator,
   type ModuleRegistration,
@@ -60,7 +61,14 @@ export function reportIntrinsicHeight(
 ): () => void {
   let lastReportedHeight: number | undefined;
   let reportHeight = () => {
-    let height = Math.ceil(element.getBoundingClientRect().height);
+    // Scroll height, not the bounding rect: the rect is the LAID-OUT box,
+    // which is bounded by the iframe's own current viewport — measuring it
+    // feeds the viewport back to the parent that sets the viewport, a loop
+    // that ratchets in steps and never converges on the content's height.
+    // Scroll height is the content's demand regardless of the box it's
+    // currently squeezed into (overflow included), so the very first
+    // report is already final (until the content itself changes).
+    let height = Math.ceil(element.scrollHeight);
     if (height === lastReportedHeight) {
       return;
     }
@@ -77,14 +85,35 @@ export function reportIntrinsicHeight(
     resizeObserver = new ResizeObserver(reportHeight);
     resizeObserver.observe(element);
   }
+  // Scroll height changes without a box-size change (content growing inside
+  // an overflow container, text swaps) are invisible to ResizeObserver —
+  // only a mutation observer sees them. Late-loading webfonts reflow text
+  // without mutating anything, so fonts.ready re-measures too. Both
+  // callbacks are already batch-delivered by the platform, and the
+  // value-dedupe above keeps repeat measurements off the wire.
+  let mutationObserver: MutationObserver | undefined;
+  if (typeof MutationObserver !== 'undefined') {
+    mutationObserver = new MutationObserver(reportHeight);
+    mutationObserver.observe(element, {
+      attributes: true,
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
+  }
+  globalThis.addEventListener('resize', reportHeight);
+  document.fonts?.ready.then(reportHeight).catch(() => undefined);
   // The render root exists (this modifier only attaches once `this.surface`
   // is set) but is very likely still empty at install time — bootstrap
   // reaches 'ready' well before the first render request. Reporting now
-  // establishes a baseline; the observer above reports again (and only
-  // then, since it's deduped) once the card actually renders and the
-  // element's real size lands.
+  // establishes a baseline; the observers above report again (deduped)
+  // once the card actually renders and its real content height lands.
   reportHeight();
-  return () => resizeObserver?.disconnect();
+  return () => {
+    resizeObserver?.disconnect();
+    mutationObserver?.disconnect();
+    globalThis.removeEventListener('resize', reportHeight);
+  };
 }
 
 /**
@@ -120,20 +149,28 @@ export function reportRenderDiagnosticOnResize(
 
 const attachSurface = modifier<{
   Args: {
-    Positional: [SandboxSurfaceClient, (element: HTMLElement) => void];
+    Positional: [SandboxSurfaceClient, (element: HTMLElement) => void, Format];
   };
   Element: HTMLElement;
-}>((element, [surface, measureAndReportRenderDiagnostic]) => {
+}>((element, [surface, measureAndReportRenderDiagnostic, format]) => {
   let disconnectEvents = connectSandboxSurface(element, surface, (error) => {
     console.error('Sandbox Surface capability failed', error);
   });
-  let stopHeightReporting = reportIntrinsicHeight(element, surface);
+  // In allocated mode the parent's tile owns the box — a child that keeps
+  // reporting intrinsic measurements would stomp the parent's `height:
+  // 100%` back to a content-derived pixel value. The format is a tracked
+  // arg, so a format switch re-runs this modifier and starts/stops the
+  // reporter to match the new mode.
+  let stopHeightReporting =
+    surfaceHeightModeFor(format) === 'intrinsic'
+      ? reportIntrinsicHeight(element, surface)
+      : undefined;
   let stopDiagnosticReporting = reportRenderDiagnosticOnResize(
     element,
     measureAndReportRenderDiagnostic,
   );
   return () => {
-    stopHeightReporting();
+    stopHeightReporting?.();
     stopDiagnosticReporting();
     disconnectEvents();
   };
@@ -528,9 +565,13 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
       </p>
     {{else if this.surface}}
       <main
-        class='boxel-sandbox-runtime'
+        class='boxel-sandbox-runtime boxel-sandbox-runtime--{{this.format}}'
         data-boxel-sandbox-runtime
-        {{attachSurface this.surface this.measureAndReportRenderDiagnostic}}
+        {{attachSurface
+          this.surface
+          this.measureAndReportRenderDiagnostic
+          this.format
+        }}
       >
         {{#if this.renderedComponent}}
           <this.renderedComponent @format={{this.format}} />
@@ -541,12 +582,32 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
       :global(html),
       :global(body) {
         margin: 0;
-        min-height: 100%;
         background: transparent;
       }
 
       .boxel-sandbox-runtime {
-        min-height: 100%;
+        width: 100%;
+        /* The root itself never scrolls — content flows at natural height
+          so the intrinsic measurement reads the content's true demand, and
+          collapsing-margin/scrollbar noise can't leak into it. Once the
+          parent has applied the reported height, this document's own <html>
+          scrolls anything past the intrinsic clamp ceiling. */
+        overflow: hidden;
+        min-height: 2.5rem;
+      }
+
+      /* An isolated card is a full page: even while its content is still
+        streaming in, it should claim at least the viewport the parent gave
+        the iframe (100vh here IS that iframe's height), exactly like an
+        in-document stack item. */
+      .boxel-sandbox-runtime--isolated {
+        min-height: 100vh;
+      }
+
+      /* Allocated mode (fitted): the tile owner sized the iframe; fill it
+        so card roots styled `height: 100%` resolve against a real box. */
+      .boxel-sandbox-runtime--fitted {
+        height: 100vh;
       }
 
       .boxel-sandbox-runtime__error {
