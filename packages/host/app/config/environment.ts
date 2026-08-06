@@ -45,7 +45,7 @@ export default config as {
   logLevels: string;
   iconsURL: string;
   autoSaveDelayMs: number;
-  roomStateUpdateTimeoutMs: number;
+  skillsRefreshTimeoutMs: number;
   monacoDebounceMs: number;
   monacoCursorDebounceMs: number;
   serverEchoDebounceMs: number;

@@ -881,4 +881,45 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
 
     await wedged;
   });
+  test('a stalled skills refresh does not hold up the message', async function (assert) {
+    // No open card, so the only thing the send waits on is the skills refresh.
+    setCardInOperatorModeState();
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    let roomId = await openAiAssistant();
+
+    // Refreshing re-uploads any skill whose content changed, and those uploads
+    // have no deadline of their own. One that never returns used to keep the
+    // message in the browser indefinitely.
+    mockMatrixUtils.setUploadContentInterceptor(
+      () => new Promise<void>(() => {}),
+    );
+
+    await fillIn('[data-test-message-field]', 'does this get out?');
+    click('[data-test-send-message-btn]');
+
+    await waitUntil(
+      () =>
+        (getRoomEvents(roomId) ?? []).some(
+          (event: any) => event.content?.body === 'does this get out?',
+        ),
+      {
+        timeout: 10_000,
+        timeoutMessage:
+          'the message never reached the room while the skills refresh was stalled',
+      },
+    );
+
+    assert.ok(
+      (getRoomEvents(roomId) ?? []).some(
+        (event: any) => event.content?.body === 'does this get out?',
+      ),
+      'the message is sent without waiting out the stalled refresh',
+    );
+
+    mockMatrixUtils.setUploadContentInterceptor(undefined);
+  });
 });

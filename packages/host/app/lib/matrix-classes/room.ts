@@ -39,7 +39,14 @@ export default class Room {
 
   constructor(public readonly roomId: string) {}
 
+  // Sends are serialised so the room's messages keep the order the user sent
+  // them in.
   readonly mutex = new Mutex();
+  // State writes are serialised separately. They read, transform, and write
+  // back, so they need a lock of their own — but sharing the send lock meant a
+  // slow state write held up the user's next message, and one that never
+  // finished stopped it being sent at all.
+  readonly stateMutex = new Mutex();
   private readonly emitter = new EventEmitter();
 
   waitForNextEvent(): Promise<void> {

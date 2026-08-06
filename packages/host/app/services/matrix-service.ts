@@ -176,16 +176,14 @@ const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];
 const UNREACHABLE_RETRY_INTERVAL_MS = 10_000;
 const MAX_UNREACHABLE_RETRY_ATTEMPTS = 6;
 
-// A room's mutex serialises state writes against message sends, so for as long
-// as a state write runs the user's message cannot leave the browser. The work
-// inside one is network-bound — reading every enabled skill, re-uploading the
-// ones that changed — and none of it carries its own deadline, so a single
-// request that never settles holds the room for as long as the tab lives. That
-// is not hypothetical: a message once sat unsent for 23 minutes behind one, with
-// no error and no failed state, and went out only when the request finally
-// returned. Bounding the write means the worst case is a skills config that
-// misses one refresh, instead of a message the user believes they sent.
-const ROOM_STATE_UPDATE_TIMEOUT_MS = ENV.roomStateUpdateTimeoutMs;
+// Sending refreshes the room's copy of the enabled skills first, so the bot
+// answers against the skills as they are now. That refresh reads every enabled
+// skill and re-uploads the ones that changed, and none of those requests carry
+// a deadline of their own — so a single one that never settles used to leave
+// the message in the browser for as long as the tab lived, with no error and
+// nothing to retry. Past this point the message is worth more than the refresh:
+// send it, and let the next message carry the newer skills.
+const SKILLS_REFRESH_TIMEOUT_MS = ENV.skillsRefreshTimeoutMs;
 
 const realmEventsLogger = logger('realm:events');
 
@@ -1563,6 +1561,28 @@ export default class MatrixService extends Service {
     return await this.client.downloadCardFileDef(cardFileDef);
   }
 
+  // Refresh the room's skills, but never let that cost the user their message.
+  // The refresh keeps running on its own state lock and lands when it lands.
+  private async refreshSkillsBeforeSend(roomId: string) {
+    let refresh = this.updateSkillsAndToolsIfNeeded(roomId).catch((e) => {
+      console.error(`Failed to refresh skills in ${roomId} before sending`, e);
+    });
+    let timedOut = Symbol('timed-out');
+    let timer: ReturnType<typeof setTimeout>;
+    let deadline = new Promise<typeof timedOut>((resolve) => {
+      timer = setTimeout(() => resolve(timedOut), SKILLS_REFRESH_TIMEOUT_MS);
+    });
+    try {
+      if ((await Promise.race([refresh, deadline])) === timedOut) {
+        console.warn(
+          `Skills refresh in ${roomId} is still running after ${SKILLS_REFRESH_TIMEOUT_MS}ms; sending without waiting for it`,
+        );
+      }
+    } finally {
+      clearTimeout(timer!);
+    }
+  }
+
   // Re-upload skills and commands. FileDefManager's cache will ensure we don't re-upload the same content.
   // If there are new urls and content hashes for skills or commands, The room state will be updated.
   async updateSkillsAndToolsIfNeeded(roomId: string) {
@@ -1973,7 +1993,7 @@ export default class MatrixService extends Service {
       ),
     );
 
-    await this.updateSkillsAndToolsIfNeeded(roomId);
+    await this.refreshSkillsBeforeSend(roomId);
     let contentData = await this.withContextAndAttachments(
       context,
       attachedCards,
@@ -2407,59 +2427,28 @@ export default class MatrixService extends Service {
     ) => Promise<Record<string, any>>,
   ) {
     let roomData = this.ensureRoomData(roomId);
-    await roomData.mutex.dispatch(async () => {
-      let expired = false;
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      let deadline = new Promise<void>((resolve) => {
-        timer = setTimeout(() => {
-          expired = true;
-          resolve();
-        }, ROOM_STATE_UPDATE_TIMEOUT_MS);
-      });
+    await roomData.stateMutex.dispatch(async () => {
+      let currentContent = await this.getStateEventSafe(
+        roomId,
+        eventType,
+        stateKey,
+      );
 
-      let write = async () => {
-        let currentContent = await this.getStateEventSafe(
-          roomId,
-          eventType,
-          stateKey,
-        );
+      // Store the original content string for comparison
+      let currentContentString = stringify(currentContent ?? {});
+      let newContent = await transformContent(currentContent ?? {});
 
-        // Store the original content string for comparison
-        let currentContentString = stringify(currentContent ?? {});
-        let newContent = await transformContent(currentContent ?? {});
-
-        // Skip sending state event if content hasn't changed
-        if (currentContentString === stringify(newContent)) {
-          return;
-        }
-
-        // The room was handed to whoever was queued behind this write, so the
-        // state it was computed against is no longer the state it would land
-        // on. Leave it to the next write rather than clobber theirs.
-        if (expired) {
-          return;
-        }
-
-        return this.client.sendStateEvent(
-          roomId,
-          eventType,
-          newContent,
-          stateKey,
-        );
-      };
-
-      try {
-        // Whichever finishes first frees the room. A write still running past
-        // the deadline is left to finish on its own and drop its result.
-        await Promise.race([write(), deadline]);
-        if (expired) {
-          console.warn(
-            `Timed out updating ${eventType} state in ${roomId} after ${ROOM_STATE_UPDATE_TIMEOUT_MS}ms; releasing the room so queued messages can be sent`,
-          );
-        }
-      } finally {
-        clearTimeout(timer);
+      // Skip sending state event if content hasn't changed
+      if (currentContentString === stringify(newContent)) {
+        return;
       }
+
+      return this.client.sendStateEvent(
+        roomId,
+        eventType,
+        newContent,
+        stateKey,
+      );
     });
   }
 
