@@ -137,6 +137,7 @@ module.exports = function (environment) {
       : process.env.MATRIX_URL || defaults.matrixURL,
     matrixServerName: process.env.MATRIX_SERVER_NAME || 'localhost',
     autoSaveDelayMs: 500,
+    roomStateUpdateTimeoutMs: 30_000,
     monacoDebounceMs: 500,
     monacoCursorDebounceMs: 200,
     serverEchoDebounceMs: 5000,
@@ -208,6 +209,7 @@ module.exports = function (environment) {
     ENV.APP.rootElement = '#ember-testing';
     ENV.APP.autoboot = false;
     ENV.autoSaveDelayMs = 0;
+    ENV.roomStateUpdateTimeoutMs = 500;
     ENV.monacoDebounceMs = 0;
     ENV.monacoCursorDebounceMs = 0;
     ENV.realmServerURL = 'http://test-realm';

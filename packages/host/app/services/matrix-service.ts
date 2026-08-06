@@ -176,6 +176,17 @@ const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];
 const UNREACHABLE_RETRY_INTERVAL_MS = 10_000;
 const MAX_UNREACHABLE_RETRY_ATTEMPTS = 6;
 
+// A room's mutex serialises state writes against message sends, so for as long
+// as a state write runs the user's message cannot leave the browser. The work
+// inside one is network-bound — reading every enabled skill, re-uploading the
+// ones that changed — and none of it carries its own deadline, so a single
+// request that never settles holds the room for as long as the tab lives. That
+// is not hypothetical: a message once sat unsent for 23 minutes behind one, with
+// no error and no failed state, and went out only when the request finally
+// returned. Bounding the write means the worst case is a skills config that
+// misses one refresh, instead of a message the user believes they sent.
+const ROOM_STATE_UPDATE_TIMEOUT_MS = ENV.roomStateUpdateTimeoutMs;
+
 const realmEventsLogger = logger('realm:events');
 
 // Bound on the test-only `postLoginCompleted` transition record below. A boot
@@ -2397,27 +2408,58 @@ export default class MatrixService extends Service {
   ) {
     let roomData = this.ensureRoomData(roomId);
     await roomData.mutex.dispatch(async () => {
-      let currentContent = await this.getStateEventSafe(
-        roomId,
-        eventType,
-        stateKey,
-      );
+      let expired = false;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      let deadline = new Promise<void>((resolve) => {
+        timer = setTimeout(() => {
+          expired = true;
+          resolve();
+        }, ROOM_STATE_UPDATE_TIMEOUT_MS);
+      });
 
-      // Store the original content string for comparison
-      let currentContentString = stringify(currentContent ?? {});
-      let newContent = await transformContent(currentContent ?? {});
+      let write = async () => {
+        let currentContent = await this.getStateEventSafe(
+          roomId,
+          eventType,
+          stateKey,
+        );
 
-      // Skip sending state event if content hasn't changed
-      if (currentContentString === stringify(newContent)) {
-        return;
+        // Store the original content string for comparison
+        let currentContentString = stringify(currentContent ?? {});
+        let newContent = await transformContent(currentContent ?? {});
+
+        // Skip sending state event if content hasn't changed
+        if (currentContentString === stringify(newContent)) {
+          return;
+        }
+
+        // The room was handed to whoever was queued behind this write, so the
+        // state it was computed against is no longer the state it would land
+        // on. Leave it to the next write rather than clobber theirs.
+        if (expired) {
+          return;
+        }
+
+        return this.client.sendStateEvent(
+          roomId,
+          eventType,
+          newContent,
+          stateKey,
+        );
+      };
+
+      try {
+        // Whichever finishes first frees the room. A write still running past
+        // the deadline is left to finish on its own and drop its result.
+        await Promise.race([write(), deadline]);
+        if (expired) {
+          console.warn(
+            `Timed out updating ${eventType} state in ${roomId} after ${ROOM_STATE_UPDATE_TIMEOUT_MS}ms; releasing the room so queued messages can be sent`,
+          );
+        }
+      } finally {
+        clearTimeout(timer);
       }
-
-      return this.client.sendStateEvent(
-        roomId,
-        eventType,
-        newContent,
-        stateKey,
-      );
     });
   }
 

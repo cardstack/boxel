@@ -82,6 +82,8 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
     })(),
   });
 
+  let { getRoomEvents } = mockMatrixUtils;
+
   let noop = () => {};
 
   hooks.beforeEach(async function () {
@@ -843,5 +845,40 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
       parsed?.[roomId]?.length,
       'persisted entry is removed once matrix finalizes the send',
     );
+  });
+  test('a state update that never finishes still releases the room for sending', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    let roomId = await openAiAssistant();
+    let matrixService = getService('matrix-service') as any;
+
+    // Refreshing a room's skills happens under the same per-room mutex the
+    // send needs, and the network calls inside it carry no deadline. One that
+    // never returns used to hold the room for the life of the tab, leaving the
+    // message in the browser with no error and no failed bubble.
+    let wedged = matrixService.updateStateEvent(
+      roomId,
+      'app.boxel.test.wedged-state',
+      '',
+      () => new Promise(() => {}),
+    );
+
+    await matrixService.sendEvent(roomId, 'm.room.message', {
+      msgtype: 'm.text',
+      body: 'queued behind the wedge',
+    });
+
+    assert.ok(
+      (getRoomEvents(roomId) ?? []).some(
+        (event: any) => event.content?.body === 'queued behind the wedge',
+      ),
+      'the send goes out once the stalled state update gives the room back',
+    );
+
+    await wedged;
   });
 });
