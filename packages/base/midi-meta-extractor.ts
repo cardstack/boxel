@@ -138,10 +138,6 @@ class TrackReader {
     return this.#cursor >= this.#end;
   }
 
-  get position(): number {
-    return this.#cursor;
-  }
-
   byte(): number | undefined {
     if (this.#cursor >= this.#end) {
       return undefined;
