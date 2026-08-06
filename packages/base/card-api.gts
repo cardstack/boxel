@@ -155,6 +155,7 @@ import {
   deserialize,
   makeMetaForField,
   makeRelativeURL,
+  rebaseReferencesFor,
   serialize,
   serializeCard,
   serializeCardResource,
@@ -1406,9 +1407,13 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
 
     visited.add(value.id ?? (value as CardDef)[localId]);
 
-    let serialized = callSerializeHook(this.card, value, doc, visited, opts) as
-      | (JSONAPIResource & { id: string; type: string })
-      | null;
+    let serialized = callSerializeHook(
+      this.card,
+      value,
+      doc,
+      visited,
+      rebaseReferencesFor(value, opts),
+    ) as (JSONAPIResource & { id: string; type: string }) | null;
     if (serialized) {
       let resource: JSONAPIResource = {
         relationships: {
@@ -1965,7 +1970,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         value,
         doc,
         visited,
-        opts,
+        rebaseReferencesFor(value, opts),
       );
       if (serialized.meta && Object.keys(serialized.meta).length === 0) {
         delete serialized.meta;

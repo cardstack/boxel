@@ -662,6 +662,64 @@ module('Integration | serialization', function (hooks) {
     );
   });
 
+  test('an included resource relativizes its references against its own id', async function (assert) {
+    // A resource carries its references relative to its OWN id, independent of
+    // the document that delivered it — the base a link target is serialized
+    // against is the target's id, not the primary's. `cardClassFromResource`
+    // resolves an included resource's `adoptsFrom` that way, so a
+    // primary-relative module ref on an included resource would resolve to the
+    // wrong module.
+    class Toy extends CardDef {
+      @field name = contains(StringField);
+    }
+    class Pet extends CardDef {
+      @field name = contains(StringField);
+      @field favoriteToy = linksTo(Toy);
+    }
+    class Person extends CardDef {
+      @field pet = linksTo(Pet);
+    }
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Person, Pet, Toy },
+      },
+    });
+
+    let ball = new Toy({ name: 'Ball' });
+    let mango = new Pet({ name: 'Mango', favoriteToy: ball });
+    let hassan = new Person({ pet: mango });
+    await saveCard(ball, `${testRealmURL}Toy/ball`, loader);
+    await saveCard(mango, `${testRealmURL}Pet/mango`, loader);
+    await saveCard(hassan, `${testRealmURL}Person/hassan`, loader);
+
+    let doc = serializeCard(hassan, {});
+    let petResource = doc.included?.find(
+      (r) => r.id === `${testRealmURL}Pet/mango`,
+    );
+    assert.ok(petResource, 'the linked pet rides along in included[]');
+    assert.strictEqual(
+      petResource?.meta.adoptsFrom.module,
+      '../test-cards',
+      "the included resource's module is relative to its own id, not the primary's",
+    );
+    assert.strictEqual(
+      (petResource?.relationships?.favoriteToy as Relationship)?.links?.self,
+      '../Toy/ball',
+      "a link on the included resource is relative to that resource's id",
+    );
+    assert.strictEqual(
+      doc.data.meta.adoptsFrom.module,
+      '../test-cards',
+      'the primary resource still relativizes against its own id',
+    );
+    assert.strictEqual(
+      (doc.data.relationships?.pet as Relationship)?.links?.self,
+      '../Pet/mango',
+      "the primary's own relationship stays relative to the primary",
+    );
+  });
+
   test('can serialize a card that has an ID', async function (assert) {
     class Person extends CardDef {
       @field firstName = contains(StringField);
@@ -1126,7 +1184,7 @@ module('Integration | serialization', function (hooks) {
           relationships: { ...cardInfoLinks },
           meta: {
             adoptsFrom: {
-              module: testRRI('test-cards'),
+              module: rri('../test-cards'),
               name: 'Toy',
             },
           },
@@ -1142,7 +1200,7 @@ module('Integration | serialization', function (hooks) {
             ...cardInfoLinks,
             favoriteToy: {
               links: {
-                self: `${testRealmURL}Toy/spookyToiletPaper`,
+                self: `../Toy/spookyToiletPaper`,
               },
               data: {
                 id: `${testRealmURL}Toy/spookyToiletPaper`,
@@ -1152,7 +1210,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: testRRI('test-cards'),
+              module: rri('../test-cards'),
               name: 'Pet',
             },
           },
@@ -1885,7 +1943,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: testRRI('test-cards'),
+              module: rri('../test-cards'),
               name: 'Person',
             },
           },
@@ -2120,7 +2178,7 @@ module('Integration | serialization', function (hooks) {
           relationships: { ...cardInfoLinks },
           meta: {
             adoptsFrom: {
-              module: testRRI('test-cards'),
+              module: rri('../test-cards'),
               name: 'Toy',
             },
           },
@@ -2256,7 +2314,7 @@ module('Integration | serialization', function (hooks) {
           relationships: { ...cardInfoLinks },
           meta: {
             adoptsFrom: {
-              module: testRRI('test-cards'),
+              module: rri('../test-cards'),
               name: 'Toy',
             },
           },
@@ -2402,7 +2460,7 @@ module('Integration | serialization', function (hooks) {
           relationships: { ...cardInfoLinks },
           meta: {
             adoptsFrom: {
-              module: testRRI('test-cards'),
+              module: rri('../test-cards'),
               name: 'Toy',
             },
           },
@@ -3411,7 +3469,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: testRRI('test-cards'),
+              module: rri('../test-cards'),
               name: 'Pet',
             },
           },
@@ -3429,7 +3487,7 @@ module('Integration | serialization', function (hooks) {
           relationships: {
             ...cardInfoLinks,
             pet: {
-              links: { self: `${testRealmURL}Pet/mango` },
+              links: { self: `../Pet/mango` },
               data: { id: `${testRealmURL}Pet/mango`, type: 'card' },
             },
             friend: { links: { self: null } },
@@ -3438,7 +3496,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: testRRI('test-cards'),
+              module: rri('../test-cards'),
               name: 'Person',
             },
           },
@@ -5584,7 +5642,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: testRRI('test-cards'),
+              module: rri('../test-cards'),
               name: 'Certificate',
             },
           },
@@ -5600,7 +5658,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: testRRI('test-cards'),
+              module: rri('../test-cards'),
               name: 'Certificate',
             },
           },
@@ -5616,7 +5674,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: testRRI('test-cards'),
+              module: rri('../test-cards'),
               name: 'Certificate',
             },
           },
@@ -5716,7 +5774,7 @@ module('Integration | serialization', function (hooks) {
             relationships: { ...cardInfoLinks },
             meta: {
               adoptsFrom: {
-                module: rri('./test-cards'),
+                module: rri('../test-cards'),
                 name: 'Certificate',
               },
             },
@@ -5732,7 +5790,7 @@ module('Integration | serialization', function (hooks) {
             relationships: { ...cardInfoLinks },
             meta: {
               adoptsFrom: {
-                module: rri('./test-cards'),
+                module: rri('../test-cards'),
                 name: 'Certificate',
               },
             },
@@ -5748,7 +5806,7 @@ module('Integration | serialization', function (hooks) {
             relationships: { ...cardInfoLinks },
             meta: {
               adoptsFrom: {
-                module: rri('./test-cards'),
+                module: rri('../test-cards'),
                 name: 'Certificate',
               },
             },
@@ -6117,7 +6175,7 @@ module('Integration | serialization', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: testRRI('test-cards'),
+                module: rri('../test-cards'),
                 name: 'Pet',
               },
             },
@@ -6131,7 +6189,7 @@ module('Integration | serialization', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: testRRI('test-cards'),
+                module: rri('../test-cards'),
                 name: 'Pet',
               },
             },
@@ -6734,7 +6792,7 @@ module('Integration | serialization', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: testRRI('test-cards'),
+                module: rri('../test-cards'),
                 name: 'Toy',
               },
             },
@@ -6749,7 +6807,7 @@ module('Integration | serialization', function (hooks) {
             relationships: {
               favoriteToy: {
                 links: {
-                  self: `${testRealmURL}Toy/spookyToiletPaper`,
+                  self: `../Toy/spookyToiletPaper`,
                 },
                 data: {
                   id: `${testRealmURL}Toy/spookyToiletPaper`,
@@ -6759,7 +6817,7 @@ module('Integration | serialization', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: testRRI('test-cards'),
+                module: rri('../test-cards'),
                 name: 'Pet',
               },
             },
@@ -7017,7 +7075,7 @@ module('Integration | serialization', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: testRRI('test-cards'),
+                module: rri('../test-cards'),
                 name: 'Pet',
               },
             },
@@ -7105,7 +7163,7 @@ module('Integration | serialization', function (hooks) {
             relationships: { ...cardInfoLinks },
             meta: {
               adoptsFrom: {
-                module: testRRI('test-cards'),
+                module: rri('../test-cards'),
                 name: 'Pet',
               },
             },
@@ -7477,7 +7535,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: testRRI('test-cards'),
+              module: rri('../test-cards'),
               name: 'Pet',
             },
           },
@@ -7498,7 +7556,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: testRRI('test-cards'),
+              module: rri('../test-cards'),
               name: 'Pet',
             },
           },
@@ -7516,18 +7574,18 @@ module('Integration | serialization', function (hooks) {
           relationships: {
             ...cardInfoLinks,
             'pets.0': {
-              links: { self: `${testRealmURL}Pet/mango` },
+              links: { self: `../Pet/mango` },
               data: { id: `${testRealmURL}Pet/mango`, type: 'card' },
             },
             'pets.1': {
-              links: { self: `${testRealmURL}Pet/van-gogh` },
+              links: { self: `../Pet/van-gogh` },
               data: { id: `${testRealmURL}Pet/van-gogh`, type: 'card' },
             },
             cardTheme: { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
-              module: testRRI('test-cards'),
+              module: rri('../test-cards'),
               name: 'Friend',
             },
           },
