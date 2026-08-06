@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": { "name": "Customer", "module": "../blocks/commerce/customer" },
+      "specType": "card",
+      "readMe": "## Customer\n\nThe party record every commercial document links to. Consumes base fields only: `EmailField`, `PhoneNumberField` (E.164 string), `AddressField`.\n\n```ts\nimport { Customer } from '../blocks/commerce/customer';\n@field customer = linksTo(Customer);\n```\n\nLinked from Invoice, Order, and Subscription.\n\n**Non-goals:** person/company split, multiple contacts per account, customer lifecycle status — those belong to the CRM records (Lead/Opportunity/Deal), not the billing party.",
+      "cardInfo": {
+        "name": "Customer (commerce kit)",
+        "summary": "Billing party record: name, email, phone, billing address — all base fields. Link target for Invoice, Order, Subscription.",
+        "notes": null,
+        "cardThumbnailURL": null
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": { "self": "../Customer/acme-industries" }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
