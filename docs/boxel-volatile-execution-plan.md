@@ -25,7 +25,7 @@ Volatility is a **mode orthogonal to tier**, not a tier. A volatile card still
 renders in Capsule or Sandbox per its classification; execution-tier rule 9
 holds (promotion may strengthen isolation, never grant Direct).
 
-## Promotion and demotion
+## Promotion is one-way for the session
 
 Promote a mounted card to volatile when editing intent is observed:
 
@@ -34,11 +34,14 @@ Promote a mounted card to volatile when editing intent is observed:
   module;
 - an explicit author affordance requests it.
 
-Demote on a quiet-period lease expiring — the frozen branch's
-`VolatileModuleRegistry` (90s lease, renewable by an in-flight save) is the
-proven shape; the lease-expiry-mid-save edge case in the extraction dossier
-(§3.4) carries over verbatim. Demotion returns the card to the stable runtime
-at the last persisted generation.
+There is no demotion. Once a module goes volatile it stays volatile in the
+loader until the tab closes; the next fresh session starts stable again from
+persisted state. This deletes the frozen branch's quiet-period lease
+machinery (`VolatileModuleRegistry`'s 90s renewable lease) and its
+lease-expiry-mid-save race entirely — the volatile registry simply retains
+entries for the session lifetime. The cost is bounded: a volatile session's
+extra state is per-tab and evaporates with it, and the stable-graph isolation
+below guarantees the rest of the workspace never pays for it.
 
 ## Isolation requirement: volatility must not leak
 
@@ -80,7 +83,7 @@ boundary rules rather than copied from vite.
 ## Sequencing
 
 1. Sandbox HMR generations per the extraction dossier (in progress).
-2. Volatile promotion/demotion: session lease, shadowing module registry,
+2. Volatile promotion: session-lifetime shadowing module registry,
    stable-graph isolation, routing input to the execution policy.
 3. Capsule-tier volatile support (needs the DOM-adoption dossier the
    extraction analysis explicitly deferred).
@@ -91,7 +94,7 @@ boundary rules rather than copied from vite.
 ## Protocol implications
 
 This un-defers more of RP-17.1 and will need spec sections + conformance
-statements for: volatile promotion/demotion as routing inputs (RP-6
-extension), generation acknowledgement semantics shared with HMR, and the
+statements for: volatile promotion as a routing input (RP-6 extension),
+generation acknowledgement semantics shared with HMR, and the
 isolation guarantee that a volatile session cannot invalidate a stable
 consumer's render (a negative conformance test).
