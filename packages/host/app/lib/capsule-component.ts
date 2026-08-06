@@ -8,6 +8,7 @@ import { htmlSafe } from '@ember/template';
 import { createTemplateFactory } from '@ember/template-factory';
 
 import {
+  assertKnownRenderDependencies,
   decodeScopedCSSRequest,
   type CodeRef,
 } from '@cardstack/runtime-common';
@@ -164,6 +165,7 @@ export async function createCapsuleRenderSlot(
     moduleIdentifier: string,
   ) => Promise<Record<string, unknown>>,
 ): Promise<CapsuleRenderSlot> {
+  assertKnownRenderDependencies(bundle);
   let definitions = new Map<string, _CapsuleComponent>();
   let stylesheets = decodedStylesheets(bundle);
 
@@ -182,7 +184,7 @@ export async function createCapsuleRenderSlot(
   let moduleCache = new Map<string, Record<string, unknown>>();
   let resolveScope = async (reference: CapsuleScopeReference) => {
     switch (reference.kind) {
-      case 'component': {
+      case 'authored-component': {
         let definition = definitions.get(reference.component);
         if (!definition) {
           throw new Error(
@@ -211,7 +213,7 @@ export async function createCapsuleRenderSlot(
         }
         return module[reference.name];
       }
-      case 'value':
+      case 'literal-value':
         return structuredClone(reference.value);
     }
   };

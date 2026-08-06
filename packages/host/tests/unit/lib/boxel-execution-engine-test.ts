@@ -89,11 +89,14 @@ class TestRuntime {
   async getField(): Promise<never> {
     throw new Error('not used');
   }
+  recordTamper?: (record: BoxelRenderRecord) => BoxelRenderRecord;
+
   async buildRenderRecord(): Promise<BoxelRenderRecord> {
     if (this.failBuild) {
       throw new Error(`${this.mode} render failed`);
     }
-    return renderRecord(this.mode, this.prefersFullSandbox);
+    let record = renderRecord(this.mode, this.prefersFullSandbox);
+    return this.recordTamper ? this.recordTamper(record) : record;
   }
   async serializeCard(): Promise<never> {
     throw new Error('not used');
@@ -671,6 +674,50 @@ module('Unit | Boxel execution engine', function () {
       session.snapshot.error?.message,
       'capsule render failed',
     );
+
+    await session.destroy();
+    engine.destroy();
+  });
+
+  test('an unsupported protocol version or required feature fails closed and retains last-known-good', async function (assert) {
+    let direct = new TestRuntime('direct');
+    let capsule = new TestRuntime('capsule');
+    let sandbox = new TestRuntime('sandbox');
+    let router = new BoxelRuntimeRouter(
+      direct as unknown as DirectBoxelRuntime,
+      () => capsule as unknown as CapsuleBoxelRuntime,
+      () => sandbox as unknown as SandboxRuntimeProcess,
+    );
+    let engine = new BoxelExecutionEngine(router, async () => capsuleSource);
+    let session = engine.createSession();
+
+    let first = await session.update(executionRequest());
+    assert.strictEqual(session.snapshot.status, 'ready');
+
+    capsule.recordTamper = (record) => ({ ...record, protocolVersion: 999 });
+    let failedVersion = await session.update(executionRequest());
+    assert.strictEqual(failedVersion, undefined);
+    assert.strictEqual(
+      session.snapshot.current,
+      first,
+      'an unknown record version cannot replace last-known-good',
+    );
+    assert.true(
+      session.snapshot.error?.message.includes('protocol version 999'),
+    );
+
+    capsule.recordTamper = (record) => ({
+      ...record,
+      boxel: { ...record.boxel, requiredFeatures: ['time-travel'] },
+    });
+    let failedFeature = await session.update(executionRequest());
+    assert.strictEqual(failedFeature, undefined);
+    assert.strictEqual(
+      session.snapshot.current,
+      first,
+      'an unknown required feature cannot replace last-known-good',
+    );
+    assert.true(session.snapshot.error?.message.includes('time-travel'));
 
     await session.destroy();
     engine.destroy();

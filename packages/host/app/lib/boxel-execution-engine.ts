@@ -1,10 +1,19 @@
-import type {
-  BoxelInstanceHandle,
-  BoxelRenderRecord,
-  LooseCardResource,
-  LooseSingleCardDocument,
-  RealmResourceIdentifier,
+import {
+  assertBoxelExecutionProtocolVersion,
+  assertSupportedFeatures,
+  type BoxelInstanceHandle,
+  type BoxelRenderRecord,
+  type LooseCardResource,
+  type LooseSingleCardDocument,
+  type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
+
+/**
+ * The semantic-protocol features this Host understands. Producers stamp
+ * requiredFeatures on their records; anything outside this set fails closed
+ * at record admission rather than rendering a partial semantic.
+ */
+const SUPPORTED_EXECUTION_FEATURES: ReadonlySet<string> = new Set();
 
 import {
   classifyBoxelSource,
@@ -244,6 +253,15 @@ export class BoxelExecutionSession {
             );
       this.assertCurrent(generation);
       let renderRecord = await lease.runtime.buildRenderRecord(card);
+      // Semantic-record admission (RP-14.3): an unsupported protocol version
+      // or required feature rejects the whole generation here, so the session
+      // retains its last-known-good output instead of rendering an unknown
+      // record shape.
+      assertBoxelExecutionProtocolVersion(renderRecord.protocolVersion);
+      assertSupportedFeatures(
+        renderRecord.boxel.requiredFeatures,
+        SUPPORTED_EXECUTION_FEATURES,
+      );
       this.assertCurrent(generation);
       return { generation, lease, card, renderRecord };
     } catch (error) {

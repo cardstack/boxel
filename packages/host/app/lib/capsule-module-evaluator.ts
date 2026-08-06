@@ -1,6 +1,7 @@
 import 'ses';
 
 import {
+  BOXEL_EXECUTION_PROTOCOL_VERSION,
   bfmRefFormatAndSize,
   bfmResolvedEmbedStyle,
   cardTypeName,
@@ -10,6 +11,12 @@ import {
   replaceMermaidSvgs,
   resolveRRIReference,
   trimJsonExtension,
+  type RenderDependency,
+  type SafeEvent,
+  type SafeEventTarget,
+  type TemplateBundle,
+  type TemplateComponentInstanceDescriptor,
+  type TemplateDescriptor,
 } from '@cardstack/runtime-common';
 import {
   CardContextName,
@@ -36,27 +43,12 @@ import { capsuleSearchEntryWireQueryFromQuery } from '@cardstack/host/lib/capsul
 
 import { createCapsuleCompartment } from '../../workers/capsule-module-registration-evaluator';
 
-export type CapsuleScopeReference =
-  | { kind: 'component'; component: string }
-  | { kind: 'trusted-export'; module: string; name: string }
-  | { kind: 'value'; value: unknown };
+export type CapsuleScopeReference = RenderDependency;
 
-export interface CapsuleTemplateDescriptor {
-  id: string;
-  block: string;
-  moduleName: string;
-  isStrictMode: boolean;
-  stylesheets: string[];
-  scope: CapsuleScopeReference[];
-  instance: CapsuleComponentInstanceDescriptor;
-}
+export type CapsuleTemplateDescriptor = TemplateDescriptor;
 
-export interface CapsuleComponentInstanceDescriptor {
-  handle: string;
-  state: Record<string, unknown>;
-  getters: string[];
-  actions: string[];
-}
+export type CapsuleComponentInstanceDescriptor =
+  TemplateComponentInstanceDescriptor;
 
 export type CapsuleComponentEffect =
   | {
@@ -75,10 +67,7 @@ export interface CapsuleComponentActionResult extends CapsuleComponentInstanceDe
   returnValue?: unknown;
 }
 
-export interface CapsuleTemplateBundle {
-  root: string;
-  templates: Record<string, CapsuleTemplateDescriptor>;
-}
+export type CapsuleTemplateBundle = TemplateBundle;
 
 export interface CapsuleTrustedExportIdentity {
   module: string;
@@ -126,9 +115,7 @@ interface CapsuleCardFieldDefinition {
   computeVia?: (this: Record<string, unknown>) => unknown;
 }
 
-function safeEventTarget(
-  target: EventTarget | null,
-): Record<string, unknown> | null {
+function safeEventTarget(target: EventTarget | null): SafeEventTarget | null {
   if (typeof Element === 'undefined' || !(target instanceof Element)) {
     return null;
   }
@@ -163,10 +150,10 @@ function safeEventTarget(
   if (source.dataset) {
     result.dataset = Object.fromEntries(Object.entries(source.dataset));
   }
-  return result;
+  return result as unknown as SafeEventTarget;
 }
 
-function safeEvent(event: Event): Record<string, unknown> {
+function safeEvent(event: Event): SafeEvent {
   let result: Record<string, unknown> = {
     type: event.type,
     bubbles: event.bubbles,
@@ -211,7 +198,7 @@ function safeEvent(event: Event): Record<string, unknown> {
       result[property] = value;
     }
   }
-  return result;
+  return result as unknown as SafeEvent;
 }
 
 export function projectCapsuleActionArguments(args: unknown[]): unknown[] {
@@ -2145,7 +2132,11 @@ export default class CapsuleModuleEvaluator {
       return id;
     };
     let rootId = visit(root);
-    return harden({ root: rootId, templates });
+    return harden({
+      protocolVersion: BOXEL_EXECUTION_PROTOCOL_VERSION,
+      root: rootId,
+      templates,
+    });
   }
 
   private isTrustedCSSVarExpression(
@@ -2217,7 +2208,7 @@ export default class CapsuleModuleEvaluator {
     handle: string,
     instance: Record<string, unknown>,
   ): CapsuleComponentInstanceDescriptor {
-    let state: Record<string, unknown> = {};
+    let state: TemplateComponentInstanceDescriptor['state'] = {};
     let actions = new Set<string>();
     for (let key of Object.keys(instance).sort()) {
       if (key !== 'args') {
@@ -2377,7 +2368,10 @@ export default class CapsuleModuleEvaluator {
     ) {
       let component = value as object;
       if (this.capturedTemplateForComponent(component)) {
-        return harden({ kind: 'component', component: visit(component) });
+        return harden({
+          kind: 'authored-component',
+          component: visit(component),
+        });
       }
       let identity =
         this.trustedExportByValue.get(component) ??
@@ -2401,7 +2395,7 @@ export default class CapsuleModuleEvaluator {
         'template scope contains an executable value without a trusted module identity',
       );
     }
-    return harden({ kind: 'value', value: this.jsonClone(value) });
+    return harden({ kind: 'literal-value', value: this.jsonClone(value) });
   }
 
   private jsonClone(value: unknown): any {

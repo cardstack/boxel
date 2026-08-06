@@ -163,11 +163,168 @@ export function assertBoxelExecutionTransportVersion(version: number): void {
   }
 }
 
+/**
+ * Semantic-record version check (RP-14.3). Every consumer of a
+ * BoxelDescription, BoxelRenderRecord, or TemplateBundle calls this before
+ * acting on the record; an unsupported version fails closed so the caller
+ * can retain last-known-good output.
+ */
+export function assertBoxelExecutionProtocolVersion(version: number): void {
+  if (version !== BOXEL_EXECUTION_PROTOCOL_VERSION) {
+    throw new Error(
+      `Unsupported Boxel execution protocol version ${version}; expected ${BOXEL_EXECUTION_PROTOCOL_VERSION}`,
+    );
+  }
+}
+
+/**
+ * Feature negotiation (RP-14.3). A record's requiredFeatures must all be
+ * supported by the consumer; an unknown required feature rejects the whole
+ * record rather than silently rendering a partial semantic.
+ */
+export function assertSupportedFeatures(
+  requiredFeatures: readonly string[],
+  supportedFeatures: ReadonlySet<string>,
+): void {
+  let unsupported = requiredFeatures.filter(
+    (feature) => !supportedFeatures.has(feature),
+  );
+  if (unsupported.length > 0) {
+    throw new Error(
+      `Unsupported Boxel execution protocol features: ${unsupported.join(', ')}`,
+    );
+  }
+}
+
 export type JSONPrimitive = string | number | boolean | null;
 export type JSONValue =
   | JSONPrimitive
   | JSONValue[]
   | { [key: string]: JSONValue };
+
+/**
+ * The reduced projection of a DOM event target that may cross an execution
+ * boundary (RP-14.1). Only allowlisted scalar members and the string dataset
+ * survive; the live Element never crosses.
+ */
+export interface SafeEventTarget {
+  tagName: string;
+  checked?: boolean;
+  id?: string;
+  name?: string;
+  selectedIndex?: number;
+  type?: string;
+  value?: string | number | boolean;
+  dataset?: Record<string, string>;
+}
+
+/**
+ * The reduced projection of a browser event delivered to authored action
+ * handlers in Capsule and Sandbox tiers (RP-14.1). Scalar members beyond the
+ * required ones are present only when the source event carried a scalar
+ * value for that allowlisted property.
+ */
+export interface SafeEvent {
+  type: string;
+  bubbles: boolean;
+  cancelable: boolean;
+  composed: boolean;
+  defaultPrevented: boolean;
+  target: SafeEventTarget | null;
+  currentTarget: SafeEventTarget | null;
+  altKey?: boolean;
+  button?: number;
+  buttons?: number;
+  clientX?: number;
+  clientY?: number;
+  code?: string;
+  ctrlKey?: boolean;
+  data?: string | null;
+  deltaMode?: number;
+  deltaX?: number;
+  deltaY?: number;
+  inputType?: string;
+  isPrimary?: boolean;
+  key?: string;
+  metaKey?: boolean;
+  pageX?: number;
+  pageY?: number;
+  pointerId?: number;
+  pointerType?: string;
+  repeat?: boolean;
+  screenX?: number;
+  screenY?: number;
+  shiftKey?: boolean;
+}
+
+/**
+ * One entry in a captured template's scope (RP-14.1). `authored-component`
+ * points at another captured template in the same bundle;
+ * `trusted-export` names a Host-resolved trusted module export; and
+ * `literal-value` carries a cloneable literal. An unknown kind rejects the
+ * whole bundle (assertKnownRenderDependencies), never a partial render.
+ *
+ * The finer trusted-component / trusted-helper / safe-modifier split is a
+ * planned refinement that requires capture-time classification in the
+ * Capsule adapter; until it ships, `trusted-export` is the single trusted
+ * kind and the Host validates each export against its vocabulary at
+ * resolution time.
+ */
+export type RenderDependency =
+  | { kind: 'authored-component'; component: string }
+  | { kind: 'trusted-export'; module: string; name: string }
+  | { kind: 'literal-value'; value: JSONValue };
+
+export interface TemplateComponentInstanceDescriptor {
+  handle: string;
+  state: Record<string, JSONValue>;
+  getters: string[];
+  actions: string[];
+}
+
+export interface TemplateDescriptor {
+  id: string;
+  block: string;
+  moduleName: string;
+  isStrictMode: boolean;
+  stylesheets: string[];
+  scope: RenderDependency[];
+  instance: TemplateComponentInstanceDescriptor;
+}
+
+/**
+ * Validated Glimmer wire data plus explicit references (RP-14.1). It never
+ * contains an executable authored closure; the Host reifies it into private
+ * component definitions after validation.
+ */
+export interface TemplateBundle {
+  protocolVersion: number;
+  root: string;
+  templates: Record<string, TemplateDescriptor>;
+}
+
+const knownRenderDependencyKinds: ReadonlySet<string> = new Set([
+  'authored-component',
+  'trusted-export',
+  'literal-value',
+]);
+
+/**
+ * Rejects a bundle whose version or dependency vocabulary this consumer
+ * does not understand, before any of it is reified (RP-14.1, RP-14.3).
+ */
+export function assertKnownRenderDependencies(bundle: TemplateBundle): void {
+  assertBoxelExecutionProtocolVersion(bundle.protocolVersion);
+  for (let descriptor of Object.values(bundle.templates)) {
+    for (let reference of descriptor.scope) {
+      if (!knownRenderDependencyKinds.has(reference.kind)) {
+        throw new Error(
+          `Capsule template '${descriptor.id}' contains an unknown render dependency kind '${(reference as { kind: string }).kind}'`,
+        );
+      }
+    }
+  }
+}
 
 export type BoxelKind = 'card' | 'field' | 'file';
 
