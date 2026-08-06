@@ -676,17 +676,27 @@ export default class SubmodeLayout extends Component<Signature> {
       }
 
       .submode-layout-top-bar-center {
-        /* Stays in flow as a flex child rather than absolutely positioned:
-           `flex: 1` reserves the middle track between the workspace button and
-           the profile controls, so the centered content (the portaled
-           expanded-card-header pill) can neither slide under those controls at
-           narrow widths nor intercept clicks meant for them. The pill itself is
-           held to `max-width: 50rem` and `margin: 0 auto` by
-           `.expanded-card-header-slot`, keeping it centered within this track. */
+        /* Narrow default: stay in flow as a flex child. `flex: 1` reserves the
+           middle track between the workspace button and the profile controls,
+           so the content can neither slide under those controls nor intercept
+           clicks meant for them — it just sits on the one line between them. */
         flex: 1;
         display: flex;
         justify-content: center;
         min-width: 0;
+      }
+      /* Wider top bars have room to center the content within the whole bar
+         rather than only within the asymmetric middle track (the 160px
+         workspace button makes the flex track off-centre). Take it out of flow
+         and pin it to the bar's centre; the breakpoint is high enough that the
+         centred content clears the workspace button on the left. */
+      @container (min-width: 60rem) {
+        .submode-layout-top-bar-center {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+        }
       }
 
       /* Slot for the expanded stack-item's CardHeader pill. When a

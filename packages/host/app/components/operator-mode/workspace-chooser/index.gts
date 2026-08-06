@@ -419,6 +419,14 @@ export default class WorkspaceChooser extends Component<Signature> {
     return Math.min(Math.max(index, 0), count - 1);
   }
 
+  // True once the user has moved the selection off its open-time default.
+  // Drives whether a tile shows its selection ring: the default tile is
+  // focused on open (so keyboard nav works) but stays unringed until the user
+  // engages, so opening the chooser doesn't look like a tile is pre-selected.
+  private get isSelectionActive() {
+    return this.selectedIndex !== null;
+  }
+
   // Keep the selection in sync with focus, so tabbing onto a tile selects it.
   @action private onFocusIn(event: Event) {
     let tile = (event.target as HTMLElement).closest('[data-nav-index]');
@@ -601,6 +609,7 @@ export default class WorkspaceChooser extends Component<Signature> {
                     @realmIdentifier={{realmIdentifier}}
                     @navIndex={{i}}
                     @isSelected={{eq this.currentIndex i}}
+                    @selectionActive={{this.isSelectionActive}}
                     @isFavoritesSection={{true}}
                     @enlargedWidth={{this.favoritesTileWidthPx}}
                   />
@@ -641,6 +650,7 @@ export default class WorkspaceChooser extends Component<Signature> {
                       @showMenu={{true}}
                       @navIndex={{navIndex}}
                       @isSelected={{eq this.currentIndex navIndex}}
+                      @selectionActive={{this.isSelectionActive}}
                     />
                   {{/let}}
                 {{/each}}
@@ -669,6 +679,7 @@ export default class WorkspaceChooser extends Component<Signature> {
                         @realmIdentifier={{realmIdentifier}}
                         @navIndex={{navIndex}}
                         @isSelected={{eq this.currentIndex navIndex}}
+                        @selectionActive={{this.isSelectionActive}}
                       />
                     {{/let}}
                   {{/each}}
@@ -738,8 +749,12 @@ export default class WorkspaceChooser extends Component<Signature> {
       .sort-controls {
         display: flex;
         align-items: center;
+        /* Keep the trigger on a single line at narrow top-bar widths rather
+           than letting its label wrap under the icon. */
+        white-space: nowrap;
       }
       .sort-select {
+        flex-shrink: 0;
         --boxel-select-background-color: rgb(42 32 64 / 90%);
         --boxel-select-border-color: rgba(255 255 255 / 25%);
         --boxel-select-text-color: var(--boxel-light);

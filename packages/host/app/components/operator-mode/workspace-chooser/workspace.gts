@@ -64,6 +64,12 @@ interface Signature {
     realmIdentifier: RealmIdentifier;
     showMenu?: boolean;
     isSelected?: boolean;
+    // Whether the user has actively engaged the keyboard selection (moved it
+    // off its default). The tile is still `isSelected` on open — it holds focus
+    // so arrow keys and Enter work — but its selection ring stays hidden until
+    // this is true, so opening the chooser doesn't look like a tile is already
+    // picked (which reads as a second selection alongside a favorited tile).
+    selectionActive?: boolean;
     isFavoritesSection?: boolean;
     enlargedWidth?: string;
     navIndex?: number;
@@ -78,7 +84,7 @@ export default class Workspace extends Component<Signature> {
       <div
         class='workspace-card
           {{if this.isHostDropdownOpen "is-open"}}
-          {{if @isSelected "is-selected"}}
+          {{if this.showSelectionRing "is-selected"}}
           {{if @isFavoritesSection "is-enlarged"}}'
         style={{cssVar favorite-tile-width=@enlargedWidth}}
         data-test-workspace={{this.name}}
@@ -612,8 +618,8 @@ export default class Workspace extends Component<Signature> {
          rule so a selected tile keeps its ring while the pointer is over
          it. */
       .workspace-card.is-selected::after {
-        border-color: var(--boxel-teal);
-        box-shadow: 0 0 0 1px var(--boxel-teal);
+        border-color: var(--boxel-highlight);
+        box-shadow: 0 0 0 1px var(--boxel-highlight);
       }
       .tile-favorite-btn {
         position: absolute;
@@ -636,20 +642,32 @@ export default class Workspace extends Component<Signature> {
       }
       .workspace-card:hover .tile-favorite-btn {
         opacity: 1;
-        background: rgba(0 0 0 / 40%);
+        background: var(--boxel-dark-40);
         backdrop-filter: blur(6px);
       }
       .workspace-card:hover .tile-favorite-btn:hover {
-        background: var(--boxel-teal);
+        background: var(--boxel-highlight);
         color: var(--boxel-dark);
         --icon-color: var(--boxel-dark);
       }
       .tile-favorite-btn.is-favorited {
-        color: var(--boxel-teal);
-        --icon-color: var(--boxel-teal);
+        color: var(--boxel-highlight);
+        --icon-color: var(--boxel-highlight);
         opacity: 1;
-        background: rgba(0 0 0 / 40%);
+        background: var(--boxel-dark-40);
         backdrop-filter: blur(6px);
+      }
+      /* Reveal on keyboard focus (the button is transparent until hover when
+         not favorited) and draw the focus ring on the wrapper, whose overflow
+         hidden would otherwise clip the inner button's outline. */
+      .tile-favorite-btn:focus-within {
+        opacity: 1;
+        background: var(--boxel-dark-40);
+        backdrop-filter: blur(6px);
+      }
+      .tile-favorite-btn:has(:focus-visible) {
+        outline: var(--boxel-outline);
+        outline-offset: -1px;
       }
       /* Tooltip wraps its trigger in a `width: fit-content` div. Stretch that
          wrapper (and the button inside it) to fill the star's box so the whole
@@ -684,11 +702,11 @@ export default class Workspace extends Component<Signature> {
       }
       .workspace-card:hover .tile-menu-btn {
         opacity: 1;
-        background: rgba(0 0 0 / 40%);
+        background: var(--boxel-dark-40);
         backdrop-filter: blur(6px);
       }
       .workspace-card:hover .tile-menu-btn:hover {
-        background: var(--boxel-teal);
+        background: var(--boxel-highlight);
         color: var(--boxel-dark);
         --icon-color: var(--boxel-dark);
       }
@@ -698,8 +716,16 @@ export default class Workspace extends Component<Signature> {
          Revealing on `:focus-within` keeps it discoverable without a pointer. */
       .tile-menu-btn:focus-within {
         opacity: 1;
-        background: rgba(0 0 0 / 40%);
+        background: var(--boxel-dark-40);
         backdrop-filter: blur(6px);
+      }
+      /* Keyboard focus also needs the standard focus ring every other control
+         gets. The inner trigger button's own outline is clipped by this
+         wrapper's overflow hidden, so draw the ring on the wrapper instead:
+         an element's own outline is not clipped by its own overflow. */
+      .tile-menu-btn:has(:focus-visible) {
+        outline: var(--boxel-outline);
+        outline-offset: -1px;
       }
       .tile-menu-btn:has([aria-expanded='true']) {
         opacity: 1;
@@ -731,14 +757,14 @@ export default class Workspace extends Component<Signature> {
         gap: var(--boxel-sp-3xs);
         padding: 0 var(--boxel-sp-2xs);
         border-radius: var(--boxel-border-radius-sm);
-        background: rgba(0 0 0 / 40%);
+        background: var(--boxel-dark-40);
         backdrop-filter: blur(6px);
         color: var(--boxel-light);
       }
       .tile-status-icon {
         display: flex;
         align-items: center;
-        color: var(--boxel-teal);
+        color: var(--boxel-highlight);
         /* Re-enable pointer events so this icon's tooltip still opens on hover
            (see `.tile-status-bar { pointer-events: none }`). */
         pointer-events: auto;
@@ -899,7 +925,7 @@ export default class Workspace extends Component<Signature> {
         margin-left: var(--boxel-sp-6xs);
       }
       .hosted-icon {
-        color: var(--boxel-teal);
+        color: var(--boxel-highlight);
         display: flex;
         align-items: center;
         margin-right: var(--boxel-sp-6xs);
@@ -996,7 +1022,7 @@ export default class Workspace extends Component<Signature> {
         left: 0;
         width: var(--boxel-xxs-container);
         height: 2.25rem;
-        background: rgba(0 0 0 / 40%);
+        background: var(--boxel-dark-40);
         backdrop-filter: blur(6px);
         border: none;
         border-radius: 0 0 var(--boxel-border-radius-xl)
@@ -1023,7 +1049,7 @@ export default class Workspace extends Component<Signature> {
         );
       }
       .trigger-house {
-        color: var(--boxel-teal);
+        color: var(--boxel-highlight);
         display: flex;
         align-items: center;
         flex-shrink: 0;
@@ -1658,6 +1684,13 @@ export default class Workspace extends Component<Signature> {
 
   private get name() {
     return this.realmInfo.name;
+  }
+
+  // The selection ring is shown only once the user has actively engaged the
+  // keyboard selection. On open the tile is selected (holds focus for keyboard
+  // nav) but unringed, so the chooser doesn't present a pre-picked tile.
+  private get showSelectionRing() {
+    return Boolean(this.args.isSelected && this.args.selectionActive);
   }
 
   get tileMenuItems() {
