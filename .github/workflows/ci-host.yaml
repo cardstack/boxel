@@ -50,6 +50,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # MEASUREMENT BRANCH ONLY — do not merge. This branch exists to time
+          # the host suite against an otherwise-identical run, and Percy
+          # uploads would both dominate the timing difference and burn
+          # snapshot quota. The run this is compared against skips Percy
+          # (draft PR), so force the same here.
+          echo "percy_needed=false" >> "$GITHUB_OUTPUT"
+          echo "Percy forced off for timing measurement"
+          exit 0
+
           if [[ "${{ github.event_name }}" != "pull_request" ]]; then
             echo "percy_needed=true" >> "$GITHUB_OUTPUT"
             echo "Not a pull request — Percy will always run"
