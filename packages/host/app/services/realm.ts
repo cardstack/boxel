@@ -438,15 +438,12 @@ class RealmResource {
       // `/_info` fallback below is the lean variant without timestamps. Ask
       // the batch for just this realm first; it populates `this.info` via
       // `applyRealmInfo` when the realm is on our own realm server, and no-ops
-      // for a federated realm (logged), in which case we fall through. Gated on
-      // a matrix client because the batch logs in to the realm server; without
-      // one (anonymous sessions, much of the test surface) we skip straight to
-      // the token-authenticated per-realm `/_info` below.
-      if (this.realmServer.hasClient) {
-        await this.realmService.prefetchRealmInfos([this.realmURL]);
-        if (this.info) {
-          return;
-        }
+      // (falling through here) for a federated realm, or before the matrix
+      // client exists — `prefetchRealmInfos` gates on that itself, since the
+      // batch needs a realm-server session.
+      await this.realmService.prefetchRealmInfos([this.realmURL]);
+      if (this.info) {
+        return;
       }
       let { info, isPublic } = await this.fetchInfoFromServer();
       this.info = new TrackedObject({ ...info, isIndexing: false, isPublic });
