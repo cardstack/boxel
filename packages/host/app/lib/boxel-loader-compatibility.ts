@@ -1,4 +1,4 @@
-import { currencyCodeSymbolMapping } from '@cardstack/runtime-common';
+import { currencyCodeSymbolMapping } from '@cardstack/runtime-common/currency-code-symbol-map';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 /**

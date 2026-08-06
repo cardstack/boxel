@@ -1665,7 +1665,6 @@ export function isBrowserTestEnv() {
 }
 
 export * from './search-results-component.ts';
-export { currencyCodeSymbolMapping } from './currency-code-symbol-map.ts';
 export { isBotTriggerEvent } from './bot-trigger.ts';
 export {
   assertIsBotCommandFilter,

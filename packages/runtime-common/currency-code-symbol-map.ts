@@ -1,6 +1,11 @@
 // This is the deterministic data exported by currency-code-symbol-map 1.0.1.
-// Keep it in Boxel's trusted runtime so Currency fields do not depend on a third-party
-// network fetch merely to deserialize or render a card that contains money.
+// Its only consumer is the Host loader shim for the esm.run package of the
+// same name (boxel-loader-compatibility.ts), which Host-owns that data-only
+// dependency so deserializing or rendering a card that contains money never
+// requires a third-party network fetch. It is deliberately not re-exported
+// from the runtime-common index: trusted Base semantics (such as
+// CurrencyField.symbol) materialize Host-side and cross execution boundaries
+// as data, so no runtime may reach for this map as a semantic substitute.
 export const currencyCodeSymbolMapping: Record<string, string> = {
   AED: 'د.إ',
   AFN: '؋',
