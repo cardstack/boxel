@@ -37,6 +37,8 @@ export const HOST_APP_QUERY_PARAMS = [
   'card',
   'cardPath',
   'debug',
+  // Deep link into profile settings, consumed once on arrival
+  'openProfileSettings',
 ];
 
 /**

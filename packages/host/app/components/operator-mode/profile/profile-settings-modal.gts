@@ -9,6 +9,7 @@ import { tracked } from '@glimmer/tracking';
 import { restartableTask, timeout, all } from 'ember-concurrency';
 
 import perform from 'ember-concurrency/helpers/perform';
+import { modifier } from 'ember-modifier';
 
 import {
   BoxelButton,
@@ -24,11 +25,21 @@ import { ProfileInfo } from '@cardstack/host/components/operator-mode/profile-in
 import config from '@cardstack/host/config/environment';
 import { isValidPassword } from '@cardstack/host/lib/matrix-utils';
 import type MatrixService from '@cardstack/host/services/matrix-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import ProfileEmail from './profile-email';
 import ProfileSubscription from './profile-subscription';
 
 import type { IAuthData } from 'matrix-js-sdk';
+
+// Subscription sits below the fold in this 70vh modal
+const scrollIntoViewIfRequested = modifier(
+  (element: HTMLElement, [requested]: [boolean]) => {
+    if (requested) {
+      element.scrollIntoView({ block: 'start' });
+    }
+  },
+);
 
 interface Signature {
   Args: {
@@ -126,7 +137,12 @@ export default class ProfileSettingsModal extends Component<Signature> {
               @changeEmailComplete={{this.completeEmail}}
             />
           {{/if}}
-          <ProfileSubscription />
+          <div
+            data-test-profile-subscription-section
+            {{scrollIntoViewIfRequested this.subscriptionRequested}}
+          >
+            <ProfileSubscription />
+          </div>
         </form>
         {{#if (or (bool this.displayNameError) (bool this.error))}}
           <div class='error-message' data-test-profile-save-error>
@@ -208,6 +224,7 @@ export default class ProfileSettingsModal extends Component<Signature> {
   </template>
 
   @service declare private matrixService: MatrixService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
   @tracked private displayName: string | undefined;
   @tracked private submode: 'email' | 'password' | undefined;
   @tracked private saveSuccessIndicatorShown = false;
@@ -227,6 +244,12 @@ export default class ProfileSettingsModal extends Component<Signature> {
   constructor(owner: Owner, args: any) {
     super(owner, args);
     this.setInitialValues.perform();
+  }
+
+  private get subscriptionRequested() {
+    return (
+      this.operatorModeStateService.profileSettingsSection === 'subscription'
+    );
   }
 
   private get title() {

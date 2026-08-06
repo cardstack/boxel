@@ -1152,6 +1152,50 @@ module('Acceptance | operator mode tests', function (hooks) {
       },
     ]);
 
+    test('openProfileSettings deep link opens settings on the subscription section', async function (assert) {
+      await visit('/?openProfileSettings=subscription');
+
+      assert.dom('[data-test-settings-modal]').exists();
+      assert.dom('[data-test-profile-subscription-section]').exists();
+
+      assert.notOk(
+        currentURL().includes('openProfileSettings'),
+        'the param is consumed on arrival',
+      );
+    });
+
+    test('a closed settings modal stays closed when operator mode state persists', async function (assert) {
+      await visit('/?openProfileSettings=subscription');
+      assert.dom('[data-test-settings-modal]').exists();
+
+      await click('[data-test-confirm-cancel-button]');
+      assert.dom('[data-test-settings-modal]').doesNotExist();
+
+      // Persisting re-runs the route's model hook
+      getService('operator-mode-state-service').workspaceChooserOpened = true;
+      await settled();
+
+      assert.dom('[data-test-settings-modal]').doesNotExist();
+    });
+
+    test('an unauthenticated arrival keeps the deep link until after login', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }]],
+      })!;
+      await click('[data-test-profile-icon-button]');
+      await click('[data-test-signout-button]');
+      assert.dom('[data-test-login-btn]').exists();
+
+      await visit('/?openProfileSettings=subscription');
+
+      assert.dom('[data-test-login-btn]').exists();
+      assert.dom('[data-test-settings-modal]').doesNotExist();
+      assert.ok(
+        currentURL().includes('openProfileSettings=subscription'),
+        'the param must outlive the login form',
+      );
+    });
+
     test('can access and save settings via profile info popover', async function (assert) {
       await visitOperatorMode({
         stacks: [

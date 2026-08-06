@@ -1,6 +1,8 @@
 import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
+import { scheduleOnce } from '@ember/runloop';
 
 import { service } from '@ember/service';
 
@@ -141,6 +143,33 @@ export default class SubmodeLayout extends Component<Signature> {
   @service declare private recentCardsService: RecentCardsService;
   @service('search-sheet-state')
   declare private searchSheetState: SearchSheetStateService;
+
+  // `?openProfileSettings` deep link. Consumed here, not in the
+  // index route, because this component exists only once logged in — a
+  // logged-out arrival renders <Auth /> after the model hook has returned.
+  // afterRender: both writes touch state this render pass already read.
+  constructor(owner: Owner, args: Signature['Args']) {
+    super(owner, args);
+
+    if (
+      this.operatorModeStateService.operatorModeController.openProfileSettings
+    )
+      scheduleOnce('afterRender', this, this.consumeProfileSettingsDeepLink);
+  }
+
+  // Nulled like `sid` in matrix/auth.gts, so the modal does not reopen on
+  // the model refresh every schedulePersist() triggers.
+  private consumeProfileSettingsDeepLink = () => {
+    let controller = this.operatorModeStateService.operatorModeController;
+    let requested = controller.openProfileSettings;
+    if (!requested) {
+      return;
+    }
+    controller.openProfileSettings = null;
+    this.operatorModeStateService.openProfileSettings(
+      requested === 'subscription' ? 'subscription' : undefined,
+    );
+  };
 
   private searchElement: HTMLElement | null = null;
   private suppressSearchClose = false;
