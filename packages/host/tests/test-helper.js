@@ -3,6 +3,7 @@ import config from '@cardstack/host/config/environment';
 import * as QUnit from 'qunit';
 import { setApplication } from '@ember/test-helpers';
 import setupOperatorModeParametersMatchAssertion from '@cardstack/host/tests/helpers/operator-mode-parameters-match';
+import { trustBaseRealmFetchCache } from '@cardstack/runtime-common';
 import { start as examStart } from 'ember-exam/test-support';
 // eslint-disable-next-line ember/no-test-import-export
 import { loadRealmTests } from './live-test';
@@ -18,6 +19,11 @@ export async function start(examOptions) {
   });
 
   async function setupHostTests() {
+    // The base realm is read-only for the lifetime of this page, so its
+    // modules never need revalidating — while the loader is replaced per
+    // test, and each replacement otherwise re-requests the whole base
+    // module graph.
+    trustBaseRealmFetchCache();
     setApplication(application);
     setupQUnit();
     setupOperatorModeParametersMatchAssertion(QUnit.assert);
