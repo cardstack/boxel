@@ -2,6 +2,7 @@ import {
   AuthenticationError,
   AuthenticationErrorMessages,
 } from '@cardstack/runtime-common/router';
+import { SESSION_TOKEN_TTL } from '@cardstack/runtime-common';
 import jsonwebtoken from 'jsonwebtoken';
 const { JsonWebTokenError, sign, TokenExpiredError, verify } = jsonwebtoken;
 
@@ -13,19 +14,21 @@ export interface RealmServerTokenClaim {
 export function createJWT(
   claims: RealmServerTokenClaim,
   secretSeed: string,
+  expiresIn: jsonwebtoken.SignOptions['expiresIn'] = SESSION_TOKEN_TTL,
 ): string {
-  return sign(claims, secretSeed, {
-    expiresIn: '7d',
-  });
+  return sign(claims, secretSeed, { expiresIn });
 }
 
 export function retrieveTokenClaim(
   authorizationString: string,
   secretSeed: string,
-) {
+): RealmServerTokenClaim & { iat: number; exp: number } {
   let tokenString = authorizationString.replace('Bearer ', '');
   try {
-    return verify(tokenString, secretSeed) as RealmServerTokenClaim;
+    return verify(tokenString, secretSeed) as RealmServerTokenClaim & {
+      iat: number;
+      exp: number;
+    };
   } catch (e) {
     if (e instanceof TokenExpiredError) {
       throw new AuthenticationError(AuthenticationErrorMessages.TokenExpired);
