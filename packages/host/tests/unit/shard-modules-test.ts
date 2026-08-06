@@ -74,6 +74,37 @@ module('Unit | shard-modules', function () {
     assert.strictEqual(unknownShards.length, 1);
   });
 
+  test('files recorded at zero seconds are spread, not piled onto one shard', function (assert) {
+    // A weight of zero never changes a bucket's running total, so without a
+    // floor every such file is assigned to the lightest bucket — which stays
+    // lightest — and they all land together.
+    let moduleIds = Array.from({ length: 12 }, (_, i) => `./zero${i}-test.ts`);
+    let timings = Object.fromEntries(moduleIds.map((id) => [id, 0]));
+
+    let counts = [1, 2, 3, 4].map(
+      (shard) => selectShardModules(moduleIds, shard, 4, timings).length,
+    );
+
+    assert.deepEqual(
+      counts,
+      [3, 3, 3, 3],
+      `zero-weight files spread evenly, got ${counts.join('/')}`,
+    );
+  });
+
+  test('a zero-weight file is never treated as lighter than a floored one', function (assert) {
+    // Both files sit under the floor, so they weigh the same and the pack
+    // falls back to its path tiebreak rather than ordering by raw seconds.
+    let timings = { './a-test.ts': 0, './b-test.ts': 0.2 };
+    let moduleIds = ['./a-test.ts', './b-test.ts'];
+
+    let first = selectShardModules(moduleIds, 1, 2, timings);
+    let second = selectShardModules(moduleIds, 2, 2, timings);
+
+    assert.deepEqual(first, ['./a-test.ts']);
+    assert.deepEqual(second, ['./b-test.ts']);
+  });
+
   test('rejects out-of-range shard coordinates', function (assert) {
     assert.throws(() => selectShardModules([], 0, 2, {}));
     assert.throws(() => selectShardModules([], 3, 2, {}));
