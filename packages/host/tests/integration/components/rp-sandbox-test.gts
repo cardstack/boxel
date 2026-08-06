@@ -19,7 +19,9 @@ import {
   createSandboxModuleEvaluator,
   measureRenderedOutput,
   reportIntrinsicHeight,
+  reportRenderDiagnosticOnResize,
   rewriteDynamicImports,
+  whenNonzeroSize,
 } from '@cardstack/host/components/boxel-sandbox-runtime';
 import CardRenderer from '@cardstack/host/components/card-renderer';
 
@@ -773,7 +775,7 @@ export async function loadThree() {
     document.body.append(element);
 
     try {
-      let stopReporting = reportIntrinsicHeight(element, surface);
+      let stop = reportIntrinsicHeight(element, surface);
       await waitUntil(() => layoutRequests.length > 0, { timeout: 2000 });
       assert.deepEqual(
         layoutRequests[0],
@@ -793,7 +795,7 @@ export async function loadThree() {
       );
 
       let countAfterResize = layoutRequests.length;
-      stopReporting();
+      stop();
       element.style.height = '100px';
       await new Promise((resolve) => setTimeout(resolve, 50));
       assert.strictEqual(
@@ -806,6 +808,143 @@ export async function loadThree() {
       surface.destroy();
       channel.port1.close();
       channel.port2.close();
+    }
+  });
+
+  // False positive below (qunit/resolve-async): reportRenderDiagnosticOnResize
+  // drives its callback off a real ResizeObserver, not an assert.async()/
+  // done() callback — every actual async operation in this test is a
+  // properly-awaited waitUntil().
+  // eslint-disable-next-line qunit/resolve-async
+  test('RP-15.3: reportRenderDiagnosticOnResize re-measures and reports again once a zero-geometry render root later gains real size — the page-reload case where the slot mounts before its ancestor has finished laying out', async function (assert) {
+    // Mirrors what actually happens on a page reload: the render root is
+    // born (and the child's own one-shot post-render measurement runs)
+    // while an ancestor in the PARENT document — the presentation slot's
+    // own stack-item, still mid opening-transition — has zero width, so the
+    // iframe's own viewport (and therefore this root, which fills it) is
+    // also zero-width. Nothing about that one-shot measurement is wrong —
+    // there really was no visible content yet — but nothing re-measures
+    // once real geometry lands, so the parent's onFirstPaint never fires
+    // and its placeholder overlay never hands off. This is the fix for
+    // that: the same box-change signal reportIntrinsicHeight already
+    // tracks for height also drives a re-measurement here.
+    let reports: ReturnType<typeof measureRenderedOutput>[] = [];
+    let measureAndReport = (element: HTMLElement) => {
+      reports.push(measureRenderedOutput(element, 'isolated'));
+    };
+
+    let root = document.createElement('main');
+    root.style.width = '0';
+    root.style.height = '0';
+    root.style.overflow = 'hidden';
+    root.innerHTML = '<div><span>Track: corridor-take-one</span></div>';
+    document.body.append(root);
+
+    try {
+      let stop = reportRenderDiagnosticOnResize(root, measureAndReport);
+      await waitUntil(() => reports.length > 0, { timeout: 2000 });
+      assert.false(
+        reports[0]?.hasVisibleContent,
+        'the initial measurement, taken while the root is still zero-size, correctly reports no visible content — exactly the "closed" placeholder overlay state on a fresh reload',
+      );
+
+      // The ancestor stack-item's opening transition finishes (or, in the
+      // real iframe case, the presentation slot itself gains its real
+      // width) and the root gains real geometry.
+      root.style.width = '1400px';
+      root.style.height = '600px';
+      await waitUntil(
+        () => reports[reports.length - 1]?.hasVisibleContent === true,
+        { timeout: 2000 },
+      );
+      let last = reports[reports.length - 1];
+      assert.true(
+        last?.hasVisibleContent,
+        "once the root gains real geometry, the resize-triggered re-measurement reports visible content without any new render() call — this is what lets the parent's onFirstPaint fire and hand off the placeholder",
+      );
+      assert.true((last?.rootRect.width ?? 0) > 0);
+
+      let countAfterResize = reports.length;
+      stop();
+      root.style.width = '300px';
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      assert.strictEqual(
+        reports.length,
+        countAfterResize,
+        'stop() disconnects the observer — no further reports after teardown',
+      );
+    } finally {
+      root.remove();
+    }
+  });
+
+  test("RP-15.3: whenNonzeroSize holds a card's first mount until its render root has real geometry — the correctness bar for a card that sizes a canvas/renderer exactly once with no ResizeObserver of its own", async function (assert) {
+    // A card class like a Three.js/WebGL viewer reads its mount point's
+    // geometry exactly once (a reasonable assumption on main, where a card
+    // only ever mounts at real size) and never re-measures. Re-measuring
+    // after the fact (reportRenderDiagnosticOnResize) cannot fix a renderer
+    // that already baked in zero-size dimensions — the card's first mount
+    // must not happen until real geometry exists.
+    let alreadySized = document.createElement('main');
+    alreadySized.style.width = '400px';
+    alreadySized.style.height = '300px';
+    document.body.append(alreadySized);
+    try {
+      let resolved = false;
+      void whenNonzeroSize(alreadySized).then(() => {
+        resolved = true;
+      });
+      await Promise.resolve();
+      assert.true(
+        resolved,
+        'a render root that already has real geometry resolves immediately — no delay on the common, non-reload case',
+      );
+    } finally {
+      alreadySized.remove();
+    }
+
+    let zeroSize = document.createElement('main');
+    zeroSize.style.width = '0';
+    zeroSize.style.height = '0';
+    document.body.append(zeroSize);
+    try {
+      let resolved = false;
+      void whenNonzeroSize(zeroSize, 2000).then(() => {
+        resolved = true;
+      });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      assert.false(
+        resolved,
+        'a zero-size render root — the reload case, before its ancestor has finished laying out — holds the mount rather than letting it proceed at zero size',
+      );
+
+      zeroSize.style.width = '1400px';
+      zeroSize.style.height = '600px';
+      await waitUntil(() => resolved, { timeout: 2000 });
+      assert.true(
+        resolved,
+        'resolves once the render root gains real geometry, without waiting out the full timeout',
+      );
+    } finally {
+      zeroSize.remove();
+    }
+
+    let neverSized = document.createElement('main');
+    neverSized.style.width = '0';
+    neverSized.style.height = '0';
+    document.body.append(neverSized);
+    try {
+      let resolved = false;
+      void whenNonzeroSize(neverSized, 50).then(() => {
+        resolved = true;
+      });
+      await waitUntil(() => resolved, { timeout: 2000 });
+      assert.true(
+        resolved,
+        'a render root that never gains real geometry (a genuinely collapsed/hidden slot, not just one mid-transition) is bounded — it resolves anyway after its timeout rather than hanging the render forever',
+      );
+    } finally {
+      neverSized.remove();
     }
   });
 

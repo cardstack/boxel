@@ -87,16 +87,54 @@ export function reportIntrinsicHeight(
   return () => resizeObserver?.disconnect();
 }
 
+/**
+ * RP-15.3: re-measures and re-posts the render diagnostic whenever the
+ * render root's own box changes — sharing the exact box-change signal
+ * `reportIntrinsicHeight` already tracks for height, on the same element.
+ *
+ * `measureRenderedOutput`'s normal call site (the render-transport `render()`
+ * below) is a one-shot measurement taken right after a single render
+ * request resolves. If the iframe's own viewport is zero-width at that
+ * exact moment — most commonly because its ancestor slot element in the
+ * parent document hasn't finished an opening transition yet, seen on a page
+ * reload — that measurement (correctly) reports `hasVisibleContent: false`,
+ * and nothing else ever re-measures once real geometry arrives: the child
+ * did paint, but the parent's `onFirstPaint` never fires, so its
+ * prerendered placeholder overlay never hands off. Re-measuring on every
+ * box change self-heals that. Re-posting is safe even when nothing
+ * meaningful changed — the parent's `receiveRenderDiagnostic` is a no-op
+ * once it has already recorded a paint — and `ResizeObserver`'s native
+ * dedup means this only fires on a real size change, not every frame.
+ */
+export function reportRenderDiagnosticOnResize(
+  element: HTMLElement,
+  measureAndReport: (element: HTMLElement) => void,
+): () => void {
+  let resizeObserver: ResizeObserver | undefined;
+  if (typeof ResizeObserver !== 'undefined') {
+    resizeObserver = new ResizeObserver(() => measureAndReport(element));
+    resizeObserver.observe(element);
+  }
+  return () => resizeObserver?.disconnect();
+}
+
 const attachSurface = modifier<{
-  Args: { Positional: [SandboxSurfaceClient] };
+  Args: {
+    Positional: [SandboxSurfaceClient, (element: HTMLElement) => void];
+  };
   Element: HTMLElement;
-}>((element, [surface]) => {
+}>((element, [surface, measureAndReportRenderDiagnostic]) => {
   let disconnectEvents = connectSandboxSurface(element, surface, (error) => {
     console.error('Sandbox Surface capability failed', error);
   });
   let stopHeightReporting = reportIntrinsicHeight(element, surface);
+  let stopDiagnosticReporting = reportRenderDiagnosticOnResize(
+    element,
+    measureAndReportRenderDiagnostic,
+  );
   return () => {
     stopHeightReporting();
+    stopDiagnosticReporting();
     disconnectEvents();
   };
 });
@@ -276,6 +314,16 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
     diagnostic: SandboxRenderDiagnostic,
   ) => void;
 
+  /**
+   * A stable (class-field, bound once) reference passed to `attachSurface`
+   * so `reportRenderDiagnosticOnResize`'s ResizeObserver installs exactly
+   * once for the render root's whole lifetime rather than being torn down
+   * and reinstalled on every re-render a fresh closure would cause.
+   */
+  private measureAndReportRenderDiagnostic = (element: HTMLElement): void => {
+    this.reportRenderDiagnostic?.(measureRenderedOutput(element, this.format));
+  };
+
   @provide(DefaultFormatsContextName)
   // @ts-ignore "defaultFormat is declared but not used"
   private get defaultFormat() {
@@ -331,6 +379,24 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
       if (!this.runtime) {
         throw new Error('Sandbox runtime is unavailable');
       }
+      // Some authored cards size a canvas or renderer exactly once from
+      // their mount point's geometry, with no ResizeObserver of their own
+      // (a reasonable assumption on main, where a card only ever mounts at
+      // real size — see mountFabrication-style modifiers). The Sandbox
+      // tier cannot make that same promise on its own: this iframe can boot
+      // — and be asked to render — before its ancestor slot in the parent
+      // document has finished laying out, most visibly on a page reload.
+      // reportRenderDiagnosticOnResize (installed by attachSurface) can
+      // detect a paint that happened at zero size after the fact, but by
+      // then a one-shot-sized renderer already baked in the wrong
+      // dimensions — there is nothing to re-measure into. So the card's
+      // component must not mount at all until real geometry exists.
+      let root = document.querySelector<HTMLElement>(
+        '[data-boxel-sandbox-runtime]',
+      );
+      if (root) {
+        await whenNonzeroSize(root);
+      }
       let slot = this.runtime.getRenderSlotForHandle(card);
       join(() => {
         this.format = format as Format;
@@ -381,7 +447,7 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
       <main
         class='boxel-sandbox-runtime'
         data-boxel-sandbox-runtime
-        {{attachSurface this.surface}}
+        {{attachSurface this.surface this.measureAndReportRenderDiagnostic}}
       >
         {{#if this.renderedComponent}}
           <this.renderedComponent @format={{this.format}} />
@@ -413,6 +479,60 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
 
 function afterRender(): Promise<void> {
   return new Promise((resolve) => scheduleOnce('afterRender', null, resolve));
+}
+
+function elementHasSize(element: Element): boolean {
+  let rect = element.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0;
+}
+
+/**
+ * Resolves once `element`'s own box is nonzero — immediately if it already
+ * is. See the comment at this function's call site (the render-transport
+ * `render()` above) for why the card's first mount must wait for this
+ * rather than merely re-measuring after the fact.
+ *
+ * Bounded: an ancestor that genuinely never gains real geometry (a
+ * collapsed or actually-hidden slot, not just one still mid an opening
+ * transition) must not hang the render forever — this gives up and
+ * resolves anyway after `timeoutMs`, at whatever size exists. A render
+ * that lands at that point can still self-heal for cards that DO react to
+ * a later resize, via `reportRenderDiagnosticOnResize`; a card that (like
+ * the class of card this exists for) sizes itself once at mount and never
+ * again would still measure zero — the best this bounded wait can do
+ * without a signal that geometry is intentionally, permanently zero.
+ */
+export function whenNonzeroSize(
+  element: Element,
+  timeoutMs = 4000,
+): Promise<void> {
+  if (elementHasSize(element)) {
+    return Promise.resolve();
+  }
+  if (typeof ResizeObserver === 'undefined') {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    let settled = false;
+    let timer: ReturnType<typeof globalThis.setTimeout>;
+    let observer: ResizeObserver;
+    let settle = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      observer.disconnect();
+      globalThis.clearTimeout(timer);
+      resolve();
+    };
+    observer = new ResizeObserver(() => {
+      if (elementHasSize(element)) {
+        settle();
+      }
+    });
+    observer.observe(element);
+    timer = globalThis.setTimeout(settle, timeoutMs);
+  });
 }
 
 /**
