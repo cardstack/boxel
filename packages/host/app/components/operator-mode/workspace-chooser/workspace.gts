@@ -640,7 +640,12 @@ export default class Workspace extends Component<Signature> {
           opacity 0.15s ease,
           background 0.15s ease;
       }
-      .workspace-card:hover .tile-favorite-btn {
+      /* Reveal the tile's controls when the card is hovered or has keyboard
+         focus anywhere within it, so a keyboard user tabbing onto the card
+         sees the star the same way a pointer user does on hover — not only
+         when the star itself is the focused tab stop. */
+      .workspace-card:hover .tile-favorite-btn,
+      .workspace-card:has(:focus-visible) .tile-favorite-btn {
         opacity: 1;
         background: var(--boxel-dark-40);
         backdrop-filter: blur(6px);
@@ -657,14 +662,8 @@ export default class Workspace extends Component<Signature> {
         background: var(--boxel-dark-40);
         backdrop-filter: blur(6px);
       }
-      /* Reveal on keyboard focus (the button is transparent until hover when
-         not favorited) and draw the focus ring on the wrapper, whose overflow
-         hidden would otherwise clip the inner button's outline. */
-      .tile-favorite-btn:focus-within {
-        opacity: 1;
-        background: var(--boxel-dark-40);
-        backdrop-filter: blur(6px);
-      }
+      /* Draw the focus ring on the wrapper, whose overflow hidden would
+         otherwise clip the inner button's own outline. */
       .tile-favorite-btn:has(:focus-visible) {
         outline: var(--boxel-outline);
         outline-offset: -1px;
@@ -700,7 +699,8 @@ export default class Workspace extends Component<Signature> {
         --boxel-icon-button-width: var(--boxel-button-xs);
         --boxel-icon-button-height: var(--boxel-button-xs);
       }
-      .workspace-card:hover .tile-menu-btn {
+      .workspace-card:hover .tile-menu-btn,
+      .workspace-card:has(:focus-visible) .tile-menu-btn {
         opacity: 1;
         background: var(--boxel-dark-40);
         backdrop-filter: blur(6px);
@@ -709,15 +709,6 @@ export default class Workspace extends Component<Signature> {
         background: var(--boxel-highlight);
         color: var(--boxel-dark);
         --icon-color: var(--boxel-dark);
-      }
-      /* Keyboard reveal: the button is `opacity: 0` until hover/open, but it
-         stays focusable, so a keyboard user tabbing through the tile would
-         otherwise land on a fully transparent control with no visible focus.
-         Revealing on `:focus-within` keeps it discoverable without a pointer. */
-      .tile-menu-btn:focus-within {
-        opacity: 1;
-        background: var(--boxel-dark-40);
-        backdrop-filter: blur(6px);
       }
       /* Keyboard focus also needs the standard focus ring every other control
          gets. The inner trigger button's own outline is clipped by this
