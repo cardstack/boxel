@@ -163,14 +163,16 @@ export default class BoxelExecutionService extends Service {
       return undefined;
     }
 
-    // The indexed prerender channel stores the four composable formats. An
-    // isolated or edit surface uses embedded as its inert handoff image; the
-    // live renderer still receives and renders the exact requested format.
-    let requestedFormat: PrerenderedHtmlFormat =
+    // An isolated surface prefers its own stored rendering, falling back to
+    // embedded while an index that predates isolated storage catches up. An
+    // edit surface uses embedded as its inert handoff image; the live
+    // renderer still receives and renders the exact requested format.
+    let formats: readonly PrerenderedHtmlFormat[] =
       format === 'fitted' || format === 'atom' || format === 'head'
-        ? format
-        : 'embedded';
-    let formats = [requestedFormat] as const;
+        ? [format]
+        : format === 'edit'
+          ? ['embedded']
+          : ['isolated', 'embedded'];
 
     for (let candidate of formats) {
       try {
@@ -200,11 +202,7 @@ export default class BoxelExecutionService extends Service {
           .filter(({ id }) => styleIds.has(id))
           .map(({ attributes }) => attributes.href);
         await Promise.all(
-          styleHrefs.map((href) =>
-            this.loaderService.loader.import(
-              validateSharedDocumentScopedCSSRequest(href),
-            ),
-          ),
+          styleHrefs.map((href) => this.installPrerenderedStylesheet(href)),
         );
         return htmlComponent(rendering.attributes.html!);
       } catch {
@@ -212,6 +210,34 @@ export default class BoxelExecutionService extends Service {
       }
     }
     return undefined;
+  }
+
+  /**
+   * Register one prerendered stylesheet in the shared Host document.
+   *
+   * The Capsule CSS policy (capsule-css-policy.ts) is the defense-in-depth
+   * backstop for every stylesheet that shares the Host document, including a
+   * prerendered placeholder's. A rejection here means the placeholder cannot
+   * carry that declaration, but per RP-8-adjacent (unsupported semantics fail
+   * atomically, never silently) the rejection itself must stay observable:
+   * log it loudly instead of disappearing into the outer best-effort catch.
+   * The placeholder is inert and disposable — the live Boxel rendering that
+   * supersedes it is classified independently (boxel-source-classifier.ts)
+   * and, for network-bearing scoped CSS, renders in the Sandbox tier, where
+   * the declaration is actually supported.
+   */
+  private async installPrerenderedStylesheet(href: string): Promise<void> {
+    let request: string;
+    try {
+      request = validateSharedDocumentScopedCSSRequest(href);
+    } catch (error) {
+      console.error(
+        `Boxel execution: dropped a prerendered placeholder stylesheet that failed the Capsule CSS policy (${href})`,
+        error,
+      );
+      return;
+    }
+    await this.loaderService.loader.import(request);
   }
 
   invalidate(moduleIdentifier?: string): void {

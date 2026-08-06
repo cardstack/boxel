@@ -4,6 +4,8 @@ import typescriptPlugin from '@babel/plugin-transform-typescript';
 import * as ContentTag from 'content-tag';
 import { init, parse } from 'es-module-lexer';
 
+import { networkBearingCSS } from './capsule-css-policy';
+
 export type AuthoredExecutionMode = 'capsule' | 'sandbox';
 
 export type BoxelRenderFormat =
@@ -38,6 +40,12 @@ const compiledDynamicInlineStyleAttribute =
   /\[\s*(?:15|16|22|23)\s*,\s*(?:5|\\*["']style\\*["'])\s*,/i;
 const authoredDocumentGlobalStyle =
   /(?:@(?:font-face|font-feature-values|font-palette-values|property|counter-style|color-profile|page|viewport|(?:-moz-)?document|namespace|view-transition|position-try|scroll-timeline|custom-media|custom-selector)\b|@layer\b(?!\s*\{)|\bview-transition-(?:name|class)\s*:)/i;
+// `networkBearingCSS` (imported above) covers `@import` and `url()`-family
+// values. A Capsule stylesheet containing either is rejected at admission
+// (capsule-css-policy.ts); routing here to Sandbox ahead of that rejection
+// gives such a card a real document where the declaration is actually
+// supported, exactly as `authoredDocumentGlobalStyle` already does for
+// `@font-face`.
 const topLayerAttributeName =
   '(?:command|commandfor|popover|popovertarget|popovertargetaction)';
 const authoredTopLayerAttribute = new RegExp(
@@ -133,6 +141,7 @@ function analyzeEmbeddedTemplates(source: string): {
   javascript: string;
   hasDynamicInlineStyle: boolean;
   hasDocumentGlobalStyle: boolean;
+  hasNetworkBearingStyle: boolean;
   hasGlobalStyleSelector: boolean;
   hasTopLayerAttribute: boolean;
   hasUnscopedStyle: boolean;
@@ -140,6 +149,7 @@ function analyzeEmbeddedTemplates(source: string): {
   let characters = Array.from(source);
   let hasDynamicInlineStyle = false;
   let hasDocumentGlobalStyle = false;
+  let hasNetworkBearingStyle = false;
   let hasGlobalStyleSelector = false;
   let hasTopLayerAttribute = false;
   let hasUnscopedStyle = false;
@@ -167,6 +177,7 @@ function analyzeEmbeddedTemplates(source: string): {
     }
     hasGlobalStyleSelector ||= /:global\s*\(/i.test(match.contents);
     hasDocumentGlobalStyle ||= authoredDocumentGlobalStyle.test(match.contents);
+    hasNetworkBearingStyle ||= networkBearingCSS.test(match.contents);
     for (
       let index = match.range.startChar;
       index < match.range.endChar;
@@ -182,6 +193,7 @@ function analyzeEmbeddedTemplates(source: string): {
     javascript: characters.join(''),
     hasDynamicInlineStyle,
     hasDocumentGlobalStyle,
+    hasNetworkBearingStyle,
     hasGlobalStyleSelector,
     hasTopLayerAttribute,
     hasUnscopedStyle,
@@ -389,6 +401,7 @@ export async function classifyBoxelSource(
   let javascript: string;
   let dynamicInlineStyle = compiledDynamicInlineStyleAttribute.test(source);
   let documentGlobalStyle = false;
+  let networkBearingStyle = false;
   let globalStyleSelector = false;
   let topLayerAttribute = compiledTopLayerAttribute.test(source);
   let unscopedStyle = hasCompiledUnscopedStyle(source);
@@ -396,6 +409,7 @@ export async function classifyBoxelSource(
     let templateAnalysis = analyzeEmbeddedTemplates(source);
     dynamicInlineStyle ||= templateAnalysis.hasDynamicInlineStyle;
     documentGlobalStyle ||= templateAnalysis.hasDocumentGlobalStyle;
+    networkBearingStyle ||= templateAnalysis.hasNetworkBearingStyle;
     globalStyleSelector ||= templateAnalysis.hasGlobalStyleSelector;
     topLayerAttribute ||= templateAnalysis.hasTopLayerAttribute;
     unscopedStyle ||= templateAnalysis.hasUnscopedStyle;
@@ -444,6 +458,7 @@ export async function classifyBoxelSource(
       ...domMethodSignals,
       ...(dynamicInlineStyle ? ['dynamic-inline-style'] : []),
       ...(documentGlobalStyle ? ['document-global-style'] : []),
+      ...(networkBearingStyle ? ['network-bearing-style'] : []),
       ...(globalStyleSelector ? ['global-style-selector'] : []),
       ...(topLayerAttribute ? ['top-layer-markup'] : []),
       ...(unscopedStyle ? ['unscoped-style'] : []),
@@ -454,6 +469,7 @@ export async function classifyBoxelSource(
     domMethodSignals.length > 0 ||
     dynamicInlineStyle ||
     documentGlobalStyle ||
+    networkBearingStyle ||
     globalStyleSelector ||
     topLayerAttribute ||
     unscopedStyle;

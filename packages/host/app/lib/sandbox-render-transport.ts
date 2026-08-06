@@ -14,15 +14,28 @@ export interface SandboxRenderTarget {
 interface PendingRenderRequest {
   resolve: () => void;
   reject: (error: Error) => void;
+  timeout?: ReturnType<typeof setTimeout>;
 }
+
+// RP-15.3: silence after `render()` resolves is a protocol violation. A
+// mounted iframe that never confirms its render (a hung module graph, a
+// wedged runloop, a child that stops responding) must still fail the
+// generation instead of leaving the placeholder slot blank forever with no
+// error ever reaching the parent.
+export const defaultSandboxRenderTimeoutMs = 10_000;
 
 /** Parent-side controller for the DOM that remains owned by the child. */
 export class SandboxRenderClient {
   private nextRequest = 0;
   private pending = new Map<string, PendingRenderRequest>();
   private closed = false;
+  private readonly renderTimeoutMs: number;
 
-  constructor(private readonly port: MessagePort) {
+  constructor(
+    private readonly port: MessagePort,
+    renderTimeoutMs = defaultSandboxRenderTimeoutMs,
+  ) {
+    this.renderTimeoutMs = renderTimeoutMs;
     port.addEventListener('message', this.receive);
     port.start();
   }
@@ -35,6 +48,24 @@ export class SandboxRenderClient {
     return this.request({ operation: 'clear' });
   }
 
+  /**
+   * Fails every in-flight request without waiting out its timeout.
+   *
+   * Used when the Host learns by an out-of-band signal (a child-reported
+   * runtime error) that the mounted render can never complete, so the
+   * generation fails immediately instead of idling until the bounded
+   * timeout above elapses.
+   */
+  failPending(error: Error): void {
+    for (let [requestId, pending] of this.pending) {
+      if (pending.timeout !== undefined) {
+        clearTimeout(pending.timeout);
+      }
+      pending.reject(error);
+      this.pending.delete(requestId);
+    }
+  }
+
   destroy(reason = 'Sandbox render client was destroyed'): void {
     if (this.closed) {
       return;
@@ -42,6 +73,9 @@ export class SandboxRenderClient {
     this.closed = true;
     this.port.removeEventListener('message', this.receive);
     for (let pending of this.pending.values()) {
+      if (pending.timeout !== undefined) {
+        clearTimeout(pending.timeout);
+      }
       pending.reject(new Error(reason));
     }
     this.pending.clear();
@@ -69,11 +103,26 @@ export class SandboxRenderClient {
       ...body,
     } as SandboxRenderRequest;
     return new Promise((resolve, reject) => {
-      this.pending.set(requestId, { resolve, reject });
+      let timeout =
+        this.renderTimeoutMs > 0
+          ? setTimeout(() => {
+              if (!this.pending.delete(requestId)) {
+                return;
+              }
+              reject(
+                new Error(
+                  `Sandbox ${body.operation} timed out after ${this.renderTimeoutMs}ms waiting for the child to confirm`,
+                ),
+              );
+            }, this.renderTimeoutMs)
+          : undefined;
+      this.pending.set(requestId, { resolve, reject, timeout });
       try {
         this.port.postMessage(request);
       } catch (error) {
-        this.pending.delete(requestId);
+        if (this.pending.delete(requestId) && timeout !== undefined) {
+          clearTimeout(timeout);
+        }
         reject(asError(error));
       }
     });
@@ -95,6 +144,9 @@ export class SandboxRenderClient {
       return;
     }
     this.pending.delete(response.requestId);
+    if (pending.timeout !== undefined) {
+      clearTimeout(pending.timeout);
+    }
     if (response.ok) {
       pending.resolve();
     } else {
@@ -111,6 +163,9 @@ export class SandboxRenderClient {
     this.closed = true;
     this.port.removeEventListener('message', this.receive);
     for (let pending of this.pending.values()) {
+      if (pending.timeout !== undefined) {
+        clearTimeout(pending.timeout);
+      }
       pending.reject(error);
     }
     this.pending.clear();

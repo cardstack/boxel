@@ -1,6 +1,7 @@
 import {
   assertBoxelExecutionProtocolVersion,
   assertSupportedFeatures,
+  modulesConsumedInMeta,
   type BoxelInstanceHandle,
   type BoxelRenderRecord,
   type LooseCardResource,
@@ -245,7 +246,10 @@ export class BoxelExecutionSession {
     };
     let lease = this.router.route(route);
     if (lease.runtime.mode === 'sandbox') {
-      (lease.runtime as SandboxRuntimeProcess).allowModules(source.moduleGraph);
+      (lease.runtime as SandboxRuntimeProcess).allowModules([
+        ...source.moduleGraph,
+        ...documentDeclaredModules(request),
+      ]);
     }
     let card: BoxelInstanceHandle | undefined;
     try {
@@ -346,4 +350,28 @@ async function disposeGeneration(
 
 function asError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
+}
+
+/**
+ * Every `adoptsFrom` module the execution document declares, for the primary
+ * resource and every `included` resource.
+ *
+ * A Sandbox module graph is otherwise seeded only from the entry module's own
+ * literal ESM imports (`source.moduleGraph`). That walk cannot see a type
+ * reached only through a `linksTo`/`linksToMany` relationship or a
+ * polymorphic `contains`/`containsMany` value — those are authored generically
+ * (e.g. `linksTo(CardDef)`) and their concrete type is data on the serialized
+ * resource, never a source-level import. `createFromSerialized` still needs
+ * to load each such type in the child, so its module must be admitted too.
+ * These are the exact modules the Host itself resolved while building this
+ * document — an explicit, per-document grant, not a realm-wide one.
+ */
+function documentDeclaredModules(request: BoxelExecutionRequest): string[] {
+  let modules = modulesConsumedInMeta(request.resource.meta);
+  for (let resource of request.document.included ?? []) {
+    if (resource.meta) {
+      modules.push(...modulesConsumedInMeta(resource.meta));
+    }
+  }
+  return [...new Set(modules)];
 }

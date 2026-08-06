@@ -1,6 +1,12 @@
 import { decodeScopedCSSRequest } from '@cardstack/runtime-common';
 
-const networkBearingCSS =
+// Shared with `boxel-source-classifier.ts`: the classifier routes any
+// authored scoped CSS that matches this pattern to the Sandbox tier (a real
+// document, where a network-bearing declaration is actually supported)
+// instead of Capsule (the shared Host document, where it is forbidden). Both
+// layers import this single pattern so their notions of "network-bearing CSS"
+// cannot drift apart.
+export const networkBearingCSS =
   /(?:@import\b|(?:url|src|image|(?:-webkit-)?image-set|cross-fade|(?:-moz-)?element|paint)\s*\()/i;
 const documentGlobalCSS =
   /@(?:font-face|font-feature-values|font-palette-values|property|counter-style|color-profile|page|viewport|(?:-moz-)?document|namespace|view-transition|position-try|scroll-timeline|custom-media|custom-selector)\b/i;

@@ -134,7 +134,11 @@ export function resolveBoxelFields(
       fieldName,
       fieldType: requiredCodeRef(field.card),
       kind: field.fieldType,
-      value: projectValue(api.peekAtField(instance, fieldName)),
+      value: projectValue(
+        api.peekAtField(instance, fieldName),
+        field.fieldType,
+        api,
+      ),
       resolvedConfiguration:
         projectJSONValue(resolveFieldConfiguration(api, field, instance)) ??
         null,
@@ -579,16 +583,90 @@ function fieldValue(
   return api.peekAtField(instance, fieldName);
 }
 
+/**
+ * Project one field's runtime value into the record's canonical value shape.
+ *
+ * `contains`/`containsMany` values are embedded composite data, never a
+ * separate resource (RP-3.3): `@model` must keep them reachable the same
+ * way the live instance does (RP-3.2), so they cross fully expanded.
+ * `linksTo`/`linksToMany` name a separate resource, but a **loaded** link
+ * reads through the ordinary getter exactly like any other field on main
+ * (RP-7.1's present state) — the target's resource was side-loaded into
+ * `included` and already deserialized (RP-8.3), so `peekAtField` returns the
+ * real instance with no new fetch or authority, and it expands the same way
+ * a composite does. Only a link with no value yet — not-loaded, not-set, or
+ * broken (RP-7.1's other four states) — has nothing to expand and projects
+ * as absent; that is what still crosses as an opaque `BoxelValueReference`.
+ */
 function projectValue(
   value: unknown,
+  fieldType: Field<BaseDefConstructor>['fieldType'],
+  api: CardAPIModule,
+  seen = new WeakSet<object>(),
 ): JSONValue | BoxelValueReference | BoxelValueReference[] {
-  if (isBaseDefInstance(value)) {
-    return boxelReference(value)!;
+  if (fieldType === 'linksTo') {
+    return isBaseDefInstance(value)
+      ? (projectExpandedValue(value, api, seen) as JSONValue)
+      : null;
   }
-  if (Array.isArray(value) && value.every(isBaseDefInstance)) {
-    return value.map((item) => boxelReference(item)!);
+  if (fieldType === 'linksToMany') {
+    return Array.isArray(value)
+      ? (value
+          .filter(isBaseDefInstance)
+          .map((item) => projectExpandedValue(item, api, seen)) as JSONValue[])
+      : [];
   }
-  return projectJSONValue(value) ?? null;
+  if (fieldType === 'containsMany') {
+    return Array.isArray(value)
+      ? value.map((entry) => projectExpandedValue(entry, api, seen))
+      : [];
+  }
+  return projectExpandedValue(value, api, seen);
+}
+
+/**
+ * Expand one loaded `BaseDefInstance`'s own declared fields recursively so
+ * nested attributes survive the boundary — a `contains` composite's own
+ * fields, or a loaded `linksTo`/`linksToMany` target's fields the same way
+ * (RP-7.1). A relationship that was not side-loaded never reaches here as a
+ * `BaseDefInstance` in the first place (`peekAtField` reads it as `undefined`
+ * until it resolves, RP-7.1), so recursive expansion is naturally bounded by
+ * exactly what the source document included (RP-8.3, RP-8.4) — this never
+ * triggers a new fetch. Identity (`id`) rides along through the target's own
+ * declared `id` field (every `CardDef` has one); a `contains` composite has
+ * none, matching RP-3.3.
+ */
+function projectExpandedValue(
+  value: unknown,
+  api: CardAPIModule,
+  seen: WeakSet<object>,
+): JSONValue {
+  if (!isBaseDefInstance(value)) {
+    return projectJSONValue(value) ?? null;
+  }
+  if (seen.has(value)) {
+    // A cyclic value graph (RP-8.2's identity map makes this reachable for
+    // linksTo, e.g. two cards linking to each other) degrades to its
+    // identity reference rather than recursing forever.
+    return (boxelReference(value) as unknown as JSONValue) ?? null;
+  }
+  seen.add(value);
+  try {
+    let result: Record<string, JSONValue> = {};
+    for (let [name, field] of Object.entries(
+      api.getFields(value, { includeComputeds: true }),
+    )) {
+      result[name] = projectValue(
+        api.peekAtField(value, name),
+        field.fieldType,
+        api,
+        seen,
+      ) as JSONValue;
+    }
+    return result;
+  } finally {
+    seen.delete(value);
+  }
 }
 
 function boxelReference(value: unknown): BoxelValueReference | null {

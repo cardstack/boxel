@@ -61,6 +61,7 @@ class TestRuntime {
   prefersFullSandbox = false;
   createdFromSerialized = 0;
   retainedCanonical?: object;
+  allowedModules: readonly string[] = [];
   private nextInstance = 0;
 
   constructor(readonly mode: BoxelRuntime['mode']) {}
@@ -108,7 +109,9 @@ class TestRuntime {
     this.disposed.push(handle);
   }
 
-  allowModules(): void {}
+  allowModules(moduleIdentifiers: readonly string[]): void {
+    this.allowedModules = moduleIdentifiers;
+  }
 
   getRenderSlotForHandle() {
     return { owner: 'direct' as const, component: {} as never };
@@ -484,6 +487,42 @@ module('Unit | Boxel execution engine', function () {
     `);
     assert.strictEqual(globalRegistration.tier, 'sandbox');
     assert.true(globalRegistration.signals.includes('document-global-style'));
+
+    let networkImport = await classifyBoxelSource(`
+      import { CardDef } from '@cardstack/base/card-api';
+      export class Example extends CardDef {
+        static isolated = class {
+          <template>
+            <section>Example</section>
+            <style scoped>@import "https://fonts.example/inter.css"; .title { color: red; }</style>
+          </template>
+        };
+      }
+    `);
+    assert.strictEqual(
+      networkImport.tier,
+      'sandbox',
+      'an @import in scoped CSS is network-bearing and cannot be admitted to the shared Capsule document, so it routes to the Sandbox tier',
+    );
+    assert.true(networkImport.signals.includes('network-bearing-style'));
+
+    let networkUrl = await classifyBoxelSource(`
+      import { CardDef } from '@cardstack/base/card-api';
+      export class Example extends CardDef {
+        static isolated = class {
+          <template>
+            <section>Example</section>
+            <style scoped>.title { background: url(https://images.example/bg.png); }</style>
+          </template>
+        };
+      }
+    `);
+    assert.strictEqual(
+      networkUrl.tier,
+      'sandbox',
+      'a url() in scoped CSS is network-bearing and routes to the Sandbox tier exactly like @import',
+    );
+    assert.true(networkUrl.signals.includes('network-bearing-style'));
   });
 
   test('module graph classification propagates authored browser dependencies and stops at trusted modules', async function (assert) {
@@ -578,6 +617,80 @@ module('Unit | Boxel execution engine', function () {
       2,
       'a changed source snapshot replaces the cached graph',
     );
+  });
+
+  test('Sandbox module authority is seeded from the document as well as the static module graph', async function (assert) {
+    // Reproduces the shape reported against the execution-runtime-suite realm:
+    // a module classified into the Sandbox tier for its own reason (here,
+    // `sandboxSource`'s browser-runtime signal) whose *document* links a
+    // second card — e.g. a `linksTo(CardDef)` relationship, resolved only at
+    // the field's declared generic type — through `included`, not through a
+    // literal ESM import anywhere in the entry module's source. Nothing in
+    // `source.moduleGraph` (the static import walk) can ever discover that
+    // module, yet the Sandbox child's `createFromSerialized` still needs to
+    // load it to construct the linked instance.
+    let direct = new TestRuntime('direct');
+    let capsule = new TestRuntime('capsule');
+    let sandbox = new TestRuntime('sandbox');
+    let router = new BoxelRuntimeRouter(
+      direct as unknown as DirectBoxelRuntime,
+      () => capsule as unknown as CapsuleBoxelRuntime,
+      () => sandbox as unknown as SandboxRuntimeProcess,
+    );
+    let sourceWithStaticGraph: BoxelSourceClassification = {
+      ...sandboxSource,
+      moduleGraph: [
+        'https://example.test/card',
+        'https://example.test/statically-imported-sibling',
+      ],
+    };
+    let engine = new BoxelExecutionEngine(
+      router,
+      async () => sourceWithStaticGraph,
+    );
+    let session = engine.createSession();
+
+    let linkedTrackResource = {
+      id: 'https://realm.example/use-case-4/track-one',
+      type: 'card',
+      attributes: {},
+      relationships: {},
+      meta: {
+        adoptsFrom: {
+          module: 'https://realm.example/use-case-4/track',
+          name: 'Track',
+        },
+      },
+    } as unknown as LooseCardResource;
+
+    let documentWithIncludedRelationship = {
+      data: {
+        ...resource,
+        relationships: {
+          subject: { data: { type: 'card', id: linkedTrackResource.id! } },
+        },
+      },
+      included: [linkedTrackResource],
+    } as unknown as LooseSingleCardDocument;
+
+    await session.update({
+      ...executionRequest('sandbox'),
+      document: documentWithIncludedRelationship,
+    });
+
+    assert.true(
+      sandbox.allowedModules.includes(
+        'https://example.test/statically-imported-sibling',
+      ),
+      'the static module graph is still admitted',
+    );
+    assert.true(
+      sandbox.allowedModules.includes('https://realm.example/use-case-4/track'),
+      'an included relationship resource’s adoptsFrom module is admitted even though no source statically imports it',
+    );
+
+    await session.destroy();
+    engine.destroy();
   });
 
   test('the router retains Capsule by principal and Sandbox by mounted surface', async function (assert) {

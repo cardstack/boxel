@@ -54,6 +54,12 @@ export type SandboxRuntimeControl =
       transportVersion: number;
       type: 'failed';
       error: { name: string; message: string };
+    }
+  | {
+      kind: 'boxel-sandbox-control';
+      transportVersion: number;
+      type: 'runtime-error';
+      error: { name: string; message: string };
     };
 
 export interface SandboxRuntimeProcessOptions {
@@ -68,6 +74,8 @@ export interface SandboxRuntimeProcessOptions {
   isTrustedModuleURL: (identifier: string) => boolean;
   identity: SurfaceExecutionIdentity;
   connectTimeout?: number;
+  /** Bounds how long a mounted child may take to confirm a render (RP-15.3). */
+  renderTimeout?: number;
 }
 
 export interface SandboxRenderSlot {
@@ -94,6 +102,14 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
   private cancelConnection?: (error: Error) => void;
   private closed = false;
   private readonly moduleAuthority: SandboxModuleAuthority;
+  // RP-15.3: a child error reported after bootstrap (an uncaught exception or
+  // unhandled rejection inside the mounted document — see
+  // `sandbox-runtime-host.ts`) fails every render this process attempts from
+  // then on, rather than leaving a stale successful mount in place while the
+  // child is actually broken.
+  private childError?: Error;
+  private controlPort?: MessagePort;
+  private postBootstrapControlListener?: (event: MessageEvent<unknown>) => void;
 
   constructor(private readonly options: SandboxRuntimeProcessOptions) {
     this.surface = options.surfaceService.register(options.identity);
@@ -174,6 +190,9 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
       throw new Error('Sandbox runtime process is closed');
     }
     await this.client;
+    if (this.childError) {
+      throw this.childError;
+    }
     if (!this.renderClient) {
       throw new Error('Sandbox render transport is unavailable');
     }
@@ -205,6 +224,14 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
     this.renderClient?.destroy();
     this.renderClient = undefined;
     this.renderedCard = undefined;
+    if (this.controlPort && this.postBootstrapControlListener) {
+      this.controlPort.removeEventListener(
+        'message',
+        this.postBootstrapControlListener,
+      );
+    }
+    this.controlPort = undefined;
+    this.postBootstrapControlListener = undefined;
     this.options.surfaceService.release(this.surface);
     void this.client.then((client) => client.destroy()).catch(() => undefined);
     this.options.iframe.src = 'about:blank';
@@ -218,6 +245,25 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
       return Promise.reject(new Error('Sandbox runtime process is closed'));
     }
     return this.client.then(callback);
+  }
+
+  /**
+   * Records a post-bootstrap child failure and fails every render this
+   * process is currently waiting on (RP-15.3).
+   *
+   * This is the Sandbox counterpart to the Capsule's synchronous evaluation
+   * errors: a child that throws or rejects after it announced readiness is
+   * otherwise indistinguishable, from the parent's perspective, from a child
+   * that quietly finished rendering nothing. Recording the failure here lets
+   * `getRenderSlot` fail closed instead of returning a slot for a mount the
+   * child itself has already abandoned.
+   */
+  private reportChildError(error: Error): void {
+    if (this.closed || this.childError) {
+      return;
+    }
+    this.childError = error;
+    this.renderClient?.failPending(error);
   }
 
   private connect(): Promise<SandboxBoxelRuntimeClient> {
@@ -284,6 +330,32 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
         }
         settled = true;
         cleanupBootstrap();
+        // Bootstrap's own listener is removed by `cleanupBootstrap` above.
+        // A successfully bootstrapped child may still fail later — an
+        // uncaught exception or unhandled rejection reported by
+        // `sandbox-runtime-host.ts` after it posted `ready` — so this
+        // process keeps a persistent listener on the same control port for
+        // the rest of its lifetime (torn down in `destroy`).
+        if (controlPort) {
+          this.controlPort = controlPort;
+          this.postBootstrapControlListener = (
+            postEvent: MessageEvent<unknown>,
+          ) => {
+            if (!isSandboxRuntimeControl(postEvent.data)) {
+              return;
+            }
+            if (
+              postEvent.data.type === 'failed' ||
+              postEvent.data.type === 'runtime-error'
+            ) {
+              this.reportChildError(runtimeControlError(postEvent.data.error));
+            }
+          };
+          controlPort.addEventListener(
+            'message',
+            this.postBootstrapControlListener,
+          );
+        }
         resolve(client);
       };
       let receive = (event: MessageEvent<unknown>) => {
@@ -302,7 +374,10 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
         let channel = new MessageChannel();
         controlPort = channel.port1;
         client = new SandboxBoxelRuntimeClient(channel.port1);
-        this.renderClient = new SandboxRenderClient(channel.port1);
+        this.renderClient = new SandboxRenderClient(
+          channel.port1,
+          this.options.renderTimeout,
+        );
         this.surfaceServer = new SandboxSurfaceServer(
           channel.port1,
           this.options.surfaceService,
@@ -382,7 +457,9 @@ export function isSandboxRuntimeControl(
     !('transportVersion' in value) ||
     value.transportVersion !== BOXEL_EXECUTION_TRANSPORT_VERSION ||
     !('type' in value) ||
-    (value.type !== 'ready' && value.type !== 'failed')
+    (value.type !== 'ready' &&
+      value.type !== 'failed' &&
+      value.type !== 'runtime-error')
   ) {
     return false;
   }

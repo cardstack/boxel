@@ -2,6 +2,7 @@ import { module, test } from 'qunit';
 
 import {
   confineCapsuleStylesheet,
+  networkBearingCSS,
   validateCapsuleInlineStyle,
   validateCapsuleStylesheet,
   validateSharedDocumentScopedCSSRequest,
@@ -126,6 +127,28 @@ module('Unit | Capsule CSS policy', function () {
       () => validateSharedDocumentScopedCSSRequest(escaped),
       /selector escaped its compiled scope/,
     );
+  });
+
+  test('exports the network-bearing CSS pattern that boxel-source-classifier.ts reuses for Sandbox routing', function (assert) {
+    // `boxel-source-classifier.ts` imports this exact pattern to route an
+    // authored module's scoped CSS to the Sandbox tier. Every value it
+    // matches must also be one `validateCapsuleStylesheet` rejects, or the
+    // two layers could drift: a card could be routed to Capsule while
+    // carrying a declaration only Sandbox's real document can honor.
+    for (let css of [
+      '@import "https://fonts.example/inter.css";',
+      '.title[data-scopedcss-a] { background: url(https://images.example/bg.png); }',
+    ]) {
+      assert.true(
+        networkBearingCSS.test(css),
+        `classifier signal pattern matches: ${css}`,
+      );
+      assert.throws(
+        () => validateCapsuleStylesheet(css),
+        /network-bearing value/,
+        `policy backstop still rejects: ${css}`,
+      );
+    }
   });
 
   test('confines compiled selectors to the Capsule render island', function (assert) {
