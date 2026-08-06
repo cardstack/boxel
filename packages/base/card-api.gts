@@ -128,6 +128,7 @@ import FileDefAtomTemplate from './default-templates/file-def-atom';
 import FileDefEmbeddedTemplate from './default-templates/file-def-embedded';
 import FileDefFittedTemplate from './default-templates/file-def-fitted';
 import FileDefIsolatedTemplate from './default-templates/file-def-isolated';
+import type { FilePreviewComponent } from './file-formats/file-preview-stage';
 import ImageDefAtomTemplate from './default-templates/image-def-atom';
 import ImageDefEmbeddedTemplate from './default-templates/image-def-embedded';
 import ImageDefFittedTemplate from './default-templates/image-def-fitted';
@@ -3041,7 +3042,11 @@ export class FileContentMismatchError extends Error {
 export class FileDef extends BaseDef {
   static displayName = 'File';
   static isFileDef = true;
-  static icon = FileIcon;
+  // Annotated with the declared type rather than inferred from the assignment:
+  // the shared format shells render whatever a subclass puts here, so a family
+  // must be free to supply any icon component, not just the
+  // `TemplateOnlyComponent` shape that inference would pin this to.
+  static icon: CardOrFieldTypeIcon = FileIcon;
   [isSavedInstance] = true;
 
   get [realmURL](): URL | undefined {
@@ -3073,6 +3078,26 @@ export class FileDef extends BaseDef {
   @field contentType = contains(StringField);
   @field contentHash = contains(StringField);
   @field contentSize = contains(NumberField);
+
+  // The four shared format shells own identity, facts, budgets, and state for
+  // every file family. What they can't know is how to draw the file itself — a
+  // waveform, a page, a 3D scene — so a family supplies that one renderer here
+  // and inherits the rest. A family that hasn't landed a renderer yet gets an
+  // honest generic pane rather than a broken one.
+  //
+  // The shells take their glyph from this class's `static icon`, so a family
+  // declares its icon once and every format picks it up — and that icon's
+  // module stays in the family's own file rather than in card-api's dependency
+  // graph, which every card in every realm inherits.
+  static previewComponent?: FilePreviewComponent;
+  // Pin a profile axis when the file's MIME type is ambiguous — a `.ts` file
+  // served as `text/plain`, say. Left unset, these are derived from the file's
+  // name and content type by the taxonomy registry.
+  static fileKind?: string;
+  static fileFamily?: string;
+  static previewKind?: string;
+  static previewAdapter?: string;
+  static previewSource?: string;
 
   static embedded: BaseDefComponent = FileDefEmbeddedTemplate;
   static fitted: BaseDefComponent = FileDefFittedTemplate;
@@ -3161,7 +3186,7 @@ export { getDefaultFileMenuItems } from './file-menu-items';
 
 export class ImageDef extends FileDef {
   static displayName = 'Image';
-  static icon = ImageIcon;
+  static icon: CardOrFieldTypeIcon = ImageIcon;
   static acceptTypes = 'image/*';
 
   @field width = contains(NumberField);
