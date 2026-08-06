@@ -40,6 +40,7 @@ import {
   testRealmURL,
   testRRI,
   cardInfo,
+  cardInfoLinks,
 } from '../../helpers';
 
 import {
@@ -697,6 +698,7 @@ module('Integration | serialization', function (hooks) {
           firstName: 'Mango',
           cardInfo,
         },
+        relationships: { ...cardInfoLinks },
         meta: {
           adoptsFrom: {
             module: rri(`../test-cards`),
@@ -1095,6 +1097,7 @@ module('Integration | serialization', function (hooks) {
           cardInfo,
         },
         relationships: {
+          ...cardInfoLinks,
           pet: {
             links: {
               self: `${testRealmURL}Pet/mango`,
@@ -1120,6 +1123,7 @@ module('Integration | serialization', function (hooks) {
             cardDescription: 'Toilet paper ghost: Poooo!',
             cardInfo,
           },
+          relationships: { ...cardInfoLinks },
           meta: {
             adoptsFrom: {
               module: testRRI('test-cards'),
@@ -1135,6 +1139,7 @@ module('Integration | serialization', function (hooks) {
             cardInfo,
           },
           relationships: {
+            ...cardInfoLinks,
             favoriteToy: {
               links: {
                 self: `${testRealmURL}Toy/spookyToiletPaper`,
@@ -1230,6 +1235,7 @@ module('Integration | serialization', function (hooks) {
           cardInfo,
         },
         relationships: {
+          ...cardInfoLinks,
           pet: {
             data: {
               lid: mango[localId],
@@ -1252,6 +1258,7 @@ module('Integration | serialization', function (hooks) {
             cardDescription: 'Toilet paper ghost: Poooo!',
             cardInfo,
           },
+          relationships: { ...cardInfoLinks },
           meta: {
             adoptsFrom: {
               module: testRRI('test-cards'),
@@ -1267,6 +1274,7 @@ module('Integration | serialization', function (hooks) {
             cardInfo,
           },
           relationships: {
+            ...cardInfoLinks,
             favoriteToy: {
               data: {
                 lid: spookyToiletPaper[localId],
@@ -1522,6 +1530,7 @@ module('Integration | serialization', function (hooks) {
           cardInfo,
         },
         relationships: {
+          ...cardInfoLinks,
           pet: {
             links: {
               self: `${testRealmURL}Pet/mango`,
@@ -1588,6 +1597,7 @@ module('Integration | serialization', function (hooks) {
           cardInfo,
         },
         relationships: {
+          ...cardInfoLinks,
           pet: {
             links: {
               self: null,
@@ -1614,6 +1624,7 @@ module('Integration | serialization', function (hooks) {
           cardInfo,
         },
         relationships: {
+          ...cardInfoLinks,
           pet: {
             links: {
               self: null,
@@ -1838,6 +1849,7 @@ module('Integration | serialization', function (hooks) {
           cardInfo,
         },
         relationships: {
+          ...cardInfoLinks,
           friend: {
             links: {
               self: `${testRealmURL}Person/mango`,
@@ -1864,6 +1876,7 @@ module('Integration | serialization', function (hooks) {
             cardInfo,
           },
           relationships: {
+            ...cardInfoLinks,
             friend: {
               links: {
                 self: null,
@@ -1906,6 +1919,7 @@ module('Integration | serialization', function (hooks) {
           cardInfo,
         },
         relationships: {
+          ...cardInfoLinks,
           friend: {
             data: {
               lid: mango[localId],
@@ -2077,6 +2091,7 @@ module('Integration | serialization', function (hooks) {
           },
         },
         relationships: {
+          ...cardInfoLinks,
           'pet.favoriteToy': {
             links: {
               self: `${testRealmURL}Toy/spookyToiletPaper`,
@@ -2102,6 +2117,7 @@ module('Integration | serialization', function (hooks) {
             cardDescription: 'Toilet paper ghost: Poooo!',
             cardInfo,
           },
+          relationships: { ...cardInfoLinks },
           meta: {
             adoptsFrom: {
               module: testRRI('test-cards'),
@@ -2211,6 +2227,7 @@ module('Integration | serialization', function (hooks) {
           cardInfo,
         },
         relationships: {
+          ...cardInfoLinks,
           'pet.favoriteToy': {
             links: {
               self: `${testRealmURL}Toy/spookyToiletPaper`,
@@ -2236,6 +2253,7 @@ module('Integration | serialization', function (hooks) {
             cardDescription: 'Toilet paper ghost: Poooo!',
             cardInfo,
           },
+          relationships: { ...cardInfoLinks },
           meta: {
             adoptsFrom: {
               module: testRRI('test-cards'),
@@ -2355,6 +2373,7 @@ module('Integration | serialization', function (hooks) {
           cardInfo,
         },
         relationships: {
+          ...cardInfoLinks,
           'pets.0.favoriteToy': {
             links: {
               self: `${testRealmURL}Toy/spookyToiletPaper`,
@@ -2380,6 +2399,7 @@ module('Integration | serialization', function (hooks) {
             cardDescription: 'Toilet paper ghost: Poooo!',
             cardInfo,
           },
+          relationships: { ...cardInfoLinks },
           meta: {
             adoptsFrom: {
               module: testRRI('test-cards'),
@@ -3102,6 +3122,7 @@ module('Integration | serialization', function (hooks) {
             },
             cardInfo,
           },
+          relationships: { ...cardInfoLinks },
           meta: {
             adoptsFrom: {
               module: testRRI('test-cards'),
@@ -3353,6 +3374,7 @@ module('Integration | serialization', function (hooks) {
           cardInfo,
         },
         relationships: {
+          ...cardInfoLinks,
           pet: { links: { self: null } },
           friend: {
             links: { self: `${testRealmURL}Person/hassan` },
@@ -3384,6 +3406,7 @@ module('Integration | serialization', function (hooks) {
             cardInfo,
           },
           relationships: {
+            ...cardInfoLinks,
             cardTheme: { links: { self: null } },
           },
           meta: {
@@ -3404,6 +3427,7 @@ module('Integration | serialization', function (hooks) {
             cardInfo,
           },
           relationships: {
+            ...cardInfoLinks,
             pet: {
               links: { self: `${testRealmURL}Pet/mango` },
               data: { id: `${testRealmURL}Pet/mango`, type: 'card' },
@@ -3575,6 +3599,7 @@ module('Integration | serialization', function (hooks) {
             cardInfo,
           },
           relationships: {
+            ...cardInfoLinks,
             pet: { links: { self: null } },
             friend: { links: { self: null } },
             friendPet: { links: { self: null } },
@@ -3947,6 +3972,7 @@ module('Integration | serialization', function (hooks) {
             cardThumbnailURL: './intro.png',
             cardInfo,
           },
+          relationships: { ...cardInfoLinks },
           meta: {
             adoptsFrom: {
               module: testRRI('test-cards'),
@@ -4022,6 +4048,7 @@ module('Integration | serialization', function (hooks) {
           },
           cardInfo,
         },
+        relationships: { ...cardInfoLinks },
         meta: {
           adoptsFrom: {
             module: testRRI('test-cards'),
@@ -4095,6 +4122,7 @@ module('Integration | serialization', function (hooks) {
           },
           cardInfo,
         },
+        relationships: { ...cardInfoLinks },
         meta: {
           adoptsFrom: {
             module: testRRI('test-cards'),
@@ -4205,6 +4233,7 @@ module('Integration | serialization', function (hooks) {
           },
           cardInfo,
         },
+        relationships: { ...cardInfoLinks },
         meta: {
           adoptsFrom: {
             module: testRRI('test-cards'),
@@ -4328,6 +4357,7 @@ module('Integration | serialization', function (hooks) {
           ],
           cardInfo,
         },
+        relationships: { ...cardInfoLinks },
         meta: {
           adoptsFrom: {
             module: testRRI('test-cards'),
@@ -4615,6 +4645,7 @@ module('Integration | serialization', function (hooks) {
           },
           cardInfo,
         },
+        relationships: { ...cardInfoLinks },
         meta: {
           adoptsFrom: {
             module: testRRI('test-cards'),
@@ -4782,6 +4813,7 @@ module('Integration | serialization', function (hooks) {
           ],
           cardInfo,
         },
+        relationships: { ...cardInfoLinks },
         meta: {
           adoptsFrom: {
             module: testRRI('test-cards'),
@@ -5216,6 +5248,7 @@ module('Integration | serialization', function (hooks) {
             firstName: 'Mango',
             cardInfo,
           },
+          relationships: { ...cardInfoLinks },
           meta: {
             adoptsFrom: {
               module: rri(`./person`),
@@ -5299,6 +5332,7 @@ module('Integration | serialization', function (hooks) {
             },
             cardInfo,
           },
+          relationships: { ...cardInfoLinks },
           meta: {
             adoptsFrom: {
               module: rri(`./post`),
@@ -5417,6 +5451,7 @@ module('Integration | serialization', function (hooks) {
             ],
             cardInfo,
           },
+          relationships: { ...cardInfoLinks },
           meta: {
             adoptsFrom: {
               module: rri(`./blog`),
@@ -5634,13 +5669,14 @@ module('Integration | serialization', function (hooks) {
             cardInfo,
           },
           relationships: {
+            ...cardInfoLinks,
             'editor.certificate': {
               data: {
                 id: `${testRealmURL}Certificate/0`,
                 type: 'card',
               },
               links: {
-                self: `${testRealmURL}Certificate/0`,
+                self: `./Certificate/0`,
               },
             },
             'posts.0.author.certificate': {
@@ -5649,7 +5685,7 @@ module('Integration | serialization', function (hooks) {
                 type: 'card',
               },
               links: {
-                self: `${testRealmURL}Certificate/1`,
+                self: `./Certificate/1`,
               },
             },
             'posts.1.author.certificate': {
@@ -5658,7 +5694,7 @@ module('Integration | serialization', function (hooks) {
                 type: 'card',
               },
               links: {
-                self: `${testRealmURL}Certificate/2`,
+                self: `./Certificate/2`,
               },
             },
           },
@@ -5677,9 +5713,10 @@ module('Integration | serialization', function (hooks) {
               cardInfo,
             },
             id: testRRI('Certificate/1'),
+            relationships: { ...cardInfoLinks },
             meta: {
               adoptsFrom: {
-                module: testRRI('test-cards'),
+                module: rri('./test-cards'),
                 name: 'Certificate',
               },
             },
@@ -5692,9 +5729,10 @@ module('Integration | serialization', function (hooks) {
               cardInfo,
             },
             id: testRRI('Certificate/2'),
+            relationships: { ...cardInfoLinks },
             meta: {
               adoptsFrom: {
-                module: testRRI('test-cards'),
+                module: rri('./test-cards'),
                 name: 'Certificate',
               },
             },
@@ -5707,9 +5745,10 @@ module('Integration | serialization', function (hooks) {
               cardInfo,
             },
             id: testRRI('Certificate/0'),
+            relationships: { ...cardInfoLinks },
             meta: {
               adoptsFrom: {
-                module: testRRI('test-cards'),
+                module: rri('./test-cards'),
                 name: 'Certificate',
               },
             },
@@ -5761,6 +5800,7 @@ module('Integration | serialization', function (hooks) {
           birthdate: '2019-10-30',
           cardInfo,
         },
+        relationships: { ...cardInfoLinks },
         meta: {
           adoptsFrom: {
             module: testRRI('test-cards'),
@@ -5787,6 +5827,7 @@ module('Integration | serialization', function (hooks) {
           cardInfo,
         },
         relationships: {
+          ...cardInfoLinks,
           cardTheme: {
             links: {
               self: null,
@@ -5834,6 +5875,7 @@ module('Integration | serialization', function (hooks) {
           unRenderedField: null,
           cardInfo,
         },
+        relationships: { ...cardInfoLinks },
         meta: {
           adoptsFrom: {
             module: rri(`../test-cards`),
@@ -5879,6 +5921,7 @@ module('Integration | serialization', function (hooks) {
             name: 'Mango',
             cardInfo,
           },
+          relationships: { ...cardInfoLinks },
           meta: {
             adoptsFrom: {
               module: rri(`${testModuleRealm}captain`),
@@ -5932,6 +5975,7 @@ module('Integration | serialization', function (hooks) {
             name: 'Mango',
             cardInfo,
           },
+          relationships: { ...cardInfoLinks },
           meta: {
             adoptsFrom: {
               module: testRRI('test-cards'),
@@ -6801,6 +6845,7 @@ module('Integration | serialization', function (hooks) {
             cardInfo,
           },
           relationships: {
+            ...cardInfoLinks,
             pets: {
               links: {
                 self: null,
@@ -7028,6 +7073,7 @@ module('Integration | serialization', function (hooks) {
             cardInfo,
           },
           relationships: {
+            ...cardInfoLinks,
             'pets.0': {
               links: {
                 self: `${testRealmURL}Pet/mango`,
@@ -7056,6 +7102,7 @@ module('Integration | serialization', function (hooks) {
               firstName: 'Mango',
               cardInfo,
             },
+            relationships: { ...cardInfoLinks },
             meta: {
               adoptsFrom: {
                 module: testRRI('test-cards'),
@@ -7111,6 +7158,7 @@ module('Integration | serialization', function (hooks) {
             cardInfo,
           },
           relationships: {
+            ...cardInfoLinks,
             'friends.0': {
               links: { self: `./mango` },
               data: { id: `${testRealmURL}Person/mango`, type: 'card' },
@@ -7136,6 +7184,7 @@ module('Integration | serialization', function (hooks) {
               cardInfo,
             },
             relationships: {
+              ...cardInfoLinks,
               friends: { links: { self: null } },
             },
             meta: {
@@ -7153,6 +7202,7 @@ module('Integration | serialization', function (hooks) {
               cardInfo,
             },
             relationships: {
+              ...cardInfoLinks,
               friends: { links: { self: null } },
             },
             meta: {
@@ -7387,6 +7437,7 @@ module('Integration | serialization', function (hooks) {
           cardInfo,
         },
         relationships: {
+          ...cardInfoLinks,
           friend: {
             links: { self: `${testRealmURL}Friend/hassan` },
             data: { id: `${testRealmURL}Friend/hassan`, type: 'card' },
@@ -7421,6 +7472,7 @@ module('Integration | serialization', function (hooks) {
             cardInfo,
           },
           relationships: {
+            ...cardInfoLinks,
             cardTheme: { links: { self: null } },
           },
           meta: {
@@ -7441,6 +7493,7 @@ module('Integration | serialization', function (hooks) {
             cardInfo,
           },
           relationships: {
+            ...cardInfoLinks,
             cardTheme: { links: { self: null } },
           },
           meta: {
@@ -7461,6 +7514,7 @@ module('Integration | serialization', function (hooks) {
             cardInfo,
           },
           relationships: {
+            ...cardInfoLinks,
             'pets.0': {
               links: { self: `${testRealmURL}Pet/mango` },
               data: { id: `${testRealmURL}Pet/mango`, type: 'card' },
@@ -7656,6 +7710,7 @@ module('Integration | serialization', function (hooks) {
             cardInfo,
           },
           relationships: {
+            ...cardInfoLinks,
             friend: { links: { self: null } },
             friendPets: { links: { self: null } },
             cardTheme: { links: { self: null } },
@@ -7832,6 +7887,7 @@ module('Integration | serialization', function (hooks) {
         includeComputeds: true,
       });
       assert.deepEqual(serialized.data.relationships, {
+        ...cardInfoLinks,
         friend: {
           links: { self: `${testRealmURL}Friend/hassan` },
           data: { type: 'card', id: `${testRealmURL}Friend/hassan` },

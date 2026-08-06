@@ -2329,6 +2329,8 @@ module(`Integration | realm indexing`, function (hooks) {
           cardTitle: 'Vet visit',
           contact: {
             firstName: 'Burcu',
+            // a computed declared inside the nested `Person` FieldDef
+            cardTitle: 'Burcu',
           },
         },
         cardDescription: 'Dog',
