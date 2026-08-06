@@ -20,6 +20,7 @@ import {
 
 import { installBoxelLoaderCompatibilityModules } from '@cardstack/host/lib/boxel-loader-compatibility';
 import DirectBoxelRuntime from '@cardstack/host/lib/direct-boxel-runtime';
+import SandboxMediaBridge from '@cardstack/host/lib/sandbox-media-bridge';
 import type { SandboxRenderTarget } from '@cardstack/host/lib/sandbox-render-transport';
 import {
   installSandboxRuntimeHost,
@@ -156,32 +157,50 @@ export function reportRenderDiagnosticOnResize(
 
 const attachSurface = modifier<{
   Args: {
-    Positional: [SandboxSurfaceClient, (element: HTMLElement) => void, Format];
+    Positional: [
+      SandboxSurfaceClient,
+      (element: HTMLElement) => void,
+      Format,
+      ((url: string) => Promise<Response>) | undefined,
+    ];
   };
   Element: HTMLElement;
-}>((element, [surface, measureAndReportRenderDiagnostic, format]) => {
-  let disconnectEvents = connectSandboxSurface(element, surface, (error) => {
-    console.error('Sandbox Surface capability failed', error);
-  });
-  // In allocated mode the parent's tile owns the box — a child that keeps
-  // reporting intrinsic measurements would stomp the parent's `height:
-  // 100%` back to a content-derived pixel value. The format is a tracked
-  // arg, so a format switch re-runs this modifier and starts/stops the
-  // reporter to match the new mode.
-  let stopHeightReporting =
-    surfaceHeightModeFor(format) === 'intrinsic'
-      ? reportIntrinsicHeight(element, surface)
-      : undefined;
-  let stopDiagnosticReporting = reportRenderDiagnosticOnResize(
+}>(
+  (
     element,
-    measureAndReportRenderDiagnostic,
-  );
-  return () => {
-    stopHeightReporting?.();
-    stopDiagnosticReporting();
-    disconnectEvents();
-  };
-});
+    [surface, measureAndReportRenderDiagnostic, format, mediaFetch],
+  ) => {
+    let disconnectEvents = connectSandboxSurface(element, surface, (error) => {
+      console.error('Sandbox Surface capability failed', error);
+    });
+    // Authored `<img>`s lose the user's realm authorization inside this
+    // credentialless document; the bridge re-resolves them through the
+    // bounded Host media lane. See sandbox-media-bridge.ts.
+    let mediaBridge = mediaFetch
+      ? new SandboxMediaBridge(element, mediaFetch)
+      : undefined;
+    mediaBridge?.start();
+    // In allocated mode the parent's tile owns the box — a child that keeps
+    // reporting intrinsic measurements would stomp the parent's `height:
+    // 100%` back to a content-derived pixel value. The format is a tracked
+    // arg, so a format switch re-runs this modifier and starts/stops the
+    // reporter to match the new mode.
+    let stopHeightReporting =
+      surfaceHeightModeFor(format) === 'intrinsic'
+        ? reportIntrinsicHeight(element, surface)
+        : undefined;
+    let stopDiagnosticReporting = reportRenderDiagnosticOnResize(
+      element,
+      measureAndReportRenderDiagnostic,
+    );
+    return () => {
+      mediaBridge?.stop();
+      stopHeightReporting?.();
+      stopDiagnosticReporting();
+      disconnectEvents();
+    };
+  },
+);
 
 let esModuleLexerInitialized = false;
 
@@ -354,6 +373,8 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
   private loader?: Loader;
   private runtime?: DirectBoxelRuntime;
   private moduleFetchHandler?: (request: Request) => Promise<Response>;
+  /** Bounded declarative-asset lane; see SandboxMediaBridge. */
+  private mediaFetch?: (url: string) => Promise<Response>;
   private reportRenderDiagnostic?: (
     diagnostic: SandboxRenderDiagnostic,
   ) => void;
@@ -389,7 +410,8 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
   private runtimeHost = installSandboxRuntimeHost({
     parentOrigin: this.args.model.parentOrigin,
     bootstrapId: this.args.model.bootstrapId,
-    createRuntime: (moduleFetch) => {
+    createRuntime: (moduleFetch, mediaFetch) => {
+      this.mediaFetch = mediaFetch;
       this.moduleFetchHandler = (request) => moduleFetch(request);
       this.network.mount(this.moduleFetchHandler);
       let fetch = fetcher(
@@ -578,6 +600,7 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
           this.surface
           this.measureAndReportRenderDiagnostic
           this.format
+          this.mediaFetch
         }}
       >
         {{#if this.renderedComponent}}

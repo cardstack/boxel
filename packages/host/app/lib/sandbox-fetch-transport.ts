@@ -18,6 +18,16 @@ interface SandboxFetchRequest {
   requestId: string;
   url: string;
   headers: [string, string][];
+  /**
+   * 'module' (default): an executable read, checked against the classified
+   * module graph. 'media': a declarative-asset read (an authored `<img>`)
+   * — never executable, never admitted to the module graph, validated as
+   * image content instead. The two purposes exist because a credentialless
+   * iframe strips the browser session that lets main render private-realm
+   * images in-document; the Host re-brokers exactly that ability, bounded
+   * to GET + image/* + a size cap (see SandboxMediaBridge).
+   */
+  purpose?: 'module' | 'media';
 }
 
 interface SandboxFetchResponse {
@@ -53,23 +63,36 @@ export class SandboxFetchClient {
     if (request.method !== 'GET') {
       throw new Error('The Sandbox module loader only supports GET');
     }
-    let requestId = `module:${++this.nextRequest}`;
-    let message: SandboxFetchRequest = {
+    return this.post({
       kind: requestKind,
-      requestId,
+      requestId: `module:${++this.nextRequest}`,
       url: request.url,
       headers: [...request.headers.entries()],
-    };
+    });
+  };
+
+  /** Declarative-asset read; see SandboxFetchRequest['purpose']. */
+  fetchMedia = async (url: string): Promise<Response> => {
+    return this.post({
+      kind: requestKind,
+      requestId: `media:${++this.nextRequest}`,
+      url,
+      headers: [['accept', 'image/*']],
+      purpose: 'media',
+    });
+  };
+
+  private post(message: SandboxFetchRequest): Promise<Response> {
     return new Promise<Response>((resolve, reject) => {
-      this.pending.set(requestId, { resolve, reject });
+      this.pending.set(message.requestId, { resolve, reject });
       try {
         this.port.postMessage(message);
       } catch (error) {
-        this.pending.delete(requestId);
+        this.pending.delete(message.requestId);
         reject(asError(error));
       }
     });
-  };
+  }
 
   destroy(): void {
     this.port.removeEventListener('message', this.receive);
@@ -153,6 +176,9 @@ export class SandboxFetchServer {
   };
 
   private async respond(request: SandboxFetchRequest): Promise<void> {
+    if ((request.purpose ?? 'module') === 'media') {
+      return this.respondMedia(request);
+    }
     let message: SandboxFetchResponse;
     try {
       if (!this.isAllowed(request.url)) {
@@ -241,6 +267,73 @@ export class SandboxFetchServer {
       message.response ? [message.response.body] : [],
     );
   }
+
+  /**
+   * Declarative-media read (`purpose: 'media'`): never consults the
+   * classified module graph, the draft overrides, or observeModule — an
+   * image is not executable and must never become admitted module state.
+   * The Host fetch carries the user's realm authorization, which is the
+   * SAME authority main grants every in-document `<img>` via the browser
+   * session; the credentialless iframe merely lost it. Bounded to GET,
+   * image/* responses, and the shared size cap. Non-image or oversized
+   * responses fail the request; the child-side bridge then restores the
+   * authored URL so public assets still render credentiallessly.
+   */
+  private async respondMedia(request: SandboxFetchRequest): Promise<void> {
+    let message: SandboxFetchResponse;
+    try {
+      let url = new URL(request.url);
+      if (!['http:', 'https:'].includes(url.protocol)) {
+        throw new Error('Sandbox media reads support only HTTP(S)');
+      }
+      let headers = new Headers();
+      for (let [name, value] of request.headers) {
+        if (forwardedRequestHeaders.has(name.toLowerCase())) {
+          headers.set(name, value);
+        }
+      }
+      let response = await this.fetch(url.href, {
+        method: 'GET',
+        headers,
+        credentials: 'omit',
+        referrerPolicy: 'no-referrer',
+        redirect: 'error',
+      });
+      let contentType = response.headers.get('content-type')?.toLowerCase();
+      if (response.ok && !contentType?.startsWith('image/')) {
+        throw new Error('Sandbox media response was not an image');
+      }
+      let body = await response.arrayBuffer();
+      if (body.byteLength > maxModuleBytes) {
+        throw new Error('Sandbox media response exceeds the size limit');
+      }
+      message = {
+        kind: responseKind,
+        requestId: request.requestId,
+        ok: true,
+        response: {
+          status: response.status,
+          statusText: response.statusText,
+          url: response.url || request.url,
+          headers: [...response.headers.entries()].filter(([name]) =>
+            forwardedResponseHeaders.has(name.toLowerCase()),
+          ),
+          body,
+        },
+      };
+    } catch (error) {
+      message = {
+        kind: responseKind,
+        requestId: request.requestId,
+        ok: false,
+        error: asError(error).message,
+      };
+    }
+    this.port.postMessage(
+      message,
+      message.response ? [message.response.body] : [],
+    );
+  }
 }
 
 function isFetchRequest(value: unknown): value is SandboxFetchRequest {
@@ -263,7 +356,11 @@ function isFetchRequest(value: unknown): value is SandboxFetchRequest {
         Array.isArray(header) &&
         header.length === 2 &&
         header.every((part) => typeof part === 'string' && part.length <= 8192),
-    )
+    ) &&
+    (!('purpose' in value) ||
+      value.purpose === undefined ||
+      value.purpose === 'module' ||
+      value.purpose === 'media')
   );
 }
 

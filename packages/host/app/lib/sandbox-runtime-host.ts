@@ -33,6 +33,7 @@ export function installSandboxRuntimeHost(options: {
   bootstrapId: string;
   createRuntime: (
     fetch: typeof globalThis.fetch,
+    fetchMedia: (url: string) => Promise<Response>,
   ) => BoxelRuntime | Promise<BoxelRuntime>;
   createRenderTarget: (
     runtime: BoxelRuntime,
@@ -127,7 +128,10 @@ export function installSandboxRuntimeHost(options: {
       try {
         fetchClient = new SandboxFetchClient(port);
         console.warn('[sandbox-child] createRuntime begun');
-        let createdRuntime = await options.createRuntime(fetchClient.fetch);
+        let createdRuntime = await options.createRuntime(
+          fetchClient.fetch,
+          fetchClient.fetchMedia,
+        );
         runtime = createdRuntime;
         console.warn('[sandbox-child] createRuntime completed', {
           mode: createdRuntime.mode,
