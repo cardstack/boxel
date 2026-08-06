@@ -414,6 +414,25 @@ export interface InstancePresentation {
    * installed in the shared document. `null` when the instance has no theme.
    */
   themeScope: string | null;
+  /**
+   * The theme's raw CSS custom-property definitions (`cssVariables` on the
+   * Theme card, or on the instance itself when it is theme-shaped) — the
+   * exact string main's `field-component.gts` hands `CardContainer`'s
+   * `@themeCss`, from which `themeScopedCss(themeScope, themeCss)` compiles
+   * the scoped stylesheet. Crossed as a plain string for the same reason as
+   * `themeScope`: the boundary tier's Host-owned wrapper must be able to
+   * make the identical trusted `CardContainer` invocation main makes, since
+   * the live Theme card never crosses. `null` when the instance has no
+   * theme CSS.
+   */
+  themeCss: string | null;
+  /**
+   * The theme's `cssImports` URL list (`CardContainer @cssImports` on
+   * main): stylesheet `@import`s — typically font faces — the theme
+   * depends on. Same Host-side derivation and same trusted emission point
+   * as `themeCss`.
+   */
+  cssImports: string[] | null;
 }
 
 /**

@@ -417,13 +417,17 @@ export default class CapsuleBoxelRuntime implements BoxelRuntime {
       theme: boxelReferenceOrNull(projection.cardTheme),
       // This fallback path builds presentation from the Capsule's own JSON
       // projection (no `hostProjection` was adopted for this instance), which
-      // does not carry the linked Theme card's `cssVariables`, only a
-      // reference. `themeScope()` needs the live theme's CSS to compute the
-      // fingerprint half of the token (boxel-projection.ts's
-      // `projectThemeScopeToken` does this Host-side, where that access is
-      // available). A card reached only through this path renders without
-      // its ambient theme scope stamped rather than a fabricated token.
+      // does not carry the linked Theme card's `cssVariables`/`cssImports`,
+      // only a reference. `themeScope()` needs the live theme's CSS to
+      // compute the fingerprint half of the token, and the stylesheet the
+      // Host-owned wrapper installs needs that same CSS text
+      // (boxel-projection.ts's `projectThemePresentation` does this
+      // Host-side, where that access is available). A card reached only
+      // through this path renders without its ambient theme scope stamped
+      // or its stylesheet installed, rather than with fabricated values.
       themeScope: null,
+      themeCss: null,
+      cssImports: null,
     };
   }
 }

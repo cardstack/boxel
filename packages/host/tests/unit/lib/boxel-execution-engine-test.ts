@@ -178,6 +178,8 @@ function renderRecord(
       thumbnailURL: null,
       theme: null,
       themeScope: null,
+      themeCss: null,
+      cssImports: null,
     },
   };
 }

@@ -28,7 +28,10 @@ import {
 } from '@cardstack/host/lib/boxel-projection';
 import type { BoxelExecutionMode } from '@cardstack/host/lib/boxel-runtime';
 import BoxelRuntimeRouter from '@cardstack/host/lib/boxel-runtime-router';
-import { BoxelModuleGraphClassifier } from '@cardstack/host/lib/boxel-source-classifier';
+import {
+  BoxelModuleGraphClassifier,
+  type BoxelSourceClassification,
+} from '@cardstack/host/lib/boxel-source-classifier';
 import CapsuleBoxelRuntime from '@cardstack/host/lib/capsule-boxel-runtime';
 import {
   validateCapsuleInlineStyle,
@@ -80,6 +83,12 @@ export default class BoxelExecutionService extends Service {
 
   private engine?: BoxelExecutionEngine;
   private classifier?: BoxelModuleGraphClassifier;
+  /**
+   * The same router instance handed to `engine` — retained here too so
+   * `reserveSandboxProcess()` can call `route()` directly, independent of
+   * (and before) a session's own materialize() call. See that method.
+   */
+  private router?: BoxelRuntimeRouter;
   private fieldPortalMaps = new WeakMap<
     BaseDef,
     Promise<Record<string, BoxComponent>>
@@ -98,6 +107,80 @@ export default class BoxelExecutionService extends Service {
 
   surfaceId(): string {
     return `boxel-surface-${++this.nextSurface}`;
+  }
+
+  /**
+   * Pre-flight classification, duplicated ahead of a session's own identical
+   * internal step (`BoxelExecutionSession.update()`'s `classifySource` call).
+   * Classification is pure static module-graph analysis with no side effects
+   * — `BoxelModuleGraphClassifier.classify()` is itself memoized by
+   * `moduleIdentifier`/`source`, so calling it here and then again from
+   * `update()` does real work only once. The renderer uses this to learn,
+   * before materialize() ever runs, whether a card needs the Sandbox tier —
+   * see `reserveSandboxProcess()`.
+   */
+  classifyForExecution(
+    moduleIdentifier: string,
+    source: string,
+  ): Promise<BoxelSourceClassification> {
+    this.ensureExecutionEngine();
+    // `classify` is the module graph API, not Ember's String extension.
+    // eslint-disable-next-line ember/no-string-prototype-extensions
+    return this.classifier!.classify(moduleIdentifier, source);
+  }
+
+  /**
+   * Obtains (and retains) the Sandbox process for this surface — completely
+   * independent of, and before, card materialization.
+   *
+   * RP-15.3: a Sandbox process cannot connect until it has a permanent DOM
+   * mount point, and that mount point is the presentation slot element the
+   * Host renders only once `BoxelExecutionSession.getRenderSlot()` resolves
+   * — which itself cannot resolve until `materialize()` has already created
+   * the card through a live connection. Left alone, that is a deadlock: the
+   * process cannot connect before it is mounted, and materialize() cannot
+   * create a card before the process connects. This reservation breaks the
+   * cycle by obtaining the (registry-retained, reference-counted) process
+   * ahead of materialize() — using the same, pure, memoized classification
+   * decision it will independently reach — so the caller can render the real
+   * presentation slot immediately and let `mount()` start connecting before
+   * materialize() ever needs the client.
+   *
+   * Returns `undefined` when classification does not select Sandbox for this
+   * request. The caller must release the returned lease exactly once (e.g.
+   * from its own teardown) — this is a second, independent retain on the
+   * same reference-counted registry entry `materialize()`'s own `route()`
+   * call also retains, so an extra release here never tears down a process
+   * still in active use.
+   */
+  reserveSandboxProcess(
+    principal: string,
+    surfaceId: string,
+    trusted: boolean,
+    format: string | undefined,
+    source: BoxelSourceClassification,
+  ): { process: SandboxRuntimeProcess; release: () => void } | undefined {
+    this.ensureExecutionEngine();
+    let router = this.router;
+    if (!router) {
+      return undefined;
+    }
+    let lease = router.route({
+      principal,
+      surfaceId,
+      trusted,
+      format,
+      source,
+      prefersFullSandbox: false,
+    });
+    if (lease.runtime.mode !== 'sandbox') {
+      lease.release();
+      return undefined;
+    }
+    return {
+      process: lease.runtime as SandboxRuntimeProcess,
+      release: lease.release,
+    };
   }
 
   async requestFor(
@@ -154,8 +237,20 @@ export default class BoxelExecutionService extends Service {
       // `projectHostBoxelSemantics` needs the same normalization to derive
       // a matching `data-boxel-theme-scope` token
       // (`boxel-projection.ts`'s `projectThemeScopeToken`).
+      // `ensureRelationshipLoaded` closes RP-7.2's lazy-load gap for a
+      // pending relationship reached through a nested `contains()` field
+      // (e.g. a themed card's `cardInfo.theme`, or a `linksToMany` owned by
+      // a contained field): card-api.gts's own lazy-load trigger keys the
+      // fetch off the field's immediate owning instance, which is only
+      // guaranteed store-wired for the canonical root this service already
+      // creates with `store: this.store` (`services/store.ts`), not for a
+      // nested sub-instance the classic (main) render path never
+      // distinguishes. Routing every pending reference through the same
+      // `StoreService.get` the classic path uses, then writing the result
+      // back onto the field, makes the fetch happen regardless.
       hostProjection: projectHostBoxelSemantics(card, api, {
         unresolveURL: (url) => this.network.virtualNetwork.unresolveURL(url),
+        ensureRelationshipLoaded: (reference) => this.store.get(reference),
       }),
     };
   }
@@ -329,13 +424,6 @@ export default class BoxelExecutionService extends Service {
     });
   }
 
-  parkSandboxIframe(iframe: HTMLIFrameElement): void {
-    if (typeof document === 'undefined') {
-      return;
-    }
-    this.parkingElement.append(iframe);
-  }
-
   private ensureExecutionEngine(): BoxelExecutionEngine {
     if (!this.engine) {
       this.classifier = new BoxelModuleGraphClassifier({
@@ -353,6 +441,7 @@ export default class BoxelExecutionService extends Service {
         (principal) => this.createCapsule(principal),
         (surfaceIdentity) => this.createSandbox(surfaceIdentity),
       );
+      this.router = router;
       let classifier = this.classifier;
       this.engine = new BoxelExecutionEngine(
         router,
@@ -422,17 +511,21 @@ export default class BoxelExecutionService extends Service {
     );
   }
 
+  /**
+   * Constructs the process object only — no iframe is created or appended
+   * here. RP-15.3: a live iframe is never re-parented, and this factory
+   * runs (via the runtime router) before any presentation slot element
+   * exists to mount into. `SandboxRuntimeProcess` creates its own iframe
+   * lazily, detached, and only inserts it into the document once — from
+   * `mount(element)`, called by the presentation slot modifier with its
+   * own, permanent slot element as the target.
+   */
   private createSandbox(surfaceIdentity: string): SandboxRuntimeProcess {
     if (typeof document === 'undefined') {
       throw new Error('Sandbox rendering requires a browser document');
     }
-    let iframe = document.createElement('iframe');
-    iframe.className = 'boxel-sandbox-process';
-    iframe.title = 'Boxel Sandbox';
-    this.parkingElement.append(iframe);
     let childURL = this.sandboxChildURL;
     return new SandboxRuntimeProcess({
-      iframe,
       childURL,
       childOrigin: new URL(childURL).origin,
       fetch: this.network.authedFetch,
@@ -446,33 +539,6 @@ export default class BoxelExecutionService extends Service {
         surfaceId: surfaceIdentity,
       },
     });
-  }
-
-  private get parkingElement(): HTMLElement {
-    let existing = document.querySelector<HTMLElement>(
-      '[data-boxel-sandbox-processes]',
-    );
-    if (existing) {
-      return existing;
-    }
-    let element = document.createElement('div');
-    element.dataset.boxelSandboxProcesses = '';
-    // A Sandbox process must stay connected and renderable while it boots and
-    // while Glimmer moves its iframe between presentation slots. `hidden`
-    // would apply `display: none`, which can suspend layout/observers inside
-    // the child and deadlock the handshake that makes the slot available.
-    // Keep the parking lot active but outside the visible and interactive UI.
-    Object.assign(element.style, {
-      position: 'fixed',
-      inset: '0 auto auto 0',
-      width: '0',
-      height: '0',
-      overflow: 'hidden',
-      pointerEvents: 'none',
-      visibility: 'hidden',
-    });
-    document.body.append(element);
-    return element;
   }
 
   private get sandboxChildURL(): string {
@@ -552,11 +618,7 @@ export default class BoxelExecutionService extends Service {
     this.engine?.destroy();
     this.engine = undefined;
     this.classifier = undefined;
-    if (typeof document !== 'undefined') {
-      document
-        .querySelector<HTMLElement>('[data-boxel-sandbox-processes]')
-        ?.remove();
-    }
+    this.router = undefined;
   }
 }
 

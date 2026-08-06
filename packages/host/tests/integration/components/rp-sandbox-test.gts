@@ -7,15 +7,18 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
+  BOXEL_SURFACE_PROTOCOL_VERSION,
   Loader,
   VirtualNetwork,
   fetcher,
   type LooseCardResource,
+  type SurfaceHandle,
 } from '@cardstack/runtime-common';
 
 import {
   createSandboxModuleEvaluator,
   measureRenderedOutput,
+  reportIntrinsicHeight,
   rewriteDynamicImports,
 } from '@cardstack/host/components/boxel-sandbox-runtime';
 import CardRenderer from '@cardstack/host/components/card-renderer';
@@ -34,7 +37,11 @@ import {
   installSandboxRuntimeErrorReporter,
   postRenderDiagnostic,
 } from '@cardstack/host/lib/sandbox-runtime-host';
+import SandboxRuntimeProcess from '@cardstack/host/lib/sandbox-runtime-process';
+import { SandboxSurfaceClient } from '@cardstack/host/lib/sandbox-surface-transport';
 import { isBoxelSandboxRuntimeBoot } from '@cardstack/host/routes/boxel-sandbox-runtime';
+
+import type SurfaceServiceType from '@cardstack/host/services/surface-service';
 
 import {
   testRealmURL,
@@ -157,27 +164,30 @@ module('Integration | rp-sandbox', function (hooks) {
     );
   });
 
-  test('RP-15.3, RP-6.4: mounting a Sandbox-routed card creates a real, credentialless iframe and fails closed to the chrome error presentation when the child cannot complete its bootstrap', async function (assert) {
+  test('RP-15.3, RP-6.4: mounting a Sandbox-routed card creates a real, credentialless iframe BORN inside its own presentation slot, and fails closed to the chrome error presentation when the child cannot complete its bootstrap', async function (assert) {
     let card = await createWidget();
 
     await renderThroughExecutionRenderer(card, 'isolated');
 
-    // SandboxRuntimeProcess.connect() creates the iframe and sets its `src`
-    // synchronously as soon as routing selects the Sandbox tier, well before
-    // any handshake with the child. It is parked off-screen (never `hidden`,
-    // so its layout stays live) until the render slot is granted, in a
-    // container appended directly to `document.body` — outside the
-    // `#ember-testing` root that `waitFor`/`assert.dom` are scoped to, so
-    // this polls the whole document directly instead.
+    // getRenderSlot() no longer awaits the full connect+render handshake
+    // before resolving — it can't: the iframe cannot exist until it has a
+    // permanent mount point, and that mount point is the slot element this
+    // very resolution causes the Host to render. So the Sandbox slot (and
+    // the iframe mounted inside it) appears promptly, well before any
+    // handshake with the child completes.
+    await waitFor('[data-boxel-execution="sandbox"]', { timeout: 5000 });
     let iframeSelector =
-      '[data-boxel-sandbox-processes] iframe.boxel-sandbox-process';
-    await waitUntil(() => document.querySelector(iframeSelector), {
-      timeout: 5000,
-    });
+      '[data-boxel-execution="sandbox"] iframe.boxel-sandbox-process';
+    await waitFor(iframeSelector, { timeout: 5000 });
     let iframe = document.querySelector<HTMLIFrameElement>(iframeSelector);
     assert.ok(
       iframe,
       'a real iframe element is created for the Sandbox process',
+    );
+    assert.strictEqual(
+      iframe?.parentElement,
+      document.querySelector('[data-boxel-execution="sandbox"]'),
+      'the iframe is a direct child of its presentation slot — born there, not moved there',
     );
     assert.strictEqual(
       iframe?.getAttribute('sandbox'),
@@ -202,10 +212,13 @@ module('Integration | rp-sandbox', function (hooks) {
     // origin (`user.localhost`), so the bootstrap handshake this iframe just
     // started can never complete. RP-15.3 requires that a Sandbox render
     // never go silently blank when that happens: it must fail closed to the
-    // same chrome error presentation Direct/Capsule use, and never mount the
-    // Sandbox slot or any authored content, rather than leaving the viewer
-    // looking at an empty rectangle. (SandboxRuntimeProcess's connect
-    // timeout defaults to 15s.)
+    // same chrome error presentation Direct/Capsule use, tearing down the
+    // Sandbox slot (and the failed process/iframe with it — the presentation
+    // slot modifier's own teardown calls unmount()) rather than leaving a
+    // dead, booting-forever iframe on screen. (SandboxRuntimeProcess's
+    // connect timeout defaults to 15s; onMountFailed is what turns that
+    // background failure into this visible state, since getRenderSlot()
+    // already returned successfully before the timeout could fire.)
     await waitFor('.boxel-execution-error', { timeout: 20000 });
     assert
       .dom('.boxel-execution-error')
@@ -222,7 +235,7 @@ module('Integration | rp-sandbox', function (hooks) {
     assert
       .dom('[data-boxel-execution="sandbox"]')
       .doesNotExist(
-        'the Sandbox slot never mounts when the child never becomes ready',
+        'the Sandbox slot (and its failed iframe) is torn down once the handshake is known to have failed',
       );
   });
 
@@ -593,16 +606,30 @@ export async function loadThree() {
   });
 
   test('RP-15.3: measureRenderedOutput distinguishes a populated render root from one that acked but painted nothing', function (assert) {
-    assert.deepEqual(
-      measureRenderedOutput(null, 'isolated'),
-      {
-        format: 'isolated',
-        elementCount: 0,
-        textLength: 0,
-        hasVisibleContent: false,
-      },
+    let missing = measureRenderedOutput(null, 'isolated');
+    assert.strictEqual(missing.format, 'isolated');
+    assert.strictEqual(missing.elementCount, 0);
+    assert.strictEqual(missing.textLength, 0);
+    assert.false(
+      missing.hasVisibleContent,
       'a missing render root (the mount point never appeared) measures as no visible content',
     );
+    assert.deepEqual(
+      missing.rootRect,
+      { width: 0, height: 0, top: 0, left: 0 },
+      'no element to measure a rect from',
+    );
+    assert.false(missing.rootHasOffsetParent);
+    assert.strictEqual(
+      typeof missing.documentVisibilityState,
+      'string',
+      'reports the real document.visibilityState regardless of root presence',
+    );
+    assert.true(
+      missing.bodyChildElementCount >= 0,
+      'reports the real document.body composition regardless of root presence — the paint-diagnosis fields this exists for',
+    );
+    assert.true(Array.isArray(missing.bodyChildren));
 
     let empty = document.createElement('main');
     document.body.append(empty);
@@ -616,6 +643,26 @@ export async function loadThree() {
       );
     } finally {
       empty.remove();
+    }
+
+    let zeroSize = document.createElement('main');
+    zeroSize.textContent = 'Track: corridor-take-one';
+    zeroSize.style.width = '0';
+    zeroSize.style.height = '0';
+    zeroSize.style.overflow = 'hidden';
+    document.body.append(zeroSize);
+    try {
+      let diagnostic = measureRenderedOutput(zeroSize, 'isolated');
+      assert.true(
+        diagnostic.textLength > 0,
+        'has real text content, unlike the empty-root case above',
+      );
+      assert.false(
+        diagnostic.hasVisibleContent,
+        'text content alone is not sufficient — a zero-size root (present but unpainted, the exact defect a prior OR-based version of this check missed) must not read as visible',
+      );
+    } finally {
+      zeroSize.remove();
     }
 
     let populated = document.createElement('main');
@@ -634,7 +681,11 @@ export async function loadThree() {
       );
       assert.true(
         diagnostic.hasVisibleContent,
-        'a render root with real content measures as visible',
+        'a render root with real, sized content measures as visible',
+      );
+      assert.true(
+        diagnostic.rootHasOffsetParent,
+        'an attached, painted element has an offsetParent',
       );
     } finally {
       populated.remove();
@@ -650,12 +701,10 @@ export async function loadThree() {
     channel.port2.start();
     channel.port1.start();
 
-    postRenderDiagnostic(channel.port1, {
-      format: 'isolated',
-      elementCount: 3,
-      textLength: 42,
-      hasVisibleContent: true,
-    });
+    postRenderDiagnostic(
+      channel.port1,
+      measureRenderedOutput(null, 'isolated'),
+    );
 
     await waitUntil(() => received.length > 0, { timeout: 2000 });
     let [message] = received as {
@@ -668,11 +717,212 @@ export async function loadThree() {
     }[];
     assert.strictEqual(message?.kind, 'boxel-sandbox-render-diagnostic');
     assert.strictEqual(message?.format, 'isolated');
-    assert.strictEqual(message?.elementCount, 3);
-    assert.strictEqual(message?.textLength, 42);
-    assert.true(message?.hasVisibleContent);
+    assert.strictEqual(message?.elementCount, 0);
+    assert.strictEqual(message?.textLength, 0);
+    assert.false(message?.hasVisibleContent);
 
     channel.port1.close();
     channel.port2.close();
+  });
+
+  // False positive below (qunit/resolve-async): the two MessageChannel
+  // port.start() calls in this test are plain Web API calls (needed for
+  // addEventListener-based ports to dispatch queued messages), not
+  // assert.async()/done() callbacks. Every actual async operation in this
+  // test is a properly-awaited waitUntil().
+  // eslint-disable-next-line qunit/resolve-async
+  test('RP-15.3, RP-16.1: reportIntrinsicHeight measures the render root and reports its real height as the surface minimumHeight, deduped and stoppable', async function (assert) {
+    // The parent cannot ResizeObserve content inside a cross-origin iframe
+    // (unlike SurfaceElementModifier's SurfaceService.attach path for
+    // Direct/Capsule) — this is the child's own replacement, driving the
+    // existing `layout` capability with a measured `minimumHeight` instead
+    // of only the one-time `heightMode` the parent already sets before
+    // render. A real SandboxSurfaceClient/port pair drives this exactly as
+    // the mounted `attachSurface` modifier does in production.
+    let channel = new MessageChannel();
+    let layoutRequests: { heightMode: string; minimumHeight?: number }[] = [];
+    channel.port1.addEventListener('message', (event) => {
+      let request = event.data as {
+        kind?: string;
+        requestId?: string;
+        operation?: string;
+        layout?: { heightMode: string; minimumHeight?: number };
+      };
+      if (request?.kind !== 'boxel-surface-request') {
+        return;
+      }
+      if (request.operation === 'layout' && request.layout) {
+        layoutRequests.push(request.layout);
+      }
+      channel.port1.postMessage({
+        kind: 'boxel-surface-response',
+        protocolVersion: BOXEL_SURFACE_PROTOCOL_VERSION,
+        requestId: request.requestId,
+        ok: true,
+      });
+    });
+    channel.port1.start();
+    channel.port2.start();
+
+    let surface = new SandboxSurfaceClient(
+      channel.port2,
+      'surface:test' as SurfaceHandle,
+    );
+    let element = document.createElement('main');
+    element.style.width = '200px';
+    document.body.append(element);
+
+    try {
+      let stopReporting = reportIntrinsicHeight(element, surface);
+      await waitUntil(() => layoutRequests.length > 0, { timeout: 2000 });
+      assert.deepEqual(
+        layoutRequests[0],
+        { heightMode: 'intrinsic', minimumHeight: 0 },
+        'reports a baseline immediately, before any content has rendered into an empty root',
+      );
+
+      element.textContent = 'Track: corridor-take-one';
+      element.style.height = '500px';
+      await waitUntil(() => layoutRequests.length > 1, { timeout: 2000 });
+      let last = layoutRequests[layoutRequests.length - 1];
+      assert.strictEqual(last?.heightMode, 'intrinsic');
+      assert.strictEqual(
+        last?.minimumHeight,
+        500,
+        "reports the element's real, resized height once the card's content lands",
+      );
+
+      let countAfterResize = layoutRequests.length;
+      stopReporting();
+      element.style.height = '100px';
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      assert.strictEqual(
+        layoutRequests.length,
+        countAfterResize,
+        'stop() disconnects the observer — no further reports after teardown',
+      );
+    } finally {
+      element.remove();
+      surface.destroy();
+      channel.port1.close();
+      channel.port2.close();
+    }
+  });
+
+  test('RP-15.3: the Sandbox process is born inside its presentation slot element and never re-parented — a repeat mount() is a no-op, and unmount() removes the iframe without moving it elsewhere', function (assert) {
+    // RP-15.3: "a live iframe is never re-parented." A cross-origin
+    // iframe's document reloads on ANY move — including one meant to
+    // preserve it (a parking lot) — so the only correct place to insert it
+    // is its permanent presentation slot, exactly once.
+    let released: unknown[] = [];
+    let surfaceService = {
+      register: () => 'surface:test',
+      release: (handle: unknown) => released.push(handle),
+      layout: () => undefined,
+    } as unknown as SurfaceServiceType;
+    let process = new SandboxRuntimeProcess({
+      childURL: 'https://sandbox.example.test/_boxel-sandbox-runtime',
+      childOrigin: 'https://sandbox.example.test',
+      surfaceService,
+      fetch: globalThis.fetch,
+      resolveModuleURL: (identifier) => identifier,
+      isTrustedModuleURL: () => false,
+      identity: { mode: 'sandbox', principal: 'user:test', surfaceId: 'x' },
+      connectTimeout: 60_000,
+    });
+
+    assert.false(
+      process.iframe.isConnected,
+      'the iframe does not exist in the document until mount()',
+    );
+
+    let slotElement = document.createElement('div');
+    document.body.append(slotElement);
+    try {
+      process.mount(slotElement);
+      let iframe = process.iframe;
+      assert.strictEqual(
+        iframe.parentElement,
+        slotElement,
+        'born directly inside its permanent slot element',
+      );
+      let srcAfterFirstMount = iframe.getAttribute('src');
+
+      process.mount(slotElement);
+      assert.strictEqual(
+        slotElement.children.length,
+        1,
+        'a repeat mount() call does not re-append (re-parent) the iframe',
+      );
+      assert.strictEqual(
+        iframe.getAttribute('src'),
+        srcAfterFirstMount,
+        'a repeat mount() does not reload the iframe',
+      );
+
+      process.unmount();
+      assert.false(
+        iframe.isConnected,
+        'unmount() removes the iframe from the document',
+      );
+      assert.strictEqual(
+        iframe.parentElement,
+        null,
+        'unmount() moves the iframe nowhere — it is simply gone, not relocated',
+      );
+    } finally {
+      process.destroy();
+      slotElement.remove();
+    }
+  });
+
+  test('RP-15.3: a failed connect (the timeout, since the child origin cannot boot here) reaches the Host as onMountFailed rather than an unhandled rejection', async function (assert) {
+    // getRenderSlot() no longer awaits the connect+render handshake before
+    // resolving (it mounts eagerly so the iframe can be born in its slot),
+    // so a background connect failure has to reach the Host some other
+    // way — this is that path.
+    let surfaceService = {
+      register: () => 'surface:test',
+      release: () => undefined,
+      layout: () => undefined,
+    } as unknown as SurfaceServiceType;
+    let process = new SandboxRuntimeProcess({
+      childURL: 'https://sandbox.example.test/_boxel-sandbox-runtime',
+      childOrigin: 'https://sandbox.example.test',
+      surfaceService,
+      fetch: globalThis.fetch,
+      resolveModuleURL: (identifier) => identifier,
+      isTrustedModuleURL: () => false,
+      identity: { mode: 'sandbox', principal: 'user:test', surfaceId: 'x' },
+      // Short on purpose: nothing in this test harness serves the child
+      // origin, so this always times out — quickly, instead of the 15s
+      // production default.
+      connectTimeout: 50,
+    });
+
+    let slotElement = document.createElement('div');
+    document.body.append(slotElement);
+    let failures: Error[] = [];
+    process.onMountFailed((error) => failures.push(error));
+
+    try {
+      process.mount(slotElement);
+      await waitUntil(() => failures.length > 0, { timeout: 2000 });
+      assert.strictEqual(failures.length, 1);
+      assert.true(
+        /timed out/i.test(failures[0]?.message ?? ''),
+        'reports the connect timeout',
+      );
+
+      // A late subscriber (matches how the Host renderer subscribes only
+      // after getRenderSlot() resolves, which can race a fast failure)
+      // still gets the already-known failure, immediately.
+      let lateFailures: Error[] = [];
+      process.onMountFailed((error) => lateFailures.push(error));
+      assert.strictEqual(lateFailures.length, 1);
+    } finally {
+      process.destroy();
+      slotElement.remove();
+    }
   });
 });

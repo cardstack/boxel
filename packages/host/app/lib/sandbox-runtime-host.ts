@@ -250,12 +250,25 @@ function postControl(
  * make "acked but painted nothing" observable without a screenshot: measured
  * right after the render's `afterRender()` settles, so it reflects the
  * committed DOM, not a scheduled-but-not-yet-flushed one.
+ *
+ * The `body*`/`root*`/`documentVisibilityState` fields exist specifically to
+ * distinguish "content exists but isn't painted" from "content never
+ * rendered": `hasVisibleContent` already requires non-zero on-screen size,
+ * but these let a human (or the parent) see WHY it might not have one — an
+ * unexpected element stacked over the render root, a detached/zero-size
+ * ancestor (`rootHasOffsetParent: false`), or the document not actually
+ * visible.
  */
 export interface SandboxRenderDiagnostic {
   format: string;
   elementCount: number;
   textLength: number;
   hasVisibleContent: boolean;
+  bodyChildElementCount: number;
+  bodyChildren: { tag: string; id: string; className: string }[];
+  rootRect: { width: number; height: number; top: number; left: number };
+  rootHasOffsetParent: boolean;
+  documentVisibilityState: string;
 }
 
 interface SandboxRenderDiagnosticMessage extends SandboxRenderDiagnostic {

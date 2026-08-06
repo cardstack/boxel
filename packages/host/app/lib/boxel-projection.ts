@@ -8,7 +8,11 @@ import {
   isFieldDef,
   isFileDef,
   Loader,
+  maybeRelativeReference,
   moduleFrom,
+  relativeTo as relativeToSymbol,
+  resolveRRIReference,
+  rri,
   type BoxelDescription,
   type BoxelKind,
   type BoxelValueReference,
@@ -18,6 +22,7 @@ import {
   type InstancePresentation,
   type JSONValue,
   type LooseSingleCardDocument,
+  type RealmResourceIdentifier,
   type ResolvedField,
 } from '@cardstack/runtime-common';
 
@@ -91,6 +96,28 @@ export interface HostBoxelProjectionOptions {
    * unnormalized.
    */
   unresolveURL?: (url: string) => string;
+  /**
+   * RP-7.2: the field getter is the lazy-load trigger — `presentRelationship
+   * Values` below reads it before anything else. That trigger only actually
+   * starts a fetch when the field's own owning instance is wired to a store
+   * that can fetch (`getStore()`/the `stores` identity map in
+   * card-api.gts): guaranteed for the canonical root instance the classic
+   * (main) render path always reads through, not guaranteed for a nested
+   * `contains()` field's own sub-instance (a themed card's `cardInfo.theme`,
+   * reached by walking into `cardInfo`) — main's render never distinguishes
+   * the two, so a Boxel that reads a not-loaded nested link can silently
+   * never fetch it.
+   *
+   * Supplying this closes that gap explicitly: `presentRelationshipValues`
+   * routes every `not-loaded` reference it finds through the same
+   * store/card-service the classic path uses (`StoreService.get` in
+   * `services/boxel-execution.ts`), then writes the resolved value directly
+   * onto the field. The very next `getRelationshipMembershipState` read
+   * (RP-7.1, e.g. `waitForAnyRelationshipToSettle`'s poll, already running
+   * as part of RP-7.3) then sees the field as present and the existing
+   * settle → republish → `@model` refresh chain takes over unchanged.
+   */
+  ensureRelationshipLoaded?: (reference: string) => Promise<unknown>;
 }
 
 /**
@@ -123,6 +150,7 @@ export function projectHostBoxelSemantics(
       api,
       options.writableFields,
       (relationship) => pending.push(relationship),
+      options.ensureRelationshipLoaded,
     ),
     presentation: projectInstancePresentation(
       instance,
@@ -273,6 +301,7 @@ export function resolveBoxelFields(
   api: CardAPIModule,
   writableFields?: ReadonlySet<string>,
   onPendingRelationship?: (pending: PendingRelationship) => void,
+  ensureLoaded?: (reference: string) => Promise<unknown>,
 ): ResolvedField[] {
   return Object.entries(
     api.getFields(instance, { includeComputeds: true }),
@@ -292,6 +321,8 @@ export function resolveBoxelFields(
         field.fieldType,
         api,
         onPendingRelationship,
+        undefined,
+        ensureLoaded,
       ),
       resolvedConfiguration:
         projectJSONValue(resolveFieldConfiguration(api, field, instance)) ??
@@ -312,7 +343,7 @@ export function projectInstancePresentation(
     summary: stringField(instance, 'cardDescription', api),
     thumbnailURL: stringField(instance, 'cardThumbnailURL', api),
     theme: boxelReference(fieldValue(instance, 'cardTheme', api)),
-    themeScope: projectThemeScopeToken(instance, api, unresolveURL),
+    ...projectThemePresentation(instance, api, unresolveURL),
   };
 }
 
@@ -327,37 +358,124 @@ export function projectInstancePresentation(
  * boundary tier's stamped `data-boxel-theme-scope` attribute matches the
  * selector the theme stylesheet was compiled against.
  *
- * `unresolveURL`, when supplied, normalizes the theme's absolute instance id
- * to its registered scoped-identifier form first (see
- * `HostBoxelProjectionOptions.unresolveURL`) — the form the theme
- * stylesheet was actually compiled against.
+ * The theme id this function starts from crosses the execution boundary
+ * absolute (RP-8.4, `useAbsoluteURL: true` in `boxel-execution.ts`'s
+ * `requestFor`) — `normalizeThemeId` below reproduces the id form the
+ * theme's realm-served document (and therefore its compiled stylesheet)
+ * actually uses instead.
+ *
+ * Alongside the scope token, `themeCss` and `cssImports` cross too — the
+ * remaining inputs of main's trusted `CardContainer` invocation
+ * (`@themeScope`/`@themeCss`/`@cssImports` in `field-component.gts`). A
+ * boundary tier renders no `field-component` chrome of its own (the Capsule
+ * slot mounts the card's template directly), so its Host-owned wrapper must
+ * be able to make that identical invocation, or a themed card silently
+ * loses its stylesheet, fonts, and the container's token derivation.
  */
-function projectThemeScopeToken(
+function projectThemePresentation(
   instance: BaseDef,
   api: CardAPIModule,
   unresolveURL?: (url: string) => string,
-): string | null {
+): Pick<InstancePresentation, 'themeScope' | 'themeCss' | 'cssImports'> {
+  const none = { themeScope: null, themeCss: null, cssImports: null };
   let ownCssVariables = fieldValue(instance, 'cssVariables', api);
   let themeId: string | null;
   let cssVariables: unknown;
+  let themeSource: BaseDef;
   if (typeof ownCssVariables === 'string') {
     themeId = boxelInstanceId(instance);
     cssVariables = ownCssVariables;
+    themeSource = instance;
   } else {
     let theme = fieldValue(instance, 'cardTheme', api);
     if (!isBaseDefInstance(theme)) {
-      return null;
+      return none;
     }
     themeId = boxelInstanceId(theme);
     cssVariables = fieldValue(theme, 'cssVariables', api);
+    themeSource = theme;
   }
   if (!themeId || typeof cssVariables !== 'string') {
-    return null;
+    return none;
   }
-  if (unresolveURL) {
-    themeId = unresolveURL(themeId);
+  themeId = normalizeThemeId(themeId, instance, api, unresolveURL);
+  let scope = themeScope(themeId, cssVariables) ?? null;
+  if (!scope) {
+    return none;
   }
-  return themeScope(themeId, cssVariables) ?? null;
+  let imports = fieldValue(themeSource, 'cssImports', api);
+  let cssImports = Array.isArray(imports)
+    ? imports.filter((entry): entry is string => typeof entry === 'string')
+    : null;
+  return {
+    themeScope: scope,
+    themeCss: cssVariables,
+    cssImports: cssImports && cssImports.length > 0 ? cssImports : null,
+  };
+}
+
+/**
+ * Reproduce, for an already-absolute theme instance id, the id form the
+ * theme's own served document (and therefore its compiled stylesheet)
+ * actually carries. Main's `field-component.gts` render, and the realm's
+ * index/prerender pipeline, both see `card.cardTheme.id` after ordinary
+ * (non-`useAbsoluteURL`) serialization, which takes one of two forms:
+ *
+ * - Same realm as `instance`: a path relative to `instance`'s own id.
+ *   Reproduced here with the identical functions and inputs
+ *   `@cardstack/base/card-serialization.ts`'s `serializeCard` uses for its
+ *   own internal `maybeRelativeReference` callback (`resolveRRIReference`
+ *   then `maybeRelativeReference`, against the instance's own id/realm) —
+ *   not a re-derived approximation.
+ * - A registered realm (Base, Catalog) or no realm context: `unresolveURL`
+ *   (`HostBoxelProjectionOptions.unresolveURL`) maps it to its
+ *   scoped-identifier prefix form when one is registered. Applied after
+ *   relativization, so it is a no-op on an already-relativized same-realm
+ *   path (which matches no `http(s)://` prefix or registered target) and
+ *   only takes effect when relativization left the id absolute.
+ * - Neither: the absolute id, unchanged.
+ */
+function normalizeThemeId(
+  themeId: string,
+  instance: BaseDef,
+  api: CardAPIModule,
+  unresolveURL?: (url: string) => string,
+): string {
+  let modelRelativeTo = instanceRelativeTo(instance);
+  let relativized: string;
+  if (modelRelativeTo) {
+    let absolute = resolveRRIReference(themeId, modelRelativeTo);
+    let realmURLString = api.getCardMeta(instance, 'realmURL');
+    let realmURL = realmURLString ? new URL(realmURLString) : undefined;
+    relativized = maybeRelativeReference(
+      rri(absolute),
+      modelRelativeTo,
+      realmURL,
+    );
+  } else {
+    relativized = themeId;
+  }
+  return unresolveURL ? unresolveURL(relativized) : relativized;
+}
+
+// `card-serialization.ts`'s `serializeCard` computes its own relativization
+// base as `model.id ?? model[relativeTo]` — the same priority order (an
+// unsaved instance has no `id`, only the `relativeTo` symbol its Box chain
+// carries).
+function instanceRelativeTo(
+  instance: BaseDef,
+): RealmResourceIdentifier | undefined {
+  let id = boxelInstanceId(instance);
+  if (id) {
+    return id as RealmResourceIdentifier;
+  }
+  let inherited = (instance as BaseDef & Record<symbol, unknown>)[
+    relativeToSymbol
+  ];
+  if (inherited instanceof URL) {
+    return inherited.href as RealmResourceIdentifier;
+  }
+  return inherited as RealmResourceIdentifier | undefined;
 }
 
 export function boxelInstanceId(value: BaseDef): string | null {
@@ -808,6 +926,7 @@ function projectValue(
   api: CardAPIModule,
   onPending: ((pending: PendingRelationship) => void) | undefined,
   seen = new WeakSet<object>(),
+  ensureLoaded?: (reference: string) => Promise<unknown>,
 ): JSONValue | BoxelValueReference | BoxelValueReference[] {
   if (fieldType === 'linksTo' || fieldType === 'linksToMany') {
     let present = presentRelationshipValues(
@@ -815,24 +934,40 @@ function projectValue(
       fieldName,
       api,
       onPending,
+      ensureLoaded,
     );
     if (fieldType === 'linksToMany') {
-      return present.map(
+      let projected = present.map(
         (target) =>
-          projectExpandedValue(target, api, onPending, seen) as JSONValue,
+          projectExpandedValue(
+            target,
+            api,
+            onPending,
+            seen,
+            ensureLoaded,
+          ) as JSONValue,
       );
+      return projected;
     }
     return present.length > 0
-      ? (projectExpandedValue(present[0], api, onPending, seen) as JSONValue)
+      ? (projectExpandedValue(
+          present[0],
+          api,
+          onPending,
+          seen,
+          ensureLoaded,
+        ) as JSONValue)
       : null;
   }
   let value = api.peekAtField(instance, fieldName);
   if (fieldType === 'containsMany') {
     return Array.isArray(value)
-      ? value.map((entry) => projectExpandedValue(entry, api, onPending, seen))
+      ? value.map((entry) =>
+          projectExpandedValue(entry, api, onPending, seen, ensureLoaded),
+        )
       : [];
   }
-  return projectExpandedValue(value, api, onPending, seen);
+  return projectExpandedValue(value, api, onPending, seen, ensureLoaded);
 }
 
 /**
@@ -857,19 +992,46 @@ function presentRelationshipValues(
   fieldName: string,
   api: CardAPIModule,
   onPending: ((pending: PendingRelationship) => void) | undefined,
+  ensureLoaded?: (reference: string) => Promise<unknown>,
 ): CardDef[] {
   void (instance as unknown as Record<string, unknown>)[fieldName];
   let { isLoading, membership } = api.getRelationshipMembershipState(
     instance as unknown as CardDef,
     fieldName,
   );
+  let notLoaded = (membership ?? []).filter(
+    (entry) => entry.kind === 'not-loaded',
+  );
   if (
     onPending &&
-    (isLoading ||
-      membership === undefined ||
-      membership.some((entry) => entry.kind === 'not-loaded'))
+    (isLoading || membership === undefined || notLoaded.length > 0)
   ) {
     onPending({ instance, fieldName });
+  }
+  if (ensureLoaded) {
+    for (let entry of notLoaded) {
+      void ensureLoaded(entry.reference).then((resolved) => {
+        if (!isBaseDefInstance(resolved)) {
+          // A `CardErrorJSONAPI` (broken link) or an unresolved reference —
+          // leave the not-loaded sentinel as-is. `lazilyLoadLink`
+          // (card-api.gts) plants the structured failure sentinel itself
+          // once its own attempt (the getter read above already triggered
+          // it) settles; this is only a defensive no-op when the
+          // store/card-service path this closure calls resolves
+          // differently.
+          return;
+        }
+        try {
+          (instance as unknown as Record<string, unknown>)[fieldName] =
+            resolved;
+        } catch {
+          // A computed field (e.g. `cardTheme`) has no setter — the
+          // declared field it mirrors (`cardInfo.theme`) is walked
+          // separately (as part of expanding `cardInfo`'s own fields) and
+          // settles there instead.
+        }
+      });
+    }
   }
   return (membership ?? [])
     .filter((entry) => entry.kind === 'present')
@@ -893,6 +1055,7 @@ function projectExpandedValue(
   api: CardAPIModule,
   onPending: ((pending: PendingRelationship) => void) | undefined,
   seen: WeakSet<object>,
+  ensureLoaded?: (reference: string) => Promise<unknown>,
 ): JSONValue {
   if (!isBaseDefInstance(value)) {
     return projectJSONValue(value) ?? null;
@@ -916,6 +1079,7 @@ function projectExpandedValue(
         api,
         onPending,
         seen,
+        ensureLoaded,
       ) as JSONValue;
     }
     return result;

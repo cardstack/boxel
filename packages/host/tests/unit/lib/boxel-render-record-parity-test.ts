@@ -190,6 +190,53 @@ function themedPlaceDocument(): LooseSingleCardDocument {
   } as unknown as LooseSingleCardDocument;
 }
 
+// A theme in the *same* realm as the card that links it — the common case
+// (an author's own Theme card), as opposed to `themedPlaceDocument`'s
+// registered-realm (Base/Catalog) case above. `testRealmURL` carries no
+// `VirtualNetwork` scoped-identifier prefix, so this exercises the
+// relativization path, not `unresolveURL`.
+const sameRealmThemedPlaceId = `${testRealmURL}Place/user-theme`;
+const sameRealmThemeId = `${testRealmURL}Theme/runtime-generated`;
+const sameRealmThemeCssVariables =
+  ':root{--accent:#7c4dff;}\n.dark{--background:#120a24;}';
+
+function sameRealmThemedPlaceDocument(): LooseSingleCardDocument {
+  return {
+    data: {
+      type: 'card',
+      id: sameRealmThemedPlaceId,
+      attributes: {
+        coordinate: { x: 3, y: 4 },
+        entries: [],
+      },
+      relationships: {
+        'cardInfo.theme': {
+          links: { self: sameRealmThemeId },
+          data: { type: 'card', id: sameRealmThemeId },
+        },
+      },
+      meta: {
+        adoptsFrom: { module: placeModule, name: 'Place' },
+      },
+    },
+    included: [
+      {
+        type: 'card',
+        id: sameRealmThemeId,
+        attributes: {
+          cssVariables: sameRealmThemeCssVariables,
+        },
+        meta: {
+          adoptsFrom: {
+            module: 'https://cardstack.com/base/card-api',
+            name: 'Theme',
+          },
+        },
+      },
+    ],
+  } as unknown as LooseSingleCardDocument;
+}
+
 const placeFixtureSource = `
   import {
     CardDef,
@@ -801,6 +848,133 @@ module('Unit | Boxel render record parity', function (hooks) {
     }
   });
 
+  test('a card whose Theme link lives in its own (unregistered) realm carries a realm-relative theme scope token', async function (assert) {
+    // The common case — an author's own Theme card, in the same realm as
+    // the card linking it — has no `VirtualNetwork` scoped-identifier
+    // prefix to normalize through (`unresolveURL` alone, the previous fix,
+    // is a no-op for it). Main's `field-component.gts` render sees
+    // `card.cardTheme.id` after ordinary (non-`useAbsoluteURL`)
+    // serialization, which relativizes a same-realm reference against the
+    // linking card's own id instead
+    // (`@cardstack/base/card-serialization.ts`'s `serializeCard`).
+    let loader = getService('loader-service').loader;
+    let network = getService('network');
+    let api = await loader.import<typeof CardAPIModule>(
+      '@cardstack/base/card-api',
+    );
+
+    let requestDocument = sameRealmThemedPlaceDocument();
+    let resource = requestDocument.data as LooseCardResource;
+    let relativeTo = sameRealmThemedPlaceId as RealmResourceIdentifier;
+
+    let canonical = await api.createFromSerialized(
+      resource as never,
+      requestDocument as never,
+      relativeTo,
+    );
+
+    // Drift-proof per the coordinator's principle: derive the expected
+    // theme id from the *real* `serializeCard` pipeline's own output for
+    // this exact fixture (ordinary, non-absolute serialization — the same
+    // call shape a realm's own document serving/indexing uses) instead of
+    // hand-computing a relative path and hoping it matches.
+    let ordinarySerialization = api.serializeCard(canonical as never, {
+      includeUnrenderedFields: true,
+    });
+    let themeRelationship = (
+      ordinarySerialization.data as unknown as LooseCardResource
+    ).relationships?.['cardInfo.theme'] as
+      | { data?: { id?: string } | null; links?: { self?: string | null } }
+      | undefined;
+    let pipelineThemeId =
+      themeRelationship?.data?.id ??
+      themeRelationship?.links?.self ??
+      undefined;
+    assert.ok(
+      pipelineThemeId,
+      'sanity: ordinary serialization outputs a cardInfo.theme relationship id for this fixture',
+    );
+
+    let expectedThemeScope = themeScope(
+      pipelineThemeId!,
+      sameRealmThemeCssVariables,
+    );
+    assert.ok(
+      expectedThemeScope,
+      'the fixture theme has both an id and CSS, so themeScope() itself resolves a token',
+    );
+
+    // Same drift-proof round-trip as the registered-realm test above:
+    // extract the selector `themeScopedCss` actually embeds for this token.
+    let generatedStylesheet = themeScopedCss(
+      expectedThemeScope,
+      sameRealmThemeCssVariables,
+    ).toString();
+    let embeddedToken = /\[data-boxel-theme-scope="([^"]*)"\]/.exec(
+      generatedStylesheet,
+    )?.[1];
+    assert.strictEqual(
+      embeddedToken,
+      expectedThemeScope,
+      "themeScopedCss's own stylesheet output embeds the identical relative-form token",
+    );
+
+    let direct = new DirectBoxelRuntime(
+      async () => api,
+      () => loader,
+      (url) => network.virtualNetwork.unresolveURL(url),
+    );
+    let directHandle = direct.retainCanonicalInstance(canonical);
+    let directRecord = await direct.buildRenderRecord(directHandle);
+    assert.strictEqual(
+      directRecord.presentation.themeScope,
+      expectedThemeScope,
+      'Direct projects the same realm-relative theme scope token the real serialization pipeline outputs',
+    );
+
+    let evaluator = new CapsuleModuleEvaluator(
+      '@test:record-parity-theme-same-realm',
+      {
+        fetch: network.authedFetch,
+        resolveImport: network.resolveImport,
+        virtualNetwork: network.virtualNetwork,
+      },
+    );
+    let capsule = new CapsuleBoxelRuntime(evaluator);
+    try {
+      let projectedDocument = projectBoxelExecutionDocument(
+        canonical,
+        requestDocument,
+        api,
+        isTrustedModule,
+      );
+      let hostProjection = projectHostBoxelSemantics(canonical, api, {
+        unresolveURL: (url) => network.virtualNetwork.unresolveURL(url),
+      });
+      assert.strictEqual(
+        hostProjection.presentation.themeScope,
+        expectedThemeScope,
+        'the Host projection carries the realm-relative theme scope token before it ever crosses to a boundary tier',
+      );
+
+      let capsuleHandle = await capsule.createFromSerialized(
+        projectedDocument.data as LooseCardResource,
+        projectedDocument,
+        relativeTo,
+        'host-display',
+      );
+      capsule.adoptHostProjection(capsuleHandle, hostProjection);
+      let capsuleRecord = await capsule.buildRenderRecord(capsuleHandle);
+      assert.strictEqual(
+        capsuleRecord.presentation.themeScope,
+        expectedThemeScope,
+        'the Capsule render record carries the same realm-relative token the renderer stamps as data-boxel-theme-scope',
+      );
+    } finally {
+      capsule.destroy();
+    }
+  });
+
   test('a card with no cardInfo.theme link carries no theme scope token', async function (assert) {
     let loader = getService('loader-service').loader;
     let api = await loader.import<typeof CardAPIModule>(
@@ -870,6 +1044,8 @@ const settlePresentation: HostBoxelProjection['presentation'] = {
   thumbnailURL: null,
   theme: null,
   themeScope: null,
+  themeCss: null,
+  cssImports: null,
 };
 
 /**

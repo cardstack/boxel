@@ -93,7 +93,9 @@ export class SandboxFetchClient {
       pending.reject(new Error(message.error ?? 'Sandbox module fetch failed'));
       return;
     }
-    let response = new Response(message.response.body, {
+    // Response() throws for a body paired with a null-body status.
+    let nullBodyStatus = [101, 204, 205, 304].includes(message.response.status);
+    let response = new Response(nullBodyStatus ? null : message.response.body, {
       status: message.response.status,
       statusText: message.response.statusText,
       headers: message.response.headers,
@@ -144,7 +146,9 @@ export class SandboxFetchServer {
     let message: SandboxFetchResponse;
     try {
       if (!this.isAllowed(request.url)) {
-        throw new Error(`Sandbox module read is outside its classified graph`);
+        throw new Error(
+          `Sandbox module read is outside its classified graph: ${request.url}`,
+        );
       }
       let headers = new Headers();
       for (let [name, value] of request.headers) {
@@ -160,7 +164,11 @@ export class SandboxFetchServer {
         redirect: 'error',
       });
       if (!this.isAllowed(response.url || request.url)) {
-        throw new Error('Sandbox module response escaped its classified graph');
+        throw new Error(
+          `Sandbox module response escaped its classified graph: ${
+            response.url || request.url
+          }`,
+        );
       }
       let body = await response.arrayBuffer();
       if (body.byteLength > maxModuleBytes) {

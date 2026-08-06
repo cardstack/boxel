@@ -6,6 +6,7 @@ import { provide } from 'ember-provide-consume-context';
 import { resource, use } from 'ember-resources';
 import { TrackedObject } from 'tracked-built-ins';
 
+import { CardContainer } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
@@ -59,6 +60,15 @@ type ExecutionRendererState = {
   fields?: Record<string, BoxComponent>;
   placeholder?: HTMLComponent;
   surface?: SurfaceHandle;
+  /**
+   * RP-15.3: the Sandbox slot mounts (and its iframe starts booting) before
+   * the child has painted anything — the iframe needs real, in-document
+   * layout to boot and measure correctly, so it is never hidden. The
+   * prerendered placeholder stays the visible content, overlaid on top of
+   * the (still invisible-to-the-user) live iframe, until the child's own
+   * first-render diagnostic confirms real output landed.
+   */
+  sandboxPainted?: boolean;
 };
 
 type HeadComponent = ComponentLike<{
@@ -136,6 +146,17 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
     });
     let unsubscribe = session.subscribe((snapshot) => {
       state.snapshot = snapshot;
+      if (snapshot.current) {
+        // RP-7.3: a relationship that settles after first paint republishes
+        // a fresh generation through this same subscription
+        // (`watchForSettle` in boxel-execution-engine.ts) — same component
+        // definition, updated per-instance data. `@model` must track every
+        // generation this way, not just the first one materialized below,
+        // or a field that resolves later (a themed card's `cardInfo.theme`,
+        // a `linksToMany` like `reviewers`) never reaches the rendered
+        // component even though the render record itself settled.
+        state.model = snapshot.current.renderRecord.instance.model;
+      }
     });
     let card = this.args.card;
     let format = this.args.format;
@@ -155,11 +176,46 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
           this.surfaceId,
           this.args.relativeTo,
         );
+        let source = await this.boxelExecution.classifyForExecution(
+          request.moduleIdentifier,
+          request.source,
+        );
+        if (!active) {
+          return;
+        }
+        let reservation = this.boxelExecution.reserveSandboxProcess(
+          request.principal,
+          request.surfaceId,
+          request.trusted,
+          request.format,
+          source,
+        );
+        if (reservation) {
+          on.cleanup(reservation.release);
+          let { process } = reservation;
+          state.slot = {
+            owner: 'sandbox',
+            iframe: process.iframe,
+            surface: process.surface,
+            process,
+          };
+          // Ember must actually paint the slot this assignment causes
+          // before the presentation slot modifier can call mount() on it —
+          // wait for that so materialize() (below) never asks for a client
+          // before mount() has at least started connecting one.
+          await process.whenMounted();
+          if (!active) {
+            return;
+          }
+        }
         let generation = await session.update(request);
         if (!generation) {
           return;
         }
-        state.model = generation.renderRecord.instance.model;
+        // `state.model` is kept in sync by the `session.subscribe` callback
+        // above, which already ran synchronously for this generation as
+        // part of `session.update()`'s own `notify()` — no separate
+        // assignment needed here.
         let [fields, slot] = await Promise.all([
           this.boxelExecution.fieldPortalsFor(card),
           session.getRenderSlot(format ?? 'isolated'),
@@ -177,6 +233,40 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
             slot.owner,
             this.surfaceId,
           );
+        } else {
+          // Fires once — immediately if this process (retained across
+          // format switches by surface identity) has already painted
+          // before, otherwise the first time its child reports a render
+          // with real visible output. Either way, that's the signal to
+          // stop showing the prerendered placeholder over the iframe.
+          let stopWatchingPaint = slot.process.onFirstPaint(() => {
+            if (active) {
+              state.sandboxPainted = true;
+            }
+          });
+          // The Sandbox slot now resolves (and mounts) before the child has
+          // necessarily connected — getRenderSlot() no longer awaits the
+          // full handshake first (it can't: the iframe needs this slot's
+          // element to exist before it can even start booting). A failed
+          // connect (most commonly the timeout) is therefore no longer a
+          // thrown rejection this async block's own try/catch would see —
+          // it surfaces here instead. Clearing state.slot falls the
+          // template through past the (now-stale) sandbox branch to the
+          // ordinary error presentation, and tears down the failed process
+          // via the slot modifier's own teardown.
+          let stopWatchingMountFailure = slot.process.onMountFailed((error) => {
+            if (!active) {
+              return;
+            }
+            state.slot = undefined;
+            state.snapshot = {
+              ...session.snapshot,
+              status: 'error',
+              error,
+            };
+          });
+          on.cleanup(stopWatchingPaint);
+          on.cleanup(stopWatchingMountFailure);
         }
       } catch (error) {
         state.snapshot = {
@@ -214,6 +304,16 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
   private get sandboxSlot(): SandboxRenderSlot | undefined {
     let slot = this.state.slot;
     return slot?.owner === 'sandbox' ? slot : undefined;
+  }
+
+  /**
+   * RP-15.3: shown overlaid on top of the (mounted, booting-or-live, never
+   * hidden) Sandbox iframe until its child reports a real painted render.
+   * Only meaningful once the Sandbox slot itself exists — before that, the
+   * ordinary placeholder branch further down already covers the wait.
+   */
+  private get showSandboxPlaceholderOverlay(): boolean {
+    return Boolean(this.state.placeholder) && !this.state.sandboxPainted;
   }
 
   private get renderedComponent() {
@@ -286,24 +386,24 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
   }
 
   /**
-   * On main, `CardContainer` (`@cardstack/boxel-ui/components`) stamps
-   * `data-boxel-theme-scope` on the card's own wrapper element, computed
-   * live from the card's linked Theme card. The Capsule slot mounts a
-   * trusted `CardContainer` portal too, but that portal's own theme
-   * computation depends on live Store/computed-field access the Capsule
-   * boundary doesn't carry across (RP-5.4) — the render record's
-   * presentation instead carries the already-computed token
-   * (`boxel-projection.ts`'s `projectThemeScopeToken`, Host-side, where that
-   * access is available). Stamping it here, on the Host-owned slot wrapper
-   * that always encloses the trusted portal, reaches the same selector the
-   * theme stylesheet (installed separately) was compiled against, whether or
-   * not the portal's own internal wrapper manages to stamp it too.
+   * On main, every card renders inside `field-component.gts`'s trusted
+   * `CardContainer` invocation, which stamps `data-boxel-theme-scope`,
+   * emits the theme's scoped stylesheet (`<style data-boxel-theme-style>`)
+   * and its `@import`s, and carries the container's semantic-token
+   * derivation (`--background` et al). The Capsule slot mounts the card's
+   * template directly — no field-component chrome — so this Host-owned
+   * wrapper makes the identical `CardContainer` invocation from the render
+   * record's presentation (Host-computed, RP-5.4; plain cloneable strings
+   * per RP-8.4's boundary rules), or a themed card silently loses its
+   * theme.
    */
-  private get themeScope(): string | undefined {
-    return (
-      this.state.snapshot.current?.renderRecord.presentation.themeScope ??
-      undefined
-    );
+  private get themePresentation() {
+    let presentation = this.state.snapshot.current?.renderRecord.presentation;
+    return {
+      themeScope: presentation?.themeScope ?? undefined,
+      themeCss: presentation?.themeCss ?? undefined,
+      cssImports: presentation?.cssImports ?? undefined,
+    };
   }
 
   <template>
@@ -315,11 +415,15 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
         @cardURL={{this.cardURL}}
       />
     {{else if this.hasCapsuleRendering}}
-      <div
+      <CardContainer
+        @tag='div'
+        @isThemed={{if this.themePresentation.themeCss true false}}
+        @themeScope={{this.themePresentation.themeScope}}
+        @themeCss={{this.themePresentation.themeCss}}
+        @cssImports={{this.themePresentation.cssImports}}
         class='boxel-execution-capsule-slot'
         data-boxel-execution='capsule'
         data-boxel-execution-reason={{this.executionReason}}
-        data-boxel-theme-scope={{this.themeScope}}
         {{surfaceElement this.capsuleSurface}}
         ...attributes
       >
@@ -333,7 +437,7 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
             @viewCard={{@viewCard}}
           />
         </DefaultFormatsProvider>
-      </div>
+      </CardContainer>
     {{else if this.sandboxSlot}}
       <div
         class='boxel-execution-sandbox-slot'
@@ -341,7 +445,23 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
         data-boxel-execution-reason={{this.executionReason}}
         {{boxelSandboxSlot this.sandboxSlot}}
         ...attributes
-      ></div>
+      >
+        {{! RP-15.3: the iframe the modifier above mounts into this element
+          is never display:none'd — it needs real layout to boot and paint
+          correctly. This overlay sits ON TOP of it (never behind, never
+          hiding it) until the child's own first-render diagnostic confirms
+          real output landed; see showSandboxPlaceholderOverlay. }}
+        {{#if this.showSandboxPlaceholderOverlay}}
+          <div
+            class='boxel-execution-placeholder boxel-execution-placeholder--overlay'
+            aria-label='Loading interactive card'
+            aria-busy='true'
+            data-boxel-execution='prerender'
+          >
+            <this.state.placeholder />
+          </div>
+        {{/if}}
+      </div>
     {{else if this.hasDirectRendering}}
       <div
         class='boxel-execution-direct-slot'
@@ -385,6 +505,11 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
       .boxel-execution-sandbox-slot {
         min-width: 0;
         width: 100%;
+        /* Anchors .boxel-execution-placeholder--overlay, which sits ON TOP
+          of the mounted iframe (a sibling in the DOM, appended by the
+          boxelSandboxSlot modifier — never removed by this component's own
+          rerenders) until the child's first paint. */
+        position: relative;
       }
 
       .boxel-execution-capsule-slot {
@@ -402,6 +527,11 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
         display: block;
         min-height: inherit;
         width: 100%;
+      }
+
+      .boxel-execution-placeholder--overlay {
+        position: absolute;
+        inset: 0;
       }
 
       .boxel-execution-loading {

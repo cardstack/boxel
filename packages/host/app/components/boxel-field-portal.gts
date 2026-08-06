@@ -118,8 +118,61 @@ export function createBoxelFieldPortal(
   value: unknown,
   relativeTo?: RealmResourceIdentifier,
 ): PortalComponent {
-  return class extends BoxelFieldPortal {
+  let target = class extends BoxelFieldPortal {
     static value = value;
     static relativeTo = relativeTo;
   } as unknown as PortalComponent;
+
+  if (!Array.isArray(value)) {
+    return target;
+  }
+
+  // RP-3.4: "`@fields` of a plural field is array-like (iterable, length,
+  // index)." Main's `linksToMany`/`containsMany` field component
+  // (`getLinksToManyComponent`/`getContainsManyComponent` in
+  // `@cardstack/base`) is a Proxy over the plural component: directly
+  // rendering it (`<@fields.reviewers />`) shows every item via the
+  // component's own template (unchanged below), while `Symbol.iterator`,
+  // `length`, and a numeric-string property yield the per-item component —
+  // so both `{{#each @fields.reviewers as |Item|}}` and
+  // `(get @fields.reviewers index)` resolve to the same per-item render an
+  // authored card composes. Reproduce that contract here so an authored
+  // Boxel sees identical behavior whether its plural field portal is a
+  // trusted Base component or this Host-owned one.
+  let itemPortals = new Map<number, PortalComponent>();
+  let itemPortalFor = (index: number): PortalComponent | undefined => {
+    if (index < 0 || index >= value.length) {
+      return undefined;
+    }
+    let existing = itemPortals.get(index);
+    if (existing) {
+      return existing;
+    }
+    let portal = createBoxelFieldPortal(value[index], relativeTo);
+    itemPortals.set(index, portal);
+    return portal;
+  };
+  let itemPortalsInOrder = (): PortalComponent[] =>
+    value.map((_entry, index) => itemPortalFor(index)!);
+
+  return new Proxy(target, {
+    get(proxyTarget, property, received) {
+      if (property === Symbol.iterator) {
+        return itemPortalsInOrder()[Symbol.iterator];
+      }
+      if (property === 'length') {
+        return value.length;
+      }
+      if (typeof property === 'string' && /^\d+$/.test(property)) {
+        return itemPortalFor(Number(property));
+      }
+      return Reflect.get(proxyTarget, property, received);
+    },
+    getPrototypeOf() {
+      // Ember's template lookup needs the proxy to appear to inherit from
+      // the real component class it wraps (the same reason
+      // `getLinksToManyComponent`/`getContainsManyComponent` do this).
+      return target;
+    },
+  }) as unknown as PortalComponent;
 }

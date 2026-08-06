@@ -77,6 +77,8 @@ class TestRuntime implements BoxelRuntime {
         thumbnailURL: null,
         theme: null,
         themeScope: null,
+        themeCss: null,
+        cssImports: null,
       },
     };
   }

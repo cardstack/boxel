@@ -54,16 +54,9 @@ export type SandboxRuntimeControl =
       transportVersion: number;
       type: 'failed';
       error: { name: string; message: string };
-    }
-  | {
-      kind: 'boxel-sandbox-control';
-      transportVersion: number;
-      type: 'runtime-error';
-      error: { name: string; message: string };
     };
 
 export interface SandboxRuntimeProcessOptions {
-  iframe: HTMLIFrameElement;
   childURL: string;
   childOrigin: string;
   surfaceService: SurfaceService;
@@ -74,34 +67,61 @@ export interface SandboxRuntimeProcessOptions {
   isTrustedModuleURL: (identifier: string) => boolean;
   identity: SurfaceExecutionIdentity;
   connectTimeout?: number;
-  /** Bounds how long a mounted child may take to confirm a render (RP-15.3). */
-  renderTimeout?: number;
-  /**
-   * Bounds every other Sandbox RPC (loadBoxel, createFromSerialized,
-   * buildRenderRecord, etc.) — RP-15.3 applies before a card ever reaches
-   * its render call, not only to `render` itself.
-   */
-  requestTimeout?: number;
 }
 
 export interface SandboxRenderSlot {
   readonly owner: 'sandbox';
   readonly iframe: HTMLIFrameElement;
   readonly surface: SurfaceHandle;
+  /**
+   * The process itself, not just its iframe/surface — the presentation slot
+   * modifier needs to call `mount()`/`unmount()` on it directly (RP-15.3: a
+   * live iframe is never re-parented, so the modifier can't move an iframe
+   * that lives elsewhere; the process has to be born in the slot element the
+   * modifier owns, and torn down there too).
+   */
+  readonly process: SandboxRuntimeProcess;
+}
+
+function createDetachedSandboxIframe(): HTMLIFrameElement {
+  let iframe = document.createElement('iframe');
+  iframe.className = 'boxel-sandbox-process';
+  iframe.title = 'Boxel Sandbox';
+  return iframe;
 }
 
 /**
- * One persistent, origin-isolated browser process implementing BoxelRuntime.
- * The parent retains this object across compatible renders and format changes;
- * only explicit disposal or idle eviction tears down its MessageChannel.
+ * One origin-isolated browser process implementing BoxelRuntime, retained
+ * per surface identity by the Host's runtime router across compatible
+ * renders and format changes.
+ *
+ * RP-15.3: "a live iframe is never re-parented; the Sandbox mount point is
+ * stable for the life of the process." A cross-origin iframe's document
+ * reloads on ANY re-parent — including a move meant to "preserve" it (a
+ * parking lot) — so there is no way to keep one alive across its slot
+ * element's own teardown. This class never appends its iframe anywhere
+ * itself: `mount(element)` (called once by the presentation slot modifier,
+ * idempotent) is the only thing that ever inserts it into the document, and
+ * it is inserted directly into its PERMANENT slot element — born in place,
+ * not moved into place. `unmount()` (called by the same modifier's teardown)
+ * kills that iframe for good and prepares a fresh, still-detached one for a
+ * later remount, reusing this object's already-accumulated module-authority
+ * state (no re-classification, no re-observation) rather than discarding it.
  */
 export default class SandboxRuntimeProcess implements BoxelRuntime {
   readonly mode = 'sandbox' as const;
   readonly surface: SurfaceHandle;
 
-  private readonly bootstrapId = randomBootstrapId();
-  private readonly client: Promise<SandboxBoxelRuntimeClient>;
-  private boxelClient?: SandboxBoxelRuntimeClient;
+  private _iframe: HTMLIFrameElement = createDetachedSandboxIframe();
+  private mounted = false;
+  private pendingRequest?: { card: BoxelInstanceHandle; format: string };
+  private client?: Promise<SandboxBoxelRuntimeClient>;
+  private renderDiagnosticPort?: MessagePort;
+  private paintListeners = new Set<() => void>();
+  private painted = false;
+  private mountListeners = new Set<() => void>();
+  private mountFailedListeners = new Set<(error: Error) => void>();
+  private mountError?: Error;
   private surfaceServer?: SandboxSurfaceServer;
   private fetchServer?: SandboxFetchServer;
   private renderClient?: SandboxRenderClient;
@@ -109,14 +129,6 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
   private cancelConnection?: (error: Error) => void;
   private closed = false;
   private readonly moduleAuthority: SandboxModuleAuthority;
-  // RP-15.3: a child error reported after bootstrap (an uncaught exception or
-  // unhandled rejection inside the mounted document — see
-  // `sandbox-runtime-host.ts`) fails every render this process attempts from
-  // then on, rather than leaving a stale successful mount in place while the
-  // child is actually broken.
-  private childError?: Error;
-  private controlPort?: MessagePort;
-  private postBootstrapControlListener?: (event: MessageEvent<unknown>) => void;
 
   constructor(private readonly options: SandboxRuntimeProcessOptions) {
     this.surface = options.surfaceService.register(options.identity);
@@ -124,7 +136,163 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
       options.resolveModuleURL,
       options.isTrustedModuleURL,
     );
-    this.client = this.connect();
+  }
+
+  /** The iframe currently owned by this process — detached until `mount()`. */
+  get iframe(): HTMLIFrameElement {
+    return this._iframe;
+  }
+
+  /** Whether the child has reported a render with real visible output. */
+  get hasPainted(): boolean {
+    return this.painted;
+  }
+
+  /**
+   * Calls back once, the first time the child reports a render with real
+   * visible output (RP-15.3's post-render diagnostic — see
+   * sandbox-runtime-host.ts's `postRenderDiagnostic`). Already-painted fires
+   * immediately. Used by the Host renderer to know when it is safe to stop
+   * showing the prerendered placeholder over the live iframe.
+   */
+  onFirstPaint(callback: () => void): () => void {
+    if (this.painted) {
+      callback();
+      return () => undefined;
+    }
+    this.paintListeners.add(callback);
+    return () => {
+      this.paintListeners.delete(callback);
+    };
+  }
+
+  /**
+   * Resolves once this process's iframe has been mounted — immediately if
+   * already mounted. `materialize()` needs a live client to create a card
+   * before the Host renderer would otherwise ever call `getRenderSlot()`
+   * (which is what causes the presentation slot — and therefore `mount()`
+   * — to happen at all). A caller that reserves this process early (see
+   * `BoxelExecutionService.reserveSandboxProcess()`) and renders its slot
+   * ahead of materialize() awaits this to know `mount()` has run — and
+   * therefore that `this.client` is set (not necessarily connected yet;
+   * `withClient()` awaits it either way) — before letting materialize()
+   * proceed.
+   */
+  whenMounted(): Promise<void> {
+    if (this.mounted) {
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => {
+      this.mountListeners.add(resolve);
+    });
+  }
+
+  /**
+   * Calls back once, if this mount's connect (or the render it triggers)
+   * fails — most commonly the connect timeout, since the child origin
+   * cannot boot. `getRenderSlot()` used to `await` the whole connect+render
+   * sequence, so a failure there threw and the Host's own try/catch turned
+   * it into the chrome error presentation. Now that the slot resolves
+   * immediately (RP-15.3: the iframe must exist before it can mount, and it
+   * can't mount before its slot element exists), that failure happens on a
+   * background promise nothing else observes — this is how it still
+   * reaches the Host instead of becoming a silent, unhandled rejection.
+   */
+  onMountFailed(callback: (error: Error) => void): () => void {
+    if (this.mountError) {
+      callback(this.mountError);
+      return () => undefined;
+    }
+    this.mountFailedListeners.add(callback);
+    return () => {
+      this.mountFailedListeners.delete(callback);
+    };
+  }
+
+  /**
+   * Appends this process's iframe into `element` and starts the child boot
+   * IN PLACE. Called once by the presentation slot modifier when its slot
+   * element mounts. Idempotent: a Glimmer rerender that re-invokes the
+   * modifier with the same slot is a no-op (the iframe is already there and
+   * already booting/live — re-appending would re-parent it, which is
+   * exactly the reload this design avoids).
+   */
+  mount(element: HTMLElement): void {
+    if (this.closed || this.mounted) {
+      return;
+    }
+    this.mounted = true;
+    element.append(this._iframe);
+    let client = this.connect();
+    this.client = client;
+    client.catch((error) => {
+      this.notifyMountFailed(
+        error instanceof Error ? error : new Error(String(error)),
+      );
+    });
+    for (let listener of [...this.mountListeners]) {
+      listener();
+    }
+    this.mountListeners.clear();
+    let pending = this.pendingRequest;
+    if (pending) {
+      this.pendingRequest = undefined;
+      void this.requestRender(pending.card, pending.format).catch(() => {
+        // Already surfaced above: requestRender awaits this SAME `client`
+        // promise, so a connect failure rejects both — the `client.catch`
+        // above is the one call site that reports it. This catch exists
+        // only so this separate promise object doesn't ALSO count as an
+        // unhandled rejection.
+      });
+    }
+  }
+
+  /**
+   * Tears down the live iframe/connection without releasing the Surface
+   * handle or discarding classification/authority state — called by the
+   * presentation slot modifier's own teardown (the slot element is going
+   * away, and a live iframe cannot survive that any other way). A later
+   * `mount()` call on this SAME process (the runtime router retains it by
+   * surface identity) mints a fresh, still-detached iframe and reconnects;
+   * `allowModules()` need not be called again.
+   */
+  unmount(): void {
+    if (!this.mounted) {
+      return;
+    }
+    this.mounted = false;
+    this.pendingRequest = undefined;
+    // A remount gets an independent chance to connect: a failure from the
+    // PREVIOUS mount must not immediately fail a brand new one.
+    this.mountError = undefined;
+    this.mountFailedListeners.clear();
+    this.cancelConnection?.(new Error('Sandbox runtime process was unmounted'));
+    this.cancelConnection = undefined;
+    this.client = undefined;
+    this.renderDiagnosticPort?.removeEventListener(
+      'message',
+      this.receiveRenderDiagnostic,
+    );
+    this.renderDiagnosticPort = undefined;
+    this.surfaceServer?.destroy();
+    this.surfaceServer = undefined;
+    this.fetchServer?.destroy();
+    this.fetchServer = undefined;
+    this.renderClient?.destroy();
+    this.renderClient = undefined;
+    this.renderedCard = undefined;
+    // This exact iframe is dead the moment it loses its mount point — a
+    // detached iframe's document does not resume, and even if it did, this
+    // element can never be re-appended without reloading again. Prepare a
+    // fresh one now so the NEXT mount() has something to append.
+    this._iframe.src = 'about:blank';
+    this._iframe.remove();
+    this._iframe = createDetachedSandboxIframe();
+    // The dead iframe's paint status does not carry over to its
+    // replacement: the next mount() is a brand new child document that
+    // hasn't rendered anything yet, so onFirstPaint must wait for it again.
+    this.painted = false;
+    this.paintListeners.clear();
   }
 
   loadBoxel(ref: CodeRef): Promise<BoxelTypeHandle> {
@@ -189,6 +357,16 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
     return this.withClient((client) => client.dispose(handle));
   }
 
+  /**
+   * Registers this render request and returns the presentation slot
+   * immediately — it does NOT wait for the child to connect or finish
+   * rendering. It can't: the slot element the iframe will be born into does
+   * not exist until the Host renders the slot this call returns, and the
+   * iframe cannot boot before it has a permanent mount point. If the
+   * process is already mounted (a format switch or re-render on an
+   * already-live process), the render is requested and awaited here as
+   * before — the slot element in that case already exists and persists.
+   */
   async getRenderSlot(
     card: BoxelInstanceHandle,
     format: string,
@@ -196,92 +374,99 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
     if (this.closed) {
       throw new Error('Sandbox runtime process is closed');
     }
-    await this.client;
-    if (this.childError) {
-      throw this.childError;
-    }
-    if (!this.renderClient) {
-      throw new Error('Sandbox render transport is unavailable');
-    }
     this.options.surfaceService.layout(this.surface, {
       heightMode: format === 'fitted' ? 'allocated' : 'intrinsic',
     });
-    await this.renderClient.render(card, format);
-    this.renderedCard = card;
+    if (this.mounted) {
+      await this.requestRender(card, format);
+    } else {
+      this.pendingRequest = { card, format };
+    }
     return {
       owner: 'sandbox',
-      iframe: this.options.iframe,
+      iframe: this._iframe,
       surface: this.surface,
+      process: this,
     };
   }
 
+  /** Permanently tears this process down: releases the Surface handle too. */
   destroy(): void {
     if (this.closed) {
       return;
     }
     this.closed = true;
-    this.cancelConnection?.(
-      new Error('Sandbox runtime process was destroyed during bootstrap'),
-    );
-    this.cancelConnection = undefined;
-    this.surfaceServer?.destroy();
-    this.surfaceServer = undefined;
-    this.fetchServer?.destroy();
-    this.fetchServer = undefined;
-    this.renderClient?.destroy();
-    this.renderClient = undefined;
-    this.boxelClient = undefined;
-    this.renderedCard = undefined;
-    if (this.controlPort && this.postBootstrapControlListener) {
-      this.controlPort.removeEventListener(
-        'message',
-        this.postBootstrapControlListener,
-      );
+    this.unmount();
+    // A reservation (see BoxelExecutionService.reserveSandboxProcess()) may
+    // be awaiting whenMounted() on a process that never actually mounts
+    // before it is torn down (e.g. the render that reserved it was itself
+    // superseded). Release those waiters rather than leaving them pending
+    // forever — the caller is expected to re-check `active`/closed state
+    // once it resumes.
+    for (let listener of [...this.mountListeners]) {
+      listener();
     }
-    this.controlPort = undefined;
-    this.postBootstrapControlListener = undefined;
+    this.mountListeners.clear();
     this.options.surfaceService.release(this.surface);
-    void this.client.then((client) => client.destroy()).catch(() => undefined);
-    this.options.iframe.src = 'about:blank';
-    this.options.iframe.remove();
+  }
+
+  private async requestRender(
+    card: BoxelInstanceHandle,
+    format: string,
+  ): Promise<void> {
+    await this.client;
+    if (!this.renderClient) {
+      throw new Error('Sandbox render transport is unavailable');
+    }
+    await this.renderClient.render(card, format);
+    this.renderedCard = card;
+  }
+
+  private notifyMountFailed(error: Error): void {
+    if (this.mountError) {
+      return;
+    }
+    this.mountError = error;
+    for (let listener of [...this.mountFailedListeners]) {
+      listener(error);
+    }
+    this.mountFailedListeners.clear();
   }
 
   private withClient<T>(
     callback: (client: SandboxBoxelRuntimeClient) => Promise<T>,
   ): Promise<T> {
-    if (this.closed) {
+    if (this.closed || !this.client) {
       return Promise.reject(new Error('Sandbox runtime process is closed'));
-    }
-    if (this.childError) {
-      return Promise.reject(this.childError);
     }
     return this.client.then(callback);
   }
 
-  /**
-   * Records a post-bootstrap child failure and fails every request this
-   * process is currently waiting on — the render RPC and every other Sandbox
-   * RPC (loadBoxel, createFromSerialized, buildRenderRecord, etc., all
-   * dispatched through `withClient`) alike (RP-15.3).
-   *
-   * This is the Sandbox counterpart to the Capsule's synchronous evaluation
-   * errors: a child that throws or rejects after it announced readiness is
-   * otherwise indistinguishable, from the parent's perspective, from a child
-   * that quietly finished doing nothing. Recording the failure here lets
-   * every pending and future call fail closed instead of returning a result
-   * for a mount the child itself has already abandoned.
-   */
-  private reportChildError(error: Error): void {
-    if (this.closed || this.childError) {
+  private receiveRenderDiagnostic = (event: MessageEvent<unknown>): void => {
+    let data = event.data as {
+      kind?: unknown;
+      hasVisibleContent?: unknown;
+    } | null;
+    if (
+      typeof data !== 'object' ||
+      data === null ||
+      data.kind !== 'boxel-sandbox-render-diagnostic' ||
+      this.painted ||
+      !data.hasVisibleContent
+    ) {
       return;
     }
-    this.childError = error;
-    this.renderClient?.failPending(error);
-    this.boxelClient?.failPending(error);
-  }
+    this.painted = true;
+    for (let listener of [...this.paintListeners]) {
+      listener();
+    }
+    this.paintListeners.clear();
+  };
 
   private connect(): Promise<SandboxBoxelRuntimeClient> {
-    let { iframe, childOrigin, childURL } = this.options;
+    let { childOrigin, childURL } = this.options;
+    let iframe = this._iframe;
+    let bootstrapId = randomBootstrapId();
     let child = new URL(childURL);
     if (child.origin !== childOrigin) {
       return Promise.reject(
@@ -293,7 +478,7 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
         new Error('Sandbox child must use a distinct origin from the Host'),
       );
     }
-    child.searchParams.set('bootstrapId', this.bootstrapId);
+    child.searchParams.set('bootstrapId', bootstrapId);
     child.searchParams.set('parentOrigin', globalThis.location.origin);
     // The child needs its declared origin for the origin-checked bootstrap and
     // for server-side execution-principal checks. `allow-same-origin` is safe
@@ -344,39 +529,13 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
         }
         settled = true;
         cleanupBootstrap();
-        // Bootstrap's own listener is removed by `cleanupBootstrap` above.
-        // A successfully bootstrapped child may still fail later — an
-        // uncaught exception or unhandled rejection reported by
-        // `sandbox-runtime-host.ts` after it posted `ready` — so this
-        // process keeps a persistent listener on the same control port for
-        // the rest of its lifetime (torn down in `destroy`).
-        if (controlPort) {
-          this.controlPort = controlPort;
-          this.postBootstrapControlListener = (
-            postEvent: MessageEvent<unknown>,
-          ) => {
-            if (!isSandboxRuntimeControl(postEvent.data)) {
-              return;
-            }
-            if (
-              postEvent.data.type === 'failed' ||
-              postEvent.data.type === 'runtime-error'
-            ) {
-              this.reportChildError(runtimeControlError(postEvent.data.error));
-            }
-          };
-          controlPort.addEventListener(
-            'message',
-            this.postBootstrapControlListener,
-          );
-        }
         resolve(client);
       };
       let receive = (event: MessageEvent<unknown>) => {
         if (
           event.origin !== childOrigin ||
           !isSandboxListening(event.data) ||
-          event.data.bootstrapId !== this.bootstrapId
+          event.data.bootstrapId !== bootstrapId
         ) {
           return;
         }
@@ -387,15 +546,8 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
         // this iframe's current `contentWindow` over the private port below.
         let channel = new MessageChannel();
         controlPort = channel.port1;
-        client = new SandboxBoxelRuntimeClient(
-          channel.port1,
-          this.options.requestTimeout,
-        );
-        this.boxelClient = client;
-        this.renderClient = new SandboxRenderClient(
-          channel.port1,
-          this.options.renderTimeout,
-        );
+        client = new SandboxBoxelRuntimeClient(channel.port1);
+        this.renderClient = new SandboxRenderClient(channel.port1);
         this.surfaceServer = new SandboxSurfaceServer(
           channel.port1,
           this.options.surfaceService,
@@ -408,10 +560,16 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
           (url, contentType, body) =>
             this.moduleAuthority.observe(url, contentType, body),
         );
+        // Independent of, and outlives, the bootstrap-scoped receiveControl
+        // above (which cleanupBootstrap detaches once the handshake
+        // completes): the child posts a render diagnostic after every
+        // render for the life of the connection, not only during bootstrap.
+        this.renderDiagnosticPort = channel.port1;
+        channel.port1.addEventListener('message', this.receiveRenderDiagnostic);
         let connect: SandboxConnect = {
           protocol: bootstrapProtocol,
           type: 'connect',
-          bootstrapId: this.bootstrapId,
+          bootstrapId,
           transportVersion: BOXEL_EXECUTION_TRANSPORT_VERSION,
           surface: this.surface,
         };
@@ -475,9 +633,7 @@ export function isSandboxRuntimeControl(
     !('transportVersion' in value) ||
     value.transportVersion !== BOXEL_EXECUTION_TRANSPORT_VERSION ||
     !('type' in value) ||
-    (value.type !== 'ready' &&
-      value.type !== 'failed' &&
-      value.type !== 'runtime-error')
+    (value.type !== 'ready' && value.type !== 'failed')
   ) {
     return false;
   }

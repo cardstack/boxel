@@ -41,14 +41,65 @@ interface SandboxComponentSignature {
   Element: Element;
 }
 
+/**
+ * RP-16.1's `layout` capability crosses to `SurfaceService.layout()`, whose
+ * `minimumHeight` is the one field that actually reaches an element's CSS —
+ * `SurfaceService.applyLayout` sets it as the *parent-side* attached
+ * element's own `min-height`, and `boxel-execution-renderer.gts`'s Sandbox
+ * iframe CSS (`min-height: inherit`) picks that up from its wrapper. But
+ * nothing drives it for the Sandbox tier without this: the parent cannot
+ * ResizeObserve content inside a cross-origin iframe the way
+ * `SurfaceElementModifier` does for Direct/Capsule (via `SurfaceService
+ * .attach`, which installs the ResizeObserver on the real, same-document
+ * render root) — intrinsic height has to originate here, in the child,
+ * where the content actually lives, and be pushed across explicitly.
+ */
+export function reportIntrinsicHeight(
+  element: HTMLElement,
+  surface: SandboxSurfaceClient,
+): () => void {
+  let lastReportedHeight: number | undefined;
+  let reportHeight = () => {
+    let height = Math.ceil(element.getBoundingClientRect().height);
+    if (height === lastReportedHeight) {
+      return;
+    }
+    lastReportedHeight = height;
+    console.warn('[sandbox-child] height reported', { height });
+    void surface
+      .layout({ heightMode: 'intrinsic', minimumHeight: height })
+      .catch((error) => {
+        console.error('Sandbox Surface height report failed', error);
+      });
+  };
+  let resizeObserver: ResizeObserver | undefined;
+  if (typeof ResizeObserver !== 'undefined') {
+    resizeObserver = new ResizeObserver(reportHeight);
+    resizeObserver.observe(element);
+  }
+  // The render root exists (this modifier only attaches once `this.surface`
+  // is set) but is very likely still empty at install time — bootstrap
+  // reaches 'ready' well before the first render request. Reporting now
+  // establishes a baseline; the observer above reports again (and only
+  // then, since it's deduped) once the card actually renders and the
+  // element's real size lands.
+  reportHeight();
+  return () => resizeObserver?.disconnect();
+}
+
 const attachSurface = modifier<{
   Args: { Positional: [SandboxSurfaceClient] };
   Element: HTMLElement;
-}>((element, [surface]) =>
-  connectSandboxSurface(element, surface, (error) => {
+}>((element, [surface]) => {
+  let disconnectEvents = connectSandboxSurface(element, surface, (error) => {
     console.error('Sandbox Surface capability failed', error);
-  }),
-);
+  });
+  let stopHeightReporting = reportIntrinsicHeight(element, surface);
+  return () => {
+    stopHeightReporting();
+    disconnectEvents();
+  };
+});
 
 let esModuleLexerInitialized = false;
 
@@ -376,15 +427,55 @@ export function measureRenderedOutput(
   root: Element | null,
   format: string,
 ): SandboxRenderDiagnostic {
+  let bodyChildren = Array.from(document.body.children).map((el) => ({
+    tag: el.tagName.toLowerCase(),
+    id: el.id,
+    className: typeof el.className === 'string' ? el.className : '',
+  }));
+  let documentVisibilityState = document.visibilityState;
+  let bodyChildElementCount = document.body.childElementCount;
   if (!root) {
-    return { format, elementCount: 0, textLength: 0, hasVisibleContent: false };
+    return {
+      format,
+      elementCount: 0,
+      textLength: 0,
+      hasVisibleContent: false,
+      bodyChildElementCount,
+      bodyChildren,
+      rootRect: { width: 0, height: 0, top: 0, left: 0 },
+      rootHasOffsetParent: false,
+      documentVisibilityState,
+    };
   }
   let elementCount = root.querySelectorAll('*').length;
   let textLength = (root.textContent ?? '').trim().length;
   let rect = root.getBoundingClientRect();
+  let rootHasOffsetParent =
+    root instanceof HTMLElement ? root.offsetParent !== null : false;
+  // A rendered element with zero on-screen size is not "visible" even if it
+  // has content and descendant elements — that's exactly the "acked but
+  // painted nothing" case. A prior version of this check treated a nonzero
+  // textLength as sufficient on its own (an OR, not an AND, against the
+  // size check), which made a zero-size/unpainted render read as visible —
+  // precisely the false positive that hid this defect from the diagnostic.
   let hasVisibleContent =
-    elementCount > 0 && (rect.width > 0 || rect.height > 0 || textLength > 0);
-  return { format, elementCount, textLength, hasVisibleContent };
+    elementCount > 0 && textLength > 0 && (rect.width > 0 || rect.height > 0);
+  return {
+    format,
+    elementCount,
+    textLength,
+    hasVisibleContent,
+    bodyChildElementCount,
+    bodyChildren,
+    rootRect: {
+      width: rect.width,
+      height: rect.height,
+      top: rect.top,
+      left: rect.left,
+    },
+    rootHasOffsetParent,
+    documentVisibilityState,
+  };
 }
 
 function asError(error: unknown): Error {
