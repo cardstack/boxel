@@ -59,8 +59,14 @@ export function reportIntrinsicHeight(
   element: HTMLElement,
   surface: SandboxSurfaceClient,
 ): () => void {
+  let stopped = false;
   let lastReportedHeight: number | undefined;
   let reportHeight = () => {
+    if (stopped) {
+      // fonts.ready (and a MutationObserver takeRecords tail) can deliver
+      // after teardown; a report from a torn-down reporter must not land.
+      return;
+    }
     // Scroll height, not the bounding rect: the rect is the LAID-OUT box,
     // which is bounded by the iframe's own current viewport — measuring it
     // feeds the viewport back to the parent that sets the viewport, a loop
@@ -110,6 +116,7 @@ export function reportIntrinsicHeight(
   // once the card actually renders and its real content height lands.
   reportHeight();
   return () => {
+    stopped = true;
     resizeObserver?.disconnect();
     mutationObserver?.disconnect();
     globalThis.removeEventListener('resize', reportHeight);
