@@ -146,9 +146,13 @@ export default class MatrixResponsePublisher {
           reasoningAndContent.content,
           this.currentResponseEventId,
           extraData,
-          responseStateSnapshot.toolCalls.map((toolCall) =>
-            toCommandRequest(toolCall as ChatCompletionMessageFunctionToolCall),
-          ),
+          // No tool calls on a continuation fragment. They belong to the answer,
+          // not to each piece it was cut into, and the reader joins the pieces
+          // back into one message — so repeating them here puts the same
+          // tool_use id in that message more than once, which Anthropic rejects
+          // outright ("tool_use ids must be unique"), failing the whole next
+          // request. The final part below carries them.
+          [],
           reasoningAndContent.reasoning,
         );
         this.roomEventsEmitted++;

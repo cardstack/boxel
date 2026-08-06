@@ -91,6 +91,15 @@ function snapshotWithToolCall(
   };
 }
 
+function snapshotWithContentAndToolCall(
+  content: string,
+  toolRequest: Partial<ToolRequest>,
+): ChatCompletionSnapshot {
+  let snapshot = snapshotWithToolCall(toolRequest);
+  snapshot.choices[0].message.content = content;
+  return snapshot;
+}
+
 module('Responding', (hooks) => {
   let fakeMatrixClient: FakeMatrixClient;
   let responder: Responder;
@@ -1646,6 +1655,42 @@ module('Responding', (hooks) => {
       sentEvents[3].content.errorMessage,
       'Error - All your base are belong to us',
       'Error message should be sent, replacing the original message',
+    );
+  });
+  test('a split answer carries its tool call only on the final event', async () => {
+    // The reader joins continuation events back into one message, so a tool
+    // call repeated across the pieces lands in that message twice. Anthropic
+    // rejects the whole request for it — "tool_use ids must be unique" — and
+    // the turn dies on the request after the one that split.
+    responder.matrixResponsePublisher.eventSizeMax = 1024; // 1KB max event size
+
+    await responder.ensureThinkingMessageSent();
+    await responder.onChunk(
+      {} as any,
+      snapshotWithContentAndToolCall('a'.repeat(3072), {
+        id: 'toolu_duplicated',
+        name: 'readRealmFile',
+        arguments: { urls: [] },
+      }),
+    );
+    await responder.finalize();
+
+    let sent = fakeMatrixClient.getSentEvents();
+    let continuedWithToolRequests = sent.filter(
+      (e: any) =>
+        e.content[APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY] &&
+        (e.content[APP_BOXEL_TOOL_REQUESTS_KEY] ?? []).length > 0,
+    );
+    assert.equal(
+      continuedWithToolRequests.length,
+      0,
+      'no piece that continues into another carries the tool call',
+    );
+    assert.ok(
+      sent.some(
+        (e: any) => (e.content[APP_BOXEL_TOOL_REQUESTS_KEY] ?? []).length > 0,
+      ),
+      'the tool call still reaches the room, on the final piece',
     );
   });
 });
