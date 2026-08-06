@@ -1444,6 +1444,75 @@ module('Integration | search-entries resource', function (hooks) {
     }
   });
 
+  test('a trusted Cardstack stylesheet loads even where the Capsule CSS policy would reject it, while an authored violation is still dropped', async function (assert) {
+    // `@layer reset { :global(h1) { ... } }` is the real shape of
+    // `@cardstack/boxel-ui/components/card-container/index.gts`'s compiled
+    // scoped CSS: a named `@layer` plus a `:global()` reset selector, both
+    // rejected by the Capsule CSS policy when authored. CardContainer wraps
+    // nearly every card, so filtering its stylesheet out here would silently
+    // strip the base styling/theming from every search result. A trusted
+    // Cardstack origin is Host-owned styling and must load; the identical
+    // stylesheet from an authored module must still be dropped.
+    let violatingCSS = '@layer reset { :global(h1) { margin: 0; } }';
+    let encoded = encodeURIComponent(btoa(violatingCSS));
+    let trustedHref = `@cardstack/boxel-ui/components/card-container/index.gts.${encoded}.glimmer-scoped.css`;
+    let authoredHref = `${testRealmURL}book.gts.${encoded}.glimmer-scoped.css`;
+
+    let specs: BookEntrySpec[] = [
+      {
+        id: `${testRealmURL}books/1`,
+        indexGen: 1,
+        htmlGen: 1,
+        html: '<div>Mango</div>',
+        cssHref: trustedHref,
+      },
+      {
+        id: `${testRealmURL}books/2`,
+        indexGen: 1,
+        htmlGen: 1,
+        html: '<div>Van Gogh</div>',
+        cssHref: authoredHref,
+      },
+    ];
+    let doc = entryCollectionDoc(specs);
+    doc.included = [...(doc.included ?? []), ...cssResourcesFor(specs)];
+
+    let originalSearchEntries = storeService.searchEntries.bind(storeService);
+    storeService.searchEntries = async () => doc;
+    let importCalls: string[] = [];
+    let originalImport = loader.import.bind(loader);
+    loader.import = (async (url: string) => {
+      if (url === trustedHref || url === authoredHref) {
+        importCalls.push(url);
+        return {};
+      }
+      return originalImport(url);
+    }) as Loader['import'];
+
+    try {
+      let search = getResourceForTest(storeService, () => ({
+        named: {
+          query: { filter: { 'item.on': bookRef }, realms: [testRealmURL] },
+        },
+      }));
+      await search.loaded;
+
+      assert.deepEqual(
+        importCalls,
+        [trustedHref],
+        'the trusted stylesheet is imported despite its named @layer and :global() selector; the authored violation is dropped',
+      );
+      assert.strictEqual(
+        search.entries.length,
+        2,
+        'both entries are still exposed — a dropped stylesheet never fails the search',
+      );
+    } finally {
+      storeService.searchEntries = originalSearchEntries;
+      loader.import = originalImport;
+    }
+  });
+
   test('an incremental event refreshes only its own realm, leaving other realms untouched', async function (assert) {
     let fetchedRealms: string[][] = [];
     let originalSearchEntries = storeService.searchEntries.bind(storeService);

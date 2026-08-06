@@ -5,6 +5,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { modifier } from 'ember-modifier';
 import { provide } from 'ember-provide-consume-context';
+import { initSync, parse } from 'es-module-lexer';
 
 import {
   DefaultFormatsContextName,
@@ -12,12 +13,17 @@ import {
   fetcher,
   maybeHandleScopedCSSRequest,
   type BoxelInstanceHandle,
+  type ModuleEvaluator,
+  type ModuleRegistration,
 } from '@cardstack/runtime-common';
 
 import { installBoxelLoaderCompatibilityModules } from '@cardstack/host/lib/boxel-loader-compatibility';
 import DirectBoxelRuntime from '@cardstack/host/lib/direct-boxel-runtime';
 import type { SandboxRenderTarget } from '@cardstack/host/lib/sandbox-render-transport';
-import { installSandboxRuntimeHost } from '@cardstack/host/lib/sandbox-runtime-host';
+import {
+  installSandboxRuntimeHost,
+  type SandboxRenderDiagnostic,
+} from '@cardstack/host/lib/sandbox-runtime-host';
 import { connectSandboxSurface } from '@cardstack/host/lib/sandbox-surface-transport';
 import type { SandboxSurfaceClient } from '@cardstack/host/lib/sandbox-surface-transport';
 import type { BoxelSandboxRuntimeModel } from '@cardstack/host/routes/boxel-sandbox-runtime';
@@ -44,6 +50,160 @@ const attachSurface = modifier<{
   }),
 );
 
+let esModuleLexerInitialized = false;
+
+function ensureESModuleLexerInitialized(): boolean {
+  if (esModuleLexerInitialized) {
+    return true;
+  }
+  try {
+    initSync();
+    esModuleLexerInitialized = true;
+  } catch (error) {
+    // Best-effort: leave dynamic import() calls exactly as authored rather
+    // than fail the whole module. They will still evaluate (as a native,
+    // unmediated dynamic import) — the pre-existing behavior — just without
+    // the RP-15.3 authority routing below.
+    console.error('Sandbox dynamic-import rewrite unavailable', error);
+  }
+  return esModuleLexerInitialized;
+}
+
+/**
+ * RP-15.3: `transpileAmd` only rewrites *static* `import`/`export`
+ * declarations into AMD dependencies — a dynamic `import(...)` expression
+ * embedded in authored source (the common way a card lazily loads a heavy
+ * third-party library like Three.js from esm.sh) survives verbatim into the
+ * eval'd factory body. Evaluated by a direct `eval()`, that literal
+ * `import()` is a real native dynamic import whose specifier resolves
+ * against the *currently executing script* — the Host's own bundle chunk
+ * that contains the evaluator, not the module being evaluated — and its
+ * fetch never reaches `SandboxFetchClient`, bypassing the Host-brokered,
+ * classified-graph-checked module read this tier requires.
+ *
+ * Rewrites every dynamic `import(...)` call site (found via `es-module-lexer`,
+ * so only real dynamic-import expressions are touched — string and comment
+ * contents are untouched) to a call to `__boxelDynamicImport__`, a name
+ * bound in the eval scope below that resolves the specifier against the
+ * *authored module's own identifier* and routes it through the same Loader
+ * (and therefore the same SandboxFetchClient/module-authority check) as
+ * every static import.
+ */
+export function rewriteDynamicImports(source: string): string {
+  if (!ensureESModuleLexerInitialized()) {
+    return source;
+  }
+  let imports: readonly { d: number }[];
+  try {
+    imports = parse(source)[0];
+  } catch {
+    // Unparseable-by-the-lexer source still reaches the AMD evaluator below
+    // unchanged; a real syntax error surfaces there with its usual message.
+    return source;
+  }
+  let dynamicImportParenStarts = imports
+    .filter((entry) => entry.d > -1)
+    .map((entry) => entry.d)
+    .sort((a, b) => b - a); // splice back-to-front so earlier offsets hold
+  if (dynamicImportParenStarts.length === 0) {
+    return source;
+  }
+  let rewritten = source;
+  for (let parenStart of dynamicImportParenStarts) {
+    // `d` is the offset of the call's opening `(`, not the `import` keyword
+    // itself (verified empirically — es-module-lexer's own .d.ts comment is
+    // ambiguous on this point).
+    let keywordStart = parenStart - 'import'.length;
+    rewritten =
+      rewritten.slice(0, keywordStart) +
+      '__boxelDynamicImport__' +
+      rewritten.slice(parenStart);
+  }
+  return rewritten;
+}
+
+export function createSandboxModuleEvaluator(
+  getLoader: () => Loader,
+): ModuleEvaluator {
+  return function sandboxModuleEvaluator(
+    source: string,
+    moduleIdentifier: string,
+  ): ModuleRegistration {
+    let rewrittenSource = rewriteDynamicImports(source);
+    type DefineFunc = ((
+      mid: string,
+      dependencyList: string[],
+      impl: Function,
+    ) => void) & {
+      registration?: ModuleRegistration;
+    };
+    // Mirrors runtime-common's own `evaluateModuleInCurrentRealm`: `define`
+    // is a local visible to the eval'd source via direct eval's shared
+    // lexical scope, not a global. `__boxelDynamicImport__` joins it for the
+    // same reason — see `rewriteDynamicImports` above for why it exists.
+    let define = ((_mid: string, dependencyList: string[], impl: Function) => {
+      define.registration = { dependencyList, implementation: impl };
+    }) as DefineFunc;
+    let __boxelDynamicImport__ = (specifier: unknown): Promise<unknown> => {
+      if (typeof specifier !== 'string') {
+        return Promise.reject(
+          new Error(
+            'Sandbox dynamic import() requires a literal string module specifier',
+          ),
+        );
+      }
+      let resolved: string;
+      try {
+        resolved = new URL(specifier, moduleIdentifier).href;
+      } catch (error) {
+        return Promise.reject(error);
+      }
+      // A dynamic import() can live inside ANY evaluated module, not only an
+      // authored card's own source — including trusted Base-realm modules
+      // this rewrite applies to just the same (the evaluator has no
+      // per-module opt-out; see rewriteDynamicImports). If one of those
+      // targets a module the classified graph never seeded (base-realm code
+      // dynamically loading an optional dependency the classifier doesn't
+      // walk into), this call is exactly where that would surface — as a
+      // rejection ("outside its classified graph"), not a hang, but log
+      // begun/completed regardless so a genuinely slow or stuck fetch is
+      // distinguishable from one that never started.
+      console.warn('[sandbox-child] dynamic import begun', {
+        specifier,
+        resolved,
+        fromModule: moduleIdentifier,
+      });
+      return getLoader()
+        .import(resolved)
+        .then(
+          (result) => {
+            console.warn('[sandbox-child] dynamic import completed', {
+              resolved,
+            });
+            return result;
+          },
+          (error) => {
+            console.warn('[sandbox-child] dynamic import failed', {
+              resolved,
+              error: error instanceof Error ? error.message : String(error),
+            });
+            throw error;
+          },
+        );
+    };
+    // `__boxelDynamicImport__` is read only by the eval'd source below, not
+    // by any statically-visible call site — this reference exists purely to
+    // keep the binding (and a build tool that might otherwise elide it) from
+    // being considered unused. See the comment above `rewriteDynamicImports`.
+    void __boxelDynamicImport__;
+    eval(rewrittenSource);
+    if (!define.registration) {
+      throw new Error(`Module ${moduleIdentifier} did not register itself`);
+    }
+    return define.registration;
+  };
+}
+
 /**
  * Trusted shell inside the isolated origin. Authored Glimmer and its DOM stay
  * below this component; only opaque handles and capability messages cross to
@@ -61,6 +221,9 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
   private loader?: Loader;
   private runtime?: DirectBoxelRuntime;
   private moduleFetchHandler?: (request: Request) => Promise<Response>;
+  private reportRenderDiagnostic?: (
+    diagnostic: SandboxRenderDiagnostic,
+  ) => void;
 
   @provide(DefaultFormatsContextName)
   // @ts-ignore "defaultFormat is declared but not used"
@@ -84,6 +247,7 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
       );
       this.loader = new Loader(fetch, this.network.resolveImport, {
         virtualNetwork: this.network.virtualNetwork,
+        moduleEvaluator: createSandboxModuleEvaluator(() => this.loader!),
       });
       installBoxelLoaderCompatibilityModules(this.loader);
       this.runtime = new DirectBoxelRuntime(
@@ -92,8 +256,9 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
       );
       return this.runtime;
     },
-    createRenderTarget: (_runtime, surface) => {
+    createRenderTarget: (_runtime, surface, reportRenderDiagnostic) => {
       join(() => (this.surface = surface));
+      this.reportRenderDiagnostic = reportRenderDiagnostic;
       return this.renderTarget;
     },
     signal: this.abortBootstrap.signal,
@@ -106,6 +271,12 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
 
   private renderTarget: SandboxRenderTarget = {
     render: async (card: BoxelInstanceHandle, format: string) => {
+      // Breadcrumb 6/7: the render-transport dispatcher (sandbox-render-
+      // transport.ts, parent-owned) called this the moment it received the
+      // render request off the wire — this is the earliest point in the
+      // sandboxed render path this component itself can observe, so it
+      // stands in for "render request received".
+      console.warn('[sandbox-child] render begun', { card, format });
       if (!this.runtime) {
         throw new Error('Sandbox runtime is unavailable');
       }
@@ -117,6 +288,16 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
         this.error = undefined;
       });
       await afterRender();
+      // Breadcrumb 7/7: the Glimmer flush this awaited has committed —
+      // report what actually landed in the DOM. The render-response ack
+      // (sandbox-render-transport.ts) only proves this promise resolved,
+      // not that anything visible came out of it.
+      let diagnostic = measureRenderedOutput(
+        document.querySelector('[data-boxel-sandbox-runtime]'),
+        format,
+      );
+      console.warn('[sandbox-child] render completed', diagnostic);
+      this.reportRenderDiagnostic?.(diagnostic);
     },
     clear: async () => {
       join(() => {
@@ -181,6 +362,29 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
 
 function afterRender(): Promise<void> {
   return new Promise((resolve) => scheduleOnce('afterRender', null, resolve));
+}
+
+/**
+ * Bounded measurement of the committed DOM under the Sandbox's own render
+ * root, taken right after `afterRender()` — so a render that acked
+ * successfully but produced no visible output (getComponent+render ran, but
+ * the card's own template branched to nothing, or an app-level dependency
+ * it silently relies on was absent) is observable from the diagnostic
+ * rather than requiring a screenshot.
+ */
+export function measureRenderedOutput(
+  root: Element | null,
+  format: string,
+): SandboxRenderDiagnostic {
+  if (!root) {
+    return { format, elementCount: 0, textLength: 0, hasVisibleContent: false };
+  }
+  let elementCount = root.querySelectorAll('*').length;
+  let textLength = (root.textContent ?? '').trim().length;
+  let rect = root.getBoundingClientRect();
+  let hasVisibleContent =
+    elementCount > 0 && (rect.width > 0 || rect.height > 0 || textLength > 0);
+  return { format, elementCount, textLength, hasVisibleContent };
 }
 
 function asError(error: unknown): Error {

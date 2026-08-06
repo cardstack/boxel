@@ -83,19 +83,41 @@ export function confineCapsuleStylesheet(css: string): string {
  * Validate a glimmer-scoped-css request before the ordinary Host Loader runs
  * its registration module. Prerendered placeholders and search results share
  * the Host document even when their live Boxel runs in a Sandbox process.
+ *
+ * This policy exists to confine AUTHORED, untrusted CSS sharing that
+ * document (docs/boxel-execution-runtime-architecture.md, "Trusted
+ * Cardstack components are one-way portals"): trusted Cardstack components
+ * — Base, Catalog, `@cardstack/*` packages such as Boxel UI — execute as
+ * Host-owned portals outside any Capsule confinement, so their own compiled
+ * scoped CSS (component resets, named `@layer`s, `:global()` selectors that
+ * intentionally opt out of scoping) is Host-trusted styling, never authored
+ * content that could be smuggled into the shared document. `isTrustedModule`
+ * identifies the request's origin module (`decodeScopedCSSRequest`'s
+ * `fromFile`) against that same trust boundary and, when it is trusted,
+ * exempts the request from the policy instead of misapplying an
+ * authored-content check to it. Callers that omit the predicate keep the
+ * strict, always-validate behavior.
  */
 export function validateSharedDocumentScopedCSSRequest(
   request: string,
+  isTrustedModule?: (moduleIdentifier: string) => boolean,
 ): string {
-  validateCapsuleStylesheet(decodeScopedCSSRequest(request).css);
+  let decoded = decodeScopedCSSRequest(request);
+  if (isTrustedModule?.(decoded.fromFile)) {
+    return request;
+  }
+  validateCapsuleStylesheet(decoded.css);
   return request;
 }
 
 function validateScopedRules(rules: CSSRuleList): void {
   for (let rule of rules) {
     if (typeof CSSStyleRule !== 'undefined' && rule instanceof CSSStyleRule) {
+      let admitAsThemeTokens = ruleDeclaresOnlyCustomProperties(rule);
       let escapedSelector = splitTopLevelCSSList(rule.selectorText).find(
-        (selector) => !selectorIsAnchoredByTopLevelScope(selector),
+        (selector) =>
+          !selectorIsAnchoredByTopLevelScope(selector) &&
+          !(admitAsThemeTokens && isBareThemeScopeSelector(selector)),
       );
       if (escapedSelector) {
         throw new Error(
@@ -251,6 +273,41 @@ function selectorIsAnchoredByTopLevelScope(selector: string): boolean {
     }
   }
   return lastScopeAttribute !== -1 && firstEscapingSiblingAfterScope === -1;
+}
+
+// `themeScope()`/`themeScopedCss()` (@cardstack/boxel-ui/helpers/
+// theme-scoped-css.ts) generate a card's theme stylesheet at runtime, not at
+// compile time: `[data-boxel-theme-scope="<themeId>-<fingerprint>"]{ --foo:
+// bar; }`, with the `.dark` half of the theme wrapped in `@container
+// style(--boxel-color-scheme: dark){ ... }`. That scope value is a
+// content-addressed hash a card cannot forge into colliding with another
+// theme, and a Capsule cannot expand a compiled `[data-scopedcss-*]`
+// attribute onto text it never compiled — so this selector shape is
+// legitimate but can never carry the compiler's own anchor. It is admitted
+// as a second, narrower anchor: only as the theme generator's own bare
+// attribute selector (`isBareThemeScopeSelector`), and only when every
+// declaration the rule carries is a custom property (`ruleDeclaresOnly
+// CustomProperties`), so acceptance stays a token pipe rather than a second
+// general escape hatch — the rule can supply `--background`, never
+// `background`.
+const themeScopeAttributeSelector =
+  /^\s*\[\s*data-boxel-theme-scope\s*=\s*(?:"[^"]*"|'[^']*')\s*\]\s*$/;
+
+function isBareThemeScopeSelector(selector: string): boolean {
+  return themeScopeAttributeSelector.test(selector);
+}
+
+function ruleDeclaresOnlyCustomProperties(rule: CSSStyleRule): boolean {
+  let declarations = rule.style;
+  if (declarations.length === 0) {
+    return false;
+  }
+  for (let index = 0; index < declarations.length; index++) {
+    if (!declarations[index]!.startsWith('--')) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function rejectDocumentGlobalCSS(css: string): void {

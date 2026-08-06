@@ -174,13 +174,21 @@ export default class CapsuleBoxelRuntime implements BoxelRuntime {
    * value references, presentation) materialize exactly once, Host-side, and
    * cross this adapter as data (RP-5.4). The Capsule evaluator continues to
    * own authored execution: templates, getters, computeVia, and actions.
+   *
+   * `onSettle`, when present, is the projection's live RP-7.3 settle-watch —
+   * a closure over the canonical instance, deliberately not cloneable. The
+   * execution session (`boxel-execution-engine.ts`) is what observes it and
+   * republishes a fresh generation; this adapter only ever needs the
+   * cloneable rest, so it is dropped here rather than passed to
+   * `structuredClone`, which would throw on a function value.
    */
   adoptHostProjection(
     card: BoxelInstanceHandle,
     projection: HostBoxelProjection,
   ): void {
     let instance = this.instances.get(card);
-    instance.hostProjection = structuredClone(projection);
+    let { onSettle: _onSettle, ...cloneable } = projection;
+    instance.hostProjection = structuredClone(cloneable);
   }
 
   async buildRenderRecord(
@@ -407,6 +415,15 @@ export default class CapsuleBoxelRuntime implements BoxelRuntime {
       summary: stringOrNull(projection.cardDescription),
       thumbnailURL: stringOrNull(projection.cardThumbnailURL),
       theme: boxelReferenceOrNull(projection.cardTheme),
+      // This fallback path builds presentation from the Capsule's own JSON
+      // projection (no `hostProjection` was adopted for this instance), which
+      // does not carry the linked Theme card's `cssVariables`, only a
+      // reference. `themeScope()` needs the live theme's CSS to compute the
+      // fingerprint half of the token (boxel-projection.ts's
+      // `projectThemeScopeToken` does this Host-side, where that access is
+      // available). A card reached only through this path renders without
+      // its ambient theme scope stamped rather than a fabricated token.
+      themeScope: null,
     };
   }
 }

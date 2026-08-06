@@ -49,13 +49,22 @@ export default class SandboxModuleAuthority {
       return;
     }
     for (let entry of imports) {
-      if (typeof entry.n !== 'string') {
+      if (typeof entry.n !== 'string' || !isResolvableSpecifier(entry.n)) {
+        // A bare specifier (`three`, `lodash-es`) is not a relative or
+        // absolute reference into this response's own origin — resolving it
+        // against `moduleIdentifier` with `new URL()` does not throw (it
+        // silently treats the bare name as a same-origin sibling path,
+        // admitting a URL nothing will ever actually request) and does not
+        // reach it either: bare packages remain inside VirtualNetwork's
+        // package shim handler, a different resolution path this observed
+        // response never goes through. Leave it unadmitted rather than
+        // manufacture a URL for it.
         continue;
       }
       try {
         this.add(new URL(entry.n, moduleIdentifier).href);
       } catch {
-        // Bare packages remain inside VirtualNetwork's package shim handler.
+        // A malformed specifier resolves to nothing.
       }
     }
   }
@@ -81,10 +90,34 @@ function canonicalModuleURL(identifier: string): string | undefined {
   }
 }
 
-function isJavaScript(contentType: string | null, identifier: string): boolean {
+// A specifier this response's own imports can be trusted to name a fetchable
+// URL for: a relative path, a root-relative path, or an absolute URL. A bare
+// specifier (`three`) is none of these — `new URL(bareSpecifier, base)`
+// resolves it anyway (treating it as a same-origin sibling segment) rather
+// than throwing, so this must be checked explicitly before that call.
+function isResolvableSpecifier(specifier: string): boolean {
   return (
-    contentType?.includes('javascript') === true ||
-    /\.(?:gjs|gts|js|mjs|ts)(?:$|[?#])/.test(identifier) ||
-    new URL(identifier).hostname === 'esm.sh'
+    specifier.startsWith('.') ||
+    specifier.startsWith('/') ||
+    /^[a-z][a-z0-9+.-]*:/i.test(specifier)
   );
+}
+
+// A binary asset content-type never parses as an ES module; skip the lexer
+// for it. Every other response is attempted. This is deliberately not an
+// allowlist of "known-JS" CDN hosts or extensions: third-party ESM CDNs vary
+// in how (or whether) they label a response `javascript`, and in which URLs
+// carry a recognizable extension at all — jsdelivr's `/+esm` bundles, for
+// one, have neither a `javascript`-only content-type guarantee nor a file
+// extension, the same shape unpkg's `?module` and skypack's pinned URLs take.
+// Admission growth generalizes to "did this response actually parse as an ES
+// module" (the `parse()` call in `observe()`, below) rather than maintaining
+// a hardcoded list of CDN hosts that happen to work today.
+const nonModuleContentType = /^(?:image|audio|video|font)\//i;
+
+function isJavaScript(contentType: string | null, identifier: string): boolean {
+  if (/\.(?:gjs|gts|js|mjs|ts)(?:$|[?#])/.test(identifier)) {
+    return true;
+  }
+  return !contentType || !nonModuleContentType.test(contentType);
 }

@@ -76,6 +76,12 @@ export interface SandboxRuntimeProcessOptions {
   connectTimeout?: number;
   /** Bounds how long a mounted child may take to confirm a render (RP-15.3). */
   renderTimeout?: number;
+  /**
+   * Bounds every other Sandbox RPC (loadBoxel, createFromSerialized,
+   * buildRenderRecord, etc.) — RP-15.3 applies before a card ever reaches
+   * its render call, not only to `render` itself.
+   */
+  requestTimeout?: number;
 }
 
 export interface SandboxRenderSlot {
@@ -95,6 +101,7 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
 
   private readonly bootstrapId = randomBootstrapId();
   private readonly client: Promise<SandboxBoxelRuntimeClient>;
+  private boxelClient?: SandboxBoxelRuntimeClient;
   private surfaceServer?: SandboxSurfaceServer;
   private fetchServer?: SandboxFetchServer;
   private renderClient?: SandboxRenderClient;
@@ -223,6 +230,7 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
     this.fetchServer = undefined;
     this.renderClient?.destroy();
     this.renderClient = undefined;
+    this.boxelClient = undefined;
     this.renderedCard = undefined;
     if (this.controlPort && this.postBootstrapControlListener) {
       this.controlPort.removeEventListener(
@@ -244,19 +252,24 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
     if (this.closed) {
       return Promise.reject(new Error('Sandbox runtime process is closed'));
     }
+    if (this.childError) {
+      return Promise.reject(this.childError);
+    }
     return this.client.then(callback);
   }
 
   /**
-   * Records a post-bootstrap child failure and fails every render this
-   * process is currently waiting on (RP-15.3).
+   * Records a post-bootstrap child failure and fails every request this
+   * process is currently waiting on — the render RPC and every other Sandbox
+   * RPC (loadBoxel, createFromSerialized, buildRenderRecord, etc., all
+   * dispatched through `withClient`) alike (RP-15.3).
    *
    * This is the Sandbox counterpart to the Capsule's synchronous evaluation
    * errors: a child that throws or rejects after it announced readiness is
    * otherwise indistinguishable, from the parent's perspective, from a child
-   * that quietly finished rendering nothing. Recording the failure here lets
-   * `getRenderSlot` fail closed instead of returning a slot for a mount the
-   * child itself has already abandoned.
+   * that quietly finished doing nothing. Recording the failure here lets
+   * every pending and future call fail closed instead of returning a result
+   * for a mount the child itself has already abandoned.
    */
   private reportChildError(error: Error): void {
     if (this.closed || this.childError) {
@@ -264,6 +277,7 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
     }
     this.childError = error;
     this.renderClient?.failPending(error);
+    this.boxelClient?.failPending(error);
   }
 
   private connect(): Promise<SandboxBoxelRuntimeClient> {
@@ -373,7 +387,11 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
         // this iframe's current `contentWindow` over the private port below.
         let channel = new MessageChannel();
         controlPort = channel.port1;
-        client = new SandboxBoxelRuntimeClient(channel.port1);
+        client = new SandboxBoxelRuntimeClient(
+          channel.port1,
+          this.options.requestTimeout,
+        );
+        this.boxelClient = client;
         this.renderClient = new SandboxRenderClient(
           channel.port1,
           this.options.renderTimeout,

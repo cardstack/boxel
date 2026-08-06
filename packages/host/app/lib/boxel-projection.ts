@@ -1,3 +1,5 @@
+import { themeScope } from '@cardstack/boxel-ui/helpers';
+
 import {
   BOXEL_EXECUTION_PROTOCOL_VERSION,
   getAncestor,
@@ -22,6 +24,7 @@ import {
 import type {
   BaseDef,
   BaseDefConstructor,
+  CardDef,
   Field,
 } from '@cardstack/base/card-api';
 import type * as CardAPI from '@cardstack/base/card-api';
@@ -40,6 +43,30 @@ export interface HostBoxelProjection {
   instanceId: string | null;
   fields: ResolvedField[];
   presentation: InstancePresentation;
+  /**
+   * Present only when this projection observed a `linksTo`/`linksToMany`
+   * field not yet in RP-7.1's `present` state (still loading, or a
+   * `linksToMany` slot not yet resolved). RP-7.3: the field renders absent
+   * now and settles to the loaded card once resolution completes — main
+   * gets this for free from Glimmer's own tracking, so a boundary tier that
+   * captured this projection once needs an explicit way to observe the same
+   * settle and re-project (RP-15.4's cross-tier obligation).
+   *
+   * Resolves once at least one previously-pending field changes state, with
+   * a *fresh* projection reflecting whatever is true then (which may still
+   * carry its own `onSettle` if something else is still pending). Resolves
+   * to `undefined` if `signal` aborts first or the wait's bound elapses —
+   * never rejects, never hangs a caller that stops observing.
+   *
+   * A function value, so it is never itself part of the cloneable record:
+   * `structuredClone` cannot carry it, and no tier may retain a live
+   * instance reference through it — the closure captured here re-derives
+   * its own fresh, cloneable `HostBoxelProjection` on each settle rather
+   * than exposing the canonical instance. Every consumer of this projection
+   * (e.g. `capsule-boxel-runtime.ts`'s `adoptHostProjection`) must strip
+   * this field before cloning the rest.
+   */
+  onSettle?: (signal: AbortSignal) => Promise<HostBoxelProjection | undefined>;
 }
 
 export interface HostBoxelProjectionOptions {
@@ -48,6 +75,31 @@ export interface HostBoxelProjectionOptions {
    * runtime never infers permission merely because it can read a value.
    */
   writableFields?: ReadonlySet<string>;
+  /**
+   * Convert an absolute instance URL to its registered scoped-identifier
+   * form (`VirtualNetwork.unresolveURL`, e.g. `https://cardstack.com/base/
+   * Theme/x` → `@cardstack/base/Theme/x`). A themed card's realm/prerender
+   * pipeline stamps and compiles its theme stylesheet against a Theme
+   * card's id in exactly this normalized form
+   * (`unresolveResourceInstanceURLs` in `runtime-common/url.ts` runs on
+   * every realm-served document); an execution document instead
+   * deliberately keeps every instance id absolute for cross-boundary module
+   * identity stability (RP-8.4, `useAbsoluteURL` in `boxel-execution.ts`'s
+   * `requestFor`). Deriving the theme scope token from the raw absolute id
+   * therefore produces a token that never matches the installed
+   * stylesheet's selector. Omit to leave the theme's instance id
+   * unnormalized.
+   */
+  unresolveURL?: (url: string) => string;
+}
+
+/**
+ * One `linksTo`/`linksToMany` field observed mid-resolution (RP-7.1: not yet
+ * `present`, not yet a terminal failure) while building a projection.
+ */
+interface PendingRelationship {
+  instance: BaseDef;
+  fieldName: string;
 }
 
 /**
@@ -62,12 +114,111 @@ export function projectHostBoxelSemantics(
   api: CardAPIModule,
   options: HostBoxelProjectionOptions = {},
 ): HostBoxelProjection {
-  return {
+  let pending: PendingRelationship[] = [];
+  let projection: HostBoxelProjection = {
     boxel: describeBoxelType(instance.constructor as BaseDefConstructor, api),
     instanceId: boxelInstanceId(instance),
-    fields: resolveBoxelFields(instance, api, options.writableFields),
-    presentation: projectInstancePresentation(instance, api),
+    fields: resolveBoxelFields(
+      instance,
+      api,
+      options.writableFields,
+      (relationship) => pending.push(relationship),
+    ),
+    presentation: projectInstancePresentation(
+      instance,
+      api,
+      options.unresolveURL,
+    ),
   };
+  if (pending.length > 0) {
+    projection.onSettle = (signal) =>
+      waitThenReproject(pending, instance, api, options, signal);
+  }
+  return projection;
+}
+
+const SETTLE_FAST_POLL_TICKS = 20;
+const SETTLE_SLOW_POLL_INTERVAL_MS = 100;
+const SETTLE_MAX_WAIT_MS = 15_000;
+
+async function waitThenReproject(
+  pending: PendingRelationship[],
+  instance: BaseDef,
+  api: CardAPIModule,
+  options: HostBoxelProjectionOptions,
+  signal: AbortSignal,
+): Promise<HostBoxelProjection | undefined> {
+  let settled = await waitForAnyRelationshipToSettle(pending, api, signal);
+  if (!settled || signal.aborted) {
+    return undefined;
+  }
+  return projectHostBoxelSemantics(instance, api, options);
+}
+
+/**
+ * Wait until at least one of `pending`'s relationship fields is no longer
+ * `not-loaded`/in-flight (RP-7.1), then resolve `true`. Never triggers a new
+ * load itself — `resolveBoxelFields` already started resolution the moment it
+ * found the field pending (RP-7.2); this only observes
+ * `getRelationshipMembershipState`, RP-7.1's sanctioned read.
+ *
+ * Bounded on two axes: `signal` ties this to whatever owns the wait (a
+ * destroyed execution session aborts it), and `SETTLE_MAX_WAIT_MS` bounds it
+ * even with no `signal` abort, so a relationship that genuinely never
+ * settles cannot leak a wait forever. Polls a burst of microtask ticks first
+ * — the common side-loaded case (RP-8.3) settles within one or two ticks,
+ * since resolution is already in flight and just needs its own microtask to
+ * land the field's bumped loading signal (`field-support.ts`) — then falls
+ * back to a coarser interval for a slower, e.g. network-bound, settle (a
+ * query-backed field, RP-7.6).
+ */
+async function waitForAnyRelationshipToSettle(
+  pending: PendingRelationship[],
+  api: CardAPIModule,
+  signal: AbortSignal,
+): Promise<boolean> {
+  let stillPending = () =>
+    pending.some((candidate) =>
+      isPendingRelationship(candidate.instance, candidate.fieldName, api),
+    );
+  for (let tick = 0; tick < SETTLE_FAST_POLL_TICKS; tick++) {
+    if (signal.aborted) {
+      return false;
+    }
+    if (!stillPending()) {
+      return true;
+    }
+    await Promise.resolve();
+  }
+  let deadline = Date.now() + SETTLE_MAX_WAIT_MS;
+  while (Date.now() < deadline) {
+    if (signal.aborted) {
+      return false;
+    }
+    if (!stillPending()) {
+      return true;
+    }
+    await new Promise<void>((resolve) =>
+      setTimeout(resolve, SETTLE_SLOW_POLL_INTERVAL_MS),
+    );
+  }
+  return false;
+}
+
+function isPendingRelationship(
+  instance: BaseDef,
+  fieldName: string,
+  api: CardAPIModule,
+): boolean {
+  let { isLoading, membership } = api.getRelationshipMembershipState(
+    instance as unknown as CardDef,
+    fieldName,
+  );
+  return (
+    isLoading ||
+    membership === undefined ||
+    membership.some((entry) => entry.kind === 'not-loaded')
+  );
 }
 
 export function describeBoxelType(
@@ -121,6 +272,7 @@ export function resolveBoxelFields(
   instance: BaseDef,
   api: CardAPIModule,
   writableFields?: ReadonlySet<string>,
+  onPendingRelationship?: (pending: PendingRelationship) => void,
 ): ResolvedField[] {
   return Object.entries(
     api.getFields(instance, { includeComputeds: true }),
@@ -135,9 +287,11 @@ export function resolveBoxelFields(
       fieldType: requiredCodeRef(field.card),
       kind: field.fieldType,
       value: projectValue(
-        api.peekAtField(instance, fieldName),
+        instance,
+        fieldName,
         field.fieldType,
         api,
+        onPendingRelationship,
       ),
       resolvedConfiguration:
         projectJSONValue(resolveFieldConfiguration(api, field, instance)) ??
@@ -151,13 +305,59 @@ export function resolveBoxelFields(
 export function projectInstancePresentation(
   instance: BaseDef,
   api: CardAPIModule,
+  unresolveURL?: (url: string) => string,
 ): InstancePresentation {
   return {
     title: stringField(instance, 'cardTitle', api),
     summary: stringField(instance, 'cardDescription', api),
     thumbnailURL: stringField(instance, 'cardThumbnailURL', api),
     theme: boxelReference(fieldValue(instance, 'cardTheme', api)),
+    themeScope: projectThemeScopeToken(instance, api, unresolveURL),
   };
+}
+
+/**
+ * Host-side equivalent of `isThemeCard`/`themeId`/`themeCss` in
+ * `@cardstack/base/field-component.gts`: an instance that declares its own
+ * `cssVariables` (a Theme card, or a card built on the same shape) scopes to
+ * its own identity; otherwise scope to its linked `cardTheme`, if any. Both
+ * branches run with full Store/computed-field access (RP-5.4) and reduce to
+ * the same plain `themeScope()` token
+ * (`@cardstack/boxel-ui/helpers/theme-scoped-css.ts`) main derives, so a
+ * boundary tier's stamped `data-boxel-theme-scope` attribute matches the
+ * selector the theme stylesheet was compiled against.
+ *
+ * `unresolveURL`, when supplied, normalizes the theme's absolute instance id
+ * to its registered scoped-identifier form first (see
+ * `HostBoxelProjectionOptions.unresolveURL`) — the form the theme
+ * stylesheet was actually compiled against.
+ */
+function projectThemeScopeToken(
+  instance: BaseDef,
+  api: CardAPIModule,
+  unresolveURL?: (url: string) => string,
+): string | null {
+  let ownCssVariables = fieldValue(instance, 'cssVariables', api);
+  let themeId: string | null;
+  let cssVariables: unknown;
+  if (typeof ownCssVariables === 'string') {
+    themeId = boxelInstanceId(instance);
+    cssVariables = ownCssVariables;
+  } else {
+    let theme = fieldValue(instance, 'cardTheme', api);
+    if (!isBaseDefInstance(theme)) {
+      return null;
+    }
+    themeId = boxelInstanceId(theme);
+    cssVariables = fieldValue(theme, 'cssVariables', api);
+  }
+  if (!themeId || typeof cssVariables !== 'string') {
+    return null;
+  }
+  if (unresolveURL) {
+    themeId = unresolveURL(themeId);
+  }
+  return themeScope(themeId, cssVariables) ?? null;
 }
 
 export function boxelInstanceId(value: BaseDef): string | null {
@@ -589,56 +789,109 @@ function fieldValue(
  * `contains`/`containsMany` values are embedded composite data, never a
  * separate resource (RP-3.3): `@model` must keep them reachable the same
  * way the live instance does (RP-3.2), so they cross fully expanded.
- * `linksTo`/`linksToMany` name a separate resource, but a **loaded** link
- * reads through the ordinary getter exactly like any other field on main
- * (RP-7.1's present state) — the target's resource was side-loaded into
- * `included` and already deserialized (RP-8.3), so `peekAtField` returns the
- * real instance with no new fetch or authority, and it expands the same way
- * a composite does. Only a link with no value yet — not-loaded, not-set, or
- * broken (RP-7.1's other four states) — has nothing to expand and projects
- * as absent; that is what still crosses as an opaque `BoxelValueReference`.
+ * `linksTo`/`linksToMany` name a separate resource; RP-7.1 governs which
+ * slots have a value to expand. That governance is `getRelationshipMembershipState`
+ * — "the only sanctioned structured observation" of link state — never a
+ * heuristic over the raw peeked value: `peekAtField` on a relationship field
+ * reads the data bucket directly and can hand back an array that is still
+ * mid-resolution (declared links not yet swapped in, or a query-backed field
+ * whose search hasn't reported results yet, RP-7.6); treating that as "already
+ * absent" silently drops slots a live template would still show once loaded.
+ * A **present** slot (whether resolved from `included`, RP-8.3, or the
+ * store's own query results, RP-7.6) expands the same way a composite does.
+ * Every other RP-7.1 state has nothing to expand and projects as absent.
  */
 function projectValue(
-  value: unknown,
+  instance: BaseDef,
+  fieldName: string,
   fieldType: Field<BaseDefConstructor>['fieldType'],
   api: CardAPIModule,
+  onPending: ((pending: PendingRelationship) => void) | undefined,
   seen = new WeakSet<object>(),
 ): JSONValue | BoxelValueReference | BoxelValueReference[] {
-  if (fieldType === 'linksTo') {
-    return isBaseDefInstance(value)
-      ? (projectExpandedValue(value, api, seen) as JSONValue)
+  if (fieldType === 'linksTo' || fieldType === 'linksToMany') {
+    let present = presentRelationshipValues(
+      instance,
+      fieldName,
+      api,
+      onPending,
+    );
+    if (fieldType === 'linksToMany') {
+      return present.map(
+        (target) =>
+          projectExpandedValue(target, api, onPending, seen) as JSONValue,
+      );
+    }
+    return present.length > 0
+      ? (projectExpandedValue(present[0], api, onPending, seen) as JSONValue)
       : null;
   }
-  if (fieldType === 'linksToMany') {
-    return Array.isArray(value)
-      ? (value
-          .filter(isBaseDefInstance)
-          .map((item) => projectExpandedValue(item, api, seen)) as JSONValue[])
-      : [];
-  }
+  let value = api.peekAtField(instance, fieldName);
   if (fieldType === 'containsMany') {
     return Array.isArray(value)
-      ? value.map((entry) => projectExpandedValue(entry, api, seen))
+      ? value.map((entry) => projectExpandedValue(entry, api, onPending, seen))
       : [];
   }
-  return projectExpandedValue(value, api, seen);
+  return projectExpandedValue(value, api, onPending, seen);
+}
+
+/**
+ * Every slot of a `linksTo`/`linksToMany` field currently in the RP-7.1
+ * `present` state, in document order. Reports the field to `onPending` when
+ * it is not (yet) fully settled (RP-7.3), so a caller can watch for it to
+ * settle later without re-deriving which fields those were.
+ *
+ * Reading the field's own getter first (`instance[fieldName]`) is what
+ * starts resolution at all (RP-7.2: "the field getter is the lazy-load
+ * trigger") — for a declared link this swaps a not-loaded slot for its real
+ * value once available, and for a query-backed field (RP-7.6) it is what
+ * creates the field's search resource in the first place; without this read
+ * `getRelationshipMembershipState`'s query branch has no resource to report
+ * membership from and always sees "in flight". This mirrors exactly what a
+ * live template read already does on main; it is not new authority, since
+ * this runs Host-side over the same canonical instance a trusted render
+ * would use.
+ */
+function presentRelationshipValues(
+  instance: BaseDef,
+  fieldName: string,
+  api: CardAPIModule,
+  onPending: ((pending: PendingRelationship) => void) | undefined,
+): CardDef[] {
+  void (instance as unknown as Record<string, unknown>)[fieldName];
+  let { isLoading, membership } = api.getRelationshipMembershipState(
+    instance as unknown as CardDef,
+    fieldName,
+  );
+  if (
+    onPending &&
+    (isLoading ||
+      membership === undefined ||
+      membership.some((entry) => entry.kind === 'not-loaded'))
+  ) {
+    onPending({ instance, fieldName });
+  }
+  return (membership ?? [])
+    .filter((entry) => entry.kind === 'present')
+    .map((entry) => entry.value);
 }
 
 /**
  * Expand one loaded `BaseDefInstance`'s own declared fields recursively so
  * nested attributes survive the boundary — a `contains` composite's own
- * fields, or a loaded `linksTo`/`linksToMany` target's fields the same way
- * (RP-7.1). A relationship that was not side-loaded never reaches here as a
- * `BaseDefInstance` in the first place (`peekAtField` reads it as `undefined`
- * until it resolves, RP-7.1), so recursive expansion is naturally bounded by
- * exactly what the source document included (RP-8.3, RP-8.4) — this never
- * triggers a new fetch. Identity (`id`) rides along through the target's own
- * declared `id` field (every `CardDef` has one); a `contains` composite has
- * none, matching RP-3.3.
+ * fields, or a present `linksTo`/`linksToMany` target's fields the same way
+ * (RP-7.1). Depth is bounded by what is actually present: a nested
+ * relationship that is not itself present projects as absent through the
+ * same `projectValue` call, never a fetch triggered by this walk beyond the
+ * one-slot lazy-load trigger `presentRelationshipValues` already documents.
+ * Identity (`id`) rides along through the target's own declared `id` field
+ * (every `CardDef` has one); a `contains` composite has none, matching
+ * RP-3.3.
  */
 function projectExpandedValue(
   value: unknown,
   api: CardAPIModule,
+  onPending: ((pending: PendingRelationship) => void) | undefined,
   seen: WeakSet<object>,
 ): JSONValue {
   if (!isBaseDefInstance(value)) {
@@ -657,9 +910,11 @@ function projectExpandedValue(
       api.getFields(value, { includeComputeds: true }),
     )) {
       result[name] = projectValue(
-        api.peekAtField(value, name),
+        value as BaseDef,
+        name,
         field.fieldType,
         api,
+        onPending,
         seen,
       ) as JSONValue;
     }

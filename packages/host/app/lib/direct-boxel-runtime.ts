@@ -79,6 +79,15 @@ export default class DirectBoxelRuntime implements BoxelRuntime {
   constructor(
     private getCardAPI: GetCardAPI,
     private getLoader?: GetLoader,
+    /**
+     * Normalizes an absolute instance URL to its registered scoped-identifier
+     * form (see `HostBoxelProjectionOptions.unresolveURL` in
+     * `boxel-projection.ts`) — needed so a themed card's `data-boxel-theme-
+     * scope` token matches the id form its theme stylesheet was compiled
+     * against, the same as the Capsule tier derives it. Omit to leave
+     * instance ids unnormalized.
+     */
+    private unresolveURL?: (url: string) => string,
   ) {}
 
   async loadBoxel(ref: CodeRef): Promise<BoxelTypeHandle> {
@@ -201,6 +210,7 @@ export default class DirectBoxelRuntime implements BoxelRuntime {
     return buildBoxelRenderRecord(
       projectHostBoxelSemantics(card, api, {
         writableFields: options.writableFields,
+        unresolveURL: this.unresolveURL,
       }),
     );
   }

@@ -285,6 +285,27 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
     return this.state.snapshot.current?.lease.decision.reason;
   }
 
+  /**
+   * On main, `CardContainer` (`@cardstack/boxel-ui/components`) stamps
+   * `data-boxel-theme-scope` on the card's own wrapper element, computed
+   * live from the card's linked Theme card. The Capsule slot mounts a
+   * trusted `CardContainer` portal too, but that portal's own theme
+   * computation depends on live Store/computed-field access the Capsule
+   * boundary doesn't carry across (RP-5.4) — the render record's
+   * presentation instead carries the already-computed token
+   * (`boxel-projection.ts`'s `projectThemeScopeToken`, Host-side, where that
+   * access is available). Stamping it here, on the Host-owned slot wrapper
+   * that always encloses the trusted portal, reaches the same selector the
+   * theme stylesheet (installed separately) was compiled against, whether or
+   * not the portal's own internal wrapper manages to stamp it too.
+   */
+  private get themeScope(): string | undefined {
+    return (
+      this.state.snapshot.current?.renderRecord.presentation.themeScope ??
+      undefined
+    );
+  }
+
   <template>
     {{#if this.headComponent}}
       <HeadFormatPreview
@@ -298,6 +319,7 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
         class='boxel-execution-capsule-slot'
         data-boxel-execution='capsule'
         data-boxel-execution-reason={{this.executionReason}}
+        data-boxel-theme-scope={{this.themeScope}}
         {{surfaceElement this.capsuleSurface}}
         ...attributes
       >

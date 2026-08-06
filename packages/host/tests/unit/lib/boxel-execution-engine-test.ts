@@ -177,6 +177,7 @@ function renderRecord(
       summary: null,
       thumbnailURL: null,
       theme: null,
+      themeScope: null,
     },
   };
 }

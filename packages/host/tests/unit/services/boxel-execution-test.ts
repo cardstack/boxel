@@ -11,8 +11,11 @@ import type { BaseDef } from '@cardstack/base/card-api';
 // the href (`decodeScopedCSSRequest` in `@cardstack/runtime-common`); a real
 // href always ends in `.glimmer-scoped.css` with the compiled CSS base64'd
 // into the preceding path segment. Build one exactly like the compiler does.
-function scopedCSSHref(css: string): string {
-  return `https://realm.example/card.gts.${encodeURIComponent(btoa(css))}.glimmer-scoped.css`;
+function scopedCSSHref(
+  css: string,
+  fromFile = 'https://realm.example/card.gts',
+): string {
+  return `${fromFile}.${encodeURIComponent(btoa(css))}.glimmer-scoped.css`;
 }
 
 module('Unit | Service | boxel-execution', function (hooks) {
@@ -91,8 +94,8 @@ module('Unit | Service | boxel-execution', function (hooks) {
     assert.ok(component, 'an inert HTML component is produced');
     assert.deepEqual(
       formats,
-      ['embedded'],
-      'isolated uses the indexed embedded prerender as its inert handoff',
+      ['isolated', 'embedded'],
+      'isolated tries its own stored prerender first, falling back to embedded',
     );
     assert.deepEqual(imported, [cssHref]);
   });
@@ -193,6 +196,105 @@ module('Unit | Service | boxel-execution', function (hooks) {
       assert.true(
         String(loggedErrors[0]?.[0]).includes(networkBearingHref),
         'the diagnostic names the dropped stylesheet',
+      );
+    } finally {
+      console.error = originalConsoleError;
+    }
+  });
+
+  test('a trusted Cardstack component stylesheet is installed without going through the Capsule CSS policy', async function (assert) {
+    let imported: string[] = [];
+    let loggedErrors: unknown[][] = [];
+    let originalConsoleError = console.error;
+    // `@layer reset { :global(h1) { ... } }` is the real shape of
+    // `@cardstack/boxel-ui/components/card-container/index.gts`'s own
+    // scoped CSS: a named `@layer` for cascade ordering plus a `:global()`
+    // reset selector that opts out of scoping. Both are document-global /
+    // scope-escaping under the Capsule CSS policy, which would reject an
+    // authored card writing them — but this is the Host's own trusted
+    // component (docs/boxel-execution-runtime-architecture.md, "Trusted
+    // Cardstack components are one-way portals"), so the policy must not
+    // apply to it at all.
+    let trustedHref = scopedCSSHref(
+      '@layer reset { :global(h1) { margin: 0; } }',
+      '@cardstack/boxel-ui/components/card-container/index.gts',
+    );
+
+    class MockStore extends Service {
+      async fetchCardEntry(_url: string, opts: { format?: string }) {
+        if (opts.format !== 'embedded') {
+          return { notModified: true as const, doc: undefined };
+        }
+        return {
+          notModified: false as const,
+          doc: {
+            data: {
+              type: 'entry',
+              id: 'https://realm.example/Card/three',
+              relationships: {
+                html: { data: [{ type: 'html', id: 'card#embedded' }] },
+              },
+            },
+            included: [
+              {
+                type: 'html',
+                id: 'card#embedded',
+                attributes: {
+                  html: '<article>Themed card</article>',
+                  cardType: 'Card',
+                  format: 'embedded',
+                },
+                relationships: {
+                  styles: { data: [{ type: 'css', id: 'style:trusted' }] },
+                },
+              },
+              {
+                type: 'css',
+                id: 'style:trusted',
+                attributes: {
+                  href: trustedHref,
+                },
+              },
+            ],
+          },
+        };
+      }
+    }
+
+    class MockLoaderService extends Service {
+      loader = {
+        import: async (identifier: string) => {
+          imported.push(identifier);
+          return {};
+        },
+      };
+    }
+
+    this.owner.register('service:store', MockStore);
+    this.owner.register('service:loader-service', MockLoaderService);
+    let service = this.owner.lookup(
+      'service:boxel-execution',
+    ) as BoxelExecutionService;
+    let card = {
+      id: 'https://realm.example/Card/three',
+    } as unknown as BaseDef;
+
+    console.error = (...args: unknown[]) => {
+      loggedErrors.push(args);
+    };
+    try {
+      let component = await service.prerenderedComponentFor(card, 'isolated');
+
+      assert.ok(component, 'the placeholder renders using the trusted style');
+      assert.deepEqual(
+        imported,
+        [trustedHref],
+        'the trusted stylesheet is installed exactly as requested, unmodified by the policy',
+      );
+      assert.strictEqual(
+        loggedErrors.length,
+        0,
+        'a trusted origin never reaches the policy, so nothing is rejected or logged',
       );
     } finally {
       console.error = originalConsoleError;

@@ -15,7 +15,6 @@ import {
   type RealmResourceIdentifier,
   type SurfaceHandle,
 } from '@cardstack/runtime-common';
-import { PACKAGES_FAKE_ORIGIN } from '@cardstack/runtime-common/package-shim-handler';
 
 import { createBoxelFieldPortal } from '@cardstack/host/components/boxel-field-portal';
 import config from '@cardstack/host/config/environment';
@@ -42,6 +41,10 @@ import {
   type HTMLComponent,
 } from '@cardstack/host/lib/html-component';
 import SandboxRuntimeProcess from '@cardstack/host/lib/sandbox-runtime-process';
+import {
+  isTrustedImport,
+  isTrustedModule,
+} from '@cardstack/host/lib/trusted-modules';
 
 import type CardService from './card-service';
 import type DirectBoxelRuntimeService from './direct-boxel-runtime';
@@ -128,12 +131,12 @@ export default class BoxelExecutionService extends Service {
       card,
       document as LooseSingleCardDocument,
       api,
-      (identifier) => this.isTrustedModule(identifier),
+      isTrustedModule,
     );
     return {
       principal: this.principal,
       surfaceId,
-      trusted: this.isTrustedModule(moduleIdentifier),
+      trusted: isTrustedModule(moduleIdentifier),
       format: format ?? 'isolated',
       moduleIdentifier,
       source,
@@ -142,7 +145,18 @@ export default class BoxelExecutionService extends Service {
       relativeTo: relativeTo ?? executionRelativeTo(card),
       purpose: format === 'edit' ? 'interactive-edit' : 'host-display',
       canonicalCard: card,
-      hostProjection: projectHostBoxelSemantics(card, api),
+      // `useAbsoluteURL: true` above keeps `document`'s own instance ids
+      // absolute (RP-8.4). A themed card's presentation must not inherit
+      // that: the theme stylesheet a themed card's realm/prerender pipeline
+      // installs is compiled against the linked Theme card's *scoped*
+      // identifier (`unresolveResourceInstanceURLs` in
+      // `runtime-common/url.ts` runs on every realm-served document), so
+      // `projectHostBoxelSemantics` needs the same normalization to derive
+      // a matching `data-boxel-theme-scope` token
+      // (`boxel-projection.ts`'s `projectThemeScopeToken`).
+      hostProjection: projectHostBoxelSemantics(card, api, {
+        unresolveURL: (url) => this.network.virtualNetwork.unresolveURL(url),
+      }),
     };
   }
 
@@ -204,7 +218,11 @@ export default class BoxelExecutionService extends Service {
         await Promise.all(
           styleHrefs.map((href) => this.installPrerenderedStylesheet(href)),
         );
-        return htmlComponent(rendering.attributes.html!);
+        // Indexed isolated HTML may have several root nodes; htmlComponent
+        // requires exactly one, so the placeholder gets a neutral wrapper.
+        return htmlComponent(
+          `<div data-boxel-prerender-placeholder>${rendering.attributes.html!}</div>`,
+        );
       } catch {
         // A missing or stale prerender must never delay or fail live execution.
       }
@@ -215,13 +233,21 @@ export default class BoxelExecutionService extends Service {
   /**
    * Register one prerendered stylesheet in the shared Host document.
    *
-   * The Capsule CSS policy (capsule-css-policy.ts) is the defense-in-depth
-   * backstop for every stylesheet that shares the Host document, including a
-   * prerendered placeholder's. A rejection here means the placeholder cannot
-   * carry that declaration, but per RP-8-adjacent (unsupported semantics fail
-   * atomically, never silently) the rejection itself must stay observable:
-   * log it loudly instead of disappearing into the outer best-effort catch.
-   * The placeholder is inert and disposable — the live Boxel rendering that
+   * The Capsule CSS policy (capsule-css-policy.ts) confines AUTHORED,
+   * untrusted CSS that shares the Host document — it was never meant to
+   * police a trusted Cardstack component's own compiled scoped CSS (Base,
+   * Catalog, `@cardstack/*` packages like Boxel UI execute as Host-owned
+   * portals outside Capsule confinement per "Trusted Cardstack components
+   * are one-way portals" in docs/boxel-execution-runtime-architecture.md).
+   * `isTrustedImport` — the same trust boundary the module-graph classifier
+   * uses (boxel-source-classifier.ts) — exempts those requests; every
+   * genuinely authored stylesheet still goes through the full policy.
+   *
+   * A rejection here means the placeholder cannot carry that declaration,
+   * but per RP-8-adjacent (unsupported semantics fail atomically, never
+   * silently) the rejection itself must stay observable: log it loudly
+   * instead of disappearing into the outer best-effort catch. The
+   * placeholder is inert and disposable — the live Boxel rendering that
    * supersedes it is classified independently (boxel-source-classifier.ts)
    * and, for network-bearing scoped CSS, renders in the Sandbox tier, where
    * the declaration is actually supported.
@@ -229,7 +255,7 @@ export default class BoxelExecutionService extends Service {
   private async installPrerenderedStylesheet(href: string): Promise<void> {
     let request: string;
     try {
-      request = validateSharedDocumentScopedCSSRequest(href);
+      request = validateSharedDocumentScopedCSSRequest(href, isTrustedImport);
     } catch (error) {
       console.error(
         `Boxel execution: dropped a prerendered placeholder stylesheet that failed the Capsule CSS policy (${href})`,
@@ -320,7 +346,7 @@ export default class BoxelExecutionService extends Service {
               ? new URL(specifier, relativeTo).href
               : specifier,
           ),
-        isTrustedModule: (identifier) => this.isTrustedImport(identifier),
+        isTrustedModule: isTrustedImport,
       });
       let router = new BoxelRuntimeRouter(
         this.directBoxelRuntime.runtime,
@@ -360,7 +386,7 @@ export default class BoxelExecutionService extends Service {
           return Reflect.get(rootComponent, property);
         }
         let identity = Loader.identify(field.card);
-        if (identity && this.isTrustedModule(identity.module)) {
+        if (identity && isTrustedModule(identity.module)) {
           return Reflect.get(rootComponent, property);
         }
         let portal = authored.get(property);
@@ -388,7 +414,7 @@ export default class BoxelExecutionService extends Service {
       fetch: this.network.authedFetch,
       resolveImport: this.network.resolveImport,
       virtualNetwork: this.network.virtualNetwork,
-      isTrustedImport: (identifier) => this.isTrustedImport(identifier),
+      isTrustedImport,
       validateInlineStyle: validateCapsuleInlineStyle,
     });
     return new CapsuleBoxelRuntime(evaluator, (identifier) =>
@@ -412,7 +438,7 @@ export default class BoxelExecutionService extends Service {
       fetch: this.network.authedFetch,
       resolveModuleURL: (identifier) =>
         this.resolveSandboxModuleURL(identifier),
-      isTrustedModuleURL: (identifier) => this.isTrustedImport(identifier),
+      isTrustedModuleURL: isTrustedImport,
       surfaceService: this.surfaceService,
       identity: {
         mode: 'sandbox',
@@ -509,15 +535,6 @@ export default class BoxelExecutionService extends Service {
     });
   }
 
-  private isTrustedModule(moduleIdentifier: string): boolean {
-    return (
-      moduleIdentifier.startsWith('@cardstack/') ||
-      moduleIdentifier.startsWith(`${PACKAGES_FAKE_ORIGIN}@cardstack/`) ||
-      isURLWithin(moduleIdentifier, 'https://cardstack.com/base/') ||
-      isURLWithin(moduleIdentifier, config.resolvedBaseRealmURL)
-    );
-  }
-
   private resolveSandboxModuleURL(moduleIdentifier: string): string {
     try {
       return this.network.virtualNetwork.toRealURLHref(
@@ -529,26 +546,6 @@ export default class BoxelExecutionService extends Service {
       // Host fetch broker, so retaining the original spelling is sufficient.
       return moduleIdentifier;
     }
-  }
-
-  private isTrustedImport(moduleIdentifier: string): boolean {
-    return (
-      this.isTrustedModule(moduleIdentifier) ||
-      isURLWithin(moduleIdentifier, 'https://cardstack.com/catalog/') ||
-      (config.resolvedCatalogRealmURL !== undefined &&
-        isURLWithin(moduleIdentifier, config.resolvedCatalogRealmURL)) ||
-      isURLWithin(moduleIdentifier, config.iconsURL) ||
-      moduleIdentifier === '@ember/component' ||
-      moduleIdentifier === '@ember/object' ||
-      moduleIdentifier === '@ember/helper' ||
-      moduleIdentifier === '@ember/modifier' ||
-      moduleIdentifier === '@ember/component/template-only' ||
-      moduleIdentifier === '@ember/template-factory' ||
-      moduleIdentifier === '@glimmer/component' ||
-      moduleIdentifier === '@glimmer/tracking' ||
-      moduleIdentifier === 'ember-provide-consume-context' ||
-      moduleIdentifier === '@cardstack/runtime-common'
-    );
   }
 
   private destroyEngine(): void {
@@ -576,25 +573,6 @@ function executionRelativeTo(
   return 'id' in card && typeof card.id === 'string'
     ? (card.id as RealmResourceIdentifier)
     : undefined;
-}
-
-function isURLWithin(identifier: string, root: string): boolean {
-  try {
-    let candidate = new URL(identifier);
-    let boundary = new URL(root);
-    if (candidate.origin !== boundary.origin) {
-      return false;
-    }
-    let boundaryPath = boundary.pathname.endsWith('/')
-      ? boundary.pathname
-      : `${boundary.pathname}/`;
-    return (
-      candidate.pathname === boundaryPath.slice(0, -1) ||
-      candidate.pathname.startsWith(boundaryPath)
-    );
-  } catch {
-    return false;
-  }
 }
 
 declare module '@ember/service' {

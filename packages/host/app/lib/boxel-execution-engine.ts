@@ -115,6 +115,16 @@ export class BoxelExecutionSession {
   private error?: Error;
   private closed = false;
   private listeners = new Set<BoxelExecutionSessionListener>();
+  /**
+   * One `AbortController` per in-flight RP-7.3 settle watch
+   * (`request.hostProjection.onSettle`, set up in `boxel-projection.ts` when
+   * a relationship was rendered absent because it hadn't settled yet). Any
+   * watch still here is for a generation this session no longer wants: a
+   * newer `update()` supersedes it (aborted at the top of `update()`, since
+   * whatever it would republish is already moot), and `destroy()` aborts
+   * whatever is left so a closed session never republishes.
+   */
+  private settleWatchers = new Set<AbortController>();
 
   constructor(
     private readonly router: BoxelRuntimeRouter,
@@ -164,6 +174,9 @@ export class BoxelExecutionSession {
     request: BoxelExecutionRequest,
   ): Promise<BoxelExecutionGeneration | undefined> {
     this.assertOpen();
+    // Whatever an existing settle watch would republish is for a generation
+    // this call is about to supersede either way.
+    this.abortSettleWatchers();
     let generation = ++this.requestedGeneration;
     this.status = 'loading';
     this.error = undefined;
@@ -199,6 +212,11 @@ export class BoxelExecutionSession {
       if (previous) {
         await disposeGeneration(previous);
       }
+      // RP-7.3: this generation renders immediately with any not-yet-settled
+      // relationship absent — first paint never awaits settlement. If the
+      // projection reported one, watch it in the background and republish a
+      // fresh generation through this same atomic path once it resolves.
+      this.watchForSettle(generation, request);
       return this.currentGeneration;
     } catch (error) {
       if (candidate) {
@@ -214,12 +232,54 @@ export class BoxelExecutionSession {
     }
   }
 
+  /**
+   * Observe one generation's RP-7.3 settle watch (if its projection reported
+   * one) and republish a fresh generation when it resolves. Fire-and-forget
+   * by design: `update()` must not await this (RP-7.3 forbids blocking first
+   * paint on relationship resolution), so failures are swallowed here rather
+   * than surfacing as an unhandled rejection or a spurious session error —
+   * the current generation, correctly rendered absent, is not wrong, just
+   * not yet complete.
+   */
+  private watchForSettle(
+    generation: number,
+    request: BoxelExecutionRequest,
+  ): void {
+    let onSettle = request.hostProjection?.onSettle;
+    if (!onSettle) {
+      return;
+    }
+    let controller = new AbortController();
+    this.settleWatchers.add(controller);
+    void (async () => {
+      try {
+        let fresh = await onSettle(controller.signal);
+        if (!fresh || this.closed || generation !== this.requestedGeneration) {
+          return;
+        }
+        await this.update({ ...request, hostProjection: fresh });
+      } catch {
+        // Best-effort observation; see doc comment above.
+      } finally {
+        this.settleWatchers.delete(controller);
+      }
+    })();
+  }
+
+  private abortSettleWatchers(): void {
+    for (let controller of this.settleWatchers) {
+      controller.abort();
+    }
+    this.settleWatchers.clear();
+  }
+
   async destroy(): Promise<void> {
     if (this.closed) {
       return;
     }
     this.closed = true;
     this.requestedGeneration++;
+    this.abortSettleWatchers();
     let current = this.currentGeneration;
     this.currentGeneration = undefined;
     this.listeners.clear();

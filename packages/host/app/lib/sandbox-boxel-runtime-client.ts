@@ -22,7 +22,18 @@ import type { BoxelRuntime, MaterializationPurpose } from './boxel-runtime';
 interface PendingRequest {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
+  timeout?: ReturnType<typeof setTimeout>;
 }
+
+// RP-15.3: any Sandbox RPC (not only `render`) can wedge — e.g. a purpose
+// (`createFromSerialized`'s `interactive-edit`) that stalls acquiring a
+// module or capability the child never actually grants. Left unbounded, that
+// hang never resolves `BoxelExecutionSession.update()`, so the session never
+// reaches `error` and the caller (`boxel-execution-renderer.gts`) is left
+// showing its last placeholder forever with no failure ever surfacing. Every
+// request gets the same bounded fail-closed timeout `SandboxRenderClient`
+// uses for the render RPC.
+export const defaultSandboxRuntimeRequestTimeoutMs = 10_000;
 
 /**
  * Parent-side semantic adapter for an origin-isolated Boxel Sandbox.
@@ -37,8 +48,13 @@ export default class SandboxBoxelRuntimeClient implements BoxelRuntime {
   private nextRequest = 0;
   private pending = new Map<string, PendingRequest>();
   private closed = false;
+  private readonly requestTimeoutMs: number;
 
-  constructor(private readonly port: MessagePort) {
+  constructor(
+    private readonly port: MessagePort,
+    requestTimeoutMs = defaultSandboxRuntimeRequestTimeoutMs,
+  ) {
+    this.requestTimeoutMs = requestTimeoutMs;
     this.port.addEventListener('message', this.onMessage);
     this.port.start();
   }
@@ -97,6 +113,23 @@ export default class SandboxBoxelRuntimeClient implements BoxelRuntime {
     await this.request('dispose', [handle]);
   }
 
+  /**
+   * Fails every in-flight request without waiting out its timeout.
+   *
+   * Used when the owning `SandboxRuntimeProcess` learns, from an out-of-band
+   * signal (a child-reported runtime error), that this process can never
+   * complete a pending operation.
+   */
+  failPending(error: Error): void {
+    for (let [requestId, pending] of this.pending) {
+      if (pending.timeout !== undefined) {
+        clearTimeout(pending.timeout);
+      }
+      pending.reject(error);
+      this.pending.delete(requestId);
+    }
+  }
+
   destroy(reason = 'Sandbox runtime client was destroyed'): void {
     if (this.closed) {
       return;
@@ -105,6 +138,9 @@ export default class SandboxBoxelRuntimeClient implements BoxelRuntime {
     this.port.removeEventListener('message', this.onMessage);
     this.port.close();
     for (let pending of this.pending.values()) {
+      if (pending.timeout !== undefined) {
+        clearTimeout(pending.timeout);
+      }
       pending.reject(new Error(reason));
     }
     this.pending.clear();
@@ -126,14 +162,30 @@ export default class SandboxBoxelRuntimeClient implements BoxelRuntime {
       args,
     };
     return new Promise<T>((resolve, reject) => {
+      let timeout =
+        this.requestTimeoutMs > 0
+          ? setTimeout(() => {
+              if (!this.pending.delete(requestId)) {
+                return;
+              }
+              reject(
+                new Error(
+                  `Sandbox ${operation} timed out after ${this.requestTimeoutMs}ms waiting for the child to respond`,
+                ),
+              );
+            }, this.requestTimeoutMs)
+          : undefined;
       this.pending.set(requestId, {
         resolve: (value) => resolve(value as T),
         reject,
+        timeout,
       });
       try {
         this.port.postMessage(request);
       } catch (error) {
-        this.pending.delete(requestId);
+        if (this.pending.delete(requestId) && timeout !== undefined) {
+          clearTimeout(timeout);
+        }
         reject(error);
       }
     });
@@ -155,6 +207,9 @@ export default class SandboxBoxelRuntimeClient implements BoxelRuntime {
       return;
     }
     this.pending.delete(response.requestId);
+    if (pending.timeout !== undefined) {
+      clearTimeout(pending.timeout);
+    }
     if (response.ok) {
       pending.resolve(response.value);
     } else {
@@ -177,6 +232,9 @@ export default class SandboxBoxelRuntimeClient implements BoxelRuntime {
     this.port.removeEventListener('message', this.onMessage);
     this.port.close();
     for (let pending of this.pending.values()) {
+      if (pending.timeout !== undefined) {
+        clearTimeout(pending.timeout);
+      }
       pending.reject(error);
     }
     this.pending.clear();

@@ -402,6 +402,18 @@ export interface InstancePresentation {
   summary: string | null;
   thumbnailURL: string | null;
   theme: BoxelValueReference | null;
+  /**
+   * The `data-boxel-theme-scope` token main stamps on a themed card's
+   * container (`themeScope()` in
+   * `@cardstack/boxel-ui/helpers/theme-scoped-css.ts`: the theme card's id
+   * plus a content fingerprint of its CSS, e.g. `<themeId>-<fingerprint>`).
+   * Computed once, Host-side, from the live linked Theme card (RP-5.4) and
+   * crossed as a plain cloneable string — never the live Theme card itself —
+   * so a boundary tier can stamp the identical attribute its own trusted
+   * `CardContainer` invocation needs to match the theme stylesheet already
+   * installed in the shared document. `null` when the instance has no theme.
+   */
+  themeScope: string | null;
 }
 
 /**

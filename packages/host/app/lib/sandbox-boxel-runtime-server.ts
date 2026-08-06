@@ -38,6 +38,18 @@ export default class SandboxBoxelRuntimeServer {
     if (!isBoxelRuntimeRequest(request)) {
       return;
     }
+    // Breadcrumb 5/7: an RPC request arrived. `loadBoxel`/`createFromSerialized`
+    // are what actually trigger module fetch + evaluation (including the
+    // authored card's own module and its dependency graph) — if the child
+    // stalls fetching or evaluating a module, this logs but the matching
+    // "RPC completed/failed" below never does, pinpointing the stall to
+    // "module import begun" without needing a separate breadcrumb inside the
+    // Loader itself (shared, non-sandbox-owned code).
+    let startedAt = Date.now();
+    console.warn('[sandbox-child] RPC request received', {
+      operation: request.operation,
+      requestId: request.requestId,
+    });
     let response: BoxelRuntimeResponse;
     try {
       assertBoxelExecutionTransportVersion(request.transportVersion);
@@ -49,6 +61,11 @@ export default class SandboxBoxelRuntimeServer {
         ok: true,
         value,
       };
+      console.warn('[sandbox-child] RPC request completed', {
+        operation: request.operation,
+        requestId: request.requestId,
+        durationMs: Date.now() - startedAt,
+      });
     } catch (error) {
       response = {
         kind: 'boxel-runtime-response',
@@ -57,6 +74,12 @@ export default class SandboxBoxelRuntimeServer {
         ok: false,
         error: projectedError(error),
       };
+      console.warn('[sandbox-child] RPC request failed', {
+        operation: request.operation,
+        requestId: request.requestId,
+        durationMs: Date.now() - startedAt,
+        error: response.error,
+      });
     }
     if (!this.closed) {
       this.port.postMessage(response);
