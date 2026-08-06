@@ -30,26 +30,84 @@ export const WAVEFORM_ALGORITHM = 'rms-peak-v1';
 // comparing two files can tell it apart from a decoded envelope.
 export const WAVEFORM_ALGORITHM_SIDE_INFO = 'mp3-side-info-v1';
 
-// Refuse to decode past this, measured on the *encoded* size because that is
-// what's known before committing to a decode.
+// What one file's decode may cost in memory.
 //
-// This applies to FLAC, Ogg, and M4A — the formats that still need a real
-// decoder. MP3 no longer does: it reads its envelope out of frame side info
-// (see `extractMp3Envelope`) and streams with flat memory, which is why it is
-// exempt. That matters because MP3 was by far the worst case here, at roughly
-// twenty times the encoded size once decoded to float PCM against four to six
-// for the rest.
+// The ceiling is on *decoded* bytes rather than encoded ones, because encoded
+// size predicts decoded size very badly. Float PCM costs
+// `duration x sampleRate x channels x 4`, so the expansion factor is
+// `(sampleRate x channels x 32) / bitrate` — which is about 4x for FLAC but 22x
+// for AAC and up to 48x for low-bitrate Opus. A single encoded ceiling that
+// looks reasonable against FLAC therefore admits a decode an order of magnitude
+// larger for a lossy stream: at 16 MB encoded, FLAC decodes to ~64 MB while
+// 64 kbps Opus decodes to ~768 MB.
 //
-// The number that matters is still the decoded one: float PCM costs
-// `duration x sampleRate x channels x 4` bytes. A 16 MB FLAC is around three
-// minutes, decoding to ~60 MB inside the shared prerender pool alongside every
-// other render — enough for ordinary music and speech while refusing masters
-// that would decode to gigabytes.
+// Predicting the decoded size costs nothing, because every caller has already
+// read the duration, sample rate, and channel count from the container's header
+// before it gets here. So the budget is applied to the figure that actually
+// matters, and each format lands wherever its own codec puts it.
 //
-// Over the ceiling is not a failure: the file still indexes with every
-// header-derived fact intact and records `skipped`, so a renderer can tell
-// "too large to analyze" from "decode failed".
-export const WAVEFORM_MAX_ENCODED_BYTES = 16 * 1024 * 1024;
+// 128 MB admits roughly five minutes of 44.1 kHz stereo — comfortably every
+// ordinary song — while refusing the long recordings that would dominate a
+// prerender page's memory alongside every other render sharing the pool.
+export const WAVEFORM_MAX_DECODED_BYTES = 128 * 1024 * 1024;
+
+// Decoded PCM is 32-bit float per sample per channel.
+const BYTES_PER_DECODED_SAMPLE = 4;
+
+// A backstop for the case the decoded size can't be predicted — a container that
+// stated no sample rate, say. Deliberately generous, because it is a proxy for
+// the real constraint rather than the constraint itself.
+export const WAVEFORM_MAX_ENCODED_BYTES = 32 * 1024 * 1024;
+
+// What the container says this file will cost once decoded, or undefined when it
+// didn't say enough to tell.
+export function predictedDecodedBytes(
+  budget: DecodeBudget,
+): number | undefined {
+  let { durationSeconds, sampleRateHz, channels } = budget;
+  if (
+    durationSeconds === undefined ||
+    sampleRateHz === undefined ||
+    channels === undefined ||
+    durationSeconds <= 0 ||
+    sampleRateHz <= 0 ||
+    channels <= 0
+  ) {
+    return undefined;
+  }
+  return durationSeconds * sampleRateHz * channels * BYTES_PER_DECODED_SAMPLE;
+}
+
+// What each caller knows before committing to a decode.
+export interface DecodeBudget {
+  durationSeconds?: number;
+  sampleRateHz?: number;
+  channels?: number;
+  contentSize?: number;
+}
+
+function megabytes(bytes: number): string {
+  return `${Math.round(bytes / (1024 * 1024))} MB`;
+}
+
+// Why this file shouldn't be decoded, or undefined to go ahead. Skipping is not
+// a failure: the file still indexes with every header-derived fact intact, and
+// `skipped` tells a renderer "too large to analyze" rather than "decode failed".
+export function decodeSkipReason(budget: DecodeBudget): string | undefined {
+  let predicted = predictedDecodedBytes(budget);
+  if (predicted !== undefined) {
+    return predicted > WAVEFORM_MAX_DECODED_BYTES
+      ? `Decoding would need about ${megabytes(predicted)}, over the ${megabytes(
+          WAVEFORM_MAX_DECODED_BYTES,
+        )} ceiling`
+      : undefined;
+  }
+  // Nothing to predict from, so fall back to the encoded proxy.
+  return budget.contentSize !== undefined &&
+    budget.contentSize > WAVEFORM_MAX_ENCODED_BYTES
+    ? `File exceeds the ${megabytes(WAVEFORM_MAX_ENCODED_BYTES)} ceiling for audio of unknown duration`
+    : undefined;
+}
 
 export interface WaveformMetadata {
   decodeStatus: 'ok' | 'unsupported' | 'failed' | 'skipped';
@@ -202,12 +260,15 @@ export async function extractAudioWaveform(
   if (bytes.byteLength === 0) {
     return { decodeStatus: 'skipped', decodeError: 'File is empty' };
   }
+  // A last-resort guard for a caller that skipped the budget check entirely.
+  // The real decision is `decodeSkipReason`, which reasons about decoded rather
+  // than encoded size.
   if (bytes.byteLength > WAVEFORM_MAX_ENCODED_BYTES) {
     return {
       decodeStatus: 'skipped',
-      decodeError: `File exceeds the ${Math.floor(
+      decodeError: `File exceeds the ${Math.round(
         WAVEFORM_MAX_ENCODED_BYTES / (1024 * 1024),
-      )} MB decode ceiling`,
+      )} MB unbudgeted ceiling`,
     };
   }
   let Decoder = audioDecoderConstructor();

@@ -359,6 +359,8 @@ module('Unit | audio metadata extractors', function (hooks) {
   let parseId3v2Tags: typeof Id3Module.parseId3v2Tags;
   let parseVorbisComments: typeof VorbisModule.parseVorbisComments;
   let analyzeDecodedAudio: typeof AudioWaveformModule.analyzeDecodedAudio;
+  let decodeSkipReason: typeof AudioWaveformModule.decodeSkipReason;
+  let predictedDecodedBytes: typeof AudioWaveformModule.predictedDecodedBytes;
   let audioAttributes: typeof AudioFileDefModule.audioAttributes;
   let extractMidiMetadata: typeof MidiModule.extractMidiMetadata;
 
@@ -388,9 +390,10 @@ module('Unit | audio metadata extractors', function (hooks) {
     ({ parseVorbisComments } = await loader.import<typeof VorbisModule>(
       '@cardstack/base/vorbis-comment-parser',
     ));
-    ({ analyzeDecodedAudio } = await loader.import<typeof AudioWaveformModule>(
-      '@cardstack/base/audio-waveform',
-    ));
+    ({ analyzeDecodedAudio, decodeSkipReason, predictedDecodedBytes } =
+      await loader.import<typeof AudioWaveformModule>(
+        '@cardstack/base/audio-waveform',
+      ));
     ({ audioAttributes } = await loader.import<typeof AudioFileDefModule>(
       '@cardstack/base/audio-file-def',
     ));
@@ -1605,6 +1608,134 @@ module('Unit | audio metadata extractors', function (hooks) {
       );
       assert.strictEqual(result.duration, undefined);
       assert.strictEqual(result.envelope, undefined);
+    });
+  });
+
+  module('decode budget', function () {
+    // The expansion factor from encoded to decoded is
+    // (sampleRate x channels x 32) / bitrate, so it varies by an order of
+    // magnitude across codecs. These are the real cases that made a single
+    // encoded-size ceiling wrong.
+    const MB = 1024 * 1024;
+
+    function forEncoded(
+      bitrateBps: number,
+      sampleRateHz: number,
+      channels: number,
+      encodedBytes: number,
+    ) {
+      let durationSeconds = (encodedBytes * 8) / bitrateBps;
+      return {
+        durationSeconds,
+        sampleRateHz,
+        channels,
+        contentSize: encodedBytes,
+      };
+    }
+
+    test('predicts decoded size from what the container already stated', function (assert) {
+      // Five minutes of 44.1 kHz stereo float.
+      assert.strictEqual(
+        predictedDecodedBytes({
+          durationSeconds: 300,
+          sampleRateHz: 44100,
+          channels: 2,
+        }),
+        300 * 44100 * 2 * 4,
+      );
+    });
+
+    test('admits an ordinary song', function (assert) {
+      // Four minutes of CD-rate stereo is ~85 MB decoded.
+      assert.strictEqual(
+        decodeSkipReason({
+          durationSeconds: 240,
+          sampleRateHz: 44100,
+          channels: 2,
+        }),
+        undefined,
+      );
+    });
+
+    test('refuses the low-bitrate Opus case the old ceiling admitted', function (assert) {
+      // 16 MB of 64 kbps Opus is 35 minutes, which decodes to ~768 MB — the
+      // case the flat 16 MB encoded ceiling let straight through.
+      let budget = forEncoded(64_000, 48_000, 2, 16 * MB);
+      assert.true(
+        budget.contentSize <= 16 * MB,
+        'the file is within what the old encoded ceiling allowed',
+      );
+      assert.ok(
+        decodeSkipReason(budget),
+        'but it is refused on the decoded size that actually matters',
+      );
+    });
+
+    test('still admits FLAC of the same encoded size', function (assert) {
+      // The same 16 MB as FLAC is only ~3 minutes, ~64 MB decoded. A per-codec
+      // outcome from one rule is the whole point.
+      let budget = forEncoded(705_600, 44_100, 2, 16 * MB);
+      assert.strictEqual(decodeSkipReason(budget), undefined);
+    });
+
+    test('mono costs half as much, so twice as long is allowed', function (assert) {
+      assert.strictEqual(
+        decodeSkipReason({
+          durationSeconds: 700,
+          sampleRateHz: 44100,
+          channels: 1,
+        }),
+        undefined,
+        'a long mono recording still fits',
+      );
+      assert.ok(
+        decodeSkipReason({
+          durationSeconds: 700,
+          sampleRateHz: 44100,
+          channels: 2,
+        }),
+        'the same duration in stereo does not',
+      );
+    });
+
+    test('the skip reason names the size that caused it', function (assert) {
+      let reason = decodeSkipReason({
+        durationSeconds: 3600,
+        sampleRateHz: 48000,
+        channels: 2,
+      });
+      assert.true(
+        /\d+ MB/.test(reason ?? ''),
+        'an operator can see how far over it was, not just that it was over',
+      );
+    });
+
+    test('falls back to encoded size when the container said too little', function (assert) {
+      assert.strictEqual(
+        predictedDecodedBytes({ contentSize: 999 * MB }),
+        undefined,
+        'nothing to predict from',
+      );
+      assert.ok(
+        decodeSkipReason({ contentSize: 999 * MB }),
+        'the encoded proxy still catches an enormous file',
+      );
+      assert.strictEqual(
+        decodeSkipReason({ contentSize: 4 * MB }),
+        undefined,
+        'and lets a small one through',
+      );
+    });
+
+    test('a zero or missing sample rate is not treated as a prediction', function (assert) {
+      assert.strictEqual(
+        predictedDecodedBytes({
+          durationSeconds: 300,
+          sampleRateHz: 0,
+          channels: 2,
+        }),
+        undefined,
+      );
     });
   });
 });

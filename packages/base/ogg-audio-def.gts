@@ -35,13 +35,22 @@ export class OggDef extends AudioDef {
       await getStream(),
     );
 
+    // Bound before the waveform call so the decode budget can be predicted from
+    // the sample rate and channel count the container already stated.
+    let encoding = extractOggEncoding(head);
+
     return {
       ...base,
       duration,
       ...audioAttributes(
-        extractOggEncoding(head),
+        encoding,
         extractOggTags(head),
-        await waveformFor(getStream, base.contentSize),
+        await waveformFor(getStream, {
+          durationSeconds: duration,
+          sampleRateHz: encoding?.sampleRateHz,
+          channels: encoding?.channels,
+          contentSize: base.contentSize,
+        }),
       ),
     };
   }

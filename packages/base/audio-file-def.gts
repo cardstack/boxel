@@ -14,12 +14,9 @@ import {
   WaveformMetadataField,
 } from './file-formats/metadata-fields';
 import { markdownAudio } from './markdown-helpers';
-import {
-  WAVEFORM_MAX_ENCODED_BYTES,
-  extractAudioWaveform,
-} from './audio-waveform';
+import { decodeSkipReason, extractAudioWaveform } from './audio-waveform';
 import type { AudioEncoding, MediaTags } from './audio-metadata';
-import type { WaveformMetadata } from './audio-waveform';
+import type { DecodeBudget, WaveformMetadata } from './audio-waveform';
 import type { ByteStream } from './file-api';
 import AudioDefIsolatedTemplate from './default-templates/audio-def-isolated';
 import AudioDefEmbeddedTemplate from './default-templates/audio-def-embedded';
@@ -170,26 +167,22 @@ export function audioAttributes(
 
 // Produce a waveform, or an honest reason for not having one.
 //
-// This is the one audio fact that needs the whole file rather than a header
-// window, so it asks for a second stream — which the extract runner satisfies by
-// re-fetching and buffering. That is a real cost during indexing, so the size
-// check comes first and uses `contentSize` when the indexer supplied it: a file
-// over the ceiling never triggers the extra read at all, rather than being
-// fetched and then rejected.
+// This is the fallback path, for the formats that still need a real decoder:
+// FLAC, Ogg, and M4A. WAV reads its envelope straight from PCM and MP3 reads
+// quantizer gains out of frame side info, so neither comes through here.
+//
+// The decode needs the whole file rather than a header window, so it asks for a
+// second stream — which the extract runner satisfies by re-fetching and
+// buffering. That is a real cost, so the budget check comes first and a file
+// over it never triggers the extra read at all, rather than being fetched and
+// then rejected.
 export async function waveformFor(
   getStream: () => Promise<ByteStream>,
-  contentSize: number | undefined,
+  budget: DecodeBudget,
 ): Promise<WaveformMetadata> {
-  if (
-    contentSize !== undefined &&
-    contentSize > WAVEFORM_MAX_ENCODED_BYTES
-  ) {
-    return {
-      decodeStatus: 'skipped',
-      decodeError: `File exceeds the ${Math.floor(
-        WAVEFORM_MAX_ENCODED_BYTES / (1024 * 1024),
-      )} MB decode ceiling`,
-    };
+  let skip = decodeSkipReason(budget);
+  if (skip) {
+    return { decodeStatus: 'skipped', decodeError: skip };
   }
   try {
     let bytes = await byteStreamToUint8Array(await getStream());

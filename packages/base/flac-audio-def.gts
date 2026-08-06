@@ -34,13 +34,22 @@ export class FlacDef extends AudioDef {
     );
     let { duration } = extractFlacDuration(bytes);
 
+    // Bound before the waveform call so the decode budget can be predicted from
+    // the sample rate and channel count the container already stated.
+    let encoding = extractFlacEncoding(bytes);
+
     return {
       ...base,
       duration,
       ...audioAttributes(
-        extractFlacEncoding(bytes),
+        encoding,
         extractFlacTags(bytes),
-        await waveformFor(getStream, base.contentSize),
+        await waveformFor(getStream, {
+          durationSeconds: duration,
+          sampleRateHz: encoding?.sampleRateHz,
+          channels: encoding?.channels,
+          contentSize: base.contentSize,
+        }),
       ),
     };
   }
