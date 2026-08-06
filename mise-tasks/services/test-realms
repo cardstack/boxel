@@ -21,6 +21,26 @@ echo "[test-realms diag] TEST_REALM_DIR=$TEST_REALM_DIR file_count=$(ls -1A "$TE
 echo "[test-realms diag] ../test-realm-cards/contents file_count=$(ls -1A ../test-realm-cards/contents 2>/dev/null | wc -l | tr -d ' ')"
 echo "[test-realms diag] ./tests/fixtures/realistic file_count=$(ls -1A ./tests/fixtures/realistic 2>/dev/null | wc -l | tr -d ' ')"
 
+# Give both test realms content-derived mtimes so they can be reconciled
+# against a cached index built on another machine (see
+# scripts/normalize-realm-mtimes.mjs). `/test/` needs this more than any other
+# realm: the `cp -R` above does not preserve mtimes, so without normalizing
+# every file here looks modified on every single boot and a cached index could
+# never match a thing.
+#
+# Both the cache-export job and the test shards start their test realms through
+# this task, so normalizing here is what keeps the two sides agreeing.
+#
+# Confined to CI for the same reason as test-services/host: `./tests/fixtures`
+# lives in the checkout, and restamping a developer's working tree would leave
+# their own dev-server index looking stale on its next boot. The temp copy
+# would be harmless either way.
+if [ -n "${CI:-}" ]; then
+  REPO_ROOT="$(cd "../.." && pwd)"
+  node "$REPO_ROOT/scripts/normalize-realm-mtimes.mjs" \
+    "$TEST_REALM_DIR" ./tests/fixtures/realistic
+fi
+
 # In environment mode, share the dev icons server; otherwise start our own
 if [ -z "$BOXEL_ENVIRONMENT" ]; then
   sh "$SCRIPTS_DIR/start-icons.sh" &

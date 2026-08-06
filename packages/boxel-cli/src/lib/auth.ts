@@ -95,6 +95,10 @@ async function getOpenIdToken(
 export async function getRealmServerToken(
   matrixAuth: MatrixAuth,
   realmServerUrl: string,
+  // Ask the realm server for a long-lived token. Only for a caller that hands
+  // the bare token to something which cannot re-mint on a 401 — everything
+  // going through the CLI's own fetch wrappers should take the default.
+  opts: { extendedLifetime?: boolean } = {},
 ): Promise<string> {
   let openIdToken = await getOpenIdToken(matrixAuth);
   let url = `${realmServerUrl.replace(/\/$/, '')}/_server-session`;
@@ -105,7 +109,11 @@ export async function getRealmServerToken(
       Accept: 'application/json',
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(openIdToken),
+    body: JSON.stringify(
+      opts.extendedLifetime
+        ? { ...openIdToken, lifetime: 'extended' }
+        : openIdToken,
+    ),
   });
 
   if (!response.ok) {

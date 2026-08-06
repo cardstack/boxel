@@ -6,6 +6,7 @@ export const CodeModePanelWidths = 'code-mode-panel-widths';
 export const CodeModePanelHeights = 'code-mode-panel-heights';
 export const ModuleInspectorSelections = 'code-mode-panel-selections';
 export const SessionLocalStorageKey = 'boxel-session';
+export const RealmServerSessionLocalStorageKey = 'boxel-realm-server-session';
 export const AiAssistantMessageDrafts = 'ai-assistant-message-drafts';
 export const AiAssistantPendingSends = 'ai-assistant-pending-sends';
 export const PlaygroundSelections = 'playground-selections';

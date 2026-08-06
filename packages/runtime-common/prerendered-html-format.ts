@@ -3,6 +3,7 @@ export const PRERENDERED_HTML_FORMATS = [
   'fitted',
   'atom',
   'head',
+  'isolated',
 ] as const;
 
 export type PrerenderedHtmlFormat = (typeof PRERENDERED_HTML_FORMATS)[number];

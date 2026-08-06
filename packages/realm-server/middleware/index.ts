@@ -1,7 +1,11 @@
 import http from 'http';
 import https from 'https';
-import type { ResponseWithNodeStream } from '@cardstack/runtime-common';
+import type {
+  DBAdapter,
+  ResponseWithNodeStream,
+} from '@cardstack/runtime-common';
 import {
+  isSessionRevoked,
   logger as getLogger,
   webStreamToText,
   sanitizeLoggingCorrelationId,
@@ -333,6 +337,7 @@ export async function fetchRequestFromContext(
 
 export function jwtMiddleware(
   secretSeed: string,
+  dbAdapter: DBAdapter,
 ): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, next: Koa.Next) {
     let authorization = ctxt.req.headers['authorization'];
@@ -352,7 +357,13 @@ export function jwtMiddleware(
       // the server. If we introduce another type of realm-server permission,
       // then we will need to compare the token with what is configured on the
       // server.
-      ctxt.state.token = retrieveTokenClaim(authorization, secretSeed);
+      let token = retrieveTokenClaim(authorization, secretSeed);
+      if (await isSessionRevoked(dbAdapter, token.user, token.iat)) {
+        throw new AuthenticationError(
+          AuthenticationErrorMessages.SessionRevoked,
+        );
+      }
+      ctxt.state.token = token;
     } catch (e) {
       if (e instanceof AuthenticationError) {
         await sendResponseForUnauthorizedRequest(ctxt, e.message);

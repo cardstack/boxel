@@ -613,6 +613,36 @@ export async function updateUser(
   }
 }
 
+export interface SynapseExternalId {
+  auth_provider: string;
+  external_id: string;
+}
+
+// Reads the admin API's view of an account, whose payload includes the
+// `external_ids` rows linking it to SSO identities. That linkage is otherwise
+// invisible from the client API, and it is the value an OIDC sign-in is matched
+// against — so it is what a test has to inspect to know *which* identity a
+// session was established for, rather than merely that some session was.
+export async function getUserExternalIds(
+  adminAccessToken: string,
+  userId: string,
+  matrixURL?: string,
+): Promise<SynapseExternalId[]> {
+  let url = `${matrixURL ?? getSynapseURL()}/_synapse/admin/v2/users/${userId}`;
+  let res = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${adminAccessToken}`,
+    },
+  });
+  if (!res.ok) {
+    throw new Error(`could not get user: ${res.status} - ${await res.text()}`);
+  }
+  let { external_ids: externalIds } = (await res.json()) as {
+    external_ids?: SynapseExternalId[];
+  };
+  return externalIds ?? [];
+}
+
 export async function updateAccountData(
   userId: string,
   accessToken: string,

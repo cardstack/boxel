@@ -26,15 +26,19 @@ const DEFAULT_CONFIG_DIR = path.join(os.homedir(), '.boxel-cli');
 const PROFILES_FILENAME = 'profiles.json';
 
 /**
- * Tokens issued by the realm server carry a 7-day TTL. Re-mint when
- * there's less than a day left so a long-running operation (or a
- * downstream consumer that bakes the token into a static header, like
- * opencode's passthrough provider) doesn't get a 401 mid-flight.
+ * Re-mint a realm-server token when this little of its life is left, so a
+ * long-running operation (or a downstream consumer that bakes the token into
+ * a static header, like opencode's passthrough provider) doesn't get a 401
+ * mid-flight. Sized to outlast a single slow command, not to be a fraction of
+ * the token's lifetime — keep it well under the server's session TTL
+ * (`SESSION_TOKEN_TTL`), because a margin at or above that TTL makes every
+ * freshly minted token look already-expired and forces a re-mint on every
+ * call.
  *
  * Decode-only — we don't verify the signature; the realm server does
  * that on every request. We only care about the `exp` claim.
  */
-const SERVER_TOKEN_EXPIRY_SAFETY_MARGIN_SEC = 86400; // 1 day
+const SERVER_TOKEN_EXPIRY_SAFETY_MARGIN_SEC = 300; // 5 minutes
 
 function isJwtNearExpiry(
   token: string,
@@ -547,6 +551,30 @@ export class ProfileManager implements RealmAuthenticator {
 
   async refreshServerToken(): Promise<string> {
     return this.fetchRealmServerTokenWithReauth();
+  }
+
+  // Mint a long-lived realm-server token for a consumer that will hold the bare
+  // string and cannot re-mint when it lapses. Deliberately not cached: the
+  // cached slot feeds the CLI's own fetch wrappers, which recover from a 401 and
+  // so should keep taking the shorter default rather than inherit this one's
+  // lifetime.
+  async mintExtendedServerToken(): Promise<string> {
+    const matrixAuth = this.getStoredMatrixAuth();
+    const active = this.getActiveProfile()!;
+    const realmServerUrl = active.profile.realmServerUrl.replace(/\/$/, '');
+    try {
+      return await fetchRealmServerToken(matrixAuth, realmServerUrl, {
+        extendedLifetime: true,
+      });
+    } catch (e) {
+      if (!(e instanceof MatrixAuthError)) {
+        throw e;
+      }
+      const freshAuth = await this.reAuthenticate();
+      return fetchRealmServerToken(freshAuth, realmServerUrl, {
+        extendedLifetime: true,
+      });
+    }
   }
 
   private findRealmTokenForUrl(url: string): string | undefined {

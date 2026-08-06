@@ -93,8 +93,10 @@ import {
   isNode,
   logger,
   fetchRealmPermissions,
+  isSessionRevoked,
   isRealmArchived,
   baseRealm,
+  SESSION_TOKEN_TTL,
   maybeURL,
   insertPermissions,
   maybeHandleScopedCSSRequest,
@@ -2951,7 +2953,7 @@ export class Realm {
               realm: this.url,
               realmServerURL: this.#realmServerURL,
             },
-            '7d',
+            SESSION_TOKEN_TTL,
             this.#realmSecretSeed,
           );
         },
@@ -3939,10 +3941,22 @@ export class Realm {
     }
     let tokenString = authorizationString.replace('Bearer ', ''); // Parse the JWT
 
-    let token: TokenClaims;
+    let token: TokenClaims & { iat: number; exp: number };
 
     try {
       token = this.#adapter.verifyJWT(tokenString, this.#realmSecretSeed);
+
+      // Checked against the token's bearer before any assume-user indirection,
+      // and ahead of the delegated branch below, so revoking a user also kills
+      // sessions delegated on their behalf.
+      if (await isSessionRevoked(this.#dbAdapter, token.user, token.iat)) {
+        this.#log.warn(
+          `auth failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}), session for user ${token.user} was issued at ${token.iat} which predates that user's session revocation`,
+        );
+        throw new AuthenticationError(
+          AuthenticationErrorMessages.SessionRevoked,
+        );
+      }
 
       let realmPermissionChecker = new RealmPermissionChecker(
         realmPermissions,

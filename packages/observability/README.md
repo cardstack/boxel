@@ -375,6 +375,47 @@ CI runs `apply.sh --env staging` on merge to main (workflow:
 `apply.sh --env production` on the production workflow
 (CS-10936).
 
+## Operator actions
+
+Some dashboards carry buttons that POST to a realm-server operator endpoint —
+reindex a realm, complete a stuck job, grant a permission, add credit. Each one
+is a `volkovlabs-form-panel` button whose `customCode` does the `fetch`; there
+are no plain GET links, and no secret travels in a querystring.
+
+**Where they live.** An action goes on the dashboard whose data motivates it,
+rather than in one central console: per-realm reindex on `realms.json`, full
+reindex on `indexing.json`, job completion on `job-queue.json` /
+`indexing.json` / `prerender-html.json`, credit on `users.json`, permission
+grants on `realms.json` / `published-realms.json` / `users.json`. An operator
+looking at the numbers that prompted the action finds the button already in
+front of them.
+
+**Auth.** Every call sends `Authorization: Bearer ${grafana_secret}`. That
+variable is a hidden `constant` in each dashboard's `templating.list`, committed
+as the literal `REPLACE_AT_APPLY_TIME` and swapped for the real value by
+`scripts/apply.sh` at apply time from `GRAFANA_SECRET`. The realm-server URL
+works the same way, committed as `__REALM_SERVER_URL__` and filled from
+`REALM_SERVER_URL`. Both substitutions are guarded on the placeholder string, so
+they no-op on any other constant that happens to share the name, and
+`scripts/lint.sh` fails the build if a committed dashboard carries anything but
+the placeholder — a real secret can't be committed by accident.
+
+**Writing one.** Three mistakes in `customCode` fail silently, so copy a working
+button rather than starting fresh:
+
+- `await` only inside an `(async () => { ... })()` wrapper. Top-level `await`
+  isn't allowed in the panel's evaluation context.
+- Interpolate with `${var:doublequote}`, never bare `${var}`. A bare
+  substitution isn't quoted and produces a syntax error at eval time.
+- Attach `.catch(...)` to the IIFE. A rejection from inside the `catch` handler
+  is otherwise unhandled and the click appears to do nothing.
+
+Report outcomes through `context.grafana.notifySuccess` /
+`notifyError` and call `context.grafana.refresh()` on success so the panel's own
+query reflects the change. Guard destructive actions with a `window.confirm`
+that returns early, and say in the dialog what the action does _not_ do — an
+operator's wrong mental model is the failure mode a tooltip won't catch.
+
 ## Phase status
 
 Phases 2 through 6 (build-out and cutover) landed by 2026-05-06.
@@ -384,11 +425,10 @@ Remaining work:
 | -------- | ----- | ----------- | -------------------------------------------------------- |
 | CS-10933 | 4     | not started | CI: post diff comment on PRs                             |
 | CS-10942 | 7     | not started | Decommission AMG `boxel-dashboard/` TF (cardstack/infra) |
-| CS-10987 | 3.5   | not started | Operator-action button panels (auth via bearer token)    |
 
 ## Indexing progress (CS-10930)
 
-**Owner dashboard: `boxel-jobs.json`**. The Boxel Jobs dashboard owns the
+**Owner dashboard: `indexing.json`**. The Indexing dashboard owns the
 cluster-wide indexing-progress view — backlog stats, throughput / stocks
 time-series, and the per-active-job "Active Indexing" table with
 file-by-file progress bars. Drill-through "View activity feed" links
@@ -430,11 +470,4 @@ adding the AMP scrape pipe (Alloy sidecar, IAM, AMP datasource) is
 - **Decommission the AMG-era `boxel-dashboard/` Terraform** in `cardstack/infra` once a full release cycle has gone by on the new flow. Tracked as CS-10942. After it lands, `configs/boxel-grafana-data-sources/` (in cardstack/infra) becomes the sole owner of the per-env data the boxel CI workflow reads.
 - **Drop the dual-ship to CloudWatch** once Loki has been load-bearing for a release cycle. Until then both backends receive identical lines through the FireLens config in `cardstack/infra:modules/aws/ecs/firelens/templates/extra.conf.tftpl`.
 - **CODEOWNERS.** No file in the repo today — if the team wants observability-specific reviewer requirements, file a separate ticket.
-
-### TODO(Phase 3.5): operator-action links are temporarily broken
-
-CS-10924 stripped `?authHeader=${grafana_secret}` from every operator-action URL in the dashboards (reindex / full-reindex / complete-job in `boxel-jobs.json`, add-credit in `user-credits.json`, upsert-realm-user-permission in `realm-permissions.json`) and removed the matching `grafana_secret` template variable. The links remain in the JSON so the Phase 3.5 ticket has a concrete target to retrofit, but **clicking them now hits the realm-server operator endpoints with no auth and will 401**.
-
-Phase 3.5 (CS-10987 — operator-endpoint cleanup, deferred to after the cutover) replaces the GET-link pattern with Grafana button panels that POST to the same endpoints with an `Authorization: Bearer <token>` header sourced from a Grafana-managed secret, not a querystring. Until that lands, dashboard operators run those actions via `boxel realm reindex` (CLI) or by hitting the endpoints directly with `curl -H "Authorization: ..."`.
-
-The pre-existing `grafana_secret` value that was previously baked into Terraform / piped through CI logs **must be rotated** as part of the Phase 3.5 cutover — assume compromised. (CS-10924 acceptance criteria carry-over.)
+- **Rotate the `grafana_secret`.** An earlier value was baked into Terraform and piped through CI logs, so treat that one as compromised until it has been rotated. Unverified as of this writing — if rotation has already happened, drop this item.
