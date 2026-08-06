@@ -10,6 +10,19 @@ export interface BoxelExecutionPolicyInput {
   format?: string;
   source: BoxelSourceClassification;
   prefersFullSandbox: boolean;
+  /**
+   * Volatile promotion (docs/boxel-volatile-execution-plan.md): the module
+   * is under active source editing for this tab's session. Strengthens
+   * isolation the same way `prefersFullSandbox` does — routes to Sandbox
+   * even when classification alone would pick Capsule, since Sandbox is
+   * where the HMR machinery lives in v1 — but never overrides `trusted`:
+   * volatile promotion is for user cards under active edit, never the
+   * platform's own trusted graph (guarded primarily at
+   * `BoxelExecutionService.promoteToVolatile()`, which is inert for a
+   * trusted module identifier; this ordering is a second, structural
+   * guarantee of the same rule).
+   */
+  volatile: boolean;
 }
 
 export interface BoxelExecutionDecision {
@@ -29,6 +42,9 @@ export function decideBoxelExecution(
   }
   if (input.trusted) {
     return { mode: 'direct', reason: 'trusted-boxel-module' };
+  }
+  if (input.volatile) {
+    return { mode: 'sandbox', reason: 'volatile-promotion' };
   }
   let decision = executionDecisionForFormat(input.source, input.format);
   return {

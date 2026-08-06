@@ -161,6 +161,19 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
     let card = this.args.card;
     let format = this.args.format;
     let active = true;
+    // Volatile promotion (docs/boxel-volatile-execution-plan.md): read
+    // isVolatile() SYNCHRONOUSLY, here in this resource's own tracking
+    // frame — reading it later, inside the async IIFE below, would not
+    // register as a dependency ember-resources can react to. This is what
+    // makes a promotion re-instantiate THIS card's resource (tearing down
+    // its current — possibly Capsule — generation and re-materializing,
+    // this time routed to Sandbox) without a page reload, scoped to
+    // exactly this card's own module: promoting a DIFFERENT card never
+    // touches this dependency, so this resource never re-runs for it.
+    let moduleIdentifier = this.boxelExecution.moduleIdentifierFor(card);
+    if (moduleIdentifier) {
+      this.boxelExecution.isVolatile(moduleIdentifier);
+    }
     void this.boxelExecution
       .prerenderedComponentFor(card, format)
       .then((placeholder) => {
@@ -189,6 +202,7 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
           request.trusted,
           request.format,
           source,
+          this.boxelExecution.isVolatile(request.moduleIdentifier),
         );
         // RP-15.3: a Sandbox bootstrap failure must fail closed no matter
         // which of its two possible paths it takes — a connect (or later

@@ -50,6 +50,7 @@ function policy(
     format: 'isolated',
     source: capsuleSource,
     prefersFullSandbox: false,
+    volatile: false,
     ...overrides,
   };
 }

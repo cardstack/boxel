@@ -2,6 +2,8 @@ import { registerDestructor } from '@ember/destroyable';
 import type Owner from '@ember/owner';
 import Service, { service } from '@ember/service';
 
+import { TrackedObject } from 'tracked-built-ins';
+
 import {
   isCssResource,
   isHtmlResource,
@@ -95,6 +97,22 @@ export default class BoxelExecutionService extends Service {
   >();
   private nextSurface = 0;
   private nextLocalBoxel = 0;
+  /**
+   * Volatile promotion (docs/boxel-volatile-execution-plan.md): one-way for
+   * the life of this service (tab) — no lease, no timer, no demotion. The
+   * only way a module leaves this set is the tab closing.
+   */
+  private volatileModules = new Set<string>();
+  /**
+   * A tracked cell per promoted-or-not module identifier, created lazily on
+   * first read. `isVolatile()` reads it (establishing autotracking's
+   * dependency); `promoteToVolatile()` bumps it. Deliberately per-module,
+   * not one shared counter: a consumer (the renderer resource) that reads
+   * `isVolatile('card-a')` must re-run when card-a is promoted, but must
+   * NOT re-run — and flicker an unrelated, unpromoted card — when some
+   * other card-b is promoted instead. See `moduleIdentifierFor()`.
+   */
+  private volatileTokens = new Map<string, { v: number }>();
 
   constructor(owner: Owner) {
     super(owner);
@@ -107,6 +125,69 @@ export default class BoxelExecutionService extends Service {
 
   surfaceId(): string {
     return `boxel-surface-${++this.nextSurface}`;
+  }
+
+  /**
+   * Volatile promotion (docs/boxel-volatile-execution-plan.md): marks
+   * `moduleIdentifier` as under active source editing for the rest of this
+   * tab's session. One-way — promoting an already-volatile module, or
+   * re-promoting after this call, is a no-op; there is no corresponding
+   * "demote". Never applies to a trusted Host module: volatile promotion
+   * exists for user cards under active edit, not the platform's own
+   * trusted graph, so this call is silently inert (not a thrown error —
+   * a caller racing card-graph discovery with a promotion trigger
+   * shouldn't have to pre-filter trusted modules itself) for a trusted
+   * `moduleIdentifier`.
+   */
+  promoteToVolatile(moduleIdentifier: string): void {
+    if (isTrustedModule(moduleIdentifier)) {
+      return;
+    }
+    if (this.volatileModules.has(moduleIdentifier)) {
+      return;
+    }
+    this.volatileModules.add(moduleIdentifier);
+    // Bump AFTER adding, so a consumer that reads isVolatile() in reaction
+    // to this exact tracked write sees the promotion already applied.
+    this.volatileToken(moduleIdentifier).v++;
+  }
+
+  /**
+   * Whether `moduleIdentifier` has been promoted to volatile. Reading this
+   * establishes a tracked dependency scoped to exactly this module
+   * identifier (see `volatileToken()`) — a consumer (the renderer
+   * resource, via `moduleIdentifierFor()`) that reads it for its OWN
+   * card's module re-runs when THAT card is promoted, never when an
+   * unrelated one is.
+   */
+  isVolatile(moduleIdentifier: string): boolean {
+    // Establishes the tracked read even though the value itself is unused
+    // here — `has()` below is not itself trackable.
+    void this.volatileToken(moduleIdentifier).v;
+    return this.volatileModules.has(moduleIdentifier);
+  }
+
+  /**
+   * Synchronous module-identity lookup — the same one `requestFor()` uses
+   * internally, exposed so a consumer can establish a per-module tracked
+   * `isVolatile()` dependency SYNCHRONOUSLY, in its own tracking frame,
+   * before any async work begins (reading `isVolatile()` later, inside an
+   * async continuation, would not register as an autotracking dependency).
+   * Returns `undefined` rather than throwing for a card whose module can't
+   * be identified yet — there is nothing to track in that case; the real
+   * error still surfaces from `requestFor()` itself.
+   */
+  moduleIdentifierFor(card: BaseDef): string | undefined {
+    return Loader.identify(card.constructor)?.module;
+  }
+
+  private volatileToken(moduleIdentifier: string): { v: number } {
+    let token = this.volatileTokens.get(moduleIdentifier);
+    if (!token) {
+      token = new TrackedObject({ v: 0 });
+      this.volatileTokens.set(moduleIdentifier, token);
+    }
+    return token;
   }
 
   /**
@@ -159,6 +240,7 @@ export default class BoxelExecutionService extends Service {
     trusted: boolean,
     format: string | undefined,
     source: BoxelSourceClassification,
+    volatile = false,
   ): { process: SandboxRuntimeProcess; release: () => void } | undefined {
     this.ensureExecutionEngine();
     let router = this.router;
@@ -172,6 +254,7 @@ export default class BoxelExecutionService extends Service {
       format,
       source,
       prefersFullSandbox: false,
+      volatile,
     });
     if (lease.runtime.mode !== 'sandbox') {
       lease.release();
@@ -449,6 +532,7 @@ export default class BoxelExecutionService extends Service {
           // `classify` is the module graph API, not Ember's String extension.
           // eslint-disable-next-line ember/no-string-prototype-extensions
           classifier.classify(moduleIdentifier, source),
+        (moduleIdentifier) => this.isVolatile(moduleIdentifier),
       );
     }
     return this.engine;

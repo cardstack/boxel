@@ -665,3 +665,35 @@ placeholder keyed on the old identity invalidated.
 **RP-18.7** An ordinary draft never re-enters the placeholder: the live
 render (or its last-known-good) remains the visible content across
 generations.
+
+## RP-19 Volatile execution v1 (promotion)
+
+Un-defers the volatile-promotion half of
+[boxel-volatile-execution-plan.md](boxel-volatile-execution-plan.md):
+which cards get RP-18's source volatility, and what the rest of the
+workspace is guaranteed while they have it. The entry seam is
+`BoxelExecutionService.promoteToVolatile(moduleIdentifier)`.
+
+**RP-19.1** Promotion is one-way for the session: a promoted module stays
+volatile until the tab closes — no demotion, no lease, no quiet-period
+expiry. Promoting an already-volatile module is a no-op. A trusted Host
+module never promotes: the call is inert for a trusted module identifier.
+
+**RP-19.2** Volatility is a routing input that can only strengthen
+isolation. In v1 a volatile module routes to the Sandbox tier regardless
+of its classification; volatility never selects a weaker runtime than
+classification or Host trust policy selected, and never grants Direct.
+
+**RP-19.3** Promoting a mounted card's module re-routes that card live,
+through the ordinary generation-replace path: the superseded generation
+disposes normally, the new lease mounts through the same slot machinery
+as any first render (RP-15.3, RP-18.6), and only consumers of that
+module's own volatility re-evaluate — an unrelated mounted card observes
+nothing.
+
+**RP-19.4** A volatile session's drafts never mutate the stable module
+graph: the host loader's cached module identity for the drafted URL is
+untouched, and a stable consumer of the same module receives zero
+notifications during another session's draft cycle. Drafts are visible
+only inside the volatile session's own render until an ordinary commit
+(save → realm invalidation) updates stable consumers once.

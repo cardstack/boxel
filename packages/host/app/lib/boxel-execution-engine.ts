@@ -102,6 +102,17 @@ export type BoxelSourceClassifier = (
 ) => Promise<BoxelSourceClassification>;
 
 /**
+ * Volatile promotion (docs/boxel-volatile-execution-plan.md): queries the
+ * Host's LIVE volatile-module set at the moment it's needed, rather than a
+ * value baked into `BoxelExecutionRequest` at `requestFor()` time — a
+ * promotion can happen in the (real, async) gap between building a request
+ * and this engine actually materializing it, and the freshest answer is
+ * the one that matters. The smallest seam that gives materialize() this
+ * without coupling the engine to `BoxelExecutionService` directly.
+ */
+export type BoxelVolatilePredicate = (moduleIdentifier: string) => boolean;
+
+/**
  * Host owner for one mounted Boxel execution surface.
  *
  * A session changes runtime generations atomically: an incomplete or failed
@@ -137,6 +148,7 @@ export class BoxelExecutionSession {
   constructor(
     private readonly router: BoxelRuntimeRouter,
     private readonly classifySource: BoxelSourceClassifier,
+    private readonly isModuleVolatile: BoxelVolatilePredicate = () => false,
   ) {}
 
   get snapshot(): BoxelExecutionSessionSnapshot {
@@ -413,6 +425,7 @@ export class BoxelExecutionSession {
       format: request.format,
       source,
       prefersFullSandbox,
+      volatile: this.isModuleVolatile(request.moduleIdentifier),
     };
     let lease = this.router.route(route);
     if (lease.runtime.mode === 'sandbox') {
@@ -491,10 +504,15 @@ export default class BoxelExecutionEngine {
       _module,
       source,
     ) => classifyBoxelSource(source),
+    private readonly isModuleVolatile: BoxelVolatilePredicate = () => false,
   ) {}
 
   createSession(): BoxelExecutionSession {
-    return new BoxelExecutionSession(this.router, this.classifySource);
+    return new BoxelExecutionSession(
+      this.router,
+      this.classifySource,
+      this.isModuleVolatile,
+    );
   }
 
   destroy(): void {
