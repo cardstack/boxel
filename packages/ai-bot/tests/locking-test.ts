@@ -1,7 +1,11 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { PgAdapter } from '@cardstack/postgres';
-import { acquireRoomLock, releaseRoomLock } from '../lib/queries.ts';
+import {
+  acquireRoomLock,
+  acquireRoomLockWithWait,
+  releaseRoomLock,
+} from '../lib/queries.ts';
 import { Client } from 'pg';
 
 function prepareTestDB() {
@@ -147,5 +151,66 @@ module('AI Bot Locking', (hooks) => {
 
     await releaseRoomLock(pgAdapter, roomId);
     await releaseRoomLock(pgAdapter, '!different:example');
+  });
+  test('a contended room is waited for, not abandoned', async (assert) => {
+    assert.expect(3);
+    let roomId = '!room:waits';
+
+    await acquireRoomLock(pgAdapter, roomId, 'instance-a', 'event-in-flight');
+
+    // A user message arriving mid-turn. Giving up here would lose it outright:
+    // nothing revisits the room's events once the turn in front finishes.
+    let waiting = acquireRoomLockWithWait(
+      pgAdapter,
+      roomId,
+      'instance-a',
+      'event-arrived-mid-turn',
+      { timeoutMs: 30_000 },
+    );
+
+    let settledEarly = await Promise.race([
+      waiting.then(() => 'settled'),
+      new Promise((resolve) => setTimeout(() => resolve('pending'), 250)),
+    ]);
+    assert.strictEqual(
+      settledEarly,
+      'pending',
+      'the waiter should still be waiting while the turn holds the room',
+    );
+
+    await releaseRoomLock(pgAdapter, roomId);
+    assert.true(await waiting, 'the waiter takes the room once it is free');
+
+    let rows = await pgAdapter.execute(
+      'SELECT event_id_being_processed FROM ai_bot_event_processing WHERE room_id = $1',
+      { bind: [roomId] },
+    );
+    assert.strictEqual(
+      rows[0].event_id_being_processed,
+      'event-arrived-mid-turn',
+      'the waiting event becomes the one being processed',
+    );
+
+    await releaseRoomLock(pgAdapter, roomId);
+  });
+
+  test('waiting gives up when the room is never released', async (assert) => {
+    assert.expect(1);
+    let roomId = '!room:wedged';
+
+    await acquireRoomLock(pgAdapter, roomId, 'instance-a', 'event-wedged');
+
+    assert.false(
+      await acquireRoomLockWithWait(
+        pgAdapter,
+        roomId,
+        'instance-b',
+        'event-gives-up',
+        { timeoutMs: 750 },
+      ),
+      'a holder that never releases eventually times the waiter out',
+    );
+
+    await releaseRoomLock(pgAdapter, roomId);
   });
 });

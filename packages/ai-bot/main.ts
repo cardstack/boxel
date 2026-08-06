@@ -58,7 +58,7 @@ import type { ChatCompletionMessageParam } from 'openai/resources';
 import { APIUserAbortError } from 'openai/error';
 import type { OpenAIError } from 'openai/error';
 import type { ChatCompletionStream } from 'openai/lib/ChatCompletionStream';
-import { acquireRoomLock, releaseRoomLock } from './lib/queries.ts';
+import { acquireRoomLockWithWait, releaseRoomLock } from './lib/queries.ts';
 import { DebugLogger } from 'matrix-js-sdk/lib/logger.js';
 import { setupSignalHandlers } from './lib/signal-handlers.ts';
 import { isShuttingDown, setActiveGenerations } from './lib/shutdown.ts';
@@ -361,7 +361,7 @@ Common issues are:
 
         // Acquire a lock so that only one instance processes events for this room at a time.
         let roomLock = await profTime(eventId, 'lock:acquire', async () =>
-          acquireRoomLock(
+          acquireRoomLockWithWait(
             assistant.pgAdapter,
             room.roomId,
             aiBotInstanceId,
@@ -370,7 +370,12 @@ Common issues are:
         );
 
         if (!roomLock) {
-          // Some other instance is already processing a recent event in this room. Ignore it.
+          // Waited out a turn that never released the room. Dropping the event
+          // loses it for good — the room's events are not a queue anything
+          // drains later — so say so rather than failing silently.
+          log.error(
+            `[${eventId}] gave up waiting for the room lock on ${room.roomId}; this event will not be answered`,
+          );
           return;
         }
 
