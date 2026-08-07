@@ -138,8 +138,9 @@ export default class ProfileSettingsModal extends Component<Signature> {
             />
           {{/if}}
           <div
-            data-test-profile-subscription-section
+            class='profile-settings-subscription'
             {{scrollIntoViewIfRequested this.subscriptionRequested}}
+            data-test-profile-subscription-section
           >
             <ProfileSubscription />
           </div>
@@ -217,7 +218,8 @@ export default class ProfileSettingsModal extends Component<Signature> {
       .profile-field :deep(.invalid) {
         box-shadow: none;
       }
-      .profile-field + .profile-field {
+      .profile-field + .profile-field,
+      .profile-settings-subscription {
         margin-top: var(--boxel-sp-xl);
       }
     </style>
