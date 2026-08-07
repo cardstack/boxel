@@ -223,20 +223,38 @@ module('Unit | rp-protocol-statics', function () {
       tier: 'sandbox' as const,
       reason: 'browser-runtime:document',
     };
-    for (let format of ['fitted', 'atom', 'head', 'markdown']) {
+    // `edit` demotes too: the Sandbox has no child→parent write leg, so an
+    // iframe edit surface is a structurally read-only dead form — the
+    // trusted Base editor must run host-side against the canonical store.
+    for (let format of ['fitted', 'atom', 'head', 'markdown', 'edit']) {
       assert.deepEqual(
         executionDecisionForFormat(sandboxDecision, format),
         { tier: 'capsule', reason: `ses-only-format:${format}` },
         `the '${format}' surface of a Sandbox module renders in Capsule with a containment diagnostic`,
       );
     }
-    for (let format of ['isolated', 'embedded', 'edit']) {
+    for (let format of ['isolated', 'embedded']) {
       assert.deepEqual(
         executionDecisionForFormat(sandboxDecision, format),
         sandboxDecision,
         `the '${format}' surface keeps the Sandbox decision`,
       );
     }
+    // RP-6.3 exception: an authored in-place editor keeps the Sandbox for
+    // edit — the SAME retained iframe as its isolated render, so in-iframe
+    // state survives the format switch (its write leg is the next
+    // milestone). The compact formats still demote even then.
+    let inPlaceEditor = { ...sandboxDecision, authoredEditTemplate: true };
+    assert.deepEqual(
+      executionDecisionForFormat(inPlaceEditor, 'edit'),
+      sandboxDecision,
+      'an authored `static edit` template keeps the Sandbox iframe for edit',
+    );
+    assert.deepEqual(
+      executionDecisionForFormat(inPlaceEditor, 'fitted'),
+      { tier: 'capsule', reason: 'ses-only-format:fitted' },
+      'the authored-edit exception never widens the compact formats',
+    );
     assert.deepEqual(
       executionDecisionForFormat(sandboxDecision, undefined),
       sandboxDecision,
@@ -300,6 +318,41 @@ module('Unit | rp-protocol-statics', function () {
       { tier: compactModule.tier, reason: compactModule.reason },
       { tier: 'capsule', reason: 'default-user-card' },
       'a split-out module with no browser requirement routes independently to Capsule',
+    );
+  });
+
+  // "EXCEPTION: a module declaring its own `static edit = …` template (an
+  // authored in-place editor) keeps the Sandbox for `edit`."
+  test('RP-6.3: classification detects an authored `static edit` template', async function (assert) {
+    let inPlace = await classifyBoxelSource(`
+      import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+      export class InPlace extends CardDef {
+        get windowTitle() { return document.title; }
+        static isolated = class Isolated extends Component<typeof InPlace> {
+          <template><div>{{@model.windowTitle}}</div></template>
+        };
+        static edit = class Edit extends Component<typeof InPlace> {
+          <template><div>in-place editor</div></template>
+        };
+      }
+    `);
+    assert.true(
+      inPlace.authoredEditTemplate,
+      'a `static edit = …` declaration is detected',
+    );
+
+    let standard = await classifyBoxelSource(`
+      import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+      export class Standard extends CardDef {
+        get windowTitle() { return document.title; }
+        static isolated = class Isolated extends Component<typeof Standard> {
+          <template><div>{{@model.windowTitle}}</div></template>
+        };
+      }
+    `);
+    assert.false(
+      standard.authoredEditTemplate,
+      'a module without one gets the trusted Base editor host-side',
     );
   });
 

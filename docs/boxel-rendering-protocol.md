@@ -243,9 +243,20 @@ independently. Authors recover Capsule for compact formats by splitting
 browser-dependent formats into separate modules.
 
 **RP-6.3** Format-level containment: compact/non-DOM formats (`fitted`,
-`atom`, `head`, `markdown`) of a Sandbox-classified module render in
-Capsule and fail closed there — composition (especially fitted galleries)
-never creates inline iframes (`executionDecisionForFormat`).
+`atom`, `head`, `markdown`) AND the `edit` surface of a Sandbox-classified
+module render in Capsule and fail closed there — composition (especially
+fitted galleries) never creates inline iframes, and `edit` must run
+host-side because it is the trusted Base editor chrome operating on the
+canonical store: the Sandbox tier has no child→parent write leg (RP-20.5
+pushes parent→child only), so an iframe edit surface is structurally
+read-only — a dead form, not an editor (`executionDecisionForFormat`).
+EXCEPTION: a module declaring its own `static edit = …` template (an
+authored in-place editor) keeps the Sandbox for `edit` — the SAME retained
+iframe as its isolated render (the runtime router retains the process by
+surface identity across format switches), so in-iframe state survives the
+switch. Its child→parent edit propagation is the Sandbox write leg — the
+next protocol milestone; until it lands the authored editor renders live
+but cannot persist.
 
 **RP-6.4** Routing inputs come from the resolved import graph produced by
 the canonical transpiler, not from regex over source text or compiled wire

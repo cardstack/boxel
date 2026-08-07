@@ -31,9 +31,26 @@ export interface BoxelSourceClassification {
   // every importer for a mere `document` token makes otherwise Capsule-compatible
   // cards depend on the hosted iframe service.
   propagatesToImporters: boolean;
+  /**
+   * The module declares its own `static edit = …` template (an in-place
+   * editor, often registered for both isolated and edit). RP-6.3: only such
+   * a module keeps the Sandbox iframe for its edit surface — the SAME
+   * retained iframe as its isolated render, preserving in-iframe state
+   * across the format switch. A module without one gets the trusted Base
+   * editor, which must run host-side against the canonical store.
+   */
+  authoredEditTemplate: boolean;
 }
 
-const iframeRenderFormats = new Set<string>(['isolated', 'embedded', 'edit']);
+// RP-6.3: `edit` is deliberately NOT here. The edit surface is the trusted
+// Base editor chrome operating on the canonical store — and the Sandbox has
+// no child→parent write leg (RP-20.5 pushes parent→child only), so an
+// iframe edit surface renders as a structurally read-only dead form (no
+// CRUD context in the child, nothing to save through). Edit demotes to the
+// Capsule like the compact formats: the standard editor runs host-side with
+// real store access, and a browser-dependent authored field editor fails
+// closed there instead of silently losing writes.
+const iframeRenderFormats = new Set<string>(['isolated', 'embedded']);
 const compiledLiteralStyleElement =
   /\[\s*10\s*,\s*(?:["']style["']|\\["']style\\["'])\s*\]/i;
 const compiledDynamicInlineStyleAttribute =
@@ -64,12 +81,21 @@ const compiledTopLayerAttribute = new RegExp(
 // surfaces. Its fitted, atom, head, and markdown surfaces stay in a Capsule and fail
 // closed there if they depend on ambient DOM authority.
 export function executionDecisionForFormat(
-  decision: Pick<BoxelSourceClassification, 'tier' | 'reason'>,
+  decision: Pick<BoxelSourceClassification, 'tier' | 'reason'> &
+    Partial<Pick<BoxelSourceClassification, 'authoredEditTemplate'>>,
   format: string | undefined,
 ): Pick<BoxelSourceClassification, 'tier' | 'reason'> {
   let effectiveFormat = format ?? 'isolated';
   if (decision.tier !== 'sandbox' || iframeRenderFormats.has(effectiveFormat)) {
-    return decision;
+    return { tier: decision.tier, reason: decision.reason };
+  }
+  // An authored in-place editor keeps the SAME retained iframe as its
+  // isolated render (the runtime router retains the process by surface
+  // identity across format switches — no reload, in-iframe state survives).
+  // Its child→parent edit propagation is the Sandbox write leg, tracked as
+  // the next protocol milestone; until then it renders live but read-only.
+  if (effectiveFormat === 'edit' && decision.authoredEditTemplate) {
+    return { tier: decision.tier, reason: decision.reason };
   }
   return {
     tier: 'capsule',
@@ -452,6 +478,7 @@ export async function classifyBoxelSource(
       signals: [],
       moduleGraph: [],
       propagatesToImporters: false,
+      authoredEditTemplate: false,
     };
   }
 
@@ -471,9 +498,14 @@ export async function classifyBoxelSource(
       signals: [],
       moduleGraph: [],
       propagatesToImporters: false,
+      authoredEditTemplate: false,
     };
   }
 
+  // `static edit = …` on a card class declares an authored in-place editor
+  // (RP-6.3): only the template CONTENT was blanked above, so the class-body
+  // assignment itself is still visible here.
+  let authoredEditTemplate = /\bstatic\s+edit\s*=/.test(javascript);
   let importSignals = imports
     .map(iframeImportSignal)
     .filter((signal): signal is string => Boolean(signal));
@@ -509,6 +541,7 @@ export async function classifyBoxelSource(
       signals,
       moduleGraph: [],
       propagatesToImporters,
+      authoredEditTemplate,
     };
   }
   return {
@@ -518,6 +551,7 @@ export async function classifyBoxelSource(
     signals: [],
     moduleGraph: [],
     propagatesToImporters: false,
+    authoredEditTemplate,
   };
 }
 
@@ -674,6 +708,7 @@ export class BoxelModuleGraphClassifier {
             signals: dependencyClassification.signals,
             moduleGraph: [],
             propagatesToImporters: true,
+            authoredEditTemplate: own.authoredEditTemplate,
           };
         }
       }
@@ -696,6 +731,7 @@ function capsuleClassification(): BoxelSourceClassification {
     signals: [],
     moduleGraph: [],
     propagatesToImporters: false,
+    authoredEditTemplate: false,
   };
 }
 
@@ -707,5 +743,6 @@ function unavailableClassification(reason: string): BoxelSourceClassification {
     signals: [reason],
     moduleGraph: [],
     propagatesToImporters: true,
+    authoredEditTemplate: false,
   };
 }

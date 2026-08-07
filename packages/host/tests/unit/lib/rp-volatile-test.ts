@@ -35,6 +35,7 @@ const capsuleSource: BoxelSourceClassification = {
   signals: [],
   moduleGraph: [],
   propagatesToImporters: false,
+  authoredEditTemplate: false,
 };
 
 /**

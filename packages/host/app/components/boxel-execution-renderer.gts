@@ -464,6 +464,17 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
               on.cleanup(stopWatchingReload);
             }
           } catch (error) {
+            if (active) {
+              // Same fail-closed convergence as onMountFailed and the
+              // !generation branch above: an already-assigned slot outranks
+              // the error presentation in the template, so a failure that
+              // reaches this catch AFTER the slot was set (most concretely:
+              // an already-mounted Sandbox render request timing out or
+              // rejecting inside getRenderSlot) would otherwise record an
+              // error nobody ever sees, behind a placeholder that spins
+              // forever.
+              state.slot = undefined;
+            }
             state.snapshot = {
               ...session.snapshot,
               status: 'error',

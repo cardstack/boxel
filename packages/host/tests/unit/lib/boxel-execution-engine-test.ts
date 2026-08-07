@@ -31,6 +31,7 @@ const capsuleSource: BoxelSourceClassification = {
   signals: [],
   moduleGraph: [],
   propagatesToImporters: false,
+  authoredEditTemplate: false,
 };
 
 const sandboxSource: BoxelSourceClassification = {
@@ -40,6 +41,7 @@ const sandboxSource: BoxelSourceClassification = {
   signals: ['document'],
   moduleGraph: [],
   propagatesToImporters: false,
+  authoredEditTemplate: false,
 };
 
 function policy(
@@ -255,14 +257,14 @@ module('Unit | Boxel execution engine', function () {
       { mode: 'capsule', reason: 'ses-only-format:fitted' },
       'compact composition formats never create inline iframes',
     );
-    for (let format of ['atom', 'head', 'markdown']) {
+    for (let format of ['atom', 'head', 'markdown', 'edit']) {
       assert.deepEqual(
         decideBoxelExecution(policy({ source: sandboxSource, format })),
         { mode: 'capsule', reason: `ses-only-format:${format}` },
         `${format} remains composable without an inline iframe`,
       );
     }
-    for (let format of ['isolated', 'embedded', 'edit']) {
+    for (let format of ['isolated', 'embedded']) {
       assert.deepEqual(
         decideBoxelExecution(policy({ source: sandboxSource, format })),
         { mode: 'sandbox', reason: 'browser-runtime:document' },
