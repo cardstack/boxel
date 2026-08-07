@@ -14,7 +14,7 @@ import PackageIcon from '@cardstack/boxel-icons/package';
 import { Customer } from './customer';
 import { Invoice } from './invoice';
 import { LineItem } from './line-item';
-import { formatMoney, sumLineItems } from './money';
+import { formatMoney, lineTotal, sumLineItems } from './money';
 
 const OrderStatusField = enumField(StringField, {
   options: ['pending', 'paid', 'shipped', 'delivered', 'canceled'],
@@ -326,64 +326,151 @@ export class Order extends CardDef {
   };
 
   static isolated = class Isolated extends Component<typeof Order> {
+    fulfilmentSteps = ['pending', 'paid', 'shipped', 'delivered'];
+    get steps() {
+      let current = this.fulfilmentSteps.indexOf(
+        this.args.model?.status ?? '',
+      );
+      return this.fulfilmentSteps.map((label, i) => ({
+        label,
+        state:
+          current < 0
+            ? 'todo'
+            : i < current
+              ? 'done'
+              : i === current
+                ? 'current'
+                : 'todo',
+      }));
+    }
+    get isCanceled() {
+      return this.args.model?.status === 'canceled';
+    }
+    get rows() {
+      return (this.args.model?.lineItems ?? []).map((item) => ({
+        description: item?.description || '\u2014',
+        quantity: item?.quantity ?? 0,
+        unit: formatMoney(
+          item?.unitPrice?.amount,
+          item?.unitPrice?.currency?.code,
+        ),
+        total: formatMoney(lineTotal(item), item?.unitPrice?.currency?.code),
+      }));
+    }
     get total() {
       const { total, code } = sumLineItems(this.args.model?.lineItems);
-      return formatMoney(total, code);
+      return formatMoney(total, code) || '\u2014';
     }
-    get hasLineItems() {
-      return (this.args.model?.lineItems?.length ?? 0) > 0;
+    get number() {
+      return this.args.model?.orderNumber?.trim() || 'Draft';
     }
     <template>
-      <article class='order-page'>
-        <header>
-          <h1>{{@model.cardTitle}}</h1>
-          <span class='status status-{{@model.status}}'>{{@model.status}}</span>
-        </header>
-        <section class='meta'>
+      <article class='order-doc'>
+        <header class='doc-head'>
           <div>
+            <p class='doc-kind'>Order</p>
+            <h1>{{this.number}}</h1>
+          </div>
+          {{#if this.isCanceled}}
+            <span class='status status-canceled'>canceled</span>
+          {{/if}}
+        </header>
+
+        {{#unless this.isCanceled}}
+          <ol class='stepper'>
+            {{#each this.steps as |step|}}
+              <li class='step step-{{step.state}}'>
+                <span class='dot'></span>
+                <span class='step-label'>{{step.label}}</span>
+              </li>
+            {{/each}}
+          </ol>
+        {{/unless}}
+
+        <section class='doc-meta'>
+          <div class='party'>
             <span class='label'>Customer</span>
             <@fields.customer @format='embedded' />
           </div>
-          <dl>
+          <dl class='facts'>
             <dt>Ordered</dt>
             <dd><@fields.orderDate /></dd>
-            <dt>Invoice</dt>
-            <dd><@fields.invoice @format='embedded' /></dd>
+            {{#if @model.invoice}}
+              <dt>Invoice</dt>
+              <dd><@fields.invoice @format='atom' /></dd>
+            {{/if}}
           </dl>
         </section>
-        <section class='panel'>
-          <h2>Items</h2>
-          {{#if this.hasLineItems}}
-            <@fields.lineItems />
-            <div class='total-row'>
-              <span>Total</span>
-              <strong>{{this.total}}</strong>
+
+        <section class='items'>
+          {{#if this.rows.length}}
+            <div class='table-scroll'>
+              <table>
+                <thead>
+                  <tr>
+                    <th class='t-desc'>Item</th>
+                    <th class='t-num'>Qty</th>
+                    <th class='t-num'>Unit</th>
+                    <th class='t-num'>Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {{#each this.rows as |row|}}
+                    <tr>
+                      <td class='t-desc'>{{row.description}}</td>
+                      <td class='t-num'>{{row.quantity}}</td>
+                      <td class='t-num'>{{row.unit}}</td>
+                      <td class='t-num t-strong'>{{row.total}}</td>
+                    </tr>
+                  {{/each}}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td class='t-desc' colspan='3'>Total</td>
+                    <td class='t-num t-total'>{{this.total}}</td>
+                  </tr>
+                </tfoot>
+              </table>
             </div>
           {{else}}
             <p class='empty'>No items yet</p>
           {{/if}}
         </section>
-        <section class='panel'>
-          <h2>Ship To</h2>
+
+        <section class='ship'>
+          <span class='label'>Ship to</span>
           <@fields.shippingAddress />
         </section>
       </article>
       <style scoped>
-        .order-page {
-          padding: 1.5rem;
+        .order-doc {
+          max-width: 46rem;
+          margin: 0 auto;
+          padding: 2rem 1.5rem;
           display: flex;
           flex-direction: column;
-          gap: 1rem;
-          max-width: 44rem;
+          gap: 1.5rem;
         }
-        header {
+        .doc-head {
           display: flex;
-          align-items: center;
-          gap: 0.75rem;
+          align-items: flex-end;
+          justify-content: space-between;
+          gap: 1rem;
+          border-bottom: 2px solid var(--foreground, #111111);
+          padding-bottom: 1rem;
+        }
+        .doc-kind {
+          margin: 0 0 0.125rem;
+          font-size: 0.6875rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.14em;
+          color: var(--muted-foreground, #6b7280);
         }
         h1 {
           margin: 0;
-          font-size: 1.375rem;
+          font-size: 1.75rem;
+          line-height: 1.1;
           font-family: var(--font-heading, inherit);
         }
         .status {
@@ -395,76 +482,163 @@ export class Order extends CardDef {
           border-radius: 999px;
           background: var(--muted, #f3f4f6);
           color: var(--muted-foreground, #6b7280);
-        }
-        .status-delivered {
-          background: #d1fae5;
-          color: #065f46;
+          margin-bottom: 0.25rem;
         }
         .status-canceled {
           background: #fee2e2;
           color: #991b1b;
         }
-        .meta {
+        .stepper {
+          list-style: none;
+          margin: 0;
+          padding: 0;
           display: flex;
-          justify-content: space-between;
-          align-items: start;
-          gap: 1rem;
-          flex-wrap: wrap;
         }
-        .meta > div {
-          flex: 1 1 22rem;
-          min-width: 16rem;
-          max-width: 28rem;
-        }
-        .meta dl {
-          flex: 1 1 24rem;
-        }
-        .label {
-          display: block;
-          font-size: 0.75rem;
-          color: var(--muted-foreground, #6b7280);
-          margin-bottom: 0.25rem;
-        }
-        dl {
-          margin: 0;
-          display: grid;
-          grid-template-columns: auto 1fr;
-          gap: 0.25rem 0.75rem;
-          font-size: 0.875rem;
+        .step {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
           align-items: center;
+          gap: 0.375rem;
+          position: relative;
         }
-        dt {
-          color: var(--muted-foreground, #6b7280);
+        .step:not(:first-child)::before {
+          content: '';
+          position: absolute;
+          top: 0.4375rem;
+          right: 50%;
+          width: 100%;
+          height: 2px;
+          background: var(--border, #e5e7eb);
         }
-        dd {
-          margin: 0;
+        .step-done:not(:first-child)::before,
+        .step-current:not(:first-child)::before {
+          background: var(--primary, #111111);
         }
-        .panel {
-          border: 1px solid var(--border, #e5e7eb);
-          border-radius: 0.75rem;
-          padding: 1rem;
+        .dot {
+          width: 0.9375rem;
+          height: 0.9375rem;
+          border-radius: 50%;
           background: var(--card, #ffffff);
+          border: 2px solid var(--border, #e5e7eb);
+          position: relative;
+          z-index: 1;
         }
-        h2 {
-          margin: 0 0 0.75rem;
-          font-size: 0.8125rem;
-          font-weight: 700;
+        .step-done .dot {
+          background: var(--primary, #111111);
+          border-color: var(--primary, #111111);
+        }
+        .step-current .dot {
+          border-color: var(--primary, #111111);
+          box-shadow: 0 0 0 3px
+            color-mix(in srgb, var(--primary, #111111) 20%, transparent);
+        }
+        .step-label {
+          font-size: 0.6875rem;
+          font-weight: 600;
           text-transform: uppercase;
           letter-spacing: 0.06em;
           color: var(--muted-foreground, #6b7280);
         }
-        .total-row {
+        .step-current .step-label {
+          color: var(--foreground, #111111);
+        }
+        .doc-meta {
           display: flex;
           justify-content: space-between;
-          border-top: 1px solid var(--border, #e5e7eb);
-          margin-top: 0.5rem;
-          padding-top: 0.625rem;
-          font-size: 0.9375rem;
+          align-items: flex-start;
+          gap: 1.5rem;
+          flex-wrap: wrap;
+        }
+        .party {
+          flex: 1 1 20rem;
+          min-width: 15rem;
+          max-width: 26rem;
+        }
+        .label {
+          display: block;
+          font-size: 0.6875rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.1em;
+          color: var(--muted-foreground, #6b7280);
+          margin-bottom: 0.375rem;
+        }
+        .facts {
+          margin: 0;
+          display: grid;
+          grid-template-columns: auto auto;
+          gap: 0.375rem 1rem;
+          font-size: 0.875rem;
+          text-align: right;
+          align-items: center;
+        }
+        .facts dt {
+          color: var(--muted-foreground, #6b7280);
+        }
+        .facts dd {
+          margin: 0;
+          font-weight: 500;
+        }
+        .table-scroll {
+          overflow-x: auto;
+        }
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 0.875rem;
+        }
+        th {
+          font-size: 0.6875rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          color: var(--muted-foreground, #6b7280);
+          padding: 0 0.5rem 0.5rem;
+          border-bottom: 1px solid var(--border, #e5e7eb);
+        }
+        td {
+          padding: 0.625rem 0.5rem;
+          border-bottom: 1px solid var(--border, #e5e7eb);
+          vertical-align: baseline;
+        }
+        .t-desc {
+          text-align: left;
+        }
+        .t-num {
+          text-align: right;
+          font-variant-numeric: tabular-nums;
+          white-space: nowrap;
+        }
+        .t-strong {
+          font-weight: 600;
+        }
+        tbody tr:last-child td {
+          border-bottom: none;
+        }
+        tfoot td {
+          border-bottom: none;
+          border-top: 2px solid var(--foreground, #111111);
+          padding-top: 0.75rem;
+          font-weight: 700;
+        }
+        .t-total {
+          font-size: 1.125rem;
         }
         .empty {
           margin: 0;
+          padding: 1.5rem;
+          text-align: center;
+          border: 1px dashed var(--border, #e5e7eb);
+          border-radius: 0.5rem;
           color: var(--muted-foreground, #6b7280);
           font-size: 0.8125rem;
+        }
+        .ship {
+          border: 1px solid var(--border, #e5e7eb);
+          border-radius: 0.5rem;
+          padding: 1rem;
+          background: var(--card, #ffffff);
         }
       </style>
     </template>

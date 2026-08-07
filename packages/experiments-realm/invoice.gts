@@ -13,7 +13,7 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 import FileInvoiceIcon from '@cardstack/boxel-icons/file-invoice';
 import { Customer } from './customer';
 import { LineItem } from './line-item';
-import { formatMoney, sumLineItems } from './money';
+import { formatMoney, lineTotal, sumLineItems } from './money';
 
 const InvoiceStatusField = enumField(StringField, {
   options: ['draft', 'sent', 'paid', 'overdue', 'void'],
@@ -324,41 +324,78 @@ export class Invoice extends CardDef {
   };
 
   static isolated = class Isolated extends Component<typeof Invoice> {
-    get totals() {
-      return sumLineItems(this.args.model?.lineItems);
+    get rows() {
+      return (this.args.model?.lineItems ?? []).map((item) => ({
+        description: item?.description || '\u2014',
+        quantity: item?.quantity ?? 0,
+        unit: formatMoney(
+          item?.unitPrice?.amount,
+          item?.unitPrice?.currency?.code,
+        ),
+        total: formatMoney(lineTotal(item), item?.unitPrice?.currency?.code),
+      }));
     }
     get total() {
-      const { total, code } = this.totals;
-      return formatMoney(total, code);
+      const { total, code } = sumLineItems(this.args.model?.lineItems);
+      return formatMoney(total, code) || '\u2014';
     }
-    get hasLineItems() {
-      return (this.args.model?.lineItems?.length ?? 0) > 0;
+    get number() {
+      return this.args.model?.invoiceNumber?.trim() || 'Draft';
     }
     <template>
-      <article class='invoice-page'>
-        <header>
-          <h1>{{@model.cardTitle}}</h1>
-          <span class='status status-{{@model.status}}'>{{@model.status}}</span>
-        </header>
-        <section class='meta'>
+      <article class='invoice-doc'>
+        <header class='doc-head'>
           <div>
+            <p class='doc-kind'>Invoice</p>
+            <h1>{{this.number}}</h1>
+          </div>
+          {{#if @model.status}}
+            <span class='status status-{{@model.status}}'>{{@model.status}}</span>
+          {{/if}}
+        </header>
+
+        <section class='doc-meta'>
+          <div class='party'>
             <span class='label'>Billed to</span>
             <@fields.customer @format='embedded' />
           </div>
-          <dl>
+          <dl class='dates'>
             <dt>Issued</dt>
             <dd><@fields.issueDate /></dd>
             <dt>Due</dt>
             <dd><@fields.dueDate /></dd>
           </dl>
         </section>
-        <section class='panel'>
-          <h2>Line Items</h2>
-          {{#if this.hasLineItems}}
-            <@fields.lineItems />
-            <div class='total-row'>
-              <span>Total</span>
-              <strong>{{this.total}}</strong>
+
+        <section class='items'>
+          {{#if this.rows.length}}
+            <div class='table-scroll'>
+              <table>
+                <thead>
+                  <tr>
+                    <th class='t-desc'>Description</th>
+                    <th class='t-num'>Qty</th>
+                    <th class='t-num'>Unit</th>
+                    <th class='t-num'>Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {{#each this.rows as |row|}}
+                    <tr>
+                      <td class='t-desc'>{{row.description}}</td>
+                      <td class='t-num'>{{row.quantity}}</td>
+                      <td class='t-num'>{{row.unit}}</td>
+                      <td class='t-num t-strong'>{{row.total}}</td>
+                    </tr>
+                  {{/each}}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td class='t-desc' colspan='3'>Total</td>
+                    <td class='t-num t-total'>{{this.total}}</td>
+                  </tr>
+                </tfoot>
+              </table>
             </div>
           {{else}}
             <p class='empty'>No line items yet</p>
@@ -366,21 +403,34 @@ export class Invoice extends CardDef {
         </section>
       </article>
       <style scoped>
-        .invoice-page {
-          padding: 1.5rem;
+        .invoice-doc {
+          max-width: 46rem;
+          margin: 0 auto;
+          padding: 2rem 1.5rem;
           display: flex;
           flex-direction: column;
-          gap: 1rem;
-          max-width: 44rem;
+          gap: 1.5rem;
         }
-        header {
+        .doc-head {
           display: flex;
-          align-items: center;
-          gap: 0.75rem;
+          align-items: flex-end;
+          justify-content: space-between;
+          gap: 1rem;
+          border-bottom: 2px solid var(--foreground, #111111);
+          padding-bottom: 1rem;
+        }
+        .doc-kind {
+          margin: 0 0 0.125rem;
+          font-size: 0.6875rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.14em;
+          color: var(--muted-foreground, #6b7280);
         }
         h1 {
           margin: 0;
-          font-size: 1.375rem;
+          font-size: 1.75rem;
+          line-height: 1.1;
           font-family: var(--font-heading, inherit);
         }
         .status {
@@ -392,6 +442,7 @@ export class Invoice extends CardDef {
           border-radius: 999px;
           background: var(--muted, #f3f4f6);
           color: var(--muted-foreground, #6b7280);
+          margin-bottom: 0.25rem;
         }
         .status-paid {
           background: #d1fae5;
@@ -401,61 +452,93 @@ export class Invoice extends CardDef {
           background: #fee2e2;
           color: #991b1b;
         }
-        .meta {
+        .doc-meta {
           display: flex;
           justify-content: space-between;
-          align-items: start;
-          gap: 1rem;
+          align-items: flex-start;
+          gap: 1.5rem;
           flex-wrap: wrap;
         }
-        .meta > div {
-          flex: 1 1 22rem;
-          min-width: 16rem;
-          max-width: 28rem;
+        .party {
+          flex: 1 1 20rem;
+          min-width: 15rem;
+          max-width: 26rem;
         }
         .label {
           display: block;
-          font-size: 0.75rem;
+          font-size: 0.6875rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.1em;
           color: var(--muted-foreground, #6b7280);
-          margin-bottom: 0.25rem;
+          margin-bottom: 0.375rem;
         }
-        dl {
+        .dates {
           margin: 0;
           display: grid;
           grid-template-columns: auto auto;
-          gap: 0.25rem 0.75rem;
+          gap: 0.375rem 1rem;
+          font-size: 0.875rem;
+          text-align: right;
+        }
+        .dates dt {
+          color: var(--muted-foreground, #6b7280);
+        }
+        .dates dd {
+          margin: 0;
+          font-weight: 500;
+        }
+        .table-scroll {
+          overflow-x: auto;
+        }
+        table {
+          width: 100%;
+          border-collapse: collapse;
           font-size: 0.875rem;
         }
-        dt {
-          color: var(--muted-foreground, #6b7280);
-        }
-        dd {
-          margin: 0;
-        }
-        .panel {
-          border: 1px solid var(--border, #e5e7eb);
-          border-radius: 0.75rem;
-          padding: 1rem;
-          background: var(--card, #ffffff);
-        }
-        h2 {
-          margin: 0 0 0.75rem;
-          font-size: 0.8125rem;
+        th {
+          font-size: 0.6875rem;
           font-weight: 700;
           text-transform: uppercase;
-          letter-spacing: 0.06em;
+          letter-spacing: 0.08em;
           color: var(--muted-foreground, #6b7280);
+          padding: 0 0.5rem 0.5rem;
+          border-bottom: 1px solid var(--border, #e5e7eb);
         }
-        .total-row {
-          display: flex;
-          justify-content: space-between;
-          border-top: 1px solid var(--border, #e5e7eb);
-          margin-top: 0.5rem;
-          padding-top: 0.625rem;
-          font-size: 0.9375rem;
+        td {
+          padding: 0.625rem 0.5rem;
+          border-bottom: 1px solid var(--border, #e5e7eb);
+          vertical-align: baseline;
+        }
+        .t-desc {
+          text-align: left;
+        }
+        .t-num {
+          text-align: right;
+          font-variant-numeric: tabular-nums;
+          white-space: nowrap;
+        }
+        .t-strong {
+          font-weight: 600;
+        }
+        tbody tr:last-child td {
+          border-bottom: none;
+        }
+        tfoot td {
+          border-bottom: none;
+          border-top: 2px solid var(--foreground, #111111);
+          padding-top: 0.75rem;
+          font-weight: 700;
+        }
+        .t-total {
+          font-size: 1.125rem;
         }
         .empty {
           margin: 0;
+          padding: 1.5rem;
+          text-align: center;
+          border: 1px dashed var(--border, #e5e7eb);
+          border-radius: 0.5rem;
           color: var(--muted-foreground, #6b7280);
           font-size: 0.8125rem;
         }
