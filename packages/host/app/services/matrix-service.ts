@@ -1258,7 +1258,18 @@ export default class MatrixService extends Service {
         );
         window.location.href = indexController.authRedirect;
       } else if (refreshRoutes) {
-        await this.router.refresh();
+        // The index route's model hook redirects when the URL carries no
+        // operatorModeState, aborting the refresh that ran it. Expected.
+        try {
+          await this.router.refresh();
+        } catch (error: any) {
+          if (
+            error?.name !== 'TransitionAborted' &&
+            error?.code !== 'TRANSITION_ABORTED'
+          ) {
+            throw error;
+          }
+        }
       }
     } else if (isTesting()) {
       // start() did nothing because the client wasn't logged in at this point,

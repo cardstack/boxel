@@ -88,7 +88,11 @@ export default class WithSubscriptionData extends Component<WithSubscriptionData
 
   constructor(...args: [any, any]) {
     super(...args);
-    this.loadSubscriptionData.perform();
+    // Uncaught, a failed token fetch escapes instead of leaving the
+    // component in its empty state. billing-service catches its own load.
+    this.loadSubscriptionData.perform().catch((e: unknown) => {
+      console.error('Failed to load subscription data', e);
+    });
   }
 
   private get isLoading() {
