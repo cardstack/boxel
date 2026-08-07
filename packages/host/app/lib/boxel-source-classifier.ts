@@ -32,24 +32,26 @@ export interface BoxelSourceClassification {
   // cards depend on the hosted iframe service.
   propagatesToImporters: boolean;
   /**
-   * The module declares its own `static edit = …` template (an in-place
-   * editor, often registered for both isolated and edit). RP-6.3: only such
-   * a module keeps the Sandbox iframe for its edit surface — the SAME
-   * retained iframe as its isolated render, preserving in-iframe state
-   * across the format switch. A module without one gets the trusted Base
-   * editor, which must run host-side against the canonical store.
+   * The module declares ANY `static edit = …` template — on the card class
+   * (an in-place editor, often registered for both isolated and edit) OR on
+   * any of its FieldDefs (authored cell/field editors). RP-6.3, stated as
+   * the principle: `edit` demotes only when the surface would contain no
+   * authored template at all; authored edit code never runs below its
+   * module's classified tier (R5), so such a module keeps the Sandbox
+   * iframe for its edit surface — the SAME retained iframe as its isolated
+   * render, preserving in-iframe state across the format switch. A module
+   * authoring none gets the trusted Base editor host-side.
    */
   authoredEditTemplate: boolean;
 }
 
-// RP-6.3: `edit` is deliberately NOT here. The edit surface is the trusted
-// Base editor chrome operating on the canonical store — and the Sandbox has
-// no child→parent write leg (RP-20.5 pushes parent→child only), so an
-// iframe edit surface renders as a structurally read-only dead form (no
-// CRUD context in the child, nothing to save through). Edit demotes to the
-// Capsule like the compact formats: the standard editor runs host-side with
-// real store access, and a browser-dependent authored field editor fails
-// closed there instead of silently losing writes.
+// RP-6.3: `edit` is deliberately NOT here. A module with no authored edit
+// template contributes no authored code to the edit surface — it is pure
+// trusted Base editor chrome, which belongs host-side against the canonical
+// store, so demoting it de-escalates nothing. (A module WITH an authored
+// edit template takes the exception above instead; its editors render
+// in-iframe, entitled via the RP-9.1 context push and persisting via the
+// RP-20.6 write leg.)
 const iframeRenderFormats = new Set<string>(['isolated', 'embedded']);
 const compiledLiteralStyleElement =
   /\[\s*10\s*,\s*(?:["']style["']|\\["']style\\["'])\s*\]/i;

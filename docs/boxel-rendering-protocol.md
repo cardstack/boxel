@@ -250,12 +250,18 @@ surface must run host-side because it is the trusted Base editor chrome
 operating directly on the canonical store — a module with no authored
 edit template contributes no authored code to that surface, so demoting
 it de-escalates nothing (`executionDecisionForFormat`).
-EXCEPTION: a module declaring its own `static edit = …` template (an
-authored in-place editor) keeps the Sandbox for `edit` — the SAME retained
-iframe as its isolated render (the runtime router retains the process by
-surface identity across format switches), so in-iframe state survives the
-switch. Its child→parent edit propagation is the Sandbox write leg
-(RP-20.6).
+EXCEPTION — stated as the principle, not the trigger: `edit` demotes
+ONLY when the surface would contain no authored template at all. A
+module authoring ANY `static edit = …` template — on the card class (an
+in-place editor) or on any of its FieldDefs (authored cell/field
+editors) — contributes authored code to the edit surface, and authored
+code never runs below its module's classified tier (R5): the edit
+surface keeps the Sandbox, in the SAME retained iframe as the isolated
+render (the runtime router retains the process by surface identity
+across format switches), so in-iframe state survives the switch. The
+standard Base editor chrome renders inside the child around those
+authored editors; entitlement arrives via the RP-9.1 context push and
+persistence via the RP-20.6 write leg.
 
 **RP-6.4** Routing inputs come from the resolved import graph produced by
 the canonical transpiler, not from regex over source text or compiled wire
@@ -780,6 +786,14 @@ relationship settlement (RP-7.3), source drafts (RP-18), and promotion
 **RP-20.3** Because the DOM survives (RP-20.1), user view state anchored
 to it survives too: scroll positions inside the card, focus, and
 uncommitted in-card component state are retained across a data update.
+KNOWN LIMIT (shared with main): an applied serialized update
+(`updateFromSerialized` — an RP-20.5 push, or main's own SSE reload)
+replaces nested compound field instances, so `{{each}}` blocks keyed on
+them remount and THEIR component-local state does not survive that
+specific apply. Scalar bindings and the card's own component are
+unaffected. This is why RP-20.6's fan-out deliberately skips the
+writer's own view — the writer must never pay that remount for its own
+edit, exactly as on main.
 
 **RP-20.4** Declarative media never blanks on rehydration. The Sandbox
 media bridge caches one authorized blob per resolved source URL for the
