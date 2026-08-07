@@ -9,7 +9,7 @@
       "specType": "card",
       "readMe": "## Subscription\n\nRecurring commercial agreement: linked Customer, plan name, price (base `AmountWithCurrency`), billing cycle enum (monthly / yearly), start date, status enum (trial / active / paused / canceled).\n\n```ts\nimport { Subscription } from '../subscription';\n```\n\n**Non-goals:** a Plan catalog card (plan is a string until a Plan block exists), proration, automatic invoice generation (that is a tool, not the record).",
       "cardInfo": {
-        "name": "Subscription (commerce kit)",
+        "name": "Subscription",
         "summary": "Recurring agreement: customer, plan, price, cycle, lifecycle status. Plan stays a string until a Plan block exists.",
         "notes": null,
         "cardThumbnailURL": null

@@ -1,0 +1,26 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "DonutChart",
+        "module": "../charts/donut-chart"
+      },
+      "specType": "component",
+      "readMe": "## DonutChart\n\nGeneric SVG donut chart with animated entry, an empty-total state, and a configurable center label/value. Extracted from the mortgage calculator's monthly-breakdown donut and generalized: the center caption and total formatting are caller-supplied.\n\n### Import\n\n```ts\nimport { DonutChart, type DonutSlice } from '../charts/donut-chart';\n```\n\n### Usage\n\n```gts\n<DonutChart @data={{this.slices}} @size={{200}} @centerLabel='TOTAL' />\n```\n\n- `@data` — `DonutSlice[]`: `{ label, value, color, class? }`.\n- `@size` — pixel size (default 220).\n- `@centerLabel` — small caption above the center value; omitted entirely when not passed.\n- `@centerValue` / `@formatTotal` — override the center text, or format the computed total (default compact number).\n- A zero/empty total renders a neutral full circle instead of slices.\n- The chart draws slices only; render your own legend from the same data (see the Metrics Report POC card).",
+      "cardInfo": {
+        "name": "DonutChart (charts block)",
+        "summary": "Generic SVG donut chart: animated entry, empty-total state, configurable center label and total formatting. Layer 03 Structures block.",
+        "notes": null,
+        "cardThumbnailURL": null
+      },
+      "containedExamples": []
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
