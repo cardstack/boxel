@@ -173,21 +173,13 @@ export default class CapsuleBoxelRuntime implements BoxelRuntime {
    * value references, presentation) materialize exactly once, Host-side, and
    * cross this adapter as data (RP-5.4). The Capsule evaluator continues to
    * own authored execution: templates, getters, computeVia, and actions.
-   *
-   * `onSettle`, when present, is the projection's live RP-7.3 settle-watch —
-   * a closure over the canonical instance, deliberately not cloneable. The
-   * execution session (`boxel-execution-engine.ts`) is what observes it and
-   * republishes a fresh generation; this adapter only ever needs the
-   * cloneable rest, so it is dropped here rather than passed to
-   * `structuredClone`, which would throw on a function value.
    */
   adoptHostProjection(
     card: BoxelInstanceHandle,
     projection: HostBoxelProjection,
   ): void {
     let instance = this.instances.get(card);
-    let { onSettle: _onSettle, ...cloneable } = projection;
-    instance.hostProjection = structuredClone(cloneable);
+    instance.hostProjection = structuredClone(projection);
   }
 
   async buildRenderRecord(

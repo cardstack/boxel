@@ -355,6 +355,17 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
                 this.surfaceId,
               );
             } else {
+              // RP-20.5: the Sandbox tier's views cannot read the canonical
+              // instance live, so parent-side mutations cross as explicit
+              // instance pushes (serialized current state, applied in place
+              // by the child). Connected once per mounted generation;
+              // teardown stops the subscription with the resource.
+              on.cleanup(
+                this.boxelExecution.connectSandboxInstanceSync(
+                  card,
+                  slot.process,
+                ),
+              );
               // Fires once — immediately if this process (retained across
               // format switches by surface identity) has already painted
               // before, otherwise the first time its child reports a render

@@ -1,4 +1,5 @@
 import type { CodeRef } from './code-ref.ts';
+import type { LooseSingleCardDocument } from './index.ts';
 
 export const BOXEL_EXECUTION_PROTOCOL_VERSION = 1;
 export const BOXEL_EXECUTION_TRANSPORT_VERSION = 1;
@@ -200,6 +201,24 @@ export type SandboxRenderRequest =
       generation: number;
       operation: 'draft';
       url: string;
+    }
+  | {
+      kind: 'boxel-sandbox-render-request';
+      transportVersion: number;
+      requestId: string;
+      generation: number;
+      /**
+       * RP-20.5: parent→child instance-data push. The Host serializes the
+       * canonical instance's CURRENT state (the same projected execution
+       * document `createFromSerialized` consumed) and the child applies it
+       * to its already-materialized copy IN PLACE (`updateFromSerialized` —
+       * main's reload path), so the child's own tracking re-renders every
+       * binding without remounting the component. Generation ordering
+       * (shared with render/clear/draft) is the revision guard: a push
+       * superseded in flight is dropped, never applied out of order.
+       */
+      operation: 'updateInstance';
+      document: LooseSingleCardDocument;
     };
 
 export type SandboxRenderResponse =

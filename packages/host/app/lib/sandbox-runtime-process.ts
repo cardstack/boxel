@@ -573,6 +573,40 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
   }
 
   /**
+   * RP-20.5 parent→child instance push: deliver the canonical instance's
+   * freshly serialized current state to the mounted child, which applies it
+   * to its already-materialized copy in place (no remount; the child's own
+   * tracking re-renders changed bindings). Shares the render family's
+   * monotonic generation sequence, so a push superseded by a newer push (or
+   * any newer render/draft) is dropped by the child, never applied out of
+   * order. Failures resolve (never reject) with the error — a missed push
+   * leaves the child on last-known-good data and the NEXT push carries the
+   * full current state anyway, so there is nothing for a caller to unwind.
+   */
+  async pushInstanceUpdate(
+    document: LooseSingleCardDocument,
+  ): Promise<{ generation: number; ok: boolean; error?: Error }> {
+    if (this.closed) {
+      return {
+        generation: this.nextGeneration,
+        ok: false,
+        error: new Error('Sandbox runtime process is closed'),
+      };
+    }
+    let generation = ++this.nextGeneration;
+    try {
+      await this.client;
+      if (!this.renderClient) {
+        throw new Error('Sandbox render transport is unavailable');
+      }
+      await this.renderClient.updateInstance(document, generation);
+      return { generation, ok: true };
+    } catch (error) {
+      return { generation, ok: false, error: asError(error) };
+    }
+  }
+
+  /**
    * Explicit hard reload — distinct from ordinary HMR (`pushDraft`): remints
    * this process's child from scratch. Stays the SAME retained object (the
    * runtime router keeps its lease; nothing re-routes) but tears down and

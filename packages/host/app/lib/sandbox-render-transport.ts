@@ -2,6 +2,7 @@ import {
   BOXEL_EXECUTION_TRANSPORT_VERSION,
   assertBoxelExecutionTransportVersion,
   type BoxelInstanceHandle,
+  type LooseSingleCardDocument,
   type SandboxRenderRequest,
   type SandboxRenderResponse,
 } from '@cardstack/runtime-common';
@@ -23,6 +24,17 @@ export interface SandboxRenderTarget {
    * a draft superseded mid-flight doesn't apply stale output.
    */
   draft(url: string, generation: number): void | Promise<void>;
+  /**
+   * RP-20.5 parent→child instance push: apply `document` — the canonical
+   * instance's freshly serialized current state — to the already-rendered
+   * card IN PLACE (`updateFromSerialized`), so the child's own tracking
+   * re-renders bindings without remounting. Same generation discipline as
+   * `draft`: re-check staleness after internal awaits.
+   */
+  updateInstance(
+    document: LooseSingleCardDocument,
+    generation: number,
+  ): void | Promise<void>;
   /**
    * Called once, right after this target's `SandboxRenderServer` is
    * constructed, with a live check against every generation the server has
@@ -83,6 +95,14 @@ export class SandboxRenderClient {
     return this.request({ operation: 'draft', url, generation });
   }
 
+  /** RP-20.5 — see `SandboxRenderTarget.updateInstance`. */
+  updateInstance(
+    document: LooseSingleCardDocument,
+    generation: number,
+  ): Promise<void> {
+    return this.request({ operation: 'updateInstance', document, generation });
+  }
+
   /**
    * Fails every in-flight request without waiting out its timeout.
    *
@@ -129,6 +149,10 @@ export class SandboxRenderClient {
       | Pick<
           Extract<SandboxRenderRequest, { operation: 'draft' }>,
           'operation' | 'url' | 'generation'
+        >
+      | Pick<
+          Extract<SandboxRenderRequest, { operation: 'updateInstance' }>,
+          'operation' | 'document' | 'generation'
         >,
   ): Promise<void> {
     if (this.closed) {
@@ -307,6 +331,8 @@ export class SandboxRenderServer {
         return this.target.clear(request.generation);
       case 'draft':
         return this.target.draft(request.url, request.generation);
+      case 'updateInstance':
+        return this.target.updateInstance(request.document, request.generation);
     }
   }
 
@@ -376,7 +402,14 @@ function isSandboxRenderRequest(value: unknown): value is SandboxRenderRequest {
       'url' in value &&
       typeof value.url === 'string' &&
       value.url.length > 0 &&
-      value.url.length <= 4096)
+      value.url.length <= 4096) ||
+    (value.operation === 'updateInstance' &&
+      'document' in value &&
+      typeof value.document === 'object' &&
+      value.document !== null &&
+      'data' in value.document &&
+      typeof value.document.data === 'object' &&
+      value.document.data !== null)
   );
 }
 

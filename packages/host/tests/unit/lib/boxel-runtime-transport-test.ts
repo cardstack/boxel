@@ -218,6 +218,7 @@ module('Unit | Boxel runtime transport', function () {
         rendered.push('clear');
       },
       draft() {},
+      updateInstance() {},
     });
     let client = new SandboxRenderClient(channel.port1);
 
@@ -249,6 +250,7 @@ module('Unit | Boxel runtime transport', function () {
       },
       clear() {},
       draft() {},
+      updateInstance() {},
     });
     let client = new SandboxRenderClient(channel.port1);
 
@@ -256,6 +258,62 @@ module('Unit | Boxel runtime transport', function () {
       await assert.rejects(
         client.render(instanceHandle, 'isolated', 1),
         /renderer rejected the format/,
+      );
+    } finally {
+      client.destroy();
+      server.destroy();
+      channel.port1.close();
+      channel.port2.close();
+    }
+  });
+
+  test('RP-15.4, RP-20.5: updateInstance pushes cross the render transport in order and a superseded push is dropped, never applied', async function (assert) {
+    let channel = new MessageChannel();
+    let applied: string[] = [];
+    let server = new SandboxRenderServer(channel.port2, {
+      render() {},
+      clear() {},
+      draft() {},
+      async updateInstance(pushedDocument, generation) {
+        // The first push dawdles so ordering is proven by the serialized
+        // queue, not by call timing.
+        await new Promise((resolve) =>
+          setTimeout(resolve, generation === 1 ? 5 : 0),
+        );
+        applied.push(
+          `${String(pushedDocument.data?.attributes?.title)}:${generation}`,
+        );
+      },
+    });
+    let client = new SandboxRenderClient(channel.port1);
+    let pushDocument = (title: string) =>
+      ({
+        data: {
+          type: 'card',
+          id: 'https://example.test/Person/1',
+          attributes: { title },
+          meta: { adoptsFrom: ref },
+        },
+      }) as LooseSingleCardDocument;
+
+    try {
+      let first = client.updateInstance(pushDocument('first'), 1);
+      let second = client.updateInstance(pushDocument('second'), 2);
+      await Promise.all([first, second]);
+      assert.deepEqual(
+        applied,
+        ['first:1', 'second:2'],
+        'pushes apply serialized, in generation order (RP-20.5: never out of order)',
+      );
+      await assert.rejects(
+        client.updateInstance(pushDocument('stale'), 1),
+        /superseded/,
+        'a push whose generation was already superseded rejects at the child',
+      );
+      assert.deepEqual(
+        applied,
+        ['first:1', 'second:2'],
+        'the superseded push is DROPPED — its document never reaches the target (the revision guard)',
       );
     } finally {
       client.destroy();

@@ -759,9 +759,16 @@ bar: a sentence typed into a text field lands intact — same element, same
 focus — while every other view of the card updates live). Per tier:
 Direct reads the live instance (Glimmer tracking); Capsule reads the
 live model projection (RP-20.2 — the same autotracking, expressed
-through the projection boundary); the Sandbox child's OWN mutations
-re-render natively inside its document. GAP (v1): a parent-side mutation does not yet cross into an
-already-mounted Sandbox child — that push (an `updateInstance` wire
-operation deserializing into the child's copy, guarded by revision
-counters against child↔parent echo loops) is the remaining delivery leg,
-tracked with RP-17.1's save/index arbitration.
+through the projection boundary); a mounted Sandbox child receives
+parent-side mutations as `updateInstance` pushes over the render
+transport — the canonical instance's freshly serialized current state,
+applied to the child's already-materialized copy IN PLACE
+(`updateFromSerialized`, main's reload path) so the child's own tracking
+re-renders without remounting, with the render family's monotonic
+generation sequence as the revision guard (a push superseded in flight
+is dropped, never applied out of order; pushes coalesce per mutation
+batch). Because every push carries full current state, a settled
+relationship reaches the child through the same lane — there is no
+separate settle-republish channel for any tier. GAP (v1): the reverse
+leg — a Sandbox child's own edits do not cross back to the parent Store;
+they re-render natively inside the child's document only.

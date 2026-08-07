@@ -127,16 +127,6 @@ export class BoxelExecutionSession {
   private closed = false;
   private listeners = new Set<BoxelExecutionSessionListener>();
   /**
-   * One `AbortController` per in-flight RP-7.3 settle watch
-   * (`request.hostProjection.onSettle`, set up in `boxel-projection.ts` when
-   * a relationship was rendered absent because it hadn't settled yet). Any
-   * watch still here is for a generation this session no longer wants: a
-   * newer `update()` supersedes it (aborted at the top of `update()`, since
-   * whatever it would republish is already moot), and `destroy()` aborts
-   * whatever is left so a closed session never republishes.
-   */
-  private settleWatchers = new Set<AbortController>();
-  /**
    * The request that produced `currentGeneration` — retained only for
    * `pushDraft()`'s authority-growth step (`documentDeclaredModules`), which
    * needs the same resource/document `materialize()` used, not for
@@ -281,9 +271,6 @@ export class BoxelExecutionSession {
     request: BoxelExecutionRequest,
   ): Promise<BoxelExecutionGeneration | undefined> {
     this.assertOpen();
-    // Whatever an existing settle watch would republish is for a generation
-    // this call is about to supersede either way.
-    this.abortSettleWatchers();
     let generation = ++this.requestedGeneration;
     this.status = 'loading';
     this.error = undefined;
@@ -335,17 +322,12 @@ export class BoxelExecutionSession {
         await disposeGeneration(previous);
       }
       // RP-7.3: this generation renders immediately with any not-yet-settled
-      // relationship absent — first paint never awaits settlement. Only a
-      // SANDBOX generation still needs the background watch + republish:
-      // Direct reads the canonical instance natively and a Capsule's
-      // `@model`/`@fields`/presentation are live read-through paths
-      // (RP-20.2), so for those tiers settlement re-renders every binding
-      // in place — a republished generation would only destroy mounted
-      // component state (focus, scroll, in-progress input) to deliver data
-      // the views already have.
-      if (this.currentGeneration.lease.runtime.mode === 'sandbox') {
-        this.watchForSettle(generation, request);
-      }
+      // relationship absent — first paint never awaits settlement. No tier
+      // needs a settle watch: Direct reads the canonical instance natively,
+      // a Capsule's `@model`/`@fields`/presentation are live read-through
+      // paths (RP-20.2), and a mounted Sandbox child receives settlement
+      // through the RP-20.5 instance push, whose freshly serialized
+      // document carries whatever has settled by push time.
       return this.currentGeneration;
     } catch (error) {
       if (candidate) {
@@ -361,54 +343,12 @@ export class BoxelExecutionSession {
     }
   }
 
-  /**
-   * Observe one generation's RP-7.3 settle watch (if its projection reported
-   * one) and republish a fresh generation when it resolves. Fire-and-forget
-   * by design: `update()` must not await this (RP-7.3 forbids blocking first
-   * paint on relationship resolution), so failures are swallowed here rather
-   * than surfacing as an unhandled rejection or a spurious session error —
-   * the current generation, correctly rendered absent, is not wrong, just
-   * not yet complete.
-   */
-  private watchForSettle(
-    generation: number,
-    request: BoxelExecutionRequest,
-  ): void {
-    let onSettle = request.hostProjection?.onSettle;
-    if (!onSettle) {
-      return;
-    }
-    let controller = new AbortController();
-    this.settleWatchers.add(controller);
-    void (async () => {
-      try {
-        let fresh = await onSettle(controller.signal);
-        if (!fresh || this.closed || generation !== this.requestedGeneration) {
-          return;
-        }
-        await this.update({ ...request, hostProjection: fresh });
-      } catch {
-        // Best-effort observation; see doc comment above.
-      } finally {
-        this.settleWatchers.delete(controller);
-      }
-    })();
-  }
-
-  private abortSettleWatchers(): void {
-    for (let controller of this.settleWatchers) {
-      controller.abort();
-    }
-    this.settleWatchers.clear();
-  }
-
   async destroy(): Promise<void> {
     if (this.closed) {
       return;
     }
     this.closed = true;
     this.requestedGeneration++;
-    this.abortSettleWatchers();
     let current = this.currentGeneration;
     this.currentGeneration = undefined;
     this.listeners.clear();

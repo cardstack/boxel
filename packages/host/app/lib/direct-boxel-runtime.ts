@@ -149,6 +149,35 @@ export default class DirectBoxelRuntime implements BoxelRuntime {
   }
 
   /**
+   * RP-20.5 parent→child instance push: apply a freshly serialized document
+   * to the instance at `handle` IN PLACE (`updateFromSerialized` — the same
+   * mechanism main's Store uses for a realm-event reload). The instance's
+   * identity — and therefore its mounted component and DOM — survives;
+   * tracking re-renders the bindings whose data changed. `creationArgs` is
+   * refreshed so a later HMR `redeserialize()` re-derives from the CURRENT
+   * data rather than resurrecting the mount-time snapshot.
+   */
+  async updateInstanceDocument(
+    handle: BoxelInstanceHandle,
+    document: LooseSingleCardDocument,
+  ): Promise<void> {
+    let args = this.creationArgs.get(handle);
+    if (!args) {
+      throw new Error(
+        `Cannot update unknown Boxel instance handle '${handle}'`,
+      );
+    }
+    let instance = this.instances.get(handle);
+    let api = await this.getCardAPI();
+    await api.updateFromSerialized(instance as never, document);
+    this.creationArgs.set(handle, {
+      resource: document.data as LooseCardResource,
+      document,
+      relativeTo: args.relativeTo,
+    });
+  }
+
+  /**
    * Retain the canonical Store-backed instance for a trusted Direct render.
    *
    * Direct must preserve the Store's identity map, lazy relationships, and

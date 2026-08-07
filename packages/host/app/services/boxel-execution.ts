@@ -385,6 +385,105 @@ export default class BoxelExecutionService extends Service {
   }
 
   /**
+   * RP-20.5: connect the canonical instance's change stream to a mounted
+   * Sandbox process — the parent→child half of cross-view sync for the one
+   * tier whose views cannot read the canonical instance live. Each
+   * mutation batch serializes the instance's CURRENT state (the same
+   * projected execution document `createFromSerialized` consumed) and
+   * pushes it over the render transport; the child applies it to its copy
+   * in place, so its DOM re-renders without remounting.
+   *
+   * Serialization happens inside a promise-chain continuation — an
+   * imperative context, never a tracking frame — so its tracked reads
+   * cannot re-entangle any resource (the RP-20.1 lesson). The chain also
+   * serializes pushes: a burst of changes coalesces to one serialize+push
+   * per drain (the `dirty` flag), and generation ordering on the wire
+   * drops anything superseded in flight. Push failures are logged, never
+   * thrown — the next push carries full current state, so a missed one
+   * self-heals.
+   */
+  connectSandboxInstanceSync(
+    card: BaseDef,
+    process: SandboxRuntimeProcess,
+  ): () => void {
+    let api = this.cardAPI;
+    if (!api) {
+      // Every render path passes through requestFor() (which captures the
+      // API) before a sandbox slot can exist; this guard is for tests that
+      // wire a process directly.
+      return () => {};
+    }
+    let stopped = false;
+    let dirty = false;
+    let queue = Promise.resolve();
+    let subscriber = () => {
+      dirty = true;
+      queue = queue.then(async () => {
+        if (stopped || !dirty) {
+          return;
+        }
+        dirty = false;
+        try {
+          let document = await this.serializeForExecution(card);
+          if (stopped) {
+            return;
+          }
+          let result = await process.pushInstanceUpdate(document);
+          if (!result.ok && result.error) {
+            console.warn(
+              '[sandbox-parent] instance push failed',
+              result.error.message,
+            );
+          } else {
+            // Parent-observable proof the child ACKED applying this
+            // revision (its in-place updateFromSerialized completed) —
+            // the cross-origin child's own console is unreachable from
+            // Host tooling, so this breadcrumb is the one place the
+            // RP-20.5 delivery loop closes observably.
+            console.warn('[sandbox-parent] instance push applied', {
+              generation: result.generation,
+            });
+          }
+        } catch (error) {
+          console.warn('[sandbox-parent] instance push failed', error);
+        }
+      });
+    };
+    api.subscribeToChanges(card, subscriber);
+    return () => {
+      stopped = true;
+      api.unsubscribeFromChanges(card, subscriber);
+    };
+  }
+
+  /**
+   * The projected execution document for `card`'s CURRENT state — the same
+   * serialization `requestFor()` performs at materialize time, factored so
+   * the RP-20.5 push delivers documents identical in shape to the one the
+   * child originally consumed.
+   */
+  private async serializeForExecution(
+    card: BaseDef,
+  ): Promise<LooseSingleCardDocument> {
+    let [document, api] = await Promise.all([
+      this.cardService.serializeCard(card as never, {
+        withIncluded: true,
+        useAbsoluteURL: true,
+      }),
+      this.cardService.getAPI(),
+    ]);
+    if (!document.data) {
+      throw new Error('Cannot push a Boxel without a serialized resource');
+    }
+    return projectBoxelExecutionDocument(
+      card,
+      document as LooseSingleCardDocument,
+      api,
+      isTrustedModule,
+    );
+  }
+
+  /**
    * RP-20.2 applied to presentation: the same live read-through the model
    * gets, for the theme/title/summary block main derives per render inside
    * `field-component.gts`. `projectInstancePresentation` is pure (peek

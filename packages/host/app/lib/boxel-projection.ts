@@ -43,35 +43,18 @@ type CardAPIModule = typeof CardAPI;
  * record from this projection locally; boundary tiers adopt it so trusted
  * semantics materialize exactly once, Host-side, and cross as data (RP-5.4).
  */
+/**
+ * Fully cloneable by construction — RP-7.3's settle behavior needs no
+ * side-channel here: every tier's live reads observe settlement through
+ * tracking (Direct natively, Capsule via the live model, RP-20.2), and a
+ * mounted Sandbox child receives it through the RP-20.5 instance push,
+ * whose serialized document carries whatever has settled by push time.
+ */
 export interface HostBoxelProjection {
   boxel: BoxelDescription;
   instanceId: string | null;
   fields: ResolvedField[];
   presentation: InstancePresentation;
-  /**
-   * Present only when this projection observed a `linksTo`/`linksToMany`
-   * field not yet in RP-7.1's `present` state (still loading, or a
-   * `linksToMany` slot not yet resolved). RP-7.3: the field renders absent
-   * now and settles to the loaded card once resolution completes — main
-   * gets this for free from Glimmer's own tracking, so a boundary tier that
-   * captured this projection once needs an explicit way to observe the same
-   * settle and re-project (RP-15.4's cross-tier obligation).
-   *
-   * Resolves once at least one previously-pending field changes state, with
-   * a *fresh* projection reflecting whatever is true then (which may still
-   * carry its own `onSettle` if something else is still pending). Resolves
-   * to `undefined` if `signal` aborts first or the wait's bound elapses —
-   * never rejects, never hangs a caller that stops observing.
-   *
-   * A function value, so it is never itself part of the cloneable record:
-   * `structuredClone` cannot carry it, and no tier may retain a live
-   * instance reference through it — the closure captured here re-derives
-   * its own fresh, cloneable `HostBoxelProjection` on each settle rather
-   * than exposing the canonical instance. Every consumer of this projection
-   * (e.g. `capsule-boxel-runtime.ts`'s `adoptHostProjection`) must strip
-   * this field before cloning the rest.
-   */
-  onSettle?: (signal: AbortSignal) => Promise<HostBoxelProjection | undefined>;
 }
 
 export interface HostBoxelProjectionOptions {
@@ -222,14 +205,13 @@ export function projectHostBoxelSemantics(
   api: CardAPIModule,
   options: HostBoxelProjectionOptions = {},
 ): HostBoxelProjection {
-  let pending: PendingRelationship[] = [];
-  let projection: HostBoxelProjection = {
+  return {
     boxel: describeBoxelType(instance.constructor as BaseDefConstructor, api),
     instanceId: boxelInstanceId(instance),
     fields: resolveBoxelFields(
       instance,
       api,
-      (relationship) => pending.push(relationship),
+      undefined,
       options.ensureRelationshipLoaded,
     ),
     presentation: projectInstancePresentation(
@@ -238,95 +220,6 @@ export function projectHostBoxelSemantics(
       options.unresolveURL,
     ),
   };
-  if (pending.length > 0) {
-    projection.onSettle = (signal) =>
-      waitThenReproject(pending, instance, api, options, signal);
-  }
-  return projection;
-}
-
-const SETTLE_FAST_POLL_TICKS = 20;
-const SETTLE_SLOW_POLL_INTERVAL_MS = 100;
-const SETTLE_MAX_WAIT_MS = 15_000;
-
-async function waitThenReproject(
-  pending: PendingRelationship[],
-  instance: BaseDef,
-  api: CardAPIModule,
-  options: HostBoxelProjectionOptions,
-  signal: AbortSignal,
-): Promise<HostBoxelProjection | undefined> {
-  let settled = await waitForAnyRelationshipToSettle(pending, api, signal);
-  if (!settled || signal.aborted) {
-    return undefined;
-  }
-  return projectHostBoxelSemantics(instance, api, options);
-}
-
-/**
- * Wait until at least one of `pending`'s relationship fields is no longer
- * `not-loaded`/in-flight (RP-7.1), then resolve `true`. Never triggers a new
- * load itself — `resolveBoxelFields` already started resolution the moment it
- * found the field pending (RP-7.2); this only observes
- * `getRelationshipMembershipState`, RP-7.1's sanctioned read.
- *
- * Bounded on two axes: `signal` ties this to whatever owns the wait (a
- * destroyed execution session aborts it), and `SETTLE_MAX_WAIT_MS` bounds it
- * even with no `signal` abort, so a relationship that genuinely never
- * settles cannot leak a wait forever. Polls a burst of microtask ticks first
- * — the common side-loaded case (RP-8.3) settles within one or two ticks,
- * since resolution is already in flight and just needs its own microtask to
- * land the field's bumped loading signal (`field-support.ts`) — then falls
- * back to a coarser interval for a slower, e.g. network-bound, settle (a
- * query-backed field, RP-7.6).
- */
-async function waitForAnyRelationshipToSettle(
-  pending: PendingRelationship[],
-  api: CardAPIModule,
-  signal: AbortSignal,
-): Promise<boolean> {
-  let stillPending = () =>
-    pending.some((candidate) =>
-      isPendingRelationship(candidate.instance, candidate.fieldName, api),
-    );
-  for (let tick = 0; tick < SETTLE_FAST_POLL_TICKS; tick++) {
-    if (signal.aborted) {
-      return false;
-    }
-    if (!stillPending()) {
-      return true;
-    }
-    await Promise.resolve();
-  }
-  let deadline = Date.now() + SETTLE_MAX_WAIT_MS;
-  while (Date.now() < deadline) {
-    if (signal.aborted) {
-      return false;
-    }
-    if (!stillPending()) {
-      return true;
-    }
-    await new Promise<void>((resolve) =>
-      setTimeout(resolve, SETTLE_SLOW_POLL_INTERVAL_MS),
-    );
-  }
-  return false;
-}
-
-function isPendingRelationship(
-  instance: BaseDef,
-  fieldName: string,
-  api: CardAPIModule,
-): boolean {
-  let { isLoading, membership } = api.getRelationshipMembershipState(
-    instance as unknown as CardDef,
-    fieldName,
-  );
-  return (
-    isLoading ||
-    membership === undefined ||
-    membership.some((entry) => entry.kind === 'not-loaded')
-  );
 }
 
 export function describeBoxelType(

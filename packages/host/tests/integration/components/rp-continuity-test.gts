@@ -4,11 +4,15 @@ import GlimmerComponent from '@glimmer/component';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import type { LooseCardResource } from '@cardstack/runtime-common';
+import type {
+  LooseCardResource,
+  LooseSingleCardDocument,
+} from '@cardstack/runtime-common';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
 import { createLiveBoxelModel } from '@cardstack/host/lib/boxel-projection';
 import SandboxMediaBridge from '@cardstack/host/lib/sandbox-media-bridge';
+import type SandboxRuntimeProcess from '@cardstack/host/lib/sandbox-runtime-process';
 
 import {
   testRealmURL,
@@ -398,6 +402,80 @@ module('Integration | rp-continuity', function (hooks) {
     } finally {
       bridge.stop();
       root.remove();
+    }
+  });
+
+  test('RP-20.5: a canonical-instance mutation reaches a mounted Sandbox process as a coalesced updateInstance push carrying the projected CURRENT state', async function (assert) {
+    let card = await createJournal();
+    let execution = getService('boxel-execution');
+    // The push serializes through the same pipeline a real render request
+    // does; running requestFor first captures the card API exactly as any
+    // real mount would have.
+    await execution.requestFor(card, 'isolated', execution.surfaceId());
+
+    let pushed: LooseSingleCardDocument[] = [];
+    let stubProcess = {
+      pushInstanceUpdate: async (pushedDocument: LooseSingleCardDocument) => {
+        pushed.push(pushedDocument);
+        return { generation: pushed.length, ok: true };
+      },
+    };
+    let disconnect = execution.connectSandboxInstanceSync(
+      card,
+      stubProcess as unknown as SandboxRuntimeProcess,
+    );
+    try {
+      (card as unknown as Record<string, unknown>).headline = 'Second Light';
+      await waitUntil(() => pushed.length >= 1);
+      assert.strictEqual(
+        pushed[pushed.length - 1]!.data?.attributes?.headline,
+        'Second Light',
+        'a mutation pushes the projected execution document carrying the CURRENT field value — the child applies it in place (RP-20.5)',
+      );
+
+      // A burst of rapid mutations coalesces: the queue drains with every
+      // push carrying whatever is current at serialize time, and the FINAL
+      // push always carries the final state.
+      let before = pushed.length;
+      let model = card as unknown as {
+        headline: string;
+        entries: string[];
+      };
+      model.entries[0] = 'rewritten mid-burst';
+      model.headline = 'Third Light';
+      model.headline = 'Final Light';
+      await waitUntil(() => pushed.length > before);
+      // Let the coalescing queue fully drain before asserting the tail.
+      await new Promise<void>((resolve) => setTimeout(resolve, 50));
+      let final = pushed[pushed.length - 1]!;
+      assert.strictEqual(
+        final.data?.attributes?.headline,
+        'Final Light',
+        'the final push carries the final state — order can never regress',
+      );
+      assert.strictEqual(
+        (final.data?.attributes?.entries as string[])[0],
+        'rewritten mid-burst',
+        'a full-document push carries every mutated field, not just the last-touched one',
+      );
+      assert.true(
+        pushed.length - before <= 3,
+        `a mutation burst coalesces per queue drain rather than pushing once per notification (saw ${
+          pushed.length - before
+        } pushes for 3 mutations)`,
+      );
+
+      disconnect();
+      let settledCount = pushed.length;
+      model.headline = 'After Disconnect';
+      await new Promise<void>((resolve) => setTimeout(resolve, 50));
+      assert.strictEqual(
+        pushed.length,
+        settledCount,
+        'disconnecting stops the stream — teardown leaves no orphan subscriber pushing at a dead process',
+      );
+    } finally {
+      disconnect();
     }
   });
 });

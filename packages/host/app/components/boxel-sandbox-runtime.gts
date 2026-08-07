@@ -14,6 +14,7 @@ import {
   maybeHandleScopedCSSRequest,
   surfaceHeightModeFor,
   type BoxelInstanceHandle,
+  type LooseSingleCardDocument,
   type ModuleEvaluator,
   type ModuleRegistration,
 } from '@cardstack/runtime-common';
@@ -517,6 +518,36 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
         this.error = undefined;
       });
       this.renderedCardHandle = undefined;
+      await afterRender();
+    },
+    updateInstance: async (
+      document: LooseSingleCardDocument,
+      generation: number,
+    ) => {
+      // RP-20.5 parent→child push: apply the canonical instance's fresh
+      // serialized state to the mounted child copy IN PLACE
+      // (DirectBoxelRuntime.updateInstanceDocument → updateFromSerialized).
+      // The component and DOM survive — the child's own tracking re-renders
+      // the changed bindings, exactly like a store reload on main. No
+      // renderedComponent/error state is touched: a failing apply rethrows
+      // and the render server acks ok:false while the last-known-good DOM
+      // stays up.
+      if (!this.runtime || !this.renderedCardHandle) {
+        throw new Error(
+          'Sandbox instance update requires an already-rendered card',
+        );
+      }
+      let renderedId = document?.data?.id;
+      if (typeof renderedId !== 'string' || renderedId.length === 0) {
+        throw new Error('Sandbox instance update requires a card id');
+      }
+      await this.runtime.updateInstanceDocument(
+        this.renderedCardHandle,
+        document,
+      );
+      if (this.isGenerationStale?.(generation)) {
+        return;
+      }
       await afterRender();
     },
     draft: async (url: string, generation: number) => {
