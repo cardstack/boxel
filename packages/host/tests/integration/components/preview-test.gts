@@ -287,20 +287,48 @@ module('Integration | preview', function (hooks) {
       '7px',
       'the authored rule applies inside the Direct render slot',
     );
+    // Assert on outline-STYLE, not outline-width: since Chrome 151,
+    // getComputedStyle().outlineWidth serializes the COMPUTED width (3px —
+    // the `medium` initial value) even when outline-style is `none` and
+    // nothing paints, so a 0px width expectation reports a phantom "leak"
+    // on a perfectly confined element. An actually leaked authored rule
+    // would flip outline-style to `solid`.
     assert.strictEqual(
-      getComputedStyle(hostCanary!).outlineWidth,
-      '0px',
+      getComputedStyle(hostCanary!).outlineStyle,
+      'none',
       'the same class name cannot leak the authored rule into Host chrome',
     );
 
-    let scopedStyle = Array.from(
-      document.querySelectorAll<HTMLStyleElement>(
-        'style[data-boxel-scoped-css]',
-      ),
-    ).find((style) => style.textContent?.includes(scopeAttribute ?? ''));
-    assert.ok(scopedStyle, 'the canonical scoped stylesheet was installed');
+    // This fixture is defined in-repo, so its <style scoped> compiles
+    // through the BUILD-time glimmer-scoped-css plugin — a dev serve
+    // injects a plain vite style tag and a test/prod build extracts a
+    // LINKED stylesheet, and only realm-served modules install through the
+    // runtime loader's `maybeHandleScopedCSSRequest` (which stamps
+    // `data-boxel-scoped-css`). `document.styleSheets` covers every
+    // installation form, so assert on the parsed rules themselves.
+    let installedSelectors: string[] = [];
+    for (let sheet of Array.from(document.styleSheets)) {
+      let rules: CSSRuleList;
+      try {
+        rules = sheet.cssRules;
+      } catch {
+        continue;
+      }
+      for (let rule of Array.from(rules)) {
+        if (
+          rule instanceof CSSStyleRule &&
+          rule.selectorText.includes(`[${scopeAttribute}]`)
+        ) {
+          installedSelectors.push(rule.selectorText);
+        }
+      }
+    }
     assert.true(
-      scopedStyle?.textContent?.includes(
+      installedSelectors.length > 0,
+      'the compiled scoped stylesheet was installed',
+    );
+    assert.true(
+      installedSelectors.includes(
         `.direct-runtime-css-canary[${scopeAttribute}]`,
       ),
       'the installed selector is attribute-scoped rather than global',
