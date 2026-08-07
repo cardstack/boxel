@@ -653,6 +653,44 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
   }
 
   /**
+   * RP-10/RP-9.1 across the boundary: push a cloneable context snapshot —
+   * v1 carries the card's realm `Permissions` — to the mounted child, which
+   * provides it to the rendered card exactly as the Host's own context
+   * plane would (without it, every Base-wrapped field editor in the child
+   * renders disabled). Same fire-and-forget failure contract as
+   * `pushInstanceUpdate`: a missed push self-heals on the next, because
+   * every push carries the full current snapshot.
+   */
+  async pushContext(
+    permissions: { canRead: boolean; canWrite: boolean } | null,
+  ): Promise<{ generation: number; ok: boolean; error?: Error }> {
+    if (this.closed) {
+      return {
+        generation: this.nextGeneration,
+        ok: false,
+        error: new Error('Sandbox runtime process is closed'),
+      };
+    }
+    // The context-sync modifier can fire in the same render flush that
+    // mounts this process — before `mount()` has set `this.client`. Waiting
+    // for the mount (resolved immediately if already mounted; released by
+    // destroy() too) keeps that first push from being lost, since nothing
+    // re-pushes until the consumed permissions value actually changes.
+    await this.whenMounted();
+    let generation = ++this.nextGeneration;
+    try {
+      await this.client;
+      if (!this.renderClient) {
+        throw new Error('Sandbox render transport is unavailable');
+      }
+      await this.renderClient.updateContext(permissions, generation);
+      return { generation, ok: true };
+    } catch (error) {
+      return { generation, ok: false, error: asError(error) };
+    }
+  }
+
+  /**
    * RP-20.6: registers the ONE receiver entitled to apply this process's
    * child instance writes — see `connectSandboxInstanceSync`, which binds it
    * to the canonical instance this process renders (identity validation and

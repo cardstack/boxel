@@ -21,6 +21,7 @@ module('Unit | Sandbox render transport', function () {
       clear: () => {},
       draft: () => {},
       updateInstance: () => {},
+      updateContext: () => {},
     };
     let server = new SandboxRenderServer(channel.port1, target);
     let client = new SandboxRenderClient(channel.port2);
@@ -49,6 +50,7 @@ module('Unit | Sandbox render transport', function () {
       clear: () => {},
       draft: () => {},
       updateInstance: () => {},
+      updateContext: () => {},
     };
     let server = new SandboxRenderServer(channel.port1, target);
     let client = new SandboxRenderClient(channel.port2);
@@ -172,6 +174,7 @@ module('Unit | Sandbox render transport', function () {
       clear: () => {},
       draft: () => {},
       updateInstance: () => {},
+      updateContext: () => {},
     };
     let server = new SandboxRenderServer(channel.port1, target);
     let client = new SandboxRenderClient(channel.port2, 10);
@@ -216,6 +219,7 @@ module('Unit | Sandbox render transport', function () {
       render: () => {},
       clear: () => {},
       updateInstance: () => {},
+      updateContext: () => {},
       draft: (url, generation) => {
         drafted.push({ url, generation });
       },
@@ -257,6 +261,7 @@ module('Unit | Sandbox render transport', function () {
       clear: () => {},
       draft: () => {},
       updateInstance: () => {},
+      updateContext: () => {},
     };
     let server = new SandboxRenderServer(channel.port1, target);
     let client = new SandboxRenderClient(channel.port2);
@@ -308,6 +313,7 @@ module('Unit | Sandbox render transport', function () {
         dispatched.push({ clear: generation });
       },
       updateInstance: () => {},
+      updateContext: () => {},
       draft: (url, generation) => {
         dispatched.push({ url, generation });
       },
@@ -357,6 +363,7 @@ module('Unit | Sandbox render transport', function () {
       render: () => {},
       clear: () => {},
       updateInstance: () => {},
+      updateContext: () => {},
       draft: (url) => {
         dispatched.push(url);
       },
@@ -384,6 +391,52 @@ module('Unit | Sandbox render transport', function () {
       await new Promise((resolve) => setTimeout(resolve, 20));
       assert.deepEqual(dispatched, []);
     } finally {
+      server.destroy();
+      channel.port1.close();
+      channel.port2.close();
+    }
+  });
+
+  test('RP-9.1: a context push crosses to the child target — permissions snapshot or null — and a malformed permissions envelope never dispatches', async function (assert) {
+    let channel = new MessageChannel();
+    let applied: ({ canRead: boolean; canWrite: boolean } | null)[] = [];
+    let target: SandboxRenderTarget = {
+      render: () => {},
+      clear: () => {},
+      draft: () => {},
+      updateInstance: () => {},
+      updateContext: (permissions) => {
+        applied.push(permissions);
+      },
+    };
+    let server = new SandboxRenderServer(channel.port1, target);
+    let client = new SandboxRenderClient(channel.port2);
+
+    try {
+      await client.updateContext({ canRead: true, canWrite: true }, 1);
+      await client.updateContext(null, 2);
+      assert.deepEqual(
+        applied,
+        [{ canRead: true, canWrite: true }, null],
+        'both a real snapshot and the no-permissions null cross intact',
+      );
+
+      channel.port2.postMessage({
+        kind: 'boxel-sandbox-render-request',
+        transportVersion: BOXEL_EXECUTION_TRANSPORT_VERSION,
+        requestId: 'bad-perms',
+        generation: 3,
+        operation: 'updateContext',
+        permissions: { canRead: 'yes', canWrite: 1 },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      assert.strictEqual(
+        applied.length,
+        2,
+        'a permissions envelope with non-boolean members never dispatches',
+      );
+    } finally {
+      client.destroy();
       server.destroy();
       channel.port1.close();
       channel.port2.close();

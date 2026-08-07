@@ -219,6 +219,27 @@ export type SandboxRenderRequest =
        */
       operation: 'updateInstance';
       document: LooseSingleCardDocument;
+    }
+  | {
+      kind: 'boxel-sandbox-render-request';
+      transportVersion: number;
+      requestId: string;
+      generation: number;
+      /**
+       * RP-10 across the Sandbox boundary: the Host's context plane cannot
+       * flow into a cross-origin child through component tree scope the way
+       * it does for Direct/Capsule, so the parent pushes a cloneable
+       * SNAPSHOT of the context values a rendered card is entitled to.
+       * v1 carries exactly one context: the card's realm `Permissions`
+       * (RP-9.1 — without it, every Base-wrapped field editor in the child
+       * renders disabled). `null` means "no permissions known" (the child
+       * provides undefined, the same as the Host before realm permissions
+       * settle). Same generation ordering as every render-family request: a
+       * snapshot superseded in flight is dropped, never applied out of
+       * order.
+       */
+      operation: 'updateContext';
+      permissions: { canRead: boolean; canWrite: boolean } | null;
     };
 
 /**

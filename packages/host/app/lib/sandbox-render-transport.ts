@@ -37,6 +37,16 @@ export interface SandboxRenderTarget {
     generation: number,
   ): void | Promise<void>;
   /**
+   * RP-10 across the boundary: apply a pushed context snapshot — v1 carries
+   * the card's realm `Permissions` (RP-9.1), which the target's owner
+   * provides to the rendered card exactly as the Host's own context plane
+   * would. Same generation discipline as `updateInstance`.
+   */
+  updateContext(
+    permissions: { canRead: boolean; canWrite: boolean } | null,
+    generation: number,
+  ): void | Promise<void>;
+  /**
    * Called once, right after this target's `SandboxRenderServer` is
    * constructed, with a live check against every generation the server has
    * SEEN ARRIVE — not just ones already dispatched through this target's
@@ -104,6 +114,18 @@ export class SandboxRenderClient {
     return this.request({ operation: 'updateInstance', document, generation });
   }
 
+  /** RP-10/RP-9.1 — see `SandboxRenderTarget.updateContext`. */
+  updateContext(
+    permissions: { canRead: boolean; canWrite: boolean } | null,
+    generation: number,
+  ): Promise<void> {
+    return this.request({
+      operation: 'updateContext',
+      permissions,
+      generation,
+    });
+  }
+
   /**
    * Fails every in-flight request without waiting out its timeout.
    *
@@ -154,6 +176,10 @@ export class SandboxRenderClient {
       | Pick<
           Extract<SandboxRenderRequest, { operation: 'updateInstance' }>,
           'operation' | 'document' | 'generation'
+        >
+      | Pick<
+          Extract<SandboxRenderRequest, { operation: 'updateContext' }>,
+          'operation' | 'permissions' | 'generation'
         >,
   ): Promise<void> {
     if (this.closed) {
@@ -332,6 +358,11 @@ export class SandboxRenderServer {
         return this.target.draft(request.url, request.generation);
       case 'updateInstance':
         return this.target.updateInstance(request.document, request.generation);
+      case 'updateContext':
+        return this.target.updateContext(
+          request.permissions,
+          request.generation,
+        );
     }
   }
 
@@ -408,7 +439,16 @@ function isSandboxRenderRequest(value: unknown): value is SandboxRenderRequest {
       value.document !== null &&
       'data' in value.document &&
       typeof value.document.data === 'object' &&
-      value.document.data !== null)
+      value.document.data !== null) ||
+    (value.operation === 'updateContext' &&
+      'permissions' in value &&
+      (value.permissions === null ||
+        (typeof value.permissions === 'object' &&
+          value.permissions !== null &&
+          'canRead' in value.permissions &&
+          typeof value.permissions.canRead === 'boolean' &&
+          'canWrite' in value.permissions &&
+          typeof value.permissions.canWrite === 'boolean')))
   );
 }
 

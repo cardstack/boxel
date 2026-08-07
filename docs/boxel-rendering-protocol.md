@@ -351,7 +351,16 @@ data stays renderable (`gc-card-store.ts:666-671`).
 **RP-9.1** Render-time writability is exactly
 `(not computeVia) ∧ (not queryDefinition) ∧ permissions.canWrite`, delivered
 as `@canEdit`; absent permissions context ⇒ not writable. Editors render
-disabled, not hidden (`field-component.gts:401-405`).
+disabled, not hidden (`field-component.gts:401-405`). The Sandbox tier
+honors this through a pushed context snapshot: host chrome's live
+permissions cannot flow into a cross-origin child through component-tree
+scope, so the Host renderer consumes them where it sits (inside the stack
+item's provider) and pushes a cloneable `{canRead, canWrite}` over the
+render transport (`updateContext`, generation-ordered like every
+render-family request; re-pushed when the consumed value settles or
+changes). Until the first snapshot arrives the child provides no
+permissions — editors disabled, the same fail-closed default as the Host
+before realm permissions settle.
 
 **RP-9.2** All mutation funnels through `setField`: validate → write data
 bucket → notify subscribers → invalidate instance tracking. `@set` and

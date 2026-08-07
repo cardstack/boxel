@@ -5,7 +5,7 @@ import Component from '@glimmer/component';
 // @ts-ignore — @glimmer/validator is provided by Ember but has no own types
 import { untrack } from '@glimmer/validator';
 
-import Modifier from 'ember-modifier';
+import Modifier, { modifier } from 'ember-modifier';
 import { consume, provide } from 'ember-provide-consume-context';
 import { resource, use } from 'ember-resources';
 import { TrackedObject } from 'tracked-built-ins';
@@ -18,7 +18,9 @@ import {
   childFieldFormatsFor,
   DefaultFormatsContextName,
   isCardInstance,
+  PermissionsContextName,
   type CodeRef,
+  type Permissions,
   type RealmResourceIdentifier,
   type SurfaceHandle,
 } from '@cardstack/runtime-common';
@@ -163,6 +165,54 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
 
   @consume(CardContextName)
   declare private hostCardContext: CardContext | undefined;
+
+  /**
+   * RP-10/RP-9.1 across the Sandbox boundary: the live permissions the
+   * surrounding host chrome provides (operator mode's stack item derives it
+   * from the realm service). Direct/Capsule renders consume it natively
+   * through component-tree scope; the Sandbox child cannot, so
+   * `syncSandboxContext` below pushes a cloneable snapshot over the render
+   * transport — re-pushed whenever this consumed value settles or changes,
+   * without ever entering the render resource's tracked set (RP-20.1).
+   */
+  @consume(PermissionsContextName)
+  declare private hostPermissions: Permissions | undefined;
+
+  /**
+   * Pushes the current permissions snapshot to the mounted Sandbox child.
+   * A function modifier so Glimmer's own template tracking re-runs it when
+   * either the slot (a new process) or the consumed permissions change —
+   * the exact reactivity main's in-tree provider gives host-side editors.
+   * Fire-and-forget like every push lane: each push carries the full
+   * current snapshot, so a missed one self-heals on the next.
+   */
+  private syncSandboxContext = modifier(
+    (
+      _element: Element,
+      [slot, permissions]: [
+        SandboxRenderSlot | undefined,
+        Permissions | undefined,
+      ],
+    ) => {
+      if (!slot) {
+        return;
+      }
+      void slot.process
+        .pushContext(
+          permissions
+            ? { canRead: permissions.canRead, canWrite: permissions.canWrite }
+            : null,
+        )
+        .then((result) => {
+          if (!result.ok && result.error) {
+            console.warn(
+              '[sandbox-parent] context push failed',
+              result.error.message,
+            );
+          }
+        });
+    },
+  );
 
   private readonly surfaceId: string;
 
@@ -751,6 +801,7 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
           fieldName=@fieldName
         }}
         {{boxelSandboxSlot this.sandboxSlot}}
+        {{this.syncSandboxContext this.sandboxSlot this.hostPermissions}}
         ...attributes
       >
         {{! RP-15.3: the iframe the modifier above mounts into this element

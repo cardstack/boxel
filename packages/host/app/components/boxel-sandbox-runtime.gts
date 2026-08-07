@@ -10,6 +10,7 @@ import { initSync, parse } from 'es-module-lexer';
 import {
   DefaultFormatsContextName,
   Loader,
+  PermissionsContextName,
   fetcher,
   maybeHandleScopedCSSRequest,
   surfaceHeightModeFor,
@@ -17,6 +18,7 @@ import {
   type LooseSingleCardDocument,
   type ModuleEvaluator,
   type ModuleRegistration,
+  type Permissions,
 } from '@cardstack/runtime-common';
 
 import { installBoxelLoaderCompatibilityModules } from '@cardstack/host/lib/boxel-loader-compatibility';
@@ -429,6 +431,14 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
   @tracked private format: Format = 'isolated';
   @tracked private surface?: SandboxSurfaceClient;
   @tracked private error?: Error;
+  /**
+   * RP-10/RP-9.1 across the boundary: the parent's pushed context snapshot.
+   * `undefined` until the first `updateContext` arrives — the same state
+   * the Host's own provider is in before realm permissions settle, so Base
+   * field editors render disabled until entitlement is known, never the
+   * other way around.
+   */
+  @tracked private contextPermissions?: Permissions;
 
   private abortBootstrap = new AbortController();
   private loader?: Loader;
@@ -470,6 +480,12 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
   // @ts-ignore "defaultFormat is declared but not used"
   private get defaultFormat() {
     return { cardDef: this.format, fieldDef: this.format };
+  }
+
+  @provide(PermissionsContextName)
+  // @ts-ignore "permissions is declared but not used"
+  private get permissions(): Permissions | undefined {
+    return this.contextPermissions;
   }
 
   private runtimeHost = installSandboxRuntimeHost({
@@ -621,6 +637,21 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
       if (this.isGenerationStale?.(generation)) {
         return;
       }
+      await afterRender();
+    },
+    updateContext: async (
+      permissions: { canRead: boolean; canWrite: boolean } | null,
+      generation: number,
+    ) => {
+      // RP-10/RP-9.1: apply the parent's context snapshot. Tracked, so the
+      // provider getter above re-renders every consumer (Base field editors
+      // flip enabled/disabled) in place — no remount, no render-state touch.
+      if (this.isGenerationStale?.(generation)) {
+        return;
+      }
+      join(() => {
+        this.contextPermissions = permissions ?? undefined;
+      });
       await afterRender();
     },
     draft: async (url: string, generation: number) => {

@@ -75,6 +75,7 @@ module('Unit | rp-hmr', function () {
       clear: () => {},
       draft: () => {},
       updateInstance: () => {},
+      updateContext: () => {},
     };
     let server = new SandboxRenderServer(channel.port1, target);
     channel.port2.addEventListener('message', (event) => {
@@ -158,6 +159,7 @@ module('Unit | rp-hmr', function () {
       clear: () => {},
       draft: () => {},
       updateInstance: () => {},
+      updateContext: () => {},
     };
     let server = new SandboxRenderServer(channel.port1, target);
     let client = new SandboxRenderClient(channel.port2);
@@ -234,6 +236,7 @@ module('Unit | rp-hmr', function () {
       clear: () => {},
       draft: () => {},
       updateInstance: () => {},
+      updateContext: () => {},
       setStaleCheck: (check) => {
         isStale = check;
       },
