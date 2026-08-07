@@ -638,7 +638,15 @@ DEFERRED (RP-9 list). Each future capability enters as its own spec section
 ## RP-17 Deferred and excluded
 
 **RP-17.1 DEFERRED** (targeted at a future protocol version, in rough
-order): mutation beyond RP-9.8's v1 (write grants, edit sessions,
+order): the RP-21 entitlement deliveries not yet built — declared query
+fields (RP-7.6) evaluated parent-side and delivered through the existing
+RP-20.5 push (never as a query capability in the child); mediated
+`viewCard` for the Sandbox tier (a navigation REQUEST over the private
+port, parent-validated, executed in parent-owned chrome); a
+gesture-scoped, parent-confirmed CRUD lane; and the visible-refusal
+chrome for an entitlement a surface cannot deliver (RP-21.3's ban on
+silent unavailability becomes enforceable only once refusal presentation
+exists); mutation beyond RP-9.8's v1 (write grants, edit sessions,
 optimistic overlays, structured rejection); Capsule-tier HMR (DOM adoption
 across component programs) and save/index acknowledgement arbitration —
 Sandbox-tier source volatility is un-deferred as RP-18; the remaining
@@ -854,3 +862,48 @@ state, so a missed or dropped one self-heals on the next; Boxel is not
 a validate-on-write system (validation is post-save, the guide system),
 so an apply is expected to succeed and the error response lane exists
 for transport faults and identity violations, not a validation UX.
+
+## RP-21 Entitlement v1 (orthogonal to containment)
+
+Containment tiers (RP-6) answer HOW a module's rendering is contained —
+how much browser authority its execution needs and how it is caged. They
+never answer what a card is entitled to KNOW or DO. Keying data or action
+authority off the tier would invert the security model: an author could
+write deliberately DOM-free code precisely to classify Capsule and
+thereby GAIN authority. This section is the axis split.
+
+**RP-21.1** Entitlement is a function of module provenance and card
+declaration, never of containment tier. Capsule and Sandbox hold the
+same trust grade — untrusted authored code — and receive IDENTICAL
+entitlements; only delivery mechanics differ (in-tree scope and host-side
+portals for Capsule; pushed snapshots and mediated port lanes for
+Sandbox). Trusted-realm provenance is what grants ambient authority
+today (the Direct tier's modules); a future per-module grant system (the
+guide/trust-badge direction) extends grants without touching containment.
+Concretely: no store, loader, service, or data-bearing context authority
+ever rides a boundary crossing — the Capsule `@context` projection
+carries exactly its enumerated presentation keys, and the Sandbox
+context push carries exactly its enumerated cloneable snapshots.
+
+**RP-21.2** Entitlement grades, from least to most: **declared** — the
+card's own document, its declared `linksTo`/`linksToMany` neighborhood,
+and its type's declared query fields (RP-7.6), always delivered as
+host/parent-evaluated DATA (materialized results, like `@model`), never
+as a query capability; every authored card holds this grade.
+**display-only** — a host-rendered presentation surface whose CONTENT the
+authored code cannot read back and cannot exfiltrate (no DOM read in SES,
+no egress in either cage): today, the Capsule's `searchResultsComponent`
+projection key — query influence without data return, the one deliberate
+asymmetry, named here so it stays a decision rather than an accident.
+**mediated action** — a user-visible request the parent validates and
+executes in parent-owned chrome (`viewCard` navigation; the future CRUD
+lane); the authored code proposes, the Host disposes. **ambient** — search
+and arbitrary data reach; held ONLY by trusted provenance, never
+grantable by classification, format, or authored code's own request.
+
+**RP-21.3** Silent unavailability is prohibited: an entitlement a
+surface cannot deliver refuses visibly (the fetch gate's self-naming
+refusals are the model), never renders as plausible-but-empty output —
+an empty list that means "not entitled" must be distinguishable from an
+empty list that means "no data." (Refusal chrome is deferred — RP-17.1;
+until it lands this statement binds designs, not pixels.)

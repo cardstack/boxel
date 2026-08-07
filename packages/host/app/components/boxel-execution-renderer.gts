@@ -34,6 +34,7 @@ import type {
   CapsuleComponent,
   CapsuleRenderSlot,
 } from '@cardstack/host/lib/capsule-component';
+import { projectCapsuleContext } from '@cardstack/host/lib/capsule-context-projection';
 import type { DirectRenderSlot } from '@cardstack/host/lib/direct-boxel-runtime';
 import type { HTMLComponent } from '@cardstack/host/lib/html-component';
 import type { SandboxRenderSlot } from '@cardstack/host/lib/sandbox-runtime-process';
@@ -683,18 +684,7 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
    * along even if this projection grew.
    */
   private get capsuleContextProjection(): unknown {
-    let context = this.hostCardContext;
-    if (!context) {
-      return undefined;
-    }
-    return Object.freeze({
-      ...(context.cardComponentModifier
-        ? { cardComponentModifier: context.cardComponentModifier }
-        : {}),
-      ...(context.searchResultsComponent
-        ? { searchResultsComponent: context.searchResultsComponent }
-        : {}),
-    });
+    return projectCapsuleContext(this.hostCardContext);
   }
 
   private get effectiveFormat(): Format {
