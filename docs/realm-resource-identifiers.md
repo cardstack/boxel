@@ -17,16 +17,23 @@ type RealmResourceIdentifier = string & { __rriBrand: unknown };
 type RealmIdentifier = string & { __riBrand: unknown };
 ```
 
-They are branded strings — no runtime wrapper, just a compile-time marker that
-says "this string is an identifier, not a URL." A `RealmIdentifier` names a
-realm itself and always ends in a slash (`@cardstack/base/`,
-`https://app.boxel.ai/experiments/`); a `RealmResourceIdentifier` names
-anything inside one. The `rri()` and `ri()` helpers brand a string at a
-boundary where you know the value is already valid.
+A `RealmIdentifier` names a realm itself and always ends in a slash
+(`@cardstack/base/`, `https://app.boxel.ai/experiments/`); a
+`RealmResourceIdentifier` names anything inside one.
 
-The brand exists to catch the mistake it is named for: **an RRI is not a URL,
-and must not be passed to `new URL()`.** `new URL('@cardstack/base/card-api')`
-throws. Resolution goes through the VirtualNetwork.
+They are branded strings — no runtime wrapper, just a compile-time marker. The
+brand works in one direction only: a plain `string` does not satisfy a
+`RealmResourceIdentifier` parameter, so an unvalidated value can't drift into an
+identifier position without a deliberate `rri()` or `ri()` at the boundary. The
+reverse is not true — a branded string is still assignable to `string`, so
+nothing stops an RRI from being handed to something that takes a plain string.
+
+That asymmetry is why the important rule here is a convention the compiler
+cannot enforce: **don't pass an RRI to `new URL()`.** A URL-form RRI parses
+fine, but a prefix-form one throws — `new URL('@cardstack/base/card-api')` is a
+`TypeError` — and a value typed as an RRI may be either form, so the call site
+usually can't know which it has. Use `VirtualNetwork.toURL` or `toURLHref`,
+which accept both.
 
 ## Why prefix form
 
@@ -256,8 +263,19 @@ on both sides — the index query engine server-side and the client-side filter
 matcher — with `equivalentURLForms` bridging index rows written under an older
 spelling.
 
-**CLI.** `boxel` commands accept RRIs wherever they accept a URL:
-`boxel file read @cardstack/catalog/blog-app/blog-app.gts`.
+**CLI.** Commands that resolve their target through `resolveRealmIdentifier`
+accept an RRI anywhere they accept a realm or file URL — the `file`
+subcommands, `search`, `lint`, `parse`, `run-command`, `realm push`,
+`realm ingest-card`, and `realm indexing-errors` among them:
+
+```
+boxel file read @cardstack/catalog/blog-app/blog-app.gts
+```
+
+This is not yet universal. The realm-lifecycle commands — `realm archive`,
+`realm restore`, `realm remove` — normalize the trailing slash and pass the
+value straight through as the realm id without resolving it, so they need a
+URL.
 
 ## Compatibility with the base-realm alias
 
