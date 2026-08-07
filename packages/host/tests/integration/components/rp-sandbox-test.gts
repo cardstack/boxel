@@ -141,6 +141,39 @@ const plainWidgetSource = `
   }
 `;
 
+// RP-6.3 exception fixture: a Sandbox-classified module (raw ember-modifier
+// import) that ALSO authors its own in-place edit template — this module
+// keeps the Sandbox iframe for its edit surface.
+const inPlaceEditorSource = `
+  import {
+    CardDef,
+    Component,
+    contains,
+    field,
+  } from 'https://cardstack.com/base/card-api';
+  import StringField from 'https://cardstack.com/base/string';
+  import { modifier } from 'ember-modifier';
+
+  const paintLabel = modifier((element, [text]) => {
+    element.textContent = text;
+  });
+
+  export class InPlaceEditor extends CardDef {
+    static displayName = 'InPlaceEditor';
+    @field label = contains(StringField);
+    static isolated = class Isolated extends Component<typeof InPlaceEditor> {
+      <template>
+        <div data-test-in-place-isolated {{paintLabel @model.label}}></div>
+      </template>
+    };
+    static edit = class Edit extends Component<typeof InPlaceEditor> {
+      <template>
+        <div data-test-in-place-edit {{paintLabel @model.label}}></div>
+      </template>
+    };
+  }
+`;
+
 // `Roster` forward-references `Classroom` through a linksTo thunk while
 // `Classroom` is declared LATER in the module — main's sanctioned pattern.
 // Evaluation must not invoke the thunk before `Classroom` initializes.
@@ -189,6 +222,7 @@ module('Integration | rp-sandbox', function (hooks) {
           'webgl-widget.gts': webglWidgetSource,
           'plain-widget.gts': plainWidgetSource,
           'forward-link.gts': forwardLinkSource,
+          'in-place-editor.gts': inPlaceEditorSource,
         },
       }),
     );
@@ -277,6 +311,57 @@ module('Integration | rp-sandbox', function (hooks) {
       'actually READING window (even inside the guarded branch) still classifies to the Sandbox tier',
     );
     assert.true(using.signals.includes('window'));
+  });
+
+  test('RP-6.3: the edit surface of a Sandbox module with NO authored edit template renders host-side — never a structurally read-only iframe form', async function (assert) {
+    let card = await createWidget();
+
+    await renderThroughExecutionRenderer(card, 'edit');
+
+    // The trusted Base editor operates on the canonical store host-side;
+    // the iframe tier has no child→parent write leg, so routing edit there
+    // produces a dead form (RP-6.3).
+    await waitFor('[data-boxel-execution]', { timeout: 20000 });
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-boxel-execution]')
+          ?.getAttribute('data-boxel-execution') !== 'prerender',
+      { timeout: 20000 },
+    );
+    let slot = document.querySelector('[data-boxel-execution]');
+    assert.notStrictEqual(
+      slot?.getAttribute('data-boxel-execution'),
+      'sandbox',
+      'edit never mounts the iframe for a standard-editor module',
+    );
+    assert
+      .dom('.boxel-execution-sandbox-slot iframe')
+      .doesNotExist('no iframe is created for the edit surface');
+  });
+
+  test('RP-6.3 exception: a module authoring its own `static edit` template keeps the Sandbox iframe for edit', async function (assert) {
+    let card = await createFromResource({
+      attributes: { label: 'in place' },
+      meta: {
+        adoptsFrom: {
+          module: testRRI('in-place-editor'),
+          name: 'InPlaceEditor',
+        },
+      },
+    });
+
+    await renderThroughExecutionRenderer(card, 'edit');
+
+    await waitFor('[data-boxel-execution="sandbox"]', { timeout: 20000 });
+    assert
+      .dom('[data-boxel-execution="sandbox"]')
+      .exists('the authored in-place editor mounts in the Sandbox');
+    assert
+      .dom('[data-boxel-execution="sandbox"] iframe')
+      .exists(
+        'the same retained iframe mechanism serves the edit surface — in-iframe state survives the isolated↔edit switch',
+      );
   });
 
   test('a forward-referenced linksTo(() => X) thunk stays lazy through Capsule evaluation', async function (assert) {
