@@ -260,13 +260,15 @@ function sanitizeLayout(layout: SurfaceLayout): SurfaceLayout {
     throw new Error(`Unsupported Surface height mode '${layout.heightMode}'`);
   }
   let minimumHeight = layout.minimumHeight;
-  if (
-    minimumHeight !== undefined &&
-    (!Number.isFinite(minimumHeight) ||
-      minimumHeight < 0 ||
-      minimumHeight > 4096)
-  ) {
-    throw new Error('Surface minimum height is outside the supported range');
+  if (minimumHeight !== undefined) {
+    if (!Number.isFinite(minimumHeight) || minimumHeight < 0) {
+      throw new Error('Surface minimum height is outside the supported range');
+    }
+    // A very tall card is NOT malformed input — it is exactly the case the
+    // intrinsic ceiling exists for. Rejecting it strands the surface at its
+    // boot height (a ~150px crop of a 7000px card); clamping applies the
+    // ceiling and lets the child's own document scroll past it.
+    minimumHeight = clampIntrinsicHeight(minimumHeight);
   }
   return { heightMode: layout.heightMode, minimumHeight };
 }

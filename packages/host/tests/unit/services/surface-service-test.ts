@@ -44,7 +44,10 @@ module('Unit | Service | surface-service', function (hooks) {
 
       await sandbox.layout({ heightMode: 'allocated', minimumHeight: 320 });
       assert.strictEqual(element.dataset.boxelSurfaceHeightMode, 'allocated');
-      assert.strictEqual(element.style.minHeight, '320px');
+      // Allocated mode: the surface's owner allocates the box; the surface
+      // fills it and its own minimumHeight report never influences it.
+      assert.strictEqual(element.style.height, '100%');
+      assert.strictEqual(element.style.minHeight, '');
       assert.deepEqual(service.identityFor(handle), {
         mode: 'capsule',
         principal: 'test-user',
@@ -55,6 +58,51 @@ module('Unit | Service | surface-service', function (hooks) {
       server.destroy();
       channel.port1.close();
       channel.port2.close();
+      detach();
+      service.release(handle);
+      element.remove();
+    }
+  });
+
+  test('a very tall intrinsic height report is clamped to the ceiling, not rejected — rejection strands the surface at its boot height and crops the card', function (assert) {
+    let service = this.owner.lookup(
+      'service:surface-service',
+    ) as SurfaceService;
+    let handle = service.register({
+      mode: 'sandbox',
+      principal: 'test-user',
+      surfaceId: 'tall-card',
+    });
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+    let detach = service.attach(handle, element);
+    try {
+      // The signet Proposal reported 7346px; the old validator threw
+      // "outside the supported range" and the slot never grew past ~150px.
+      service.layout(handle, { heightMode: 'intrinsic', minimumHeight: 7346 });
+      assert.strictEqual(
+        element.style.height,
+        '2400px',
+        'the ceiling applies; past it the child document scrolls',
+      );
+      // Genuinely malformed input still fails closed.
+      assert.throws(
+        () =>
+          service.layout(handle, {
+            heightMode: 'intrinsic',
+            minimumHeight: Number.NaN,
+          }),
+        /outside the supported range/,
+      );
+      assert.throws(
+        () =>
+          service.layout(handle, {
+            heightMode: 'intrinsic',
+            minimumHeight: -1,
+          }),
+        /outside the supported range/,
+      );
+    } finally {
       detach();
       service.release(handle);
       element.remove();
