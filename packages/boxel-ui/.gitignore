@@ -1,14 +1,23 @@
-# See https://help.github.com/ignore-files/ for more about ignoring files.
+# The authoritative copies of these live in the monorepo root (because they're
+# more useful on github that way), but the build copies them into here so they
+# will also appear in published NPM packages.
+/LICENSE.md
+/README.md
 
-/dist/
-/tmp/
+# compiled output
+/declarations
+/dist
+/dist-tests
+/tmp
+
+# npm/pnpm/yarn pack output
+*.tgz
 
 # dependencies
 node_modules/
 
 # misc
 /.eslintcache
-/addon/.eslintcache
 .env*
 .pnpm-debug.log
 npm-debug.log*
