@@ -209,6 +209,34 @@ export class VirtualNetwork {
   }
 
   /**
+   * The realm holding `reference`, as a real URL href, or undefined when no
+   * registered realm does.
+   *
+   * Matches either spelling — a prefix-form RRI against the registered realm
+   * identifiers, a URL against those identifiers' targets — and always answers
+   * in URL form so callers can compare against a realm's own URL.
+   *
+   * Longest match wins, because a realm's identifier can be a prefix of
+   * another's: `@cardstack/base/` and `@cardstack/base-extras/` both match a
+   * reference into the latter, and the deeper one is the real holder. This is
+   * why a realm can't be recovered by counting path segments — realm roots are
+   * whatever was registered, at whatever depth.
+   */
+  realmForReference(reference: string): string | undefined {
+    let best: string | undefined;
+    let bestLength = -1;
+    for (let [prefix, target] of this.realmMappings) {
+      for (let candidate of [prefix, target]) {
+        if (reference.startsWith(candidate) && candidate.length > bestLength) {
+          bestLength = candidate.length;
+          best = target;
+        }
+      }
+    }
+    return best ? ensureTrailingSlash(best) : undefined;
+  }
+
+  /**
    * Convert a URL back to its registered prefix form when one matches,
    * e.g. `http://localhost:4201/catalog/foo` → `@cardstack/catalog/foo`.
    *

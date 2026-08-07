@@ -3490,6 +3490,105 @@ module(`Integration | realm indexing`, function (hooks) {
     }
   });
 
+  test('a query-backed field resolves references that live in another realm', async function (assert) {
+    // A query field with no realm searches only the realm holding the card, so
+    // a reference into another realm could never match. Interpolating the
+    // reference ids into `realms` targets wherever they actually live.
+    class Pet extends CardDef {
+      static displayName = 'Pet';
+      @field name = contains(StringField);
+    }
+    class Note extends FieldDef {
+      // Declared before `mentioned`: interpolated paths are validated when the
+      // field decorator runs, so the target must already exist.
+      @field rawIds = containsMany(StringField);
+      @field mentionedIds = containsMany(StringField, {
+        computeVia: function (this: Note) {
+          return this.rawIds ?? [];
+        },
+      });
+      // Targets CardDef, not a realm-local class: a cross-realm reference
+      // points at a card whose type module lives in that other realm, so a
+      // realm-local type filter could never match it. This is how
+      // RichMarkdownField declares its own reference links.
+      @field mentioned = linksToMany(() => CardDef, {
+        query: {
+          filter: { in: { id: '$this.mentionedIds' } },
+          realms: '$this.mentionedIds',
+        },
+      });
+    }
+    class Post extends CardDef {
+      @field note = contains(Note);
+    }
+
+    let otherRealmURL = 'http://test-realm/other/';
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      realmURL: otherRealmURL,
+      contents: {
+        'pet.gts': { Pet },
+        'Pet/mango.json': {
+          data: {
+            attributes: { name: 'Mango' },
+            meta: { adoptsFrom: { module: '../pet', name: 'Pet' } },
+          },
+        },
+      },
+    });
+
+    let virtualNetwork = getService('network').virtualNetwork;
+    virtualNetwork.addRealmMapping('@other/cards/', otherRealmURL);
+    try {
+      let { realm } = await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'test-cards.gts': { Post, Note },
+          'post-1.json': {
+            data: {
+              attributes: {
+                note: { rawIds: ['@other/cards/Pet/mango'] },
+              },
+              meta: {
+                adoptsFrom: { module: './test-cards', name: 'Post' },
+              },
+            },
+          },
+        },
+      });
+
+      let post = await realm.realmIndexQueryEngine.cardDocument(
+        new URL(`${testRealmURL}post-1`),
+        { loadLinks: true },
+      );
+      if (post?.type === 'doc') {
+        let mentioned = post.doc.data.relationships?.[
+          'note.mentioned'
+        ] as Relationship;
+        let searchURL = mentioned?.links?.search ?? '';
+        let namesOtherRealm =
+          searchURL.includes(encodeURIComponent(otherRealmURL)) ||
+          searchURL.includes(otherRealmURL);
+        assert.ok(
+          namesOtherRealm,
+          `links.search names the other realm (got ${searchURL})`,
+        );
+        assert.deepEqual(
+          mentioned?.data,
+          [{ type: 'card', id: `${otherRealmURL}Pet/mango` }],
+          'the cross-realm reference resolved',
+        );
+      } else {
+        assert.ok(
+          false,
+          `search entry was an error: ${post?.error.errorDetail.message}`,
+        );
+      }
+    } finally {
+      virtualNetwork.removeRealmMapping('@other/cards/');
+    }
+  });
+
   test('can index a card that has nested linksTo fields', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,

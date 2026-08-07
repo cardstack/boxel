@@ -526,6 +526,13 @@ export interface CardStore {
   // interior form without holding the network. Returns the input unchanged
   // when no network is available.
   canonicalizeId(id: string): string;
+  // The realm holding `id`, as a real URL href, or undefined when this store's
+  // network can't place it. Completes the same boundary as the two above: card
+  // code can ask which realm a reference belongs to without holding the realm
+  // mappings itself. A realm root is whatever was registered, at whatever
+  // depth, so it can't be recovered from the path — `/user/alice/` is a realm
+  // and `/user/` is not.
+  realmForId(id: string): string | undefined;
   getCard(url: string): CardDef | undefined;
   getFileMeta(url: string): FileDef | undefined;
   setCard(url: string, instance: CardDef): void;
@@ -5040,6 +5047,16 @@ class FallbackCardStore implements CardStore {
       return id;
     }
     return vn ? vn.unresolveURL(id) : id;
+  }
+
+  realmForId(id: string): string | undefined {
+    let vn: VirtualNetwork | undefined;
+    try {
+      vn = myLoader().getVirtualNetwork();
+    } catch {
+      return undefined;
+    }
+    return vn?.realmForReference(id);
   }
 
   // Mirror the host stores' bucket-key fold: every spelling of the same

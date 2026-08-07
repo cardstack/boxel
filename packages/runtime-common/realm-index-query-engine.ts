@@ -994,68 +994,79 @@ export class RealmIndexQueryEngine {
       fieldName,
       fieldPath,
       resolvePathValue: (path) => getValueForResourcePath(resource, path),
+      // The realm mappings live here, not in the card: an entry naming a
+      // resource resolves to the realm holding it, so a field can target
+      // "wherever these references live".
+      resolveRealmForReference: (reference) =>
+        this.realmHrefForReference(reference),
     });
     if (!normalized) {
       return { results: [], errors: [], searchURL: '' };
     }
 
-    let { query, realm } = normalized;
-    let searchURL = buildQuerySearchURL(realm, query);
+    let { query, realms } = normalized;
+    let searchURL = buildQuerySearchURL(realms, query);
     let aggregated: (CardResource<Saved> | FileMetaResource)[] = [];
     let seen = new Set<string>();
     let errors: QueryFieldErrorDetail[] = [];
 
-    let realmResults: (CardResource<Saved> | FileMetaResource)[] = [];
-    if (realm === this.realmURL.href) {
-      try {
-        if (await this.queryTargetsFileMeta(query.filter, opts)) {
-          let { files } = await this.#indexQueryEngine.searchFiles(
-            this.realmURL,
-            query,
-            opts,
+    // Query each targeted realm and merge. A realm that errors — most often
+    // because the caller lacks permission on it — contributes its error and no
+    // results, leaving the realms that did answer intact rather than failing
+    // the whole field.
+    for (let realm of realms) {
+      let realmResults: (CardResource<Saved> | FileMetaResource)[] = [];
+      if (realm === this.realmURL.href) {
+        try {
+          if (await this.queryTargetsFileMeta(query.filter, opts)) {
+            let { files } = await this.#indexQueryEngine.searchFiles(
+              this.realmURL,
+              query,
+              opts,
+            );
+            realmResults = files.map((fileEntry) =>
+              fileResourceFromIndex(new URL(fileEntry.canonicalURL), fileEntry),
+            );
+          } else {
+            let collection = await this.#indexQueryEngine.searchCards(
+              this.realmURL,
+              query,
+              opts,
+            );
+            realmResults = Array.isArray(collection.cards)
+              ? collection.cards
+              : [];
+          }
+        } catch (err: unknown) {
+          let message =
+            err instanceof Error ? err.message : String(err ?? 'unknown error');
+          errors.push({
+            realm,
+            type: 'unknown',
+            message,
+          });
+          this.#log.debug(
+            `query field "${fieldName}" on ${resource.id ?? '(unsaved card)'} failed to execute local search: ${message}`,
           );
-          realmResults = files.map((fileEntry) =>
-            fileResourceFromIndex(new URL(fileEntry.canonicalURL), fileEntry),
-          );
-        } else {
-          let collection = await this.#indexQueryEngine.searchCards(
-            this.realmURL,
-            query,
-            opts,
-          );
-          realmResults = Array.isArray(collection.cards)
-            ? collection.cards
-            : [];
         }
-      } catch (err: unknown) {
-        let message =
-          err instanceof Error ? err.message : String(err ?? 'unknown error');
-        errors.push({
-          realm,
-          type: 'unknown',
-          message,
-        });
-        this.#log.debug(
-          `query field "${fieldName}" on ${resource.id ?? '(unsaved card)'} failed to execute local search: ${message}`,
-        );
+      } else {
+        let remoteResult = await this.fetchRemoteQueryResults(realm, query);
+        if (remoteResult.error) {
+          errors.push(remoteResult.error);
+          this.#log.debug(
+            `query field "${fieldName}" on ${resource.id ?? '(unsaved card)'} failed querying realm ${realm}: ${remoteResult.error.message}`,
+          );
+        }
+        realmResults = remoteResult.cards;
       }
-    } else {
-      let remoteResult = await this.fetchRemoteQueryResults(realm, query);
-      if (remoteResult.error) {
-        errors.push(remoteResult.error);
-        this.#log.debug(
-          `query field "${fieldName}" on ${resource.id ?? '(unsaved card)'} failed querying realm ${realm}: ${remoteResult.error.message}`,
-        );
-      }
-      realmResults = remoteResult.cards;
-    }
 
-    for (let result of realmResults) {
-      if (!result?.id || seen.has(result.id)) {
-        continue;
+      for (let result of realmResults) {
+        if (!result?.id || seen.has(result.id)) {
+          continue;
+        }
+        seen.add(result.id);
+        aggregated.push(result);
       }
-      seen.add(result.id);
-      aggregated.push(result);
     }
 
     if (
@@ -1069,6 +1080,29 @@ export class RealmIndexQueryEngine {
     }
 
     return { results: aggregated, errors, searchURL };
+  }
+
+  // The realm holding `reference`, as a real URL href.
+  //
+  // A realm identifier maps to itself; a resource identifier maps to the realm
+  // that contains it. Prefix-form RRIs are resolved through the realm mappings
+  // rather than by parsing path segments — a realm prefix is whatever was
+  // registered, not necessarily two segments deep.
+  //
+  // Returns undefined for a reference this network can't place. Callers drop
+  // those instead of falling back to the containing realm, so an unknown realm
+  // yields no results rather than results from the wrong place.
+  private realmHrefForReference(reference: string): string | undefined {
+    let mapped = this.#realm.virtualNetwork.realmForReference(reference);
+    if (mapped) {
+      return mapped;
+    }
+    // An unmapped realm has no registered prefix, so the VirtualNetwork can't
+    // place it. Its own realm is the one such realm this engine knows by URL,
+    // which is what lets a same-realm reference resolve there.
+    return reference.startsWith(this.realmURL.href)
+      ? this.realmURL.href
+      : undefined;
   }
 
   private getQueryDefinition(
