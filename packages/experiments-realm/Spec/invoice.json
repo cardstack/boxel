@@ -6,7 +6,7 @@
       "specType": "card",
       "readMe": "## Invoice\n\nBilling document: number, linked Customer, issue/due dates, status enum (draft → sent → paid / overdue / void), `containsMany(LineItem)`. The total is computed from line items and never stored.\n\n```ts\nimport { Invoice } from '../invoice';\n```\n\n**Non-goals:** tax computation, partial payments and balance tracking (Payment links to Invoice; reconciliation is app logic), PDF rendering.",
       "cardInfo": {
-        "name": "Invoice (commerce kit)",
+        "name": "Invoice",
         "summary": "Billing document with linked customer, dates, status lifecycle, and computed totals from shared LineItems.",
         "notes": null,
         "cardThumbnailURL": null

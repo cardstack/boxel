@@ -1,0 +1,26 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "LineChart",
+        "module": "../charts/line-chart"
+      },
+      "specType": "component",
+      "readMe": "## LineChart\n\nGeneric multi-series SVG line chart with hover tooltip, per-series toggle chips, and an empty state. Extracted from the mortgage calculator's amortization chart and generalized: series definitions and value formatting are caller-supplied, nothing is currency- or domain-bound.\n\n### Import\n\n```ts\nimport { LineChart } from '../charts/line-chart';\n```\n\n### Usage\n\n```gts\n<LineChart\n  @data={{this.points}}\n  @series={{this.series}}\n  @xKey='x'\n  @formatX={{this.formatX}}\n  @label='Metric samples trend'\n/>\n```\n\n- `@data` — `Record<string, number>[]`, sorted by the x field.\n- `@series` — `{ key, label, color?, dashed? }[]`; colors default to the shared `--chart-N` palette.\n- `@xKey` — which field of each point is the x axis (default `'x'`).\n- `@formatValue` / `@formatValueShort` / `@formatX` — optional formatters for tooltip values, y-axis ticks, and x labels; defaults are plain locale numbers.\n- Renders a dashed 'No data to chart yet' panel when data or series are empty.",
+      "cardInfo": {
+        "name": "LineChart (charts block)",
+        "summary": "Generic multi-series SVG line chart: hover tooltip, series toggles, caller-supplied formatters, empty state. Layer 03 Structures block.",
+        "notes": null,
+        "cardThumbnailURL": null
+      },
+      "containedExamples": []
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
