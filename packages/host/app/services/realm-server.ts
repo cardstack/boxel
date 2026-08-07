@@ -33,6 +33,7 @@ import {
 } from '@cardstack/runtime-common/realm-auth-client';
 
 import ENV from '@cardstack/host/config/environment';
+import { isBoxelSandboxRuntimeBoot } from '@cardstack/host/routes/boxel-sandbox-runtime';
 import { SessionLocalStorageKey } from '@cardstack/host/utils/local-storage-keys';
 
 import type { ExtendedClient } from './matrix-sdk-loader';
@@ -642,6 +643,18 @@ export default class RealmServerService extends Service {
 
   async fetchCatalogRealms() {
     if (this.catalogRealmIdentifiers.length > 0) {
+      return;
+    }
+    if (isBoxelSandboxRuntimeBoot()) {
+      // The Sandbox child (RP-15.3) renders exactly one card; its only
+      // network authority is the parent's module-graph-gated port, which
+      // (correctly) refuses this app-bootstrap endpoint. Left ungated, the
+      // constructor's fire-and-forget call becomes an unhandled rejection
+      // AND `_ready` never fulfills — so any child-side materialize path
+      // that awaits realm-server readiness hangs forever with no error.
+      // The workspace catalog listing is meaningless in the child; resolve
+      // readiness with none.
+      this._ready.fulfill();
       return;
     }
     let response = await this.network.fetch(

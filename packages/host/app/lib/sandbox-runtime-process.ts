@@ -11,6 +11,7 @@ import {
   type RealmResourceIdentifier,
   type ResolvedField,
   type RuntimeHandle,
+  type SandboxProjectedError,
   type SurfaceHandle,
 } from '@cardstack/runtime-common';
 
@@ -21,7 +22,10 @@ import type { SurfaceExecutionIdentity } from '@cardstack/host/services/surface-
 import SandboxBoxelRuntimeClient from './sandbox-boxel-runtime-client';
 import { SandboxFetchServer } from './sandbox-fetch-transport';
 import SandboxModuleAuthority from './sandbox-module-authority';
-import { SandboxRenderClient } from './sandbox-render-transport';
+import {
+  SandboxRenderClient,
+  reconstructedError,
+} from './sandbox-render-transport';
 import { SandboxSurfaceServer } from './sandbox-surface-transport';
 
 import type { BoxelRuntime, MaterializationPurpose } from './boxel-runtime';
@@ -52,7 +56,22 @@ export type SandboxRuntimeControl =
       kind: 'boxel-sandbox-control';
       transportVersion: number;
       type: 'failed';
-      error: { name: string; message: string };
+      error: SandboxProjectedError;
+    }
+  | {
+      /**
+       * RP-15.3: the child's report of an uncaught error or unhandled
+       * rejection AFTER bootstrap succeeded — a failure that happens outside
+       * any render-request/response cycle (an async modifier effect, a
+       * rejected loader promise). Terminal for the mounted render: the
+       * parent fails any in-flight render request and surfaces the error
+       * through the same channel a mount failure uses, so the Host's error
+       * presentation shows it instead of a silently blank iframe.
+       */
+      kind: 'boxel-sandbox-control';
+      transportVersion: number;
+      type: 'runtime-error';
+      error: SandboxProjectedError;
     };
 
 export interface SandboxRuntimeProcessOptions {
@@ -340,13 +359,21 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
     let pending = this.pendingRequest;
     if (pending) {
       this.pendingRequest = undefined;
-      void this.requestRender(pending.card, pending.format).catch(() => {
-        // Already surfaced above: requestRender awaits this SAME `client`
-        // promise, so a connect failure rejects both — the `client.catch`
-        // above is the one call site that reports it. This catch exists
-        // only so this separate promise object doesn't ALSO count as an
-        // unhandled rejection.
-      });
+      void this.requestRender(pending.card, pending.format).catch(
+        (error: unknown) => {
+          // Two distinct failures reject this promise: a connect failure
+          // (already reported once via `client.catch` above — notifyMountFailed
+          // is idempotent, so reporting again here is harmless) and a CHILD
+          // RENDER failure after a successful connect, which rejects only this
+          // promise. This first-mount render runs on a background promise no
+          // caller awaits (`getRenderSlot()` resolved before mount), so this
+          // listener is the only path by which its failure can ever reach the
+          // Host's error presentation.
+          this.notifyMountFailed(
+            error instanceof Error ? error : new Error(String(error)),
+          );
+        },
+      );
     }
   }
 
@@ -375,6 +402,10 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
     this.renderDiagnosticPort?.removeEventListener(
       'message',
       this.receiveRenderDiagnostic,
+    );
+    this.renderDiagnosticPort?.removeEventListener(
+      'message',
+      this.receiveRuntimeError,
     );
     this.renderDiagnosticPort = undefined;
     this.surfaceServer?.destroy();
@@ -686,6 +717,25 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
     return this.client.then(callback);
   }
 
+  /**
+   * RP-15.3: the child's report of an uncaught error or unhandled rejection
+   * after a successful bootstrap — the only signal for a failure that
+   * happens outside any render-request/response cycle. Terminal for the
+   * mounted render: fail anything in flight (so an awaiting render caller
+   * rejects with the REAL error, not a later timeout) and surface it
+   * through the mount-failure channel, which the Host renderer already
+   * turns into the error presentation in place of a silently blank iframe.
+   */
+  private receiveRuntimeError = (event: MessageEvent<unknown>): void => {
+    let data = event.data;
+    if (!isSandboxRuntimeControl(data) || data.type !== 'runtime-error') {
+      return;
+    }
+    let error = reconstructedError(data.error);
+    this.renderClient?.failPending(error);
+    this.notifyMountFailed(error);
+  };
+
   private receiveRenderDiagnostic = (event: MessageEvent<unknown>): void => {
     let data = event.data as {
       kind?: unknown;
@@ -694,10 +744,20 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
     if (
       typeof data !== 'object' ||
       data === null ||
-      data.kind !== 'boxel-sandbox-render-diagnostic' ||
-      this.painted ||
-      !data.hasVisibleContent
+      data.kind !== 'boxel-sandbox-render-diagnostic'
     ) {
+      return;
+    }
+    if (!data.hasVisibleContent) {
+      // The child logs this too, but only to its own (cross-origin) console.
+      // Mirroring it here puts "the render acked but painted nothing" where
+      // someone debugging the PARENT app can actually see it.
+      console.warn(
+        '[sandbox-parent] child render acked but produced no visible output',
+        data,
+      );
+    }
+    if (this.painted || !data.hasVisibleContent) {
       return;
     }
     this.painted = true;
@@ -765,7 +825,13 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
           return;
         }
         if (event.data.type === 'failed') {
-          fail(runtimeControlError(event.data.error));
+          fail(reconstructedError(event.data.error));
+          return;
+        }
+        if (event.data.type !== 'ready') {
+          // 'runtime-error' belongs to the persistent post-bootstrap
+          // listener (receiveRuntimeError) — it must never satisfy the
+          // bootstrap handshake as if it were 'ready'.
           return;
         }
         if (settled || !client) {
@@ -808,9 +874,13 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
         // Independent of, and outlives, the bootstrap-scoped receiveControl
         // above (which cleanupBootstrap detaches once the handshake
         // completes): the child posts a render diagnostic after every
-        // render for the life of the connection, not only during bootstrap.
+        // render for the life of the connection, not only during bootstrap —
+        // and a post-'ready' uncaught error/unhandled rejection arrives as a
+        // 'runtime-error' control message at any later time (RP-15.3:
+        // silence after an ack is a protocol violation).
         this.renderDiagnosticPort = channel.port1;
         channel.port1.addEventListener('message', this.receiveRenderDiagnostic);
+        channel.port1.addEventListener('message', this.receiveRuntimeError);
         let connect: SandboxConnect = {
           protocol: bootstrapProtocol,
           type: 'connect',
@@ -878,7 +948,9 @@ export function isSandboxRuntimeControl(
     !('transportVersion' in value) ||
     value.transportVersion !== BOXEL_EXECUTION_TRANSPORT_VERSION ||
     !('type' in value) ||
-    (value.type !== 'ready' && value.type !== 'failed')
+    (value.type !== 'ready' &&
+      value.type !== 'failed' &&
+      value.type !== 'runtime-error')
   ) {
     return false;
   }
@@ -892,12 +964,6 @@ export function isSandboxRuntimeControl(
       'message' in value.error &&
       typeof value.error.message === 'string')
   );
-}
-
-function runtimeControlError(error: { name: string; message: string }): Error {
-  let result = new Error(error.message);
-  result.name = error.name;
-  return result;
 }
 
 function asError(error: unknown): Error {

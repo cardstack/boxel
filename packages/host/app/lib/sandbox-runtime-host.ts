@@ -1,9 +1,13 @@
-import { BOXEL_EXECUTION_TRANSPORT_VERSION } from '@cardstack/runtime-common';
+import {
+  BOXEL_EXECUTION_TRANSPORT_VERSION,
+  type SandboxProjectedError,
+} from '@cardstack/runtime-common';
 
 import SandboxBoxelRuntimeServer from './sandbox-boxel-runtime-server';
 import { SandboxFetchClient } from './sandbox-fetch-transport';
 import {
   SandboxRenderServer,
+  projectedError,
   type SandboxRenderTarget,
 } from './sandbox-render-transport';
 
@@ -227,32 +231,21 @@ export function installSandboxRuntimeHost(options: {
   });
 }
 
-// The parent's `SandboxRuntimeControl` union (sandbox-runtime-process.ts,
-// parent-side) is expected to grow a `'runtime-error'` variant alongside
-// `'ready'`/`'failed'` so a persistent post-bootstrap listener can fail an
-// in-flight render and close future render slots. This file only owns the
-// child side of that contract, so the shape is declared locally rather than
-// imported: it must satisfy the same envelope validator the parent already
-// applies to `'ready'`/`'failed'` (`kind`, `transportVersion`, `type`).
-interface SandboxRuntimeErrorControl {
-  kind: 'boxel-sandbox-control';
-  transportVersion: number;
-  type: 'runtime-error';
-  error: { name: string; message: string };
-}
-
 function postControl(
   port: MessagePort,
   body:
     | Pick<Extract<SandboxRuntimeControl, { type: 'ready' }>, 'type'>
     | Pick<Extract<SandboxRuntimeControl, { type: 'failed' }>, 'type' | 'error'>
-    | Pick<SandboxRuntimeErrorControl, 'type' | 'error'>,
+    | Pick<
+        Extract<SandboxRuntimeControl, { type: 'runtime-error' }>,
+        'type' | 'error'
+      >,
 ): void {
   port.postMessage({
     kind: 'boxel-sandbox-control',
     transportVersion: BOXEL_EXECUTION_TRANSPORT_VERSION,
     ...body,
-  } satisfies SandboxRuntimeControl | SandboxRuntimeErrorControl);
+  } satisfies SandboxRuntimeControl);
 }
 
 /**
@@ -411,11 +404,11 @@ export function installSandboxRuntimeErrorReporter(
   };
 }
 
-function projectedBootstrapError(error: unknown): {
-  name: string;
-  message: string;
-} {
+function projectedBootstrapError(error: unknown): SandboxProjectedError {
+  // Full projection (stack + depth-bounded cause chain) so the Host's error
+  // presentation can show the ROOT cause; only the fallback name for a
+  // non-Error throw differs from the render transport's projection.
   return error instanceof Error
-    ? { name: error.name, message: error.message }
+    ? projectedError(error)
     : { name: 'SandboxBootstrapError', message: String(error) };
 }

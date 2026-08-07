@@ -1634,13 +1634,6 @@ export default class CapsuleModuleEvaluator {
           ) {
             return descriptor;
           }
-          let card = (definition as { card?: unknown }).card;
-          if (
-            (typeof card !== 'object' || card === null) &&
-            typeof card !== 'function'
-          ) {
-            return descriptor;
-          }
           let fields = this.fieldMetadataByPrototype.get(target);
           if (!fields) {
             fields = new Map();
@@ -1650,10 +1643,22 @@ export default class CapsuleModuleEvaluator {
           // Once module evaluation finishes Loader can identify authored
           // types, and cardFieldMetadata converts it to an inert CodeRef. No
           // executable value crosses into the Host.
-          let computeVia = (definition as { computeVia?: unknown }).computeVia;
+          //
+          // `card` stays a LAZY delegate to the definition's own memoized
+          // getter: this decorator runs at class-evaluation time, where a
+          // forward-referenced `linksTo(() => X)` target may still be in
+          // its temporal dead zone. Every consumer of this map runs
+          // post-evaluation, when the thunk resolves safely.
+          let capturedDefinition = definition as {
+            card?: unknown;
+            computeVia?: unknown;
+          };
+          let computeVia = capturedDefinition.computeVia;
           fields.set(name, {
             kind,
-            card,
+            get card() {
+              return capturedDefinition.card as object;
+            },
             ...(typeof computeVia === 'function'
               ? {
                   computeVia:
@@ -1697,23 +1702,47 @@ export default class CapsuleModuleEvaluator {
       options?: { computeVia?: unknown },
     ) => {
       let computeVia = options?.computeVia;
-      let card = relationshipType(cardOrThunk);
       if (
-        (typeof card !== 'object' || card === null) &&
-        typeof card !== 'function'
+        (typeof cardOrThunk !== 'object' || cardOrThunk === null) &&
+        typeof cardOrThunk !== 'function'
       ) {
         throw new Error(`Invalid ${type} field definition`);
       }
+      // Main resolves a `linksTo(() => Classroom)` thunk LAZILY, on first
+      // access — never at field-definition time. Field definitions run
+      // during class evaluation, i.e. mid-module-evaluation, where a
+      // forward-referenced class is still in its temporal dead zone;
+      // invoking the thunk here threw `Cannot access 'X' before
+      // initialization` for any module that defines the referenced card
+      // later in the same file. Memoized getter defers the read until the
+      // first consumer (projection/metadata, always post-evaluation).
+      let resolved: unknown;
+      let resolvedYet = false;
+      let resolveCard = () => {
+        if (!resolvedYet) {
+          resolved = relationshipType(cardOrThunk);
+          resolvedYet = true;
+          if (
+            (typeof resolved !== 'object' || resolved === null) &&
+            typeof resolved !== 'function'
+          ) {
+            throw new Error(`Invalid ${type} field definition`);
+          }
+        }
+        return resolved;
+      };
       return Object.freeze({
         type,
-        card,
+        get card() {
+          return resolveCard();
+        },
         ...(typeof computeVia === 'function'
           ? {
               computeVia:
                 computeVia as CapsuleCardFieldDefinition['computeVia'],
             }
           : {}),
-      }) satisfies CapsuleCardFieldDefinition;
+      }) as CapsuleCardFieldDefinition;
     };
     let contains = (card: unknown, options?: { computeVia?: unknown }) =>
       definition('contains', card, options);

@@ -575,9 +575,13 @@ RP-12.4.
 transferred private MessageChannel; **a live iframe is never re-parented**;
 Host-brokered module fetches limited to the admitted graph; a post-render
 error is reported to the parent (silence after `render()` resolves is a
-protocol violation); the prerender placeholder is retained as
-last-known-good; layout crosses via the `layout` capability, not
-hard-coded per format.
+protocol violation) as a `runtime-error` control message, which the parent
+CONSUMES: it fails any in-flight render request and surfaces through the
+mount-failure channel to the Host's error presentation — never a silently
+blank iframe. Errors cross the boundary with their stack and depth-bounded
+`cause` chain so the presentation shows the root cause, not the boundary
+wrapper. The prerender placeholder is retained as last-known-good; layout
+crosses via the `layout` capability, not hard-coded per format.
 
 **RP-15.4** Conformance machinery: (a) the **equivalence oracle** — each
 fixture rendered through main's legacy path and through the protocol's

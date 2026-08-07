@@ -221,6 +221,19 @@ export type SandboxRenderRequest =
       document: LooseSingleCardDocument;
     };
 
+/**
+ * A structured-clone-safe projection of a child-side Error. `stack` and the
+ * (depth-bounded) `cause` chain ride along so the Host's error presentation
+ * can show the render's ROOT cause — a bare name/message pair from a boundary
+ * wrapper hides the failure that actually matters.
+ */
+export interface SandboxProjectedError {
+  name: string;
+  message: string;
+  stack?: string;
+  cause?: SandboxProjectedError;
+}
+
 export type SandboxRenderResponse =
   | {
       kind: 'boxel-sandbox-render-response';
@@ -235,10 +248,7 @@ export type SandboxRenderResponse =
       requestId: string;
       generation: number;
       ok: false;
-      error: {
-        name: string;
-        message: string;
-      };
+      error: SandboxProjectedError;
       /**
        * True when the child chose not to run this generation at all (or
        * abandoned it mid-flight) because a newer one already superseded it

@@ -3,6 +3,7 @@ import {
   assertBoxelExecutionTransportVersion,
   type BoxelInstanceHandle,
   type LooseSingleCardDocument,
+  type SandboxProjectedError,
   type SandboxRenderRequest,
   type SandboxRenderResponse,
 } from '@cardstack/runtime-common';
@@ -213,9 +214,7 @@ export class SandboxRenderClient {
     if (response.ok) {
       pending.resolve();
     } else {
-      let error = new Error(response.error.message);
-      error.name = response.error.name;
-      pending.reject(error);
+      pending.reject(reconstructedError(response.error));
     }
   };
 
@@ -445,10 +444,38 @@ function isSandboxRenderResponse(
   );
 }
 
-function projectedError(error: unknown): { name: string; message: string } {
-  return error instanceof Error
-    ? { name: error.name, message: error.message }
-    : { name: 'SandboxRenderError', message: String(error) };
+export function projectedError(
+  error: unknown,
+  depth = 0,
+): SandboxProjectedError {
+  if (!(error instanceof Error)) {
+    return { name: 'SandboxRenderError', message: String(error) };
+  }
+  let cause = (error as Error & { cause?: unknown }).cause;
+  return {
+    name: error.name,
+    message: error.message,
+    ...(error.stack ? { stack: error.stack } : {}),
+    // Depth-bounded so a cyclic or pathological cause chain cannot make the
+    // response unserializable.
+    ...(cause !== undefined && cause !== null && depth < 6
+      ? { cause: projectedError(cause, depth + 1) }
+      : {}),
+  };
+}
+
+export function reconstructedError(projected: SandboxProjectedError): Error {
+  let error = new Error(projected.message);
+  error.name = projected.name;
+  if (projected.stack) {
+    error.stack = projected.stack;
+  }
+  if (projected.cause) {
+    (error as Error & { cause?: unknown }).cause = reconstructedError(
+      projected.cause,
+    );
+  }
+  return error;
 }
 
 function asError(error: unknown): Error {

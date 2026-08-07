@@ -2,7 +2,9 @@ import { module, test } from 'qunit';
 
 import type { SurfaceHandle } from '@cardstack/runtime-common';
 
-import SandboxRuntimeProcess from '@cardstack/host/lib/sandbox-runtime-process';
+import SandboxRuntimeProcess, {
+  isSandboxRuntimeControl,
+} from '@cardstack/host/lib/sandbox-runtime-process';
 
 import type SurfaceService from '@cardstack/host/services/surface-service';
 
@@ -49,6 +51,57 @@ function createTestRuntime(
 }
 
 module('Unit | Sandbox runtime process', function () {
+  test("RP-15.3: the control envelope accepts the child's post-ready 'runtime-error' report — and still rejects malformed shapes", function (assert) {
+    let base = {
+      kind: 'boxel-sandbox-control',
+      transportVersion: 1,
+    };
+    // The guard hard-codes the CURRENT transport version; mirror it by
+    // probing what 'ready' accepts rather than duplicating the constant.
+    let version = [1, 2, 3, 4, 5].find((transportVersion) =>
+      isSandboxRuntimeControl({ ...base, transportVersion, type: 'ready' }),
+    );
+    assert.ok(version, 'found the accepted transport version via ready');
+    assert.true(
+      isSandboxRuntimeControl({
+        ...base,
+        transportVersion: version,
+        type: 'runtime-error',
+        error: {
+          name: 'Error',
+          message: 'Sandbox module read is outside its classified graph',
+        },
+      }),
+      "a well-formed 'runtime-error' passes — the parent's persistent listener depends on this",
+    );
+    assert.false(
+      isSandboxRuntimeControl({
+        ...base,
+        transportVersion: version,
+        type: 'runtime-error',
+      }),
+      "a 'runtime-error' with no error payload is rejected",
+    );
+    assert.false(
+      isSandboxRuntimeControl({
+        ...base,
+        transportVersion: version,
+        type: 'runtime-error',
+        error: { name: 'Error' },
+      }),
+      "a 'runtime-error' with a partial error payload is rejected",
+    );
+    assert.false(
+      isSandboxRuntimeControl({
+        ...base,
+        transportVersion: version,
+        type: 'something-else',
+        error: { name: 'Error', message: 'x' },
+      }),
+      'an unknown control type is rejected',
+    );
+  });
+
   test('creates its iframe detached — never appended anywhere until mount()', function (assert) {
     let { service } = fakeSurfaceService();
     let runtime = new SandboxRuntimeProcess({

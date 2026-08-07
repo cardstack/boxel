@@ -5,6 +5,8 @@ import { BOXEL_EXECUTION_TRANSPORT_VERSION } from '@cardstack/runtime-common';
 import {
   SandboxRenderClient,
   SandboxRenderServer,
+  projectedError,
+  reconstructedError,
   type SandboxRenderTarget,
 } from '@cardstack/host/lib/sandbox-render-transport';
 
@@ -32,6 +34,85 @@ module('Unit | Sandbox render transport', function () {
       channel.port1.close();
       channel.port2.close();
     }
+  });
+
+  test('a child render failure crosses the wire with its stack and full cause chain — the Host error presentation needs the ROOT cause, not the boundary wrapper', async function (assert) {
+    let channel = new MessageChannel();
+    let root = new Error('Cannot access Classroom before initialization');
+    root.name = 'ReferenceError';
+    let wrapper = new Error('Unable to import module for render');
+    (wrapper as Error & { cause?: unknown }).cause = root;
+    let target: SandboxRenderTarget = {
+      render: () => {
+        throw wrapper;
+      },
+      clear: () => {},
+      draft: () => {},
+      updateInstance: () => {},
+    };
+    let server = new SandboxRenderServer(channel.port1, target);
+    let client = new SandboxRenderClient(channel.port2);
+
+    try {
+      let caught: unknown;
+      try {
+        await client.render('card:one' as never, 'isolated', 1);
+      } catch (error) {
+        caught = error;
+      }
+      assert.ok(caught instanceof Error, 'the render rejected with an Error');
+      let error = caught as Error & { cause?: Error };
+      assert.strictEqual(error.message, 'Unable to import module for render');
+      assert.strictEqual(
+        error.stack,
+        wrapper.stack,
+        'the child-side stack survives the wire',
+      );
+      assert.ok(error.cause instanceof Error, 'the cause chain survives');
+      assert.strictEqual(error.cause?.name, 'ReferenceError');
+      assert.strictEqual(
+        error.cause?.message,
+        'Cannot access Classroom before initialization',
+      );
+    } finally {
+      client.destroy();
+      server.destroy();
+      channel.port1.close();
+      channel.port2.close();
+    }
+  });
+
+  test('projectedError bounds a pathological cause chain and reconstructedError round-trips what was kept', function (assert) {
+    // Deeper than the projection depth bound; the projection must terminate
+    // and stay structured-clone-safe rather than recursing without limit.
+    let deepest = new Error('depth-9');
+    let error: Error = deepest;
+    for (let depth = 8; depth >= 0; depth--) {
+      let wrapper = new Error(`depth-${depth}`);
+      (wrapper as Error & { cause?: unknown }).cause = error;
+      error = wrapper;
+    }
+    let projected = projectedError(error);
+    let depth = 0;
+    let cursor: typeof projected | undefined = projected;
+    while (cursor.cause) {
+      cursor = cursor.cause;
+      depth++;
+    }
+    assert.true(
+      depth < 9,
+      `the projected cause chain is depth-bounded (saw ${depth})`,
+    );
+
+    let rebuilt = reconstructedError(projected) as Error & { cause?: Error };
+    assert.strictEqual(rebuilt.message, 'depth-0');
+    assert.strictEqual(rebuilt.cause?.message, 'depth-1');
+
+    // A non-Error throw still projects to a usable name/message pair.
+    let projectedString = projectedError('boom');
+    assert.strictEqual(projectedString.name, 'SandboxRenderError');
+    assert.strictEqual(projectedString.message, 'boom');
+    assert.strictEqual(projectedString.stack, undefined);
   });
 
   test('RP-15.3: a render that never gets a response fails closed on a bounded timeout instead of hanging forever', async function (assert) {

@@ -577,7 +577,22 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
   }
 
   private get errorStack(): string | undefined {
-    return this.state.snapshot.error?.stack;
+    // Boundary wrappers (e.g. the Capsule evaluator's "Unable to import…")
+    // carry the underlying failure as `cause`; without walking the chain
+    // the details pane shows only the wrapper and hides the actual reason
+    // a card failed to render.
+    let error: unknown = this.state.snapshot.error;
+    let sections: string[] = [];
+    let depth = 0;
+    while (error instanceof Error && depth < 6) {
+      sections.push(error.stack ?? `${error.name}: ${error.message}`);
+      error = (error as Error & { cause?: unknown }).cause;
+      depth++;
+    }
+    if (error !== undefined && error !== null) {
+      sections.push(String(error));
+    }
+    return sections.length ? sections.join('\n\nCaused by: ') : undefined;
   }
 
   private get executionReason(): string | undefined {
@@ -826,13 +841,18 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
         `> :global(iframe)` here compiled to a global `iframe` rule that
         styled every iframe on the page). The whole selector must live
         inside `:global()`. */
+      /* No opacity transition on the boot→live handoff: the placeholder is
+        removed in the SAME render that un-hides the iframe, so a fade-in
+        would leave a window with neither layer visible — a guaranteed flash
+        on every Sandbox load at first-paint time. The child has already
+        painted real content (that is what flips the class), so an instant
+        swap is seamless. */
       :global(.boxel-execution-sandbox-slot > iframe) {
         border: 0;
         display: block;
         width: 100%;
         height: 100%;
         min-height: inherit;
-        transition: opacity 120ms ease-out;
       }
 
       :global(.boxel-execution-sandbox-slot.is-booting > iframe) {

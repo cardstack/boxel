@@ -141,6 +141,36 @@ const plainWidgetSource = `
   }
 `;
 
+// `Roster` forward-references `Classroom` through a linksTo thunk while
+// `Classroom` is declared LATER in the module — main's sanctioned pattern.
+// Evaluation must not invoke the thunk before `Classroom` initializes.
+const forwardLinkSource = `
+  import {
+    CardDef,
+    Component,
+    contains,
+    field,
+    linksTo,
+  } from 'https://cardstack.com/base/card-api';
+  import StringField from 'https://cardstack.com/base/string';
+
+  export class Roster extends CardDef {
+    static displayName = 'Roster';
+    @field label = contains(StringField);
+    @field classroom = linksTo(() => Classroom);
+    static isolated = class Isolated extends Component<typeof Roster> {
+      <template>
+        <div data-test-forward-roster>{{@model.label}}</div>
+      </template>
+    };
+  }
+
+  export class Classroom extends CardDef {
+    static displayName = 'Classroom';
+    @field name = contains(StringField);
+  }
+`;
+
 module('Integration | rp-sandbox', function (hooks) {
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
@@ -158,6 +188,7 @@ module('Integration | rp-sandbox', function (hooks) {
         contents: {
           'webgl-widget.gts': webglWidgetSource,
           'plain-widget.gts': plainWidgetSource,
+          'forward-link.gts': forwardLinkSource,
         },
       }),
     );
@@ -189,6 +220,91 @@ module('Integration | rp-sandbox', function (hooks) {
       ...overrides,
     });
   }
+
+  test('RP-6.1: a quoted style attribute with interpolation classifies to the Sandbox tier', async function (assert) {
+    // `style='background: {{row.tone}}'` compiles to a concat expression —
+    // never the bare trusted cssVar invocation the Capsule admits. Before
+    // the classifier learned this form, such modules classified Capsule and
+    // the evaluator then refused the template at admission, leaving the
+    // card unrenderable instead of routed to the iframe where inline
+    // styles are supported.
+    let classification = await classifyBoxelSource(`
+      import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+      export class TonedCard extends CardDef {
+        static isolated = class Isolated extends Component<typeof TonedCard> {
+          <template>
+            <div style='background: {{@model.cardTitle}}'>toned</div>
+          </template>
+        };
+      }
+    `);
+    assert.strictEqual(classification.tier, 'sandbox');
+    assert.strictEqual(
+      classification.reason,
+      'browser-runtime:dynamic-inline-style',
+    );
+  });
+
+  test('RP-6.1: a bare `typeof window` guard stays Capsule-eligible, while an actual window reference still classifies to the Sandbox tier', async function (assert) {
+    // `typeof` on an unresolvable name evaluates to 'undefined' WITHOUT
+    // throwing, so the standard isomorphic guard runs correctly inside the
+    // Capsule compartment and acquires no browser authority.
+    let guarded = await classifyBoxelSource(`
+      import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+      export class GuardedCard extends CardDef {
+        get environment() {
+          return typeof window !== 'undefined' ? 'browser' : 'other';
+        }
+      }
+    `);
+    assert.strictEqual(
+      guarded.tier,
+      'capsule',
+      'the typeof-guard alone does not force the iframe',
+    );
+
+    let using = await classifyBoxelSource(`
+      import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+      export class UsingCard extends CardDef {
+        get width() {
+          return typeof window !== 'undefined' ? window.innerWidth : 0;
+        }
+      }
+    `);
+    assert.strictEqual(
+      using.tier,
+      'sandbox',
+      'actually READING window (even inside the guarded branch) still classifies to the Sandbox tier',
+    );
+    assert.true(using.signals.includes('window'));
+  });
+
+  test('a forward-referenced linksTo(() => X) thunk stays lazy through Capsule evaluation', async function (assert) {
+    // Main resolves relationship thunks on first access, never at
+    // field-definition time. The Capsule facade used to invoke the thunk
+    // while the module was still evaluating, throwing `Cannot access 'X'
+    // before initialization` for any module that declares the referenced
+    // card LATER in the same file — main-authored realms do this routinely.
+    let card = await createFromResource({
+      attributes: { label: 'forward hello' },
+      meta: {
+        adoptsFrom: { module: testRRI('forward-link'), name: 'Roster' },
+      },
+    });
+
+    await renderThroughExecutionRenderer(card, 'isolated');
+
+    await waitFor('[data-test-forward-roster]', { timeout: 5000 });
+    assert
+      .dom('[data-test-forward-roster]')
+      .hasText('forward hello', 'the authored isolated template rendered');
+    assert
+      .dom('[data-boxel-execution="capsule"]')
+      .exists('the plain module renders in the Capsule tier');
+    assert
+      .dom('.boxel-execution-error')
+      .doesNotExist('no temporal-dead-zone failure surfaces');
+  });
 
   test('RP-6.1: a module that imports a raw browser-authority package classifies to the Sandbox tier', async function (assert) {
     let classification = await classifyBoxelSource(webglWidgetSource);

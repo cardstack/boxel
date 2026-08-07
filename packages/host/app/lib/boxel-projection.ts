@@ -996,8 +996,17 @@ function presentRelationshipValues(
     onPending({ instance, fieldName });
   }
   if (ensureLoaded && !pure) {
+    // A not-loaded slot's `reference` is the relationship's own serialized
+    // href, which may be RELATIVE (`../files/report.pdf`). Resolve it
+    // against the owning instance exactly like card-api's `lazilyLoadLink`
+    // does (`resolveRef(link, instance.id ?? instance[relativeTo])`) —
+    // handing the store a relative id can only ever miss.
+    let base = instanceRelativeTo(instance);
     for (let entry of notLoaded) {
-      void ensureLoaded(entry.reference).then((resolved) => {
+      let reference = base
+        ? resolveRRIReference(entry.reference, base)
+        : entry.reference;
+      void ensureLoaded(reference).then((resolved) => {
         if (!isBaseDefInstance(resolved)) {
           // A `CardErrorJSONAPI` (broken link) or an unresolved reference —
           // leave the not-loaded sentinel as-is. `lazilyLoadLink`

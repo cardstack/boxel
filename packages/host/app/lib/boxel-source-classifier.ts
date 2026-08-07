@@ -165,6 +165,19 @@ function analyzeEmbeddedTemplates(source: string): {
     )) {
       hasDynamicInlineStyle ||= style[1] !== 'cssVar';
     }
+    // A QUOTED style attribute with any interpolation
+    // (`style='background: {{row.tone}}'`) compiles to a concat expression —
+    // never the bare trusted cssVar invocation the Capsule admits — so it is
+    // dynamic no matter what appears inside the mustache. Missing this form
+    // classified such modules Capsule, where the evaluator then correctly
+    // refused the template at admission (RP-6.1 R2 belongs here, ahead of
+    // that rejection, so the card gets the iframe where inline styles are
+    // actually supported).
+    for (let style of match.contents.matchAll(
+      /\sstyle\s*=\s*("[^"]*"|'[^']*')/gi,
+    )) {
+      hasDynamicInlineStyle ||= style[1].includes('{{');
+    }
     for (let tag of match.contents.matchAll(/<[^>]+>/g)) {
       hasTopLayerAttribute ||= authoredTopLayerAttribute.test(tag[0]);
     }
@@ -319,13 +332,28 @@ function executableBrowserGlobals(source: string): string[] {
         ReferencedIdentifier(path) {
           let name = path.node.name;
           if (
-            iframeGlobalSignals.includes(
+            !iframeGlobalSignals.includes(
               name as (typeof iframeGlobalSignals)[number],
-            ) &&
-            !path.scope.hasBinding(name)
+            ) ||
+            path.scope.hasBinding(name)
           ) {
-            unboundBrowserGlobals.add(name);
+            return;
           }
+          // `typeof window` acquires no authority: on an unresolvable name
+          // it evaluates to 'undefined' WITHOUT throwing, so the standard
+          // isomorphic guard (`typeof window !== 'undefined' && …`) runs
+          // correctly inside the Capsule compartment. Any other reference
+          // to the same name — including the guarded branch's actual use —
+          // still classifies to the Sandbox tier.
+          if (
+            babel.types.isUnaryExpression(path.parent, {
+              operator: 'typeof',
+            }) &&
+            path.parent.argument === path.node
+          ) {
+            return;
+          }
+          unboundBrowserGlobals.add(name);
         },
       },
     };
