@@ -251,18 +251,34 @@ export class Customer extends CardDef {
   };
 
   static isolated = class Isolated extends Component<typeof Customer> {
+    get name() {
+      return this.args.model?.name?.trim() || 'Unnamed Customer';
+    }
+    get initials() {
+      let words = this.name.split(/\s+/).filter(Boolean).slice(0, 2);
+      let letters = words.map((w) => w[0]?.toUpperCase() ?? '').join('');
+      return letters || '?';
+    }
     <template>
       <article class='customer-page'>
-        <header>
-          <h1>{{@model.cardTitle}}</h1>
+        <header class='ch'>
+          <span class='avatar'>{{this.initials}}</span>
+          <div class='ch-id'>
+            <p class='doc-kind'>Customer</p>
+            <h1>{{this.name}}</h1>
+          </div>
         </header>
         <section class='panel'>
           <h2>Contact</h2>
           <dl>
-            <dt>Email</dt>
-            <dd><@fields.email /></dd>
-            <dt>Phone</dt>
-            <dd><@fields.phone /></dd>
+            {{#if @model.email}}
+              <dt>Email</dt>
+              <dd><@fields.email /></dd>
+            {{/if}}
+            {{#if @model.phone}}
+              <dt>Phone</dt>
+              <dd><@fields.phone /></dd>
+            {{/if}}
           </dl>
         </section>
         <section class='panel'>
@@ -272,37 +288,69 @@ export class Customer extends CardDef {
       </article>
       <style scoped>
         .customer-page {
-          padding: 1.5rem;
+          max-width: 40rem;
+          margin: 0 auto;
+          padding: 2rem 1.5rem;
           display: flex;
           flex-direction: column;
+          gap: 1.25rem;
+        }
+        .ch {
+          display: flex;
+          align-items: center;
           gap: 1rem;
-          max-width: 40rem;
+          border-bottom: 2px solid var(--foreground, #111111);
+          padding-bottom: 1.25rem;
+        }
+        .avatar {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 56px;
+          height: 56px;
+          border-radius: 50%;
+          background: var(--primary, #111111);
+          color: var(--primary-foreground, #ffffff);
+          font-size: 1.25rem;
+          font-weight: 700;
+          letter-spacing: 0.02em;
+          flex-shrink: 0;
+        }
+        .doc-kind {
+          margin: 0 0 0.125rem;
+          font-size: 0.6875rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.14em;
+          color: var(--muted-foreground, #6b7280);
         }
         h1 {
           margin: 0;
-          font-size: 1.375rem;
+          font-size: 1.625rem;
+          line-height: 1.1;
           font-family: var(--font-heading, inherit);
         }
         .panel {
           border: 1px solid var(--border, #e5e7eb);
           border-radius: 0.75rem;
-          padding: 1rem;
+          padding: 1rem 1.25rem;
           background: var(--card, #ffffff);
         }
         h2 {
           margin: 0 0 0.75rem;
-          font-size: 0.8125rem;
+          font-size: 0.6875rem;
           font-weight: 700;
           text-transform: uppercase;
-          letter-spacing: 0.06em;
+          letter-spacing: 0.1em;
           color: var(--muted-foreground, #6b7280);
         }
         dl {
           margin: 0;
           display: grid;
           grid-template-columns: auto 1fr;
-          gap: 0.375rem 1rem;
+          gap: 0.5rem 1.25rem;
           font-size: 0.875rem;
+          align-items: center;
         }
         dt {
           color: var(--muted-foreground, #6b7280);
