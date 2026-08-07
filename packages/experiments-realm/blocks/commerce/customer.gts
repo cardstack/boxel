@@ -61,6 +61,195 @@ export class Customer extends CardDef {
     </template>
   };
 
+  static atom = class Atom extends Component<typeof Customer> {
+    <template>
+      <span class='customer-atom'>
+        <UsersIcon class='ca-icon' />
+        <span class='ca-name'>{{if
+            @model.name
+            @model.name
+            'Unnamed Customer'
+          }}</span>
+      </span>
+      <style scoped>
+        .customer-atom {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.375rem;
+          font-size: 0.8125rem;
+          font-weight: 500;
+          color: var(--foreground, #111111);
+        }
+        .ca-icon {
+          width: 14px;
+          height: 14px;
+          color: var(--muted-foreground, #6b7280);
+          flex-shrink: 0;
+        }
+        .ca-name {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+      </style>
+    </template>
+  };
+
+  static fitted = class Fitted extends Component<typeof Customer> {
+    get name() {
+      return this.args.model?.name?.trim() || 'Unnamed Customer';
+    }
+    get initials() {
+      let words = this.name.split(/\s+/).filter(Boolean).slice(0, 2);
+      let letters = words.map((w) => w[0]?.toUpperCase() ?? '').join('');
+      return letters || '?';
+    }
+    get location() {
+      let a = this.args.model?.billingAddress;
+      return [a?.city, a?.country?.name].filter(Boolean).join(', ');
+    }
+    <template>
+      <div class='fitted'>
+        <div class='fmt badge'>
+          <span class='avatar'>{{this.initials}}</span>
+          <span class='name'>{{this.name}}</span>
+        </div>
+        <div class='fmt strip'>
+          <span class='avatar'>{{this.initials}}</span>
+          <div class='info'>
+            <span class='name'>{{this.name}}</span>
+            {{#if @model.email}}
+              <span class='meta'>{{@model.email}}</span>
+            {{/if}}
+          </div>
+        </div>
+        <div class='fmt tile'>
+          <span class='avatar avatar-lg'>{{this.initials}}</span>
+          <span class='name'>{{this.name}}</span>
+          {{#if @model.email}}
+            <span class='meta'>{{@model.email}}</span>
+          {{/if}}
+          {{#if this.location}}
+            <span class='meta'>{{this.location}}</span>
+          {{/if}}
+        </div>
+        <div class='fmt card'>
+          <span class='avatar avatar-lg'>{{this.initials}}</span>
+          <div class='info'>
+            <span class='name name-lg'>{{this.name}}</span>
+            {{#if @model.email}}
+              <span class='meta'>{{@model.email}}</span>
+            {{/if}}
+            {{#if @model.phone}}
+              <span class='meta'>{{@model.phone}}</span>
+            {{/if}}
+            {{#if this.location}}
+              <span class='meta'>{{this.location}}</span>
+            {{/if}}
+          </div>
+        </div>
+      </div>
+      <style scoped>
+        .fitted {
+          width: 100%;
+          height: 100%;
+          color: var(--foreground, #111111);
+        }
+        .fmt {
+          display: none;
+          width: 100%;
+          height: 100%;
+          box-sizing: border-box;
+          overflow: hidden;
+        }
+        .avatar {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 28px;
+          height: 28px;
+          border-radius: 50%;
+          background: var(--muted, #eef2f7);
+          color: var(--muted-foreground, #6b7280);
+          font-size: 0.6875rem;
+          font-weight: 700;
+          letter-spacing: 0.02em;
+          flex-shrink: 0;
+        }
+        .avatar-lg {
+          width: 40px;
+          height: 40px;
+          font-size: 0.875rem;
+        }
+        .name {
+          font-weight: 600;
+          font-size: 0.8125rem;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          max-width: 100%;
+        }
+        .name-lg {
+          font-size: 1rem;
+        }
+        .meta {
+          font-size: 0.6875rem;
+          color: var(--muted-foreground, #6b7280);
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          max-width: 100%;
+        }
+        .info {
+          display: flex;
+          flex-direction: column;
+          gap: 0.125rem;
+          min-width: 0;
+        }
+        @container fitted-card (max-width: 150px) and (max-height: 169px) {
+          .badge {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 0.375rem;
+            padding: 0.5rem;
+            text-align: center;
+          }
+        }
+        @container fitted-card (min-width: 151px) and (max-height: 169px) {
+          .strip {
+            display: flex;
+            align-items: center;
+            gap: 0.625rem;
+            padding: 0.625rem 0.75rem;
+          }
+        }
+        @container fitted-card (max-width: 399px) and (min-height: 170px) {
+          .tile {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            justify-content: center;
+            gap: 0.25rem;
+            padding: 0.875rem;
+          }
+          .tile .avatar-lg {
+            margin-bottom: 0.25rem;
+          }
+        }
+        @container fitted-card (min-width: 400px) and (min-height: 170px) {
+          .card {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1.25rem;
+          }
+        }
+      </style>
+    </template>
+  };
+
   static isolated = class Isolated extends Component<typeof Customer> {
     <template>
       <article class='customer-page'>
