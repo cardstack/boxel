@@ -66,7 +66,7 @@ import { FittedCard } from '@cardstack/boxel-ui/components';
 
 (Providing `:placeholder` instead renders the image column with your icon/content on the `--fc-image-background` gradient — use that when the card *usually* has media and this instance just lacks it; omit all three when the card type never has media.)
 
-Source: [`packages/boxel-ui/src/components/fitted-card/`](https://github.com/cardstack/boxel/tree/main/packages/boxel-ui/src/components/fitted-card) — read the component's doc comment for the full named-block / arg / `--fc-*` API (including `@layout` to force vertical/horizontal and the `--fc-*-display` visibility overrides).
+Source: [`packages/boxel-ui/addon/src/components/fitted-card/`](https://github.com/cardstack/boxel/tree/main/packages/boxel-ui/addon/src/components/fitted-card) — read the component's doc comment for the full named-block / arg / `--fc-*` API (including `@layout` to force vertical/horizontal and the `--fc-*-display` visibility overrides).
 
 Tune, don't fork: when the composition IS standard, prefer setting `--fc-*` variables and `@container fitted-card (...)` overrides from your card's scoped CSS over forking the layout. When it isn't — see the special-template rule above — hand-roll from the start; the File Inventory references show what that looks like.
 
