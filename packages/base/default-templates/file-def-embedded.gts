@@ -1,41 +1,38 @@
 import GlimmerComponent from '@glimmer/component';
-import FileIcon from '@cardstack/boxel-icons/file';
+
+import { filePreviewComponentFor } from '../file-formats/file-preview-stage';
+import { FileEmbeddedShell } from '../file-formats/file-shell-embedded';
+import {
+  fileProfileSource,
+  fileViewModel,
+} from '../file-formats/file-view-model';
+
 import type { FileDef } from '../card-api';
 
 export default class FileDefEmbeddedTemplate extends GlimmerComponent<{
   Args: {
     model: FileDef;
+    fields?: Record<string, any>;
+    cardOrField?: unknown;
   };
 }> {
+  get viewModel() {
+    return fileViewModel(
+      this.args.model,
+      'embedded',
+      fileProfileSource(this.args.model, this.args.cardOrField),
+    );
+  }
+
+  get preview() {
+    return filePreviewComponentFor(this.args.model, this.args.cardOrField);
+  }
+
   <template>
-    <div class='file-embedded' data-test-file-embedded>
-      <FileIcon class='file-embedded__icon' width='20' height='20' />
-      <span class='file-embedded__name'>{{@model.name}}</span>
-    </div>
-    <style scoped>
-      .file-embedded {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xs);
-        padding: var(--boxel-sp);
-        width: 100%;
-        min-width: 0;
-      }
-
-      .file-embedded__icon {
-        color: var(--boxel-600);
-        flex-shrink: 0;
-      }
-
-      .file-embedded__name {
-        font-weight: 600;
-        color: var(--boxel-900);
-        font-size: var(--boxel-font-sm);
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        min-width: 0;
-      }
-    </style>
+    <FileEmbeddedShell
+      @model={{this.viewModel}}
+      @fields={{@fields}}
+      @preview={{this.preview}}
+    />
   </template>
 }

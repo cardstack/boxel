@@ -23,9 +23,7 @@ interface ClassBox<T extends typeof CardDef> {
   fields: Array<{ name: string; type: string }>;
 }
 
-export class GetFieldsResource<
-  T extends typeof CardDef = typeof CardDef,
-> extends Resource<Args> {
+export class GetFieldsResource<T extends typeof CardDef = typeof CardDef> extends Resource<Args> {
   @tracked result: ClassBox<T> | null = null;
   @tracked isLoading = true;
   @tracked error: Error | null = null;
@@ -56,16 +54,11 @@ export class GetFieldsResource<
       name: ref.name,
     };
   }
-  private async getClass(ref: {
-    module: string;
-    name: string;
-  }): Promise<typeof CardDef> {
+  private async getClass(ref: { module: string; name: string }): Promise<typeof CardDef> {
     void ref;
     return CardDef;
   }
-  private getFields(
-    cls: typeof CardDef,
-  ): Array<{ name: string; type: string }> {
+  private getFields(cls: typeof CardDef): Array<{ name: string; type: string }> {
     void cls;
     return [];
   }

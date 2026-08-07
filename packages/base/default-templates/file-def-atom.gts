@@ -1,37 +1,26 @@
 import GlimmerComponent from '@glimmer/component';
-import FileIcon from '@cardstack/boxel-icons/file';
+
+import {
+  fileProfileSource,
+  fileViewModel,
+} from '../file-formats/file-view-model';
+import { FileAtomShell } from '../file-formats/file-shell-atom';
+
 import type { FileDef } from '../card-api';
 
 export default class FileDefAtomTemplate extends GlimmerComponent<{
   Args: {
     model: FileDef;
+    cardOrField?: unknown;
   };
 }> {
-  <template>
-    <span class='file-atom' data-test-file-atom>
-      <FileIcon class='file-atom__icon' width='16' height='16' />
-      <span class='file-atom__name'>{{@model.name}}</span>
-    </span>
-    <style scoped>
-      .file-atom {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--boxel-sp-4xs);
-        min-width: 0;
-      }
+  get viewModel() {
+    return fileViewModel(
+      this.args.model,
+      'atom',
+      fileProfileSource(this.args.model, this.args.cardOrField),
+    );
+  }
 
-      .file-atom__icon {
-        flex-shrink: 0;
-        color: var(--boxel-600);
-      }
-
-      .file-atom__name {
-        color: var(--boxel-900);
-        font-size: var(--boxel-font-sm);
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-    </style>
-  </template>
+  <template><FileAtomShell @model={{this.viewModel}} /></template>
 }

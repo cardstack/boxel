@@ -49,36 +49,34 @@ describe('loadManifest', () => {
     }
   }
 
-  it('accepts the pre-copy-model shape without a commands list', () => {
+  it('accepts a well-formed manifest', () => {
     withManifestFile(
-      JSON.stringify({ version: 'v0.0.22', skills: ['boxel-development'] }),
+      JSON.stringify({ version: 'v0.1.0', skills: ['boxel'] }),
       (path) => {
-        const m = loadManifest(path);
-        expect(m).toEqual({
-          version: 'v0.0.22',
-          skills: ['boxel-development'],
+        expect(loadManifest(path)).toEqual({
+          version: 'v0.1.0',
+          skills: ['boxel'],
         });
-        expect(m?.commands).toBeUndefined();
       },
     );
   });
 
-  it('accepts the copy-model shape with a commands list', () => {
+  it('ignores a leftover commands list from an older manifest', () => {
     withManifestFile(
       JSON.stringify({
-        version: 'v0.0.28',
+        version: 'v0.0.30',
         skills: ['boxel'],
         commands: ['boxel-create-card.md'],
       }),
       (path) => {
-        expect(loadManifest(path)?.commands).toEqual(['boxel-create-card.md']);
+        expect(loadManifest(path)?.skills).toEqual(['boxel']);
       },
     );
   });
 
-  it('rejects a malformed commands list', () => {
+  it('rejects a malformed skills list', () => {
     withManifestFile(
-      JSON.stringify({ version: 'v0.0.28', skills: [], commands: [42] }),
+      JSON.stringify({ version: 'v0.1.0', skills: [42] }),
       (path) => {
         expect(loadManifest(path)).toBeNull();
       },
@@ -133,7 +131,6 @@ describe('renderCatalogBlock', () => {
     fn: (sourceRoot: string) => void,
     layout: {
       skills?: Record<string, string | null>;
-      commands?: Record<string, string>;
     },
   ): void {
     const sourceRoot = mkdtempSync(join(tmpdir(), 'build-skills-src-'));
@@ -149,29 +146,17 @@ describe('renderCatalogBlock', () => {
           writeFileSync(join(skillsDir, name, 'SKILL.md'), content);
         }
       }
-      const commandsDir = join(sourceRoot, 'commands');
-      mkdirSync(commandsDir, { recursive: true });
-      for (const [name, content] of Object.entries(layout.commands ?? {})) {
-        writeFileSync(join(commandsDir, name), content);
-      }
       fn(sourceRoot);
     } finally {
       rmSync(sourceRoot, { recursive: true, force: true });
     }
   }
 
-  it('prefixes both skills (by dir name) and commands (by basename) with /boxel-cli:', () => {
+  it('prefixes skills by directory name with /boxel-cli:', () => {
     withSource(
       (sourceRoot) => {
-        const block = renderCatalogBlock(
-          sourceRoot,
-          ['boxel', 'glossary.md'],
-          ['boxel-create-card.md'],
-        );
+        const block = renderCatalogBlock(sourceRoot, ['boxel', 'glossary.md']);
         expect(block).toContain('| `/boxel-cli:boxel` | Authoring cards. |');
-        expect(block).toContain(
-          '| `/boxel-cli:boxel-create-card` | Create a card. |',
-        );
         // The plain top-level file has no SKILL.md and is skipped.
         expect(block).not.toContain('glossary');
         // No bare, un-namespaced skill rows leak through.
@@ -182,10 +167,6 @@ describe('renderCatalogBlock', () => {
           boxel: '---\nname: boxel\ndescription: Authoring cards.\n---\n# B\n',
           'glossary.md': null,
         },
-        commands: {
-          'boxel-create-card.md':
-            '---\nname: boxel-create-card\ndescription: Create a card.\n---\n',
-        },
       },
     );
   });
@@ -193,7 +174,7 @@ describe('renderCatalogBlock', () => {
   it('escapes pipe characters in descriptions and defaults a missing description to empty', () => {
     withSource(
       (sourceRoot) => {
-        const block = renderCatalogBlock(sourceRoot, ['piped', 'nodesc'], []);
+        const block = renderCatalogBlock(sourceRoot, ['piped', 'nodesc']);
         expect(block).toContain('a \\| b');
         expect(block).toContain('| `/boxel-cli:nodesc` |  |');
       },
