@@ -9,7 +9,7 @@
         "module": "../vendor",
         "name": "Vendor"
       },
-      "readMe": "# Vendor\n\n## Summary\nAn external vendor/contractor with `serviceCategory`, `contractStart` (date), `contractLength` (DurationField), and `performanceRating` (ScoreField), plus contact details.\n\n## Import\n```ts\nimport { Vendor } from './vendor';\n```\n\n## Usage\n```ts\n@field vendor = linksTo(() => Vendor);\n```\n\n## Template Usage\nEmbedded view is a facts grid; fitted is an icon + name + category row."
+      "readMe": "# Vendor\n\n## Summary\nAn external vendor/contractor with `serviceCategory`, `contractStart` (date), `contractLength` (DurationField), and `performanceRating` (ScoreField), plus contact details.\n\n## Import\n```ts\nimport { Vendor } from './vendor';\n```\n\n## Usage\n```ts\n@field vendor = linksTo(() => Vendor);\n```\n\n## Template Usage\nEmbedded view is a facts grid; fitted is an icon + name + category row.\n\n**Non-goals:** contracts and invoicing (the commerce kit owns those); vendor onboarding workflow."
     },
     "relationships": {
       "linkedExamples.0": {

@@ -23,9 +23,21 @@ export const EMPLOYEE_STATUSES = ['onboarding', 'active', 'offboarded'];
 // seal color), active = forest green (the primary, "permanent record" color),
 // offboarded = stone (a deliberate muted color, not a blank fallthrough).
 export const EMPLOYEE_STATUS_COLORS: Record<string, StateColor> = {
-  onboarding: { bg: '#f3e2c2', fg: '#6b4a12', ring: '#a9773a' },
-  active: { bg: '#dbe6d5', fg: '#1f2b1c', ring: '#3a4a35' },
-  offboarded: { bg: '#e8e2d3', fg: '#6b5f3f', ring: '#9c8f66' },
+  onboarding: {
+    bg: 'var(--employee-status-onboarding-bg, #f3e2c2)',
+    fg: 'var(--employee-status-onboarding-fg, #6b4a12)',
+    ring: 'var(--employee-status-onboarding-ring, #a9773a)',
+  },
+  active: {
+    bg: 'var(--employee-status-active-bg, #dbe6d5)',
+    fg: 'var(--employee-status-active-fg, #1f2b1c)',
+    ring: 'var(--employee-status-active-ring, #3a4a35)',
+  },
+  offboarded: {
+    bg: 'var(--employee-status-offboarded-bg, #e8e2d3)',
+    fg: 'var(--employee-status-offboarded-fg, #6b5f3f)',
+    ring: 'var(--employee-status-offboarded-ring, #9c8f66)',
+  },
 };
 
 export const EmployeeStatusField = enumField(StringField, {
@@ -152,6 +164,7 @@ export class Employee extends PersonBase {
           font-family: var(--font-serif, serif);
           font-weight: 600;
           font-size: var(--boxel-font-size-lg);
+          font-family: var(--font-heading, inherit);
         }
         .role {
           margin: var(--boxel-sp-5xs) 0 0;
@@ -203,6 +216,116 @@ export class Employee extends PersonBase {
           margin: var(--boxel-sp-5xs) 0 0;
           font-size: var(--boxel-font-size-sm);
           overflow-wrap: anywhere;
+        }
+      </style>
+    </template>
+  };
+
+  static embedded = class Embedded extends Component<typeof this> {
+    get statusStyle() {
+      let c = stateColorOf(EMPLOYEE_STATUS_COLORS, this.args.model?.status);
+      return htmlSafe(`background: ${c.bg}; color: ${c.fg};`);
+    }
+    <template>
+      <div class='employee-embedded'>
+        {{#if @model.photoUrl}}
+          <img class='ee-avatar' src={{@model.photoUrl}} alt='' />
+        {{else}}
+          <span class='ee-avatar ee-initials'>{{@model.initials}}</span>
+        {{/if}}
+        <div class='ee-main'>
+          <span class='ee-name'>{{if @model.name @model.name 'Unnamed'}}</span>
+          <span class='ee-role'>
+            {{if @model.role @model.role '—'}}{{#if @model.department}}
+              · {{@model.department}}{{/if}}
+          </span>
+        </div>
+        {{#if @model.status}}
+          <span class='ee-status' style={{this.statusStyle}}>{{@model.status}}</span>
+        {{/if}}
+      </div>
+      <style scoped>
+        .employee-embedded {
+          display: flex;
+          align-items: center;
+          gap: 0.625rem;
+          padding: 0.625rem 0.75rem;
+          font-size: 0.8125rem;
+        }
+        .ee-avatar {
+          width: 30px;
+          height: 30px;
+          border-radius: 50%;
+          object-fit: cover;
+          flex-shrink: 0;
+        }
+        .ee-initials {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          background: var(--muted, #eef2f7);
+          color: var(--muted-foreground, #6b7280);
+          font-size: 0.6875rem;
+          font-weight: 700;
+        }
+        .ee-main {
+          display: flex;
+          flex-direction: column;
+          gap: 0.0625rem;
+          min-width: 0;
+          flex: 1;
+        }
+        .ee-name {
+          font-weight: 600;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .ee-role {
+          font-size: 0.6875rem;
+          color: var(--muted-foreground, #6b7280);
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .ee-status {
+          font-size: 0.625rem;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          padding: 0.125rem 0.4375rem;
+          border-radius: 999px;
+          flex-shrink: 0;
+        }
+      </style>
+    </template>
+  };
+
+  static atom = class Atom extends Component<typeof this> {
+    <template>
+      <span class='employee-atom'>
+        <BriefcaseIcon class='employee-atom-icon' />
+        <span class='employee-atom-name'>{{@model.title}}</span>
+      </span>
+      <style scoped>
+        .employee-atom {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.375rem;
+          font-size: 0.8125rem;
+          font-weight: 500;
+          color: var(--foreground, #111111);
+        }
+        .employee-atom-icon {
+          width: 14px;
+          height: 14px;
+          color: var(--muted-foreground, #6b7280);
+          flex-shrink: 0;
+        }
+        .employee-atom-name {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
         }
       </style>
     </template>

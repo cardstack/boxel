@@ -9,7 +9,7 @@
         "module": "../trt-employee",
         "name": "Employee"
       },
-      "readMe": "# Employee\n\n## Summary\nExtends PersonBase with role, department, startDate (onboarding), status (onboarding | active | offboarded), salary, and a self-referential `manager` link. `tenure` is a computed DurationField in days since startDate.\n\n## Import\n```ts\nimport { Employee } from '../trt-employee';\n```\n\n## Usage\n```ts\n@field manager = linksTo(() => Employee);\n```\nThe org-chart tree is built from the manager edges via `buildOrgTree` in `utils/index`.\n\n## Template Usage\nHas isolated (profile with facts grid) and fitted (avatar + name + role row) views."
+      "readMe": "# Employee\n\n## Summary\nExtends PersonBase with role, department, startDate (onboarding), status (onboarding | active | offboarded), salary, and a self-referential `manager` link. `tenure` is a computed DurationField in days since startDate.\n\n## Import\n```ts\nimport { Employee } from '../trt-employee';\n```\n\n## Usage\n```ts\n@field manager = linksTo(() => Employee);\n```\nThe org-chart tree is built from the manager edges via `buildOrgTree` in `utils/index`.\n\n## Template Usage\nHas isolated (profile with facts grid) and fitted (avatar + name + role row) views.\n\n**Non-goals:** payroll/benefits detail; multi-manager or dotted-line reporting (single `manager` edge only); offboarding workflow."
     },
     "relationships": {
       "linkedExamples.0": {

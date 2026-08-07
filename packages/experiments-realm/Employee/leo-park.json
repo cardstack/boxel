@@ -19,6 +19,11 @@
         "links": {
           "self": "../Employee/marcus-webb"
         }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/ledger"
+        }
       }
     },
     "meta": {

@@ -23,9 +23,21 @@ export const PROJECT_STATUSES = ['planned', 'active', 'done'];
 // Harmonized with the Ledger identity: active shares the forest-green
 // primary; planned/done stay in the muted stone/slate register.
 export const PROJECT_STATUS_COLORS: Record<string, StateColor> = {
-  planned: { bg: '#ece4d0', fg: '#5c5232', ring: '#a8976a' },
-  active: { bg: '#dbe6d5', fg: '#1f2b1c', ring: '#3a4a35' },
-  done: { bg: '#dbe3e6', fg: '#2f4550', ring: '#5f7a85' },
+  planned: {
+    bg: 'var(--project-status-planned-bg, #ece4d0)',
+    fg: 'var(--project-status-planned-fg, #5c5232)',
+    ring: 'var(--project-status-planned-ring, #a8976a)',
+  },
+  active: {
+    bg: 'var(--project-status-active-bg, #dbe6d5)',
+    fg: 'var(--project-status-active-fg, #1f2b1c)',
+    ring: 'var(--project-status-active-ring, #3a4a35)',
+  },
+  done: {
+    bg: 'var(--project-status-done-bg, #dbe3e6)',
+    fg: 'var(--project-status-done-fg, #2f4550)',
+    ring: 'var(--project-status-done-ring, #5f7a85)',
+  },
 };
 
 export const ProjectStatusField = enumField(StringField, {
@@ -150,6 +162,7 @@ export class Project extends CardDef {
           font-family: var(--font-serif, serif);
           font-weight: 600;
           font-size: var(--boxel-font-size-lg);
+          font-family: var(--font-heading, inherit);
         }
         .status-track {
           margin: var(--boxel-sp-lg) 0 0;
@@ -347,6 +360,36 @@ export class Project extends CardDef {
     </template>
   };
 
+  static atom = class Atom extends Component<typeof this> {
+    <template>
+      <span class='project-atom'>
+        <FolderKanbanIcon class='project-atom-icon' />
+        <span class='project-atom-name'>{{@model.title}}</span>
+      </span>
+      <style scoped>
+        .project-atom {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.375rem;
+          font-size: 0.8125rem;
+          font-weight: 500;
+          color: var(--foreground, #111111);
+        }
+        .project-atom-icon {
+          width: 14px;
+          height: 14px;
+          color: var(--muted-foreground, #6b7280);
+          flex-shrink: 0;
+        }
+        .project-atom-name {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+      </style>
+    </template>
+  };
+
   static fitted = class Fitted extends Component<typeof this> {
     get statusColor() {
       return stateColorOf(PROJECT_STATUS_COLORS, this.args.model?.status);
@@ -368,6 +411,9 @@ export class Project extends CardDef {
         <div class='info'>
           <span class='name'>{{@model.title}}</span>
           <span class='meta'>{{@model.status}}</span>
+          {{#if @model.description}}
+            <span class='body-line'>{{@model.description}}</span>
+          {{/if}}
         </div>
       </div>
       <style scoped>
@@ -409,6 +455,24 @@ export class Project extends CardDef {
           font-size: var(--boxel-font-size-xs);
           color: var(--muted-foreground, var(--boxel-450));
           text-transform: capitalize;
+        }
+        .body-line {
+          display: none;
+          font-size: var(--boxel-font-size-xs);
+          color: var(--muted-foreground, var(--boxel-450));
+          overflow: hidden;
+          display: none;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+        }
+        .body-strong {
+          color: var(--foreground, var(--boxel-dark));
+          font-weight: 600;
+        }
+        @container fitted-card (height > 120px) {
+          .body-line {
+            display: -webkit-box;
+          }
         }
         @container fitted-card (height <= 80px) {
           .project-fitted {

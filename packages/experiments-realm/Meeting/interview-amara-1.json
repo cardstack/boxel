@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Amara Okafor — Technical Interview",
+      "name": "Amara Okafor \u2014 Technical Interview",
       "meetingType": "interview",
       "date": "2026-08-04T10:00:00.000Z",
       "duration": {
@@ -12,7 +12,7 @@
       "interviewScore": 4,
       "notes": "Strong on distributed systems; dig deeper into schema design next round.",
       "cardInfo": {
-        "name": "Amara — Technical Interview"
+        "name": "Amara \u2014 Technical Interview"
       }
     },
     "relationships": {
@@ -29,6 +29,11 @@
       "interviewers.1": {
         "links": {
           "self": "../Employee/priya-nair"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/ledger"
         }
       }
     },

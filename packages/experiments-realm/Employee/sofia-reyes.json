@@ -19,6 +19,11 @@
         "links": {
           "self": null
         }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/ledger"
+        }
       }
     },
     "meta": {

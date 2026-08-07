@@ -29,6 +29,13 @@
         "module": "../candidate",
         "name": "Candidate"
       }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/ledger"
+        }
+      }
     }
   }
 }

@@ -9,12 +9,19 @@
         "module": "../commands/approve-offer-command.gts",
         "name": "ApproveOfferCommand"
       },
-      "readMe": "# Approve Offer Command\n\n## Summary\nValidates the candidate is at the `offer` stage, creates a new Employee (status `onboarding`) from the candidate's details in the same realm, links it via `candidate.hiredAs`, records approver/salary/decision date, and sets status to `hired`.\n\n## Import\n```ts\nimport { ApproveOfferCommand } from './commands/approve-offer-command';\n```\n\n## Usage\n```ts\nawait new ApproveOfferCommand(commandContext).execute({\n  candidate,\n  approver,\n  salary: 145000,\n  startDate: new Date('2026-09-01'),\n});\n```\nThe new employee then appears in the Directory and Org Chart tabs."
+      "readMe": "# Approve Offer Command\n\n## Summary\nValidates the candidate is at the `offer` stage, creates a new Employee (status `onboarding`) from the candidate's details in the same realm, links it via `candidate.hiredAs`, records approver/salary/decision date, and sets status to `hired`.\n\n## Import\n```ts\nimport { ApproveOfferCommand } from './commands/approve-offer-command';\n```\n\n## Usage\n```ts\nawait new ApproveOfferCommand(commandContext).execute({\n  candidate,\n  approver,\n  salary: 145000,\n  startDate: new Date('2026-09-01'),\n});\n```\nThe new employee then appears in the Directory and Org Chart tabs.\n\n**Non-goals:** compensation approval chains; offer letters. Guards: candidate must be at the offer stage."
     },
     "meta": {
       "adoptsFrom": {
         "module": "https://cardstack.com/base/spec",
         "name": "Spec"
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Candidate/offer-tomas"
+        }
       }
     }
   }

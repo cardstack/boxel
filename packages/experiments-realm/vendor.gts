@@ -140,6 +140,7 @@ export class Vendor extends CardDef {
           font-family: var(--font-serif, serif);
           font-weight: 600;
           font-size: var(--boxel-font-size-lg);
+          font-family: var(--font-heading, inherit);
         }
         .contact-lines {
           margin-top: var(--boxel-sp);
@@ -250,6 +251,36 @@ export class Vendor extends CardDef {
     </template>
   };
 
+  static atom = class Atom extends Component<typeof this> {
+    <template>
+      <span class='vendor-atom'>
+        <BuildingIcon class='vendor-atom-icon' />
+        <span class='vendor-atom-name'>{{@model.title}}</span>
+      </span>
+      <style scoped>
+        .vendor-atom {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.375rem;
+          font-size: 0.8125rem;
+          font-weight: 500;
+          color: var(--foreground, #111111);
+        }
+        .vendor-atom-icon {
+          width: 14px;
+          height: 14px;
+          color: var(--muted-foreground, #6b7280);
+          flex-shrink: 0;
+        }
+        .vendor-atom-name {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+      </style>
+    </template>
+  };
+
   static fitted = class Fitted extends Component<typeof this> {
     <template>
       <div
@@ -259,6 +290,13 @@ export class Vendor extends CardDef {
         <div class='info'>
           <span class='name'>{{@model.title}}</span>
           <span class='meta'>{{@model.serviceCategory}}</span>
+          {{#if @model.performanceRating}}
+            <span class='body-line body-strong'>★
+              {{@model.performanceRating}}/5</span>
+          {{/if}}
+          {{#if @model.contactName}}
+            <span class='body-line'>{{@model.contactName}}</span>
+          {{/if}}
         </div>
       </div>
       <style scoped>
@@ -302,6 +340,24 @@ export class Vendor extends CardDef {
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
+        }
+        .body-line {
+          display: none;
+          font-size: var(--boxel-font-size-xs);
+          color: var(--muted-foreground, var(--boxel-450));
+          overflow: hidden;
+          display: none;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+        }
+        .body-strong {
+          color: var(--foreground, var(--boxel-dark));
+          font-weight: 600;
+        }
+        @container fitted-card (height > 120px) {
+          .body-line {
+            display: -webkit-box;
+          }
         }
         @container fitted-card (height <= 80px) {
           .vendor-fitted {

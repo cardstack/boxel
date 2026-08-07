@@ -8,7 +8,8 @@
         "name": "Team",
         "module": "../sprint-task"
       },
-      "specType": "card"
+      "specType": "card",
+      "readMe": "\n\n**Non-goals:** nested sub-teams; team-level permissions; capacity planning."
     },
     "meta": {
       "adoptsFrom": {

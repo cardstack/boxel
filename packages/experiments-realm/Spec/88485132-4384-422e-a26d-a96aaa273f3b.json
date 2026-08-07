@@ -9,12 +9,19 @@
         "module": "../commands/extract-resume-command.gts",
         "name": "ExtractResumeCommand"
       },
-      "readMe": "# Extract Resume Command\n\n## Summary\nSends the candidate's `resumeText` to a one-shot LLM request with a strict JSON-only prompt, parses the result, fills empty candidate fields (name, email, phone, appliedRole, skills), advances status from applied to screening, and saves the card.\n\n## Import\n```ts\nimport { ExtractResumeCommand } from './commands/extract-resume-command';\n```\n\n## Usage\n```ts\nawait new ExtractResumeCommand(commandContext).execute({ candidate });\n```\nFails soft with a readable error if the model output is not valid JSON."
+      "readMe": "# Extract Resume Command\n\n## Summary\nSends the candidate's `resumeText` to a one-shot LLM request with a strict JSON-only prompt, parses the result, fills empty candidate fields (name, email, phone, appliedRole, skills), advances status from applied to screening, and saves the card.\n\n## Import\n```ts\nimport { ExtractResumeCommand } from './commands/extract-resume-command';\n```\n\n## Usage\n```ts\nawait new ExtractResumeCommand(commandContext).execute({ candidate });\n```\nFails soft with a readable error if the model output is not valid JSON.\n\n**Non-goals:** file parsing (plain resumeText only); overwriting fields that already have values."
     },
     "meta": {
       "adoptsFrom": {
         "module": "https://cardstack.com/base/spec",
         "name": "Spec"
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Candidate/applied-jordan"
+        }
       }
     }
   }

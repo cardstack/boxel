@@ -24,6 +24,11 @@
         "links": {
           "self": "../Team/engineering"
         }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/ledger"
+        }
       }
     },
     "meta": {

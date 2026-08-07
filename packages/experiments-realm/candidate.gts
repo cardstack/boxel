@@ -15,7 +15,7 @@ import UserSearchIcon from '@cardstack/boxel-icons/user-search';
 import { htmlSafe } from '@ember/template';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { eq, lte } from '@cardstack/boxel-ui/helpers';
 
 import { PersonBase } from './person-base';
 import { ScoreField } from './score-field';
@@ -41,12 +41,36 @@ export const CANDIDATE_STAGES = [
 // green as Employee's "active" status — the pipeline visually resolves into
 // the permanent record.
 export const CANDIDATE_STAGE_COLORS: Record<string, StateColor> = {
-  applied: { bg: '#ece4d0', fg: '#5c5232', ring: '#a8976a' },
-  screening: { bg: '#dde6da', fg: '#33452f', ring: '#5f7a54' },
-  interviewing: { bg: '#e6dde8', fg: '#4a2f52', ring: '#8a5f96' },
-  offer: { bg: '#f3e2c2', fg: '#6b4a12', ring: '#a9773a' },
-  hired: { bg: '#dbe6d5', fg: '#1f2b1c', ring: '#3a4a35' },
-  rejected: { bg: '#ecd8d2', fg: '#6b2f22', ring: '#a3503a' },
+  applied: {
+    bg: 'var(--stage-applied-bg, #ece4d0)',
+    fg: 'var(--stage-applied-fg, #5c5232)',
+    ring: 'var(--stage-applied-ring, #a8976a)',
+  },
+  screening: {
+    bg: 'var(--stage-screening-bg, #dde6da)',
+    fg: 'var(--stage-screening-fg, #33452f)',
+    ring: 'var(--stage-screening-ring, #5f7a54)',
+  },
+  interviewing: {
+    bg: 'var(--stage-interviewing-bg, #e6dde8)',
+    fg: 'var(--stage-interviewing-fg, #4a2f52)',
+    ring: 'var(--stage-interviewing-ring, #8a5f96)',
+  },
+  offer: {
+    bg: 'var(--stage-offer-bg, #f3e2c2)',
+    fg: 'var(--stage-offer-fg, #6b4a12)',
+    ring: 'var(--stage-offer-ring, #a9773a)',
+  },
+  hired: {
+    bg: 'var(--stage-hired-bg, #dbe6d5)',
+    fg: 'var(--stage-hired-fg, #1f2b1c)',
+    ring: 'var(--stage-hired-ring, #3a4a35)',
+  },
+  rejected: {
+    bg: 'var(--stage-rejected-bg, #ecd8d2)',
+    fg: 'var(--stage-rejected-fg, #6b2f22)',
+    ring: 'var(--stage-rejected-ring, #a3503a)',
+  },
 };
 
 export const CandidateStatusField = enumField(StringField, {
@@ -287,6 +311,7 @@ export class Candidate extends PersonBase {
           font-family: var(--font-serif, serif);
           font-weight: 600;
           font-size: var(--boxel-font-size-lg);
+          font-family: var(--font-heading, inherit);
         }
         .role {
           margin: var(--boxel-sp-5xs) 0 0;
@@ -428,6 +453,136 @@ export class Candidate extends PersonBase {
     </template>
   };
 
+  static embedded = class Embedded extends Component<typeof this> {
+    get stageStyle() {
+      let c = stateColorOf(CANDIDATE_STAGE_COLORS, this.args.model?.status);
+      return htmlSafe(`background: ${c.bg}; color: ${c.fg};`);
+    }
+    get scoreLabel() {
+      let v = this.args.model?.overallScore;
+      return typeof v === 'number' ? `\u2605 ${v}` : null;
+    }
+    <template>
+      <div class='candidate-embedded'>
+        {{#if @model.photoUrl}}
+          <img class='ce-avatar' src={{@model.photoUrl}} alt='' />
+        {{else}}
+          <span class='ce-avatar ce-initials'>{{@model.initials}}</span>
+        {{/if}}
+        <div class='ce-main'>
+          <span class='ce-name'>{{if @model.name @model.name 'Unnamed'}}</span>
+          {{#if @model.appliedRole}}
+            <span class='ce-role'>{{@model.appliedRole}}</span>
+          {{/if}}
+        </div>
+        <div class='ce-side'>
+          {{#if @model.status}}
+            <span class='ce-stage' style={{this.stageStyle}}>{{@model.status}}</span>
+          {{/if}}
+          {{#if this.scoreLabel}}
+            <span class='ce-score'>{{this.scoreLabel}}</span>
+          {{/if}}
+        </div>
+      </div>
+      <style scoped>
+        .candidate-embedded {
+          display: flex;
+          align-items: center;
+          gap: 0.625rem;
+          padding: 0.625rem 0.75rem;
+          font-size: 0.8125rem;
+        }
+        .ce-avatar {
+          width: 30px;
+          height: 30px;
+          border-radius: 50%;
+          object-fit: cover;
+          flex-shrink: 0;
+        }
+        .ce-initials {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          background: var(--muted, #eef2f7);
+          color: var(--muted-foreground, #6b7280);
+          font-size: 0.6875rem;
+          font-weight: 700;
+        }
+        .ce-main {
+          display: flex;
+          flex-direction: column;
+          gap: 0.0625rem;
+          min-width: 0;
+          flex: 1;
+        }
+        .ce-name {
+          font-weight: 600;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .ce-role {
+          font-size: 0.6875rem;
+          color: var(--muted-foreground, #6b7280);
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .ce-side {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-end;
+          gap: 0.1875rem;
+          flex-shrink: 0;
+        }
+        .ce-stage {
+          font-size: 0.625rem;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          padding: 0.125rem 0.4375rem;
+          border-radius: 999px;
+        }
+        .ce-score {
+          font-size: 0.6875rem;
+          font-weight: 600;
+          color: var(--muted-foreground, #6b7280);
+          font-variant-numeric: tabular-nums;
+        }
+      </style>
+    </template>
+  };
+
+  static atom = class Atom extends Component<typeof this> {
+    <template>
+      <span class='candidate-atom'>
+        <UserSearchIcon class='candidate-atom-icon' />
+        <span class='candidate-atom-name'>{{@model.title}}</span>
+      </span>
+      <style scoped>
+        .candidate-atom {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.375rem;
+          font-size: 0.8125rem;
+          font-weight: 500;
+          color: var(--foreground, #111111);
+        }
+        .candidate-atom-icon {
+          width: 14px;
+          height: 14px;
+          color: var(--muted-foreground, #6b7280);
+          flex-shrink: 0;
+        }
+        .candidate-atom-name {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+      </style>
+    </template>
+  };
+
   static fitted = class Fitted extends Component<typeof this> {
     get stageColor() {
       return stateColorOf(CANDIDATE_STAGE_COLORS, this.args.model?.status);
@@ -462,6 +617,23 @@ export class Candidate extends PersonBase {
             {{@model.status}}
           </span>
         {{/if}}
+        <div class='fitted-body'>
+          {{#if @model.overallScore}}
+            <span class='body-row score-row'>★ {{@model.overallScore}}/5</span>
+          {{/if}}
+          {{#if @model.appliedDate}}
+            <span class='body-row'>Applied <@fields.appliedDate /></span>
+          {{/if}}
+          {{#if @model.skills.length}}
+            <span class='body-skills'>
+              {{#each @model.skills as |skill index|}}
+                {{#if (lte index 3)}}
+                  <span class='skill-chip'>{{skill}}</span>
+                {{/if}}
+              {{/each}}
+            </span>
+          {{/if}}
+        </div>
       </div>
       <style scoped>
         .candidate-fitted {
@@ -524,6 +696,48 @@ export class Candidate extends PersonBase {
           font-size: var(--boxel-font-size-xs);
           text-transform: capitalize;
           flex: none;
+        }
+        .candidate-fitted {
+          flex-wrap: wrap;
+          align-content: flex-start;
+        }
+        .fitted-body {
+          display: none;
+          width: 100%;
+          flex-direction: column;
+          gap: var(--boxel-sp-xxs);
+          padding-top: var(--boxel-sp-xs);
+          border-top: 1px solid var(--border, var(--boxel-200));
+          margin-top: var(--boxel-sp-xxs);
+        }
+        @container fitted-card (height > 120px) {
+          .fitted-body {
+            display: flex;
+          }
+        }
+        .body-row {
+          font-size: var(--boxel-font-size-xs);
+          color: var(--muted-foreground, var(--boxel-450));
+        }
+        .score-row {
+          color: var(--foreground, var(--boxel-dark));
+          font-weight: 600;
+        }
+        .body-skills {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.25rem;
+          overflow: hidden;
+          max-height: 3.2em;
+        }
+        .skill-chip {
+          font-size: 0.625rem;
+          font-weight: 500;
+          padding: 0.0625rem 0.4375rem;
+          border-radius: 999px;
+          background: var(--muted, var(--boxel-100));
+          color: var(--muted-foreground, var(--boxel-450));
+          white-space: nowrap;
         }
         @container fitted-card (height <= 80px) {
           .candidate-fitted {

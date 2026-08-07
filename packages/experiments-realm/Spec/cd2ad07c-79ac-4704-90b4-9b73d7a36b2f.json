@@ -9,12 +9,19 @@
         "module": "../person-base",
         "name": "PersonBase"
       },
-      "readMe": "# Person Base\n\n## Summary\nThe shared base for Employee and Candidate: `name`, `email`, `phone`, `photoUrl`, and computed `initials`. Provides the avatar-row embedded view both subclasses inherit.\n\n## Import\n```ts\nimport { PersonBase } from './person-base';\n```\n\n## Usage\n```ts\nexport class Employee extends PersonBase { ... }\n```\n\n## Template Usage\nEmbedded view renders photo (or initials fallback) + name + email."
+      "readMe": "# Person Base\n\n## Summary\nThe shared base for Employee and Candidate: `name`, `email`, `phone`, `photoUrl`, and computed `initials`. Provides the avatar-row embedded view both subclasses inherit.\n\n## Import\n```ts\nimport { PersonBase } from './person-base';\n```\n\n## Usage\n```ts\nexport class Employee extends PersonBase { ... }\n```\n\n## Template Usage\nEmbedded view renders photo (or initials fallback) + name + email.\n\n**Non-goals:** direct instantiation \u2014 this is a shared base for Candidate/Employee, not a standalone record; no addresses (unlike commerce Customer)."
     },
     "meta": {
       "adoptsFrom": {
         "module": "https://cardstack.com/base/spec",
         "name": "Spec"
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Employee/sofia-reyes"
+        }
       }
     }
   }

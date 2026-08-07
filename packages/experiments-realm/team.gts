@@ -121,6 +121,7 @@ export class Team extends CardDef {
           font-family: var(--font-serif, serif);
           font-weight: 600;
           font-size: var(--boxel-font-size-lg);
+          font-family: var(--font-heading, inherit);
         }
         .mission {
           margin: var(--boxel-sp-xs) 0 0;
@@ -290,6 +291,36 @@ export class Team extends CardDef {
     </template>
   };
 
+  static atom = class Atom extends Component<typeof this> {
+    <template>
+      <span class='team-atom'>
+        <UsersIcon class='team-atom-icon' />
+        <span class='team-atom-name'>{{@model.title}}</span>
+      </span>
+      <style scoped>
+        .team-atom {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.375rem;
+          font-size: 0.8125rem;
+          font-weight: 500;
+          color: var(--foreground, #111111);
+        }
+        .team-atom-icon {
+          width: 14px;
+          height: 14px;
+          color: var(--muted-foreground, #6b7280);
+          flex-shrink: 0;
+        }
+        .team-atom-name {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+      </style>
+    </template>
+  };
+
   static fitted = class Fitted extends Component<typeof this> {
     <template>
       <div
@@ -299,6 +330,9 @@ export class Team extends CardDef {
         <div class='info'>
           <span class='name'>{{@model.title}}</span>
           <span class='meta'>{{@model.headcount}}</span>
+          {{#if @model.mission}}
+            <span class='body-line'>{{@model.mission}}</span>
+          {{/if}}
         </div>
       </div>
       <style scoped>
@@ -339,6 +373,24 @@ export class Team extends CardDef {
         .meta {
           font-size: var(--boxel-font-size-xs);
           color: var(--muted-foreground, var(--boxel-450));
+        }
+        .body-line {
+          display: none;
+          font-size: var(--boxel-font-size-xs);
+          color: var(--muted-foreground, var(--boxel-450));
+          overflow: hidden;
+          display: none;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+        }
+        .body-strong {
+          color: var(--foreground, var(--boxel-dark));
+          font-weight: 600;
+        }
+        @container fitted-card (height > 120px) {
+          .body-line {
+            display: -webkit-box;
+          }
         }
         @container fitted-card (height <= 80px) {
           .team-fitted {

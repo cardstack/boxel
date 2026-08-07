@@ -1,0 +1,26 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "Candidate fitted walk",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "card": {
+        "links": {
+          "self": "../Candidate/interviewing-amara"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../embedded-view-driver",
+        "name": "EmbeddedViewDriver"
+      }
+    }
+  }
+}

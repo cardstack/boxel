@@ -29,6 +29,11 @@
         "links": {
           "self": "../Vendor/paylock-payroll"
         }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/ledger"
+        }
       }
     },
     "meta": {

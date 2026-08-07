@@ -9,12 +9,19 @@
         "module": "../commands/generate-interview-questions-command.gts",
         "name": "GenerateInterviewQuestionsCommand"
       },
-      "readMe": "# Generate Interview Questions Command\n\n## Summary\nBuilds a recruiter prompt from the candidate's applied role, skills, resume, and an optional focus area, runs a one-shot LLM request, and writes the markdown question kit to `candidate.generatedQuestions`.\n\n## Import\n```ts\nimport { GenerateInterviewQuestionsCommand } from './commands/generate-interview-questions-command';\n```\n\n## Usage\n```ts\nawait new GenerateInterviewQuestionsCommand(commandContext).execute({\n  candidate,\n  focusArea: 'system design',\n});\n```"
+      "readMe": "# Generate Interview Questions Command\n\n## Summary\nBuilds a recruiter prompt from the candidate's applied role, skills, resume, and an optional focus area, runs a one-shot LLM request, and writes the markdown question kit to `candidate.generatedQuestions`.\n\n## Import\n```ts\nimport { GenerateInterviewQuestionsCommand } from './commands/generate-interview-questions-command';\n```\n\n## Usage\n```ts\nawait new GenerateInterviewQuestionsCommand(commandContext).execute({\n  candidate,\n  focusArea: 'system design',\n});\n```\n\n**Non-goals:** question banks or scoring rubrics; output is markdown prose onto the candidate."
     },
     "meta": {
       "adoptsFrom": {
         "module": "https://cardstack.com/base/spec",
         "name": "Spec"
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Candidate/interviewing-amara"
+        }
       }
     }
   }

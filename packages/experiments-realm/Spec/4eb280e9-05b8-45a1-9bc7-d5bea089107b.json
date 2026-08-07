@@ -9,7 +9,7 @@
         "module": "../meeting",
         "name": "Meeting"
       },
-      "readMe": "# Meeting\n\n## Summary\nA meeting with `meetingType` (interview | one-on-one | standup | vendor-review), `date` (datetime), `duration` (DurationField), an optional linked `candidate`, `interviewers` (linksToMany Employee), an `interviewScore` (ScoreField) and markdown `notes`.\n\n## Import\n```ts\nimport { Meeting } from './meeting';\n```\n\n## Usage\nMeetings linked to the tracker app feed its Calendar tab; interview-type meetings render as highlighted chips.\n\n## Template Usage\nEmbedded view shows type, time, duration, candidate, and score."
+      "readMe": "# Meeting\n\n## Summary\nA meeting with `meetingType` (interview | one-on-one | standup | vendor-review), `date` (datetime), `duration` (DurationField), an optional linked `candidate`, `interviewers` (linksToMany Employee), an `interviewScore` (ScoreField) and markdown `notes`.\n\n## Import\n```ts\nimport { Meeting } from './meeting';\n```\n\n## Usage\nMeetings linked to the tracker app feed its Calendar tab; interview-type meetings render as highlighted chips.\n\n## Template Usage\nEmbedded view shows type, time, duration, candidate, and score.\n\n**Non-goals:** recurrence rules; external calendar sync; video-call links."
     },
     "relationships": {
       "linkedExamples.0": {

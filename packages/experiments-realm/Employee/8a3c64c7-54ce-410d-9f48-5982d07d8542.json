@@ -2,24 +2,15 @@
   "data": {
     "type": "card",
     "attributes": {
+      "role": "Platform Engineer",
       "department": null,
-      "firstName": null,
-      "lastName": null,
-      "isCool": false,
-      "isHuman": false,
-      "address": {
-        "addressLine1": null,
-        "addressLine2": null,
-        "city": null,
-        "state": null,
-        "postalCode": null,
-        "country": {
-          "name": null,
-          "code": null
-        },
-        "poBoxNumber": null
-      },
-      "trips": {},
+      "startDate": "2026-08-07",
+      "status": "onboarding",
+      "salary": 145000,
+      "name": "Tom\u00e1s Ribeiro",
+      "email": "tomas.ribeiro@example.com",
+      "phone": "+1 555 0142",
+      "photoUrl": null,
       "cardInfo": {
         "name": null,
         "summary": null,
@@ -29,7 +20,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../employee",
+        "module": "../trt-employee",
         "name": "Employee"
       }
     },

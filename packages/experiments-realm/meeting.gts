@@ -31,10 +31,26 @@ export const MEETING_TYPES = [
 // identity: interview shares candidate.gts's "interviewing" plum, vendor
 // review shares the brass seal color.
 export const MEETING_TYPE_COLORS: Record<string, StateColor> = {
-  interview: { bg: '#e6dde8', fg: '#4a2f52', ring: '#8a5f96' },
-  'one-on-one': { bg: '#dde6da', fg: '#33452f', ring: '#5f7a54' },
-  standup: { bg: '#dbe3e6', fg: '#2f4550', ring: '#5f7a85' },
-  'vendor-review': { bg: '#f3e2c2', fg: '#6b4a12', ring: '#a9773a' },
+  interview: {
+    bg: 'var(--meeting-type-interview-bg, #e6dde8)',
+    fg: 'var(--meeting-type-interview-fg, #4a2f52)',
+    ring: 'var(--meeting-type-interview-ring, #8a5f96)',
+  },
+  'one-on-one': {
+    bg: 'var(--meeting-type-one-on-one-bg, #dde6da)',
+    fg: 'var(--meeting-type-one-on-one-fg, #33452f)',
+    ring: 'var(--meeting-type-one-on-one-ring, #5f7a54)',
+  },
+  standup: {
+    bg: 'var(--meeting-type-standup-bg, #dbe3e6)',
+    fg: 'var(--meeting-type-standup-fg, #2f4550)',
+    ring: 'var(--meeting-type-standup-ring, #5f7a85)',
+  },
+  'vendor-review': {
+    bg: 'var(--meeting-type-vendor-review-bg, #f3e2c2)',
+    fg: 'var(--meeting-type-vendor-review-fg, #6b4a12)',
+    ring: 'var(--meeting-type-vendor-review-ring, #a9773a)',
+  },
 };
 
 export const MeetingTypeField = enumField(StringField, {
@@ -266,6 +282,7 @@ export class Meeting extends CardDef {
           font-family: var(--font-serif, serif);
           font-weight: 600;
           font-size: var(--boxel-font-size-lg);
+          font-family: var(--font-heading, inherit);
         }
         .type {
           display: inline-block;
@@ -435,6 +452,36 @@ export class Meeting extends CardDef {
     </template>
   };
 
+  static atom = class Atom extends Component<typeof this> {
+    <template>
+      <span class='meeting-atom'>
+        <CalendarIcon class='meeting-atom-icon' />
+        <span class='meeting-atom-name'>{{@model.title}}</span>
+      </span>
+      <style scoped>
+        .meeting-atom {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.375rem;
+          font-size: 0.8125rem;
+          font-weight: 500;
+          color: var(--foreground, #111111);
+        }
+        .meeting-atom-icon {
+          width: 14px;
+          height: 14px;
+          color: var(--muted-foreground, #6b7280);
+          flex-shrink: 0;
+        }
+        .meeting-atom-name {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+      </style>
+    </template>
+  };
+
   static fitted = class Fitted extends Component<typeof this> {
     get typeColor() {
       return stateColorOf(MEETING_TYPE_COLORS, this.args.model?.meetingType);
@@ -456,6 +503,16 @@ export class Meeting extends CardDef {
         <div class='info'>
           <span class='name'>{{@model.title}}</span>
           <span class='meta'><@fields.date @format='atom' /></span>
+          {{#if @model.meetingType}}
+            <span class='body-line'>{{@model.meetingType}}{{#if
+                @model.duration
+              }}
+                · <@fields.duration @format='atom' />{{/if}}</span>
+          {{/if}}
+          {{#if @model.interviewScore}}
+            <span class='body-line body-strong'>★
+              {{@model.interviewScore}}/5</span>
+          {{/if}}
         </div>
       </div>
       <style scoped>
@@ -499,6 +556,24 @@ export class Meeting extends CardDef {
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
+        }
+        .body-line {
+          display: none;
+          font-size: var(--boxel-font-size-xs);
+          color: var(--muted-foreground, var(--boxel-450));
+          overflow: hidden;
+          display: none;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+        }
+        .body-strong {
+          color: var(--foreground, var(--boxel-dark));
+          font-weight: 600;
+        }
+        @container fitted-card (height > 120px) {
+          .body-line {
+            display: -webkit-box;
+          }
         }
         @container fitted-card (height <= 80px) {
           .meeting-fitted {

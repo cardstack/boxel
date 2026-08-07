@@ -3,18 +3,26 @@
     "type": "card",
     "attributes": {
       "cardTitle": "Score Field",
-      "cardDescription": "1–5 star rating field for interview scores and vendor performance",
+      "cardDescription": "1\u20135 star rating field for interview scores and vendor performance",
       "specType": "field",
       "ref": {
         "module": "../score-field",
         "name": "ScoreField"
       },
-      "readMe": "# Score Field\n\n## Summary\nA NumberField subclass rendering a 1–5 star picker (edit), a star row (embedded), and a compact `★ n` (atom). Used for interview ratings, candidate overall scores, and vendor performance.\n\n## Import\n```ts\nimport { ScoreField } from './score-field';\n```\n\n## Usage\n```ts\n@field interviewScore = contains(ScoreField);\n```\n\n## Template Usage\n```hbs\n<@fields.interviewScore />\n```"
+      "readMe": "# Score Field\n\n## Summary\nA NumberField subclass rendering a 1\u20135 star picker (edit), a star row (embedded), and a compact `\u2605 n` (atom). Used for interview ratings, candidate overall scores, and vendor performance.\n\n## Import\n```ts\nimport { ScoreField } from './score-field';\n```\n\n## Usage\n```ts\n@field interviewScore = contains(ScoreField);\n```\n\n## Template Usage\n```hbs\n<@fields.interviewScore />\n```\n\n**Non-goals:** scales other than 1\u20135; half-star values; weighted or multi-dimension scoring. Primitive field \u2014 the model IS the number (extends NumberField).\n\n**Example in use:** the linked Meeting (interview-amara-1) carries `interviewScore: 4` \u2014 inline `containedExamples` cannot hold primitive FieldDefs (platform limitation).",
+      "containedExamples": []
     },
     "meta": {
       "adoptsFrom": {
         "module": "https://cardstack.com/base/spec",
         "name": "Spec"
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Meeting/interview-amara-1"
+        }
       }
     }
   }

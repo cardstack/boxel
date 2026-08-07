@@ -11,6 +11,13 @@
         "module": "../sprint-task",
         "name": "Team"
       }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/ledger"
+        }
+      }
     }
   }
 }

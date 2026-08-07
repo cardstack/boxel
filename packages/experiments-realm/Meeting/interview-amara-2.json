@@ -28,6 +28,11 @@
         "links": {
           "self": "../Employee/priya-nair"
         }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/ledger"
+        }
       }
     },
     "meta": {

@@ -41,8 +41,11 @@ import { Calendar, type CalendarEvent } from '../components/calendar';
 import { OrgTree, type OrgTreeItem } from '../components/org-tree';
 import { RejectCandidateCommand } from '../commands/reject-candidate-command';
 import { ApproveOfferCommand } from '../commands/approve-offer-command';
+import { ExtractResumeCommand } from '../commands/extract-resume-command';
+import { GenerateInterviewQuestionsCommand } from '../commands/generate-interview-questions-command';
 import {
   buildOrgTree,
+  daysBetween,
   durationInDays,
   initialsOf,
   stateColorOf,
@@ -384,6 +387,59 @@ class Isolated extends Component<typeof TalentResourceTracker> {
     });
   };
 
+  extractResume = async (candidate: Candidate) => {
+    await this.runCommand(candidate, async (commandContext) => {
+      await new ExtractResumeCommand(commandContext).execute({
+        candidate,
+      } as any);
+    });
+  };
+
+  generateQuestions = async (candidate: Candidate) => {
+    await this.runCommand(candidate, async (commandContext) => {
+      await new GenerateInterviewQuestionsCommand(commandContext).execute({
+        candidate,
+      } as any);
+    });
+  };
+
+  isBusyCandidate = (candidate: Candidate | undefined): boolean => {
+    return Boolean(candidate?.id) && this.busyCandidateId === candidate?.id;
+  };
+
+  stopEvent = (event: Event) => {
+    event.stopPropagation();
+  };
+
+  // Time-in-stage aging: recruiters triage by how long a candidate has been
+  // sitting in the pipeline. Only open stages age.
+  pipelineAge = (
+    candidate: Candidate | undefined,
+  ): { label: string; stale: boolean } | undefined => {
+    if (!candidate?.appliedDate) return undefined;
+    let status = candidate.status;
+    if (status === 'hired' || status === 'rejected') return undefined;
+    let days = daysBetween(new Date(candidate.appliedDate), new Date());
+    if (days < 0) return undefined;
+    return { label: `Day ${days + 1}`, stale: days >= 30 };
+  };
+
+  // Interview scorecard rollup: average of linked Meetings' interviewScore.
+  avgInterviewScore = (
+    candidate: Candidate | undefined,
+  ): { label: string } | undefined => {
+    if (!candidate?.id) return undefined;
+    let scores = this.meetings
+      .filter((m) => m.candidate?.id === candidate.id)
+      .map((m) => m.interviewScore)
+      .filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+    if (!scores.length) return undefined;
+    let avg = scores.reduce((a, b) => a + b, 0) / scores.length;
+    return {
+      label: `\u2605 ${(Math.round(avg * 10) / 10).toFixed(1)} avg \u00b7 ${scores.length}`,
+    };
+  };
+
   private async runCommand(
     candidate: Candidate,
     action: (commandContext: any) => Promise<void>,
@@ -598,6 +654,71 @@ class Isolated extends Component<typeof TalentResourceTracker> {
                       @displayContainer={{false}}
                     />
                   {{/if}}
+                  {{#if candidateModel}}
+                    {{! The kanban drag engine claims every pointerdown inside
+                        [data-card-index]; stopping propagation here keeps
+                        button presses from becoming drags or card-opens. }}
+                    {{! template-lint-disable no-invalid-interactive no-pointer-down-event-binding }}
+                    <div
+                      class='card-extras'
+                      {{on 'pointerdown' this.stopEvent}}
+                      {{on 'mousedown' this.stopEvent}}
+                      {{on 'click' this.stopEvent}}
+                    >
+                      {{#let
+                        (this.pipelineAge candidateModel)
+                        (this.avgInterviewScore candidateModel)
+                        as |age avg|
+                      }}
+                        {{#if age}}
+                          <span
+                            class='age-chip {{if age.stale "stale"}}'
+                          >{{age.label}}</span>
+                        {{/if}}
+                        {{#if avg}}
+                          <span class='avg-chip'>{{avg.label}}</span>
+                        {{/if}}
+                      {{/let}}
+                      {{#if (eq candidateStatus 'applied')}}
+                        <button
+                          type='button'
+                          class='stage-act'
+                          disabled={{this.isBusyCandidate candidateModel}}
+                          {{on 'click' (fn this.extractResume candidateModel)}}
+                        >{{if
+                            (this.isBusyCandidate candidateModel)
+                            'Extracting…'
+                            'Extract résumé'
+                          }}</button>
+                      {{/if}}
+                      {{#if (eq candidateStatus 'interviewing')}}
+                        <button
+                          type='button'
+                          class='stage-act'
+                          disabled={{this.isBusyCandidate candidateModel}}
+                          {{on 'click' (fn this.generateQuestions candidateModel)}}
+                        >{{if
+                            (this.isBusyCandidate candidateModel)
+                            'Generating…'
+                            'Interview questions'
+                          }}</button>
+                      {{/if}}
+                      {{#if (eq candidateStatus 'offer')}}
+                        <button
+                          type='button'
+                          class='stage-act approve'
+                          disabled={{this.isBusyCandidate candidateModel}}
+                          {{on 'click' (fn this.approve candidateModel)}}
+                        >Approve</button>
+                        <button
+                          type='button'
+                          class='stage-act danger'
+                          disabled={{this.isBusyCandidate candidateModel}}
+                          {{on 'click' (fn this.reject candidateModel)}}
+                        >Reject</button>
+                      {{/if}}
+                    </div>
+                  {{/if}}
                 {{/let}}
               </:card>
               <:ghost as |dragIdx|>
@@ -649,6 +770,59 @@ class Isolated extends Component<typeof TalentResourceTracker> {
         overflow: hidden;
         clip: rect(0, 0, 0, 0);
         white-space: nowrap;
+      }
+      .card-extras {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.375rem;
+        padding: 0.375rem 0.625rem 0.5rem;
+        cursor: default;
+      }
+      .card-extras:empty {
+        display: none;
+      }
+      .age-chip,
+      .avg-chip {
+        font-size: 0.625rem;
+        font-weight: 600;
+        letter-spacing: 0.03em;
+        padding: 0.125rem 0.4375rem;
+        border-radius: 999px;
+        background: var(--muted, #eceadf);
+        color: var(--muted-foreground, #6b7280);
+        font-variant-numeric: tabular-nums;
+      }
+      .age-chip.stale {
+        background: #fef3c7;
+        color: #92400e;
+      }
+      .stage-act {
+        font: inherit;
+        font-size: 0.6875rem;
+        font-weight: 600;
+        padding: 0.1875rem 0.5625rem;
+        border-radius: 999px;
+        border: 1px solid var(--border, #d9d4c0);
+        background: var(--card, #fffdf7);
+        color: var(--foreground, inherit);
+        cursor: pointer;
+      }
+      .stage-act:hover:not(:disabled) {
+        background: var(--accent, #eceadf);
+      }
+      .stage-act:disabled {
+        opacity: 0.6;
+        cursor: default;
+      }
+      .stage-act.approve {
+        background: var(--primary, #1f6f54);
+        border-color: var(--primary, #1f6f54);
+        color: var(--primary-foreground, #f4faf6);
+      }
+      .stage-act.danger {
+        color: #991b1b;
+        border-color: #e7b9b9;
       }
       .cover {
         background: var(--cover, var(--primary, var(--boxel-highlight)));
