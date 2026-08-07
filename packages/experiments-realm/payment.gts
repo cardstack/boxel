@@ -280,42 +280,80 @@ export class Payment extends CardDef {
   };
 
   static isolated = class Isolated extends Component<typeof Payment> {
+    get amount() {
+      return (
+        formatMoney(
+          this.args.model?.amount?.amount,
+          this.args.model?.amount?.currency?.code,
+        ) || '\u2014'
+      );
+    }
     <template>
-      <article class='payment-page'>
-        <header>
-          <h1>{{@model.cardTitle}}</h1>
-          <span class='method'>{{@model.method}}</span>
-        </header>
-        <section class='panel'>
-          <dl>
-            <dt>Paid at</dt>
-            <dd><@fields.paidAt /></dd>
-            <dt>Reference</dt>
-            <dd>{{@model.reference}}</dd>
-            <dt>Applied to</dt>
-            <dd class='invoice'><@fields.invoice @format='embedded' /></dd>
+      <article class='receipt-wrap'>
+        <div class='receipt'>
+          <header class='r-head'>
+            <p class='r-label'>Payment received</p>
+            <h1 class='r-amount'>{{this.amount}}</h1>
+            {{#if @model.method}}
+              <span class='chip'>{{@model.method}}</span>
+            {{/if}}
+          </header>
+          <div class='tear' aria-hidden='true'></div>
+          <dl class='r-rows'>
+            {{#if @model.paidAt}}
+              <dt>Paid at</dt>
+              <dd><@fields.paidAt /></dd>
+            {{/if}}
+            {{#if @model.reference}}
+              <dt>Reference</dt>
+              <dd class='mono'>{{@model.reference}}</dd>
+            {{/if}}
+            {{#if @model.invoice}}
+              <dt>Applied to</dt>
+              <dd class='r-invoice'><@fields.invoice @format='atom' /></dd>
+            {{/if}}
           </dl>
-        </section>
+        </div>
       </article>
       <style scoped>
-        .payment-page {
-          padding: 1.5rem;
+        .receipt-wrap {
+          padding: 2.5rem 1.5rem;
+          display: flex;
+          justify-content: center;
+        }
+        .receipt {
+          width: 100%;
+          max-width: 24rem;
+          background: var(--card, #ffffff);
+          border: 1px solid var(--border, #e5e7eb);
+          border-radius: 0.5rem;
+          box-shadow: var(--shadow-md, 0 4px 14px rgba(0, 0, 0, 0.08));
+          overflow: hidden;
+        }
+        .r-head {
           display: flex;
           flex-direction: column;
-          gap: 1rem;
-          max-width: 40rem;
-        }
-        header {
-          display: flex;
           align-items: center;
-          gap: 0.75rem;
+          gap: 0.5rem;
+          padding: 2rem 1.5rem 1.5rem;
+          text-align: center;
         }
-        h1 {
+        .r-label {
           margin: 0;
-          font-size: 1.375rem;
+          font-size: 0.6875rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.14em;
+          color: var(--muted-foreground, #6b7280);
+        }
+        .r-amount {
+          margin: 0;
+          font-size: 2.25rem;
+          line-height: 1.1;
+          font-variant-numeric: tabular-nums;
           font-family: var(--font-heading, inherit);
         }
-        .method {
+        .chip {
           font-size: 0.6875rem;
           font-weight: 600;
           text-transform: uppercase;
@@ -325,28 +363,52 @@ export class Payment extends CardDef {
           background: var(--muted, #f3f4f6);
           color: var(--muted-foreground, #6b7280);
         }
-        .panel {
-          border: 1px solid var(--border, #e5e7eb);
-          border-radius: 0.75rem;
-          padding: 1rem;
-          background: var(--card, #ffffff);
+        .tear {
+          border-top: 2px dashed var(--border, #e5e7eb);
+          margin: 0 1rem;
+          position: relative;
         }
-        dl {
+        .tear::before,
+        .tear::after {
+          content: '';
+          position: absolute;
+          top: -0.5rem;
+          width: 1rem;
+          height: 1rem;
+          border-radius: 50%;
+          background: var(--background, #f4f4f4);
+          border: 1px solid var(--border, #e5e7eb);
+        }
+        .tear::before {
+          left: -1.5rem;
+        }
+        .tear::after {
+          right: -1.5rem;
+        }
+        .r-rows {
           margin: 0;
+          padding: 1.25rem 1.5rem 1.75rem;
           display: grid;
           grid-template-columns: auto 1fr;
-          gap: 0.5rem 1rem;
+          gap: 0.625rem 1.25rem;
           font-size: 0.875rem;
           align-items: center;
         }
-        dt {
+        .r-rows dt {
           color: var(--muted-foreground, #6b7280);
         }
-        dd {
+        .r-rows dd {
           margin: 0;
+          text-align: right;
+          font-weight: 500;
         }
-        .invoice :deep(.invoice-row) {
-          padding: 0;
+        .mono {
+          font-family: var(--font-mono, ui-monospace, monospace);
+          font-size: 0.8125rem;
+        }
+        .r-invoice {
+          display: flex;
+          justify-content: flex-end;
         }
       </style>
     </template>

@@ -332,44 +332,74 @@ export class Subscription extends CardDef {
 
   static isolated = class Isolated extends Component<typeof Subscription> {
     get price() {
-      return formatMoney(
-        this.args.model?.price?.amount,
-        this.args.model?.price?.currency?.code,
+      return (
+        formatMoney(
+          this.args.model?.price?.amount,
+          this.args.model?.price?.currency?.code,
+        ) || '\u2014'
       );
     }
     <template>
-      <article class='subscription-page'>
-        <header>
-          <h1>{{@model.cardTitle}}</h1>
-          <span class='status status-{{@model.status}}'>{{@model.status}}</span>
+      <article class='sub-page'>
+        <header class='doc-head'>
+          <div>
+            <p class='doc-kind'>Subscription</p>
+            <h1>{{@model.cardTitle}}</h1>
+          </div>
+          {{#if @model.status}}
+            <span class='status status-{{@model.status}}'>{{@model.status}}</span>
+          {{/if}}
         </header>
-        <section class='panel'>
+
+        <section class='price-hero'>
+          <span class='ph-amount'>{{this.price}}</span>
+          {{#if @model.billingCycle}}
+            <span class='ph-cycle'>/ {{@model.billingCycle}}</span>
+          {{/if}}
+        </section>
+
+        <section class='facts-panel'>
           <dl>
-            <dt>Price</dt>
-            <dd>{{this.price}} / {{@model.billingCycle}}</dd>
-            <dt>Started</dt>
-            <dd><@fields.startDate /></dd>
-            <dt>Customer</dt>
-            <dd><@fields.customer @format='embedded' /></dd>
+            {{#if @model.startDate}}
+              <dt>Started</dt>
+              <dd><@fields.startDate /></dd>
+            {{/if}}
+            {{#if @model.customer}}
+              <dt>Customer</dt>
+              <dd class='cust'><@fields.customer @format='embedded' /></dd>
+            {{/if}}
           </dl>
         </section>
       </article>
       <style scoped>
-        .subscription-page {
-          padding: 1.5rem;
+        .sub-page {
+          max-width: 40rem;
+          margin: 0 auto;
+          padding: 2rem 1.5rem;
           display: flex;
           flex-direction: column;
-          gap: 1rem;
-          max-width: 40rem;
+          gap: 1.5rem;
         }
-        header {
+        .doc-head {
           display: flex;
-          align-items: center;
-          gap: 0.75rem;
+          align-items: flex-end;
+          justify-content: space-between;
+          gap: 1rem;
+          border-bottom: 2px solid var(--foreground, #111111);
+          padding-bottom: 1rem;
+        }
+        .doc-kind {
+          margin: 0 0 0.125rem;
+          font-size: 0.6875rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.14em;
+          color: var(--muted-foreground, #6b7280);
         }
         h1 {
           margin: 0;
-          font-size: 1.375rem;
+          font-size: 1.75rem;
+          line-height: 1.1;
           font-family: var(--font-heading, inherit);
         }
         .status {
@@ -381,6 +411,7 @@ export class Subscription extends CardDef {
           border-radius: 999px;
           background: var(--muted, #f3f4f6);
           color: var(--muted-foreground, #6b7280);
+          margin-bottom: 0.25rem;
         }
         .status-active {
           background: #d1fae5;
@@ -390,17 +421,39 @@ export class Subscription extends CardDef {
           background: #fee2e2;
           color: #991b1b;
         }
-        .panel {
+        .price-hero {
+          display: flex;
+          align-items: baseline;
+          justify-content: center;
+          gap: 0.5rem;
+          padding: 2rem 1.5rem;
+          background: var(--card, #ffffff);
           border: 1px solid var(--border, #e5e7eb);
           border-radius: 0.75rem;
-          padding: 1rem;
+          box-shadow: var(--shadow-xs, 0 1px 2px rgba(0, 0, 0, 0.05));
+        }
+        .ph-amount {
+          font-size: 2.5rem;
+          font-weight: 700;
+          line-height: 1;
+          font-variant-numeric: tabular-nums;
+          font-family: var(--font-heading, inherit);
+        }
+        .ph-cycle {
+          font-size: 1rem;
+          color: var(--muted-foreground, #6b7280);
+        }
+        .facts-panel {
+          border: 1px solid var(--border, #e5e7eb);
+          border-radius: 0.75rem;
+          padding: 1rem 1.25rem;
           background: var(--card, #ffffff);
         }
         dl {
           margin: 0;
           display: grid;
           grid-template-columns: auto 1fr;
-          gap: 0.5rem 1rem;
+          gap: 0.625rem 1.25rem;
           font-size: 0.875rem;
           align-items: center;
         }
@@ -409,6 +462,9 @@ export class Subscription extends CardDef {
         }
         dd {
           margin: 0;
+        }
+        .cust :deep(.customer) {
+          padding: 0;
         }
       </style>
     </template>
