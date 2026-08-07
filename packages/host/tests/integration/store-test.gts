@@ -97,7 +97,13 @@ module('Integration | Store', function (hooks) {
   let ManagerDef: typeof CardDefType;
   let realmService: RealmService;
 
-  setupLocalIndexing(hooks);
+  // Every test builds the same fixtures in the beforeEach below, so the realm
+  // is indexed once and that index restored per test. Tests here do write —
+  // that stays with the test that wrote it, since the snapshot is restored
+  // rather than carried forward.
+  setupLocalIndexing(hooks, {
+    reuseIndexAcrossTests: 'store',
+  });
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
