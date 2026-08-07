@@ -2,9 +2,9 @@
   "data": {
     "type": "card",
     "attributes": {
-      "ref": { "name": "Order", "module": "../blocks/commerce/order" },
+      "ref": { "name": "Order", "module": "../blocks/order" },
       "specType": "card",
-      "readMe": "## Order\n\nFulfilment document: number, linked Customer and Invoice, order date, shipping address (base `AddressField` — second consumer alongside Customer's billing address), status enum (pending / paid / shipped / delivered / canceled), `containsMany(LineItem)` shared with Invoice.\n\n```ts\nimport { Order } from '../blocks/commerce/order';\n```\n\n**Non-goals:** shipment tracking (Shipment is a Logistics-kit record), inventory reservation, returns.",
+      "readMe": "## Order\n\nFulfilment document: number, linked Customer and Invoice, order date, shipping address (base `AddressField` — second consumer alongside Customer's billing address), status enum (pending / paid / shipped / delivered / canceled), `containsMany(LineItem)` shared with Invoice.\n\n```ts\nimport { Order } from '../blocks/order';\n```\n\n**Non-goals:** shipment tracking (Shipment is a Logistics-kit record), inventory reservation, returns.",
       "cardInfo": {
         "name": "Order (commerce kit)",
         "summary": "Fulfilment document: customer, invoice link, shipping address, status lifecycle, shared LineItems with computed total.",

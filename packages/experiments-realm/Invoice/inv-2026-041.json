@@ -10,17 +10,32 @@
         {
           "description": "Workspace Pro seats (10)",
           "quantity": 10,
-          "unitPrice": { "amount": 49, "currency": { "code": "USD" } }
+          "unitPrice": {
+            "amount": 49,
+            "currency": {
+              "code": "USD"
+            }
+          }
         },
         {
           "description": "Onboarding workshop",
           "quantity": 1,
-          "unitPrice": { "amount": 800, "currency": { "code": "USD" } }
+          "unitPrice": {
+            "amount": 800,
+            "currency": {
+              "code": "USD"
+            }
+          }
         },
         {
           "description": "Priority support add-on",
           "quantity": 12,
-          "unitPrice": { "amount": 25, "currency": { "code": "USD" } }
+          "unitPrice": {
+            "amount": 25,
+            "currency": {
+              "code": "USD"
+            }
+          }
         }
       ],
       "cardInfo": {
@@ -32,12 +47,19 @@
     },
     "relationships": {
       "customer": {
-        "links": { "self": "../Customer/acme-industries" }
+        "links": {
+          "self": "../Customer/acme-industries"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../blocks/commerce/invoice",
+        "module": "../blocks/invoice",
         "name": "Invoice"
       }
     }

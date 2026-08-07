@@ -2,9 +2,9 @@
   "data": {
     "type": "card",
     "attributes": {
-      "ref": { "name": "Invoice", "module": "../blocks/commerce/invoice" },
+      "ref": { "name": "Invoice", "module": "../blocks/invoice" },
       "specType": "card",
-      "readMe": "## Invoice\n\nBilling document: number, linked Customer, issue/due dates, status enum (draft → sent → paid / overdue / void), `containsMany(LineItem)`. The total is computed from line items and never stored.\n\n```ts\nimport { Invoice } from '../blocks/commerce/invoice';\n```\n\n**Non-goals:** tax computation, partial payments and balance tracking (Payment links to Invoice; reconciliation is app logic), PDF rendering.",
+      "readMe": "## Invoice\n\nBilling document: number, linked Customer, issue/due dates, status enum (draft → sent → paid / overdue / void), `containsMany(LineItem)`. The total is computed from line items and never stored.\n\n```ts\nimport { Invoice } from '../blocks/invoice';\n```\n\n**Non-goals:** tax computation, partial payments and balance tracking (Payment links to Invoice; reconciliation is app logic), PDF rendering.",
       "cardInfo": {
         "name": "Invoice (commerce kit)",
         "summary": "Billing document with linked customer, dates, status lifecycle, and computed totals from shared LineItems.",
