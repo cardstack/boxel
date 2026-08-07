@@ -19,6 +19,7 @@ module(
   'Acceptance | interact submode | search sheet persistence tests',
   function (hooks) {
     setupInteractSubmodeTests(hooks, {
+      reuseIndexAcrossTests: 'interactSearchSheetPersistence',
       setRealm() {},
     });
 

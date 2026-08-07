@@ -948,7 +948,12 @@ class MockLocalIndexer extends Service {
 // this test starts from a snapshot, and `setupTestRealm`, which skips the
 // boot index when it does and captures the snapshot when it doesn't.
 let reusableIndex:
-  | { snapshotName: string; captured: boolean; restored: boolean }
+  | {
+      snapshotName: string;
+      captured: boolean;
+      restored: boolean;
+      manual: boolean;
+    }
   | undefined;
 
 export function setupLocalIndexing(
@@ -965,19 +970,29 @@ export function setupLocalIndexing(
     // identical pristine index: the snapshot is *restored* (a full table
     // replace), not carried over, so one test's writes cannot reach another.
     //
-    // Not usable yet by a module that builds more than one realm per test:
-    // the snapshot is captured after the first realm finishes indexing, so
-    // later realms' rows would be missing from it.
-    //
-    // Also not usable by a module whose tests are *about* indexing. A test
-    // whose index was restored runs against a realm started with
-    // `skipBootIndex`, so anything the boot index does beyond populating those
-    // tables — evicting a module from the loader, recording that it was flushed
-    // — has not happened. `Integration | Store` is the worked example: 71 of
-    // its 73 tests are indifferent, while two assert on exactly that
-    // module-rebuild bookkeeping and fail. Identical fixtures are necessary but
-    // not sufficient; the module also has to not care how its index got there.
+    // Not usable by a module whose tests are *about* indexing. A test whose
+    // index was restored runs against a realm started with `skipBootIndex`, so
+    // anything the boot index does beyond populating those tables — evicting a
+    // module from the loader, recording that it was flushed — has not happened.
+    // `Integration | Store` is the worked example: 71 of its 73 tests are
+    // indifferent, while two assert on exactly that module-rebuild bookkeeping
+    // and fail. Identical fixtures are necessary but not sufficient; the module
+    // also has to not care how its index came to exist.
     reuseIndexAcrossTests?: string;
+
+    // Set by a module (or its setup helper) that builds more than one realm
+    // per test. By default the snapshot is captured as soon as the first realm
+    // finishes indexing, which for such a module would omit every later
+    // realm's rows; this suppresses that and hands the timing to
+    // `captureReusableIndex`, which the caller invokes once its last realm is
+    // built.
+    //
+    // Forgetting that call is safe: nothing is ever captured, so every test
+    // indexes for itself exactly as it did before opting in. Calling it too
+    // early is the failure that matters, which is why it belongs immediately
+    // after the last realm rather than being inferred from a realm count kept
+    // somewhere else.
+    captureIndexManually?: boolean;
   },
 ) {
   hooks.before(function () {
@@ -986,6 +1001,7 @@ export function setupLocalIndexing(
           snapshotName: opts.reuseIndexAcrossTests,
           captured: false,
           restored: false,
+          manual: opts.captureIndexManually ?? false,
         }
       : undefined;
   });
@@ -1058,6 +1074,26 @@ export function setupLocalIndexing(
     });
     getTestRealmRegistry().clear();
   });
+}
+
+// Capture the reusable index now, for a module that opted in with
+// `captureIndexManually` because it builds several realms per test. Call it
+// once, from wherever the last realm is built — a setup helper that builds them
+// all is the right home, since the call then can't drift out of step with the
+// number of realms the way a count declared elsewhere would.
+//
+// Must be called before the test body runs, so that what later tests restore is
+// the fixtures as indexed and nothing a test went on to write. A no-op unless
+// the module opted in, so a shared helper can call it unconditionally, and a
+// no-op after the first test, since the snapshot it captured is what every
+// later test restores.
+export async function captureReusableIndex() {
+  if (!reusableIndex || reusableIndex.captured || !reusableIndex.manual) {
+    return;
+  }
+  let dbAdapter = await getDbAdapter();
+  await dbAdapter.exportSnapshot(reusableIndex.snapshotName);
+  reusableIndex.captured = true;
 }
 
 export function setupOnSave(hooks: NestedHooks) {
@@ -1420,11 +1456,15 @@ async function setupTestRealm({
   await adapter.ready;
   await worker.run();
   await realm.start();
-  if (reusableIndex && !reusableIndex.captured) {
+  if (reusableIndex && !reusableIndex.captured && !reusableIndex.manual) {
     // First test of a module that reuses its index: this start() just did the
     // indexing, so keep the result for the rest of the module. Captured before
     // the test body runs, so what later tests restore is the fixtures as
     // indexed and nothing a test went on to write.
+    //
+    // A module building several realms per test opts out of this timing with
+    // `captureIndexManually` and calls `captureReusableIndex` after its last
+    // realm, since capturing here would omit the realms still to come.
     await dbAdapter.exportSnapshot(reusableIndex.snapshotName);
     reusableIndex.captured = true;
   }

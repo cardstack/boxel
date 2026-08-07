@@ -19,6 +19,7 @@ module(
   'Acceptance | interact submode | multiple stacks tests',
   function (hooks) {
     let { setActiveRealms } = setupInteractSubmodeTests(hooks, {
+      reuseIndexAcrossTests: 'interactMultipleStacks',
       setRealm() {},
     });
 
