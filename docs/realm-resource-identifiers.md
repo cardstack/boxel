@@ -261,21 +261,33 @@ spelling.
 
 ## Compatibility with the base-realm alias
 
-`https://cardstack.com/base/` remains registered as a secondary alias for the
-base realm, and is expected to stay registered indefinitely: user data outside
-this repository holds URL-form base references, and that trail outlives any
-in-repo conversion.
+`https://cardstack.com/base/` is still the base realm's own identity, not just
+a spelling that resolves. The realm server boots base with
+`--fromUrl='https://cardstack.com/base/'`, and a realm's `--fromUrl` is the URL
+it is registered and keyed under. `@cardstack/base/` is registered _in
+addition_: when a `--fromUrl` matches `https://cardstack.com/<realm>/`, the
+realm server registers both the URL alias (`addURLMapping`, virtual → real) and
+the corresponding `@cardstack/<realm>/` realm mapping, so `unresolveURL`
+canonicalizes either spelling to the same RRI. That matters for cross-process
+cache keys — the host writes definition-cache entries keyed by RRI form during
+prerender, and the realm server reads them back.
 
-The realm server bridges the two automatically. When a `--fromUrl` matches
-`https://cardstack.com/<realm>/`, it registers both the URL alias
-(`addURLMapping`) and the corresponding `@cardstack/<realm>/` realm mapping, so
-`unresolveURL` canonicalizes either spelling to the same RRI. That matters for
-cross-process cache keys — the host writes definition-cache entries keyed by
-RRI form during prerender, and the realm server reads them back.
+No realm currently uses a prefix as its identity. A scoped `--fromUrl` (catalog,
+skills, openrouter) registers the prefix mapping and then uses the `--toUrl` as
+the realm's identity, so those realms are keyed under their real served URL with
+no alias in play. Base is the one realm whose identity is a URL that nothing
+serves.
 
-Catalog, skills, and openrouter boot prefix-first; base still boots with the
-URL alias as its serving identity, with `@cardstack/base/` registered
-alongside.
+The alias is transitional, not permanent. Both spellings resolve today because
+realm data written before the conversion still holds URL-form base references,
+and the runtime carries matching tolerance for it: index type filters `OR`
+across the RRI, real-URL, and alias spellings of a key
+(`internalKeysFor` + `equivalentURLForms`), and definition lookup tries the RRI
+key before falling back to the alias. That data is rewritable — see
+[Migrating existing realm data](#migrating-existing-realm-data) — and once the
+conversion is complete in every environment and no alias-form base keys remain
+in the index, the tolerance collapses to a single key and the alias itself can
+be retired.
 
 Two lint rules keep the URL form from creeping back into source:
 
