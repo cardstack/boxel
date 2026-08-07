@@ -142,7 +142,13 @@ function modelNameFor(llmId: string): string {
 
 module('Acceptance | AI Assistant tests', function (hooks) {
   setupApplicationTest(hooks);
-  setupLocalIndexing(hooks);
+  // Every test in this module builds the same realm fixtures in the beforeEach
+  // below, so the realm is indexed once and that index restored for each
+  // subsequent test. What a test writes afterwards stays with that test — the
+  // snapshot is restored, not carried forward.
+  setupLocalIndexing(hooks, {
+    reuseIndexAcrossTests: 'aiAssistant',
+  });
   setupOnSave(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
