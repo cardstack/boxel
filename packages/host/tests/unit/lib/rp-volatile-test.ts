@@ -73,9 +73,6 @@ class TestRuntime {
   async serializeCard(): Promise<never> {
     throw new Error('not used');
   }
-  async serializeCardPatch(): Promise<never> {
-    throw new Error('not used');
-  }
   async dispose(handle: string): Promise<void> {
     this.disposed.push(handle);
   }

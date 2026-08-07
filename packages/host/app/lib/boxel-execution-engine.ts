@@ -335,10 +335,17 @@ export class BoxelExecutionSession {
         await disposeGeneration(previous);
       }
       // RP-7.3: this generation renders immediately with any not-yet-settled
-      // relationship absent — first paint never awaits settlement. If the
-      // projection reported one, watch it in the background and republish a
-      // fresh generation through this same atomic path once it resolves.
-      this.watchForSettle(generation, request);
+      // relationship absent — first paint never awaits settlement. Only a
+      // SANDBOX generation still needs the background watch + republish:
+      // Direct reads the canonical instance natively and a Capsule's
+      // `@model`/`@fields`/presentation are live read-through paths
+      // (RP-20.2), so for those tiers settlement re-renders every binding
+      // in place — a republished generation would only destroy mounted
+      // component state (focus, scroll, in-progress input) to deliver data
+      // the views already have.
+      if (this.currentGeneration.lease.runtime.mode === 'sandbox') {
+        this.watchForSettle(generation, request);
+      }
       return this.currentGeneration;
     } catch (error) {
       if (candidate) {

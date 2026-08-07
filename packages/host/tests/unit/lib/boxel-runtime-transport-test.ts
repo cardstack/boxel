@@ -92,9 +92,6 @@ class TestRuntime implements BoxelRuntime {
       },
     };
   }
-  async serializeCardPatch() {
-    return { attributes: { name: 'Ada' } };
-  }
   async dispose(handle: RuntimeHandle) {
     this.disposed.push(handle);
   }
@@ -117,9 +114,6 @@ module('Unit | Boxel runtime transport', function () {
         (await client.buildRenderRecord(instanceHandle)).presentation.title,
         'Ada',
       );
-      assert.deepEqual(await client.serializeCardPatch(instanceHandle, {}), {
-        attributes: { name: 'Ada' },
-      });
       await client.dispose(instanceHandle);
       assert.deepEqual(runtime.disposed, [instanceHandle]);
     } finally {

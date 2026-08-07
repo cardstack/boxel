@@ -3,11 +3,9 @@ import {
   type BoxelDescription,
   type BoxelRenderRecord,
   type CodeRef,
-  type JSONValue,
   type Loader,
   type LooseCardResource,
   type LooseSingleCardDocument,
-  type PatchData,
   type RealmResourceIdentifier,
   type ResolvedField,
   type RuntimeHandle,
@@ -44,14 +42,6 @@ export interface DirectRenderSlot {
 
 export interface DirectRenderSlotOptions {
   componentCodeRef?: CodeRef;
-}
-
-export interface DirectRenderRecordOptions {
-  /**
-   * Writability is contextual authority supplied by the Host. The semantic
-   * runtime never infers permission merely because it can read a value.
-   */
-  writableFields?: ReadonlySet<string>;
 }
 
 type GetCardAPI = () => Promise<typeof CardAPI>;
@@ -239,13 +229,9 @@ export default class DirectBoxelRuntime implements BoxelRuntime {
   async buildRenderRecord(
     card: BoxelInstanceHandle,
   ): Promise<BoxelRenderRecord>;
-  async buildRenderRecord(
-    card: BaseDef,
-    options?: DirectRenderRecordOptions,
-  ): Promise<BoxelRenderRecord>;
+  async buildRenderRecord(card: BaseDef): Promise<BoxelRenderRecord>;
   async buildRenderRecord(
     cardOrHandle: BaseDef | BoxelInstanceHandle,
-    options: DirectRenderRecordOptions = {},
   ): Promise<BoxelRenderRecord> {
     let api = await this.getCardAPI();
     let card =
@@ -254,7 +240,6 @@ export default class DirectBoxelRuntime implements BoxelRuntime {
         : cardOrHandle;
     return buildBoxelRenderRecord(
       projectHostBoxelSemantics(card, api, {
-        writableFields: options.writableFields,
         unresolveURL: this.unresolveURL,
       }),
     );
@@ -268,35 +253,6 @@ export default class DirectBoxelRuntime implements BoxelRuntime {
       includeComputeds: true,
       includeUnrenderedFields: true,
     });
-  }
-
-  async serializeCardPatch(
-    card: BoxelInstanceHandle,
-    changes: Record<string, JSONValue>,
-  ): Promise<PatchData> {
-    let instance = this.instances.get(card);
-    let api = await this.getCardAPI();
-    let fields = api.getFields(instance, {
-      includeComputeds: true,
-    }) as unknown as Record<string, Field>;
-    let patch: PatchData = {};
-    for (let [fieldName, value] of Object.entries(changes)) {
-      let field = fields[fieldName];
-      if (!field) {
-        throw new Error(`Unknown field '${fieldName}'`);
-      }
-      if (field.computeVia) {
-        throw new Error(`Computed field '${fieldName}' is not writable`);
-      }
-      if (field.fieldType === 'linksTo' || field.fieldType === 'linksToMany') {
-        patch.relationships ??= {};
-        patch.relationships[fieldName] = value as never;
-      } else {
-        patch.attributes ??= {};
-        patch.attributes[fieldName] = value;
-      }
-    }
-    return patch;
   }
 
   async dispose(handle: RuntimeHandle): Promise<void> {

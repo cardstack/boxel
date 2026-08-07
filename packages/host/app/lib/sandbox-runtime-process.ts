@@ -6,10 +6,8 @@ import {
   type BoxelTypeHandle,
   type CodeRef,
   surfaceHeightModeFor,
-  type JSONValue,
   type LooseCardResource,
   type LooseSingleCardDocument,
-  type PatchData,
   type RealmResourceIdentifier,
   type ResolvedField,
   type RuntimeHandle,
@@ -443,15 +441,6 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
 
   serializeCard(card: BoxelInstanceHandle): Promise<LooseSingleCardDocument> {
     return this.withClient((client) => client.serializeCard(card));
-  }
-
-  serializeCardPatch(
-    card: BoxelInstanceHandle,
-    changes: Record<string, JSONValue>,
-  ): Promise<PatchData> {
-    return this.withClient((client) =>
-      client.serializeCardPatch(card, changes),
-    );
   }
 
   async dispose(handle: RuntimeHandle): Promise<void> {

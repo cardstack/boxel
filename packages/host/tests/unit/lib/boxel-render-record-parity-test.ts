@@ -28,6 +28,7 @@ import type { BoxelSourceClassification } from '@cardstack/host/lib/boxel-source
 import CapsuleBoxelRuntime from '@cardstack/host/lib/capsule-boxel-runtime';
 import CapsuleModuleEvaluator from '@cardstack/host/lib/capsule-module-evaluator';
 import DirectBoxelRuntime from '@cardstack/host/lib/direct-boxel-runtime';
+import type SandboxRuntimeProcess from '@cardstack/host/lib/sandbox-runtime-process';
 
 import {
   testRealmURL,
@@ -523,8 +524,8 @@ module('Unit | Boxel render record parity', function (hooks) {
         'computed field values materialize in the record',
       );
       assert.true(
-        directRecord.instance.fields.every((field) => field.writable === false),
-        'writability requires an explicit Host grant and defaults to false',
+        directRecord.instance.fields.every((field) => !('writable' in field)),
+        'writability is not record data — write authority is the Host-granted set capability (RP-9.8), never a flag a tier could read',
       );
       let embedded = directRecord.boxel.formats.find(
         (format) => format.format === 'embedded',
@@ -1049,21 +1050,29 @@ const settlePresentation: HostBoxelProjection['presentation'] = {
 };
 
 /**
- * Minimal `CapsuleBoxelRuntime`-shaped stub for exercising
- * `BoxelExecutionSession`'s RP-7.3 settle-republish wiring
- * (boxel-execution-engine.ts) in isolation, without a real SES compartment:
- * it remembers whatever `HostBoxelProjection` `adoptHostProjection` handed
- * it per instance and turns it into a `BoxelRenderRecord` the same way
- * `buildBoxelRenderRecord` does — declared field values become the model.
+ * Minimal runtime stub for exercising `BoxelExecutionSession`'s RP-7.3
+ * settle-watch wiring (boxel-execution-engine.ts) in isolation. Mode is
+ * configurable because the wiring is TIER-GATED: only a Sandbox generation
+ * spends a settle watch — Direct and Capsule read the canonical instance
+ * live (RP-20.2), so settlement re-renders their bindings in place and a
+ * republished generation would only destroy mounted component state. When
+ * routed as a Capsule the stub still records `adoptHostProjection` so its
+ * record carries real field values; routed as a Sandbox (which never
+ * receives the Host projection) it builds an empty-model record — data
+ * freshness for that tier is the pending RP-20.5 updateInstance lane, not
+ * the republish.
  */
-class SettleStubCapsuleRuntime {
-  readonly mode = 'capsule' as const;
+class SettleStubRuntime {
   private projections = new Map<BoxelInstanceHandle, HostBoxelProjection>();
   private nextInstance = 0;
   disposed: BoxelInstanceHandle[] = [];
 
+  constructor(readonly mode: 'capsule' | 'sandbox') {}
+
+  allowModules(): void {}
+
   async createFromSerialized(): Promise<BoxelInstanceHandle> {
-    return `capsule-instance:${++this.nextInstance}` as BoxelInstanceHandle;
+    return `stub-instance:${++this.nextInstance}` as BoxelInstanceHandle;
   }
 
   adoptHostProjection(
@@ -1077,25 +1086,22 @@ class SettleStubCapsuleRuntime {
     card: BoxelInstanceHandle,
   ): Promise<BoxelRenderRecord> {
     let projection = this.projections.get(card);
-    if (!projection) {
-      throw new Error('no adopted projection for this handle');
-    }
     let model: Record<string, unknown> = {};
-    for (let field of projection.fields) {
+    for (let field of projection?.fields ?? []) {
       model[field.fieldName] = field.value;
     }
-    if (projection.instanceId) {
+    if (projection?.instanceId) {
       model.id = projection.instanceId;
     }
     return {
       protocolVersion: 1,
       boxel: settleBoxel,
       instance: {
-        id: projection.instanceId,
+        id: projection?.instanceId ?? null,
         model: model as Record<string, JSONValue>,
-        fields: projection.fields,
+        fields: projection?.fields ?? [],
       },
-      presentation: projection.presentation,
+      presentation: projection?.presentation ?? settlePresentation,
     };
   }
 
@@ -1108,14 +1114,14 @@ class SettleStubCapsuleRuntime {
 }
 
 module('Unit | Boxel execution engine settle republish', function () {
-  test('a pending relationship settling republishes a fresh generation without blocking first paint (RP-7.3, RP-15.4)', async function (assert) {
-    let capsule = new SettleStubCapsuleRuntime();
+  test('a pending relationship settling republishes a fresh SANDBOX generation without blocking first paint (RP-7.3, RP-15.4)', async function (assert) {
+    let sandbox = new SettleStubRuntime('sandbox');
     let router = new BoxelRuntimeRouter(
       {} as unknown as DirectBoxelRuntime,
-      () => capsule as unknown as CapsuleBoxelRuntime,
       () => {
-        throw new Error('sandbox is not used by this fixture');
+        throw new Error('capsule is not used by this fixture');
       },
+      () => sandbox as unknown as SandboxRuntimeProcess,
     );
     let engine = new BoxelExecutionEngine(router, async () => settleSource);
     let session = engine.createSession();
@@ -1139,7 +1145,6 @@ module('Unit | Boxel execution engine settle republish', function () {
           value: [],
           resolvedConfiguration: null,
           presentation: {},
-          writable: false,
         },
       ],
       presentation: settlePresentation,
@@ -1163,70 +1168,65 @@ module('Unit | Boxel execution engine settle republish', function () {
       document: settleDocument,
       purpose: 'host-display',
       hostProjection: unsettledProjection,
+      // Routes this request to the Sandbox tier — the only tier that still
+      // consumes the settle watch (Direct/Capsule read the instance live,
+      // RP-20.2).
+      prefersFullSandbox: true,
     };
 
-    let generations: BoxelRenderRecord[] = [];
+    let generationNumbers: number[] = [];
     let unsubscribe = session.subscribe((snapshot) => {
       if (snapshot.current) {
-        generations.push(snapshot.current.renderRecord);
+        generationNumbers.push(snapshot.current.generation);
       }
     });
 
     try {
       let first = await session.update(request);
       assert.ok(first, 'the first generation materializes');
-      assert.deepEqual(
-        first?.renderRecord.instance.model.reviewers,
-        [],
-        'RP-7.3: first paint renders the not-yet-settled relationship absent — never blocked on settlement',
+      assert.strictEqual(
+        first?.lease.decision.mode,
+        'sandbox',
+        'this fixture exercises the Sandbox tier',
       );
       assert.strictEqual(
         onSettleCalls,
         1,
-        'the session started watching the reported settle exactly once for this generation',
+        'the session started watching the reported settle exactly once for this Sandbox generation — first paint never blocked on settlement (RP-7.3)',
       );
 
       let settledProjection: HostBoxelProjection = {
         ...unsettledProjection,
-        fields: [
-          {
-            ...unsettledProjection.fields[0]!,
-            value: [{ id: 'https://example.test/Reviewer/a', name: 'Ada' }],
-          },
-        ],
         onSettle: undefined,
       };
-      let secondGenerationPromise = new Promise<BoxelRenderRecord>(
-        (resolve) => {
-          let unsubscribeSecond = session.subscribe((snapshot) => {
-            if (
-              snapshot.current &&
-              snapshot.current.generation !== first?.generation
-            ) {
-              unsubscribeSecond();
-              resolve(snapshot.current.renderRecord);
-            }
-          });
-        },
-      );
+      let secondGenerationPromise = new Promise<number>((resolve) => {
+        let unsubscribeSecond = session.subscribe((snapshot) => {
+          if (
+            snapshot.current &&
+            snapshot.current.generation !== first?.generation
+          ) {
+            unsubscribeSecond();
+            resolve(snapshot.current.generation);
+          }
+        });
+      });
       resolveSettle?.(settledProjection);
       let second = await secondGenerationPromise;
 
-      assert.deepEqual(
-        second.instance.model.reviewers,
-        [{ id: 'https://example.test/Reviewer/a', name: 'Ada' }],
-        'once the reported relationship settles, a fresh generation carries the resolved items (RP-7.3, RP-15.4)',
+      assert.true(
+        second > first!.generation,
+        'once the reported relationship settles, a fresh generation republishes through the same atomic update() path (RP-7.3, RP-15.4)',
       );
       assert.deepEqual(
-        generations.map((record) => record.instance.model.reviewers),
-        [[], [{ id: 'https://example.test/Reviewer/a', name: 'Ada' }]],
-        'subscribers observe exactly the absent-then-settled sequence, never an intermediate or duplicate generation',
+        generationNumbers,
+        [first!.generation, second],
+        'subscribers observe exactly one entry per real generation — never an intermediate or duplicate',
       );
       // Snapshot at assertion time: the array is live and the finally
       // block's destroy() will push more before QUnit serializes a failure.
       assert.deepEqual(
-        [...capsule.disposed],
-        ['capsule-instance:1'],
+        [...sandbox.disposed],
+        ['stub-instance:1'],
         'the settle-triggered generation swap is the same atomic replacement update() already performs: the superseded generation is disposed after the swap — and only it',
       );
     } finally {
@@ -1235,14 +1235,66 @@ module('Unit | Boxel execution engine settle republish', function () {
     }
   });
 
-  test('destroying the session stops an in-flight settle watch from republishing', async function (assert) {
-    let capsule = new SettleStubCapsuleRuntime();
+  test('a Capsule generation spends no settle watch — settlement re-renders its live reads in place (RP-20.2)', async function (assert) {
+    let capsule = new SettleStubRuntime('capsule');
     let router = new BoxelRuntimeRouter(
       {} as unknown as DirectBoxelRuntime,
       () => capsule as unknown as CapsuleBoxelRuntime,
       () => {
         throw new Error('sandbox is not used by this fixture');
       },
+    );
+    let engine = new BoxelExecutionEngine(router, async () => settleSource);
+    let session = engine.createSession();
+
+    let onSettleCalls = 0;
+    let projection: HostBoxelProjection = {
+      boxel: settleBoxel,
+      instanceId: settleResource.id!,
+      fields: [],
+      presentation: settlePresentation,
+      onSettle: () => {
+        onSettleCalls++;
+        return Promise.resolve(undefined);
+      },
+    };
+
+    try {
+      let generation = await session.update({
+        principal: 'user:one',
+        surfaceId: 'surface:one',
+        trusted: false,
+        format: 'isolated',
+        moduleIdentifier: 'https://example.test/place',
+        source: 'capsule',
+        resource: settleResource,
+        document: settleDocument,
+        purpose: 'host-display',
+        hostProjection: projection,
+      });
+      assert.strictEqual(generation?.lease.decision.mode, 'capsule');
+      // The watch (were one started) begins synchronously inside update();
+      // a microtask turn gives any stray fire-and-forget kickoff the chance
+      // to prove itself before the assertion.
+      await Promise.resolve();
+      assert.strictEqual(
+        onSettleCalls,
+        0,
+        "a Capsule generation's relationships settle through the live model's tracked reads (RP-20.2) — a republished generation would only destroy mounted component state to deliver data the views already have",
+      );
+    } finally {
+      await session.destroy();
+    }
+  });
+
+  test('destroying the session stops an in-flight settle watch from republishing', async function (assert) {
+    let sandbox = new SettleStubRuntime('sandbox');
+    let router = new BoxelRuntimeRouter(
+      {} as unknown as DirectBoxelRuntime,
+      () => {
+        throw new Error('capsule is not used by this fixture');
+      },
+      () => sandbox as unknown as SandboxRuntimeProcess,
     );
     let engine = new BoxelExecutionEngine(router, async () => settleSource);
     let session = engine.createSession();
@@ -1263,7 +1315,6 @@ module('Unit | Boxel execution engine settle republish', function () {
           value: [],
           resolvedConfiguration: null,
           presentation: {},
-          writable: false,
         },
       ],
       presentation: settlePresentation,
@@ -1286,6 +1337,7 @@ module('Unit | Boxel execution engine settle republish', function () {
       document: settleDocument,
       purpose: 'host-display',
       hostProjection: projection,
+      prefersFullSandbox: true,
     };
 
     await session.update(request);

@@ -117,11 +117,6 @@ export default class SandboxBoxelRuntimeServer {
         return this.runtime.buildRenderRecord(args[0] as BoxelInstanceHandle);
       case 'serializeCard':
         return this.runtime.serializeCard(args[0] as BoxelInstanceHandle);
-      case 'serializeCardPatch':
-        return this.runtime.serializeCardPatch(
-          args[0] as BoxelInstanceHandle,
-          args[1] as Record<string, JSONValue>,
-        );
       case 'dispose':
         await this.runtime.dispose(args[0] as RuntimeHandle);
         return null;
@@ -137,7 +132,6 @@ const runtimeOperations = new Set<BoxelRuntimeRequest['operation']>([
   'getField',
   'buildRenderRecord',
   'serializeCard',
-  'serializeCardPatch',
   'dispose',
 ]);
 

@@ -371,13 +371,17 @@ only id and realm meta merge back. A 404 on reload is a delete: consumers'
 slots are rewritten to `link-not-found` sentinels
 (`store.ts:3069-3090, 2323-2343`).
 
-**RP-9.8** Cross-boundary mutation (Capsule/Sandbox) is the reverse
-projection of the same semantics: named field changes →
-`serializeCardPatch` producing canonical attributes + relationship
-identifiers only — rejecting computed fields, presentation values,
-side-loaded resources, and fields outside the write grant — applied through
-the Host's single authorized Store path with the same clientRequestId
-discipline. No tier receives a Store-write shortcut.
+**RP-9.8** Cross-boundary mutation (Capsule/Sandbox) is main's `Box.set`
+expressed as a capability: the Host grants a `set` closure per
+non-computed field (through the field portal / renderer argument chain),
+and an authored editor's set effect invokes that closure, which assigns
+the canonical instance's field — entering RP-9.2's one `setField` funnel
+(validate → write → notify → autosave) exactly as a trusted Base editor
+does. Write authority is the presence of the granted closure, never a
+record flag or a patch-document protocol; no tier receives a Store-write
+shortcut. (The Sandbox tier's grant rides the pending updateInstance
+lane; until it lands, a Sandbox editor's writes stay child-local — the
+documented RP-20.5 gap.)
 
 ## RP-10 The context plane and ambient contract
 
@@ -509,19 +513,20 @@ isolated render) plus its scoped-CSS URLs.
 `packages/runtime-common/boxel-execution-protocol.ts`: cloneable, versioned,
 no Ember imports. Records (≈10): `CodeRef`; `BoxelDescription` (ref, kind,
 ancestors, fields, formats, presentation statics); `FieldDescription`
-(name, kind, field type ref, resolved configuration, computed?, writable);
+(name, kind, field type ref, resolved configuration, computed?);
 `InstanceProjection` (id, type ref, revision, cloneable model with linked
 values as `{$boxel:{id,type}}` **references, never expanded graphs**);
 `TemplateBundle` (validated wire templates + typed dependency union
 `trusted-component | authored-component | trusted-helper | safe-modifier |
 block`; unknown kind rejects the generation); `SafeEvent` (exported,
-versioned); `ComponentUpdate` (`{generation, changed, effects}`);
-`PatchData`; the protocol-version/feature record.
+versioned); `ComponentUpdate` (`{generation, changed, effects}`); the
+protocol-version/feature record.
 
 **RP-14.2** Operations (`BoxelRuntime`, per tier): `loadBoxel`,
 `describeBoxel`, `createFromSerialized`, `getFields`/`getField`,
-`getRenderSlot(instance, format)`, `invokeAction`, `serializeCardPatch`,
-`dispose`. Nothing else.
+`getRenderSlot(instance, format)`, `invokeAction`, `serializeCard`,
+`dispose`. Nothing else — mutation is not an operation on this interface
+(RP-9.8: it is a Host-granted `set` capability).
 
 **RP-14.3** Version discipline: every record carries the protocol version;
 **consumers check it** and fail closed to last-known-good with one

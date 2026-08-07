@@ -76,11 +76,6 @@ export interface HostBoxelProjection {
 
 export interface HostBoxelProjectionOptions {
   /**
-   * Writability is contextual authority supplied by the Host. The semantic
-   * runtime never infers permission merely because it can read a value.
-   */
-  writableFields?: ReadonlySet<string>;
-  /**
    * Convert an absolute instance URL to its registered scoped-identifier
    * form (`VirtualNetwork.unresolveURL`, e.g. `https://cardstack.com/base/
    * Theme/x` → `@cardstack/base/Theme/x`). A themed card's realm/prerender
@@ -234,7 +229,6 @@ export function projectHostBoxelSemantics(
     fields: resolveBoxelFields(
       instance,
       api,
-      options.writableFields,
       (relationship) => pending.push(relationship),
       options.ensureRelationshipLoaded,
     ),
@@ -385,7 +379,6 @@ export function describeBoxelType(
 export function resolveBoxelFields(
   instance: BaseDef,
   api: CardAPIModule,
-  writableFields?: ReadonlySet<string>,
   onPendingRelationship?: (pending: PendingRelationship) => void,
   ensureLoaded?: (reference: string) => Promise<unknown>,
 ): ResolvedField[] {
@@ -414,7 +407,6 @@ export function resolveBoxelFields(
         projectJSONValue(resolveFieldConfiguration(api, field, instance)) ??
         null,
       presentation,
-      writable: !field.computeVia && (writableFields?.has(fieldName) ?? false),
     };
   });
 }

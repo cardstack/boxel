@@ -16,7 +16,6 @@ import {
   type JSONValue,
   type LooseCardResource,
   type LooseSingleCardDocument,
-  type PatchData,
   type RealmResourceIdentifier,
   type ResolvedField,
   type RuntimeHandle,
@@ -282,29 +281,6 @@ export default class CapsuleBoxelRuntime implements BoxelRuntime {
       ...projection,
     };
     return document;
-  }
-
-  async serializeCardPatch(
-    card: BoxelInstanceHandle,
-    changes: Record<string, JSONValue>,
-  ): Promise<PatchData> {
-    let instance = this.instances.get(card);
-    let metadata = await this.metadataFor(instance.type);
-    let patch: PatchData = {};
-    for (let [fieldName, value] of Object.entries(changes)) {
-      let field = metadata.fields[fieldName];
-      if (!field) {
-        throw new Error(`Unknown field '${fieldName}'`);
-      }
-      if (field.kind === 'linksTo' || field.kind === 'linksToMany') {
-        patch.relationships ??= {};
-        patch.relationships[fieldName] = value as never;
-      } else {
-        patch.attributes ??= {};
-        patch.attributes[fieldName] = value;
-      }
-    }
-    return patch;
   }
 
   async dispose(handle: RuntimeHandle): Promise<void> {
@@ -591,8 +567,9 @@ function setSnapshotPath(
  * The Host-less fallback projection of one field, shaped identically to the
  * shared pipeline's `ResolvedField`. Configuration and field descriptions
  * require the canonical instance, so without an adopted Host projection they
- * resolve to their empty values; writability always requires an explicit Host
- * grant and therefore defaults to false (RP-9.1).
+ * resolve to their empty values. Writability is not record data at all:
+ * write authority is the Host-granted `set` capability argument (RP-9.1's
+ * rule enforced where the grant is made), never a flag a tier could read.
  */
 function resolvedField(
   fieldName: string,
@@ -606,7 +583,6 @@ function resolvedField(
     value,
     resolvedConfiguration: null,
     presentation: {},
-    writable: false,
   };
 }
 

@@ -73,7 +73,22 @@ function cardIdOf(instance: BaseDef | undefined): string | undefined {
  * silently disappears from operator mode.
  */
 class BoxelFieldPortal extends Component<Signature> {
-  static value: unknown;
+  /**
+   * A PATH, not a captured value — main's `Box` holds (instance, fieldName)
+   * and resolves the value per render, which is the entire reason N views of
+   * one card stay in sync there (RP-20.2). This thunk is that path expressed
+   * through the portal boundary: every render re-reads the canonical
+   * instance (a tracked read — the caller composes in the instance's version
+   * cell), so a reorder, splice, or save echo re-renders the portal in place
+   * instead of freezing it at creation-time state.
+   */
+  static read: () => unknown;
+  /**
+   * Main's `Box.set` for this field, when the Host grants it: assigns the
+   * canonical instance's field, which funnels through RP-9.2's one setField
+   * path (notify subscribers → autosave). Absent for computed fields.
+   */
+  static write: ((value: unknown) => void) | undefined;
   static relativeTo: RealmResourceIdentifier | undefined;
   static fieldMeta: PortalFieldMeta | undefined;
 
@@ -84,7 +99,11 @@ class BoxelFieldPortal extends Component<Signature> {
   declare private cardContext: CardContext | undefined;
 
   private get value(): unknown {
-    return (this.constructor as typeof BoxelFieldPortal).value;
+    return (this.constructor as typeof BoxelFieldPortal).read();
+  }
+
+  private get write(): ((value: unknown) => void) | undefined {
+    return (this.constructor as typeof BoxelFieldPortal).write;
   }
 
   private get relativeTo(): RealmResourceIdentifier | undefined {
@@ -169,6 +188,7 @@ class BoxelFieldPortal extends Component<Signature> {
         @format={{this.format}}
         @displayContainer={{false}}
         @relativeTo={{this.relativeTo}}
+        @set={{this.write}}
         {{this.cardComponentModifier
           card=this.boxel
           format=this.format
@@ -211,18 +231,36 @@ class BoxelFieldPortal extends Component<Signature> {
   </template>
 }
 
-export function createBoxelFieldPortal(
-  value: unknown,
-  relativeTo?: RealmResourceIdentifier,
-  fieldMeta?: PortalFieldMeta,
+function createPortalClass(
+  read: () => unknown,
+  relativeTo: RealmResourceIdentifier | undefined,
+  fieldMeta: PortalFieldMeta | undefined,
+  write: ((value: unknown) => void) | undefined,
 ): PortalComponent {
-  let target = class extends BoxelFieldPortal {
-    static value = value;
+  return class extends BoxelFieldPortal {
+    static read = read;
+    static write = write;
     static relativeTo = relativeTo;
     static fieldMeta = fieldMeta;
   } as unknown as PortalComponent;
+}
 
-  if (!Array.isArray(value)) {
+export function createBoxelFieldPortal(
+  read: () => unknown,
+  relativeTo?: RealmResourceIdentifier,
+  fieldMeta?: PortalFieldMeta,
+  write?: (value: unknown) => void,
+): PortalComponent {
+  let target = createPortalClass(read, relativeTo, fieldMeta, write);
+
+  // Plurality is a property of the FIELD (its declared kind), never of a
+  // value captured at creation time — a `containsMany` that is momentarily
+  // empty is still plural, and a live `read()` may legally change length on
+  // every render.
+  if (
+    fieldMeta?.fieldType !== 'containsMany' &&
+    fieldMeta?.fieldType !== 'linksToMany'
+  ) {
     return target;
   }
 
@@ -238,21 +276,43 @@ export function createBoxelFieldPortal(
   // authored card composes. Reproduce that contract here so an authored
   // Boxel sees identical behavior whether its plural field portal is a
   // trusted Base component or this Host-owned one.
+  let currentArray = (): unknown[] => {
+    let value = read();
+    return Array.isArray(value) ? value : [];
+  };
+  // Cached per INDEX — a stable component identity per position is exactly
+  // main's per-index Box child (`children()` in card-api's Box), so an item
+  // whose content changes re-renders in place while an item that merely
+  // moved re-reads its new occupant through the index path.
   let itemPortals = new Map<number, PortalComponent>();
   let itemPortalFor = (index: number): PortalComponent | undefined => {
-    if (index < 0 || index >= value.length) {
+    if (index < 0 || index >= currentArray().length) {
       return undefined;
     }
     let existing = itemPortals.get(index);
     if (existing) {
       return existing;
     }
-    let portal = createBoxelFieldPortal(value[index], relativeTo, fieldMeta);
+    let portal = createPortalClass(
+      () => currentArray()[index],
+      relativeTo,
+      fieldMeta,
+      write
+        ? (value) => {
+            // RP-9.3: `containsMany` mutates the watched array in place —
+            // the same write main's per-index Box.set performs.
+            let array = read();
+            if (Array.isArray(array)) {
+              array[index] = value;
+            }
+          }
+        : undefined,
+    );
     itemPortals.set(index, portal);
     return portal;
   };
   let itemPortalsInOrder = (): PortalComponent[] =>
-    value.map((_entry, index) => itemPortalFor(index)!);
+    currentArray().map((_entry, index) => itemPortalFor(index)!);
 
   return new Proxy(target, {
     get(proxyTarget, property, received) {
@@ -260,7 +320,7 @@ export function createBoxelFieldPortal(
         return itemPortalsInOrder()[Symbol.iterator];
       }
       if (property === 'length') {
-        return value.length;
+        return currentArray().length;
       }
       if (typeof property === 'string' && /^\d+$/.test(property)) {
         return itemPortalFor(Number(property));

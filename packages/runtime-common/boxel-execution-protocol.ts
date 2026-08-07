@@ -95,7 +95,6 @@ export type BoxelRuntimeOperation =
   | 'getField'
   | 'buildRenderRecord'
   | 'serializeCard'
-  | 'serializeCardPatch'
   | 'dispose';
 
 export interface BoxelRuntimeRequest {
@@ -443,7 +442,6 @@ export interface ResolvedField {
   value: JSONValue | BoxelValueReference | BoxelValueReference[];
   resolvedConfiguration: JSONValue | null;
   presentation: Record<string, JSONValue>;
-  writable: boolean;
 }
 
 export interface InstancePresentation {

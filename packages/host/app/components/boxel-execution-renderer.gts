@@ -54,6 +54,15 @@ interface Signature {
     displayContainer?: boolean;
     viewCard?: ViewCardFn;
     relativeTo?: RealmResourceIdentifier;
+    /**
+     * Main's `Box.set` for the field this render occupies, granted by the
+     * field portal (RP-9.2: `@set` and direct assignment are the same
+     * write). Crosses into a Capsule as a set CAPABILITY (the authored
+     * component's `set` effect invokes this Host closure); never a Store
+     * shortcut. The Sandbox tier's mutation lane is the pending
+     * updateInstance push and does not consume this argument yet.
+     */
+    set?: (value: unknown) => void;
   };
 }
 
@@ -550,7 +559,15 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
   }
 
   private get themePresentation() {
-    let presentation = this.state.snapshot.current?.renderRecord.presentation;
+    // A live read (RP-20.2's pattern applied to presentation): a themed
+    // card's `cardInfo.theme` is a `linksTo` that routinely settles AFTER
+    // first materialize. The record's presentation is that moment's captured
+    // value; this read follows the path instead, so the theme applies the
+    // instant the relationship settles — the same tracked-read mechanics
+    // that keep `@model` fresh, with no settle republish needed.
+    let presentation =
+      this.boxelExecution.livePresentationFor(this.args.card) ??
+      this.state.snapshot.current?.renderRecord.presentation;
     return {
       themeScope: presentation?.themeScope ?? undefined,
       themeCss: presentation?.themeCss ?? undefined,
@@ -591,6 +608,7 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
             @renderRecord={{this.state.snapshot.current.renderRecord}}
             @displayContainer={{@displayContainer}}
             @viewCard={{@viewCard}}
+            @set={{@set}}
             @context={{this.capsuleContextProjection}}
           />
         </DefaultFormatsProvider>

@@ -112,9 +112,7 @@ module('Integration | preview', function (hooks) {
 
     let firstSlot = runtime.getRenderSlot(card);
     let secondSlot = runtime.getRenderSlot(card);
-    let record = await runtime.buildRenderRecord(card, {
-      writableFields: new Set(['firstName', 'greeting']),
-    });
+    let record = await runtime.buildRenderRecord(card);
 
     assert.strictEqual(
       firstSlot,
@@ -159,12 +157,7 @@ module('Integration | preview', function (hooks) {
     assert.deepEqual(firstName?.presentation, {
       description: 'The name shown by the card',
     });
-    assert.true(firstName?.writable, 'explicitly granted field is writable');
     assert.strictEqual(greeting?.value, 'Hello, Mango');
-    assert.false(
-      greeting?.writable,
-      'a computed field remains read-only even when included in the grant',
-    );
 
     let isolated = record.boxel.formats.find(
       (format) => format.format === 'isolated',

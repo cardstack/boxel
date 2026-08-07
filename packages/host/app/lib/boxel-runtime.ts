@@ -4,12 +4,10 @@ import type {
   CodeRef,
   LooseCardResource,
   LooseSingleCardDocument,
-  PatchData,
   RealmResourceIdentifier,
   ResolvedField,
   BoxelInstanceHandle,
   BoxelTypeHandle,
-  JSONValue,
   RuntimeHandle,
 } from '@cardstack/runtime-common';
 
@@ -50,11 +48,6 @@ export interface BoxelRuntime {
   buildRenderRecord(card: BoxelInstanceHandle): Promise<BoxelRenderRecord>;
 
   serializeCard(card: BoxelInstanceHandle): Promise<LooseSingleCardDocument>;
-
-  serializeCardPatch(
-    card: BoxelInstanceHandle,
-    changes: Record<string, JSONValue>,
-  ): Promise<PatchData>;
 
   dispose(handle: RuntimeHandle): Promise<void>;
 }

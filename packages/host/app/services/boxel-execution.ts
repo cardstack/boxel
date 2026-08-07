@@ -29,6 +29,7 @@ import {
   createLiveBoxelModel,
   projectBoxelExecutionDocument,
   projectHostBoxelSemantics,
+  projectInstancePresentation,
 } from '@cardstack/host/lib/boxel-projection';
 import type { BoxelExecutionMode } from '@cardstack/host/lib/boxel-runtime';
 import BoxelRuntimeRouter from '@cardstack/host/lib/boxel-runtime-router';
@@ -383,6 +384,29 @@ export default class BoxelExecutionService extends Service {
     );
   }
 
+  /**
+   * RP-20.2 applied to presentation: the same live read-through the model
+   * gets, for the theme/title/summary block main derives per render inside
+   * `field-component.gts`. `projectInstancePresentation` is pure (peek
+   * reads and membership observations only — no lazy-load triggers, no
+   * write-backs), so consuming it from a tracked getter is safe; the
+   * version cell makes a late-settling `cardInfo.theme` re-derive the
+   * scope token in place. Returns `undefined` before the first
+   * `requestFor()` has captured the card API — callers fall back to the
+   * materialize-time record presentation, which is identical at that
+   * moment by construction.
+   */
+  livePresentationFor(card: BaseDef) {
+    if (!this.cardAPI) {
+      return undefined;
+    }
+    let cell = this.instanceVersionCellFor(card, this.cardAPI);
+    void cell.v;
+    return projectInstancePresentation(card, this.cardAPI, (url) =>
+      this.network.virtualNetwork.unresolveURL(url),
+    );
+  }
+
   private instanceVersionCellFor(
     card: BaseDef,
     api: NonNullable<typeof this.cardAPI>,
@@ -632,8 +656,18 @@ export default class BoxelExecutionService extends Service {
         }
         let portal = authored.get(property);
         if (!portal) {
+          let cell = this.instanceVersionCellFor(card, api);
           portal = createBoxelFieldPortal(
-            api.peekAtField(card, property),
+            // A PATH, never a captured value (RP-20.2, main's Box): the
+            // portal re-reads the canonical instance per render. The version
+            // cell is composed in for the same reason as the live model's
+            // reads — `peekAtField` tracks a TrackedArray's items but not
+            // the field SLOT, so a save echo that replaces the whole array
+            // would otherwise freeze the portal.
+            () => {
+              void cell.v;
+              return api.peekAtField(card, property);
+            },
             executionRelativeTo(card),
             // RP-11.5: the portal re-stamps field-component.gts's DOM
             // contract (ElementTracker registration + data attributes),
@@ -641,6 +675,17 @@ export default class BoxelExecutionService extends Service {
             // cannot classify the entry (linksTo vs linksToMany vs
             // contains) and operator-mode adornments skip the card.
             { fieldType: field.fieldType, fieldName: field.name },
+            // Main's Box.set, granted per RP-9.1's own rule (computed
+            // fields are never writable): assignment funnels through
+            // RP-9.2's one setField path — notify → autosave — so a
+            // Capsule editor's set effect is the same write a trusted Base
+            // editor performs.
+            field.computeVia
+              ? undefined
+              : (value) => {
+                  (card as unknown as Record<string, unknown>)[property] =
+                    value;
+                },
           );
           authored.set(property, portal);
         }

@@ -2,6 +2,11 @@ import { module, test } from 'qunit';
 
 import { createBoxelFieldPortal } from '@cardstack/host/components/boxel-field-portal';
 
+const pluralMeta = {
+  fieldType: 'containsMany' as const,
+  fieldName: 'entries',
+};
+
 // RP-3.4: "Plural fields: `@fields` of a plural field is array-like
 // (iterable, length, index)." Main's `linksToMany`/`containsMany` field
 // component (`getLinksToManyComponent`/`getContainsManyComponent` in
@@ -11,10 +16,18 @@ import { createBoxelFieldPortal } from '@cardstack/host/components/boxel-field-p
 // `(get @fields.reviewers index)` and get the per-item component either way.
 // `createBoxelFieldPortal` is the Host-owned equivalent placed in `@fields`
 // for a field whose value never enters a Capsule or Sandbox — these tests
-// verify it reproduces the same array-like contract.
+// verify it reproduces the same array-like contract over a LIVE read (a
+// thunk, main's Box path — RP-20.2), never a value captured at creation.
 module('Unit | components/boxel-field-portal', function () {
-  test('a scalar field value returns a plain portal with no array-like surface', function (assert) {
-    let portal = createBoxelFieldPortal('a plain string value');
+  test('a scalar field returns a plain portal with no array-like surface', function (assert) {
+    let portal = createBoxelFieldPortal(
+      () => 'a plain string value',
+      undefined,
+      {
+        fieldType: 'contains',
+        fieldName: 'title',
+      },
+    );
     assert.strictEqual(
       (portal as unknown as Record<PropertyKey, unknown>)[Symbol.iterator],
       undefined,
@@ -27,8 +40,23 @@ module('Unit | components/boxel-field-portal', function () {
     );
   });
 
-  test('a plural field value exposes length, in matching document order', function (assert) {
-    let portal = createBoxelFieldPortal(['first', 'second', 'third']);
+  test('plurality follows the declared field kind, not the momentary value shape', function (assert) {
+    let portal = createBoxelFieldPortal(() => [], undefined, pluralMeta);
+    assert.strictEqual(
+      typeof (portal as unknown as Record<PropertyKey, unknown>)[
+        Symbol.iterator
+      ],
+      'function',
+      'an empty containsMany is still plural — a momentarily empty array must not demote the portal to scalar',
+    );
+  });
+
+  test('a plural field exposes length, in matching document order', function (assert) {
+    let portal = createBoxelFieldPortal(
+      () => ['first', 'second', 'third'],
+      undefined,
+      pluralMeta,
+    );
     assert.strictEqual(
       (portal as unknown as { length: number }).length,
       3,
@@ -36,8 +64,43 @@ module('Unit | components/boxel-field-portal', function () {
     );
   });
 
-  test('a plural field value supports numeric-index access, matching (get @fields.x index)', function (assert) {
-    let portal = createBoxelFieldPortal(['first', 'second', 'third']);
+  test('length and bounds are LIVE reads — a mutation after creation is visible (RP-20.2)', function (assert) {
+    let value = ['first', 'second'];
+    let portal = createBoxelFieldPortal(() => value, undefined, pluralMeta);
+    let indexed = portal as unknown as Record<string, unknown> & {
+      length: number;
+    };
+    assert.strictEqual(indexed.length, 2);
+    value.push('third');
+    assert.strictEqual(
+      indexed.length,
+      3,
+      'a push after portal creation is visible on the next length read — the portal holds a path, never a captured value',
+    );
+    assert.strictEqual(
+      typeof indexed['2'],
+      'function',
+      'the new index answers with a per-item component',
+    );
+    value.length = 1;
+    assert.strictEqual(
+      indexed.length,
+      1,
+      'a splice-down is visible immediately',
+    );
+    assert.strictEqual(
+      indexed['1'],
+      undefined,
+      'a now-out-of-bounds index answers undefined, not a stale component',
+    );
+  });
+
+  test('a plural field supports numeric-index access, matching (get @fields.x index)', function (assert) {
+    let portal = createBoxelFieldPortal(
+      () => ['first', 'second', 'third'],
+      undefined,
+      pluralMeta,
+    );
     let indexed = portal as unknown as Record<string, unknown>;
     assert.strictEqual(
       typeof indexed['0'],
@@ -67,7 +130,11 @@ module('Unit | components/boxel-field-portal', function () {
   });
 
   test('the same index yields the identical per-item component across repeated access', function (assert) {
-    let portal = createBoxelFieldPortal(['first', 'second']);
+    let portal = createBoxelFieldPortal(
+      () => ['first', 'second'],
+      undefined,
+      pluralMeta,
+    );
     let indexed = portal as unknown as Record<string, unknown>;
     assert.strictEqual(
       indexed['0'],
@@ -76,8 +143,12 @@ module('Unit | components/boxel-field-portal', function () {
     );
   });
 
-  test('a plural field value is directly iterable, matching {{#each @fields.x as |Item|}}', function (assert) {
-    let portal = createBoxelFieldPortal(['first', 'second', 'third']);
+  test('a plural field is directly iterable, matching {{#each @fields.x as |Item|}}', function (assert) {
+    let portal = createBoxelFieldPortal(
+      () => ['first', 'second', 'third'],
+      undefined,
+      pluralMeta,
+    );
     let items = [...(portal as unknown as Iterable<unknown>)];
     assert.strictEqual(
       items.length,
@@ -99,8 +170,12 @@ module('Unit | components/boxel-field-portal', function () {
     assert.strictEqual(items[2], indexed['2']);
   });
 
-  test('a plural field value is still directly renderable, unindexed, as a single component', function (assert) {
-    let portal = createBoxelFieldPortal(['first', 'second']);
+  test('a plural field is still directly renderable, unindexed, as a single component', function (assert) {
+    let portal = createBoxelFieldPortal(
+      () => ['first', 'second'],
+      undefined,
+      pluralMeta,
+    );
     // Ember's component manager resolves a proxied component's template via
     // its prototype chain (the same reason
     // `getLinksToManyComponent`/`getContainsManyComponent` implement
@@ -114,9 +189,31 @@ module('Unit | components/boxel-field-portal', function () {
     );
   });
 
-  test('an empty plural field value has zero length and no iterated items', function (assert) {
-    let portal = createBoxelFieldPortal([]);
+  test('an empty plural field has zero length and no iterated items', function (assert) {
+    let portal = createBoxelFieldPortal(() => [], undefined, pluralMeta);
     assert.strictEqual((portal as unknown as { length: number }).length, 0);
     assert.deepEqual([...(portal as unknown as Iterable<unknown>)], []);
+  });
+
+  test('a granted write on a plural item mutates the watched array in place (RP-9.3)', function (assert) {
+    let value: unknown[] = ['first', 'second'];
+    // The per-item write path is exercised through the portal class's static
+    // `write` — reach it the way the component instance does.
+    let portal = createBoxelFieldPortal(
+      () => value,
+      undefined,
+      pluralMeta,
+      () => {
+        throw new Error(
+          'the whole-field write must not be invoked for an item write',
+        );
+      },
+    ) as unknown as Record<string, { write?: (v: unknown) => void }>;
+    portal['1']?.write?.('replaced');
+    assert.deepEqual(
+      value,
+      ['first', 'replaced'],
+      'an item write lands at its index on the live array — the same in-place mutation main’s per-index Box.set performs',
+    );
   });
 });
