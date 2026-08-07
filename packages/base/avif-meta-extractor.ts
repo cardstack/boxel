@@ -11,6 +11,10 @@ const FTYP_MARKER = new Uint8Array([0x66, 0x74, 0x79, 0x70]); // "ftyp"
 const AVIF_BRAND = new Uint8Array([0x61, 0x76, 0x69, 0x66]); // "avif"
 const AVIS_BRAND = new Uint8Array([0x61, 0x76, 0x69, 0x73]); // "avis"
 
+// Reused across every auxC box inspected, rather than allocating a decoder per
+// box while scanning — mirrors the module-level decoder in the EXIF extractor.
+const LATIN1 = new TextDecoder('latin1');
+
 // Minimum: ftyp box header (8) + major brand (4) = 12 bytes
 const MIN_BYTES = 12;
 
@@ -276,7 +280,7 @@ export function extractAvifColorProfile(
       if (start >= auxC.end) {
         return false;
       }
-      let text = new TextDecoder('latin1').decode(
+      let text = LATIN1.decode(
         bytes.subarray(start, Math.min(auxC.end, bytes.length)),
       );
       return text.startsWith(ALPHA_AUX_TYPE);
