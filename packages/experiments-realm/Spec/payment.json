@@ -9,7 +9,7 @@
       "specType": "card",
       "readMe": "## Payment\n\nA settlement fact: amount (base `AmountWithCurrency`), method enum (card / bank transfer / cash / other), paid-at timestamp, external reference, linked Invoice.\n\n```ts\nimport { Payment } from '../payment';\n```\n\n**Non-goals:** payment processing/gateway integration, refunds as negative payments, allocation across multiple invoices.",
       "cardInfo": {
-        "name": "Payment (commerce kit)",
+        "name": "Payment",
         "summary": "Settlement record: amount, method, timestamp, reference, linked invoice. A fact, not a workflow.",
         "notes": null,
         "cardThumbnailURL": null

@@ -6,7 +6,7 @@
       "specType": "field",
       "readMe": "## LineItem\n\nShared line-item field for commercial documents: description, quantity, unit price (base `AmountWithCurrency`). Line totals are computed, never stored.\n\n```ts\nimport { LineItem } from '../line-item';\n@field lineItems = containsMany(LineItem);\n```\n\nConsumed by both Invoice and Order — the block's two-consumer proof.\n\n**Non-goals:** per-line tax and discounts; multi-currency within one document (first line's currency wins for totals).",
       "cardInfo": {
-        "name": "LineItem (commerce kit)",
+        "name": "LineItem",
         "summary": "Shared line-item field: description, quantity, unit price. Totals computed, not stored. Consumed by Invoice and Order.",
         "notes": null,
         "cardThumbnailURL": null
