@@ -390,6 +390,31 @@ export class Loader {
   }
 
   /**
+   * A shimmed module's executable identity IS a host-defined module value
+   * registered through `shimModule` — there is no independent source to
+   * fetch, classify, or evaluate elsewhere (a realm-served shim answers
+   * source requests with only a marker comment). Callers that route
+   * execution use this to keep shims in the host runtime.
+   *
+   * Spelling-insensitive on the same identity family `moduleCacheKey`
+   * shares (`.gts` / `.ts` / extensionless): a shim may be registered under
+   * one spelling while a captured class identity carries another.
+   */
+  isShimmedModule(moduleIdentifier: string): boolean {
+    let resolved = this.resolveImport(moduleIdentifier);
+    if (this.moduleShims.has(resolved)) {
+      return true;
+    }
+    let key = this.moduleCacheKey(resolved);
+    for (let shimIdentifier of this.moduleShims.keys()) {
+      if (this.moduleCacheKey(shimIdentifier) === key) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
    * Invalidates one module and only already-known reverse dependants. This is
    * the primitive that lets a retained Capsule update authored code without
    * discarding trusted modules or unrelated render islands.
@@ -1151,6 +1176,14 @@ export class Loader {
 
     if (loaded.type === 'shimmed') {
       this.captureIdentitiesOfModuleExports(loaded.module, moduleIdentifier);
+
+      // A shim can arrive from the FETCH RESPONSE (the serving realm marks
+      // it with `Symbol.for('shimmed-module')`) rather than a local
+      // `shimModule()` call. Record it here too, so `isShimmedModule` is
+      // truthful on every loader that has loaded the module — execution
+      // routing depends on it — and future fetches short-circuit exactly
+      // like a locally registered shim.
+      this.moduleShims.set(moduleIdentifier, loaded.module);
 
       this.setModule(moduleIdentifier, {
         state: 'evaluated',

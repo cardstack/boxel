@@ -18,6 +18,7 @@ module('Unit | Sandbox render transport', function () {
       },
       clear: () => {},
       draft: () => {},
+      updateInstance: () => {},
     };
     let server = new SandboxRenderServer(channel.port1, target);
     let client = new SandboxRenderClient(channel.port2);
@@ -89,6 +90,7 @@ module('Unit | Sandbox render transport', function () {
       render: () => new Promise((resolve) => setTimeout(resolve, 40)),
       clear: () => {},
       draft: () => {},
+      updateInstance: () => {},
     };
     let server = new SandboxRenderServer(channel.port1, target);
     let client = new SandboxRenderClient(channel.port2, 10);
@@ -132,6 +134,7 @@ module('Unit | Sandbox render transport', function () {
     let target: SandboxRenderTarget = {
       render: () => {},
       clear: () => {},
+      updateInstance: () => {},
       draft: (url, generation) => {
         drafted.push({ url, generation });
       },
@@ -172,6 +175,7 @@ module('Unit | Sandbox render transport', function () {
       },
       clear: () => {},
       draft: () => {},
+      updateInstance: () => {},
     };
     let server = new SandboxRenderServer(channel.port1, target);
     let client = new SandboxRenderClient(channel.port2);
@@ -222,6 +226,7 @@ module('Unit | Sandbox render transport', function () {
       clear: (generation) => {
         dispatched.push({ clear: generation });
       },
+      updateInstance: () => {},
       draft: (url, generation) => {
         dispatched.push({ url, generation });
       },
@@ -270,6 +275,7 @@ module('Unit | Sandbox render transport', function () {
     let target: SandboxRenderTarget = {
       render: () => {},
       clear: () => {},
+      updateInstance: () => {},
       draft: (url) => {
         dispatched.push(url);
       },

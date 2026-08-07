@@ -253,6 +253,18 @@ opcodes. The mounted tier is stamped as `data-boxel-execution`
 (`direct|capsule|sandbox|prerender`) with `data-boxel-execution-reason` —
 a diagnostic, not an author API.
 
+**RP-6.5** The standard-view base-template override (interact mode's
+"Toggle Standard View", the preview panel's synthetic `form` format — a
+`baseCardRef` passed alongside `execution='auto'`) is resolved by the
+execution renderer per tier, never by opting the render out of the
+execution runtime. For Direct and Capsule it resolves host-side through
+`trustedBaseRenderSlotFor` — the same trusted-Base resolution a Capsule's
+missing authored format takes. For a Sandbox-classified module it is
+REFUSED: the authored render stays confined to the iframe and the override
+is ignored with a diagnostic, because honoring it host-side would execute
+the module's authored field templates in the main document. This is an
+instance of R5: nothing may de-escalate isolation.
+
 ## RP-7 Relationships and lazy loading
 
 **RP-7.1** Link state is a five-way union: `present`, `not-loaded`,

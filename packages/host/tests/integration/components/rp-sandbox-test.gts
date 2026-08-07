@@ -10,6 +10,7 @@ import {
   BOXEL_SURFACE_PROTOCOL_VERSION,
   Loader,
   VirtualNetwork,
+  baseCardRef,
   fetcher,
   type LooseCardResource,
   type SurfaceHandle,
@@ -100,6 +101,46 @@ async function renderThroughExecutionRenderer(card: BaseDef, format?: Format) {
   );
 }
 
+// The standard-view override exactly as interact mode's Toggle Standard
+// View passes it (stack-item.gts): baseCardRef alongside execution='auto'.
+async function renderWithBaseTemplateOverride(card: BaseDef, format?: Format) {
+  await renderComponent(
+    class TestDriver extends GlimmerComponent {
+      <template>
+        <CardRenderer
+          @card={{card}}
+          @format={{format}}
+          @execution='auto'
+          @codeRef={{baseCardRef}}
+        />
+      </template>
+    },
+  );
+}
+
+// No browser-authority imports: RP-6.1 R4 routes this module to Capsule —
+// the tier whose standard-view override must resolve HOST-SIDE through the
+// trusted Base template (RP-6.5), same as a missing authored format.
+const plainWidgetSource = `
+  import {
+    CardDef,
+    Component,
+    contains,
+    field,
+  } from 'https://cardstack.com/base/card-api';
+  import StringField from 'https://cardstack.com/base/string';
+
+  export class PlainWidget extends CardDef {
+    static displayName = 'PlainWidget';
+    @field label = contains(StringField);
+    static isolated = class Isolated extends Component<typeof PlainWidget> {
+      <template>
+        <div data-test-plain-widget>{{@model.label}}</div>
+      </template>
+    };
+  }
+`;
+
 module('Integration | rp-sandbox', function (hooks) {
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
@@ -116,6 +157,7 @@ module('Integration | rp-sandbox', function (hooks) {
         mockMatrixUtils,
         contents: {
           'webgl-widget.gts': webglWidgetSource,
+          'plain-widget.gts': plainWidgetSource,
         },
       }),
     );
@@ -239,6 +281,60 @@ module('Integration | rp-sandbox', function (hooks) {
       .doesNotExist(
         'the Sandbox slot (and its failed iframe) is torn down once the handshake is known to have failed',
       );
+  });
+
+  test('RP-6.5: the standard-view base-template override resolves host-side through the trusted Base template for a Capsule-classified card', async function (assert) {
+    let card = await createFromResource({
+      attributes: { label: 'plain hello' },
+      meta: {
+        adoptsFrom: { module: testRRI('plain-widget'), name: 'PlainWidget' },
+      },
+    });
+
+    await renderWithBaseTemplateOverride(card, 'isolated');
+
+    // trustedBaseRenderSlotFor resolves the override over the canonical
+    // instance via the Direct runtime — the render mounts as a Direct slot,
+    // not a Capsule one.
+    await waitFor('[data-boxel-execution="direct"]', { timeout: 5000 });
+    assert
+      .dom('[data-boxel-execution="direct"]')
+      .exists('the override mounts the trusted Base template host-side');
+    assert
+      .dom('[data-test-plain-widget]')
+      .doesNotExist(
+        'the authored isolated template does not render — the Base template replaced it',
+      );
+    assert
+      .dom('[data-boxel-execution="capsule"]')
+      .doesNotExist('no Capsule slot mounts for the overridden render');
+  });
+
+  test('RP-6.5: the standard-view base-template override is refused for a Sandbox-classified card — the authored render stays confined to the iframe', async function (assert) {
+    let card = await createWidget();
+
+    await renderWithBaseTemplateOverride(card, 'isolated');
+
+    // Classification still routes Sandbox; the override must not
+    // de-escalate the render into the main document (RP-6.1 R5).
+    await waitFor('[data-boxel-execution="sandbox"]', { timeout: 5000 });
+    await waitFor(
+      '[data-boxel-execution="sandbox"] iframe.boxel-sandbox-process',
+      { timeout: 5000 },
+    );
+    assert
+      .dom('[data-boxel-execution="sandbox"] iframe.boxel-sandbox-process')
+      .exists(
+        'the Sandbox slot and its iframe mount exactly as without the override',
+      );
+    assert
+      .dom('[data-boxel-execution="direct"]')
+      .doesNotExist(
+        'no host-side Base-template render is created for a Sandbox-classified module',
+      );
+    assert
+      .dom('[data-test-webgl-widget]')
+      .doesNotExist('no authored content renders in the main document');
   });
 
   test('RP-15.3: an uncaught error or unhandled rejection before ready is held and released as a single runtime-error control message once ready posts', async function (assert) {

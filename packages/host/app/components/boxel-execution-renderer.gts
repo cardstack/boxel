@@ -18,6 +18,7 @@ import {
   childFieldFormatsFor,
   DefaultFormatsContextName,
   isCardInstance,
+  type CodeRef,
   type RealmResourceIdentifier,
   type SurfaceHandle,
 } from '@cardstack/runtime-common';
@@ -44,6 +45,7 @@ import type {
   BoxComponent,
   CardContext,
   FieldFormats,
+  FieldType,
   Format,
   ViewCardFn,
 } from '@cardstack/base/card-api';
@@ -75,6 +77,16 @@ interface Signature {
      */
     fieldType?: FieldType;
     fieldName?: string;
+    /**
+     * The standard-view override (always `baseCardRef` today): render the
+     * trusted Base template for this card instead of its authored format.
+     * Resolved per tier (RP-6.5) — host-side via
+     * `trustedBaseRenderSlotFor` for Direct/Capsule (the same resolution a
+     * Capsule's missing authored format takes), REFUSED for Sandbox, where
+     * honoring it host-side would execute the sandboxed module's authored
+     * FieldDef templates in the main document.
+     */
+    baseTemplateRef?: CodeRef;
   };
 }
 
@@ -107,10 +119,23 @@ type HeadComponent = ComponentLike<{
 /**
  * Matches `DEFAULT_CARD_CONTEXT`'s no-op in `@cardstack/base`: when no
  * operator-mode context provides a real `cardComponentModifier`, tracking
- * silently registers nothing.
+ * silently registers nothing. Its signature mirrors the real tracker
+ * modifier's so the two are interchangeable at the invocation site.
  */
 class NoOpModifier extends Modifier<{
-  Args: { Named: Record<string, unknown> };
+  Args: {
+    Named: {
+      // BaseDef, not CardDef: the invocation site passes `@card` before the
+      // isCardInstance narrowing — the getter below only hands out the REAL
+      // tracker modifier for card instances, so the looser static type never
+      // lets a non-card reach real tracking at runtime.
+      card?: BaseDef;
+      cardId?: string;
+      format: Format | 'data';
+      fieldType: FieldType | undefined;
+      fieldName: string | undefined;
+    };
+  };
 }> {
   modify() {}
 }
@@ -174,6 +199,7 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
     let card = this.args.card;
     let format = this.args.format;
     let relativeTo = this.args.relativeTo;
+    let baseTemplateRef = this.args.baseTemplateRef;
     let state = new TrackedObject<ExecutionRendererState>({
       snapshot: session.snapshot,
     });
@@ -209,9 +235,11 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
     if (moduleIdentifier) {
       this.boxelExecution.isVolatile(moduleIdentifier);
     }
-    // RP-20.1: this resource's tracked dependency set is EXACTLY the three
+    // RP-20.1: this resource's tracked dependency set is EXACTLY the four
     // reads above — the card's identity (the `args.card` reference), the
-    // requested format, and the module's volatility cell. Nothing below may
+    // requested format, the standard-view override (`baseTemplateRef`, so a
+    // Toggle Standard View re-materializes like a format change), and the
+    // module's volatility cell. Nothing below may
     // add to it: the synchronous prefix of the async pipeline (everything
     // up to its first await) otherwise still runs inside this tracking
     // frame, and `requestFor`/serialization read the instance's TRACKED
@@ -346,6 +374,21 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
                 card,
                 slot.componentCodeRef,
               );
+            }
+            if (baseTemplateRef) {
+              if (slot.owner === 'sandbox') {
+                // RP-6.5: the override never crosses the Sandbox boundary —
+                // the authored render stays confined and the standard view
+                // is unavailable for this card.
+                console.warn(
+                  `Ignoring standard-view base-template override for a Sandbox-classified card — honoring it would execute the module's authored field templates outside the iframe boundary`,
+                );
+              } else {
+                slot = this.boxelExecution.trustedBaseRenderSlotFor(
+                  card,
+                  baseTemplateRef,
+                );
+              }
             }
             state.fields = fields;
             state.slot = slot;
@@ -594,9 +637,13 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
    * registers FieldDef compounds either, and an entry without a card
    * identity breaks overlay consumers downstream.
    */
-  private get cardComponentModifier() {
+  private get cardComponentModifier(): typeof NoOpModifier {
+    // The cast unifies the union for Glint: the real tracker modifier's
+    // Named args match NoOpModifier's except for the (deliberately looser,
+    // runtime-guarded) `card` type documented on NoOpModifier.
     return isCardInstance(this.args.card)
-      ? (this.hostCardContext?.cardComponentModifier ?? NoOpModifier)
+      ? ((this.hostCardContext?.cardComponentModifier ??
+          NoOpModifier) as unknown as typeof NoOpModifier)
       : NoOpModifier;
   }
 

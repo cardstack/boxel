@@ -322,7 +322,16 @@ export default class BoxelExecutionService extends Service {
     return {
       principal: this.principal,
       surfaceId,
-      trusted: isTrustedModule(moduleIdentifier),
+      // A Loader-shimmed module is host-defined by construction: its class
+      // identity lives in the host process and its realm file serves only a
+      // shim marker (no evaluable source exists for Capsule/Sandbox to
+      // run). Routing it anywhere but Direct executes a comment. In the
+      // app, shims are @cardstack internals (already trusted); in tests,
+      // fixture modules registered via `loader.shimModule` render exactly
+      // as main renders them.
+      trusted:
+        isTrustedModule(moduleIdentifier) ||
+        this.loaderService.loader.isShimmedModule(moduleIdentifier),
       format: format ?? 'isolated',
       moduleIdentifier,
       source,

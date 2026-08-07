@@ -147,7 +147,12 @@ export function createLiveBoxelModel(
     // Establishes the version dependency BEFORE the value read, so a
     // notification arriving between the two invalidates this frame.
     version?.();
-    let field = api.getFields(instance, { includeComputeds: true })[fieldName];
+    let field = (
+      api.getFields(instance, { includeComputeds: true }) as Record<
+        string,
+        Field<BaseDefConstructor> | undefined
+      >
+    )[fieldName];
     if (!field) {
       return fallback[fieldName];
     }

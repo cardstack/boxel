@@ -77,6 +77,7 @@ export default class CardRenderer extends Component<Signature> {
         @format={{@format}}
         @displayContainer={{@displayContainer}}
         @viewCard={{this.viewCard}}
+        @baseTemplateRef={{@codeRef}}
         ...attributes
       />
     {{else if (eq @format 'head')}}
@@ -105,10 +106,13 @@ export default class CardRenderer extends Component<Signature> {
   }
 
   private get usesExecutionRuntime(): boolean {
-    return (
-      this.args.execution === 'auto' &&
-      this.args.field === undefined &&
-      this.args.codeRef === undefined
-    );
+    // Under 'auto', a codeRef is only ever the standard-view base-template
+    // override (baseCardRef from stack-item / preview-panel). It must NOT
+    // opt the render out of the execution runtime — that would silently
+    // execute a Sandbox-classified module's authored field templates in the
+    // main document. The execution renderer resolves the override per tier
+    // (RP-6.5): host-side trusted Base for Direct/Capsule, refused for
+    // Sandbox.
+    return this.args.execution === 'auto' && this.args.field === undefined;
   }
 }
