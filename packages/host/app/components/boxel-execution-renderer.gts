@@ -5,6 +5,7 @@ import Component from '@glimmer/component';
 // @ts-ignore — @glimmer/validator is provided by Ember but has no own types
 import { untrack } from '@glimmer/validator';
 
+import Modifier from 'ember-modifier';
 import { consume, provide } from 'ember-provide-consume-context';
 import { resource, use } from 'ember-resources';
 import { TrackedObject } from 'tracked-built-ins';
@@ -14,7 +15,9 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
   CardContextName,
+  childFieldFormatsFor,
   DefaultFormatsContextName,
+  isCardInstance,
   type RealmResourceIdentifier,
   type SurfaceHandle,
 } from '@cardstack/runtime-common';
@@ -63,6 +66,15 @@ interface Signature {
      * updateInstance push and does not consume this argument yet.
      */
     set?: (value: unknown) => void;
+    /**
+     * Field identity when this render occupies a field position (supplied
+     * by the field portal), carried into the ElementTracker registration
+     * below — overlays classify entries by it (linksTo vs linksToMany vs
+     * contains). Absent for a root render, exactly as main registers a
+     * root card with no field.
+     */
+    fieldType?: FieldType;
+    fieldName?: string;
   };
 }
 
@@ -91,6 +103,17 @@ type HeadComponent = ComponentLike<{
     model?: Record<string, unknown>;
   };
 }>;
+
+/**
+ * Matches `DEFAULT_CARD_CONTEXT`'s no-op in `@cardstack/base`: when no
+ * operator-mode context provides a real `cardComponentModifier`, tracking
+ * silently registers nothing.
+ */
+class NoOpModifier extends Modifier<{
+  Args: { Named: Record<string, unknown> };
+}> {
+  modify() {}
+}
 
 interface DefaultFormatsProviderSignature {
   Args: { value: FieldFormats };
@@ -143,17 +166,7 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
    * template invokes.
    */
   private get capsuleChildFormats(): FieldFormats {
-    let format = this.args.format ?? 'isolated';
-    switch (format) {
-      case 'edit':
-        return { cardDef: 'edit', fieldDef: 'edit' };
-      case 'atom':
-      case 'head':
-      case 'markdown':
-        return { cardDef: format, fieldDef: format };
-      default:
-        return { cardDef: 'fitted', fieldDef: 'embedded' };
-    }
+    return childFieldFormatsFor(this.args.format ?? 'isolated') as FieldFormats;
   }
 
   @use private execution = resource(({ on }) => {
@@ -558,6 +571,24 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
     return this.args.format ?? 'isolated';
   }
 
+  /**
+   * RP-11.5: on main, EVERY card render — root included — passes through
+   * `field-component.gts`'s `CardContainer`, which registers the element
+   * with operator mode's ElementTracker via the injected
+   * `cardComponentModifier`. In this architecture that container IS the
+   * Capsule/Sandbox slot root rendered here, so this is the one
+   * registration site (the field portal supplies `@fieldType`/`@fieldName`
+   * for a nested render; a root render registers with no field, exactly as
+   * main does). Real tracking only for card instances — main never
+   * registers FieldDef compounds either, and an entry without a card
+   * identity breaks overlay consumers downstream.
+   */
+  private get cardComponentModifier() {
+    return isCardInstance(this.args.card)
+      ? (this.hostCardContext?.cardComponentModifier ?? NoOpModifier)
+      : NoOpModifier;
+  }
+
   private get themePresentation() {
     // A live read (RP-20.2's pattern applied to presentation): a themed
     // card's `cardInfo.theme` is a `linksTo` that routinely settles AFTER
@@ -597,6 +628,12 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
         data-boxel-card-format={{this.effectiveFormat}}
         data-test-card={{this.cardURL}}
         data-test-card-format={{this.effectiveFormat}}
+        {{this.cardComponentModifier
+          card=@card
+          format=this.effectiveFormat
+          fieldType=@fieldType
+          fieldName=@fieldName
+        }}
         {{surfaceElement this.capsuleSurface}}
         ...attributes
       >
@@ -623,6 +660,12 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
         data-boxel-card-format={{this.effectiveFormat}}
         data-test-card={{this.cardURL}}
         data-test-card-format={{this.effectiveFormat}}
+        {{this.cardComponentModifier
+          card=@card
+          format=this.effectiveFormat
+          fieldType=@fieldType
+          fieldName=@fieldName
+        }}
         {{boxelSandboxSlot this.sandboxSlot}}
         ...attributes
       >

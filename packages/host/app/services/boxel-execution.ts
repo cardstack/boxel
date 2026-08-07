@@ -674,7 +674,11 @@ export default class BoxelExecutionService extends Service {
             // which needs the field's identity — without it, overlays
             // cannot classify the entry (linksTo vs linksToMany vs
             // contains) and operator-mode adornments skip the card.
-            { fieldType: field.fieldType, fieldName: field.name },
+            {
+              fieldType: field.fieldType,
+              fieldName: field.name,
+              isComputed: Boolean(field.computeVia),
+            },
             // Main's Box.set, granted per RP-9.1's own rule (computed
             // fields are never writable): assignment funnels through
             // RP-9.2's one setField path — notify → autosave — so a

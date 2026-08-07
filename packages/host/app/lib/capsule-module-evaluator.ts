@@ -5,6 +5,7 @@ import {
   bfmRefFormatAndSize,
   bfmResolvedEmbedStyle,
   cardTypeName,
+  childFieldFormatsFor,
   extractMermaidBlocks,
   fileNameFromUrl,
   processKatexPlaceholders,
@@ -1411,19 +1412,13 @@ export default class CapsuleModuleEvaluator {
             return modelID ?? renderedID;
           }
           if (contextName === DefaultFormatsContextName) {
+            // The ONE shared cascade (RP-2.6) — a local copy here previously
+            // drifted (nested cardDef defaulted to the containing format, so
+            // a linksTo inside an isolated Capsule render mounted `isolated`
+            // where main mounts `fitted`).
             let format =
               typeof args.format === 'string' ? args.format : 'isolated';
-            if (format === 'edit') {
-              return Object.freeze({ cardDef: 'edit', fieldDef: 'edit' });
-            }
-            if (
-              format === 'atom' ||
-              format === 'head' ||
-              format === 'markdown'
-            ) {
-              return Object.freeze({ cardDef: format, fieldDef: format });
-            }
-            return Object.freeze({ cardDef: format, fieldDef: 'embedded' });
+            return Object.freeze(childFieldFormatsFor(format));
           }
           if (contextName === PermissionsContextName) {
             return Object.freeze({

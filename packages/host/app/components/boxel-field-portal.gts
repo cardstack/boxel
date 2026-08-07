@@ -1,10 +1,8 @@
 import Component from '@glimmer/component';
 
-import Modifier from 'ember-modifier';
 import { consume } from 'ember-provide-consume-context';
 
 import {
-  CardContextName,
   DefaultFormatsContextName,
   isBaseDefInstance,
   isCardInstance,
@@ -15,8 +13,6 @@ import BoxelExecutionRenderer from '@cardstack/host/components/boxel-execution-r
 
 import type {
   BaseDef,
-  CardContext,
-  CardDef,
   FieldFormats,
   FieldType,
   Format,
@@ -36,23 +32,11 @@ type PortalComponent = ComponentLike<Signature>;
 export interface PortalFieldMeta {
   fieldType: FieldType | undefined;
   fieldName: string | undefined;
-}
-
-/**
- * Matches `DEFAULT_CARD_CONTEXT`'s no-op in `@cardstack/base`: when no
- * operator-mode context provides a real `cardComponentModifier`, tracking
- * silently registers nothing.
- */
-class NoOpModifier extends Modifier<{
-  Args: { Named: Record<string, unknown> };
-}> {
-  modify() {}
-}
-
-function cardIdOf(instance: BaseDef | undefined): string | undefined {
-  return instance && isCardInstance(instance)
-    ? ((instance as CardDef).id as string | undefined)
-    : undefined;
+  /**
+   * Main's `determineFormats` rule (field-component.gts): a computed field
+   * never renders its editor — in an edit cascade it renders embedded.
+   */
+  isComputed?: boolean;
 }
 
 /**
@@ -67,10 +51,11 @@ function cardIdOf(instance: BaseDef | undefined): string | undefined {
  * `field-component.gts`, whose `CardContainer` carries the operator-mode
  * DOM contract — the injected `cardComponentModifier` (ElementTracker
  * registration, which is what overlays/adorn discover cards through) and
- * the `data-boxel-card-id`/`data-test-card` attributes. This portal
- * replaces that chrome for authored fields, so it must re-stamp the same
- * contract on its rendered root or every overlay-eligible nested card
- * silently disappears from operator mode.
+ * the `data-boxel-card-id`/`data-test-card` attributes. In this
+ * architecture that container is the renderer's own slot root, which
+ * stamps the contract for root and nested renders alike; this portal
+ * contributes the field identity (`@fieldType`/`@fieldName`) that
+ * classifies a nested entry.
  */
 class BoxelFieldPortal extends Component<Signature> {
   /**
@@ -94,9 +79,6 @@ class BoxelFieldPortal extends Component<Signature> {
 
   @consume(DefaultFormatsContextName)
   declare private defaultFormats: FieldFormats | undefined;
-
-  @consume(CardContextName)
-  declare private cardContext: CardContext | undefined;
 
   private get value(): unknown {
     return (this.constructor as typeof BoxelFieldPortal).read();
@@ -133,34 +115,25 @@ class BoxelFieldPortal extends Component<Signature> {
   }
 
   private get format(): Format {
-    if (this.args.format) {
-      return this.args.format;
-    }
+    // Card-ness selects the cascade axis for the plural case too: main's
+    // `linksToMany` items render in the CARD axis (`defaultFormats.cardDef`,
+    // links-to-many-component.gts), not the field axis.
+    let rendersCards = this.boxel
+      ? isCardInstance(this.boxel)
+      : Boolean(this.boxels?.every((instance) => isCardInstance(instance)));
     let defaults = this.defaultFormats ?? {
       cardDef: 'isolated',
       fieldDef: 'embedded',
     };
-    return this.boxel && isCardInstance(this.boxel)
-      ? defaults.cardDef
-      : defaults.fieldDef;
-  }
-
-  /**
-   * Real tracking only for card instances — main never registers FieldDef
-   * compounds with the ElementTracker either, and an entry without a
-   * card identity would break overlay consumers downstream.
-   */
-  private get cardComponentModifier() {
-    let tracksCards = this.boxel
-      ? isCardInstance(this.boxel)
-      : Boolean(this.boxels?.every((instance) => isCardInstance(instance)));
-    return tracksCards
-      ? (this.cardContext?.cardComponentModifier ?? NoOpModifier)
-      : NoOpModifier;
-  }
-
-  private get cardId(): string | undefined {
-    return cardIdOf(this.boxel);
+    let format =
+      this.args.format ?? (rendersCards ? defaults.cardDef : defaults.fieldDef);
+    // Main's `determineFormats`: a computed FIELD never renders in edit —
+    // applied after any author-named format, exactly as main applies it to
+    // the resolved result.
+    if (!rendersCards && this.fieldMeta?.isComputed && format === 'edit') {
+      return 'embedded';
+    }
+    return format;
   }
 
   private get displayValue(): string {
@@ -182,6 +155,10 @@ class BoxelFieldPortal extends Component<Signature> {
   }
 
   <template>
+    {{! RP-11.5: the ElementTracker registration and card data attributes are
+      stamped by the renderer on its own slot root (the one registration
+      site, shared with root renders); this portal contributes the field
+      identity overlays classify entries by. }}
     {{#if this.boxel}}
       <BoxelExecutionRenderer
         @card={{this.boxel}}
@@ -189,16 +166,8 @@ class BoxelFieldPortal extends Component<Signature> {
         @displayContainer={{false}}
         @relativeTo={{this.relativeTo}}
         @set={{this.write}}
-        {{this.cardComponentModifier
-          card=this.boxel
-          format=this.format
-          fieldType=this.fieldType
-          fieldName=this.fieldName
-        }}
-        data-boxel-card-id={{this.cardId}}
-        data-boxel-card-format={{this.format}}
-        data-test-card={{this.cardId}}
-        data-test-card-format={{this.format}}
+        @fieldType={{this.fieldType}}
+        @fieldName={{this.fieldName}}
         data-test-field-component-card
         ...attributes
       />
@@ -209,16 +178,8 @@ class BoxelFieldPortal extends Component<Signature> {
           @format={{this.format}}
           @displayContainer={{false}}
           @relativeTo={{this.relativeTo}}
-          {{this.cardComponentModifier
-            card=boxel
-            format=this.format
-            fieldType=this.fieldType
-            fieldName=this.fieldName
-          }}
-          data-boxel-card-id={{cardIdOf boxel}}
-          data-boxel-card-format={{this.format}}
-          data-test-card={{cardIdOf boxel}}
-          data-test-card-format={{this.format}}
+          @fieldType={{this.fieldType}}
+          @fieldName={{this.fieldName}}
           data-test-field-component-card
           ...attributes
         />

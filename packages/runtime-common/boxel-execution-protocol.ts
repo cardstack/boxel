@@ -32,6 +32,35 @@ export function surfaceHeightModeFor(format: string): SurfaceHeightMode {
   return format === 'fitted' ? 'allocated' : 'intrinsic';
 }
 
+/**
+ * Main's child-format cascade, verbatim (`defaultFieldFormats` in
+ * `@cardstack/base/field-component.gts`, RP-2.6): the formats `<@fields.x />`
+ * resolves to inside a template rendering as `containingFormat` when the
+ * author names none. This is the ONE definition for every execution tier
+ * that reproduces the cascade outside Base's own field components (the Host
+ * renderer's Capsule slot, the Capsule facade's `DefaultFormatsContextName`
+ * answer) — a drifted copy renders nested cards in the wrong format on that
+ * tier only, which is exactly the class of divergence RP conformance exists
+ * to prevent.
+ */
+export function childFieldFormatsFor(containingFormat: string): {
+  cardDef: string;
+  fieldDef: string;
+} {
+  switch (containingFormat) {
+    case 'edit':
+      return { cardDef: 'edit', fieldDef: 'edit' };
+    case 'atom':
+    case 'head':
+    case 'markdown':
+      return { cardDef: containingFormat, fieldDef: containingFormat };
+    default:
+      // isolated | fitted | embedded (and any unknown format degrades the
+      // same way main degrades it)
+      return { cardDef: 'fitted', fieldDef: 'embedded' };
+  }
+}
+
 export interface SurfacePresentation {
   headerColor?: string | null;
   containerBackground?: string | null;
