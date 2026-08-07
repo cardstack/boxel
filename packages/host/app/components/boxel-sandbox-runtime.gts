@@ -19,6 +19,7 @@ import {
   type ModuleEvaluator,
   type ModuleRegistration,
   type Permissions,
+  type SurfaceHeightMode,
 } from '@cardstack/runtime-common';
 
 import { installBoxelLoaderCompatibilityModules } from '@cardstack/host/lib/boxel-loader-compatibility';
@@ -164,7 +165,7 @@ const attachSurface = modifier<{
     Positional: [
       SandboxSurfaceClient,
       (element: HTMLElement) => void,
-      Format,
+      SurfaceHeightMode,
       ((url: string) => Promise<Response>) | undefined,
     ];
   };
@@ -172,7 +173,7 @@ const attachSurface = modifier<{
 }>(
   (
     element,
-    [surface, measureAndReportRenderDiagnostic, format, mediaFetch],
+    [surface, measureAndReportRenderDiagnostic, heightMode, mediaFetch],
   ) => {
     let disconnectEvents = connectSandboxSurface(element, surface, (error) => {
       console.error('Sandbox Surface capability failed', error);
@@ -184,13 +185,13 @@ const attachSurface = modifier<{
       ? new SandboxMediaBridge(element, mediaFetch)
       : undefined;
     mediaBridge?.start();
-    // In allocated mode the parent's tile owns the box — a child that keeps
+    // In allocated mode the parent owns the box — a child that keeps
     // reporting intrinsic measurements would stomp the parent's `height:
-    // 100%` back to a content-derived pixel value. The format is a tracked
-    // arg, so a format switch re-runs this modifier and starts/stops the
-    // reporter to match the new mode.
+    // 100%` back to a content-derived pixel value. The mode is derived from
+    // tracked state, so a format switch (or a change in the Host's box
+    // contract) re-runs this modifier and starts/stops the reporter to match.
     let stopHeightReporting =
-      surfaceHeightModeFor(format) === 'intrinsic'
+      heightMode === 'intrinsic'
         ? reportIntrinsicHeight(element, surface)
         : undefined;
     let stopDiagnosticReporting = reportRenderDiagnosticOnResize(
@@ -429,6 +430,13 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
 
   @tracked private renderedComponent?: ComponentLike<SandboxComponentSignature>;
   @tracked private format: Format = 'isolated';
+  /**
+   * RP-9.9: the parent's box contract for this render, carried on the render
+   * op. Combined with `format` it decides the height mode — and both sides
+   * feed the SAME pair to `surfaceHeightModeFor`, so the parent's layout and
+   * this child's decision to measure cannot disagree.
+   */
+  @tracked private hostOwnsBox = false;
   @tracked private surface?: SandboxSurfaceClient;
   @tracked private error?: Error;
   /**
@@ -475,6 +483,14 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
   private measureAndReportRenderDiagnostic = (element: HTMLElement): void => {
     this.reportRenderDiagnostic?.(measureRenderedOutput(element, this.format));
   };
+
+  /**
+   * RP-9.9: the same derivation the parent ran, from the same inputs. Drives
+   * both the root's height CSS and whether this child measures itself at all.
+   */
+  private get heightMode(): SurfaceHeightMode {
+    return surfaceHeightModeFor(this.format, this.hostOwnsBox);
+  }
 
   @provide(DefaultFormatsContextName)
   // @ts-ignore "defaultFormat is declared but not used"
@@ -538,6 +554,7 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
       card: BoxelInstanceHandle,
       format: string,
       generation: number,
+      hostOwnsBox?: boolean,
     ) => {
       // Breadcrumb 6/7: the render-transport dispatcher (sandbox-render-
       // transport.ts, parent-owned) called this the moment it received the
@@ -580,6 +597,7 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
       let slot = this.runtime.getRenderSlotForHandle(card);
       join(() => {
         this.format = format as Format;
+        this.hostOwnsBox = hostOwnsBox ?? false;
         this.renderedComponent =
           slot.component as ComponentLike<SandboxComponentSignature>;
         this.error = undefined;
@@ -743,12 +761,13 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
       </p>
     {{else if this.surface}}
       <main
-        class='boxel-sandbox-runtime boxel-sandbox-runtime--{{this.format}}'
+        class='boxel-sandbox-runtime boxel-sandbox-runtime--{{this.format}}
+          boxel-sandbox-runtime--{{this.heightMode}}'
         data-boxel-sandbox-runtime
         {{attachSurface
           this.surface
           this.measureAndReportRenderDiagnostic
-          this.format
+          this.heightMode
           this.mediaFetch
         }}
       >
@@ -783,9 +802,14 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
         min-height: 100vh;
       }
 
-      /* Allocated mode (fitted): the tile owner sized the iframe; fill it
-        so card roots styled `height: 100%` resolve against a real box. */
-      .boxel-sandbox-runtime--fitted {
+      /* Allocated mode (RP-9.9): someone above sized this iframe — a fitted
+        tile's owner, or a Host slot with a definite box. Fill that viewport
+        with a DEFINITE height, not a minimum: a card root styled
+        height: 100% resolves its percentage only against a definite
+        containing block, and resolves to auto (i.e. collapses to its own
+        content) against a min-height. That collapse is what left full-page
+        cards rendering at ~60px. */
+      .boxel-sandbox-runtime--allocated {
         height: 100vh;
       }
 

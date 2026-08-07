@@ -219,6 +219,7 @@ module('Unit | Boxel runtime transport', function () {
       },
       draft() {},
       updateInstance() {},
+      updateContext() {},
     });
     let client = new SandboxRenderClient(channel.port1);
 
@@ -251,6 +252,7 @@ module('Unit | Boxel runtime transport', function () {
       clear() {},
       draft() {},
       updateInstance() {},
+      updateContext() {},
     });
     let client = new SandboxRenderClient(channel.port1);
 
@@ -274,6 +276,7 @@ module('Unit | Boxel runtime transport', function () {
       render() {},
       clear() {},
       draft() {},
+      updateContext() {},
       async updateInstance(pushedDocument, generation) {
         // The first push dawdles so ordering is proven by the serialized
         // queue, not by call timing.

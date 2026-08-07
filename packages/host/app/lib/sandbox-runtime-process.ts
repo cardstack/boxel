@@ -166,7 +166,11 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
 
   private _iframe: HTMLIFrameElement = createDetachedSandboxIframe();
   private mounted = false;
-  private pendingRequest?: { card: BoxelInstanceHandle; format: string };
+  private pendingRequest?: {
+    card: BoxelInstanceHandle;
+    format: string;
+    hostOwnsBox?: boolean;
+  };
   private client?: Promise<SandboxBoxelRuntimeClient>;
   private renderDiagnosticPort?: MessagePort;
   private paintListeners = new Set<() => void>();
@@ -372,21 +376,23 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
     let pending = this.pendingRequest;
     if (pending) {
       this.pendingRequest = undefined;
-      void this.requestRender(pending.card, pending.format).catch(
-        (error: unknown) => {
-          // Two distinct failures reject this promise: a connect failure
-          // (already reported once via `client.catch` above — notifyMountFailed
-          // is idempotent, so reporting again here is harmless) and a CHILD
-          // RENDER failure after a successful connect, which rejects only this
-          // promise. This first-mount render runs on a background promise no
-          // caller awaits (`getRenderSlot()` resolved before mount), so this
-          // listener is the only path by which its failure can ever reach the
-          // Host's error presentation.
-          this.notifyMountFailed(
-            error instanceof Error ? error : new Error(String(error)),
-          );
-        },
-      );
+      void this.requestRender(
+        pending.card,
+        pending.format,
+        pending.hostOwnsBox,
+      ).catch((error: unknown) => {
+        // Two distinct failures reject this promise: a connect failure
+        // (already reported once via `client.catch` above — notifyMountFailed
+        // is idempotent, so reporting again here is harmless) and a CHILD
+        // RENDER failure after a successful connect, which rejects only this
+        // promise. This first-mount render runs on a background promise no
+        // caller awaits (`getRenderSlot()` resolved before mount), so this
+        // listener is the only path by which its failure can ever reach the
+        // Host's error presentation.
+        this.notifyMountFailed(
+          error instanceof Error ? error : new Error(String(error)),
+        );
+      });
     }
   }
 
@@ -510,17 +516,18 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
   async getRenderSlot(
     card: BoxelInstanceHandle,
     format: string,
+    hostOwnsBox?: boolean,
   ): Promise<SandboxRenderSlot> {
     if (this.closed) {
       throw new Error('Sandbox runtime process is closed');
     }
     this.options.surfaceService.layout(this.surface, {
-      heightMode: surfaceHeightModeFor(format),
+      heightMode: surfaceHeightModeFor(format, hostOwnsBox),
     });
     if (this.mounted) {
-      await this.requestRender(card, format);
+      await this.requestRender(card, format, hostOwnsBox);
     } else {
-      this.pendingRequest = { card, format };
+      this.pendingRequest = { card, format, hostOwnsBox };
     }
     return {
       owner: 'sandbox',
@@ -760,13 +767,14 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
   private async requestRender(
     card: BoxelInstanceHandle,
     format: string,
+    hostOwnsBox?: boolean,
   ): Promise<void> {
     let generation = ++this.nextGeneration;
     await this.client;
     if (!this.renderClient) {
       throw new Error('Sandbox render transport is unavailable');
     }
-    await this.renderClient.render(card, format, generation);
+    await this.renderClient.render(card, format, generation, hostOwnsBox);
     this.renderedCard = card;
   }
 

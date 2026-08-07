@@ -9,10 +9,16 @@ import {
 } from '@cardstack/runtime-common';
 
 export interface SandboxRenderTarget {
+  /**
+   * `hostOwnsBox` is the Host slot's box contract (RP-9.9), not a style: the
+   * child feeds it to `surfaceHeightModeFor` alongside `format` so its
+   * decision to measure matches the parent's decision to allocate.
+   */
   render(
     card: BoxelInstanceHandle,
     format: string,
     generation: number,
+    hostOwnsBox?: boolean,
   ): void | Promise<void>;
   clear(generation: number): void | Promise<void>;
   /**
@@ -93,8 +99,15 @@ export class SandboxRenderClient {
     card: BoxelInstanceHandle,
     format: string,
     generation: number,
+    hostOwnsBox?: boolean,
   ): Promise<void> {
-    return this.request({ operation: 'render', card, format, generation });
+    return this.request({
+      operation: 'render',
+      card,
+      format,
+      generation,
+      hostOwnsBox,
+    });
   }
 
   clear(generation: number): Promise<void> {
@@ -163,7 +176,7 @@ export class SandboxRenderClient {
     body:
       | Pick<
           Extract<SandboxRenderRequest, { operation: 'render' }>,
-          'operation' | 'card' | 'format' | 'generation'
+          'operation' | 'card' | 'format' | 'generation' | 'hostOwnsBox'
         >
       | Pick<
           Extract<SandboxRenderRequest, { operation: 'clear' }>,
@@ -351,6 +364,7 @@ export class SandboxRenderServer {
           request.card,
           request.format,
           request.generation,
+          request.hostOwnsBox,
         );
       case 'clear':
         return this.target.clear(request.generation);
@@ -427,7 +441,10 @@ function isSandboxRenderRequest(value: unknown): value is SandboxRenderRequest {
       'format' in value &&
       typeof value.format === 'string' &&
       value.format.length > 0 &&
-      value.format.length <= 128) ||
+      value.format.length <= 128 &&
+      (!('hostOwnsBox' in value) ||
+        value.hostOwnsBox === undefined ||
+        typeof value.hostOwnsBox === 'boolean')) ||
     (value.operation === 'draft' &&
       'url' in value &&
       typeof value.url === 'string' &&

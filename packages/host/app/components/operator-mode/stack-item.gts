@@ -1180,6 +1180,13 @@ export default class OperatorModeStackItem extends Component<Signature> {
               @format={{this.cardFormat}}
               @codeRef={{this.defaultCodeRef}}
               @execution='auto'
+              {{! RP-9.9: a stack item's box comes from the viewport, not
+                from the card — .stack-item-card is a definite-height grid
+                whose content row stretches. That is main's contract for a
+                full-page card, and the reason authors style card roots
+                `height: 100%`. Declaring it here is what lets those roots
+                resolve against a real box on every execution tier. }}
+              @hostOwnsBox={{true}}
             />
             <OperatorModeOverlays
               @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}

@@ -40,6 +40,8 @@ interface Signature {
     codeRef?: ResolvedCodeRef;
     displayContainer?: boolean;
     execution?: 'auto' | 'direct';
+    /** RP-9.9 — see `BoxelExecutionRenderer`'s arg of the same name. */
+    hostOwnsBox?: boolean;
   };
 }
 
@@ -78,6 +80,7 @@ export default class CardRenderer extends Component<Signature> {
         @displayContainer={{@displayContainer}}
         @viewCard={{this.viewCard}}
         @baseTemplateRef={{@codeRef}}
+        @hostOwnsBox={{@hostOwnsBox}}
         ...attributes
       />
     {{else if (eq @format 'head')}}

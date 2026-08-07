@@ -21,16 +21,39 @@ export type SurfaceHandle = string & {
 export type SurfaceHeightMode = 'intrinsic' | 'allocated';
 
 /**
- * The single authority for which height mode a render format gets. Fitted
- * cards live in tiles whose size the tile owner allocates; every other
- * format flows at its content's intrinsic height (the child reports it, the
- * Host applies it, and the surrounding stack scrolls — the same reading
- * experience as an in-document card). Both sides of the Sandbox boundary
- * derive from this one function so the parent's Surface layout and the
- * child's decision to measure never disagree.
+ * The single authority for which height mode a render gets. Both sides of
+ * the Sandbox boundary derive from this one function, with the same inputs,
+ * so the parent's Surface layout and the child's decision to measure never
+ * disagree.
+ *
+ * Two things allocate a box, and they are different in kind:
+ *
+ * - `format === 'fitted'`: a tile owner always allocates a fitted card's
+ *   box. This is a property of the format itself.
+ * - `hostOwnsBox`: the Host slot this render lands in has a definite height
+ *   of its own (a stack item, whose box comes from the viewport). Only the
+ *   Host knows this — the same format renders into a definite box in one
+ *   place and an auto-height panel in another, so it cannot be inferred
+ *   from the format string. RP-9.9.
+ *
+ * Everything else flows at its content's intrinsic height: the child
+ * reports it, the Host applies it, and the surrounding stack scrolls — the
+ * same reading experience as an in-document card.
+ *
+ * Why `hostOwnsBox` cannot be dropped in favor of a format rule: a card
+ * authored `height: 100%` (main's stack items give one, so authors write
+ * them) resolves that percentage against its container. Measure the
+ * container from the content instead and the percentage has nothing
+ * definite to resolve against, so it collapses to the content's own
+ * height — which is what produced it. A card that FILLS its box can never
+ * also be the thing that MEASURES it; someone above has to own the box and
+ * say so.
  */
-export function surfaceHeightModeFor(format: string): SurfaceHeightMode {
-  return format === 'fitted' ? 'allocated' : 'intrinsic';
+export function surfaceHeightModeFor(
+  format: string,
+  hostOwnsBox = false,
+): SurfaceHeightMode {
+  return hostOwnsBox || format === 'fitted' ? 'allocated' : 'intrinsic';
 }
 
 /**
@@ -186,6 +209,13 @@ export type SandboxRenderRequest =
       operation: 'render';
       card: BoxelInstanceHandle;
       format: string;
+      /**
+       * RP-9.9: whether the Host slot this render lands in owns a definite
+       * box. Absent means it does not (the format's default applies). The
+       * child needs it because a card that fills its box cannot also be the
+       * thing that measures it — see `surfaceHeightModeFor`.
+       */
+      hostOwnsBox?: boolean;
     }
   | {
       kind: 'boxel-sandbox-render-request';

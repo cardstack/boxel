@@ -422,6 +422,29 @@ serialized proposal crosses back to the one entitled receiver, whose
 apply enters the canonical instance parent-side — same funnel, expressed
 over the boundary.)
 
+**RP-9.9** The box contract is the Host's to declare, never the format's to
+imply. Main renders a card directly into the Host's box with no wrapper, so
+a card root styled `height: 100%` — which main's own
+`.boxel-card-container` and isolated-format wrapper both are — resolves its
+percentage against whatever box the Host established. Every tier here
+inserts a slot element main does not have, so each slot must be layout
+transparent: `height: 100%` on the in-document slots (Direct, Capsule),
+which restores the chain against a definite Host box and computes back to
+`auto` against an indefinite one, costing nothing where the Host flows its
+content. The Sandbox cannot self-neutralize that way — its child's box IS
+the iframe's viewport — so the Host's contract crosses as data on the
+render op (`hostOwnsBox`), and BOTH sides derive the height mode from the
+same `(format, hostOwnsBox)` pair through `surfaceHeightModeFor`. A
+declared box allocates (the card fills it, the child stops measuring
+itself); an undeclared one keeps the format's default, which is intrinsic
+for everything but `fitted`, whose tile owner always allocates. The
+declaration cannot be inferred from the format, because the same format
+renders into a stack item's definite box in one place and code mode's
+auto-height panel in another. Underlying law: a card that FILLS its box can
+never also be the thing that MEASURES it — measure the container from the
+content and the percentage has nothing definite to resolve against, so it
+collapses to the content's own height.
+
 ## RP-10 The context plane and ambient contract
 
 **RP-10.1** Context tokens are plain string constants in runtime-common

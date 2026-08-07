@@ -157,7 +157,17 @@ export class BoxelExecutionSession {
     return () => this.listeners.delete(listener);
   }
 
-  async getRenderSlot(format: string): Promise<BoxelExecutionRenderSlot> {
+  /**
+   * `hostOwnsBox` (RP-9.9) reaches only the Sandbox: Direct and Capsule
+   * render into the Host's own document, where the slot element carries the
+   * box contract in CSS and no one has to be told about it. A Sandbox's
+   * child is behind an iframe whose viewport IS its box, so the contract
+   * has to cross the boundary as data.
+   */
+  async getRenderSlot(
+    format: string,
+    hostOwnsBox?: boolean,
+  ): Promise<BoxelExecutionRenderSlot> {
     let current = this.currentGeneration;
     if (!current) {
       throw new Error('Boxel execution session has no ready generation');
@@ -176,6 +186,7 @@ export class BoxelExecutionSession {
         return (current.lease.runtime as SandboxRuntimeProcess).getRenderSlot(
           current.card,
           format,
+          hostOwnsBox,
         );
     }
   }

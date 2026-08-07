@@ -90,6 +90,18 @@ interface Signature {
      * FieldDef templates in the main document.
      */
     baseTemplateRef?: CodeRef;
+    /**
+     * RP-9.9: this render's slot lands in a Host box that already has a
+     * definite height (a stack item, sized from the viewport), so the card
+     * should FILL that box rather than dictate it — main's contract for a
+     * full-page card, which is why authors write `height: 100%` roots.
+     *
+     * Only the Host knows this, and it is not a property of the format:
+     * `isolated` renders into a stack item's definite box here and into
+     * code mode's auto-height spec panel there. Omitted (the default) keeps
+     * the format's own rule — intrinsic for everything but `fitted`.
+     */
+    hostOwnsBox?: boolean;
   };
 }
 
@@ -251,6 +263,7 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
     let format = this.args.format;
     let relativeTo = this.args.relativeTo;
     let baseTemplateRef = this.args.baseTemplateRef;
+    let hostOwnsBox = this.args.hostOwnsBox;
     let state = new TrackedObject<ExecutionRendererState>({
       snapshot: session.snapshot,
     });
@@ -418,7 +431,7 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
             // assignment needed here.
             let [fields, slot] = await Promise.all([
               this.boxelExecution.fieldPortalsFor(card),
-              session.getRenderSlot(format ?? 'isolated'),
+              session.getRenderSlot(format ?? 'isolated', hostOwnsBox),
             ]);
             if (slot.owner === 'trusted-base') {
               slot = this.boxelExecution.trustedBaseRenderSlotFor(
@@ -876,14 +889,25 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
         overflow: hidden;
       }
 
+      /* RP-9.9: main renders the card straight into the Host box with no
+        wrapper at all, so a card root styled height: 100% resolves against
+        whatever the Host established. These slots ARE that missing wrapper,
+        and a wrapper with auto height silently breaks the percentage chain:
+        the card collapses to its own content height (a full-page card lands
+        at ~60px). height: 100% restores transparency and costs nothing
+        where the Host box is auto, since a percentage height against an
+        indefinite containing block computes back to auto, which is exactly
+        the in-flow behavior these slots had before. */
       .boxel-execution-capsule-slot {
         min-width: 0;
         width: 100%;
+        height: 100%;
       }
 
       .boxel-execution-direct-slot {
         min-width: 0;
         width: 100%;
+        height: 100%;
       }
 
       /* The iframe is appended by the boxelSandboxSlot modifier, not this
