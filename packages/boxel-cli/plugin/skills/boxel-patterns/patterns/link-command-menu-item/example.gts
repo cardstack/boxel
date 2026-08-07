@@ -6,8 +6,8 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import { getCardMenuItems } from '@cardstack/runtime-common';
-import type { GetCardMenuItemParams } from 'https://cardstack.com/base/card-menu-items';
-import type { MenuItemOptions } from '@cardstack/boxel-ui/helpers';
+import { type GetCardMenuItemParams } from 'https://cardstack.com/base/card-menu-items';
+import { type MenuItemOptions } from '@cardstack/boxel-ui/helpers';
 import MapPinIcon from '@cardstack/boxel-icons/map-pin';
 import BuildingIcon from '@cardstack/boxel-icons/building';
 
@@ -32,9 +32,9 @@ export class Destination extends CardDef {
         icon: MapPinIcon,
         action: async () => {
           this.cardInfo = new CardInfoField({
-            title: 'Paris — City of Light',
-            description: 'The capital of France.',
-            thumbnailURL:
+            name: 'Paris — City of Light',
+            summary: 'The capital of France.',
+            cardThumbnailURL:
               'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=400',
           });
           await params.saveCard(this);
@@ -45,9 +45,9 @@ export class Destination extends CardDef {
         icon: BuildingIcon,
         action: async () => {
           this.cardInfo = new CardInfoField({
-            title: 'New York — The Big Apple',
-            description: 'The most populous city in the United States.',
-            thumbnailURL:
+            name: 'New York — The Big Apple',
+            summary: 'The most populous city in the United States.',
+            cardThumbnailURL:
               'https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=400',
           });
           await params.saveCard(this);

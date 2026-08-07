@@ -29,25 +29,14 @@ export class LruCache<K, V> {
     }
   }
 
-  has(key: K) {
-    return this.map.has(key);
-  }
-  clear() {
-    this.map.clear();
-  }
-  get size() {
-    return this.map.size;
-  }
+  has(key: K) { return this.map.has(key); }
+  clear()      { this.map.clear(); }
+  get size()   { return this.map.size; }
 }
 
 // === Usage: CSS color parser with cache ===============================
 
-interface RGBA {
-  r: number;
-  g: number;
-  b: number;
-  a: number;
-}
+interface RGBA { r: number; g: number; b: number; a: number; }
 
 const COLOR_CACHE = new LruCache<string, RGBA | null>(100);
 const DEFAULT_RGBA: RGBA = { r: 0, g: 0, b: 0, a: 1 };
@@ -56,35 +45,19 @@ export function parseCssColorSafe(input: string): RGBA {
   let cached = COLOR_CACHE.get(input);
   if (cached !== undefined) return cached ?? DEFAULT_RGBA;
 
-  let result =
-    tryHex(input) ??
-    tryRgb(input) ??
-    tryHsl(input) ??
-    tryNamed(input) ??
-    tryViaBrowser(input); // canvas fallback
+  let result = tryHex(input)
+            ?? tryRgb(input)
+            ?? tryHsl(input)
+            ?? tryNamed(input)
+            ?? tryViaBrowser(input);   // canvas fallback
 
   COLOR_CACHE.set(input, result);
   return result ?? DEFAULT_RGBA;
 }
 
 // ⚠️ Pseudocode — real parsers in the catalog-realm.
-function tryHex(s: string): RGBA | null {
-  void s;
-  return null;
-}
-function tryRgb(s: string): RGBA | null {
-  void s;
-  return null;
-}
-function tryHsl(s: string): RGBA | null {
-  void s;
-  return null;
-}
-function tryNamed(s: string): RGBA | null {
-  void s;
-  return null;
-}
-function tryViaBrowser(s: string): RGBA | null {
-  void s;
-  return null;
-}
+function tryHex(s: string): RGBA | null { void s; return null; }
+function tryRgb(s: string): RGBA | null { void s; return null; }
+function tryHsl(s: string): RGBA | null { void s; return null; }
+function tryNamed(s: string): RGBA | null { void s; return null; }
+function tryViaBrowser(s: string): RGBA | null { void s; return null; }

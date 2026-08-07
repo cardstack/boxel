@@ -1,10 +1,5 @@
 import { Command } from '@cardstack/runtime-common/commands';
-import {
-  CardDef,
-  field,
-  contains,
-  StringField,
-} from 'https://cardstack.com/base/card-api';
+import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
 import { tracked } from '@glimmer/tracking';
 
 // 🧩 PATTERN: Typed Command with tracked progressStep
@@ -29,10 +24,7 @@ class UploadImageResult extends CardDef {
   @field publicUrl = contains(StringField);
 }
 
-export class UploadImageCommand extends Command<
-  typeof UploadImageInput,
-  typeof UploadImageResult
-> {
+export class UploadImageCommand extends Command<typeof UploadImageInput, typeof UploadImageResult> {
   static actionVerb = 'Upload';
 
   inputType = UploadImageInput;

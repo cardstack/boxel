@@ -81,6 +81,10 @@ Ready patterns below can be read and adapted. Each has `patterns/<slug>/README.m
 - `link-flip-card` — CSS-only front/back flip primitive: `perspective` + `transform: rotateY(180deg)` + `backface-visibility: hidden`, driven by a single `@tracked isFlipped`. Flashcards, product reveals, two-sided info cards.
 - `link-host-mode-paths` — Route clean external URLs (`/`, `/about`, `/pricing`) to specific cards via `hostRoutingRules` on the `RealmConfig` card at `/realm.json`. Public realms only; static paths only; same-realm references.
 
+### Collaborate
+
+- `collab-yjs-shared-document` *(README-only)* — Real-time co-editing of a card-backed document (Y.Text code/text pad, or Y.Map structured state like a shared 3D scene) via a Yjs websocket relay. Everyone syncs; a single committer peer holding a realm JWT materializes settled content back into the official card. Includes the seeding rules, read-only role enforcement, and the boundary with ordered commands (scarcity/fairness never goes in a CRDT).
+
 ### Integrate external
 
 - `integrate-openrouter-image-generation` — Preferred image generator. OpenRouter chat completions with `modalities: ['image', 'text']`; default to Gemini image, use ChatGPT/OpenAI image models when requested; persist bytes with `WriteBinaryFileCommand` + `ImageDef`.
