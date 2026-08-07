@@ -1178,7 +1178,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.dom('[data-test-settings-modal]').doesNotExist();
     });
 
-    test('an unauthenticated arrival keeps the deep link until after login', async function (assert) {
+    test('a deep link arriving logged out waits for login, then opens the modal', async function (assert) {
       await visitOperatorMode({
         stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }]],
       })!;
@@ -1188,35 +1188,24 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       await visit('/?openProfileSettings=subscription');
 
+      // The model hook returns before the login form renders, so consuming
+      // the param there would swallow it with no modal to show.
       assert.dom('[data-test-login-btn]').exists();
       assert.dom('[data-test-settings-modal]').doesNotExist();
       assert.ok(
         currentURL().includes('openProfileSettings=subscription'),
         'the param must outlive the login form',
       );
-    });
-
-    test('the deep link opens the modal once the visitor logs in', async function (assert) {
-      await visitOperatorMode({
-        stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }]],
-      })!;
-      await click('[data-test-profile-icon-button]');
-      await click('[data-test-signout-button]');
-
-      await visit('/?openProfileSettings=subscription');
-      assert.dom('[data-test-settings-modal]').doesNotExist();
 
       await fillIn('[data-test-username-field]', 'testuser');
       await fillIn('[data-test-password-field]', 'mock-password');
       await click('[data-test-login-btn]');
 
-      // The route's model hook already ran and returned while logged out, so
-      // this only passes if the param is consumed after the post-login refresh.
       assert.dom('[data-test-settings-modal]').exists();
       assert.dom('[data-test-profile-subscription-section]').exists();
       assert.notOk(
         currentURL().includes('openProfileSettings'),
-        'the param is consumed on arrival',
+        'the param is consumed once it has been acted on',
       );
     });
 

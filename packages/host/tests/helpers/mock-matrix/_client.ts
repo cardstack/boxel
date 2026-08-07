@@ -432,8 +432,7 @@ export class MockClient implements ExtendedClient {
   }
 
   // Mirrors what `loggedInAs` bootstraps at setup, so a test can drive the
-  // real login form and get the post-login route refresh that follows it.
-  // Any password is accepted; these tests are not about credentials.
+  // real login form. Any password is accepted.
   loginWithPassword(
     user: string,
     _password: string,
