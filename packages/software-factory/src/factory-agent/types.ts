@@ -194,6 +194,8 @@ export type IssuePriority = 'critical' | 'high' | 'medium' | 'low';
 
 /** IssueData extended with the typed fields the IssueScheduler needs. */
 export interface SchedulableIssue extends IssueData {
+  /** Board key shown on the tracker ("SN-1"); `id` is the card URL. */
+  issueId?: string;
   status: IssueStatus;
   priority: IssuePriority;
   /** IDs of issues that must be done before this one can start. */

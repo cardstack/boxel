@@ -4752,6 +4752,14 @@ module(`Integration | realm indexing`, function (hooks) {
         .sort()
         // Exclude synthetic imports that encapsulate scoped CSS
         .filter((ref) => !ref.includes('glimmer-scoped.css')),
+      // This list is also the guard on how wide every card's dependency graph
+      // is: `card-api` statically imports FileDef's format templates, so
+      // anything the shared file-format shells import lands here — and
+      // therefore in the deps of every card in every realm, whether or not it
+      // ever renders a file. Growth here is a real cost (module loads per cold
+      // prerender, bytes per index row), so treat an addition as a decision
+      // rather than a snapshot to re-record. A family's own glyph belongs on
+      // its subclass's `static icon`, not in a shared map.
       [
         '@cardstack/base/-private',
         '@cardstack/base/card-api',
@@ -4778,6 +4786,14 @@ module(`Integration | realm indexing`, function (hooks) {
         '@cardstack/base/default-templates/missing-template',
         '@cardstack/base/field-component',
         '@cardstack/base/field-support',
+        '@cardstack/base/file-formats/file-presentation',
+        '@cardstack/base/file-formats/file-preview-stage',
+        '@cardstack/base/file-formats/file-shell-atom',
+        '@cardstack/base/file-formats/file-shell-embedded',
+        '@cardstack/base/file-formats/file-shell-fitted',
+        '@cardstack/base/file-formats/file-shell-isolated',
+        '@cardstack/base/file-formats/file-type-profile',
+        '@cardstack/base/file-formats/file-view-model',
         '@cardstack/base/file-menu-items',
         '@cardstack/base/helpers/sanitized-html',
         '@cardstack/base/helpers/set-background-image',
@@ -4918,6 +4934,14 @@ module(`Integration | realm indexing`, function (hooks) {
         .sort()
         // Exclude synthetic imports that encapsulate scoped CSS
         .filter((ref) => !ref.includes('glimmer-scoped.css')),
+      // This list is also the guard on how wide every card's dependency graph
+      // is: `card-api` statically imports FileDef's format templates, so
+      // anything the shared file-format shells import lands here — and
+      // therefore in the deps of every card in every realm, whether or not it
+      // ever renders a file. Growth here is a real cost (module loads per cold
+      // prerender, bytes per index row), so treat an addition as a decision
+      // rather than a snapshot to re-record. A family's own glyph belongs on
+      // its subclass's `static icon`, not in a shared map.
       [
         '@cardstack/base/-private',
         '@cardstack/base/boolean',
@@ -4946,6 +4970,14 @@ module(`Integration | realm indexing`, function (hooks) {
         '@cardstack/base/default-templates/missing-template',
         '@cardstack/base/field-component',
         '@cardstack/base/field-support',
+        '@cardstack/base/file-formats/file-presentation',
+        '@cardstack/base/file-formats/file-preview-stage',
+        '@cardstack/base/file-formats/file-shell-atom',
+        '@cardstack/base/file-formats/file-shell-embedded',
+        '@cardstack/base/file-formats/file-shell-fitted',
+        '@cardstack/base/file-formats/file-shell-isolated',
+        '@cardstack/base/file-formats/file-type-profile',
+        '@cardstack/base/file-formats/file-view-model',
         '@cardstack/base/file-menu-items',
         '@cardstack/base/helpers/sanitized-html',
         '@cardstack/base/helpers/set-background-image',

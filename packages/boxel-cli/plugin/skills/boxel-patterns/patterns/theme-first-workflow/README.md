@@ -6,7 +6,7 @@ validated: source-proven
 
 **What this gives you:** A repeatable starting sequence for any new card or app — pick (or build) a Theme card first, link it through `cardInfo.theme`, then write the card definition with the theme tokens baked in from line one. The result: cards that ship looking right, not "let me retrofit colors later".
 
-**When to use:** Whenever a user asks for a new card, a card family, or an app — before you write the first line of `.gts`. This is meant to run as **step 0** of `/boxel-create-card`, `/boxel-design-card`, or any "build me a …" intent.
+**When to use:** Whenever a user asks for a new card, a card family, or an app — before you write the first line of `.gts`. This is meant to run as **step 0** of creating a card, designing one, or any "build me a …" intent.
 
 **The insight:** Boxel's theme system is built around `cardInfo.theme` — a `linksTo(Theme)` field on every CardDef. The Theme card holds:
 - theme variables - either as a raw `cssVariables` string on minimal themes or as structured `rootVariables`, `darkModeVariables`, `typography`, palette, and mark fields that compute `cssVariables`.
@@ -24,7 +24,7 @@ If you skip this step and build the card with hard-coded colors, you've wasted t
 
 Three options, in order of preference:
 
-1. **Reuse an existing Theme.** Most realms already have a couple. Browse `<realm>/Theme/*.json` or search via `/boxel-search-cards` filtered on the Theme class. Pick by `styleName` / `visualDNA` fields.
+1. **Reuse an existing Theme.** Most realms already have a couple. Browse `<realm>/Theme/*.json` or search with `npx boxel search` filtered on the Theme class. Pick by `styleName` / `visualDNA` fields.
 2. **Copy and edit.** Take an existing Theme, `copy-card` it, modify the `cssVariables` and `cssImports`. Catalog Themes have a "Copy and Edit" menu item built in.
 3. **Author a new Theme.** Choose the narrowest base that preserves the design intent:
    - `https://cardstack.com/base/brand-guide` for a full brand system with logo/mark usage, functional palette, color palette, typography, voice, and detailed style guidance.
@@ -104,7 +104,7 @@ No hard-coded `#7b61ff`, no `font-family: 'Inter'`. Tokens only. The Theme card 
 
 ### Step 3 — Verify via preview
 
-After writing the card and a sample instance, `/boxel-preview-card` to confirm the theme is applied. If the card looks unstyled, the most common cause is missing `cardInfo.theme` link on the instance.
+After writing the card and a sample instance, preview it in the live app to confirm the theme is applied (see `skills/boxel-environment/SKILL.md`). If the card looks unstyled, the most common cause is missing `cardInfo.theme` link on the instance.
 
 **Standard theme tokens to expect (from catalog Themes):**
 

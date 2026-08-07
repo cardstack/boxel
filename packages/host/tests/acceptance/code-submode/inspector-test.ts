@@ -306,6 +306,39 @@ const friendCardSource = `
   }
 `;
 
+// A card whose template navigates through `viewCard`, the way the Workspace
+// card's pinned tiles and Library tiles do. Card templates receive that
+// function from the card-crud-functions context, so this fixture is what
+// proves the code-mode preview pane provides it.
+const navigatorCardSource = `
+  import { contains, field, linksTo, CardDef, Component } from "@cardstack/base/card-api";
+  import { on } from '@ember/modifier';
+  import StringField from "@cardstack/base/string";
+
+  export class Navigator extends CardDef {
+    static displayName = 'Navigator';
+    @field name = contains(StringField);
+    @field target = linksTo(() => Navigator);
+    static isolated = class Isolated extends Component<typeof this> {
+      openTarget = () => {
+        let { target } = this.args.model;
+        if (target) {
+          this.args.viewCard?.(target);
+        }
+      };
+      <template>
+        <div data-test-navigator>
+          <button
+            type='button'
+            data-test-open-target
+            {{on 'click' this.openTarget}}
+          >Open target</button>
+        </div>
+      </template>
+    };
+  }
+`;
+
 const exportsSource = `
   import {
     contains,
@@ -519,6 +552,26 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
           'person.gts': personCardSource,
           'pet.gts': petCardSource,
           'friend.gts': friendCardSource,
+          'navigator.gts': navigatorCardSource,
+          'Navigator/parent.json': {
+            data: {
+              attributes: { name: 'Parent' },
+              relationships: {
+                target: { links: { self: './child' } },
+              },
+              meta: {
+                adoptsFrom: { module: '../navigator', name: 'Navigator' },
+              },
+            },
+          },
+          'Navigator/child.json': {
+            data: {
+              attributes: { name: 'Child' },
+              meta: {
+                adoptsFrom: { module: '../navigator', name: 'Navigator' },
+              },
+            },
+          },
           'employee.gts': employeeCardSource,
           'in-this-file.gts': inThisFileSource,
           'exports.gts': exportsSource,
@@ -991,6 +1044,26 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       .hasAttribute('aria-label', 'Test Workspace B');
     assert.dom('[data-test-field="name"] input').hasValue('Van Gogh');
     assert.dom('[data-test-card-url-bar-input]').hasValue(`${id}.json`);
+  });
+
+  test('a card in the preview pane can navigate through viewCard', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}Navigator/parent.json`,
+    });
+
+    await waitFor('[data-test-open-target]');
+    await click('[data-test-open-target]');
+
+    await waitFor(
+      `[data-test-code-mode-card-renderer-header="${testRealmURL}Navigator/child"]`,
+    );
+    assert
+      .dom('[data-test-card-url-bar-input]')
+      .hasValue(
+        `${testRealmURL}Navigator/child.json`,
+        'the in-card button opened the linked card, like the hover overlays do',
+      );
   });
 
   test<TestContextWithSave>('can duplicate an instance in different realm', async function (assert) {

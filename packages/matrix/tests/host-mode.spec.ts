@@ -4,9 +4,9 @@ import {
   createSubscribedUserAndLogin,
   logout,
   postCardSource,
-  setRealmRedirects,
   waitForPublishedMarker,
   waitUntil,
+  withTracedContext,
 } from '../helpers/index.ts';
 import { appURL } from '../support/isolated-realm-server.ts';
 import { randomUUID } from 'crypto';
@@ -89,8 +89,8 @@ async function publishRealm(
 
 // Create a fresh source realm, seed it with the host-mode fixture cards, and
 // publish it. Leaves the page logged out. The `page` must already have realm
-// redirects registered (the per-test `page` fixture does this; a hand-rolled
-// context page must call `setRealmRedirects` first).
+// redirects registered — the per-test `page` fixture and `withTracedContext`
+// both do this.
 //
 // `options.routingRulePath` seeds a `realm.json` host routing rule (mapping
 // that path to the white-paper card) BEFORE the single publish — so routing
@@ -337,16 +337,16 @@ test.describe('Host mode', () => {
     test.setTimeout(180_000);
     let lastError: unknown;
     for (let attempt = 1; attempt <= 3; attempt++) {
-      // `beforeAll` only has access to worker-scoped fixtures, so build a
-      // throwaway context by hand. Publishing is server-side state that
-      // outlives this context, so we close it once setup is done.
-      const context = await browser.newContext();
-      const page = await context.newPage();
+      // `beforeAll` only has access to worker-scoped fixtures, so the context is
+      // built by hand. Publishing is server-side state that outlives it, so it
+      // closes once setup is done. Each attempt traces separately — the trace of
+      // the attempt that failed is what explains why setup never took.
       try {
-        await setRealmRedirects(page);
-        realm = await createAndPublishHostModeRealm(page);
-        // Don't let a wedged context's close error mask a successful setup.
-        await context.close().catch(() => {});
+        realm = await withTracedContext(
+          browser,
+          `host-mode-setup-attempt-${attempt}`,
+          (page) => createAndPublishHostModeRealm(page),
+        );
         return;
       } catch (e) {
         lastError = e;
@@ -355,7 +355,6 @@ test.describe('Host mode', () => {
             (e as Error)?.message
           }`,
         );
-        await context.close().catch(() => {});
       }
     }
     throw lastError;

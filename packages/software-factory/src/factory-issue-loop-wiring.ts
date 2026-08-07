@@ -45,6 +45,7 @@ import { retryWithPoll } from './retry-with-poll.ts';
 import { startSpan, withSpan } from './run-trace.ts';
 import { RenderGate } from './render-gate.ts';
 import { RunLogWriter } from './run-log.ts';
+import { RunTelemetryWriter } from './run-telemetry.ts';
 import { RunMonitor, type MonitorLevel } from './run-monitor.ts';
 import {
   buildFactoryTools,
@@ -470,6 +471,7 @@ export async function runFactoryIssueLoop(
   log.info(`Starting issue loop: targetRealm=${targetRealm}`);
 
   let runLog: RunLogWriter | undefined;
+  let telemetry: RunTelemetryWriter | undefined;
   {
     // Last NONEMPTY path segment: a trailing slash (common for --repo-url)
     // must not yield an empty slug, or every such run writes Runs/.json
@@ -500,6 +502,26 @@ export async function runFactoryIssueLoop(
     monitor = new RunMonitor({
       runLog,
       level: config.monitorLevel ?? 'normal',
+    });
+
+    // Live telemetry card: same control-realm raw-write channel as the run
+    // log, fed by the trace observer and debounced. Best-effort — a
+    // telemetry failure must never affect the run.
+    telemetry = new RunTelemetryWriter({
+      workspaceDir,
+      controlRealm,
+      slug: runSlug,
+      config: {
+        runTitle: config.runTitle ?? runSlug,
+        briefUrl: config.briefUrl,
+        targetRealmUrl: targetRealm,
+        controlRealmUrl: controlRealm,
+        targetPhase: config.toPhase ?? 'implementation',
+        factoryCommit: process.env.FACTORY_COMMIT ?? '',
+        startedAtMs: Date.now(),
+      },
+      rawWriteFile: (relativePath, content) =>
+        client.write(controlRealm, relativePath, content),
     });
   }
 
@@ -543,9 +565,24 @@ export async function runFactoryIssueLoop(
 
   try {
     monitor?.start();
-    return await runIssueLoop(issueLoopConfig);
+    await telemetry?.start().catch((err) => {
+      log.warn(`RunTelemetry start failed (non-fatal): ${String(err)}`);
+    });
+    let result = await runIssueLoop(issueLoopConfig);
+    await telemetry?.finish(result.outcome).catch(() => {});
+    return result;
+  } catch (err) {
+    // The loop threw: that is a failure, distinct from a run that stopped
+    // with work still on the board.
+    await telemetry?.finish('failed').catch(() => {});
+    throw err;
   } finally {
     monitor?.stop();
+    if (telemetry) {
+      // Backstop for paths that settled neither branch. finish() keeps the
+      // first outcome, so this never overwrites a real verdict.
+      await telemetry.finish('stopped').catch(() => {});
+    }
     // Some agents (notably `OpencodeFactoryAgent`) hold persistent
     // backend state across iterations — long-lived opencode subprocess
     // + MCP server + JWT'd HTTP client. Tear that down here so a

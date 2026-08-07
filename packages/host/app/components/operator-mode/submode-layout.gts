@@ -37,6 +37,7 @@ import type IndexController from '@cardstack/host/controllers';
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
 import { AiAssistantPanelWidth } from '@cardstack/host/utils/local-storage-keys';
+import type { SearchResultKind } from '@cardstack/host/utils/search/types';
 
 import SearchSheet, { SearchSheetModes } from '../search-sheet';
 
@@ -61,7 +62,7 @@ interface Signature {
   Args: {
     onSearchSheetOpened?: () => void;
     onSearchSheetClosed?: () => void;
-    onCardSelectFromSearch?: (cardId: string) => void;
+    onCardSelectFromSearch?: (cardId: string, kind?: SearchResultKind) => void;
     selectedCardRef?: ResolvedCodeRef | undefined;
     newFileOptions?: NewFileOptions;
   };
@@ -364,8 +365,11 @@ export default class SubmodeLayout extends Component<Signature> {
     this.args.onSearchSheetOpened?.();
   }
 
-  @action private async handleCardSelectFromSearch(cardId: string) {
-    this.args.onCardSelectFromSearch?.(cardId);
+  @action private async handleCardSelectFromSearch(
+    cardId: string,
+    kind?: SearchResultKind,
+  ) {
+    this.args.onCardSelectFromSearch?.(cardId, kind);
     this.closeSearchSheet();
   }
 

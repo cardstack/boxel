@@ -25,6 +25,7 @@ import type { ResolvedCodeRef } from '@cardstack/runtime-common';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type SearchSheetStateService from '@cardstack/host/services/search-sheet-state';
 import { SEARCH_SHEET_BASE_FILTER } from '@cardstack/host/services/search-sheet-state';
+import type { SearchResultKind } from '@cardstack/host/utils/search/types';
 import {
   isURLSearchKey,
   resolveSearchKeyAsURL,
@@ -57,7 +58,7 @@ interface Signature {
     onFocus: () => void;
     onBlur: () => void;
     onSearch: (term: string) => void;
-    onCardSelect: (cardId: string) => void;
+    onCardSelect: (cardId: string, kind?: SearchResultKind) => void;
     onInputInsertion?: (element: HTMLElement) => void;
     onFilterChange?: () => void;
   };
@@ -158,12 +159,17 @@ export default class SearchSheet extends Component<Signature> {
     this.args.onBlur();
   }
 
-  @action private handleCardSelect(selection: string | { realmURL: string }) {
+  @action private handleCardSelect(
+    selection: string | { realmURL: string },
+    kind?: SearchResultKind,
+  ) {
     if (typeof selection !== 'string') {
       return;
     }
-    // Selecting a result keeps the search, so reopening returns to it.
-    this.args.onCardSelect(selection);
+    // Selecting a result keeps the search, so reopening returns to it. `kind`
+    // carries the result's card/file classification so the consumer opens the
+    // right URL without re-deriving it from the id.
+    this.args.onCardSelect(selection, kind);
   }
 
   @action

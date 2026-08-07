@@ -1,9 +1,10 @@
-import { expect, type Page } from '@playwright/test';
+import { expect, test, type Browser, type Page } from '@playwright/test';
 import type { Credentials } from '../support/synapse/index.ts';
 import {
   loginUser,
   getAllRoomEvents,
   getJoinedRooms,
+  getUserExternalIds,
   registerUser,
   type SynapseInstance,
   sync,
@@ -95,6 +96,32 @@ export async function updateSynapseUser(
   await updateUser(adminAccessToken, userId, options);
 }
 
+// The SSO identities linked to an account, narrowed to one IdP. Returns the
+// bare external ids, which for an OIDC provider are the values its mapping
+// provider derived from the `sub` claim.
+export async function getExternalIdsForIdp(
+  userId: string,
+  authProvider: string,
+): Promise<string[]> {
+  let { adminAccessToken } = getMatrixTestContext();
+  let externalIds = await getUserExternalIds(adminAccessToken, userId);
+  // Sorted: the admin API reports rows in database order, so an account with
+  // more than one linked identity would make assertions order-dependent.
+  return externalIds
+    .filter((entry) => entry.auth_provider === authProvider)
+    .map((entry) => entry.external_id)
+    .sort();
+}
+
+// The subject claim to present to the mock identity provider. One Synapse
+// instance serves the whole run, so a subject reused across attempts matches the
+// `user_external_ids` row an earlier attempt left behind and signs the retry
+// into that account. Deriving it from the UUID-suffixed username keeps every
+// attempt a fresh identity.
+export function subjectFor(username: string): string {
+  return `google-oauth2|${username}`;
+}
+
 async function registerRealmRedirect(
   page: Page,
   fromPrefix: string,
@@ -119,6 +146,57 @@ export async function setRealmRedirects(page: Page) {
     'http://localhost:4201/base/',
     'https://localhost:4205/base/',
   );
+}
+
+// Runs `body` against a page in a context built by hand, rather than the one the
+// `page` fixture provides. Two situations need that: a second browser identity
+// inside one test, and `beforeAll`, which only sees worker-scoped fixtures.
+//
+// Playwright attaches traces, video and screenshots in its own `context`
+// fixture, so a context from `browser.newContext()` records nothing — a failure
+// in one is reported with no artifact to open. This starts a trace and keeps it
+// when there is something to explain, so the failing run carries the same
+// evidence a fixture-backed page would.
+//
+// The trace is kept in two cases. When `body` throws, obviously. And on any
+// retry, whatever `body` does — because the context has to close when `body`
+// returns, so a failure *after* that point (an assertion about what the session
+// persisted, say) can no longer be traced from here. Keeping the trace for the
+// whole of a retried attempt covers that, and mirrors the suite's
+// `trace: 'retry-with-trace'`: a first attempt stays cheap, and the attempt that
+// runs because something already failed records everything.
+//
+// Closing is best-effort on every path: a context that has wedged can fail or
+// hang on close, and that must not replace the real error, nor turn a completed
+// body into a failure.
+export async function withTracedContext<T>(
+  browser: Browser,
+  name: string,
+  body: (page: Page) => Promise<T>,
+): Promise<T> {
+  let context = await browser.newContext();
+  await context.tracing.start({ screenshots: true, snapshots: true });
+  let keepTrace = test.info().retry > 0;
+  try {
+    let page = await context.newPage();
+    await setRealmRedirects(page);
+    return await body(page);
+  } catch (e) {
+    keepTrace = true;
+    throw e;
+  } finally {
+    if (keepTrace) {
+      let tracePath = test.info().outputPath(`${name}-trace.zip`);
+      await context.tracing.stop({ path: tracePath }).catch(() => {});
+      await test
+        .info()
+        .attach(`${name}-trace`, { path: tracePath })
+        .catch(() => {});
+    } else {
+      await context.tracing.stop().catch(() => {});
+    }
+    await context.close().catch(() => {});
+  }
 }
 
 export async function registerRealmUsers(synapse: SynapseInstance) {

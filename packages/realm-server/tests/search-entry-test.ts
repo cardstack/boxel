@@ -245,6 +245,13 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('accepts format: isolated as a queryable prerendered format', function (assert) {
+      let parsed = parseSearchEntryQueryFromPayload({
+        filter: { eq: { htmlQuery: { eq: { format: 'isolated' } } } },
+      });
+      assert.deepEqual(parsed.htmlQuery, { eq: { format: 'isolated' } });
+    });
+
     test('sort entries may carry their own item.on anchor', function (assert) {
       let parsed = parseSearchEntryQueryFromPayload({
         sort: [

@@ -19,6 +19,7 @@ import type {
   AgentContext,
   AgentRunResult,
   IssueData,
+  ResolvedSkill,
   SchedulableIssue,
   ValidationResults,
   ValidationStepResult,
@@ -351,6 +352,24 @@ function issueSlug(issue: SchedulableIssue): string {
   return basename ?? id;
 }
 
+/** Context weight of one resolved skill: its body plus every reference. */
+function skillContextChars(skill: ResolvedSkill): number {
+  let refs = (skill.references ?? []).reduce((sum, ref) => sum + ref.length, 0);
+  return skill.content.length + refs;
+}
+
+/**
+ * The board key an issue displays on the tracker ("SN-1", "DESIGN-0"), which
+ * is what telemetry groups turns by. Falls back to the URL basename for
+ * issues written without one.
+ */
+function issueBoardKey(issue: SchedulableIssue): string {
+  let key = issue.issueId;
+  return typeof key === 'string' && key.trim() !== ''
+    ? key.trim()
+    : issueSlug(issue);
+}
+
 /** Realm-relative card path for an issue (for run-log show-me links). */
 function issueCardPath(
   issue: SchedulableIssue,
@@ -582,6 +601,9 @@ export async function runIssueLoop(
     context: AgentContext,
     info: {
       issueTitle: string;
+      /** Board key of the issue this turn belongs to; omitted for turns
+       * that serve no single issue (the shared-context prime turn). */
+      issueId?: string;
       turnType: string;
       iteration?: number;
       maxIterations?: number;
@@ -602,8 +624,37 @@ export async function runIssueLoop(
       });
     }
     let turnStartMs = Date.now();
+    // The trace only records a span on CLOSE, so a running turn is
+    // invisible to it. Emit an explicit start marker so the telemetry
+    // aggregator can render the in-flight turn as a live segment; the
+    // closing inference span below carries the duration and supersedes it.
+    traceEvent('inference', 'turn-start', {
+      turnType: info.turnType,
+      issue: info.issueTitle,
+      issueId: info.issueId,
+      iteration: info.iteration,
+      model: context.modelBudget?.model ?? 'inherit',
+      effort: context.modelBudget?.effort ?? 'inherit',
+    });
+    // The skills this turn actually carried, recorded per turn rather than
+    // at resolution time: `loadAll` traces what was *asked* for, while the
+    // context here is post-budget-trim and includes the generated
+    // host-tools skill — i.e. what the model really read.
+    for (let skill of context.skills ?? []) {
+      traceEvent('skills', 'in-context', {
+        turnType: info.turnType,
+        issueId: info.issueId,
+        skill: skill.name,
+        chars: skillContextChars(skill),
+        refs: skill.references?.length ?? 0,
+        // A resumed/forked session already carries the skills in its
+        // conversation prefix; a fresh session pays to inject them.
+        resumed: Boolean(context.resumeSession),
+      });
+    }
     let endTurnSpan = startSpan('inference', info.turnType, {
       issue: info.issueTitle,
+      issueId: info.issueId,
       iteration: info.iteration,
       model: context.modelBudget?.model ?? 'inherit',
       effort: context.modelBudget?.effort ?? 'inherit',
@@ -1250,6 +1301,7 @@ export async function runIssueLoop(
         }
         let reviewResult = await runTurn(reviewContext, {
           issueTitle: issueDisplayTitle(reviewIssue),
+          issueId: issueBoardKey(reviewIssue),
           turnType: 'review',
         });
         allToolCalls.push(...reviewResult.toolCalls);
@@ -1426,6 +1478,7 @@ export async function runIssueLoop(
         );
         let designResult = await runTurn(context, {
           issueTitle: issueDisplayTitle(issue),
+          issueId: issueBoardKey(issue),
           turnType: 'design',
           iteration,
           maxIterations: maxIterationsPerIssue,
@@ -1464,6 +1517,7 @@ export async function runIssueLoop(
           }
           result = await runTurn(buildContext, {
             issueTitle: issueDisplayTitle(issue),
+            issueId: issueBoardKey(issue),
             turnType: 'build',
             iteration,
             maxIterations: maxIterationsPerIssue,
@@ -1472,6 +1526,7 @@ export async function runIssueLoop(
       } else {
         result = await runTurn(context, {
           issueTitle: issueDisplayTitle(issue),
+          issueId: issueBoardKey(issue),
           turnType:
             issue.issueType === 'bootstrap'
               ? 'bootstrap'
