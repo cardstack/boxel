@@ -11,7 +11,10 @@
         "city": "Kuala Lumpur",
         "state": "Wilayah Persekutuan",
         "postalCode": "50250",
-        "country": { "name": "Malaysia", "code": "MY" }
+        "country": {
+          "name": "Malaysia",
+          "code": "MY"
+        }
       },
       "cardInfo": {
         "name": null,
@@ -24,6 +27,13 @@
       "adoptsFrom": {
         "module": "../customer",
         "name": "Customer"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/ledger"
+        }
       }
     }
   }

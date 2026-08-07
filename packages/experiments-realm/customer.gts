@@ -281,6 +281,7 @@ export class Customer extends CardDef {
         h1 {
           margin: 0;
           font-size: 1.375rem;
+          font-family: var(--font-heading, inherit);
         }
         .panel {
           border: 1px solid var(--border, #e5e7eb);
