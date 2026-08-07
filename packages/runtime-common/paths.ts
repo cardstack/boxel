@@ -18,6 +18,10 @@ interface RealmPathsVirtualNetwork {
 
 export class RealmPaths {
   readonly url: string;
+  // `url` without its trailing slash. `inRealm` compares against this on
+  // every call and is hot enough to show up in a CPU profile of the test
+  // suite, so it is computed once here rather than per call.
+  private urlWithoutTrailingSlash: string;
   private virtualNetwork: RealmPathsVirtualNetwork | undefined;
 
   constructor(realmURL: URL, virtualNetwork?: RealmPathsVirtualNetwork);
@@ -34,6 +38,7 @@ export class RealmPaths {
     } else {
       this.url = ensureTrailingSlash(realmURLOrId);
     }
+    this.urlWithoutTrailingSlash = this.url.replace(/\/$/, '');
     this.virtualNetwork = virtualNetwork;
   }
 
@@ -109,7 +114,7 @@ export class RealmPaths {
     let inputStr = input instanceof URL ? input.href : input;
     let decoded: string;
     try {
-      decoded = decodeURI(inputStr);
+      decoded = decodeUriIfNeeded(inputStr);
     } catch {
       return false;
     }
@@ -117,7 +122,7 @@ export class RealmPaths {
     if (
       decoded.startsWith(this.url) ||
       // realm root with missing trailing slash, optionally with query string
-      decoded.split('?')[0] === this.url.replace(/\/$/, '')
+      beforeQuery(decoded) === this.urlWithoutTrailingSlash
     ) {
       return true;
     }
@@ -136,13 +141,13 @@ export class RealmPaths {
     }
     let decodedURL: string;
     try {
-      decodedURL = decodeURI(inputURL);
+      decodedURL = decodeUriIfNeeded(inputURL);
     } catch {
       return false;
     }
     return (
       decodedURL.startsWith(realmURL) ||
-      decodedURL.split('?')[0] === realmURL.replace(/\/$/, '')
+      beforeQuery(decodedURL) === realmURL.replace(/\/$/, '')
     );
   }
 
@@ -173,6 +178,22 @@ export function join(...pathParts: string[]): LocalPath {
 
 export function ensureTrailingSlash(url: string) {
   return url.endsWith('/') ? url : `${url}/`;
+}
+
+// `decodeURI` only rewrites percent-escapes, so a string without a '%' is
+// returned unchanged — and it can only throw on a malformed escape, which
+// likewise requires one. Skipping the call for the common case keeps
+// `inRealm` off `decodeURI` entirely for ordinary ids; it is hot enough for
+// that to be visible in a CPU profile of the test suite.
+function decodeUriIfNeeded(value: string): string {
+  return value.includes('%') ? decodeURI(value) : value;
+}
+
+// `s.split('?')[0]` allocates an array (and every subsequent segment) just to
+// read the part before the query string.
+function beforeQuery(value: string): string {
+  let queryStart = value.indexOf('?');
+  return queryStart === -1 ? value : value.slice(0, queryStart);
 }
 
 // Documenting that this represents a local path within realm, with no leading
