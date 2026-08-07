@@ -2,10 +2,53 @@ import { merge } from 'lodash-es';
 
 import { baseRealm, isNode } from './index.ts';
 
-const cache = new Map<
-  string,
-  { etag: string; body: string; realmURL: string }
->();
+interface CacheEntry {
+  etag: string;
+  body: string;
+  realmURL: string;
+  headers: [string, string][];
+  url: string;
+}
+
+const cache = new Map<string, CacheEntry>();
+
+// Headers that describe how the body was framed on the wire. The replayed body
+// is a decoded string, so carrying these over would describe it wrongly.
+const bodyFramingHeaders = new Set([
+  'content-encoding',
+  'content-length',
+  'transfer-encoding',
+]);
+
+// A cached body on its own is not a faithful stand-in for the response: the
+// loader derives a module's canonical identity from `X-Boxel-Canonical-Path`,
+// falling back to `response.url` (see Loader#fetchModule). A bare
+// `new Response(body)` has neither, so the module gets registered under the
+// URL that was requested rather than its canonical one — two identities for
+// one module, which breaks `instanceof`, def lookup, and serialization.
+function replayCachedResponse(entry: CacheEntry, live?: Response): Response {
+  let headers = new Headers();
+  let copy = (name: string, value: string) => {
+    if (!bodyFramingHeaders.has(name.toLowerCase())) {
+      headers.set(name, value);
+    }
+  };
+  for (let [name, value] of entry.headers) {
+    copy(name, value);
+  }
+  // A 304 carries the realm's current metadata for the module — including its
+  // canonical path — but no content-type, so it overlays the cached headers
+  // rather than replacing them.
+  live?.headers.forEach((value, name) => copy(name, value));
+
+  let response = new Response(entry.body, { headers });
+  let url = live?.url || entry.url;
+  if (url) {
+    // `url` is a read-only getter that the constructor can't populate.
+    Object.defineProperty(response, 'url', { value: url, configurable: true });
+  }
+  return response;
+}
 
 // When set, cached base-realm responses are served without revalidating, and
 // they survive `clearFetchCache`.
@@ -79,9 +122,7 @@ export async function cachedFetch(
   let cacheKey = `${key}::accept:${accept}`;
   let cached = cache.get(cacheKey);
   if (cached && isTrustedBaseRealmEntry(cached)) {
-    // Same shape the 304 branch below returns, which every consumer of this
-    // function already handles.
-    return new Response(cached.body);
+    return replayCachedResponse(cached);
   }
   if (cached?.etag) {
     if (urlOrRequest instanceof Request) {
@@ -104,15 +145,18 @@ export async function cachedFetch(
         `Received HTTP 304 "not modified" when we don't have cache for ${key} (Accept: ${accept})`,
       );
     }
-    return new Response(cached.body);
+    return replayCachedResponse(cached, response);
   } else if (response.ok) {
     let maybeETag = response.headers.get('ETag');
     let maybeRealmURL = response.headers.get('X-boxel-realm-url');
     if (maybeETag && maybeRealmURL) {
       let etag = maybeETag;
       let realmURL = maybeRealmURL;
+      let headers: [string, string][] = [];
+      response.headers.forEach((value, name) => headers.push([name, value]));
+      let url = response.url;
       response.cacheResponse = (body: string) => {
-        cache.set(cacheKey, { etag, body, realmURL });
+        cache.set(cacheKey, { etag, body, realmURL, headers, url });
       };
     }
   }
