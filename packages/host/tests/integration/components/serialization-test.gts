@@ -698,9 +698,9 @@ module('Integration | serialization', function (hooks) {
       (r) => r.id === `${testRealmURL}Pet/mango`,
     );
     assert.ok(petResource, 'the linked pet rides along in included[]');
-    assert.strictEqual(
-      petResource?.meta.adoptsFrom.module,
-      '../test-cards',
+    assert.deepEqual(
+      petResource?.meta.adoptsFrom,
+      { module: rri('../test-cards'), name: 'Pet' },
       "the included resource's module is relative to its own id, not the primary's",
     );
     assert.strictEqual(
@@ -708,9 +708,9 @@ module('Integration | serialization', function (hooks) {
       '../Toy/ball',
       "a link on the included resource is relative to that resource's id",
     );
-    assert.strictEqual(
-      doc.data.meta.adoptsFrom.module,
-      '../test-cards',
+    assert.deepEqual(
+      doc.data.meta.adoptsFrom,
+      { module: rri('../test-cards'), name: 'Person' },
       'the primary resource still relativizes against its own id',
     );
     assert.strictEqual(
