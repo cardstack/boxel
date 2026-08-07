@@ -245,18 +245,17 @@ browser-dependent formats into separate modules.
 **RP-6.3** Format-level containment: compact/non-DOM formats (`fitted`,
 `atom`, `head`, `markdown`) AND the `edit` surface of a Sandbox-classified
 module render in Capsule and fail closed there — composition (especially
-fitted galleries) never creates inline iframes, and `edit` must run
-host-side because it is the trusted Base editor chrome operating on the
-canonical store: the Sandbox tier has no child→parent write leg (RP-20.5
-pushes parent→child only), so an iframe edit surface is structurally
-read-only — a dead form, not an editor (`executionDecisionForFormat`).
+fitted galleries) never creates inline iframes, and the STANDARD `edit`
+surface must run host-side because it is the trusted Base editor chrome
+operating directly on the canonical store — a module with no authored
+edit template contributes no authored code to that surface, so demoting
+it de-escalates nothing (`executionDecisionForFormat`).
 EXCEPTION: a module declaring its own `static edit = …` template (an
 authored in-place editor) keeps the Sandbox for `edit` — the SAME retained
 iframe as its isolated render (the runtime router retains the process by
 surface identity across format switches), so in-iframe state survives the
-switch. Its child→parent edit propagation is the Sandbox write leg — the
-next protocol milestone; until it lands the authored editor renders live
-but cannot persist.
+switch. Its child→parent edit propagation is the Sandbox write leg
+(RP-20.6).
 
 **RP-6.4** Routing inputs come from the resolved import graph produced by
 the canonical transpiler, not from regex over source text or compiled wire
@@ -402,9 +401,11 @@ the canonical instance's field — entering RP-9.2's one `setField` funnel
 (validate → write → notify → autosave) exactly as a trusted Base editor
 does. Write authority is the presence of the granted closure, never a
 record flag or a patch-document protocol; no tier receives a Store-write
-shortcut. (The Sandbox tier's grant rides the pending updateInstance
-lane; until it lands, a Sandbox editor's writes stay child-local — the
-documented RP-20.5 gap.)
+shortcut. (The Sandbox tier's equivalent authority is RP-20.6's write
+lane: an authored setter mutates the child's materialized copy and the
+serialized proposal crosses back to the one entitled receiver, whose
+apply enters the canonical instance parent-side — same funnel, expressed
+over the boundary.)
 
 ## RP-10 The context plane and ambient contract
 
@@ -796,6 +797,37 @@ generation sequence as the revision guard (a push superseded in flight
 is dropped, never applied out of order; pushes coalesce per mutation
 batch). Because every push carries full current state, a settled
 relationship reaches the child through the same lane — there is no
-separate settle-republish channel for any tier. GAP (v1): the reverse
-leg — a Sandbox child's own edits do not cross back to the parent Store;
-they re-render natively inside the child's document only.
+separate settle-republish channel for any tier. The reverse leg is
+RP-20.6.
+
+**RP-20.6** The Sandbox write leg — RP-20.5's reverse polarity. An
+authored mutation inside a mounted Sandbox child (a setter on `@model`,
+exactly main's in-place edit idiom) crosses back to the parent as a full
+save-shaped serialized document over a dedicated write lane on the same
+private port (`SandboxWriteClient`/`SandboxWriteServer`, mirroring the
+render transport's envelope validation, serial dispatch, bounded ack
+timeout, and monotonic-sequence stale-drop). The child's trigger is
+card-api's own `subscribeToChanges` on the rendered instance — the exact
+signal main's store autosave consumes — coalesced per mutation batch
+like the RP-20.5 push loop. Authority is entirely parent-side: the one
+registered receiver (`connectSandboxInstanceSync`) validates the
+document's identity against the ONE canonical instance the process
+renders (a write for any other card is refused before anything
+applies), applies it in place (`updateFromSerialized`), and persists
+through the store's own debounced autosave lane (`scheduleSave`) — the
+realm write, permissions, and post-save arbitration never move into the
+child. An applied write fans out to every OTHER connected view of the
+card as an ordinary RP-20.5 push; the writer's own connection is
+deliberately skipped — its child already holds exactly the state it
+wrote, and an echo push would replace nested compound field instances
+and remount their DOM (destroying an open in-place editor) for zero
+data change. Loop termination is structural, not flag-based:
+`updateFromSerialized` writes the data bucket without firing change
+subscribers, so an applied push (child side) can never re-trigger the
+write subscription and an applied write (parent side) can never
+re-trigger the push subscription — each direction's apply is silent to
+the other's trigger. Writes are proposals of complete current
+state, so a missed or dropped one self-heals on the next; Boxel is not
+a validate-on-write system (validation is post-save, the guide system),
+so an apply is expected to succeed and the error response lane exists
+for transport faults and identity violations, not a validation UX.

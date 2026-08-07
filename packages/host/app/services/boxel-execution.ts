@@ -115,6 +115,19 @@ export default class BoxelExecutionService extends Service {
    */
   private instanceVersions = new WeakMap<BaseDef, { v: number }>();
   /**
+   * RP-20.6: every live sandbox sync connection's push trigger, per
+   * canonical instance. A child write applied to the canonical instance
+   * cannot fire card-api change subscribers (`updateFromSerialized` writes
+   * the data bucket directly), so the OTHER sandbox views of the same card
+   * would never learn of it — this registry is how an applied write fans
+   * back out: the receiver invokes every registered trigger, each of which
+   * serializes the (now-updated) canonical state and pushes it to its own
+   * child. The writer's own trigger is included deliberately: its child
+   * applies the normalization echo silently (no subscribers fire in the
+   * child either), so the loop terminates by construction.
+   */
+  private instanceSyncPushTriggers = new WeakMap<BaseDef, Set<() => void>>();
+  /**
    * Volatile promotion (docs/boxel-volatile-execution-plan.md): one-way for
    * the life of this service (tab) — no lease, no timer, no demotion. The
    * only way a module leaves this set is the tab closing.
@@ -459,9 +472,67 @@ export default class BoxelExecutionService extends Service {
       });
     };
     api.subscribeToChanges(card, subscriber);
+    let triggers = this.instanceSyncPushTriggers.get(card);
+    if (!triggers) {
+      triggers = new Set();
+      this.instanceSyncPushTriggers.set(card, triggers);
+    }
+    triggers.add(subscriber);
+    // RP-20.6 child→parent write leg: the reverse of the push loop above.
+    // The child proposes its rendered instance's complete current state; the
+    // ONLY thing it is entitled to write is this connection's own canonical
+    // card, so the document's identity is validated before anything is
+    // applied. Apply goes through `updateFromSerialized` — the same in-place
+    // mechanism the child uses for the downstream push — and persistence
+    // goes through the store's own debounced autosave lane
+    // (`scheduleSave`), because the direct bucket write cannot fire the
+    // autosave subscriber the way a host-side setter mutation would.
+    // Boxel accepts writes; validation is a post-save concern (the guide
+    // system), so an apply here is expected to succeed — the error path
+    // exists for transport faults and identity violations, not a
+    // validation UX.
+    let disconnectWriteReceiver = process.setChildWriteReceiver(
+      async (document) => {
+        let cardId = (card as { id?: unknown }).id;
+        let incomingId = document.data?.id;
+        if (typeof cardId !== 'string' || cardId.length === 0) {
+          throw new Error(
+            'Sandbox instance write requires a saved canonical card',
+          );
+        }
+        if (
+          typeof incomingId !== 'string' ||
+          this.network.virtualNetwork.unresolveURL(incomingId) !==
+            this.network.virtualNetwork.unresolveURL(cardId)
+        ) {
+          throw new Error(
+            `Sandbox instance write for '${String(incomingId)}' does not match the card this process renders`,
+          );
+        }
+        await api.updateFromSerialized(card as never, document);
+        this.store.scheduleSave(cardId);
+        console.warn('[sandbox-parent] child write applied', { id: cardId });
+        for (let trigger of [
+          ...(this.instanceSyncPushTriggers.get(card) ?? []),
+        ]) {
+          // Skip the WRITER's own connection: its child already holds
+          // exactly the state it just wrote, and an echo push would apply
+          // updateFromSerialized over it — replacing nested compound field
+          // instances and remounting their {{each}} DOM (destroying an
+          // open in-cell editor) for zero data change. Every OTHER view of
+          // the card receives the write as an ordinary RP-20.5 push.
+          if (trigger === subscriber) {
+            continue;
+          }
+          trigger();
+        }
+      },
+    );
     return () => {
       stopped = true;
       api.unsubscribeFromChanges(card, subscriber);
+      this.instanceSyncPushTriggers.get(card)?.delete(subscriber);
+      disconnectWriteReceiver();
     };
   }
 

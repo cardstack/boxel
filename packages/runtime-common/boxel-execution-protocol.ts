@@ -222,6 +222,50 @@ export type SandboxRenderRequest =
     };
 
 /**
+ * RP-20.6 child→parent instance write: the Sandbox child's proposal of new
+ * state for the ONE card it is rendering — the reverse leg of RP-20.5's
+ * parent→child push, carrying a full save-shaped serialized document (not a
+ * diff; each write is the instance's complete current state, so a missed one
+ * self-heals on the next). `seq` is a child-issued monotonic counter: the
+ * parent applies writes in arrival order (MessagePort is FIFO) and drops a
+ * request whose seq it has already passed, so a stale document can never be
+ * applied after a newer one. The parent — not the child — owns everything
+ * downstream of apply: it updates the CANONICAL instance in place
+ * (`updateFromSerialized`) and schedules the store's own debounced autosave,
+ * so persistence, permissions, and realm arbitration all stay parent-side.
+ */
+export interface SandboxWriteRequest {
+  kind: 'boxel-sandbox-write-request';
+  transportVersion: number;
+  requestId: string;
+  seq: number;
+  document: LooseSingleCardDocument;
+}
+
+export type SandboxWriteResponse =
+  | {
+      kind: 'boxel-sandbox-write-response';
+      transportVersion: number;
+      requestId: string;
+      seq: number;
+      ok: true;
+    }
+  | {
+      kind: 'boxel-sandbox-write-response';
+      transportVersion: number;
+      requestId: string;
+      seq: number;
+      ok: false;
+      error: SandboxProjectedError;
+      /**
+       * True when the parent chose not to apply this write because a newer
+       * seq had already been applied — informational, not a failure of the
+       * child's state (the newer write already carried it).
+       */
+      dropped?: boolean;
+    };
+
+/**
  * A structured-clone-safe projection of a child-side Error. `stack` and the
  * (depth-bounded) `cause` chain ride along so the Host's error presentation
  * can show the render's ROOT cause — a bare name/message pair from a boundary

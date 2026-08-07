@@ -17,6 +17,7 @@ import {
 } from './sandbox-runtime-process';
 
 import { SandboxSurfaceClient } from './sandbox-surface-transport';
+import { SandboxWriteClient } from './sandbox-write-transport';
 
 import type { BoxelRuntime } from './boxel-runtime';
 import type { SandboxRuntimeControl } from './sandbox-runtime-process';
@@ -43,6 +44,12 @@ export function installSandboxRuntimeHost(options: {
     runtime: BoxelRuntime,
     surface: SandboxSurfaceClient,
     reportRenderDiagnostic: (diagnostic: SandboxRenderDiagnostic) => void,
+    /**
+     * RP-20.6 child→parent write leg: the sender the render target's owner
+     * uses to propose the rendered instance's new state after an authored
+     * mutation — see `SandboxWriteClient`.
+     */
+    writeClient: SandboxWriteClient,
   ) => SandboxRenderTarget | Promise<SandboxRenderTarget>;
   announceInterval?: number;
   signal?: AbortSignal;
@@ -129,6 +136,7 @@ export function installSandboxRuntimeHost(options: {
       let surface: SandboxSurfaceClient | undefined;
       let renderServer: SandboxRenderServer | undefined;
       let fetchClient: SandboxFetchClient | undefined;
+      let writeClient: SandboxWriteClient | undefined;
       try {
         fetchClient = new SandboxFetchClient(port);
         console.warn('[sandbox-child] createRuntime begun');
@@ -148,10 +156,13 @@ export function installSandboxRuntimeHost(options: {
         let createdSurface = new SandboxSurfaceClient(port, event.data.surface);
         surface = createdSurface;
         console.warn('[sandbox-child] createRenderTarget begun');
+        let createdWriteClient = new SandboxWriteClient(port);
+        writeClient = createdWriteClient;
         let renderTarget = await options.createRenderTarget(
           createdRuntime,
           createdSurface,
           (diagnostic) => postRenderDiagnostic(port, diagnostic),
+          createdWriteClient,
         );
         console.warn('[sandbox-child] createRenderTarget completed');
         let createdRenderServer = new SandboxRenderServer(port, renderTarget);
@@ -189,6 +200,7 @@ export function installSandboxRuntimeHost(options: {
             createdSurface.destroy();
             createdRenderServer.destroy();
             createdRuntimeServer.destroy();
+            createdWriteClient.destroy();
             fetchClient?.destroy();
             if (
               'destroy' in createdRuntime &&
@@ -209,6 +221,7 @@ export function installSandboxRuntimeHost(options: {
         renderServer?.destroy();
         surface?.destroy();
         runtimeServer?.destroy();
+        writeClient?.destroy();
         fetchClient?.destroy();
         if (
           runtime &&

@@ -737,6 +737,19 @@ export default class StoreService extends Service implements StoreInterface {
     this.doAutoSave(id, { isImmediate: true });
   }
 
+  /**
+   * Schedules a save through the same debounced lane the autosave
+   * subscriber uses — for a mutation applied WITHOUT firing card-api change
+   * subscribers (`updateFromSerialized` writes the data bucket directly), so
+   * the autosave subscriber never saw it. The Sandbox tier's child→parent
+   * write leg (RP-20.6) is the caller: a sandboxed card's authored mutation
+   * must persist with exactly the cadence the same mutation would have had
+   * host-side, not `save()`'s immediate one.
+   */
+  scheduleSave(id: string) {
+    this.doAutoSave(id);
+  }
+
   async add<T extends CardDef>(
     instanceOrDoc: T | LooseSingleCardDocument,
     opts?: TrackedCreateOptions & { doNotPersist: true },

@@ -27,6 +27,7 @@ import {
   reconstructedError,
 } from './sandbox-render-transport';
 import { SandboxSurfaceServer } from './sandbox-surface-transport';
+import { SandboxWriteServer } from './sandbox-write-transport';
 
 import type { BoxelRuntime, MaterializationPurpose } from './boxel-runtime';
 
@@ -176,6 +177,18 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
   private surfaceServer?: SandboxSurfaceServer;
   private fetchServer?: SandboxFetchServer;
   private renderClient?: SandboxRenderClient;
+  private writeServer?: SandboxWriteServer;
+  /**
+   * RP-20.6: the one consumer entitled to apply this process's child writes
+   * — registered by `BoxelExecutionService.connectSandboxInstanceSync`,
+   * which binds it to the ONE canonical instance this process renders. Held
+   * on the process (not the transport) so it survives an unmount/remount
+   * cycle the same way the render request does: the transport is per-
+   * connection, the entitlement is per-process.
+   */
+  private childWriteReceiver?: (
+    document: LooseSingleCardDocument,
+  ) => void | Promise<void>;
   private renderedCard?: BoxelInstanceHandle;
   private cancelConnection?: (error: Error) => void;
   private closed = false;
@@ -414,6 +427,8 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
     this.fetchServer = undefined;
     this.renderClient?.destroy();
     this.renderClient = undefined;
+    this.writeServer?.destroy();
+    this.writeServer = undefined;
     this.renderedCard = undefined;
     // This exact iframe is dead the moment it loses its mount point — a
     // detached iframe's document does not resume, and even if it did, this
@@ -638,6 +653,26 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
   }
 
   /**
+   * RP-20.6: registers the ONE receiver entitled to apply this process's
+   * child instance writes — see `connectSandboxInstanceSync`, which binds it
+   * to the canonical instance this process renders (identity validation and
+   * persistence both live there, parent-side). Returns a deregistration
+   * callback; a second registration replaces the first (the runtime router
+   * retains one process per surface identity, and the sync connection is
+   * re-established per render).
+   */
+  setChildWriteReceiver(
+    receiver: (document: LooseSingleCardDocument) => void | Promise<void>,
+  ): () => void {
+    this.childWriteReceiver = receiver;
+    return () => {
+      if (this.childWriteReceiver === receiver) {
+        this.childWriteReceiver = undefined;
+      }
+    };
+  }
+
+  /**
    * Explicit hard reload — distinct from ordinary HMR (`pushDraft`): remints
    * this process's child from scratch. Stays the SAME retained object (the
    * runtime router keeps its lease; nothing re-routes) but tears down and
@@ -818,6 +853,8 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
         this.surfaceServer = undefined;
         this.fetchServer?.destroy();
         this.fetchServer = undefined;
+        this.writeServer?.destroy();
+        this.writeServer = undefined;
         reject(error);
       };
       let receiveControl = (event: MessageEvent<unknown>) => {
@@ -871,6 +908,20 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
             this.moduleAuthority.observe(url, contentType, body),
           (url) => this.draftOverrides.get(url),
         );
+        // RP-20.6 child→parent write leg: applies through the registered
+        // receiver (connectSandboxInstanceSync's entitlement to the ONE
+        // canonical instance this process renders). A write arriving before
+        // any receiver is registered fails closed with an ordinary error
+        // response — never buffered, never applied later out of context.
+        this.writeServer = new SandboxWriteServer(channel.port1, (document) => {
+          let receiver = this.childWriteReceiver;
+          if (!receiver) {
+            throw new Error(
+              'No sandbox instance-write receiver is registered for this process',
+            );
+          }
+          return receiver(document);
+        });
         // Independent of, and outlives, the bootstrap-scoped receiveControl
         // above (which cleanupBootstrap detaches once the handshake
         // completes): the child posts a render diagnostic after every

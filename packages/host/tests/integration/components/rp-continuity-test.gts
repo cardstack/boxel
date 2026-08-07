@@ -431,6 +431,7 @@ module('Integration | rp-continuity', function (hooks) {
         pushed.push(pushedDocument);
         return { generation: pushed.length, ok: true };
       },
+      setChildWriteReceiver: () => () => {},
     };
     let disconnect = execution.connectSandboxInstanceSync(
       card,
@@ -487,6 +488,203 @@ module('Integration | rp-continuity', function (hooks) {
         'disconnecting stops the stream — teardown leaves no orphan subscriber pushing at a dead process',
       );
     } finally {
+      disconnect();
+    }
+  });
+
+  test('RP-20.6: a child instance write applies to the canonical instance, schedules the debounced save, and fans back out — and the loop terminates', async function (assert) {
+    let resource: LooseCardResource = {
+      id: `${testRealmURL}Journal/rp-20-6`,
+      attributes: {
+        headline: 'First Light',
+        entries: ['Entry 1'],
+      },
+      meta: { adoptsFrom: { module: testRRI('journal'), name: 'Journal' } },
+    };
+    let store = getService('store');
+    let card = await store.__dangerousCreateFromSerialized(
+      resource,
+      { data: resource },
+      new URL(testRealmURL),
+    );
+    let execution = getService('boxel-execution');
+    await execution.requestFor(card, 'isolated', execution.surfaceId());
+
+    let scheduledSaves: string[] = [];
+    let storeWithSpy = store as unknown as {
+      scheduleSave: (id: string) => void;
+    };
+    let originalScheduleSave = storeWithSpy.scheduleSave;
+    storeWithSpy.scheduleSave = (id: string) => scheduledSaves.push(id);
+
+    let makeStubProcess = (pushed: LooseSingleCardDocument[]) => {
+      let captured: {
+        receiver?: (document: LooseSingleCardDocument) => void | Promise<void>;
+      } = {};
+      return {
+        captured,
+        process: {
+          pushInstanceUpdate: async (
+            pushedDocument: LooseSingleCardDocument,
+          ) => {
+            pushed.push(pushedDocument);
+            return { generation: pushed.length, ok: true };
+          },
+          setChildWriteReceiver: (
+            r: (document: LooseSingleCardDocument) => void | Promise<void>,
+          ) => {
+            captured.receiver = r;
+            return () => {
+              captured.receiver = undefined;
+            };
+          },
+        } as unknown as SandboxRuntimeProcess,
+      };
+    };
+    // Two sandbox views of the one canonical card: the WRITER and an
+    // observer. The applied write must fan out to the observer as an
+    // ordinary RP-20.5 push — and must NOT echo back to the writer, whose
+    // child already holds the state it wrote (an echo would remount its
+    // compound-field DOM for zero data change).
+    let writerPushes: LooseSingleCardDocument[] = [];
+    let observerPushes: LooseSingleCardDocument[] = [];
+    let writer = makeStubProcess(writerPushes);
+    let observer = makeStubProcess(observerPushes);
+    let disconnect = execution.connectSandboxInstanceSync(card, writer.process);
+    let disconnectObserver = execution.connectSandboxInstanceSync(
+      card,
+      observer.process,
+    );
+    let receiver = writer.captured.receiver;
+    try {
+      assert.ok(receiver, 'connecting registered the child-write receiver');
+
+      // The write a real child would send: the instance's complete
+      // save-shaped serialization, with the mutation baked in.
+      let cardService = getService('card-service');
+      let written = (await cardService.serializeCard(card as never, {
+        useAbsoluteURL: true,
+      })) as LooseSingleCardDocument;
+      written.data.attributes = {
+        ...written.data.attributes,
+        headline: 'Written From The Child',
+      };
+      await receiver!(written);
+
+      assert.strictEqual(
+        (card as unknown as { headline: string }).headline,
+        'Written From The Child',
+        'the CANONICAL instance carries the child-authored value',
+      );
+      assert.deepEqual(
+        scheduledSaves,
+        [(card as unknown as { id: string }).id],
+        'persistence went through the store’s debounced autosave lane, once',
+      );
+      await waitUntil(() => observerPushes.length >= 1);
+      assert.strictEqual(
+        observerPushes[observerPushes.length - 1]!.data?.attributes?.headline,
+        'Written From The Child',
+        'the applied write fans out to the OTHER connected view as an ordinary RP-20.5 push',
+      );
+      assert.strictEqual(
+        writerPushes.length,
+        0,
+        'the writer’s own connection gets no echo push — its child already holds the state it wrote',
+      );
+
+      // Loop termination: the fan-out push is applied child-side via
+      // updateFromSerialized, which fires no change subscribers — so after
+      // the queue settles, nothing keeps writing or pushing.
+      await new Promise<void>((resolve) => setTimeout(resolve, 60));
+      let settledPushes = writerPushes.length + observerPushes.length;
+      let settledSaves = scheduledSaves.length;
+      await new Promise<void>((resolve) => setTimeout(resolve, 60));
+      assert.strictEqual(
+        writerPushes.length + observerPushes.length,
+        settledPushes,
+        'pushes stopped',
+      );
+      assert.strictEqual(
+        scheduledSaves.length,
+        settledSaves,
+        'saves stopped — the write loop terminated',
+      );
+    } finally {
+      storeWithSpy.scheduleSave = originalScheduleSave;
+      disconnect();
+      disconnectObserver();
+    }
+  });
+
+  test('RP-20.6: a child write for ANY other card is refused before anything applies — the write entitlement is exactly the one canonical instance', async function (assert) {
+    let resource: LooseCardResource = {
+      id: `${testRealmURL}Journal/rp-20-6-entitlement`,
+      attributes: { headline: 'First Light', entries: ['Entry 1'] },
+      meta: { adoptsFrom: { module: testRRI('journal'), name: 'Journal' } },
+    };
+    let store = getService('store');
+    let card = await store.__dangerousCreateFromSerialized(
+      resource,
+      { data: resource },
+      new URL(testRealmURL),
+    );
+    let execution = getService('boxel-execution');
+    await execution.requestFor(card, 'isolated', execution.surfaceId());
+
+    let scheduledSaves: string[] = [];
+    let storeWithSpy = store as unknown as {
+      scheduleSave: (id: string) => void;
+    };
+    let originalScheduleSave = storeWithSpy.scheduleSave;
+    storeWithSpy.scheduleSave = (id: string) => scheduledSaves.push(id);
+
+    let receiver:
+      | ((document: LooseSingleCardDocument) => void | Promise<void>)
+      | undefined;
+    let stubProcess = {
+      pushInstanceUpdate: async () => ({ generation: 1, ok: true }),
+      setChildWriteReceiver: (
+        r: (document: LooseSingleCardDocument) => void | Promise<void>,
+      ) => {
+        receiver = r;
+        return () => {};
+      },
+    };
+    let disconnect = execution.connectSandboxInstanceSync(
+      card,
+      stubProcess as unknown as SandboxRuntimeProcess,
+    );
+    try {
+      let foreign: LooseSingleCardDocument = {
+        data: {
+          id: `${testRealmURL}Journal/some-other-card`,
+          type: 'card',
+          attributes: { headline: 'Hijacked' },
+          meta: {
+            adoptsFrom: { module: testRRI('journal'), name: 'Journal' },
+          },
+        },
+      } as LooseSingleCardDocument;
+      let caught: unknown;
+      try {
+        await receiver!(foreign);
+      } catch (error) {
+        caught = error;
+      }
+      assert.ok(caught instanceof Error, 'the foreign write was refused');
+      assert.true(
+        (caught as Error).message.includes('does not match'),
+        'refused for identity, before apply',
+      );
+      assert.notStrictEqual(
+        (card as unknown as { headline: string }).headline,
+        'Hijacked',
+        'the canonical instance was never touched',
+      );
+      assert.deepEqual(scheduledSaves, [], 'no save was scheduled');
+    } finally {
+      storeWithSpy.scheduleSave = originalScheduleSave;
       disconnect();
     }
   });

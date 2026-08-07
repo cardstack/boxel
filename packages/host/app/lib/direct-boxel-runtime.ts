@@ -284,6 +284,66 @@ export default class DirectBoxelRuntime implements BoxelRuntime {
     });
   }
 
+  /**
+   * RP-20.6 child→parent write leg: the SAVE-shaped serialization of the
+   * instance at `handle` — no computeds (a save never persists them, and the
+   * parent's `updateFromSerialized` writes the data bucket directly, so a
+   * stale computed value crossing the wire would be stuffed into canonical
+   * state rather than recomputed), unrendered fields included (a write must
+   * carry the instance's COMPLETE current state; each write self-heals the
+   * last).
+   */
+  async serializeInstanceForWrite(
+    handle: BoxelInstanceHandle,
+  ): Promise<LooseSingleCardDocument> {
+    let api = await this.getCardAPI();
+    return api.serializeCard(this.instances.get(handle) as never, {
+      includeUnrenderedFields: true,
+    });
+  }
+
+  /**
+   * RP-20.6: subscribes `subscriber` to card-api change notifications on the
+   * instance at `handle` — the exact signal main's store autosave consumes,
+   * fired by authored setter mutations but (deliberately, see
+   * `_updateFromSerialized`) NOT by an applied RP-20.5 push, which is what
+   * makes the write loop terminate without any suppression flag. Coverage is
+   * recursive over nested compounds present at subscribe time and survives
+   * an applied push swapping them (`applySubscribersToInstanceValue`
+   * migrates subscribers to the new values); a mutation ASSIGNING a
+   * brand-new nested compound is covered by the caller re-subscribing from
+   * its own notification (idempotent per (instance, subscriber) — the same
+   * idiom as `BoxelExecutionService.instanceVersionCellFor`).
+   */
+  async subscribeToInstanceChanges(
+    handle: BoxelInstanceHandle,
+    subscriber: () => void,
+  ): Promise<() => void> {
+    let api = await this.getCardAPI();
+    let instance = this.instances.get(handle);
+    let stopped = false;
+    let resubscriber = () => {
+      if (stopped) {
+        return;
+      }
+      subscriber();
+      // Grow coverage over any newly assigned nested compound, off the
+      // notify path so this stays a pure observer. The `stopped` re-check
+      // keeps a microtask already in flight at teardown time from
+      // resurrecting a dead subscription.
+      queueMicrotask(() => {
+        if (!stopped) {
+          api.subscribeToChanges(instance, resubscriber);
+        }
+      });
+    };
+    api.subscribeToChanges(instance, resubscriber);
+    return () => {
+      stopped = true;
+      api.unsubscribeFromChanges(instance, resubscriber);
+    };
+  }
+
   async dispose(handle: RuntimeHandle): Promise<void> {
     if (handle.startsWith('direct-type:')) {
       this.types.release(handle);

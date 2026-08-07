@@ -29,6 +29,7 @@ import {
 } from '@cardstack/host/lib/sandbox-runtime-host';
 import { connectSandboxSurface } from '@cardstack/host/lib/sandbox-surface-transport';
 import type { SandboxSurfaceClient } from '@cardstack/host/lib/sandbox-surface-transport';
+import type { SandboxWriteClient } from '@cardstack/host/lib/sandbox-write-transport';
 import type { BoxelSandboxRuntimeModel } from '@cardstack/host/routes/boxel-sandbox-runtime';
 import type NetworkService from '@cardstack/host/services/network';
 
@@ -202,6 +203,65 @@ const attachSurface = modifier<{
     };
   },
 );
+
+/**
+ * RP-20.6 child→parent write leg: forwards authored mutations of the
+ * rendered instance to the parent as full save-shaped documents — the exact
+ * mirror of the parent's `connectSandboxInstanceSync` (RP-20.5) in the other
+ * direction, same dirty-flag + promise-queue coalescing. The subscription is
+ * card-api's `subscribeToChanges`, which authored setter mutations fire and
+ * an applied parent push (`updateFromSerialized`) deliberately does NOT —
+ * that asymmetry, not any suppression flag, is what terminates the sync
+ * loop. Send failures are logged, never thrown: the next mutation's write
+ * carries full current state, so a missed one self-heals.
+ */
+export function forwardInstanceWrites(
+  runtime: DirectBoxelRuntime,
+  handle: BoxelInstanceHandle,
+  writeClient: SandboxWriteClient,
+): () => void {
+  let stopped = false;
+  let dirty = false;
+  let queue = Promise.resolve();
+  let unsubscribe: (() => void) | undefined;
+  let subscriber = () => {
+    dirty = true;
+    queue = queue.then(async () => {
+      if (stopped || !dirty) {
+        return;
+      }
+      dirty = false;
+      try {
+        let document = await runtime.serializeInstanceForWrite(handle);
+        if (stopped) {
+          return;
+        }
+        await writeClient.write(document);
+        // The one child-observable breadcrumb that the parent ACKED applying
+        // this write — mirrors '[sandbox-parent] instance push applied'.
+        console.warn('[sandbox-child] instance write applied');
+      } catch (error) {
+        console.warn('[sandbox-child] instance write failed', error);
+      }
+    });
+  };
+  void runtime.subscribeToInstanceChanges(handle, subscriber).then(
+    (unsub) => {
+      if (stopped) {
+        unsub();
+        return;
+      }
+      unsubscribe = unsub;
+    },
+    (error) => {
+      console.warn('[sandbox-child] instance write subscription failed', error);
+    },
+  );
+  return () => {
+    stopped = true;
+    unsubscribe?.();
+  };
+}
 
 let esModuleLexerInitialized = false;
 
@@ -381,6 +441,10 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
   ) => void;
   /** The handle currently mounted — Sandbox HMR's `draft()` re-derives it. */
   private renderedCardHandle?: BoxelInstanceHandle;
+  /** RP-20.6: sender for child→parent instance writes, set at bootstrap. */
+  private writeClient?: SandboxWriteClient;
+  /** Teardown for the current `forwardInstanceWrites` subscription. */
+  private stopWriteForwarding?: () => void;
   /**
    * RP-17.1 HMR un-deferral: a live check against every generation the
    * parent-facing `SandboxRenderServer` has seen arrive, not just ones
@@ -434,9 +498,15 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
       );
       return this.runtime;
     },
-    createRenderTarget: (_runtime, surface, reportRenderDiagnostic) => {
+    createRenderTarget: (
+      _runtime,
+      surface,
+      reportRenderDiagnostic,
+      writeClient,
+    ) => {
       join(() => (this.surface = surface));
       this.reportRenderDiagnostic = reportRenderDiagnostic;
+      this.writeClient = writeClient;
       return this.renderTarget;
     },
     signal: this.abortBootstrap.signal,
@@ -490,6 +560,7 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
         return;
       }
       this.renderedCardHandle = card;
+      this.installWriteForwarder(card);
       let slot = this.runtime.getRenderSlotForHandle(card);
       join(() => {
         this.format = format as Format;
@@ -518,6 +589,8 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
         this.error = undefined;
       });
       this.renderedCardHandle = undefined;
+      this.stopWriteForwarding?.();
+      this.stopWriteForwarding = undefined;
       await afterRender();
     },
     updateInstance: async (
@@ -587,6 +660,10 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
       if (this.isGenerationStale?.(generation)) {
         return;
       }
+      // redeserialize() replaced the instance UNDER the same handle — the
+      // write subscription is bound to the old instance object, so it must
+      // be re-installed against the replacement (RP-20.6).
+      this.installWriteForwarder(this.renderedCardHandle);
       join(() => {
         this.renderedComponent =
           slot.component as ComponentLike<SandboxComponentSignature>;
@@ -605,8 +682,18 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
     },
   };
 
+  private installWriteForwarder(card: BoxelInstanceHandle): void {
+    this.stopWriteForwarding?.();
+    this.stopWriteForwarding =
+      this.runtime && this.writeClient
+        ? forwardInstanceWrites(this.runtime, card, this.writeClient)
+        : undefined;
+  }
+
   willDestroy(): void {
     super.willDestroy();
+    this.stopWriteForwarding?.();
+    this.stopWriteForwarding = undefined;
     this.abortBootstrap.abort();
     void this.runtimeHost.then((host) => host?.destroy());
     this.loader?.dispose();

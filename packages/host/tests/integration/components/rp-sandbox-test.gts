@@ -364,7 +364,7 @@ module('Integration | rp-sandbox', function (hooks) {
       );
   });
 
-  test('a forward-referenced linksTo(() => X) thunk stays lazy through Capsule evaluation', async function (assert) {
+  test('RP-7.2: a forward-referenced linksTo(() => X) thunk stays lazy through Capsule evaluation — resolution is first-access, never definition time', async function (assert) {
     // Main resolves relationship thunks on first access, never at
     // field-definition time. The Capsule facade used to invoke the thunk
     // while the module was still evaluating, throwing `Cannot access 'X'
