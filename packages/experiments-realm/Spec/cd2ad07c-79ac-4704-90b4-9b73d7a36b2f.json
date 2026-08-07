@@ -1,0 +1,21 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Person Base",
+      "cardDescription": "Shared person base card with name, email, phone, photo URL, and an initials-avatar embedded view",
+      "specType": "card",
+      "ref": {
+        "module": "../person-base",
+        "name": "PersonBase"
+      },
+      "readMe": "# Person Base\n\n## Summary\nThe shared base for Employee and Candidate: `name`, `email`, `phone`, `photoUrl`, and computed `initials`. Provides the avatar-row embedded view both subclasses inherit.\n\n## Import\n```ts\nimport { PersonBase } from './person-base';\n```\n\n## Usage\n```ts\nexport class Employee extends PersonBase { ... }\n```\n\n## Template Usage\nEmbedded view renders photo (or initials fallback) + name + email."
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

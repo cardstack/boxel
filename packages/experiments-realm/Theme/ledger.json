@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cssVariables": ":root {\n  --background: #f3ecda;\n  --foreground: #1f2b1c;\n  --card: #fbf7ec;\n  --card-foreground: #1f2b1c;\n  --popover: #fbf7ec;\n  --popover-foreground: #1f2b1c;\n  --primary: #3a4a35;\n  --primary-foreground: #f3ecda;\n  --secondary: #8a6d2f;\n  --secondary-foreground: #f3ecda;\n  --muted: #ece4d0;\n  --muted-foreground: #6b5f3f;\n  --accent: #8a6d2f;\n  --accent-foreground: #f3ecda;\n  --destructive: #a3503a;\n  --destructive-foreground: #f3ecda;\n  --border: #c9b98a;\n  --input: #fbf7ec;\n  --ring: #8a6d2f;\n  --radius: 0.5rem;\n  --font-sans: 'Work Sans', system-ui, sans-serif;\n  --font-serif: 'Fraunces', Georgia, serif;\n}",
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Work+Sans:wght@400;500;600;700&display=swap"
+      ],
+      "cardInfo": {
+        "name": "Ledger",
+        "summary": "The Talent & Resource Tracker's default look — deep forest green and brass on parchment, with Fraunces and Work Sans. A personnel-register identity: the ATS as a ledger of record.",
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "@cardstack/base/card-api",
+        "name": "Theme"
+      }
+    }
+  }
+}

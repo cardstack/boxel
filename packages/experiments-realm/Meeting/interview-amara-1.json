@@ -1,0 +1,42 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Amara Okafor — Technical Interview",
+      "meetingType": "interview",
+      "date": "2026-08-04T10:00:00.000Z",
+      "duration": {
+        "value": 60,
+        "unit": "minutes"
+      },
+      "interviewScore": 4,
+      "notes": "Strong on distributed systems; dig deeper into schema design next round.",
+      "cardInfo": {
+        "name": "Amara — Technical Interview"
+      }
+    },
+    "relationships": {
+      "candidate": {
+        "links": {
+          "self": "../Candidate/interviewing-amara"
+        }
+      },
+      "interviewers.0": {
+        "links": {
+          "self": "../Employee/marcus-webb"
+        }
+      },
+      "interviewers.1": {
+        "links": {
+          "self": "../Employee/priya-nair"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../meeting",
+        "name": "Meeting"
+      }
+    }
+  }
+}

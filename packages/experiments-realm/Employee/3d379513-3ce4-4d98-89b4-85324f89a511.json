@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "department": null,
+      "firstName": null,
+      "lastName": null,
+      "isCool": false,
+      "isHuman": false,
+      "address": {
+        "addressLine1": null,
+        "addressLine2": null,
+        "city": null,
+        "state": null,
+        "postalCode": null,
+        "country": {
+          "name": null,
+          "code": null
+        },
+        "poBoxNumber": null
+      },
+      "trips": {},
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../employee",
+        "name": "Employee"
+      }
+    }
+  }
+}

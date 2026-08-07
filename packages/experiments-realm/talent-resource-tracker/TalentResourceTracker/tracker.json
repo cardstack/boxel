@@ -1,0 +1,132 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Acme Talent & Resource Tracker",
+      "cardInfo": {
+        "name": "Acme Talent & Resource Tracker",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "employees.0": {
+        "links": {
+          "self": "../../Employee/sofia-reyes"
+        }
+      },
+      "employees.1": {
+        "links": {
+          "self": "../../Employee/marcus-webb"
+        }
+      },
+      "employees.2": {
+        "links": {
+          "self": "../../Employee/dana-kim"
+        }
+      },
+      "employees.3": {
+        "links": {
+          "self": "../../Employee/priya-nair"
+        }
+      },
+      "employees.4": {
+        "links": {
+          "self": "../../Employee/leo-park"
+        }
+      },
+      "candidates.0": {
+        "links": {
+          "self": "../../Candidate/applied-jordan"
+        }
+      },
+      "candidates.1": {
+        "links": {
+          "self": "../../Candidate/interviewing-amara"
+        }
+      },
+      "candidates.2": {
+        "links": {
+          "self": "../../Candidate/offer-tomas"
+        }
+      },
+      "candidates.3": {
+        "links": {
+          "self": "../../Candidate/rejected-quinn"
+        }
+      },
+      "meetings.0": {
+        "links": {
+          "self": "../../Meeting/interview-amara-1"
+        }
+      },
+      "meetings.1": {
+        "links": {
+          "self": "../../Meeting/interview-amara-2"
+        }
+      },
+      "meetings.2": {
+        "links": {
+          "self": "../../Meeting/interview-tomas"
+        }
+      },
+      "meetings.3": {
+        "links": {
+          "self": "../../Meeting/eng-standup"
+        }
+      },
+      "meetings.4": {
+        "links": {
+          "self": null
+        }
+      },
+      "meetings.5": {
+        "links": {
+          "self": "../../Meeting/2bd48ed2-6c3a-4773-a96f-23927f6f8644"
+        }
+      },
+      "teams.0": {
+        "links": {
+          "self": "../../Team/engineering"
+        }
+      },
+      "teams.1": {
+        "links": {
+          "self": "../../Team/people-ops"
+        }
+      },
+      "projects.0": {
+        "links": {
+          "self": "../../Project/platform-rebuild"
+        }
+      },
+      "projects.1": {
+        "links": {
+          "self": "../../Project/benefits-migration"
+        }
+      },
+      "vendors.0": {
+        "links": {
+          "self": "../../Vendor/talentbridge-agency"
+        }
+      },
+      "vendors.1": {
+        "links": {
+          "self": "../../Vendor/paylock-payroll"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../../Theme/ledger"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../talent-resource-tracker",
+        "name": "TalentResourceTracker"
+      }
+    }
+  }
+}

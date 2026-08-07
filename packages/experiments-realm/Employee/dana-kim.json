@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Dana Kim",
+      "email": "dana.kim@example.com",
+      "phone": "+1 555 0103",
+      "role": "Head of People",
+      "department": "People Ops",
+      "startDate": "2023-06-05",
+      "status": "active",
+      "salary": 165000,
+      "cardInfo": {
+        "name": "Dana Kim"
+      }
+    },
+    "relationships": {
+      "manager": {
+        "links": {
+          "self": "../Employee/sofia-reyes"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../trt-employee",
+        "name": "Employee"
+      }
+    }
+  }
+}

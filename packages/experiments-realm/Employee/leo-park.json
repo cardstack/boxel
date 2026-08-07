@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Leo Park",
+      "email": "leo.park@example.com",
+      "phone": "+1 555 0105",
+      "role": "Frontend Engineer",
+      "department": "Engineering",
+      "startDate": "2026-07-01",
+      "status": "onboarding",
+      "salary": 128000,
+      "cardInfo": {
+        "name": "Leo Park"
+      }
+    },
+    "relationships": {
+      "manager": {
+        "links": {
+          "self": "../Employee/marcus-webb"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../trt-employee",
+        "name": "Employee"
+      }
+    }
+  }
+}

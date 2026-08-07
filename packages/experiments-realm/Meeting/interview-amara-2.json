@@ -1,0 +1,40 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Amara Okafor — System Design",
+      "meetingType": "interview",
+      "date": "2026-08-11T14:00:00.000Z",
+      "duration": {
+        "value": 90,
+        "unit": "minutes"
+      },
+      "cardInfo": {
+        "name": "Amara — System Design",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "interviewScore": null,
+      "notes": null
+    },
+    "relationships": {
+      "candidate": {
+        "links": {
+          "self": "../Candidate/interviewing-amara"
+        }
+      },
+      "interviewers.0": {
+        "links": {
+          "self": "../Employee/priya-nair"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../meeting",
+        "name": "Meeting"
+      }
+    }
+  }
+}

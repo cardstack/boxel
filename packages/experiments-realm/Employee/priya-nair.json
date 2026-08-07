@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Priya Nair",
+      "email": "priya.nair@example.com",
+      "phone": "+1 555 0104",
+      "role": "Senior Backend Engineer",
+      "department": "Engineering",
+      "startDate": "2024-02-12",
+      "status": "active",
+      "salary": 150000,
+      "cardInfo": {
+        "name": "Priya Nair"
+      }
+    },
+    "relationships": {
+      "manager": {
+        "links": {
+          "self": "../Employee/marcus-webb"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../trt-employee",
+        "name": "Employee"
+      }
+    }
+  }
+}

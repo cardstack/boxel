@@ -1,0 +1,47 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Jordan Ellis",
+      "status": "interviewing",
+      "boardOrder": 2,
+      "appliedRole": "Frontend Engineer",
+      "appliedDate": "2026-07-28",
+      "resumeText": "JORDAN ELLIS\njordan.ellis@example.com | +1 555 0140 | Portland, OR\n\nSUMMARY\nFrontend engineer with 6 years of experience building design systems and data-heavy SPAs.\n\nEXPERIENCE\nSenior Frontend Engineer — Nimbus Analytics (2022–2026)\n- Led migration of a 400-component dashboard from AngularJS to Ember Octane\n- Built a themeable chart library used by 30+ internal teams (D3, TypeScript)\n- Cut initial bundle size 45% via route-based code splitting\n\nFrontend Engineer — Brightline Health (2019–2022)\n- Shipped a HIPAA-compliant patient portal (React, Redux)\n- Introduced visual regression testing with Playwright\n\nSKILLS\nTypeScript, Ember, React, D3, GraphQL, Playwright, CSS architecture, accessibility (WCAG 2.2)\n\nEDUCATION\nBS Computer Science, University of Oregon, 2019",
+      "cardInfo": {
+        "name": "Jordan Ellis (applied)",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "decisionDate": null,
+      "skills": [
+        "TypeScript",
+        "Ember",
+        "React",
+        "D3",
+        "GraphQL",
+        "Playwright",
+        "CSS architecture",
+        "accessibility (WCAG 2.2)",
+        "AngularJS",
+        "Redux",
+        "code splitting",
+        "visual regression testing"
+      ],
+      "overallScore": null,
+      "generatedQuestions": null,
+      "rejectionReason": null,
+      "offerSalary": null,
+      "email": "jordan.ellis@example.com",
+      "phone": "+1 555 0140",
+      "photoUrl": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../candidate",
+        "name": "Candidate"
+      }
+    }
+  }
+}

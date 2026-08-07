@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Team",
+      "cardDescription": "A team with a lead and members, showing computed headcount",
+      "specType": "card",
+      "ref": {
+        "module": "../team",
+        "name": "Team"
+      },
+      "readMe": "# Team\n\n## Summary\nA team card with `name`, `mission`, a `lead` (linksTo Employee) and `members` (linksToMany Employee). `headcount` is computed from the members list.\n\n## Import\n```ts\nimport { Team } from './team';\n```\n\n## Usage\n```ts\n@field team = linksTo(() => Team);\n```\n\n## Template Usage\nEmbedded view shows mission and lead; fitted view is an icon + name + headcount row."
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Team/engineering"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

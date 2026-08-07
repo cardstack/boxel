@@ -1,0 +1,26 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Tomás Ribeiro",
+      "email": "tomas.ribeiro@example.com",
+      "phone": "+1 555 0142",
+      "status": "offer",
+      "boardOrder": 1,
+      "appliedRole": "Platform Engineer",
+      "appliedDate": "2026-06-20",
+      "skills": ["Rust", "AWS", "Docker", "CI/CD", "Observability"],
+      "overallScore": 5,
+      "offerSalary": 145000,
+      "cardInfo": {
+        "name": "Tomás Ribeiro (offer)"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../candidate",
+        "name": "Candidate"
+      }
+    }
+  }
+}

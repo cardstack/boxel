@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Employee",
+      "cardDescription": "An employee with role, department, start date, computed tenure, and a manager link that forms the org chart",
+      "specType": "card",
+      "ref": {
+        "module": "../trt-employee",
+        "name": "Employee"
+      },
+      "readMe": "# Employee\n\n## Summary\nExtends PersonBase with role, department, startDate (onboarding), status (onboarding | active | offboarded), salary, and a self-referential `manager` link. `tenure` is a computed DurationField in days since startDate.\n\n## Import\n```ts\nimport { Employee } from '../trt-employee';\n```\n\n## Usage\n```ts\n@field manager = linksTo(() => Employee);\n```\nThe org-chart tree is built from the manager edges via `buildOrgTree` in `utils/index`.\n\n## Template Usage\nHas isolated (profile with facts grid) and fitted (avatar + name + role row) views."
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Employee/sofia-reyes"
+        }
+      },
+      "linkedExamples.1": {
+        "links": {
+          "self": "../Employee/marcus-webb"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

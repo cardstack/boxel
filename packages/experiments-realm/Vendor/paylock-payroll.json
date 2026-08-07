@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "PayLock Payroll",
+      "contactName": "Ivan Sorokin",
+      "email": "ivan@paylock.example.com",
+      "website": "https://paylock.example.com",
+      "serviceCategory": "Payroll & benefits",
+      "contractStart": "2025-11-01",
+      "contractLength": {
+        "value": 24,
+        "unit": "months"
+      },
+      "performanceRating": 5,
+      "cardInfo": {
+        "name": "PayLock Payroll"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../vendor",
+        "name": "Vendor"
+      }
+    }
+  }
+}

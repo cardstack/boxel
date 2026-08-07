@@ -1,0 +1,21 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Score Field",
+      "cardDescription": "1–5 star rating field for interview scores and vendor performance",
+      "specType": "field",
+      "ref": {
+        "module": "../score-field",
+        "name": "ScoreField"
+      },
+      "readMe": "# Score Field\n\n## Summary\nA NumberField subclass rendering a 1–5 star picker (edit), a star row (embedded), and a compact `★ n` (atom). Used for interview ratings, candidate overall scores, and vendor performance.\n\n## Import\n```ts\nimport { ScoreField } from './score-field';\n```\n\n## Usage\n```ts\n@field interviewScore = contains(ScoreField);\n```\n\n## Template Usage\n```hbs\n<@fields.interviewScore />\n```"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

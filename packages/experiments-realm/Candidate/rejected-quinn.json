@@ -1,0 +1,26 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Quinn Harper",
+      "email": "quinn.harper@example.com",
+      "status": "rejected",
+      "boardOrder": 1,
+      "appliedRole": "Frontend Engineer",
+      "appliedDate": "2026-06-01",
+      "decisionDate": "2026-06-25",
+      "skills": ["jQuery", "PHP"],
+      "overallScore": 2,
+      "rejectionReason": "Skills did not match the current stack",
+      "cardInfo": {
+        "name": "Quinn Harper (rejected)"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../candidate",
+        "name": "Candidate"
+      }
+    }
+  }
+}

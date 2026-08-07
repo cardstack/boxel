@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Benefits Migration",
+      "description": "Move payroll and benefits onto the new vendor platform.",
+      "status": "planned",
+      "startDate": "2026-09-01",
+      "estimatedEffort": {
+        "value": 6,
+        "unit": "weeks"
+      },
+      "cardInfo": {
+        "name": "Benefits Migration"
+      }
+    },
+    "relationships": {
+      "lead": {
+        "links": {
+          "self": "../Employee/dana-kim"
+        }
+      },
+      "team": {
+        "links": {
+          "self": "../Team/people-ops"
+        }
+      },
+      "vendor": {
+        "links": {
+          "self": "../Vendor/paylock-payroll"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../project",
+        "name": "Project"
+      }
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Meeting",
+      "cardDescription": "A scheduled meeting or interview with datetime, duration, interviewers, and an interview score",
+      "specType": "card",
+      "ref": {
+        "module": "../meeting",
+        "name": "Meeting"
+      },
+      "readMe": "# Meeting\n\n## Summary\nA meeting with `meetingType` (interview | one-on-one | standup | vendor-review), `date` (datetime), `duration` (DurationField), an optional linked `candidate`, `interviewers` (linksToMany Employee), an `interviewScore` (ScoreField) and markdown `notes`.\n\n## Import\n```ts\nimport { Meeting } from './meeting';\n```\n\n## Usage\nMeetings linked to the tracker app feed its Calendar tab; interview-type meetings render as highlighted chips.\n\n## Template Usage\nEmbedded view shows type, time, duration, candidate, and score."
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Meeting/interview-amara-1"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

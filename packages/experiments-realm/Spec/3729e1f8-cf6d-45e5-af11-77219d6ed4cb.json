@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Candidate",
+      "cardDescription": "An applicant moving through the hiring pipeline with resume text, skills, interview score, and computed time-to-hire",
+      "specType": "card",
+      "ref": {
+        "module": "../candidate",
+        "name": "Candidate"
+      },
+      "readMe": "# Candidate\n\n## Summary\nExtends PersonBase with appliedRole, appliedDate, decisionDate, pipeline status (applied | screening | interviewing | offer | hired | rejected), resumeText, skills, overallScore (ScoreField), generatedQuestions, and offer fields. `timeToHire` is a computed DurationField between appliedDate and decisionDate.\n\n## Import\n```ts\nimport { Candidate } from './candidate';\n```\n\n## Usage\nPaste a resume into `resumeText`, then run the Extract Resume command to fill name/email/skills. The Generate Interview Questions command writes `generatedQuestions`.\n\n## Template Usage\nIsolated view shows the pipeline stage, skills pills, generated questions, and the raw resume."
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Candidate/applied-jordan"
+        }
+      },
+      "linkedExamples.1": {
+        "links": {
+          "self": "../Candidate/offer-tomas"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

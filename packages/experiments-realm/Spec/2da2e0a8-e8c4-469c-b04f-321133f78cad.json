@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Talent & Resource Tracker",
+      "cardDescription": "ATS + HRIS app card: hiring pipeline, employee directory, interview calendar, and org chart in one tabbed shell",
+      "specType": "app",
+      "ref": {
+        "module": "./talent-resource-tracker/talent-resource-tracker",
+        "name": "TalentResourceTracker"
+      },
+      "readMe": "# Talent & Resource Tracker\n\n## Summary\nAn applicant tracking system (ATS) and employee resource manager. Tabs: Dashboard (headcount, open pipeline, average time-to-hire), Directory (query-driven employee card list), Pipeline (candidates by stage with Approve/Reject actions), Calendar (interview scheduling month grid), and Org Chart (manager-hierarchy tree).\n\n## Import\n```ts\nimport { TalentResourceTracker } from './talent-resource-tracker';\n```\n\n## Usage\nCreate an instance and link employees, candidates, meetings, teams, projects, and vendors to it. The Directory tab finds all Employee cards in the realm by query; the other tabs read the linked collections.\n\n## Template Usage\nThe isolated view is the whole app. Approve/Reject buttons on the Pipeline tab run the ApproveOfferCommand / RejectCandidateCommand against the selected candidate."
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "./talent-resource-tracker/TalentResourceTracker/tracker"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

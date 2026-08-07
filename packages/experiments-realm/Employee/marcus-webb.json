@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Marcus Webb",
+      "email": "marcus.webb@example.com",
+      "phone": "+1 555 0102",
+      "role": "VP of Engineering",
+      "department": "Engineering",
+      "startDate": "2023-01-16",
+      "status": "active",
+      "salary": 195000,
+      "cardInfo": {
+        "name": "Marcus Webb"
+      }
+    },
+    "relationships": {
+      "manager": {
+        "links": {
+          "self": "../Employee/sofia-reyes"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../trt-employee",
+        "name": "Employee"
+      }
+    }
+  }
+}

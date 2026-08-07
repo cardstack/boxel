@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "TalentBridge Agency",
+      "contactName": "Renee Fontaine",
+      "email": "renee@talentbridge.example.com",
+      "website": "https://talentbridge.example.com",
+      "serviceCategory": "Staffing agency",
+      "contractStart": "2026-01-15",
+      "contractLength": {
+        "value": 12,
+        "unit": "months"
+      },
+      "performanceRating": 4,
+      "cardInfo": {
+        "name": "TalentBridge Agency"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../vendor",
+        "name": "Vendor"
+      }
+    }
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Duration Field",
+      "cardDescription": "Value + unit duration field (minutes to months) with humanized pill display",
+      "specType": "field",
+      "ref": {
+        "module": "../duration-field",
+        "name": "DurationField"
+      },
+      "readMe": "# Duration Field\n\n## Summary\nA composite FieldDef holding `value` (number) + `unit` (minutes | hours | days | weeks | months) with a computed humanized `label`. Edit is a number input + unit select; embedded is a clock pill; atom is compact (`45m`, `3d`, `2w`).\n\n## Import\n```ts\nimport { DurationField } from './duration-field';\n```\n\n## Usage\n```ts\n@field duration = contains(DurationField);\n// computed example\n@field tenure = contains(DurationField, {\n  computeVia: function (this: Employee) {\n    let days = daysBetween(this.startDate);\n    return days == null ? undefined : new DurationField({ value: days, unit: 'days' });\n  },\n});\n```\n\n## Template Usage\n```hbs\n<@fields.duration />\n<@fields.duration @format='atom' />\n```",
+      "containedExamples": [
+        {
+          "value": null,
+          "unit": null
+        }
+      ],
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "@cardstack/base/spec",
+        "name": "Spec"
+      },
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "../duration-field",
+              "name": "DurationField"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

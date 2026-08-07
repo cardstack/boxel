@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Sofia Reyes",
+      "email": "sofia.reyes@example.com",
+      "phone": "+1 555 0101",
+      "role": "Chief Executive Officer",
+      "department": "Executive",
+      "startDate": "2022-03-01",
+      "status": "active",
+      "salary": 240000,
+      "cardInfo": {
+        "name": "Sofia Reyes"
+      }
+    },
+    "relationships": {
+      "manager": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../trt-employee",
+        "name": "Employee"
+      }
+    }
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Engineering",
+      "mission": "Build and run the product platform.",
+      "cardInfo": {
+        "name": "Engineering Team"
+      }
+    },
+    "relationships": {
+      "lead": {
+        "links": {
+          "self": "../Employee/marcus-webb"
+        }
+      },
+      "members.0": {
+        "links": {
+          "self": "../Employee/priya-nair"
+        }
+      },
+      "members.1": {
+        "links": {
+          "self": "../Employee/leo-park"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../team",
+        "name": "Team"
+      }
+    }
+  }
+}

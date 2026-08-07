@@ -1,0 +1,21 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Reject Candidate Command",
+      "cardDescription": "Rejects a candidate with a reason and records the decision date",
+      "specType": "command",
+      "ref": {
+        "module": "../commands/reject-candidate-command.gts",
+        "name": "RejectCandidateCommand"
+      },
+      "readMe": "# Reject Candidate Command\n\n## Summary\nSets the candidate's status to `rejected`, stores the rejection reason and decision date, and saves the card. Refuses to reject a candidate who is already hired.\n\n## Import\n```ts\nimport { RejectCandidateCommand } from './commands/reject-candidate-command';\n```\n\n## Usage\n```ts\nawait new RejectCandidateCommand(commandContext).execute({\n  candidate,\n  reason: 'Position filled',\n});\n```"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

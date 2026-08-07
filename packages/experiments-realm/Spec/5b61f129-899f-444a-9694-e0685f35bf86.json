@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Project",
+      "cardDescription": "A project with lead, team, optional vendor, start date, and estimated effort",
+      "specType": "card",
+      "ref": {
+        "module": "../project",
+        "name": "Project"
+      },
+      "readMe": "# Project\n\n## Summary\nA project with `status` (planned | active | done), a `lead` (Employee), a `team`, an optional external `vendor`, a `startDate` and an `estimatedEffort` DurationField.\n\n## Import\n```ts\nimport { Project } from './project';\n```\n\n## Usage\nLink projects to the tracker app to show them on the Dashboard tab.\n\n## Template Usage\nEmbedded view shows status, start, effort, lead, and vendor; fitted is an icon row."
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Project/platform-rebuild"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
