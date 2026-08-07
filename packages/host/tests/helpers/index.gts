@@ -981,7 +981,18 @@ export function setupLocalIndexing(
       : undefined;
   });
 
-  hooks.after(function () {
+  hooks.after(async function () {
+    if (reusableIndex?.captured) {
+      // A snapshot is a separate in-memory database that `exportSnapshot`
+      // opens and leaves ATTACHed, since `importSnapshot` reads from it; only
+      // `deleteSnapshot` detaches and closes it. Nothing restores this module's
+      // snapshot after its last test, and the adapter is a page singleton whose
+      // `close()` never runs mid-shard, so without this every opted-in module
+      // would leave its indexed fixtures resident — and hold an ATTACH slot,
+      // which SQLite caps — for the rest of the shard.
+      let dbAdapter = await getDbAdapter();
+      await dbAdapter.deleteSnapshot(reusableIndex.snapshotName);
+    }
     reusableIndex = undefined;
   });
 
