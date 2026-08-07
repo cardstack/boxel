@@ -28,6 +28,11 @@
 // all land together. Floor every weight at a nominal per-file cost, which
 // both stands in for what the data can't see and keeps such files
 // distributed.
+//
+// scripts/generate-test-module-timings.mjs floors identically, because the
+// drift gate deciding whether to rewrite the timings file predicts the
+// slowest shard by replaying this pack. A floor here and not there would
+// gate regeneration on an assignment that never runs.
 const MIN_MODULE_WEIGHT_SECONDS = 1;
 
 export function selectShardModules(
