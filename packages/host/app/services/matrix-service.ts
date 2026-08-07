@@ -3032,11 +3032,17 @@ export default class MatrixService extends Service {
       event.content?.body &&
       event.content?.isStreamingFinished
     ) {
-      // Check if the message contains code patches by looking for search/replace blocks
+      // Any marker is enough to queue. An answer too long for one event is
+      // split at a character count that knows nothing about what it is cutting
+      // through, so a SEARCH/REPLACE block routinely straddles the boundary and
+      // no single event holds all three markers — requiring all three here left
+      // exactly those patches unqueued, while the UI, which reads the joined
+      // message, still offered an apply button for them. Whether there is
+      // anything to apply is decided later against the whole answer.
       let body = event.content.body as string;
       if (
-        body.includes(SEARCH_MARKER) &&
-        body.includes(SEPARATOR_MARKER) &&
+        body.includes(SEARCH_MARKER) ||
+        body.includes(SEPARATOR_MARKER) ||
         body.includes(REPLACE_MARKER)
       ) {
         this.toolService.queueEventForCodePatchProcessing(event);
