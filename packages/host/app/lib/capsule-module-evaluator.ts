@@ -810,7 +810,7 @@ export default class CapsuleModuleEvaluator {
 
   instantiateComponent(
     componentHandle: string,
-    args: Record<string, unknown>,
+    args: Record<string, unknown> | (() => Record<string, unknown>),
   ): CapsuleComponentInstanceDescriptor {
     let component = this.componentByHandle.get(componentHandle);
     if (!component || typeof component !== 'function') {
@@ -819,10 +819,22 @@ export default class CapsuleModuleEvaluator {
       );
     }
     let effects: CapsuleComponentEffect[] = [];
+    // Args as PATHS (RP-20.2's idiom one boundary deeper): when the caller
+    // supplies a reader, authored JS reads `this.args.x` through a live
+    // membrane that projects the CURRENT Host arg per read — so an arg
+    // update never re-instantiates the authored component, and a read made
+    // during a Host render frame establishes the same tracked dependencies
+    // the Host-side value carries (the live `@model` proxy's version cell).
+    // A plain record still takes the one-shot clone path (used by
+    // `readComponentProperty`'s uninstantiated fallback).
+    let compartmentArgs =
+      typeof args === 'function'
+        ? this.liveComponentArgs(args, effects)
+        : this.componentArgs(args, effects);
     let instance = new (component as new (
       owner: undefined,
       args: Record<string, unknown>,
-    ) => Record<string, unknown>)(undefined, this.componentArgs(args, effects));
+    ) => Record<string, unknown>)(undefined, compartmentArgs);
     let instanceHandle = `capsule-instance-${this.nextComponentInstanceHandle++}`;
     this.componentInstanceByHandle.set(instanceHandle, instance);
     effects.length = 0;
@@ -2252,6 +2264,176 @@ export default class CapsuleModuleEvaluator {
       state,
       getters: [...getters],
       actions: [...actions],
+    });
+  }
+
+  /**
+   * The live-args membrane: a hardened proxy whose every property read
+   * projects the CURRENT Host arg (per-read `jsonClone` +
+   * `cloneIntoCompartment`, so no live Host object ever crosses), with the
+   * two capability arguments (`viewCard`/`set`) answered as stable hardened
+   * closures that queue effects exactly like the one-shot path. `model`
+   * answers with a nested membrane so authored getters read leaves of the
+   * Host's live model proxy — which is what makes an authored getter read
+   * during a Host render frame transitively consume the model's tracked
+   * version cell.
+   */
+  private liveComponentArgs(
+    readCurrent: () => Record<string, unknown>,
+    effects: CapsuleComponentEffect[],
+  ): Record<string, unknown> {
+    let projectValue = (value: unknown): unknown => {
+      if (typeof value === 'function') {
+        return undefined;
+      }
+      try {
+        return this.cloneIntoCompartment(this.jsonClone(value));
+      } catch {
+        return undefined;
+      }
+    };
+    let viewCard = harden(
+      (target: unknown, format?: unknown, options?: unknown): undefined => {
+        let targetID =
+          typeof target === 'string'
+            ? target
+            : typeof target === 'object' &&
+                target !== null &&
+                'href' in target &&
+                typeof target.href === 'string'
+              ? target.href
+              : typeof target === 'object' &&
+                  target !== null &&
+                  'id' in target &&
+                  typeof target.id === 'string'
+                ? target.id
+                : undefined;
+        if (!targetID) {
+          return;
+        }
+        let safeOptions: unknown;
+        if (options !== undefined) {
+          try {
+            safeOptions = this.jsonClone(options);
+          } catch {
+            // Capability arguments are data-only; invalid/cyclic option
+            // bags are omitted while the validated target proceeds.
+          }
+        }
+        effects.push({
+          type: 'view-card',
+          target: targetID,
+          ...(typeof format === 'string' ? { format } : {}),
+          ...(typeof safeOptions === 'object' && safeOptions !== null
+            ? { options: safeOptions as Record<string, unknown> }
+            : {}),
+        });
+      },
+    );
+    let set = harden((value: unknown): undefined => {
+      let safeValue = this.jsonClone(value);
+      if (value !== null && typeof value === 'object') {
+        let constructorFields = this.initialCardFieldsByInstance.get(value);
+        if (constructorFields) {
+          Object.assign(
+            safeValue as Record<string, unknown>,
+            this.jsonClone(constructorFields),
+          );
+        }
+      }
+      effects.push({ type: 'set', value: safeValue });
+    });
+    // Deliberately NOT hardened: harden() freezes the proxy target, and a
+    // frozen target pins the ownKeys/descriptor invariants to a fixed key
+    // set — the whole point here is that keys and values are LIVE. Nothing
+    // live leaks anyway: every trap returns per-read clones or the
+    // individually hardened capability closures.
+    let modelMembrane = new Proxy(
+      Object.create(null) as Record<string, unknown>,
+      {
+        get: (_target, property) => {
+          if (typeof property !== 'string') {
+            return undefined;
+          }
+          let model = readCurrent().model;
+          if (typeof model !== 'object' || model === null) {
+            return undefined;
+          }
+          return projectValue((model as Record<string, unknown>)[property]);
+        },
+        has: (_target, property) => {
+          let model = readCurrent().model;
+          return (
+            typeof property === 'string' &&
+            typeof model === 'object' &&
+            model !== null &&
+            property in (model as Record<string, unknown>)
+          );
+        },
+        ownKeys: () => {
+          let model = readCurrent().model;
+          return typeof model === 'object' && model !== null
+            ? Object.keys(model as Record<string, unknown>)
+            : [];
+        },
+        getOwnPropertyDescriptor: (_target, property) => {
+          let model = readCurrent().model;
+          if (
+            typeof property !== 'string' ||
+            typeof model !== 'object' ||
+            model === null ||
+            !(property in (model as Record<string, unknown>))
+          ) {
+            return undefined;
+          }
+          return {
+            configurable: true,
+            enumerable: true,
+            value: projectValue((model as Record<string, unknown>)[property]),
+          };
+        },
+      },
+    );
+    let grants = (current: Record<string, unknown>, name: string): boolean =>
+      typeof current[name] === 'function' ||
+      current[
+        name === 'viewCard'
+          ? capsuleViewCardCapabilityArgument
+          : capsuleSetCapabilityArgument
+      ] === true;
+    let liveKeys = () =>
+      Object.keys(readCurrent()).filter(
+        (key) =>
+          key !== capsuleViewCardCapabilityArgument &&
+          key !== capsuleSetCapabilityArgument,
+      );
+    let readArgument = (name: string): unknown => {
+      let current = readCurrent();
+      if (name === 'viewCard') {
+        return grants(current, 'viewCard') ? viewCard : undefined;
+      }
+      if (name === 'set') {
+        return grants(current, 'set') ? set : undefined;
+      }
+      if (name === 'model') {
+        return 'model' in current ? modelMembrane : undefined;
+      }
+      return projectValue(current[name]);
+    };
+    return new Proxy(Object.create(null) as Record<string, unknown>, {
+      get: (_target, property) =>
+        typeof property === 'string' ? readArgument(property) : undefined,
+      has: (_target, property) =>
+        typeof property === 'string' && liveKeys().includes(property),
+      ownKeys: () => liveKeys(),
+      getOwnPropertyDescriptor: (_target, property) =>
+        typeof property === 'string' && liveKeys().includes(property)
+          ? {
+              configurable: true,
+              enumerable: true,
+              value: readArgument(property),
+            }
+          : undefined,
     });
   }
 

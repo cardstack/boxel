@@ -1,16 +1,12 @@
 import { tracked } from '@glimmer/tracking';
 
 import type { JSONValue } from '@cardstack/runtime-common';
-import { realmURL } from '@cardstack/runtime-common/constants';
 
-import {
-  capsuleRealmURLArgument,
-  capsuleSetCapabilityArgument,
-  capsuleViewCardCapabilityArgument,
-  type CapsuleComponentActionResult,
-  type CapsuleComponentEffect,
-  type CapsuleComponentInstanceDescriptor,
-  type CapsuleTemplateDescriptor,
+import type {
+  CapsuleComponentActionResult,
+  CapsuleComponentEffect,
+  CapsuleComponentInstanceDescriptor,
+  CapsuleTemplateDescriptor,
 } from './capsule-module-evaluator';
 
 import type CapsuleModuleEvaluator from './capsule-module-evaluator';
@@ -63,8 +59,13 @@ interface LiveCapsuleComponent {
   definition: CapsuleComponentDefinition;
   context: CapsuleComponentContext;
   evaluatorHandle: string;
-  argumentSignature: string;
-  hostArgs: Record<string, unknown>;
+  /**
+   * The current Host args, read LIVE by the evaluator's args membrane
+   * (`liveComponentArgs`): authored `this.args.x` reads project whatever
+   * is in here at read time. `updateComponent` swaps the reference; the
+   * authored instance persists across every arg change.
+   */
+  argsBox: { current: Record<string, unknown> };
   generation: number;
   revision: number;
 }
@@ -87,16 +88,12 @@ class CapsuleComponentContext {
   }
 
   update(descriptor: CapsuleComponentInstanceDescriptor): void {
+    // Called only from action results now (args-as-paths removed the
+    // arg-update re-instantiation path), so this always runs outside a
+    // render frame and the invalidation can be synchronous.
     this.installShape(descriptor);
     this.state = descriptor.state;
-    // Deferred out of the render frame: with the live `@model` (RP-20.2) an
-    // argument update can now arrive DURING a render pass — the manager
-    // re-projects args whose values changed with the instance — and a
-    // synchronous bump here would update a tag this same render already
-    // consumed (Glimmer's backtracking assertion). `this.state` is already
-    // swapped above, so the deferred invalidation only schedules the
-    // re-read; readers never observe stale state.
-    queueMicrotask(() => this.revision++);
+    this.revision++;
   }
 
   readState(name: string, fallback?: unknown): unknown {
@@ -158,10 +155,10 @@ export class DefaultCapsuleComponentRuntime implements CapsuleComponentRuntime {
     definition: CapsuleComponentDefinition,
     args: Record<string, unknown>,
   ): CapsuleComponentInstanceHandle {
-    let projectedArgs = projectComponentArguments(args);
+    let argsBox = { current: args };
     let descriptor = this.evaluator.instantiateComponent(
       definition.descriptor.instance.handle,
-      projectedArgs,
+      () => argsBox.current,
     );
     let handle =
       `capsule-component-instance:${++this.nextInstance}` as CapsuleComponentInstanceHandle;
@@ -170,8 +167,7 @@ export class DefaultCapsuleComponentRuntime implements CapsuleComponentRuntime {
       definition,
       context,
       evaluatorHandle: descriptor.handle,
-      argumentSignature: stableJSONString(projectedArgs),
-      hostArgs: args,
+      argsBox,
       generation: 1,
       revision: 0,
     });
@@ -186,30 +182,14 @@ export class DefaultCapsuleComponentRuntime implements CapsuleComponentRuntime {
     component: CapsuleComponentInstanceHandle,
     args: Record<string, unknown>,
   ): CapsuleComponentUpdate {
+    // Args are PATHS: the authored instance reads them through the live
+    // membrane, so an arg change is just a reference swap — no signature
+    // diff, no re-instantiation, no state cloning. Authored component
+    // state survives every data update, and template reads of context
+    // getters re-run against current values through Host tracking.
     let live = this.get(component);
-    live.hostArgs = args;
-    let projectedArgs = projectComponentArguments(args);
-    let signature = stableJSONString(projectedArgs);
-    if (signature === live.argumentSignature) {
-      return unchangedUpdate(live);
-    }
-
-    this.evaluator.releaseComponentInstance(live.evaluatorHandle);
-    let descriptor = this.evaluator.instantiateComponent(
-      live.definition.descriptor.instance.handle,
-      projectedArgs,
-    );
-    live.evaluatorHandle = descriptor.handle;
-    live.argumentSignature = signature;
-    live.generation++;
-    live.revision++;
-    live.context.update(descriptor);
-    return {
-      generation: live.generation,
-      componentRevision: live.revision,
-      changed: jsonState(descriptor.state),
-      effects: [],
-    };
+    live.argsBox.current = args;
+    return unchangedUpdate(live);
   }
 
   invokeAction(
@@ -262,7 +242,7 @@ export class DefaultCapsuleComponentRuntime implements CapsuleComponentRuntime {
     live.revision++;
     live.context.update(result);
     for (let effect of result.effects) {
-      dispatchEffect(live.hostArgs, effect);
+      dispatchEffect(live.argsBox.current, effect);
     }
     return {
       generation: live.generation,
@@ -308,58 +288,6 @@ function dispatchEffect(
       set(effect.value);
     }
   }
-}
-
-/** Reduce Glimmer's stable named-argument proxy to a cloneable Capsule record. */
-export function projectComponentArguments(
-  value: unknown,
-): Record<string, unknown> {
-  if (typeof value !== 'object' || value === null) {
-    return {};
-  }
-  let source = value as Record<string, unknown>;
-  let result: Record<string, unknown> = {};
-  for (let [name, item] of Object.entries(source)) {
-    if (name === 'viewCard' && typeof item === 'function') {
-      result[capsuleViewCardCapabilityArgument] = true;
-      continue;
-    }
-    if (name === 'set' && typeof item === 'function') {
-      result[capsuleSetCapabilityArgument] = true;
-      continue;
-    }
-    let cloned = cloneJSON(item);
-    if (cloned !== undefined) {
-      result[name] = cloned;
-    }
-  }
-
-  let model = source.model;
-  if (typeof model === 'object' && model !== null) {
-    let href = (model as { [realmURL]?: { href?: unknown } })[realmURL]?.href;
-    let plainModel = result.model;
-    if (
-      typeof href === 'string' &&
-      typeof plainModel === 'object' &&
-      plainModel !== null
-    ) {
-      (plainModel as Record<string, unknown>)[capsuleRealmURLArgument] = href;
-    }
-  }
-  return result;
-}
-
-function cloneJSON(value: unknown): unknown {
-  try {
-    let json = JSON.stringify(value);
-    return json === undefined ? undefined : JSON.parse(json);
-  } catch {
-    return undefined;
-  }
-}
-
-function stableJSONString(value: Record<string, unknown>): string {
-  return JSON.stringify(value);
 }
 
 function jsonState(value: Record<string, unknown>): Record<string, JSONValue> {
