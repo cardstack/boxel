@@ -313,6 +313,7 @@ export class Payment extends CardDef {
         h1 {
           margin: 0;
           font-size: 1.375rem;
+          font-family: var(--font-heading, inherit);
         }
         .method {
           font-size: 0.6875rem;

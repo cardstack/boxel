@@ -370,6 +370,7 @@ export class Subscription extends CardDef {
         h1 {
           margin: 0;
           font-size: 1.375rem;
+          font-family: var(--font-heading, inherit);
         }
         .status {
           font-size: 0.6875rem;
