@@ -152,6 +152,12 @@ function themedPlaceDocument(): LooseSingleCardDocument {
       attributes: {
         coordinate: { x: 1, y: 2 },
         entries: [],
+        // Present in every realm-served document (serialization always
+        // emits the composite); the nested 'cardInfo.theme' relationship
+        // below only deserializes through the composite's own
+        // Contains.deserialize walk, which never runs when the attribute
+        // is absent.
+        cardInfo: {},
       },
       relationships: {
         'cardInfo.theme': {
@@ -199,6 +205,7 @@ function sameRealmThemedPlaceDocument(): LooseSingleCardDocument {
       attributes: {
         coordinate: { x: 3, y: 4 },
         entries: [],
+        cardInfo: {},
       },
       relationships: {
         'cardInfo.theme': {

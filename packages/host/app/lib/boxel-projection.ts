@@ -8,11 +8,9 @@ import {
   isFieldDef,
   isFileDef,
   Loader,
-  maybeRelativeReference,
   moduleFrom,
   relativeTo as relativeToSymbol,
   resolveRRIReference,
-  rri,
   type BoxelDescription,
   type BoxelKind,
   type BoxelValueReference,
@@ -358,7 +356,17 @@ function projectThemePresentation(
     cssVariables = ownCssVariables;
     themeSource = instance;
   } else {
-    let theme = fieldValue(instance, 'cardTheme', api);
+    // `cardTheme` is CardDef's COMPUTED linksTo mirror of `cardInfo.theme`.
+    // Neither `peekAtField` nor membership sees it (both read the framework
+    // bucket, and a computed relationship's value never lands there) — main
+    // reads it as an ORDINARY property read (`card.cardTheme` in
+    // field-component.gts), which runs the compute. The compute's own read
+    // of `cardInfo.theme` is RP-7.2's sanctioned lazy-load trigger — the
+    // exact read main performs on every themed render.
+    let theme =
+      'cardTheme' in api.getFields(instance, { includeComputeds: true })
+        ? (instance as unknown as Record<string, unknown>).cardTheme
+        : undefined;
     if (!isBaseDefInstance(theme)) {
       return none;
     }
@@ -369,7 +377,7 @@ function projectThemePresentation(
   if (!themeId || typeof cssVariables !== 'string') {
     return none;
   }
-  themeId = normalizeThemeId(themeId, instance, api, unresolveURL);
+  themeId = normalizeThemeId(themeId, instance, unresolveURL);
   let scope = themeScope(themeId, cssVariables) ?? null;
   if (!scope) {
     return none;
@@ -386,47 +394,28 @@ function projectThemePresentation(
 }
 
 /**
- * Reproduce, for an already-absolute theme instance id, the id form the
- * theme's own served document (and therefore its compiled stylesheet)
- * actually carries. Main's `field-component.gts` render, and the realm's
- * index/prerender pipeline, both see `card.cardTheme.id` after ordinary
- * (non-`useAbsoluteURL`) serialization, which takes one of two forms:
- *
- * - Same realm as `instance`: a path relative to `instance`'s own id.
- *   Reproduced here with the identical functions and inputs
- *   `@cardstack/base/card-serialization.ts`'s `serializeCard` uses for its
- *   own internal `maybeRelativeReference` callback (`resolveRRIReference`
- *   then `maybeRelativeReference`, against the instance's own id/realm) —
- *   not a re-derived approximation.
- * - A registered realm (Base, Catalog) or no realm context: `unresolveURL`
- *   (`HostBoxelProjectionOptions.unresolveURL`) maps it to its
- *   scoped-identifier prefix form when one is registered. Applied after
- *   relativization, so it is a no-op on an already-relativized same-realm
- *   path (which matches no `http(s)://` prefix or registered target) and
- *   only takes effect when relativization left the id absolute.
- * - Neither: the absolute id, unchanged.
+ * Reproduce, for a theme instance id, the id form the theme's own served
+ * document (and therefore its compiled stylesheet) actually carries.
+ * `cardInfo.theme` is always a relationship NESTED under the `cardInfo`
+ * composite, and main's `Contains.serialize` drops `opts` when serializing
+ * a composite's own relationships (`callSerializeHook(this.card, value,
+ * doc)` — no `maybeRelativeReference` threads through), so a nested theme
+ * id is NEVER relativized on main: it serves absolute, and
+ * `field-component.gts`'s live render reads `card.cardTheme.id` — also
+ * absolute. The only transformation a served document applies is the
+ * realm-server's `unresolveResourceInstanceURLs` (registered realms map to
+ * their scoped-identifier prefix), reproduced here via `unresolveURL`.
  */
 function normalizeThemeId(
   themeId: string,
   instance: BaseDef,
-  api: CardAPIModule,
   unresolveURL?: (url: string) => string,
 ): string {
   let modelRelativeTo = instanceRelativeTo(instance);
-  let relativized: string;
-  if (modelRelativeTo) {
-    let absolute = resolveRRIReference(themeId, modelRelativeTo);
-    let realmURLString = api.getCardMeta(instance, 'realmURL');
-    let realmURL = realmURLString ? new URL(realmURLString) : undefined;
-    relativized = maybeRelativeReference(
-      rri(absolute),
-      modelRelativeTo,
-      realmURL,
-    );
-  } else {
-    relativized = themeId;
-  }
-  return unresolveURL ? unresolveURL(relativized) : relativized;
+  let absolute = modelRelativeTo
+    ? resolveRRIReference(themeId, modelRelativeTo)
+    : themeId;
+  return unresolveURL ? unresolveURL(absolute) : absolute;
 }
 
 // `card-serialization.ts`'s `serializeCard` computes its own relativization
@@ -857,7 +846,18 @@ function stringField(
   fieldName: string,
   api: CardAPIModule,
 ): string | null {
-  let value = fieldValue(instance, fieldName, api);
+  // Main reads presentation strings as ORDINARY property reads
+  // (`card.cardTitle` in chrome and templates), which lets an authored
+  // prototype getter SHADOW the framework field — a common authoring
+  // pattern (`get cardTitle() { ... }` on a CardDef). `peekAtField` reads
+  // only the framework data bucket and misses the shadow, so the projected
+  // title regressed to the computed default. The ordinary read executes at
+  // most an authored getter — exactly what main executes for the same
+  // value on every render.
+  if (!(fieldName in api.getFields(instance, { includeComputeds: true }))) {
+    return null;
+  }
+  let value = (instance as unknown as Record<string, unknown>)[fieldName];
   return typeof value === 'string' ? value : null;
 }
 
