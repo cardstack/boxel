@@ -1,6 +1,6 @@
 # Icon imports — `@cardstack/boxel-icons`
 
-Boxel ships ~6,400 icons from Lucide + Tabler bundled as Glimmer components. Every `CardDef` and `FieldDef` SHOULD set `static icon = SomeIcon` so the card type renders with a recognizable badge in the chooser, the cards-grid, and editor breadcrumbs.
+Boxel ships ~6,400 icons from Lucide + Tabler bundled as Glimmer components. Every `CardDef` and `FieldDef` SHOULD set `static icon = SomeIcon` so the card type renders with a recognizable badge in the chooser, in card lists, and in editor breadcrumbs. The default index card also keys its Library rail off this icon, one row per card type, so a type with no `icon` is the one indistinguishable row in a workspace's main navigation.
 
 ## ⚠️ CDN verification is the only proof an icon exists
 

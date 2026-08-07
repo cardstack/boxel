@@ -38,7 +38,7 @@ validated: source-proven
 - The older `DndKanbanBoard` / `DndColumn` component exists for legacy CRM/sprint-planner code. New work should use `KanbanPlane`.
 
 **Source:**
-- boxel monorepo: `packages/boxel-ui/addon/src/components/kanban/*` — reusable component implementation.
+- boxel monorepo: `packages/boxel-ui/src/components/kanban/*` — reusable component implementation.
 - boxel monorepo: `packages/software-factory/realm/kanban-board.gts` — board CardDef integration.
 - boxel monorepo: `packages/software-factory/realm/issue-tracker.gts` — domain integration.
 - Commit `2aee5d30ce` - `Add kanban board components to boxel-ui (#4562)`.

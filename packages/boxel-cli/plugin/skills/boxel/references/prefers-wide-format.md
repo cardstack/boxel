@@ -71,7 +71,7 @@ The fix is symmetric: drop the line, save, refresh.
 - **`app-card-home-with-search`** — the home CardDef sets it. The result-list sections (`@context.searchResultsComponent`; older builds used `PrerenderedCardSearch`) need width to render their child grids.
 - **`layout-sectioned-record-with-nav`** — pattern won't work without it. The 220px sticky nav + main content needs ≥800px.
 - **`layout-3d-card-carousel`** — perspective + per-card translateZ requires viewport width to feel spatial.
-- **`/boxel-create-card`** done-criteria — confirm whether the card you just created should be wide-format. Don't skip this; the default is wrong for app cards.
+- **Card-creation done-criteria** — confirm whether the card you just created should be wide-format. Don't skip this; the default is wrong for app cards.
 
 ## Why isn't it the default?
 

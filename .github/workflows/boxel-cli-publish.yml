@@ -238,7 +238,6 @@ jobs:
                   packages/boxel-cli/plugin/.claude-plugin/plugin.json \
                   packages/boxel-cli/plugin/.codex-plugin/plugin.json \
                   packages/boxel-cli/plugin/skills \
-                  packages/boxel-cli/plugin/commands \
                   packages/boxel-cli/plugin/README.md \
                   packages/boxel-cli/scripts/.boxel-skills-manifest.json
           if git diff --cached --quiet; then

@@ -2,7 +2,7 @@
 
 ## Fitted means the parent owns the cell size
 
-A `fitted` child card must **not** impose its own intrinsic minimum height or rely on its content to size the surface. The parent (a grid, a filmstrip, a CardsGrid) decides the cell envelope; the child fills it.
+A `fitted` child card must **not** impose its own intrinsic minimum height or rely on its content to size the surface. The parent (a grid, a filmstrip, the default index card's Library) decides the cell envelope; the child fills it.
 
 **The host establishes a size container named `fitted-card` around every fitted template — query it; never create your own container on the root.** The host wrapper (`.field-component-card.fitted-format`) already sets `width: 100%; height: 100%; overflow: hidden; container-type: size; container-name: fitted-card` (see `boxel-ui-guidelines/references/delegated-render-control.md`). Your template's root is a single `.fit` grid that fills that wrapper:
 
@@ -37,7 +37,7 @@ For standard fitted compositions — image/placeholder + eyebrow + title + subti
 ```gts
 import { FittedCard } from '@cardstack/boxel-ui/components';
 
-<FittedCard @imageUrl={{@model.imageUrl}} @imageAlt={{@model.title}}>
+<FittedCard @imageUrl={{@model.imageUrl}} @imageAlt={{@model.cardTitle}}>
   <:placeholder><BookOpen width='24' height='24' /></:placeholder>
   <:badgeLeft><Pill @size='extra-small'>New</Pill></:badgeLeft>
   <:eyebrow>Non-fiction</:eyebrow>
@@ -66,9 +66,21 @@ import { FittedCard } from '@cardstack/boxel-ui/components';
 
 (Providing `:placeholder` instead renders the image column with your icon/content on the `--fc-image-background` gradient — use that when the card *usually* has media and this instance just lacks it; omit all three when the card type never has media.)
 
-Source: [`packages/boxel-ui/addon/src/components/fitted-card/`](https://github.com/cardstack/boxel/tree/main/packages/boxel-ui/addon/src/components/fitted-card) — read the component's doc comment for the full named-block / arg / `--fc-*` API (including `@layout` to force vertical/horizontal and the `--fc-*-display` visibility overrides).
+Source: [`packages/boxel-ui/src/components/fitted-card/`](https://github.com/cardstack/boxel/tree/main/packages/boxel-ui/src/components/fitted-card) — read the component's doc comment for the full named-block / arg / `--fc-*` API (including `@layout` to force vertical/horizontal and the `--fc-*-display` visibility overrides).
 
 Tune, don't fork: when the composition IS standard, prefer setting `--fc-*` variables and `@container fitted-card (...)` overrides from your card's scoped CSS over forking the layout. When it isn't — see the special-template rule above — hand-roll from the start; the File Inventory references show what that looks like.
+
+### Customising caller-owned content per breakpoint
+
+`FittedCard` handles its own layout at every size. For caller-owned content that needs show/hide per breakpoint, add `@container fitted-card` rules in your own `<style scoped>`:
+
+```css
+@container fitted-card (width < 250px) {
+  .my-detail-row {
+    display: none;
+  }
+}
+```
 
 ## Query the Host Container (`fitted-card`)
 
@@ -695,10 +707,10 @@ Every fitted card has regions. Common patterns:
       <div class="r-hero"><img class="hero-img" src={{@model.imageUrl}} alt="" /></div>
     {{/if}}
     <div class="r-head">
-      <h3 class="headline">{{@model.title}}</h3>
+      <h3 class="headline"><@fields.cardTitle /></h3>
     </div>
     <div class="r-body">
-      <p class="excerpt">{{@model.description}}</p>
+      <p class="excerpt"><@fields.cardDescription /></p>
     </div>
     <div class="r-meta">
       <span>{{@model.author}}</span>
@@ -769,6 +781,12 @@ Open the Format Preview card, link your card instance, and check all 16 sizes. U
 No modifiers, no data attributes. All layout logic lives in CSS.
 
 ## File Inventory
+
+> **These reference files are not in this repo.** They were authored in a
+> private realm and no accessible realm contains copies. Treat this guide
+> itself as the reference — it inlines the patterns those files demonstrate —
+> or use the `FittedCard` component from `@cardstack/boxel-ui/components`,
+> which implements the standard internally.
 
 | File | Purpose |
 |------|---------|

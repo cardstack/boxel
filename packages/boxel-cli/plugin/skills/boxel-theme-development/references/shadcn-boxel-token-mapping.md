@@ -9,8 +9,8 @@ Boxel runtime convention: `CardContainer` maps the theme's semantic tokens into 
 Sources to re-check when this model changes:
 
 - Official shadcn theming docs: `https://ui.shadcn.com/docs/theming`
-- Boxel card container mapping: `packages/boxel-ui/addon/src/components/card-container/index.gts`
-- Boxel button, input, dropdown, tooltip, pill, icon-button, and progress components under `packages/boxel-ui/addon/src/components/`
+- Boxel card container mapping: `packages/boxel-ui/src/components/card-container/index.gts`
+- Boxel button, input, dropdown, tooltip, pill, icon-button, and progress components under `packages/boxel-ui/src/components/`
 - Structured theme variable descriptions: `packages/base/structured-theme-variables.gts`
 
 ## Hard Rules

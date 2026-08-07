@@ -18,9 +18,7 @@ function extensionForContentType(contentType: string): string {
 }
 
 function parseImageDataUrl(dataUrl: string) {
-  let match = dataUrl.match(
-    /^data:(image\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=]+)$/,
-  );
+  let match = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=]+)$/);
   if (!match) {
     throw new Error('Expected a base64 image data URL.');
   }
@@ -58,9 +56,7 @@ export async function writeGeneratedImageFile(
     id: fileIdentifier,
     sourceUrl: fileIdentifier,
     url: fileIdentifier,
-    name: decodeURIComponent(
-      fileIdentifier.split('/').pop() ?? 'generated-image',
-    ),
+    name: decodeURIComponent(fileIdentifier.split('/').pop() ?? 'generated-image'),
     contentType: image.contentType,
     contentSize: image.contentSize,
   });
