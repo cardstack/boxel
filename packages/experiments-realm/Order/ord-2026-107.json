@@ -11,18 +11,31 @@
         "city": "Shah Alam",
         "state": "Selangor",
         "postalCode": "40150",
-        "country": { "name": "Malaysia", "code": "MY" }
+        "country": {
+          "name": "Malaysia",
+          "code": "MY"
+        }
       },
       "lineItems": [
         {
           "description": "Hardware security keys",
           "quantity": 10,
-          "unitPrice": { "amount": 55, "currency": { "code": "USD" } }
+          "unitPrice": {
+            "amount": 55,
+            "currency": {
+              "code": "USD"
+            }
+          }
         },
         {
           "description": "USB-C docking stations",
           "quantity": 4,
-          "unitPrice": { "amount": 189, "currency": { "code": "USD" } }
+          "unitPrice": {
+            "amount": 189,
+            "currency": {
+              "code": "USD"
+            }
+          }
         }
       ],
       "cardInfo": {
@@ -34,10 +47,19 @@
     },
     "relationships": {
       "customer": {
-        "links": { "self": "../Customer/acme-industries" }
+        "links": {
+          "self": "../Customer/acme-industries"
+        }
       },
       "invoice": {
-        "links": { "self": "../Invoice/inv-2026-041" }
+        "links": {
+          "self": "../Invoice/inv-2026-041"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/ledger"
+        }
       }
     },
     "meta": {

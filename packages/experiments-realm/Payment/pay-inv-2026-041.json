@@ -2,7 +2,12 @@
   "data": {
     "type": "card",
     "attributes": {
-      "amount": { "amount": 1590, "currency": { "code": "USD" } },
+      "amount": {
+        "amount": 1590,
+        "currency": {
+          "code": "USD"
+        }
+      },
       "method": "bank transfer",
       "paidAt": "2026-07-28T09:30:00.000Z",
       "reference": "MYR-TT-88213",
@@ -15,7 +20,14 @@
     },
     "relationships": {
       "invoice": {
-        "links": { "self": "../Invoice/inv-2026-041" }
+        "links": {
+          "self": "../Invoice/inv-2026-041"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/ledger"
+        }
       }
     },
     "meta": {
