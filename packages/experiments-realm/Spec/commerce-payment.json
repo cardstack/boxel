@@ -2,25 +2,32 @@
   "data": {
     "type": "card",
     "attributes": {
-      "ref": { "name": "Payment", "module": "../blocks/commerce/payment" },
+      "ref": {
+        "name": "Payment",
+        "module": "../blocks/payment"
+      },
       "specType": "card",
-      "readMe": "## Payment\n\nA settlement fact: amount (base `AmountWithCurrency`), method enum (card / bank transfer / cash / other), paid-at timestamp, external reference, linked Invoice.\n\n```ts\nimport { Payment } from '../blocks/commerce/payment';\n```\n\n**Non-goals:** payment processing/gateway integration, refunds as negative payments, allocation across multiple invoices.",
+      "readMe": "## Payment\n\nA settlement fact: amount (base `AmountWithCurrency`), method enum (card / bank transfer / cash / other), paid-at timestamp, external reference, linked Invoice.\n\n```ts\nimport { Payment } from '../blocks/payment';\n```\n\n**Non-goals:** payment processing/gateway integration, refunds as negative payments, allocation across multiple invoices.",
       "cardInfo": {
         "name": "Payment (commerce kit)",
         "summary": "Settlement record: amount, method, timestamp, reference, linked invoice. A fact, not a workflow.",
         "notes": null,
         "cardThumbnailURL": null
       },
-      "containedExamples": []
+      "containedExamples": [],
+      "cardTitle": null,
+      "cardDescription": null
     },
     "relationships": {
       "linkedExamples.0": {
-        "links": { "self": "../Payment/pay-inv-2026-041" }
+        "links": {
+          "self": "../Payment/pay-inv-2026-041"
+        }
       }
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/spec",
+        "module": "@cardstack/base/spec",
         "name": "Spec"
       }
     }

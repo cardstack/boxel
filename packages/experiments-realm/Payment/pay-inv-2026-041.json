@@ -20,7 +20,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../blocks/commerce/payment",
+        "module": "../blocks/payment",
         "name": "Payment"
       }
     }
