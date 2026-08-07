@@ -24,7 +24,11 @@ function addNames(names: string[]) {
 function removeNames(names: string[]) {
   for (const name of names) {
     const count = refCounts.get(name) ?? 0;
-    if (count <= 1) {
+    if (count === 0) {
+      // never tracked — not ours to remove
+      continue;
+    }
+    if (count === 1) {
       refCounts.delete(name);
       document.body.classList.remove(name);
     } else {
@@ -40,8 +44,10 @@ export default class SetBodyClass extends Helper<Signature> {
 
   compute([classNames]: [string?]): void {
     const next = classNames ? classNames.split(/\s+/).filter(Boolean) : [];
-    removeNames(this.current);
+    // Acquire before releasing so a name present in both lists keeps a
+    // nonzero refcount and never leaves <body> during a recompute.
     addNames(next);
+    removeNames(this.current);
     this.current = next;
   }
 
