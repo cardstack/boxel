@@ -56,7 +56,20 @@ class BoxelOidcMappingProvider:
     def parse_config(config: JsonDict) -> dict:
         return dict(config or {})
 
-    async def get_remote_user_id(self, userinfo: JsonDict) -> str:
+    # MUST stay synchronous. Synapse calls this without awaiting it (see
+    # `synapse.handlers.oidc`, which does
+    # `subject = self._user_mapping_provider.get_remote_user_id(user)`) and
+    # stores the result as the `external_id` it matches Google identities
+    # against. Declaring it `async` makes the stored id the *coroutine's*
+    # repr — a string embedding `id()`, i.e. a heap address. Because the
+    # coroutine is never awaited it is freed immediately and the allocator
+    # reuses the block, so those addresses recur across sign-ins: a later
+    # sign-in whose repr collides with an existing `user_external_ids` row is
+    # logged in as that row's owner, and `map_user_attributes` — with all of
+    # the verified-email, ambiguity and collision checks below — is skipped
+    # entirely. `map_user_attributes` and `get_extra_attributes` are awaited
+    # by Synapse and must stay `async`; this one must not.
+    def get_remote_user_id(self, userinfo: JsonDict) -> str:
         return userinfo["sub"]
 
     async def map_user_attributes(

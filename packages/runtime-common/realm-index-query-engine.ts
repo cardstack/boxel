@@ -1649,9 +1649,13 @@ export class RealmIndexQueryEngine {
             relationshipType === CardResourceType && !expectsFileMeta;
           let resolvedSelf: string;
           try {
+            // Resolve the base to a real URL first: `resource.id` may be a
+            // canonical RRI (mapped realm), which `resolveURL` only accepts as
+            // a base for a registered prefix — `toURL` yields the fetchable URL
+            // either form. Mirrors the `linkURL` base above.
             resolvedSelf = vn.resolveURL(
               relationship.links.self,
-              resource.id,
+              resource.id ? vn.toURL(resource.id) : realmURL,
             ).href;
           } catch {
             throw new Error(
@@ -2059,8 +2063,8 @@ function collectIconId(
 // One candidate rendering of a row, with its markup: a (format, renderType)
 // point in the rendering set the renderSet projection selects. The
 // fitted/embedded JSONB maps contribute one candidate per render-type key;
-// the scalar atom/head columns contribute one candidate at the row's own
-// native type.
+// the scalar atom/head/isolated columns contribute one candidate at the row's
+// own native type.
 type RowRendering = RenderingCandidate & { html: string };
 
 function enumerateRowRenderings(row: {
@@ -2068,6 +2072,7 @@ function enumerateRowRenderings(row: {
   embedded_html?: Record<string, string> | null;
   atom_html?: string | null;
   head_html?: string | null;
+  isolated_html?: string | null;
   types?: string[] | null;
 }): RowRendering[] {
   let candidates: RowRendering[] = [];
@@ -2096,6 +2101,13 @@ function enumerateRowRenderings(row: {
       html: row.head_html,
     });
   }
+  if (row.isolated_html != null) {
+    candidates.push({
+      format: 'isolated',
+      ...(nativeKey ? { renderTypeKey: nativeKey } : {}),
+      html: row.isolated_html,
+    });
+  }
   return candidates;
 }
 
@@ -2120,6 +2132,9 @@ function enumerateFileRenderings(file: IndexedFile): RowRendering[] {
   }
   if (file.headHtml != null) {
     candidates.push({ format: 'head', html: file.headHtml });
+  }
+  if (file.isolatedHtml != null) {
+    candidates.push({ format: 'isolated', html: file.isolatedHtml });
   }
   return candidates;
 }

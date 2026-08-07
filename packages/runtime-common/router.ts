@@ -17,6 +17,10 @@ export const AuthenticationErrorMessages = {
     "User permissions in the JWT payload do not match the server's permissions",
   TokenExpired: 'Token expired',
   TokenInvalid: 'Token invalid',
+  // The token was issued before this user's sessions were revoked. Clients with
+  // a live matrix session recover by re-authenticating, same as for an expired
+  // token, so this is deliberately a 401 rather than a 403.
+  SessionRevoked: 'Session revoked',
 } as const;
 export type AuthenticationErrorMessages =
   (typeof AuthenticationErrorMessages)[keyof typeof AuthenticationErrorMessages];

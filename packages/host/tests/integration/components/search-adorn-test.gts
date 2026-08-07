@@ -25,6 +25,7 @@ function entry(
 ): RenderableSearchEntryLike {
   return {
     id: 'http://test/Foo/1',
+    type: 'card',
     realmUrl: 'http://test/',
     name: 'Foo/1',
     isError: false,

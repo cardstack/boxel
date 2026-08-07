@@ -65,6 +65,7 @@ import {
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_REALMS_EVENT_TYPE,
   APP_BOXEL_REALM_SERVERS_EVENT_TYPE,
+  REALMS_LIST_UPDATED_EVENT_TYPE,
   APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE,
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_LLM_MODE,
@@ -95,7 +96,11 @@ import type { TempEvent } from '@cardstack/host/lib/matrix-classes/room';
 import Room from '@cardstack/host/lib/matrix-classes/room';
 import { getRandomBackgroundURL, iconURLFor } from '@cardstack/host/lib/utils';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
-import { clearLocalStorage } from '@cardstack/host/utils/local-storage-keys';
+import {
+  clearLocalStorage,
+  RealmServerSessionLocalStorageKey,
+  SessionLocalStorageKey,
+} from '@cardstack/host/utils/local-storage-keys';
 
 import { isSkillCard } from '../lib/file-def-manager';
 import { getSkillSourceTools, loadSkillSource } from '../lib/skill-tools';
@@ -256,6 +261,11 @@ export default class MatrixService extends Service {
   #clientReadyDeferred = new Deferred<void>();
   #matrixSDK: ExtendedMatrixSDK | undefined;
   #eventBindings: [EmittedEvents, (...arg: any[]) => void][] | undefined;
+  // Whether the realm-server `realms-list-updated` subscription has been wired.
+  // The subscription lives on RealmServerService and survives logout (see
+  // RealmServerService.resetState), so it is wired once per app lifetime and is
+  // deliberately not cleared by resetState().
+  #realmsListUpdatedSubscribed = false;
   currentUserEventReadReceipts: TrackedMap<string, { readAt: Date }> =
     new TrackedMap();
 
@@ -528,6 +538,15 @@ export default class MatrixService extends Service {
     return (
       !this.session.isAuthenticated && Boolean(this.storage?.getItem('auth'))
     );
+  }
+
+  // Who the persisted auth belongs to, readable without booting a client — so a
+  // route outside the authenticated app (e.g. the CLI authorization page) can
+  // tell whose account this browser last signed in as. Deliberately narrower
+  // than `getAuth()`: knowing the user id shouldn't come with the ability to
+  // read the persisted access token.
+  get persistedUserId(): string | undefined {
+    return this.getAuth()?.user_id;
   }
 
   // Test-only diagnostic for the intermittent "operator-mode renders the login
@@ -1015,6 +1034,7 @@ export default class MatrixService extends Service {
       this.realmServer.setClient(this.client);
       if (isTesting()) console.warn('[start-phase] realmServer.login');
       await this.realmServer.login(registrationToken);
+      this.subscribeToRealmsListUpdatesOnce();
       this.saveAuth(auth);
       this.bindEventListeners();
 
@@ -1238,7 +1258,18 @@ export default class MatrixService extends Service {
         );
         window.location.href = indexController.authRedirect;
       } else if (refreshRoutes) {
-        await this.router.refresh();
+        // The index route's model hook redirects when the URL carries no
+        // operatorModeState, aborting the refresh that ran it. Expected.
+        try {
+          await this.router.refresh();
+        } catch (error: any) {
+          if (
+            error?.name !== 'TransitionAborted' &&
+            error?.code !== 'TRANSITION_ABORTED'
+          ) {
+            throw error;
+          }
+        }
       }
     } else if (isTesting()) {
       // start() did nothing because the client wasn't logged in at this point,
@@ -1347,6 +1378,66 @@ export default class MatrixService extends Service {
         }
       }),
     );
+  }
+
+  // Wire the realm-server `realms-list-updated` push exactly once per app
+  // lifetime. The realm server emits it to the owner's session room whenever
+  // their set of accessible realms changes server-side (create/delete/archive/
+  // unarchive) — including from another tab, the CLI, or an AI agent — so a
+  // session viewing the workspace chooser updates live. Wired from the
+  // post-login path rather than the constructor so merely constructing this
+  // service never forces the lazy RealmServerService to instantiate (and fire
+  // its boot fetches). The subscription lives on RealmServerService and
+  // survives logout, hence the once guard.
+  private subscribeToRealmsListUpdatesOnce() {
+    if (this.#realmsListUpdatedSubscribed) {
+      return;
+    }
+    this.#realmsListUpdatedSubscribed = true;
+    this.realmServer.subscribeEvent(
+      REALMS_LIST_UPDATED_EVENT_TYPE,
+      this.refreshRealmsList.bind(this),
+    );
+  }
+
+  // React to a realm-server `realms-list-updated` push: re-derive the
+  // available-realms list so a session viewing the workspace chooser reflects a
+  // realm created/deleted/archived/unarchived out of band (another tab, the
+  // CLI, an AI agent) without a reload. Only trusted-server sessions need this —
+  // their list is assembled authoritatively from `_realm-auth`, so an
+  // out-of-band change reaches them through no other channel. Legacy sessions
+  // derive the list from `app.boxel.realms` account data, whose Matrix sync
+  // already delivers such changes (see the AccountData listener), so they are
+  // left to that path. Best-effort: a push must never crash the app, so
+  // assembly failures are logged and the current list is left intact.
+  //
+  // The archived list is a separate list on RealmServerService fed by a
+  // different endpoint (`_archived-realms`) that `_realm-auth` never touches, so
+  // re-deriving the active list alone would leave "Archived" stale: an
+  // out-of-band archive wouldn't appear there, and an out-of-band unarchive
+  // would leave the realm showing in both sections. Since one generic signal
+  // serves all four mutations, refresh the archived list here too — but only
+  // when it's already been fetched, so an owner who never opened "Archived"
+  // doesn't pay the fetch.
+  private async refreshRealmsList() {
+    if (!this.trustedRealmServersAuthoritative) {
+      return;
+    }
+    try {
+      let realmServers = await this.getRealmServersFromAccountData();
+      if (realmServers.length === 0) {
+        return;
+      }
+      await this.applyTrustedRealmServersAccountData(realmServers);
+      if (this.realmServer.isArchivedRealmsFetched) {
+        await this.realmServer.fetchArchivedRealms({ force: true });
+      }
+    } catch (err) {
+      console.error(
+        'Failed to refresh realms list after realms-list-updated event',
+        err,
+      );
+    }
   }
 
   // Re-assemble the available-realms list from a runtime
@@ -1976,6 +2067,11 @@ export default class MatrixService extends Service {
     clientSecret: string,
     sendAttempt: number,
   ) {
+    // The standalone /cli-auth route can reach registration before the SDK has
+    // finished loading (operator mode always boots first, so the register form
+    // is only reached once `ready` has resolved). Wait for it here so the client
+    // exists before the first registration request touches it.
+    await this.ready;
     return await this.client.requestEmailToken(
       'registration',
       email,
@@ -2380,6 +2476,9 @@ export default class MatrixService extends Service {
   }
 
   async registerRequest(data: MatrixSDK.RegisterRequest, kind?: string) {
+    // See requestRegisterEmailToken: registration can run before the SDK has
+    // loaded on the standalone /cli-auth route.
+    await this.ready;
     return await this.client.registerRequest(data, kind);
   }
 
@@ -2392,6 +2491,9 @@ export default class MatrixService extends Service {
   }
 
   async isUsernameAvailable(username: string) {
+    // See requestRegisterEmailToken: the username check runs while the register
+    // form is filled, which on /cli-auth can precede the SDK finishing loading.
+    await this.ready;
     return await this.client.isUsernameAvailable(username);
   }
 
@@ -2984,6 +3086,26 @@ export default class MatrixService extends Service {
   private clearAuth() {
     this.storage?.removeItem('auth');
     this.localPersistenceService.setCurrentRoomId(undefined);
+  }
+
+  // Drop this browser's persisted session locally, without the server-side
+  // logout() performs — that would revoke the device. The CLI-auth register
+  // flow uses this after handing the just-minted registration device to the
+  // CLI: the CLI is that device's sole owner, so the browser must not keep it
+  // as its own persisted session (a later browser-side logout would otherwise
+  // revoke the CLI's session too). Account-level bootstrap side-effects
+  // (personal realm, realm auth) stay put; only this browser's local link to
+  // the device is forgotten.
+  //
+  // Storage-only, and all three keys of it. The realm tokens are persisted
+  // apart from the Matrix session, and a session-room claim inside the
+  // realm-server token is the identity a later realm-auth handshake adopts:
+  // leaving it behind hands the next account a session room belonging to this
+  // one, which it is not invited to and cannot join.
+  forgetPersistedSession() {
+    this.clearAuth();
+    window.localStorage.removeItem(RealmServerSessionLocalStorageKey);
+    window.localStorage.removeItem(SessionLocalStorageKey);
   }
 
   async activateCodingSkill() {

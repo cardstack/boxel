@@ -1,7 +1,9 @@
 import {
+  EXTENDED_SESSION_TOKEN_TTL,
   fetchSessionRoom,
   getOrCreateUser,
   logger,
+  SESSION_TOKEN_TTL,
   SupportedMimeType,
   upsertSessionRoom,
 } from '@cardstack/runtime-common';
@@ -41,8 +43,18 @@ export default function handleCreateSessionRequest({
       ) {
         return new Response(body, init);
       },
-      createJWT: async (user: string, sessionRoom: string) =>
-        createJWT({ user, sessionRoom }, realmSecretSeed),
+      createJWT: async (
+        user: string,
+        sessionRoom: string,
+        opts?: { extendedLifetime?: boolean },
+      ) =>
+        createJWT(
+          { user, sessionRoom },
+          realmSecretSeed,
+          opts?.extendedLifetime
+            ? EXTENDED_SESSION_TOKEN_TTL
+            : SESSION_TOKEN_TTL,
+        ),
       ensureSessionRoom: async (userId: string, registrationToken?: string) => {
         let sessionRoom = await fetchSessionRoom(dbAdapter, userId);
 

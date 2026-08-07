@@ -3249,6 +3249,124 @@ module(basename(import.meta.filename), function () {
         );
       });
 
+      test('invalidates a consumer when the dotted-id instance it links to is written', async function (assert) {
+        await realm.write(
+          'dotted-link.gts',
+          `
+          import { CardDef, Component, contains, field, linksTo } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
+
+          export class DottedTarget extends CardDef {
+            @field name = contains(StringField);
+
+            static atom = class Atom extends Component<typeof this> {
+              <template>
+                <p><@fields.name /></p>
+              </template>
+            }
+            static embedded = class Embedded extends Component<typeof this> {
+              <template>
+                <p><@fields.name /></p>
+              </template>
+            }
+            static fitted = class Fitted extends Component<typeof this> {
+              <template>
+                <p><@fields.name /></p>
+              </template>
+            }
+            static isolated = class Isolated extends Component<typeof this> {
+              <template>
+                <p><@fields.name /></p>
+              </template>
+            }
+          }
+
+          export class DottedConsumer extends CardDef {
+            @field target = linksTo(() => DottedTarget);
+
+            static atom = class Atom extends Component<typeof this> {
+              <template>
+                <@fields.target />
+              </template>
+            }
+            static embedded = class Embedded extends Component<typeof this> {
+              <template>
+                <@fields.target />
+              </template>
+            }
+            static fitted = class Fitted extends Component<typeof this> {
+              <template>
+                <@fields.target />
+              </template>
+            }
+            static isolated = class Isolated extends Component<typeof this> {
+              <template>
+                <@fields.target />
+              </template>
+            }
+          }
+        `,
+        );
+
+        // A dot in a card id is part of the name: this instance's id is
+        // `hello.test`, and its index row is keyed on `hello.test.json`.
+        let dottedTarget = (name: string) =>
+          JSON.stringify({
+            data: {
+              attributes: { name },
+              meta: {
+                adoptsFrom: {
+                  module: rri('./dotted-link'),
+                  name: 'DottedTarget',
+                },
+              },
+            },
+          } as LooseSingleCardDocument);
+
+        await realm.write('hello.test.json', dottedTarget('Dotted Target'));
+        await realm.write(
+          'dotted-consumer.json',
+          JSON.stringify({
+            data: {
+              relationships: {
+                target: { links: { self: './hello.test' } },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: rri('./dotted-link'),
+                  name: 'DottedConsumer',
+                },
+              },
+            },
+          } as LooseSingleCardDocument),
+        );
+
+        let deps = await depsFor(`${testRealm}dotted-consumer.json`);
+        assert.ok(
+          deps.includes(`${testRealm}hello.test.json`),
+          `deps include the dotted target's row URL (deps: ${JSON.stringify(
+            deps,
+          )})`,
+        );
+        assert.notOk(
+          deps.includes(`${testRealm}hello.test`),
+          'the dotted target is recorded at its row URL rather than its bare id',
+        );
+
+        let beforeInvalidation = await indexedAtFor(
+          `${testRealm}dotted-consumer.json`,
+        );
+        await realm.write(
+          'hello.test.json',
+          dottedTarget('Dotted Target Updated'),
+        );
+        assert.notStrictEqual(
+          await indexedAtFor(`${testRealm}dotted-consumer.json`),
+          beforeInvalidation,
+          'writing the dotted-id instance invalidates the consumer linking to it',
+        );
+      });
+
       // remove this once we have a query based relationship invalidation strategy
       test('does not capture deps from query-backed relationships', async function (assert) {
         await realm.write(

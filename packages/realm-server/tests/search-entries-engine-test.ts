@@ -347,6 +347,31 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('html.format: isolated selects the isolated rendering', async function (assert) {
+      let doc = await testRealm.realmIndexQueryEngine.searchEntries(
+        personQuery({
+          filterEq: { htmlQuery: { eq: { format: 'isolated' } } },
+          fields: { entry: ['html'] },
+        }),
+      );
+      assert.deepEqual(doc.meta.htmlQuery, { eq: { format: 'isolated' } });
+      // `isolated` is a scalar column rendered at the row's own native type, so
+      // its composite id carries the native key like the other scalar formats.
+      let htmlId = `${johnId}#isolated#${personKey}`;
+      assert.deepEqual(htmlIdsOf(entryFor(doc, johnId)!), [htmlId]);
+      let html = htmlIn(doc, htmlId)!;
+      assert.strictEqual(html.attributes.format, 'isolated');
+      let markup = normalizedHtml(html);
+      assert.true(
+        markup.includes('<h1'),
+        `isolated rendering carries the card's isolated <h1> markup: ${html.attributes.html}`,
+      );
+      assert.true(
+        markup.includes('John'),
+        `isolated rendering carries the card's field value: ${html.attributes.html}`,
+      );
+    });
+
     test('html.format: head selects the document head rendering', async function (assert) {
       let doc = await testRealm.realmIndexQueryEngine.searchEntries(
         personQuery({

@@ -107,7 +107,7 @@ Use these command patterns when making or improving theme cards through the app 
 Monorepo source files to check when this model changes: `packages/base/structured-theme.gts`, `packages/base/style-reference.gts`, `packages/base/detailed-style-reference.gts`, `packages/base/brand-guide.gts`, `packages/base/brand-logo.gts`, `packages/base/brand-functional-palette.gts`, `packages/base/structured-theme-variables.gts`, `packages/base/Theme/boxel-brand-guide.json`, `packages/boxel-ui/addon/src/helpers/theme-css.ts`, and `packages/host/app/tools/generate-theme-example.ts`.
 
 ### 3.2 Canonical Theme Variables
-Use the variables directly (do not wrap with `hsl(var(...))`). Pair backgrounds with their foregrounds for contrast.
+Use the variables directly (do not wrap with `hsl(var(...))`). Pair backgrounds with their foregrounds for contrast: a rule that sets a semantic background also sets the paired `--*-foreground` in the same rule, once at that surface's root — descendants inherit it. See the Color Pairing Rules in `boxel-ui-guidelines/references/use-boxel-design-tokens-for-theming.md` for the full rules and exceptions.
 
 Our design system is compatible with shadcn css variables.
 
@@ -171,13 +171,13 @@ When assigning values, remember that Boxel UI treats shadcn-style tokens as pair
 - Radius: (`border-radius`)
 ```css
 --radius
---boxel-border-radius-xxs
+--boxel-border-radius-2xs
 --boxel-border-radius-xs
 --boxel-border-radius-sm
 --boxel-border-radius
 --boxel-border-radius-lg
 --boxel-border-radius-xl
---boxel-border-radius-xxl
+--boxel-border-radius-2xl
 ```
 - Spacing:
 ```css

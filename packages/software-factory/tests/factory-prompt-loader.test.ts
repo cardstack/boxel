@@ -5,10 +5,10 @@ import {
   assembleImplementPrompt,
   assembleIteratePrompt,
   assembleSystemPrompt,
-  assembleTestPrompt,
   buildOneShotMessages,
   FilePromptLoader,
   interpolate,
+  isBugFixIssue,
   PromptTemplateNotFoundError,
 } from '../src/factory-prompt-loader.ts';
 
@@ -424,8 +424,8 @@ module('factory-prompt-loader > assembleImplementPrompt', function () {
     let result = assembleImplementPrompt({ context: ctx, loader });
 
     assert.ok(
-      result.includes('Implement this issue'),
-      'has implementation instructions',
+      result.includes('Work design-first'),
+      'has design-first implementation instructions',
     );
     assert.ok(result.includes('signal_done'), 'mentions signal_done');
   });
@@ -477,7 +477,7 @@ module('factory-prompt-loader > assembleImplementPrompt', function () {
       'includes tool output data',
     );
     assert.ok(
-      result.includes('Implement this issue'),
+      result.includes('Work design-first'),
       'still includes implementation instructions',
     );
   });
@@ -693,36 +693,27 @@ module('factory-prompt-loader > assembleIteratePrompt', function () {
 });
 
 // ---------------------------------------------------------------------------
-// assembleTestPrompt
+// issue-harden template
 // ---------------------------------------------------------------------------
 
-module('factory-prompt-loader > assembleTestPrompt', function () {
-  test('includes issue and implemented files', function (assert) {
+module('factory-prompt-loader > issue-harden template', function () {
+  test('renders the hardening turn prompt', function (assert) {
     let loader = new FilePromptLoader();
-    let ctx = makeMinimalContext({
-      issue: { id: 'Issues/t1', summary: 'Test issue' },
+    let result = loader.load('issue-harden', {
+      project: { objective: 'Build a sticky note family' },
+      issue: {
+        id: 'Issues/harden-sticky-note',
+        summary: 'Harden: Implement Sticky Note card',
+        description: 'Write QUnit tests for the shipped work of SN-1.',
+        acceptanceCriteria: '- [ ] run_tests passes',
+      },
+      knowledge: [],
     });
 
-    let result = assembleTestPrompt({
-      context: ctx,
-      implementedFiles: [
-        {
-          path: 'sticky-note.gts',
-          content: 'export class StickyNote {}',
-          realm: 'target',
-        },
-      ],
-      loader,
-    });
-
-    assert.ok(result.includes('Issues/t1'), 'includes issue ID');
-    assert.ok(result.includes('sticky-note.gts'), 'includes file path');
-    assert.ok(
-      result.includes('export class StickyNote'),
-      'includes file content',
-    );
-    assert.ok(result.includes('target realm'), 'includes realm');
-    assert.ok(result.includes('signal_done'), 'instructs to call signal_done');
+    assert.ok(result.includes('Issues/harden-sticky-note'), 'issue id');
+    assert.ok(result.includes('HARDENING turn'), 'hardening instructions');
+    assert.ok(result.includes('runTests()'), 'QUnit conventions');
+    assert.ok(result.includes('signal_done'), 'signals done via MCP tool');
   });
 });
 
@@ -834,3 +825,56 @@ module(
     });
   },
 );
+
+// ---------------------------------------------------------------------------
+// Bug-fix routing — defects skip the design round
+// ---------------------------------------------------------------------------
+
+module('factory-prompt-loader > bug-fix routing', function () {
+  test('isBugFixIssue matches defect/bug types, not feature', function (assert) {
+    assert.true(isBugFixIssue({ issueType: 'defect' }));
+    assert.true(isBugFixIssue({ issueType: 'bug' }));
+    assert.true(isBugFixIssue({ issueType: 'Regression' }));
+    assert.false(isBugFixIssue({ issueType: 'feature' }));
+    assert.false(isBugFixIssue({ issueType: 'adjustment' }));
+    assert.false(isBugFixIssue({}));
+    assert.false(isBugFixIssue(undefined));
+  });
+
+  test('a defect issue gets the diagnose-and-fix prompt (no design round)', function (assert) {
+    let loader = new FilePromptLoader();
+    let prompt = assembleImplementPrompt({
+      context: makeMinimalContext({
+        issue: {
+          id: 'Issues/crash',
+          issueType: 'defect',
+          summary: 'x crashes',
+        },
+      }),
+      loader,
+    });
+    assert.true(/bug fix on an existing card/i.test(prompt), 'uses issue-fix');
+    assert.true(
+      /Do NOT run a design round/i.test(prompt),
+      'explicitly forbids the design round',
+    );
+    assert.notOk(
+      /HTML mockup before any schema/i.test(prompt),
+      'no design-first mockup section',
+    );
+  });
+
+  test('a feature issue gets the design-first implement prompt', function (assert) {
+    let loader = new FilePromptLoader();
+    let prompt = assembleImplementPrompt({
+      context: makeMinimalContext({
+        issue: { id: 'Issues/new', issueType: 'feature', summary: 'new card' },
+      }),
+      loader,
+    });
+    assert.true(
+      /DESIGN — HTML mockup before any schema/i.test(prompt),
+      'feature build keeps the design round',
+    );
+  });
+});

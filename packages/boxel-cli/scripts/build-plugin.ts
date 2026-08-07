@@ -1,6 +1,8 @@
 /**
  * Generate the `<!-- generated:commands -->` synopsis blocks in the plugin's
- * SKILL.md files from the Commander program. Run via `pnpm build:plugin`.
+ * SKILL.md files from the Commander program, and sync the Codex plugin
+ * manifest (`.codex-plugin/plugin.json`) from the Claude Code one. Run via
+ * `pnpm build:plugin`.
  *
  * CI runs this and `git diff --exit-code` to fail PRs whose CLI changes
  * weren't reflected in the plugin. The "synopsis-bump coupling" check (see
@@ -8,11 +10,17 @@
  * whenever a generated block changes.
  */
 import type { Command, Option } from 'commander';
-import { readFileSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 import { buildBoxelProgram } from '../src/build-program.ts';
 
 const PLUGIN_DIR = resolve(import.meta.dirname, '..', 'plugin');
+const CLAUDE_MANIFEST_PATH = resolve(
+  PLUGIN_DIR,
+  '.claude-plugin',
+  'plugin.json',
+);
+const CODEX_MANIFEST_PATH = resolve(PLUGIN_DIR, '.codex-plugin', 'plugin.json');
 
 interface SkillSpec {
   /** Skill folder name under plugin/skills/ */
@@ -174,6 +182,64 @@ function rewriteSkillFile(skill: string, body: string): boolean {
   return true;
 }
 
+/**
+ * Derive `.codex-plugin/plugin.json` from `.claude-plugin/plugin.json` so the
+ * two manifests can't drift: name/version/metadata come from the Claude
+ * manifest (which the publish workflow bumps in both files), while the
+ * description, `skills` pointer, and `interface` block are Codex-specific.
+ */
+const CLAUDE_DESCRIPTION_PREFIX = 'Claude Code skills';
+
+function syncCodexManifest(): boolean {
+  const claude = JSON.parse(readFileSync(CLAUDE_MANIFEST_PATH, 'utf8'));
+  // Fail rather than let a reworded Claude description carry "Claude Code"
+  // into the Codex manifest, which a silent no-op replace would do.
+  if (!claude.description.startsWith(CLAUDE_DESCRIPTION_PREFIX)) {
+    throw new Error(
+      `Expected .claude-plugin/plugin.json description to start with ` +
+        `"${CLAUDE_DESCRIPTION_PREFIX}" so the Codex description can be derived ` +
+        `from it. Got: ${JSON.stringify(claude.description.slice(0, 60))}. ` +
+        `Update CLAUDE_DESCRIPTION_PREFIX in scripts/build-plugin.ts.`,
+    );
+  }
+  const codex = {
+    name: claude.name,
+    version: claude.version,
+    description:
+      'Skills' + claude.description.slice(CLAUDE_DESCRIPTION_PREFIX.length),
+    skills: './skills/',
+    author: claude.author,
+    homepage: claude.homepage,
+    repository: claude.repository,
+    license: claude.license,
+    interface: {
+      displayName: 'Boxel CLI',
+      shortDescription: 'Author and sync Boxel cards, realms, and workspaces',
+      longDescription:
+        'Create and edit Boxel cards, fields, and templates, then sync them ' +
+        'between local disk and a Boxel realm — with skills covering card ' +
+        'authoring, theming, catalog listings, federated search, and realm ' +
+        'indexing diagnostics.',
+      developerName: 'Cardstack',
+      category: 'Developer Tools',
+      capabilities: ['Interactive', 'Read', 'Write'],
+      defaultPrompt: [
+        'Create a Boxel card for the data I describe',
+        'Pull my Boxel workspace down so I can edit it locally',
+      ],
+      websiteURL: 'https://boxel.ai',
+    },
+  };
+  const next = JSON.stringify(codex, null, 2) + '\n';
+  const prior = existsSync(CODEX_MANIFEST_PATH)
+    ? readFileSync(CODEX_MANIFEST_PATH, 'utf8')
+    : null;
+  if (next === prior) return false;
+  mkdirSync(resolve(PLUGIN_DIR, '.codex-plugin'), { recursive: true });
+  writeFileSync(CODEX_MANIFEST_PATH, next);
+  return true;
+}
+
 function main(): void {
   const program = buildBoxelProgram('0.0.0');
   let changed = 0;
@@ -184,10 +250,14 @@ function main(): void {
       console.log(`updated plugin/skills/${spec.skill}/SKILL.md`);
     }
   }
+  if (syncCodexManifest()) {
+    changed++;
+    console.log('updated plugin/.codex-plugin/plugin.json');
+  }
   console.log(
     changed === 0
-      ? 'Plugin synopsis already up to date.'
-      : `Plugin synopsis regenerated (${changed} file${changed === 1 ? '' : 's'} changed).`,
+      ? 'Plugin content already up to date.'
+      : `Plugin content regenerated (${changed} file${changed === 1 ? '' : 's'} changed).`,
   );
 }
 

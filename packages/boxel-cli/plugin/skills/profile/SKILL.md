@@ -26,6 +26,12 @@ Profiles use the Matrix ID format: `@username:domain`.
 
 `switch` accepts a partial match — `boxel profile switch sarah` is enough if there's only one profile matching `sarah`.
 
+## Which environment a new profile targets
+
+`boxel profile add` targets production. `--staging` and `--local` pick another environment instead (at most one of `--production` / `--staging` / `--local`); there is no environment prompt.
+
+With `-u`, the Matrix ID's own domain decides — `boxel.ai`, `stack.cards`, and `localhost` are recognized, and any other domain needs `--matrix-url` and `--realm-server-url`.
+
 ## Adding profiles non-interactively
 
 For automation, set `BOXEL_PASSWORD` in the environment instead of passing `-p`:
@@ -46,7 +52,7 @@ BOXEL_ENVIRONMENT=my-branch boxel profile add -u @sarah:my-branch.localhost
 # → realm-server at https://realm-server.my-branch.localhost/
 ```
 
-Override individually with `--matrix-url` / `--realm-server-url` if needed.
+Override individually with `--matrix-url` / `--realm-server-url` if needed — these win over both `BOXEL_ENVIRONMENT` and the environment flags, field by field.
 
 <!-- generated:commands:start -->
 
@@ -70,6 +76,11 @@ Manage saved profiles for different users/environments
 - `-n, --name <displayName>` — Display name (for add command)
 - `-m, --matrix-url <url>` — Matrix server URL (for add command with non-standard domains)
 - `-r, --realm-server-url <url>` — Realm server URL (for add command with non-standard domains)
+- `--no-browser` — Sign in with a username and password in the terminal instead of opening a browser (for add command)
+- `--host-url <url>` — Origin serving the browser sign-in page, when it is not the realm server (for add command)
+- `--production` — Target production — the default (for add command)
+- `--staging` — Target staging instead of production (for add command)
+- `--local` — Target a local dev server instead of production (for add command)
 
 <!-- generated:commands:end -->
 

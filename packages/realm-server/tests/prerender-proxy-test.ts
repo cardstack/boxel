@@ -136,7 +136,7 @@ module(basename(import.meta.filename), function () {
       let router = new Router();
       router.post(
         '/_prerender-card',
-        jwtMiddleware(realmSecretSeed),
+        jwtMiddleware(realmSecretSeed, dbAdapter),
         handlePrerenderProxy({
           kind: 'card',
           prerenderer,
@@ -226,7 +226,7 @@ module(basename(import.meta.filename), function () {
       let router = new Router();
       router.post(
         '/_prerender-card',
-        jwtMiddleware(realmSecretSeed),
+        jwtMiddleware(realmSecretSeed, makeDbAdapter([])),
         handlePrerenderProxy({
           kind: 'card',
           prerenderer: undefined,
@@ -259,7 +259,7 @@ module(basename(import.meta.filename), function () {
       let router = new Router();
       router.post(
         '/_prerender-card',
-        jwtMiddleware(realmSecretSeed),
+        jwtMiddleware(realmSecretSeed, makeDbAdapter([])),
         handlePrerenderProxy({
           kind: 'card',
           prerenderer,
@@ -294,7 +294,7 @@ module(basename(import.meta.filename), function () {
       let router = new Router();
       router.post(
         '/_prerender-card',
-        jwtMiddleware(realmSecretSeed),
+        jwtMiddleware(realmSecretSeed, makeDbAdapter([])),
         handlePrerenderProxy({
           kind: 'card',
           prerenderer,
@@ -344,7 +344,7 @@ module(basename(import.meta.filename), function () {
       let router = new Router();
       router.post(
         '/_prerender-card',
-        jwtMiddleware(realmSecretSeed),
+        jwtMiddleware(realmSecretSeed, dbAdapter),
         handlePrerenderProxy({
           kind: 'card',
           prerenderer,
@@ -354,7 +354,7 @@ module(basename(import.meta.filename), function () {
       );
       router.post(
         '/_prerender-module',
-        jwtMiddleware(realmSecretSeed),
+        jwtMiddleware(realmSecretSeed, dbAdapter),
         handlePrerenderProxy({
           kind: 'module',
           prerenderer,

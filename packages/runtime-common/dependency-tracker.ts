@@ -60,12 +60,6 @@ function canonicalURL(url: string): string | undefined {
   return url;
 }
 
-function hasPathExtension(url: string): boolean {
-  let lastSlash = url.lastIndexOf('/');
-  let segment = lastSlash !== -1 ? url.slice(lastSlash + 1) : url;
-  return segment.length > 0 && segment.includes('.');
-}
-
 function normalizeModuleURL(url: string): string | undefined {
   let canonical = canonicalURL(url);
   if (!canonical) {
@@ -79,12 +73,22 @@ function normalizeModuleURL(url: string): string | undefined {
   return canonical;
 }
 
+// An instance dependency is recorded in the form the index carries it: the
+// instance's `.json` URL. The `.json` suffix — not "the last path segment has a
+// dot" — is what says a reference already has that form, because card ids can
+// legitimately contain dots (a `ModelConfiguration/claude-sonnet-4.6`
+// instance, a `hello.test` instance). Reading such a dot as an extension would
+// leave the dep at a URL no index row carries, so changing the instance would
+// never invalidate this consumer. Two conventions make the suffix sufficient on
+// its own: files are tracked through `trackFile`, so an instance reference here
+// is never a file path, and a card id never ends in `.json` — that suffix
+// belongs to the row, not to the id.
 function normalizeInstanceURL(url: string): string | undefined {
   let canonical = canonicalURL(url);
   if (!canonical) {
     return undefined;
   }
-  if (!hasPathExtension(canonical)) {
+  if (!canonical.endsWith('.json')) {
     return `${canonical}.json`;
   }
   return canonical;

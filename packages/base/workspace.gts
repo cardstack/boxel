@@ -143,6 +143,36 @@ export type ActivityVerb = 'Created' | 'Updated' | 'Remixed';
 // the Activity feed rather than "Updated".
 const CREATED_WINDOW_MS = 120000;
 
+// Setup progress is announced on crossing a multiple of this, rather than on
+// every change, so a long-running job reports in a few times instead of
+// continuously.
+const PROGRESS_ANNOUNCE_STEP = 25;
+
+// Rounds a live percentage down to the last announced milestone. The status
+// region's text is derived from this, so it only changes when a milestone is
+// crossed — that is what keeps a job whose meter advances every few seconds from
+// interrupting a screen reader every few seconds.
+export function progressMilestone(pct: number): number {
+  return (
+    Math.floor(Math.max(0, pct) / PROGRESS_ANNOUNCE_STEP) *
+    PROGRESS_ANNOUNCE_STEP
+  );
+}
+
+// The text the search status region announces once a search has settled.
+// `shown` is what the dropdown lists (capped), `total` the full hit count.
+// A settled zero is a real "no matches"; the caller is responsible for only
+// reaching here on settle, never for the empty debounce or dismissal windows.
+export function describeSearchResults(shown: number, total: number): string {
+  if (!shown) {
+    return 'No matching cards';
+  }
+  if (total > shown) {
+    return `Showing ${shown} of ${total} results`;
+  }
+  return shown === 1 ? '1 result' : `${shown} results`;
+}
+
 export function classifyActivityVerb(
   modMs: number | undefined,
   createdMs: number | undefined,
@@ -173,6 +203,22 @@ export function activityVerbFor(
     ? 'Remixed'
     : classifyActivityVerb(modMs, createdMs);
 }
+
+// How the Frame typeahead's hotkey is spelled on the platform the user is
+// actually on. `setupSearchHotkey` binds `metaKey || ctrlKey`, so both spellings
+// work everywhere and this is purely about naming the one they'd reach for.
+// Matches on `Mac`, as codemirror-editor.gts's own mod-key label does.
+export function searchHotkeyLabel(platform: string): string {
+  return /Mac/i.test(platform) ? '⌘K' : 'Ctrl+K';
+}
+
+// Resolved once, against whichever browser evaluates this module. In the app
+// that is the user's own, which is the case this is for. A prerender pass
+// resolves it against the prerender browser instead, so generated HTML carries
+// that machine's spelling until the app renders the card live.
+const SEARCH_HOTKEY_LABEL = searchHotkeyLabel(
+  typeof navigator === 'undefined' ? '' : navigator.platform,
+);
 
 type RealmConfigCard = CardDef & { iconURL?: string }; // RealmConfig shape
 
@@ -351,6 +397,16 @@ class Isolated extends Component<typeof Workspace> {
       data-test-workspace-index
       {{this.setupRealmSubscription this.primaryRealm}}
     >
+      {{! Setup progress runs on its own — jobs start, advance and finish with no
+        interaction to hang an announcement off. Lives at the root, outside every
+        segment: the Activity tab's dot is always on screen while the dock that
+        details it is only rendered on that one tab, and a live region has to be
+        in the DOM before its text changes to be announced at all. }}
+      <span
+        class='boxel-sr-only'
+        role='status'
+        data-test-progress-announcement
+      >{{this.progressAnnouncement}}</span>
       <header class='frame'>
         <nav class='tabs' aria-label='Sections'>
           <button
@@ -373,7 +429,9 @@ class Isolated extends Component<typeof Workspace> {
           ><ActivityIcon class='tab-icon' />
             Activity{{#if this.runningJobs.length}}<span
                 class='attention-dot'
-              />{{/if}}</button>
+                aria-hidden='true'
+              /><span class='boxel-sr-only'>({{this.runningJobs.length}}
+                in progress)</span>{{/if}}</button>
         </nav>
         {{#if @model.signage}}
           {{! workspace signage — hover reveals the purpose annotation }}
@@ -388,13 +446,32 @@ class Isolated extends Component<typeof Workspace> {
               type='text'
               placeholder='Search'
               aria-label='Search this space'
+              aria-keyshortcuts='Meta+K Control+K'
               value={{this.searchTerm}}
               {{on 'input' this.onSearchInput}}
               {{on 'keydown' this.onSearchKeydown}}
               {{on 'focus' this.onSearchFocus}}
               {{on 'focusout' this.onSearchBlur}}
             />
-            <span class='search-kbd'>⌘K</span>
+            {{! the visible hint is decorative — aria-keyshortcuts above carries
+              the same thing to assistive tech, in both spellings }}
+            <span
+              class='search-kbd'
+              aria-hidden='true'
+            >{{SEARCH_HOTKEY_LABEL}}</span>
+            {{! Results appear and refresh without any focus change, so nothing
+              would reach a screen reader on its own. Announced as a count
+              rather than a list of titles: the search reruns on each keystroke,
+              and reading matches back would talk over the user's typing. }}
+            <span
+              class='boxel-sr-only'
+              role='status'
+              data-test-search-announcement
+            >{{this.searchAnnouncement}}</span>
+            {{! Results are click-only, so this is not a combobox: an
+              `aria-controls`/`aria-expanded` textbox would name a role AT does
+              not honour on an <input> and dangle when the list is empty. The
+              status region above carries the count instead. }}
             {{#if this.searchResults.length}}
               <div class='search-results'>
                 {{#each this.searchResults as |result|}}
@@ -441,7 +518,13 @@ class Isolated extends Component<typeof Workspace> {
                 class='setup-bar'
                 {{on 'click' (this.setSegment 'activity')}}
               >
-                <span class='setup-ring' style={{this.ringStyle job}}>
+                {{! ring and meter both restate the percentage this button
+                  already spells out in `.setup-pct`, so they are decoration }}
+                <span
+                  class='setup-ring'
+                  style={{this.ringStyle job}}
+                  aria-hidden='true'
+                >
                   <span class='setup-ring-hole' /></span>
                 <span class='setup-lines'>
                   <span class='setup-name'>Setting up
@@ -452,7 +535,7 @@ class Isolated extends Component<typeof Workspace> {
                       ·
                       {{this.jobEta job}}{{/if}}</span>
                 </span>
-                <span class='setup-track'><span
+                <span class='setup-track' aria-hidden='true'><span
                     class='setup-fill'
                     style={{this.jobFillStyle job}}
                   /></span>
@@ -591,7 +674,7 @@ class Isolated extends Component<typeof Workspace> {
               {{/if}}
             {{else if (eq mod 'browse')}}
               {{#if this.browseVisible}}
-                <section class='zone'>
+                <section class='zone' data-test-browse>
                   <div class='section-head'>
                     <h2 class='section-title'>Browse</h2>
                     <p class='section-hint'>All cards and files in this space.</p>
@@ -605,6 +688,7 @@ class Isolated extends Component<typeof Workspace> {
                             <button
                               type='button'
                               class='type-chip'
+                              data-test-type-chip={{option.id}}
                               {{on 'click' (this.jumpToFilter option)}}
                             >
                               {{#if (this.iconHtml option)}}
@@ -613,9 +697,10 @@ class Isolated extends Component<typeof Workspace> {
                                   }}</span>
                               {{/if}}
                               {{option.displayName}}
-                              <span class='type-chip-count'>{{this.countFor
-                                  option
-                                }}</span>
+                              <span
+                                class='type-chip-count'
+                                data-test-type-chip-count
+                              >{{this.countFor option}}</span>
                             </button>
                           {{/each}}
                         </div>
@@ -629,6 +714,7 @@ class Isolated extends Component<typeof Workspace> {
                             <button
                               type='button'
                               class='type-chip'
+                              data-test-type-chip={{option.id}}
                               {{on 'click' (this.jumpToFilter option)}}
                             >
                               {{#if (this.iconHtml option)}}
@@ -637,9 +723,10 @@ class Isolated extends Component<typeof Workspace> {
                                   }}</span>
                               {{/if}}
                               {{option.displayName}}
-                              <span class='type-chip-count'>{{this.countFor
-                                  option
-                                }}</span>
+                              <span
+                                class='type-chip-count'
+                                data-test-type-chip-count
+                              >{{this.countFor option}}</span>
                             </button>
                           {{/each}}
                         </div>
@@ -818,22 +905,26 @@ class Isolated extends Component<typeof Workspace> {
           {{! Collapsing dock: the full panel scrolls away with the log;
             a one-line summary pins under the frame while it is off-screen. }}
           {{#if this.runningJobs.length}}
+            {{! No aria-label here: one would replace this button's own text as
+              its accessible name, and that text is the live summary of what is
+              being set up. The action is appended instead, so the name carries
+              both. }}
             <button
               type='button'
               class='dock-mini {{if this.dockCondensed "shown"}}'
-              aria-label='Show progress details'
               disabled={{if this.dockCondensed false true}}
               {{on 'click' this.revealDock}}
             >
-              <span class='dock-dot' />
+              <span class='dock-dot' aria-hidden='true' />
               <span class='dock-mini-title'>In progress</span>
               <span class='dock-mini-summary'>{{this.dockSummary}}</span>
-              <span class='dock-mini-track'>
+              <span class='dock-mini-track' aria-hidden='true'>
                 <span
                   class='dock-mini-fill'
                   style={{this.jobFillStyle this.firstRunningJob}}
                 />
               </span>
+              <span class='boxel-sr-only'>Show progress details</span>
             </button>
           {{/if}}
           <div
@@ -846,7 +937,7 @@ class Isolated extends Component<typeof Workspace> {
             {{#if this.runningJobs.length}}
               <div class='dock' {{this.trackDock}}>
                 <div class='dock-head'>
-                  <span class='dock-dot' />
+                  <span class='dock-dot' aria-hidden='true' />
                   <h2 class='dock-title'>In progress</h2>
                   <span class='dock-hint'>Keep this tab open until it finishes.</span>
                 </div>
@@ -2319,6 +2410,14 @@ class Isolated extends Component<typeof Workspace> {
         color: var(--grid-ink-quiet);
       }
 
+      /* A buried card sits behind another in the stack, so it must not keep
+         offering chrome to interact with. Both ancestors are host chrome the
+         host really renders: `.operator-mode` on the operator-mode container,
+         and `buried` on a stack item that isn't on top. They resolve from here
+         because scoping only attaches this card's attribute to the selector's
+         last compound, leaving the ancestor part to match outside it.
+         Host mode marks its stack items `buried` too, but has no
+         `.operator-mode` ancestor, so there this chrome stays visible. */
       .operator-mode .buried .frame-actions,
       .operator-mode .buried .doors {
         display: none;
@@ -2386,6 +2485,14 @@ class Isolated extends Component<typeof Workspace> {
       (j) => j.status === 'running' || j.status === 'queued',
     );
   }
+
+  // A live region going from text to empty announces nothing, so the progress
+  // region falling silent would never speak that setup finished. This carries a
+  // one-shot "Setup complete", set only on the running→idle transition tracked
+  // in `loadJobs` — never on the initial load of a space whose jobs finished in
+  // a past session, which is why it is pushed state rather than derived.
+  @tracked private setupCompleteAnnouncement = '';
+  #hadRunningJobs = false;
 
   // Door surround chrome: the grid owns the kicker and footer
   // around each entry point's fitted face; index-aligned with the
@@ -2460,6 +2567,18 @@ class Isolated extends Component<typeof Workspace> {
     card: CardDef;
   }[] = new TrackedArray();
 
+  // What the search status region says, held as settled state rather than
+  // derived live from `searchResults`. Two consequences the live form got wrong:
+  //  - it read the debounce window as "no matches" for every prefix on the way
+  //    to a term that matches, and blanking to '' each keystroke made the region
+  //    re-announce an unchanged count as if it were new;
+  //  - it read the term, not the results, so a blur that clears the dropdown but
+  //    leaves the term announced "No matching cards" for a search that matched.
+  // Instead this is set only where a search actually settles, and cleared only
+  // where the dropdown is dismissed, so an in-flight search keeps showing the
+  // previous answer and a dismissal falls silent.
+  @tracked private searchAnnouncement = '';
+
   setupSearchHotkey = modifier((element: Element) => {
     let input = element.querySelector('input');
     let onKeydown = (ev: KeyboardEvent) => {
@@ -2482,6 +2601,7 @@ class Isolated extends Component<typeof Workspace> {
     if (ke.key === 'Escape') {
       this.searchTerm = '';
       this.searchResults.splice(0, this.searchResults.length);
+      this.searchAnnouncement = ''; // dismissed, not "no matches"
       this.clearLibrarySearch(); // Esc also restores the rail selection
       (ev.target as HTMLInputElement).blur();
     } else if (ke.key === 'Enter') {
@@ -2505,6 +2625,10 @@ class Isolated extends Component<typeof Workspace> {
   private hideResults = restartableTask(async () => {
     await timeout(200);
     this.searchResults.splice(0, this.searchResults.length);
+    // Clearing the dropdown on blur is a dismissal, not a search that returned
+    // nothing — leaving the term set here would otherwise re-announce
+    // "No matching cards" for a search that did match.
+    this.searchAnnouncement = '';
   });
 
   openResult = (result: { card: CardDef }) => () => {
@@ -2512,6 +2636,7 @@ class Isolated extends Component<typeof Workspace> {
     this.searchTerm = '';
     this.hideResults.cancelAll();
     this.searchResults.splice(0, this.searchResults.length);
+    this.searchAnnouncement = '';
   };
 
   private runSearch = restartableTask(async () => {
@@ -2520,6 +2645,7 @@ class Isolated extends Component<typeof Workspace> {
     let store = this.args.context?.store;
     if (!term || !store) {
       this.searchResults.splice(0, this.searchResults.length);
+      this.searchAnnouncement = ''; // never ran; nothing settled to announce
       return;
     }
     // CLI-verified shape: `contains` only matches when paired with a
@@ -2553,6 +2679,12 @@ class Isolated extends Component<typeof Workspace> {
         card,
       });
     }
+    // Settled: this is the one place a real count (including a genuine zero)
+    // becomes the announcement.
+    this.searchAnnouncement = describeSearchResults(
+      this.searchResults.length,
+      this.searchTotal,
+    );
   });
 
   @tracked private searchTotal = 0; // full hit count for the See-all row
@@ -2674,6 +2806,32 @@ class Isolated extends Component<typeof Workspace> {
     return this.runningJobs[0]!; // Read only under the runningJobs.length guard.
   }
 
+  // What the progress status region says. Deliberately coarser than the meters
+  // it stands in for: those advance continuously, and a region that changed with
+  // them would talk over everything else on the page. Quantising to quarters
+  // means the text changes at most four times per job, plus whenever the set of
+  // running jobs changes.
+  get progressAnnouncement(): string {
+    let jobs = this.runningJobs;
+    if (!jobs.length) {
+      // Empty until a run has finished this session, then the one-shot
+      // "Setup complete" — so falling idle is spoken instead of going silent.
+      return this.setupCompleteAnnouncement;
+    }
+    if (jobs.length > 1) {
+      return `${jobs.length} tasks running`;
+    }
+    let job = jobs[0]!;
+    let name = this.jobName(job);
+    if (!job.card.progressTotal) {
+      // No total means jobPct is a placeholder, not a measurement.
+      return `Setting up ${name}`;
+    }
+    return `Setting up ${name}, ${progressMilestone(
+      this.jobPct(job),
+    )}% complete`;
+  }
+
   get dockSummary(): string {
     let jobs = this.runningJobs;
     if (jobs.length === 1) {
@@ -2748,15 +2906,18 @@ class Isolated extends Component<typeof Workspace> {
     return htmlSafe(`--door-h: ${height}px`);
   }
 
-  // settings gates: unset booleans read as their defaults
+  // Settings gates. About and Browse show by default and are opt-out: an unset
+  // `hideAbout`/`hideBrowse` (BooleanField `emptyValue` is `false`) reads as
+  // "not hidden", so both surfaces appear until the administrator turns them
+  // off. The negative naming is load-bearing, not a style choice — a
+  // `show`-prefixed boolean cannot express a default-on setting here, because
+  // an unset field and an explicitly-disabled one both read as `false`.
   private get aboutVisible() {
-    return (
-      Boolean(this.args.model.readme) && this.args.model.showReadme !== false
-    );
+    return Boolean(this.args.model.readme) && !this.args.model.hideAbout;
   }
 
   private get browseVisible() {
-    return this.hasInventory && this.args.model.showBrowse !== false;
+    return this.hasInventory && !this.args.model.hideBrowse;
   }
 
   @tracked private latest: { title: string; when?: string } | undefined;
@@ -3141,17 +3302,14 @@ class Isolated extends Component<typeof Workspace> {
       }
     } else {
       let specId = await chooseCard(
-        // Constrain the interactive Spec query too.
+        // Offer Specs from every realm the user can reach — the new card is
+        // created in this Workspace's realm regardless of where its Spec lives.
         {
           filter: {
             on: specRef,
             every: [{ eq: { isCard: true } }],
           },
           page: { size: SEARCH_PAGE_SIZE }, // Keep chooser result pages bounded.
-        },
-        {
-          consumingRealm: this.args.model[realmURL], // Scope the chooser to this Card Grid's realm.
-          lockConsumingRealm: true, // Prevent broadening into other realms.
         },
       );
 
@@ -3292,6 +3450,16 @@ class Isolated extends Component<typeof Workspace> {
         component: (card.constructor as typeof BaseDef).getComponent(card),
       });
     }
+    // Speak completion once, on the running→idle edge. A fresh run underway
+    // clears the terminal announcement (the region is showing "Setting up…"
+    // anyway); the last job leaving clears it on the next start, not now.
+    let running = this.runningJobs.length > 0;
+    if (running) {
+      this.setupCompleteAnnouncement = '';
+    } else if (this.#hadRunningJobs) {
+      this.setupCompleteAnnouncement = 'Setup complete';
+    }
+    this.#hadRunningJobs = running;
   });
 
   private refreshOnIndex = (ev: RealmEventContent) => {
@@ -3740,19 +3908,20 @@ export class Workspace extends CardDef {
             </div>
             <div class='setting'>
               <div class='setting-text'>
-                <span class='setting-label'>Show About</span>
-                <p class='setting-help'>Keep the About section visible below the
-                  pins. Turn off to keep Home to cards only.</p>
+                <span class='setting-label'>Hide About</span>
+                <p class='setting-help'>The About section shows below the pins by
+                  default. Turn on to keep Home to cards only.</p>
               </div>
-              <div class='setting-control'><@fields.showReadme /></div>
+              <div class='setting-control'><@fields.hideAbout /></div>
             </div>
             <div class='setting'>
               <div class='setting-text'>
-                <span class='setting-label'>Show Browse</span>
-                <p class='setting-help'>The inventory of card and file types,
-                  with counts, linking into the Library.</p>
+                <span class='setting-label'>Hide Browse</span>
+                <p class='setting-help'>Browse shows the inventory of card and
+                  file types, with counts, linking into the Library. Turn on to
+                  hide it.</p>
               </div>
-              <div class='setting-control'><@fields.showBrowse /></div>
+              <div class='setting-control'><@fields.hideBrowse /></div>
             </div>
             <div class='setting stack'>
               <div class='setting-text'>
@@ -4228,11 +4397,12 @@ export class Workspace extends CardDef {
 
   @field entryPoints = linksToMany(CardDef);
   @field readme = linksTo(MarkdownDef); // realm README shown on Home
-  // settings — every field wires to live behavior. Booleans
-  // read unset as their default (showReadme/showBrowse default ON,
-  // searchIncludesSystem defaults OFF).
-  @field showReadme = contains(BooleanField);
-  @field showBrowse = contains(BooleanField);
+  // settings — every field wires to live behavior. Booleans read unset as
+  // `false` (BooleanField `emptyValue`), so each is framed to make that the
+  // intended default: About and Browse are opt-out (hide*, default shown),
+  // system cards in search are opt-in (searchIncludesSystem, default off).
+  @field hideAbout = contains(BooleanField);
+  @field hideBrowse = contains(BooleanField);
   @field searchIncludesSystem = contains(BooleanField);
   @field defaultView = contains(StringField); // 'grid' | 'strip'
   @field workspace = linksTo(CardDef); // the realm's config card

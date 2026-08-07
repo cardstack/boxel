@@ -8,8 +8,10 @@ import type { SchedulableIssue } from '../src/factory-agent/index.ts';
 import {
   IssueScheduler,
   RealmIssueStore,
+  mapCardToSchedulableIssue,
   type IssueStore,
 } from '../src/issue-scheduler.ts';
+import { createTestWorkspace } from './helpers/workspace-fixture.ts';
 
 // ---------------------------------------------------------------------------
 // MockIssueStore
@@ -506,5 +508,159 @@ module('issue-scheduler > RealmIssueStore issue-type filter', function () {
       module: 'http://localhost:4201/software-factory/issue-tracker',
       name: 'Issue',
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// RealmIssueStore.readLocalStatus — authoritative workspace-file status
+// ---------------------------------------------------------------------------
+
+module('issue-scheduler > RealmIssueStore readLocalStatus', function (hooks) {
+  const realmUrl = 'http://localhost:4201/user/my-test-realm/';
+  const darkfactoryModuleUrl =
+    'http://localhost:4201/software-factory/darkfactory';
+  let workspace: ReturnType<typeof createTestWorkspace>;
+
+  hooks.beforeEach(function () {
+    workspace = createTestWorkspace();
+  });
+  hooks.afterEach(function () {
+    workspace.cleanup();
+  });
+
+  function makeStore() {
+    return new RealmIssueStore({
+      realmUrl,
+      darkfactoryModuleUrl,
+      client: {} as unknown as BoxelCLIClient,
+      workspaceDir: workspace.dir,
+    });
+  }
+
+  test('reads the status from the local workspace file, not the realm index', async function (assert) {
+    // The workspace file is the source of truth the sync pushes; the index
+    // can lag behind it. A completed seed reads `done` here even while the
+    // index still reports `in_progress`.
+    workspace.write(
+      'Issues/port-analysis-seed.json',
+      JSON.stringify({
+        data: { type: 'card', attributes: { status: 'done' } },
+      }),
+    );
+    let status = await makeStore().readLocalStatus(
+      `${realmUrl}Issues/port-analysis-seed`,
+    );
+    assert.strictEqual(status, 'done');
+  });
+
+  test('returns undefined when the workspace file is absent', async function (assert) {
+    let status = await makeStore().readLocalStatus(
+      `${realmUrl}Issues/never-written`,
+    );
+    assert.strictEqual(status, undefined);
+  });
+});
+
+module('issue-scheduler > local issue overlay', function () {
+  test('addLocalIssues makes an unindexed issue schedulable immediately', async function (assert) {
+    let store = new MockIssueStore([
+      makeIssue({ id: 'impl', status: 'done', order: 1 }),
+    ]);
+    let scheduler = new IssueScheduler(store);
+    await scheduler.loadIssues();
+
+    scheduler.addLocalIssues([
+      makeIssue({
+        id: 'harden-impl',
+        status: 'backlog',
+        order: 2,
+        blockedBy: ['impl'],
+      }),
+    ]);
+
+    assert.true(scheduler.hasUnblockedIssues(), 'local issue is eligible');
+    assert.strictEqual(scheduler.pickNextIssue()?.id, 'harden-impl');
+  });
+
+  test('refreshIssueState updates the overlay — a blocked local issue is not re-picked', async function (assert) {
+    let store = new MockIssueStore([
+      makeIssue({ id: 'impl', status: 'done', order: 1 }),
+    ]);
+    let scheduler = new IssueScheduler(store);
+    await scheduler.loadIssues();
+    scheduler.addLocalIssues([
+      makeIssue({ id: 'harden-impl', status: 'backlog', order: 2 }),
+    ]);
+
+    // The turn ends blocked: the store (workspace-file fallback in
+    // production) reports the new status; the index still lags.
+    store.issues.push(
+      makeIssue({ id: 'harden-impl', status: 'blocked', order: 2 }),
+    );
+    await scheduler.refreshIssueState(
+      makeIssue({ id: 'harden-impl', status: 'in_progress', order: 2 }),
+    );
+    store.issues = store.issues.filter((i) => i.id !== 'harden-impl');
+
+    await scheduler.loadIssues();
+    assert.false(
+      scheduler.hasUnblockedIssues(),
+      'the overlay carries blocked, not the registration snapshot',
+    );
+  });
+
+  test('local issues survive loadIssues until the index catches up', async function (assert) {
+    let store = new MockIssueStore([
+      makeIssue({ id: 'impl', status: 'done', order: 1 }),
+    ]);
+    let scheduler = new IssueScheduler(store);
+    await scheduler.loadIssues();
+    scheduler.addLocalIssues([
+      makeIssue({ id: 'harden-impl', status: 'backlog', order: 2 }),
+    ]);
+
+    // Index still lagging: reload keeps the local overlay.
+    await scheduler.loadIssues();
+    assert.strictEqual(scheduler.pickNextIssue()?.id, 'harden-impl');
+
+    // Index caught up (with fresher state): the indexed row wins.
+    store.issues.push(
+      makeIssue({ id: 'harden-impl', status: 'in_progress', order: 2 }),
+    );
+    await scheduler.loadIssues();
+    let picked = scheduler.pickNextIssue();
+    assert.strictEqual(picked?.id, 'harden-impl');
+    assert.strictEqual(
+      picked?.status,
+      'in_progress',
+      'indexed state replaces the local overlay',
+    );
+  });
+});
+
+module('issue-scheduler > mapCardToSchedulableIssue', function () {
+  test('carries the board key through, distinct from the card URL', function (assert) {
+    let issue = mapCardToSchedulableIssue({
+      id: 'https://realms.test/user/rt-control/Issues/sticky-note',
+      attributes: {
+        issueId: 'SN-1',
+        summary: 'Implement Sticky Note card',
+        status: 'in_progress',
+        priority: 'high',
+      },
+    });
+    assert.strictEqual(issue.issueId, 'SN-1');
+    assert.strictEqual(
+      issue.id,
+      'https://realms.test/user/rt-control/Issues/sticky-note',
+    );
+  });
+
+  test('an issue written without a board key maps to undefined', function (assert) {
+    let issue = mapCardToSchedulableIssue({
+      id: 'https://realms.test/user/rt-control/Issues/no-key',
+      attributes: { summary: 'No key', status: 'backlog' },
+    });
+    assert.strictEqual(issue.issueId, undefined);
   });
 });

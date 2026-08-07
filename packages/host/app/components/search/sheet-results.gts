@@ -25,8 +25,12 @@ import {
   buildUrlSection,
   type RecentsSection,
   type SearchSheetSection,
+  type UrlSection,
 } from '@cardstack/host/utils/search/sections';
-import type { NewCardArgs } from '@cardstack/host/utils/search/types';
+import type {
+  NewCardArgs,
+  SearchResultKind,
+} from '@cardstack/host/utils/search/types';
 
 import { SORT_OPTIONS, VIEW_OPTIONS, type SortOption } from './constants';
 import ResultSection from './result-section';
@@ -62,6 +66,10 @@ interface Signature {
     resolvedCard: CardDef | undefined;
     isCardResourceLoaded: boolean;
     realms: string[];
+    // True when `realms` is a hard scope (the chooser's realm picker is
+    // locked). A pasted URL that resolves outside the scope is then
+    // suppressed rather than offered.
+    realmsLocked?: boolean;
     baseFilter?: Filter;
     offerToCreate?: { ref: CodeRef; relativeTo: URL | undefined };
     // The recent card ids stripped of any `.json`, for most-recent-first
@@ -77,8 +85,14 @@ interface Signature {
     onChangeSort: (option: SortOption) => void;
 
     // Selection + submit.
-    handleSelect: (selection: string | NewCardArgs) => void;
-    onSubmit?: (selection: string | NewCardArgs) => void;
+    handleSelect: (
+      selection: string | NewCardArgs,
+      kind?: SearchResultKind,
+    ) => void;
+    onSubmit?: (
+      selection: string | NewCardArgs,
+      kind?: SearchResultKind,
+    ) => void;
     multiSelect?: boolean;
     selectedCards?: (string | NewCardArgs)[];
     onSelectAll?: (cards: string[]) => void;
@@ -129,16 +143,34 @@ export default class SheetResults extends Component<Signature> {
     return buildRecentsSection([...entries]);
   }
 
+  // The URL-paste section. When the realm scope is locked (the chooser is
+  // hard-scoped to a consuming realm), a pasted URL that resolves to a card
+  // outside the scope is suppressed — otherwise the tile would be
+  // selectable and Go could return a cross-realm card. `buildUrlSection`
+  // resolves `realmUrl` against `realms` (normalizing id forms), so an
+  // in-scope card always yields one of the `realms` entries verbatim.
+  private get urlSection(): UrlSection | undefined {
+    let section = buildUrlSection(
+      this.args.resolvedCard,
+      this.args.searchKeyIsURL,
+      this.args.realms,
+      this.realm,
+      (url) => this.network.virtualNetwork.unresolveURL(url),
+    );
+    if (
+      section &&
+      this.args.realmsLocked &&
+      !this.args.realms.includes(section.realmUrl)
+    ) {
+      return undefined;
+    }
+    return section;
+  }
+
   private get sections(): SearchSheetSection[] {
     return assembleSections(
       this.recentsSection,
-      buildUrlSection(
-        this.args.resolvedCard,
-        this.args.searchKeyIsURL,
-        this.args.realms,
-        this.realm,
-        (url) => this.network.virtualNetwork.unresolveURL(url),
-      ),
+      this.urlSection,
       buildQuerySections(this.args.mainResults.entries, {
         isURL: this.args.searchKeyIsURL,
         isSearchKeyEmpty: this.args.isSearchKeyEmpty,
@@ -162,7 +194,9 @@ export default class SheetResults extends Component<Signature> {
       if (!this.args.isCardResourceLoaded) {
         return 'Searching…';
       }
-      return this.args.resolvedCard ? '1 result from 1 realm' : '0 results';
+      // Count the section, not the resolved card — a card suppressed by the
+      // locked realm scope must not be reported as a result.
+      return this.urlSection ? '1 result from 1 realm' : '0 results';
     }
     const total = this.args.mainResults.meta.page?.total ?? 0;
     // The mini variant compresses the summary to "X results" — the design puts
@@ -199,8 +233,8 @@ export default class SheetResults extends Component<Signature> {
         urls.push(entry.id.replace(/\.json$/, ''));
       }
     }
-    if (this.args.resolvedCard?.id) {
-      urls.push(this.args.resolvedCard.id.replace(/\.json$/, ''));
+    if (this.urlSection?.card.id) {
+      urls.push(this.urlSection.card.id.replace(/\.json$/, ''));
     }
     return [...new Set(urls)];
   }
@@ -239,8 +273,17 @@ export default class SheetResults extends Component<Signature> {
     this.args.pagination.showMore(sectionId, totalCount);
   }
 
-  @action isSectionCollapsed(sectionId: string): boolean {
-    return this.args.pagination.isCollapsed(sectionId);
+  @action isSectionCollapsed(section: SearchSheetSection): boolean {
+    // A pasted URL is an explicit ask for that one card. A focused
+    // ("show only") realm section — including the one seeded when the
+    // chooser is scoped to a consuming realm — must not hide it: during a
+    // URL paste the realm query sections aren't rendered at all, so
+    // collapsing the URL section would leave the result count with
+    // nothing visible under it.
+    if (section.type === 'url') {
+      return false;
+    }
+    return this.args.pagination.isCollapsed(section.sid);
   }
 
   <template>
@@ -265,10 +308,19 @@ export default class SheetResults extends Component<Signature> {
     {{! Handle empty URL search state — only after loading completes }}
     {{#if @searchKeyIsURL}}
       {{#if @isCardResourceLoaded}}
-        {{#unless @resolvedCard}}
+        {{#unless this.urlSection}}
           <div class='empty-state' data-test-search-sheet-empty>
-            No card found at
-            {{@searchKey}}
+            {{#if @resolvedCard}}
+              {{! The card exists but the locked realm scope excludes it —
+                  saying "no card found" here would be untrue and send the
+                  user hunting for a typo. }}
+              Card at
+              {{@searchKey}}
+              is not in the realms this chooser is limited to
+            {{else}}
+              No card found at
+              {{@searchKey}}
+            {{/if}}
           </div>
         {{/unless}}
       {{/if}}
@@ -294,7 +346,7 @@ export default class SheetResults extends Component<Signature> {
           @variant={{@variant}}
           @handleSelect={{@handleSelect}}
           @isFocused={{eq @pagination.focusedSection section.sid}}
-          @isCollapsed={{this.isSectionCollapsed section.sid}}
+          @isCollapsed={{this.isSectionCollapsed section}}
           @onFocusSection={{this.onFocusSection}}
           @getDisplayedCount={{this.getDisplayedCount}}
           @onShowMore={{this.onShowMore}}

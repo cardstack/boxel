@@ -1,4 +1,4 @@
-import { waitFor, click, fillIn } from '@ember/test-helpers';
+import { waitFor, click, fillIn, settled } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
 import { getService } from '@universal-ember/test-support';
@@ -165,6 +165,91 @@ module(
           `[data-test-card-chooser-modal] [data-test-realm-url="${baseRealm.url}"]`,
         )
         .doesNotExist('cross-realm candidates are excluded by the lock');
+    });
+
+    test('pasting a full card URL from the consuming realm shows the result', async function (assert) {
+      await renderRealmConfigEdit([{ path: '/docs' }]);
+
+      await click('[data-test-add-new="instance"]');
+      await waitFor('[data-test-card-chooser-modal]');
+
+      // Paste the full URL of a card that lives in the consuming realm —
+      // exactly the card the locked chooser is scoped to.
+      await fillIn(
+        '[data-test-card-chooser-modal] [data-test-search-field]',
+        `${testRealmURL}Pet/mango`,
+      );
+
+      // The URL-paste result section renders once the card resolves.
+      await waitFor(
+        '[data-test-card-chooser-modal] [data-section-sid^="url:"]',
+      );
+
+      // The chooser opens with the consuming realm's section focused
+      // ("show only"), which collapses every other section — but a pasted
+      // URL is an explicit ask, so its section must not be collapsed
+      // (collapse hides the result tile via display: none while the
+      // summary still reports "1 result").
+      assert
+        .dom('[data-test-card-chooser-modal] [data-section-sid^="url:"]')
+        .doesNotHaveClass(
+          'search-result-block--collapsed',
+          'the URL-paste section is not collapsed by the seeded realm focus',
+        );
+      assert
+        .dom(
+          '[data-test-card-chooser-modal] [data-section-sid^="url:"] [data-test-item-button]',
+        )
+        .isVisible('the pasted card result tile is visible');
+
+      // The visible tile is actually usable: selecting it enables Go.
+      await click(
+        '[data-test-card-chooser-modal] [data-section-sid^="url:"] [data-test-item-button]',
+      );
+      assert
+        .dom('[data-test-card-chooser-go-button]')
+        .isNotDisabled('the pasted card can be chosen');
+    });
+
+    test('pasting a card URL from outside the consuming realm offers no result', async function (assert) {
+      await renderRealmConfigEdit([{ path: '/docs' }]);
+
+      await click('[data-test-add-new="instance"]');
+      await waitFor('[data-test-card-chooser-modal]');
+
+      // A real card, but in the base realm — outside the consuming realm
+      // the chooser is locked to. The chooser's hard scope applies to
+      // pasted URLs too: revealing this card would let Go return a
+      // cross-realm selection.
+      await fillIn(
+        '[data-test-card-chooser-modal] [data-test-search-field]',
+        `${baseRealm.url}types/card`,
+      );
+
+      await waitFor(
+        '[data-test-card-chooser-modal] [data-test-search-sheet-empty]',
+        { timeout: 10000 },
+      );
+      assert
+        .dom('[data-test-card-chooser-modal] [data-section-sid^="url:"]')
+        .doesNotExist(
+          'no URL-paste section is offered for an out-of-scope card',
+        );
+      assert
+        .dom('[data-test-card-chooser-modal] [data-test-search-sheet-empty]')
+        .containsText(
+          'is not in the realms this chooser is limited to',
+          'the empty state explains the card is out of scope, not missing',
+        );
+      assert
+        .dom('[data-test-card-chooser-modal] [data-test-search-label]')
+        .containsText('0 results', 'the summary does not count the card');
+      assert
+        .dom('[data-test-card-chooser-modal] [data-test-item-button]')
+        .doesNotExist('there is no tile to select');
+      assert
+        .dom('[data-test-card-chooser-go-button]')
+        .isDisabled('a cross-realm card cannot be returned by the chooser');
     });
 
     test('renders a per-rule warning when a path is malformed', async function (assert) {
@@ -337,6 +422,138 @@ module(
       } finally {
         (globalThis as any)._CARDSTACK_CARD_CHOOSER = originalChooser;
       }
+    });
+
+    test('a rule with a redirect target renders the redirect editor', async function (assert) {
+      await renderRealmConfigEdit([
+        { path: '/tos', redirectTo: '/terms', statusCode: 301 },
+      ]);
+
+      assert
+        .dom(
+          '[data-test-routing-rule-kind] [data-test-boxel-radio-option-id="redirect"] input[type="radio"]',
+        )
+        .isChecked('the kind toggle reflects the stored redirect');
+      assert
+        .dom('[data-test-redirect-input]')
+        .hasValue('/terms', 'the stored target is shown');
+      assert
+        .dom('[data-test-status-code-select]')
+        .containsText('301', 'the stored status code is selected');
+      assert
+        .dom('[data-test-add-new="instance"]')
+        .doesNotExist('the card chooser is not shown for a redirect rule');
+    });
+
+    test('switching a rule to a redirect swaps the target editor and validates the target', async function (assert) {
+      await renderRealmConfigEdit([{ path: '/docs' }]);
+
+      assert
+        .dom('[data-test-redirect-input]')
+        .doesNotExist('a card rule shows no redirect editor');
+
+      await click(
+        '[data-test-routing-rule-kind] [data-test-boxel-radio-option-id="redirect"] input[type="radio"]',
+      );
+      assert.dom('[data-test-redirect-input]').exists();
+      assert
+        .dom('[data-test-add-new="instance"]')
+        .doesNotExist('the card chooser is replaced by the redirect editor');
+
+      await fillIn('[data-test-redirect-input]', 'terms');
+      assert
+        .dom('[data-test-redirect-warning]')
+        .containsText(
+          'Redirect target must be a path starting with / or a full http(s) URL',
+          'a slash-less target warns',
+        );
+
+      await fillIn('[data-test-redirect-input]', 'https://example.com/terms');
+      assert
+        .dom('[data-test-redirect-warning]')
+        .doesNotExist('an external http(s) URL is allowed');
+
+      await fillIn('[data-test-redirect-input]', '/terms');
+      assert
+        .dom('[data-test-redirect-warning]')
+        .doesNotExist('a realm-relative path is allowed');
+
+      await click(
+        '[data-test-routing-rule-kind] [data-test-boxel-radio-option-id="card"] input[type="radio"]',
+      );
+      assert
+        .dom('[data-test-redirect-input]')
+        .doesNotExist('switching back to card removes the redirect editor');
+      assert
+        .dom('[data-test-add-new="instance"]')
+        .exists('switching back to card restores the chooser');
+    });
+
+    test('the shown editor follows the model when the rule changes elsewhere', async function (assert) {
+      // The same config card can be open in more than one place. The
+      // editor derives which target editor to show from the rule itself,
+      // so a change made elsewhere is reflected here; a copy of the
+      // choice held in component state would shadow it forever, and the
+      // next keystroke would write a `redirectTo` that silently beats
+      // the instance the other editor had chosen.
+      await renderRealmConfigEdit([{ path: '/tos', redirectTo: '/terms' }]);
+
+      assert
+        .dom('[data-test-redirect-input]')
+        .exists('starts on the redirect editor');
+
+      let store = getService('store');
+      let realmConfig = (await store.get(`${testRealmURL}realm`)) as any;
+      realmConfig.hostRoutingRules[0].redirectTo = undefined;
+      await settled();
+
+      assert
+        .dom('[data-test-redirect-input]')
+        .doesNotExist('clearing the target elsewhere flips this editor back');
+      assert
+        .dom(
+          '[data-test-routing-rule-kind] [data-test-boxel-radio-option-id="card"] input[type="radio"]',
+        )
+        .isChecked('the toggle follows the model rather than a stale copy');
+    });
+
+    test('warns when redirect rules loop back on themselves', async function (assert) {
+      // The realm drops looping rules when it reads the config, so
+      // without this banner the path would just stop routing with no
+      // explanation.
+      await renderRealmConfigEdit([
+        { path: '/tos', redirectTo: '/tos' },
+        { path: '/a', redirectTo: '/b' },
+        { path: '/b', redirectTo: '/a' },
+        { path: '/fine', redirectTo: '/terms' },
+      ]);
+
+      assert
+        .dom('[data-test-redirect-loop-warning]')
+        .exists('the redirect-loop banner is shown');
+      assert
+        .dom('[data-test-redirect-loop-warning]')
+        .containsText('/tos', 'the banner names the self-redirect');
+      assert
+        .dom('[data-test-redirect-loop-warning]')
+        .containsText('/a', 'the banner names both halves of the ring');
+      assert
+        .dom('[data-test-redirect-loop-warning]')
+        .doesNotContainText(
+          '/fine',
+          'a terminating redirect is not flagged as a loop',
+        );
+    });
+
+    test('no redirect-loop warning for rules that terminate', async function (assert) {
+      await renderRealmConfigEdit([
+        { path: '/tos', redirectTo: '/terms' },
+        { path: '/blog', redirectTo: 'https://example.com/blog' },
+      ]);
+
+      assert
+        .dom('[data-test-redirect-loop-warning]')
+        .doesNotExist('no banner when nothing loops');
     });
 
     test('typing into the path input always stores a leading slash', async function (assert) {

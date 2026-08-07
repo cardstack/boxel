@@ -33,7 +33,10 @@ import {
 } from '@cardstack/runtime-common/realm-auth-client';
 
 import ENV from '@cardstack/host/config/environment';
-import { SessionLocalStorageKey } from '@cardstack/host/utils/local-storage-keys';
+import {
+  RealmServerSessionLocalStorageKey,
+  SessionLocalStorageKey,
+} from '@cardstack/host/utils/local-storage-keys';
 
 import type { ExtendedClient } from './matrix-sdk-loader';
 import type NetworkService from './network';
@@ -577,6 +580,14 @@ export default class RealmServerService extends Service {
     return [...this.archivedRealmsList];
   }
 
+  // Whether the archived-realms list has been fetched (i.e. the owner has
+  // expanded the "Archived" section at least once). Lets callers refresh that
+  // list only when it's actually being shown, rather than paying the fetch for
+  // an owner who never opened it.
+  get isArchivedRealmsFetched(): boolean {
+    return this.archivedRealmsFetched;
+  }
+
   @cached
   get availableRealmIndexCardIds() {
     return this.availableRealmIdentifiers.map((url) => `${url}index`);
@@ -859,9 +870,25 @@ export default class RealmServerService extends Service {
 
     let realmServerEvent = JSON.parse(event.content.body) as RealmServerEvent;
     let subscribers = this.eventSubscribers.get(realmServerEvent.eventType);
-    subscribers?.forEach(async (subscriber) => {
-      await subscriber(realmServerEvent.data);
-    });
+    // Await the subscribers so callers that `await handleEvent(...)` observe the
+    // subscriber work as complete — a `forEach(async ...)` returns before any
+    // subscriber settles. Each subscriber is isolated so one that rejects is
+    // logged rather than failing its siblings or the event-processing caller,
+    // preserving the best-effort dispatch this always had.
+    if (subscribers) {
+      await Promise.all(
+        subscribers.map(async (subscriber) => {
+          try {
+            await subscriber(realmServerEvent.data);
+          } catch (err) {
+            console.error(
+              `realm-server event subscriber for ${realmServerEvent.eventType} failed`,
+              err,
+            );
+          }
+        }),
+      );
+    }
   }
 
   subscribeEvent(eventType: string, subscriber: RealmServerEventSubscriber) {
@@ -1484,7 +1511,7 @@ export default class RealmServerService extends Service {
 }
 
 const tokenRefreshPeriodSec = 5 * 60; // 5 minutes
-const sessionLocalStorageKey = 'boxel-realm-server-session';
+const sessionLocalStorageKey = RealmServerSessionLocalStorageKey;
 
 function claimsFromRawToken(rawToken: string): RealmServerJWTPayload {
   let [_header, payload] = rawToken.split('.');

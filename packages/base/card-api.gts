@@ -128,6 +128,7 @@ import FileDefAtomTemplate from './default-templates/file-def-atom';
 import FileDefEmbeddedTemplate from './default-templates/file-def-embedded';
 import FileDefFittedTemplate from './default-templates/file-def-fitted';
 import FileDefIsolatedTemplate from './default-templates/file-def-isolated';
+import type { FilePreviewComponent } from './file-formats/file-preview-stage';
 import ImageDefAtomTemplate from './default-templates/image-def-atom';
 import ImageDefEmbeddedTemplate from './default-templates/image-def-embedded';
 import ImageDefFittedTemplate from './default-templates/image-def-fitted';
@@ -516,6 +517,14 @@ export interface CardStore {
   // undefined when the reference can't be resolved (no network available, or
   // an unresolvable reference) so callers can degrade to URL math.
   resolveURL(reference: string, base?: string): URL | undefined;
+  // Fold an id to its canonical RRI form: a mapped realm's URL collapses to
+  // its `@scope/name/...` prefix, an already-canonical RRI is returned
+  // unchanged, and anything with no registered mapping (an unmapped realm's
+  // URL, a local id) passes through as-is. The inverse of `resolveURL`'s
+  // boundary role — card code canonicalizes an incoming id to the opaque
+  // interior form without holding the network. Returns the input unchanged
+  // when no network is available.
+  canonicalizeId(id: string): string;
   getCard(url: string): CardDef | undefined;
   getFileMeta(url: string): FileDef | undefined;
   setCard(url: string, instance: CardDef): void;
@@ -3033,7 +3042,11 @@ export class FileContentMismatchError extends Error {
 export class FileDef extends BaseDef {
   static displayName = 'File';
   static isFileDef = true;
-  static icon = FileIcon;
+  // Annotated with the declared type rather than inferred from the assignment:
+  // the shared format shells render whatever a subclass puts here, so a family
+  // must be free to supply any icon component, not just the
+  // `TemplateOnlyComponent` shape that inference would pin this to.
+  static icon: CardOrFieldTypeIcon = FileIcon;
   [isSavedInstance] = true;
 
   get [realmURL](): URL | undefined {
@@ -3065,6 +3078,26 @@ export class FileDef extends BaseDef {
   @field contentType = contains(StringField);
   @field contentHash = contains(StringField);
   @field contentSize = contains(NumberField);
+
+  // The four shared format shells own identity, facts, budgets, and state for
+  // every file family. What they can't know is how to draw the file itself — a
+  // waveform, a page, a 3D scene — so a family supplies that one renderer here
+  // and inherits the rest. A family that hasn't landed a renderer yet gets an
+  // honest generic pane rather than a broken one.
+  //
+  // The shells take their glyph from this class's `static icon`, so a family
+  // declares its icon once and every format picks it up — and that icon's
+  // module stays in the family's own file rather than in card-api's dependency
+  // graph, which every card in every realm inherits.
+  static previewComponent?: FilePreviewComponent;
+  // Pin a profile axis when the file's MIME type is ambiguous — a `.ts` file
+  // served as `text/plain`, say. Left unset, these are derived from the file's
+  // name and content type by the taxonomy registry.
+  static fileKind?: string;
+  static fileFamily?: string;
+  static previewKind?: string;
+  static previewAdapter?: string;
+  static previewSource?: string;
 
   static embedded: BaseDefComponent = FileDefEmbeddedTemplate;
   static fitted: BaseDefComponent = FileDefFittedTemplate;
@@ -3153,7 +3186,7 @@ export { getDefaultFileMenuItems } from './file-menu-items';
 
 export class ImageDef extends FileDef {
   static displayName = 'Image';
-  static icon = ImageIcon;
+  static icon: CardOrFieldTypeIcon = ImageIcon;
   static acceptTypes = 'image/*';
 
   @field width = contains(NumberField);
@@ -4169,7 +4202,14 @@ export async function updateFromSerialized<T extends BaseDefConstructor>(
 ): Promise<BaseInstanceType<T>> {
   stores.set(instance, store);
   if (!instance[relativeTo] && doc.data.id) {
-    instance[relativeTo] = rri(doc.data.id);
+    // Card ids fold to canonical RRI; FileDef ids stay URL (see
+    // `_createFromSerialized`).
+    let isFileLike = isFileDef(
+      Reflect.getPrototypeOf(instance)!.constructor as typeof BaseDef,
+    );
+    instance[relativeTo] = rri(
+      isFileLike ? doc.data.id : store.canonicalizeId(doc.data.id),
+    );
   }
 
   if (isCardInstance(instance)) {
@@ -4216,20 +4256,30 @@ async function _createFromSerialized<T extends BaseDefConstructor>(
   if (!doc) {
     doc = { data: resource };
   }
+  let isFileLike = isFileMetaResource(resource) || isFileDef(card);
+  // Fold the incoming id onto the canonical interior form (RRI for a mapped
+  // realm; unchanged for an unmapped realm or a local id) at this ingest
+  // boundary, so the in-memory `id` field, the identity-map key, and the
+  // relative-resolution base all share one opaque spelling. Scoped to card
+  // instances; FileDef ids stay in URL form (their identity is entangled with
+  // the file-extract invalidation contract).
+  let canonicalId =
+    resource.id != null && !isFileLike
+      ? (store.canonicalizeId(resource.id) as typeof resource.id)
+      : resource.id;
   let instance: BaseInstanceType<T> | undefined;
-  if (resource.id != null || resource.lid != null) {
-    let resourceId = (resource.id ?? resource.lid)!;
-    let cachedInstance =
-      isFileMetaResource(resource) || isFileDef(card)
-        ? store.getFileMeta(resourceId)
-        : store.getCard(resourceId);
+  if (canonicalId != null || resource.lid != null) {
+    let resourceId = (canonicalId ?? resource.lid)!;
+    let cachedInstance = isFileLike
+      ? store.getFileMeta(resourceId)
+      : store.getCard(resourceId);
     if (cachedInstance && instanceOf(cachedInstance, card as any)) {
       instance = cachedInstance as BaseInstanceType<T>;
     }
   }
   if (!instance) {
     instance = new card({
-      id: resource.id,
+      id: canonicalId,
       [localId]: resource.lid,
     }) as BaseInstanceType<T>;
     instance[relativeTo] = _relativeTo;
@@ -4423,7 +4473,14 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
       ...resource.attributes,
       ...nonNestedRelationships,
       ...linksToManyRelationships,
-      ...(resource.id !== undefined ? { id: resource.id } : {}),
+      ...(resource.id !== undefined
+        ? {
+            id:
+              isFileMetaResource(resource) || isFileDef(card)
+                ? resource.id
+                : store.canonicalizeId(resource.id),
+          }
+        : {}),
     }).map(async ([fieldName, value]) => {
       let field = getField(instance, fieldName);
       if (!field) {
@@ -4970,29 +5027,50 @@ class FallbackCardStore implements CardStore {
     }
   }
 
-  getCard(id: string) {
+  canonicalizeId(id: string): string {
+    let vn: VirtualNetwork | undefined;
+    try {
+      vn = myLoader().getVirtualNetwork();
+    } catch {
+      return id;
+    }
+    return vn ? vn.unresolveURL(id) : id;
+  }
+
+  // Mirror the host stores' bucket-key fold: every spelling of the same
+  // resource — canonical RRI, virtual/url-mapped alias, real URL — lands on
+  // one key, so a lookup by a card's canonical id finds an instance that was
+  // inserted under its raw URL form (and vice versa). Without this, a repeated
+  // or cyclic relationship misses the already-hydrated instance and reloads a
+  // duplicate instead of terminating at the identity map. Ids that don't
+  // resolve (local ids, or no VirtualNetwork available) key as-is.
+  #storeKey(id: string): string {
     id = id.replace(/\.json$/, '');
-    return this.#instances.get(id);
+    try {
+      let vn = myLoader().getVirtualNetwork();
+      return vn ? vn.toRealURLHref(id) : id;
+    } catch {
+      return id;
+    }
+  }
+
+  getCard(id: string) {
+    return this.#instances.get(this.#storeKey(id));
   }
   getFileMeta(id: string) {
-    id = id.replace(/\.json$/, '');
-    return this.#fileMetaInstances.get(id);
+    return this.#fileMetaInstances.get(this.#storeKey(id));
   }
   setCard(id: string, instance: CardDef) {
-    id = id.replace(/\.json$/, '');
-    return this.#instances.set(id, instance);
+    return this.#instances.set(this.#storeKey(id), instance);
   }
   setFileMeta(id: string, instance: FileDef) {
-    id = id.replace(/\.json$/, '');
-    return this.#fileMetaInstances.set(id, instance);
+    return this.#fileMetaInstances.set(this.#storeKey(id), instance);
   }
   setCardNonTracked(id: string, instance: CardDef) {
-    id = id.replace(/\.json$/, '');
-    return this.#instances.set(id, instance);
+    return this.#instances.set(this.#storeKey(id), instance);
   }
   setFileMetaNonTracked(id: string, instance: FileDef) {
-    id = id.replace(/\.json$/, '');
-    return this.#fileMetaInstances.set(id, instance);
+    return this.#fileMetaInstances.set(this.#storeKey(id), instance);
   }
   makeTracked(_id: string) {}
   trackLoad(load: Promise<unknown>) {

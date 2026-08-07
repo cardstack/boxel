@@ -1,4 +1,5 @@
 import type Owner from '@ember/owner';
+import { waitUntil } from '@ember/test-helpers';
 
 import type { RealmAction } from '@cardstack/runtime-common';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
@@ -22,6 +23,37 @@ export class MockUtils {
   ) {}
   getRoomEvents = (roomId: string) => {
     return this.testState.sdk!.getRoomEvents(roomId);
+  };
+  // Wait until the mock homeserver holds at least `count` m.room.message
+  // events for the room, then return them. Sending a message renders an
+  // optimistic bubble at click-time while the pre-send pipeline (context
+  // summary, card/file serialization, media uploads) continues past
+  // `settled()` — those legs run outside any test waiter; only the mutex
+  // dispatches (the sendEvent and room-state legs) are waiter-tracked.
+  // DOM-based waits therefore prove nothing about server-side delivery;
+  // assertions on `getRoomEvents` must wait on the server state itself.
+  waitForRoomMessages = async (roomId: string, count: number) => {
+    let messages = () =>
+      this.getRoomEvents(roomId).filter((e) => e.type === 'm.room.message');
+    try {
+      await waitUntil(() => messages().length >= count, { timeout: 10_000 });
+    } catch (e) {
+      // Dump the room's actual events so a send that failed (its optimistic
+      // bubble stays client-side and never reaches the mock homeserver) is
+      // distinguishable from a send that is merely slow.
+      let events = this.getRoomEvents(roomId);
+      throw new Error(
+        `timed out waiting for ${count} m.room.message event(s) in ${roomId}; ` +
+          `mock homeserver has ${events.length} event(s): ` +
+          JSON.stringify(
+            events.map((event) => ({
+              type: event.type,
+              event_id: event.event_id,
+            })),
+          ),
+      );
+    }
+    return messages();
   };
   getRoomIds = () => {
     // A realm can fire a deferred `broadcastRealmEvent` (the trailing `index`

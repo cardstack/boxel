@@ -54,6 +54,7 @@ import {
 } from '../factory-tool-builder.ts';
 import { deriveCatalogRealmUrl } from '../factory-catalog-realm.ts';
 import { logger } from '../logger.ts';
+import { startSpan, traceEvent } from '../run-trace.ts';
 import {
   assembleBootstrapPrompt,
   assembleImplementPrompt,
@@ -352,6 +353,11 @@ export class OpencodeFactoryAgent implements LoopAgent {
       },
     };
 
+    // opencode reports tokens per assistant message; the turn's usage is the
+    // last report, which is cumulative for the session. Declared out here so
+    // the return paths below can carry it.
+    let turnUsage: TurnUsage | undefined;
+
     try {
       let session = await client.session.create({
         query: { directory: workspaceDir },
@@ -364,10 +370,17 @@ export class OpencodeFactoryAgent implements LoopAgent {
       // propagation: a `session.error` (e.g. 401 from the model API)
       // resolves `sessionErrored`, which short-circuits the run below
       // and returns `blocked` instead of letting the loop spin.
-      let stopEventLog = subscribeForLogging(client, sessionId, (message) => {
-        sessionErrorMessage = message;
-        resolveSessionError();
-      }).catch(() => undefined);
+      let stopEventLog = subscribeForLogging(
+        client,
+        sessionId,
+        (message) => {
+          sessionErrorMessage = message;
+          resolveSessionError();
+        },
+        (usage) => {
+          turnUsage = usage;
+        },
+      ).catch(() => undefined);
 
       let prompt = this.buildPrompt(context);
       let systemPrompt = this.buildSystemPrompt(context);
@@ -390,7 +403,12 @@ export class OpencodeFactoryAgent implements LoopAgent {
           body: {
             model: {
               providerID: FACTORY_PROVIDER_ID,
-              modelID: this.config.model,
+              // Per-turn budget override from the orchestrator's policy —
+              // any OpenRouter model id works here (e.g. `openai/gpt-5.2`,
+              // `moonshotai/kimi-k2`). `effort` has no opencode per-prompt
+              // equivalent yet, so only the model half of the budget
+              // applies on this backend.
+              modelID: context.modelBudget?.model ?? this.config.model,
             },
             system: systemPrompt,
             // Trim opencode's default tool catalog to only what the
@@ -438,13 +456,27 @@ export class OpencodeFactoryAgent implements LoopAgent {
       this.currentHooks = undefined;
     }
 
+    // Same event shape the Claude backend emits, so the telemetry
+    // aggregator attributes tokens to this turn without knowing which
+    // backend ran it.
+    let usage = turnUsage;
+    if (usage) {
+      traceEvent('inference', 'usage', {
+        sumIn: usage.inputTokens,
+        sumOut: usage.outputTokens,
+        sumCacheRead: usage.cacheReadTokens,
+        costUsd: usage.costUsd,
+      });
+    }
+
     if (captured?.kind === 'done') {
-      return { status: 'done', toolCalls: toolCallLog };
+      return { status: 'done', toolCalls: toolCallLog, usage };
     }
     if (captured?.kind === 'clarification') {
       return {
         status: 'blocked',
         toolCalls: toolCallLog,
+        usage,
         message: captured.message ?? '',
       };
     }
@@ -452,12 +484,14 @@ export class OpencodeFactoryAgent implements LoopAgent {
       return {
         status: 'blocked',
         toolCalls: toolCallLog,
+        usage,
         message: `opencode session error: ${sessionErrorMessage}`,
       };
     }
     return {
       status: toolCallLog.length > 0 ? 'done' : 'needs_iteration',
       toolCalls: toolCallLog,
+      usage,
     };
   }
 
@@ -478,8 +512,53 @@ export class OpencodeFactoryAgent implements LoopAgent {
 
   private buildPrompt(context: AgentContext): string {
     let issueType = (context.issue as Record<string, unknown>).issueType;
+    if (context.primeTurn === true) {
+      return this.promptLoader.load('prime', {
+        project: context.project,
+        knowledge: context.knowledge,
+      });
+    }
+    // Acceptance dispatch must precede the issue-type branches: the review
+    // turn reuses the issue context, and falling through to the implement
+    // prompt would let the "reviewer" edit product files that runReviewGate
+    // then syncs — with a missing verdict defaulting to approval.
+    if (context.acceptanceTurn) {
+      return this.promptLoader.load('acceptance-walkthrough', {
+        issue: context.issue,
+        project: context.project?.id?.startsWith('http')
+          ? context.project
+          : undefined,
+        darkfactoryModuleUrl: requireDarkfactoryModuleUrl(context),
+        renderSummary: context.acceptanceTurn.renderSummary,
+        screenshots: context.acceptanceTurn.screenshots,
+        failedCaptures:
+          context.acceptanceTurn.failedCaptures.length > 0
+            ? context.acceptanceTurn.failedCaptures
+            : undefined,
+      });
+    }
+    if (issueType === 'design') {
+      return this.promptLoader.load('issue-design-foundation', {
+        issue: context.issue,
+        project: context.project,
+        knowledge: context.knowledge,
+      });
+    }
+    if (issueType === 'analysis') {
+      return this.promptLoader.load('issue-analysis', {
+        issue: context.issue,
+        darkfactoryModuleUrl: requireDarkfactoryModuleUrl(context),
+      });
+    }
     if (issueType === 'bootstrap' && context.briefUrl) {
       return assembleBootstrapPrompt({ context, loader: this.promptLoader });
+    }
+    if (issueType === 'hardening' && !context.validationContext) {
+      return this.promptLoader.load('issue-harden', {
+        issue: context.issue,
+        project: context.project,
+        knowledge: context.knowledge,
+      });
     }
     if (context.validationContext) {
       return assembleIteratePrompt({
@@ -570,9 +649,14 @@ async function startFactoryMcpServer(
     let typedArgs = (args ?? {}) as Record<string, unknown>;
     let start = Date.now();
     let result: unknown;
+    let endToolSpan = startSpan('tool', name);
     try {
       result = await tool.execute(typedArgs);
+      endToolSpan({
+        ok: !(result && typeof result === 'object' && 'error' in result),
+      });
     } catch (error) {
+      endToolSpan({ ok: false });
       result = {
         error: error instanceof Error ? error.message : String(error),
       };
@@ -766,6 +850,18 @@ async function waitForSessionIdle(
   }
 }
 
+/** Token counts for one assistant message, as opencode reports them. */
+interface TurnUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  costUsd?: number;
+}
+
+function num(v: unknown): number {
+  return typeof v === 'number' && Number.isFinite(v) ? v : 0;
+}
+
 /**
  * Subscribe to opencode's `/event` SSE stream and log step transitions
  * + native tool invocations + session.idle for our session. Best-effort
@@ -777,6 +873,7 @@ async function subscribeForLogging(
   client: { event: { subscribe: () => Promise<unknown> } },
   sessionId: string,
   onError?: (message: string) => void,
+  onUsage?: (usage: TurnUsage) => void,
 ): Promise<void> {
   let events: { stream: AsyncIterable<unknown> };
   try {
@@ -803,6 +900,33 @@ async function subscribeForLogging(
           log.warn(`opencode session.error: ${summary}`);
           onError?.(summary);
           return;
+        }
+        case 'message.updated': {
+          // Assistant messages carry the turn's token counts. Without
+          // this the telemetry card reports zero tokens for every turn on
+          // this backend, which reads as "free" rather than "unknown".
+          let info = props.info as
+            | {
+                role?: string;
+                tokens?: {
+                  input?: number;
+                  output?: number;
+                  reasoning?: number;
+                  cache?: { read?: number; write?: number };
+                };
+                cost?: number;
+              }
+            | undefined;
+          if (info?.role === 'assistant' && info.tokens) {
+            onUsage?.({
+              inputTokens: num(info.tokens.input),
+              outputTokens:
+                num(info.tokens.output) + num(info.tokens.reasoning),
+              cacheReadTokens: num(info.tokens.cache?.read),
+              costUsd: typeof info.cost === 'number' ? info.cost : undefined,
+            });
+          }
+          break;
         }
         case 'message.part.updated': {
           let part = props.part as

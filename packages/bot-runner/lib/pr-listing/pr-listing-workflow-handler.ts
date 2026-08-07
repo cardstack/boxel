@@ -35,11 +35,12 @@ const PR_LISTING_CREATE = 'pr-listing-create';
 const PR_LISTING_RETRY = 'pr-listing-retry';
 
 type FailedStep = 'collect-files' | 'lint' | 'create-pr-card' | 'github-pr';
-type FileContent = { filename: string; contents: string };
+type FileContent = { filename: string; contents: string; isBinary?: boolean };
 
 interface PrCardData {
   prCardResult: RunCommandResponse;
   prCardUrl: string | null;
+  textFiles: FileContent[];
   binaryFiles: FileContent[];
 }
 
@@ -249,9 +250,7 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
       if (ctx.isRetry) {
         await this.clearStaleWorkflowError(ctx);
       }
-      let prCardData = ctx.existingPrCardUrl
-        ? await runStep('create-pr-card', () => this.loadExistingPrCard(ctx))
-        : await this.runFreshPrCardFlow(ctx);
+      let prCardData = await this.runFreshPrCardFlow(ctx);
 
       await runStep('github-pr', () => this.pushToGitHub(ctx, prCardData));
       await runStep('github-pr', () =>
@@ -274,12 +273,12 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
       this.applyLint(ctx, textFiles),
     );
     let { prCardResult, prCardUrl } = await runStep('create-pr-card', () =>
-      this.createPrCard(ctx, lintedFiles, totalCount),
+      this.createPrCard(ctx, lintedFiles, binaryFiles, totalCount),
     );
     await runStep('create-pr-card', () =>
       this.linkPrCardOnWorkflow(ctx, prCardUrl),
     );
-    return { prCardResult, prCardUrl, binaryFiles };
+    return { prCardResult, prCardUrl, textFiles: lintedFiles, binaryFiles };
   }
 
   // ── Steps ──
@@ -304,11 +303,15 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
     });
     requireReady(result, 'collect-submission-files');
 
-    // Binary files bypass the PrCard 512KB size limit; they're committed to
-    // GitHub directly via addContentsToCommit's binaryFiles arg.
+    // Binaries skip lint and are committed to GitHub as base64 blobs. The
+    // collector's isBinary flag says how each file was actually read — a
+    // text-extension FileDef (e.g. a generated .js) still carries base64;
+    // the extension check is only a fallback for pre-flag collect results.
     let allFiles = extractFileContents(result.cardResultString);
-    let binaryFiles = allFiles.filter((f) => isBinaryFilename(f.filename));
-    let textFiles = allFiles.filter((f) => !isBinaryFilename(f.filename));
+    let isBinaryFile = (f: FileContent) =>
+      f.isBinary ?? isBinaryFilename(f.filename);
+    let binaryFiles = allFiles.filter((f) => isBinaryFile(f));
+    let textFiles = allFiles.filter((f) => !isBinaryFile(f));
     log.info('pr-listing-create: files collected', {
       fileCount: allFiles.length,
       binaryCount: binaryFiles.length,
@@ -376,9 +379,22 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
   private async createPrCard(
     ctx: WorkflowContext,
     textFiles: FileContent[],
+    binaryFiles: FileContent[],
     totalFileCount: number,
   ): Promise<{ prCardResult: RunCommandResponse; prCardUrl: string | null }> {
+    // Retry reuses the PrCard linked by the prior attempt; the files pushed
+    // to GitHub always come from this run's fresh collection.
+    if (ctx.existingPrCardUrl) {
+      log.info('pr-listing-retry: reusing existing PrCard', {
+        existingPrCardUrl: ctx.existingPrCardUrl,
+      });
+      return {
+        prCardResult: { status: 'ready', cardResultString: null },
+        prCardUrl: ctx.existingPrCardUrl,
+      };
+    }
     let prSummary = buildPrSummary(ctx, totalFileCount);
+    let fileManifest = buildFileManifest(textFiles, binaryFiles);
     let prCardResult = await this.enqueueRunCommand({
       runAs: this.submissionBotUserId,
       realmURL: ctx.submissionRealm,
@@ -388,7 +404,7 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
         branchName: ctx.branchName,
         submittedBy: ctx.runAs,
         prSummary,
-        allFileContents: textFiles,
+        fileManifest,
       },
     });
     if (prCardResult.status !== 'ready') {
@@ -401,7 +417,7 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
         error: prCardResult.error,
         cardResultString: prCardResult.cardResultString ?? null,
         fileCount: textFiles.length,
-        inputPayloadSize: JSON.stringify(textFiles).length,
+        inputPayloadSize: JSON.stringify(fileManifest).length,
       });
       throw new Error(
         prCardResult.error?.trim() ||
@@ -413,41 +429,6 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
     return { prCardResult, prCardUrl };
   }
 
-  private async loadExistingPrCard(ctx: WorkflowContext): Promise<PrCardData> {
-    log.info('pr-listing-retry: reusing existing PrCard', {
-      existingPrCardUrl: ctx.existingPrCardUrl,
-    });
-    let result = await this.enqueueRunCommand({
-      runAs: this.submissionBotUserId,
-      realmURL: ctx.submissionRealm,
-      command: FETCH_CARD_JSON_COMMAND,
-      commandInput: { cardIdentifier: ctx.existingPrCardUrl },
-    });
-    requireReady(result, 'fetch-card-json (existing PrCard)');
-
-    let prCardDoc = extractFetchedDocument(result.cardResultString);
-    let allFileContents = extractFileContents(
-      prCardDoc ? JSON.stringify(prCardDoc) : null,
-    );
-    if (!prCardDoc || allFileContents.length === 0) {
-      throw new Error(
-        `existing PrCard at ${ctx.existingPrCardUrl} has no allFileContents — refusing to open an empty PR`,
-      );
-    }
-    let prCardResult: RunCommandResponse = {
-      ...result,
-      cardResultString: JSON.stringify(prCardDoc),
-    };
-    // Binary files aren't stored on the PrCard; addContentsToCommit dedupes
-    // by content-hash so re-running with empty binaries is safe when the
-    // prior attempt already committed them.
-    return {
-      prCardResult,
-      prCardUrl: ctx.existingPrCardUrl,
-      binaryFiles: [],
-    };
-  }
-
   private async pushToGitHub(
     ctx: WorkflowContext,
     prCardData: PrCardData,
@@ -457,7 +438,10 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
     );
     await this.createListingPRHandler.addContentsToCommit(
       ctx.syntheticCreateEvent,
-      prCardData.prCardResult,
+      prCardData.textFiles.map((f) => ({
+        path: f.filename,
+        content: f.contents,
+      })),
       prCardData.binaryFiles.map((f) => ({
         path: f.filename,
         content: f.contents,
@@ -466,7 +450,7 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
     let prResult = await this.createListingPRHandler.openCreateListingPR(
       ctx.syntheticCreateEvent,
       ctx.runAs,
-      prCardData.prCardResult,
+      prCardData.textFiles.length + prCardData.binaryFiles.length,
       ctx.workflowCardUrl,
     );
     log.info('pr-listing-create: PR created', {
@@ -699,6 +683,31 @@ function extractFetchedDocument(cardResultString?: string | null): any | null {
   }
 }
 
+function buildFileManifest(
+  textFiles: FileContent[],
+  binaryFiles: FileContent[],
+): { filename: string; size: number; kind: 'text' | 'binary' }[] {
+  return [
+    ...textFiles.map((f) => ({
+      filename: f.filename,
+      size: Buffer.byteLength(f.contents, 'utf8'),
+      kind: 'text' as const,
+    })),
+    ...binaryFiles.map((f) => ({
+      filename: f.filename,
+      size: base64DecodedLength(f.contents),
+      kind: 'binary' as const,
+    })),
+  ];
+}
+
+function base64DecodedLength(base64: string): number {
+  let length = base64.length;
+  if (length === 0) return 0;
+  let padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0;
+  return Math.floor((length * 3) / 4) - padding;
+}
+
 function extractFileContents(cardResultString?: string | null): FileContent[] {
   if (!cardResultString || !cardResultString.trim()) {
     return [];
@@ -709,12 +718,20 @@ function extractFileContents(cardResultString?: string | null): FileContent[] {
     if (!Array.isArray(items)) {
       return [];
     }
-    return items.filter(
-      (item: any) =>
-        item &&
-        typeof item.filename === 'string' &&
-        typeof item.contents === 'string',
-    );
+    return items
+      .filter(
+        (item: any) =>
+          item &&
+          typeof item.filename === 'string' &&
+          typeof item.contents === 'string',
+      )
+      .map((item: any) => ({
+        filename: item.filename,
+        contents: item.contents,
+        ...(typeof item.isBinary === 'boolean'
+          ? { isBinary: item.isBinary }
+          : {}),
+      }));
   } catch {
     return [];
   }

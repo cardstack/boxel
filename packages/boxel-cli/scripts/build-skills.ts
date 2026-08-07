@@ -1,20 +1,19 @@
 /**
- * Copy `skills/` and `commands/` from the pinned boxel-skills tag into
- * `plugin/`. Run via `pnpm build:skills` from `packages/boxel-cli/`.
+ * Copy `skills/` from the pinned boxel-skills tag into `plugin/`. Run via
+ * `pnpm build:skills` from `packages/boxel-cli/`.
  *
  * Source: cardstack/boxel-skills at a pinned tag (BOXEL_SKILLS_VERSION).
  * Override the source location with BOXEL_SKILLS_REPO=/path/to/checkout for
  * local development against an unreleased boxel-skills branch.
  *
  * boxel-skills is markdown-first: `skills/<name>/SKILL.md` (+ `references/`,
- * `scripts/`) directories and `commands/<name>.md` slash-command files are
- * already in the shape Claude Code consumes, so this build is a verbatim
- * copy — no transformation, no formatting, no curation. Frontmatter is read
+ * `scripts/`) directories are already in the shape agents consume, so this
+ * build is a verbatim copy — no transformation, no formatting, no curation. Frontmatter is read
  * only to regenerate the plugin README's catalog tables.
  *
  * Stale-entry sweep: each run persists the copied entry names to
  * `scripts/.boxel-skills-manifest.json` and, on the next run, deletes any
- * `plugin/skills/<name>` or `plugin/commands/<name>` that was in the prior
+ * `plugin/skills/<name>` that was in the prior
  * manifest but is no longer in the source — keeping the plugin from shipping
  * content that has been removed or renamed upstream. Entries this script
  * never wrote (the CLI-authored skills like `file-ops` and `realm-sync`) are
@@ -37,7 +36,7 @@ import {
 import { relative, resolve } from 'path';
 import { format, resolveConfig } from 'prettier';
 
-const BOXEL_SKILLS_VERSION = 'v0.0.30';
+const BOXEL_SKILLS_VERSION = 'v0.1.0';
 const BOXEL_SKILLS_REPO_URL = 'https://github.com/cardstack/boxel-skills.git';
 
 const PLUGIN_DIR = resolve(import.meta.dirname, '..', 'plugin');
@@ -120,17 +119,14 @@ export function parseFrontmatter(content: string): {
 }
 
 /**
- * Persisted record of which `plugin/skills/<name>` and
- * `plugin/commands/<name>` entries the last `pnpm build:skills` run copied.
- * Used to detect and delete entries that drop out of the source (upstream
- * removal or rename) so the plugin never ships stale content. `commands` is
- * optional for backward compatibility with manifests written before the
- * copy-only model shipped command files.
+ * Persisted record of which `plugin/skills/<name>` entries the last
+ * `pnpm build:skills` run copied. Used to detect and delete entries that drop
+ * out of the source (upstream removal or rename) so the plugin never ships
+ * stale content.
  */
 export interface Manifest {
   version: string;
   skills: string[];
-  commands?: string[];
 }
 
 export function loadManifest(path: string): Manifest | null {
@@ -153,10 +149,7 @@ export function loadManifest(path: string): Manifest | null {
     data === null ||
     typeof m.version !== 'string' ||
     !Array.isArray(m.skills) ||
-    !m.skills.every((s) => typeof s === 'string') ||
-    (m.commands !== undefined &&
-      (!Array.isArray(m.commands) ||
-        !m.commands.every((s) => typeof s === 'string')))
+    !m.skills.every((s) => typeof s === 'string')
   ) {
     return null;
   }
@@ -210,7 +203,7 @@ function copyEntries(
 
 /**
  * Write `content` to `filePath` after running it through the repo's Prettier
- * config. Copied skill/command files ship verbatim; this applies only to the
+ * config. Copied skill files ship verbatim; this applies only to the
  * README this script itself generates, so local format passes don't drift it
  * from the committed copy.
  */
@@ -234,15 +227,13 @@ function tableRow(name: string, description: string): string {
 
 /**
  * Build the marker-fenced auto-gen block for `plugin/README.md`: a skill
- * table and a command table, each keyed by the `/boxel-cli:<name>` slash
- * invocation (skills by directory name, commands by file basename) with the
- * description read from each entry's frontmatter. Pure over the filesystem
+ * table keyed by directory name, with the description read from each entry's
+ * frontmatter. Pure over the filesystem
  * `sourceRoot` so it can be unit-tested without touching the real plugin dir.
  */
 export function renderCatalogBlock(
   sourceRoot: string,
   skillEntries: readonly string[],
-  commandEntries: readonly string[],
 ): string {
   const tagUrl = `https://github.com/cardstack/boxel-skills/tree/${BOXEL_SKILLS_VERSION}`;
   const lines: string[] = [];
@@ -261,30 +252,19 @@ export function renderCatalogBlock(
     lines.push(tableRow(`/boxel-cli:${entry}`, fm.description ?? ''));
   }
   lines.push('');
-  lines.push('| Command | Use it for |');
-  lines.push('|---|---|');
-  for (const entry of commandEntries) {
-    const fm = parseFrontmatter(
-      readFileSync(resolve(sourceRoot, 'commands', entry), 'utf8'),
-    );
-    const name = entry.replace(/\.md$/, '');
-    lines.push(tableRow(`/boxel-cli:${name}`, fm.description ?? ''));
-  }
-  lines.push('');
   lines.push(README_END_MARKER);
   return lines.join('\n');
 }
 
 /**
  * Rewrite the auto-generated block in `plugin/README.md` so it lists every
- * copied skill and command with the name/description from its frontmatter.
+ * copied skill with the name/description from its frontmatter.
  * The block is fenced by HTML marker comments — if they're missing, throw
  * clearly rather than silently un-wiring the auto-gen.
  */
 export async function updatePluginReadme(
   sourceRoot: string,
   skillEntries: readonly string[],
-  commandEntries: readonly string[],
 ): Promise<void> {
   const readme = readFileSync(PLUGIN_README_PATH, 'utf8');
   const beginIdx = readme.indexOf(README_BEGIN_MARKER);
@@ -297,59 +277,43 @@ export async function updatePluginReadme(
     );
   }
 
-  const replacement = renderCatalogBlock(
-    sourceRoot,
-    skillEntries,
-    commandEntries,
-  );
+  const replacement = renderCatalogBlock(sourceRoot, skillEntries);
   const before = readme.slice(0, beginIdx);
   const after = readme.slice(endIdx + README_END_MARKER.length);
   const next = `${before}${replacement}${after}`;
   await writeFormattedMarkdown(PLUGIN_README_PATH, next);
-  console.log(
-    `wrote plugin/README.md (${skillEntries.length} skills, ${commandEntries.length} commands)`,
-  );
+  console.log(`wrote plugin/README.md (${skillEntries.length} skills)`);
 }
 
-function writeManifest(
-  skillEntries: readonly string[],
-  commandEntries: readonly string[],
-): void {
+function writeManifest(skillEntries: readonly string[]): void {
   const manifest: Manifest = {
     version: BOXEL_SKILLS_VERSION,
     skills: [...skillEntries].sort(),
-    commands: [...commandEntries].sort(),
   };
   writeFileSync(MANIFEST_PATH, JSON.stringify(manifest, null, 2) + '\n');
   console.log(
-    `wrote ${relative(resolve(import.meta.dirname, '..'), MANIFEST_PATH)} (${manifest.skills.length} skills, ${manifest.commands!.length} commands)`,
+    `wrote ${relative(resolve(import.meta.dirname, '..'), MANIFEST_PATH)} (${manifest.skills.length} skills)`,
   );
 }
 
 async function main(): Promise<void> {
   const sourceRoot = resolveSourceRoot();
   const skillEntries = listEntries(resolve(sourceRoot, 'skills'));
-  const commandEntries = listEntries(resolve(sourceRoot, 'commands'));
 
   const priorManifest = loadManifest(MANIFEST_PATH);
   sweepStaleEntries(
     'skills',
     computeStaleIds(priorManifest?.skills, skillEntries),
   );
-  sweepStaleEntries(
-    'commands',
-    computeStaleIds(priorManifest?.commands, commandEntries),
-  );
 
   copyEntries(sourceRoot, 'skills', skillEntries);
-  copyEntries(sourceRoot, 'commands', commandEntries);
 
-  await updatePluginReadme(sourceRoot, skillEntries, commandEntries);
-  writeManifest(skillEntries, commandEntries);
+  await updatePluginReadme(sourceRoot, skillEntries);
+  writeManifest(skillEntries);
 
   console.log('');
   console.log(
-    `Done. Copied ${skillEntries.length} skill(s) and ${commandEntries.length} command(s) from boxel-skills@${BOXEL_SKILLS_VERSION}.`,
+    `Done. Copied ${skillEntries.length} skill(s) from boxel-skills@${BOXEL_SKILLS_VERSION}.`,
   );
 }
 

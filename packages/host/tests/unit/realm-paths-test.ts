@@ -71,4 +71,43 @@ module('Unit | RealmPaths', function (hooks) {
       realmPaths.inRealm(rri('https://cardstack.com/humans/éxample')),
     );
   });
+
+  test('#inRealm handles percent-encoding, query strings, and the realm root', function (assert) {
+    // Percent-escapes are decoded before comparing, so an encoded id inside
+    // the realm still matches while an encoded id outside it does not.
+    assert.true(
+      realmPaths.inRealm(rri('https://cardstack.com/h%C3%BCmans/example')),
+      'percent-encoded realm path is in realm',
+    );
+    assert.true(
+      realmPaths.inRealm(rri('https://cardstack.com/hümans/a%20b.json')),
+      'percent-encoded local path is in realm',
+    );
+    assert.false(
+      realmPaths.inRealm(rri('https://cardstack.com/h%C3%BCmans2/example')),
+      'a percent-encoded path outside the realm is not in realm',
+    );
+
+    // A malformed escape can't be decoded; that is a "not in realm" answer
+    // rather than a thrown error.
+    assert.false(
+      realmPaths.inRealm(rri('https://cardstack.com/hümans/bad%ZZ')),
+      'malformed percent-escape is not in realm',
+    );
+
+    // The realm root matches with or without its trailing slash, and a query
+    // string doesn't defeat the match.
+    assert.true(
+      realmPaths.inRealm(rri('https://cardstack.com/hümans')),
+      'realm root without trailing slash is in realm',
+    );
+    assert.true(
+      realmPaths.inRealm(rri('https://cardstack.com/hümans?foo=bar')),
+      'realm root with a query string is in realm',
+    );
+    assert.true(
+      realmPaths.inRealm(rri('https://cardstack.com/hümans/example?a=1&b=2')),
+      'local path with a query string is in realm',
+    );
+  });
 });

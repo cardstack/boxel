@@ -20,6 +20,9 @@ import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 export interface ArchiveTarget {
   realmURL: string;
   permissions: RealmPermissions;
+  // The authorized requester (realm owner). Handlers use it to notify the
+  // owner's other sessions that their realm list changed.
+  ownerUserId: string;
 }
 
 // Parse the JSON:API body, resolve the target realm URL, and authorize the
@@ -128,5 +131,5 @@ export async function resolveAndAuthorizeArchiveTarget(
     return null;
   }
 
-  return { realmURL, permissions };
+  return { realmURL, permissions, ownerUserId };
 }
