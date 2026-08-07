@@ -9,12 +9,15 @@ import type {
   LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 
+import { PermissionsContextName } from '@cardstack/runtime-common';
+
 import CardRenderer from '@cardstack/host/components/card-renderer';
 import { createLiveBoxelModel } from '@cardstack/host/lib/boxel-projection';
 import SandboxMediaBridge from '@cardstack/host/lib/sandbox-media-bridge';
 import type SandboxRuntimeProcess from '@cardstack/host/lib/sandbox-runtime-process';
 
 import {
+  provideConsumeContext,
   testRealmURL,
   setupCardLogs,
   setupIntegrationTestRealm,
@@ -76,6 +79,15 @@ module('Integration | rp-continuity', function (hooks) {
   setupRealmCacheTeardown(hooks);
 
   hooks.beforeEach(async function () {
+    // RP-9.1: absent permissions context, editors render DISABLED — and
+    // `focus()` on a disabled input is a silent no-op (activeElement stays
+    // on <body>), which made the typing test report a phantom focus loss
+    // that a real operator-mode session (which always provides
+    // permissions) never exhibits. Provide what operator mode provides.
+    provideConsumeContext(PermissionsContextName, {
+      canRead: true,
+      canWrite: true,
+    });
     await withCachedRealmSetup(async () =>
       setupIntegrationTestRealm({
         mockMatrixUtils,
