@@ -22,7 +22,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../blocks/customer",
+        "module": "../customer",
         "name": "Customer"
       }
     }

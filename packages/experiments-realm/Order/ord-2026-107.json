@@ -42,7 +42,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../blocks/order",
+        "module": "../order",
         "name": "Order"
       }
     }

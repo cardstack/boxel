@@ -2,9 +2,9 @@
   "data": {
     "type": "card",
     "attributes": {
-      "ref": { "name": "LineItem", "module": "../blocks/line-item" },
+      "ref": { "name": "LineItem", "module": "../line-item" },
       "specType": "field",
-      "readMe": "## LineItem\n\nShared line-item field for commercial documents: description, quantity, unit price (base `AmountWithCurrency`). Line totals are computed, never stored.\n\n```ts\nimport { LineItem } from '../blocks/line-item';\n@field lineItems = containsMany(LineItem);\n```\n\nConsumed by both Invoice and Order — the block's two-consumer proof.\n\n**Non-goals:** per-line tax and discounts; multi-currency within one document (first line's currency wins for totals).",
+      "readMe": "## LineItem\n\nShared line-item field for commercial documents: description, quantity, unit price (base `AmountWithCurrency`). Line totals are computed, never stored.\n\n```ts\nimport { LineItem } from '../line-item';\n@field lineItems = containsMany(LineItem);\n```\n\nConsumed by both Invoice and Order — the block's two-consumer proof.\n\n**Non-goals:** per-line tax and discounts; multi-currency within one document (first line's currency wins for totals).",
       "cardInfo": {
         "name": "LineItem (commerce kit)",
         "summary": "Shared line-item field: description, quantity, unit price. Totals computed, not stored. Consumed by Invoice and Order.",
@@ -29,13 +29,13 @@
         "containedExamples": [
           {
             "adoptsFrom": {
-              "module": "../blocks/line-item",
+              "module": "../line-item",
               "name": "LineItem"
             }
           },
           {
             "adoptsFrom": {
-              "module": "../blocks/line-item",
+              "module": "../line-item",
               "name": "LineItem"
             }
           }
