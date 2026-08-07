@@ -21,7 +21,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../blocks/commerce/subscription",
+        "module": "../blocks/subscription",
         "name": "Subscription"
       }
     }
