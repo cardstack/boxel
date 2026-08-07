@@ -101,3 +101,14 @@ module `https://cardstack.com/base/theme`, name `default` (querying `#Theme` fai
 `StructuredTheme` is likewise the default export of `base/structured-theme`. When a
 `get_card_schema` call fails with "named export is a CardDef", retry with `name:
 "default"` before assuming the card is unreachable — do NOT fall back to curling the URL.
+
+## 9. Never call `serializeCard(model)` from a render getter
+
+Serializing the card's own model inside a template-facing getter (isolated/embedded
+component code) can appear to work, then fails in two environment-dependent ways:
+in prerender it throws during render (instance-error 500, the card drops out of
+prerendered listings), and in interactive sessions it raises the deterministic
+IDResolver error `conflicting instance id in store` — the serialize path re-registers
+the instance under a conflicting local id. When a template needs a JSON:API-shaped
+view of the card, reconstruct the shape from `@model` fields instead of calling
+`serializeCard`.

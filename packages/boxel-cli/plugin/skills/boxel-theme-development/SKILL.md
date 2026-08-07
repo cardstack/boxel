@@ -44,7 +44,7 @@ Use this for the theme artifact itself. Use `boxel-design` when the task is prim
    - Put logo and mark material in `markUsage`; never invent miscellaneous string fields for brand assets.
    - Put brand colors in `brandColorPalette` and role colors in `functionalPalette`.
    - Put semantic UI values in `rootVariables` and `darkModeVariables`.
-   - Treat shadcn-style tokens as paired surface/foreground contracts: `--primary` is an action fill or indicator, not ordinary text.
+   - Treat shadcn-style tokens as paired surface/foreground contracts: `--primary` is an action fill or indicator, not ordinary text. Same for the muted pair: `--muted` is a pale *surface* (table stripes, wells) and `--muted-foreground` is quiet-but-readable *text*; defining both as dark grays yields dark-on-dark tables in long-form Markdown.
    - Normalize `rootVariables.spacing` for Boxel's runtime `--spacing * 4` mapping. Use `0.25rem` for a 16px `--boxel-sp` base unless there is a deliberate reason to diverge.
    - Put design rationale in `visualDNA` and the DetailedStyleReference markdown fields.
 
@@ -53,6 +53,7 @@ Use this for the theme artifact itself. Use `boxel-design` when the task is prim
    - Include `attributes.cardInfo` for name, summary, thumbnail, and notes.
    - Omit `relationships["cardInfo.theme"]` on Theme cards themselves.
    - Keep `cssImports` as font/link URLs; do not inline `@import` in templates.
+   - Never nest `@media` blocks inside `cssVariables` — the theme parser silently skips those declarations. Dark-mode values belong in `darkModeVariables`.
    - Use absolute URLs for cross-realm theme links unless a relative path has been verified.
 
 6. **Validate.**

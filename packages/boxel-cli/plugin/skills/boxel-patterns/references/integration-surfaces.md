@@ -311,7 +311,7 @@ Headings, lists, code fences, tables, alerts (`> [!NOTE]`), task lists, striketh
 
 ## 10. boxel-cli commands
 
-Local CLI for realm sync, watching, checkpoints, federated search, and scripted host commands. Workflow command: `/boxel-sync-workspace`.
+Local CLI for realm sync, watching, checkpoints, federated search, and scripted host commands.
 
 > **Note on versions.** If `/usr/local/bin/boxel --help` shows a smaller surface (just `realm create/pull/push/sync` + `profile` + `run-command`), that's a stale install. The full set below comes from the source at `~/Projects/boxel/packages/boxel-cli`. Rebuild + relink to get all commands.
 
@@ -407,5 +407,5 @@ npx boxel consolidate-workspaces                            Merge multiple watch
 | Embed Three.js / Leaflet / chess.js | §8 (ESM CDN) + patterns `integrate-three-js-via-cdn` etc. |
 | Render BFM | §9 (BFM features) + pattern `show-runtime-markdown-html` |
 | Write BFM (static markdown format) | §9 + skill `boxel-markdown-format` |
-| Sync a realm locally | §10 (boxel-cli) + command `/boxel-sync-workspace` |
+| Sync a realm locally | §10 (boxel-cli) |
 | Drive the live Boxel app | §3 (host commands) + skill `boxel-environment` |

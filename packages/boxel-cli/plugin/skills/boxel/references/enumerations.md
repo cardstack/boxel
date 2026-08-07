@@ -202,7 +202,7 @@ export class Task extends CardDef {
   
   @field cardTitle = contains(StringField, {
     computeVia: function(this: Task) {
-      return this.taskName ?? 'Untitled Task';
+      return this.cardInfo?.name ?? this.taskName ?? 'Untitled Task';
     }
   });
 }

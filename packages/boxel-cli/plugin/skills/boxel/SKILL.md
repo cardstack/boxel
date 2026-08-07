@@ -85,6 +85,7 @@ Read a reference when its topic comes up — and batch: when several references 
 Core syntax and patterns (load when topic comes up):
 
 - `references/core-concept.md` — CardDef vs FieldDef, formats, inherited fields, CardInfo.
+- `references/default-index-card.md` — The card at a workspace's root (`index.json`): what the default `Workspace` adoption gives you (Home / Library / Activity / Cmd+K), the fields worth setting, `entryPoints` as the supported way to pin a card to the root, and what changes for workspaces still on `CardsGrid`.
 - `references/quick-reference.md` — Core imports, UI components, helpers, icons, file types.
 - `references/common-imports.md` — Common `.gts` imports and the import preflight for `fn`, task handlers, `on`, `concat`, `get`, helpers, formatters, tasks, and host commands. Load before generating or reviewing non-trivial templates.
 - `references/lint-workflow.md` — Mandatory installed npm `boxel` lint commands, local vs remote lint, clean-output interpretation, and fallback rules.
