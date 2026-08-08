@@ -115,7 +115,10 @@ export default class WorkspaceChooser extends Component<Signature> {
 
   @tracked private selectedSortOption: SortOption = this.sortOptions[0]!;
 
-  @action private onSortChange(option: SortOption) {
+  @action private onSortChange(option: SortOption | null) {
+    if (!option) {
+      return;
+    }
     this.selectedSortOption = option;
   }
 
