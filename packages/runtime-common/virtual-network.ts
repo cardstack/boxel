@@ -233,7 +233,18 @@ export class VirtualNetwork {
         }
       }
     }
-    return best ? ensureTrailingSlash(best) : undefined;
+    if (!best) {
+      return undefined;
+    }
+    // A prefix mapping points at where the realm is *reachable*, which is not
+    // always the URL the realm calls itself. The base realm is served as
+    // `https://cardstack.com/base/` and merely mapped to a real host, and its
+    // index rows are stored under that virtual URL — so answering with the
+    // mapping target would name a realm the index has never heard of, and the
+    // search would come back empty. Fold back to the virtual form when one
+    // exists; every other realm maps to itself and is unaffected.
+    let virtual = this.mapURL(ensureTrailingSlash(best), 'real-to-virtual');
+    return ensureTrailingSlash(virtual ? virtual.href : best);
   }
 
   /**
