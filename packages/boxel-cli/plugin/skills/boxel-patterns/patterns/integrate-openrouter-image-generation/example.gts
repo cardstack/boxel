@@ -52,19 +52,15 @@ function extensionForContentType(contentType: string): string {
 }
 
 function safeFileStem(value: string): string {
-  return (
-    value
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '')
-      .slice(0, 48) || 'openrouter-image'
-  );
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 48) || 'openrouter-image';
 }
 
 function parseDataImageUrl(dataUrl: string) {
-  let match = dataUrl.match(
-    /^data:(image\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=]+)$/,
-  );
+  let match = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=]+)$/);
   if (!match) {
     throw new Error('OpenRouter did not return a base64 image data URL.');
   }
@@ -111,9 +107,7 @@ export default class GenerateOpenRouterImageCommand extends Command<
     return OpenRouterImageInput;
   }
 
-  protected async run(
-    input: OpenRouterImageInput,
-  ): Promise<OpenRouterImageResult> {
+  protected async run(input: OpenRouterImageInput): Promise<OpenRouterImageResult> {
     if (!input.prompt) throw new Error('prompt is required');
     if (!input.targetRealmUrl) throw new Error('targetRealmUrl is required');
 
@@ -131,15 +125,11 @@ export default class GenerateOpenRouterImageCommand extends Command<
 
     if (input.aspectRatio || input.imageSize) {
       requestBody.image_config = {};
-      if (input.aspectRatio)
-        requestBody.image_config.aspect_ratio = input.aspectRatio;
-      if (input.imageSize)
-        requestBody.image_config.image_size = input.imageSize;
+      if (input.aspectRatio) requestBody.image_config.aspect_ratio = input.aspectRatio;
+      if (input.imageSize) requestBody.image_config.image_size = input.imageSize;
     }
 
-    let result = await new SendRequestViaProxyCommand(
-      this.commandContext,
-    ).execute({
+    let result = await new SendRequestViaProxyCommand(this.commandContext).execute({
       url: 'https://openrouter.ai/api/v1/chat/completions',
       method: 'POST',
       headers: {
@@ -155,15 +145,13 @@ export default class GenerateOpenRouterImageCommand extends Command<
     let image = parseDataImageUrl(imageUrl);
     let path = `GeneratedImages/${safeFileStem(input.prompt)}-${Date.now()}.${image.extension}`;
 
-    let written = await new WriteBinaryFileCommand(this.commandContext).execute(
-      {
-        path,
-        realm: input.targetRealmUrl,
-        base64Content: image.base64Content,
-        contentType: image.contentType,
-        useNonConflictingFilename: true,
-      },
-    );
+    let written = await new WriteBinaryFileCommand(this.commandContext).execute({
+      path,
+      realm: input.targetRealmUrl,
+      base64Content: image.base64Content,
+      contentType: image.contentType,
+      useNonConflictingFilename: true,
+    });
 
     let fileIdentifier = written?.fileIdentifier;
     if (!fileIdentifier) {
@@ -175,9 +163,7 @@ export default class GenerateOpenRouterImageCommand extends Command<
         id: fileIdentifier,
         sourceUrl: fileIdentifier,
         url: fileIdentifier,
-        name: decodeURIComponent(
-          fileIdentifier.split('/').pop() ?? 'generated-image',
-        ),
+        name: decodeURIComponent(fileIdentifier.split('/').pop() ?? 'generated-image'),
         contentType: image.contentType,
         contentSize: image.contentSize,
       }),

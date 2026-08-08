@@ -103,6 +103,7 @@ jobs:
               - *shared
               - 'packages/boxel-icons/**'
               - 'packages/boxel-ui/**'
+              - 'packages/boxel-ui/docs-app/**'
             matrix:
               - *shared
               - 'packages/base/**'
@@ -340,7 +341,10 @@ jobs:
           SKIP_ICONS_BUILD: ${{ steps.icons-cache.outputs.cache-hit }}
       - name: Run test suite
         run: pnpm test
-        working-directory: packages/boxel-ui/test-app
+        working-directory: packages/boxel-ui
+      - name: Run docs app test suite
+        run: pnpm test
+        working-directory: packages/boxel-ui/docs-app
 
   boxel-ui-raw-icon-changes-only:
     name: Boxel UI ensure raw icon changes only
@@ -355,7 +359,7 @@ jobs:
       - uses: ./.github/actions/init
       - name: Rebuild boxel-ui icons
         run: pnpm rebuild:icons
-        working-directory: packages/boxel-ui/addon
+        working-directory: packages/boxel-ui
       - name: Fail if generated icons have been changed without underlying raw icon changing
         run: git diff --exit-code
 
@@ -850,7 +854,7 @@ jobs:
         working-directory: packages/boxel-icons
       - name: Build Boxel UI
         run: pnpm run build
-        working-directory: packages/boxel-ui/addon
+        working-directory: packages/boxel-ui
       - name: Build host dist
         run: pnpm build
         working-directory: packages/host
@@ -1070,4 +1074,35 @@ jobs:
         with:
           name: boxel-index-cache
           path: /tmp/boxel-index-cache.sql.gz
+          retention-days: 30
+      # The host-scoped snapshot covers only the realms a host test shard
+      # serves, so a shard downloads and replays a fraction of the full one.
+      # Verified with its own expected-tables sidecar (the script's default
+      # would resolve to the full snapshot's, which happens to list the same
+      # tables — passing it explicitly keeps that a fact rather than a
+      # coincidence).
+      - name: Verify host-scoped index cache is complete
+        run: |
+          scripts/verify-index-cache.sh \
+            /tmp/boxel-index-cache-host.sql.gz \
+            /tmp/boxel-index-cache-host.tables
+      - name: Upload host-scoped index cache
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: boxel-index-cache-host
+          path: /tmp/boxel-index-cache-host.sql.gz
+          retention-days: 30
+      # The live test realms (`/test/`, `/node-test/`) index into their own
+      # database, so they get their own snapshot. A test shard waits on their
+      # readiness alongside base and skills.
+      - name: Verify test-realm index cache is complete
+        run: |
+          scripts/verify-index-cache.sh \
+            /tmp/boxel-index-cache-test.sql.gz \
+            /tmp/boxel-index-cache-test.tables
+      - name: Upload test-realm index cache
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: boxel-index-cache-test
+          path: /tmp/boxel-index-cache-test.sql.gz
           retention-days: 30

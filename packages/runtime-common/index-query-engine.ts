@@ -861,19 +861,22 @@ export class IndexQueryEngine {
     // File-only columns the assembly loop reads to build a `file` row's
     // resource + native renderings. Each is gated on `i.type = 'file'` so a
     // mixed query never drags a card row's (potentially multi-megabyte)
-    // `search_doc` / `isolated_html` / `markdown`: within a `(url, type)`
-    // group the type is constant, so the CASE yields the value for a file
-    // group and NULL for an instance group (which the assembly loop ignores
-    // — it only calls `fileEntryFromResult` on `file` rows). Appended to
-    // either projection only when file rows are in scope.
+    // `search_doc` — the only large column in this fragment: within a
+    // `(url, type)` group the type is constant, so the CASE yields the value
+    // for a file group and NULL for an instance group (which the assembly loop
+    // ignores — it only calls `fileEntryFromResult` on `file` rows). Appended
+    // to either projection only when file rows are in scope.
     let fileOnly = (col: string) =>
       `ANY_VALUE(CASE WHEN i.type = 'file' THEN ${col} END)`;
     // Only the columns the file-row assembly actually reads
     // (`fileResourceFromIndex` + `fileEntryFromResult`): the row's search_doc,
-    // timestamps, realm, and index generation. `markdown` and `isolated_html`
-    // are deliberately NOT here — neither the file-meta resource nor its
-    // renderings read them, and `markdown` can be multi-megabyte. The standalone
-    // `searchFiles` projection (below) still carries them for its own consumers.
+    // timestamps, realm, and index generation. `markdown` is deliberately NOT
+    // here — nothing in the file-meta resource or its renderings reads it, and
+    // it can be multi-megabyte. `isolated_html` is a rendering column served to
+    // file renderings too (`enumerateFileRenderings`), so it rides the shared
+    // `renderSet` projection alongside the other per-format HTML columns rather
+    // than this file-only fragment. The standalone `searchFiles` projection
+    // (below) still carries both for its own consumers.
     let fileColumns = `, ${fileOnly('i.search_doc')} as search_doc, ${fileOnly(
       'i.last_modified',
     )} as last_modified, ${fileOnly(
@@ -898,13 +901,13 @@ export class IndexQueryEngine {
     } else {
       // The full rendering set: every per-format HTML column whole (the
       // fitted/embedded JSONB maps keyed by render type, the scalar
-      // atom/head columns), plus the live serialization on every row. The
-      // caller enumerates candidate renderings and selects from the set.
+      // atom/head/isolated columns), plus the live serialization on every row.
+      // The caller enumerates candidate renderings and selects from the set.
       // HTML, the deps that carry its scoped-CSS URLs, and the rendering
       // generation all come from the prerendered_html channel (`ph`); a row
       // with no prerendered row reads them as NULL and falls back to its
       // `item` serialization.
-      let renderSet = `SELECT i.url AS url, ANY_VALUE(i.type) as type, ANY_VALUE(${effectiveHasError()}) as has_error, ANY_VALUE(i.file_alias) as file_alias, ANY_VALUE(ph.fitted_html) as fitted_html, ANY_VALUE(ph.embedded_html) as embedded_html, ANY_VALUE(ph.atom_html) as atom_html, ANY_VALUE(ph.head_html) as head_html, ANY_VALUE(i.types) as types, ANY_VALUE(ph.deps) as deps, ANY_VALUE(i.display_names) as display_names, ANY_VALUE(i.icon_html) as icon_html, ANY_VALUE(${effectiveErrorDoc()}) as error_doc, ANY_VALUE(i.pristine_doc) as pristine_doc, ANY_VALUE(i.generation) as generation, ANY_VALUE(ph.generation) as html_generation`;
+      let renderSet = `SELECT i.url AS url, ANY_VALUE(i.type) as type, ANY_VALUE(${effectiveHasError()}) as has_error, ANY_VALUE(i.file_alias) as file_alias, ANY_VALUE(ph.fitted_html) as fitted_html, ANY_VALUE(ph.embedded_html) as embedded_html, ANY_VALUE(ph.atom_html) as atom_html, ANY_VALUE(ph.head_html) as head_html, ANY_VALUE(ph.isolated_html) as isolated_html, ANY_VALUE(i.types) as types, ANY_VALUE(ph.deps) as deps, ANY_VALUE(i.display_names) as display_names, ANY_VALUE(i.icon_html) as icon_html, ANY_VALUE(${effectiveErrorDoc()}) as error_doc, ANY_VALUE(i.pristine_doc) as pristine_doc, ANY_VALUE(i.generation) as generation, ANY_VALUE(ph.generation) as html_generation`;
       selectClauseExpression =
         entryType !== 'instance' ? [`${renderSet}${fileColumns}`] : [renderSet];
     }
@@ -1293,7 +1296,18 @@ export class IndexQueryEngine {
         : [
             dbExpression({
               pg: [
-                `to_tsvector('english', markdown_search_text(ph.markdown)) @@ websearch_to_tsquery('english',`,
+                // The leading `ph.markdown IS NOT NULL` is a null-rejecting
+                // guard, not a behavior change: `markdown_search_text` coalesces
+                // null markdown to '' and a non-empty query never matches an
+                // empty tsvector, so absent-markdown rows are already excluded.
+                // But because that coalesce hides the null-rejection from the
+                // planner, without this guard it cannot reduce the LEFT JOIN to
+                // prerendered_html, drives the query from boxel_index, and
+                // recomputes every row's tsvector at query time instead of using
+                // the markdown GIN index. The explicit guard restores the
+                // reduction so the index is used, and stays correct under `not`
+                // and `any` (an absent row still can't match a positive term).
+                `ph.markdown IS NOT NULL AND to_tsvector('english', markdown_search_text(ph.markdown)) @@ websearch_to_tsquery('english',`,
                 param(filter.matches),
                 `)`,
               ],

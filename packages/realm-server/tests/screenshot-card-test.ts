@@ -89,7 +89,7 @@ module(basename(import.meta.filename), function () {
       let router = new Router();
       router.post(
         '/_screenshot-card',
-        jwtMiddleware(realmSecretSeed),
+        jwtMiddleware(realmSecretSeed, args.dbAdapter),
         handleScreenshotCard(args),
       );
       app.use(router.routes());

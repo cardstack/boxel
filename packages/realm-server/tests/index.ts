@@ -388,6 +388,8 @@ const ALL_TEST_FILES: string[] = [
   './sanitize-head-html-test',
   './node-realm-test',
   './session-room-queries-test',
+  './session-revocation-test',
+  './session-lifetime-test',
   './indexing-dashboard-test',
   './indexing-event-sink-test',
   './skip-query-backed-expansion-test',

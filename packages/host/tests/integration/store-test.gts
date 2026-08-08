@@ -1060,6 +1060,213 @@ module('Integration | Store', function (hooks) {
     assert.strictEqual(fileJSON.data.attributes.name, 'Andrea', 'file exists');
   });
 
+  // The store's single write-permission check lives on the autosave path
+  // (`useEphemeralState`, consulted by `doAutoSave`). `persistAndUpdate` has no
+  // such guard, so a persist that bypasses the queue must re-apply the check or
+  // it will PATCH a realm the user cannot write to.
+  test<TestContextWithSave>('add() does not persist an existing card when the realm is read-only', async function (assert) {
+    (storeService as any).realm.permissions = () => ({
+      get canRead() {
+        return true;
+      },
+      get canWrite() {
+        return false;
+      },
+    });
+    let instance = (await storeService.get(
+      `${testRealmURL}Person/hassan`,
+    )) as any;
+
+    let writes: string[] = [];
+    this.onSave((url) => writes.push(url.href));
+
+    instance.name = 'Hassan Updated';
+    let result = await storeService.add(instance);
+    await settled();
+
+    assert.deepEqual(writes, [], 'no write is attempted without permission');
+    assert.true(
+      isCardInstance(result),
+      'add() still resolves with the instance rather than a permission error',
+    );
+    let file = await testRealmAdapter.openFile('Person/hassan.json');
+    assert.strictEqual(
+      JSON.parse(file!.content as string).data.attributes.name,
+      'Hassan',
+      'the durable document is untouched',
+    );
+  });
+
+  test('add() reports its save in the card save state', async function (assert) {
+    let instance = (await storeService.get(
+      `${testRealmURL}Person/hassan`,
+    )) as any;
+    instance.name = 'Hassan Updated';
+
+    await storeService.add(instance);
+
+    // add() persists outside the autosave queue, so it has to fold its own
+    // outcome into the save state the indicator renders.
+    let saveState = storeService.getSaveState(instance.id)!;
+    assert.false(
+      saveState.hasUnsavedChanges,
+      'the card no longer reports unsaved changes',
+    );
+    assert.ok(saveState.lastSaved, 'lastSaved reflects the add()-driven save');
+    assert.strictEqual(
+      saveState.lastSaveError,
+      undefined,
+      'no save error is reported',
+    );
+    assert.false(saveState.isSaving, 'the save is no longer in flight');
+  });
+
+  test('add() records a persistence failure in the card save state', async function (assert) {
+    let instance = (await storeService.get(
+      `${testRealmURL}Person/hassan`,
+    )) as any;
+    instance.name = 'Hassan Updated';
+
+    let store = storeService as any;
+    store.saveCardDocument = async () => {
+      throw new Error('intentional persistence failure');
+    };
+    try {
+      await storeService.add(instance);
+    } finally {
+      delete store.saveCardDocument;
+    }
+
+    let saveState = storeService.getSaveState(instance.id)!;
+    assert.ok(
+      saveState.lastSaveError,
+      'the failure is visible to the save indicator, not only to the caller',
+    );
+    assert.false(saveState.isSaving, 'the save is no longer in flight');
+  });
+
+  test('add() awaits durable persistence for an existing card', async function (assert) {
+    let queenzy = (await storeService.get(
+      `${testRealmURL}Person/queenzy`,
+    )) as any;
+    let instance = (await storeService.get(
+      `${testRealmURL}Person/hassan`,
+    )) as any;
+    // Mutate a scalar attribute and a relationship together: the two travel
+    // through different serialization paths, so a persist that awaited only one
+    // of them would still pass a scalar-only assertion.
+    instance.name = 'Hassan Updated';
+    instance.bestFriend = queenzy;
+
+    let result = await storeService.add(instance);
+    assert.true(
+      isCardInstance(result),
+      'add() resolves with the card instance',
+    );
+
+    // Read the backing JSON with no waitUntil: that is what makes this an
+    // assertion about ordering rather than about eventual consistency. An
+    // add() that resolved before the PATCH landed would still see the
+    // pre-mutation state here.
+    let file = await testRealmAdapter.openFile('Person/hassan.json');
+    let fileJSON = JSON.parse(file!.content as string);
+    assert.strictEqual(
+      fileJSON.data.attributes.name,
+      'Hassan Updated',
+      'the scalar mutation is durable as soon as add() resolves',
+    );
+    assert.ok(
+      (fileJSON.data.relationships.bestFriend.links.self as string).endsWith(
+        'queenzy',
+      ),
+      'the link mutation is durable as soon as add() resolves',
+    );
+  });
+
+  test('add() stays pending until an existing card is durably persisted', async function (assert) {
+    let instance = (await storeService.get(
+      `${testRealmURL}Person/hassan`,
+    )) as any;
+    instance.name = 'Hassan Updated';
+
+    let store = storeService as any;
+    let gate = new Deferred<void>();
+    // Keep the unbound original and call it with an explicit receiver, so the
+    // stub can be removed rather than replaced. `persistAndUpdate` lives on the
+    // prototype, so deleting the shadowing own property below restores the
+    // method exactly — assigning a bound copy back would leave a permanent own
+    // property with a different identity and arity.
+    let originalPersist = store.persistAndUpdate;
+    store.persistAndUpdate = async (...args: any[]) => {
+      await gate.promise;
+      return await originalPersist.call(store, ...args);
+    };
+
+    try {
+      let resolved = false;
+      let addPromise = storeService.add(instance).then((r) => {
+        resolved = true;
+        return r;
+      });
+
+      // Give a fire-and-forget implementation every opportunity to resolve
+      // early; a durable implementation must remain pending while the gate is
+      // held closed.
+      for (let i = 0; i < 10; i++) {
+        await Promise.resolve();
+      }
+      assert.false(
+        resolved,
+        'add() has not resolved while persistence is gated',
+      );
+
+      gate.fulfill();
+      await addPromise;
+      assert.true(resolved, 'add() resolves once persistence completes');
+    } finally {
+      delete store.persistAndUpdate;
+    }
+
+    let file = await testRealmAdapter.openFile('Person/hassan.json');
+    assert.strictEqual(
+      JSON.parse(file!.content as string).data.attributes.name,
+      'Hassan Updated',
+      'the mutation is durably persisted',
+    );
+  });
+
+  test('add() surfaces persistence failures for an existing card', async function (assert) {
+    let instance = (await storeService.get(
+      `${testRealmURL}Person/hassan`,
+    )) as any;
+    instance.name = 'Hassan Updated';
+
+    // Removed rather than reassigned in `finally`, for the reason given on the
+    // persistAndUpdate stub above.
+    let store = storeService as any;
+    store.saveCardDocument = async () => {
+      throw new Error('intentional persistence failure');
+    };
+
+    let result;
+    try {
+      result = await storeService.add(instance);
+    } finally {
+      delete store.saveCardDocument;
+    }
+
+    assert.false(
+      isCardInstance(result),
+      'add() resolves with a card error rather than the instance when persistence fails',
+    );
+    assert.ok(
+      (result as CardErrorJSONAPI).message.includes(
+        'intentional persistence failure',
+      ),
+      'the persistence error propagates to the caller instead of being swallowed',
+    );
+  });
+
   test<TestContextWithSave>('can add a serialized instance to the store', async function (assert) {
     assert.expect(6);
     this.onSave((_, doc) => {

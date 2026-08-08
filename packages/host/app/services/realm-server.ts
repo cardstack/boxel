@@ -34,7 +34,10 @@ import {
 } from '@cardstack/runtime-common/realm-auth-client';
 
 import ENV from '@cardstack/host/config/environment';
-import { SessionLocalStorageKey } from '@cardstack/host/utils/local-storage-keys';
+import {
+  RealmServerSessionLocalStorageKey,
+  SessionLocalStorageKey,
+} from '@cardstack/host/utils/local-storage-keys';
 
 import type { ExtendedClient } from './matrix-sdk-loader';
 import type NetworkService from './network';
@@ -1570,7 +1573,7 @@ export default class RealmServerService extends Service {
 }
 
 const tokenRefreshPeriodSec = 5 * 60; // 5 minutes
-const sessionLocalStorageKey = 'boxel-realm-server-session';
+const sessionLocalStorageKey = RealmServerSessionLocalStorageKey;
 
 function claimsFromRawToken(rawToken: string): RealmServerJWTPayload {
   let [_header, payload] = rawToken.split('.');

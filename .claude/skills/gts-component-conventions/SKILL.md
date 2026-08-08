@@ -49,7 +49,7 @@ box-shadow: 0 0 0 0.125rem var(--c); /* was 2px */
 
 ### 3. Save hardcoded colors as CSS variables
 
-Never ship a raw hex/rgb in a component. If a color recurs across components, promote it to a shared token in `packages/boxel-ui/addon/src/styles/variables.css`; if it's truly local, define a component-scoped custom property. Falling back to another variable is fine (`var(--token, var(--other))`); a hardcoded literal fallback is not.
+Never ship a raw hex/rgb in a component. If a color recurs across components, promote it to a shared token in `packages/boxel-ui/src/styles/variables.css`; if it's truly local, define a component-scoped custom property. Falling back to another variable is fine (`var(--token, var(--other))`); a hardcoded literal fallback is not.
 
 Reuse an existing semantic token before inventing a new one, and **name tokens by role, not by hue**. A color named for its appearance (`--boxel-teal-ink`, `--boxel-dark-teal`) is a palette primitive; a color named for its job (`--boxel-highlight`, `--boxel-highlight-hover`) is what components should reference.
 

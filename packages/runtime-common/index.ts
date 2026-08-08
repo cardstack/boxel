@@ -1042,6 +1042,7 @@ export * from './constants.ts';
 export * from './helpers/const.ts';
 export * from './document.ts';
 export * from './matrix-constants.ts';
+export * from './session-token.ts';
 export * from './matrix-client.ts';
 export * from './queue.ts';
 export * from './job-utils.ts';

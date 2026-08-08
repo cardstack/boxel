@@ -19,4 +19,3 @@ packages/observability/grafanactl/resources/
 # The CLI-authored skills under plugin/skills/ ride along; they're markdown
 # maintained by hand + build-plugin.ts, not prettier.
 packages/boxel-cli/plugin/skills/
-packages/boxel-cli/plugin/commands/

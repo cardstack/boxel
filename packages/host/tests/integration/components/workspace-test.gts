@@ -38,6 +38,22 @@ module('Integration | Card | workspace', function (hooks) {
       .hasText('Home', 'Home is the default active segment');
   });
 
+  // The Home "Browse" module is gated on `hasInventory`: with no realm bound
+  // (and thus no `_types` inventory) it must stay hidden rather than render an
+  // empty shell. The populated case — one pill per card type with counts — is
+  // covered in the acceptance suite, which has a real indexed realm.
+  test('Home omits the Browse module when the realm has no inventory', async function (assert) {
+    let card = new Workspace({});
+    await renderCard(loader, card, 'isolated');
+
+    assert
+      .dom('nav.tabs .tab.active')
+      .hasText('Home', 'Home is the active segment');
+    assert
+      .dom('[data-test-browse]')
+      .doesNotExist('Browse stays hidden until the realm reports inventory');
+  });
+
   test('edit format renders workspace settings', async function (assert) {
     let card = new Workspace({});
     await renderCard(loader, card, 'edit');

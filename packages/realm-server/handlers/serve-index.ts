@@ -1,12 +1,19 @@
 import type Koa from 'koa';
 import { JSDOM } from 'jsdom';
 import { merge } from 'lodash-es';
-import type { DBAdapter, Realm } from '@cardstack/runtime-common';
+import type {
+  DBAdapter,
+  HostRoutingRule,
+  Realm,
+} from '@cardstack/runtime-common';
 import {
+  foreignQueryParams,
   hasExtension,
+  isRedirectRoutingRule,
   logger,
   param,
   query,
+  resolveRedirectTarget,
   sanitizeHeadHTMLToString,
 } from '@cardstack/runtime-common';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
@@ -387,13 +394,44 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     // a private routed path exists to an unauthenticated caller. The map is
     // also written into the @cardstack/host/config/environment meta tag
     // further down so the SPA can resolve the path post-hydration.
-    let routingMap: { path: string; id: string }[] = routedRealm
+    let routingMap: HostRoutingRule[] = routedRealm
       ? await routedRealm.getHostRoutingMap()
       : [];
     if (routingMap.length > 0) {
       // The match and its canonical form live once, in matchHostRoutingRule.
       let matched = await matchHostRoutingRule(requestURL, routingDeps);
       if (matched) {
+        if (isRedirectRoutingRule(matched.rule)) {
+          // A declared redirect rule. Redirect straight to the
+          // declared target from either trailing-slash form of the
+          // matched path — canonicalizing first would cost the client a
+          // second hop for no benefit. `resolveRedirectTarget` is shared
+          // with the routing map injected further down, so the URL a
+          // full-page visitor is sent to and the one an in-app
+          // transition resolves cannot drift apart. The request's query
+          // string carries over unless the target declares its own —
+          // minus the host app's own params, which a redirect has no
+          // business handing on: the target may be an external site, and
+          // `sid` / `clientSecret` are password-reset tokens. The SPA
+          // drops the same list on its in-app navigation.
+          let { redirectTo, statusCode } = matched.rule;
+          let target = new URL(
+            resolveRedirectTarget(
+              redirectTo,
+              new URL(matched.realm.url).pathname,
+            ),
+            requestURL,
+          );
+          if (requestURL.search && !target.search) {
+            let forwarded = foreignQueryParams(requestURL.search);
+            if (forwarded) {
+              target.search = forwarded;
+            }
+          }
+          ctxt.redirect(target.href);
+          ctxt.status = statusCode;
+          return;
+        }
         // Canonicalize the URL. A rule declared as '/pricing' matches both
         // '/pricing' and '/pricing/' (RealmPaths.local strips trailing
         // slashes); the canonical form is the realm mount pathname joined
@@ -517,10 +555,21 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       // the SPA's path lookup to be a direct equality match, prefix each
       // rule path with the realm's pathname before serializing.
       let realmPathname = new URL(routedRealm.url).pathname;
-      let hostScopedMap = routingMap.map((rule) => ({
-        path: realmPathname + rule.path.replace(/^\//, ''),
-        id: rule.id,
-      }));
+      let hostScopedMap = routingMap.map((rule) => {
+        let path = realmPathname + rule.path.replace(/^\//, '');
+        if (isRedirectRoutingRule(rule)) {
+          // A redirect rule's realm-relative target is prefixed the same
+          // way as its path, so the SPA can hand the value straight to a
+          // location change without knowing the realm's mount point.
+          // Same helper the `Location` header above goes through.
+          return {
+            path,
+            redirectTo: resolveRedirectTarget(rule.redirectTo, realmPathname),
+            statusCode: rule.statusCode,
+          };
+        }
+        return { path, id: rule.id };
+      });
       // Per-request merge into the already-rewritten config meta tag.
       // The retrieveIndexHTML rewrite is cached process-wide because the
       // fields it touches are global; the routing map is per-realm so it

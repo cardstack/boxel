@@ -9,7 +9,7 @@ atoms. If your parent's design language disagrees (an editorial design wants
 
 This file documents EXACTLY what the host injects and EXACTLY how the parent
 overrides it. Source: `packages/base/field-component.gts` +
-`packages/boxel-ui/addon/src/components/card-container/index.gts` in the
+`packages/boxel-ui/src/components/card-container/index.gts` in the
 Boxel monorepo.
 
 **Related but distinct concern — Host-mode click-through.** When you render
@@ -840,7 +840,7 @@ Design the content; trust the wrapper.
 
 In the Boxel monorepo:
 
-- `packages/boxel-ui/addon/src/components/card-container/index.gts` —
+- `packages/boxel-ui/src/components/card-container/index.gts` —
   CardContainer + the global selector + `--themed` cascade
 - `packages/base/field-component.gts` — per-format classes +
   `displayContainer` arg

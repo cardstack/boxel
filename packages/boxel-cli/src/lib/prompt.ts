@@ -2,6 +2,7 @@ import * as readline from 'readline';
 import { Writable } from 'stream';
 
 export function prompt(question: string): Promise<string> {
+  const wasFlowing = process.stdin.readableFlowing;
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
@@ -10,6 +11,13 @@ export function prompt(question: string): Promise<string> {
   return new Promise((resolve) => {
     rl.question(question, (answer) => {
       rl.close();
+      // Creating the interface resumes stdin, and closing it doesn't undo that —
+      // a resumed stdin keeps the event loop alive, so a command whose last act
+      // is a prompt would sit there having already finished its work. The
+      // no-echo prompt below takes the same care.
+      if (!wasFlowing) {
+        process.stdin.pause();
+      }
       resolve(answer.trim());
     });
   });

@@ -34,7 +34,7 @@ Once you've downloaded workspace files:
 
 1. Navigate to the files in your Explorer view
 2. Edit files as you normally would in VS Code
-3. If file watching is enabled, local changes will automatically sync to the remote workspace. Changes remotely will *not* automatically sync back.
+3. If file watching is enabled, local changes will automatically sync to the remote workspace. Changes remotely will _not_ automatically sync back.
 4. Otherwise, manually push changes using the upload icon in the Boxel Workspaces view
 
 ### Managing Coding Skills
@@ -47,6 +47,7 @@ The extension includes a Skills Manager that allows you to enable various coding
 4. Enabled skills will be applied to your editing experience automatically
 
 Skills are stored in two locations:
+
 - Skill definitions are saved in your user folder
 - The enabled/disabled state is saved separately to persist across refreshes
 
@@ -81,7 +82,7 @@ Install dependencies with pnpm:
 pnpm install
 ```
 
-Build a dependent package, from `/packages/boxel-ui/addon`:
+Build a dependent package, from `/packages/boxel-ui`:
 
 ```bash
 pnpm build
