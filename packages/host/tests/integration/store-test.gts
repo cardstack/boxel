@@ -1833,9 +1833,8 @@ module('Integration | Store', function (hooks) {
   // produces — so without care the mere act of viewing a card can dirty it and
   // trigger an auto-save. That write is invisible to the user, bumps the
   // instance's version, and schedules a reindex.
-  test<TestContextWithSave>('loading a card and resolving its linksTo issues no save', async function (assert) {
-    // Write the link unresolved on disk so loading takes the lazy link-load
-    // path (rather than the target already being in the identity map).
+  test<TestContextWithSave>('resolving a linksTo lazily issues no save', async function (assert) {
+    let hassanId = `${testRealmURL}Person/hassan`;
     await testRealm.write(
       'Person/hassan.json',
       JSON.stringify({
@@ -1851,24 +1850,51 @@ module('Integration | Store', function (hooks) {
       }),
     );
 
+    // A card GET side-loads its linksTo targets into `included`, and
+    // deserialization resolves the field straight from there — synchronously,
+    // never touching the lazy path. Writing the link unresolved on disk does
+    // not change that. Drop the side-load for this one document so the field
+    // deserializes to a not-loaded marker and reading it drives the real lazy
+    // load, which is the path that assigns the target back onto the field.
+    let loadCardDocument = cardStore.loadCardDocument.bind(cardStore);
+    cardStore.loadCardDocument = (async (url: string, opts?: any) => {
+      let doc = await loadCardDocument(url, opts);
+      if (url.replace(/\.json$/, '') === hassanId && doc && 'data' in doc) {
+        delete (doc as any).included;
+      }
+      return doc;
+    }) as typeof cardStore.loadCardDocument;
+
     let saved: string[] = [];
     this.onSave((url) => {
       saved.push(url.href);
     });
 
-    let instance = (await storeService.get(
-      `${testRealmURL}Person/hassan`,
-    )) as any;
-    // Drain the lazy link load, then let its field assignment settle.
-    await storeService.flush();
-    await settled();
+    try {
+      let instance = (await storeService.get(hassanId)) as any;
 
-    assert.strictEqual(
-      instance.bestFriend?.name,
-      'Jade',
-      'the linksTo resolved (so the lazy-load path did run)',
-    );
-    assert.deepEqual(saved, [], 'no save was issued while loading');
+      // Reading a not-loaded link yields undefined and starts the load. This
+      // is what distinguishes the lazy path from the side-loaded one, where
+      // the target would already be here — so it is the assertion that keeps
+      // this test honest.
+      assert.strictEqual(
+        instance.bestFriend,
+        undefined,
+        'the link is not loaded yet, so reading it takes the lazy path',
+      );
+
+      await storeService.flush();
+      await settled();
+
+      assert.strictEqual(
+        instance.bestFriend?.name,
+        'Jade',
+        'the lazy load resolved the target and assigned it to the field',
+      );
+      assert.deepEqual(saved, [], 'no save was issued while loading');
+    } finally {
+      cardStore.loadCardDocument = loadCardDocument;
+    }
   });
 
   test('a concurrent field write during store.patch is not clobbered by the patch’s stale snapshot', async function (assert) {
