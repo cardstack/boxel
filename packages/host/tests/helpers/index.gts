@@ -968,6 +968,15 @@ export function setupLocalIndexing(
     // Not usable yet by a module that builds more than one realm per test:
     // the snapshot is captured after the first realm finishes indexing, so
     // later realms' rows would be missing from it.
+    //
+    // Also not usable by a module whose tests are *about* indexing. A test
+    // whose index was restored runs against a realm started with
+    // `skipBootIndex`, so anything the boot index does beyond populating those
+    // tables — evicting a module from the loader, recording that it was flushed
+    // — has not happened. `Integration | Store` is the worked example: 71 of
+    // its 73 tests are indifferent, while two assert on exactly that
+    // module-rebuild bookkeeping and fail. Identical fixtures are necessary but
+    // not sufficient; the module also has to not care how its index got there.
     reuseIndexAcrossTests?: string;
   },
 ) {
