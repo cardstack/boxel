@@ -874,6 +874,150 @@
         ],
         "title": "Realms Accessible to ${matrix_user_id}",
         "type": "table"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Operator action: retire every session token already issued to this user \u2014 both the realm-server session and the per-realm sessions. Tokens minted after the click are unaffected, so a client holding a valid Matrix session simply re-authenticates; this is not a sign-out. To evict an active session, deactivate the user's Matrix device in Synapse first, then revoke here \u2014 the other order lets the client re-mint. Against a bearer who copied a realm JWT and has no Matrix session, this alone is a permanent cutoff. Click POSTs with `Authorization: Bearer ${grafana_secret}`.",
+        "fieldConfig": {
+          "defaults": {},
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 40
+        },
+        "id": 8,
+        "pluginVersion": "6.2.0",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT COALESCE(\n    to_char(to_timestamp(sessions_revoked_at) AT TIME ZONE 'UTC',\n            'YYYY-MM-DD HH24:MI:SS UTC'),\n    'never'\n  ) AS last_revocation\nFROM users\nWHERE matrix_user_id = ${matrix_user_id:sqlstring};",
+            "refId": "A"
+          }
+        ],
+        "title": "Operator Actions: Revoke sessions for ${matrix_user_id}",
+        "type": "volkovlabs-form-panel",
+        "options": {
+          "buttonGroup": {
+            "orientation": "center",
+            "size": "md"
+          },
+          "confirmModal": {
+            "body": "Please confirm the action.",
+            "cancel": "Cancel",
+            "columns": {
+              "include": [
+                "name",
+                "newValue"
+              ],
+              "name": "Field",
+              "newValue": "Value",
+              "oldValue": "Previous"
+            },
+            "confirm": "Confirm",
+            "elementDisplayMode": "modified",
+            "title": "Confirm operator action"
+          },
+          "elements": [
+            {
+              "id": "last_revocation",
+              "type": "disabled",
+              "title": "Sessions last revoked",
+              "tooltip": "When this user's sessions were last revoked, or `never`. Any token issued before that instant is rejected.",
+              "labelWidth": 28,
+              "section": "current",
+              "fieldName": "last_revocation",
+              "queryField": {
+                "refId": "A",
+                "value": "last_revocation"
+              }
+            },
+            {
+              "id": "btn_revoke_sessions",
+              "type": "button",
+              "title": "",
+              "buttonLabel": "Revoke sessions",
+              "tooltip": "POST /_grafana-revoke-user-sessions?user=${matrix_user_id}. Retires tokens issued before now. Not a sign-out \u2014 deactivate the Matrix device first to evict an active session.",
+              "labelWidth": 28,
+              "section": "actions",
+              "show": "form",
+              "size": "md",
+              "variant": "destructive",
+              "value": "",
+              "customCode": "if (!window.confirm('Revoke every session token already issued to ' + ${matrix_user_id:doublequote} + '?\\n\\nThis does NOT sign the user out. A client that still holds a valid Matrix session will re-authenticate and keep working.\\n\\nTo evict an active intruder, deactivate their Matrix device in Synapse FIRST, then run this to retire the tokens it already minted.')) { return; }\nconst params = new URLSearchParams({ user: ${matrix_user_id:doublequote} });\n(async () => {\ntry {\n  const r = await fetch(${realm_server:doublequote} + '_grafana-revoke-user-sessions?' + params.toString(), { method: 'POST', headers: { 'Authorization': 'Bearer ' + ${grafana_secret:doublequote} } });\n  if (r.ok) {\n    context.grafana.notifySuccess(['Sessions revoked', 'Tokens issued to ' + ${matrix_user_id:doublequote} + ' before now are no longer accepted. Deactivate their Matrix device if the intent is to evict an active session.']);\n    if (typeof context.grafana.refresh === 'function') { context.grafana.refresh(); }\n  } else {\n    const txt = await r.text();\n    context.grafana.notifyError(['Revoke sessions failed', 'HTTP ' + r.status + ': ' + txt]);\n  }\n} catch (err) {\n  context.grafana.notifyError(['Revoke sessions failed', String(err)]);\n}\n\n})().catch(function (err) { console.error('operator action handler error:', err); });"
+            }
+          ],
+          "initial": {
+            "code": "",
+            "contentType": "application/json",
+            "getPayload": "return {};",
+            "highlight": false,
+            "method": "query",
+            "payload": {}
+          },
+          "layout": {
+            "orientation": "horizontal",
+            "padding": 10,
+            "sectionVariant": "default",
+            "sections": [
+              {
+                "id": "current",
+                "name": "Current state"
+              },
+              {
+                "id": "actions",
+                "name": "Danger zone"
+              }
+            ],
+            "variant": "split"
+          },
+          "reset": {
+            "icon": "process",
+            "text": "Refresh",
+            "variant": "hidden"
+          },
+          "resetAction": {
+            "code": "",
+            "confirm": false,
+            "contentType": "application/json",
+            "getPayload": "return {};",
+            "method": "-",
+            "mode": "initial",
+            "payload": {}
+          },
+          "saveDefault": {
+            "icon": "save",
+            "text": "Save Default",
+            "variant": "hidden"
+          },
+          "submit": {
+            "icon": "cloud-upload",
+            "text": "Submit",
+            "variant": "hidden"
+          },
+          "sync": false,
+          "update": {
+            "code": "",
+            "confirm": false,
+            "contentType": "application/json",
+            "getPayload": "return {};",
+            "method": "-",
+            "payload": {},
+            "payloadMode": "all"
+          },
+          "updateEnabled": "disabled"
+        }
       }
     ],
     "refresh": "30s",

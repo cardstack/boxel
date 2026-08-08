@@ -25,6 +25,54 @@ NODE_TEST_REALM_READY="${REALM_TEST_READY_SCHEME}://${REALM_TEST_URL#*://}/node-
 HOST_TEST_LOG_LEVELS="${HOST_TEST_LOG_LEVELS:-*=info,realm:requests=warn}"
 SKIP_CATALOG="${SKIP_CATALOG:-}"
 
+REPO_ROOT="$(cd "../.." && pwd)"
+
+# Give every file in the realms this stack boots a content-derived mtime, so
+# they match the mtimes recorded in a cached index built on a different
+# runner (see scripts/normalize-realm-mtimes.mjs for the mechanism). Three
+# realms, matching the `--path` args services/realm-server passes that
+# aren't switched off by the SKIP_* flags below: base, skills, openrouter.
+# Keep this list in step with the one in ci/cache-index — a realm normalized
+# on only one side never matches and re-indexes wholesale.
+#
+# Runs on every CI shard, not only the ones importing a cache: it keeps
+# mtimes identical between cache and from-scratch runs, so `last-modified`
+# on these realms' source files — and the "last saved" text the host renders
+# from it — reads the same either way. Percy compares PR snapshots against
+# baselines from main runs, which never import the cache, so normalizing
+# only the importing runs would diff every snapshot that surfaces a file's
+# modified time.
+#
+# Confined to CI because it rewrites mtimes in the checkout it runs against.
+# On a developer's machine that would restamp their working tree and leave
+# their own dev-server index looking stale on its next boot; a local host-test
+# run indexes from scratch anyway, so it has nothing to gain here.
+#
+# skills:setup first because the skills realm is a separate clone that may
+# not be on disk yet; it no-ops when the content is already there.
+if [ -n "${CI:-}" ]; then
+  pnpm --dir=../skills-realm skills:setup
+  node "$REPO_ROOT/scripts/normalize-realm-mtimes.mjs" \
+    ../base ../skills-realm/contents ../openrouter-realm
+fi
+
+# Seeding the index tables from a cached snapshot is `mise run ci:import-index`,
+# which the caller runs as its own step *before* this one. It deliberately does
+# not happen here: this task's first act is to hand control to
+# `start-server-and-test`, and any work in front of that delays every service
+# it launches — Synapse included, which callers wait on with a fixed budget.
+#
+# When a snapshot has been imported, the boot index is what reconciles it
+# against this checkout, so no REALM_SERVER_FULL_INDEX_ON_STARTUP override is
+# set here: `discoverInvalidations` skips every file whose mtime matches its
+# indexed row and revisits the rest, so this checkout's own changes — and
+# whatever the invalidation fan-out reaches from them — get re-rendered while
+# untouched files keep their cached rows. `applyBatchUpdates` upserts only the
+# invalidated URLs, so rows the pass never visits survive, and
+# `_readiness-check` awaits the in-flight index, so tests can't race the
+# reconcile. With no snapshot imported the same pass simply finds nothing to
+# skip and indexes from scratch.
+
 # START_SERVER_AND_TEST_INSECURE=1 scopes to the wait-on readiness probe.
 # The realm-server / vite now serve the self-signed mkcert leaf on
 # https://localhost:4201|4202|4200; start-server-and-test forces

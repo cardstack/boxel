@@ -18,9 +18,9 @@ For a quickstart, see [here](./QUICKSTART.md)
 
 `packages/realm-server` is a node app that serves the realm as an HTTP server, as well as, it can also host the runtime application for its own realm.
 
-`packages/boxel-ui/addon` is the UI components Ember addon
+`packages/boxel-ui` is the UI components Ember addon
 
-`packages/boxel-ui/test-app` is the test suite and component explorer for boxel-ui, deployed at [boxel-ui.stack.cards](https://boxel-ui.stack.cards)
+`packages/boxel-ui/docs-app` is the test suite and component explorer for boxel-ui, deployed at [boxel-ui.stack.cards](https://boxel-ui.stack.cards)
 
 `packages/matrix` is the docker container for running the matrix server: synapse, as well as tests that involve running a matrix client.
 
@@ -109,7 +109,7 @@ Make sure that you have created a matrix user for the base and experiments realm
 
 In order to run the ember-cli hosted app:
 
-1. `pnpm build` in the boxel-ui/addon workspace to build the boxel-ui addon.
+1. `pnpm build` in the boxel-ui workspace to build the boxel-ui addon.
 2. `pnpm start` in the host/ workspace to serve the ember app.
 3. `mise run dev` from the repo root to serve the base and experiments realms -- this will also allow you to switch between the app and the tests without having to restart servers). This expects the Ember application to be running at `https://localhost:4200`, if you’re running it elsewhere you can specify it with `HOST_URL=http://localhost:5200 mise run dev`.
 
@@ -525,7 +525,7 @@ Matrix requires an SMTP server in order to send emails. In order to facilitate t
 
 There is a ember-freestyle component explorer available to assist with development. In order to run the freestyle app:
 
-1. `cd packages/boxel-ui/test-app`
+1. `cd packages/boxel-ui/docs-app`
 2. `pnpm start`
 3. Visit http://localhost:4220/ in your browser
 
@@ -652,7 +652,7 @@ To run the `packages/realm-server/` workspace tests start:
 
 ### Boxel UI
 
-1. `cd packages/boxel-ui/test-app`
+1. `cd packages/boxel-ui/docs-app`
 2. `pnpm test` (or `pnpm start` and visit http://localhost:4220/tests to run tests in the browser)
 
 ### Matrix tests

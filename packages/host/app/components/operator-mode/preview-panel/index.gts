@@ -32,7 +32,10 @@ import {
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
-import { CardContextName } from '@cardstack/runtime-common';
+import {
+  CardContextName,
+  CardCrudFunctionsContextName,
+} from '@cardstack/runtime-common';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
 import Overlays from '@cardstack/host/components/operator-mode/overlays';
@@ -54,6 +57,7 @@ import MetadataPanel from './metadata-panel';
 import type {
   BaseDef,
   CardContext,
+  CardCrudFunctions,
   CardDef,
   Format,
   ViewCardFn,
@@ -209,6 +213,26 @@ export default class PreviewPanel extends Component<Signature> {
       ...this.cardContext,
       cardComponentModifier: this.cardTracker.trackElement,
     };
+  }
+
+  /**
+   * Card templates receive their crud functions through this context rather
+   * than through args (see `field-component.gts`), and the two providers of
+   * it are the interact-mode stack and host mode. Without one here, a button
+   * inside a previewed card that calls `viewCard` — the Workspace card's
+   * pinned tiles, a Library tile, any card that navigates — silently does
+   * nothing, because `viewCard` is undefined and every call site guards with
+   * `?.`. The pane's own `@viewCard` only ever reached the hover overlays.
+   *
+   * Only `viewCard` is provided: it navigates the code path, which is what
+   * the overlay buttons in this same pane already do. The rest stay
+   * undefined, so an in-card create/edit/delete button remains inert here
+   * instead of doing something a code-mode preview cannot honor.
+   */
+  @provide(CardCrudFunctionsContextName)
+  // @ts-ignore context is used via provider
+  private get cardCrudFunctions(): Partial<CardCrudFunctions> {
+    return { viewCard: this.args.viewCard };
   }
 
   private get renderedCardsForOverlayActions():

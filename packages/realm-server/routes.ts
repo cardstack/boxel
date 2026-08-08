@@ -37,6 +37,7 @@ import handleFullReindex from './handlers/handle-full-reindex.ts';
 import handleRemoveJob from './handlers/handle-remove-job.ts';
 import handleAddCredit from './handlers/handle-add-credit.ts';
 import handleUpsertRealmUserPermission from './handlers/handle-upsert-realm-user-permission.ts';
+import handleRevokeUserSessions from './handlers/handle-revoke-user-sessions.ts';
 import handleCreateStripeSessionRequest from './handlers/handle-create-stripe-session.ts';
 import handleRequestForward from './handlers/handle-request-forward.ts';
 import handleOpenRouterPassthrough from './handlers/handle-openrouter-passthrough.ts';
@@ -161,12 +162,12 @@ export function createRoutes(args: CreateRoutesArgs) {
   router.post('/_server-session', handleCreateSessionRequest(args));
   router.post(
     '/_create-realm',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleCreateRealmRequest(createRealmDeps, args.sendEvent),
   );
   router.delete(
     '/_delete-realm',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleDeleteRealm(args),
   );
   router.get('/_catalog-realms', handleFetchCatalogRealmsRequest(args));
@@ -177,28 +178,28 @@ export function createRoutes(args: CreateRoutesArgs) {
   router.get('/_skill-validation', handleSkillValidation(args));
   router.post(
     '/_run-command',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleRunCommand(args),
   );
   router.post('/_stripe-webhook', handleStripeWebhookRequest(args));
   router.post(
     '/_stripe-session',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleCreateStripeSessionRequest(args),
   );
   router.get(
     '/_user',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleFetchUserRequest(args),
   );
   router.post(
     '/_user',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleCreateUserRequest(args),
   );
   router.post(
     '/_request-forward',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleRequestForward({
       dbAdapter: args.dbAdapter,
     }),
@@ -209,12 +210,12 @@ export function createRoutes(args: CreateRoutesArgs) {
   // preference to the body's self-reported value.
   router.post(
     '/_client-telemetry',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleClientTelemetry(),
   );
   router.post(
     '/_openrouter/chat/completions',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleOpenRouterPassthrough({
       dbAdapter: args.dbAdapter,
     }),
@@ -242,7 +243,7 @@ export function createRoutes(args: CreateRoutesArgs) {
   );
   router.post(
     '/_prerender-card',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handlePrerenderProxy({
       kind: 'card',
       prerenderer: args.prerenderer,
@@ -252,7 +253,7 @@ export function createRoutes(args: CreateRoutesArgs) {
   );
   router.post(
     '/_prerender-module',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handlePrerenderProxy({
       kind: 'module',
       prerenderer: args.prerenderer,
@@ -262,7 +263,7 @@ export function createRoutes(args: CreateRoutesArgs) {
   );
   router.post(
     '/_prerender-file-extract',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handlePrerenderProxy({
       kind: 'file-extract',
       prerenderer: args.prerenderer,
@@ -272,32 +273,32 @@ export function createRoutes(args: CreateRoutesArgs) {
   );
   router.post(
     '/_screenshot-card',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleScreenshotCard(args),
   );
   router.post(
     '/_publish-realm',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handlePublishRealm(args),
   );
   router.post(
     '/_unpublish-realm',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleUnpublishRealm(args),
   );
   router.post(
     '/_archive-realm',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleArchiveRealm(args),
   );
   router.post(
     '/_unarchive-realm',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleUnarchiveRealm(args),
   );
   router.get(
     '/_archived-realms',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleArchivedRealms(args),
   );
 
@@ -316,10 +317,14 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_grafana-upsert-realm-user-permission',
     handleUpsertRealmUserPermission(args),
   );
+  registerGrafanaEndpoint(
+    '/_grafana-revoke-user-sessions',
+    handleRevokeUserSessions(args),
+  );
   router.post('/_post-deployment', handlePostDeployment(args));
   router.post(
     '/_realm-auth',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleRealmAuth(args),
   );
   // Shared-secret authenticated (HMAC over body + timestamp); auth is handled
@@ -331,27 +336,27 @@ export function createRoutes(args: CreateRoutesArgs) {
   router.post('/_worker-request', handleWorkerRequest(args));
   router.get(
     '/_check-boxel-domain-availability',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleCheckBoxelDomainAvailabilityRequest(args),
   );
   router.get(
     '/_boxel-claimed-domains',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleGetBoxelClaimedDomainRequest(args),
   );
   router.post(
     '/_boxel-claimed-domains',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleClaimBoxelDomainRequest(args),
   );
   router.delete(
     '/_boxel-claimed-domains/:claimedDomainId',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleDeleteBoxelClaimedDomainRequest(args),
   );
   router.post(
     '/_unlisted-realm-path',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleUnlistedRealmPathRequest(args),
   );
   // Matrix tests don't need the GitHub PR integration, and skipping this route
@@ -359,69 +364,69 @@ export function createRoutes(args: CreateRoutesArgs) {
   if (process.env.DISABLE_GITHUB_PR_ROUTE !== 'true') {
     router.post(
       '/_github-pr',
-      jwtMiddleware(args.realmSecretSeed),
+      jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
       handleGitHubPRRequestLazy(args),
     );
   }
   router.get('/_download-realm', handleDownloadRealm(args));
   router.post(
     '/_bot-registration',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleBotRegistrationRequest(args),
   );
   router.get(
     '/_bot-registrations',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleBotRegistrationsRequest(args),
   );
   router.delete(
     '/_bot-registration',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleBotUnregistrationRequest(args),
   );
   router.post(
     '/_bot-commands',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleBotCommandsRequest(args),
   );
   router.get(
     '/_bot-commands',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleBotCommandsListRequest(args),
   );
   router.delete(
     '/_bot-commands',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleBotCommandDeleteRequest(args),
   );
   router.post(
     '/_incoming-webhooks',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleCreateIncomingWebhookRequest(args),
   );
   router.get(
     '/_incoming-webhooks',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleListIncomingWebhooksRequest(args),
   );
   router.delete(
     '/_incoming-webhooks',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleDeleteIncomingWebhookRequest(args),
   );
   router.post(
     '/_webhook-commands',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleCreateWebhookCommandRequest(args),
   );
   router.get(
     '/_webhook-commands',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleListWebhookCommandsRequest(args),
   );
   router.delete(
     '/_webhook-commands',
-    jwtMiddleware(args.realmSecretSeed),
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleDeleteWebhookCommandRequest(args),
   );
   router.post('/_webhooks/:webhookPath', handleWebhookReceiverRequest(args));

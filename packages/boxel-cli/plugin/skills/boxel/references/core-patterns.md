@@ -1,11 +1,12 @@
 **Card with computed cardTitle:**
 
 A card's display name comes from `cardTitle` (a computed pass-through from
-`cardInfo.name`). To derive it from another field, override `cardTitle`.
-Declaring your own `@field title` does NOT set the display name — the host
-reads `cardTitle`, not `title`. A plain `title` field is just ordinary data;
-that's fine when it's the primary field a `cardTitle` override reads, but on
-its own it leaves the card showing "Untitled" everywhere.
+`cardInfo.name`, with a built-in `Untitled <displayName>` fallback). To derive
+it from another field, override `cardTitle`. Declaring your own `@field title`
+does NOT set the display name — the host reads `cardTitle`, not `title`. A
+plain `title` field is just ordinary data; that's fine when it's the primary
+field a `cardTitle` override reads or real domain data (a blog post's title, a
+job title), but on its own it leaves the card showing "Untitled" everywhere.
 
 ```gts
 export class BlogPost extends CardDef {
@@ -18,6 +19,12 @@ export class BlogPost extends CardDef {
   });
 }
 ```
+
+In templates, render `<@fields.cardTitle />` (or read `@model.cardTitle` for a
+raw string). Never hand-roll the fallback — `{{if @model.title @model.title
+'Untitled Foo'}}` is a violation: the `Untitled <displayName>` fallback is
+already built into `cardTitle`. Instance JSON sets the name via
+`cardInfo.name`.
 
 **Field definition:**
 ```gts
@@ -37,7 +44,7 @@ export class AddressField extends FieldDef {
 
 ## Core Patterns
 
-### 1. Card Definition with Safe Computed Title
+### 1. Card Definition with Safe Computed cardTitle
 ```gts
 import { CardDef, field, contains, linksTo, containsMany, linksToMany, Component } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
@@ -62,7 +69,8 @@ export class BlogPost extends CardDef {
   @field cardTitle = contains(StringField, {
     computeVia: function(this: BlogPost) {
       try {
-        const baseTitle = this.headline ?? 'Untitled Post';
+        // A user-set cardInfo.name always wins over the derived value
+        const baseTitle = this.cardInfo?.name ?? this.headline ?? 'Untitled Post';
         const maxLength = 50;
         if (baseTitle.length <= maxLength) return baseTitle;
         return baseTitle.substring(0, maxLength - 3) + '...';
@@ -162,12 +170,14 @@ static isolated = class Isolated extends Component<typeof BlogPost> { // Isolate
   @tracked showComments = false;
   
   // CRITICAL: Do ALL computation in functions, never in templates
-  get safeTitle() {
+  // (Titles need no getter or fallback — render <@fields.cardTitle />;
+  // its `Untitled <displayName>` fallback is built in.)
+  get safeExcerpt() {
     try {
-      return this.args?.model?.title ?? 'Untitled Post';
+      return this.args?.model?.body?.slice(0, 140) ?? '';
     } catch (e) {
-      console.error('BlogPost: Error accessing title', e);
-      return 'Untitled Post';
+      console.error('BlogPost: Error accessing body', e);
+      return '';
     }
   }
   
@@ -191,7 +201,7 @@ static isolated = class Isolated extends Component<typeof BlogPost> { // Isolate
     <article class="blog-post-surface">
       <header>
         <time>{{if @model.publishDate (formatDateTime @model.publishDate 'MMMM D, YYYY') "Date not set"}}</time>
-        <h1>{{this.safeTitle}}</h1>
+        <h1><@fields.cardTitle /></h1>
         
         {{#if @fields.author}}
           <@fields.author />

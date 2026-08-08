@@ -96,7 +96,11 @@ import type { TempEvent } from '@cardstack/host/lib/matrix-classes/room';
 import Room from '@cardstack/host/lib/matrix-classes/room';
 import { getRandomBackgroundURL, iconURLFor } from '@cardstack/host/lib/utils';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
-import { clearLocalStorage } from '@cardstack/host/utils/local-storage-keys';
+import {
+  clearLocalStorage,
+  RealmServerSessionLocalStorageKey,
+  SessionLocalStorageKey,
+} from '@cardstack/host/utils/local-storage-keys';
 
 import { isSkillCard } from '../lib/file-def-manager';
 import { getSkillSourceTools, loadSkillSource } from '../lib/skill-tools';
@@ -1254,7 +1258,18 @@ export default class MatrixService extends Service {
         );
         window.location.href = indexController.authRedirect;
       } else if (refreshRoutes) {
-        await this.router.refresh();
+        // The index route's model hook redirects when the URL carries no
+        // operatorModeState, aborting the refresh that ran it. Expected.
+        try {
+          await this.router.refresh();
+        } catch (error: any) {
+          if (
+            error?.name !== 'TransitionAborted' &&
+            error?.code !== 'TRANSITION_ABORTED'
+          ) {
+            throw error;
+          }
+        }
       }
     } else if (isTesting()) {
       // start() did nothing because the client wasn't logged in at this point,
@@ -2052,6 +2067,11 @@ export default class MatrixService extends Service {
     clientSecret: string,
     sendAttempt: number,
   ) {
+    // The standalone /cli-auth route can reach registration before the SDK has
+    // finished loading (operator mode always boots first, so the register form
+    // is only reached once `ready` has resolved). Wait for it here so the client
+    // exists before the first registration request touches it.
+    await this.ready;
     return await this.client.requestEmailToken(
       'registration',
       email,
@@ -2456,6 +2476,9 @@ export default class MatrixService extends Service {
   }
 
   async registerRequest(data: MatrixSDK.RegisterRequest, kind?: string) {
+    // See requestRegisterEmailToken: registration can run before the SDK has
+    // loaded on the standalone /cli-auth route.
+    await this.ready;
     return await this.client.registerRequest(data, kind);
   }
 
@@ -2468,6 +2491,9 @@ export default class MatrixService extends Service {
   }
 
   async isUsernameAvailable(username: string) {
+    // See requestRegisterEmailToken: the username check runs while the register
+    // form is filled, which on /cli-auth can precede the SDK finishing loading.
+    await this.ready;
     return await this.client.isUsernameAvailable(username);
   }
 
@@ -3060,6 +3086,26 @@ export default class MatrixService extends Service {
   private clearAuth() {
     this.storage?.removeItem('auth');
     this.localPersistenceService.setCurrentRoomId(undefined);
+  }
+
+  // Drop this browser's persisted session locally, without the server-side
+  // logout() performs — that would revoke the device. The CLI-auth register
+  // flow uses this after handing the just-minted registration device to the
+  // CLI: the CLI is that device's sole owner, so the browser must not keep it
+  // as its own persisted session (a later browser-side logout would otherwise
+  // revoke the CLI's session too). Account-level bootstrap side-effects
+  // (personal realm, realm auth) stay put; only this browser's local link to
+  // the device is forgotten.
+  //
+  // Storage-only, and all three keys of it. The realm tokens are persisted
+  // apart from the Matrix session, and a session-room claim inside the
+  // realm-server token is the identity a later realm-auth handshake adopts:
+  // leaving it behind hands the next account a session room belonging to this
+  // one, which it is not invited to and cannot join.
+  forgetPersistedSession() {
+    this.clearAuth();
+    window.localStorage.removeItem(RealmServerSessionLocalStorageKey);
+    window.localStorage.removeItem(SessionLocalStorageKey);
   }
 
   async activateCodingSkill() {

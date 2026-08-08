@@ -10,23 +10,32 @@ import {
   realmURL,
 } from './card-api';
 import BooleanField from './boolean';
+import NumberField from './number';
 import StringField from './string';
 import CardInfoTemplates from './default-templates/card-info';
 import {
   cardDefComputedFields,
+  DEFAULT_REDIRECT_STATUS,
   findDuplicateRoutingPaths,
+  findRedirectCycles,
   getField,
   getFieldIcon,
+  REDIRECT_STATUS_CODES,
+  validateRedirectTarget,
   validateRoutingPath,
 } from '@cardstack/runtime-common';
 import {
+  BoxelInput,
   BoxelInputGroup,
+  BoxelSelect,
   FieldContainer,
   Header,
+  RadioInput,
 } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import FileSettingsIcon from '@cardstack/boxel-icons/file-settings';
 import LinkIcon from '@cardstack/boxel-icons/link';
+import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { startCase } from 'lodash-es';
@@ -36,7 +45,12 @@ class RoutingRuleAtom extends Component<typeof RoutingRuleField> {
   <template>
     <span class='routing-rule-atom'>
       <span class='path'>{{if @model.path @model.path '(no path)'}}</span>
-      {{#if @model.instance}}
+      {{#if @model.redirectTo}}
+        <span class='arrow' aria-hidden='true'>→</span>
+        <span class='redirect-target' data-test-redirect-target>
+          {{@model.redirectTo}}
+        </span>
+      {{else if @model.instance}}
         <span class='arrow' aria-hidden='true'>→</span>
         <@fields.instance @format='atom' />
       {{/if}}
@@ -47,7 +61,8 @@ class RoutingRuleAtom extends Component<typeof RoutingRuleField> {
         align-items: center;
         gap: var(--boxel-sp-xxs);
       }
-      .path {
+      .path,
+      .redirect-target {
         font-family: var(--boxel-font-family-mono, monospace);
       }
       .arrow {
@@ -58,6 +73,13 @@ class RoutingRuleAtom extends Component<typeof RoutingRuleField> {
 }
 
 class RoutingRuleEdit extends Component<typeof RoutingRuleField> {
+  private kindItems: { id: 'card' | 'redirect'; text: string }[] = [
+    { id: 'card', text: 'Render a card' },
+    { id: 'redirect', text: 'Redirect' },
+  ];
+
+  private statusCodeOptions = [...REDIRECT_STATUS_CODES];
+
   constructor(owner: Owner, args: any) {
     super(owner, args);
     // The path input renders an empty input alongside a fixed `/`
@@ -104,6 +126,65 @@ class RoutingRuleEdit extends Component<typeof RoutingRuleField> {
     this.args.model.path = `/${trimmed}`;
   }
 
+  // Which target editor is showing, derived from the data alone: a rule
+  // carrying a `redirectTo` is a redirect rule. `setKind` seeds an empty
+  // string when switching, which reads as a redirect (the field is unset
+  // as `undefined`, and `StringField` has no empty value that would
+  // blur the two) and so survives a reload. Deliberately not mirrored
+  // into component state: field writes notify Glimmer synchronously, so
+  // a copy would buy nothing and would go on shadowing the model after
+  // anything but this toggle changed it.
+  get kind(): 'card' | 'redirect' {
+    return this.args.model.redirectTo != null ? 'redirect' : 'card';
+  }
+
+  get isRedirect(): boolean {
+    return this.kind === 'redirect';
+  }
+
+  // Switching kind clears the other kind's target so a rule is never
+  // ambiguous (the read path prefers `redirectTo` when both are set,
+  // but only a hand-edited realm.json can get into that state).
+  @action
+  setKind(kind: 'card' | 'redirect') {
+    if (kind === 'redirect') {
+      this.args.model.instance = undefined;
+      if (this.args.model.redirectTo == null) {
+        this.args.model.redirectTo = '';
+      }
+    } else {
+      this.args.model.redirectTo = undefined;
+      this.args.model.statusCode = undefined;
+    }
+  }
+
+  get redirectToValue(): string {
+    return this.args.model.redirectTo ?? '';
+  }
+
+  @action
+  setRedirectTo(value: string) {
+    this.args.model.redirectTo = value ?? '';
+  }
+
+  get redirectWarning(): string | undefined {
+    return validateRedirectTarget(this.args.model.redirectTo);
+  }
+
+  get selectedStatusCode(): number {
+    return this.args.model.statusCode ?? DEFAULT_REDIRECT_STATUS;
+  }
+
+  @action
+  setStatusCode(code: number) {
+    this.args.model.statusCode = code;
+  }
+
+  @action
+  statusCodeLabel(code: number): string {
+    return code === 301 ? '301 · permanent' : '302 · temporary';
+  }
+
   // The chooser is locked to the consuming realm; pass it through
   // explicitly rather than letting LinksToEditor read it from
   // `RealmURLContext`. The context is only provided by the operator-mode
@@ -119,6 +200,22 @@ class RoutingRuleEdit extends Component<typeof RoutingRuleField> {
 
   <template>
     <div class='routing-rule-edit' data-test-routing-rule-edit>
+      <div class='kind-toggle' data-test-routing-rule-kind>
+        {{! RadioInput names the group after itself when @name is absent,
+            which is what keeps each rule's pair of radios independent. }}
+        <RadioInput
+          @items={{this.kindItems}}
+          @groupDescription='Routing rule target'
+          @checkedId={{this.kind}}
+          @spacing='compact'
+          @hideBorder={{true}}
+          as |item|
+        >
+          <item.component @onChange={{fn this.setKind item.data.id}}>
+            {{item.data.text}}
+          </item.component>
+        </RadioInput>
+      </div>
       <div class='row'>
         <div class='path-cell'>
           <BoxelInputGroup
@@ -132,16 +229,43 @@ class RoutingRuleEdit extends Component<typeof RoutingRuleField> {
           </BoxelInputGroup>
         </div>
         <span class='arrow' aria-hidden='true'>→</span>
-        <div class='instance-cell'>
-          <@fields.instance
-            @lockConsumingRealm={{true}}
-            @consumingRealm={{this.consumingRealm}}
-          />
-        </div>
+        {{#if this.isRedirect}}
+          <div class='redirect-cell'>
+            <BoxelInput
+              @value={{this.redirectToValue}}
+              @onInput={{this.setRedirectTo}}
+              @placeholder='/path or https://example.com/page'
+              data-test-redirect-input
+            />
+            <div class='status-code-cell'>
+              <BoxelSelect
+                @options={{this.statusCodeOptions}}
+                @selected={{this.selectedStatusCode}}
+                @onChange={{this.setStatusCode}}
+                data-test-status-code-select
+                as |code|
+              >
+                {{this.statusCodeLabel code}}
+              </BoxelSelect>
+            </div>
+          </div>
+        {{else}}
+          <div class='instance-cell'>
+            <@fields.instance
+              @lockConsumingRealm={{true}}
+              @consumingRealm={{this.consumingRealm}}
+            />
+          </div>
+        {{/if}}
       </div>
       {{#if this.pathWarning}}
         <div class='path-warning' role='status' data-test-path-warning>
           {{this.pathWarning}}
+        </div>
+      {{/if}}
+      {{#if this.redirectWarning}}
+        <div class='path-warning' role='status' data-test-redirect-warning>
+          {{this.redirectWarning}}
         </div>
       {{/if}}
     </div>
@@ -182,6 +306,26 @@ class RoutingRuleEdit extends Component<typeof RoutingRuleField> {
       .instance-cell {
         min-width: 0;
       }
+      /* The target cell shares a 1fr track with the path input and the
+         card can render quite narrow (operator-mode stack item), so the
+         status picker stacks BELOW the target input rather than beside
+         it — side-by-side, their combined minimum width overflows the
+         rule container. min-width: 0 (cell and input) lets the track
+         shrink the URL input instead of pushing the row wider. */
+      .redirect-cell {
+        display: grid;
+        gap: var(--boxel-sp-xxs);
+        min-width: 0;
+      }
+      .redirect-cell :deep(input) {
+        font-family: var(--boxel-font-family-mono, monospace);
+        min-width: 0;
+      }
+      .status-code-cell {
+        justify-self: start;
+        min-width: 9rem;
+        max-width: 100%;
+      }
       .path-warning {
         font-size: var(--boxel-font-size-xs);
         color: #92400e;
@@ -202,6 +346,16 @@ export class RoutingRuleField extends FieldDef {
   @field instance = linksTo(CardDef, {
     description:
       'Card instance to render when the realm is navigated at this path',
+  });
+
+  @field redirectTo = contains(StringField, {
+    description:
+      'Redirect target — a path in this realm (e.g. "/terms") or an external http(s) URL. When set, the path redirects instead of rendering a card',
+  });
+
+  @field statusCode = contains(NumberField, {
+    description:
+      'HTTP status for a redirect rule: 301 (permanent) or 302 (temporary, the default)',
   });
 
   static atom = RoutingRuleAtom;
@@ -289,6 +443,14 @@ class RealmConfigEdit extends Component<typeof RealmConfig> {
     return findDuplicateRoutingPaths(this.args.model.hostRoutingRules);
   }
 
+  // Redirect rules that chain back on themselves. The realm drops these
+  // when it reads the config — a served loop would bounce visitors until
+  // the browser gave up — so the path silently stops routing until the
+  // owner breaks the ring.
+  get redirectLoopPaths(): string[] {
+    return findRedirectCycles(this.args.model.hostRoutingRules);
+  }
+
   // Routing rules whose linked target card no longer exists. The
   // `instance` linksTo resolves to a terminal broken-link state once the
   // editor has tried to load it ('not-found' for a 404, 'error' for an
@@ -350,6 +512,19 @@ class RealmConfigEdit extends Component<typeof RealmConfig> {
                 >
                   These paths point to a card that no longer exists:
                   {{#each this.danglingRoutingRulePaths as |p i|}}
+                    {{#if i}}, {{/if}}<code>{{p}}</code>
+                  {{/each}}
+                </div>
+              {{/if}}
+              {{#if this.redirectLoopPaths.length}}
+                <div
+                  class='warning'
+                  role='status'
+                  data-test-redirect-loop-warning
+                >
+                  These redirects loop back on themselves and will not be
+                  applied:
+                  {{#each this.redirectLoopPaths as |p i|}}
                     {{#if i}}, {{/if}}<code>{{p}}</code>
                   {{/each}}
                 </div>

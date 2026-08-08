@@ -111,7 +111,7 @@ export class HomePage extends CardDef {
           display: flex;
           flex-direction: column;
           gap: var(--boxel-sp);
-          margin-bottom: var(--boxel-sp-xxl);
+          margin-bottom: var(--boxel-sp-2xl);
         }
         .nav {
           display: flex;

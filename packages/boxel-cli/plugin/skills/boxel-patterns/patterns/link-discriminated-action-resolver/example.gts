@@ -40,22 +40,15 @@ interface RegularActions {
   type: 'regular';
 }
 
-export type ListingActions =
-  | SkillActions
-  | AppActions
-  | ThemeActions
-  | RegularActions;
+export type ListingActions = SkillActions | AppActions | ThemeActions | RegularActions;
 
 // 🎯 The resolver.
-export function resolveListingActions(
-  card: Listing,
-  ctx: Context,
-): ListingActions {
+export function resolveListingActions(card: Listing, ctx: Context): ListingActions {
   if (card instanceof SkillListing) {
     return {
       type: 'skill',
       installSkill: () => ctx.installSkill(card.id),
-      openRoom: () => ctx.openRoom(card.id),
+      openRoom:     () => ctx.openRoom(card.id),
     };
   }
   if (card instanceof AppListing) {

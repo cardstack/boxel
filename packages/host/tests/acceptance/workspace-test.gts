@@ -3,6 +3,8 @@ import { click, visit, waitFor } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
+import { baseRealm } from '@cardstack/runtime-common';
+
 import {
   setupLocalIndexing,
   setupAcceptanceTestRealm,
@@ -97,6 +99,113 @@ module('Acceptance | workspace card', function (hooks) {
 
     await click(`${STACK} nav.tabs .tab:nth-child(3)`);
     assert.dom(`${STACK} .activity-pane`).exists('Activity pane renders');
+  });
+
+  // Pills are matched by their visible label rather than by index, since the
+  // order of `_types` inventory isn't part of the contract. Asserts and then
+  // throws on a miss so a fixture that stops producing the type fails as a
+  // named assertion instead of a null dereference further down.
+  function findTypeChip(assert: Assert, label: string): HTMLElement {
+    let chip = [
+      ...document.querySelectorAll(`${STACK} [data-test-type-chip]`),
+    ].find((el) => el.textContent?.includes(label));
+    assert.ok(chip, `a pill for the ${label} card type is present`);
+    if (!(chip instanceof HTMLElement)) {
+      throw new Error(`no Browse pill labelled "${label}" was rendered`);
+    }
+    return chip;
+  }
+
+  test('the "New card" chooser searches across all available realms, not just this workspace', async function (assert) {
+    await visit('/');
+    await click('[data-test-workspace-button="Unnamed Workspace"]');
+    await waitFor(`${STACK} nav.tabs`);
+
+    // The empty-space welcome hero offers a "New card" affordance that opens
+    // the Spec chooser. The chosen Spec may live in any realm the user can
+    // reach; the new card still lands in this workspace's realm.
+    await click(`${STACK} .welcome-alt`);
+    await waitFor('[data-test-card-chooser-modal]');
+
+    // The realm scope must not be locked to the workspace's own realm — the
+    // picker stays interactive and offers other reachable realms.
+    await waitFor('[data-test-realm-picker] [data-test-boxel-picker-trigger]');
+    await click('[data-test-realm-picker] [data-test-boxel-picker-trigger]');
+    await waitFor('[data-test-boxel-picker-option-row]');
+    assert
+      .dom(`[data-test-boxel-picker-option-row="${baseRealm.url}"]`)
+      .exists('a realm other than the workspace realm is selectable');
+    assert
+      .dom(`[data-test-boxel-picker-option-row="${testRealmURL}"]`)
+      .exists('the workspace realm is also among the choices');
+  });
+
+  // The Home "Browse" module renders one pill per realm card/file type with
+  // that type's instance count, and clicking a pill opens the Library filtered
+  // to that type. It only renders once `_types` has reported inventory, so it
+  // needs a realm with real indexed instances — hence acceptance, not the bare
+  // isolated-render integration tests.
+  test('Home Browse lists a pill per card type with its instance count', async function (assert) {
+    await visit('/');
+    await click('[data-test-workspace-button="Unnamed Workspace"]');
+    await waitFor(`${STACK} nav.tabs`);
+
+    await waitFor(`${STACK} [data-test-browse]`);
+    assert
+      .dom(`${STACK} [data-test-browse]`)
+      .exists(
+        'the Home Browse module renders once the realm reports inventory',
+      );
+
+    let noteChip = findTypeChip(assert, 'Note');
+    assert
+      .dom(noteChip.querySelector('[data-test-type-chip-count]'))
+      .hasText('1', 'the Note pill shows its single-instance count');
+  });
+
+  test('clicking a Home Browse pill opens the Library filtered to that type', async function (assert) {
+    await visit('/');
+    await click('[data-test-workspace-button="Unnamed Workspace"]');
+    await waitFor(`${STACK} [data-test-browse]`);
+
+    let noteChip = findTypeChip(assert, 'Note');
+    let noteTypeId = noteChip.getAttribute('data-test-type-chip');
+    // Without this the filter selector below interpolates to
+    // `[data-test-workspace-filter="null"]` and reports a missing element
+    // rather than a pill that carries no type id.
+    assert.ok(noteTypeId, 'the Note pill carries the type id it filters on');
+
+    await click(noteChip);
+
+    assert
+      .dom(`${STACK} nav.tabs .tab.active`)
+      .hasText('Library', 'the pill switches to the Library segment');
+    assert
+      .dom(`${STACK} [data-test-workspace-filter="${noteTypeId}"]`)
+      .hasClass(
+        'selected',
+        'the Library opens with the clicked type pre-selected',
+      );
+  });
+
+  // The Library rail lists a row per realm card type (sourced from the same
+  // `_types` inventory that feeds the Home pills), each with its instance count
+  // — not just the base Everything / Cards / Files filters.
+  test('the Library rail lists a row per card type with its count', async function (assert) {
+    await visit('/');
+    await click('[data-test-workspace-button="Unnamed Workspace"]');
+    await waitFor(`${STACK} nav.tabs`);
+
+    await click(`${STACK} nav.tabs .tab:nth-child(2)`); // Library
+    await waitFor(`${STACK} .rail-group`);
+
+    let noteRow = [
+      ...document.querySelectorAll(`${STACK} .rail-row.type`),
+    ].find((el) => el.textContent?.includes('Note')) as HTMLElement | undefined;
+    assert.ok(noteRow, 'the Library rail lists a Note card-type row');
+    assert
+      .dom(noteRow!.querySelector('.rail-count'))
+      .hasText('1', 'the Note rail row shows its single-instance count');
   });
 
   test('a remix surfaces in the Activity feed as a first-class event', async function (assert) {
