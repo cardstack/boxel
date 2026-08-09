@@ -30,6 +30,8 @@ For a quickstart, see [here](./QUICKSTART.md)
 
 `packages/skills-realm` is a realm that hosts AI skills. Skills are maintained in the [boxel-skills](https://github.com/cardstack/boxel-skills) repository and cloned locally for development. See the [Skills Realm README](./packages/skills-realm/README.md) for setup and development workflows.
 
+`packages/deck` is the Deck protocol core — canonical tree hash, pack format, three-way merge, import-map resolution — **vendored verbatim** from the [Deck repo](https://github.com/christse/deck). Two entries: `@cardstack/deck` is browser-safe and is what host and runtime-common import; `@cardstack/deck/node` reaches the filesystem and belongs to realm-server. Do not edit `packages/deck/src` or `packages/deck/tests` here — fixes land in Deck first, with a test there, then come back via `node scripts/deck-sync.mjs pull ~/Projects/deck`. CI recomputes the tree hash recorded in `packages/deck/DECK_SOURCE` and fails on an in-place edit, so the two copies cannot silently drift.
+
 ### Catalog Realms
 
 The **Cardstack Catalog** (served from [cardstack/boxel-catalog](https://github.com/cardstack/boxel-catalog)) is the source of truth for new development and the destination for community submissions.

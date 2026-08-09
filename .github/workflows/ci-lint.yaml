@@ -35,6 +35,23 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
 
+      - name: Lint Deck
+        # First, and deliberately: packages/deck is vendored verbatim from
+        # the Deck repo, and this step's `lint:vendored` recomputes the
+        # tree-hash recorded in packages/deck/DECK_SOURCE. An in-place edit
+        # to the vendored tree fails here in seconds, with instructions to
+        # move the change upstream, rather than after the slow builds below.
+        if: ${{ !cancelled() }}
+        run: pnpm run lint
+        working-directory: packages/deck
+      - name: Test Deck
+        # Cheap (~215 unit tests, no services). The tree-hash proves the
+        # bytes match a Deck commit; this proves they still behave under
+        # Boxel's Node version and module resolution, which is the part a
+        # hash cannot tell us.
+        if: ${{ !cancelled() }}
+        run: pnpm run test
+        working-directory: packages/deck
       - name: Lint Boxel Icons
         if: ${{ !cancelled() }}
         run: pnpm run lint
