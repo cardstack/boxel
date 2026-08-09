@@ -1,0 +1,43 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "Lead",
+        "module": "../lead"
+      },
+      "specType": "card",
+      "readMe": "## Lead\n\nAn unqualified person/company who showed interest: `name`, `company`, base email/phone, `source` enum (website/referral/webinar/ad/event/cold outreach/other), `status` enum (new \u2192 contacted \u2192 qualified | disqualified), `score` 0\u2013100 (written by the Classify AI tool or by hand; rendered as a bar in isolated).\n\nA qualified Lead is CONVERTED \u2014 the Convert Lead command creates Contact + Account + Opportunity from it; the Lead itself is a capture record, not a pipeline record.\n\n**Non-goals:** pipeline stages/value (Opportunity's job), account linkage (a Lead pre-dates the Account existing), nurture sequences (out of scope per spec).",
+      "cardInfo": {
+        "name": "Lead",
+        "summary": "Capture record before qualification: source, status (new/contacted/qualified/disqualified), 0-100 score bar. Converts to Contact+Account+Opportunity.",
+        "notes": null,
+        "cardThumbnailURL": null
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Lead/kenji-tanaka"
+        }
+      },
+      "linkedExamples.1": {
+        "links": {
+          "self": "../Lead/sara-okafor"
+        }
+      },
+      "linkedExamples.2": {
+        "links": {
+          "self": "../Lead/pavel-novak"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

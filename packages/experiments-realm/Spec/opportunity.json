@@ -1,0 +1,38 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "Opportunity",
+        "module": "../opportunity"
+      },
+      "specType": "card",
+      "readMe": "## Opportunity\n\nA qualified pursuit in the pipeline. `account`/`owner` links (owner typed `linksTo(User)`), `value` (AmountWithCurrency), `stage` enum (8 stages, exported as `PIPELINE_STAGES`), `probability` (base PercentageField, optional override), `closeDate`.\n\n**Stage/probability precedence (spec addendum D):** each stage has a default probability (`STAGE_DEFAULT_PROBABILITY`); a stored `probability` is a rep override that survives stage changes. Computed `effectiveProbability` resolves override-else-default, and the isolated header shows weighted value with its source labeled (override vs stage default).\n\nIsolated shows a stage stepper: closed-lost opportunities show a red terminal instead of the won lane.\n\n```ts\nimport { Opportunity, PIPELINE_STAGES, STAGE_DEFAULT_PROBABILITY } from '../opportunity';\n```\n\n**Non-goals:** negotiation artifacts (terms/competitors/stakeholders \u2014 Deal adds those), forecasting rollups (dashboard/metrics block job).",
+      "cardInfo": {
+        "name": "Opportunity",
+        "summary": "Pipeline record: value, 8-stage enum, probability = stage default with rep override, computed effectiveProbability + weighted display, stage stepper isolated.",
+        "notes": null,
+        "cardThumbnailURL": null
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Opportunity/acme-plant-expansion"
+        }
+      },
+      "linkedExamples.1": {
+        "links": {
+          "self": "../Opportunity/brightleaf-workspace"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

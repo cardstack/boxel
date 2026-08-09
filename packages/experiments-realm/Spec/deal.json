@@ -1,0 +1,38 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "Deal",
+        "module": "../deal"
+      },
+      "specType": "card",
+      "readMe": "## Deal\n\n`Deal extends Opportunity` \u2014 literal card adoption, so one Pipeline Board renders both and the stage enum lives on Opportunity. Adds negotiation-phase fields: `terms` (markdown), `competitors` (containsMany string), `decisionMakers = linksToMany(Contact)`.\n\nInherits atom/embedded/fitted from Opportunity; overrides isolated to add Decision Makers and Terms panels.\n\nWhen a Deal reaches closed won, the Close-Won chain command takes over (Contract \u2192 Subscription \u2192 first Invoice).\n\n**Non-goals:** contract legalese (Contract card, v1.1), order line items (Order's job), duplicate stage machinery \u2014 it IS an Opportunity.",
+      "cardInfo": {
+        "name": "Deal",
+        "summary": "Opportunity subtype for final negotiation: + terms markdown, competitors, decisionMakers linksToMany(Contact). One board renders both via adoption.",
+        "notes": null,
+        "cardThumbnailURL": null
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Deal/acme-enterprise-renewal"
+        }
+      },
+      "linkedExamples.1": {
+        "links": {
+          "self": "../Deal/brightleaf-pilot"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
