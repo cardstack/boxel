@@ -1,0 +1,40 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "activityType": "email",
+      "summary": "Second overdue reminder sent for INV-2026-033",
+      "body": "Reminder sent to accounts@ with statement attached. No reply to the first reminder from Jul 24.",
+      "occurredAt": "2026-08-08T09:00:00.000Z",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../activity",
+        "name": "Activity"
+      }
+    },
+    "relationships": {
+      "author": {
+        "links": {
+          "self": "../Teammate/marcus-osei"
+        }
+      },
+      "about": {
+        "links": {
+          "self": "../Invoice/inv-2026-033"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/ledger"
+        }
+      }
+    }
+  }
+}
