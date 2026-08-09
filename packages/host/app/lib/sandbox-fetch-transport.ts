@@ -159,6 +159,14 @@ export class SandboxFetchServer {
      * "does one exist for this exact URL right now."
      */
     private readonly getDraftOverride?: (url: string) => string | undefined,
+    /**
+     * Resolves an admitted module spelling to the URL the Host should read.
+     * The child can legitimately hold a persisted Base alias from another
+     * deployment (for example localhost:4201); authorization checks both
+     * spellings, while the parent fetch always uses the current deployment's
+     * configured URL.
+     */
+    private readonly resolveModuleURL: (url: string) => string = (url) => url,
   ) {
     port.addEventListener('message', this.receive);
   }
@@ -181,12 +189,15 @@ export class SandboxFetchServer {
     }
     let message: SandboxFetchResponse;
     try {
+      let resolvedURL = this.resolveModuleURL(request.url);
       if (!this.isAllowed(request.url)) {
         throw new Error(
           `Sandbox module read is outside its classified graph: ${request.url}`,
         );
       }
-      let draftSource = this.getDraftOverride?.(request.url);
+      let draftSource =
+        this.getDraftOverride?.(request.url) ??
+        this.getDraftOverride?.(resolvedURL);
       if (draftSource !== undefined) {
         let body = new TextEncoder().encode(draftSource).buffer;
         // The draft's own newly-introduced imports (edge case 8/§3) are
@@ -195,7 +206,7 @@ export class SandboxFetchServer {
         // module graph before ever setting this override (see
         // BoxelExecutionSession.pushDraft), so this call is defense in
         // depth, not the sole admission path.
-        await this.observeModule?.(request.url, 'text/javascript', body);
+        await this.observeModule?.(resolvedURL, 'text/javascript', body);
         message = {
           kind: responseKind,
           requestId: request.requestId,
@@ -203,7 +214,7 @@ export class SandboxFetchServer {
           response: {
             status: 200,
             statusText: 'OK',
-            url: request.url,
+            url: resolvedURL,
             headers: [['content-type', 'text/javascript']],
             body,
           },
@@ -217,7 +228,7 @@ export class SandboxFetchServer {
           headers.set(name, value);
         }
       }
-      let response = await this.fetch(request.url, {
+      let response = await this.fetch(resolvedURL, {
         method: 'GET',
         headers,
         credentials: 'omit',

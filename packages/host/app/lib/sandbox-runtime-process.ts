@@ -953,6 +953,7 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
           (url, contentType, body) =>
             this.moduleAuthority.observe(url, contentType, body),
           (url) => this.draftOverrides.get(url),
+          (url) => this.options.resolveModuleURL(url),
         );
         // RP-20.6 child→parent write leg: applies through the registered
         // receiver (connectSandboxInstanceSync's entitlement to the ONE

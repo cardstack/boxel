@@ -125,6 +125,60 @@ module('Unit | Sandbox module fetch transport', function () {
     }
   });
 
+  test('a trusted Base alias is authorized and fetched through the configured Base URL', async function (assert) {
+    let channel = new MessageChannel();
+    let localBaseURL = 'https://localhost:4201/base/card-api';
+    let configuredBaseURL = 'https://realms-staging.stack.cards/base/card-api';
+    let resolveModuleURL = (identifier: string) =>
+      identifier === localBaseURL ? configuredBaseURL : identifier;
+    let authority = new SandboxModuleAuthority(resolveModuleURL, (identifier) =>
+      identifier.startsWith('https://realms-staging.stack.cards/base/'),
+    );
+    let requested: string[] = [];
+    let server = new SandboxFetchServer(
+      channel.port1,
+      async (input) => {
+        requested.push(String(input));
+        return new Response('export const trusted = true;', {
+          headers: { 'content-type': 'text/javascript' },
+        });
+      },
+      (url) => authority.has(url),
+      (url, contentType, body) => authority.observe(url, contentType, body),
+      undefined,
+      resolveModuleURL,
+    );
+    let client = new SandboxFetchClient(channel.port2);
+    channel.port1.start();
+    channel.port2.start();
+
+    try {
+      let response = await client.fetch(localBaseURL);
+      assert.strictEqual(
+        await response.text(),
+        'export const trusted = true;',
+        'the known Base alias remains readable as trusted framework code',
+      );
+      assert.deepEqual(
+        requested,
+        [configuredBaseURL],
+        "the Host reads its configured Base URL, never the viewer's localhost alias",
+      );
+
+      await assert.rejects(
+        client.fetch('https://localhost:4201/private/card-api'),
+        /outside its classified graph/,
+        'the resolution rule does not broaden trust to another localhost path',
+      );
+      assert.strictEqual(requested.length, 1, 'the denied URL never fetches');
+    } finally {
+      client.destroy();
+      server.destroy();
+      channel.port1.close();
+      channel.port2.close();
+    }
+  });
+
   test('a third-party CDN response admits its own declared imports without a hostname allowlist', async function (assert) {
     // jsdelivr's `/+esm` bundles are extensionless and are not esm.sh, the
     // only CDN `isJavaScript` used to special-case. This mirrors the existing

@@ -26,9 +26,12 @@ export default class SandboxModuleAuthority {
   }
 
   has(identifier: string): boolean {
+    let resolvedIdentifier = this.resolveModuleURL(identifier);
     return (
       this.isTrustedModuleURL(identifier) ||
-      this.modules.has(canonicalModuleURL(identifier) ?? '')
+      this.isTrustedModuleURL(resolvedIdentifier) ||
+      this.modules.has(canonicalModuleURL(identifier) ?? '') ||
+      this.modules.has(canonicalModuleURL(resolvedIdentifier) ?? '')
     );
   }
 
