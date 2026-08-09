@@ -2,9 +2,12 @@
   "data": {
     "type": "card",
     "attributes": {
-      "ref": { "name": "Invoice", "module": "../invoice" },
+      "ref": {
+        "name": "Invoice",
+        "module": "../invoice"
+      },
       "specType": "card",
-      "readMe": "## Invoice\n\nBilling document: number, linked Customer, issue/due dates, status enum (draft → sent → paid / overdue / void), `containsMany(LineItem)`. The total is computed from line items and never stored.\n\n```ts\nimport { Invoice } from '../invoice';\n```\n\n**Non-goals:** tax computation, partial payments and balance tracking (Payment links to Invoice; reconciliation is app logic), PDF rendering.",
+      "readMe": "## Invoice\n\nBilling document: number, linked Customer, issue/due dates, status enum (draft \u2192 sent \u2192 paid / overdue / void), `containsMany(LineItem)`. The total is computed from line items and never stored.\n\n```ts\nimport { Invoice } from '../invoice';\n```\n\n**Non-goals:** tax computation, partial payments and balance tracking (Payment links to Invoice; reconciliation is app logic), PDF rendering.\n\n**2026-08-10 deltas (Revenue OS spec):** statuses now `draft/sent/viewed/partial/paid/overdue/void`; added `sentDate`, computed `daysOverdue` (0 when paid/void or not yet due), `owner = linksTo(Teammate)`, and source links `order`/`subscription` (direction flipped: the invoice points at its source, not vice versa). `payments = linksToMany(Payment)` is maintained by the Record Payment command; the isolated view derives Paid/Balance-due from it. Examples cover paid, partial, overdue, void+empty, and a 13-line freelancer invoice with no source link.",
       "cardInfo": {
         "name": "Invoice",
         "summary": "Billing document with linked customer, dates, status lifecycle, and computed totals from shared LineItems.",
@@ -15,7 +18,29 @@
     },
     "relationships": {
       "linkedExamples.0": {
-        "links": { "self": "../Invoice/inv-2026-041" }
+        "links": {
+          "self": "../Invoice/inv-2026-041"
+        }
+      },
+      "linkedExamples.1": {
+        "links": {
+          "self": "../Invoice/inv-2026-052"
+        }
+      },
+      "linkedExamples.2": {
+        "links": {
+          "self": "../Invoice/inv-2026-033"
+        }
+      },
+      "linkedExamples.3": {
+        "links": {
+          "self": "../Invoice/inv-2026-018"
+        }
+      },
+      "linkedExamples.4": {
+        "links": {
+          "self": "../Invoice/inv-f-007"
+        }
       }
     },
     "meta": {

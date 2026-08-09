@@ -1,0 +1,53 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "invoiceNumber": "INV-2026-033",
+      "issueDate": "2026-06-10",
+      "sentDate": "2026-06-10",
+      "dueDate": "2026-07-10",
+      "status": "overdue",
+      "lineItems": [
+        {
+          "description": "Custom integration build",
+          "quantity": 1,
+          "unitPrice": {
+            "amount": 5400,
+            "currency": {
+              "code": "USD"
+            }
+          }
+        }
+      ],
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../invoice",
+        "name": "Invoice"
+      }
+    },
+    "relationships": {
+      "account": {
+        "links": {
+          "self": "../Account/acme-industries"
+        }
+      },
+      "owner": {
+        "links": {
+          "self": "../Teammate/marcus-osei"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/ledger"
+        }
+      }
+    }
+  }
+}

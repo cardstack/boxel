@@ -20,14 +20,14 @@
       }
     },
     "relationships": {
-      "customer": {
-        "links": {
-          "self": "../Customer/acme-industries"
-        }
-      },
       "cardInfo.theme": {
         "links": {
           "self": "../Theme/ledger"
+        }
+      },
+      "account": {
+        "links": {
+          "self": "../Account/acme-industries"
         }
       }
     },
