@@ -1,0 +1,52 @@
+{
+  "name": "@cardstack/deck",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Deck protocol core, vendored from the Deck repo. See DECK_SOURCE — do not edit src/ here.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./node": "./src/node.ts",
+    "./resolve": "./src/resolve.ts",
+    "./import-map-pack": "./src/import-map-pack.ts",
+    "./inherit": "./src/inherit.ts",
+    "./classify": "./src/classify.ts",
+    "./pack-mode": "./src/pack-mode.ts",
+    "./pack-hermetic": "./src/pack-hermetic.ts",
+    "./tree-hash": "./src/tree-hash.ts",
+    "./canonical-zip": "./src/canonical-zip.ts",
+    "./packlist": "./src/packlist.ts",
+    "./pack": "./src/pack.ts",
+    "./store": "./src/store.ts",
+    "./object-store": "./src/object-store.ts",
+    "./signature": "./src/signature.ts",
+    "./keyring": "./src/keyring.ts",
+    "./import-map": "./src/import-map.ts",
+    "./vendor": "./src/vendor.ts",
+    "./source-graph": "./src/source-graph.ts",
+    "./es-lexer": "./src/es-lexer.ts",
+    "./lock": "./src/lock.ts",
+    "./verify-links": "./src/verify-links.ts",
+    "./fork": "./src/fork.ts",
+    "./tree": "./src/tree.ts",
+    "./merge": "./src/merge.ts",
+    "./offer": "./src/offer.ts",
+    "./deck-scan": "./src/deck-scan.ts"
+  },
+  "scripts": {
+    "test": "node tests/index.ts",
+    "lint": "pnpm run lint:types && pnpm run lint:vendored",
+    "lint:types": "tsc --noEmit",
+    "lint:vendored": "node ../../scripts/deck-sync.mjs check"
+  },
+  "dependencies": {
+    "semver": "^7.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@types/qunit": "catalog:",
+    "@types/semver": "^7.7.0",
+    "qunit": "catalog:",
+    "typescript": "catalog:"
+  }
+}

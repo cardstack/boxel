@@ -19,3 +19,11 @@ packages/observability/grafanactl/resources/
 # The CLI-authored skills under plugin/skills/ ride along; they're markdown
 # maintained by hand + build-plugin.ts, not prettier.
 packages/boxel-cli/plugin/skills/
+
+# Deck protocol core, vendored verbatim from the Deck repo (see
+# packages/deck/DECK_SOURCE). `scripts/deck-sync.mjs check` recomputes a
+# tree-hash over these bytes and fails CI when they differ from upstream, so
+# reformatting them here breaks the build to no purpose — the fix would have
+# to be made in Deck and synced back. Deck formats with its own config.
+packages/deck/src/
+packages/deck/tests/

@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    // Mirrors the Deck repo's tsconfig.base.json deliberately. src/ is
+    // vendored verbatim, so it must typecheck under the same settings it
+    // was written against — identical settings mean a failure here is a
+    // real problem with the sync, not a difference of opinion between two
+    // compiler configs.
+    "target": "es2022",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "allowSyntheticDefaultImports": true,
+    "allowImportingTsExtensions": true,
+    "noImplicitAny": true,
+    "noImplicitThis": true,
+    "alwaysStrict": true,
+    "strictNullChecks": true,
+    "strictPropertyInitialization": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noEmitOnError": false,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "baseUrl": "."
+  },
+  "include": ["./src/**/*", "./tests/**/*"]
+}

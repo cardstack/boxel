@@ -23,7 +23,15 @@ const PNPM_OWNED_FILES = new Set(['pnpm-lock.yaml', 'pnpm-workspace.yaml']);
 // it and drifts the copy from its source. Regenerating (`pnpm build:skills`)
 // then reports phantom diffs. Match on a path segment so absolute staged paths
 // work.
-const VERBATIM_COPIED_TREES = ['/packages/boxel-cli/plugin/skills/'];
+const VERBATIM_COPIED_TREES = [
+  '/packages/boxel-cli/plugin/skills/',
+  // Vendored from the Deck repo; `scripts/deck-sync.mjs check` fails CI if
+  // these bytes differ from DECK_SOURCE's recorded tree-hash. Without this
+  // skip, committing them reformats them and the guard fires on our own
+  // pre-commit hook rather than on a real edit.
+  '/packages/deck/src/',
+  '/packages/deck/tests/',
+];
 const isVerbatimCopy = (file) => {
   const posix = file.replace(/\\/g, '/');
   return VERBATIM_COPIED_TREES.some((tree) => posix.includes(tree));
