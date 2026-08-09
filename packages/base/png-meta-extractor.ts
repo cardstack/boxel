@@ -48,17 +48,24 @@ export function extractPngDimensions(bytes: Uint8Array): {
 // IHDR color type is a bit field: 1 = palette used, 2 = color used, 4 = alpha
 // channel present. Only five of the eight combinations are legal, and each
 // fixes the channel count.
+//
+// `colorSpace` here names the channel *model*, not a colorimetric profile.
+// IHDR proves grayscale/indexed outright, but for truecolor (2/6) it says only
+// "three or four channels of color" — sRGB versus Display P3 versus an embedded
+// ICC profile is stated in an `sRGB`/`iCCP`/`cICP` chunk past IHDR that this
+// header-only read never reaches. So truecolor leaves `colorSpace` unset rather
+// than guess `srgb`; `channels` already records that it's RGB(A).
 const PNG_COLOR_TYPES: Record<
   number,
-  { colorSpace: string; channels: number; hasAlpha: boolean }
+  { colorSpace?: string; channels: number; hasAlpha: boolean }
 > = {
   0: { colorSpace: 'grayscale', channels: 1, hasAlpha: false },
-  2: { colorSpace: 'srgb', channels: 3, hasAlpha: false },
+  2: { channels: 3, hasAlpha: false },
   // Palette entries are themselves RGB triples, so the samples are indices but
   // the rendered color is three-channel.
   3: { colorSpace: 'indexed', channels: 3, hasAlpha: false },
   4: { colorSpace: 'grayscale-alpha', channels: 2, hasAlpha: true },
-  6: { colorSpace: 'srgb', channels: 4, hasAlpha: true },
+  6: { channels: 4, hasAlpha: true },
 };
 
 // IHDR byte offsets, continuing past the dimensions read above.

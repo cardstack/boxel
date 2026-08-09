@@ -53,12 +53,15 @@ export interface JpegFrameInfo {
   components: number;
 }
 
-// Component counts map to the color model the encoder used. JPEG has no alpha
-// channel in any mode, so `hasAlpha` is a definite `false` rather than unknown.
+// The component count alone pins the color model only for a single channel:
+// one component is grayscale, unambiguously. Three components are RGB *or*
+// YCbCr and four are CMYK *or* YCCK, and which one is carried by an Adobe APP14
+// transform flag this frame-header read doesn't parse — so those cases leave
+// `colorSpace` unset rather than guess, while `channels` still records the count.
+// JPEG has no alpha channel in any mode, so `hasAlpha` is a definite `false`
+// rather than unknown.
 const JPEG_COLOR_SPACES: Record<number, string> = {
   1: 'grayscale',
-  3: 'ycbcr',
-  4: 'cmyk',
 };
 
 export function extractJpgColorProfile(

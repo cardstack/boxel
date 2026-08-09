@@ -635,8 +635,9 @@ module('Unit | image metadata extractors', function (hooks) {
         channels: 1,
         hasAlpha: false,
       });
+      // Color type 2 is truecolor: IHDR proves three channels but not their
+      // colorimetry, so no `colorSpace` is claimed.
       assert.deepEqual(extractPngColorProfile(buildPng(8, 2)), {
-        colorSpace: 'srgb',
         bitDepth: 8,
         channels: 3,
         hasAlpha: false,
@@ -653,8 +654,8 @@ module('Unit | image metadata extractors', function (hooks) {
         channels: 2,
         hasAlpha: true,
       });
+      // Color type 6 is truecolor + alpha: again four channels, no colorimetry.
       assert.deepEqual(extractPngColorProfile(buildPng(8, 6)), {
-        colorSpace: 'srgb',
         bitDepth: 8,
         channels: 4,
         hasAlpha: true,
@@ -680,17 +681,21 @@ module('Unit | image metadata extractors', function (hooks) {
 
   module('JPEG color profile', function () {
     test('maps the frame component count onto a color model', function (assert) {
+      // One component is unambiguously grayscale.
       assert.deepEqual(
         extractJpgColorProfile(buildJpeg([], { components: 1 })),
         { colorSpace: 'grayscale', bitDepth: 8, channels: 1, hasAlpha: false },
       );
+      // Three components are RGB or YCbCr and four are CMYK or YCCK; the count
+      // alone can't tell which, so `colorSpace` is left unset while `channels`
+      // still records the count.
       assert.deepEqual(
         extractJpgColorProfile(buildJpeg([], { components: 3 })),
-        { colorSpace: 'ycbcr', bitDepth: 8, channels: 3, hasAlpha: false },
+        { bitDepth: 8, channels: 3, hasAlpha: false },
       );
       assert.deepEqual(
         extractJpgColorProfile(buildJpeg([], { components: 4 })),
-        { colorSpace: 'cmyk', bitDepth: 8, channels: 4, hasAlpha: false },
+        { bitDepth: 8, channels: 4, hasAlpha: false },
       );
     });
 

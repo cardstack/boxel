@@ -274,12 +274,12 @@ module('Acceptance | png image def', function (hooks) {
     assert.deepEqual(
       result.searchDoc?.colorProfile,
       {
-        colorSpace: { code: 'srgb', scheme: 'color-space' },
         bitDepth: 8,
         channels: 3,
         hasAlpha: false,
       },
-      'the fixture is 8-bit color type 2, so three channels and no alpha',
+      'the fixture is 8-bit color type 2, so three channels and no alpha; ' +
+        'IHDR proves the channel model but not colorimetry, so no color space is claimed',
     );
     assert.strictEqual(
       result.searchDoc?.exif,

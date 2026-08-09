@@ -241,12 +241,13 @@ module('Acceptance | jpg image def', function (hooks) {
     assert.deepEqual(
       result.searchDoc?.colorProfile,
       {
-        colorSpace: { code: 'ycbcr', scheme: 'color-space' },
+        colorSpace: { code: 'srgb', scheme: 'color-space' },
         bitDepth: 8,
         channels: 3,
         hasAlpha: false,
       },
-      "the frame header's color model outranks the EXIF sRGB tag",
+      "a 3-component frame is RGB or YCbCr and the header can't say which, so " +
+        'it declines to guess and the EXIF sRGB tag fills in as the fallback',
     );
   });
 
@@ -296,8 +297,8 @@ module('Acceptance | jpg image def', function (hooks) {
     );
     assert.strictEqual(
       body?.data?.attributes?.colorProfile?.colorSpace?.code,
-      'ycbcr',
-      'file meta serves the coded color-space value',
+      'srgb',
+      'file meta serves the coded color-space value the EXIF fallback supplied',
     );
   });
 

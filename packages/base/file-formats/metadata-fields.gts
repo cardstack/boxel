@@ -371,6 +371,19 @@ export class ColorProfileField extends FieldDef {
   @field hasAlpha = contains(BooleanField);
   @field iccProfile = contains(StringField);
 
+  // A plain `{{#if @model.hasAlpha}}` would hide a genuine `false` alongside an
+  // unset value, collapsing the "no alpha channel" fact this field is careful to
+  // record. Projecting to a non-empty string keeps the two distinguishable in
+  // the template while still rendering nothing when we never learned either way.
+  @field hasAlphaLabel = contains(StringField, {
+    computeVia: function (this: ColorProfileField) {
+      if (this.hasAlpha == null) {
+        return '';
+      }
+      return this.hasAlpha ? 'Yes' : 'No';
+    },
+  });
+
   static embedded = class Embedded extends Component<typeof ColorProfileField> {
     <template>
       <dl class='metadata-rows'>
@@ -383,6 +396,9 @@ export class ColorProfileField extends FieldDef {
         {{/if}}
         {{#if @model.channels}}
           <div class='row'><dt>Channels</dt><dd>{{@model.channels}}</dd></div>
+        {{/if}}
+        {{#if @model.hasAlphaLabel}}
+          <div class='row'><dt>Alpha</dt><dd>{{@model.hasAlphaLabel}}</dd></div>
         {{/if}}
         {{#if @model.iccProfile}}
           <div class='row'><dt>ICC profile</dt><dd>{{@model.iccProfile}}</dd></div>
