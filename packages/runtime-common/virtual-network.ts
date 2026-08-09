@@ -1,3 +1,4 @@
+import { resolveSpecifier } from '@cardstack/deck';
 import { RealmPaths, ensureTrailingSlash } from './paths.ts';
 import { baseRealm } from './index.ts';
 import type {
@@ -24,6 +25,25 @@ export class VirtualNetwork {
   private handlers: Handler[] = [];
   private urlMappings: [string, string][] = [];
   private importMap: Map<string, (rest: string) => string> = new Map();
+  // The decklist: a DATA import map in the shape the import-maps spec
+  // defines, consulted BEFORE the handler chain above.
+  //
+  // Two maps rather than one, because they answer different questions. The
+  // handler map is a prefix table of FUNCTIONS: it says "anything under this
+  // realm prefix, rewrite it like so", and knows nothing about who is
+  // importing. That is right for realm URLs, which mean the same thing to
+  // everyone, and useless for a bare specifier, which has to be allowed to
+  // mean different things to different modules. `scopes` is the whole point
+  // — keyed by the IMPORTER, so two modules in one realm can resolve
+  // `palette` to two different versions without either copying a tree.
+  //
+  // Both empty by default, and Deck's `resolveSpecifier` returns undefined
+  // when the map says nothing about a specifier. So with no decklist loaded
+  // resolution falls straight through to the handler chain and behaves
+  // exactly as it did before this existed — which `virtual-network-test`
+  // asserts as a property, not as a spot check.
+  private decklistImports: Record<string, string> = {};
+  private decklistScopes: Record<string, Record<string, string>> = {};
   private realmMappings = new Map<string, string>();
   // Memo for toURLHref. Hot paths (module-graph walks, per-instance realm
   // membership checks) resolve the same identifiers over and over and only
@@ -104,7 +124,33 @@ export class VirtualNetwork {
     }
   }
 
-  resolveImport = (moduleIdentifier: string) => {
+  // `relativeTo` is the importing module — the argument that makes scopes
+  // possible at all. It is OPTIONAL because this function is passed by value
+  // to a dozen call sites (Loader, the capsule evaluator, tests), most of
+  // which have no importer to offer; those keep working and simply cannot
+  // benefit from scopes. Callers that DO know who is asking should pass it,
+  // or a decklist with scopes silently resolves as if it had none, which is
+  // the failure mode that looks like "scopes don't work".
+  resolveImport = (moduleIdentifier: string, relativeTo?: string) => {
+    // The decklist first. `resolveSpecifier` is Deck's implementation of the
+    // import-maps algorithm — exact key beats prefix, longest scope wins —
+    // and returning undefined is how it says "this map has no opinion",
+    // which is precisely the signal needed to fall through without changing
+    // any existing behaviour.
+    if (
+      Object.keys(this.decklistImports).length > 0 ||
+      Object.keys(this.decklistScopes).length > 0
+    ) {
+      let resolved = resolveSpecifier({
+        specifier: moduleIdentifier,
+        fromUrl: relativeTo ?? '',
+        imports: this.decklistImports,
+        scopes: this.decklistScopes,
+      });
+      if (resolved !== undefined) {
+        return resolved;
+      }
+    }
     for (let [prefix, handler] of this.importMap) {
       if (moduleIdentifier.startsWith(prefix)) {
         return handler(moduleIdentifier.slice(prefix.length));
@@ -115,6 +161,33 @@ export class VirtualNetwork {
     }
     return moduleIdentifier;
   };
+
+  /**
+   * Load a decklist — the `imports` / `scopes` halves of an import map.
+   *
+   * Additive to whatever is already loaded, so a realm's own decklist and an
+   * inherited one can both be applied; later keys win on collision, which
+   * matches how `extends` flattens (the child overrides the parent).
+   */
+  addDecklist(decklist: {
+    imports?: Record<string, string>;
+    scopes?: Record<string, Record<string, string>>;
+  }): void {
+    Object.assign(this.decklistImports, decklist.imports ?? {});
+    for (let [scope, mappings] of Object.entries(decklist.scopes ?? {})) {
+      this.decklistScopes[scope] = {
+        ...(this.decklistScopes[scope] ?? {}),
+        ...mappings,
+      };
+    }
+  }
+
+  /** Drop every decklist mapping. Exists so a test can assert the
+   * no-decklist behaviour on the same instance it just exercised. */
+  clearDecklist(): void {
+    this.decklistImports = {};
+    this.decklistScopes = {};
+  }
 
   private packageShimHandler = new PackageShimHandler(this.resolveImport);
 
