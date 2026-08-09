@@ -531,6 +531,39 @@ timeout must not merely be increased. Protocol analysis can continue, but no
 commit group that claims Sandbox compatibility should advance until Track and
 Poster Board each pass twice with tab cleanup between runs.
 
+#### Sandbox lifecycle revalidation — 2026-08-09
+
+Five consecutive clean-browser rounds of the two Sandbox cases now complete:
+
+- Track crosses the prerender-to-interactive handoff and its real iframe Play
+  control becomes Pause;
+- Poster Board crosses the same handoff, enters the Direct default edit
+  template, and accepts a real wheel scroll through its long form;
+- each round closes both app tabs before the next one, so persistent iframe
+  processes, loaders, media elements, and MessageChannels from earlier rounds
+  cannot manufacture resource exhaustion.
+
+Candidate handoff time was approximately 0.9–1.8 seconds for Poster Board and
+1.6–1.9 seconds for Track. Total case time remains slower than staging and is
+still a performance concern, but the earlier fifteen-second connection timeout
+is not reproducible in this clean cohort.
+
+The revalidation did expose a protocol-observability defect: ResizeObserver was
+installed while the child render root was intentionally empty, before the
+first render request. Its initial callback was logged and transported as
+“render acked but produced no visible output,” even though no render had acked
+and the subsequent real render succeeded. The child now suppresses render
+diagnostics until an accepted generation has completed a Glimmer flush. Normal
+bootstrap/RPC/render breadcrumbs are debug output; warnings are reserved for
+real lifecycle failures. This keeps the smoke log usable as evidence instead
+of making a healthy Sandbox look fundamentally broken.
+
+The browser smoke gate now treats either a connection timeout or a blank-render
+warning during these successful Sandbox cases as a regression. Semantic text
+parity alone is insufficient because the prerender placeholder contains the
+same text; the gate also waits for the live child, exercises its controls, and
+audits the lifecycle log before declaring the case healthy.
+
 #### Edit interaction baseline — 2026-08-09
 
 The browser gate now includes two interactions that semantic text checks could

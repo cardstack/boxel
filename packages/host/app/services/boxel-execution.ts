@@ -462,7 +462,7 @@ export default class BoxelExecutionService extends Service {
             // the cross-origin child's own console is unreachable from
             // Host tooling, so this breadcrumb is the one place the
             // RP-20.5 delivery loop closes observably.
-            console.warn('[sandbox-parent] instance push applied', {
+            console.debug('[sandbox-parent] instance push applied', {
               generation: result.generation,
             });
           }
@@ -511,7 +511,7 @@ export default class BoxelExecutionService extends Service {
         }
         await api.updateFromSerialized(card as never, document);
         this.store.scheduleSave(cardId);
-        console.warn('[sandbox-parent] child write applied', { id: cardId });
+        console.debug('[sandbox-parent] child write applied', { id: cardId });
         for (let trigger of [
           ...(this.instanceSyncPushTriggers.get(card) ?? []),
         ]) {
@@ -916,7 +916,7 @@ export default class BoxelExecutionService extends Service {
     // succession is the signature of a remint loop (a renderer resource
     // re-instantiating on every tick of some tracked state), and only this
     // side knows the surface identity that ties the boots together.
-    console.warn('[sandbox-parent] process created', {
+    console.debug('[sandbox-parent] process created', {
       surfaceId: surfaceIdentity,
       priorCreationsThisSession: this.sandboxCreationCount++,
     });

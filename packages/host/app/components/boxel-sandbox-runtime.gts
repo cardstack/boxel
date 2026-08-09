@@ -85,7 +85,7 @@ export function reportIntrinsicHeight(
       return;
     }
     lastReportedHeight = height;
-    console.warn('[sandbox-child] height reported', { height });
+    console.debug('[sandbox-child] height reported', { height });
     void surface
       .layout({ heightMode: 'intrinsic', minimumHeight: height })
       .catch((error) => {
@@ -242,7 +242,7 @@ export function forwardInstanceWrites(
         await writeClient.write(document);
         // The one child-observable breadcrumb that the parent ACKED applying
         // this write — mirrors '[sandbox-parent] instance push applied'.
-        console.warn('[sandbox-child] instance write applied');
+        console.debug('[sandbox-child] instance write applied');
       } catch (error) {
         console.warn('[sandbox-child] instance write failed', error);
       }
@@ -384,7 +384,7 @@ export function createSandboxModuleEvaluator(
       // rejection ("outside its classified graph"), not a hang, but log
       // begun/completed regardless so a genuinely slow or stuck fetch is
       // distinguishable from one that never started.
-      console.warn('[sandbox-child] dynamic import begun', {
+      console.debug('[sandbox-child] dynamic import begun', {
         specifier,
         resolved,
         fromModule: moduleIdentifier,
@@ -393,7 +393,7 @@ export function createSandboxModuleEvaluator(
         .import(resolved)
         .then(
           (result) => {
-            console.warn('[sandbox-child] dynamic import completed', {
+            console.debug('[sandbox-child] dynamic import completed', {
               resolved,
             });
             return result;
@@ -457,6 +457,13 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
   private reportRenderDiagnostic?: (
     diagnostic: SandboxRenderDiagnostic,
   ) => void;
+  /**
+   * Resize observation starts as soon as the child render root exists, which
+   * is intentionally before the first render request. An empty bootstrap root
+   * is not a failed render and must never be reported as one. This bit changes
+   * only after a Glimmer flush for an accepted render generation has committed.
+   */
+  private hasCommittedRender = false;
   /** The handle currently mounted — Sandbox HMR's `draft()` re-derives it. */
   private renderedCardHandle?: BoxelInstanceHandle;
   /** RP-20.6: sender for child→parent instance writes, set at bootstrap. */
@@ -481,6 +488,9 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
    * and reinstalled on every re-render a fresh closure would cause.
    */
   private measureAndReportRenderDiagnostic = (element: HTMLElement): void => {
+    if (!this.hasCommittedRender) {
+      return;
+    }
     this.reportRenderDiagnostic?.(measureRenderedOutput(element, this.format));
   };
 
@@ -561,7 +571,7 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
       // render request off the wire — this is the earliest point in the
       // sandboxed render path this component itself can observe, so it
       // stands in for "render request received".
-      console.warn('[sandbox-child] render begun', {
+      console.debug('[sandbox-child] render begun', {
         card,
         format,
         generation,
@@ -606,12 +616,13 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
       if (this.isGenerationStale?.(generation)) {
         return;
       }
+      this.hasCommittedRender = true;
       // Breadcrumb 7/7: the Glimmer flush this awaited has committed —
       // report what actually landed in the DOM. The render-response ack
       // (sandbox-render-transport.ts) only proves this promise resolved,
       // not that anything visible came out of it.
       let diagnostic = measureRenderedOutput(root, format);
-      console.warn('[sandbox-child] render completed', diagnostic);
+      console.debug('[sandbox-child] render completed', diagnostic);
       this.reportRenderDiagnostic?.(diagnostic);
     },
     clear: async (generation: number) => {
@@ -622,6 +633,7 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
         this.renderedComponent = undefined;
         this.error = undefined;
       });
+      this.hasCommittedRender = false;
       this.renderedCardHandle = undefined;
       this.stopWriteForwarding?.();
       this.stopWriteForwarding = undefined;
@@ -688,7 +700,7 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
       // ordinary HMR generation either: `this.painted`
       // (sandbox-runtime-process.ts) is untouched by any of this, so
       // onFirstPaint (already fired once) never re-arms.
-      console.warn('[sandbox-child] draft begun', { url, generation });
+      console.debug('[sandbox-child] draft begun', { url, generation });
       if (!this.runtime || !this.renderedCardHandle) {
         throw new Error(
           'Sandbox draft requires an already-rendered card to redraft',
@@ -723,7 +735,7 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
         return;
       }
       let diagnostic = measureRenderedOutput(root, this.format);
-      console.warn('[sandbox-child] draft completed', diagnostic);
+      console.debug('[sandbox-child] draft completed', diagnostic);
       this.reportRenderDiagnostic?.(diagnostic);
     },
     setStaleCheck: (isStale) => {

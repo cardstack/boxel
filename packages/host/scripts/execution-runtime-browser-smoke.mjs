@@ -17,6 +17,11 @@ const FATAL_TEXT = [
   'SYNTAX ERROR',
 ];
 
+const FATAL_SANDBOX_LOG_TEXT = [
+  'Timed out connecting to the Sandbox child',
+  'render acked but produced no visible output',
+];
+
 export const executionRuntimeSmokeCases = [
   {
     id: 'release-composition',
@@ -542,6 +547,24 @@ function assess(probeResult, interaction, smokeCase, checkExecution) {
   return { failures, pass: failures.length === 0 };
 }
 
+async function auditSandboxLifecycle(tab, smokeCases) {
+  if (
+    !smokeCases.some((smokeCase) => smokeCase.expectedExecution === 'sandbox')
+  ) {
+    return { failures: [], matchingLogs: [] };
+  }
+  let logs = await tab.dev.logs();
+  let matchingLogs = logs
+    .map((entry) => JSON.stringify(entry))
+    .filter((entry) =>
+      FATAL_SANDBOX_LOG_TEXT.some((fatalText) => entry.includes(fatalText)),
+    );
+  return {
+    failures: matchingLogs.length ? ['sandbox-lifecycle-log-failure'] : [],
+    matchingLogs,
+  };
+}
+
 async function runOrigin(browser, origin, smokeCases, options) {
   let tab = await browser.tabs.new();
   let results = [];
@@ -645,6 +668,7 @@ export async function runExecutionRuntimeBrowserSmoke({
     timeoutMs,
   });
   let failures = candidate.results.filter((result) => !result.assessment.pass);
+  let sandboxLifecycle = await auditSandboxLifecycle(candidate.tab, cases);
   let stoppedAtAuthentication = failures.some((result) =>
     result.assessment.failures.includes('authentication-required'),
   );
@@ -679,9 +703,10 @@ export async function runExecutionRuntimeBrowserSmoke({
     candidate,
     performanceWarnings,
     reference,
+    sandboxLifecycle,
     status: stoppedAtAuthentication
       ? 'candidate-authentication-required'
-      : failures.length
+      : failures.length || sandboxLifecycle.failures.length
         ? 'candidate-regression'
         : 'pass',
   };

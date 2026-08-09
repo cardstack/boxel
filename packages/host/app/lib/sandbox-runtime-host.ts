@@ -76,7 +76,7 @@ export function installSandboxRuntimeHost(options: {
         // be spam) — confirms the bootstrap listener is actually up and
         // trying to reach the parent.
         announcedOnce = true;
-        console.warn('[sandbox-child] listening posted', {
+        console.debug('[sandbox-child] listening posted', {
           bootstrapId: options.bootstrapId,
           parentOrigin: options.parentOrigin,
         });
@@ -114,7 +114,7 @@ export function installSandboxRuntimeHost(options: {
       // its port was accepted. If this never logs, the parent's connect
       // either never reached this frame or failed one of the checks above
       // (wrong origin, stale bootstrapId, wrong port count).
-      console.warn('[sandbox-child] connect received', {
+      console.debug('[sandbox-child] connect received', {
         bootstrapId: options.bootstrapId,
       });
       // Installed before module evaluation starts (createRuntime below is
@@ -139,13 +139,13 @@ export function installSandboxRuntimeHost(options: {
       let writeClient: SandboxWriteClient | undefined;
       try {
         fetchClient = new SandboxFetchClient(port);
-        console.warn('[sandbox-child] createRuntime begun');
+        console.debug('[sandbox-child] createRuntime begun');
         let createdRuntime = await options.createRuntime(
           fetchClient.fetch,
           fetchClient.fetchMedia,
         );
         runtime = createdRuntime;
-        console.warn('[sandbox-child] createRuntime completed', {
+        console.debug('[sandbox-child] createRuntime completed', {
           mode: createdRuntime.mode,
         });
         let createdRuntimeServer = new SandboxBoxelRuntimeServer(
@@ -155,7 +155,7 @@ export function installSandboxRuntimeHost(options: {
         runtimeServer = createdRuntimeServer;
         let createdSurface = new SandboxSurfaceClient(port, event.data.surface);
         surface = createdSurface;
-        console.warn('[sandbox-child] createRenderTarget begun');
+        console.debug('[sandbox-child] createRenderTarget begun');
         let createdWriteClient = new SandboxWriteClient(port);
         writeClient = createdWriteClient;
         let renderTarget = await options.createRenderTarget(
@@ -164,7 +164,7 @@ export function installSandboxRuntimeHost(options: {
           (diagnostic) => postRenderDiagnostic(port, diagnostic),
           createdWriteClient,
         );
-        console.warn('[sandbox-child] createRenderTarget completed');
+        console.debug('[sandbox-child] createRenderTarget completed');
         let createdRenderServer = new SandboxRenderServer(port, renderTarget);
         renderServer = createdRenderServer;
         // Sandbox HMR (RP-17.1 un-deferral): gives the target a live check
@@ -180,7 +180,7 @@ export function installSandboxRuntimeHost(options: {
         // Breadcrumb 4/7: bootstrap fully completed and 'ready' is on the
         // wire. Everything from here on is RPC-driven — no more of the
         // child's own boot sequencing runs.
-        console.warn('[sandbox-child] ready posted');
+        console.debug('[sandbox-child] ready posted');
         // RP-15.3: a live iframe is never re-parented and render() acks are
         // request-scoped, so neither channel can report a failure that
         // surfaces after a render has already resolved (an async modifier
@@ -313,7 +313,7 @@ export function postRenderDiagnostic(
     ...diagnostic,
   } satisfies SandboxRenderDiagnosticMessage);
   if (diagnostic.hasVisibleContent) {
-    console.warn('[sandbox-child] render diagnostic', diagnostic);
+    console.debug('[sandbox-child] render diagnostic', diagnostic);
   } else {
     console.warn(
       '[sandbox-child] render acked but produced no visible output',

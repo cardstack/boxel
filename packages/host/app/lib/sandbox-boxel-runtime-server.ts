@@ -46,7 +46,7 @@ export default class SandboxBoxelRuntimeServer {
     // "module import begun" without needing a separate breadcrumb inside the
     // Loader itself (shared, non-sandbox-owned code).
     let startedAt = Date.now();
-    console.warn('[sandbox-child] RPC request received', {
+    console.debug('[sandbox-child] RPC request received', {
       operation: request.operation,
       requestId: request.requestId,
     });
@@ -61,7 +61,7 @@ export default class SandboxBoxelRuntimeServer {
         ok: true,
         value,
       };
-      console.warn('[sandbox-child] RPC request completed', {
+      console.debug('[sandbox-child] RPC request completed', {
         operation: request.operation,
         requestId: request.requestId,
         durationMs: Date.now() - startedAt,

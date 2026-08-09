@@ -63,7 +63,7 @@ export default class BoxelSandboxRuntimeRoute extends Route {
     // client log reaches this (the child page connects to the same dev
     // server), so this and the breadcrumbs downstream of it turn "never
     // reaches render" into "stops exactly at X".
-    console.warn('[sandbox-child] route model resolved', {
+    console.debug('[sandbox-child] route model resolved', {
       bootstrapId,
       parentOrigin,
       pathname: window.location.pathname,
