@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "Board",
+        "module": "../board"
+      },
+      "specType": "component",
+      "readMe": "## Board\n\nThe layer-matrix **Board** presentation element: a generic kanban over any cards, consuming `KanbanPlane` from boxel-ui (drag engine, columns, WIP limits come free \u2014 consume, don't rebuild). The block adds the card-level contract: `@items` (CardDef[]), `@columns` ({key,label,color?}[]), `@columnKeyFor(item)`, and `@onMove(item, columnKey)` fired when a drag crosses columns \u2014 the consumer persists (e.g. set `stage`). Cards render via their own fitted format by default (the board provides the `fitted-card` container); pass a `<:card as |item|>` block to customize.\n\n```gts\nimport { Board } from '../board';\n<Board @items={{this.opps}} @columns={{this.stages}} @columnKeyFor={{this.stageOf}} @onMove={{this.setStage}} />\n```\n\nThe linked example is a demo card mounting the board over the pipeline instances (Opportunity + Deal in one board via adoption).\n\n**Non-goals:** column order persistence and per-card sort order (in-memory only \u2014 same open question as App 2's boardOrder), query-driven item loading (consumer's job), interactive children inside cards (drag engine claims pointerdown; stopPropagation wrapper needed \u2014 see App 2 findings).",
+      "cardInfo": {
+        "name": "Board",
+        "summary": "Generic kanban block over any cards on boxel-ui KanbanPlane: columnKeyFor maps card\u2192column, onMove persists drags, fitted renders by default.",
+        "notes": null,
+        "cardThumbnailURL": null
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../PipelineBoardDemo/q3-pipeline"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
