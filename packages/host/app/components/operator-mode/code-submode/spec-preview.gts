@@ -242,9 +242,17 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
               @onSelectCard={{@viewSpecInPlayground}}
             />
             {{#if this.displayIsolated}}
-              <CardRenderer @card={{@activeSpec}} @format='isolated' />
+              <CardRenderer
+                @card={{@activeSpec}}
+                @format='isolated'
+                @execution='direct'
+              />
             {{else}}
-              <CardRenderer @card={{@activeSpec}} @format='edit' />
+              <CardRenderer
+                @card={{@activeSpec}}
+                @format='edit'
+                @execution='direct'
+              />
             {{/if}}
           </div>
         {{/if}}

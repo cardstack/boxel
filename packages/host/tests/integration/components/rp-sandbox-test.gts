@@ -95,14 +95,17 @@ async function renderThroughExecutionRenderer(card: BaseDef, format?: Format) {
   await renderComponent(
     class TestDriver extends GlimmerComponent {
       <template>
-        <CardRenderer @card={{card}} @format={{format}} @execution='auto' />
+        {{! Ordinary product callsites omit @execution. The top-level
+            CardRenderer boundary must classify both Capsule and Sandbox
+            modules without callers opting into safety. }}
+        <CardRenderer @card={{card}} @format={{format}} />
       </template>
     },
   );
 }
 
 // The standard-view override exactly as interact mode's Toggle Standard
-// View passes it (stack-item.gts): baseCardRef alongside execution='auto'.
+// View passes it (stack-item.gts): baseCardRef with automatic policy routing.
 async function renderWithBaseTemplateOverride(card: BaseDef, format?: Format) {
   await renderComponent(
     class TestDriver extends GlimmerComponent {
@@ -110,7 +113,6 @@ async function renderWithBaseTemplateOverride(card: BaseDef, format?: Format) {
         <CardRenderer
           @card={{card}}
           @format={{format}}
-          @execution='auto'
           @codeRef={{baseCardRef}}
         />
       </template>
@@ -746,6 +748,84 @@ export async function loadThree() {
           'https://esm.sh/three@0.160.0/es2022/three.mjs',
         ],
         "the dynamic import and its own declared sub-import both crossed the authority-checked SandboxFetchClient broker at esm.sh's real origin, exactly like a static import",
+      );
+    } finally {
+      client.destroy();
+      server.destroy();
+      channel.port1.close();
+      channel.port2.close();
+    }
+  });
+
+  test('G-07: trusted Base and authored children compose inside one Sandbox-local Loader', async function (assert) {
+    let channel = new MessageChannel();
+    let sources: Record<string, string> = {
+      'https://realm.example/browser-card': `
+        import { BASE_LABEL } from 'https://cardstack.com/base/test-field';
+        import { authoredLabel } from './authored-child';
+        export const result = BASE_LABEL + ' -> ' + authoredLabel;
+      `,
+      'https://realm.example/authored-child':
+        "export const authoredLabel = 'authored child';",
+      'https://cardstack.com/base/test-field':
+        "export const BASE_LABEL = 'trusted Base field';",
+    };
+    let requested: string[] = [];
+    let authority = new SandboxModuleAuthority(
+      (identifier) => identifier,
+      (identifier) => identifier.startsWith('https://cardstack.com/base/'),
+    );
+    authority.allow(['https://realm.example/browser-card']);
+    let server = new SandboxFetchServer(
+      channel.port1,
+      async (input) => {
+        let url = String(input);
+        requested.push(url);
+        let source = sources[url];
+        return source === undefined
+          ? new Response('not found', { status: 404 })
+          : new Response(source, {
+              headers: { 'content-type': 'text/javascript' },
+            });
+      },
+      (url) => authority.has(url),
+      (url, contentType, body) => authority.observe(url, contentType, body),
+    );
+    let client = new SandboxFetchClient(channel.port2);
+    channel.port1.start();
+    channel.port2.start();
+
+    let virtualNetwork = new VirtualNetwork(globalThis.fetch);
+    virtualNetwork.mount((request: Request) => client.fetch(request));
+    let fetchFn = fetcher(virtualNetwork.fetch, [], virtualNetwork);
+    let loader: Loader = new Loader(fetchFn, virtualNetwork.resolveImport, {
+      virtualNetwork,
+      moduleEvaluator: createSandboxModuleEvaluator(() => loader),
+    });
+
+    try {
+      let mod = await loader.import<{ result: string }>(
+        'https://realm.example/browser-card',
+      );
+
+      assert.strictEqual(
+        mod.result,
+        'trusted Base field -> authored child',
+        'trusted and authored exports are usable by the browser card in one child runtime',
+      );
+      assert.deepEqual(
+        [...requested].sort(),
+        [
+          'https://cardstack.com/base/test-field',
+          'https://realm.example/authored-child',
+          'https://realm.example/browser-card',
+        ],
+        'both nested modules were fetched by the same Sandbox-local Loader and authority broker',
+      );
+      await assert.rejects(
+        loader.import('https://realm.example/not-declared'),
+        /outside its classified graph/,
+        'the shared child Loader does not broaden authored module authority',
       );
     } finally {
       client.destroy();

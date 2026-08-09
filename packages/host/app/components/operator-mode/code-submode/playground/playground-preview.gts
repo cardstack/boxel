@@ -71,17 +71,28 @@ const PlaygroundPreview: TemplateOnlyComponent<Signature> = <template>
         @card={{@card}}
         @format={{@format}}
         @codeRef={{@codeRef}}
+        @execution='direct'
       />
     </CardContainer>
   {{else if (eq @format 'embedded')}}
     <CardContainer
       class={{if @isFieldDef 'field-preview-container' 'preview-container'}}
     >
-      <CardRenderer class='preview' @card={{@card}} @format={{@format}} />
+      <CardRenderer
+        class='preview'
+        @card={{@card}}
+        @format={{@format}}
+        @execution='direct'
+      />
     </CardContainer>
   {{else if (eq @format 'head')}}
     <CardContainer class='preview-container'>
-      <CardRenderer class='preview' @card={{@card}} @format={{@format}} />
+      <CardRenderer
+        class='preview'
+        @card={{@card}}
+        @format={{@format}}
+        @execution='direct'
+      />
     </CardContainer>
   {{else if (eq @format 'atom')}}
     <div class='atom-preview-container' data-test-atom-preview>Lorem ipsum dolor
@@ -91,6 +102,7 @@ const PlaygroundPreview: TemplateOnlyComponent<Signature> = <template>
         @card={{@card}}
         @format={{@format}}
         @displayContainer={{unless @isFieldDef false}}
+        @execution='direct'
       />
       tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim
       veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea

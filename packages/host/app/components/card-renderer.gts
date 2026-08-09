@@ -109,13 +109,23 @@ export default class CardRenderer extends Component<Signature> {
   }
 
   private get usesExecutionRuntime(): boolean {
-    // Under 'auto', a codeRef is only ever the standard-view base-template
-    // override (baseCardRef from stack-item / preview-panel). It must NOT
-    // opt the render out of the execution runtime — that would silently
-    // execute a Sandbox-classified module's authored field templates in the
-    // main document. The execution renderer resolves the override per tier
+    // Top-level Boxels enter the policy router unless a trusted caller makes
+    // the legacy/direct escape hatch explicit. This keeps containment as the
+    // safe default for every product surface that adopts CardRenderer; new
+    // surfaces cannot accidentally execute authored modules in the Host.
+    //
+    // A field render stays inside its parent's already-selected execution
+    // environment. Routing it again would create a boundary per delegated
+    // field instead of preserving Boxel's compositional render graph.
+    //
+    // Under automatic execution, a codeRef is only ever the standard-view
+    // Base-template override (baseCardRef from stack-item / preview-panel).
+    // It must NOT opt the render out of the execution runtime — that would
+    // silently execute a Sandbox-classified module's authored field templates
+    // in the main document. The execution renderer resolves the override per
+    // tier
     // (RP-6.5): host-side trusted Base for Direct/Capsule, refused for
     // Sandbox.
-    return this.args.execution === 'auto' && this.args.field === undefined;
+    return this.args.execution !== 'direct' && this.args.field === undefined;
   }
 }

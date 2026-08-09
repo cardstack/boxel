@@ -1179,7 +1179,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
               @card={{this.card}}
               @format={{this.cardFormat}}
               @codeRef={{this.defaultCodeRef}}
-              @execution='auto'
               {{! RP-9.9: a stack item's box comes from the viewport, not
                 from the card — .stack-item-card is a definite-height grid
                 whose content row stretches. That is main's contract for a

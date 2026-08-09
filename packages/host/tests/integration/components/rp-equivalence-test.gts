@@ -62,6 +62,7 @@ async function renderLegacy(
           @card={{card}}
           @format={{format}}
           @displayContainer={{displayContainer}}
+          @execution='direct'
         />
       </template>
     },

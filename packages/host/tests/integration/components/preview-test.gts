@@ -39,6 +39,10 @@ function containsExecutableValue(value: unknown): boolean {
 }
 
 module('Integration | preview', function (hooks) {
+  // This module is the low-level Direct/Glimmer oracle. Its fixtures are
+  // ephemeral in-memory instances backed by shimmed modules, not realm-served
+  // execution documents. Realm-backed automatic routing is covered by
+  // rp-realm-mirror-compatibility-test.gts.
   let loader: Loader;
   setupRenderingTest(hooks);
 
@@ -64,7 +68,7 @@ module('Integration | preview', function (hooks) {
     let card = new TestCard({ firstName: 'Mango ' });
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template><CardRenderer @card={{card}} /></template>
+        <template><CardRenderer @card={{card}} @execution='direct' /></template>
       },
     );
     await waitFor('[data-test-firstName]'); // we need to wait for the card instance to load
@@ -168,7 +172,7 @@ module('Integration | preview', function (hooks) {
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template><CardRenderer @card={{card}} /></template>
+        <template><CardRenderer @card={{card}} @execution='direct' /></template>
       },
     );
     await waitFor('[data-test-runtime-card]');
@@ -256,7 +260,7 @@ module('Integration | preview', function (hooks) {
           <div class='direct-runtime-css-canary' data-test-host-css-canary>
             Host content
           </div>
-          <CardRenderer @card={{card}} />
+          <CardRenderer @card={{card}} @execution='direct' />
         </template>
       },
     );
@@ -368,7 +372,11 @@ module('Integration | preview', function (hooks) {
       card = headCard;
 
       <template>
-        <CardRenderer @card={{this.card}} @format={{@format}} />
+        <CardRenderer
+          @card={{this.card}}
+          @format={{@format}}
+          @execution='direct'
+        />
       </template>
     }
 
@@ -431,7 +439,11 @@ module('Integration | preview', function (hooks) {
       card = fallbackCard;
 
       <template>
-        <CardRenderer @card={{this.card}} @format={{@format}} />
+        <CardRenderer
+          @card={{this.card}}
+          @format={{@format}}
+          @execution='direct'
+        />
       </template>
     }
 
@@ -488,7 +500,11 @@ module('Integration | preview', function (hooks) {
       };
       <template>
         <button {{on 'click' this.flip}} data-test-flip-format>flip</button>
-        <CardRenderer @card={{this.card}} @format={{this.format}} />
+        <CardRenderer
+          @card={{this.card}}
+          @format={{this.format}}
+          @execution='direct'
+        />
       </template>
     }
 
@@ -560,7 +576,11 @@ module('Integration | preview', function (hooks) {
       };
       <template>
         <button {{on 'click' this.flip}} data-test-flip-format>flip</button>
-        <CardRenderer @card={{this.card}} @format={{this.format}} />
+        <CardRenderer
+          @card={{this.card}}
+          @format={{this.format}}
+          @execution='direct'
+        />
       </template>
     }
 
@@ -640,7 +660,11 @@ module('Integration | preview', function (hooks) {
       };
       <template>
         <button {{on 'click' this.flip}} data-test-flip-format>flip</button>
-        <CardRenderer @card={{this.card}} @format={{this.format}} />
+        <CardRenderer
+          @card={{this.card}}
+          @format={{this.format}}
+          @execution='direct'
+        />
       </template>
     }
 

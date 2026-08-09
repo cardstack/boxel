@@ -239,11 +239,19 @@ export const OptionsDropdown: TemplateOnlyComponent<OptionsDropdownSignature> =
     >
       {{#if @isFileMeta}}
         <div class='file-item'>
-          <CardRenderer @card={{asFile item}} @format='atom' />
+          <CardRenderer
+            @card={{asFile item}}
+            @format='atom'
+            @execution='direct'
+          />
         </div>
       {{else if @isField}}
         <CardContainer class='field' @displayBoundaries={{true}}>
-          <CardRenderer @card={{fieldOf item}} @format='atom' />
+          <CardRenderer
+            @card={{fieldOf item}}
+            @format='atom'
+            @execution='direct'
+          />
         </CardContainer>
       {{else}}
         <CardContainer class='card' @displayBoundaries={{true}}>
