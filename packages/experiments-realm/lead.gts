@@ -13,7 +13,7 @@ import { htmlSafe } from '@ember/template';
 import TargetIcon from '@cardstack/boxel-icons/target';
 
 const LeadStatusField = enumField(StringField, {
-  options: ['new', 'contacted', 'qualified', 'disqualified'],
+  options: ['new', 'contacted', 'qualified', 'converted', 'disqualified'],
   displayName: 'Lead Status',
 });
 
@@ -152,6 +152,10 @@ export class Lead extends CardDef {
           background: var(--lead-qualified-bg, #dcfce7);
           color: var(--lead-qualified-fg, #166534);
         }
+        .status-converted {
+          background: var(--lead-converted-bg, #dcfce7);
+          color: var(--lead-converted-fg, #166534);
+        }
         .status-disqualified {
           background: var(--lead-disqualified-bg, #fee2e2);
           color: var(--lead-disqualified-fg, #991b1b);
@@ -240,6 +244,10 @@ export class Lead extends CardDef {
         .status-qualified {
           background: var(--lead-qualified-bg, #dcfce7);
           color: var(--lead-qualified-fg, #166534);
+        }
+        .status-converted {
+          background: var(--lead-converted-bg, #dcfce7);
+          color: var(--lead-converted-fg, #166534);
         }
         .status-disqualified {
           background: var(--lead-disqualified-bg, #fee2e2);
@@ -374,6 +382,10 @@ export class Lead extends CardDef {
         .status-qualified {
           background: var(--lead-qualified-bg, #dcfce7);
           color: var(--lead-qualified-fg, #166534);
+        }
+        .status-converted {
+          background: var(--lead-converted-bg, #dcfce7);
+          color: var(--lead-converted-fg, #166534);
         }
         .status-disqualified {
           background: var(--lead-disqualified-bg, #fee2e2);
