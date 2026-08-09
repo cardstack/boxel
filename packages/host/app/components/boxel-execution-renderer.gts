@@ -840,9 +840,11 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
         data-boxel-execution='direct'
         data-boxel-execution-reason={{this.executionReason}}
         {{surfaceElement this.directSurface}}
-        ...attributes
       >
-        <this.directComponent @displayContainer={{@displayContainer}} />
+        <this.directComponent
+          @displayContainer={{@displayContainer}}
+          ...attributes
+        />
       </div>
     {{else if (eq this.state.snapshot.status 'error')}}
       <section class='boxel-execution-error' role='alert' ...attributes>

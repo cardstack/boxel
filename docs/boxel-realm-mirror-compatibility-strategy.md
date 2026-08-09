@@ -393,9 +393,13 @@ Use a smaller set of user workflows rather than mounting isolated cards only:
 
 ### Layer 5 — browser differential and performance
 
-Only after Layers 0–4 have classified failures should we compare deployed
-staging/main with the branch in browsers. The browser runner records both
-semantic probes and visuals:
+Browser comparison has two cadences. A small commit-group smoke gate runs
+after every coherent group of runtime changes. It catches broad product
+regressions before we spend more time inside isolated protocol tests. The
+larger differential and performance pass runs after Layers 0–4 have classified
+failures. Both use the same staging/main reference and candidate branch.
+
+The browser runner records both semantic probes and visuals:
 
 - main/staging URL, branch URL, card and source hashes;
 - selected/actual mode and classifier reasons;
@@ -411,6 +415,141 @@ the rollout. A visual mismatch accompanied by semantic parity is a CSS/layout
 bug; a record mismatch is a semantic boundary bug; a route mismatch is a
 classifier or integration bug. This classification keeps browser debugging
 focused.
+
+#### Commit-group browser smoke gate
+
+The executable cohort lives in
+`packages/host/scripts/execution-runtime-browser-smoke.mjs`. It is imported by
+the Codex in-app-browser runtime and receives the real in-app browser handle;
+it does not launch a separate headless browser. The reference origin defaults
+to `https://realms-staging.stack.cards`, and the candidate is the locally
+running or deployed branch Host pointed at the same staging cards.
+
+The six cases are deliberately graph-heavy rather than numerous:
+
+| Case                        | Why it earns a place in every commit-group run                                                      |
+| --------------------------- | --------------------------------------------------------------------------------------------------- |
+| `Release/opening-night`     | Deep Capsule composition, Guide, theme, trusted Base portals, relationships, and computed values.   |
+| `NestedFieldHost/sample`    | Capsule isolated output followed by the Direct default edit template and nested editable FieldDefs. |
+| `MarkdownArticle/sample`    | Rich Markdown, linked images, and authored cards at atom, embedded, fitted, and isolated formats.   |
+| `ComputedFlightPlan/sample` | Deep computed/BXL-shaped projection, delegated FieldDefs, theme, and scoped CSS.                    |
+| `Track/corridor-take-one`   | Real Sandbox media lifecycle, cover image, iframe controls, and a user-triggered play transition.   |
+| `PosterBoard/sample`        | Surface layout coordinates, image projection, visual composition, and hostile-CSS risk.             |
+
+Before comparing output, the runner requires both origins to be authenticated.
+A sign-in page aborts the run and is never recorded as a renderer result. The
+browser profile only needs this one-time local sign-in; later commit groups
+reuse it.
+
+Each case asserts stable user-visible meaning rather than complete DOM HTML:
+
+- specific text and computed values that would expose a lost boundary field;
+- heading structure, healthy images, controls, and a non-zero card slot;
+- the candidate's `data-boxel-execution` tier;
+- default-edit field values or the media play-to-pause transition;
+- absence of blank, loading-only, syntax-error, and runtime-error states;
+- Host chrome colors plus screenshots for the Release and Sandbox media
+  canaries when visual review is requested.
+
+Sandbox cases have two independent readiness barriers. First, the Host must
+show the prerendered semantic placeholder. Second, that placeholder must leave
+the DOM and the cross-origin iframe must expose the same semantics and usable
+controls. The runner reads the child through an in-app-browser frame locator
+and performs the media action inside that frame. It never treats a correct
+placeholder, a transport acknowledgement, or a same-looking placeholder
+button as proof that the Sandbox became interactive.
+
+The result also reports candidate/reference elapsed time and the Sandbox
+handoff time. A candidate taking at least 2.5 times the reference duration (or
+at least eight seconds total) produces a `performanceWarnings` entry. A warning
+does not weaken correctness or block protocol work by itself, but it stays in
+the commit-group record and must not trend upward across successive groups.
+Failure to complete the Sandbox handoff within the case timeout remains a hard
+correctness failure.
+
+Staging is an oracle, not an automatically accepted golden file. If staging no
+longer satisfies the checked-in invariants, the run reports
+`reference-drift` and stops. We inspect the changed staging behavior before
+updating expectations. This prevents a broken deployment from teaching the
+branch a new broken baseline.
+
+The decision rule is intentionally severe:
+
+1. authentication failure or reference drift aborts without judging runtime
+   correctness;
+2. blank output, fatal UI, wrong execution tier, missing computed values,
+   broken required images, or failed edit/media interaction blocks the current
+   commit group;
+3. any failure of the Release composition canary, or two failures anywhere in
+   the six-card cohort, pauses architectural work for root-cause analysis;
+4. a visual-only mismatch with semantic parity is fixed as CSS/layout work and
+   does not justify weakening the protocol;
+5. when all hard checks are green and the two visual canaries remain
+   recognizably equivalent, graph-analysis and protocol work may continue.
+
+For the routine gate, import the runner in the persistent in-app-browser Node
+runtime and pass its signed-in browser handle, the candidate origin, and a
+20–30 second per-case timeout. Call `closeExecutionRuntimeSmokeTabs(result)`
+after every completed run. Keep a failed tab open only long enough to inspect
+it, then close it too. Sandbox tabs own persistent iframes, loaders, media
+elements, and message channels; accumulating completed runs can exhaust the
+browser and manufacture false startup failures. This cleanup keeps the gate
+cheap: one reference tab and one candidate tab are reused across all six
+cases, while still exercising the actual application, iframe origin, cookies,
+CSS, images, and interactions.
+
+After a green structured run, inspect one fixed-viewport screenshot pair for
+`Release/opening-night` and one for `Track/corridor-take-one`. The purpose is
+not pixel equality. It is to catch host-chrome leakage, double framing,
+incorrect intrinsic height, missing themes, and obviously remounted or blank
+content that semantic text alone cannot expose.
+
+#### First observed baseline — 2026-08-09
+
+The first clean comparison established a useful split instead of a blanket
+green result:
+
+- Release, Nested Field Host, Rich Markdown, and Computed Flight Plan pass on
+  both staging/main and the local candidate. The Nested Field interaction also
+  proves that Edit routes to Direct and retains all four nested values.
+- One warm six-case run completed, but repeated clean runs exposed a hard
+  Sandbox lifecycle failure in both Track and Poster Board. The child logs
+  `listening`, accepts `connect`, posts `ready`, and can finish rendering;
+  nevertheless the parent later replaces the card with `Timed out connecting
+to the Sandbox child` after about fifteen seconds.
+- The successful warm run was already materially slower for Sandbox: Track
+  took about 10.7 seconds versus 3.3 seconds on staging; Poster Board took
+  about 11.1 seconds versus 3.1 seconds. These remain performance baselines,
+  not correctness allowances.
+
+The commit-group gate is therefore **red for Sandbox repeatability**. This is
+not a fixture-content or classifier failure because two unrelated Sandbox
+graphs reproduce it while the Capsule/Direct cohort remains green. The next
+runtime repair should instrument and correct ownership of the bootstrap
+control channel/process identity; expectations must not be relaxed and the
+timeout must not merely be increased. Protocol analysis can continue, but no
+commit group that claims Sandbox compatibility should advance until Track and
+Poster Board each pass twice with tab cleanup between runs.
+
+#### Edit interaction baseline — 2026-08-09
+
+The browser gate now includes two interactions that semantic text checks could
+not cover:
+
+- Release and Poster Board enter Edit and receive a real wheel gesture over the
+  rendered card. Both staging and the local candidate expose a 592 px viewport,
+  `overflow-y: auto`, and scroll to 900 px. Release has 3,861 px of content;
+  Poster Board has 2,608 px.
+- Nested Field Host enters Edit, replaces the title through the visible input,
+  waits for the save acknowledgement, restores the original value, and verifies
+  that the canonical value is visible again.
+
+The scroll regression was a Direct-runtime wiring error: host layout attributes
+were applied to the execution diagnostic wrapper instead of the rendered card
+root. The Direct adapter now forwards those attributes to the component, which
+matches the pre-runtime contract and keeps scroll ownership with CardContainer.
+These interactions are hard smoke failures; a card that merely renders text but
+cannot scroll or accept and restore input is not compatible.
 
 ## First mirror cohorts and assertions
 
