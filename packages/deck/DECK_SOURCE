@@ -9,10 +9,10 @@
 # tree-hash below and fails if this tree was edited in place.
 
 source: https://github.com/christse/deck
-deck-commit: e5957ac61b76abbd1e5d46d47c7725df9535f522
-deck-subject: Four decisions from the Boxel side, and one correction
-deck-date: 2026-08-09T18:07:10-04:00
+deck-commit: c7b3884fa809009340cad043f35210c8f6a323c0
+deck-subject: Put the store's naming rules and types on the /node entry
+deck-date: 2026-08-09T19:32:07-04:00
 vendored: src tests
 file-count: 47
 tree-hash-spec: tree-hash-v1
-tree-hash: 194557c55e6ebd79a701269f8c41984eae7c34c8eebb65102fe5005414a10b0a
+tree-hash: 56548599185a61b2f12d5e041729c54eda67aacfdd6ed2f9482b1b245923f1fa

@@ -52,6 +52,13 @@ export type {
 
 export {
   inspectStore,
+  // What counts as a package name and a dist-tag is protocol, not a detail
+  // of this implementation: an embedder building a publish gate has to
+  // refuse the same names this store refuses, and the alternative to
+  // exporting these is every consumer re-deriving the rules from the docs
+  // and drifting. Found by a consumer that needed exactly this.
+  isValidDistTag,
+  isValidPackageName,
   listStorePackages,
   publishToStore,
   readStoreMeta,
@@ -59,6 +66,14 @@ export {
   readStoredPack,
   releaseVersion,
   resolveVersionSpec,
+} from './store.ts';
+// A caller that reads store metadata needs to be able to name its type —
+// otherwise it either restates the shape or reaches for `any`.
+export type {
+  SpecResolution,
+  StoreMeta,
+  StoreVersionRecord,
+  StorageKind,
 } from './store.ts';
 
 export { verifyLinks } from './verify-links.ts';

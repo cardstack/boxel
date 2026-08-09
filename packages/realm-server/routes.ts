@@ -57,6 +57,7 @@ import handleRealmInfo from './handlers/handle-realm-info.ts';
 import handleFederatedTypes from './handlers/handle-federated-types.ts';
 import { multiRealmAuthorization } from './middleware/multi-realm-authorization.ts';
 import handleDownloadRealm from './handlers/handle-download-realm.ts';
+import handlePackageServe from './handlers/handle-package-serve.ts';
 import {
   handleBotRegistrationRequest,
   handleBotRegistrationsRequest,
@@ -101,6 +102,11 @@ export type CreateRoutesArgs = {
   realms: Realm[];
   reconciler: RealmRegistryReconciler;
   realmsRootPath: string;
+  // Deck object store backing the versioned package address space
+  // (`/_packages/<name>@<version>/<path>`). Optional: when unset the serve
+  // handler answers 501 and nothing else in the server changes, so the
+  // address space stays inert until a store is deliberately provisioned.
+  packageStorePath?: string;
   getMatrixRegistrationSecret: () => Promise<string>;
   // Synapse admin credentials. Optional at the top: when both are unset the
   // grafana upsert handler falls back to a localhost-only default so local
@@ -369,6 +375,16 @@ export function createRoutes(args: CreateRoutesArgs) {
     );
   }
   router.get('/_download-realm', handleDownloadRealm(args));
+  // Read-only, unauthenticated by design: these are published library bytes
+  // addressed by an immutable version, the same trust class as the realm's
+  // own public assets. The wildcard carries `<name>@<version>/<path>`, which
+  // `parsePackagePath` validates before anything touches the store.
+  //
+  // `*rest`, not `(.*)`: @koa/router 14 uses path-to-regexp 8, which dropped
+  // bare capture groups and THROWS at registration rather than ignoring
+  // them — so the wrong spelling here is not a 404, it is a realm server
+  // that will not boot. `package-routes-test.ts` pins it.
+  router.get('/_packages/*rest', handlePackageServe(args));
   router.post(
     '/_bot-registration',
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),

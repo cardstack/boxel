@@ -135,6 +135,11 @@ module('package entries', function () {
       ['treeHashFromDir', 'node'],
       ['publishToStore', 'node'],
       ['resolveVersionSpec', 'node'],
+      // The naming rules a publish gate has to enforce. An embedder that
+      // cannot ask "is this a legal package name" writes its own regex, and
+      // two spellings of the rule is one more than the protocol allows.
+      ['isValidPackageName', 'node'],
+      ['isValidDistTag', 'node'],
       // catalog verbs: ranges in, pins and scopes out
       ['lockDeck', 'node'],
       ['resolveDependencies', 'node'],

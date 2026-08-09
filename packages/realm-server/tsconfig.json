@@ -1,6 +1,14 @@
 {
   "compilerOptions": {
-    "target": "es2020",
+    // es2022, not es2020: this package runs on the Node pinned in
+    // .mise.toml (24.x), and `target` with no explicit `lib` is what decides
+    // which built-ins the checker believes exist. At es2020 it does not
+    // believe in `Array.prototype.at`, which ES2022 added and which the
+    // vendored Deck core uses — so the claim was already inaccurate and
+    // merely happened not to be load-bearing before. Raising it only ADDS
+    // library declarations (it cannot introduce new errors), and `noEmit`
+    // is on, so nothing about the output changes.
+    "target": "es2022",
     "allowJs": true,
     "module": "nodenext",
     "moduleResolution": "nodenext",
