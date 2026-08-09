@@ -1,0 +1,43 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "Contact",
+        "module": "../contact"
+      },
+      "specType": "card",
+      "readMe": "## Contact\n\nAn individual person at an Account \u2014 you sell to people, not logos. `firstName`/`lastName` (computed `name`), base `EmailField`/`PhoneNumberField`, `jobTitle`, `role` enum (decision maker/champion/influencer/user/billing \u2014 a label, deliberately NOT color-coded as a lifecycle), `account = linksTo(Account)`.\n\n```ts\nimport { Contact } from '../contact';\n@field decisionMakers = linksToMany(Contact);\n```\n\nLinked from Deal.decisionMakers; the Customer 360 view lists an account's contacts by query.\n\n**Non-goals:** internal people (that's User/Teammate), lead capture (Lead converts INTO a Contact via the Convert Lead command), social profiles, comms history (Activity's job).",
+      "cardInfo": {
+        "name": "Contact",
+        "summary": "Person at an account: name, reach, jobTitle, role label, account link. Deal stakeholders and Customer 360 both consume it.",
+        "notes": null,
+        "cardThumbnailURL": null
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Contact/farah-zulkifli"
+        }
+      },
+      "linkedExamples.1": {
+        "links": {
+          "self": "../Contact/jason-lim"
+        }
+      },
+      "linkedExamples.2": {
+        "links": {
+          "self": "../Contact/mei-fong"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
