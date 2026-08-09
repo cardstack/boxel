@@ -1,27 +1,17 @@
 import {
-  CardDef,
   Component,
-  StringField,
   contains,
   field,
-} from '@cardstack/base/card-api';
-import EmailField from '@cardstack/base/email';
-import UserIcon from '@cardstack/boxel-icons/user';
+} from 'https://cardstack.com/base/card-api';
+import StringField from 'https://cardstack.com/base/string';
+import { User } from './user';
 
-export class User extends CardDef {
-  static displayName = 'User';
-  static icon = UserIcon;
-  @field name = contains(StringField);
-  @field email = contains(EmailField);
-  @field cardTitle = contains(StringField, {
-    computeVia: function (this: User) {
-      return this.name?.trim()?.length
-        ? this.name
-        : `Untitled ${this.constructor.displayName}`;
-    },
-  });
+export class Teammate extends User {
+  static displayName = 'Teammate';
 
-  static atom = class Atom extends Component<typeof User> {
+  @field jobTitle = contains(StringField);
+
+  static embedded = class Embedded extends Component<typeof Teammate> {
     get initials() {
       let words = (this.args.model?.name ?? '')
         .split(/\s+/)
@@ -30,65 +20,17 @@ export class User extends CardDef {
       return words.map((w) => w[0]?.toUpperCase() ?? '').join('') || '?';
     }
     <template>
-      <span class='user-atom'>
-        <span class='ua-avatar'>{{this.initials}}</span>
-        <span class='ua-name'>{{if
-            @model.name
-            @model.name
-            'Unassigned'
-          }}</span>
-      </span>
-      <style scoped>
-        .user-atom {
-          display: inline-flex;
-          align-items: center;
-          gap: 0.375rem;
-          font-size: 0.8125rem;
-          font-weight: 500;
-          color: var(--foreground, #111111);
-        }
-        .ua-avatar {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 18px;
-          height: 18px;
-          border-radius: 50%;
-          background: var(--muted, #eef2f7);
-          color: var(--muted-foreground, #6b7280);
-          font-size: 0.5625rem;
-          font-weight: 700;
-          flex-shrink: 0;
-        }
-        .ua-name {
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-      </style>
-    </template>
-  };
-
-  static embedded = class Embedded extends Component<typeof User> {
-    get initials() {
-      let words = (this.args.model?.name ?? '')
-        .split(/\s+/)
-        .filter(Boolean)
-        .slice(0, 2);
-      return words.map((w) => w[0]?.toUpperCase() ?? '').join('') || '?';
-    }
-    <template>
-      <div class='user'>
+      <div class='teammate'>
         <span class='avatar'>{{this.initials}}</span>
         <div class='info'>
           <div class='name'>{{if @model.name @model.name 'Unnamed'}}</div>
-          {{#if @model.email}}
-            <div class='meta'>{{@model.email}}</div>
+          {{#if @model.jobTitle}}
+            <div class='meta'>{{@model.jobTitle}}</div>
           {{/if}}
         </div>
       </div>
       <style scoped>
-        .user {
+        .teammate {
           display: flex;
           align-items: center;
           gap: 0.625rem;
@@ -125,9 +67,9 @@ export class User extends CardDef {
     </template>
   };
 
-  static fitted = class Fitted extends Component<typeof User> {
+  static fitted = class Fitted extends Component<typeof Teammate> {
     get name() {
-      return this.args.model?.name?.trim() || 'Unnamed User';
+      return this.args.model?.name?.trim() || 'Unnamed Teammate';
     }
     get initials() {
       let words = this.name.split(/\s+/).filter(Boolean).slice(0, 2);
@@ -138,6 +80,9 @@ export class User extends CardDef {
         <span class='avatar'>{{this.initials}}</span>
         <div class='info'>
           <span class='name'>{{this.name}}</span>
+          {{#if @model.jobTitle}}
+            <span class='meta line-title'>{{@model.jobTitle}}</span>
+          {{/if}}
           {{#if @model.email}}
             <span class='meta line-email'>{{@model.email}}</span>
           {{/if}}
@@ -188,11 +133,12 @@ export class User extends CardDef {
           text-overflow: ellipsis;
           white-space: nowrap;
         }
+        .line-title,
         .line-email {
           display: none;
         }
         @container fitted-card (min-height: 65px) {
-          .line-email {
+          .line-title {
             display: block;
           }
         }
@@ -208,26 +154,32 @@ export class User extends CardDef {
             height: 40px;
             font-size: 0.875rem;
           }
+          .line-email {
+            display: block;
+          }
         }
       </style>
     </template>
   };
 
-  static isolated = class Isolated extends Component<typeof User> {
+  static isolated = class Isolated extends Component<typeof Teammate> {
     get name() {
-      return this.args.model?.name?.trim() || 'Unnamed User';
+      return this.args.model?.name?.trim() || 'Unnamed Teammate';
     }
     get initials() {
       let words = this.name.split(/\s+/).filter(Boolean).slice(0, 2);
       return words.map((w) => w[0]?.toUpperCase() ?? '').join('') || '?';
     }
     <template>
-      <article class='user-page'>
-        <header class='uh'>
+      <article class='teammate-page'>
+        <header class='th'>
           <span class='avatar'>{{this.initials}}</span>
-          <div class='uh-id'>
-            <p class='doc-kind'>{{@model.constructor.displayName}}</p>
+          <div class='th-id'>
+            <p class='doc-kind'>Teammate</p>
             <h1>{{this.name}}</h1>
+            {{#if @model.jobTitle}}
+              <p class='job-title'>{{@model.jobTitle}}</p>
+            {{/if}}
           </div>
         </header>
         {{#if @model.email}}
@@ -241,7 +193,7 @@ export class User extends CardDef {
         {{/if}}
       </article>
       <style scoped>
-        .user-page {
+        .teammate-page {
           max-width: 40rem;
           margin: 0 auto;
           padding: 2rem 1.5rem;
@@ -249,7 +201,7 @@ export class User extends CardDef {
           flex-direction: column;
           gap: 1.25rem;
         }
-        .uh {
+        .th {
           display: flex;
           align-items: center;
           gap: 1rem;
@@ -283,6 +235,11 @@ export class User extends CardDef {
           font-size: 1.625rem;
           line-height: 1.1;
           font-family: var(--font-heading, inherit);
+        }
+        .job-title {
+          margin: 0.25rem 0 0;
+          font-size: 0.875rem;
+          color: var(--muted-foreground, #6b7280);
         }
         .panel {
           border: 1px solid var(--border, #e5e7eb);
