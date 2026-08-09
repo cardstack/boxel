@@ -1,0 +1,36 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "firstName": "Jason",
+      "lastName": "Lim",
+      "email": "jason.lim@acme-industries.example",
+      "jobTitle": "IT Manager",
+      "role": "champion",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../contact",
+        "name": "Contact"
+      }
+    },
+    "relationships": {
+      "account": {
+        "links": {
+          "self": "../Account/acme-industries"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/ledger"
+        }
+      }
+    }
+  }
+}
