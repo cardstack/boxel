@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "Table",
+        "module": "../table"
+      },
+      "specType": "component",
+      "readMe": "## Table\n\nThe layer-matrix **Table** presentation element: a sortable record table over any cards. Columns are declared as `{key, label, align?, value(item)}` \u2014 the value function reads whatever the consumer wants (fields, computed values, linked traversals). Click a header to sort (asc/desc toggle); when the display value is formatted (money, dates), give the column a separate `sortValue(item)` returning the raw number \u2014 formatted strings do not order correctly; rows can take `@onRowClick`. Numeric columns get `align: 'right'` + tabular-nums; empty set renders `@emptyMessage`.\n\n```gts\nimport { Table } from '../table';\n<Table @items={{this.invoices}} @columns={{this.columns}} @onRowClick={{this.open}} />\n```\n\nThe linked example is the spec's Invoice Tracker pattern over the scenario invoices (paid/partial/overdue/void, daysOverdue column live from the computed field).\n\n**Non-goals:** filtering (consumers pass a filtered items array \u2014 filters are app state), pagination/virtual scroll (POC scale is ~50 records; packaging-stage criterion), bulk selection + actions (deferred with the Export/Duplicate tools), inline editing (that's the platform edit format's job).",
+      "cardInfo": {
+        "name": "Table",
+        "summary": "Sortable record table block: declarative columns with value functions, header sort, row click, empty state. Invoice Tracker is the reference consumer.",
+        "notes": null,
+        "cardThumbnailURL": null
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../InvoiceTableDemo/invoice-tracker"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
