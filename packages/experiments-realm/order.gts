@@ -11,10 +11,10 @@ import DateField from 'https://cardstack.com/base/date';
 import AddressField from 'https://cardstack.com/base/address';
 import enumField from 'https://cardstack.com/base/enum';
 import PackageIcon from '@cardstack/boxel-icons/package';
-import { Customer } from './customer';
-import { Invoice } from './invoice';
+import PercentageField from 'https://cardstack.com/base/percentage';
+import { Account } from './account';
 import { LineItem } from './line-item';
-import { formatMoney, lineTotal, sumLineItems } from './money';
+import { formatMoney, lineTotal, orderTotals, sumLineItems } from './money';
 
 const OrderStatusField = enumField(StringField, {
   options: ['pending', 'paid', 'shipped', 'delivered', 'canceled'],
@@ -26,12 +26,12 @@ export class Order extends CardDef {
   static icon = PackageIcon;
 
   @field orderNumber = contains(StringField);
-  @field customer = linksTo(Customer);
-  @field invoice = linksTo(Invoice);
+  @field account = linksTo(Account);
   @field orderDate = contains(DateField);
   @field shippingAddress = contains(AddressField);
   @field status = contains(OrderStatusField);
   @field lineItems = containsMany(LineItem);
+  @field taxRate = contains(PercentageField);
 
   @field cardTitle = contains(StringField, {
     computeVia: function (this: Order) {
@@ -43,7 +43,10 @@ export class Order extends CardDef {
 
   static embedded = class Embedded extends Component<typeof Order> {
     get total() {
-      const { total, code } = sumLineItems(this.args.model?.lineItems);
+      const { total, code } = orderTotals(
+        this.args.model?.lineItems,
+        this.args.model?.taxRate,
+      );
       return formatMoney(total, code);
     }
     <template>
@@ -129,7 +132,10 @@ export class Order extends CardDef {
 
   static fitted = class Fitted extends Component<typeof Order> {
     get total() {
-      const { total, code } = sumLineItems(this.args.model?.lineItems);
+      const { total, code } = orderTotals(
+        this.args.model?.lineItems,
+        this.args.model?.taxRate,
+      );
       return formatMoney(total, code) || '—';
     }
     get destination() {
@@ -183,8 +189,8 @@ export class Order extends CardDef {
                 >{{@model.status}}</span>
               {{/if}}
             </div>
-            {{#if @model.customer.name}}
-              <span class='meta'>{{@model.customer.name}}</span>
+            {{#if @model.account.name}}
+              <span class='meta'>{{@model.account.name}}</span>
             {{/if}}
             {{#if this.destination}}
               <span class='meta'>To {{this.destination}}</span>
@@ -358,11 +364,25 @@ export class Order extends CardDef {
       }));
     }
     get total() {
-      const { total, code } = sumLineItems(this.args.model?.lineItems);
+      const { total, code } = orderTotals(
+        this.args.model?.lineItems,
+        this.args.model?.taxRate,
+      );
       return formatMoney(total, code) || '\u2014';
     }
     get number() {
       return this.args.model?.orderNumber?.trim() || 'Draft';
+    }
+    get totals() {
+      return orderTotals(this.args.model?.lineItems, this.args.model?.taxRate);
+    }
+    get subtotalDisplay() {
+      return formatMoney(this.totals.subtotal, this.totals.code);
+    }
+    get taxDisplay() {
+      return this.totals.tax
+        ? formatMoney(this.totals.tax, this.totals.code)
+        : '';
     }
     <template>
       <article class='order-doc'>
@@ -389,16 +409,12 @@ export class Order extends CardDef {
 
         <section class='doc-meta'>
           <div class='party'>
-            <span class='label'>Customer</span>
-            <@fields.customer @format='embedded' />
+            <span class='label'>Account</span>
+            <@fields.account @format='embedded' />
           </div>
           <dl class='facts'>
             <dt>Ordered</dt>
             <dd><@fields.orderDate /></dd>
-            {{#if @model.invoice}}
-              <dt>Invoice</dt>
-              <dd><@fields.invoice @format='atom' /></dd>
-            {{/if}}
           </dl>
         </section>
 
@@ -425,6 +441,16 @@ export class Order extends CardDef {
                   {{/each}}
                 </tbody>
                 <tfoot>
+                  {{#if this.taxDisplay}}
+                    <tr class='sub-row'>
+                      <td class='t-desc' colspan='3'>Subtotal</td>
+                      <td class='t-num'>{{this.subtotalDisplay}}</td>
+                    </tr>
+                    <tr class='sub-row'>
+                      <td class='t-desc' colspan='3'>Tax ({{@model.taxRate}}%)</td>
+                      <td class='t-num'>{{this.taxDisplay}}</td>
+                    </tr>
+                  {{/if}}
                   <tr>
                     <td class='t-desc' colspan='3'>Total</td>
                     <td class='t-num t-total'>{{this.total}}</td>
@@ -624,6 +650,15 @@ export class Order extends CardDef {
         }
         .t-total {
           font-size: 1.125rem;
+        }
+        .sub-row td {
+          border-top: none;
+          padding-top: 0.25rem;
+          font-weight: 500;
+        }
+        tfoot .sub-row:first-child td {
+          border-top: 2px solid var(--foreground, #111111);
+          padding-top: 0.75rem;
         }
         .empty {
           margin: 0;

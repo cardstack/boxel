@@ -7,7 +7,7 @@
         "module": "../payment"
       },
       "specType": "card",
-      "readMe": "## Payment\n\nA settlement fact: amount (base `AmountWithCurrency`), method enum (card / bank transfer / cash / other), paid-at timestamp, external reference, linked Invoice.\n\n```ts\nimport { Payment } from '../payment';\n```\n\n**Non-goals:** payment processing/gateway integration, refunds as negative payments, allocation across multiple invoices.",
+      "readMe": "## Payment\n\nA settlement fact: amount (base `AmountWithCurrency`), method enum (card / bank transfer / cash / other), paid-at timestamp, external reference, linked Invoice.\n\n```ts\nimport { Payment } from '../payment';\n```\n\n**Non-goals:** payment processing/gateway integration, refunds as negative payments, allocation across multiple invoices.\n\nA payment may be partial: `../Payment/pay-inv-2026-052-1` covers roughly half of INV-2026-052, which stays status `partial` with the balance derived on the invoice.",
       "cardInfo": {
         "name": "Payment",
         "summary": "Settlement record: amount, method, timestamp, reference, linked invoice. A fact, not a workflow.",
@@ -22,6 +22,11 @@
       "linkedExamples.0": {
         "links": {
           "self": "../Payment/pay-inv-2026-041"
+        }
+      },
+      "linkedExamples.1": {
+        "links": {
+          "self": "../Payment/pay-inv-2026-052-1"
         }
       }
     },

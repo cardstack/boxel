@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Account fitted walk",
+      "cardDescription": null,
+      "cardThumbnailURL": null
+    },
+    "relationships": {
+      "card": {
+        "links": {
+          "self": "../Account/acme-industries"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../embedded-view-driver",
+        "name": "EmbeddedViewDriver"
+      }
+    }
+  }
+}

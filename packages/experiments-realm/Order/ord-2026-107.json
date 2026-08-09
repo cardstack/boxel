@@ -43,22 +43,18 @@
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      }
+      },
+      "taxRate": 8
     },
     "relationships": {
-      "customer": {
-        "links": {
-          "self": "../Customer/acme-industries"
-        }
-      },
-      "invoice": {
-        "links": {
-          "self": "../Invoice/inv-2026-041"
-        }
-      },
       "cardInfo.theme": {
         "links": {
           "self": "../Theme/ledger"
+        }
+      },
+      "account": {
+        "links": {
+          "self": "../Account/acme-industries"
         }
       }
     },

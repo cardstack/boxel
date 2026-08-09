@@ -1,0 +1,40 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "amount": {
+        "amount": 2400,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "method": "bank transfer",
+      "paidAt": "2026-08-03T14:10:00.000Z",
+      "reference": "MYR-TT-90441",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../payment",
+        "name": "Payment"
+      }
+    },
+    "relationships": {
+      "invoice": {
+        "links": {
+          "self": "../Invoice/inv-2026-052"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/ledger"
+        }
+      }
+    }
+  }
+}
