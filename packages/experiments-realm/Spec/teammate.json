@@ -1,0 +1,38 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "Teammate",
+        "module": "../teammate"
+      },
+      "specType": "card",
+      "readMe": "## Teammate\n\nExtends the base **User** card (`../user`, the matrix User element) with `jobTitle` and format overrides that show it. Owner fields should type against `User`, not Teammate \u2014 adoption makes any User subtype assignable:\n\n```ts\nimport { User } from '../user';\n@field owner = linksTo(User);  // a Teammate instance satisfies this\n```\n\nLinked from Account and Invoice owner slots today; Opportunity/Deal next.\n\n**Non-goals:** authentication, permissions, Matrix identity \u2014 this is an assignment record, not an auth principal. No org hierarchy (that's Team/Role territory).",
+      "cardInfo": {
+        "name": "Teammate",
+        "summary": "Internal person flavor of User: adds jobTitle. Fills any owner slot typed linksTo(User) via adoption.",
+        "notes": null,
+        "cardThumbnailURL": null
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Teammate/dana-whitfield"
+        }
+      },
+      "linkedExamples.1": {
+        "links": {
+          "self": "../Teammate/marcus-osei"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
