@@ -32,3 +32,9 @@ boxel-dev-all.pids
 # the /custom/modules/ mount.
 __pycache__/
 *.pyc
+
+# Local Deck object store for the versioned package address space
+# (`PACKAGE_STORE_PATH`). Seeded by
+# packages/realm-server/scripts/seed-package-store.mjs; content-addressed
+# bytes, reproducible from the seed script, never committed.
+.package-store/

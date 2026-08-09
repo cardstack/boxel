@@ -1161,6 +1161,12 @@ export class RealmServer {
           realms: this.realms,
           assetsURL: this.assetsURL,
           realmsRootPath: this.realmsRootPath,
+          // Deck object store behind `/_packages/…`. Unset means the serve
+          // handler answers 501 and nothing else changes, so the versioned
+          // address space stays off until a deployment opts in. Read here
+          // rather than threaded through the constructor because it is
+          // deployment configuration, like the TLS and HTTP/2 vars above.
+          packageStorePath: process.env.PACKAGE_STORE_PATH,
           getMatrixRegistrationSecret: this.getMatrixRegistrationSecret,
           matrixAdminUsername: this.matrixAdminUsername,
           matrixAdminPassword: this.matrixAdminPassword,
