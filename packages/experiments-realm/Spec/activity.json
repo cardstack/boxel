@@ -1,0 +1,43 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "Activity",
+        "module": "../activity"
+      },
+      "specType": "card",
+      "readMe": "## Activity\n\nThe layer-matrix **Activity** record: one timeline entry \u2014 `activityType` enum (note/call/email/meeting/status change, each with its own icon), `summary`, markdown `body`, `occurredAt`, `author = linksTo(User)`, and `about = linksTo(CardDef)` so an activity can attach to ANY record (deal, invoice, account\u2026). The embedded format is a timeline row \u2014 the Customer 360 right panel is a reverse-chronological query over `about`.\n\n```ts\nimport { Activity } from '../activity';\n// timeline = query Activity where about = this account/deal/invoice\n```\n\n**Non-goals:** reminders/scheduling (Remind tool, deferred), automatic capture from email/calendar sync (out of scope per spec), threaded comments.",
+      "cardInfo": {
+        "name": "Activity",
+        "summary": "Timeline entry: typed (note/call/email/meeting/status change), authored, timestamped, attachable to any record via about=linksTo(CardDef).",
+        "notes": null,
+        "cardThumbnailURL": null
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Activity/acme-renewal-call"
+        }
+      },
+      "linkedExamples.1": {
+        "links": {
+          "self": "../Activity/acme-stage-change"
+        }
+      },
+      "linkedExamples.2": {
+        "links": {
+          "self": "../Activity/inv-033-reminder-email"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

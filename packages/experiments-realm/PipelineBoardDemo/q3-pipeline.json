@@ -1,0 +1,46 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "Q3 Pipeline",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../board-demo",
+        "name": "PipelineBoardDemo"
+      }
+    },
+    "relationships": {
+      "records.0": {
+        "links": {
+          "self": "../Opportunity/acme-plant-expansion"
+        }
+      },
+      "records.1": {
+        "links": {
+          "self": "../Opportunity/brightleaf-workspace"
+        }
+      },
+      "records.2": {
+        "links": {
+          "self": "../Deal/acme-enterprise-renewal"
+        }
+      },
+      "records.3": {
+        "links": {
+          "self": "../Deal/brightleaf-pilot"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/ledger"
+        }
+      }
+    }
+  }
+}
