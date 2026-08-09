@@ -26,6 +26,15 @@ export function sumLineItems(items: LineItemLike[] | undefined): {
   return { total, code };
 }
 
+export function orderTotals(
+  items: LineItemLike[] | undefined,
+  taxRate?: number,
+): { subtotal: number; tax: number; total: number; code: string | undefined } {
+  let { total: subtotal, code } = sumLineItems(items);
+  let tax = taxRate ? subtotal * (taxRate / 100) : 0;
+  return { subtotal, tax, total: subtotal + tax, code };
+}
+
 export function formatMoney(amount: number | undefined, code?: string): string {
   if (amount === undefined || !Number.isFinite(amount)) return '';
   if (code) {

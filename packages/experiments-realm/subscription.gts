@@ -10,7 +10,7 @@ import DateField from 'https://cardstack.com/base/date';
 import AmountWithCurrency from 'https://cardstack.com/base/amount-with-currency';
 import enumField from 'https://cardstack.com/base/enum';
 import RefreshIcon from '@cardstack/boxel-icons/refresh';
-import { Customer } from './customer';
+import { Account } from './account';
 import { formatMoney } from './money';
 
 const BillingCycleField = enumField(StringField, {
@@ -27,12 +27,28 @@ export class Subscription extends CardDef {
   static displayName = 'Subscription';
   static icon = RefreshIcon;
 
-  @field customer = linksTo(Customer);
+  @field account = linksTo(Account);
   @field planName = contains(StringField);
   @field price = contains(AmountWithCurrency);
   @field billingCycle = contains(BillingCycleField);
   @field startDate = contains(DateField);
   @field status = contains(SubscriptionStatusField);
+
+  @field renewalDate = contains(DateField, {
+    computeVia: function (this: Subscription) {
+      if (!this.startDate) return undefined;
+      if (!['trial', 'active'].includes(this.status ?? '')) return undefined;
+      let next = new Date(this.startDate);
+      let now = new Date();
+      let step =
+        this.billingCycle === 'yearly'
+          ? (d: Date) => d.setFullYear(d.getFullYear() + 1)
+          : (d: Date) => d.setMonth(d.getMonth() + 1);
+      step(next);
+      while (next <= now) step(next);
+      return next;
+    },
+  });
 
   @field cardTitle = contains(StringField, {
     computeVia: function (this: Subscription) {
@@ -188,11 +204,14 @@ export class Subscription extends CardDef {
                 >{{@model.status}}</span>
               {{/if}}
             </div>
-            {{#if @model.customer.name}}
-              <span class='meta'>{{@model.customer.name}}</span>
+            {{#if @model.account.name}}
+              <span class='meta'>{{@model.account.name}}</span>
             {{/if}}
             {{#if @model.startDate}}
               <span class='meta'>Since <@fields.startDate /></span>
+            {{/if}}
+            {{#if @model.renewalDate}}
+              <span class='meta'>Renews <@fields.renewalDate /></span>
             {{/if}}
           </div>
           <span class='figure figure-lg'>{{this.price}}</span>
@@ -364,9 +383,13 @@ export class Subscription extends CardDef {
               <dt>Started</dt>
               <dd><@fields.startDate /></dd>
             {{/if}}
-            {{#if @model.customer}}
-              <dt>Customer</dt>
-              <dd class='cust'><@fields.customer @format='embedded' /></dd>
+            {{#if @model.renewalDate}}
+              <dt>Renews</dt>
+              <dd><@fields.renewalDate /></dd>
+            {{/if}}
+            {{#if @model.account}}
+              <dt>Account</dt>
+              <dd class='cust'><@fields.account @format='embedded' /></dd>
             {{/if}}
           </dl>
         </section>
@@ -463,7 +486,7 @@ export class Subscription extends CardDef {
         dd {
           margin: 0;
         }
-        .cust :deep(.customer) {
+        .cust :deep(.account) {
           padding: 0;
         }
       </style>

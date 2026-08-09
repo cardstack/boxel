@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Teammate fitted walk",
+      "cardDescription": null,
+      "cardThumbnailURL": null
+    },
+    "relationships": {
+      "card": {
+        "links": {
+          "self": "../Teammate/dana-whitfield"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../embedded-view-driver",
+        "name": "EmbeddedViewDriver"
+      }
+    }
+  }
+}

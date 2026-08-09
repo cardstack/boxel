@@ -1,0 +1,58 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "orderNumber": "ORD-2026-112",
+      "orderDate": "2026-08-02",
+      "status": "canceled",
+      "taxRate": 8,
+      "shippingAddress": {
+        "addressLine1": "Level 12, Menara Acme",
+        "addressLine2": "Jalan Sultan Ismail",
+        "city": "Kuala Lumpur",
+        "state": "Wilayah Persekutuan",
+        "postalCode": "50250",
+        "country": {
+          "name": "Malaysia",
+          "code": "MY"
+        }
+      },
+      "lineItems": [
+        {
+          "description": "On-site training day",
+          "quantity": 2,
+          "unitPrice": {
+            "amount": 1500,
+            "currency": {
+              "code": "USD"
+            }
+          }
+        }
+      ],
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../order",
+        "name": "Order"
+      }
+    },
+    "relationships": {
+      "account": {
+        "links": {
+          "self": "../Account/acme-industries"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/ledger"
+        }
+      }
+    }
+  }
+}

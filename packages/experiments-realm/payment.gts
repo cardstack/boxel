@@ -22,7 +22,7 @@ export class Payment extends CardDef {
   static displayName = 'Payment';
   static icon = CreditCardIcon;
 
-  @field invoice = linksTo(Invoice);
+  @field invoice = linksTo(() => Invoice);
   @field amount = contains(AmountWithCurrency);
   @field method = contains(PaymentMethodField);
   @field paidAt = contains(DatetimeField);

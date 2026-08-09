@@ -5,18 +5,24 @@ import {
   containsMany,
   field,
   linksTo,
+  linksToMany,
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
+import NumberField from 'https://cardstack.com/base/number';
 import DateField from 'https://cardstack.com/base/date';
 import enumField from 'https://cardstack.com/base/enum';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import FileInvoiceIcon from '@cardstack/boxel-icons/file-invoice';
-import { Customer } from './customer';
+import { Account } from './account';
+import { User } from './user';
 import { LineItem } from './line-item';
+import { Order } from './order';
+import { Subscription } from './subscription';
+import { Payment } from './payment';
 import { formatMoney, lineTotal, sumLineItems } from './money';
 
 const InvoiceStatusField = enumField(StringField, {
-  options: ['draft', 'sent', 'paid', 'overdue', 'void'],
+  options: ['draft', 'sent', 'viewed', 'partial', 'paid', 'overdue', 'void'],
   displayName: 'Invoice Status',
 });
 
@@ -25,11 +31,27 @@ export class Invoice extends CardDef {
   static icon = FileInvoiceIcon;
 
   @field invoiceNumber = contains(StringField);
-  @field customer = linksTo(Customer);
+  @field account = linksTo(Account);
+  @field owner = linksTo(User);
   @field issueDate = contains(DateField);
+  @field sentDate = contains(DateField);
   @field dueDate = contains(DateField);
   @field status = contains(InvoiceStatusField);
   @field lineItems = containsMany(LineItem);
+  @field order = linksTo(() => Order);
+  @field subscription = linksTo(() => Subscription);
+  @field payments = linksToMany(() => Payment);
+
+  @field daysOverdue = contains(NumberField, {
+    computeVia: function (this: Invoice) {
+      if (!this.dueDate) return 0;
+      if (['paid', 'void'].includes(this.status ?? '')) return 0;
+      let days = Math.floor(
+        (Date.now() - new Date(this.dueDate).getTime()) / 86400000,
+      );
+      return days > 0 ? days : 0;
+    },
+  });
 
   @field cardTitle = contains(StringField, {
     computeVia: function (this: Invoice) {
@@ -79,12 +101,16 @@ export class Invoice extends CardDef {
           color: var(--muted-foreground, #6b7280);
         }
         .status-paid {
-          background: #d1fae5;
-          color: #065f46;
+          background: var(--state-paid-bg, #d1fae5);
+          color: var(--state-paid-fg, #065f46);
+        }
+        .status-partial {
+          background: var(--state-partial-bg, #fef3c7);
+          color: var(--state-partial-fg, #92400e);
         }
         .status-overdue {
-          background: #fee2e2;
-          color: #991b1b;
+          background: var(--state-overdue-bg, #fee2e2);
+          color: var(--state-overdue-fg, #991b1b);
         }
         .total {
           margin-left: auto;
@@ -180,8 +206,8 @@ export class Invoice extends CardDef {
                 >{{@model.status}}</span>
               {{/if}}
             </div>
-            {{#if @model.customer.name}}
-              <span class='meta'>Billed to {{@model.customer.name}}</span>
+            {{#if @model.account.name}}
+              <span class='meta'>Billed to {{@model.account.name}}</span>
             {{/if}}
             <span class='meta'>{{this.itemCount}}
               item{{unless (eq this.itemCount 1) 's'}}{{#if @model.dueDate}}
@@ -250,12 +276,16 @@ export class Invoice extends CardDef {
           white-space: nowrap;
         }
         .status-paid {
-          background: #d1fae5;
-          color: #065f46;
+          background: var(--state-paid-bg, #d1fae5);
+          color: var(--state-paid-fg, #065f46);
+        }
+        .status-partial {
+          background: var(--state-partial-bg, #fef3c7);
+          color: var(--state-partial-fg, #92400e);
         }
         .status-overdue {
-          background: #fee2e2;
-          color: #991b1b;
+          background: var(--state-overdue-bg, #fee2e2);
+          color: var(--state-overdue-fg, #991b1b);
         }
         .row {
           display: flex;
@@ -342,6 +372,24 @@ export class Invoice extends CardDef {
     get number() {
       return this.args.model?.invoiceNumber?.trim() || 'Draft';
     }
+    get paidSum() {
+      let sum = 0;
+      let code: string | undefined;
+      for (let p of this.args.model?.payments ?? []) {
+        sum += p?.amount?.amount ?? 0;
+        code = code ?? p?.amount?.currency?.code ?? undefined;
+      }
+      return { sum, code };
+    }
+    get amountPaid() {
+      let { sum, code } = this.paidSum;
+      return sum ? formatMoney(sum, code) : '';
+    }
+    get balance() {
+      const { total, code } = sumLineItems(this.args.model?.lineItems);
+      let due = total - this.paidSum.sum;
+      return formatMoney(due > 0 ? due : 0, this.paidSum.code ?? code);
+    }
     <template>
       <article class='invoice-doc'>
         <header class='doc-head'>
@@ -357,13 +405,33 @@ export class Invoice extends CardDef {
         <section class='doc-meta'>
           <div class='party'>
             <span class='label'>Billed to</span>
-            <@fields.customer @format='embedded' />
+            <@fields.account @format='embedded' />
           </div>
           <dl class='dates'>
             <dt>Issued</dt>
             <dd><@fields.issueDate /></dd>
+            {{#if @model.sentDate}}
+              <dt>Sent</dt>
+              <dd><@fields.sentDate /></dd>
+            {{/if}}
             <dt>Due</dt>
             <dd><@fields.dueDate /></dd>
+            {{#if @model.daysOverdue}}
+              <dt>Overdue</dt>
+              <dd class='overdue-days'>{{@model.daysOverdue}} days</dd>
+            {{/if}}
+            {{#if @model.owner}}
+              <dt>Owner</dt>
+              <dd><@fields.owner @format='atom' /></dd>
+            {{/if}}
+            {{#if @model.order}}
+              <dt>Order</dt>
+              <dd><@fields.order @format='atom' /></dd>
+            {{/if}}
+            {{#if @model.subscription}}
+              <dt>Subscription</dt>
+              <dd><@fields.subscription @format='atom' /></dd>
+            {{/if}}
           </dl>
         </section>
 
@@ -394,6 +462,16 @@ export class Invoice extends CardDef {
                     <td class='t-desc' colspan='3'>Total</td>
                     <td class='t-num t-total'>{{this.total}}</td>
                   </tr>
+                  {{#if this.amountPaid}}
+                    <tr class='sub-row'>
+                      <td class='t-desc' colspan='3'>Paid</td>
+                      <td class='t-num'>{{this.amountPaid}}</td>
+                    </tr>
+                    <tr class='sub-row'>
+                      <td class='t-desc' colspan='3'>Balance due</td>
+                      <td class='t-num t-strong'>{{this.balance}}</td>
+                    </tr>
+                  {{/if}}
                 </tfoot>
               </table>
             </div>
@@ -401,6 +479,13 @@ export class Invoice extends CardDef {
             <p class='empty'>No line items yet</p>
           {{/if}}
         </section>
+
+        {{#if @model.payments.length}}
+          <section class='payments'>
+            <span class='label'>Payments</span>
+            <@fields.payments @format='embedded' />
+          </section>
+        {{/if}}
       </article>
       <style scoped>
         .invoice-doc {
@@ -445,12 +530,16 @@ export class Invoice extends CardDef {
           margin-bottom: 0.25rem;
         }
         .status-paid {
-          background: #d1fae5;
-          color: #065f46;
+          background: var(--state-paid-bg, #d1fae5);
+          color: var(--state-paid-fg, #065f46);
+        }
+        .status-partial {
+          background: var(--state-partial-bg, #fef3c7);
+          color: var(--state-partial-fg, #92400e);
         }
         .status-overdue {
-          background: #fee2e2;
-          color: #991b1b;
+          background: var(--state-overdue-bg, #fee2e2);
+          color: var(--state-overdue-fg, #991b1b);
         }
         .doc-meta {
           display: flex;
@@ -532,6 +621,18 @@ export class Invoice extends CardDef {
         }
         .t-total {
           font-size: 1.125rem;
+        }
+        .overdue-days {
+          color: var(--state-overdue-fg, #991b1b);
+          font-weight: 600;
+        }
+        .sub-row td {
+          border-top: none;
+          padding-top: 0.25rem;
+          font-weight: 500;
+        }
+        .payments .label {
+          margin-bottom: 0.375rem;
         }
         .empty {
           margin: 0;
