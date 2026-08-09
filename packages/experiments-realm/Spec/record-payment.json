@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "default",
+        "module": "../record-payment"
+      },
+      "specType": "command",
+      "readMe": "## Record Payment\n\nThe single writer for payment state (spec addendum decision B): creates a **Payment** against an invoice and, in the same command, (1) appends it to `Invoice.payments` so the invoice's Paid/Balance-due rows stay truthful, (2) flips invoice status to `partial` or `paid` by comparing the running total to the line-item sum, and (3) writes `Account.firstPaidAt` once \u2014 the monotonic event fact behind `isCustomer`. Refuses void invoices and non-positive amounts.\n\nCommands cannot hold `containedExamples` \u2014 the linked example is the natural target: an overdue unpaid invoice.\n\n**Non-goals:** refunds/chargebacks, payment-gateway integration, currency conversion (payment currency defaults to the invoice's).",
+      "cardInfo": {
+        "name": "Record Payment",
+        "summary": "Payment against an invoice: maintains Invoice.payments + status and writes Account.firstPaidAt once (decision B single writer).",
+        "notes": null,
+        "cardThumbnailURL": null
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Invoice/inv-2026-033"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
