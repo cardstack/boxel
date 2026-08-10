@@ -101,7 +101,12 @@ export class BoxelSelectDefaultTrigger extends Component<TriggerSignature> {
     <BoxelTriggerWrapper @placeholder={{@placeholder}} @select={{@select}}>
       <:default>
         {{#if @selectedItemComponent}}
+          {{! @selected is the ember-power-select 9 contract (what the
+              exported toSelectedItemComponent type advertises); @option is
+              the legacy boxel contract, kept for existing components in
+              realms outside this repo. }}
           <@selectedItemComponent
+            @selected={{@select.selected}}
             @option={{@select.selected}}
             @select={{@select}}
           />

@@ -190,12 +190,15 @@ function enumField<BaseT extends FieldDefConstructor>(
     };
 
     static selectedItem = class SelectedItem extends GlimmerComponent<{
-      Args: { option: any; configuration?: any };
+      Args: { selected: any; configuration?: any };
     }> {
       <template>
-        {{#if @option}}
+        {{#if @selected}}
           {{#let (component EnumField.atom) as |Atom|}}
-            <Atom @model={{@option.value}} @configuration={{@configuration}} />
+            <Atom
+              @model={{@selected.value}}
+              @configuration={{@configuration}}
+            />
           {{/let}}
         {{/if}}
       </template>
