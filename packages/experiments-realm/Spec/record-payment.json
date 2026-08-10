@@ -7,7 +7,7 @@
         "module": "../record-payment"
       },
       "specType": "command",
-      "readMe": "## Record Payment\n\nThe single writer for payment state (spec addendum decision B): creates a **Payment** against an invoice and, in the same command, (1) appends it to `Invoice.payments` so the invoice's Paid/Balance-due rows stay truthful, (2) flips invoice status to `partial` or `paid` by comparing the running total to the line-item sum, and (3) writes `Account.firstPaidAt` once \u2014 the monotonic event fact behind `isCustomer`. Refuses void invoices and non-positive amounts.\n\nCommands cannot hold `containedExamples` \u2014 the linked example is the natural target: an overdue unpaid invoice.\n\n**Non-goals:** refunds/chargebacks, payment-gateway integration, currency conversion (payment currency defaults to the invoice's).\n\n**Load-state lesson (stage 2, 2026-08-10):** the command re-fetches the invoice via GetCardCommand before reading payments/account \u2014 callers may pass cards with unloaded links; the first live run only worked because the app UI happened to have loaded them.",
+      "readMe": "## Record Payment\n\nThe single writer for payment state: creates a **Payment** against an invoice and, in the same command, (1) appends it to `Invoice.payments` so the invoice's Paid and Balance-due rows stay truthful, (2) flips invoice status to `partial` or `paid` by comparing the running total to the line-item sum, and (3) writes `Account.firstPaidAt` once \u2014 the monotonic event fact behind `isCustomer`. Refuses void invoices and non-positive amounts.\n\n```ts\nimport RecordPaymentCommand from '../record-payment';\nlet { payment, invoice } = await new RecordPaymentCommand(\n  commandContext,\n).execute({ invoice, amount: 2400, method: 'bank transfer' });\n```\n\nThe command re-fetches the invoice before reading `payments` or `account`, so it never depends on the caller's load state; an unresolved `payments` link would otherwise drop the invoice's payment history on save.\n\nBecause one command owns every write in that set, the balance a consumer reads is always consistent with the payments behind it \u2014 the reason this is a command rather than three separate edits.\n\nThe linked example is the command's natural target: an unpaid invoice past its due date.\n\n**Non-goals:** refunds and chargebacks, payment-gateway integration, currency conversion (payment currency defaults to the invoice's).",
       "cardInfo": {
         "name": "Record Payment",
         "summary": "Payment against an invoice: maintains Invoice.payments + status and writes Account.firstPaidAt once (decision B single writer).",
@@ -19,7 +19,7 @@
     "relationships": {
       "linkedExamples.0": {
         "links": {
-          "self": "../Invoice/inv-2026-033"
+          "self": "../Invoice/inv-2026-061"
         }
       }
     },
