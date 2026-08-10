@@ -223,8 +223,7 @@ export class MockClient implements ExtendedClient {
   }
 
   async getOpenIdToken() {
-    let accessToken =
-      this.sdkOpts.loggedInAs ?? this.clientOpts.userId ?? 'mock-matrix-user';
+    let accessToken = this.loggedInAs ?? 'mock-matrix-user';
     let baseUrl = this.baseUrl ?? 'http://localhost';
     let matrixServerName: string;
     try {
