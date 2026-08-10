@@ -1156,7 +1156,11 @@ module('Acceptance | operator mode tests', function (hooks) {
       await visit('/?openProfileSettings=subscription');
 
       assert.dom('[data-test-settings-modal]').exists();
-      assert.dom('[data-test-profile-subscription-section]').exists();
+      assert.strictEqual(
+        getService('operator-mode-state-service').profileSettingsSection,
+        'subscription',
+        'the modal opened targeting the subscription section',
+      );
 
       assert.notOk(
         currentURL().includes('openProfileSettings'),
@@ -1202,7 +1206,11 @@ module('Acceptance | operator mode tests', function (hooks) {
       await click('[data-test-login-btn]');
 
       assert.dom('[data-test-settings-modal]').exists();
-      assert.dom('[data-test-profile-subscription-section]').exists();
+      assert.strictEqual(
+        getService('operator-mode-state-service').profileSettingsSection,
+        'subscription',
+        'the modal opened targeting the subscription section',
+      );
       assert.notOk(
         currentURL().includes('openProfileSettings'),
         'the param is consumed once it has been acted on',
@@ -1226,6 +1234,11 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       assert.dom('[data-test-profile-popover]').doesNotExist();
       assert.dom('[data-test-settings-modal]').exists();
+      assert.strictEqual(
+        getService('operator-mode-state-service').profileSettingsSection,
+        undefined,
+        'a plain open does not target a section',
+      );
 
       assert.dom('[data-test-profile-icon]').hasText('T'); // "T", from first letter of: @testuser:localhost
       assert.dom('[data-test-profile-display-name]').hasText(''); // No display name set yet
