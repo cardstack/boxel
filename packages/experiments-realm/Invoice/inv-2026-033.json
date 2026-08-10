@@ -6,7 +6,7 @@
       "issueDate": "2026-06-10",
       "sentDate": "2026-06-10",
       "dueDate": "2026-07-10",
-      "status": "overdue",
+      "status": "paid",
       "lineItems": [
         {
           "description": "Custom integration build",
@@ -46,6 +46,11 @@
       "cardInfo.theme": {
         "links": {
           "self": "../Theme/ledger"
+        }
+      },
+      "payments.0": {
+        "links": {
+          "self": "../Payment/eb23a0cc-fa18-4ce3-83b7-2c016f650381"
         }
       }
     }
