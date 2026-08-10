@@ -736,6 +736,31 @@ export class AuthedFetchResult extends CardDef {
   @field body = contains(JsonField);
 }
 
+// Cutting a Version of a package the realm server holds: analyze a candidate,
+// propose it, accept or withdraw a proposal. One input rather than four,
+// because the four are one conversation with the same door and the card that
+// drives them wants them to stay in step.
+//
+// NOTE WHAT IS ABSENT. There is no `proposedBy` and no `acceptedBy`. Those are
+// the review trail, and a field a client could fill would make the trail
+// decorative — the server takes both from the authenticated token. A card can
+// say what it wants done; it cannot say who is doing it.
+export class PackageProposalInput extends CardDef {
+  @field action = contains(StringField); // analyze | propose | accept | withdraw
+  @field packageName = contains(StringField); // e.g. lib/palette
+  @field version = contains(StringField); // the semver being claimed
+  @field body = contains(StringField); // the changelog
+  @field source = contains(StringField); // the candidate's entry source
+  @field proposalId = contains(StringField);
+  @field overrideReason = contains(StringField);
+}
+
+export class PackageProposalResult extends CardDef {
+  @field ok = contains(BooleanField);
+  @field status = contains(NumberField);
+  @field body = contains(JsonField);
+}
+
 export class GetDefaultWritableRealmResult extends CardDef {
   @field realmIdentifier = contains(StringField); // empty string if no writable realm found
 }

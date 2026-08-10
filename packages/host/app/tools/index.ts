@@ -50,6 +50,7 @@ import * as OpenAiAssistantRoomToolModule from './open-ai-assistant-room';
 import * as OpenCreateListingModalToolModule from './open-create-listing-modal';
 import * as OpenInInteractModeModule from './open-in-interact-mode';
 import * as OpenWorkspaceToolModule from './open-workspace';
+import * as PackageProposalToolModule from './package-proposal';
 import * as PatchCardInstanceToolModule from './patch-card-instance';
 import * as PatchCodeToolModule from './patch-code';
 import * as PatchFieldsToolModule from './patch-fields';
@@ -304,6 +305,11 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
   shimHostToolModule(virtualNetwork, 'open-workspace', OpenWorkspaceToolModule);
   shimHostToolModule(
     virtualNetwork,
+    'package-proposal',
+    PackageProposalToolModule,
+  );
+  shimHostToolModule(
+    virtualNetwork,
     'send-ai-assistant-message',
     SendAiAssistantMessageModule,
   );
@@ -501,6 +507,7 @@ export const HostToolClasses: (typeof HostBaseTool<any, any>)[] = [
   RetrySubmissionWorkflowToolModule.default,
   OpenInInteractModeModule.default,
   OpenWorkspaceToolModule.default,
+  PackageProposalToolModule.default,
   GenerateThemeExampleToolModule.default,
   PatchCodeToolModule.default,
   PatchFieldsToolModule.default,

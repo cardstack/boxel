@@ -58,6 +58,7 @@ import handleFederatedTypes from './handlers/handle-federated-types.ts';
 import { multiRealmAuthorization } from './middleware/multi-realm-authorization.ts';
 import handleDownloadRealm from './handlers/handle-download-realm.ts';
 import handlePackageServe from './handlers/handle-package-serve.ts';
+import handlePackageProposals from './handlers/handle-package-proposals.ts';
 import {
   handleBotRegistrationRequest,
   handleBotRegistrationsRequest,
@@ -385,6 +386,20 @@ export function createRoutes(args: CreateRoutesArgs) {
   // them — so the wrong spelling here is not a 404, it is a realm server
   // that will not boot. `package-routes-test.ts` pins it.
   router.get('/_packages/*rest', handlePackageServe(args));
+  // The write half of the same address space, deliberately at its own path
+  // rather than as a POST branch on the serve door above — that handler's
+  // header records "a GET must never be able to mutate the store, and keeping
+  // the gate out of reach is cheaper than proving it is never invoked", and
+  // sharing a prefix would put the gate back within reach of a routing
+  // mistake. The queue is readable without a token because a review nobody
+  // may read is not a review; proposing and accepting need one, and the
+  // identity on the record comes from that token rather than from the body.
+  router.get('/_package-proposals/*rest', handlePackageProposals(args));
+  router.post(
+    '/_package-proposals/*rest',
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handlePackageProposals(args),
+  );
   router.post(
     '/_bot-registration',
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),

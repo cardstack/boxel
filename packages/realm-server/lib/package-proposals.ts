@@ -50,6 +50,20 @@ export interface Proposal {
   gate: PublishVerdict;
   /** The structural pass, when a predecessor existed to compare against. */
   delta?: Verdict & { comparedWith: string };
+  /**
+   * The candidate's entry source, carried so that what is accepted is what
+   * was reviewed.
+   *
+   * A proposal that named only a treeHash would be reviewable but not
+   * publishable: the bytes would have to be re-supplied at accept time by
+   * whoever clicked accept, and nothing would tie them to the diff the
+   * reviewer read. Carrying the source lets the accepting side re-derive the
+   * seal and refuse if it does not match what was proposed.
+   *
+   * Single-string because this demo's package is one module. A real pack is a
+   * tree, and this field is the shape that has to grow first.
+   */
+  source?: string;
 }
 
 export interface ProposeInput {
@@ -64,6 +78,8 @@ export interface ProposeInput {
   candidateSource?: string;
   priorSource?: string;
   priorVersion?: string;
+  /** Kept on the record; defaults to `candidateSource`. */
+  source?: string;
   meta?: Parameters<typeof checkPublish>[0]['meta'];
   now?: Date;
   id?: string;
@@ -88,9 +104,14 @@ export function claimedBump(prior: string, next: string): Bump | undefined {
   if (a.length < 3 || b.length < 3 || [...a, ...b].some((n) => !isFinite(n))) {
     return undefined;
   }
+  // Each test is anchored on the components to its LEFT being equal. Reading
+  // them independently says `4.0.0 → 1.2.3` is a minor, because 2 > 0 — and a
+  // version that went backwards would then be graded against a suggestion
+  // computed for a line it does not belong to. Undefined is the honest answer
+  // for anything that is not an increment; the caller asks about it.
   if (b[0] > a[0]) return 'major';
-  if (b[1] > a[1]) return 'minor';
-  if (b[2] > a[2]) return 'patch';
+  if (b[0] === a[0] && b[1] > a[1]) return 'minor';
+  if (b[0] === a[0] && b[1] === a[1] && b[2] > a[2]) return 'patch';
   return undefined;
 }
 
@@ -131,6 +152,9 @@ export async function proposeVersion(input: ProposeInput): Promise<Proposal> {
     state: 'open',
     gate,
     ...(delta ? { delta } : {}),
+    ...((input.source ?? input.candidateSource)
+      ? { source: input.source ?? input.candidateSource }
+      : {}),
   };
 
   let dir = proposalsDir(input.storeDir, input.name);
@@ -184,7 +208,8 @@ export type AcceptResult =
         | 'unknown-proposal'
         | 'not-open'
         | 'gate-refused'
-        | 'override-needs-reason';
+        | 'override-needs-reason'
+        | 'claim-does-not-follow';
       detail: string;
     };
 
@@ -196,6 +221,18 @@ export interface AcceptInput {
   /** Required when accepting below the suggested bump. */
   overrideReason?: string;
   now?: Date;
+  /**
+   * The effect that makes the Version exist — publishing the pack — run after
+   * every check has passed and before the record is marked accepted.
+   *
+   * Sequenced here rather than left to the caller so the two cannot disagree.
+   * Marking first and publishing after would, on a failed publish, leave a
+   * proposal claiming a Version that nobody can resolve; publishing first and
+   * marking after would run the effect before the override check that exists
+   * to stop it. A `commit` that throws leaves the proposal open, which is the
+   * state a retry can proceed from.
+   */
+  commit?: (proposal: Proposal) => Promise<void>;
 }
 
 /**
@@ -211,9 +248,11 @@ export interface AcceptInput {
  * Version's own record. It is exactly the sentence a future reader wants when
  * the break surfaces.
  *
- * Accepting does not itself write bytes to the store; the caller publishes
- * the pack it already holds. Keeping those separate means a failed publish
- * cannot leave a proposal marked accepted for a Version that does not exist.
+ * Accepting does not itself write bytes to the store. The caller supplies
+ * that effect as `commit`, and this runs it after the checks and before the
+ * record is marked — so a failed publish cannot leave a proposal marked
+ * accepted for a Version that does not exist, and the effect can never run
+ * ahead of the check that exists to stop it.
  */
 export async function acceptProposal(
   input: AcceptInput,
@@ -245,6 +284,26 @@ export async function acceptProposal(
   let claimed = proposal.delta
     ? claimedBump(proposal.delta.comparedWith, proposal.version)
     : undefined;
+
+  // The claim does not follow the Version it was compared against — it goes
+  // backwards, or sideways. Deck permits it: a patch on an older line is a
+  // real thing to publish. But the structural verdict on this proposal was
+  // computed against the HIGHEST version, so it describes a delta this claim
+  // is not making, and letting it through would mean publishing a number
+  // nothing checked. Cheaper to ask than to be wrong: the same reason field,
+  // a different question.
+  if (proposal.delta && !claimed && !input.overrideReason) {
+    return {
+      kind: 'refused',
+      code: 'claim-does-not-follow',
+      detail:
+        `${proposal.version} does not follow ${proposal.delta.comparedWith}, ` +
+        'which is what the structural pass compared it against — so that ' +
+        'verdict does not describe this claim. Publishing onto an older line ' +
+        'is allowed; say why, and the reason is kept.',
+    };
+  }
+
   if (
     suggested &&
     claimed &&
@@ -262,6 +321,11 @@ export async function acceptProposal(
   }
 
   let now = input.now ?? new Date();
+  if (input.commit) {
+    // Deliberately unguarded: a publish that fails should surface as itself,
+    // not as a refusal code invented here. The proposal stays open.
+    await input.commit(proposal);
+  }
   let accepted: Proposal = {
     ...proposal,
     state: 'accepted',

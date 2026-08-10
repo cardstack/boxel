@@ -8,6 +8,7 @@ import {
   claimedBump,
   listProposals,
   proposeVersion,
+  readProposal,
   withdrawProposal,
 } from '../lib/package-proposals.ts';
 
@@ -32,7 +33,9 @@ async function withStore(fn: (dir: string) => Promise<void>) {
   }
 }
 
-const META = { versions: { '1.0.0': { treeHash: 'aa', storage: 'blobs-v1' } } };
+const META = {
+  versions: { '1.0.0': { treeHash: 'aa', storage: 'blobs-v1' } },
+} as const;
 
 module(basename(import.meta.filename), function () {
   module('publishing in two phases', function () {
@@ -173,6 +176,48 @@ module(basename(import.meta.filename), function () {
       });
     });
 
+    test('a claim that does not follow its baseline is asked about', async function (assert) {
+      // The gap a live demo found: claim 1.2.3 while 4.0.0 is the current
+      // Version. Every existing check passes it — 1.2.3 is a valid semver
+      // nobody has published — and the structural verdict on record was
+      // computed against 4.0.0, describing a delta this claim is not making.
+      // So without this it publishes with nothing having checked the number.
+      await withStore(async (dir) => {
+        let p = await proposeVersion({
+          storeDir: dir,
+          name: 'lib/palette',
+          version: '1.2.3',
+          treeHash: 'bb',
+          body: 'a backport, or a typo',
+          proposedBy: 'chris',
+          priorSource: V1,
+          candidateSource: V2,
+          priorVersion: '4.0.0',
+          meta: META,
+        });
+        let refused = await acceptProposal({
+          storeDir: dir,
+          name: 'lib/palette',
+          id: p.id,
+          acceptedBy: 'reviewer',
+        });
+        assert.strictEqual(
+          refused.kind === 'refused' ? refused.code : refused.kind,
+          'claim-does-not-follow',
+        );
+        // Allowed with a reason, because publishing onto an older line is a
+        // real thing to do — it just may not pass silently.
+        let accepted = await acceptProposal({
+          storeDir: dir,
+          name: 'lib/palette',
+          id: p.id,
+          acceptedBy: 'reviewer',
+          overrideReason: 'backporting the fix to the 1.x line',
+        });
+        assert.strictEqual(accepted.kind, 'accepted');
+      });
+    });
+
     test('a proposal is accepted once', async function (assert) {
       await withStore(async (dir) => {
         let p = await proposeVersion({
@@ -220,11 +265,101 @@ module(basename(import.meta.filename), function () {
       });
     });
 
+    test('the effect runs after the checks, and a failed one leaves it open', async function (assert) {
+      // Publishing is the thing that makes a Version exist, so its ordering
+      // against the checks is the whole safety property. Two facts here: the
+      // refused proposal never reaches `commit` at all, and a `commit` that
+      // throws leaves nothing marked — which is the state a retry proceeds
+      // from.
+      await withStore(async (dir) => {
+        let ran: string[] = [];
+        let refusable = await proposeVersion({
+          storeDir: dir,
+          name: 'lib/palette',
+          version: '1.1.0',
+          treeHash: 'bb',
+          body: 'tidy up',
+          proposedBy: 'chris',
+          priorSource: V1,
+          candidateSource: REMOVED,
+          priorVersion: '1.0.0',
+          meta: META,
+        });
+        await acceptProposal({
+          storeDir: dir,
+          name: 'lib/palette',
+          id: refusable.id,
+          acceptedBy: 'reviewer',
+          commit: async () => {
+            ran.push('published');
+          },
+        });
+        assert.deepEqual(ran, [], 'a refused acceptance never publishes');
+
+        let p = await proposeVersion({
+          storeDir: dir,
+          name: 'lib/palette',
+          version: '2.0.0',
+          treeHash: 'bb',
+          body: 'x',
+          proposedBy: 'chris',
+          meta: META,
+        });
+        await assert.rejects(
+          acceptProposal({
+            storeDir: dir,
+            name: 'lib/palette',
+            id: p.id,
+            acceptedBy: 'reviewer',
+            commit: async () => {
+              throw new Error('disk full');
+            },
+          }),
+          /disk full/,
+          'the publish failure surfaces as itself',
+        );
+        let stored = await readProposal(dir, 'lib/palette', p.id);
+        assert.strictEqual(
+          stored?.state,
+          'open',
+          'and the proposal is still open, not accepted for a Version nobody has',
+        );
+      });
+    });
+
+    test('the proposal carries the bytes it is a claim about', async function (assert) {
+      // Without this, acceptance would have to be re-supplied the source by
+      // whoever clicked accept, and nothing would tie it to the diff the
+      // reviewer read.
+      await withStore(async (dir) => {
+        let p = await proposeVersion({
+          storeDir: dir,
+          name: 'lib/palette',
+          version: '2.0.0',
+          treeHash: 'bb',
+          body: 'x',
+          proposedBy: 'chris',
+          priorSource: V1,
+          candidateSource: V2,
+          priorVersion: '1.0.0',
+          meta: META,
+        });
+        assert.strictEqual(p.source, V2);
+        let stored = await readProposal(dir, 'lib/palette', p.id);
+        assert.strictEqual(stored?.source, V2, 'and it survives a round trip');
+      });
+    });
+
     test('the claimed bump is read off the numbers, not taken on trust', async function (assert) {
       assert.strictEqual(claimedBump('1.0.0', '2.0.0'), 'major');
       assert.strictEqual(claimedBump('1.0.0', '1.1.0'), 'minor');
       assert.strictEqual(claimedBump('1.0.0', '1.0.1'), 'patch');
       assert.strictEqual(claimedBump('1.0.0', 'nonsense'), undefined);
+      // Not an increment at all. Read component-by-component this looks like a
+      // minor (2 > 0), which would grade a backwards claim against a
+      // suggestion computed for a line it does not extend.
+      assert.strictEqual(claimedBump('4.0.0', '1.2.3'), undefined);
+      assert.strictEqual(claimedBump('1.0.0', '1.0.0'), undefined);
     });
   });
 });
