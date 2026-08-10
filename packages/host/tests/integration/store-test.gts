@@ -1835,13 +1835,27 @@ module('Integration | Store', function (hooks) {
   // instance's version, and schedules a reindex.
   test<TestContextWithSave>('resolving a linksTo lazily issues no save', async function (assert) {
     let hassanId = `${testRealmURL}Person/hassan`;
+    // A target of its own: deserialization resolves a link straight from the
+    // identity map when the target is already in the store, which skips the
+    // lazy path just as surely as side-loading does.
+    await testRealm.write(
+      'Person/ghost-friend.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'Ghost' },
+          meta: { adoptsFrom: { module: testRRI('person'), name: 'Person' } },
+        },
+      }),
+    );
     await testRealm.write(
       'Person/hassan.json',
       JSON.stringify({
         data: {
           attributes: { name: 'Hassan' },
           relationships: {
-            bestFriend: { links: { self: `${testRealmURL}Person/jade` } },
+            bestFriend: {
+              links: { self: `${testRealmURL}Person/ghost-friend` },
+            },
           },
           meta: {
             adoptsFrom: { module: testRRI('person'), name: 'Person' },
@@ -1851,19 +1865,25 @@ module('Integration | Store', function (hooks) {
     );
 
     // A card GET side-loads its linksTo targets into `included`, and
-    // deserialization resolves the field straight from there — synchronously,
-    // never touching the lazy path. Writing the link unresolved on disk does
-    // not change that. Drop the side-load for this one document so the field
-    // deserializes to a not-loaded marker and reading it drives the real lazy
-    // load, which is the path that assigns the target back onto the field.
-    let loadCardDocument = cardStore.loadCardDocument.bind(cardStore);
-    cardStore.loadCardDocument = (async (url: string, opts?: any) => {
-      let doc = await loadCardDocument(url, opts);
-      if (url.replace(/\.json$/, '') === hassanId && doc && 'data' in doc) {
-        delete (doc as any).included;
+    // deserialization resolves the field from there synchronously — never
+    // touching the lazy path this test is about. Writing the link unresolved
+    // on disk does not change that. Drop the side-load for this one document
+    // so the field deserializes to a not-loaded marker, and reading it drives
+    // the real lazy load — the path that assigns the target onto the field.
+    let cardService = getService('card-service');
+    let fetchJSON = cardService.fetchJSON.bind(cardService);
+    let intercepted = 0;
+    cardService.fetchJSON = (async (
+      url: string | URL,
+      args?: Parameters<typeof fetchJSON>[1],
+    ) => {
+      let doc = await fetchJSON(url, args);
+      if (String(url).replace(/\.json$/, '') === hassanId) {
+        intercepted++;
+        delete (doc as any)?.included;
       }
       return doc;
-    }) as typeof cardStore.loadCardDocument;
+    }) as typeof cardService.fetchJSON;
 
     let saved: string[] = [];
     this.onSave((url) => {
@@ -1873,10 +1893,10 @@ module('Integration | Store', function (hooks) {
     try {
       let instance = (await storeService.get(hassanId)) as any;
 
-      // Reading a not-loaded link yields undefined and starts the load. This
-      // is what distinguishes the lazy path from the side-loaded one, where
-      // the target would already be here — so it is the assertion that keeps
-      // this test honest.
+      // These two keep the test honest rather than describing behaviour: if
+      // the fetch is never intercepted, or the link arrives already resolved,
+      // the lazy path did not run and a save during it would go unnoticed.
+      assert.ok(intercepted > 0, 'the card fetch was intercepted');
       assert.strictEqual(
         instance.bestFriend,
         undefined,
@@ -1888,12 +1908,12 @@ module('Integration | Store', function (hooks) {
 
       assert.strictEqual(
         instance.bestFriend?.name,
-        'Jade',
+        'Ghost',
         'the lazy load resolved the target and assigned it to the field',
       );
       assert.deepEqual(saved, [], 'no save was issued while loading');
     } finally {
-      cardStore.loadCardDocument = loadCardDocument;
+      cardService.fetchJSON = fetchJSON;
     }
   });
 
