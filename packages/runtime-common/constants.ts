@@ -28,14 +28,17 @@ export function baseRRI(path: string): RealmResourceIdentifier {
   return rri(`${baseRealmRRI}${path}`);
 }
 
-// Hardcoded fallback default skills for new AI rooms when the user's active
-// system card configures none. These are the legacy `Skill/*` cards; flipping
-// the fallback to the `.md` skill files is tracked separately (CS-11783) and
-// waits on those files being served in every skills realm. Note the room-
-// creation path already resolves either kind, and the system card's
-// `defaultSkillCards` / `defaultSkillFiles` already accept both.
+// The skills realm's index — the pull-model entry point. Its body names every
+// skill and command the assistant can reach and is short enough to push into
+// every room, so a room needs no other skill up front: the model reads what a
+// task actually calls for. This is the default skill for new AI rooms, and the
+// skill the system card's `defaultSkillFiles` names.
+export const skillsIndexLocalPath = 'index.md';
+
+// The legacy `Skill` card carrying the Boxel coding guidance, enabled by the
+// build-listing and readme-spec flows, which set up their own skill lists
+// rather than going through the room defaults.
 export const devSkillLocalPath = 'Skill/boxel-development';
-export const envSkillLocalPath = 'Skill/boxel-environment';
 
 export const baseRef: ResolvedCodeRef = {
   module: `${baseRealmRRI}card-api` as RealmResourceIdentifier,

@@ -722,11 +722,21 @@ Common issues are:
                   pendingFulfillAgentId = agentId;
                 }
               } catch (error) {
-                // When the cancel handler aborts the runner,
-                // finalChatCompletion() throws APIUserAbortError.
-                // Finalize the responder with the canceled flag and let
-                // the finally block handle credit tracking.
-                if (error instanceof APIUserAbortError) {
+                // Aborting the runner always surfaces as APIUserAbortError, but
+                // the user is not the only one who aborts it: the chunk handler
+                // does too when publishing a chunk fails, and that failure is
+                // the answer being cut off rather than withdrawn. Telling them
+                // apart by `chunkHandlingError` keeps a send failure from being
+                // recorded as a cancellation — which reads to the user as an
+                // answer that simply stops mid-sentence, with no error to act on
+                // and nothing in the log but "canceled by user".
+                if (error instanceof APIUserAbortError && chunkHandlingError) {
+                  log.error(
+                    `[${eventId}] Generation aborted after a chunk could not be published`,
+                  );
+                  log.error(chunkHandlingError);
+                  await responder.onError(chunkHandlingError); // E.g. MatrixError: [413] event too large
+                } else if (error instanceof APIUserAbortError) {
                   log.info(`[${eventId}] Generation was canceled by user`);
                   await responder.finalize({ isCanceled: true });
                 } else {

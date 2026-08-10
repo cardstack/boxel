@@ -20,6 +20,8 @@ import { clearHtmlComponentCache } from '@cardstack/host/lib/html-component';
 import type SessionService from '@cardstack/host/services/session';
 import { AiAssistantOpen } from '@cardstack/host/utils/local-storage-keys';
 
+import { getTestRealmRegistry } from './test-realm-registry';
+
 import { cleanupMonacoEditorModels } from './index';
 
 // Pin `yaml` into the eager test bundle. `markdown-file-def` parses frontmatter
@@ -268,6 +270,25 @@ function setupFetchDebugging(hooks: NestedHooks) {
         startedAt: Date.now(),
       });
       try {
+        // Requests to a registered test realm are answered in-page rather
+        // than dispatched to the network. The service-worker relay that
+        // otherwise serves these URLs only intercepts once the worker
+        // controls the page and its per-module activation has been acked;
+        // a card component that renders (and fetches) before that window
+        // closes would otherwise hit the real network and fail, since the
+        // test-realm host doesn't exist outside the harness. The registry
+        // is populated at realm construction, so this path has no such
+        // window. Non-fetch resources (images, workers) still rely on the
+        // service worker.
+        for (let [realmUrl, { realm }] of getTestRealmRegistry()) {
+          if (url.startsWith(realmUrl)) {
+            let response = await realm.maybeHandle(new Request(input, init));
+            if (response) {
+              return response;
+            }
+            break;
+          }
+        }
         return await boundFetch(input, init);
       } catch (error) {
         let reason = formatErrorForLog(error);

@@ -254,7 +254,7 @@ export default class CreateListingModal extends Component<Signature> {
       if (this.operatorModeStateService.workspaceChooserOpened) {
         this.operatorModeStateService.closeWorkspaceChooser();
       }
-      await this.operatorModeStateService.updateSubmode(Submodes.Code);
+      this.operatorModeStateService.updateSubmode(Submodes.Code);
       await this.operatorModeStateService.updateCodePath(
         new URL(cardUrl + '.json'),
         'preview',
