@@ -120,6 +120,61 @@ export default function handlePackageServe({
     // package name.
     let raw = ctxt.params?.rest;
     let rest = Array.isArray(raw) ? raw.join('/') : (raw ?? '');
+
+    // An address with no `@` names the PACKAGE rather than a file inside one
+    // version of it, and answers with the versions that exist.
+    //
+    // Anything that has to offer a CHOICE of version — a picker, a lock card,
+    // a timeline — otherwise has to invent version numbers and probe for
+    // 404s. That is a scan, not a listing, and it can never discover a
+    // version nobody thought to guess.
+    //
+    // Read-only like the rest of this door. It reports what the store holds
+    // and cannot change it; publishing stays out of reach of a GET.
+    if (rest && !rest.includes('@')) {
+      let name = rest.replace(/\/+$/, '');
+      let meta = await readStoreMeta(packageStorePath, name);
+      if (!meta) {
+        return setContextResponse(
+          ctxt,
+          errorResponse(404, 'unknown-package', `no package named ${name}`),
+        );
+      }
+      // Newest first, by publish time rather than by semver. This is the
+      // order things HAPPENED, which is what a timeline wants — and it stays
+      // right for a store holding versions no semver comparison would order
+      // the way they were actually released.
+      let versions = Object.entries(meta.versions ?? {})
+        .map(([version, record]) => ({
+          version,
+          treeHash: record.treeHash,
+          publishedAt: record.publishedAt,
+        }))
+        // A record with no publish time sorts last rather than throwing off
+        // the comparison — an unstamped version is older bookkeeping, not a
+        // reason to refuse the whole listing.
+        .sort((a, b) =>
+          (b.publishedAt ?? '').localeCompare(a.publishedAt ?? ''),
+        );
+      return setContextResponse(
+        ctxt,
+        new Response(
+          JSON.stringify({ name: meta.name, versions, tags: meta.tags ?? {} }),
+          {
+            status: 200,
+            headers: {
+              'content-type': 'application/json',
+              // Never cached, unlike the immutable bytes this door usually
+              // serves. The whole reason to ask is to find out whether
+              // something new landed; a cached answer would make a picker
+              // blind to precisely the version it is looking for.
+              'cache-control': 'no-store',
+            },
+          },
+        ),
+      );
+    }
+
     let parsed = parsePackagePath(rest);
     if (!parsed.ok) {
       return setContextResponse(
