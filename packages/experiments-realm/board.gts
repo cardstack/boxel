@@ -22,6 +22,7 @@ interface BoardSignature {
     boardLabel?: string;
     columnKeyFor: (item: CardDef) => string | undefined;
     columns: BoardColumn[];
+    hideEmpty?: boolean;
     items: CardDef[];
     onMove?: (item: CardDef, columnKey: string) => void;
   };
@@ -33,11 +34,16 @@ interface BoardSignature {
 
 export class Board extends GlimmerComponent<BoardSignature> {
   get kanbanColumns(): KanbanColumnConfig[] {
+    let counts = new Map<string, number>();
+    for (let p of this.placements) {
+      counts.set(p.columnId, (counts.get(p.columnId) ?? 0) + 1);
+    }
     return this.args.columns.map((c, i) => ({
       key: c.key,
       label: c.label ?? c.key,
       color: c.color ?? null,
-      collapsed: null,
+      collapsed:
+        this.args.hideEmpty && !(counts.get(c.key) ?? 0) ? true : null,
       sortOrder: i,
       wipLimit: null,
     }));
@@ -75,6 +81,7 @@ export class Board extends GlimmerComponent<BoardSignature> {
       <KanbanPlane
         @boardLabel={{@boardLabel}}
         @columns={{this.kanbanColumns}}
+        @hideEmpty={{@hideEmpty}}
         @placements={{this.placements}}
         @onChange={{this.handleChange}}
       >

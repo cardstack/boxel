@@ -76,6 +76,7 @@ export class RevenueOs extends CardDef {
     @tracked activeTab = 'pipeline';
     @tracked invoiceFilter = 'open';
     @tracked ownerFilter = 'all';
+    @tracked showAllStages = false;
     @tracked accountQuery = '';
     @tracked selectedAccountId: string | undefined;
     @tracked statusMessage = '';
@@ -194,6 +195,10 @@ export class RevenueOs extends CardDef {
     @action setOwnerFilter(selection: string) {
       this.ownerFilter = selection === 'All owners' ? 'all' : selection;
     }
+
+    @action toggleAllStages() {
+      this.showAllStages = !this.showAllStages;
+    }
     onMove = async (item: CardDef, columnKey: string) => {
       (item as Opportunity).stage = columnKey;
       if (this.commandContext && this.realm) {
@@ -219,8 +224,8 @@ export class RevenueOs extends CardDef {
       }
       return {
         count: open.length,
-        total: formatMoney(total, code) || '$0',
-        weighted: formatMoney(weighted, code) || '$0',
+        total: formatMoney(total, code ?? 'USD'),
+        weighted: formatMoney(weighted, code ?? 'USD'),
       };
     }
 
@@ -253,6 +258,7 @@ export class RevenueOs extends CardDef {
         mrr += s.billingCycle === 'yearly' ? p / 12 : p;
         code = code ?? s.price?.currency?.code ?? undefined;
       }
+      code = code ?? 'USD';
       let won = this.opportunities.filter((o) => o.stage === 'closed won');
       let lost = this.opportunities.filter((o) => o.stage === 'closed lost');
       let closed = won.length + lost.length;
@@ -268,8 +274,8 @@ export class RevenueOs extends CardDef {
       let sumOf = (list: Invoice[]) =>
         list.reduce((acc, i) => acc + sumLineItems(i.lineItems).total, 0);
       return {
-        mrr: formatMoney(mrr, code) || '$0',
-        arr: formatMoney(mrr * 12, code) || '$0',
+        mrr: formatMoney(mrr, code),
+        arr: formatMoney(mrr * 12, code),
         secondary: [
           { label: 'Pipeline', value: this.stageTotals.total },
           { label: 'Weighted forecast', value: this.stageTotals.weighted },
@@ -279,9 +285,9 @@ export class RevenueOs extends CardDef {
           },
           {
             label: 'Outstanding',
-            value: formatMoney(balanceOf(open), code) || '$0',
+            value: formatMoney(balanceOf(open), code),
           },
-          { label: 'Collected', value: formatMoney(sumOf(paid), code) || '$0' },
+          { label: 'Collected', value: formatMoney(sumOf(paid), code) },
         ],
       };
     }
@@ -381,10 +387,14 @@ export class RevenueOs extends CardDef {
     }
 
     get selectedAccount(): Account | undefined {
-      return (
-        this.filteredAccounts.find((a) => a.id === this.selectedAccountId) ??
-        this.filteredAccounts[0]
+      let chosen = this.filteredAccounts.find(
+        (a) => a.id === this.selectedAccountId,
       );
+      if (chosen) return chosen;
+      let weight = (a: Account) =>
+        this.invoices.filter((i) => i.account?.id === a.id).length +
+        this.subscriptions.filter((s) => s.account?.id === a.id).length;
+      return [...this.filteredAccounts].sort((a, b) => weight(b) - weight(a))[0];
     }
     @action selectAccount(account: Account) {
       this.selectedAccountId = account.id;
@@ -489,7 +499,7 @@ export class RevenueOs extends CardDef {
         else if (days <= 60) buckets.b60 += balance;
         else buckets.b90 += balance;
       }
-      let f = (n: number) => formatMoney(n, code) || '$0';
+      let f = (n: number) => formatMoney(n, code ?? 'USD');
       let tone = (n: number, level: string) => (n > 0 ? level : 'zero');
       return [
         { label: 'Current', value: f(buckets.current), tone: 'ok' },
@@ -595,6 +605,11 @@ export class RevenueOs extends CardDef {
           <section class='pane'>
             <div class='pane-head'>
               <h2>Pipeline</h2>
+              <Pill
+                @kind='button'
+                @variant={{if this.showAllStages 'primary' 'muted'}}
+                {{on 'click' this.toggleAllStages}}
+              >All stages</Pill>
               {{#if this.owners.length}}
                 <div class='filters' aria-label='Filter by owner'>
                   {{#each this.ownerOptions as |name|}}
@@ -624,6 +639,7 @@ export class RevenueOs extends CardDef {
                 @columns={{this.boardColumns}}
                 @columnKeyFor={{this.columnKeyFor}}
                 @onMove={{this.onMove}}
+                @hideEmpty={{unless this.showAllStages true}}
               />
             </div>
             {{#if this.negotiationDeals.length}}
