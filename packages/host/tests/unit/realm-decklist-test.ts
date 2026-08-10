@@ -16,18 +16,18 @@ import {
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
 
-// The decklist as a CARD, which is the form the user actually meets it in.
+// The realm's import map, in the form it actually takes on disk.
 //
 // `decklist-loader-test` proves the Loader honours a decklist once one is in
 // the virtual network; it puts one there by hand. This proves the other half:
-// that a realm carrying a Decklist card gets that card's pins applied to it,
-// with nobody calling `setRealmDecklist` from a test.
+// that a realm carrying an `importmap.json` gets that file's pins applied to
+// it, with nobody calling `setRealmDecklist` from a test.
 //
-// The card sits alongside the RealmConfig card at `<realm>/realm.json` — a
-// card instance at a well-known id that configures the environment rather
-// than describing content, and one that can govern many cards in its realm
-// without being any of them.
-module('Unit | decklist | a realm loads its Decklist card', function (hooks) {
+// The file is NOT A CARD — `deck-multi-package-design.md` §2 — and the tests
+// below depend on that being true rather than merely stated. Nothing here
+// writes a `meta.adoptsFrom`, nothing indexes an instance, and the pins are
+// available to the loader before any card class has been evaluated.
+module('Unit | decklist | a realm loads its import map', function (hooks) {
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
   let mockMatrixUtils = setupMockMatrix(hooks);
@@ -43,40 +43,13 @@ module('Unit | decklist | a realm loads its Decklist card', function (hooks) {
       setupIntegrationTestRealm({
         mockMatrixUtils,
         contents: {
-          // The card class. It lives in the realm, not in base — the host
-          // never loads it, so it does not have to. See the comment on
-          // `loadDecklist`: the decklist is read as card source precisely so
-          // that configuring the loader requires neither loading a card class
-          // through the loader being configured, nor an index that cannot
-          // exist yet at the moment the pins are needed. Both fields are
-          // stored for the same reason — a computed field is invisible to a
-          // reader holding only the bytes.
-          'decklist-card.gts': `
-            import { CardDef, field, contains } from '@cardstack/base/card-api';
-            import { JsonField } from '@cardstack/base/json-field';
-            export class Decklist extends CardDef {
-              static displayName = 'Decklist';
-              @field imports = contains(JsonField);
-              @field scopes = contains(JsonField);
-            }
-          `,
-          // The instance. Everything relative, so the card is portable
-          // between hosts — the realm is the base.
-          'decklist.json': {
-            data: {
-              attributes: {
-                title: 'Workspace pins',
-                imports: { palette: './palette-v2.js' },
-                scopes: {
-                  'legacy-viewer/': { palette: './palette-v1.js' },
-                },
-              },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}decklist-card`,
-                  name: 'Decklist',
-                },
-              },
+          // The web import-map shape, verbatim. A browser could load this.
+          // Everything relative, so the map is portable between hosts — the
+          // realm is the base.
+          'importmap.json': {
+            imports: { palette: './palette-v2.js' },
+            scopes: {
+              'legacy-viewer/': { palette: './palette-v1.js' },
             },
           },
           'palette-v1.js': `
@@ -112,9 +85,9 @@ module('Unit | decklist | a realm loads its Decklist card', function (hooks) {
     loader.getVirtualNetwork()?.clearDecklist();
   });
 
-  test('the card in the realm is what pins the versions', async function (assert) {
+  test('the file in the realm is what pins the versions', async function (assert) {
     // `ensureRealmMeta` is the ordinary boot path — it resolves the realm's
-    // `_info`, which is where the decklist load hangs off. Nothing in this
+    // `_info`, which is where the import-map load hangs off. Nothing in this
     // test mentions the virtual network.
     await getService('realm').ensureRealmMeta(testRealmURL);
 
@@ -128,19 +101,19 @@ module('Unit | decklist | a realm loads its Decklist card', function (hooks) {
     assert.strictEqual(
       gallery.describe(),
       '2:#f59e0b',
-      "the gallery got v2 from the card's realm-wide imports",
+      "the gallery got v2 from the file's realm-wide imports",
     );
     assert.strictEqual(
       legacy.describe(),
       '1:#b91c1c',
-      "the legacy viewer got v1 from the card's scope",
+      "the legacy viewer got v1 from the file's scope",
     );
   });
 
-  // Re-reading the card after it changes rebinds the modules it governs.
+  // Re-reading the file after it changes rebinds the modules it governs.
   //
-  // SCOPE, stated precisely so this test is not read as more than it is. A
-  // decklist edit propagates in two legs: the realm's index event has to
+  // SCOPE, stated precisely so this test is not read as more than it is. An
+  // import-map edit propagates in two legs: the realm's index event has to
   // reach the store, and the store then has to reload the pins before
   // rebuilding. This exercises the SECOND leg by calling the same entry point
   // the store's handler calls. The first leg — SSE delivery — is not
@@ -153,7 +126,7 @@ module('Unit | decklist | a realm loads its Decklist card', function (hooks) {
   // complete before the rebuild: rebuild first and it re-imports against the
   // versions being replaced, reproduces them exactly, and reads as if nothing
   // propagated at all.
-  test('editing the card changes which version a module gets', async function (assert) {
+  test('editing the file changes which version a module gets', async function (assert) {
     await getService('realm').login(testRealmURL);
     await getService('realm').ensureRealmMeta(testRealmURL);
 
@@ -166,30 +139,19 @@ module('Unit | decklist | a realm loads its Decklist card', function (hooks) {
       'the scope pins the legacy viewer to v1 to begin with',
     );
 
-    // What moving a version control in the card's UI amounts to: the scope
-    // is dropped, so the legacy viewer falls back to the realm-wide v2.
+    // What moving a version control amounts to: the scope is dropped, so the
+    // legacy viewer falls back to the realm-wide v2.
     await testRealm.write(
-      'decklist.json',
+      'importmap.json',
       JSON.stringify({
-        data: {
-          attributes: {
-            title: 'Workspace pins',
-            imports: { palette: './palette-v2.js' },
-            scopes: {},
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}decklist-card`,
-              name: 'Decklist',
-            },
-          },
-        },
+        imports: { palette: './palette-v2.js' },
+        scopes: {},
       }),
     );
     await settled();
 
-    // What the store's index handler does when it sees this card
-    // invalidated. Called directly because the event does not arrive here.
+    // What the store's index handler does when it sees this file invalidated.
+    // Called directly because the event does not arrive here.
     await getService('realm').reloadDecklistFor(testRealmURL);
     await settled();
 
@@ -207,18 +169,56 @@ module('Unit | decklist | a realm loads its Decklist card', function (hooks) {
     );
   });
 
-  test('the pins are scoped to the realm that owns the card', async function (assert) {
+  // A map that names a parent it cannot inherit from applies NOTHING — not
+  // even the half of itself that parsed. L11, fail closed: an app quietly
+  // missing the entries it inherited is worse than an import that fails, and
+  // much harder to read. `deck.extends` must name an exact version, so a tag
+  // is refused rather than resolved.
+  //
+  // Note what is asserted: the `imports` block below is perfectly well
+  // formed. If the pin still applied, a typo'd parent would look like it had
+  // worked.
+  test('a map that cannot inherit applies nothing at all', async function (assert) {
+    await getService('realm').login(testRealmURL);
+    await getService('realm').ensureRealmMeta(testRealmURL);
+
+    await testRealm.write(
+      'importmap.json',
+      JSON.stringify({
+        imports: { palette: './palette-v1.js' },
+        deck: { extends: 'latest' },
+      }),
+    );
+    await settled();
+    await getService('realm').reloadDecklistFor(testRealmURL);
+    await settled();
+
+    // `https://packages/…` is the virtual network's sentinel for a bare
+    // specifier nothing claimed. It resolves nowhere — the package-shim
+    // handler answers a fetch of it with a 404 that names the specifier and
+    // says no decklist in scope maps it — so this is what "the pin did not
+    // apply" looks like from the resolver, and it is loud rather than silent.
+    assert.strictEqual(
+      getService('loader-service')
+        .loader.getVirtualNetwork()!
+        .resolveImport('palette', `${testRealmURL}gallery/scene.js`),
+      'https://packages/palette',
+      'no pin survives a parent that cannot be honoured',
+    );
+  });
+
+  test('the pins are scoped to the realm that owns the file', async function (assert) {
     await getService('realm').ensureRealmMeta(testRealmURL);
 
     // A module outside this realm asking for the same specifier must not
     // pick up this realm's pin. This is the property `setRealmDecklist`
-    // exists for, checked here against a decklist that really came from a
-    // card rather than one installed by a test.
+    // exists for, checked here against a map that really came from a realm
+    // file rather than one installed by a test.
     let outsider = 'https://somewhere-else.example.com/app/scene.gts';
     assert.notStrictEqual(
       loader.getVirtualNetwork()!.resolveImport('palette', outsider),
       `${testRealmURL}palette-v2.js`,
-      "another realm's module is not governed by this realm's decklist",
+      "another realm's module is not governed by this realm's import map",
     );
   });
 });

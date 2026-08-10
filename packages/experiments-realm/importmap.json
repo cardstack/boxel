@@ -1,0 +1,5 @@
+{
+  "imports": {
+    "palette": "/_packages/lib/palette@1.0.0/index.js"
+  }
+}

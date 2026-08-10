@@ -92,6 +92,7 @@ import {
   type RealmResourceIdentifier,
   type Saved,
   type VirtualNetwork,
+  invalidationsNameImportMap,
 } from '@cardstack/runtime-common';
 
 import CardStore, { getDeps, type ReferenceCount } from '../lib/gc-card-store';
@@ -2015,17 +2016,17 @@ export default class StoreService extends Service implements StoreInterface {
       ? this.cardService.clientRequestIds.has(event.clientRequestId)
       : false;
 
-    // A realm's decklist changing is a code change for every card in that
+    // A realm's import map changing is a code change for every card in that
     // realm — the modules are byte-identical but a bare specifier they import
-    // now means something else. It reaches us as a plain instance
-    // invalidation, so none of the executable-extension logic below sees it.
+    // now means something else. `importmap.json` is not a card and not
+    // executable, so it arrives as a plain file invalidation that none of the
+    // executable-extension logic below sees.
     //
     // Driven from here rather than from the realm service's own subscription
     // because this handler is demonstrably live, and because the ordering
     // matters: the pins have to be installed BEFORE the rebuild re-imports,
     // or the rebuild faithfully reproduces the versions being replaced.
-    // Instance invalidations carry the id without `.json`.
-    if (invalidations.includes(`${event.realmURL}decklist`)) {
+    if (invalidationsNameImportMap(invalidations, event.realmURL as string)) {
       this.reloadDecklistThenRebuild.perform(event.realmURL as string);
       return;
     }

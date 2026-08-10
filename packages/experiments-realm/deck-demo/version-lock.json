@@ -1,20 +1,16 @@
 {
   "data": {
     "attributes": {
-      "imports": {
-        "palette": "/_packages/lib/palette@1.0.0/index.js"
-      },
       "cardInfo": {
         "name": null,
         "summary": null,
         "cardThumbnailURL": null,
         "notes": null
-      },
-      "pinnedVersion": "1.0.0"
+      }
     },
     "meta": {
       "adoptsFrom": {
-        "module": "./deck-demo/version-lock",
+        "module": "./version-lock",
         "name": "VersionLock"
       }
     },

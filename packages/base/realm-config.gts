@@ -25,6 +25,7 @@ import {
   validateRoutingPath,
 } from '@cardstack/runtime-common';
 import {
+  Button as BoxelButton,
   BoxelInput,
   BoxelInputGroup,
   BoxelSelect,
@@ -35,9 +36,13 @@ import {
 import { eq } from '@cardstack/boxel-ui/helpers';
 import FileSettingsIcon from '@cardstack/boxel-icons/file-settings';
 import LinkIcon from '@cardstack/boxel-icons/link';
+import WriteTextFileTool from '@cardstack/boxel-host/tools/write-text-file';
 import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
+import { tracked } from '@glimmer/tracking';
+import { restartableTask } from 'ember-concurrency';
 import { startCase } from 'lodash-es';
 import type { FieldsTypeFor } from './card-api';
 
@@ -362,6 +367,165 @@ export class RoutingRuleField extends FieldDef {
   static edit = RoutingRuleEdit;
 }
 
+// ---------------------------------------------------------------------------
+// The import map, authored.
+//
+// `deck-multi-package-design.md` §3 puts the authoring surface for a realm's
+// import map on this card, and the map itself in a plain file:
+//
+//   > The card is a convenience, never a dependency. An agent can write
+//   > `importmap.json` directly, and the protocol is satisfied. A broken card
+//   > def or a slow index cannot stop module resolution.
+//
+// So these fields are INTENT and the file is TRUTH. Saving this card does not
+// change what any module resolves to; writing the file does, which is why
+// materializing is an explicit action with a visible preview rather than a
+// side effect of typing. The reasons the design gives for materializing at
+// save time rather than computing at read time: the server must never run
+// realm JS to resolve its own routes, a snapshot must carry its literal map,
+// and the map is a default — evaluated once and then plain data — not a
+// computed.
+//
+// Deliberately NOT computed fields. A computed preview would be indexed, and
+// indexing is exactly what the read path cannot depend on. The preview below
+// is a component getter, built by the same function that builds the bytes, so
+// the two cannot drift.
+// ---------------------------------------------------------------------------
+
+class ImportPinAtom extends Component<typeof ImportPinField> {
+  <template>
+    <span class='pin'>
+      <code>{{if @model.specifier @model.specifier '(no specifier)'}}</code>
+      <span class='arrow' aria-hidden='true'>→</span>
+      <code>{{if @model.target @model.target '(unset)'}}</code>
+    </span>
+    <style scoped>
+      .pin {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--boxel-sp-xxs);
+        font-family: var(--boxel-font-family-mono, monospace);
+        font-size: var(--boxel-font-size-sm);
+      }
+      .arrow {
+        opacity: 0.6;
+      }
+    </style>
+  </template>
+}
+
+export class ImportPinField extends FieldDef {
+  static displayName = 'Import Pin';
+
+  @field specifier = contains(StringField, {
+    description:
+      'What the source writes, e.g. "three" or a trailing-slash prefix like "@ui/"',
+  });
+
+  @field target = contains(StringField, {
+    description:
+      'What answers to it — a URL, or a path relative to the realm root',
+  });
+
+  static atom = ImportPinAtom;
+}
+
+class ImportScopeAtom extends Component<typeof ImportScopeField> {
+  <template>
+    <span class='scope'>
+      <code>{{if @model.prefix @model.prefix '(no prefix)'}}</code>
+      <span class='count'>{{@model.pins.length}} pinned</span>
+    </span>
+    <style scoped>
+      .scope {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+      }
+      code {
+        font-family: var(--boxel-font-family-mono, monospace);
+        font-size: var(--boxel-font-size-sm);
+      }
+      .count {
+        color: var(--boxel-450);
+        font-size: var(--boxel-font-size-xs);
+      }
+    </style>
+  </template>
+}
+
+export class ImportScopeField extends FieldDef {
+  static displayName = 'Import Scope';
+
+  @field prefix = contains(StringField, {
+    description:
+      'The importer prefix these pins apply to, e.g. "legacy-viewer/". Only modules under it see them.',
+  });
+
+  @field pins = containsMany(ImportPinField);
+
+  static atom = ImportScopeAtom;
+}
+
+interface ImportMapDocument {
+  imports: Record<string, string>;
+  scopes: Record<string, Record<string, string>>;
+}
+
+// The one place the map is built. Both the preview and the bytes come through
+// here — a preview assembled separately from what gets written is how a
+// control ends up claiming a version the realm is not using.
+//
+// Entries missing either half are skipped rather than written as empty
+// strings: a row half-typed in the editor is not yet a pin, and writing
+// `"": ""` would be a resolution rule that matches everything.
+function buildImportMap(model: {
+  imports?: (Partial<ImportPinField> | undefined)[];
+  scopes?: (Partial<ImportScopeField> | undefined)[];
+}): ImportMapDocument {
+  let imports: Record<string, string> = {};
+  for (let pin of model.imports ?? []) {
+    if (pin?.specifier && pin?.target) {
+      imports[pin.specifier] = pin.target;
+    }
+  }
+  let scopes: Record<string, Record<string, string>> = {};
+  for (let scope of model.scopes ?? []) {
+    if (!scope?.prefix) {
+      continue;
+    }
+    let table: Record<string, string> = {};
+    for (let pin of scope.pins ?? []) {
+      if (pin?.specifier && pin?.target) {
+        table[pin.specifier] = pin.target;
+      }
+    }
+    scopes[scope.prefix] = table;
+  }
+  return { imports, scopes };
+}
+
+// A specifier listed twice in one table. JSON cannot hold both, so the last
+// one silently wins — which reads as "my pin does nothing" much later, in
+// whichever module happened to import it.
+function duplicateSpecifiers(
+  pins: (Partial<ImportPinField> | undefined)[] | undefined,
+): string[] {
+  let seen = new Set<string>();
+  let duplicates = new Set<string>();
+  for (let pin of pins ?? []) {
+    let specifier = pin?.specifier;
+    if (!specifier) {
+      continue;
+    }
+    if (seen.has(specifier)) {
+      duplicates.add(specifier);
+    }
+    seen.add(specifier);
+  }
+  return [...duplicates];
+}
+
 class RealmConfigEmbedded extends Component<typeof RealmConfig> {
   <template>
     <div class='realm-config-embedded' data-test-realm-config-embedded>
@@ -442,6 +606,55 @@ class RealmConfigEdit extends Component<typeof RealmConfig> {
   get duplicatePaths(): string[] {
     return findDuplicateRoutingPaths(this.args.model.hostRoutingRules);
   }
+
+  // What `importmap.json` will contain if it is written now. Built by the
+  // same function that builds the bytes, so what is shown is what lands.
+  get importMapPreview(): string {
+    return JSON.stringify(buildImportMap(this.args.model), null, 2);
+  }
+
+  get aliasCollisions(): string[] {
+    let collisions = duplicateSpecifiers(this.args.model.imports);
+    for (let scope of this.args.model.scopes ?? []) {
+      for (let specifier of duplicateSpecifiers(scope?.pins)) {
+        collisions.push(`${scope?.prefix ?? '(no prefix)'} · ${specifier}`);
+      }
+    }
+    return collisions;
+  }
+
+  @tracked private materializeError: string | undefined;
+  @tracked private materializedAt: string | undefined;
+
+  // The explicit write. Not wired to save: editing this card is a statement
+  // of intent, and changing what every module in the realm resolves to is a
+  // separate decision that should take a deliberate click.
+  private materialize = restartableTask(async () => {
+    let commandContext = this.args.context?.commandContext;
+    let realm = this.args.model[realmURL]?.href;
+    if (!commandContext || !realm) {
+      this.materializeError =
+        'No writable realm in context, so there is nowhere to write the map.';
+      return;
+    }
+    this.materializeError = undefined;
+    try {
+      await new WriteTextFileTool(commandContext).execute({
+        realm,
+        path: 'importmap.json',
+        content: `${this.importMapPreview}\n`,
+        overwrite: true,
+      });
+      this.materializedAt = new Date().toLocaleTimeString();
+    } catch (e: any) {
+      this.materializeError = String(e?.message ?? e);
+      this.materializedAt = undefined;
+    }
+  });
+
+  private writeImportMap = () => {
+    this.materialize.perform();
+  };
 
   // Redirect rules that chain back on themselves. The realm drops these
   // when it reads the config — a served loop would bounce visitors until
@@ -540,6 +753,44 @@ class RealmConfigEdit extends Component<typeof RealmConfig> {
           {{/each-in}}
         </section>
       {{/if}}
+      <section class='import-map' data-test-import-map-materialize>
+        <h3>importmap.json</h3>
+        <p class='explain'>
+          The fields above are what you want. This file is what the loader
+          reads. Writing it is what changes resolution for every card in this
+          realm — until then nothing has moved.
+        </p>
+        {{#if this.aliasCollisions.length}}
+          <div class='warning' role='status' data-test-alias-collision-warning>
+            Listed more than once, so only the last would survive:
+            {{#each this.aliasCollisions as |c i|}}
+              {{#if i}}, {{/if}}<code>{{c}}</code>
+            {{/each}}
+          </div>
+        {{/if}}
+        <pre class='preview' data-test-import-map-preview>{{this.importMapPreview}}</pre>
+        <div class='actions'>
+          <BoxelButton
+            @kind='primary'
+            @disabled={{this.materialize.isRunning}}
+            {{on 'click' this.writeImportMap}}
+            data-test-write-import-map
+          >
+            {{if this.materialize.isRunning 'Writing…' 'Write importmap.json'}}
+          </BoxelButton>
+          {{#if this.materializedAt}}
+            <span class='written' data-test-import-map-written>
+              written at
+              {{this.materializedAt}}
+            </span>
+          {{/if}}
+        </div>
+        {{#if this.materializeError}}
+          <div class='warning' role='status' data-test-import-map-error>
+            {{this.materializeError}}
+          </div>
+        {{/if}}
+      </section>
       <footer class='notes-footer'>
         <FieldContainer
           @label='Notes'
@@ -569,7 +820,44 @@ class RealmConfigEdit extends Component<typeof RealmConfig> {
         padding: var(--realm-config-padding);
         background-color: var(--background);
       }
-      .own-display-fields + .notes-footer {
+      .own-display-fields + .import-map {
+        border-top: 1px solid var(--realm-config-hr-color);
+      }
+      .import-map {
+        display: grid;
+        gap: var(--boxel-sp-xs);
+        padding: var(--realm-config-padding);
+        background-color: var(--background);
+      }
+      .import-map h3 {
+        margin: 0;
+        font: 600 var(--boxel-font);
+        font-family: var(--boxel-font-family-mono, monospace);
+      }
+      .explain {
+        margin: 0;
+        color: var(--boxel-450);
+        font-size: var(--boxel-font-size-sm);
+      }
+      .preview {
+        margin: 0;
+        padding: var(--boxel-sp-xs);
+        background: rgba(0, 0, 0, 0.04);
+        border-radius: var(--boxel-border-radius-sm, 6px);
+        font-family: var(--boxel-font-family-mono, monospace);
+        font-size: var(--boxel-font-size-sm);
+        overflow-x: auto;
+      }
+      .actions {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-sm);
+      }
+      .written {
+        color: var(--boxel-450);
+        font-size: var(--boxel-font-size-xs);
+      }
+      .import-map + .notes-footer {
         border-top: 1px solid var(--realm-config-hr-color);
       }
       .notes-footer {
@@ -670,6 +958,12 @@ export class RealmConfig extends CardDef {
   @field backgroundURL = contains(StringField);
   @field iconURL = contains(StringField);
   @field hostRoutingRules = containsMany(RoutingRuleField);
+
+  // Intent, not truth — see the block comment above `ImportPinField`. These
+  // describe the map the owner wants; `importmap.json` is what the loader
+  // reads, and it only changes when the owner writes it.
+  @field imports = containsMany(ImportPinField);
+  @field scopes = containsMany(ImportScopeField);
   // Opt-in to keeping the full prerendered isolated HTML for the
   // realm's default CardsGrid index card. Default behaviour for this
   // card writes a small boilerplate placeholder instead — the

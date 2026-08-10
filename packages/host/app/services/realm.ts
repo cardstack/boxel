@@ -35,10 +35,15 @@ import {
   Deferred,
   ensureTrailingSlash,
   fetchPublishabilityReport,
+  importMapURL,
+  invalidationsNameImportMap,
   logger,
+  parseImportMapFile,
+  resolveImportMap,
   ri,
   rri,
   SupportedMimeType,
+  type DecklistLink,
   type RealmInfo,
   RealmPaths,
 } from '@cardstack/runtime-common';
@@ -130,26 +135,6 @@ export interface RealmPrivateDependencyReport {
 type AuthStatus =
   | { type: 'logged-in'; token: string; claims: JWTPayload }
   | { type: 'anonymous' };
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-// Narrow an untrusted value to a string→string map, dropping entries that
-// are not strings rather than rejecting the whole map. See the call site for
-// why a partly-broken decklist is still worth applying.
-function asStringMap(value: unknown): Record<string, string> | undefined {
-  if (!isPlainObject(value)) {
-    return undefined;
-  }
-  let result: Record<string, string> = {};
-  for (let [key, entry] of Object.entries(value)) {
-    if (typeof entry === 'string') {
-      result[key] = entry;
-    }
-  }
-  return result;
-}
 
 class RealmResource {
   @service declare private matrixService: MatrixService;
@@ -346,25 +331,28 @@ class RealmResource {
               ) {
                 this.refreshInfo();
               }
-              // Same mechanism for the Decklist card: editing it changes what
+              // Same mechanism for the import map: editing it changes what
               // every bare specifier in this realm resolves to, so reload it
               // and let the virtual network invalidate the module caches. This
               // is the propagation path a version control in card UI rides —
-              // move the slider, the card saves, the realm re-indexes, and
-              // the modules that import the pinned library come back bound to
-              // a different version. Like the `realm` case above, instance
-              // invalidations carry the id without `.json`.
+              // move the slider, the card writes the map, the realm
+              // re-indexes, and the modules that import the pinned library
+              // come back bound to a different version.
+              //
+              // The index drops `.json` from the id here, the same way it
+              // does for a card instance — see `invalidationsNameImportMap`,
+              // which accepts both spellings and says why.
               //
               // A full or copy index reloads unconditionally, and that is not
               // belt-and-braces: on a realm being indexed for the FIRST time
               // the boot-time load races the index and gets a 404, and no
               // incremental event ever follows to correct it. The realm would
-              // sit there with a Decklist card that does nothing. One
+              // sit there with an import map that does nothing. One
               // conditional GET per wholesale index is a cheap way to be sure
               // the pins reflect what is actually in the realm.
               if (
                 data.indexType !== 'incremental' ||
-                data.invalidations.includes(`${this.realmURL}decklist`)
+                invalidationsNameImportMap(data.invalidations, this.realmURL)
               ) {
                 this.loadDecklist();
               }
@@ -489,35 +477,29 @@ class RealmResource {
     await this.decklistLoad;
   }
 
-  // The realm's Decklist card, if it has one, folded into the virtual
-  // network. A sibling of the RealmConfig card at `<realm>/realm.json`: a
-  // card instance at a well-known id that configures the environment rather
-  // than describing content.
+  // The realm's import map, folded into the virtual network.
   //
-  // Read as card SOURCE — the bytes of `decklist.json` on disk — rather than
-  // through the store or the index, and every part of that is load-bearing.
+  // `<realm>/importmap.json` is a PLAIN JSON FILE, not a card. That is the
+  // ruling in `deck-multi-package-design.md` §2, and §3 gives the reason:
+  // module resolution must not depend on the index or on card compute. The
+  // RealmConfig card is the authoring surface and writes this file; it is a
+  // convenience, never a dependency, so an agent that writes the file
+  // directly satisfies the protocol and a broken card def cannot stop a realm
+  // from resolving its modules.
   //
-  // Not through the store, because loading the decklist through the store
-  // would mean loading its own card class through the very loader it is
-  // meant to configure. Reading `attributes` off the JSON keeps the host
-  // ignorant of the card's class, which also means the class can live in the
-  // realm rather than in base.
+  // Read as SOURCE — the bytes on disk — rather than through the index,
+  // because of when this runs. Indexing a realm renders its modules, and
+  // those renders need the pins, so the map is read *during* the index that
+  // would populate it. Asking the index for it then is a chicken-and-egg: on
+  // a full index of a cold realm the row does not exist until its turn comes
+  // round, and the request stalls on the in-progress index before 404ing. The
+  // file is on disk the whole time.
   //
-  // Not through the index, because of when this runs. Indexing a realm
-  // renders its modules, and those renders need the pins — so the decklist is
-  // read *during* the index that would populate it. Asking the index for it
-  // then is a chicken-and-egg: on a full index of a cold realm the row does
-  // not exist until its turn comes round, and the request stalls on the
-  // in-progress index before 404ing. The file is on disk the whole time.
-  //
-  // The cost of reading the file is that computed fields do not exist yet, so
-  // `imports` has to be a stored field. That is the right trade: it makes the
-  // pins data at rest, readable by anything that can read the realm, with no
-  // dependency on having evaluated the card that carries them.
-  //
-  // Best-effort by design. Most realms have no decklist, so a 404 is the
-  // common case and not a failure; and a realm whose decklist cannot be read
-  // should still open, behaving as it does today.
+  // Best-effort about the file, fail-closed about its contents. Most realms
+  // have no import map, so a 404 is the common case and not a failure; but a
+  // map that names a parent it cannot inherit from applies NOTHING rather
+  // than applying its own half, because an app silently missing the entries
+  // it inherited is worse than an import that fails loudly.
   async loadDecklist(): Promise<void> {
     this.decklistSettled = false;
     let decklist = await this.fetchDecklistFromServer();
@@ -525,19 +507,73 @@ class RealmResource {
   }
 
   private async fetchDecklistFromServer(): Promise<DecklistInput | undefined> {
+    let text = await this.readImportMapFile(importMapURL(this.realmURL));
+    if (text == null) {
+      return undefined;
+    }
+    let start: DecklistLink;
+    try {
+      start = parseImportMapFile(text);
+    } catch (error) {
+      // A malformed `deck.extends`. Deliberately loud and deliberately
+      // total — see `parseImportMapFile`.
+      console.warn(
+        `[realm-service] import map refused ${JSON.stringify({
+          realmURL: this.realmURL,
+          error: String(error),
+        })}`,
+      );
+      this.decklistSettled = true;
+      return undefined;
+    }
+    let decklist: DecklistInput;
+    try {
+      decklist = await resolveImportMap({
+        start,
+        realmURL: this.realmURL,
+        load: async (parentURL) => {
+          let parentText = await this.readImportMapFile(parentURL);
+          return parentText == null
+            ? undefined
+            : parseImportMapFile(parentText);
+        },
+      });
+    } catch (error) {
+      console.warn(
+        `[realm-service] import map inheritance failed ${JSON.stringify({
+          realmURL: this.realmURL,
+          error: String(error),
+        })}`,
+      );
+      this.decklistSettled = true;
+      return undefined;
+    }
+    this.decklistSettled = true;
+    if (
+      Object.keys(decklist.imports ?? {}).length === 0 &&
+      Object.keys(decklist.scopes ?? {}).length === 0
+    ) {
+      return undefined;
+    }
+    return decklist;
+  }
+
+  // The bytes of an import map, or undefined if there are none to read.
+  //
+  // Sets `decklistSettled` only for answers that re-reading cannot change:
+  // the file is not there, or it was served. A transport failure or a 5xx
+  // leaves it unset, so the next caller tries again.
+  private async readImportMapFile(url: string): Promise<string | undefined> {
     let response: Response;
     try {
-      response = await this.network.authedFetch(
-        `${this.realmURL}decklist.json`,
-        {
-          headers: { Accept: SupportedMimeType.CardSource },
-        },
-      );
+      response = await this.network.authedFetch(url, {
+        headers: { Accept: SupportedMimeType.CardSource },
+      });
     } catch (error) {
       if (isTesting()) {
         console.warn(
-          `[realm-service] decklist fetch failed ${JSON.stringify({
-            realmURL: this.realmURL,
+          `[realm-service] import map fetch failed ${JSON.stringify({
+            url,
             error: String(error),
           })}`,
         );
@@ -552,49 +588,14 @@ class RealmResource {
     }
     if (response.status !== 200) {
       console.warn(
-        `[realm-service] decklist fetch bad status ${JSON.stringify({
-          realmURL: this.realmURL,
+        `[realm-service] import map fetch bad status ${JSON.stringify({
+          url,
           status: response.status,
         })}`,
       );
       return undefined;
     }
-    let attributes: Record<string, unknown> | undefined;
-    try {
-      let json = await waitForPromise(response.json());
-      attributes = json?.data?.attributes;
-    } catch (error) {
-      console.warn(
-        `[realm-service] decklist is not readable JSON ${JSON.stringify({
-          realmURL: this.realmURL,
-          error: String(error),
-        })}`,
-      );
-      // The bytes were served and they are not JSON. Re-reading them will not
-      // change that, and the fix — editing the file — arrives as an event.
-      this.decklistSettled = true;
-      return undefined;
-    }
-    // The card is user-authored and can be saved mid-edit in any shape, so
-    // nothing here may assume a field is present or is the right type. A
-    // malformed half of the map is dropped and the other half still applies:
-    // refusing the whole decklist over one bad entry would take the user's
-    // working pins away at the moment they are editing.
-    let imports = asStringMap(attributes?.imports);
-    let scopes: Record<string, Record<string, string>> = {};
-    if (isPlainObject(attributes?.scopes)) {
-      for (let [scope, mappings] of Object.entries(attributes.scopes)) {
-        let resolved = asStringMap(mappings);
-        if (resolved) {
-          scopes[scope] = resolved;
-        }
-      }
-    }
-    this.decklistSettled = true;
-    if (!imports && Object.keys(scopes).length === 0) {
-      return undefined;
-    }
-    return { imports: imports ?? {}, scopes };
+    return await waitForPromise(response.text());
   }
 
   // Fetches the realm's current `_info` from the realm server. Used both for

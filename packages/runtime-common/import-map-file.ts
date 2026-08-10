@@ -1,0 +1,192 @@
+// A realm's import map: `importmap.json` at the realm root.
+//
+// NOT A CARD, and that is the point rather than an implementation detail.
+// `deck-multi-package-design.md` §2 states it plainly — "One plain JSON file
+// at the realm root. It is not a card." — and §3 gives the reason: module
+// resolution must not depend on the index or on card compute. A card would
+// make it depend on both. The authoring surface is the RealmConfig card,
+// which WRITES this file; the card is a convenience, never a dependency, so
+// an agent that writes `importmap.json` directly satisfies the protocol and a
+// broken card def cannot stop a realm from resolving its modules.
+//
+// The format is the web import-map standard — `imports` and `scopes`, a
+// browser could load it — plus one vendor key for everything Deck adds, so
+// future spec members can never collide with ours. Deck writes `deck`; a map
+// authored in a Boxel realm may write `boxel`. Both are read.
+//
+// Every algorithm here is imported from `@cardstack/deck`, not reimplemented.
+// That is the backport's standing rule: the flattening order, the depth
+// limit, what `null` means and which parents are legal are protocol
+// decisions, and a second copy of them is a second thing to get wrong.
+
+import { IMPORT_MAP_PATH } from '@cardstack/deck/import-map';
+import {
+  flattenInheritance,
+  isExactParent,
+  parseLink,
+  resolveInheritance,
+  type DecklistLink,
+} from '@cardstack/deck/inherit';
+
+import { ensureTrailingSlash } from './paths.ts';
+
+import type { DecklistInput } from './virtual-network.ts';
+
+export { IMPORT_MAP_PATH };
+
+export type { DecklistLink };
+
+/**
+ * The URL of a realm's import map.
+ */
+export function importMapURL(realmURL: string): string {
+  return `${ensureTrailingSlash(realmURL)}${IMPORT_MAP_PATH}`;
+}
+
+/**
+ * Whether a realm's index invalidation list names that realm's import map.
+ *
+ * BOTH SPELLINGS, and the reason is worth stating because a single wrong
+ * guess here costs all reactivity silently. The realm reports the map as
+ * `<realm>importmap` — the extension is dropped, the same way it is for a
+ * card instance whose id has none. That is what arrives today, verified
+ * against a live incremental index. The full filename is accepted too, since
+ * it is the file's actual URL and the stripping is the index's convention
+ * rather than a promise; matching both costs one comparison, and matching
+ * only the wrong one produces an import map that quietly stops propagating.
+ */
+export function invalidationsNameImportMap(
+  invalidations: readonly string[],
+  realmURL: string,
+): boolean {
+  let withExtension = importMapURL(realmURL);
+  let withoutExtension = withExtension.replace(/\.json$/, '');
+  return invalidations.some(
+    (id) => id === withExtension || id === withoutExtension,
+  );
+}
+
+/**
+ * Read one link of an inheritance chain out of the bytes of an
+ * `importmap.json`.
+ *
+ * Tolerant of a file that is missing, empty, or not JSON at all — those
+ * yield an empty link, matching how a realm with no map behaves. NOT tolerant
+ * of a malformed `deck.extends`: that throws, because a typo'd parent which
+ * silently resolved to "inherits nothing" would produce an app missing most
+ * of its dependencies, reported much later as unrelated import errors.
+ */
+export function parseImportMapFile(jsonText: string): DecklistLink {
+  return parseLink(jsonText);
+}
+
+/**
+ * Where a parent named by `deck.extends` keeps its own import map.
+ *
+ * Deck accepts three spellings of a parent. Two of them have an unambiguous
+ * address in a Boxel realm server and are supported here:
+ *
+ *   https://app.example/catalog/acme/blog@1.2.3/   fully qualified
+ *   lib/palette@1.0.0                              a package on this server
+ *
+ * The second resolves under `/_packages/`, which is where this server already
+ * serves the versioned package space from — the same address a pin in
+ * `imports` would name, so a parent and a pin agree about where a version
+ * lives.
+ *
+ * The third — a scoped alias like `@catalog/acme/blog@1.2.3/` — is refused.
+ * Resolving it needs a mapping from catalog scope to origin that this server
+ * does not have and that the corpus has not settled. Refusing with the reason
+ * named beats guessing an origin and inheriting from the wrong tree.
+ */
+export function parentImportMapURL(parent: string, realmURL: string): string {
+  if (!isExactParent(parent)) {
+    throw new Error(
+      `deck.extends must name an exact version, and "${parent}" does not`,
+    );
+  }
+  if (/^https?:\/\//i.test(parent)) {
+    return importMapURL(parent);
+  }
+  if (parent.startsWith('@')) {
+    throw new Error(
+      `deck.extends names "${parent}", a catalog-scoped parent. This server ` +
+        `has no mapping from a catalog scope to an origin, so the parent ` +
+        `cannot be fetched. Name it by full URL instead.`,
+    );
+  }
+  // `<publisher>/<package>@<version>` — a package published to this server.
+  return new URL(
+    `/_packages/${parent.replace(/\/$/, '')}/${IMPORT_MAP_PATH}`,
+    realmURL,
+  ).href;
+}
+
+/**
+ * Flatten a chain that has already been loaded, ancestor first.
+ */
+export function flattenImportMaps(
+  chain: readonly DecklistLink[],
+): DecklistInput {
+  return narrow(flattenInheritance(chain));
+}
+
+/**
+ * Walk a map's ancestry and flatten it into the single map the loader gets.
+ *
+ * `load` is the caller's, because fetching a parent is I/O and the walk has
+ * to stay usable in a browser. Fails closed: a parent that cannot be loaded
+ * throws rather than yielding a partial map.
+ */
+export async function resolveImportMap(options: {
+  start: DecklistLink;
+  load: (parentURL: string) => Promise<DecklistLink | undefined>;
+  realmURL: string;
+}): Promise<DecklistInput> {
+  let { start, load, realmURL } = options;
+  if (!start.extends) {
+    // The overwhelmingly common case, and worth not paying a walk for.
+    return flattenImportMaps([start]);
+  }
+  let flat = await resolveInheritance({
+    start,
+    load: (parent) => load(parentImportMapURL(parent, realmURL)),
+  });
+  return narrow(flat);
+}
+
+/**
+ * The map is user-authored and can be saved mid-edit in any shape, so nothing
+ * downstream may assume a value is a string. An entry that is not one is
+ * dropped and the rest of the map still applies: refusing the whole map over
+ * one bad entry would take a user's working pins away at the moment they are
+ * editing them.
+ *
+ * A malformed `extends` is the deliberate exception — see
+ * `parseImportMapFile`.
+ */
+function narrow(flat: {
+  imports: Record<string, unknown>;
+  scopes: Record<string, Record<string, unknown>>;
+}): DecklistInput {
+  let imports: Record<string, string> = {};
+  for (let [specifier, value] of Object.entries(flat.imports ?? {})) {
+    if (typeof value === 'string') {
+      imports[specifier] = value;
+    }
+  }
+  let scopes: Record<string, Record<string, string>> = {};
+  for (let [prefix, table] of Object.entries(flat.scopes ?? {})) {
+    if (typeof table !== 'object' || table === null) {
+      continue;
+    }
+    let narrowed: Record<string, string> = {};
+    for (let [specifier, value] of Object.entries(table)) {
+      if (typeof value === 'string') {
+        narrowed[specifier] = value;
+      }
+    }
+    scopes[prefix] = narrowed;
+  }
+  return { imports, scopes };
+}

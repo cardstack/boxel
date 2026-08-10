@@ -34,7 +34,9 @@
         "../base/*.d.ts",
         "../base/*"
       ],
-      "@cardstack/host/tests/*": ["../host/tests/*"]
+      "@cardstack/host/tests/*": ["../host/tests/*"],
+      "@cardstack/boxel-host/tools/*": ["../host/app/tools/*"],
+      "@cardstack/boxel-host/commands/*": ["../host/app/tools/*"]
     },
     "types": ["@cardstack/local-types"]
   },
