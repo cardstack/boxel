@@ -13,6 +13,11 @@ import { fn } from '@ember/helper';
 import { htmlSafe } from '@ember/template';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import {
+  BoxelButton,
+  BoxelInput,
+  Pill,
+} from '@cardstack/boxel-ui/components';
+import {
   identifyCard,
   realmURL,
   type getCards,
@@ -177,8 +182,16 @@ export class RevenueOs extends CardDef {
       );
     }
 
-    @action setOwnerFilter(event: Event) {
-      this.ownerFilter = (event.target as HTMLSelectElement).value;
+    get ownerOptions(): string[] {
+      return ['All owners', ...this.owners];
+    }
+
+    get ownerSelection(): string {
+      return this.ownerFilter === 'all' ? 'All owners' : this.ownerFilter;
+    }
+
+    @action setOwnerFilter(selection: string) {
+      this.ownerFilter = selection === 'All owners' ? 'all' : selection;
     }
     onMove = async (item: CardDef, columnKey: string) => {
       (item as Opportunity).stage = columnKey;
@@ -319,8 +332,8 @@ export class RevenueOs extends CardDef {
       );
     }
 
-    @action setAccountQuery(event: Event) {
-      this.accountQuery = (event.target as HTMLInputElement).value;
+    @action setAccountQuery(value: string) {
+      this.accountQuery = value;
     }
 
     @action async logActivity() {
@@ -553,11 +566,11 @@ export class RevenueOs extends CardDef {
           </div>
           <nav class='tabs'>
             {{#each TABS as |tab|}}
-              <button
-                type='button'
-                class='tab {{if (eq this.activeTab tab.key) "active"}}'
+              <Pill
+                @kind='button'
+                @variant={{if (eq this.activeTab tab.key) 'primary' 'muted'}}
                 {{on 'click' (fn this.setTab tab.key)}}
-              >{{tab.label}}</button>
+              >{{tab.label}}</Pill>
             {{/each}}
           </nav>
         </header>
@@ -571,20 +584,19 @@ export class RevenueOs extends CardDef {
             <div class='pane-head'>
               <h2>Pipeline</h2>
               {{#if this.owners.length}}
-                <select
-                  class='owner-select'
-                  aria-label='Filter by owner'
-                  {{on 'change' this.setOwnerFilter}}
-                >
-                  <option value='all' selected={{eq this.ownerFilter 'all'}}>All
-                    owners</option>
-                  {{#each this.owners as |name|}}
-                    <option
-                      value={{name}}
-                      selected={{eq this.ownerFilter name}}
-                    >{{name}}</option>
+                <div class='filters' aria-label='Filter by owner'>
+                  {{#each this.ownerOptions as |name|}}
+                    <Pill
+                      @kind='button'
+                      @variant={{if
+                        (eq this.ownerSelection name)
+                        'primary'
+                        'muted'
+                      }}
+                      {{on 'click' (fn this.setOwnerFilter name)}}
+                    >{{name}}</Pill>
                   {{/each}}
-                </select>
+                </div>
               {{/if}}
               <p class='pane-sub'>{{this.stageTotals.count}}
                 open ·
@@ -607,17 +619,17 @@ export class RevenueOs extends CardDef {
                 <span class='rail-label'>In negotiation</span>
                 {{#each this.negotiationDeals as |deal|}}
                   <div class='rail-row'>
-                    <button
-                      type='button'
-                      class='link-ish'
+                    <BoxelButton
+                      @kind='text-only'
+                      @size='extra-small'
                       {{on 'click' (fn this.openCard deal)}}
-                    >{{deal.name}}</button>
-                    <button
-                      type='button'
-                      class='act'
-                      disabled={{this.busy}}
+                    >{{deal.name}}</BoxelButton>
+                    <BoxelButton
+                      @kind='secondary'
+                      @size='extra-small'
+                      @disabled={{this.busy}}
                       {{on 'click' (fn this.closeWon deal)}}
-                    >Close won</button>
+                    >Close won</BoxelButton>
                   </div>
                 {{/each}}
               </div>
@@ -665,13 +677,12 @@ export class RevenueOs extends CardDef {
         {{#if (eq this.activeTab 'accounts')}}
           <section class='pane split'>
             <aside class='side-list'>
-              <input
-                class='search'
-                type='search'
-                placeholder='Search name, domain, contact email…'
-                value={{this.accountQuery}}
+              <BoxelInput
+                @type='search'
+                @placeholder='Search name, domain, contact email…'
+                @value={{this.accountQuery}}
+                @onInput={{this.setAccountQuery}}
                 aria-label='Search accounts'
-                {{on 'input' this.setAccountQuery}}
               />
               {{#each this.filteredAccounts as |account|}}
                 <button
@@ -691,16 +702,16 @@ export class RevenueOs extends CardDef {
                 <div class='detail-head'>
                   <h2>{{this.selectedAccount.name}}</h2>
                   <div class='head-actions'>
-                    <button
-                      type='button'
-                      class='act'
+                    <BoxelButton
+                      @kind='secondary'
+                      @size='extra-small'
                       {{on 'click' this.logActivity}}
-                    >Log activity</button>
-                    <button
-                      type='button'
-                      class='act'
+                    >Log activity</BoxelButton>
+                    <BoxelButton
+                      @kind='secondary'
+                      @size='extra-small'
                       {{on 'click' (fn this.openCard this.selectedAccount)}}
-                    >Open account</button>
+                    >Open account</BoxelButton>
                   </div>
                 </div>
                 <AccountMetrics
@@ -756,11 +767,11 @@ export class RevenueOs extends CardDef {
             </div>
             <div class='filters'>
               {{#each INVOICE_FILTERS as |f|}}
-                <button
-                  type='button'
-                  class='chip {{if (eq this.invoiceFilter f.key) "active"}}'
+                <Pill
+                  @kind='button'
+                  @variant={{if (eq this.invoiceFilter f.key) 'primary' 'muted'}}
                   {{on 'click' (fn this.setInvoiceFilter f.key)}}
-                >{{f.label}}</button>
+                >{{f.label}}</Pill>
               {{/each}}
             </div>
             <Table
@@ -778,12 +789,12 @@ export class RevenueOs extends CardDef {
                       ·
                       {{this.balanceDisplay inv}}
                       due</span>
-                    <button
-                      type='button'
-                      class='act'
-                      disabled={{this.busy}}
+                    <BoxelButton
+                      @kind='secondary'
+                      @size='extra-small'
+                      @disabled={{this.busy}}
                       {{on 'click' (fn this.recordBalancePayment inv)}}
-                    >Record payment</button>
+                    >Record payment</BoxelButton>
                   </div>
                 {{/each}}
               </div>
@@ -795,11 +806,11 @@ export class RevenueOs extends CardDef {
           <section class='pane'>
             <div class='pane-head'>
               <h2>Leads</h2>
-              <button
-                type='button'
-                class='act'
+              <BoxelButton
+                @kind='secondary'
+                @size='extra-small'
                 {{on 'click' this.newLead}}
-              >New lead</button>
+              >New lead</BoxelButton>
             </div>
             <div class='lead-list'>
               {{#each this.leads as |lead|}}
@@ -810,12 +821,12 @@ export class RevenueOs extends CardDef {
                     {{/let}}
                   </div>
                   {{#if (this.canConvert lead)}}
-                    <button
-                      type='button'
-                      class='act'
-                      disabled={{this.busy}}
+                    <BoxelButton
+                      @kind='secondary'
+                      @size='extra-small'
+                      @disabled={{this.busy}}
                       {{on 'click' (fn this.convertLead lead)}}
-                    >Convert</button>
+                    >Convert</BoxelButton>
                   {{/if}}
                 </div>
               {{else}}
@@ -863,21 +874,6 @@ export class RevenueOs extends CardDef {
           display: flex;
           gap: 0.25rem;
           flex-wrap: wrap;
-        }
-        .tab {
-          border: 0;
-          background: none;
-          font: inherit;
-          font-size: 0.8125rem;
-          font-weight: 600;
-          padding: 0.375rem 0.75rem;
-          border-radius: 999px;
-          cursor: pointer;
-          color: var(--muted-foreground, #6b7280);
-        }
-        .tab.active {
-          background: var(--primary, #111111);
-          color: var(--primary-foreground, #ffffff);
         }
         .status-banner {
           margin: 0;
@@ -936,35 +932,6 @@ export class RevenueOs extends CardDef {
           justify-content: space-between;
           gap: 1rem;
           font-size: 0.875rem;
-        }
-        .link-ish {
-          border: 0;
-          background: none;
-          font: inherit;
-          font-weight: 600;
-          cursor: pointer;
-          padding: 0;
-          color: var(--foreground, #111111);
-          text-align: left;
-        }
-        .act {
-          border: 1px solid var(--border, #e5e7eb);
-          background: var(--card, #ffffff);
-          font: inherit;
-          font-size: 0.75rem;
-          font-weight: 600;
-          padding: 0.3125rem 0.75rem;
-          border-radius: 999px;
-          cursor: pointer;
-          white-space: nowrap;
-        }
-        .act:hover:not(:disabled) {
-          background: var(--primary, #111111);
-          color: var(--primary-foreground, #ffffff);
-        }
-        .act:disabled {
-          opacity: 0.5;
-          cursor: default;
         }
         .metric-grid,
         .aging-strip {
@@ -1101,22 +1068,6 @@ export class RevenueOs extends CardDef {
           gap: 0.375rem;
           flex-wrap: wrap;
         }
-        .chip {
-          border: 1px solid var(--border, #e5e7eb);
-          background: var(--card, #ffffff);
-          font: inherit;
-          font-size: 0.75rem;
-          font-weight: 600;
-          padding: 0.25rem 0.75rem;
-          border-radius: 999px;
-          cursor: pointer;
-          color: var(--muted-foreground, #6b7280);
-        }
-        .chip.active {
-          background: var(--primary, #111111);
-          border-color: var(--primary, #111111);
-          color: var(--primary-foreground, #ffffff);
-        }
         .lead-list {
           display: flex;
           flex-direction: column;
@@ -1139,26 +1090,6 @@ export class RevenueOs extends CardDef {
           margin: 0;
           font-size: 0.8125rem;
           color: var(--muted-foreground, #6b7280);
-        }
-        .owner-select {
-          font: inherit;
-          font-size: 0.8125rem;
-          padding: 0.25rem 0.5rem;
-          border: 1px solid var(--border, #e5e7eb);
-          border-radius: 0.5rem;
-          background: var(--card, #ffffff);
-          color: var(--foreground, #111111);
-        }
-        .search {
-          font: inherit;
-          font-size: 0.8125rem;
-          padding: 0.4375rem 0.625rem;
-          border: 1px solid var(--border, #e5e7eb);
-          border-radius: 0.5rem;
-          background: var(--card, #ffffff);
-          color: var(--foreground, #111111);
-          width: 100%;
-          box-sizing: border-box;
         }
         .head-actions {
           display: flex;
