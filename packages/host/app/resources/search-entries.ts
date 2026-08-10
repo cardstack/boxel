@@ -25,6 +25,7 @@ import {
   isIconResource,
   logger as runtimeLogger,
   resourceIdentity,
+  ri,
   rri,
   wireFilterHasMatches,
   RealmPaths,
@@ -726,9 +727,13 @@ export class SearchEntriesResource extends Resource<Args> {
       }
     }
 
-    // One RealmPaths per searched realm per build — not per entry.
+    // One RealmPaths per searched realm per build — not per entry. The realm
+    // identifier is passed as-is: it is canonical, matching the form the entry
+    // ids arrive in, so membership below is a same-form prefix test. Parsing it
+    // as a URL would both throw on a canonical identifier and reintroduce the
+    // form mismatch.
     let realmPaths = this.realmsToSearch.map(
-      (realm) => new RealmPaths(new URL(realm)),
+      (realm) => new RealmPaths(ri(realm)),
     );
     let realmUrlFor = (id: string): string => {
       let idRRI = rri(id);

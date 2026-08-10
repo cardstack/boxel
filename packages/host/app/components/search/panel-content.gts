@@ -212,9 +212,8 @@ export default class PanelContent extends Component<Signature> {
   }
 
   private get searchKeyAsURL() {
-    return resolveSearchKeyAsURL(
-      this.args.searchKey,
-      this.realmServer.availableRealmIdentifiers,
+    return resolveSearchKeyAsURL(this.args.searchKey, (url) =>
+      this.realmServer.realmIdentifierForURL(url),
     );
   }
 

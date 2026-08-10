@@ -13,15 +13,16 @@ export function isSearchKeyEmpty(searchKey: string): boolean {
   return (searchKey?.trim() ?? '') === '';
 }
 
+// `realmIdentifierForURL` answers "is this URL one of the known realms, and
+// what is its identifier?". Asking rather than comparing keeps this free of the
+// realm-identifier form: the search key is whatever the user typed, a realm
+// identifier is canonical, and only the realm server can relate the two.
 export function resolveSearchKeyAsURL(
   searchKey: string,
-  availableRealmIdentifiers: readonly RealmIdentifier[],
+  realmIdentifierForURL: (url: string) => RealmIdentifier | undefined,
 ): string | undefined {
   if (!isURLSearchKey(searchKey)) {
     return undefined;
   }
-  let maybeIndexCardURL = availableRealmIdentifiers.find(
-    (u) => u === searchKey + '/',
-  );
-  return maybeIndexCardURL ?? searchKey;
+  return realmIdentifierForURL(searchKey + '/') ?? searchKey;
 }

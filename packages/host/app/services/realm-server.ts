@@ -4,7 +4,7 @@ import { service } from '@ember/service';
 
 import { isTesting } from '@embroider/macros';
 
-import { cached } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 
 import { restartableTask, rawTimeout, task } from 'ember-concurrency';
 
@@ -122,9 +122,18 @@ export default class RealmServerService extends Service {
   private eventSubscribers: Map<string, RealmServerEventSubscriber[]> =
     new Map();
 
+  // Bumped whenever a realm mapping is registered or removed, so the memoized
+  // canonical identifier list recomputes. The app registers every mapping while
+  // the network service is constructed, before anything reads a realm
+  // identifier, but tests register them mid-run.
+  @tracked private realmMappingGeneration = 0;
+
   constructor(owner: Owner) {
     super(owner);
     this.session.register(this);
+    this.network.virtualNetwork.onMappingChange(() => {
+      this.realmMappingGeneration++;
+    });
     this.fetchCatalogRealms();
   }
 
@@ -471,7 +480,29 @@ export default class RealmServerService extends Service {
 
   @cached
   get availableRealmIdentifiers(): RealmIdentifier[] {
-    return this.availableRealms.map((r) => ri(r.url));
+    // Realms arrive as URLs — the base realm as its `cardstack.com` alias, user
+    // and catalog realms as the server's own URLs — while the identifiers a card
+    // carries are canonical. Fold them here, where realms enter, so the two are
+    // the same shape everywhere downstream: comparing a card to a realm is then
+    // a plain prefix test, with no VirtualNetwork needed to bridge the forms.
+    void this.realmMappingGeneration;
+    let { virtualNetwork } = this.network;
+    return this.availableRealms.map((r) =>
+      ri(virtualNetwork.unresolveURL(r.url)),
+    );
+  }
+
+  // The identifier of the known realm a URL names, if any. Callers holding a
+  // URL — a user-typed search key, a link — ask this rather than comparing
+  // against `availableRealmIdentifiers` themselves, which would require them to
+  // know the identifier form and to reach for the VirtualNetwork to bridge it.
+  realmIdentifierForURL(url: string): RealmIdentifier | undefined {
+    let canonical = ri(
+      this.network.virtualNetwork.unresolveURL(ensureTrailingSlash(url)),
+    );
+    return this.availableRealmIdentifiers.find(
+      (identifier) => identifier === canonical,
+    );
   }
 
   assertOwnRealmServer(realmServerURLs: string[]): void {
