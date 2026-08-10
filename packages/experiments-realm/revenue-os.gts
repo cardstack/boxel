@@ -38,7 +38,6 @@ import { Lead } from './lead';
 import { Contact } from './contact';
 import { Activity } from './activity';
 import ConvertLeadCommand from './convert-lead';
-import CloseWonCommand from './close-won';
 import RecordPaymentCommand from './record-payment';
 import { formatMoney, outstandingBalance, sumLineItems } from './money';
 
@@ -255,25 +254,6 @@ export class RevenueOs extends CardDef {
         total: formatMoney(total, code ?? 'USD'),
         weighted: formatMoney(weighted, code ?? 'USD'),
       };
-    }
-
-    get negotiationDeals(): Opportunity[] {
-      return this.opportunities.filter((o) => o.stage === 'negotiation');
-    }
-
-    @action async closeWon(deal: Opportunity) {
-      if (!this.commandContext || !this.realm) return;
-      this.busy = true;
-      try {
-        let result: any = await new CloseWonCommand(this.commandContext).execute(
-          { deal, realm: this.realm } as any,
-        );
-        this.statusMessage = result?.message ?? `${deal.name} closed won`;
-      } catch (e: any) {
-        this.statusMessage = e?.message ?? 'Close won failed';
-      } finally {
-        this.busy = false;
-      }
     }
 
     // ── dashboard ─────────────────────────────────────────────────────
@@ -713,33 +693,46 @@ export class RevenueOs extends CardDef {
 
         {{#if (eq this.activeTab 'pipeline')}}
           <section class='pane'>
-            <div class='pane-head'>
+            <div class='board-toolbar'>
               <h2>Pipeline</h2>
-              <Switch
-                @isEnabled={{this.showAllStages}}
-                @onChange={{this.toggleAllStages}}
-                @label='All stages'
-              />
-              {{#if this.owners.length}}
-                <div class='owner-select'>
-                  <BoxelSelect
-                    @options={{this.ownerOptions}}
-                    @selected={{this.ownerSelection}}
-                    @onChange={{this.setOwnerFilter}}
-                    @renderInPlace={{true}}
-                    aria-label='Filter by owner'
-                    as |name|
-                  >
-                    {{name}}
-                  </BoxelSelect>
+              <div class='toolbar-controls'>
+                <div class='switch-wrap'>
+                  <Switch
+                    @isEnabled={{this.showAllStages}}
+                    @onChange={{this.toggleAllStages}}
+                    @label='All stages'
+                  />
+                  <span class='switch-text'>All stages</span>
                 </div>
-              {{/if}}
-              <p class='pane-sub'>{{this.stageTotals.count}}
-                open ·
-                {{this.stageTotals.total}}
-                total ·
-                {{this.stageTotals.weighted}}
-                weighted</p>
+                {{#if this.owners.length}}
+                  <div class='owner-select'>
+                    <BoxelSelect
+                      @options={{this.ownerOptions}}
+                      @selected={{this.ownerSelection}}
+                      @onChange={{this.setOwnerFilter}}
+                      @renderInPlace={{true}}
+                      aria-label='Filter by owner'
+                      as |name|
+                    >
+                      {{name}}
+                    </BoxelSelect>
+                  </div>
+                {{/if}}
+              </div>
+              <div class='board-stats'>
+                <span class='stat'><span
+                    class='stat-value'
+                  >{{this.stageTotals.count}}</span>
+                  open</span>
+                <span class='stat'><span
+                    class='stat-value'
+                  >{{this.stageTotals.total}}</span>
+                  total</span>
+                <span class='stat'><span
+                    class='stat-value'
+                  >{{this.stageTotals.weighted}}</span>
+                  weighted</span>
+              </div>
             </div>
             <div class='board-wrap'>
               {{#if this.queriesSettled}}
@@ -755,26 +748,6 @@ export class RevenueOs extends CardDef {
                 <p class='empty'>Loading pipeline…</p>
               {{/if}}
             </div>
-            {{#if this.negotiationDeals.length}}
-              <div class='action-rail'>
-                <span class='rail-label'>In negotiation</span>
-                {{#each this.negotiationDeals as |deal|}}
-                  <div class='rail-row'>
-                    <BoxelButton
-                      @kind='text-only'
-                      @size='extra-small'
-                      {{on 'click' (fn this.openCard deal)}}
-                    >{{deal.name}}</BoxelButton>
-                    <BoxelButton
-                      @kind='secondary'
-                      @size='extra-small'
-                      @disabled={{this.busy}}
-                      {{on 'click' (fn this.closeWon deal)}}
-                    >Close won</BoxelButton>
-                  </div>
-                {{/each}}
-              </div>
-            {{/if}}
           </section>
         {{/if}}
 
@@ -1150,28 +1123,45 @@ export class RevenueOs extends CardDef {
         .board-wrap {
           height: 420px;
         }
-        .action-rail {
-          border: 1px solid var(--border, #e5e7eb);
-          border-radius: 0.75rem;
-          background: var(--card, #ffffff);
-          padding: 0.75rem 1rem;
-          display: flex;
-          flex-direction: column;
-          gap: 0.5rem;
-        }
-        .rail-label {
-          font-size: 0.6875rem;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.1em;
-          color: var(--muted-foreground, #6b7280);
-        }
-        .rail-row {
+        .board-toolbar {
           display: flex;
           align-items: center;
-          justify-content: space-between;
+          gap: 1.25rem;
+          flex-wrap: wrap;
+        }
+        .toolbar-controls {
+          display: flex;
+          align-items: center;
           gap: 1rem;
-          font-size: 0.875rem;
+        }
+        .switch-wrap {
+          display: flex;
+          align-items: center;
+          gap: 0.4375rem;
+        }
+        .switch-text {
+          font-size: 0.8125rem;
+          font-weight: 500;
+          color: var(--muted-foreground, #6b7280);
+          white-space: nowrap;
+        }
+        .board-stats {
+          margin-left: auto;
+          display: flex;
+          align-items: baseline;
+          gap: 1.25rem;
+        }
+        .stat {
+          font-size: 0.75rem;
+          color: var(--muted-foreground, #6b7280);
+          white-space: nowrap;
+        }
+        .stat-value {
+          font-size: 0.9375rem;
+          font-weight: 700;
+          color: var(--foreground, #111111);
+          font-variant-numeric: tabular-nums;
+          margin-right: 0.25rem;
         }
         .metric-grid,
         .aging-strip {
