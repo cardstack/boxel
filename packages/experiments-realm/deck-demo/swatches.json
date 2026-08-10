@@ -1,0 +1,19 @@
+{
+  "data": {
+    "attributes": {
+      "cardInfo": {
+        "name": "Palette Swatches",
+        "summary": "Imports the bare specifier `palette`; the Version Lock decides which build that is.",
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "./palette-swatches",
+        "name": "PaletteSwatches"
+      }
+    },
+    "type": "card"
+  }
+}
