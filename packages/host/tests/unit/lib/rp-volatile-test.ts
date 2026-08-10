@@ -376,6 +376,7 @@ module('Unit | rp-volatile | engine routing', function () {
         principal: 'user:test',
         surfaceId: 'volatile-isolation-test',
       },
+      loadTimeout: 20,
       connectTimeout: 20,
     });
 

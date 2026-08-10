@@ -26,6 +26,7 @@ function fakeSurfaceService(): {
 function createTestRuntime(
   overrides: {
     service?: SurfaceService;
+    loadTimeout?: number;
     connectTimeout?: number;
     resolveModuleURL?: (identifier: string) => string;
   } = {},
@@ -46,6 +47,7 @@ function createTestRuntime(
       principal: 'user:test',
       surfaceId: 'sandbox-test',
     },
+    loadTimeout: overrides.loadTimeout ?? overrides.connectTimeout ?? 30,
     connectTimeout: overrides.connectTimeout ?? 30,
   });
 }

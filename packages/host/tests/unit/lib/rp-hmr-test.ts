@@ -62,6 +62,7 @@ function createRuntime(
       principal: 'user:test',
       surfaceId: 'sandbox-test',
     },
+    loadTimeout: overrides.connectTimeout ?? 30,
     connectTimeout: overrides.connectTimeout ?? 30,
   });
 }

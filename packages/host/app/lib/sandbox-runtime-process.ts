@@ -85,6 +85,9 @@ export interface SandboxRuntimeProcessOptions {
   /** Trusted framework modules are leaves of the authored module graph. */
   isTrustedModuleURL: (identifier: string) => boolean;
   identity: SurfaceExecutionIdentity;
+  /** Maximum time for the child document and its module graph to load. */
+  loadTimeout?: number;
+  /** Maximum time for the transport handshake after the child has loaded. */
   connectTimeout?: number;
 }
 
@@ -361,9 +364,13 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
       return;
     }
     this.mounted = true;
-    element.append(this._iframe);
+    // Establish the child URL and all bootstrap listeners before inserting
+    // the iframe. Besides closing the first-message race, this means the
+    // `load` event below can only belong to the requested child document —
+    // never the iframe's initial about:blank document.
     let client = this.connect();
     this.client = client;
+    element.append(this._iframe);
     client.catch((error) => {
       this.notifyMountFailed(
         error instanceof Error ? error : new Error(String(error)),
@@ -877,11 +884,30 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
       let client: SandboxBoxelRuntimeClient | undefined;
       let controlPort: MessagePort | undefined;
       let settled = false;
-      let timeout = globalThis.setTimeout(() => {
-        fail(new Error('Timed out connecting to the Sandbox child'));
-      }, this.options.connectTimeout ?? 15_000);
+      // Loading the cross-origin child document includes its module graph.
+      // In development that can include a cold Vite transform and is not a
+      // transport failure. Give document boot its own bounded phase, then
+      // apply the much tighter connection deadline only after `load`.
+      let loadTimeout = globalThis.setTimeout(() => {
+        fail(new Error('Timed out loading the Sandbox child'));
+      }, this.options.loadTimeout ?? 90_000);
+      let connectTimeout: ReturnType<typeof globalThis.setTimeout> | undefined;
+      let receiveLoad = () => {
+        globalThis.clearTimeout(loadTimeout);
+        connectTimeout ??= globalThis.setTimeout(() => {
+          fail(new Error('Timed out connecting to the Sandbox child'));
+        }, this.options.connectTimeout ?? 15_000);
+      };
+      let receiveLoadError = () => {
+        fail(new Error('Failed to load the Sandbox child'));
+      };
       let cleanupBootstrap = () => {
-        globalThis.clearTimeout(timeout);
+        globalThis.clearTimeout(loadTimeout);
+        if (connectTimeout !== undefined) {
+          globalThis.clearTimeout(connectTimeout);
+        }
+        iframe.removeEventListener('load', receiveLoad);
+        iframe.removeEventListener('error', receiveLoadError);
         globalThis.removeEventListener('message', receive);
         controlPort?.removeEventListener('message', receiveControl);
         this.cancelConnection = undefined;
@@ -999,6 +1025,8 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
         globalThis.removeEventListener('message', receive);
       };
       this.cancelConnection = fail;
+      iframe.addEventListener('load', receiveLoad);
+      iframe.addEventListener('error', receiveLoadError);
       globalThis.addEventListener('message', receive);
       iframe.src = child.href;
     });

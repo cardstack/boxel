@@ -463,9 +463,10 @@ module('Integration | rp-sandbox', function (hooks) {
     // Sandbox slot (and the failed process/iframe with it — the presentation
     // slot modifier's own teardown calls unmount()) rather than leaving a
     // dead, booting-forever iframe on screen. (SandboxRuntimeProcess's
-    // connect timeout defaults to 15s; onMountFailed is what turns that
-    // background failure into this visible state, since getRenderSlot()
-    // already returned successfully before the timeout could fire.)
+    // document loading and the connect handshake have independent bounded
+    // deadlines; onMountFailed is what turns either background failure into
+    // this visible state, since getRenderSlot() already returned before the
+    // failure could fire.)
     await waitFor('.boxel-execution-error', { timeout: 20000 });
     assert
       .dom('.boxel-execution-error')
@@ -1421,9 +1422,10 @@ export async function loadThree() {
       resolveModuleURL: (identifier) => identifier,
       isTrustedModuleURL: () => false,
       identity: { mode: 'sandbox', principal: 'user:test', surfaceId: 'x' },
-      // Short on purpose: nothing in this test harness serves the child
-      // origin, so this always times out — quickly, instead of the 15s
-      // production default.
+      loadTimeout: 60_000,
+      // Short on purpose. The test dispatches the child document's load
+      // event below, so this exercises the post-load handshake phase rather
+      // than spending its transport budget on document/module loading.
       connectTimeout: 50,
     });
 
@@ -1434,6 +1436,7 @@ export async function loadThree() {
 
     try {
       process.mount(slotElement);
+      process.iframe.dispatchEvent(new Event('load'));
       await waitUntil(() => failures.length > 0, { timeout: 2000 });
       assert.strictEqual(failures.length, 1);
       assert.true(
@@ -1450,6 +1453,45 @@ export async function loadThree() {
     } finally {
       process.destroy();
       slotElement.remove();
+    }
+  });
+
+  test('RP-15.3: a cold Sandbox child gets a document-load budget independent of its transport handshake budget', async function (assert) {
+    let surfaceService = {
+      register: () => 'surface:test',
+      release: () => undefined,
+      layout: () => undefined,
+    } as unknown as SurfaceServiceType;
+    let process = new SandboxRuntimeProcess({
+      childURL: 'https://sandbox.example.test/_boxel-sandbox-runtime',
+      childOrigin: 'https://sandbox.example.test',
+      surfaceService,
+      fetch: globalThis.fetch,
+      resolveModuleURL: (identifier) => identifier,
+      isTrustedModuleURL: () => false,
+      identity: { mode: 'sandbox', principal: 'user:test', surfaceId: 'x' },
+      loadTimeout: 50,
+      // If this timer began at mount, it would win. It must not begin until
+      // the requested child document emits `load`.
+      connectTimeout: 1,
+    });
+
+    // A detached permanent slot makes document non-loading deterministic;
+    // no network behavior from the browser test harness is involved.
+    let detachedSlot = document.createElement('div');
+    let failures: Error[] = [];
+    process.onMountFailed((error) => failures.push(error));
+
+    try {
+      process.mount(detachedSlot);
+      await waitUntil(() => failures.length > 0, { timeout: 2000 });
+      assert.strictEqual(
+        failures[0]?.message,
+        'Timed out loading the Sandbox child',
+        'document boot fails on its own deadline, not the transport deadline',
+      );
+    } finally {
+      process.destroy();
     }
   });
 });

@@ -18,6 +18,7 @@ const FATAL_TEXT = [
 ];
 
 const FATAL_SANDBOX_LOG_TEXT = [
+  'Timed out loading the Sandbox child',
   'Timed out connecting to the Sandbox child',
   'render acked but produced no visible output',
 ];
@@ -336,6 +337,12 @@ export const executionRuntimeNavigationSoakCases = [
     mustContain: ['BX4500 · ORD → LHR', '$119345.79999999999'],
   },
   {
+    buttonName: '17 Editable Rating',
+    expectedExecution: 'sandbox',
+    mustContain: ['A quiet room with excellent boundaries', 'Click a star'],
+    requiredSelectors: ['[aria-label="Set rating to 1"]'],
+  },
+  {
     buttonName: '23 Surface Poster Board',
     expectedExecution: 'sandbox',
     mustContain: ['After Dark', 'Signal bloom'],
@@ -408,16 +415,30 @@ async function settleSandboxHandoff(tab, timeoutMs) {
   };
 }
 
-async function settleSandboxFrame(tab, expectedText, timeoutMs) {
+async function settleSandboxFrame(
+  tab,
+  expectedText,
+  timeoutMs,
+  requiredSelectors = [],
+) {
   try {
     let frame = tab.playwright.frameLocator('iframe.boxel-sandbox-process');
     let text = await frame.locator('body').innerText({ timeoutMs });
     let normalizedText = text.toLocaleLowerCase();
+    let selectorsReady = (
+      await Promise.all(
+        requiredSelectors.map(async (selector) =>
+          Boolean(await frame.locator(selector).count()),
+        ),
+      )
+    ).every(Boolean);
     return {
       fatal: FATAL_TEXT.some((value) => text.includes(value)),
-      ready: expectedText.every((value) =>
-        normalizedText.includes(value.toLocaleLowerCase()),
-      ),
+      ready:
+        selectorsReady &&
+        expectedText.every((value) =>
+          normalizedText.includes(value.toLocaleLowerCase()),
+        ),
       signIn: false,
     };
   } catch {
@@ -1194,7 +1215,12 @@ export async function runExecutionRuntimeNavigationSoak({
           ? await settleSandboxHandoff(tab, timeoutMs)
           : undefined;
       let ready = sandboxHandoff
-        ? await settleSandboxFrame(tab, soakCase.mustContain, timeoutMs)
+        ? await settleSandboxFrame(
+            tab,
+            soakCase.mustContain,
+            timeoutMs,
+            soakCase.requiredSelectors,
+          )
         : await settle(tab, soakCase.mustContain, timeoutMs);
       let opened = await navigationSoakSnapshot(tab);
       let caseFailures = [];
