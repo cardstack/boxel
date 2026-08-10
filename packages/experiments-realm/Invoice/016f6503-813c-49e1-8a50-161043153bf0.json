@@ -1,0 +1,53 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "invoiceNumber": "INV-2026-924",
+      "issueDate": "2026-08-10",
+      "sentDate": null,
+      "dueDate": "2026-09-09",
+      "status": "draft",
+      "lineItems": [
+        {
+          "description": "Brightleaf Workspace Rollout \u2014 year 1",
+          "quantity": 1,
+          "unitPrice": {
+            "amount": 6800,
+            "currency": {
+              "code": "USD"
+            }
+          }
+        }
+      ],
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "account": {
+        "links": {
+          "self": "../Account/brightleaf-studio"
+        }
+      },
+      "owner": {
+        "links": {
+          "self": "../Teammate/dana-whitfield"
+        }
+      },
+      "subscription": {
+        "links": {
+          "self": "../Subscription/c3b72c01-6f65-4381-bc69-e18a50161043"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../invoice",
+        "name": "Invoice"
+      }
+    }
+  }
+}

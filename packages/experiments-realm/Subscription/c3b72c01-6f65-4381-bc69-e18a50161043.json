@@ -1,0 +1,36 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "planName": "Brightleaf Workspace Rollout",
+      "price": {
+        "amount": 6800,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "billingCycle": "yearly",
+      "startDate": "2026-08-10",
+      "status": "active",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "account": {
+        "links": {
+          "self": "../Account/brightleaf-studio"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../subscription",
+        "name": "Subscription"
+      }
+    }
+  }
+}
