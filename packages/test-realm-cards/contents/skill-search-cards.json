@@ -1,0 +1,26 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "instructions": "Use search-cards-by-type-and-title to find cards by their type or title.",
+      "commands": [
+        {
+          "codeRef": {
+            "name": "SearchCardsByTypeAndTitleCommand",
+            "module": "@cardstack/boxel-host/commands/search-cards"
+          },
+          "requiresApproval": true
+        }
+      ],
+      "cardTitle": "Card Search",
+      "cardDescription": null,
+      "cardThumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/skill",
+        "name": "Skill"
+      }
+    }
+  }
+}

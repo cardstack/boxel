@@ -187,11 +187,9 @@ module('buildPromptForModel', (hooks) => {
     );
 
     // Should have a system prompt and a user prompt
-    assert.equal(result.length, 3);
+    assert.equal(result.length, 2);
     assert.equal(result[0].role, 'system');
-    assert.equal(result[1].role, 'system');
-    assert.equal(result[2].role, 'user');
-    assert.equal(result[2].content, 'Hey');
+    assert.equal(result[1].role, 'user');
 
     assert.equal(
       result[1].content,
@@ -210,7 +208,7 @@ Errors display:
     Source URL: http://localhost:4201/experiments/author.gts
 
 Current date and time: 2025-06-11T11:43:00.533Z
-`,
+` + '\n\nHey',
     );
   });
 
@@ -286,11 +284,9 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
 
     // Should have a system prompt and a user prompt
-    assert.equal(result.length, 3);
+    assert.equal(result.length, 2);
     assert.equal(result[0].role, 'system');
-    assert.equal(result[1].role, 'system');
-    assert.equal(result[2].role, 'user');
-    assert.equal(result[2].content, 'Hey');
+    assert.equal(result[1].role, 'user');
 
     assert.equal(
       result[1].content,
@@ -312,7 +308,7 @@ Viewing card instance: http://localhost:4201/experiments/Author/1
 In format: isolated
 
 Current date and time: 2025-06-11T11:43:00.533Z
-`,
+` + '\n\nHey',
     );
   });
 
@@ -371,11 +367,9 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
 
     // Should have a system prompt and a user prompt
-    assert.equal(result.length, 3);
+    assert.equal(result.length, 2);
     assert.equal(result[0].role, 'system');
-    assert.equal(result[1].role, 'system');
-    assert.equal(result[2].role, 'user');
-    assert.equal(result[2].content, 'Hey');
+    assert.equal(result[1].role, 'user');
 
     assert.equal(
       result[1].content,
@@ -391,7 +385,7 @@ Available workspaces:
 The user has no open cards.
 
 Current date and time: 2025-06-11T11:43:00.533Z
-`,
+` + '\n\nHey',
     );
   });
 
@@ -443,11 +437,9 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
 
     // Should have a system prompt and a user prompt
-    assert.equal(result.length, 3);
+    assert.equal(result.length, 2);
     assert.equal(result[0].role, 'system');
-    assert.equal(result[1].role, 'system');
-    assert.equal(result[2].role, 'user');
-    assert.equal(result[2].content, 'Hey');
+    assert.equal(result[1].role, 'user');
 
     assert.equal(
       result[1].content,
@@ -462,7 +454,7 @@ Module inspector panel: spec
 Active spec card: http://localhost:4201/experiments/Spec/author-spec-1
 
 Current date and time: 2025-06-11T11:43:00.533Z
-`,
+` + '\n\nHey',
     );
   });
 
@@ -530,12 +522,11 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
 
     // Should include the body as well as the card
-    assert.equal(result.length, 3);
+    assert.equal(result.length, 2);
     assert.equal(result[0].role, 'system');
-    assert.equal(result[1].role, 'system');
-    assert.equal(result[2].role, 'user');
+    assert.equal(result[1].role, 'user');
     assert.true(
-      (result[2].content as string).startsWith('Hey'),
+      (result[1].content as string).includes('Hey'),
       'message body should be in the user prompt',
     );
     if (
@@ -543,32 +534,32 @@ Current date and time: 2025-06-11T11:43:00.533Z
       history[0].content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE
     ) {
       assert.true(
-        (result[2].content as string).includes(`"firstName": "Terry"`),
+        (result[1].content as string).includes(`"firstName": "Terry"`),
         'attached card should be in the message that it was sent with 1',
       );
       assert.true(
-        (result[2].content as string).includes(`"lastName": "Pratchett"`),
+        (result[1].content as string).includes(`"lastName": "Pratchett"`),
         'attached card should be in the message that it was sent with 2',
       );
       assert.true(
         (result[1].content as string).includes('Room ID: room1'),
-        'roomId should be in the system context message',
+        'roomId should be in the context leading the user turn',
       );
       assert.true(
         (result[1].content as string).includes('Submode: interact'),
-        'submode should be in the system context message',
+        'submode should be in the context leading the user turn',
       );
       assert.true(
         (result[1].content as string).includes(
           'Workspace: http://localhost:4201/experiments',
         ),
-        'workspace should be in the system context message',
+        'workspace should be in the context leading the user turn',
       );
       assert.true(
         (result[1].content as string).includes(
           'Open cards:\n - http://localhost:4201/experiments/Author/1\n',
         ),
-        'open card ids should be in the system context message',
+        'open card ids should be in the context leading the user turn',
       );
     } else {
       assert.true(
@@ -1066,7 +1057,7 @@ Attached Files (files with newer versions don't show their content):
     );
 
     assert.ok(
-      (prompt[prompt.length - 2].content as string).includes(
+      (prompt[prompt.length - 1].content as string).includes(
         'File open in code editor: http://test-realm-server/my-realm/spaghetti-recipe.gts',
       ),
       'Context should include the URL of the file open in the code editor',
@@ -1761,10 +1752,10 @@ Attached Files (files with newer versions don't show their content):
     let nonEditableCardsMessage =
       'You are unable to edit any cards, the user has not given you access, they need to open the card and let it be auto-attached.';
 
-    let userContextMessage = messages?.[messages.length - 2];
+    let userContextMessage = messages?.[messages.length - 1];
     assert.ok(
       (userContextMessage?.content as string).includes(nonEditableCardsMessage),
-      'System context message should include the "unable to edit cards" message when there are attached cards and no tools, and no attached files, but was ' +
+      'The context leading the user turn should include the "unable to edit cards" message when there are attached cards and no tools, and no attached files, but was ' +
         userContextMessage?.content,
     );
 
@@ -1995,7 +1986,7 @@ Attached Files (files with newer versions don't show their content):
     const result = (
       await getPromptParts(eventList, '@aibot:localhost', fakeMatrixClient)
     ).messages!;
-    assert.equal(result.length, 3);
+    assert.equal(result.length, 2);
     assert.equal(result[0].role, 'system');
     const systemPromptText = (result[0].content as TextContent[])
       .map((c) => c.text)
@@ -2128,9 +2119,9 @@ Attached Files (files with newer versions don't show their content):
       systemPromptText.includes('Use pirate colloquialism when responding.'),
       'skill card instructions included in the system message',
     );
-    assert.equal(result[2].role, 'user');
+    assert.equal(result[1].role, 'user');
     assert.true(
-      (result[2].content as string).includes(
+      (result[1].content as string).includes(
         '"appTitle": "Radio Episode Tracker for Nerds"',
       ),
       'attached card details included in the user message',
@@ -2366,8 +2357,8 @@ Attached Files (files with newer versions don't show their content):
       '@aibot:localhost',
       fakeMatrixClient,
     );
-    assert.equal(messages!.length, 3);
-    assert.equal(messages![2].role, 'user');
+    assert.equal(messages!.length, 2);
+    assert.equal(messages![1].role, 'user');
     assert.true(tools!.length === 1);
     assert.deepEqual(toolChoice, {
       type: 'function',
@@ -3356,7 +3347,7 @@ The user has no open cards.
 Disabled skills: http://boxel.ai/skills/skill_card_editing
 
 Current date and time: 2025-06-11T11:43:00.533Z
-`,
+` + '\n\nCommand Definitions',
     );
   });
 
@@ -3516,10 +3507,10 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
     assert.deepEqual(
       messages!.map((m) => m.role),
-      ['system', 'system', 'user', 'assistant'],
+      ['system', 'user', 'assistant'],
     );
     assert.equal(
-      messages![3].content,
+      messages![2].content,
       'Updating the file...\n' +
         'http://test.com/spaghetti-recipe.gts\n' +
         '[Omitting previously suggested and applied code change]\n' +
@@ -3902,7 +3893,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
   });
 
-  test('context message is placed before last user message when just one user message', async () => {
+  test('context leads the last user message when there is just one user message', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
@@ -3919,11 +3910,16 @@ Current date and time: 2025-06-11T11:43:00.533Z
       fakeMatrixClient,
     );
     assert.equal(messages![0].role, 'system');
-    assert.equal(messages![1].role, 'system');
-    assert.equal(messages![2].role, 'user');
+    assert.equal(messages![1].role, 'user');
+    assert.ok(
+      (messages![1].content as string).startsWith(
+        'The user is currently viewing',
+      ),
+      'the context leads the user turn',
+    );
   });
 
-  test('context message is placed before last user message when multiple user messages', async () => {
+  test('context leads the last user message when there are multiple user messages', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
@@ -3942,8 +3938,13 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.equal(messages![0].role, 'system');
     assert.equal(messages![1].role, 'user');
     assert.equal(messages![2].role, 'assistant');
-    assert.equal(messages![3].role, 'system');
-    assert.equal(messages![4].role, 'user');
+    assert.equal(messages![3].role, 'user');
+    assert.ok(
+      (messages![3].content as string).startsWith(
+        'The user is currently viewing',
+      ),
+      'the context leads the last user turn',
+    );
   });
 
   test('context message is placed after the last tool call if the last message is a tool call', async () => {
@@ -3970,7 +3971,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.equal(messages![8].role, 'system');
   });
 
-  test('context message is placed after the last user message if the last message is an assistant message', async () => {
+  test('context leads the last user message when the last message is an assistant message', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
@@ -3987,9 +3988,58 @@ Current date and time: 2025-06-11T11:43:00.533Z
       fakeMatrixClient,
     );
     assert.equal(messages![0].role, 'system');
-    assert.equal(messages![1].role, 'system');
-    assert.equal(messages![2].role, 'user');
-    assert.equal(messages![3].role, 'assistant');
+    assert.equal(messages![1].role, 'user');
+    assert.ok(
+      (messages![1].content as string).startsWith(
+        'The user is currently viewing',
+      ),
+      'the context leads the user turn it explains',
+    );
+    assert.equal(messages![2].role, 'assistant');
+  });
+
+  test('no interstitial system message is followed by a user message', async () => {
+    // Anthropic rejects the array outright when a `system` message is neither
+    // last nor immediately before an `assistant` message:
+    //   "role 'system' must precede an 'assistant' message or end the array"
+    // The leading system prompt is exempt — providers lift it out of the array
+    // into their own system parameter — so this checks every one after it.
+    for (let fixture of [
+      'user-message-last-single.json',
+      'user-message-last-multiple.json',
+      'assistant-message-last.json',
+      'tool-call-last.json',
+      'code-blocks.json',
+      'connect-tool-calls-to-results.json',
+    ]) {
+      const eventList: DiscreteMatrixEvent[] = JSON.parse(
+        readFileSync(
+          path.join(import.meta.dirname, 'resources/chats', fixture),
+          'utf-8',
+        ),
+      );
+      const { messages } = await getPromptParts(
+        eventList,
+        '@aibot:localhost',
+        fakeMatrixClient,
+      );
+      if (!messages) {
+        // A history the bot would not answer builds no message array.
+        continue;
+      }
+      for (let i = 1; i < messages!.length; i++) {
+        if (messages![i].role !== 'system') {
+          continue;
+        }
+        let next = messages![i + 1];
+        assert.true(
+          next === undefined || next.role === 'assistant',
+          `${fixture}: system message at ${i} is followed by ${
+            next?.role ?? 'nothing'
+          }, which Anthropic rejects`,
+        );
+      }
+    }
   });
 
   test('context message contains the current date and time', async () => {
@@ -4008,7 +4058,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       '@aibot:localhost',
       fakeMatrixClient,
     );
-    assert.equal(messages![3].role, 'system');
+    assert.equal(messages![3].role, 'user');
     assert.true(
       !!(messages![3].content as string).match(
         /Current date and time: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/,
@@ -5171,7 +5221,7 @@ new
     ];
 
     const summaryMessage =
-      'The automated correctness checks have finished. Summarize the results based on the tool output above in one short sentence. Do not mention: correctness, automated correctness checks, tool calls.';
+      'The automated correctness checks have finished. Summarize the results based on the tool output above in one short sentence. Do not mention: correctness, automated correctness checks, tool calls. If work you already described remains unfinished, carry straight on with it in the same reply — this is a note on what just landed, not a request to stop.';
 
     const promptParts = await getPromptParts(
       eventList,
@@ -5181,7 +5231,11 @@ new
     let enabledUserMessages =
       promptParts.messages?.filter((message) => message.role === 'user') ?? [];
     assert.true(
-      enabledUserMessages.some((message) => message.content === summaryMessage),
+      enabledUserMessages.some(
+        (message) =>
+          typeof message.content === 'string' &&
+          message.content.endsWith(summaryMessage),
+      ),
       'Summary should be included',
     );
     assert.false(
@@ -5572,7 +5626,10 @@ new
       1,
       'Only the non-empty user message should be included',
     );
-    assert.equal(userMessages[0].content, 'Hello');
+    assert.true(
+      (userMessages[0].content as string).endsWith('Hello'),
+      'the surviving user message keeps its body',
+    );
   });
   test('only the most recent message attachments include file content in the prompt', async () => {
     // Policy: files attached to older messages should show metadata only,

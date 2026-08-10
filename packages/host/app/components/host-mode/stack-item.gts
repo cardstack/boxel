@@ -149,9 +149,10 @@ export default class HostModeStackItem extends Component<Signature> {
         {{if this.doMovingForwardAnimation "move-forward-animation"}}
         {{if this.isItemFullWidth "full-width"}}
         {{if this.isTesting "testing"}}'
+      style={{this.styleForStackedCard}}
+      data-host-mode-stack-item
       data-test-host-mode-stack-item-index={{@index}}
       data-test-host-mode-stack-item={{@cardId}}
-      style={{this.styleForStackedCard}}
     >
       <div class='stack-item-card'>
         <HostModeCard

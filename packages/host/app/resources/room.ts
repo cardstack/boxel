@@ -293,6 +293,33 @@ export class RoomResource extends Resource<Args> {
       .sort((a, b) => a.created.getTime() - b.created.getTime());
   }
 
+  /**
+   * The message an event belongs to, which for an answer long enough to have
+   * been split across continuation events is the head of that chain — the one
+   * `messages` exposes, and the only one whose `body` is the whole answer. A
+   * caller holding a raw event id cannot use `messages.find` for this: the
+   * continuations are filtered out of that list, so every id but the first
+   * looks like an event with no message.
+   */
+  messageForEventId(eventId: string): Message | undefined {
+    let message = this._messageCache.get(eventId);
+    if (!message) {
+      return undefined;
+    }
+    let seen = new Set<string>();
+    while (message?.continuationOf && !seen.has(message.continuationOf)) {
+      seen.add(message.continuationOf);
+      let parent = this._messageCache.get(message.continuationOf);
+      if (!parent) {
+        // The head has not arrived yet. Returning nothing lets the caller wait
+        // for a later event in the chain rather than act on a partial answer.
+        return undefined;
+      }
+      message = parent;
+    }
+    return message;
+  }
+
   @cached
   get members() {
     if (this.roomId == undefined) {

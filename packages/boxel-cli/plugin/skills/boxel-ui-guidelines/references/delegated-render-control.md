@@ -2,7 +2,7 @@
 
 When a parent card renders a linked or compound field via `<@fields.X @format='...' />`, the host wraps the child render in chrome you didn't write. Default chrome looks like "shadcn neutral card": rounded corners, soft border, white-ish background, `overflow: hidden`, padding for atoms. If your parent's design language disagrees (Row & Rail wants `--radius: 0` and editorial sharp corners), the chrome fights it.
 
-This file documents EXACTLY what the host injects and EXACTLY how the parent overrides it. Source: `~/Projects/boxel/packages/base/field-component.gts` + `~/Projects/boxel/packages/boxel-ui/src/components/card-container/index.gts`.
+This file documents EXACTLY what the host injects and EXACTLY how the parent overrides it. Source: `~/Projects/boxel/packages/base/field-component.gts` + `~/Projects/boxel/packages/boxel-ui/addon/src/components/card-container/index.gts`.
 
 **Related but distinct concern — Host-mode click-through.** When you render a result list via `@context.searchResultsComponent` (or the older `PrerenderedCardSearch` surface) inside an app card that publishes to Host mode, the rendered tiles need an explicit anchor overlay to be clickable. The in-app `@context.cardComponentModifier` machinery only fires in Interact / Code mode. See [`app-card-home-with-search`](../../boxel-patterns/patterns/app-card-home-with-search/README.md) → "Host-mode click-through" for the overlay pattern.
 
@@ -662,7 +662,7 @@ Stage 4 of the design playbook (deriving fitted + embedded from the established 
 
 ## Source files (verify before depending on details)
 
-- `~/Projects/boxel/packages/boxel-ui/src/components/card-container/index.gts` — CardContainer + the global selector + `--themed` cascade
+- `~/Projects/boxel/packages/boxel-ui/addon/src/components/card-container/index.gts` — CardContainer + the global selector + `--themed` cascade
 - `~/Projects/boxel/packages/base/field-component.gts` — per-format classes + `displayContainer` arg
 - `~/Projects/boxel/packages/catalog-realm/crm-app/contact.gts:121,218` — production examples of `@displayContainer={{false}}` for atom
 - `~/Projects/boxel/packages/catalog-realm/sprint-planner/sprint-task.gts:208-211` — atom with custom class + display:contents
