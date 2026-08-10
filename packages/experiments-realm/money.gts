@@ -26,6 +26,22 @@ export function sumLineItems(items: LineItemLike[] | undefined): {
   return { total, code };
 }
 
+export interface PaymentLike {
+  amount?: MoneyLike;
+}
+
+export function outstandingBalance(
+  items: LineItemLike[] | undefined,
+  payments: (PaymentLike | undefined)[] | undefined,
+): number {
+  let { total } = sumLineItems(items);
+  let paid = (payments ?? []).reduce(
+    (acc, p) => acc + (p?.amount?.amount ?? 0),
+    0,
+  );
+  return Math.max(total - paid, 0);
+}
+
 export function orderTotals(
   items: LineItemLike[] | undefined,
   taxRate?: number,
