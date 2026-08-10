@@ -117,6 +117,8 @@ interface SerializedExpandedStackItem {
 
 export type FileView = 'inspector' | 'browser';
 
+export type ProfileSettingsSection = 'subscription';
+
 type SerializedItem = CardItem;
 type SerializedStack = SerializedItem[];
 
@@ -175,6 +177,7 @@ export default class OperatorModeStateService extends Service {
   private moduleInspectorHistory: Record<string, ModuleInspectorView>;
 
   @tracked profileSettingsOpen = false;
+  @tracked profileSettingsSection: ProfileSettingsSection | undefined;
   @tracked createListingModalPayload?: CreateListingModalPayload;
 
   // Per-card expanded-mode intent. Keyed by stack-item instance id so the
@@ -255,6 +258,14 @@ export default class OperatorModeStateService extends Service {
 
   toggleProfileSettings = () => {
     this.profileSettingsOpen = !this.profileSettingsOpen;
+    if (!this.profileSettingsOpen) {
+      this.profileSettingsSection = undefined;
+    }
+  };
+
+  openProfileSettings = (section?: ProfileSettingsSection) => {
+    this.profileSettingsSection = section;
+    this.profileSettingsOpen = true;
   };
 
   get state() {
@@ -330,6 +341,7 @@ export default class OperatorModeStateService extends Service {
     this.cardTitles = new TrackedMap();
     this.moduleInspectorHistory = {};
     this.profileSettingsOpen = false;
+    this.profileSettingsSection = undefined;
     this.createListingModalPayload = undefined;
     this.expandedStackItems.clear();
     window.localStorage.removeItem(ModuleInspectorSelections);
