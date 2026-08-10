@@ -90,15 +90,19 @@ export class Lead extends CardDef {
             <span class='meta'>{{@model.company}}</span>
           {{/if}}
         </div>
-        {{#if @model.score}}
-          <span class='score-block'>
+        <span class='score-block'>
+          {{#if @model.score}}
             <span class='score'>{{@model.score}}</span>
             <span class='score-caption'>score</span>
-          </span>
-        {{/if}}
-        {{#if @model.status}}
-          <span class='status status-{{@model.status}}'>{{@model.status}}</span>
-        {{/if}}
+          {{else}}
+            <span class='score score-none'>—</span>
+          {{/if}}
+        </span>
+        <span class='status-col'>
+          {{#if @model.status}}
+            <span class='status status-{{@model.status}}'>{{@model.status}}</span>
+          {{/if}}
+        </span>
       </div>
       <style scoped>
         .lead-row {
@@ -136,6 +140,17 @@ export class Lead extends CardDef {
           flex-direction: column;
           align-items: center;
           gap: 0.0625rem;
+          width: 3.25rem;
+          flex-shrink: 0;
+        }
+        .score-none {
+          color: var(--muted-foreground, #6b7280);
+        }
+        .status-col {
+          display: flex;
+          justify-content: center;
+          width: 8.5rem;
+          flex-shrink: 0;
         }
         .score {
           font-weight: 700;
