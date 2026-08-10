@@ -61,8 +61,10 @@ import type { LocalPath } from './paths.ts';
 import { RealmPaths, ensureTrailingSlash, join } from './paths.ts';
 import type ms from 'ms';
 import {
+  DEFAULT_AUDIO_SIZE_LIMIT_BYTES,
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
+  DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
 } from './constants.ts';
 import {
   persistFileMeta,
@@ -183,7 +185,10 @@ import { fetcher } from './fetcher.ts';
 import { RealmIndexQueryEngine } from './realm-index-query-engine.ts';
 import { RealmIndexUpdater } from './realm-index-updater.ts';
 import serialize from './file-serializer.ts';
-import { validateWriteSize } from './write-size-validation.ts';
+import {
+  fileSizeLimitFor,
+  validateWriteSize,
+} from './write-size-validation.ts';
 import { md5 } from 'super-fast-md5';
 import { resolveFileDefCodeRef } from './file-def-code-ref.ts';
 
@@ -866,6 +871,8 @@ export class Realm {
   #transpileCoordinator?: PopulateCoordinator;
   #cardSizeLimitBytes: number;
   #fileSizeLimitBytes: number;
+  #audioSizeLimitBytes: number;
+  #videoSizeLimitBytes: number;
 
   #publicEndpoints: RouteTable<true> = new Map([
     [
@@ -932,6 +939,8 @@ export class Realm {
       definitionLookup,
       cardSizeLimitBytes,
       fileSizeLimitBytes,
+      audioSizeLimitBytes,
+      videoSizeLimitBytes,
       transpileCoordinator,
     }: {
       url: string;
@@ -945,6 +954,8 @@ export class Realm {
       definitionLookup: DefinitionLookup;
       cardSizeLimitBytes?: number;
       fileSizeLimitBytes?: number;
+      audioSizeLimitBytes?: number;
+      videoSizeLimitBytes?: number;
       // CS-11030: when set, the realm coalesces concurrent cross-process
       // transpiles through an advisory-lock + NOTIFY winner/loser flow
       // and persists the resulting bytes to `module_transpile_cache` so
@@ -976,6 +987,10 @@ export class Realm {
       cardSizeLimitBytes ?? DEFAULT_CARD_SIZE_LIMIT_BYTES;
     this.#fileSizeLimitBytes =
       fileSizeLimitBytes ?? DEFAULT_FILE_SIZE_LIMIT_BYTES;
+    this.#audioSizeLimitBytes =
+      audioSizeLimitBytes ?? DEFAULT_AUDIO_SIZE_LIMIT_BYTES;
+    this.#videoSizeLimitBytes =
+      videoSizeLimitBytes ?? DEFAULT_VIDEO_SIZE_LIMIT_BYTES;
     this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
     this.#copiedFromRealm = opts?.copiedFromRealm;
     let owner: string | undefined;
@@ -2134,7 +2149,7 @@ export class Realm {
         isCardDocumentString(content)
           ? 'card'
           : 'file';
-      this.assertWriteSize(content, sizeType);
+      this.assertWriteSize(content, sizeType, path);
       let isNewFile: boolean;
       if (typeof content === 'string') {
         let existingFile = await readFileAsText(path, (p) =>
@@ -2504,14 +2519,14 @@ export class Realm {
         }
         if (isModuleResource(resource)) {
           let content = resource.attributes?.content ?? '';
-          this.assertWriteSize(content, 'file');
+          this.assertWriteSize(content, 'file', localPath);
           files.set(localPath, content);
         } else if (isCardResource(resource)) {
           let doc = {
             data: resource,
           };
           let jsonString = JSON.stringify(doc, null, 2);
-          this.assertWriteSize(jsonString, 'card');
+          this.assertWriteSize(jsonString, 'card', localPath);
           files.set(localPath, jsonString);
         } else {
           return createResponse({
@@ -4121,9 +4136,19 @@ export class Realm {
     });
   }
 
-  private assertWriteSize(content: string | Uint8Array, type: 'card' | 'file') {
+  private assertWriteSize(
+    content: string | Uint8Array,
+    type: 'card' | 'file',
+    path: LocalPath,
+  ) {
     let limit =
-      type === 'card' ? this.#cardSizeLimitBytes : this.#fileSizeLimitBytes;
+      type === 'card'
+        ? this.#cardSizeLimitBytes
+        : fileSizeLimitFor(path, {
+            default: this.#fileSizeLimitBytes,
+            audio: this.#audioSizeLimitBytes,
+            video: this.#videoSizeLimitBytes,
+          });
     try {
       validateWriteSize(content, limit, type);
     } catch (error: any) {

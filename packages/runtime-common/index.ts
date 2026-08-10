@@ -980,7 +980,11 @@ export {
   ERROR_DOC_MAX_BYTES,
   ERROR_DOC_MAX_ADDITIONAL_ERRORS,
 } from './error.ts';
-export { validateWriteSize } from './write-size-validation.ts';
+export {
+  fileSizeLimitFor,
+  validateWriteSize,
+} from './write-size-validation.ts';
+export type { FileSizeLimits } from './write-size-validation.ts';
 
 export interface ResourceObject {
   type: string;

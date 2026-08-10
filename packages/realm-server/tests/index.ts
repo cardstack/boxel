@@ -280,6 +280,7 @@ const ALL_TEST_FILES: string[] = [
   './clamp-serialized-error-test',
   './sanitize-for-jsonb-test',
   './is-json-content-type-test',
+  './file-size-limit-test',
   './prerender-diagnostics-persistence-test',
   './prerender-proxy-test',
   './prerender-v8-prof-test',
