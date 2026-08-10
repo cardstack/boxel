@@ -9,6 +9,8 @@ export interface TableColumn {
   key: string;
   label: string;
   align?: 'left' | 'right';
+  custom?: boolean;
+  sortable?: boolean;
   value: (item: CardDef) => string | number | null | undefined;
   sortValue?: (item: CardDef) => string | number | null | undefined;
 }
@@ -18,12 +20,19 @@ function cellValue(column: TableColumn, item: CardDef): string {
   return v === null || v === undefined ? '—' : String(v);
 }
 
+function isSortable(column: TableColumn): boolean {
+  return column.sortable !== false;
+}
+
 interface TableSignature {
   Args: {
     columns: TableColumn[];
     emptyMessage?: string;
     items: CardDef[];
     onRowClick?: (item: CardDef) => void;
+  };
+  Blocks: {
+    cell: [CardDef, TableColumn];
   };
   Element: HTMLElement;
 }
@@ -76,16 +85,20 @@ export class Table extends GlimmerComponent<TableSignature> {
           <tr>
             {{#each @columns as |column|}}
               <th class='align-{{if column.align column.align "left"}}'>
-                <button
-                  type='button'
-                  class='sort-btn'
-                  {{on 'click' (fn this.toggleSort column)}}
-                >
-                  {{column.label}}
-                  <span class='sort-mark'>{{this.sortIndicator
-                      column.key
-                    }}</span>
-                </button>
+                {{#if (isSortable column)}}
+                  <button
+                    type='button'
+                    class='sort-btn'
+                    {{on 'click' (fn this.toggleSort column)}}
+                  >
+                    {{column.label}}
+                    <span class='sort-mark'>{{this.sortIndicator
+                        column.key
+                      }}</span>
+                  </button>
+                {{else}}
+                  <span class='plain-head'>{{column.label}}</span>
+                {{/if}}
               </th>
             {{/each}}
           </tr>
@@ -100,7 +113,11 @@ export class Table extends GlimmerComponent<TableSignature> {
             >
               {{#each @columns as |column|}}
                 <td class='align-{{if column.align column.align "left"}}'>
-                  {{cellValue column item}}
+                  {{#if column.custom}}
+                    {{yield item column to='cell'}}
+                  {{else}}
+                    {{cellValue column item}}
+                  {{/if}}
                 </td>
               {{/each}}
             </tr>
@@ -152,6 +169,15 @@ export class Table extends GlimmerComponent<TableSignature> {
       }
       .sort-mark {
         font-size: 0.5625rem;
+      }
+      .plain-head {
+        display: inline-block;
+        padding: 0.5rem;
+        font-size: 0.6875rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted-foreground, #6b7280);
       }
       td {
         padding: 0.625rem 0.5rem;
