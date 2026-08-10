@@ -3,7 +3,10 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import ignoreModule from 'ignore';
 import pLimit from 'p-limit';
-import { isBinaryFilename } from '@cardstack/runtime-common/infer-content-type';
+import {
+  isBinaryContentType,
+  isBinaryFilename,
+} from '@cardstack/runtime-common/infer-content-type';
 
 const ignore = (ignoreModule as any).default || ignoreModule;
 type Ignore = ReturnType<typeof ignoreModule>;
@@ -455,7 +458,7 @@ export abstract class RealmSyncBase {
     console.log(`  Uploaded: ${relativePath}`);
   }
 
-  // Uploads a single binary file (PNG, PDF, font, etc.) per the host
+  // Uploads a single binary file per the host
   // pattern: a per-file POST with Content-Type: application/octet-stream
   // and the raw bytes as the body. The realm-server routes octet-stream
   // POSTs to upsertBinaryFile, which writes the bytes verbatim without
@@ -763,7 +766,15 @@ export abstract class RealmSyncBase {
     const localDir = path.dirname(localPath);
     await fs.mkdir(localDir, { recursive: true });
 
-    if (isBinaryFilename(relativePath)) {
+    // Classify by what the realm served rather than by the requested name, so
+    // this agrees with `file read` on paths whose extension is absent or does
+    // not describe the bytes. Falls back to the name when the header is absent.
+    const servedContentType = response.headers.get('content-type');
+    const isBinary = servedContentType
+      ? isBinaryContentType(servedContentType)
+      : isBinaryFilename(relativePath);
+
+    if (isBinary) {
       const buffer = Buffer.from(await response.arrayBuffer());
       await fs.writeFile(localPath, buffer);
     } else {
