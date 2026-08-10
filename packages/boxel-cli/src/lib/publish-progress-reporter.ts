@@ -1,5 +1,6 @@
 import type { PublishProgress } from '@cardstack/runtime-common/realm-operations';
 import { cliLog, isQuiet } from './cli-log.ts';
+import { DIM, FG_CYAN, RESET } from './colors.ts';
 
 // Publishing a large realm spends minutes indexing and then rendering, and the
 // CLI has nothing to show for it. These renderers turn the progress readings
@@ -22,6 +23,12 @@ const PHASE_LABELS: Record<PublishProgress['phase'], string> = {
 // shape of the progress in ~11 lines.
 const LOG_STEPS_PER_PASS = 10;
 
+// Cells in the interactive bar, and the floor it collapses at. Narrow enough to
+// leave room for the label and counts on an 80-column terminal; below the floor
+// the bar is dropped rather than squeezed into something unreadable.
+const BAR_WIDTH = 24;
+const MIN_COLUMNS_FOR_BAR = 60;
+
 export interface PublishProgressReporter {
   onProgress: (progress: PublishProgress) => void;
   // Clears the in-place line an interactive run leaves behind, so whatever the
@@ -30,12 +37,17 @@ export interface PublishProgressReporter {
   finish: () => void;
 }
 
+interface OutputStream {
+  write: (chunk: string) => unknown;
+  isTTY?: boolean;
+  // Terminal width, when the stream reports one. Absent on a stream that
+  // isn't a terminal, and on some terminals that don't expose a size.
+  columns?: number;
+}
+
 export function createPublishProgressReporter(
   // Injectable for tests; defaults to the real stderr.
-  stream: {
-    write: (chunk: string) => unknown;
-    isTTY?: boolean;
-  } = process.stderr,
+  stream: OutputStream = process.stderr,
 ): PublishProgressReporter {
   return stream.isTTY ? interactiveReporter(stream) : nonInteractiveReporter();
 }
@@ -48,21 +60,40 @@ function describe(progress: PublishProgress): string {
   return `${label} ${progress.filesCompleted} of ${progress.totalFiles} files…`;
 }
 
+// A determinate bar, drawn only where one can mean something: a pass that has
+// reported a total, on a terminal wide enough to hold it alongside the counts.
+// `colors.ts` blanks the escapes under NO_COLOR / non-TTY stdout, so this
+// degrades to plain block characters rather than leaking escapes into a
+// redirected stream.
+function bar(progress: PublishProgress, columns: number | undefined): string {
+  if (progress.totalFiles === 0 || progress.phase === 'done') {
+    return '';
+  }
+  if (columns !== undefined && columns < MIN_COLUMNS_FOR_BAR) {
+    return '';
+  }
+  let ratio = Math.min(progress.filesCompleted / progress.totalFiles, 1);
+  let filled = Math.round(ratio * BAR_WIDTH);
+  return `${FG_CYAN}${'█'.repeat(filled)}${RESET}${DIM}${'░'.repeat(
+    BAR_WIDTH - filled,
+  )}${RESET} `;
+}
+
 // Rewrites one line in place, the way a terminal user expects a progress
 // indicator to behave.
-function interactiveReporter(stream: {
-  write: (chunk: string) => unknown;
-  isTTY?: boolean;
-}): PublishProgressReporter {
+function interactiveReporter(stream: OutputStream): PublishProgressReporter {
   let wroteLine = false;
   return {
     onProgress(progress) {
       if (isQuiet()) {
         return;
       }
-      // `\x1b[2K` clears the whole row first: a shorter reading (fewer digits)
-      // would otherwise leave the tail of the previous one on screen.
-      stream.write(`\r\x1b[2K${describe(progress)}`);
+      // `\x1b[2K` clears the whole row first: a shorter reading (fewer digits,
+      // or a bar that just disappeared) would otherwise leave the tail of the
+      // previous one on screen.
+      stream.write(
+        `\r\x1b[2K${bar(progress, stream.columns)}${describe(progress)}`,
+      );
       wroteLine = true;
     },
     finish() {
