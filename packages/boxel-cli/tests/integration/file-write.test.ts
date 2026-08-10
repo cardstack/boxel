@@ -12,7 +12,11 @@ import {
   createTestRealmViaCli,
 } from '../helpers/integration.ts';
 import { runBoxel } from '../helpers/run-boxel.ts';
-import { TINY_PNG_BYTES, TINY_PDF_BYTES } from '../helpers/binary-fixtures.ts';
+import {
+  TINY_PNG_BYTES,
+  TINY_PDF_BYTES,
+  NON_UTF8_BYTES,
+} from '../helpers/binary-fixtures.ts';
 
 // `boxel file write <path> --realm <url>` reads content from STDIN (text)
 // or `--file <local>` (binary). We drive the installed binary and verify
@@ -124,6 +128,47 @@ describe('file write (integration)', () => {
     let response = await readBack('doc.pdf');
     let remote = Buffer.from(await response.arrayBuffer());
     expect(remote.equals(Buffer.from(TINY_PDF_BYTES))).toBe(true);
+  });
+
+  it('writes a .bin file byte-identically', async () => {
+    // .bin maps to application/octet-stream, the default for unknown
+    // extensions — the payload's invalid UTF-8 sequences survive only if
+    // that classification routes the upload through the binary path.
+    let src = path.join(os.tmpdir(), `boxel-write-${Date.now()}.bin`);
+    fs.writeFileSync(src, Buffer.from(NON_UTF8_BYTES));
+    try {
+      let res = await runBoxel(
+        ['file', 'write', 'blob.bin', '--realm', realmUrl, '--file', src],
+        { home },
+      );
+      expect(res.ok, res.stderr).toBe(true);
+    } finally {
+      fs.rmSync(src, { force: true });
+    }
+
+    let response = await readBack('blob.bin');
+    expect(response.ok).toBe(true);
+    let remote = Buffer.from(await response.arrayBuffer());
+    expect(remote.equals(Buffer.from(NON_UTF8_BYTES))).toBe(true);
+  });
+
+  it('writes a .zip file byte-identically', async () => {
+    let src = path.join(os.tmpdir(), `boxel-write-${Date.now()}.zip`);
+    fs.writeFileSync(src, Buffer.from(NON_UTF8_BYTES));
+    try {
+      let res = await runBoxel(
+        ['file', 'write', 'archive.zip', '--realm', realmUrl, '--file', src],
+        { home },
+      );
+      expect(res.ok, res.stderr).toBe(true);
+    } finally {
+      fs.rmSync(src, { force: true });
+    }
+
+    let response = await readBack('archive.zip');
+    expect(response.ok).toBe(true);
+    let remote = Buffer.from(await response.arrayBuffer());
+    expect(remote.equals(Buffer.from(NON_UTF8_BYTES))).toBe(true);
   });
 
   it('exits non-zero with a clear error when there is no active profile', async () => {

@@ -12,7 +12,7 @@ import {
   TEST_REALM_SERVER_URL,
 } from '../helpers/integration.ts';
 import { runBoxel } from '../helpers/run-boxel.ts';
-import { TINY_PNG_BYTES } from '../helpers/binary-fixtures.ts';
+import { TINY_PNG_BYTES, NON_UTF8_BYTES } from '../helpers/binary-fixtures.ts';
 
 // `boxel file read <path> [--realm <url>] --json` prints
 // `{ ok, status, error?, content?, bytesBase64? }` on stdout. We drive the
@@ -185,6 +185,30 @@ describe('file read (integration)', () => {
     expect(result.bytesBase64).toBeDefined();
     let bytes = Buffer.from(result.bytesBase64!, 'base64');
     expect(bytes.equals(Buffer.from(TINY_PNG_BYTES))).toBe(true);
+  });
+
+  it('reads a .zip byte-identically (returns bytes, not content)', async () => {
+    // application/zip is not a media MIME type, so this pins that binary
+    // classification doesn't hinge on being one — a text-path read would
+    // UTF-8-decode the payload and mangle its invalid sequences into U+FFFD.
+    let zipUrl = `${realmUrl}archive.zip`;
+    let seed = await reloadProfile(home).authedRealmFetch(zipUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: NON_UTF8_BYTES,
+    });
+    expect(seed.ok, `seed POST failed: ${seed.status}`).toBe(true);
+
+    let res = await runBoxel(
+      ['file', 'read', 'archive.zip', '--realm', realmUrl, '--json'],
+      { home },
+    );
+    let result = res.json<ReadJson>();
+    expect(result.ok).toBe(true);
+    expect(result.content).toBeUndefined();
+    expect(result.bytesBase64).toBeDefined();
+    let bytes = Buffer.from(result.bytesBase64!, 'base64');
+    expect(bytes.equals(Buffer.from(NON_UTF8_BYTES))).toBe(true);
   });
 
   it('returns error result when no active profile', async () => {
