@@ -27,12 +27,11 @@ function renderedCardEntry(
 module('Integration | overlays detached elements', function (hooks) {
   setupRenderingTest(hooks);
 
-  // The element tracker reconciles its entries in an afterRender pass, so
-  // when a card's rendered DOM node is replaced (e.g. a hot update of the
-  // card's source while it is open in a stack), the overlay getters can
-  // recompute while the tracker still lists the old, now-detached element.
-  // Overlays must tolerate such entries: a detached element has no parent to
-  // measure z-index from and no geometry to anchor an overlay to.
+  // Overlays must tolerate a tracked entry whose element is already detached:
+  // such an element has no geometry to anchor an overlay to and no parent to
+  // measure a z-index from. Binding is the observable signal that an entry
+  // reached the overlay machinery, since it sets `cursor: pointer` on the
+  // card element it binds.
   test('a tracked card element that is detached mid-update does not crash the render', async function (assert) {
     let renderedCards = new TrackedArray<RenderedCardForOverlayActions>([]);
     await renderComponent(
@@ -71,5 +70,15 @@ module('Integration | overlays detached elements', function (hooks) {
         { count: 1 },
         'detached entry is pruned while the connected overlay still renders',
       );
+    assert.strictEqual(
+      detachedElement.style.cursor,
+      '',
+      'the detached element is never bound',
+    );
+    assert.strictEqual(
+      attachedElement.style.cursor,
+      'pointer',
+      'the connected element alongside it is still bound',
+    );
   });
 });

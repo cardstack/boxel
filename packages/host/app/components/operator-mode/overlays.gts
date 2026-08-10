@@ -408,8 +408,9 @@ export default class Overlays extends Component<OverlaySignature> {
 
     let parentElement = element.parentElement;
     if (!parentElement) {
-      // A detached element has no parent to measure; fall back to the
-      // default stacking behavior instead of crashing the render.
+      // An element with no parent element — a document element, or a direct
+      // child of a shadow root — has nothing to measure against, and default
+      // stacking is the only meaningful answer for it.
       return htmlSafe('z-index: auto');
     }
     let zIndexParentElement = window
