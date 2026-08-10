@@ -7,7 +7,7 @@
         "module": "../lead"
       },
       "specType": "card",
-      "readMe": "## Lead\n\nAn unqualified person/company who showed interest: `name`, `company`, base email/phone, `source` enum (website/referral/webinar/ad/event/cold outreach/other), `status` enum (new \u2192 contacted \u2192 qualified | disqualified), `score` 0\u2013100 (written by the Classify AI tool or by hand; rendered as a bar in isolated).\n\nA qualified Lead is CONVERTED \u2014 the Convert Lead command creates Contact + Account + Opportunity from it; the Lead itself is a capture record, not a pipeline record.\n\n**Non-goals:** pipeline stages/value (Opportunity's job), account linkage (a Lead pre-dates the Account existing), nurture sequences (out of scope per spec).",
+      "readMe": "## Lead\n\nAn unqualified person or company who showed interest: `name`, `company`, base email/phone, `source` enum (website/referral/webinar/ad/event/cold outreach/other), `status` enum (new \u2192 contacted \u2192 qualified | disqualified | converted), and `score` 0\u2013100 rendered as a `ProgressBar` in isolated \u2014 written by the Classify tool or by hand.\n\n```ts\nimport { Lead } from '../lead';\n@field lead = linksTo(Lead);\n```\n\nA qualified Lead is CONVERTED rather than promoted: the Convert Lead command creates Contact + Account + Opportunity from it, and the Lead remains a capture record, not a pipeline record. Examples span the status enum: new, qualified and ready to convert, disqualified, and already converted.\n\n**Non-goals:** pipeline stages or deal value (Opportunity's job), account linkage (a Lead pre-dates the Account existing), nurture sequences.",
       "cardInfo": {
         "name": "Lead",
         "summary": "Capture record before qualification: source, status (new/contacted/qualified/disqualified), 0-100 score bar. Converts to Contact+Account+Opportunity.",
@@ -24,12 +24,17 @@
       },
       "linkedExamples.1": {
         "links": {
-          "self": "../Lead/sara-okafor"
+          "self": "../Lead/imani-adeyemi"
         }
       },
       "linkedExamples.2": {
         "links": {
           "self": "../Lead/pavel-novak"
+        }
+      },
+      "linkedExamples.3": {
+        "links": {
+          "self": "../Lead/sara-okafor"
         }
       }
     },
