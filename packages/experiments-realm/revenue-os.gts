@@ -783,19 +783,13 @@ export class RevenueOs extends CardDef {
                 <h3>Pipeline by stage</h3>
                 <ul class='bars'>
                   {{#each this.stageBars as |bar|}}
-                    <li>
-                      <button
-                        type='button'
-                        class='bar-row'
-                        {{on 'click' (fn this.drillTo 'pipeline' undefined)}}
-                      >
-                        <span class='bar-label'>{{bar.stage}}</span>
-                        <span class='bar-track'>
-                          {{! template-lint-disable no-inline-styles }}
-                          <span class='bar-fill' style={{bar.widthStyle}}></span>
-                        </span>
-                        <span class='bar-value'>{{bar.display}}</span>
-                      </button>
+                    <li class='bar-row'>
+                      <span class='bar-label'>{{bar.stage}}</span>
+                      <span class='bar-track'>
+                        {{! template-lint-disable no-inline-styles }}
+                        <span class='bar-fill' style={{bar.widthStyle}}></span>
+                      </span>
+                      <span class='bar-value'>{{bar.display}}</span>
                     </li>
                   {{/each}}
                 </ul>
@@ -1307,16 +1301,7 @@ export class RevenueOs extends CardDef {
           align-items: center;
           gap: 0.625rem;
           font-size: 0.75rem;
-          width: 100%;
-          border: 0;
-          background: none;
           padding: 0.125rem 0;
-          font-family: inherit;
-          cursor: pointer;
-          border-radius: 0.375rem;
-        }
-        .bar-row:hover {
-          background: var(--muted, #f3f4f6);
         }
         .bar-label {
           text-transform: capitalize;
@@ -1440,6 +1425,11 @@ export class RevenueOs extends CardDef {
         }
         .owner-select {
           min-width: 11rem;
+          --boxel-select-background-color: var(--card, #ffffff);
+          --boxel-select-border-color: var(--border, #e5e7eb);
+          --boxel-select-text-color: var(--foreground, #111111);
+          --boxel-select-placeholder-color: var(--muted-foreground, #6b7280);
+          --boxel-select-focus-border-color: var(--primary, #111111);
         }
         .row-open {
           display: block;
