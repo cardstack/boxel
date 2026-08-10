@@ -1139,6 +1139,7 @@ export { SupportedMimeType, isJsonContentType } from './supported-mime-type.ts';
 export {
   isUrlLike,
   VirtualNetwork,
+  type DecklistInput,
   type ResponseWithNodeStream,
 } from './virtual-network.ts';
 export { RealmAuthDataSource } from './realm-auth-data-source.ts';

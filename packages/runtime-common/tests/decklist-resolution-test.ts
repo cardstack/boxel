@@ -159,6 +159,141 @@ const tests: SharedTests<unknown> = Object.freeze({
     );
   },
 
+  'two realms pin the same library differently, and neither wins': async (
+    assert,
+  ) => {
+    // The reason `setRealmDecklist` exists. Each realm's decklist is a card
+    // in that realm, so with two workspaces open there are two maps in one
+    // VirtualNetwork. Folded into a single global `imports` table they would
+    // overwrite each other and the winner would depend on load order — a bug
+    // that reproduces only when both realms are open, in whichever order the
+    // user happened to open them. Installing each realm's imports as a scope
+    // over that realm makes the importer decide, which is the mechanism
+    // scopes already provide.
+    let other = 'https://realm-server.example.com/other/';
+    let vn = new VirtualNetwork(createEnvironmentAwareFetch());
+    vn.setRealmDecklist(REALM, {
+      imports: { palette: '/_packages/lib/palette@1.0.0/index.js' },
+    });
+    vn.setRealmDecklist(other, {
+      imports: { palette: '/_packages/lib/palette@2.0.0/index.js' },
+    });
+
+    assert.strictEqual(
+      vn.resolveImport('palette', `${REALM}scene.gts`),
+      `${SERVE}/lib/palette@1.0.0/index.js`,
+      'acme keeps v1',
+    );
+    assert.strictEqual(
+      vn.resolveImport('palette', `${other}scene.gts`),
+      `${SERVE}/lib/palette@2.0.0/index.js`,
+      'other keeps v2 — loaded second, and it did not clobber acme',
+    );
+  },
+
+  "a realm's own scopes still beat its realm-wide default": async (assert) => {
+    // Installing a realm's `imports` as `scopes[realmURL]` must not cost the
+    // realm its ability to override itself for a subtree. It doesn't, because
+    // import-maps resolution takes the LONGEST matching scope and the realm's
+    // own scope keys resolve to URLs nested beneath the realm.
+    let vn = new VirtualNetwork(createEnvironmentAwareFetch());
+    vn.setRealmDecklist(REALM, {
+      imports: { palette: '/_packages/lib/palette@2.0.0/index.js' },
+      scopes: {
+        'legacy-viewer/': { palette: '/_packages/lib/palette@1.0.0/index.js' },
+      },
+    });
+    assert.strictEqual(
+      vn.resolveImport('palette', `${REALM}legacy-viewer/scene.gts`),
+      `${SERVE}/lib/palette@1.0.0/index.js`,
+      'the nested scope wins over the realm-wide default',
+    );
+    assert.strictEqual(
+      vn.resolveImport('palette', `${REALM}gallery/scene.gts`),
+      `${SERVE}/lib/palette@2.0.0/index.js`,
+      'and everything else still gets the default',
+    );
+  },
+
+  'reloading a realm decklist replaces it, dropping retracted pins': async (
+    assert,
+  ) => {
+    // The card is edited repeatedly, so this path runs constantly. An
+    // additive table can never forget: remove a pin from the card, reload,
+    // and the deleted entry would still be answering — the user would see
+    // their edit do nothing and reasonably conclude the feature is broken.
+    let vn = new VirtualNetwork(createEnvironmentAwareFetch());
+    vn.setRealmDecklist(REALM, {
+      imports: {
+        palette: '/_packages/lib/palette@1.0.0/index.js',
+        retracted: '/_packages/lib/gone@1.0.0/index.js',
+      },
+      scopes: {
+        'legacy-viewer/': { palette: '/_packages/lib/palette@1.0.0/index.js' },
+      },
+    });
+    // The edited card: palette bumped, `retracted` and the scope deleted.
+    vn.setRealmDecklist(REALM, {
+      imports: { palette: '/_packages/lib/palette@2.0.0/index.js' },
+    });
+
+    assert.strictEqual(
+      vn.resolveImport('palette', `${REALM}gallery/scene.gts`),
+      `${SERVE}/lib/palette@2.0.0/index.js`,
+      'the bumped pin took effect',
+    );
+    assert.strictEqual(
+      vn.resolveImport('palette', `${REALM}legacy-viewer/scene.gts`),
+      `${SERVE}/lib/palette@2.0.0/index.js`,
+      'the deleted scope is gone, so legacy-viewer falls back to the default',
+    );
+    assert.notStrictEqual(
+      vn.resolveImport('retracted', `${REALM}gallery/scene.gts`),
+      `${SERVE}/lib/gone@1.0.0/index.js`,
+      'the deleted import is gone too',
+    );
+  },
+
+  'addDecklist accumulates, which is exactly why realms do not use it': async (
+    assert,
+  ) => {
+    // The distinction the two methods exist to draw, asserted rather than
+    // described. `addDecklist` merges — correct for its callers, who each
+    // contribute a piece of one map. Run a realm's reloads through it and a
+    // retracted pin would never go away, so this pins the difference: if
+    // someone later "simplifies" the two methods into one, one of these two
+    // tests fails and says which behaviour was lost.
+    let vn = new VirtualNetwork(createEnvironmentAwareFetch());
+    vn.addDecklist(
+      { imports: { retracted: '/_packages/lib/gone@1.0.0/index.js' } },
+      REALM,
+    );
+    vn.addDecklist(
+      { imports: { palette: '/_packages/lib/palette@2.0.0/index.js' } },
+      REALM,
+    );
+    assert.strictEqual(
+      vn.resolveImport('retracted', `${REALM}gallery/scene.gts`),
+      `${SERVE}/lib/gone@1.0.0/index.js`,
+      'the earlier entry survives the second call — additive, as documented',
+    );
+  },
+
+  'removing a realm decklist takes its pins with it': async (assert) => {
+    // Closing a workspace, or deleting the card.
+    let vn = new VirtualNetwork(createEnvironmentAwareFetch());
+    vn.setRealmDecklist(REALM, {
+      imports: { palette: '/_packages/lib/palette@1.0.0/index.js' },
+    });
+    let pinned = vn.resolveImport('palette', `${REALM}gallery/scene.gts`);
+    vn.setRealmDecklist(REALM, undefined);
+    assert.notStrictEqual(
+      vn.resolveImport('palette', `${REALM}gallery/scene.gts`),
+      pinned,
+      'the pin no longer applies once the realm decklist is removed',
+    );
+  },
+
   'editing the decklist changes what resolves': async (assert) => {
     // The user-facing promise: this is a file you edit. Change the pin,
     // reload, get different code. Modelled here as a fresh load of an

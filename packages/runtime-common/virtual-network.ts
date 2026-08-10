@@ -21,6 +21,66 @@ export interface ResponseWithNodeStream extends Response {
 
 export type Handler = (req: Request) => Promise<Response | null>;
 
+/** A decklist as authored — every part optional, values possibly relative. */
+export interface DecklistInput {
+  imports?: Record<string, string>;
+  scopes?: Record<string, Record<string, string>>;
+}
+
+/** A decklist after base resolution: both halves present, values absolute. */
+interface Decklist {
+  imports: Record<string, string>;
+  scopes: Record<string, Record<string, string>>;
+}
+
+/**
+ * Resolve every URL in a decklist against `baseURL`, per the import-maps
+ * spec. Deck's `resolveSpecifier` deliberately does no base resolution — it
+ * is a pure function of the table it is handed, and only the caller knows
+ * where the table came from — so it happens here, once at load rather than
+ * on every lookup.
+ *
+ * This is what lets the map be WRITTEN BY HAND and stay portable: an author
+ * can pin `/_packages/lib/palette@2.0.0/index.js` and it keeps working when
+ * the realm is served from a different host, which an absolute URL baked
+ * into the card never would.
+ */
+function resolveDecklistAgainst(
+  decklist: DecklistInput,
+  baseURL: string | undefined,
+): Decklist {
+  let resolve = (value: string): string => {
+    if (!baseURL) {
+      return value;
+    }
+    try {
+      return new URL(value, baseURL).href;
+    } catch {
+      // A value that is not a URL at all — a bare specifier mapped onto
+      // another bare specifier — is left alone rather than dropped. The map
+      // is user-authored; refusing to load the whole thing over one odd
+      // entry would be worse than passing it through.
+      return value;
+    }
+  };
+  let imports: Record<string, string> = {};
+  for (let [specifier, value] of Object.entries(decklist.imports ?? {})) {
+    imports[specifier] = resolve(value);
+  }
+  let scopes: Record<string, Record<string, string>> = {};
+  for (let [scope, mappings] of Object.entries(decklist.scopes ?? {})) {
+    // Scope KEYS are URLs too, and are matched against the importer's URL, so
+    // a relative scope like `legacy-viewer/` has to become absolute or it can
+    // never match anything.
+    let resolved: Record<string, string> = {};
+    for (let [specifier, value] of Object.entries(mappings)) {
+      resolved[specifier] = resolve(value);
+    }
+    scopes[resolve(scope)] = resolved;
+  }
+  return { imports, scopes };
+}
+
 export class VirtualNetwork {
   private handlers: Handler[] = [];
   private urlMappings: [string, string][] = [];
@@ -42,8 +102,23 @@ export class VirtualNetwork {
   // resolution falls straight through to the handler chain and behaves
   // exactly as it did before this existed — which `virtual-network-test`
   // asserts as a property, not as a spot check.
+  //
+  // The two tables below are DERIVED. The sources of truth are the anonymous
+  // decklist and the per-realm ones beneath them; `recomputeDecklist` folds
+  // those into these. Keeping the sources separate is what makes a realm's
+  // decklist replaceable — reloading one realm's map must not disturb
+  // another's, and an additive-only table can never forget the pin it is
+  // replacing.
   private decklistImports: Record<string, string> = {};
   private decklistScopes: Record<string, Record<string, string>> = {};
+  // Loaded by callers that speak for no particular realm: tests, the
+  // coexistence demo, the capsule evaluator. Its `imports` are genuinely
+  // global, which is what "no importer" resolves against.
+  private anonymousDecklist: Decklist = { imports: {}, scopes: {} };
+  // Keyed by realm URL. A realm's decklist governs the modules IN that realm
+  // and nowhere else — see setRealmDecklist for why its `imports` become a
+  // scope rather than joining the global table.
+  private realmDecklists = new Map<string, Decklist>();
   private realmMappings = new Map<string, string>();
   // Memo for toURLHref. Hot paths (module-graph walks, per-instance realm
   // membership checks) resolve the same identifiers over and over and only
@@ -182,62 +257,91 @@ export class VirtualNetwork {
    * the table came from. So the resolution happens here, once at load, not
    * on every lookup.
    */
-  addDecklist(
-    decklist: {
-      imports?: Record<string, string>;
-      scopes?: Record<string, Record<string, string>>;
-    },
-    baseURL?: string,
-  ): void {
-    let resolve = (value: string): string => {
-      if (!baseURL) {
-        return value;
-      }
-      try {
-        return new URL(value, baseURL).href;
-      } catch {
-        // A value that is not a URL at all — a bare specifier mapped onto
-        // another bare specifier — is left alone rather than dropped. The
-        // map is user-authored; refusing to load the whole thing over one
-        // odd entry would be worse than passing it through.
-        return value;
-      }
-    };
-    for (let [specifier, value] of Object.entries(decklist.imports ?? {})) {
-      this.decklistImports[specifier] = resolve(value);
+  addDecklist(decklist: DecklistInput, baseURL?: string): void {
+    let resolved = resolveDecklistAgainst(decklist, baseURL);
+    for (let [specifier, value] of Object.entries(resolved.imports)) {
+      this.anonymousDecklist.imports[specifier] = value;
     }
-    for (let [scope, mappings] of Object.entries(decklist.scopes ?? {})) {
-      // Scope KEYS are URLs too, and are matched against the importer's URL,
-      // so a relative scope like `legacy-viewer/` has to become absolute or
-      // it can never match anything.
-      let scopeKey = resolve(scope);
-      let resolved: Record<string, string> = {
-        ...(this.decklistScopes[scopeKey] ?? {}),
+    for (let [scope, mappings] of Object.entries(resolved.scopes)) {
+      this.anonymousDecklist.scopes[scope] = {
+        ...(this.anonymousDecklist.scopes[scope] ?? {}),
+        ...mappings,
       };
-      for (let [specifier, value] of Object.entries(mappings)) {
-        resolved[specifier] = resolve(value);
-      }
-      this.decklistScopes[scopeKey] = resolved;
     }
-    // Changing the decklist changes what a specifier MEANS, so every module
-    // already resolved under the old map is stale. This is the same signal
-    // `addRealmMapping` fires, and the Loader is already listening: it
-    // discards its RRI-keyed module caches on mapping change. That makes
-    // "edit the pin, get the other version" a cache-invalidation problem
-    // that is already solved, rather than a new mechanism — which is what
-    // a version control in card UI will ultimately drive.
-    this.notifyMappingChange();
+    this.recomputeDecklist();
+  }
+
+  /**
+   * Install (or, with `undefined`, remove) the decklist a realm owns.
+   *
+   * Unlike `addDecklist` this REPLACES whatever that realm had before, which
+   * is the whole reason it exists: a realm's decklist is a card the user
+   * edits, so it is reloaded over and over, and an additive table can never
+   * forget the pin it is superseding — retract v1 and v2 and the stale entry
+   * would still be answering.
+   *
+   * The realm's `imports` are installed as `scopes[realmURL]`, NOT as global
+   * imports. A realm's map is that realm's business: with two realms open,
+   * one pinning palette@1 and the other palette@2, a single global table
+   * would have them overwrite each other and the winner would depend on load
+   * order. Making the realm URL a scope means the importer decides, which is
+   * exactly the mechanism scopes already provide — no new precedence rule to
+   * invent, and the realm's own `scopes` (already resolved against the realm,
+   * so nested beneath it) keep winning over its realm-wide default because
+   * import-maps resolution takes the longest matching scope.
+   */
+  setRealmDecklist(
+    realmURL: string,
+    decklist: DecklistInput | undefined,
+  ): void {
+    if (!decklist) {
+      if (!this.realmDecklists.delete(realmURL)) {
+        return; // nothing there; don't churn every module cache for a no-op
+      }
+      this.recomputeDecklist();
+      return;
+    }
+    this.realmDecklists.set(
+      realmURL,
+      resolveDecklistAgainst(decklist, realmURL),
+    );
+    this.recomputeDecklist();
   }
 
   /** Drop every decklist mapping. Exists so a test can assert the
    * no-decklist behaviour on the same instance it just exercised. */
   clearDecklist(): void {
-    this.decklistImports = {};
-    this.decklistScopes = {};
-    // Clearing changes what a specifier means just as surely as adding does,
-    // so it owes the same invalidation. Without this a module resolved under
-    // the old map survives in the Loader's cache and the clear looks like it
-    // did nothing.
+    this.anonymousDecklist = { imports: {}, scopes: {} };
+    this.realmDecklists.clear();
+    this.recomputeDecklist();
+  }
+
+  // Fold the sources into the two flat tables `resolveImport` reads, then
+  // announce it.
+  //
+  // Changing a decklist changes what a specifier MEANS, so every module
+  // already resolved under the old map is stale — including on a CLEAR, which
+  // is as much a change as an add. This is the same signal `addRealmMapping`
+  // fires and the Loader is already listening: it discards its RRI-keyed
+  // module caches on mapping change. That makes "edit the pin, get the other
+  // version" a cache-invalidation problem that is already solved rather than
+  // a new mechanism, which is what a version control in card UI drives.
+  private recomputeDecklist(): void {
+    let imports: Record<string, string> = { ...this.anonymousDecklist.imports };
+    let scopes: Record<string, Record<string, string>> = {};
+    let mergeScopes = (from: Record<string, Record<string, string>>) => {
+      for (let [scope, mappings] of Object.entries(from)) {
+        scopes[scope] = { ...(scopes[scope] ?? {}), ...mappings };
+      }
+    };
+    mergeScopes(this.anonymousDecklist.scopes);
+    for (let [realmURL, decklist] of this.realmDecklists) {
+      // The realm's realm-wide default, expressed as a scope over the realm.
+      scopes[realmURL] = { ...(scopes[realmURL] ?? {}), ...decklist.imports };
+      mergeScopes(decklist.scopes);
+    }
+    this.decklistImports = imports;
+    this.decklistScopes = scopes;
     this.notifyMappingChange();
   }
 

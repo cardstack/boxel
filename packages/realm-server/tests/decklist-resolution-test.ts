@@ -30,6 +30,26 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(decklistResolutionTests, assert, {});
     });
 
+    test('two realms pin the same library differently, and neither wins', async function (assert) {
+      await runSharedTest(decklistResolutionTests, assert, {});
+    });
+
+    test("a realm's own scopes still beat its realm-wide default", async function (assert) {
+      await runSharedTest(decklistResolutionTests, assert, {});
+    });
+
+    test('reloading a realm decklist replaces it, dropping retracted pins', async function (assert) {
+      await runSharedTest(decklistResolutionTests, assert, {});
+    });
+
+    test('addDecklist accumulates, which is exactly why realms do not use it', async function (assert) {
+      await runSharedTest(decklistResolutionTests, assert, {});
+    });
+
+    test('removing a realm decklist takes its pins with it', async function (assert) {
+      await runSharedTest(decklistResolutionTests, assert, {});
+    });
+
     test('editing the decklist changes what resolves', async function (assert) {
       await runSharedTest(decklistResolutionTests, assert, {});
     });

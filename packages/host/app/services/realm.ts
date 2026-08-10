@@ -23,6 +23,7 @@ import window from 'ember-window-mock';
 import { TrackedSet, TrackedObject, TrackedArray } from 'tracked-built-ins';
 
 import type {
+  DecklistInput,
   Permissions,
   JWTPayload,
   RealmClient,
@@ -129,6 +130,26 @@ export interface RealmPrivateDependencyReport {
 type AuthStatus =
   | { type: 'logged-in'; token: string; claims: JWTPayload }
   | { type: 'anonymous' };
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+// Narrow an untrusted value to a string→string map, dropping entries that
+// are not strings rather than rejecting the whole map. See the call site for
+// why a partly-broken decklist is still worth applying.
+function asStringMap(value: unknown): Record<string, string> | undefined {
+  if (!isPlainObject(value)) {
+    return undefined;
+  }
+  let result: Record<string, string> = {};
+  for (let [key, entry] of Object.entries(value)) {
+    if (typeof entry === 'string') {
+      result[key] = entry;
+    }
+  }
+  return result;
+}
 
 class RealmResource {
   @service declare private matrixService: MatrixService;
@@ -325,6 +346,28 @@ class RealmResource {
               ) {
                 this.refreshInfo();
               }
+              // Same mechanism for the Decklist card: editing it changes what
+              // every bare specifier in this realm resolves to, so reload it
+              // and let the virtual network invalidate the module caches. This
+              // is the propagation path a version control in card UI rides —
+              // move the slider, the card saves, the realm re-indexes, and
+              // the modules that import the pinned library come back bound to
+              // a different version. Like the `realm` case above, instance
+              // invalidations carry the id without `.json`.
+              //
+              // A full or copy index reloads unconditionally, and that is not
+              // belt-and-braces: on a realm being indexed for the FIRST time
+              // the boot-time load races the index and gets a 404, and no
+              // incremental event ever follows to correct it. The realm would
+              // sit there with a Decklist card that does nothing. One
+              // conditional GET per wholesale index is a cheap way to be sure
+              // the pins reflect what is actually in the realm.
+              if (
+                data.indexType !== 'incremental' ||
+                data.invalidations.includes(`${this.realmURL}decklist`)
+              ) {
+                this.loadDecklist();
+              }
               break;
             default:
               throw assertNever(data);
@@ -379,6 +422,13 @@ class RealmResource {
     }
     try {
       await this.fetchingInfo;
+      // After info, always — not inside the task. `fetchInfoTask` returns
+      // early on the two paths where info is already present or arrives in
+      // bulk, which are the common ones; a decklist loaded only on the
+      // from-server branch would leave the pins working sometimes. Awaited
+      // here so that anyone who has awaited `fetchInfo` can rely on the
+      // realm's pins being installed before they import anything from it.
+      await this.ensureDecklist();
     } catch (error) {
       // Realm info loading is best-effort during teardown. When the app/test is
       // already being destroyed, callers cannot do anything useful with a
@@ -392,6 +442,11 @@ class RealmResource {
 
   private fetchInfoTask = dropTask(async () => {
     try {
+      // The decklist load is deliberately OUTSIDE the three ways info can
+      // arrive. Info most often comes from the bulk fetch, or is already
+      // present, and both of those return early — hanging the decklist off
+      // the from-server branch alone would mean the common path never loads
+      // it, and the symptom would be "pins work sometimes".
       if (this.info) {
         return;
       }
@@ -405,6 +460,116 @@ class RealmResource {
       this.fetchingInfo = undefined;
     }
   });
+
+  private decklistLoad: Promise<void> | undefined;
+  private foundDecklist = false;
+
+  // Ensure this realm's pins are installed before anyone imports from it.
+  //
+  // A HIT is memoized — once the pins are in place, re-reading the card on
+  // every `fetchInfo` would be waste, and the SSE handler above reloads it
+  // when it actually changes. A MISS is not, deliberately: "this realm has
+  // no decklist yet" is exactly the answer that goes stale, because a realm
+  // still being indexed answers 404 for a card it is about to have. Caching
+  // that would leave the realm permanently unpinned with a Decklist card
+  // sitting in it. Retrying costs one 404 per `fetchInfo` on realms that
+  // genuinely have none, which is cheap and self-healing.
+  private async ensureDecklist(): Promise<void> {
+    if (this.foundDecklist) {
+      return;
+    }
+    if (!this.decklistLoad) {
+      this.decklistLoad = this.loadDecklist().finally(() => {
+        this.decklistLoad = undefined;
+      });
+    }
+    await this.decklistLoad;
+  }
+
+  // The realm's Decklist card, if it has one, folded into the virtual
+  // network. A sibling of the RealmConfig card at `<realm>/realm.json`: a
+  // card instance at a well-known id that configures the environment rather
+  // than describing content.
+  //
+  // Fetched as a raw card DOCUMENT rather than through the store, and that is
+  // deliberate. The decklist decides what a bare specifier means, so it has
+  // to be in place before the modules it governs are loaded — and loading it
+  // through the store would mean loading its own card class through the very
+  // loader it is meant to configure. Reading `attributes` off the JSON keeps
+  // the host ignorant of the card's class, which also means the class can
+  // live in the realm rather than in base.
+  //
+  // Best-effort by design. Most realms have no decklist, so a 404 is the
+  // common case and not a failure; and a realm whose decklist cannot be read
+  // should still open, behaving as it does today.
+  async loadDecklist(): Promise<void> {
+    let decklist = await this.fetchDecklistFromServer();
+    this.foundDecklist = decklist !== undefined;
+    this.network.virtualNetwork.setRealmDecklist(this.realmURL, decklist);
+  }
+
+  private async fetchDecklistFromServer(): Promise<DecklistInput | undefined> {
+    let response: Response;
+    try {
+      response = await this.network.authedFetch(`${this.realmURL}decklist`, {
+        headers: { Accept: SupportedMimeType.CardJson },
+      });
+    } catch (error) {
+      if (isTesting()) {
+        console.warn(
+          `[realm-service] decklist fetch failed ${JSON.stringify({
+            realmURL: this.realmURL,
+            error: String(error),
+          })}`,
+        );
+      }
+      return undefined;
+    }
+    if (response.status === 404) {
+      return undefined; // the ordinary case: this realm pins nothing
+    }
+    if (response.status !== 200) {
+      console.warn(
+        `[realm-service] decklist fetch bad status ${JSON.stringify({
+          realmURL: this.realmURL,
+          status: response.status,
+        })}`,
+      );
+      return undefined;
+    }
+    let attributes: Record<string, unknown> | undefined;
+    try {
+      let json = await waitForPromise(response.json());
+      attributes = json?.data?.attributes;
+    } catch (error) {
+      console.warn(
+        `[realm-service] decklist is not readable JSON ${JSON.stringify({
+          realmURL: this.realmURL,
+          error: String(error),
+        })}`,
+      );
+      return undefined;
+    }
+    // The card is user-authored and can be saved mid-edit in any shape, so
+    // nothing here may assume a field is present or is the right type. A
+    // malformed half of the map is dropped and the other half still applies:
+    // refusing the whole decklist over one bad entry would take the user's
+    // working pins away at the moment they are editing.
+    let imports = asStringMap(attributes?.imports);
+    let scopes: Record<string, Record<string, string>> = {};
+    if (isPlainObject(attributes?.scopes)) {
+      for (let [scope, mappings] of Object.entries(attributes.scopes)) {
+        let resolved = asStringMap(mappings);
+        if (resolved) {
+          scopes[scope] = resolved;
+        }
+      }
+    }
+    if (!imports && Object.keys(scopes).length === 0) {
+      return undefined;
+    }
+    return { imports: imports ?? {}, scopes };
+  }
 
   // Fetches the realm's current `_info` from the realm server. Used both for
   // the initial load (fetchInfoTask) and to refresh an already-loaded info
