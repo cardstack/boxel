@@ -219,6 +219,9 @@ export default class PillMenu extends Component<Signature> {
 
       .menu-footer {
         padding: var(--chat-input-area-bottom-padding);
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
       }
 
       .menu-footer::before {

@@ -324,7 +324,7 @@ export default class Room extends Component<Signature> {
                       <li class='llm-select-footer'>
                         {{#if this.systemCardId}}
                           <BoxelButton
-                            @kind='text-only'
+                            @kind='primary'
                             @size='extra-small'
                             class='llm-select-footer-action'
                             {{on 'click' this.goToSystemCard}}
@@ -335,7 +335,7 @@ export default class Room extends Component<Signature> {
                         {{/if}}
                         {{#unless this.isDefaultSystemCard}}
                           <BoxelButton
-                            @kind='text-only'
+                            @kind='primary'
                             @size='extra-small'
                             class='llm-select-footer-action'
                             {{on
@@ -534,22 +534,29 @@ export default class Room extends Component<Signature> {
 
       .llm-select-footer {
         display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-xxxs);
+        flex-wrap: wrap;
+        gap: 5px;
         border-top: 1px solid var(--boxel-200);
         padding-top: var(--boxel-sp-xxxs);
       }
 
       .llm-select-footer-action {
-        --boxel-button-padding: var(--boxel-sp-xxxs) var(--boxel-sp-sm);
+        --boxel-button-font: 600 var(--boxel-font-xs);
+        --boxel-button-border: 1px solid var(--boxel-400);
+        --boxel-button-color: var(--boxel-dark);
+        --boxel-button-padding: var(--boxel-sp-5xs) var(--boxel-sp-sm);
         --boxel-button-min-height: unset;
-        justify-content: flex-start;
-        font: 500 var(--boxel-font-xs);
-        color: var(--boxel-500);
+
+        gap: var(--boxel-sp-xs);
+        background: none;
       }
 
-      .llm-select-footer-action:hover {
-        color: var(--boxel-dark);
+      .llm-select-footer-action:hover:not(:disabled),
+      .llm-select-footer-action:focus:not(:disabled) {
+        --icon-color: var(--boxel-600);
+        color: var(--boxel-600);
+        background: none;
+        box-shadow: none;
       }
 
       .chat-input-area :deep(.minimized-arrow) {

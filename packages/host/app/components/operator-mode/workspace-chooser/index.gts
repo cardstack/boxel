@@ -387,6 +387,7 @@ export default class WorkspaceChooser extends Component<Signature> {
           <div class='sort-controls'>
             <BoxelSelect
               class='sort-select'
+              @dropdownClass='workspace-chooser-sort-dropdown'
               @options={{this.sortOptions}}
               @selected={{this.selectedSortOption}}
               @onChange={{this.onSortChange}}
@@ -567,13 +568,38 @@ export default class WorkspaceChooser extends Component<Signature> {
         align-items: center;
       }
       .sort-select {
-        --boxel-select-background-color: rgb(42 32 64 / 90%);
+        flex-shrink: 0;
+        --boxel-select-background-color: var(--boxel-800);
         --boxel-select-border-color: rgba(255 255 255 / 25%);
         --boxel-select-text-color: var(--boxel-light);
         --boxel-select-focus-border-color: rgba(255 255 255 / 50%);
         --icon-color: var(--boxel-light);
         font: 400 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp);
+      }
+      :global(.boxel-select__dropdown.workspace-chooser-sort-dropdown) {
+        --boxel-dropdown-background-color: #3b394b;
+        --boxel-dropdown-border-color: rgba(255, 255, 255, 0.25);
+        --boxel-dropdown-text-color: #fff;
+        --boxel-dropdown-selected-text-color: #fff;
+        --boxel-dropdown-hover-color: #272330;
+        --boxel-dropdown-highlight-color: #3b394b;
+      }
+      :global(
+        .workspace-chooser-sort-dropdown
+          .boxel-select-option-item.ember-power-select-option--selected.ember-power-select-option--highlighted
+      ) {
+        background-color: #3b394b;
+      }
+      :global(
+        .workspace-chooser-sort-dropdown
+          .boxel-select-option-item.ember-power-select-option--selected:hover
+      ) {
+        background-color: #272330;
+      }
+      :global(.workspace-chooser-sort-dropdown .boxel-select-option-checkmark) {
+        --icon-color: #00ffba;
+        color: #00ffba;
       }
       .workspace-chooser__content {
         display: flex;

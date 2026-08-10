@@ -107,6 +107,15 @@ export default class LLMSelect extends Component<Signature> {
         scroll-timeline: --pill-menu-content-scroll-timeline;
       }
 
+      /* LLMSelect renders its own footer-like row inside .llm-list rather
+      than forwarding a :footer block to PillMenu, so PillMenu never marks
+      itself `has-footer` and its default bottom scroll-shadow (meant to be
+      swapped out when a real footer exists) is left dangling over the
+      list content instead of framing the true bottom edge. */
+      :deep(.menu-content::after) {
+        display: none;
+      }
+
       .llm-option {
         background: var(--boxel-light);
         border-radius: var(--boxel-border-radius);
