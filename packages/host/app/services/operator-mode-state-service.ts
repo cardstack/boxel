@@ -177,7 +177,6 @@ export default class OperatorModeStateService extends Service {
   private moduleInspectorHistory: Record<string, ModuleInspectorView>;
 
   @tracked profileSettingsOpen = false;
-  // Section to reveal when the settings modal opens
   @tracked profileSettingsSection: ProfileSettingsSection | undefined;
   @tracked createListingModalPayload?: CreateListingModalPayload;
 
