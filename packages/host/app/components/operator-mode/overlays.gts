@@ -184,7 +184,15 @@ export default class Overlays extends Component<OverlaySignature> {
   // listeners for elements that are no longer present. A pure getter would leak stale listeners here.
   /* eslint-disable ember/no-side-effects */
   protected get renderedCardsForOverlayActionsWithEvents() {
-    let renderedCards = this.args.renderedCardsForOverlayActions;
+    // The element tracker reconciles its entries in an afterRender pass, so
+    // when a card's rendered DOM node is replaced (e.g. a hot update of the
+    // card's source while it is open in a stack), this getter can recompute
+    // while the incoming array still references the old, now-detached
+    // element. Prune those entries: a detached element has no parent to
+    // measure z-index from and no geometry to anchor an overlay to.
+    let renderedCards = this.args.renderedCardsForOverlayActions.filter(
+      (renderedCard) => renderedCard.element.isConnected,
+    );
     let currentElements = new Set(renderedCards.map((card) => card.element));
     for (let [element, handlers] of this.boundRenderedCardElements) {
       if (!currentElements.has(element)) {
@@ -398,7 +406,12 @@ export default class Overlays extends Component<OverlaySignature> {
       return overlayZIndexStyle;
     }
 
-    let parentElement = element.parentElement!;
+    let parentElement = element.parentElement;
+    if (!parentElement) {
+      // A detached element has no parent to measure; fall back to the
+      // default stacking behavior instead of crashing the render.
+      return htmlSafe('z-index: auto');
+    }
     let zIndexParentElement = window
       .getComputedStyle(parentElement)
       .getPropertyValue('z-index');
