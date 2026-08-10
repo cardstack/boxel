@@ -14,21 +14,21 @@ import type {
 
 import { cn, not } from '../../helpers.gts';
 import { BoxelAfterOptionsComponent } from './after-options.gts';
-
-const DefaultAfterOptions =
-  BoxelAfterOptionsComponent as unknown as ComponentLike<
-    PowerSelectAfterOptionsSignature<any, any, true>
-  >;
 import BoxelSelectedItem from './selected-item.gts';
+import BoxelMultiSelectDefaultTrigger from './trigger.gts';
 
 // The default subcomponents are generic classes whose inferred ComponentLike
 // shapes glint cannot match against power-select's expected unions; their
 // signatures are structurally compatible (verified by the suite), so pin
 // them to the expected member types once here.
+const DefaultAfterOptions =
+  BoxelAfterOptionsComponent as unknown as ComponentLike<
+    PowerSelectAfterOptionsSignature<any, any, true>
+  >;
+
 const DefaultSelectedItem = BoxelSelectedItem as unknown as ComponentLike<
   PowerSelectSelectedItemSignature<any, any, true>
 >;
-import BoxelMultiSelectDefaultTrigger from './trigger.gts';
 
 // Everything else is inherited from ember-power-select's own args;
 // options/selected are re-declared only to make them required.
