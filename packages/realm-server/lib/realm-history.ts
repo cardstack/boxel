@@ -31,6 +31,13 @@ export interface HistoryEntry {
   timestamp: string;
   description: string;
   filesSummary: string[];
+  // The jj commit author name, when the sealing caller supplied one via
+  // `seal(dir, message, { actorName })` — e.g. `_history/commit`'s `actor`
+  // field. Undefined for changes sealed without an actor: the debounced
+  // write-sealer and restores both seal anonymously. Optional at the
+  // interface too, since a backend that cannot attribute an actor (see
+  // `prepareActorCommit`) will never populate it.
+  author?: string;
 }
 
 export interface RestorePlan {
@@ -120,9 +127,52 @@ export class RealmHistoryManager {
     }
   }
 
+  // Advances the working copy to a fresh, empty commit authored by `actor`,
+  // so a subsequent write + `seal(dir, message, actor)` attributes correctly
+  // (see `seal`'s doc comment for why `actor` alone, passed only to `seal`,
+  // is too late). Any changes already sitting in the current working copy —
+  // e.g. from a normal write through the card-write endpoints that the
+  // debounced sealer hasn't caught up to yet — are swept into their own
+  // change first, under the default identity, so they aren't silently
+  // misattributed to the incoming actor.
+  async prepareActorCommit(
+    dir: string,
+    actor: { name: string; email?: string },
+  ): Promise<void> {
+    return this.#enqueue(dir, async () => {
+      await this.#ensureRepoUnqueued(dir);
+      let { stdout } = await this.#jj(dir, [
+        'log',
+        '--no-graph',
+        '-r',
+        '@',
+        '-T',
+        'if(empty, "empty", "dirty")',
+      ]);
+      if (stdout.trim() === 'dirty') {
+        await this.#jj(dir, ['commit', '-m', 'save']);
+      }
+      await this.#jj(dir, ['new'], actor);
+    });
+  }
+
   // Seals the working copy as one jj change when it is dirty. Returns the
-  // sealed changeId, or undefined when there was nothing to seal.
-  async seal(dir: string, message: string): Promise<string | undefined> {
+  // sealed changeId, or undefined when there was nothing to seal. `actor`
+  // overrides the AUTHOR shown for this change — but jj fixes a commit's
+  // author at the moment it's CREATED (`jj commit` == `jj describe` + `jj
+  // new`; the new empty child gets whatever config `jj new` ran under), not
+  // at `describe`/`commit -m` time. That means `actor` here only reaches the
+  // change we're sealing if the caller already advanced to a fresh,
+  // actor-stamped empty commit BEFORE writing files into it — see
+  // `prepareActorCommit`, which `_history/commit`'s handler calls first.
+  // Passed with no prior `prepareActorCommit`, `actor` is a no-op: it lands
+  // on the NEXT change instead, which is why it's still forwarded to the
+  // `commit` call below (harmless, and correct for that next-change case).
+  async seal(
+    dir: string,
+    message: string,
+    actor?: { name: string; email?: string },
+  ): Promise<string | undefined> {
     return this.#enqueue(dir, async () => {
       await this.#ensureRepoUnqueued(dir);
       // Any jj invocation snapshots the working copy first; this one also
@@ -138,7 +188,7 @@ export class RealmHistoryManager {
       if (stdout.trim() !== 'dirty') {
         return undefined;
       }
-      await this.#jj(dir, ['commit', '-m', message]);
+      await this.#jj(dir, ['commit', '-m', message], actor);
       let sealed = await this.#jj(dir, [
         'log',
         '--no-graph',
@@ -159,6 +209,7 @@ export class RealmHistoryManager {
         `committer.timestamp().format("%Y-%m-%dT%H:%M:%S%z") ++ "${FIELD_SEP}" ++ ` +
         `description.first_line() ++ "${FIELD_SEP}" ++ ` +
         `if(empty, "empty", "change") ++ "${FIELD_SEP}" ++ ` +
+        `author.name() ++ "${FIELD_SEP}" ++ ` +
         `diff.summary() ++ "${RECORD_SEP}"`;
       let { stdout } = await this.#jj(dir, [
         'log',
@@ -173,8 +224,15 @@ export class RealmHistoryManager {
         if (!record.trim()) {
           continue;
         }
-        let [changeId, commitId, timestamp, description, emptiness, summary] =
-          record.split(FIELD_SEP);
+        let [
+          changeId,
+          commitId,
+          timestamp,
+          description,
+          emptiness,
+          author,
+          summary,
+        ] = record.split(FIELD_SEP);
         if (emptiness === 'empty') {
           // the (usually empty) working-copy change on top of history
           continue;
@@ -184,6 +242,10 @@ export class RealmHistoryManager {
           commitId,
           timestamp,
           description,
+          // The bot identity is the "no actor supplied" default (debounced
+          // auto-saves, restores) — surfacing it as a real actor would be
+          // noise, not attribution.
+          author: author && author !== 'realm-history' ? author : undefined,
           filesSummary: (summary ?? '')
             .split('\n')
             .map((line) => line.trim())
@@ -288,22 +350,32 @@ export class RealmHistoryManager {
     await this.#jj(dir, ['git', 'init', '--colocate']);
   }
 
-  #baseArgs(): string[] {
+  #baseArgs(actor?: { name: string; email?: string }): string[] {
+    // jj's --config value is a TOML string literal; a raw embedded quote
+    // would break out of it (a jj-level parse error, not a shell one — args
+    // reach jj as an argv array, never a shell), so strip quotes rather than
+    // try to escape them.
+    let sanitize = (s: string) => s.replace(/"/g, '').slice(0, 200);
+    let name = actor?.name ? sanitize(actor.name) : 'realm-history';
+    let email = actor?.email
+      ? sanitize(actor.email)
+      : 'realm-history@boxel.localhost';
     return [
       '--no-pager',
       '--color=never',
       '--config',
-      'user.name="realm-history"',
+      `user.name="${name}"`,
       '--config',
-      'user.email="realm-history@boxel.localhost"',
+      `user.email="${email}"`,
     ];
   }
 
   async #jj(
     dir: string,
     args: string[],
+    actor?: { name: string; email?: string },
   ): Promise<{ stdout: string; stderr: string }> {
-    return execFileAsync(JJ_BIN, [...this.#baseArgs(), ...args], {
+    return execFileAsync(JJ_BIN, [...this.#baseArgs(actor), ...args], {
       cwd: dir,
       maxBuffer: MAX_BUFFER,
     });
@@ -322,8 +394,45 @@ export class RealmHistoryManager {
   }
 }
 
-let manager: RealmHistoryManager | undefined;
-export function getRealmHistoryManager(): RealmHistoryManager {
+// The shape a Timeline backend satisfies. `handle-realm-history.ts` programs
+// against this rather than the concrete class, so the process that actually
+// keeps the Timeline can change without the HTTP surface moving.
+//
+// One implementation today — the jj CLI, below. The seam is here because the
+// second one is already named: `deck-daemon.md` describes deckd taking over
+// the Timeline, and when it does the handler should not need editing. It is
+// structural rather than `implements` on purpose: a future backend is a
+// separate process behind a client, with no reason to inherit from this one.
+export interface RealmHistoryBackend {
+  noteMutation(dir: string, path: string): void;
+  flush(dir: string): Promise<void>;
+  // Optional, because attribution is the part a backend is most likely to
+  // lack. It advances to a fresh actor-authored commit BEFORE a write, so the
+  // write's eventual `seal(dir, message, actor)` lands against the right
+  // author — jj fixes authorship at create time, not at commit time, which is
+  // the trap `prepareActorCommit` exists to avoid. A backend without it
+  // cannot attribute custom actors, and callers must read its absence that
+  // way rather than as a harmless no-op.
+  prepareActorCommit?(
+    dir: string,
+    actor: { name: string; email?: string },
+  ): Promise<void>;
+  seal(
+    dir: string,
+    message: string,
+    actor?: { name: string; email?: string },
+  ): Promise<string | undefined>;
+  list(dir: string): Promise<HistoryEntry[]>;
+  fileAt(
+    dir: string,
+    revisionId: string,
+    path: string,
+  ): Promise<Buffer | undefined>;
+  restorePlan(dir: string, revisionId: string): Promise<RestorePlan>;
+}
+
+let manager: RealmHistoryBackend | undefined;
+export function getRealmHistoryManager(): RealmHistoryBackend {
   if (!manager) {
     manager = new RealmHistoryManager();
   }

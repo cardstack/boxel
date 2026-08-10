@@ -168,6 +168,112 @@ export default function handleRealmHistory(
       return;
     }
 
+    // A save operation that tags its own audit-log entry: optionally write
+    // (and/or delete) files through the realm's own write path — same
+    // invalidation/indexing/SSE guarantee `_history/restore` leans on — then
+    // seal with a caller-supplied message and actor instead of the debounced
+    // write-sealer's generic "save: <paths>". Message-only calls (no writes/
+    // deletes) just re-describe whatever the normal card-write endpoints
+    // left dirty, for a "save now, tag after" workflow.
+    if (ctxt.method === 'POST' && rest === 'commit') {
+      let request = await fetchRequestFromContext(ctxt);
+      let body: {
+        message?: string;
+        actor?: { name?: string; email?: string };
+        writes?: Record<string, string>;
+        deletes?: string[];
+      };
+      try {
+        body = await request.json();
+      } catch {
+        await sendResponseForBadRequest(ctxt, `request body must be JSON`);
+        return;
+      }
+      let { message, actor, writes, deletes } = body;
+      if (!message || typeof message !== 'string') {
+        await sendResponseForBadRequest(
+          ctxt,
+          `body must include a non-empty "message"`,
+        );
+        return;
+      }
+      if (actor !== undefined && !actor.name) {
+        await sendResponseForBadRequest(
+          ctxt,
+          `"actor", when present, must include a "name"`,
+        );
+        return;
+      }
+      let writePaths = writes ? Object.keys(writes) : [];
+      let deletePaths = deletes ?? [];
+      if (
+        !writePaths.every(isValidHistoryPath) ||
+        (deletes !== undefined &&
+          (!Array.isArray(deletes) || !deletes.every(isValidHistoryPath)))
+      ) {
+        await sendResponseForBadRequest(
+          ctxt,
+          `"writes" keys and "deletes" entries must be realm-local file paths`,
+        );
+        return;
+      }
+
+      let actorForSeal = actor?.name
+        ? { name: actor.name, email: actor.email }
+        : undefined;
+      // jj fixes a commit's author at creation time, not at describe time —
+      // so the actor has to land BEFORE these writes are snapshotted, not
+      // just on the seal call that describes them afterward. Backends
+      // without this primitive (jj-lib today) silently keep default
+      // attribution; that gap is documented on the interface.
+      if (actorForSeal && manager.prepareActorCommit) {
+        await manager.prepareActorCommit(dir, actorForSeal);
+      }
+      if (writePaths.length > 0) {
+        await realm.writeMany(new Map(writePaths.map((p) => [p, writes![p]])));
+      }
+      if (deletePaths.length > 0) {
+        await realm.deleteAll(deletePaths);
+      }
+
+      let newChangeId = await manager.seal(dir, message, actorForSeal);
+      if (newChangeId === undefined) {
+        // Nothing was dirty (no writes/deletes given, and nothing pending
+        // from an earlier normal-API write) — report the current head
+        // rather than a confusing null.
+        let history = await manager.list(dir);
+        await respondJSON(ctxt, {
+          data: {
+            type: 'realm-history-commit',
+            attributes: {
+              message,
+              changeId: history[0]?.changeId ?? null,
+              sealed: false,
+              wrote: [],
+              removed: [],
+            },
+          },
+        });
+        return;
+      }
+      log.info(
+        `committed ${realm.url} as ${newChangeId} (wrote ${writePaths.length}, removed ${deletePaths.length}): ${message}`,
+      );
+      await respondJSON(ctxt, {
+        data: {
+          type: 'realm-history-commit',
+          attributes: {
+            message,
+            changeId: newChangeId,
+            sealed: true,
+            wrote: writePaths,
+            removed: deletePaths,
+          },
+        },
+      });
+      return;
+    }
+
     if (ctxt.method === 'POST' && rest === 'restore') {
       let request = await fetchRequestFromContext(ctxt);
       let body: { changeId?: string; paths?: string[] };

@@ -111,6 +111,90 @@ module(basename(import.meta.filename), function (hooks) {
     });
   });
 
+  module('actor attribution', function () {
+    // jj fixes a commit's AUTHOR at the moment it's CREATED (`jj commit` ==
+    // `jj describe` + `jj new`; the new empty child inherits whatever config
+    // `jj new` ran under) — not at describe/`commit -m` time. Passing an
+    // actor only to the describing call attributes it to the NEXT change
+    // instead, one step behind. This regression test pins the real fix:
+    // `prepareActorCommit` must run BEFORE the write it's meant to attribute.
+    jjTest(
+      'an actor passed only to seal (no prepareActorCommit) attributes one change late',
+      async function (assert) {
+        writeFileSync(join(dir, 'a.txt'), 'v1');
+        await manager.seal(dir, 'first message', { name: 'Actor One' });
+        writeFileSync(join(dir, 'a.txt'), 'v2');
+        await manager.seal(dir, 'second message', { name: 'Actor Two' });
+
+        let history = await manager.list(dir);
+        let [second, first] = history;
+        assert.strictEqual(second.description, 'second message');
+        assert.notStrictEqual(
+          second.author,
+          'Actor Two',
+          'documents the trap: the actor lands on the WRONG (later) change without prepareActorCommit',
+        );
+        assert.strictEqual(first.description, 'first message');
+        assert.strictEqual(
+          first.author,
+          undefined,
+          'the bot identity is filtered to undefined, not surfaced as a real actor',
+        );
+      },
+    );
+
+    jjTest(
+      'prepareActorCommit before a write attributes the correct change to the correct actor',
+      async function (assert) {
+        await manager.prepareActorCommit(dir, { name: 'Actor One' });
+        writeFileSync(join(dir, 'a.txt'), 'v1');
+        await manager.seal(dir, 'first message', { name: 'Actor One' });
+
+        await manager.prepareActorCommit(dir, { name: 'Actor Two' });
+        writeFileSync(join(dir, 'a.txt'), 'v2');
+        await manager.seal(dir, 'second message', { name: 'Actor Two' });
+
+        let history = await manager.list(dir);
+        let [second, first] = history;
+        assert.strictEqual(second.description, 'second message');
+        assert.strictEqual(second.author, 'Actor Two');
+        assert.strictEqual(first.description, 'first message');
+        assert.strictEqual(first.author, 'Actor One');
+      },
+    );
+
+    jjTest(
+      'prepareActorCommit sweeps pre-existing dirty content into its own default-identity change first',
+      async function (assert) {
+        // Content written through the normal card-write endpoints, not yet
+        // caught by the debounced sealer, must not be silently misattributed
+        // to the next _history/commit's actor.
+        writeFileSync(join(dir, 'stray.txt'), 'unsealed from a normal write');
+
+        await manager.prepareActorCommit(dir, { name: 'Actor One' });
+        writeFileSync(join(dir, 'a.txt'), 'v1');
+        await manager.seal(dir, 'tagged message', { name: 'Actor One' });
+
+        let history = await manager.list(dir);
+        assert.strictEqual(
+          history.length,
+          2,
+          'the stray content sealed as its own change, separate from the tagged one',
+        );
+        let [tagged, swept] = history;
+        assert.strictEqual(tagged.description, 'tagged message');
+        assert.strictEqual(tagged.author, 'Actor One');
+        assert.deepEqual(tagged.filesSummary, ['A a.txt']);
+        assert.strictEqual(
+          swept.author,
+          undefined,
+          'the swept-up stray content keeps the default bot identity',
+        );
+        assert.deepEqual(swept.filesSummary, ['A stray.txt']);
+      },
+    );
+  });
+
   module('fileAt', function () {
     jjTest(
       'returns content at a prior change, undefined when absent',
