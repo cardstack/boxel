@@ -98,9 +98,7 @@ export class Contact extends CardDef {
       return words.map((w) => w[0]?.toUpperCase() ?? '').join('') || '?';
     }
     get subtitle() {
-      return [this.args.model?.jobTitle, this.args.model?.account?.name]
-        .filter(Boolean)
-        .join(' · ');
+      return this.args.model?.jobTitle;
     }
     <template>
       <div class='contact'>

@@ -418,6 +418,14 @@ export class RevenueOs extends CardDef {
       let id = this.selectedAccount?.id;
       return this.subscriptions.filter((s) => s.account?.id === id);
     }
+    get accountDeals(): Opportunity[] {
+      let id = this.selectedAccount?.id;
+      return this.opportunities.filter((o) => o.account?.id === id);
+    }
+    get accountInvoices(): Invoice[] {
+      let id = this.selectedAccount?.id;
+      return this.invoices.filter((i) => i.account?.id === id);
+    }
     get accountActivities(): Activity[] {
       let ids = new Set<string>();
       let id = this.selectedAccount?.id;
@@ -767,6 +775,38 @@ export class RevenueOs extends CardDef {
                   @context={{@context}}
                 />
                 <div class='detail-cols'>
+                  <div class='panel'>
+                    <h3>Deals</h3>
+                    {{#each this.accountDeals as |deal|}}
+                      <button
+                        type='button'
+                        class='row-open'
+                        {{on 'click' (fn this.openCard deal)}}
+                      >
+                        {{#let (this.cardComponent deal) as |C|}}
+                          <C @format='embedded' />
+                        {{/let}}
+                      </button>
+                    {{else}}
+                      <p class='empty'>No deals yet</p>
+                    {{/each}}
+                  </div>
+                  <div class='panel'>
+                    <h3>Invoices</h3>
+                    {{#each this.accountInvoices as |inv|}}
+                      <button
+                        type='button'
+                        class='row-open'
+                        {{on 'click' (fn this.openCard inv)}}
+                      >
+                        {{#let (this.cardComponent inv) as |C|}}
+                          <C @format='embedded' />
+                        {{/let}}
+                      </button>
+                    {{else}}
+                      <p class='empty'>No invoices yet</p>
+                    {{/each}}
+                  </div>
                   <div class='panel'>
                     <h3>Contacts</h3>
                     {{#each this.accountContacts as |contact|}}
@@ -1233,6 +1273,30 @@ export class RevenueOs extends CardDef {
         .head-actions {
           display: flex;
           gap: 0.375rem;
+        }
+        .row-open {
+          display: block;
+          width: 100%;
+          border: 0;
+          padding: 0;
+          background: none;
+          font: inherit;
+          text-align: left;
+          cursor: pointer;
+          border-radius: 0.5rem;
+        }
+        .row-open:hover {
+          background: var(--muted, #f3f4f6);
+        }
+        .panel :deep(.boxel-card-container) {
+          background: transparent;
+          border-radius: 0;
+        }
+        .panel :deep(.boxel-card-container--boundaries) {
+          box-shadow: none;
+        }
+        .panel .row-open + .row-open {
+          border-top: 1px solid var(--border, #e5e7eb);
         }
       </style>
     </template>
