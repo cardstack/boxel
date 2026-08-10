@@ -1025,7 +1025,16 @@ export function setupLocalIndexing(
   hooks.beforeEach(async function () {
     let dbAdapter = await getDbAdapter();
     if (reusableIndex?.captured) {
-      // Replaces every table from the snapshot, so this subsumes reset().
+      // Subsumes reset(), which is a precondition rather than a property:
+      // importSnapshot DELETEs and refills every table it finds in the
+      // *snapshot*, so it covers reset()'s list only because the snapshot was
+      // taken from `main` with the schema unchanged since. A table in `main`
+      // but missing from the snapshot would never be cleared, and that leak
+      // reads as one test seeing another's rows, with nothing to attribute it
+      // to. The systematic exception is `sqlite_%` names, which the copy skips
+      // — harmless while nothing in config/schema is AUTOINCREMENT, since then
+      // `sqlite_sequence` doesn't exist; a migration adding one would leave
+      // restored tests inheriting the previous test's id counter.
       await dbAdapter.importSnapshot(reusableIndex.snapshotName);
       reusableIndex.restored = true;
     } else {
