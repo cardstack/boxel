@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "AccountMetrics",
+        "module": "../account-metrics"
+      },
+      "specType": "component",
+      "readMe": "## AccountMetrics\n\nDecision B2 made concrete: unbounded reporting aggregates live in a query block, NOT on the Account card. Takes `@account` and `@context` (for `getCards` live queries over the account's realm) and renders the metric strip: MRR (active/trial subscriptions, yearly normalized /12), ARR, Outstanding (open invoices), Collected (paid invoices), Overdue count. Live: a new payment or subscription updates the strip without reloads.\n\n```gts\nimport { AccountMetrics } from '../account-metrics';\n<AccountMetrics @account={{@model.account}} @context={{@context}} />\n```\n\nv1 honesty: Collected sums PAID invoices' line items, not Payment records \u2014 partial payments count only once the invoice flips to paid. Payment-level precision needs nested link loading; logged for stage 2.\n\n**Non-goals:** cross-account rollups (pipeline value, win rate \u2014 dashboard queries those directly), storing any of these numbers on cards (never), cross-currency summation (mixed currencies are excluded per addendum E).",
+      "cardInfo": {
+        "name": "AccountMetrics",
+        "summary": "Query block for per-account reporting: MRR/ARR/Outstanding/Collected/Overdue live via getCards. The rollup home per decision B2.",
+        "notes": null,
+        "cardThumbnailURL": null
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../AccountMetricsDemo/acme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
