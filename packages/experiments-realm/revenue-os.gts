@@ -28,7 +28,7 @@ import { Board, type BoardColumn } from './board';
 import { Table, type TableColumn } from './table';
 import { LineChart, type ChartPoint } from './line-chart';
 import { AccountMetrics } from './account-metrics';
-import { Opportunity, PIPELINE_STAGES } from './opportunity';
+import { Opportunity, PIPELINE_STAGES, STAGE_COLORS } from './opportunity';
 import { Account } from './account';
 import { Invoice } from './invoice';
 import { Subscription } from './subscription';
@@ -163,6 +163,7 @@ export class RevenueOs extends CardDef {
     boardColumns: BoardColumn[] = PIPELINE_STAGES.map((s) => ({
       key: s,
       label: s,
+      color: STAGE_COLORS[s],
     }));
     columnKeyFor = (item: CardDef) => (item as Opportunity)?.stage;
 
@@ -243,7 +244,7 @@ export class RevenueOs extends CardDef {
     }
 
     // ── dashboard ─────────────────────────────────────────────────────
-    get dashboardMetrics() {
+    get dash() {
       let mrr = 0;
       let code: string | undefined;
       for (let s of this.subscriptions) {
@@ -259,20 +260,30 @@ export class RevenueOs extends CardDef {
         OPEN_INVOICE_STATUSES.includes(i.status ?? ''),
       );
       let paid = this.invoices.filter((i) => i.status === 'paid');
+      let balanceOf = (list: Invoice[]) =>
+        list.reduce(
+          (acc, i) => acc + outstandingBalance(i.lineItems, i.payments),
+          0,
+        );
       let sumOf = (list: Invoice[]) =>
         list.reduce((acc, i) => acc + sumLineItems(i.lineItems).total, 0);
-      return [
-        { label: 'MRR', value: formatMoney(mrr, code) || '$0' },
-        { label: 'ARR', value: formatMoney(mrr * 12, code) || '$0' },
-        { label: 'Pipeline', value: this.stageTotals.total },
-        { label: 'Weighted forecast', value: this.stageTotals.weighted },
-        {
-          label: 'Win rate',
-          value: closed ? `${Math.round((won.length / closed) * 100)}%` : '—',
-        },
-        { label: 'Outstanding', value: formatMoney(sumOf(open), code) || '$0' },
-        { label: 'Collected', value: formatMoney(sumOf(paid), code) || '$0' },
-      ];
+      return {
+        mrr: formatMoney(mrr, code) || '$0',
+        arr: formatMoney(mrr * 12, code) || '$0',
+        secondary: [
+          { label: 'Pipeline', value: this.stageTotals.total },
+          { label: 'Weighted forecast', value: this.stageTotals.weighted },
+          {
+            label: 'Win rate',
+            value: closed ? `${Math.round((won.length / closed) * 100)}%` : '—',
+          },
+          {
+            label: 'Outstanding',
+            value: formatMoney(balanceOf(open), code) || '$0',
+          },
+          { label: 'Collected', value: formatMoney(sumOf(paid), code) || '$0' },
+        ],
+      };
     }
 
     get mrrTrend(): ChartPoint[] {
@@ -479,11 +490,12 @@ export class RevenueOs extends CardDef {
         else buckets.b90 += balance;
       }
       let f = (n: number) => formatMoney(n, code) || '$0';
+      let tone = (n: number, level: string) => (n > 0 ? level : 'zero');
       return [
-        { label: 'Current', value: f(buckets.current) },
-        { label: '1–30 days', value: f(buckets.b30) },
-        { label: '31–60 days', value: f(buckets.b60) },
-        { label: '60+ days', value: f(buckets.b90) },
+        { label: 'Current', value: f(buckets.current), tone: 'ok' },
+        { label: '1–30 days', value: f(buckets.b30), tone: tone(buckets.b30, 'warn') },
+        { label: '31–60 days', value: f(buckets.b60), tone: tone(buckets.b60, 'late') },
+        { label: '60+ days', value: f(buckets.b90), tone: tone(buckets.b90, 'late') },
       ];
     }
 
@@ -639,22 +651,28 @@ export class RevenueOs extends CardDef {
 
         {{#if (eq this.activeTab 'dashboard')}}
           <section class='pane'>
+            <div class='hero'>
+              <div class='hero-metric'>
+                <span class='m-label'>Monthly recurring revenue</span>
+                <span class='hero-value'>{{this.dash.mrr}}</span>
+                <span class='hero-sub'>{{this.dash.arr}} annualized</span>
+              </div>
+              <div class='hero-chart'>
+                <LineChart
+                  @points={{this.mrrTrend}}
+                  @formatValue={{this.chartMoney}}
+                />
+              </div>
+            </div>
             <div class='metric-grid'>
-              {{#each this.dashboardMetrics as |m|}}
-                <div class='metric'>
+              {{#each this.dash.secondary as |m|}}
+                <div class='metric metric-flat'>
                   <span class='m-label'>{{m.label}}</span>
                   <span class='m-value'>{{m.value}}</span>
                 </div>
               {{/each}}
             </div>
             <div class='dash-cols'>
-              <div class='panel'>
-                <h3>MRR build</h3>
-                <LineChart
-                  @points={{this.mrrTrend}}
-                  @formatValue={{this.chartMoney}}
-                />
-              </div>
               <div class='panel'>
                 <h3>Pipeline by stage</h3>
                 <ul class='bars'>
@@ -759,9 +777,9 @@ export class RevenueOs extends CardDef {
           <section class='pane'>
             <div class='aging-strip'>
               {{#each this.aging as |bucket|}}
-                <div class='metric'>
+                <div class='metric metric-flat'>
                   <span class='m-label'>{{bucket.label}}</span>
-                  <span class='m-value'>{{bucket.value}}</span>
+                  <span class='m-value tone-{{bucket.tone}}'>{{bucket.value}}</span>
                 </div>
               {{/each}}
             </div>
@@ -853,7 +871,7 @@ export class RevenueOs extends CardDef {
           justify-content: space-between;
           gap: 1rem;
           flex-wrap: wrap;
-          border-bottom: 2px solid var(--foreground, #111111);
+          border-bottom: 4px double var(--foreground, #111111);
           padding-bottom: 0.875rem;
         }
         .brand {
@@ -862,8 +880,13 @@ export class RevenueOs extends CardDef {
           gap: 0.625rem;
         }
         .brand-icon {
-          width: 26px;
-          height: 26px;
+          width: 38px;
+          height: 38px;
+          padding: 7px;
+          box-sizing: border-box;
+          border-radius: 0.625rem;
+          background: var(--primary, #111111);
+          color: var(--primary-foreground, #ffffff);
         }
         h1 {
           margin: 0;
@@ -947,6 +970,56 @@ export class RevenueOs extends CardDef {
           border-radius: 0.75rem;
           padding: 0.875rem 1rem;
           background: var(--card, #ffffff);
+        }
+        .metric-flat {
+          border: none;
+          background: var(--muted, #f3f4f6);
+        }
+        .hero {
+          display: grid;
+          grid-template-columns: minmax(15rem, 1fr) minmax(20rem, 2fr);
+          gap: 1.5rem;
+          align-items: center;
+          border: 1px solid var(--border, #e5e7eb);
+          border-radius: 1rem;
+          background: var(--card, #ffffff);
+          padding: 1.5rem 1.75rem;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+        .hero-metric {
+          display: flex;
+          flex-direction: column;
+          gap: 0.375rem;
+        }
+        .hero-value {
+          font-size: 3rem;
+          line-height: 1;
+          font-weight: 700;
+          font-family: var(--font-heading, inherit);
+          font-variant-numeric: tabular-nums;
+          color: var(--primary, #111111);
+        }
+        .hero-sub {
+          font-size: 0.875rem;
+          color: var(--muted-foreground, #6b7280);
+          font-variant-numeric: tabular-nums;
+        }
+        .hero-chart {
+          min-width: 0;
+        }
+        .tone-warn {
+          color: var(--state-partial-fg, #92400e);
+        }
+        .tone-late {
+          color: var(--state-overdue-fg, #991b1b);
+        }
+        .tone-zero {
+          color: var(--muted-foreground, #6b7280);
+        }
+        @media (max-width: 48rem) {
+          .hero {
+            grid-template-columns: 1fr;
+          }
         }
         .m-label {
           font-size: 0.6875rem;
