@@ -644,7 +644,7 @@ export async function runGlintCheck(
               `${HOST_PKG_PATH}/app/tools/*`,
             ],
             '@cardstack/boxel-ui/*': [
-              `${join(PACKAGES_PATH, 'boxel-ui', 'addon', 'src')}/*`,
+              `${join(PACKAGES_PATH, 'boxel-ui', 'src')}/*`,
             ],
             '*': [`${HOST_PKG_PATH}/types/*`],
           },

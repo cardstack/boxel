@@ -1,6 +1,6 @@
 packages:
   - packages/*
-  - packages/boxel-ui/*
+  - packages/boxel-ui/docs-app
   - vendor/*
 
 catalog:

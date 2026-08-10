@@ -4,7 +4,7 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import { formatDistanceToNow } from 'date-fns';
-import { task } from 'ember-concurrency';
+import { didCancel, task } from 'ember-concurrency';
 
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { cn, formatNumber } from '@cardstack/boxel-ui/helpers';
@@ -88,7 +88,16 @@ export default class WithSubscriptionData extends Component<WithSubscriptionData
 
   constructor(...args: [any, any]) {
     super(...args);
-    this.loadSubscriptionData.perform();
+    // Uncaught, a failed token fetch escapes instead of leaving the
+    // component in its empty state. billing-service catches its own load.
+    // Chaining opts into cancelation too — the modal closing mid-load is
+    // teardown, not a failure.
+    this.loadSubscriptionData.perform().catch((e: unknown) => {
+      if (didCancel(e)) {
+        return;
+      }
+      console.error('Failed to load subscription data', e);
+    });
   }
 
   private get isLoading() {

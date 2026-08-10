@@ -1622,7 +1622,6 @@ ${REPLACE_MARKER}
     await click('[data-test-open-ai-assistant]');
     let roomId = getRoomIds().pop()!;
 
-    await click('[data-test-llm-mode-selector]');
     await click('[data-test-llm-mode-option="act"]');
 
     let head = `\`\`\`

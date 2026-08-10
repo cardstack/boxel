@@ -52,16 +52,14 @@
 
 - No tests
 
-### packages/boxel-ui/addon, packages/boxel-ui/test-app
+### packages/boxel-ui, packages/boxel-ui/docs-app
 
-- Addon functionality is tested via sibling test-app directory
-- `cd packages/boxel-ui/addon && pnpm start` to start a process that will watch files and automatically rebuild the addon
-- `cd packages/boxel-ui/test-app && pnpm start` to start a process that will watch files and automatically rebuild the test-app
-- Run all tests
-  `cd packages/boxel-ui/test-app && ember test --path dist`
-- To run a subset of the tests:
-  `ember test --path dist --filter "some text that appears in module name or test name"`  
-  Note that the filter is matched against the module name and test name, not the file name! Try to avoid using pipe characters in the filter, since they can confuse auto-approval tool use filters set up by the user.
+- Component integration/unit tests live in the addon itself (`packages/boxel-ui/tests`); docs-app has only an acceptance test and the boxel-ui type canary
+- `cd packages/boxel-ui && pnpm start` to serve the addon's dev/test environment (vite)
+- Run the addon test suite: `cd packages/boxel-ui && pnpm test`
+- To run a subset interactively: `cd packages/boxel-ui && pnpm start:test`, then use the QUnit filter UI (or `?filter=` in the URL)
+- `cd packages/boxel-ui/docs-app && pnpm start` to run the docs app
+- Run docs-app tests: `cd packages/boxel-ui/docs-app && ember test --path dist` (supports `--filter "text"`)
 
 ### packages/host
 
@@ -92,7 +90,7 @@
 #### CSS Guidance
 
 - Use scalable units such as rem
-- Use CSS variables from packages/boxel-ui/addon/src/styles/variables.css
+- Use CSS variables from packages/boxel-ui/src/styles/variables.css
 
 #### Iterating on host tests with the Chrome MCP server
 
