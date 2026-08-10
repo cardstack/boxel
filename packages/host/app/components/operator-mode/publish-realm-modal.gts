@@ -18,6 +18,7 @@ import perform from 'ember-concurrency/helpers/perform';
 import {
   BoxelButton,
   BoxelInputGroup,
+  ProgressBar,
   RealmIcon,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
@@ -57,7 +58,7 @@ import type StoreService from '@cardstack/host/services/store';
 import type ToolService from '@cardstack/host/services/tool-service';
 import CheckDomainAvailabilityTool from '@cardstack/host/tools/check-domain-availability';
 import {
-  describePublishProgress,
+  publishProgressView,
   publishTargetHost,
 } from '@cardstack/host/utils/publish-progress';
 
@@ -906,7 +907,7 @@ export default class PublishRealmModal extends Component<Signature> {
     return this.realm.publishingRealms(this.currentRealmURL).map((url) => ({
       url,
       host: publishTargetHost(url),
-      description: describePublishProgress(
+      ...publishProgressView(
         this.realm.publishProgress(this.currentRealmURL, url),
       ),
     }));
@@ -1602,11 +1603,28 @@ export default class PublishRealmModal extends Component<Signature> {
               data-test-publish-progress-status
             >
               {{#each this.publishingStatuses as |status|}}
-                <div data-test-publish-progress-for={{status.url}}>
-                  {{#if this.hasSeveralPublishTargets}}
-                    <span class='progress-target'>{{status.host}}</span>
+                <div
+                  class='progress-row'
+                  data-test-publish-progress-for={{status.url}}
+                >
+                  <div class='progress-description'>
+                    {{#if this.hasSeveralPublishTargets}}
+                      <span class='progress-target'>{{status.host}}</span>
+                    {{/if}}
+                    {{status.description}}
+                  </div>
+                  {{#if status.counts}}
+                    {{! Named through `aria-label` rather than `@label`, which
+                        the shared bar also renders as visible text inside the
+                        track — unreadable at this height, and redundant with
+                        the description above it. }}
+                    <ProgressBar
+                      class='progress-bar'
+                      aria-label='{{status.phaseLabel}} {{status.url}}'
+                      @value={{status.counts.completed}}
+                      @max={{status.counts.total}}
+                    />
                   {{/if}}
-                  {{status.description}}
                 </div>
               {{/each}}
             </div>
@@ -1878,16 +1896,33 @@ export default class PublishRealmModal extends Component<Signature> {
       .publish-progress-status {
         display: flex;
         flex-direction: column;
-        gap: var(--boxel-sp-5xs);
-        align-self: center;
+        justify-content: center;
+        gap: var(--boxel-sp-xxs);
+        /* Take the footer's free width so the bars have a length worth
+           reading, while the buttons keep their own. */
+        flex: 1;
+        max-width: 22rem;
         margin-right: var(--horizontal-gap);
         color: var(--muted-foreground);
         font-size: var(--boxel-font-size-xs);
         line-height: var(--boxel-line-height-xs);
       }
 
+      .progress-row {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-5xs);
+      }
+
       .progress-target {
         font-weight: 600;
+      }
+
+      /* The shared bar sizes its track in em, so the font size is the height
+         control — this keeps it a slim rule under the description rather than a
+         full-height labelled bar. */
+      .progress-bar {
+        font-size: 0.375rem;
       }
 
       .custom-subdomain-setup {

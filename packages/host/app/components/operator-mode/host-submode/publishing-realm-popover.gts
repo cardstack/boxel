@@ -5,20 +5,10 @@ import { LoadingIndicator, ProgressBar } from '@cardstack/boxel-ui/components';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
-import { publishPhaseLabel } from '@cardstack/host/utils/publish-progress';
+import { publishProgressView } from '@cardstack/host/utils/publish-progress';
 
 interface PublishingRealmArgs {
   isOpen: boolean;
-}
-
-interface PublishingTarget {
-  url: string;
-  // What the publish is doing right now, e.g. "Indexing". Present before any
-  // progress arrives so a target never renders as a bare URL.
-  phaseLabel: string;
-  // Only set once the running pass has reported a total, which is what makes a
-  // determinate bar meaningful. Until then the row shows the phase alone.
-  counts?: { completed: number; total: number };
 }
 
 export default class PublishingRealmPopover extends Component<PublishingRealmArgs> {
@@ -29,22 +19,11 @@ export default class PublishingRealmPopover extends Component<PublishingRealmArg
     return this.realm.publishingRealms(this.realmURL);
   }
 
-  get publishingTargets(): PublishingTarget[] {
-    return this.publishingRealms.map((url) => {
-      let progress = this.realm.publishProgress(this.realmURL, url);
-      return {
-        url,
-        phaseLabel: publishPhaseLabel(progress),
-        ...(progress && progress.totalFiles > 0
-          ? {
-              counts: {
-                completed: progress.filesCompleted,
-                total: progress.totalFiles,
-              },
-            }
-          : {}),
-      };
-    });
+  get publishingTargets() {
+    return this.publishingRealms.map((url) => ({
+      url,
+      ...publishProgressView(this.realm.publishProgress(this.realmURL, url)),
+    }));
   }
 
   get realmURL() {

@@ -808,6 +808,11 @@ module('Acceptance | host submode', function (hooks) {
         assert
           .dom('[data-test-publish-progress-status]')
           .hasText('Starting…', 'the modal names a pass right away');
+        assert
+          .dom(
+            '[data-test-publish-progress-status] [data-test-boxel-progress-bar]',
+          )
+          .doesNotExist('no bar until the pass reports a total');
 
         await click('[data-test-publish-realm-button]');
         await waitFor('.publishing-realm-popover');
@@ -833,12 +838,18 @@ module('Acceptance | host submode', function (hooks) {
         assert
           .dom('[data-test-publish-progress-status]')
           .hasText('Indexing 42 of 270 files…');
-        assert
-          .dom('[data-test-boxel-progress-bar]')
-          .hasAttribute('aria-valuenow', '42');
-        assert
-          .dom('[data-test-boxel-progress-bar]')
-          .hasAttribute('aria-valuemax', '270');
+        // Both surfaces draw a determinate bar once the pass reports a total.
+        for (let scope of [
+          '[data-test-publish-progress-status]',
+          '.publishing-realm-popover',
+        ]) {
+          assert
+            .dom(`${scope} [data-test-boxel-progress-bar]`)
+            .hasAttribute('aria-valuenow', '42');
+          assert
+            .dom(`${scope} [data-test-boxel-progress-bar]`)
+            .hasAttribute('aria-valuemax', '270');
+        }
 
         reportProgress!({
           phase: 'render',

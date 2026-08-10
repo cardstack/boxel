@@ -4,7 +4,8 @@ import type { PublishProgress } from '@cardstack/runtime-common';
 // indexing every file, then rendering every page — and on a large realm they
 // take minutes. Naming the pass and counting through it distinguishes slow
 // progress from a hang, which an indeterminate spinner cannot. Shared by the
-// publish modal and the publishing popover so both name a pass the same way.
+// publish modal and the publishing popover so both describe a pass the same
+// way.
 
 const PHASE_LABELS: Record<PublishProgress['phase'], string> = {
   index: 'Indexing',
@@ -14,23 +15,37 @@ const PHASE_LABELS: Record<PublishProgress['phase'], string> = {
   done: 'Finishing up',
 };
 
-// The pass a publish is in. `undefined` covers the window between accepting the
-// publish and its first reading, so a target is never labelled with nothing.
-export function publishPhaseLabel(progress: PublishProgress | undefined) {
-  return progress ? PHASE_LABELS[progress.phase] : 'Starting';
+export interface PublishProgressView {
+  // The pass on its own, e.g. "Indexing".
+  phaseLabel: string;
+  // The pass plus its counts as one line, e.g. "Indexing 42 of 270 files…".
+  description: string;
+  // Set only once the running pass reports a total, which is the point a
+  // determinate bar starts to mean something. Absent between accepting the
+  // publish and its first reading, and between the two passes.
+  counts?: { completed: number; total: number };
 }
 
-// The pass plus its counts, as one line. Counts are omitted until the running
-// pass reports a total, which is the same point a determinate bar starts to
-// mean something.
-export function describePublishProgress(
+export function publishProgressView(
   progress: PublishProgress | undefined,
-): string {
-  let label = publishPhaseLabel(progress);
-  if (!progress || progress.totalFiles === 0) {
-    return `${label}…`;
+): PublishProgressView {
+  // No reading yet: the publish has been accepted but its first pass hasn't
+  // reported. Still labelled, so a target never renders as a bare URL.
+  if (!progress) {
+    return { phaseLabel: 'Starting', description: 'Starting…' };
   }
-  return `${label} ${progress.filesCompleted} of ${progress.totalFiles} files…`;
+  let phaseLabel = PHASE_LABELS[progress.phase];
+  if (progress.totalFiles === 0) {
+    return { phaseLabel, description: `${phaseLabel}…` };
+  }
+  return {
+    phaseLabel,
+    description: `${phaseLabel} ${progress.filesCompleted} of ${progress.totalFiles} files…`,
+    counts: {
+      completed: progress.filesCompleted,
+      total: progress.totalFiles,
+    },
+  };
 }
 
 // The host of a publish target, for labelling one target's progress among
