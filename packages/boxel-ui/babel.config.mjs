@@ -1,10 +1,9 @@
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import {
-  babelCompatSupport,
-  templateCompatSupport,
-} from '@embroider/compat/babel';
+import { buildMacros } from '@embroider/macros/babel';
+
+const macros = buildMacros();
 
 /**
  * This babel config drives the vite dev/test pipeline (see vite.config.mjs).
@@ -26,13 +25,8 @@ export default {
     [
       'babel-plugin-ember-template-compilation',
       {
-        enableLegacyModules: [
-          'ember-cli-htmlbars',
-          'ember-cli-htmlbars-inline-precompile',
-          'htmlbars-inline-precompile',
-        ],
         transforms: [
-          ...templateCompatSupport(),
+          ...macros.templateMacros,
           'glimmer-scoped-css/ast-transform',
         ],
       },
@@ -55,7 +49,7 @@ export default {
         regenerator: false,
       },
     ],
-    ...babelCompatSupport(),
+    ...macros.babelMacros,
   ],
 
   generatorOpts: {

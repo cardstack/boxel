@@ -11,24 +11,92 @@ import { action } from '@ember/object';
 import { guidFor } from '@ember/object/internals';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
+import type { ComponentLike } from '@glint/template';
 import PowerSelect, {
   type PowerSelectArgs,
 } from 'ember-power-select/components/power-select';
+import type { PowerSelectBeforeOptionsSignature } from 'ember-power-select/components/power-select/before-options';
 import BeforeOptions from 'ember-power-select/components/power-select/before-options';
 import PowerSelectOptions from 'ember-power-select/components/power-select/options';
+import type { PowerSelectTriggerSignature } from 'ember-power-select/components/power-select/trigger';
+import type {
+  Option,
+  PowerSelectAfterOptionsSignature,
+  PowerSelectSelectedItemSignature,
+  Select,
+} from 'ember-power-select/types';
 
 import cn from '../../helpers/cn.ts';
 import { BoxelSelectDefaultTrigger } from './trigger.gts';
 
-export interface BoxelSelectArgs<ItemT> extends PowerSelectArgs {
+// glint cannot match curried/generic components against power-select's
+// expected component-type unions; these shapes are structurally compatible
+// (exercised by the test suite), so pin them to the expected member types.
+// Exported for consumers that pass their own subcomponents to BoxelSelect /
+// BoxelMultiSelect, since realm packages cannot import ember-power-select's
+// types themselves.
+export function toTriggerComponent(
+  component: unknown,
+): ComponentLike<PowerSelectTriggerSignature<any, any, false>> {
+  return component as ComponentLike<
+    PowerSelectTriggerSignature<any, any, false>
+  >;
+}
+
+export function toMultiSelectTriggerComponent(
+  component: unknown,
+): ComponentLike<PowerSelectTriggerSignature<any, any, true>> {
+  return component as ComponentLike<
+    PowerSelectTriggerSignature<any, any, true>
+  >;
+}
+
+export function toBeforeOptionsComponent(
+  component: unknown,
+): ComponentLike<PowerSelectBeforeOptionsSignature<any, any, false>> {
+  return component as ComponentLike<
+    PowerSelectBeforeOptionsSignature<any, any, false>
+  >;
+}
+
+export function toSelectedItemComponent(
+  component: unknown,
+): ComponentLike<PowerSelectSelectedItemSignature<any, any, false>> {
+  return component as ComponentLike<
+    PowerSelectSelectedItemSignature<any, any, false>
+  >;
+}
+
+export function toAfterOptionsComponent(
+  component: unknown,
+): ComponentLike<PowerSelectAfterOptionsSignature<any, any, false>> {
+  return component as ComponentLike<
+    PowerSelectAfterOptionsSignature<any, any, false>
+  >;
+}
+
+// Consumers bind `selected` to app data, where "no selection" is
+// conventionally `null`; power-select expresses it as `undefined`. Redeclare
+// the pair null-tolerant here and translate at the boundary (below) so call
+// sites don't each have to bridge the two conventions.
+export interface BoxelSelectArgs<ItemT> extends Omit<
+  PowerSelectArgs<ItemT>,
+  'selected' | 'onChange'
+> {
+  onChange: (
+    selection: ItemT | null,
+    select: Select<ItemT, false>,
+    event?: Event,
+  ) => void;
   options: ItemT[];
+  selected?: ItemT | Promise<ItemT | undefined> | null;
   variant?: 'primary' | 'secondary' | 'muted' | 'destructive' | 'default';
 }
 
 interface Signature<ItemT = any> {
   Args: BoxelSelectArgs<ItemT>;
   Blocks: {
-    default: [ItemT];
+    default: [Option<ItemT>];
   };
   Element: HTMLElement;
 }
@@ -146,10 +214,31 @@ export default class BoxelSelect<ItemT = any> extends Component<
   @action
   onClose(
     select: Parameters<NonNullable<Signature<ItemT>['Args']['onClose']>>[0],
-    event: Event,
+    event?: Event,
   ) {
     this.stopObservingTheme();
-    this.args.onClose?.(select, event);
+    return this.args.onClose?.(select, event);
+  }
+
+  // null↔undefined translation for the no-selection value (see
+  // BoxelSelectArgs above). Option<ItemT> is a conditional type that only
+  // unwraps group/array option shapes, so for our flat ItemT options the
+  // casts are identities the compiler cannot reduce on an unresolved
+  // type parameter.
+  private get selectedForPowerSelect() {
+    return (this.args.selected ?? undefined) as
+      | Option<ItemT>
+      | Promise<Option<ItemT> | undefined>
+      | undefined;
+  }
+
+  @action
+  private handleChange(
+    selection: Option<ItemT> | undefined,
+    select: Select<ItemT, false>,
+    event?: Event,
+  ) {
+    this.args.onChange((selection ?? null) as ItemT | null, select, event);
   }
 
   private detectAndSetThemeColors() {
@@ -221,10 +310,10 @@ export default class BoxelSelect<ItemT = any> extends Component<
       }}
       @options={{@options}}
       @searchField={{@searchField}}
-      @selected={{@selected}}
+      @selected={{this.selectedForPowerSelect}}
       @selectedItemComponent={{@selectedItemComponent}}
       @placeholder={{@placeholder}}
-      @onChange={{@onChange}}
+      @onChange={{this.handleChange}}
       @onBlur={{@onBlur}}
       @onClose={{this.onClose}}
       @renderInPlace={{@renderInPlace}}
@@ -247,10 +336,12 @@ export default class BoxelSelect<ItemT = any> extends Component<
       @triggerComponent={{if
         @triggerComponent
         @triggerComponent
-        (component
-          BoxelSelectDefaultTrigger
-          invertIcon=(eq @verticalPosition 'above')
-          variant=@variant
+        (toTriggerComponent
+          (component
+            BoxelSelectDefaultTrigger
+            invertIcon=(eq @verticalPosition 'above')
+            variant=@variant
+          )
         )
       }}
       @disabled={{@disabled}}
@@ -259,7 +350,7 @@ export default class BoxelSelect<ItemT = any> extends Component<
       @beforeOptionsComponent={{if
         @beforeOptionsComponent
         @beforeOptionsComponent
-        (component BeforeOptions autofocus=false)
+        (toBeforeOptionsComponent (component BeforeOptions autofocus=false))
       }}
       @afterOptionsComponent={{@afterOptionsComponent}}
       @optionsComponent={{if

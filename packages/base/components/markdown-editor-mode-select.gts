@@ -37,7 +37,7 @@ export default class MarkdownEditorModeSelect extends GlimmerComponent<Signature
     );
   }
 
-  handleChange = (option: ModeOption | undefined) => {
+  handleChange = (option: ModeOption | null) => {
     if (option) {
       this.args.onChange(option.value);
     }

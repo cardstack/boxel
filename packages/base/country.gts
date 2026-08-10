@@ -67,7 +67,10 @@ class CountryFieldEdit extends Component<typeof CountryField> {
     });
   });
 
-  @action onSelectCountry(country: CountryData) {
+  @action onSelectCountry(country: CountryData | null) {
+    if (!country) {
+      return;
+    }
     this.country = country;
     this.args.model.name = country.name;
     this.args.model.code = country.code;

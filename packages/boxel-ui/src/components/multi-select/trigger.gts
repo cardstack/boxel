@@ -1,34 +1,32 @@
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
-import type { ComponentLike } from '@glint/template';
-import type { Select } from 'ember-power-select/components/power-select';
+import type { PowerSelectTriggerSignature } from 'ember-power-select/components/power-select/trigger';
+import type { Option, Select } from 'ember-power-select/types';
 
 import { cn } from '../../helpers.gts';
 import CaretDown from '../../icons/caret-down.gts';
 import IconX from '../../icons/icon-x.gts';
 import Pill from '../pill/index.gts';
 import { BoxelTriggerWrapper } from '../select/trigger.gts';
-import BoxelSelectedItem, {
-  type SelectedItemSignature,
-} from './selected-item.gts';
+import BoxelSelectedItem from './selected-item.gts';
 
-export interface TriggerComponentSignature<ItemT> {
-  Args: {
-    placeholder?: string;
-    select: Select;
-    selectedItemComponent?: ComponentLike<SelectedItemSignature<ItemT>>;
-  };
+// Inherits ember-power-select's trigger contract so this component (and
+// custom ones typed against this signature) can be passed anywhere
+// power-select expects a trigger; the block is a boxel addition.
+export interface TriggerComponentSignature<ItemT> extends Omit<
+  PowerSelectTriggerSignature<ItemT, unknown, true>,
+  'Blocks'
+> {
   Blocks: {
-    default: [ItemT, Select];
+    default: [Option<ItemT>, Select<ItemT, true>];
   };
-  Element: HTMLElement;
 }
 
-type ExtendedSelect = Select & {
+type ExtendedSelect<ItemT> = Select<ItemT, true> & {
   actions: {
-    remove: (item: any, event?: MouseEvent) => void;
-  } & Select['actions'];
+    remove: (item: Option<ItemT>, event?: MouseEvent) => void;
+  } & Select<ItemT, true>['actions'];
 };
 
 export default class BoxelMultiSelectDefaultTrigger<ItemT> extends Component<
@@ -40,40 +38,38 @@ export default class BoxelMultiSelectDefaultTrigger<ItemT> extends Component<
 
   private maxVisibleItems = 3;
 
-  get visibleContent(): any[] {
-    return this.args.select.selected.slice(0, this.maxVisibleItems);
+  get visibleContent() {
+    return (this.args.select.selected ?? []).slice(0, this.maxVisibleItems);
   }
 
   get hasMoreItems(): boolean {
-    return this.args.select.selected.length > this.maxVisibleItems;
+    return (this.args.select.selected ?? []).length > this.maxVisibleItems;
   }
 
   get remainingItemsCount(): number {
-    return this.args.select.selected.length - this.maxVisibleItems;
+    return (this.args.select.selected ?? []).length - this.maxVisibleItems;
   }
 
   @action
   removeExcessItems(event: Event) {
     event.stopPropagation();
-    const newSelected = this.args.select.selected.slice(
+    const newSelected = (this.args.select.selected ?? []).slice(
       0,
       this.maxVisibleItems,
     );
-    this.args.select.selected = [...newSelected];
     this.args.select.actions.select(newSelected);
   }
 
   @action
-  removeItem(item: any, event?: Event) {
+  removeItem(item: Option<ItemT>, event?: Event) {
     event?.stopPropagation();
-    const newSelected = this.args.select.selected.filter(
-      (i: any) => i !== item,
+    const newSelected = (this.args.select.selected ?? []).filter(
+      (i) => i !== item,
     );
-    this.args.select.selected = [...newSelected];
     this.args.select.actions.select(newSelected);
   }
 
-  get select(): ExtendedSelect {
+  get select(): ExtendedSelect<ItemT> {
     return {
       ...this.args.select,
       actions: {
@@ -84,7 +80,7 @@ export default class BoxelMultiSelectDefaultTrigger<ItemT> extends Component<
   }
 
   get hasSelectedItems() {
-    return this.args.select.selected && this.args.select.selected.length > 0;
+    return (this.args.select.selected ?? []).length > 0;
   }
 
   @action
@@ -106,7 +102,7 @@ export default class BoxelMultiSelectDefaultTrigger<ItemT> extends Component<
         }}
           {{#each this.visibleContent as |item|}}
             <SelectedComponent
-              @option={{item}}
+              @selected={{item}}
               @select={{this.select}}
               as |option select|
             >

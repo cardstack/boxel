@@ -99,7 +99,11 @@ export class ContactLinkField extends FieldDef {
       return this.args.model.items ?? [];
     }
 
-    onSelect = (option: ContactLink) => (this.args.model.label = option.label);
+    onSelect = (option: ContactLink | null) => {
+      if (option) {
+        this.args.model.label = option.label;
+      }
+    };
 
     get selectedOption() {
       return this.options?.find(
