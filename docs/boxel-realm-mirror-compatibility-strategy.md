@@ -504,6 +504,46 @@ not pixel equality. It is to catch host-chrome leakage, double framing,
 incorrect intrinsic height, missing themes, and obviously remounted or blank
 content that semantic text alone cannot expose.
 
+#### Extended mechanism cohort
+
+The same runner exports `executionRuntimeExtendedCorpusCases`, a ten-card lane
+extracted from the compatibility corpus. The lane adds mechanisms rather than
+more cards with equivalent markup:
+
+| Case                 | Expected tier | Additional mechanism                               |
+| -------------------- | ------------- | -------------------------------------------------- |
+| Activity Timeline    | Capsule       | `containsMany` projection and authored ordering    |
+| Linked Project       | Capsule       | `linksTo` and `linksToMany` visual projections     |
+| Recursive Discussion | Capsule       | Recursive FieldDef graph and stable hierarchy      |
+| CardInfo Recipe      | Capsule       | Computed cardInfo and presentation metadata        |
+| Editable Rating      | Sandbox       | Authored DOM events and live interactive controls  |
+| Workflow Studio      | Capsule       | Tracked local workflow state and authored actions  |
+| Video Dispatch       | Capsule       | Native video markup without full browser authority |
+| Geo Dispatch Map     | Sandbox       | Leaflet, external styles/networking, and map DOM   |
+| Fabrication Viewer   | Sandbox       | Three.js, 3MF, WebGL, ResizeObserver, and disposal |
+| Top Layer Studio     | Sandbox       | Native popover and top-layer containment           |
+
+Text alone is insufficient for these interactive and browser-dependent
+mechanisms. The runner also requires a live rating button, `<video>`, Leaflet
+container, `<canvas>`, or `[popover]` as appropriate. For Sandbox cases those
+selectors are evaluated inside the cross-origin child after interactive
+handoff, not against the prerender placeholder.
+
+The first complete comparison on 2026-08-09 passed all ten cards on both
+origins. Local Capsule navigation had a 2,842 ms median across six cases. Local
+Sandbox navigation had a 4,608 ms median across four cases, including a 1,613
+ms median interactive handoff. Sandbox lifecycle logs were clean, and
+navigating back to a Capsule destination left zero iframes and no Sandbox
+loading state. The run also corrected two harness assumptions: Editable Rating
+is currently classified Sandbox because its authored module imports DOM event
+machinery, and a Sandbox document may contain both the runtime `<main>` and an
+authored `<main>`, so the harness measures the explicit runtime root.
+
+This lane is an intermediate smoke test, not a replacement for the six-card
+commit gate or the 35-boundary format gauntlet. Run all three when runtime
+graph handling, trusted portals, format selection, or Sandbox lifecycle
+changes.
+
 #### First observed baseline — 2026-08-09
 
 The first clean comparison established a useful split instead of a blanket

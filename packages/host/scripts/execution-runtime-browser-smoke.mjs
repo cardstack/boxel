@@ -163,6 +163,146 @@ export const executionRuntimeBroadCorpusCases = [
   },
 ];
 
+// This lane broadens the commit gate by mechanism rather than by visual
+// variety. Each card contributes a boundary behavior that is not already
+// isolated by the six-card cohort or the 35-slot format gauntlet. It remains
+// small enough for regular local runs while exercising real workspace code.
+export const executionRuntimeExtendedCorpusCases = [
+  {
+    id: 'activity-timeline',
+    path: '/ctse/sandbox-compatibility-corpus-20260803/ActivityTimeline/sample',
+    expectedExecution: 'capsule',
+    mustContain: [
+      'Launch room activity',
+      'Compatibility corpus created',
+      'Accessibility review passed',
+      'Editorial layout approved',
+    ],
+    purpose:
+      'containsMany projection and authored ordering across a Capsule boundary.',
+  },
+  {
+    id: 'linked-project',
+    path: '/ctse/sandbox-compatibility-corpus-20260803/LinkedProject/sample',
+    expectedExecution: 'capsule',
+    mustContain: [
+      'Realm boundary compatibility',
+      'Mina Okafor',
+      'Accessibility',
+      'Theo Park',
+      'Editorial design',
+    ],
+    purpose:
+      'linksTo and linksToMany projections whose linked values remain visually useful inside Capsule rendering.',
+  },
+  {
+    id: 'recursive-discussion',
+    path: '/ctse/sandbox-compatibility-corpus-20260803/RecursiveDiscussion/sample',
+    expectedExecution: 'capsule',
+    mustContain: [
+      'Sandbox design review',
+      'Stable identity matters as much as capability confinement.',
+      'That makes recursive preparation an explicit boundary requirement.',
+      'The same source and state should produce the same visual hierarchy in both Hosts.',
+    ],
+    purpose:
+      'Recursive FieldDef graph preparation with stable authored hierarchy.',
+  },
+  {
+    id: 'card-info-recipe',
+    path: '/ctse/sandbox-compatibility-corpus-20260803/CardInfoRecipe/sample',
+    expectedExecution: 'capsule',
+    mustContain: [
+      'Golden Hour Lemon Beans',
+      'Silky white beans',
+      '42 min',
+      '4 bowls',
+    ],
+    purpose:
+      'Computed cardInfo metadata and authored presentation state across the boundary.',
+  },
+  {
+    id: 'editable-rating',
+    path: '/ctse/sandbox-compatibility-corpus-20260803/EditableRating/sample',
+    expectedExecution: 'sandbox',
+    mustContain: ['A quiet room with excellent boundaries', '128 reviews'],
+    requiredSelectors: ['[aria-label="Set rating to 1"]'],
+    purpose:
+      'Interactive authored controls and modifier-compatible event handling in Sandbox execution.',
+  },
+  {
+    id: 'workflow-studio',
+    path: '/ctse/sandbox-compatibility-corpus-20260803/WorkflowStudio/sample',
+    expectedExecution: 'capsule',
+    mustContain: [
+      'Night Market Publishing Run',
+      'Collect',
+      'Shape',
+      'Review',
+      'Publish',
+      'active-index=0',
+    ],
+    purpose:
+      'Tracked local workflow state and multiple authored actions in one Capsule.',
+  },
+  {
+    id: 'video-dispatch',
+    path: '/ctse/sandbox-compatibility-corpus-20260803/VideoDispatch/sample',
+    expectedExecution: 'capsule',
+    mustContain: [
+      'Night market field dispatch',
+      'MP4 + WebM',
+      'metadata preload',
+      'Two source formats, one authored media surface.',
+    ],
+    requiredSelectors: ['video'],
+    purpose:
+      'Native media markup that should not require a full browser Sandbox.',
+  },
+  {
+    id: 'geo-dispatch-map',
+    path: '/ctse/sandbox-compatibility-corpus-20260803/GeoDispatchMap/sample',
+    expectedExecution: 'sandbox',
+    mustContain: [
+      'Canal Street night dispatch',
+      'LAT 40.7195',
+      'LON -74.0062',
+      'map-ready',
+    ],
+    requiredSelectors: ['.leaflet-container'],
+    purpose:
+      'Leaflet, external styles, networking, and map DOM inside the cross-origin Sandbox.',
+  },
+  {
+    id: 'fabrication-viewer',
+    path: '/ctse/sandbox-compatibility-corpus-20260803/FabricationViewer/sample',
+    expectedExecution: 'sandbox',
+    mustContain: [
+      'Additive bracket · tolerance study',
+      'MODEL/3MF',
+      'ResizeObserver',
+      'explicit disposal',
+    ],
+    requiredSelectors: ['canvas'],
+    purpose:
+      'Three.js, 3MF loading, WebGL canvas, ResizeObserver, and explicit resource disposal.',
+  },
+  {
+    id: 'top-layer-studio',
+    path: '/ctse/sandbox-compatibility-corpus-20260803/TopLayerStudio/sample',
+    expectedExecution: 'sandbox',
+    mustContain: [
+      'Contained control plane',
+      'NATIVE TOP LAYER',
+      'Open vendor detail',
+      'popover-capability=available',
+    ],
+    requiredSelectors: ['[popover]'],
+    purpose:
+      'Native top-layer and popover containment inside the Sandbox document.',
+  },
+];
+
 // A same-document navigation cohort for lifecycle and retained-DOM checks.
 // These buttons all live on the compatibility-corpus workspace card, so the
 // runner opens and closes stack items through the product UI instead of using
@@ -304,7 +444,7 @@ async function probe(tab, smokeCase, origin, timeoutMs, checkExecution) {
       ? await settleSandboxHandoff(tab, timeoutMs)
       : undefined;
   let result = await tab.playwright.evaluate(
-    ({ expectedText, fatalText }) => {
+    ({ expectedText, fatalText, requiredSelectors }) => {
       let text = document.body?.innerText ?? '';
       let normalizedText = text.toLocaleLowerCase();
       let headings = [...document.querySelectorAll('h1,h2,h3')]
@@ -358,6 +498,9 @@ async function probe(tab, smokeCase, origin, timeoutMs, checkExecution) {
         inputCount: document.querySelectorAll(
           'input, textarea, select, [contenteditable="true"]',
         ).length,
+        missingRequiredSelectors: requiredSelectors.filter(
+          (selector) => !document.querySelector(selector),
+        ),
         missingText: expectedText.filter(
           (value) => !normalizedText.includes(value.toLocaleLowerCase()),
         ),
@@ -369,7 +512,11 @@ async function probe(tab, smokeCase, origin, timeoutMs, checkExecution) {
         title: document.title,
       };
     },
-    { expectedText: smokeCase.mustContain, fatalText: FATAL_TEXT },
+    {
+      expectedText: smokeCase.mustContain,
+      fatalText: FATAL_TEXT,
+      requiredSelectors: smokeCase.requiredSelectors ?? [],
+    },
   );
   if (
     checkExecution &&
@@ -392,10 +539,19 @@ async function probe(tab, smokeCase, origin, timeoutMs, checkExecution) {
         width: image.naturalWidth,
       })),
     );
-    let frameCardRect = await frame.locator('main').evaluate((element) => {
-      let rect = element.getBoundingClientRect();
-      return { height: rect.height, width: rect.width };
-    });
+    let frameCardRect = await frame
+      .locator('[data-boxel-sandbox-runtime]')
+      .first()
+      .evaluate((element) => {
+        let rect = element.getBoundingClientRect();
+        return { height: rect.height, width: rect.width };
+      });
+    let missingRequiredSelectors = [];
+    for (let selector of smokeCase.requiredSelectors ?? []) {
+      if ((await frame.locator(selector).count()) === 0) {
+        missingRequiredSelectors.push(selector);
+      }
+    }
     result = {
       ...result,
       cardRect: frameCardRect,
@@ -407,6 +563,7 @@ async function probe(tab, smokeCase, origin, timeoutMs, checkExecution) {
       inputCount: await frame
         .locator('input, textarea, select, [contenteditable="true"]')
         .count(),
+      missingRequiredSelectors,
       missingText: smokeCase.mustContain.filter(
         (value) => !normalizedFrameText.includes(value.toLocaleLowerCase()),
       ),
@@ -615,6 +772,9 @@ function assess(probeResult, interaction, smokeCase, checkExecution) {
   }
   if (probeResult.inputCount < (smokeCase.minimumInputs ?? 0)) {
     failures.push('missing-interactive-control');
+  }
+  if (probeResult.missingRequiredSelectors.length) {
+    failures.push('missing-required-selector');
   }
   if (
     !probeResult.cardRect ||
