@@ -17,6 +17,7 @@ The following are important concepts:
 - [Computed Fields](computed-fields.md): Computed fields work too! We can compute on the data that is already contained in a card to build more complex logic.
 - [Indexing](indexing.md): Indexing powers the re-rendering of cards when it's dependencies get updated.
 - [Realm](realm.md): Realms are storage for cards that have their own underlying permissions and indexer.
+- [Realm Resource Identifiers](realm-resource-identifiers.md): How cards, modules, and files are named — including the portable `@cardstack/base/` prefix form and how the VirtualNetwork resolves it.
 - [Search](search.md): Every Card is searchable within and across realms.
 
 ## Operations
