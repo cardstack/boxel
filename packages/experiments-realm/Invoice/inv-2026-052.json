@@ -6,7 +6,7 @@
       "issueDate": "2026-07-20",
       "sentDate": "2026-07-21",
       "dueDate": "2026-08-19",
-      "status": "partial",
+      "status": "paid",
       "lineItems": [
         {
           "description": "Implementation services (July)",
@@ -56,6 +56,11 @@
       "payments.0": {
         "links": {
           "self": "../Payment/pay-inv-2026-052-1"
+        }
+      },
+      "payments.1": {
+        "links": {
+          "self": "../Payment/272f6cbf-4eb6-475c-9f4f-02ac98046a24"
         }
       },
       "cardInfo.theme": {
