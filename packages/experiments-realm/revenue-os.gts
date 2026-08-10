@@ -1114,6 +1114,13 @@ export class RevenueOs extends CardDef {
           border-color: var(--foreground, #111111);
           box-shadow: 0 0 0 1px var(--foreground, #111111);
         }
+        .side-item :deep(.boxel-card-container) {
+          background: transparent;
+          border-radius: 0;
+        }
+        .side-item :deep(.boxel-card-container--boundaries) {
+          box-shadow: none;
+        }
         .detail {
           display: flex;
           flex-direction: column;
@@ -1158,6 +1165,13 @@ export class RevenueOs extends CardDef {
         .lead-embed {
           flex: 1;
           min-width: 0;
+        }
+        .lead-embed :deep(.boxel-card-container) {
+          background: transparent;
+          border-radius: 0;
+        }
+        .lead-embed :deep(.boxel-card-container--boundaries) {
+          box-shadow: none;
         }
         .empty {
           margin: 0;
