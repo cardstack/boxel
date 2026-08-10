@@ -428,7 +428,7 @@ export class PackageShimHandler {
             );
           return response;
         }
-        return null;
+        return unresolvedSpecifierResponse(request.url);
       } catch (err: any) {
         this.log.error(
           `PackageShimHandler#handle threw an error handling ${request.url}: ${describeShimError(err)}`,
@@ -543,6 +543,27 @@ function toImportSpecifier(moduleId: string): string {
   return moduleId.startsWith(PACKAGES_FAKE_ORIGIN)
     ? moduleId.slice(PACKAGES_FAKE_ORIGIN.length)
     : moduleId;
+}
+
+// A bare specifier that reached the packages origin and matched no shim.
+//
+// The origin is a sentinel, not a host — `https://packages/` resolves
+// nowhere. Returning null here let the request fall through to a real fetch,
+// so the author's mistake arrived as `Failed to fetch https://packages/foo`,
+// a DNS error naming a hostname they never wrote and cannot look up. This
+// says what actually happened instead: nothing claimed the specifier.
+//
+// The two ways a specifier gets claimed are the two things to check, so both
+// are named. A realm's decklist is the more likely culprit of the two,
+// because it is loaded per realm and asynchronously — a specifier that
+// resolves fine once the pins are in place fails exactly like an unknown one
+// before they are.
+function unresolvedSpecifierResponse(url: string): Response {
+  let specifier = toImportSpecifier(url);
+  return new Response(
+    `Nothing resolves the bare specifier "${specifier}". It matched no shimmed package, and no decklist in scope maps it to a URL. If it should come from a realm's decklist, check that the realm's pins were installed before this module was imported.`,
+    { status: 404, statusText: 'Unresolved bare specifier' },
+  );
 }
 
 // Whether a resolved namespace can carry own-property exports worth

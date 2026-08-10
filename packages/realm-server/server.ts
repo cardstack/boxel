@@ -4,6 +4,7 @@ import http from 'http';
 import http2 from 'http2';
 import net from 'net';
 import { readFileSync } from 'fs';
+import { join } from 'path';
 import type { DefinitionLookup, Realm } from '@cardstack/runtime-common';
 import {
   logger,
@@ -1161,12 +1162,23 @@ export class RealmServer {
           realms: this.realms,
           assetsURL: this.assetsURL,
           realmsRootPath: this.realmsRootPath,
-          // Deck object store behind `/_packages/…`. Unset means the serve
-          // handler answers 501 and nothing else changes, so the versioned
-          // address space stays off until a deployment opts in. Read here
-          // rather than threaded through the constructor because it is
-          // deployment configuration, like the TLS and HTTP/2 vars above.
-          packageStorePath: process.env.PACKAGE_STORE_PATH,
+          // Deck object store behind `/_packages/…`, belonging to THIS realm
+          // server. Defaulted from the server's own realms root rather than
+          // required, so a server always has somewhere to serve packages from
+          // and two servers on one machine cannot end up sharing or
+          // clobbering a store — the same reasoning that gives each
+          // environment its own database.
+          //
+          // Requiring the variable was worse than it looks. Unset, the serve
+          // handler answered 501 with a JSON body, so a decklist pinning a
+          // package resolved to a live address that returned JSON where
+          // JavaScript belonged. The module then failed to evaluate by
+          // throwing a non-Error, which surfaced nowhere near the cause.
+          // PACKAGE_STORE_PATH still overrides, for deployments that keep the
+          // store somewhere other than beside the realms.
+          packageStorePath:
+            process.env.PACKAGE_STORE_PATH ??
+            join(this.realmsRootPath, '.package-store'),
           getMatrixRegistrationSecret: this.getMatrixRegistrationSecret,
           matrixAdminUsername: this.matrixAdminUsername,
           matrixAdminPassword: this.matrixAdminPassword,

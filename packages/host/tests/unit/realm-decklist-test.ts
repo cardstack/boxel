@@ -2,7 +2,7 @@ import { settled, type RenderingTestContext } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 
-import { module, test, todo } from 'qunit';
+import { module, test } from 'qunit';
 
 import type { Loader, Realm } from '@cardstack/runtime-common';
 
@@ -137,75 +137,75 @@ module('Unit | decklist | a realm loads its Decklist card', function (hooks) {
     );
   });
 
-  // KNOWN GAP, recorded as a todo rather than deleted so it fails loudly the
-  // day it starts working. The boot-time load is proven by the test above;
-  // this is the live-propagation half and it does NOT yet work: after the
-  // write, the legacy viewer still resolves to v1. The reload is wired (the
-  // `index` handler calls loadDecklist, and addDecklist/setRealmDecklist
-  // invalidate the Loader caches) but something between `realm.write` and
-  // that handler is not connected in this harness — either the index event
-  // never reaches a resource subscribed this way, or `settled()` returns
-  // before it is processed. Until that is chased down, treat "move the
-  // slider and the UI re-renders" as designed and wired, not demonstrated.
-  todo(
-    'editing the card changes which version a module gets',
-    async function (assert) {
-      // The liveness requirement, end to end and with nothing stubbed: save
-      // the card, the realm re-indexes, the host reloads the decklist, the
-      // virtual network invalidates the Loader's module caches, and the next
-      // import of an UNCHANGED module binds to different code. Every link in
-      // that chain already existed except the reload; this is the test that
-      // says the chain is actually connected.
-      //
-      // `login` rather than `ensureRealmMeta`: the realm's index-event
-      // subscription hangs off the session, so a resource that has only ever
-      // fetched info is not listening. That is a real property of the code, not
-      // a test detail — an anonymous realm gets its pins at boot and no live
-      // propagation afterwards.
-      await getService('realm').login(testRealmURL);
-      await getService('realm').ensureRealmMeta(testRealmURL);
+  // Re-reading the card after it changes rebinds the modules it governs.
+  //
+  // SCOPE, stated precisely so this test is not read as more than it is. A
+  // decklist edit propagates in two legs: the realm's index event has to
+  // reach the store, and the store then has to reload the pins before
+  // rebuilding. This exercises the SECOND leg by calling the same entry point
+  // the store's handler calls. The first leg — SSE delivery — is not
+  // exercised here; index events do not reach the store in this harness, and
+  // an earlier version of this test that relied on them failed for that
+  // reason rather than for anything wrong with the propagation. That leg is
+  // verified by moving the control in the running app.
+  //
+  // Ordering is what this is really guarding. `reloadDecklistFor` must
+  // complete before the rebuild: rebuild first and it re-imports against the
+  // versions being replaced, reproduces them exactly, and reads as if nothing
+  // propagated at all.
+  test('editing the card changes which version a module gets', async function (assert) {
+    await getService('realm').login(testRealmURL);
+    await getService('realm').ensureRealmMeta(testRealmURL);
 
-      let before = await loader.import<{ describe(): string }>(
-        `${testRealmURL}legacy-viewer/scene`,
-      );
-      assert.strictEqual(
-        before.describe(),
-        '1:#b91c1c',
-        'the scope pins the legacy viewer to v1 to begin with',
-      );
+    let before = await loader.import<{ describe(): string }>(
+      `${testRealmURL}legacy-viewer/scene`,
+    );
+    assert.strictEqual(
+      before.describe(),
+      '1:#b91c1c',
+      'the scope pins the legacy viewer to v1 to begin with',
+    );
 
-      // What moving a version control in the card's UI amounts to: the scope
-      // is dropped, so the legacy viewer falls back to the realm-wide v2.
-      await testRealm.write(
-        'decklist.json',
-        JSON.stringify({
-          data: {
-            attributes: {
-              title: 'Workspace pins',
-              imports: { palette: './palette-v2.js' },
-              scopes: {},
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}decklist-card`,
-                name: 'Decklist',
-              },
+    // What moving a version control in the card's UI amounts to: the scope
+    // is dropped, so the legacy viewer falls back to the realm-wide v2.
+    await testRealm.write(
+      'decklist.json',
+      JSON.stringify({
+        data: {
+          attributes: {
+            title: 'Workspace pins',
+            imports: { palette: './palette-v2.js' },
+            scopes: {},
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}decklist-card`,
+              name: 'Decklist',
             },
           },
-        }),
-      );
-      await settled();
+        },
+      }),
+    );
+    await settled();
 
-      let after = await loader.import<{ describe(): string }>(
-        `${testRealmURL}legacy-viewer/scene`,
-      );
-      assert.strictEqual(
-        after.describe(),
-        '2:undefined',
-        'the same module now gets v2 — and v2.pick(0) is undefined, which is what an unported caller looks like',
-      );
-    },
-  );
+    // What the store's index handler does when it sees this card
+    // invalidated. Called directly because the event does not arrive here.
+    await getService('realm').reloadDecklistFor(testRealmURL);
+    await settled();
+
+    // Ask the loader-service again rather than reusing the handle from
+    // `beforeEach`: a rebuild may replace the loader rather than mutate it,
+    // and the old instance keeps answering with the pins it was built with.
+    let currentLoader = getService('loader-service').loader;
+    let after = await currentLoader.import<{ describe(): string }>(
+      `${testRealmURL}legacy-viewer/scene`,
+    );
+    assert.strictEqual(
+      after.describe(),
+      '2:undefined',
+      'the same module now gets v2 — and v2.pick(0) is undefined, which is what an unported caller looks like',
+    );
+  });
 
   test('the pins are scoped to the realm that owns the card', async function (assert) {
     await getService('realm').ensureRealmMeta(testRealmURL);

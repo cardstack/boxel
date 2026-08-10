@@ -2,7 +2,7 @@
   "data": {
     "attributes": {
       "imports": {
-        "palette": "/_packages/lib/palette@2.0.0/index.js"
+        "palette": "/_packages/lib/palette@1.0.0/index.js"
       },
       "cardInfo": {
         "name": null,
@@ -10,7 +10,7 @@
         "cardThumbnailURL": null,
         "notes": null
       },
-      "pinnedVersion": "2.0.0"
+      "pinnedVersion": "1.0.0"
     },
     "meta": {
       "adoptsFrom": {
