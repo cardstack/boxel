@@ -1917,6 +1917,84 @@ module('Integration | Store', function (hooks) {
     }
   });
 
+  // The plural sibling of the test above. It resolves through a different
+  // mechanism — a WatchedArray slot rather than a field setter — so suppressing
+  // the change notification in one says nothing about the other.
+  test<TestContextWithSave>('resolving a linksToMany lazily issues no save', async function (assert) {
+    let hassanId = `${testRealmURL}Person/hassan`;
+    await testRealm.write(
+      'Person/ghost-friend.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'Ghost' },
+          meta: { adoptsFrom: { module: testRRI('person'), name: 'Person' } },
+        },
+      }),
+    );
+    await testRealm.write(
+      'Person/hassan.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'Hassan' },
+          relationships: {
+            'friends.0': {
+              links: { self: `${testRealmURL}Person/ghost-friend` },
+            },
+          },
+          meta: {
+            adoptsFrom: { module: testRRI('person'), name: 'Person' },
+          },
+        },
+      }),
+    );
+
+    let cardService = getService('card-service');
+    let fetchJSON = cardService.fetchJSON.bind(cardService);
+    let intercepted = 0;
+    cardService.fetchJSON = (async (
+      url: string | URL,
+      args?: Parameters<typeof fetchJSON>[1],
+    ) => {
+      let doc = await fetchJSON(url, args);
+      if (String(url).replace(/\.json$/, '') === hassanId) {
+        intercepted++;
+        delete (doc as any)?.included;
+      }
+      return doc;
+    }) as typeof cardService.fetchJSON;
+
+    let saved: string[] = [];
+    this.onSave((url) => {
+      saved.push(url.href);
+    });
+
+    try {
+      let instance = (await storeService.get(hassanId)) as any;
+
+      assert.ok(intercepted > 0, 'the card fetch was intercepted');
+      // The proxy hides an unresolved slot, so an unloaded element reads as
+      // absent. Seeing the target here instead would mean it arrived resolved
+      // and the lazy path never ran.
+      assert.deepEqual(
+        instance.friends.map((f: any) => f?.name),
+        [undefined],
+        'the element is not loaded yet, so reading it takes the lazy path',
+      );
+
+      await storeService.flush();
+      await settled();
+
+      assert.deepEqual(
+        instance.friends.map((f: any) => f?.name),
+        ['Ghost'],
+        'the lazy load resolved the target into its slot',
+      );
+      assert.deepEqual(saved, [], 'no save was issued while loading');
+    } finally {
+      cardService.fetchJSON = fetchJSON;
+    }
+  });
+
   test('a concurrent field write during store.patch is not clobbered by the patch’s stale snapshot', async function (assert) {
     let targetId = `${testRealmURL}Person/hassan`;
     let instance = (await storeService.get(targetId)) as any;
