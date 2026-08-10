@@ -80,7 +80,7 @@ module(basename(import.meta.filename), function () {
           acceptedBy: 'reviewer',
         });
         assert.strictEqual(
-          accepted.kind === 'refused' && accepted.code,
+          accepted.kind === 'refused' ? accepted.code : accepted.kind,
           'gate-refused',
           'and it still blocks acceptance',
         );
@@ -114,7 +114,7 @@ module(basename(import.meta.filename), function () {
           acceptedBy: 'reviewer',
         });
         assert.strictEqual(
-          refused.kind === 'refused' && refused.code,
+          refused.kind === 'refused' ? refused.code : refused.kind,
           'override-needs-reason',
           'it cannot be waved through silently',
         );
@@ -130,7 +130,9 @@ module(basename(import.meta.filename), function () {
         });
         assert.strictEqual(accepted.kind, 'accepted');
         assert.strictEqual(
-          accepted.kind === 'accepted' && accepted.proposal.overrideReason,
+          accepted.kind === 'accepted'
+            ? accepted.proposal.overrideReason
+            : undefined,
           'pick was never exported in a released build',
           'and the reason is kept, not just consumed',
         );
@@ -194,7 +196,10 @@ module(basename(import.meta.filename), function () {
           id: p.id,
           acceptedBy: 'reviewer',
         });
-        assert.strictEqual(again.kind === 'refused' && again.code, 'not-open');
+        assert.strictEqual(
+          again.kind === 'refused' ? again.code : again.kind,
+          'not-open',
+        );
       });
     });
 
