@@ -505,20 +505,20 @@ module('normalizeQueryDefinition', function () {
       ]);
     });
 
-    test('a peer realm the resolver cannot place is still honored', function (assert) {
-      // A field may name a realm this process holds no mapping for. It is
-      // addressed by its root, so it survives; a resource identifier the
-      // resolver cannot place does not, and must not be mistaken for a realm.
-      let normalized = normalize('https://peer.realm/somewhere/');
+    test('a realm named directly is honored even when the resolver cannot place it', function (assert) {
+      // A field may target a peer realm this process holds no mapping for.
+      // What it was authored as decides this, not how it is spelled: a realm
+      // href may legitimately omit the trailing slash, which the search-URL
+      // builder normalizes on its own.
       assert.deepEqual(
-        normalized?.realms,
+        normalize('https://peer.realm/somewhere/')?.realms,
         ['https://peer.realm/somewhere/'],
-        'an unplaceable realm root is used as written',
+        'an unplaceable realm is used as written',
       );
-      assert.strictEqual(
-        normalize('https://peer.realm/somewhere/Pet/mango'),
-        null,
-        'an unplaceable resource identifier is dropped, not treated as a realm',
+      assert.deepEqual(
+        normalize('https://peer.example')?.realms,
+        ['https://peer.example'],
+        'a realm without a trailing slash is not mistaken for a resource',
       );
     });
   });

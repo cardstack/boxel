@@ -32,6 +32,12 @@ const EMPTY_PREDICATE_KEYS = new Set([
 export const THIS_INTERPOLATION_PREFIX = '$this.';
 export const THIS_REALM_TOKEN = '$REALM';
 
+function isInterpolationToken(value: unknown): boolean {
+  return (
+    typeof value === 'string' && value.startsWith(THIS_INTERPOLATION_PREFIX)
+  );
+}
+
 export interface NormalizeQueryDefinitionParams {
   fieldDefinition: FieldDefinition;
   queryDefinition: QueryWithInterpolations;
@@ -193,6 +199,15 @@ export function normalizeQueryDefinition({
   // targets the realm holding the instance.
   let specifiedRealms: any =
     queryAny.realms ?? queryAny.realm ?? THIS_REALM_TOKEN;
+  // Whether the target was authored as an interpolation — i.e. whatever the
+  // instance's data holds — rather than as realm names written into the query.
+  // Recorded before interpolation substitutes values, because afterwards a
+  // reference id and a realm href are both just strings, and the two need
+  // opposite treatment when the resolver can't place them.
+  let realmsAreInterpolated =
+    isInterpolationToken(specifiedRealms) ||
+    (Array.isArray(specifiedRealms) &&
+      specifiedRealms.some(isInterpolationToken));
   let interpolatedRealms = interpolateNode(
     specifiedRealms,
     queryAny.realms ? 'realms' : 'realm',
@@ -238,14 +253,18 @@ export function normalizeQueryDefinition({
     if (resolved) {
       return resolved;
     }
-    // The resolver knows the realms this process has mappings for, which is not
-    // every realm that exists: a field may name a peer realm directly, and that
-    // has always been honored as written. Distinguish the two by shape — a
-    // realm is addressed by its root and so ends in a slash, while a resource
-    // identifier does not. Keeping an unplaceable root means an explicit
-    // cross-realm target still works; dropping an unplaceable resource means a
-    // reference is never mistaken for a realm to search.
-    return value.endsWith('/') ? value : undefined;
+    // The resolver only knows the realms this process holds mappings for, which
+    // is not every realm that exists. A realm written into the query is honored
+    // as written — a field may target a peer this process has never heard of,
+    // and that worked before. Values that arrived by interpolation are the
+    // instance's own data, so an unplaceable one is dropped rather than
+    // mistaken for a realm to search.
+    //
+    // Provenance decides this, not spelling: a realm href may legitimately be
+    // written without a trailing slash (`buildQuerySearchURL` and
+    // `parseRealmsParam` both normalize that), so shape says nothing about
+    // whether a string names a realm or a resource.
+    return realmsAreInterpolated ? undefined : value;
   };
 
   const resolveRealms = (value: any): string[] => {
