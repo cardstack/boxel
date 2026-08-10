@@ -22,6 +22,7 @@ import {
   Deferred,
   type Realm,
   type ResolvedCodeRef,
+  ri,
   rri,
   fileDefFormats,
 } from '@cardstack/runtime-common';
@@ -2669,7 +2670,7 @@ export class ExportedCard extends ExportedCardParent {
     // before applying its own type filter.
     let searchSheetState = getService('search-sheet-state');
     searchSheetState.searchKey = 'Mango';
-    searchSheetState.selectedRealms = [new URL('http://unrelated-realm/')];
+    searchSheetState.selectedRealms = [ri('http://unrelated-realm/')];
     searchSheetState.resultsScrollTop = 240;
 
     await waitFor('[data-boxel-selector-item-text="Pet"]');

@@ -20,7 +20,10 @@ import {
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { IconSearch } from '@cardstack/boxel-ui/icons';
 
-import type { ResolvedCodeRef } from '@cardstack/runtime-common';
+import type {
+  RealmIdentifier,
+  ResolvedCodeRef,
+} from '@cardstack/runtime-common';
 
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type SearchSheetStateService from '@cardstack/host/services/search-sheet-state';
@@ -98,7 +101,7 @@ export default class SearchSheet extends Component<Signature> {
     return this.searchSheetState.selectedTypes;
   }
 
-  private get initialSelectedRealms(): URL[] {
+  private get initialSelectedRealms(): RealmIdentifier[] {
     return this.searchSheetState.selectedRealms;
   }
 
@@ -215,7 +218,7 @@ export default class SearchSheet extends Component<Signature> {
     this.args.onSearch?.(searchKey);
   }
 
-  @action private handleRealmChange(selectedRealms: URL[]) {
+  @action private handleRealmChange(selectedRealms: RealmIdentifier[]) {
     this.searchSheetState.selectedRealms = selectedRealms;
     this.args.onFilterChange?.();
   }

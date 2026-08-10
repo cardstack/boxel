@@ -17,7 +17,11 @@ import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 import { Button } from '@cardstack/boxel-ui/components';
 import { eq, not } from '@cardstack/boxel-ui/helpers';
 
-import type { Loader, CardChooserQuery } from '@cardstack/runtime-common';
+import type {
+  Loader,
+  CardChooserQuery,
+  RealmIdentifier,
+} from '@cardstack/runtime-common';
 import {
   type CodeRef,
   type CreateNewCard,
@@ -247,14 +251,20 @@ export default class CardChooserModal extends Component<Signature> {
     return this.stateStack[this.stateStack.length - 1];
   }
 
-  private get initialSelectedRealmsForPanel(): URL[] | undefined {
+  private get initialSelectedRealmsForPanel(): RealmIdentifier[] | undefined {
     if (!this.state?.consumingRealm) {
       return undefined;
     }
     if (!this.state.preselectConsumingRealm && !this.state.lockConsumingRealm) {
       return undefined;
     }
-    return [this.state.consumingRealm];
+    // Callers hand us a realm URL while the panel selects by identifier, so
+    // resolve it to the known realm's identifier rather than passing the URL
+    // through as one — an unresolved URL wouldn't match what it is compared to.
+    let identifier = this.realmServer.realmIdentifierForURL(
+      this.state.consumingRealm.href,
+    );
+    return identifier ? [identifier] : undefined;
   }
 
   private get initialSelectedTypesForPanel(): ResolvedCodeRef[] | undefined {

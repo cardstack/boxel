@@ -4,7 +4,11 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import type { Filter, ResolvedCodeRef } from '@cardstack/runtime-common';
+import type {
+  Filter,
+  RealmIdentifier,
+  ResolvedCodeRef,
+} from '@cardstack/runtime-common';
 
 import type { RealmFilter } from '@cardstack/host/components/realm-picker';
 import type { TypeFilter } from '@cardstack/host/components/type-picker';
@@ -22,7 +26,7 @@ interface Signature {
     searchKey: string;
     baseFilter?: Filter;
     initialSelectedTypes?: ResolvedCodeRef[];
-    initialSelectedRealms?: URL[];
+    initialSelectedRealms?: RealmIdentifier[];
     /**
      * Hard-scope: when true, selectedRealms is fixed to initialSelectedRealms
      * and the realm picker is disabled.
@@ -34,7 +38,7 @@ interface Signature {
     // Seed the sort from a restored value (the search sheet passes its
     // persisted sort); defaults to the first option otherwise.
     initialActiveSort?: SortOption;
-    onRealmChange?: (selectedRealms: URL[]) => void;
+    onRealmChange?: (selectedRealms: RealmIdentifier[]) => void;
     onTypeChange?: (selectedTypes: ResolvedCodeRef[]) => void;
     onSortChange?: (option: SortOption) => void;
   };
@@ -58,7 +62,7 @@ interface Signature {
 export default class SearchPanel extends Component<Signature> {
   @service declare private realmServer: RealmServerService;
 
-  @tracked private selectedRealms: URL[] =
+  @tracked private selectedRealms: RealmIdentifier[] =
     this.args.initialSelectedRealms ?? [];
   @tracked private activeSort: SortOption =
     this.args.initialActiveSort ?? SORT_OPTIONS[0];
@@ -71,18 +75,18 @@ export default class SearchPanel extends Component<Signature> {
   }));
 
   private get initialFocusedSectionId(): string | null {
-    let realmURLs = this.args.initialSelectedRealms;
-    if (!realmURLs || realmURLs.length === 0) {
+    let identifiers = this.args.initialSelectedRealms;
+    if (!identifiers || identifiers.length === 0) {
       return null;
     }
-    return `realm:${realmURLs[0].href}`;
+    return `realm:${identifiers[0]}`;
   }
 
   private get selectedRealmURLs(): string[] {
     if (this.selectedRealms.length === 0) {
       return this.realmServer.availableRealmIdentifiers;
     }
-    return this.selectedRealms.map((url) => url.href);
+    return this.selectedRealms;
   }
 
   // -- Filter objects --
@@ -116,7 +120,7 @@ export default class SearchPanel extends Component<Signature> {
   // -- Actions --
 
   @action
-  private onRealmChange(selected: URL[]) {
+  private onRealmChange(selected: RealmIdentifier[]) {
     if (this.args.lockSelectedRealms) {
       return;
     }

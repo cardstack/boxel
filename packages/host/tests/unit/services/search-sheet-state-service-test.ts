@@ -3,6 +3,7 @@ import { setupTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
 import {
+  ri,
   rri,
   type ResolvedCodeRef,
   type Sort,
@@ -24,7 +25,7 @@ const SORT: SortOption = {
 function populate(service: SearchSheetStateService) {
   service.searchKey = 'Mango';
   service.selectedTypes = [CODE_REF];
-  service.selectedRealms = [new URL('http://test-realm/test/')];
+  service.selectedRealms = [ri('http://test-realm/test/')];
   service.activeSort = SORT;
   service.activeViewId = 'strip';
   service.pagination.focus('realm:http://test-realm/test/');

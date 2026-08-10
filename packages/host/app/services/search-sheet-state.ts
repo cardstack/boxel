@@ -7,6 +7,7 @@ import {
   internalKeyFor,
   searchEntryWireQueryFromQuery,
   type Filter,
+  type RealmIdentifier,
   type ResolvedCodeRef,
   type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
@@ -53,7 +54,7 @@ export default class SearchSheetStateService extends Service {
 
   @tracked searchKey = '';
   @tracked selectedTypes: ResolvedCodeRef[] | undefined;
-  @tracked selectedRealms: URL[] = [];
+  @tracked selectedRealms: RealmIdentifier[] = [];
   @tracked activeSort: SortOption | undefined;
   @tracked activeViewId = 'grid';
   @tracked pagination = new SectionPagination();
@@ -115,7 +116,7 @@ export default class SearchSheetStateService extends Service {
         { scope: searchScopeForOptions({ cardsOnly: false }) },
       ),
       // Empty selection => the resource searches every available realm.
-      realms: this.selectedRealms.map((url) => url.href),
+      realms: [...this.selectedRealms],
       // Cap each realm's results at the focused-section display limit — the
       // most the sheet ever shows in one section. The search still reports the
       // full match count in `meta.page.total` (which drives the result-count
