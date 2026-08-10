@@ -26,6 +26,7 @@ import {
   parseLink,
   resolveInheritance,
   type DecklistLink,
+  type MapValue,
 } from '@cardstack/deck/inherit';
 
 import { ensureTrailingSlash } from './paths.ts';
@@ -146,13 +147,78 @@ export async function resolveImportMap(options: {
   let { start, load, realmURL } = options;
   if (!start.extends) {
     // The overwhelmingly common case, and worth not paying a walk for.
-    return flattenImportMaps([start]);
+    return flattenImportMaps([resolveLinkAgainst(start, realmURL)]);
   }
+  // EVERY LINK IS RESOLVED AGAINST THE URL IT CAME FROM, before the merge.
+  //
+  // A map's relative values mean "next to me", and inheritance is the one
+  // place where "me" differs per link: a parent published at
+  // `/_packages/acme/gallery@1.2.3/` writing `./scene.js` means that
+  // package's scene, not a file of the same name sitting in whichever realm
+  // remixed it. Flattening first and resolving once at the end — which is
+  // what a single base would do — silently re-homes every inherited entry
+  // onto the child, and the failure is invisible until an inherited module
+  // 404s or, worse, hits an unrelated file the child happens to have.
+  //
+  // `null` survives resolution untouched: it is a removal instruction, not
+  // an address.
   let flat = await resolveInheritance({
-    start,
-    load: (parent) => load(parentImportMapURL(parent, realmURL)),
+    start: resolveLinkAgainst(start, realmURL),
+    load: async (parent) => {
+      let parentURL = parentImportMapURL(parent, realmURL);
+      let link = await load(parentURL);
+      return link && resolveLinkAgainst(link, parentURL);
+    },
   });
   return narrow(flat);
+}
+
+/**
+ * Make every address in one link absolute against that link's own base.
+ *
+ * Scope KEYS are resolved too: they are matched against the importer's URL,
+ * so a scope inherited from a parent has to keep meaning the parent's
+ * subtree rather than the child's.
+ */
+function resolveLinkAgainst(link: DecklistLink, baseURL: string): DecklistLink {
+  let resolve = (value: MapValue): MapValue => {
+    if (value === null || typeof value !== 'string') {
+      return value;
+    }
+    try {
+      return new URL(value, baseURL).href;
+    } catch {
+      // A bare specifier mapped onto another bare specifier is not a URL and
+      // is passed through rather than dropped — the map is user-authored,
+      // and losing the whole entry over one odd value is the worse failure.
+      return value;
+    }
+  };
+  let resolveKey = (key: string): string => {
+    try {
+      return new URL(key, baseURL).href;
+    } catch {
+      return key;
+    }
+  };
+
+  let imports: Record<string, MapValue> = {};
+  for (let [specifier, value] of Object.entries(link.imports ?? {})) {
+    imports[specifier] = resolve(value);
+  }
+  let scopes: Record<string, Record<string, MapValue> | null> = {};
+  for (let [prefix, table] of Object.entries(link.scopes ?? {})) {
+    if (table === null) {
+      scopes[resolveKey(prefix)] = null;
+      continue;
+    }
+    let resolved: Record<string, MapValue> = {};
+    for (let [specifier, value] of Object.entries(table)) {
+      resolved[specifier] = resolve(value);
+    }
+    scopes[resolveKey(prefix)] = resolved;
+  }
+  return { ...link, imports, scopes };
 }
 
 /**

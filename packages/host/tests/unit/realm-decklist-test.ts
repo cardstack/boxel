@@ -207,6 +207,69 @@ module('Unit | decklist | a realm loads its import map', function (hooks) {
     );
   });
 
+  // REMIX IS A MAP, NOT A COPY.
+  //
+  // The realm below holds no copy of the deck it remixes. Its whole
+  // contribution is one `importmap.json`: `deck.extends` names an exact
+  // published parent, and a single entry overrides one of the parent's pins.
+  // Everything the parent declared and the child did not mention is
+  // inherited. That is the difference between changing one module of a
+  // two-hundred-module app and duplicating two hundred files.
+  //
+  // The property this really guards is WHOSE base a relative value resolves
+  // against. The parent writes `./ui.js` meaning a file beside itself; the
+  // child writes `./palette-v2.js` meaning a file beside ITSELF. Resolve the
+  // flattened map against one base — the obvious implementation — and every
+  // inherited entry silently re-homes onto the remix, where it either 404s
+  // or, worse, finds an unrelated file of the same name.
+  test('a remix inherits its parent and overrides one entry', async function (assert) {
+    await getService('realm').login(testRealmURL);
+
+    // The parent, published under its own exact address. Its `ui.js` is only
+    // reachable from here — the remix has no such file.
+    await testRealm.write(
+      'vendor/gallery@1.0.0/importmap.json',
+      JSON.stringify({
+        imports: { palette: './palette-v1.js', 'gallery-ui': './ui.js' },
+      }),
+    );
+    await testRealm.write(
+      'vendor/gallery@1.0.0/palette-v1.js',
+      'export const VERSION = 1;\nexport function pick() { return "parent"; }\n',
+    );
+    await testRealm.write(
+      'vendor/gallery@1.0.0/ui.js',
+      'export const WHO = "parent ui";\n',
+    );
+
+    // The remix. One file, two facts: who it descends from, and the one pin
+    // it disagrees about.
+    await testRealm.write(
+      'importmap.json',
+      JSON.stringify({
+        deck: { extends: `${testRealmURL}vendor/gallery@1.0.0/` },
+        imports: { palette: './palette-v2.js' },
+      }),
+    );
+    await settled();
+    await getService('realm').reloadDecklistFor(testRealmURL);
+    await settled();
+
+    let vn = getService('loader-service').loader.getVirtualNetwork()!;
+    let importer = `${testRealmURL}gallery/scene.js`;
+
+    assert.strictEqual(
+      vn.resolveImport('gallery-ui', importer),
+      `${testRealmURL}vendor/gallery@1.0.0/ui.js`,
+      "the inherited entry still points inside the PARENT, not at the remix's own root",
+    );
+    assert.strictEqual(
+      vn.resolveImport('palette', importer),
+      `${testRealmURL}palette-v2.js`,
+      'the overridden entry resolves against the REMIX, which is where its file lives',
+    );
+  });
+
   test('the pins are scoped to the realm that owns the file', async function (assert) {
     await getService('realm').ensureRealmMeta(testRealmURL);
 
