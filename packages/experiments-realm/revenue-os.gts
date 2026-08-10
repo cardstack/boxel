@@ -11,7 +11,7 @@ import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { htmlSafe } from '@ember/template';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { eq, gt } from '@cardstack/boxel-ui/helpers';
 import {
   BoxelButton,
   BoxelInput,
@@ -41,6 +41,17 @@ import RecordPaymentCommand from './record-payment';
 import { formatMoney, outstandingBalance, sumLineItems } from './money';
 
 const OPEN_INVOICE_STATUSES = ['sent', 'viewed', 'partial', 'overdue'];
+
+function invoiceStatus(item: CardDef): string {
+  return (item as Invoice).status ?? '';
+}
+
+function stopThen(action: (...args: any[]) => void) {
+  return (event: Event) => {
+    event.stopPropagation();
+    action(event);
+  };
+}
 const OPEN_STAGES = PIPELINE_STAGES.filter(
   (s) => s !== 'closed won' && s !== 'closed lost',
 );
@@ -451,6 +462,7 @@ export class RevenueOs extends CardDef {
       {
         key: 'status',
         label: 'Status',
+        custom: true,
         value: (item) => (item as Invoice).status,
       },
       {
@@ -470,6 +482,14 @@ export class RevenueOs extends CardDef {
         label: 'Days overdue',
         align: 'right',
         value: (item) => (item as Invoice).daysOverdue || undefined,
+      },
+      {
+        key: 'actions',
+        label: '',
+        align: 'right',
+        custom: true,
+        sortable: false,
+        value: () => '',
       },
     ];
 
@@ -507,12 +527,6 @@ export class RevenueOs extends CardDef {
         { label: '31–60 days', value: f(buckets.b60), tone: tone(buckets.b60, 'late') },
         { label: '60+ days', value: f(buckets.b90), tone: tone(buckets.b90, 'late') },
       ];
-    }
-
-    get openInvoices(): Invoice[] {
-      return this.invoices.filter((i) =>
-        OPEN_INVOICE_STATUSES.includes(i.status ?? ''),
-      );
     }
 
     balanceOf = (inv: Invoice) => outstandingBalance(inv.lineItems, inv.payments);
@@ -813,26 +827,25 @@ export class RevenueOs extends CardDef {
               @columns={{this.invoiceColumns}}
               @onRowClick={{this.openCard}}
               @emptyMessage='No invoices match this filter'
-            />
-            {{#if this.openInvoices.length}}
-              <div class='action-rail'>
-                <span class='rail-label'>Collect</span>
-                {{#each this.openInvoices as |inv|}}
-                  <div class='rail-row'>
-                    <span>{{inv.invoiceNumber}}
-                      ·
-                      {{this.balanceDisplay inv}}
-                      due</span>
+            >
+              <:cell as |item column|>
+                {{#if (eq column.key 'status')}}
+                  {{#let (invoiceStatus item) as |status|}}
+                    <span class='tstatus tstatus-{{status}}'>{{status}}</span>
+                  {{/let}}
+                {{else if (eq column.key 'actions')}}
+                  {{#if (gt (this.balanceOf item) 0)}}
                     <BoxelButton
                       @kind='secondary'
                       @size='extra-small'
                       @disabled={{this.busy}}
-                      {{on 'click' (fn this.recordBalancePayment inv)}}
-                    >Record payment</BoxelButton>
-                  </div>
-                {{/each}}
-              </div>
-            {{/if}}
+                      {{on 'click' (stopThen (fn this.recordBalancePayment item))}}
+                    >Record
+                      {{this.balanceDisplay item}}</BoxelButton>
+                  {{/if}}
+                {{/if}}
+              </:cell>
+            </Table>
           </section>
         {{/if}}
 
@@ -1031,6 +1044,29 @@ export class RevenueOs extends CardDef {
         }
         .tone-zero {
           color: var(--muted-foreground, #6b7280);
+        }
+        .tstatus {
+          font-size: 0.625rem;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          padding: 0.125rem 0.5rem;
+          border-radius: 999px;
+          background: var(--muted, #f3f4f6);
+          color: var(--muted-foreground, #6b7280);
+          white-space: nowrap;
+        }
+        .tstatus-paid {
+          background: var(--state-paid-bg, #d1fae5);
+          color: var(--state-paid-fg, #065f46);
+        }
+        .tstatus-partial {
+          background: var(--state-partial-bg, #fef3c7);
+          color: var(--state-partial-fg, #92400e);
+        }
+        .tstatus-overdue {
+          background: var(--state-overdue-bg, #fee2e2);
+          color: var(--state-overdue-fg, #991b1b);
         }
         @media (max-width: 48rem) {
           .hero {
