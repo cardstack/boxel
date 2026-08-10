@@ -281,6 +281,9 @@ class VersionLockIsolated extends Component<typeof VersionLock> {
     </section>
 
     <style scoped>
+      /* Light, like the swatches card beside it. The container is a neutral
+         surface: everything that changes between versions is the library's
+         output, so the chrome stays constant and out of the way. */
       .lock {
         padding: 1.5rem;
         font: 400 15px/1.5 system-ui, sans-serif;
@@ -315,6 +318,13 @@ class VersionLockIsolated extends Component<typeof VersionLock> {
       }
       .choice:hover {
         border-color: #999;
+      }
+      /* Kept from the dark pass, which is the one thing there worth keeping:
+         this control is fully keyboard-operable and deserves a ring that does
+         not depend on the browser default surviving a restyle. */
+      .choice:focus-visible {
+        outline: 2px solid #0090ff;
+        outline-offset: 2px;
       }
       .choice:disabled {
         cursor: progress;

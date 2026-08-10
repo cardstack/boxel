@@ -1,5 +1,10 @@
 {
   "imports": {
-    "palette": "/_packages/lib/palette@1.0.0/index.js"
+    "palette": "/_packages/lib/palette@4.0.0/index.js"
+  },
+  "boxel": {
+    "dependencies": {
+      "palette": "live"
+    }
   }
 }
