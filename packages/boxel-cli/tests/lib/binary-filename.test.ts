@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { isBinaryFilename } from '@cardstack/runtime-common/infer-content-type';
+import {
+  isBinaryContentType,
+  isBinaryFilename,
+} from '@cardstack/runtime-common/infer-content-type';
 
 // `isBinaryFilename` decides which wire format the CLI uses: binary paths
 // move raw bytes (octet-stream upload, arrayBuffer download) while text
@@ -34,9 +37,14 @@ describe('isBinaryFilename', () => {
   ];
 
   const text = [
-    // text/* (including the .gts/.ts content-type overrides)
+    // text/* (including the .gts/.gjs/.ts content-type overrides). The
+    // overrides matter: mime-types maps none of these three to a textual
+    // type on its own — .ts resolves to video/mp2t, and .gts/.gjs to
+    // nothing at all — yet all three are card module source.
     'card.gts',
+    'card.gjs',
     'card.ts',
+    'types.d.ts',
     'notes.md',
     'style.css',
     'page.html',
@@ -69,4 +77,58 @@ describe('isBinaryFilename', () => {
       expect(isBinaryFilename(filename)).toBe(false);
     });
   }
+});
+
+// Callers holding a response classify on the served content type instead of
+// the requested name, so the two entry points must agree on the same
+// taxonomy — and the content-type form has to tolerate header syntax.
+describe('isBinaryContentType', () => {
+  it('ignores content-type parameters', () => {
+    expect(isBinaryContentType('text/plain; charset=utf-8')).toBe(false);
+    expect(isBinaryContentType('application/json;charset=UTF-8')).toBe(false);
+    expect(isBinaryContentType('application/octet-stream; name=x')).toBe(true);
+  });
+
+  it('is case-insensitive', () => {
+    expect(isBinaryContentType('TEXT/PLAIN')).toBe(false);
+    expect(isBinaryContentType('Application/JSON')).toBe(false);
+  });
+
+  it('classifies every textual mime type the platform speaks as text', () => {
+    // A card id resolves to its .json source, and module source is served
+    // under the glimmer/typescript types. The vnd.card vendor types are
+    // textual too, so no surface that echoes one can trip the byte path.
+    expect(isBinaryContentType('application/json')).toBe(false);
+    expect(isBinaryContentType('text/typescript+glimmer')).toBe(false);
+    expect(isBinaryContentType('text/javascript+glimmer')).toBe(false);
+    expect(isBinaryContentType('application/vnd.card+json')).toBe(false);
+    expect(isBinaryContentType('application/vnd.card+source')).toBe(false);
+    expect(isBinaryContentType('application/vnd.card+html')).toBe(false);
+    expect(isBinaryContentType('application/vnd.card.file-meta+json')).toBe(
+      false,
+    );
+    expect(isBinaryContentType('application/vnd.api+json')).toBe(false);
+  });
+
+  it('treats unrecognized and media types as binary', () => {
+    expect(isBinaryContentType('application/octet-stream')).toBe(true);
+    expect(isBinaryContentType('application/zip')).toBe(true);
+    expect(isBinaryContentType('video/mp4')).toBe(true);
+    expect(isBinaryContentType('image/png')).toBe(true);
+    expect(isBinaryContentType('application/x-newly-invented')).toBe(true);
+  });
+
+  it('accepts both mime-db spellings of sql and yaml', () => {
+    // These types are spelled differently across mime-db releases; a lookup
+    // resolving to either spelling must land on the text side.
+    for (let type of [
+      'application/sql',
+      'application/x-sql',
+      'application/yaml',
+      'application/x-yaml',
+      'text/yaml',
+    ]) {
+      expect(isBinaryContentType(type), `${type} should be text`).toBe(false);
+    }
+  });
 });

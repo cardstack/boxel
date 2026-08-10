@@ -211,6 +211,47 @@ describe('file read (integration)', () => {
     expect(bytes.equals(Buffer.from(NON_UTF8_BYTES))).toBe(true);
   });
 
+  it('reads a card by its extensionless id as text, not bytes', async () => {
+    // Card ids carry no extension — the realm resolves `test-card` to
+    // `test-card.json` and serves it as JSON. Classifying by the requested
+    // name would call it binary and hand back base64, so this pins that the
+    // served content type is what decides.
+    let res = await runBoxel(
+      ['file', 'read', 'test-card', '--realm', realmUrl, '--json'],
+      { home },
+    );
+    let result = res.json<ReadJson>();
+
+    expect(result.ok, `read failed: ${JSON.stringify(result)}`).toBe(true);
+    expect(result.bytesBase64).toBeUndefined();
+    expect(result.content).toBeTruthy();
+    expect(JSON.parse(result.content!)).toHaveProperty('data');
+  });
+
+  it('reads a module by a dotted extensionless name as text', async () => {
+    // `hello.test` resolves through the executable-extension fallback to
+    // `hello.test.gts`; `.test` is not a textual extension on its own.
+    let seed = await reloadProfile(home).authedRealmFetch(
+      `${realmUrl}hello.test.gts`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/vnd.card+source' },
+        body: 'export const hello = "world";\n',
+      },
+    );
+    expect(seed.ok, `seed POST failed: ${seed.status}`).toBe(true);
+
+    let res = await runBoxel(
+      ['file', 'read', 'hello.test', '--realm', realmUrl, '--json'],
+      { home },
+    );
+    let result = res.json<ReadJson>();
+
+    expect(result.ok, `read failed: ${JSON.stringify(result)}`).toBe(true);
+    expect(result.bytesBase64).toBeUndefined();
+    expect(result.content).toContain('hello');
+  });
+
   it('returns error result when no active profile', async () => {
     let emptyHome = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-empty-'));
     try {

@@ -171,6 +171,40 @@ describe('file write (integration)', () => {
     expect(remote.equals(Buffer.from(NON_UTF8_BYTES))).toBe(true);
   });
 
+  it('writes string content from STDIN to a non-textual path', async () => {
+    // STDIN can only produce a string, so refusing string content at a path
+    // that is binary by extension would make such paths unwritable. The
+    // string is UTF-8 encoded onto the byte path instead, which is lossless.
+    let script = '#!/usr/bin/env python3\nprint("hi")\n';
+    let res = await runBoxel(
+      ['file', 'write', 'scripts/hello.py', '--realm', realmUrl],
+      { home, input: script },
+    );
+    expect(res.ok, res.stderr).toBe(true);
+
+    let response = await readBack('scripts/hello.py');
+    expect(response.ok).toBe(true);
+    let remote = Buffer.from(await response.arrayBuffer());
+    expect(remote.toString('utf8')).toBe(script);
+  });
+
+  it('refuses binary source content at a text destination', async () => {
+    // The destructive direction stays blocked: raw bytes at a text extension
+    // would be served back as text and mangled by the UTF-8 decode.
+    let src = path.join(os.tmpdir(), `boxel-write-${Date.now()}-guard.png`);
+    fs.writeFileSync(src, Buffer.from(TINY_PNG_BYTES));
+    try {
+      let res = await runBoxel(
+        ['file', 'write', 'notes.md', '--realm', realmUrl, '--file', src],
+        { home },
+      );
+      expect(res.exitCode).toBe(1);
+      expect(res.stderr).toContain('Refusing to write');
+    } finally {
+      fs.rmSync(src, { force: true });
+    }
+  });
+
   it('exits non-zero with a clear error when there is no active profile', async () => {
     let emptyHome = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-empty-'));
     try {
