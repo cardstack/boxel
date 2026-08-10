@@ -9,6 +9,7 @@ import { tracked } from '@glimmer/tracking';
 import ExternalLink from '@cardstack/boxel-icons/external-link';
 
 import { format as formatDate, isSameDay, isSameYear } from 'date-fns';
+import { modifier } from 'ember-modifier';
 
 import {
   BoxelDropdown,
@@ -45,6 +46,42 @@ interface Signature {
 
 export default class PastSessionItem extends Component<Signature> {
   @tracked private preventMenuClose = false;
+  private closeDropdownAction: (() => void) | null = null;
+  private closeDropdownTimer: ReturnType<typeof setTimeout> | null = null;
+  private triggerElement: HTMLElement | null = null;
+
+  private registerCloseAction = modifier(
+    (_element: HTMLElement, [closeFn]: [() => void]) => {
+      this.closeDropdownAction = closeFn;
+      return () => {
+        this.closeDropdownAction = null;
+      };
+    },
+  );
+
+  private registerTriggerElement = modifier((element: HTMLElement) => {
+    this.triggerElement = element;
+    return () => {
+      this.triggerElement = null;
+    };
+  });
+
+  @action
+  private scheduleCloseDropdown() {
+    this.cancelCloseDropdown();
+    this.closeDropdownTimer = setTimeout(() => {
+      this.closeDropdownAction?.();
+      this.triggerElement?.blur();
+    }, 200);
+  }
+
+  @action
+  private cancelCloseDropdown() {
+    if (this.closeDropdownTimer) {
+      clearTimeout(this.closeDropdownTimer);
+      this.closeDropdownTimer = null;
+    }
+  }
 
   <template>
     <li
@@ -52,6 +89,8 @@ export default class PastSessionItem extends Component<Signature> {
       data-test-joined-room={{@session.roomId}}
       data-room-id={{@session.roomId}}
       data-is-current-room={{@isCurrentRoom}}
+      {{on 'mouseenter' this.cancelCloseDropdown}}
+      {{on 'mouseleave' this.scheduleCloseDropdown}}
     >
       <button
         class='view-session-button'
@@ -87,7 +126,7 @@ export default class PastSessionItem extends Component<Signature> {
           {{/if}}
         </div>
       </button>
-      <BoxelDropdown>
+      <BoxelDropdown @contentClass='past-session-menu-dropdown'>
         <:trigger as |bindings|>
           <Tooltip @placement='top'>
             <:trigger>
@@ -98,6 +137,7 @@ export default class PastSessionItem extends Component<Signature> {
                 @label='past session options'
                 data-test-past-session-options-button={{@session.roomId}}
                 {{bindings}}
+                {{this.registerTriggerElement}}
               />
             </:trigger>
             <:content>
@@ -108,6 +148,9 @@ export default class PastSessionItem extends Component<Signature> {
         <:content as |dd|>
           <Menu
             class='menu past-session-menu themeless'
+            {{this.registerCloseAction dd.close}}
+            {{on 'mouseenter' this.cancelCloseDropdown}}
+            {{on 'mouseleave' this.scheduleCloseDropdown}}
             @closeMenu={{fn this.handleCloseMenu dd.close}}
             @items={{array
               (menuItem
@@ -139,37 +182,49 @@ export default class PastSessionItem extends Component<Signature> {
       }
 
       .session {
+        position: relative;
         display: flex;
         align-items: center;
         justify-content: space-between;
-        border-top: 1px solid var(--past-sessions-divider-color);
         padding: var(--boxel-sp) var(--boxel-sp-sm);
         margin-right: var(--boxel-sp-xs);
         margin-left: var(--boxel-sp-xs);
         border-radius: var(--boxel-border-radius-xs);
       }
 
-      .session:first-child {
-        border-top: none;
+      .session::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 1px;
+        background: #4f4b57;
       }
 
-      .session:hover {
+      .session:first-child::before {
+        display: none;
+      }
+
+      .session:hover,
+      .session:has(.menu-button[aria-expanded='true']) {
         background-color: var(--ai-assistant-menu-hover-background);
+        border-radius: calc(var(--boxel-border-radius-xs) + 2px);
         cursor: pointer;
       }
-      .session[data-is-current-room] {
-        border: 1px solid var(--past-sessions-divider-color);
-      }
-      .session:hover + .session:not([data-is-current-room]),
-      .session[data-is-current-room] + .session {
-        border-top-color: transparent;
+      .session:hover::before,
+      .session:has(.menu-button[aria-expanded='true'])::before,
+      .session:hover + .session::before,
+      .session:has(.menu-button[aria-expanded='true']) + .session::before {
+        background: transparent;
       }
       .name {
         font-weight: 600;
       }
       .date {
-        margin-top: var(--boxel-sp-xxs);
+        margin-top: calc(var(--boxel-sp-xxs) - 5px);
         color: var(--boxel-400);
+        font-size: 12px;
       }
       .view-session-button {
         color: var(--boxel-light);
@@ -195,12 +250,17 @@ export default class PastSessionItem extends Component<Signature> {
         visibility: visible;
       }
 
+      :global(.past-session-menu-dropdown) {
+        border: none;
+        box-shadow: none;
+      }
+
       .menu {
         --boxel-menu-item-content-padding: var(--boxel-sp-xxs)
           var(--boxel-sp-sm);
 
-        background: var(--ai-assistant-menu-background);
-        border: 1px solid var(--past-sessions-divider-color);
+        background: #3b394b;
+        border: 1px solid rgba(255, 255, 255, 0.25);
         color: var(--boxel-light);
         padding: var(--boxel-sp-xs);
         box-shadow: var(--boxel-deep-box-shadow);
@@ -218,7 +278,7 @@ export default class PastSessionItem extends Component<Signature> {
       }
 
       .menu :deep(.boxel-menu__item:hover) {
-        background-color: var(--ai-assistant-menu-hover-background);
+        background-color: #272330;
         border-radius: var(--boxel-border-radius-xs);
       }
 
