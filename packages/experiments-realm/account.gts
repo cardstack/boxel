@@ -12,6 +12,7 @@ import EmailField from 'https://cardstack.com/base/email';
 import PhoneNumberField from 'https://cardstack.com/base/phone-number';
 import AddressField from 'https://cardstack.com/base/address';
 import UsersIcon from '@cardstack/boxel-icons/users';
+import { Avatar } from '@cardstack/boxel-ui/components';
 import { User } from './user';
 
 export class Account extends CardDef {
@@ -113,11 +114,6 @@ export class Account extends CardDef {
     get name() {
       return this.args.model?.name?.trim() || 'Unnamed Account';
     }
-    get initials() {
-      let words = this.name.split(/\s+/).filter(Boolean).slice(0, 2);
-      let letters = words.map((w) => w[0]?.toUpperCase() ?? '').join('');
-      return letters || '?';
-    }
     get location() {
       let a = this.args.model?.billingAddress;
       return [a?.city, a?.country?.name].filter(Boolean).join(', ');
@@ -125,11 +121,21 @@ export class Account extends CardDef {
     <template>
       <div class='fitted'>
         <div class='fmt badge'>
-          <span class='avatar'>{{this.initials}}</span>
+          <Avatar
+            class='avatar'
+            @userId={{@model.email}}
+            @displayName={{this.name}}
+            @isReady={{true}}
+          />
           <span class='name'>{{this.name}}</span>
         </div>
         <div class='fmt strip'>
-          <span class='avatar'>{{this.initials}}</span>
+          <Avatar
+            class='avatar'
+            @userId={{@model.email}}
+            @displayName={{this.name}}
+            @isReady={{true}}
+          />
           <div class='info'>
             <span class='name'>{{this.name}}</span>
             {{#if @model.email}}
@@ -138,7 +144,12 @@ export class Account extends CardDef {
           </div>
         </div>
         <div class='fmt tile'>
-          <span class='avatar avatar-lg'>{{this.initials}}</span>
+          <Avatar
+            class='avatar avatar-lg'
+            @userId={{@model.email}}
+            @displayName={{this.name}}
+            @isReady={{true}}
+          />
           <span class='name'>{{this.name}}</span>
           {{#if @model.industry}}
             <span class='meta'>{{@model.industry}}</span>
@@ -151,7 +162,12 @@ export class Account extends CardDef {
           {{/if}}
         </div>
         <div class='fmt card'>
-          <span class='avatar avatar-lg'>{{this.initials}}</span>
+          <Avatar
+            class='avatar avatar-lg'
+            @userId={{@model.email}}
+            @displayName={{this.name}}
+            @isReady={{true}}
+          />
           <div class='info'>
             <span class='name name-lg'>{{this.name}}</span>
             {{#if @model.industry}}
@@ -186,23 +202,14 @@ export class Account extends CardDef {
           overflow: hidden;
         }
         .avatar {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 28px;
-          height: 28px;
-          border-radius: 50%;
-          background: var(--muted, #eef2f7);
-          color: var(--muted-foreground, #6b7280);
-          font-size: 0.6875rem;
+          --profile-avatar-icon-size: 28px;
+          --profile-avatar-icon-border: 0;
           font-weight: 700;
           letter-spacing: 0.02em;
           flex-shrink: 0;
         }
         .avatar-lg {
-          width: 40px;
-          height: 40px;
-          font-size: 0.875rem;
+          --profile-avatar-icon-size: 40px;
         }
         .name {
           font-weight: 600;
@@ -290,15 +297,15 @@ export class Account extends CardDef {
     get name() {
       return this.args.model?.name?.trim() || 'Unnamed Account';
     }
-    get initials() {
-      let words = this.name.split(/\s+/).filter(Boolean).slice(0, 2);
-      let letters = words.map((w) => w[0]?.toUpperCase() ?? '').join('');
-      return letters || '?';
-    }
     <template>
       <article class='account-page'>
         <header class='ch'>
-          <span class='avatar'>{{this.initials}}</span>
+          <Avatar
+            class='avatar'
+            @userId={{@model.email}}
+            @displayName={{this.name}}
+            @isReady={{true}}
+          />
           <div class='ch-id'>
             <p class='doc-kind'>Account</p>
             <h1>{{this.name}}</h1>
@@ -362,15 +369,7 @@ export class Account extends CardDef {
           padding-bottom: 1.25rem;
         }
         .avatar {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 56px;
-          height: 56px;
-          border-radius: 50%;
-          background: var(--primary, #111111);
-          color: var(--primary-foreground, #ffffff);
-          font-size: 1.25rem;
+          --profile-avatar-icon-size: 56px;
           font-weight: 700;
           letter-spacing: 0.02em;
           flex-shrink: 0;

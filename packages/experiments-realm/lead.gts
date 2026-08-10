@@ -9,8 +9,8 @@ import NumberField from 'https://cardstack.com/base/number';
 import EmailField from 'https://cardstack.com/base/email';
 import PhoneNumberField from 'https://cardstack.com/base/phone-number';
 import enumField from 'https://cardstack.com/base/enum';
-import { htmlSafe } from '@ember/template';
 import TargetIcon from '@cardstack/boxel-icons/target';
+import { ProgressBar } from '@cardstack/boxel-ui/components';
 
 const LeadStatusField = enumField(StringField, {
   options: ['new', 'contacted', 'qualified', 'converted', 'disqualified'],
@@ -313,9 +313,8 @@ export class Lead extends CardDef {
     get name() {
       return this.args.model?.name?.trim() || 'Unnamed Lead';
     }
-    get scoreBarStyle() {
-      let score = Math.max(0, Math.min(100, this.args.model?.score ?? 0));
-      return htmlSafe(`width: ${score}%`);
+    get clampedScore() {
+      return Math.max(0, Math.min(100, this.args.model?.score ?? 0));
     }
     <template>
       <article class='lead-page'>
@@ -336,8 +335,7 @@ export class Lead extends CardDef {
             <span class='score-value'>{{@model.score}}</span>
             <span class='score-label'>lead score</span>
             <div class='score-bar'>
-              {{! template-lint-disable no-inline-styles }}
-              <div class='score-fill' style={{this.scoreBarStyle}}></div>
+              <ProgressBar @value={{this.clampedScore}} @max={{100}} />
             </div>
           </section>
         {{/if}}
@@ -448,15 +446,6 @@ export class Lead extends CardDef {
         }
         .score-bar {
           grid-column: 1 / -1;
-          height: 6px;
-          border-radius: 999px;
-          background: var(--muted, #f3f4f6);
-          overflow: hidden;
-        }
-        .score-fill {
-          height: 100%;
-          border-radius: 999px;
-          background: var(--primary, #111111);
         }
         .panel {
           border: 1px solid var(--border, #e5e7eb);
