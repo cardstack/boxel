@@ -2,13 +2,12 @@ import type Owner from '@ember/owner';
 import { setOwner } from '@ember/owner';
 import { service } from '@ember/service';
 
-import { md5 } from 'super-fast-md5';
-
 import {
   APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   codeRefWithAbsoluteIdentifier,
+  computeContentHash,
   getClass,
   getToolDefinitions,
   inferContentType,
@@ -170,7 +169,7 @@ export default class FileDefManagerImpl
   }
 
   async getContentHash(content: string | Uint8Array): Promise<string> {
-    return md5(content);
+    return computeContentHash(content);
   }
 
   private async getCachedUrlForContent(

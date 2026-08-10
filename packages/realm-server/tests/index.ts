@@ -281,6 +281,7 @@ const ALL_TEST_FILES: string[] = [
   './sanitize-for-jsonb-test',
   './is-json-content-type-test',
   './file-size-limit-test',
+  './content-hash-test',
   './prerender-diagnostics-persistence-test',
   './prerender-proxy-test',
   './prerender-v8-prof-test',

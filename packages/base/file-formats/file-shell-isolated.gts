@@ -20,6 +20,8 @@ import {
   IconSearch,
 } from '@cardstack/boxel-ui/icons';
 
+import { isSampledContentHash } from '@cardstack/runtime-common';
+
 import {
   boundedVideoFrameAspectRatio,
   fileIconFor,
@@ -127,7 +129,17 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
         `${humanSize(m.contentSize)} · ${m.contentSize.toLocaleString()} bytes`,
       );
     }
-    push('MD5', m.contentHash, true);
+    // A whole-content fingerprint is a plain md5, so it is worth naming as
+    // one — it matches what `md5sum` reports. A sampled fingerprint covers
+    // only the file's head and tail, so calling it an md5 would invite a
+    // comparison that can never match.
+    if (m.contentHash) {
+      push(
+        isSampledContentHash(m.contentHash) ? 'Checksum (sampled)' : 'MD5',
+        m.contentHash,
+        true,
+      );
+    }
     if (m.width && m.height) {
       push('Dimensions', `${m.width} × ${m.height} px`);
     }

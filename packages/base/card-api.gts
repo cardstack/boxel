@@ -41,6 +41,7 @@ import {
   getSerializer,
   humanReadable,
   identifyCard,
+  computeContentHash,
   inferContentType,
   isBaseInstance,
   isCardError,
@@ -148,7 +149,6 @@ import HashIcon from '@cardstack/boxel-icons/hash';
 // normalizeEnumOptions used by enum moved to packages/base/enum.gts
 import PatchThemeTool from '@cardstack/boxel-host/commands/patch-theme';
 import CopyAndEditTool from '@cardstack/boxel-host/commands/copy-and-edit';
-import { md5 } from 'super-fast-md5';
 
 import {
   callSerializeHook,
@@ -3127,11 +3127,7 @@ export class FileDef extends BaseDef {
     if (!contentHash || contentSize === undefined) {
       let bytes = await byteStreamToUint8Array(await getStream());
       if (!contentHash) {
-        try {
-          contentHash = md5(bytes);
-        } catch {
-          contentHash = md5(new TextDecoder().decode(bytes));
-        }
+        contentHash = computeContentHash(bytes);
       }
       if (contentSize === undefined) {
         contentSize = bytes.byteLength;

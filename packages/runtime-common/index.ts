@@ -982,8 +982,16 @@ export {
 } from './error.ts';
 export {
   fileSizeLimitFor,
+  validateByteLength,
   validateWriteSize,
 } from './write-size-validation.ts';
+export {
+  computeContentHash,
+  isSampledContentHash,
+  CONTENT_HASH_WHOLE_LIMIT_BYTES,
+  CONTENT_HASH_HEAD_BYTES,
+  CONTENT_HASH_TAIL_BYTES,
+} from './content-hash.ts';
 export type { FileSizeLimits } from './write-size-validation.ts';
 
 export interface ResourceObject {

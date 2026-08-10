@@ -189,7 +189,7 @@ import {
   fileSizeLimitFor,
   validateWriteSize,
 } from './write-size-validation.ts';
-import { md5 } from 'super-fast-md5';
+import { computeContentHash } from './content-hash.ts';
 import { resolveFileDefCodeRef } from './file-def-code-ref.ts';
 
 import type { Utils } from './matrix-backend-authentication.ts';
@@ -435,7 +435,8 @@ type CachedSourceFileEntry = {
   ref: FileRef;
   defaultHeaders: Record<string, string>;
   canonicalPath: LocalPath;
-  // md5 of the materialized body, computed once on cache populate. Used
+  // Content fingerprint of the materialized body, computed once on cache
+  // populate. Used
   // as the ETag base so two writes within the same unix second still
   // produce distinct ETags — see `buildEtag` for the rationale.
   contentHash: string | undefined;
@@ -480,7 +481,7 @@ type ModuleTranspileResult = {
   dependencyKeys: Set<string>;
 };
 
-// ETag base prefers a content fingerprint (md5 of the file body) over
+// ETag base prefers a content fingerprint (derived from the file body) over
 // `lastModified` because the unix-second timestamp collides for two
 // writes that land in the same second — and `cachedFetch` (loader →
 // cached-fetch) will then serve a stale 304-cached body. We compute the
@@ -577,24 +578,9 @@ export function ifNoneMatchMatches(headerValue: string, etag: string): boolean {
     .some((token) => token.trim().replace(/^W\//, '') === normalizedEtag);
 }
 
-function computeContentHash(content: string | Uint8Array): string {
-  try {
-    if (content instanceof Uint8Array) {
-      return md5(content);
-    }
-    return md5(new TextEncoder().encode(content));
-  } catch {
-    try {
-      return md5(String(content));
-    } catch {
-      throw new Error('Failed to compute content hash');
-    }
-  }
-}
-
-// Cheap helper for the source endpoint: returns md5 of the body when the
-// ref has already been materialized to a string or Uint8Array. Returns
-// undefined for stream refs (the caller falls back to lastModified).
+// Cheap helper for the source endpoint: returns the content fingerprint of the
+// body when the ref has already been materialized to a string or Uint8Array.
+// Returns undefined for stream refs (the caller falls back to lastModified).
 function contentHashFromMaterializedRef(ref: FileRef): string | undefined {
   let { content } = ref;
   if (typeof content === 'string' || content instanceof Uint8Array) {
@@ -3846,7 +3832,7 @@ export class Realm {
     options?: {
       defaultHeaders?: Record<string, string>;
       etagVariant?: string;
-      // Optional content-derived fingerprint (e.g. md5 of body bytes).
+      // Optional content-derived fingerprint derived from the body bytes.
       // Takes precedence over `ref.lastModified` for the ETag — see
       // `buildEtag`. Callers that have the materialized body already
       // (the source endpoint cache-miss path) compute this for free.
@@ -4301,7 +4287,7 @@ export class Realm {
         }
         // Compute the content fingerprint while we have the body in
         // memory — `cachedRef.content` is already a string/Uint8Array
-        // post-materialization, so this is a single md5 with no extra I/O.
+        // post-materialization, so this is a single hash with no extra I/O.
         let contentHash = contentHashFromMaterializedRef(cachedRef);
         if (
           sourceCacheGenSnapshot &&
