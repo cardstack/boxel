@@ -14,7 +14,9 @@ import {
   uuidv4,
   userInitiatedPriority,
   deriveRealmName,
+  IMPORT_MAP_PATH,
 } from '@cardstack/runtime-common';
+import { rebindPublishedImportMap } from '../lib/publish-import-map.ts';
 import { getUnlistedSlug } from '../lib/unlisted-realm-path.ts';
 import { getPublishedRealmDomainOverrides } from '@cardstack/runtime-common/constants';
 
@@ -552,6 +554,32 @@ export default function handlePublishRealm({
           // card (/realm.json) on disk before the reindex below picks
           // it up.
           await ensureRealmIndexBoilerplateOptIn(publishedRealmPath);
+
+          // Re-home the published copy's import map. The tree just landed on
+          // a different origin, and an origin-relative pin — a `/_packages/…`
+          // package address — now names the published host, which has no
+          // package store. See `publish-import-map.ts` for why this asks the
+          // classifier rather than swapping prefixes.
+          try {
+            let rebind = await rebindPublishedImportMap(publishedRealmPath, {
+              serverURL,
+            });
+            if (!rebind.absent) {
+              log.info(
+                `publish rebound ${IMPORT_MAP_PATH} for ${publishedRealmURL}: ${JSON.stringify(rebind)}`,
+              );
+            }
+          } catch (rebindError: any) {
+            // A realm whose map cannot be re-homed still publishes. Its
+            // package pins will not resolve on the published origin, which is
+            // exactly where they stood before this ran; refusing the whole
+            // publish over the map would be the larger failure.
+            log.error(
+              `publish could not rebind ${IMPORT_MAP_PATH} for ${publishedRealmURL}: ${
+                rebindError?.message ?? rebindError
+              }`,
+            );
+          }
 
           // Clear stale modules cache for the published realm (including
           // error entries from a previous publish) before the reindex's
