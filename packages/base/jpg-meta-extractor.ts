@@ -1,4 +1,8 @@
 import { FileContentMismatchError } from './file-api';
+import {
+  prunedColorProfile,
+  type ImageColorProfile,
+} from './image-color-profile';
 
 // JPEG files start with SOI marker: FF D8
 const JPEG_SOI = new Uint8Array([0xff, 0xd8]);
@@ -36,10 +40,58 @@ function validateJpegSignature(bytes: Uint8Array): void {
   }
 }
 
+// A JPEG's frame header carries its encoding as well as its size, and both come
+// from the same scan for the SOF marker — so one pass reads them together and
+// the two exported readers project from it.
+export interface JpegFrameInfo {
+  width: number;
+  height: number;
+  // Bits per sample. Baseline JPEG is always 8; 12 and 16 appear in extended
+  // and lossless modes.
+  precision: number;
+  // 1 = grayscale, 3 = YCbCr (or RGB), 4 = CMYK/YCCK.
+  components: number;
+}
+
+// The component count alone pins the color model only for a single channel:
+// one component is grayscale, unambiguously. Three components are RGB *or*
+// YCbCr and four are CMYK *or* YCCK, and which one is carried by an Adobe APP14
+// transform flag this frame-header read doesn't parse — so those cases leave
+// `colorSpace` unset rather than guess, while `channels` still records the count.
+// JPEG has no alpha channel in any mode, so `hasAlpha` is a definite `false`
+// rather than unknown.
+const JPEG_COLOR_SPACES: Record<number, string> = {
+  1: 'grayscale',
+};
+
+export function extractJpgColorProfile(
+  bytes: Uint8Array,
+): ImageColorProfile | undefined {
+  let frame: JpegFrameInfo;
+  try {
+    frame = extractJpgFrameInfo(bytes);
+  } catch {
+    // A file we can't find a frame header in has no color facts to report; the
+    // dimension reader is what decides whether that's a content mismatch.
+    return undefined;
+  }
+  return prunedColorProfile({
+    colorSpace: JPEG_COLOR_SPACES[frame.components],
+    bitDepth: frame.precision > 0 ? frame.precision : undefined,
+    channels: frame.components > 0 ? frame.components : undefined,
+    hasAlpha: false,
+  });
+}
+
 export function extractJpgDimensions(bytes: Uint8Array): {
   width: number;
   height: number;
 } {
+  let { width, height } = extractJpgFrameInfo(bytes);
+  return { width, height };
+}
+
+export function extractJpgFrameInfo(bytes: Uint8Array): JpegFrameInfo {
   validateJpegSignature(bytes);
 
   if (bytes.length < MIN_BYTES) {
@@ -74,7 +126,11 @@ export function extractJpgDimensions(bytes: Uint8Array): {
     }
 
     // Markers without a length field (standalone markers)
-    if (marker === 0xd8 || marker === 0xd9 || (marker >= 0xd0 && marker <= 0xd7)) {
+    if (
+      marker === 0xd8 ||
+      marker === 0xd9 ||
+      (marker >= 0xd0 && marker <= 0xd7)
+    ) {
       continue;
     }
 
@@ -89,14 +145,19 @@ export function extractJpgDimensions(bytes: Uint8Array): {
       //   1 byte  — precision
       //   2 bytes — height (big-endian)
       //   2 bytes — width  (big-endian)
+      //   1 byte  — number of components
       if (offset + 2 + 5 > bytes.length) {
-        throw new FileContentMismatchError(
-          'JPEG SOF segment is truncated',
-        );
+        throw new FileContentMismatchError('JPEG SOF segment is truncated');
       }
+      let precision = view.getUint8(offset + 2);
       let height = view.getUint16(offset + 2 + 1);
       let width = view.getUint16(offset + 2 + 3);
-      return { width, height };
+      // The component count sits one byte past the dimensions. A frame header
+      // truncated right after the size still yields usable dimensions, so
+      // report zero components rather than rejecting the file.
+      let components =
+        offset + 2 + 6 <= bytes.length ? view.getUint8(offset + 2 + 5) : 0;
+      return { width, height, precision, components };
     }
 
     // Skip to next marker

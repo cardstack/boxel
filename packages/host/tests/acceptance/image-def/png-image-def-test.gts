@@ -261,6 +261,33 @@ module('Acceptance | png image def', function (hooks) {
     );
   });
 
+  test('reads the color profile out of IHDR during extract', async function (assert) {
+    let url = makeFileURL('sample.png');
+    await visit(
+      fileExtractPath(url, {
+        fileExtract: true,
+        fileDefCodeRef: pngDefCodeRef(),
+      }),
+    );
+
+    let result = await captureFileExtractResult('ready');
+    assert.deepEqual(
+      result.searchDoc?.colorProfile,
+      {
+        bitDepth: 8,
+        channels: 3,
+        hasAlpha: false,
+      },
+      'the fixture is 8-bit color type 2, so three channels and no alpha; ' +
+        'IHDR proves the channel model but not colorimetry, so no color space is claimed',
+    );
+    assert.strictEqual(
+      result.searchDoc?.exif,
+      undefined,
+      'PNG carries no EXIF in IHDR, so no exif attribute is produced',
+    );
+  });
+
   test('falls back when PngDef is used for non-PNG content', async function (assert) {
     let url = makeFileURL('not-a-png.png');
     await visit(

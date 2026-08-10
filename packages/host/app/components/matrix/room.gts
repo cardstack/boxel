@@ -1610,7 +1610,23 @@ export default class Room extends Component<Signature> {
       });
     }
 
-    return new FileDefKlass(attributes);
+    // Build the typed instance through the deserialize path rather than the raw
+    // `new FileDefKlass(attributes)` constructor. The constructor assigns every
+    // attribute through the field setter, which rejects a composite field's
+    // serialized (plain-object) value — e.g. a raster image's `colorProfile` /
+    // `exif`. `createFromSerialized` deserializes those nested objects into
+    // their FieldDef instances instead. No store is passed, so it deserializes
+    // into an isolated store and stays a standalone instance, as before.
+    let api = await this.cardService.getAPI();
+    let resource = {
+      ...extracted.resource,
+      attributes,
+    } as Parameters<typeof api.createFromSerialized>[0];
+    return (await api.createFromSerialized(
+      resource,
+      { data: resource } as Parameters<typeof api.createFromSerialized>[1],
+      new URL(sourceUrl),
+    )) as FileDef;
   }
 
   private doSendMessage = enqueueTask(
