@@ -1516,6 +1516,8 @@ module(basename(import.meta.filename), function () {
               '@node-test_realm:localhost': ['read', 'realm-owner'],
             },
             fileSizeLimitBytes: 512,
+            audioSizeLimitBytes: 2048,
+            videoSizeLimitBytes: 8192,
             onRealmSetup,
           });
 
@@ -1533,79 +1535,64 @@ module(basename(import.meta.filename), function () {
               'error title is correct',
             );
           });
+
+          test('audio is held to the audio limit, not the general file limit', async function (assert) {
+            let overFileLimit = new Uint8Array(1024).fill(0xff);
+            let response = await request
+              .post('/theme.mp3')
+              .set('Content-Type', 'application/octet-stream')
+              .send(Buffer.from(overFileLimit));
+
+            assert.strictEqual(response.status, 204, 'HTTP 204 status');
+
+            let overAudioLimit = new Uint8Array(4096).fill(0xff);
+            response = await request
+              .post('/too-long.mp3')
+              .set('Content-Type', 'application/octet-stream')
+              .send(Buffer.from(overAudioLimit));
+
+            assert.strictEqual(response.status, 413, 'HTTP 413 status');
+            assert.strictEqual(
+              response.body.errors[0].title,
+              'Payload Too Large',
+              'error title is correct',
+            );
+          });
+
+          test('video is held to the video limit, which is above the audio limit', async function (assert) {
+            let overAudioLimit = new Uint8Array(4096).fill(0xff);
+            let response = await request
+              .post('/intro.mp4')
+              .set('Content-Type', 'application/octet-stream')
+              .send(Buffer.from(overAudioLimit));
+
+            assert.strictEqual(response.status, 204, 'HTTP 204 status');
+
+            let overVideoLimit = new Uint8Array(16384).fill(0xff);
+            response = await request
+              .post('/too-long.mp4')
+              .set('Content-Type', 'application/octet-stream')
+              .send(Buffer.from(overVideoLimit));
+
+            assert.strictEqual(response.status, 413, 'HTTP 413 status');
+            assert.strictEqual(
+              response.body.errors[0].title,
+              'Payload Too Large',
+              'error title is correct',
+            );
+          });
+
+          test('a payload exactly at the ceiling is accepted', async function (assert) {
+            let atAudioLimit = new Uint8Array(2048).fill(0xff);
+            let response = await request
+              .post('/exact.mp3')
+              .set('Content-Type', 'application/octet-stream')
+              .send(Buffer.from(atAudioLimit));
+
+            assert.strictEqual(response.status, 204, 'HTTP 204 status');
+          });
         },
       );
-
-      module('public writable realm with media size limits', function (hooks) {
-        setupPermissionedRealmCached(hooks, {
-          fixture: 'simple',
-          realmURL,
-          permissions: {
-            '*': ['read', 'write'],
-            '@node-test_realm:localhost': ['read', 'realm-owner'],
-          },
-          fileSizeLimitBytes: 512,
-          audioSizeLimitBytes: 2048,
-          videoSizeLimitBytes: 8192,
-          onRealmSetup,
-        });
-
-        test('audio is held to the audio limit, not the general file limit', async function (assert) {
-          let overFileLimit = new Uint8Array(1024).fill(0xff);
-          let response = await request
-            .post('/theme.mp3')
-            .set('Content-Type', 'application/octet-stream')
-            .send(Buffer.from(overFileLimit));
-
-          assert.strictEqual(response.status, 204, 'HTTP 204 status');
-
-          let overAudioLimit = new Uint8Array(4096).fill(0xff);
-          response = await request
-            .post('/too-long.mp3')
-            .set('Content-Type', 'application/octet-stream')
-            .send(Buffer.from(overAudioLimit));
-
-          assert.strictEqual(response.status, 413, 'HTTP 413 status');
-          assert.strictEqual(
-            response.body.errors[0].title,
-            'Payload Too Large',
-            'error title is correct',
-          );
-        });
-
-        test('video is held to the video limit, which is above the audio limit', async function (assert) {
-          let overAudioLimit = new Uint8Array(4096).fill(0xff);
-          let response = await request
-            .post('/intro.mp4')
-            .set('Content-Type', 'application/octet-stream')
-            .send(Buffer.from(overAudioLimit));
-
-          assert.strictEqual(response.status, 204, 'HTTP 204 status');
-
-          let overVideoLimit = new Uint8Array(16384).fill(0xff);
-          response = await request
-            .post('/too-long.mp4')
-            .set('Content-Type', 'application/octet-stream')
-            .send(Buffer.from(overVideoLimit));
-
-          assert.strictEqual(response.status, 413, 'HTTP 413 status');
-          assert.strictEqual(
-            response.body.errors[0].title,
-            'Payload Too Large',
-            'error title is correct',
-          );
-        });
-
-        test('non-media binaries still get the general file limit', async function (assert) {
-          let overFileLimit = new Uint8Array(1024).fill(0xff);
-          let response = await request
-            .post('/too-large.bin')
-            .set('Content-Type', 'application/octet-stream')
-            .send(Buffer.from(overFileLimit));
-
-          assert.strictEqual(response.status, 413, 'HTTP 413 status');
-        });
-      });
 
       module('permissioned realm for binary', function (hooks) {
         setupPermissionedRealmCached(hooks, {

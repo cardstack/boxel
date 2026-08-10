@@ -27,11 +27,18 @@ export const personalRealmURL = `http://test-realm/personal/`;
 type InteractSubmodeSetupOptions = {
   setRealm: (realm: Realm) => void;
   fileSizeLimitBytes?: number;
+  audioSizeLimitBytes?: number;
+  videoSizeLimitBytes?: number;
 };
 
 export function setupInteractSubmodeTests(
   hooks: NestedHooks,
-  { setRealm, fileSizeLimitBytes }: InteractSubmodeSetupOptions,
+  {
+    setRealm,
+    fileSizeLimitBytes,
+    audioSizeLimitBytes,
+    videoSizeLimitBytes,
+  }: InteractSubmodeSetupOptions,
 ) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -324,6 +331,8 @@ export function setupInteractSubmodeTests(
     ({ realm } = await setupAcceptanceTestRealm({
       mockMatrixUtils,
       fileSizeLimitBytes,
+      audioSizeLimitBytes,
+      videoSizeLimitBytes,
       contents: {
         ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'address.gts': { Address },

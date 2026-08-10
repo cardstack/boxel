@@ -10,7 +10,12 @@ import {
   isCardErrorJSONAPI,
   type LocalPath,
 } from '@cardstack/runtime-common';
+import {
+  fileSizeLimitFor,
+  validateByteLength,
+} from '@cardstack/runtime-common/write-size-validation';
 
+import type EnvironmentService from './environment-service';
 import type NetworkService from './network';
 import type SessionService from './session';
 import type StoreService from './store';
@@ -48,6 +53,7 @@ export class FileUploadTask {
 }
 
 export default class FileUploadService extends Service {
+  @service declare private environmentService: EnvironmentService;
   @service declare private network: NetworkService;
   @service declare private session: SessionService;
   @service declare private store: StoreService;
@@ -201,6 +207,20 @@ export default class FileUploadService extends Service {
       }
 
       task.fileName = file.name;
+
+      // The realm rejects an over-limit write with a 413, but only after the
+      // whole body has crossed the wire and been buffered server-side. Checking
+      // the size the browser already knows turns that into an immediate error.
+      validateByteLength(
+        file.size,
+        fileSizeLimitFor(file.name, {
+          default: this.environmentService.fileSizeLimitBytes,
+          audio: this.environmentService.audioSizeLimitBytes,
+          video: this.environmentService.videoSizeLimitBytes,
+        }),
+        'file',
+      );
+
       task.state = 'uploading';
 
       let targetUrl = new RealmPaths(realmURL).fileURL(file.name as LocalPath);

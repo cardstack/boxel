@@ -76,6 +76,17 @@ module(basename(import.meta.filename), function () {
     );
   });
 
+  test('a general limit above the media limits lifts media with it', function (assert) {
+    // The media limits give media more room than other files; they are not a
+    // cap on it. An operator who raises only the general limit must not end up
+    // with audio and video held to something smaller than a .bin of the same
+    // size.
+    let raised = { default: 500, audio: 200, video: 300 };
+    assert.strictEqual(fileSizeLimitFor('theme.mp3', raised), 500);
+    assert.strictEqual(fileSizeLimitFor('intro.mp4', raised), 500);
+    assert.strictEqual(fileSizeLimitFor('asset.bin', raised), 500);
+  });
+
   test('anything granted a media ceiling is carried as bytes', function (assert) {
     // A media ceiling is only meaningful for content that reaches the realm
     // intact. Callers that read a file before uploading it pick text vs bytes
