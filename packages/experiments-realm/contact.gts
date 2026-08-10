@@ -10,6 +10,7 @@ import EmailField from 'https://cardstack.com/base/email';
 import PhoneNumberField from 'https://cardstack.com/base/phone-number';
 import enumField from 'https://cardstack.com/base/enum';
 import ContactIcon from '@cardstack/boxel-icons/address-book';
+import { Avatar } from '@cardstack/boxel-ui/components';
 import { Account } from './account';
 
 const ContactRoleField = enumField(StringField, {
@@ -44,15 +45,14 @@ export class Contact extends CardDef {
   });
 
   static atom = class Atom extends Component<typeof Contact> {
-    get initials() {
-      let words = [this.args.model?.firstName, this.args.model?.lastName]
-        .filter(Boolean)
-        .slice(0, 2) as string[];
-      return words.map((w) => w[0]?.toUpperCase() ?? '').join('') || '?';
-    }
     <template>
       <span class='contact-atom'>
-        <span class='cta-avatar'>{{this.initials}}</span>
+        <Avatar
+          class='cta-avatar'
+          @userId={{@model.email}}
+          @displayName={{@model.name}}
+          @isReady={{true}}
+        />
         <span class='cta-name'>{{if
             @model.name
             @model.name
@@ -69,15 +69,8 @@ export class Contact extends CardDef {
           color: var(--foreground, #111111);
         }
         .cta-avatar {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 18px;
-          height: 18px;
-          border-radius: 50%;
-          background: var(--muted, #eef2f7);
-          color: var(--muted-foreground, #6b7280);
-          font-size: 0.5625rem;
+          --profile-avatar-icon-size: 18px;
+          --profile-avatar-icon-border: 0;
           font-weight: 700;
           flex-shrink: 0;
         }
@@ -91,18 +84,17 @@ export class Contact extends CardDef {
   };
 
   static embedded = class Embedded extends Component<typeof Contact> {
-    get initials() {
-      let words = [this.args.model?.firstName, this.args.model?.lastName]
-        .filter(Boolean)
-        .slice(0, 2) as string[];
-      return words.map((w) => w[0]?.toUpperCase() ?? '').join('') || '?';
-    }
     get subtitle() {
       return this.args.model?.jobTitle;
     }
     <template>
       <div class='contact'>
-        <span class='avatar'>{{this.initials}}</span>
+        <Avatar
+          class='avatar'
+          @userId={{@model.email}}
+          @displayName={{@model.name}}
+          @isReady={{true}}
+        />
         <div class='info'>
           <div class='name'>{{if @model.name @model.name 'Unnamed'}}</div>
           {{#if this.subtitle}}
@@ -121,15 +113,8 @@ export class Contact extends CardDef {
           padding: 0.625rem 0.875rem;
         }
         .avatar {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 32px;
-          height: 32px;
-          border-radius: 50%;
-          background: var(--muted, #eef2f7);
-          color: var(--muted-foreground, #6b7280);
-          font-size: 0.75rem;
+          --profile-avatar-icon-size: 32px;
+          --profile-avatar-icon-border: 0;
           font-weight: 700;
           flex-shrink: 0;
         }
@@ -171,13 +156,14 @@ export class Contact extends CardDef {
     get name() {
       return this.args.model?.name?.trim() || 'Unnamed Contact';
     }
-    get initials() {
-      let words = this.name.split(/\s+/).filter(Boolean).slice(0, 2);
-      return words.map((w) => w[0]?.toUpperCase() ?? '').join('') || '?';
-    }
     <template>
       <div class='fitted'>
-        <span class='avatar'>{{this.initials}}</span>
+        <Avatar
+          class='avatar'
+          @userId={{@model.email}}
+          @displayName={{@model.name}}
+          @isReady={{true}}
+        />
         <div class='info'>
           <span class='name'>{{this.name}}</span>
           {{#if @model.jobTitle}}
@@ -204,15 +190,8 @@ export class Contact extends CardDef {
           color: var(--foreground, #111111);
         }
         .avatar {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 28px;
-          height: 28px;
-          border-radius: 50%;
-          background: var(--muted, #eef2f7);
-          color: var(--muted-foreground, #6b7280);
-          font-size: 0.6875rem;
+          --profile-avatar-icon-size: 28px;
+          --profile-avatar-icon-border: 0;
           font-weight: 700;
           flex-shrink: 0;
         }
@@ -254,9 +233,7 @@ export class Contact extends CardDef {
             padding: 0.875rem;
           }
           .avatar {
-            width: 40px;
-            height: 40px;
-            font-size: 0.875rem;
+            --profile-avatar-icon-size: 40px;
           }
           .line-email {
             display: block;
@@ -275,14 +252,15 @@ export class Contact extends CardDef {
     get name() {
       return this.args.model?.name?.trim() || 'Unnamed Contact';
     }
-    get initials() {
-      let words = this.name.split(/\s+/).filter(Boolean).slice(0, 2);
-      return words.map((w) => w[0]?.toUpperCase() ?? '').join('') || '?';
-    }
     <template>
       <article class='contact-page'>
         <header class='ch'>
-          <span class='avatar'>{{this.initials}}</span>
+          <Avatar
+            class='avatar'
+            @userId={{@model.email}}
+            @displayName={{@model.name}}
+            @isReady={{true}}
+          />
           <div class='ch-id'>
             <p class='doc-kind'>Contact</p>
             <h1>{{this.name}}</h1>
@@ -331,17 +309,8 @@ export class Contact extends CardDef {
           padding-bottom: 1.25rem;
         }
         .avatar {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 56px;
-          height: 56px;
-          border-radius: 50%;
-          background: var(--primary, #111111);
-          color: var(--primary-foreground, #ffffff);
-          font-size: 1.25rem;
+          --profile-avatar-icon-size: 56px;
           font-weight: 700;
-          letter-spacing: 0.02em;
           flex-shrink: 0;
         }
         .ch-id {
