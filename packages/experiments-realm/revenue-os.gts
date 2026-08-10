@@ -15,7 +15,9 @@ import { eq, gt } from '@cardstack/boxel-ui/helpers';
 import {
   BoxelButton,
   BoxelInput,
+  BoxelSelect,
   Pill,
+  Switch,
 } from '@cardstack/boxel-ui/components';
 import {
   identifyCard,
@@ -142,6 +144,12 @@ export class RevenueOs extends CardDef {
       return (this.args as any).context?.commandContext;
     }
 
+    // CardCrudFunctions ride on component args only in interactive contexts;
+    // prerender gets the static shell so the indexer never mounts the board.
+    private get isInteractive() {
+      return Boolean((this.args as any).viewCard);
+    }
+
     // ── data ──────────────────────────────────────────────────────────
     get opportunities(): Opportunity[] {
       return ((this.opportunityList?.instances ?? []) as Opportunity[]).filter(
@@ -186,6 +194,15 @@ export class RevenueOs extends CardDef {
         if (n) names.add(n);
       }
       return [...names].sort();
+    }
+
+    get queriesSettled(): boolean {
+      return ![
+        this.opportunityList,
+        this.accountList,
+        this.invoiceList,
+        this.subscriptionList,
+      ].some((list: any) => list?.isLoading);
     }
 
     get boardItems(): Opportunity[] {
@@ -288,17 +305,31 @@ export class RevenueOs extends CardDef {
         mrr: formatMoney(mrr, code),
         arr: formatMoney(mrr * 12, code),
         secondary: [
-          { label: 'Pipeline', value: this.stageTotals.total },
-          { label: 'Weighted forecast', value: this.stageTotals.weighted },
+          { label: 'Pipeline', value: this.stageTotals.total, tab: 'pipeline' },
+          {
+            label: 'Weighted forecast',
+            value: this.stageTotals.weighted,
+            tab: 'pipeline',
+          },
           {
             label: 'Win rate',
-            value: closed ? `${Math.round((won.length / closed) * 100)}%` : '—',
+            value: closed
+              ? `${won.length} of ${closed} won`
+              : 'no closed deals yet',
+            tab: 'pipeline',
           },
           {
             label: 'Outstanding',
             value: formatMoney(balanceOf(open), code),
+            tab: 'invoices',
+            filter: 'open',
           },
-          { label: 'Collected', value: formatMoney(sumOf(paid), code) },
+          {
+            label: 'Collected',
+            value: formatMoney(sumOf(paid), code),
+            tab: 'invoices',
+            filter: 'paid',
+          },
         ],
       };
     }
@@ -377,6 +408,32 @@ export class RevenueOs extends CardDef {
               occurredAt: new Date().toISOString(),
             },
             relationships: { about: { links: { self: account.id } } },
+            meta: { adoptsFrom: ref },
+          },
+        },
+      });
+    }
+
+    @action async newAccount() {
+      let ref = identifyCard(Account);
+      if (!ref) return;
+      await (this.args as any).createCard?.(ref, undefined, {
+        realmURL: this.realm ? new URL(this.realm) : undefined,
+        doc: { data: { attributes: {}, meta: { adoptsFrom: ref } } },
+      });
+    }
+
+    @action async newInvoice() {
+      let ref = identifyCard(Invoice);
+      if (!ref) return;
+      await (this.args as any).createCard?.(ref, undefined, {
+        realmURL: this.realm ? new URL(this.realm) : undefined,
+        doc: {
+          data: {
+            attributes: {
+              status: 'draft',
+              issueDate: new Date().toISOString().slice(0, 10),
+            },
             meta: { adoptsFrom: ref },
           },
         },
@@ -574,6 +631,19 @@ export class RevenueOs extends CardDef {
     canConvert = (lead: Lead) =>
       !['converted', 'disqualified'].includes(lead.status ?? '');
 
+    get leadRows(): { lead: Lead; account: Account | undefined }[] {
+      return this.leads.map((lead) => {
+        let account: Account | undefined;
+        if (lead.status === 'converted') {
+          let domain = lead.email?.split('@')[1];
+          account =
+            this.accounts.find((a) => a.domain && a.domain === domain) ??
+            this.accounts.find((a) => a.name && a.name === lead.company);
+        }
+        return { lead, account };
+      });
+    }
+
     @action async convertLead(lead: Lead) {
       if (!this.commandContext || !this.realm) return;
       this.busy = true;
@@ -597,11 +667,29 @@ export class RevenueOs extends CardDef {
       this.invoiceFilter = key;
     }
 
+    @action drillTo(tab: string, filter?: string) {
+      if (filter) this.invoiceFilter = filter;
+      this.setTab(tab);
+    }
+
     cardComponent = (card: CardDef) => {
       return (card.constructor as typeof CardDef).getComponent(card);
     };
 
     <template>
+      {{#unless this.isInteractive}}
+        <div class='app'>
+          <header class='app-head'>
+            <div class='brand'>
+              <ChartAreaIcon class='brand-icon' />
+              <h1>{{@model.cardTitle}}</h1>
+            </div>
+          </header>
+          <p class='empty'>Open in Interact mode for the pipeline, dashboard,
+            and collections workspace.</p>
+        </div>
+      {{/unless}}
+      {{#if this.isInteractive}}
       <div class='app'>
         <header class='app-head'>
           <div class='brand'>
@@ -627,24 +715,23 @@ export class RevenueOs extends CardDef {
           <section class='pane'>
             <div class='pane-head'>
               <h2>Pipeline</h2>
-              <Pill
-                @kind='button'
-                @variant={{if this.showAllStages 'primary' 'muted'}}
-                {{on 'click' this.toggleAllStages}}
-              >All stages</Pill>
+              <Switch
+                @isEnabled={{this.showAllStages}}
+                @onChange={{this.toggleAllStages}}
+                @label='All stages'
+              />
               {{#if this.owners.length}}
-                <div class='filters' aria-label='Filter by owner'>
-                  {{#each this.ownerOptions as |name|}}
-                    <Pill
-                      @kind='button'
-                      @variant={{if
-                        (eq this.ownerSelection name)
-                        'primary'
-                        'muted'
-                      }}
-                      {{on 'click' (fn this.setOwnerFilter name)}}
-                    >{{name}}</Pill>
-                  {{/each}}
+                <div class='owner-select'>
+                  <BoxelSelect
+                    @options={{this.ownerOptions}}
+                    @selected={{this.ownerSelection}}
+                    @onChange={{this.setOwnerFilter}}
+                    @renderInPlace={{true}}
+                    aria-label='Filter by owner'
+                    as |name|
+                  >
+                    {{name}}
+                  </BoxelSelect>
                 </div>
               {{/if}}
               <p class='pane-sub'>{{this.stageTotals.count}}
@@ -655,14 +742,18 @@ export class RevenueOs extends CardDef {
                 weighted</p>
             </div>
             <div class='board-wrap'>
-              <Board
-                @boardLabel='Pipeline'
-                @items={{this.boardItems}}
-                @columns={{this.boardColumns}}
-                @columnKeyFor={{this.columnKeyFor}}
-                @onMove={{this.onMove}}
-                @hideEmpty={{unless this.showAllStages true}}
-              />
+              {{#if this.queriesSettled}}
+                <Board
+                  @boardLabel='Pipeline'
+                  @items={{this.boardItems}}
+                  @columns={{this.boardColumns}}
+                  @columnKeyFor={{this.columnKeyFor}}
+                  @onMove={{this.onMove}}
+                  @hideEmpty={{unless this.showAllStages true}}
+                />
+              {{else}}
+                <p class='empty'>Loading pipeline…</p>
+              {{/if}}
             </div>
             {{#if this.negotiationDeals.length}}
               <div class='action-rail'>
@@ -704,10 +795,14 @@ export class RevenueOs extends CardDef {
             </div>
             <div class='metric-grid'>
               {{#each this.dash.secondary as |m|}}
-                <div class='metric metric-flat'>
+                <button
+                  type='button'
+                  class='metric metric-flat metric-link'
+                  {{on 'click' (fn this.drillTo m.tab m.filter)}}
+                >
                   <span class='m-label'>{{m.label}}</span>
                   <span class='m-value'>{{m.value}}</span>
-                </div>
+                </button>
               {{/each}}
             </div>
             <div class='dash-cols'>
@@ -716,12 +811,18 @@ export class RevenueOs extends CardDef {
                 <ul class='bars'>
                   {{#each this.stageBars as |bar|}}
                     <li>
-                      <span class='bar-label'>{{bar.stage}}</span>
-                      <span class='bar-track'>
-                        {{! template-lint-disable no-inline-styles }}
-                        <span class='bar-fill' style={{bar.widthStyle}}></span>
-                      </span>
-                      <span class='bar-value'>{{bar.display}}</span>
+                      <button
+                        type='button'
+                        class='bar-row'
+                        {{on 'click' (fn this.drillTo 'pipeline' undefined)}}
+                      >
+                        <span class='bar-label'>{{bar.stage}}</span>
+                        <span class='bar-track'>
+                          {{! template-lint-disable no-inline-styles }}
+                          <span class='bar-fill' style={{bar.widthStyle}}></span>
+                        </span>
+                        <span class='bar-value'>{{bar.display}}</span>
+                      </button>
                     </li>
                   {{/each}}
                 </ul>
@@ -731,7 +832,16 @@ export class RevenueOs extends CardDef {
         {{/if}}
 
         {{#if (eq this.activeTab 'accounts')}}
-          <section class='pane split'>
+          <section class='pane'>
+            <div class='pane-head'>
+              <h2>Accounts</h2>
+              <BoxelButton
+                @kind='secondary'
+                @size='extra-small'
+                {{on 'click' this.newAccount}}
+              >New account</BoxelButton>
+            </div>
+            <div class='split'>
             <aside class='side-list'>
               <BoxelInput
                 @type='search'
@@ -810,9 +920,15 @@ export class RevenueOs extends CardDef {
                   <div class='panel'>
                     <h3>Contacts</h3>
                     {{#each this.accountContacts as |contact|}}
-                      {{#let (this.cardComponent contact) as |C|}}
-                        <C @format='embedded' />
-                      {{/let}}
+                      <button
+                        type='button'
+                        class='row-open'
+                        {{on 'click' (fn this.openCard contact)}}
+                      >
+                        {{#let (this.cardComponent contact) as |C|}}
+                          <C @format='embedded' />
+                        {{/let}}
+                      </button>
                     {{else}}
                       <p class='empty'>No contacts yet</p>
                     {{/each}}
@@ -820,9 +936,15 @@ export class RevenueOs extends CardDef {
                   <div class='panel'>
                     <h3>Subscriptions</h3>
                     {{#each this.accountSubscriptions as |sub|}}
-                      {{#let (this.cardComponent sub) as |C|}}
-                        <C @format='embedded' />
-                      {{/let}}
+                      <button
+                        type='button'
+                        class='row-open'
+                        {{on 'click' (fn this.openCard sub)}}
+                      >
+                        {{#let (this.cardComponent sub) as |C|}}
+                          <C @format='embedded' />
+                        {{/let}}
+                      </button>
                     {{else}}
                       <p class='empty'>No subscriptions</p>
                     {{/each}}
@@ -830,9 +952,15 @@ export class RevenueOs extends CardDef {
                   <div class='panel timeline'>
                     <h3>Activity</h3>
                     {{#each this.accountActivities as |act|}}
-                      {{#let (this.cardComponent act) as |C|}}
-                        <C @format='embedded' />
-                      {{/let}}
+                      <button
+                        type='button'
+                        class='row-open'
+                        {{on 'click' (fn this.openCard act)}}
+                      >
+                        {{#let (this.cardComponent act) as |C|}}
+                          <C @format='embedded' />
+                        {{/let}}
+                      </button>
                     {{else}}
                       <p class='empty'>No activity recorded</p>
                     {{/each}}
@@ -840,11 +968,20 @@ export class RevenueOs extends CardDef {
                 </div>
               {{/if}}
             </div>
+            </div>
           </section>
         {{/if}}
 
         {{#if (eq this.activeTab 'invoices')}}
           <section class='pane'>
+            <div class='pane-head'>
+              <h2>Invoices</h2>
+              <BoxelButton
+                @kind='secondary'
+                @size='extra-small'
+                {{on 'click' this.newInvoice}}
+              >New invoice</BoxelButton>
+            </div>
             <div class='aging-strip'>
               {{#each this.aging as |bucket|}}
                 <div class='metric metric-flat'>
@@ -900,20 +1037,30 @@ export class RevenueOs extends CardDef {
               >New lead</BoxelButton>
             </div>
             <div class='lead-list'>
-              {{#each this.leads as |lead|}}
+              {{#each this.leadRows as |row|}}
                 <div class='lead-row'>
-                  <div class='lead-embed'>
-                    {{#let (this.cardComponent lead) as |C|}}
+                  <button
+                    type='button'
+                    class='row-open lead-embed'
+                    {{on 'click' (fn this.openCard row.lead)}}
+                  >
+                    {{#let (this.cardComponent row.lead) as |C|}}
                       <C @format='embedded' />
                     {{/let}}
-                  </div>
-                  {{#if (this.canConvert lead)}}
+                  </button>
+                  {{#if (this.canConvert row.lead)}}
                     <BoxelButton
                       @kind='secondary'
                       @size='extra-small'
                       @disabled={{this.busy}}
-                      {{on 'click' (fn this.convertLead lead)}}
+                      {{on 'click' (fn this.convertLead row.lead)}}
                     >Convert</BoxelButton>
+                  {{else if row.account}}
+                    <BoxelButton
+                      @kind='text-only'
+                      @size='extra-small'
+                      {{on 'click' (fn this.openCard row.account)}}
+                    >View account →</BoxelButton>
                   {{/if}}
                 </div>
               {{else}}
@@ -923,6 +1070,7 @@ export class RevenueOs extends CardDef {
           </section>
         {{/if}}
       </div>
+      {{/if}}
       <style scoped>
         .app {
           min-height: 100%;
@@ -1044,6 +1192,14 @@ export class RevenueOs extends CardDef {
           border: none;
           background: var(--muted, #f3f4f6);
         }
+        .metric-link {
+          font: inherit;
+          text-align: left;
+          cursor: pointer;
+        }
+        .metric-link:hover {
+          background: var(--border, #e5e7eb);
+        }
         .hero {
           display: grid;
           grid-template-columns: minmax(15rem, 1fr) minmax(20rem, 2fr);
@@ -1153,12 +1309,22 @@ export class RevenueOs extends CardDef {
           flex-direction: column;
           gap: 0.5rem;
         }
-        .bars li {
+        .bar-row {
           display: grid;
           grid-template-columns: 7rem 1fr auto;
           align-items: center;
           gap: 0.625rem;
           font-size: 0.75rem;
+          width: 100%;
+          border: 0;
+          background: none;
+          padding: 0.125rem 0;
+          font-family: inherit;
+          cursor: pointer;
+          border-radius: 0.375rem;
+        }
+        .bar-row:hover {
+          background: var(--muted, #f3f4f6);
         }
         .bar-label {
           text-transform: capitalize;
@@ -1273,6 +1439,9 @@ export class RevenueOs extends CardDef {
         .head-actions {
           display: flex;
           gap: 0.375rem;
+        }
+        .owner-select {
+          min-width: 11rem;
         }
         .row-open {
           display: block;
