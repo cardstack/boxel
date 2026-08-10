@@ -166,6 +166,9 @@ export default class SubmodeLayout extends Component<Signature> {
       return;
     }
     controller.openProfileSettings = null;
+    // An unrecognized value still opens settings: this param is linked from
+    // external pages, so a stale or mistyped link degrades to the modal's
+    // default view rather than doing nothing.
     this.operatorModeStateService.openProfileSettings(
       requested === 'subscription' ? 'subscription' : undefined,
     );
