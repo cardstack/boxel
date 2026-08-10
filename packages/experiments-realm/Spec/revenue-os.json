@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "RevenueOs",
+        "module": "../revenue-os"
+      },
+      "specType": "app",
+      "readMe": "## Revenue OS\n\nA sales-and-billing workspace that runs one continuous process instead of two disconnected systems: capture a lead, work it through the pipeline, win it, and bill it — with each handoff performed by a command rather than by hand.\n\nFive tabs, all query-driven through live `getCards` so a card saved anywhere in the realm appears without a refresh. Pipeline is the landing tab because it answers \"what needs me today\".\n\n| Tab | What it answers | Blocks it mounts |\n|-----|-----------------|------------------|\n| Pipeline | What needs my attention today? | Board, Opportunity + Deal fitted |\n| Dashboard | Are we going to hit the number? | LineChart, aging strip |\n| Accounts | Everything about one customer | AccountMetrics, Account/Contact/Deal/Invoice/Subscription/Activity embedded |\n| Invoices | Who owes us money, and how late? | Table, Account atom |\n| Leads | Who is worth qualifying? | Lead embedded |\n\n**The app owns its canvas; it never reaches into a block.** Blocks are styled by theme tokens and shaped through arguments — Board takes a per-column `color`, Table takes column definitions with their own `sortValue`, LineChart takes `@points` and a formatter. Where a block needed to express something new, the argument grew; no block was forked or copied.\n\n### The handoffs are commands, not screens\n\n`Convert Lead` turns a qualified lead into Account + Contact + Opportunity. `Close Won` runs when a card is dragged into the Closed Won column — it activates the subscription and drafts the first invoice, so the gesture that records the win also does the billing setup. `Record Payment` is the single writer for payment state, which is why the balance shown in the table always agrees with the payments behind it.\n\n### What is app code rather than a block\n\nTab navigation, filter controls, the masthead and the per-row action rails are app chrome and belong here. Two pieces of app code are duplication worth extracting: the dashboard's metric tiles restate AccountMetrics' tile styling (a MetricTile block would absorb both), and the pipeline-by-stage bars are hand-built CSS because no Bar Chart block exists yet.\n\n**Non-goals:** a \"my deals\" filter (there is no session-identity concept to resolve \"my\"), PDF export of the dashboard, bulk reminder and export actions, and 1000-row table performance — the invoice table is honest at demo scale and paginating it is a packaging concern, not a modelling one. Order and Payment have no tab of their own: an invoice links to the order or subscription that produced it and lists its own payments, which is where the spec asks for them.",
+      "cardInfo": {
+        "name": "Revenue OS",
+        "summary": "Sales-and-billing workspace composing the commerce and CRM blocks unforked: pipeline board, revenue dashboard, customer 360, invoice tracker, and lead list, with the lifecycle handoffs run as commands.",
+        "notes": null,
+        "cardThumbnailURL": null
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../RevenueOs/main"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
