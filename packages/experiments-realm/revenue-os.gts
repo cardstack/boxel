@@ -289,14 +289,12 @@ export class RevenueOs extends CardDef {
           {
             label: 'Weighted forecast',
             value: this.stageTotals.weighted,
-            tab: 'pipeline',
           },
           {
             label: 'Win rate',
             value: closed
               ? `${won.length} of ${closed} won`
               : 'no closed deals yet',
-            tab: 'pipeline',
           },
           {
             label: 'Outstanding',
@@ -768,14 +766,21 @@ export class RevenueOs extends CardDef {
             </div>
             <div class='metric-grid'>
               {{#each this.dash.secondary as |m|}}
-                <button
-                  type='button'
-                  class='metric metric-flat metric-link'
-                  {{on 'click' (fn this.drillTo m.tab m.filter)}}
-                >
-                  <span class='m-label'>{{m.label}}</span>
-                  <span class='m-value'>{{m.value}}</span>
-                </button>
+                {{#if m.tab}}
+                  <button
+                    type='button'
+                    class='metric metric-flat metric-link'
+                    {{on 'click' (fn this.drillTo m.tab m.filter)}}
+                  >
+                    <span class='m-label'>{{m.label}}</span>
+                    <span class='m-value'>{{m.value}}</span>
+                  </button>
+                {{else}}
+                  <div class='metric metric-flat'>
+                    <span class='m-label'>{{m.label}}</span>
+                    <span class='m-value'>{{m.value}}</span>
+                  </div>
+                {{/if}}
               {{/each}}
             </div>
             <div class='dash-cols'>
