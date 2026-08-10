@@ -234,6 +234,11 @@ export class VirtualNetwork {
   clearDecklist(): void {
     this.decklistImports = {};
     this.decklistScopes = {};
+    // Clearing changes what a specifier means just as surely as adding does,
+    // so it owes the same invalidation. Without this a module resolved under
+    // the old map survives in the Loader's cache and the clear looks like it
+    // did nothing.
+    this.notifyMappingChange();
   }
 
   private packageShimHandler = new PackageShimHandler(this.resolveImport);
