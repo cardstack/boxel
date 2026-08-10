@@ -208,7 +208,15 @@ export class Loader {
   private static loaders = new WeakMap<Function, Loader>();
 
   private fetchImplementation: Fetch;
-  private resolveImport: (moduleIdentifier: string) => string;
+  // `relativeTo` is the importing module. Optional because a top-level
+  // `import()` genuinely has no importer — the app is asking — but a
+  // module's own dependencies always do, and that is the case where scoped
+  // resolution lives or dies. See the `define` shim, which had the importer
+  // in hand and was discarding it.
+  private resolveImport: (
+    moduleIdentifier: string,
+    relativeTo?: string,
+  ) => string;
   private virtualNetwork: VirtualNetwork | undefined;
   // Unsubscribe for the realm-mapping-change listener registered below. The
   // VirtualNetwork outlives any single loader (LoaderService replaces the
@@ -227,7 +235,7 @@ export class Loader {
 
   constructor(
     fetch: Fetch,
-    resolveImport?: (moduleIdentifier: string) => string,
+    resolveImport?: (moduleIdentifier: string, relativeTo?: string) => string,
     options?: {
       retrySleep?: (ms: number) => Promise<void>;
       virtualNetwork?: VirtualNetwork;
@@ -1074,8 +1082,17 @@ export class Loader {
         } else {
           return {
             type: 'dep',
+            // `moduleIdentifier` is the module doing the importing, and it
+            // is passed to resolution as well as used as the relative base.
+            // Those are two different jobs: the base turns `./sibling.gts`
+            // into a URL, while the IMPORTER is what lets a decklist scope
+            // give this module a different version of a bare specifier than
+            // its neighbour gets. Before this it was only the base, so every
+            // module in a realm resolved `palette` identically no matter
+            // what any scope said — the failure that presents as "scopes
+            // don't work".
             moduleURL: new URL(
-              this.resolveImport(depId),
+              this.resolveImport(depId, moduleIdentifier),
               new URL(moduleIdentifier),
             ),
           };
