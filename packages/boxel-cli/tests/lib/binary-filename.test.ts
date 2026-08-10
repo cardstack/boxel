@@ -110,7 +110,7 @@ describe('isBinaryContentType', () => {
     expect(isBinaryContentType('application/vnd.api+json')).toBe(false);
   });
 
-  it('treats unrecognized and media types as binary', () => {
+  it('treats unrecognized, archive, and audiovisual types as binary', () => {
     expect(isBinaryContentType('application/octet-stream')).toBe(true);
     expect(isBinaryContentType('application/zip')).toBe(true);
     expect(isBinaryContentType('video/mp4')).toBe(true);

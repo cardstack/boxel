@@ -813,10 +813,11 @@ describe('realm push (integration)', () => {
   });
 
   it('pushes .zip, .bin, and .mp4 files byte-identically', async () => {
-    // None of these MIME types (application/zip, application/octet-stream,
-    // video/mp4) are media types, so this pins that binary classification
-    // doesn't hinge on being one — a text-pipeline round-trip would replace
-    // the payload's invalid UTF-8 sequences with U+FFFD.
+    // These three span the range that has to reach the byte path: an archive
+    // type, a video type, and application/octet-stream — the type unknown
+    // extensions resolve to. A text-pipeline round-trip would replace the
+    // payload's invalid UTF-8 sequences with U+FFFD, so recovering the bytes
+    // intact is the proof that each one stayed on the byte path.
     let realmUrl = await createTestRealm();
     let localDir = makeLocalDir();
 

@@ -188,9 +188,9 @@ describe('file read (integration)', () => {
   });
 
   it('reads a .zip byte-identically (returns bytes, not content)', async () => {
-    // application/zip is not a media MIME type, so this pins that binary
-    // classification doesn't hinge on being one — a text-path read would
-    // UTF-8-decode the payload and mangle its invalid sequences into U+FFFD.
+    // A text-path read would UTF-8-decode the payload and mangle its invalid
+    // sequences into U+FFFD, so recovering the bytes intact is the proof that
+    // application/zip is read as bytes.
     let zipUrl = `${realmUrl}archive.zip`;
     let seed = await reloadProfile(home).authedRealmFetch(zipUrl, {
       method: 'POST',
