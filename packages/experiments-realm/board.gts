@@ -20,6 +20,7 @@ function itemAt(items: CardDef[], index: number): CardDef | undefined {
 interface BoardSignature {
   Args: {
     boardLabel?: string;
+    cardSize?: any;
     columnKeyFor: (item: CardDef) => string | undefined;
     columns: BoardColumn[];
     hideEmpty?: boolean;
@@ -80,6 +81,7 @@ export class Board extends GlimmerComponent<BoardSignature> {
     <div class='board' ...attributes>
       <KanbanPlane
         @boardLabel={{@boardLabel}}
+        @cardSize={{@cardSize}}
         @columns={{this.kanbanColumns}}
         @hideEmpty={{@hideEmpty}}
         @placements={{this.placements}}
@@ -91,11 +93,9 @@ export class Board extends GlimmerComponent<BoardSignature> {
               {{#if (has-block 'card')}}
                 {{yield item to='card'}}
               {{else}}
-                <div class='board-card'>
-                  {{#let (this.cardComponent item) as |C|}}
-                    <C @format='fitted' />
-                  {{/let}}
-                </div>
+                {{#let (this.cardComponent item) as |C|}}
+                  <C @format='fitted' />
+                {{/let}}
               {{/if}}
             {{/if}}
           {{/let}}
@@ -103,11 +103,9 @@ export class Board extends GlimmerComponent<BoardSignature> {
         <:ghost as |index|>
           {{#let (itemAt @items index) as |item|}}
             {{#if item}}
-              <div class='board-card board-ghost'>
-                {{#let (this.cardComponent item) as |C|}}
-                  <C @format='fitted' />
-                {{/let}}
-              </div>
+              {{#let (this.cardComponent item) as |C|}}
+                <C @format='fitted' />
+              {{/let}}
             {{/if}}
           {{/let}}
         </:ghost>
@@ -118,19 +116,6 @@ export class Board extends GlimmerComponent<BoardSignature> {
         width: 100%;
         height: 100%;
         overflow-x: auto;
-      }
-      .board-card {
-        container-type: size;
-        container-name: fitted-card;
-        height: 140px;
-        border: 1px solid var(--border, #e5e7eb);
-        border-radius: 0.5rem;
-        background: var(--card, #ffffff);
-        overflow: hidden;
-      }
-      .board-ghost {
-        opacity: 0.85;
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
       }
     </style>
   </template>
