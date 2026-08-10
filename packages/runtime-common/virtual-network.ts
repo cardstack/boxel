@@ -168,18 +168,65 @@ export class VirtualNetwork {
    * Additive to whatever is already loaded, so a realm's own decklist and an
    * inherited one can both be applied; later keys win on collision, which
    * matches how `extends` flattens (the child overrides the parent).
+   *
+   * `baseURL` is the decklist's own location, normally the realm that owns
+   * it, and everything in the map is resolved against it — scope keys and
+   * mapped values alike, exactly as the import-maps spec requires. This is
+   * what lets the file be WRITTEN BY HAND and stay portable: an author can
+   * put `/_packages/lib/palette@2.0.0/index.js` in a realm's importmap.json
+   * and it keeps working when the realm is served from a different host,
+   * which an absolute URL baked into the file would not.
+   *
+   * Deck's `resolveSpecifier` deliberately does no base resolution — it is a
+   * pure function of the table it is handed, and only the caller knows where
+   * the table came from. So the resolution happens here, once at load, not
+   * on every lookup.
    */
-  addDecklist(decklist: {
-    imports?: Record<string, string>;
-    scopes?: Record<string, Record<string, string>>;
-  }): void {
-    Object.assign(this.decklistImports, decklist.imports ?? {});
-    for (let [scope, mappings] of Object.entries(decklist.scopes ?? {})) {
-      this.decklistScopes[scope] = {
-        ...(this.decklistScopes[scope] ?? {}),
-        ...mappings,
-      };
+  addDecklist(
+    decklist: {
+      imports?: Record<string, string>;
+      scopes?: Record<string, Record<string, string>>;
+    },
+    baseURL?: string,
+  ): void {
+    let resolve = (value: string): string => {
+      if (!baseURL) {
+        return value;
+      }
+      try {
+        return new URL(value, baseURL).href;
+      } catch {
+        // A value that is not a URL at all — a bare specifier mapped onto
+        // another bare specifier — is left alone rather than dropped. The
+        // map is user-authored; refusing to load the whole thing over one
+        // odd entry would be worse than passing it through.
+        return value;
+      }
+    };
+    for (let [specifier, value] of Object.entries(decklist.imports ?? {})) {
+      this.decklistImports[specifier] = resolve(value);
     }
+    for (let [scope, mappings] of Object.entries(decklist.scopes ?? {})) {
+      // Scope KEYS are URLs too, and are matched against the importer's URL,
+      // so a relative scope like `legacy-viewer/` has to become absolute or
+      // it can never match anything.
+      let scopeKey = resolve(scope);
+      let resolved: Record<string, string> = {
+        ...(this.decklistScopes[scopeKey] ?? {}),
+      };
+      for (let [specifier, value] of Object.entries(mappings)) {
+        resolved[specifier] = resolve(value);
+      }
+      this.decklistScopes[scopeKey] = resolved;
+    }
+    // Changing the decklist changes what a specifier MEANS, so every module
+    // already resolved under the old map is stale. This is the same signal
+    // `addRealmMapping` fires, and the Loader is already listening: it
+    // discards its RRI-keyed module caches on mapping change. That makes
+    // "edit the pin, get the other version" a cache-invalidation problem
+    // that is already solved, rather than a new mechanism — which is what
+    // a version control in card UI will ultimately drive.
+    this.notifyMappingChange();
   }
 
   /** Drop every decklist mapping. Exists so a test can assert the

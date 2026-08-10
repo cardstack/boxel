@@ -128,6 +128,63 @@ const tests: SharedTests<unknown> = Object.freeze({
       'no importer means no scope, not an error',
     );
   },
+  'a hand-written decklist uses relative paths and stays portable': async (
+    assert,
+  ) => {
+    // What a user actually types into a realm's importmap.json. No host
+    // name anywhere: the realm it lives in is the base. If this needed
+    // absolute URLs the file could not be committed, moved between
+    // environments, or sensibly hand-edited — which is the whole point of
+    // it being a file in the realm rather than server configuration.
+    let authored = {
+      imports: { palette: '/_packages/lib/palette@2.0.0/index.js' },
+      scopes: {
+        'legacy-viewer/': {
+          palette: '/_packages/lib/palette@1.0.0/index.js',
+        },
+      },
+    };
+    let vn = new VirtualNetwork(createEnvironmentAwareFetch());
+    vn.addDecklist(authored, REALM);
+
+    assert.strictEqual(
+      vn.resolveImport('palette', `${REALM}gallery/scene.gts`),
+      `${SERVE}/lib/palette@2.0.0/index.js`,
+      'a root-relative value resolves against the realm origin',
+    );
+    assert.strictEqual(
+      vn.resolveImport('palette', `${REALM}legacy-viewer/scene.gts`),
+      `${SERVE}/lib/palette@1.0.0/index.js`,
+      'a relative scope key resolves against the realm too, and matches',
+    );
+  },
+
+  'editing the decklist changes what resolves': async (assert) => {
+    // The user-facing promise: this is a file you edit. Change the pin,
+    // reload, get different code. Modelled here as a fresh load of an
+    // edited map, which is what a reload does.
+    let vn = new VirtualNetwork(createEnvironmentAwareFetch());
+    vn.addDecklist(
+      { imports: { palette: '/_packages/lib/palette@1.0.0/index.js' } },
+      REALM,
+    );
+    assert.strictEqual(
+      vn.resolveImport('palette', `${REALM}gallery/scene.gts`),
+      `${SERVE}/lib/palette@1.0.0/index.js`,
+      'before the edit: v1',
+    );
+
+    vn.clearDecklist();
+    vn.addDecklist(
+      { imports: { palette: '/_packages/lib/palette@2.0.0/index.js' } },
+      REALM,
+    );
+    assert.strictEqual(
+      vn.resolveImport('palette', `${REALM}gallery/scene.gts`),
+      `${SERVE}/lib/palette@2.0.0/index.js`,
+      'after the edit: v2 — one line of JSON, no code touched',
+    );
+  },
 });
 
 export default tests;

@@ -25,5 +25,13 @@ module(basename(import.meta.filename), function () {
     test('an importer-less caller still resolves the realm-wide import', async function (assert) {
       await runSharedTest(decklistResolutionTests, assert, {});
     });
+
+    test('a hand-written decklist uses relative paths and stays portable', async function (assert) {
+      await runSharedTest(decklistResolutionTests, assert, {});
+    });
+
+    test('editing the decklist changes what resolves', async function (assert) {
+      await runSharedTest(decklistResolutionTests, assert, {});
+    });
   });
 });
