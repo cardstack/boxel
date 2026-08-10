@@ -1124,15 +1124,17 @@ module('Acceptance | file chooser tests | upload size limit', function (hooks) {
       ),
     );
 
-    await waitUntil(() => task.state !== 'picking', {
+    // Wait for a terminal state: settling for "left picking" would pass on
+    // 'uploading' even if the upload went on to fail.
+    await waitUntil(() => task.state === 'complete' || task.state === 'error', {
       timeout: 10000,
-      timeoutMessage: 'upload task never left the picking state',
+      timeoutMessage: 'upload task never reached a terminal state',
     });
 
-    assert.notStrictEqual(
+    assert.strictEqual(
       task.state,
-      'error',
-      'audio under the audio limit is not rejected by the size check',
+      'complete',
+      'audio under the audio limit uploads instead of being rejected',
     );
     assert
       .dom('[data-test-choose-file-modal-upload-error]')
