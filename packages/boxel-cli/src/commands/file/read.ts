@@ -9,7 +9,10 @@ import { resolveRealmSecretSeed } from '../../lib/prompt.ts';
 import type { RealmAuthenticator } from '../../lib/realm-authenticator.ts';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
-import { isBinaryFilename } from '@cardstack/runtime-common/infer-content-type';
+import {
+  isBinaryContentType,
+  isBinaryFilename,
+} from '@cardstack/runtime-common/infer-content-type';
 import { FG_RED, DIM, RESET } from '../../lib/colors.ts';
 import { cliLog } from '../../lib/cli-log.ts';
 
@@ -19,9 +22,9 @@ export interface ReadResult {
   /** Raw text content of the file. Populated for non-binary paths. */
   content?: string;
   /**
-   * Raw bytes. Populated when the requested path is a binary filename
-   * (PNG, PDF, font, etc.) — see `isBinaryFilename`. Mutually exclusive
-   * with `content`.
+   * Raw bytes. Populated when the realm serves a binary content type —
+   * anything not known to be textual, which includes unrecognized types.
+   * Mutually exclusive with `content`.
    */
   bytes?: Uint8Array;
   error?: string;
@@ -76,10 +79,9 @@ export function resolveReadTarget(
 }
 
 /**
- * Read a file from a realm. Returns raw text in `content` for text files;
- * returns raw bytes in `bytes` for binary files (PNG / PDF / font / etc.,
- * per `isBinaryFilename`). Callers should parse the content themselves
- * if needed (e.g. JSON).
+ * Read a file from a realm. Returns raw text in `content` when the realm
+ * serves a textual content type, and raw bytes in `bytes` otherwise.
+ * Callers should parse the content themselves if needed (e.g. JSON).
  *
  * Auth is resolved via `resolveRealmAuthenticator`: a realm secret seed (when
  * supplied) mints a JWT locally as the realm-server bot; otherwise the active
@@ -132,7 +134,17 @@ export async function read(
     };
   }
 
-  if (isBinaryFilename(path)) {
+  // The served content type describes the bytes that actually arrived, so it
+  // beats the requested path: the realm resolves extension fallbacks, and a
+  // card id (`Cards/my-card`) or a dotted name (`hello.test`) carries no
+  // usable extension of its own. Fall back to the path only when the response
+  // omits the header.
+  let servedContentType = response.headers.get('content-type');
+  let isBinary = servedContentType
+    ? isBinaryContentType(servedContentType)
+    : isBinaryFilename(path);
+
+  if (isBinary) {
     let bytes = new Uint8Array(await response.arrayBuffer());
     return { ok: true, status: response.status, bytes };
   }
