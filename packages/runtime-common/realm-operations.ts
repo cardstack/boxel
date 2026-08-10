@@ -304,6 +304,10 @@ export interface PublishProgress {
 
 export interface FetchPublishProgressInput {
   publishedRealmURL: string;
+  // Abandons the request. A progress read is advisory and short-lived, so a
+  // caller that has stopped caring needs to be able to drop one that is still
+  // outstanding rather than wait on it.
+  signal?: AbortSignal;
 }
 
 interface PublishProgressResponseBody {
@@ -330,6 +334,7 @@ export const fetchPublishProgress: RealmOperation<
 
   let response = await client.authedFetch(url.href, {
     headers: { Accept: JSONAPI_MIME },
+    ...(input.signal ? { signal: input.signal } : {}),
   });
   if (!response.ok) {
     let body = await safeReadResponseText(response);
@@ -436,7 +441,7 @@ export const waitForReady: RealmOperation<WaitForReadyInput, void> = async (
       );
     }
   } finally {
-    await stopSamplingProgress?.();
+    stopSamplingProgress?.();
   }
 
   throw new Error(
@@ -448,23 +453,37 @@ export const waitForReady: RealmOperation<WaitForReadyInput, void> = async (
 
 // Polls publish progress until stopped, reporting only when the reading
 // changes so a consumer can redraw (or log) per update rather than per poll.
-// Returns a stop function that also awaits the loop, so no sample can land
-// after the wait it belongs to has settled.
+//
+// Stopping is synchronous and cannot block. It would be tidier to await the
+// loop so teardown is fully ordered, but that hands an advisory channel the
+// power to hold up the wait it decorates: a progress request that never settles
+// — a server that accepts the connection and then goes silent — would keep
+// `waitForReady` from returning even after readiness had already passed, which
+// is exactly the freeze this whole feature exists to make visible. The
+// `stopped` re-check after each await is what actually enforces the contract
+// that no reading lands after the wait settles; the loop is then free to unwind
+// on its own.
 function sampleProgress(
   client: RealmClient,
   publishedRealmURL: string,
   onProgress: (progress: PublishProgress) => void,
   intervalMs: number,
-): () => Promise<void> {
+): () => void {
   let stopped = false;
   let wake: (() => void) | undefined;
+  let inFlight: AbortController | undefined;
   let lastReading: string | undefined;
 
-  let loop = (async () => {
+  void (async () => {
     while (!stopped) {
+      // Per-request, so stopping abandons the outstanding read rather than
+      // leaving a socket open — which in Node would hold the event loop past
+      // the end of the publish.
+      inFlight = new AbortController();
       try {
         let progress = await fetchPublishProgress(client, {
           publishedRealmURL,
+          signal: inFlight.signal,
         });
         let reading = `${progress.phase}:${progress.filesCompleted}/${progress.totalFiles}`;
         if (!stopped && reading !== lastReading) {
@@ -473,7 +492,8 @@ function sampleProgress(
         }
       } catch (_error) {
         // Advisory: a failed sample (an older realm server without the route, a
-        // transient error) must never disturb the readiness wait it decorates.
+        // transient error, the abort above) must never disturb the readiness
+        // wait it decorates.
       }
       if (stopped) {
         return;
@@ -491,10 +511,10 @@ function sampleProgress(
     }
   })();
 
-  return async () => {
+  return () => {
     stopped = true;
+    inFlight?.abort();
     wake?.();
-    await loop;
   };
 }
 

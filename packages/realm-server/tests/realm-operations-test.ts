@@ -354,6 +354,43 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    // The freeze this feature exists to make visible must not be one it can
+    // cause. A progress request that never settles — a server that accepts the
+    // connection and then goes silent — cannot be allowed to hold up a wait
+    // whose readiness check has already passed.
+    test('waitForReady resolves and abandons the request when a progress sample never settles', async function (assert) {
+      let aborted = false;
+      let { client } = makeClient((url, init) => {
+        if (url.includes('_publish-progress')) {
+          return new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () => {
+              aborted = true;
+              reject(new Error('aborted'));
+            });
+          });
+        }
+        return new Response(null, { status: 200 });
+      });
+
+      let outcome = await Promise.race([
+        waitForReady(client, {
+          publishedRealmURL: 'https://mike.boxel.space/notes/',
+          timeoutMs: 2000,
+          pollIntervalMs: 1,
+          progressPollIntervalMs: 1,
+          onProgress: () => {},
+        }).then(() => 'resolved'),
+        new Promise((resolve) => setTimeout(() => resolve('hung'), 3000)),
+      ]);
+
+      assert.strictEqual(
+        outcome,
+        'resolved',
+        'the readiness result is not held up by the outstanding progress read',
+      );
+      assert.true(aborted, 'the outstanding progress read is abandoned');
+    });
+
     // A realm server that doesn't serve the route (or a transient failure) must
     // not turn a publish that is progressing normally into a failure.
     test('waitForReady still resolves when progress sampling fails', async function (assert) {
