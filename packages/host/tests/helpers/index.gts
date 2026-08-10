@@ -991,7 +991,8 @@ export function setupLocalIndexing(
     // indexes for itself exactly as it did before opting in. Calling it too
     // early is the failure that matters, which is why it belongs immediately
     // after the last realm rather than being inferred from a realm count kept
-    // somewhere else.
+    // somewhere else — and why building a realm after the capture throws (see
+    // setupTestRealm) instead of quietly serving that realm unindexed.
     captureIndexManually?: boolean;
   },
 ) {
@@ -1395,6 +1396,25 @@ async function setupTestRealm({
     definitionLookup = owner.lookup(
       'definition-lookup:main',
     ) as DefinitionLookup;
+  }
+
+  // A realm built in the same test that captured the snapshot cannot be in it —
+  // the capture already happened. Later tests would restore an index missing
+  // this realm and, because they also skip the boot index, serve it with
+  // nothing indexed at all. That reads as "these cards don't exist": a search
+  // returns nothing, an assertion that a card is absent passes, a list renders
+  // short. Nothing looks broken, and the first test still passes, because the
+  // live database did hold both. So fail here, on the first test, naming what
+  // to do about it. `restored` distinguishes the capturing test (false) from
+  // every later one (true, where realms are expected to come from the
+  // snapshot).
+  if (reusableIndex?.captured && !reusableIndex.restored) {
+    throw new Error(
+      `reuseIndexAcrossTests ('${reusableIndex.snapshotName}'): a realm is being built after this module's index snapshot was captured, so the snapshot cannot contain it. ` +
+        (reusableIndex.manual
+          ? 'captureReusableIndex() ran too early — move it after the last realm this module builds.'
+          : 'This module builds more than one realm per test: pass captureIndexManually and call captureReusableIndex() once, after the last realm.'),
+    );
   }
   await insertPermissions(dbAdapter, new URL(realmURL), permissions);
   let worker = new Worker({
