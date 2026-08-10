@@ -223,14 +223,29 @@ export class VirtualNetwork {
    * whatever was registered, at whatever depth.
    */
   realmForReference(reference: string): string | undefined {
+    // A realm can be addressed several ways, and which ones exist depends on
+    // how it was registered. A prefix mapping contributes its `@scope/name/`
+    // spelling and its target; a URL mapping contributes the virtual space and
+    // the real one. Realms registered only by URL — everything that isn't
+    // `@cardstack/<name>/` or a scoped prefix — appear solely in the latter, so
+    // matching `realmMappings` alone would fail to place them at all.
+    let candidates: [string, string][] = [];
+    for (let [prefix, target] of this.realmMappings) {
+      candidates.push([prefix, target], [target, target]);
+    }
+    for (let [virtual, real] of this.urlMappings) {
+      candidates.push([virtual, real], [real, real]);
+    }
+
     let best: string | undefined;
     let bestLength = -1;
-    for (let [prefix, target] of this.realmMappings) {
-      for (let candidate of [prefix, target]) {
-        if (reference.startsWith(candidate) && candidate.length > bestLength) {
-          bestLength = candidate.length;
-          best = target;
-        }
+    for (let [addressable, realmHref] of candidates) {
+      if (
+        reference.startsWith(addressable) &&
+        addressable.length > bestLength
+      ) {
+        bestLength = addressable.length;
+        best = realmHref;
       }
     }
     if (!best) {
