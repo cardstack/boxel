@@ -3710,7 +3710,10 @@ function lazilyLoadLink(
           value[index] = fieldValue;
         }
       } else {
-        (instance as any)[field.name] = fieldValue;
+        // Not `instance[field.name] = fieldValue`: assigning through the field
+        // setter announces a change, which marks the instance dirty and
+        // auto-saves it — a write triggered by reading the card.
+        setResolvedField(instance, field, fieldValue);
       }
     } catch (e) {
       let error = e as Error;
@@ -4679,6 +4682,18 @@ function makeDescriptor<
   }
   (descriptor.get as any)[isField] = field;
   return descriptor;
+}
+
+// Fill in a field value that resolution produced rather than a user edit — the
+// loaded target of a link the instance already referenced. Change subscribers
+// drive auto-save, so announcing this as a change writes the card back to the
+// server merely because it was read, bumping its version and scheduling a
+// reindex. Glimmer's tracking is still notified, so rendering updates.
+function setResolvedField(instance: BaseDef, field: Field, value: any) {
+  propagateRealmContext(value, instance);
+  value = field.validate(instance, value);
+  getDataBucket(instance).set(field.name, value);
+  notifyCardTracking(instance);
 }
 
 function setField(instance: BaseDef, field: Field, value: any) {
