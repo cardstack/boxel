@@ -39,6 +39,7 @@ import { Contact } from './contact';
 import { Activity } from './activity';
 import ConvertLeadCommand from './convert-lead';
 import RecordPaymentCommand from './record-payment';
+import CloseWonCommand from './close-won';
 import { formatMoney, outstandingBalance, sumLineItems } from './money';
 
 const OPEN_INVOICE_STATUSES = ['sent', 'viewed', 'partial', 'overdue'];
@@ -227,14 +228,40 @@ export class RevenueOs extends CardDef {
       this.showAllStages = !this.showAllStages;
     }
     onMove = async (item: CardDef, columnKey: string) => {
-      (item as Opportunity).stage = columnKey;
-      if (this.commandContext && this.realm) {
-        await new SaveCardCommand(this.commandContext).execute({
-          card: item,
-          realm: this.realm,
-        } as any);
+      if (!this.commandContext || !this.realm) return;
+      if (columnKey === 'closed won') {
+        await this.closeWon(item as Opportunity);
+        return;
       }
+      (item as Opportunity).stage = columnKey;
+      await new SaveCardCommand(this.commandContext).execute({
+        card: item,
+        realm: this.realm,
+      } as any);
     };
+
+    // Winning a deal is the handoff the app exists to remove: the command
+    // activates the subscription and drafts the first invoice, so dragging
+    // into Closed Won runs it instead of just writing the stage.
+    @action async closeWon(deal: Opportunity) {
+      if (!this.commandContext || !this.realm) return;
+      // The command works on its own refetched copy, so move the card here too
+      // or it sits in its old column until the live query catches up.
+      let stageBefore = deal.stage;
+      deal.stage = 'closed won';
+      this.busy = true;
+      try {
+        let result: any = await new CloseWonCommand(
+          this.commandContext,
+        ).execute({ deal, realm: this.realm } as any);
+        this.statusMessage = result?.message ?? `${deal.name} closed won`;
+      } catch (e: any) {
+        deal.stage = stageBefore;
+        this.statusMessage = e?.message ?? 'Close won failed';
+      } finally {
+        this.busy = false;
+      }
+    }
 
     get stageTotals() {
       let open = this.opportunities.filter((o) =>
@@ -490,6 +517,7 @@ export class RevenueOs extends CardDef {
       {
         key: 'account',
         label: 'Account',
+        custom: true,
         value: (item) => (item as Invoice).account?.name,
       },
       {
@@ -571,6 +599,8 @@ export class RevenueOs extends CardDef {
         { label: '60+ days', value: f(buckets.b90), tone: tone(buckets.b90, 'late') },
       ];
     }
+
+    accountOf = (item: CardDef) => (item as Invoice).account;
 
     balanceOf = (inv: Invoice) => outstandingBalance(inv.lineItems, inv.payments);
     balanceDisplay = (inv: Invoice) => {
@@ -981,6 +1011,14 @@ export class RevenueOs extends CardDef {
                 {{#if (eq column.key 'status')}}
                   {{#let (invoiceStatus item) as |status|}}
                     <span class='tstatus tstatus-{{status}}'>{{status}}</span>
+                  {{/let}}
+                {{else if (eq column.key 'account')}}
+                  {{#let (this.accountOf item) as |account|}}
+                    {{#if account}}
+                      {{#let (this.cardComponent account) as |C|}}
+                        <C @format='atom' />
+                      {{/let}}
+                    {{/if}}
                   {{/let}}
                 {{else if (eq column.key 'actions')}}
                   {{#if (gt (this.balanceOf item) 0)}}
