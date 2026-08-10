@@ -8,6 +8,9 @@ import type { PublishProgress } from '@cardstack/runtime-common';
 // way.
 
 const PHASE_LABELS: Record<PublishProgress['phase'], string> = {
+  // Enqueued with no worker on it. Named rather than folded into "Indexing" so
+  // a backed-up or stalled queue doesn't look like a slow index.
+  queued: 'Waiting for a worker',
   index: 'Indexing',
   render: 'Rendering',
   // Both passes have reported clear, but the publish isn't finished until the

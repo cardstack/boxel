@@ -115,6 +115,17 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         );
       }
 
+      // A live reservation is what makes a job "being worked on" rather than
+      // merely queued — the same state pg-queue writes when a worker claims a
+      // job, and what the endpoint reads to tell the two apart.
+      async function claimJob(jobId: number, opts: { expired?: boolean } = {}) {
+        await dbAdapter.execute(
+          `INSERT INTO job_reservations (job_id, locked_until, worker_id)
+             VALUES ($1, NOW() + ($2 || ' minutes')::interval, 'test-worker')`,
+          { bind: [jobId, opts.expired ? '-5' : '5'] },
+        );
+      }
+
       test('rejects an unauthenticated request', async function (assert) {
         let realmURL = await ownedRealm();
         let response = await getProgress(realmURL);
@@ -144,6 +155,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           concurrency_group: indexingConcurrencyGroup(realmURL),
           args: { realmURL },
         });
+        await claimJob(Number(job.id));
         await seedProgress(Number(job.id), 42, 270);
 
         let response = await getProgress(realmURL, { as: ownerUserId });
@@ -167,11 +179,12 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       // must still name the index pass.
       test('reports the index phase with zero counts before the job has reported', async function (assert) {
         let realmURL = await ownedRealm();
-        await insertJob(dbAdapter, {
+        let job = await insertJob(dbAdapter, {
           job_type: 'from-scratch-index',
           concurrency_group: indexingConcurrencyGroup(realmURL),
           args: { realmURL },
         });
+        await claimJob(Number(job.id));
 
         let response = await getProgress(realmURL, { as: ownerUserId });
 
@@ -192,12 +205,14 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           concurrency_group: indexingConcurrencyGroup(realmURL),
           args: { realmURL },
         });
+        await claimJob(Number(indexJob.id));
         await seedProgress(Number(indexJob.id), 5, 270);
         let htmlJob = await insertJob(dbAdapter, {
           job_type: 'prerender_html',
           concurrency_group: prerenderHtmlConcurrencyGroup(realmURL),
           args: { realmURL },
         });
+        await claimJob(Number(htmlJob.id));
         await seedProgress(Number(htmlJob.id), 1, 270);
 
         let response = await getProgress(realmURL, { as: ownerUserId });
@@ -216,6 +231,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           concurrency_group: prerenderHtmlConcurrencyGroup(realmURL),
           args: { realmURL },
         });
+        await claimJob(Number(htmlJob.id));
         await seedProgress(Number(htmlJob.id), 12, 270);
 
         let response = await getProgress(realmURL, { as: ownerUserId });
@@ -223,6 +239,76 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         assert.deepEqual(response.body.data.attributes, {
           phase: 'render',
           filesCompleted: 12,
+          totalFiles: 270,
+        });
+      });
+
+      // A job nothing has claimed is the case that reads as a hang: the lane is
+      // not empty, so the publish is unfinished, but no progress will ever
+      // arrive. Reporting it as `index` would render a stalled or backed-up
+      // queue exactly like a slow index.
+      test('reports queued while no worker holds the job', async function (assert) {
+        let realmURL = await ownedRealm();
+        await insertJob(dbAdapter, {
+          job_type: 'from-scratch-index',
+          concurrency_group: indexingConcurrencyGroup(realmURL),
+          args: { realmURL },
+        });
+
+        let response = await getProgress(realmURL, { as: ownerUserId });
+
+        assert.deepEqual(response.body.data.attributes, {
+          phase: 'queued',
+          filesCompleted: 0,
+          totalFiles: 0,
+        });
+      });
+
+      // An expired reservation is a worker that died holding the job. It is
+      // claimable again, and until something claims it nobody is working on it
+      // — the same situation as never having been claimed.
+      test('reports queued when the only reservation has expired', async function (assert) {
+        let realmURL = await ownedRealm();
+        let job = await insertJob(dbAdapter, {
+          job_type: 'from-scratch-index',
+          concurrency_group: indexingConcurrencyGroup(realmURL),
+          args: { realmURL },
+        });
+        await claimJob(Number(job.id), { expired: true });
+        await seedProgress(Number(job.id), 30, 270);
+
+        let response = await getProgress(realmURL, { as: ownerUserId });
+
+        assert.deepEqual(
+          response.body.data.attributes,
+          { phase: 'queued', filesCompleted: 0, totalFiles: 0 },
+          'the dead attempt’s counts are not reported as live progress',
+        );
+      });
+
+      // Queued work sits behind the running job in the same lane. The held job
+      // is the one to report, whichever order they were enqueued in.
+      test('reports the held job rather than the oldest queued one', async function (assert) {
+        let realmURL = await ownedRealm();
+        let queued = await insertJob(dbAdapter, {
+          job_type: 'from-scratch-index',
+          concurrency_group: indexingConcurrencyGroup(realmURL),
+          args: { realmURL },
+        });
+        await seedProgress(Number(queued.id), 0, 0);
+        let running = await insertJob(dbAdapter, {
+          job_type: 'from-scratch-index',
+          concurrency_group: indexingConcurrencyGroup(realmURL),
+          args: { realmURL },
+        });
+        await claimJob(Number(running.id));
+        await seedProgress(Number(running.id), 88, 270);
+
+        let response = await getProgress(realmURL, { as: ownerUserId });
+
+        assert.deepEqual(response.body.data.attributes, {
+          phase: 'index',
+          filesCompleted: 88,
           totalFiles: 270,
         });
       });

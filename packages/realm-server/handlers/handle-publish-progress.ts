@@ -18,19 +18,23 @@ import {
 import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
 
-// The stage of a publish a realm is currently in. These are the same two waits
-// `_readiness-check?awaitPrerenderHtml=true` performs, in the same order, so a
-// publish's progress display and the moment it reports ready can't disagree:
-// `index` while the realm's index lane still holds work, `render` until the
-// prerendered HTML for the current generation is live, `done` once both have
-// settled.
-type PublishPhase = 'index' | 'render' | 'done';
+// The stage of a publish a realm is currently in. `index` and `render` are the
+// two waits `_readiness-check?awaitPrerenderHtml=true` performs, in the same
+// order, so a publish's progress display and the moment it reports ready can't
+// disagree; `done` is both having settled.
+//
+// `queued` is the case the other three can't express: work is outstanding but
+// no worker holds it. Reporting that as `index` would render a stalled queue
+// identically to a slow one — the exact ambiguity this endpoint exists to
+// remove — so it is called out rather than folded in.
+type PublishPhase = 'queued' | 'index' | 'render' | 'done';
 
-// Both columns come from the LEFT JOIN against `job_progress`, so they are
-// null for a job that hasn't reported yet.
+// `total_files` / `files_completed` come from the LEFT JOIN against
+// `job_progress`, so they are null for a job that hasn't reported yet.
 interface PublishProgressRow {
   total_files?: number | null;
   files_completed?: number | null;
+  has_worker?: boolean;
 }
 
 // Reports how far along a published realm's indexing and prerendering are, so
@@ -144,7 +148,11 @@ async function readPublishProgress(
     indexingConcurrencyGroup(realmURL),
   );
   if (indexJob) {
-    return { phase: 'index', ...counts(indexJob) };
+    return indexJob.has_worker
+      ? { phase: 'index', ...counts(indexJob) }
+      : // Nothing is working the job, so it has no counts to report and none
+        // are coming until a worker picks it up.
+        { phase: 'queued', filesCompleted: 0, totalFiles: 0 };
   }
 
   // The index lane is clear, so anything outstanding is HTML. A job in the
@@ -154,7 +162,9 @@ async function readPublishProgress(
     prerenderHtmlConcurrencyGroup(realmURL),
   );
   if (htmlJob) {
-    return { phase: 'render', ...counts(htmlJob) };
+    return htmlJob.has_worker
+      ? { phase: 'render', ...counts(htmlJob) }
+      : { phase: 'queued', filesCompleted: 0, totalFiles: 0 };
   }
   // An empty lane does not mean the render is done: the index pass enqueues its
   // prerender job fire-and-forget, so the work can be pending with nothing yet
@@ -167,22 +177,32 @@ async function readPublishProgress(
   return { phase: 'done', filesCompleted: 0, totalFiles: 0 };
 }
 
-// The progress of the job currently holding a realm's lane. Jobs in one
-// concurrency group serialize and are claimed oldest-first, so the lowest
-// unfulfilled id is the one running; any behind it have not started and have no
-// progress to report. A job that has been claimed but hasn't reported its first
-// event yet has no `job_progress` row — hence the LEFT JOIN and the null
-// columns, which surface as 0/0 ("starting") rather than dropping the phase.
+// The job currently holding a realm's lane, and whether a worker is actually on
+// it. Jobs in one concurrency group serialize, so at most one is held at a time;
+// prefer the held one and fall back to the oldest queued, which is the one a
+// worker will claim next.
+//
+// `has_worker` is a live reservation — uncompleted and not yet expired. An
+// expired one means the worker that held the job died without finishing it, so
+// the job is claimable again and, until something claims it, nobody is working
+// on it; that reads the same as never having been claimed.
+//
+// A job claimed but yet to report its first event has no `job_progress` row —
+// hence the LEFT JOIN and the null columns, which surface as 0/0 ("starting")
+// rather than dropping the phase.
 async function currentJobProgress(
   dbAdapter: DBAdapter,
   concurrencyGroup: string,
 ): Promise<PublishProgressRow | undefined> {
   let [row] = (await query(dbAdapter, [
-    `SELECT jp.total_files, jp.files_completed FROM jobs j`,
+    `SELECT jp.total_files, jp.files_completed,`,
+    `EXISTS (SELECT 1 FROM job_reservations jr WHERE jr.job_id = j.id`,
+    `AND jr.completed_at IS NULL AND jr.locked_until > NOW()) AS has_worker`,
+    `FROM jobs j`,
     `LEFT JOIN job_progress jp ON jp.job_id = j.id`,
     `WHERE j.status = 'unfulfilled' AND j.concurrency_group =`,
     param(concurrencyGroup),
-    `ORDER BY j.id ASC LIMIT 1`,
+    `ORDER BY has_worker DESC, j.id ASC LIMIT 1`,
   ])) as PublishProgressRow[];
   return row;
 }

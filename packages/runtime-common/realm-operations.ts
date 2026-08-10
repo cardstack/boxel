@@ -288,14 +288,16 @@ export const fetchPublishabilityReport: RealmOperation<
 // Where a published realm is in the two passes a publish waits on. `index`
 // while its index lane still holds work, `render` until the prerendered HTML
 // for the current generation is live, `done` once both have settled — the same
-// order `_readiness-check?awaitPrerenderHtml=true` gates on.
+// order `_readiness-check?awaitPrerenderHtml=true` gates on. `queued` means
+// work is outstanding but no worker holds it, which is worth distinguishing:
+// otherwise a stalled queue is indistinguishable from a slow pass.
 //
 // The counts describe the pass named by `phase` and reset between them: 40/270
 // under `index` is files indexed, under `render` it is pages rendered. Both are
-// 0 for a pass whose job is queued but hasn't reported its first event, which
-// reads as "starting" rather than as no work.
+// 0 under `queued`, and 0 for a pass whose worker hasn't reported its first
+// event yet, which reads as "starting" rather than as no work.
 export interface PublishProgress {
-  phase: 'index' | 'render' | 'done';
+  phase: 'queued' | 'index' | 'render' | 'done';
   filesCompleted: number;
   totalFiles: number;
 }

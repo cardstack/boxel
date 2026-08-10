@@ -73,6 +73,17 @@ describe('publish progress reporter', () => {
       expect(chunks).toEqual(['\r\x1b[2KRendering…']);
     });
 
+    // A publish whose job nothing has claimed produces no counts and never
+    // will. Saying "Indexing" there would describe work that isn't happening.
+    it('says the work is waiting for a worker when it is only queued', () => {
+      let { chunks, stream } = fakeStream(true);
+      let reporter = createPublishProgressReporter(stream);
+
+      reporter.onProgress(progress('queued', 0, 0));
+
+      expect(chunks).toEqual(['\r\x1b[2KWaiting for a worker…']);
+    });
+
     it('writes nothing under --quiet', () => {
       let { chunks, stream } = fakeStream(true);
       let reporter = createPublishProgressReporter(stream);
