@@ -8,6 +8,7 @@ import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import { Command } from '@cardstack/runtime-common';
 import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
+import GetCardCommand from '@cardstack/boxel-host/commands/get-card';
 import PatchCardInstanceCommand from '@cardstack/boxel-host/commands/patch-card-instance';
 import { Invoice } from './invoice';
 import { Payment } from './payment';
@@ -41,6 +42,11 @@ export default class RecordPaymentCommand extends Command<
     let { invoice, amount, currencyCode, method, reference, realm } = input;
     if (!invoice) throw new Error('An invoice is required');
     if (!realm) throw new Error('A realm is required');
+    if (invoice.id) {
+      invoice = (await new GetCardCommand(this.commandContext).execute({
+        cardId: invoice.id,
+      })) as Invoice;
+    }
     if (typeof amount !== 'number' || amount <= 0) {
       throw new Error('A positive payment amount is required');
     }
