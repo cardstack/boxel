@@ -28,6 +28,7 @@ export function isBinaryFilename(filename: string): boolean {
     mimeType.startsWith('image/') ||
     mimeType.startsWith('font/') ||
     mimeType.startsWith('audio/') ||
+    mimeType.startsWith('video/') ||
     mimeType === 'application/pdf' ||
     mimeType === 'application/vnd.ms-fontobject' // .eot legacy font
   );

@@ -6,6 +6,7 @@ import {
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
   DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
   fileSizeLimitFor,
+  isBinaryFilename,
 } from '@cardstack/runtime-common';
 
 const LIMITS = { default: 100, audio: 200, video: 300 };
@@ -73,6 +74,30 @@ module(basename(import.meta.filename), function () {
       fileSizeLimitFor('http://localhost:4201/test/card.gts', LIMITS),
       100,
     );
+  });
+
+  test('anything granted a media ceiling is carried as bytes', function (assert) {
+    // A media ceiling is only meaningful for content that reaches the realm
+    // intact. Callers that read a file before uploading it pick text vs bytes
+    // from `isBinaryFilename`, so a path sized as media and read as text would
+    // be UTF-8 mangled on the way in — and the larger ceiling would let the
+    // mangled bytes through instead of rejecting them.
+    for (let path of [
+      'sounds/theme.mp3',
+      'sounds/theme.m4a',
+      'sounds/theme.wav',
+      'clips/intro.mp4',
+      'clips/intro.mov',
+      'clips/intro.webm',
+      'clips/intro.mkv',
+    ]) {
+      assert.notStrictEqual(
+        fileSizeLimitFor(path, LIMITS),
+        LIMITS.default,
+        `${path} gets a media ceiling`,
+      );
+      assert.true(isBinaryFilename(path), `${path} is carried as bytes`);
+    }
   });
 
   test('media ceilings exceed the general file ceiling', function (assert) {
