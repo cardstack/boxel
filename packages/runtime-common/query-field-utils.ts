@@ -231,7 +231,21 @@ export function normalizeQueryDefinition({
         `query field "${fieldName}" must resolve realm interpolation "${value}" to a non-empty string`,
       );
     }
-    return resolveRealmForReference ? resolveRealmForReference(value) : value;
+    if (!resolveRealmForReference) {
+      return value;
+    }
+    let resolved = resolveRealmForReference(value);
+    if (resolved) {
+      return resolved;
+    }
+    // The resolver knows the realms this process has mappings for, which is not
+    // every realm that exists: a field may name a peer realm directly, and that
+    // has always been honored as written. Distinguish the two by shape — a
+    // realm is addressed by its root and so ends in a slash, while a resource
+    // identifier does not. Keeping an unplaceable root means an explicit
+    // cross-realm target still works; dropping an unplaceable resource means a
+    // reference is never mistaken for a realm to search.
+    return value.endsWith('/') ? value : undefined;
   };
 
   const resolveRealms = (value: any): string[] => {
