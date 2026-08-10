@@ -4,6 +4,7 @@ import {
   field,
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
+import { Avatar } from '@cardstack/boxel-ui/components';
 import { User } from './user';
 
 export class Teammate extends User {
@@ -12,16 +13,14 @@ export class Teammate extends User {
   @field jobTitle = contains(StringField);
 
   static embedded = class Embedded extends Component<typeof Teammate> {
-    get initials() {
-      let words = (this.args.model?.name ?? '')
-        .split(/\s+/)
-        .filter(Boolean)
-        .slice(0, 2);
-      return words.map((w) => w[0]?.toUpperCase() ?? '').join('') || '?';
-    }
     <template>
       <div class='teammate'>
-        <span class='avatar'>{{this.initials}}</span>
+        <Avatar
+          class='avatar'
+          @userId={{@model.email}}
+          @displayName={{@model.name}}
+          @isReady={{true}}
+        />
         <div class='info'>
           <div class='name'>{{if @model.name @model.name 'Unnamed'}}</div>
           {{#if @model.jobTitle}}
@@ -37,15 +36,8 @@ export class Teammate extends User {
           padding: 0.625rem 0.875rem;
         }
         .avatar {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 32px;
-          height: 32px;
-          border-radius: 50%;
-          background: var(--muted, #eef2f7);
-          color: var(--muted-foreground, #6b7280);
-          font-size: 0.75rem;
+          --profile-avatar-icon-size: 32px;
+          --profile-avatar-icon-border: 0;
           font-weight: 700;
           flex-shrink: 0;
         }
@@ -71,13 +63,14 @@ export class Teammate extends User {
     get name() {
       return this.args.model?.name?.trim() || 'Unnamed Teammate';
     }
-    get initials() {
-      let words = this.name.split(/\s+/).filter(Boolean).slice(0, 2);
-      return words.map((w) => w[0]?.toUpperCase() ?? '').join('') || '?';
-    }
     <template>
       <div class='fitted'>
-        <span class='avatar'>{{this.initials}}</span>
+        <Avatar
+          class='avatar'
+          @userId={{@model.email}}
+          @displayName={{@model.name}}
+          @isReady={{true}}
+        />
         <div class='info'>
           <span class='name'>{{this.name}}</span>
           {{#if @model.jobTitle}}
@@ -101,15 +94,8 @@ export class Teammate extends User {
           color: var(--foreground, #111111);
         }
         .avatar {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 28px;
-          height: 28px;
-          border-radius: 50%;
-          background: var(--muted, #eef2f7);
-          color: var(--muted-foreground, #6b7280);
-          font-size: 0.6875rem;
+          --profile-avatar-icon-size: 28px;
+          --profile-avatar-icon-border: 0;
           font-weight: 700;
           flex-shrink: 0;
         }
@@ -150,9 +136,7 @@ export class Teammate extends User {
             padding: 0.875rem;
           }
           .avatar {
-            width: 40px;
-            height: 40px;
-            font-size: 0.875rem;
+            --profile-avatar-icon-size: 40px;
           }
           .line-email {
             display: block;
@@ -166,14 +150,15 @@ export class Teammate extends User {
     get name() {
       return this.args.model?.name?.trim() || 'Unnamed Teammate';
     }
-    get initials() {
-      let words = this.name.split(/\s+/).filter(Boolean).slice(0, 2);
-      return words.map((w) => w[0]?.toUpperCase() ?? '').join('') || '?';
-    }
     <template>
       <article class='teammate-page'>
         <header class='th'>
-          <span class='avatar'>{{this.initials}}</span>
+          <Avatar
+            class='avatar'
+            @userId={{@model.email}}
+            @displayName={{@model.name}}
+            @isReady={{true}}
+          />
           <div class='th-id'>
             <p class='doc-kind'>Teammate</p>
             <h1>{{this.name}}</h1>
@@ -209,17 +194,8 @@ export class Teammate extends User {
           padding-bottom: 1.25rem;
         }
         .avatar {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 56px;
-          height: 56px;
-          border-radius: 50%;
-          background: var(--primary, #111111);
-          color: var(--primary-foreground, #ffffff);
-          font-size: 1.25rem;
+          --profile-avatar-icon-size: 56px;
           font-weight: 700;
-          letter-spacing: 0.02em;
           flex-shrink: 0;
         }
         .doc-kind {

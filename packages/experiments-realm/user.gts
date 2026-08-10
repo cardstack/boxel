@@ -7,6 +7,7 @@ import {
 } from '@cardstack/base/card-api';
 import EmailField from '@cardstack/base/email';
 import UserIcon from '@cardstack/boxel-icons/user';
+import { Avatar } from '@cardstack/boxel-ui/components';
 
 export class User extends CardDef {
   static displayName = 'User';
@@ -22,16 +23,14 @@ export class User extends CardDef {
   });
 
   static atom = class Atom extends Component<typeof User> {
-    get initials() {
-      let words = (this.args.model?.name ?? '')
-        .split(/\s+/)
-        .filter(Boolean)
-        .slice(0, 2);
-      return words.map((w) => w[0]?.toUpperCase() ?? '').join('') || '?';
-    }
     <template>
       <span class='user-atom'>
-        <span class='ua-avatar'>{{this.initials}}</span>
+        <Avatar
+          class='ua-avatar'
+          @userId={{@model.email}}
+          @displayName={{@model.name}}
+          @isReady={{true}}
+        />
         <span class='ua-name'>{{if
             @model.name
             @model.name
@@ -48,15 +47,8 @@ export class User extends CardDef {
           color: var(--foreground, #111111);
         }
         .ua-avatar {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 18px;
-          height: 18px;
-          border-radius: 50%;
-          background: var(--muted, #eef2f7);
-          color: var(--muted-foreground, #6b7280);
-          font-size: 0.5625rem;
+          --profile-avatar-icon-size: 18px;
+          --profile-avatar-icon-border: 0;
           font-weight: 700;
           flex-shrink: 0;
         }
@@ -70,16 +62,14 @@ export class User extends CardDef {
   };
 
   static embedded = class Embedded extends Component<typeof User> {
-    get initials() {
-      let words = (this.args.model?.name ?? '')
-        .split(/\s+/)
-        .filter(Boolean)
-        .slice(0, 2);
-      return words.map((w) => w[0]?.toUpperCase() ?? '').join('') || '?';
-    }
     <template>
       <div class='user'>
-        <span class='avatar'>{{this.initials}}</span>
+        <Avatar
+          class='avatar'
+          @userId={{@model.email}}
+          @displayName={{@model.name}}
+          @isReady={{true}}
+        />
         <div class='info'>
           <div class='name'>{{if @model.name @model.name 'Unnamed'}}</div>
           {{#if @model.email}}
@@ -95,15 +85,8 @@ export class User extends CardDef {
           padding: 0.625rem 0.875rem;
         }
         .avatar {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 32px;
-          height: 32px;
-          border-radius: 50%;
-          background: var(--muted, #eef2f7);
-          color: var(--muted-foreground, #6b7280);
-          font-size: 0.75rem;
+          --profile-avatar-icon-size: 32px;
+          --profile-avatar-icon-border: 0;
           font-weight: 700;
           flex-shrink: 0;
         }
@@ -129,13 +112,14 @@ export class User extends CardDef {
     get name() {
       return this.args.model?.name?.trim() || 'Unnamed User';
     }
-    get initials() {
-      let words = this.name.split(/\s+/).filter(Boolean).slice(0, 2);
-      return words.map((w) => w[0]?.toUpperCase() ?? '').join('') || '?';
-    }
     <template>
       <div class='fitted'>
-        <span class='avatar'>{{this.initials}}</span>
+        <Avatar
+          class='avatar'
+          @userId={{@model.email}}
+          @displayName={{@model.name}}
+          @isReady={{true}}
+        />
         <div class='info'>
           <span class='name'>{{this.name}}</span>
           {{#if @model.email}}
@@ -156,15 +140,8 @@ export class User extends CardDef {
           color: var(--foreground, #111111);
         }
         .avatar {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 28px;
-          height: 28px;
-          border-radius: 50%;
-          background: var(--muted, #eef2f7);
-          color: var(--muted-foreground, #6b7280);
-          font-size: 0.6875rem;
+          --profile-avatar-icon-size: 28px;
+          --profile-avatar-icon-border: 0;
           font-weight: 700;
           flex-shrink: 0;
         }
@@ -204,9 +181,7 @@ export class User extends CardDef {
             padding: 0.875rem;
           }
           .avatar {
-            width: 40px;
-            height: 40px;
-            font-size: 0.875rem;
+            --profile-avatar-icon-size: 40px;
           }
         }
       </style>
@@ -217,14 +192,15 @@ export class User extends CardDef {
     get name() {
       return this.args.model?.name?.trim() || 'Unnamed User';
     }
-    get initials() {
-      let words = this.name.split(/\s+/).filter(Boolean).slice(0, 2);
-      return words.map((w) => w[0]?.toUpperCase() ?? '').join('') || '?';
-    }
     <template>
       <article class='user-page'>
         <header class='uh'>
-          <span class='avatar'>{{this.initials}}</span>
+          <Avatar
+            class='avatar'
+            @userId={{@model.email}}
+            @displayName={{@model.name}}
+            @isReady={{true}}
+          />
           <div class='uh-id'>
             <p class='doc-kind'>{{@model.constructor.displayName}}</p>
             <h1>{{this.name}}</h1>
@@ -257,17 +233,8 @@ export class User extends CardDef {
           padding-bottom: 1.25rem;
         }
         .avatar {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 56px;
-          height: 56px;
-          border-radius: 50%;
-          background: var(--primary, #111111);
-          color: var(--primary-foreground, #ffffff);
-          font-size: 1.25rem;
+          --profile-avatar-icon-size: 56px;
           font-weight: 700;
-          letter-spacing: 0.02em;
           flex-shrink: 0;
         }
         .doc-kind {
