@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Okafor Logistics",
+      "domain": "okafor-logistics.example",
+      "industry": null,
+      "email": null,
+      "phone": null,
+      "billingAddress": {
+        "addressLine1": null,
+        "addressLine2": null,
+        "city": null,
+        "state": null,
+        "postalCode": null,
+        "country": {
+          "name": null,
+          "code": null
+        },
+        "poBoxNumber": null
+      },
+      "firstPaidAt": null,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../account",
+        "name": "Account"
+      }
+    }
+  }
+}

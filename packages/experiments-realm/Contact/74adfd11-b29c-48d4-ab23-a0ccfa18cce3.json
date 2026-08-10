@@ -1,0 +1,32 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "firstName": "Sara",
+      "lastName": "Okafor",
+      "email": "sara@okafor-logistics.example",
+      "phone": null,
+      "jobTitle": null,
+      "role": null,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "account": {
+        "links": {
+          "self": "../Account/a4b874ad-fd11-429c-a8d4-eb23a0ccfa18"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../contact",
+        "name": "Contact"
+      }
+    }
+  }
+}

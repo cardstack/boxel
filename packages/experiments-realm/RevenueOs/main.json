@@ -2,24 +2,18 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Sara Okafor",
-      "company": "Okafor Logistics",
-      "email": "sara@okafor-logistics.example",
-      "source": "referral",
-      "status": "converted",
-      "score": 88,
+      "orgName": "Cardstack Demo Co",
       "cardInfo": {
-        "name": null,
+        "name": "Revenue OS",
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      },
-      "phone": null
+      }
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../lead",
-        "name": "Lead"
+        "module": "../revenue-os",
+        "name": "RevenueOs"
       }
     },
     "relationships": {
