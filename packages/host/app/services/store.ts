@@ -45,6 +45,7 @@ import {
   realmURL as realmURLSymbol,
   localId as localIdSymbol,
   meta,
+  ri,
   rri,
   logger,
   formattedError,
@@ -1247,9 +1248,13 @@ export default class StoreService extends Service implements StoreInterface {
   // No fallback: an empty input yields an empty list (the card path relies on
   // this to mean "search nothing" rather than "search everything").
   private normalizeRealmPaths(realms: string[] | undefined): string[] {
-    return (realms ?? [])
-      .map((realm) => new RealmPaths(new URL(realm)).url)
-      .filter(Boolean);
+    return (
+      (realms ?? [])
+        // Either form an identifier can take — realm URL or canonical — is
+        // preserved; parsing as a URL would reject the canonical form.
+        .map((realm) => new RealmPaths(ri(realm)).url)
+        .filter(Boolean)
+    );
   }
 
   // The host default: an absent/empty realm list means every realm the user can

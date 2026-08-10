@@ -1,23 +1,27 @@
 import {
   RealmPaths,
+  ri,
   rri,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 
 /**
- * Normalizes realm URLs by ensuring they have trailing slashes and
- * are properly formatted using RealmPaths.
+ * Normalizes realm identifiers by ensuring they have trailing slashes.
  *
- * @param realms - Array of realm URL strings to normalize
- * @returns Array of normalized realm URL strings
+ * Accepts either form an identifier can take — a realm URL or a canonical
+ * identifier — and preserves it. Parsing as a URL would reject the canonical
+ * form outright.
+ *
+ * @param realms - Array of realm identifiers to normalize
+ * @returns Array of normalized realm identifiers
  *
  * @example
- * normalizeRealms(['http://localhost:4201/test', 'http://localhost:4201/demo/'])
- * // Returns: ['http://localhost:4201/test/', 'http://localhost:4201/demo/']
+ * normalizeRealms(['http://localhost:4201/test', '@cardstack/base'])
+ * // Returns: ['http://localhost:4201/test/', '@cardstack/base/']
  */
 export function normalizeRealms(realms: string[]): string[] {
   return realms.map((r) => {
-    return new RealmPaths(new URL(r)).url;
+    return new RealmPaths(ri(r)).url;
   });
 }
 
