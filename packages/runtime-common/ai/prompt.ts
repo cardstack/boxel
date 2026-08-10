@@ -1657,7 +1657,12 @@ export async function buildPromptForModel(
     historicalMessages.push({
       role: 'user',
       content:
-        'The automated correctness checks have finished. Summarize the results based on the tool output above in one short sentence. Do not mention: correctness, automated correctness checks, tool calls.',
+        // This lands mid-answer, right after a file is written, and it is the
+        // last thing the model reads before replying — so an instruction that
+        // only asks for a summary reads as the end of the work. It was: a build
+        // announced as two cards delivered one, reported it was clean, and
+        // stopped, because nothing resumes a plan across turns.
+        'The automated correctness checks have finished. Summarize the results based on the tool output above in one short sentence. Do not mention: correctness, automated correctness checks, tool calls. If work you already described remains unfinished, carry straight on with it in the same reply — this is a note on what just landed, not a request to stop.',
     });
   }
   let systemMessageParts = [SYSTEM_MESSAGE];
