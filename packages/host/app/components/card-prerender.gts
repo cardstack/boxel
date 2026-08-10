@@ -64,6 +64,7 @@ import type { Model as HtmlRouteModel } from '../routes/render/html';
 import type LoaderService from '../services/loader-service';
 import type LocalIndexer from '../services/local-indexer';
 import type NetworkService from '../services/network';
+import type RealmService from '../services/realm';
 import type RenderService from '../services/render-service';
 import type RenderStoreService from '../services/render-store';
 
@@ -75,6 +76,7 @@ export default class CardPrerender extends Component {
   @service declare private renderService: RenderService;
   @service declare private localIndexer: LocalIndexer;
   @service declare private loaderService: LoaderService;
+  @service declare private realm: RealmService;
   #nonce = 0;
   #shouldClearCacheForNextRender = true;
   #prerendererDelegate!: Prerenderer;
@@ -684,6 +686,7 @@ export default class CardPrerender extends Component {
       store: this.store,
       loaderService: this.loaderService,
       network: this.network,
+      realm: this.realm,
       authGuard: this.#moduleAuthGuard,
       state: this.#moduleModelState(),
       owner: this,
@@ -803,6 +806,15 @@ export default class CardPrerender extends Component {
         | CardErrorsJSONAPI;
       if ('errors' in doc) {
         return;
+      }
+      // Resolving the realm's meta installs its decklist, and the module
+      // loaded just below may import a bare specifier that only the decklist
+      // can resolve. Priming is best-effort, but priming with the wrong
+      // resolution is worse than not priming: the Loader caches by resolved
+      // identifier, so a miss here would be the answer everyone else gets.
+      let realmURL = response.headers.get('x-boxel-realm-url');
+      if (realmURL) {
+        await this.realm.ensureRealmMeta(realmURL);
       }
       let cardType = await deriveCardTypeFromDoc(
         doc,

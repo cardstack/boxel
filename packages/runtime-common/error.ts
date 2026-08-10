@@ -360,6 +360,19 @@ export function formattedError(
   error: any,
   err?: CardError | Partial<CardErrorJSONAPI>,
 ): CardErrorsJSONAPI {
+  // Nothing downstream guards `error`, so a `throw undefined` — or a throw of
+  // any non-object, which is legal JS and does happen — makes this function
+  // fail on its own first dereference. The report then reads "Cannot read
+  // properties of undefined (reading 'responseHeaders')", which describes the
+  // reporter rather than the fault, and the real failure is gone. Substituting
+  // a carrier keeps whatever we do know visible.
+  if (error == null || typeof error !== 'object') {
+    error = new Error(
+      error === undefined
+        ? 'an error was thrown with no value (threw undefined)'
+        : `a non-object was thrown: ${String(error)}`,
+    );
+  }
   if (isCardError(err)) {
     let cardError;
     let meta: CardErrorJSONAPI['meta'] | undefined;

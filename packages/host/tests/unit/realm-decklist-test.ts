@@ -45,9 +45,12 @@ module('Unit | decklist | a realm loads its Decklist card', function (hooks) {
         contents: {
           // The card class. It lives in the realm, not in base — the host
           // never loads it, so it does not have to. See the comment on
-          // `loadDecklist`: the decklist is read as a raw card document
-          // precisely so that configuring the loader does not require
-          // loading a card class through the loader being configured.
+          // `loadDecklist`: the decklist is read as card source precisely so
+          // that configuring the loader requires neither loading a card class
+          // through the loader being configured, nor an index that cannot
+          // exist yet at the moment the pins are needed. Both fields are
+          // stored for the same reason — a computed field is invisible to a
+          // reader holding only the bytes.
           'decklist-card.gts': `
             import { CardDef, field, contains } from '@cardstack/base/card-api';
             import { JsonField } from '@cardstack/base/json-field';

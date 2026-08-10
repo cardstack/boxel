@@ -1832,6 +1832,33 @@ export default class StoreService extends Service implements StoreInterface {
     );
   }
 
+  // Best-effort: an instance whose realm cannot be worked out is left to the
+  // existing behaviour rather than blocked. The realm is taken from the doc's
+  // own `meta.realmURL` when present — the authoritative answer — and only
+  // then guessed from the id, which needs the realm to be known already.
+  async #ensureRealmPinsFor(
+    resource: LooseCardResource,
+    relativeTo?: RealmResourceIdentifier | URL | undefined,
+  ): Promise<void> {
+    let realmURL =
+      resource.meta?.realmURL ??
+      (resource.id
+        ? this.realm.realmOf(resource.id as RealmResourceIdentifier)
+        : undefined) ??
+      (relativeTo ? this.realm.realmOf(relativeTo) : undefined);
+    if (!realmURL) {
+      return;
+    }
+    try {
+      await this.realm.ensureRealmMeta(String(realmURL));
+    } catch (error) {
+      storeLogger.warn(
+        `could not resolve realm meta for ${String(realmURL)} before deserialize; its decklist pins may not be installed`,
+        error,
+      );
+    }
+  }
+
   private async createFromSerialized<T extends CardDef>(
     resource: LooseCardResource,
     doc: LooseSingleCardDocument | CardDocument,
@@ -1839,6 +1866,13 @@ export default class StoreService extends Service implements StoreInterface {
     dependencyTrackingContext?: RuntimeDependencyTrackingContext,
   ): Promise<T> {
     let api = await this.cardService.getAPI();
+    // Deserializing loads the card's class, and that class may import a bare
+    // specifier only its realm's decklist can resolve. Resolving the realm's
+    // meta is what installs those pins, so it has to happen first — otherwise
+    // the specifier falls through to the packages origin and fails to fetch.
+    // Same ordering the render and module routes need; this is the one the
+    // interactive app goes through.
+    await this.#ensureRealmPinsFor(resource, relativeTo);
     let shouldStubTimers =
       this.renderContextBlocksPersistence() && !isTesting();
     let performCreate = async () =>
@@ -1980,6 +2014,21 @@ export default class StoreService extends Service implements StoreInterface {
     let ownWrite = event.clientRequestId
       ? this.cardService.clientRequestIds.has(event.clientRequestId)
       : false;
+
+    // A realm's decklist changing is a code change for every card in that
+    // realm — the modules are byte-identical but a bare specifier they import
+    // now means something else. It reaches us as a plain instance
+    // invalidation, so none of the executable-extension logic below sees it.
+    //
+    // Driven from here rather than from the realm service's own subscription
+    // because this handler is demonstrably live, and because the ordering
+    // matters: the pins have to be installed BEFORE the rebuild re-imports,
+    // or the rebuild faithfully reproduces the versions being replaced.
+    // Instance invalidations carry the id without `.json`.
+    if (invalidations.includes(`${event.realmURL}decklist`)) {
+      this.reloadDecklistThenRebuild.perform(event.realmURL as string);
+      return;
+    }
 
     // The invalidation triggers a rebuild when it touches an already-loaded
     // executable module: the loader must be flushed so the updated code is
@@ -2262,6 +2311,16 @@ export default class StoreService extends Service implements StoreInterface {
       }
     }
   }
+
+  // Re-read the realm's decklist, then rebuild — strictly in that order. The
+  // rebuild is what re-imports and re-renders the open graph, so running it
+  // against the old pins would just reproduce the versions being replaced.
+  private reloadDecklistThenRebuild = keepLatestTask(
+    async (realmURL: string) => {
+      await this.realm.reloadDecklistFor(realmURL);
+      await this.rebuildForCodeChange.perform();
+    },
+  );
 
   // Coalesced client rebuild: flush the loader, reset the store, and re-fetch
   // every live card reference. `keepLatest` bounds a write burst to one

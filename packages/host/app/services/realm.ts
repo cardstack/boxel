@@ -462,20 +462,23 @@ class RealmResource {
   });
 
   private decklistLoad: Promise<void> | undefined;
-  private foundDecklist = false;
+  // Whether the last read reached a definite answer: the file was read, or
+  // the realm said it is not there. Distinct from "a decklist was found".
+  private decklistSettled = false;
 
   // Ensure this realm's pins are installed before anyone imports from it.
   //
-  // A HIT is memoized — once the pins are in place, re-reading the card on
-  // every `fetchInfo` would be waste, and the SSE handler above reloads it
-  // when it actually changes. A MISS is not, deliberately: "this realm has
-  // no decklist yet" is exactly the answer that goes stale, because a realm
-  // still being indexed answers 404 for a card it is about to have. Caching
-  // that would leave the realm permanently unpinned with a Decklist card
-  // sitting in it. Retrying costs one 404 per `fetchInfo` on realms that
-  // genuinely have none, which is cheap and self-healing.
+  // Any DEFINITE answer is memoized, including "there is no decklist here".
+  // Reading the file makes a 404 authoritative in a way an index lookup never
+  // was, and most realms have no decklist at all: without this, indexing a
+  // realm re-asks once per module visited and answers itself 404 every time.
+  // A decklist that appears later is not missed, because creating one is a
+  // write, and the SSE handler above reloads unconditionally.
+  //
+  // A transport failure is not an answer and is not memoized — otherwise one
+  // blip would leave a realm unpinned for the rest of the session.
   private async ensureDecklist(): Promise<void> {
-    if (this.foundDecklist) {
+    if (this.decklistSettled) {
       return;
     }
     if (!this.decklistLoad) {
@@ -491,29 +494,45 @@ class RealmResource {
   // card instance at a well-known id that configures the environment rather
   // than describing content.
   //
-  // Fetched as a raw card DOCUMENT rather than through the store, and that is
-  // deliberate. The decklist decides what a bare specifier means, so it has
-  // to be in place before the modules it governs are loaded — and loading it
-  // through the store would mean loading its own card class through the very
-  // loader it is meant to configure. Reading `attributes` off the JSON keeps
-  // the host ignorant of the card's class, which also means the class can
-  // live in the realm rather than in base.
+  // Read as card SOURCE — the bytes of `decklist.json` on disk — rather than
+  // through the store or the index, and every part of that is load-bearing.
+  //
+  // Not through the store, because loading the decklist through the store
+  // would mean loading its own card class through the very loader it is
+  // meant to configure. Reading `attributes` off the JSON keeps the host
+  // ignorant of the card's class, which also means the class can live in the
+  // realm rather than in base.
+  //
+  // Not through the index, because of when this runs. Indexing a realm
+  // renders its modules, and those renders need the pins — so the decklist is
+  // read *during* the index that would populate it. Asking the index for it
+  // then is a chicken-and-egg: on a full index of a cold realm the row does
+  // not exist until its turn comes round, and the request stalls on the
+  // in-progress index before 404ing. The file is on disk the whole time.
+  //
+  // The cost of reading the file is that computed fields do not exist yet, so
+  // `imports` has to be a stored field. That is the right trade: it makes the
+  // pins data at rest, readable by anything that can read the realm, with no
+  // dependency on having evaluated the card that carries them.
   //
   // Best-effort by design. Most realms have no decklist, so a 404 is the
   // common case and not a failure; and a realm whose decklist cannot be read
   // should still open, behaving as it does today.
   async loadDecklist(): Promise<void> {
+    this.decklistSettled = false;
     let decklist = await this.fetchDecklistFromServer();
-    this.foundDecklist = decklist !== undefined;
     this.network.virtualNetwork.setRealmDecklist(this.realmURL, decklist);
   }
 
   private async fetchDecklistFromServer(): Promise<DecklistInput | undefined> {
     let response: Response;
     try {
-      response = await this.network.authedFetch(`${this.realmURL}decklist`, {
-        headers: { Accept: SupportedMimeType.CardJson },
-      });
+      response = await this.network.authedFetch(
+        `${this.realmURL}decklist.json`,
+        {
+          headers: { Accept: SupportedMimeType.CardSource },
+        },
+      );
     } catch (error) {
       if (isTesting()) {
         console.warn(
@@ -526,7 +545,10 @@ class RealmResource {
       return undefined;
     }
     if (response.status === 404) {
-      return undefined; // the ordinary case: this realm pins nothing
+      // The ordinary case: this realm pins nothing. A definite answer, so it
+      // is worth remembering — see `ensureDecklist`.
+      this.decklistSettled = true;
+      return undefined;
     }
     if (response.status !== 200) {
       console.warn(
@@ -548,6 +570,9 @@ class RealmResource {
           error: String(error),
         })}`,
       );
+      // The bytes were served and they are not JSON. Re-reading them will not
+      // change that, and the fix — editing the file — arrives as an event.
+      this.decklistSettled = true;
       return undefined;
     }
     // The card is user-authored and can be saved mid-edit in any shape, so
@@ -565,6 +590,7 @@ class RealmResource {
         }
       }
     }
+    this.decklistSettled = true;
     if (!imports && Object.keys(scopes).length === 0) {
       return undefined;
     }
@@ -951,6 +977,15 @@ export default class RealmService extends Service {
   async ensureRealmMeta(realmURL: string): Promise<void> {
     let resource = this.getOrCreateRealmResource(realmURL);
     await resource.fetchInfo();
+  }
+
+  // Force a re-read of a realm's decklist, bypassing the memo. For the
+  // caller that already knows the decklist changed — it saw the
+  // invalidation — and needs the new pins installed before it does anything
+  // that resolves a specifier.
+  async reloadDecklistFor(realmURL: string): Promise<void> {
+    let resource = this.getOrCreateRealmResource(realmURL);
+    await resource.loadDecklist();
   }
 
   async login(realmURL: string): Promise<void> {

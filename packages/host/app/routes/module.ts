@@ -110,6 +110,7 @@ export interface ModuleModelContext {
   store: RenderStoreService;
   loaderService: LoaderService;
   network: NetworkService;
+  realm: RealmService;
   authGuard: ReturnType<typeof createAuthErrorGuard>;
   state: ModuleModelState;
   owner: object;
@@ -193,6 +194,7 @@ export default class ModuleRoute extends Route<Model> {
       store: this.store,
       loaderService: this.loaderService,
       network: this.network,
+      realm: this.realm,
       authGuard: this.#authGuard,
       state: {
         getTypesCache: () => this.typesCache,
@@ -232,32 +234,13 @@ export async function buildModuleModel(
 
   try {
     return await context.authGuard.race(async () => {
-      let module: Record<string, any> | undefined;
-      try {
-        module = await context.loaderService.loader.import(id);
-      } catch (err: any) {
-        console.warn(
-          `encountered error loading module "${id}": ${err.message}`,
-        );
-        let depsSet = new Set(
-          await (
-            await context.loaderService.loader.getConsumedModules(id)
-          ).filter((u) => u !== id),
-        );
-        if (isCardError(err) && err.deps) {
-          for (let dep of err.deps) {
-            depsSet.add(dep);
-          }
-        }
-        return modelWithError({
-          id,
-          nonce,
-          deps: [...depsSet],
-          message: `encountered error loading module "${id}": ${err.message}`,
-          err,
-        });
-      }
-
+      // The HEAD comes before the import so that the realm can come before
+      // both. Resolving a realm's meta is what installs its decklist into the
+      // virtual network, and this module may import a bare specifier that
+      // only the decklist can resolve — import first and that specifier falls
+      // through to the packages origin and fails to fetch. The HEAD is needed
+      // either way (last-modified, created-at, and the shimmed check), and it
+      // is the only thing here that knows which realm owns this module.
       let response: Response;
       try {
         response = await context.network.authedFetch(id, {
@@ -284,6 +267,39 @@ export async function buildModuleModel(
           nonce,
           status: response.status,
           message: `Could not HTTP HEAD (accept: card-source) ${id}: ${response.status} - ${response.statusText}`,
+        });
+      }
+
+      // Shimmed modules have no realm and no pins; everything else gets its
+      // realm's decklist installed before a single specifier is resolved.
+      let realmURL = response.headers.get('x-boxel-realm-url');
+      if (realmURL) {
+        await context.realm.ensureRealmMeta(realmURL);
+      }
+
+      let module: Record<string, any> | undefined;
+      try {
+        module = await context.loaderService.loader.import(id);
+      } catch (err: any) {
+        console.warn(
+          `encountered error loading module "${id}": ${err.message}`,
+        );
+        let depsSet = new Set(
+          await (
+            await context.loaderService.loader.getConsumedModules(id)
+          ).filter((u) => u !== id),
+        );
+        if (isCardError(err) && err.deps) {
+          for (let dep of err.deps) {
+            depsSet.add(dep);
+          }
+        }
+        return modelWithError({
+          id,
+          nonce,
+          deps: [...depsSet],
+          message: `encountered error loading module "${id}": ${err.message}`,
+          err,
         });
       }
 

@@ -81,6 +81,35 @@ function resolveDecklistAgainst(
   return { imports, scopes };
 }
 
+/**
+ * Whether two resolved decklists say the same thing. Both sides are the
+ * output of `resolveDecklistAgainst`, so every value is already an absolute
+ * href and a flat string-to-string comparison is exact — no ordering or
+ * whitespace differences to normalise away.
+ */
+function sameDecklist(a: Decklist, b: Decklist): boolean {
+  let sameMap = (
+    x: Record<string, string>,
+    y: Record<string, string>,
+  ): boolean => {
+    let xKeys = Object.keys(x);
+    if (xKeys.length !== Object.keys(y).length) {
+      return false;
+    }
+    return xKeys.every((k) => x[k] === y[k]);
+  };
+  if (!sameMap(a.imports, b.imports)) {
+    return false;
+  }
+  let aScopes = Object.keys(a.scopes);
+  if (aScopes.length !== Object.keys(b.scopes).length) {
+    return false;
+  }
+  return aScopes.every(
+    (scope) => b.scopes[scope] && sameMap(a.scopes[scope], b.scopes[scope]),
+  );
+}
+
 export class VirtualNetwork {
   private handlers: Handler[] = [];
   private urlMappings: [string, string][] = [];
@@ -165,6 +194,7 @@ export class VirtualNetwork {
   // discard those entries when the mapping set changes — the RRI→URL
   // relationship is only stable between changes.
   private mappingChangeListeners = new Set<() => void>();
+  private decklistReplacedListeners = new Set<() => void>();
 
   constructor(
     nativeFetch = createEnvironmentAwareFetch(),
@@ -195,6 +225,22 @@ export class VirtualNetwork {
 
   private notifyMappingChange() {
     for (let listener of this.mappingChangeListeners) {
+      listener();
+    }
+  }
+
+  // Subscribe to a realm's decklist being REPLACED — the pins moved after
+  // modules were already resolved against the old ones. Narrower than
+  // `onMappingChange`, which also fires for every realm mounted at boot, and
+  // deliberately so: the answer to this one is expensive (re-import and
+  // re-render), so it must not be raised by anything routine.
+  onDecklistReplaced(listener: () => void): () => void {
+    this.decklistReplacedListeners.add(listener);
+    return () => this.decklistReplacedListeners.delete(listener);
+  }
+
+  private notifyDecklistReplaced() {
+    for (let listener of this.decklistReplacedListeners) {
       listener();
     }
   }
@@ -299,13 +345,33 @@ export class VirtualNetwork {
         return; // nothing there; don't churn every module cache for a no-op
       }
       this.recomputeDecklist();
+      this.notifyDecklistReplaced();
       return;
     }
-    this.realmDecklists.set(
-      realmURL,
-      resolveDecklistAgainst(decklist, realmURL),
-    );
+    let resolved = resolveDecklistAgainst(decklist, realmURL);
+    // A realm's decklist is re-read on every index event that realm emits,
+    // and almost none of those events touch it. Recomputing unconditionally
+    // would fire `notifyMappingChange` each time, and the Loader answers that
+    // by dropping its module cache — so every unrelated write to the realm
+    // would make the app re-fetch and re-evaluate its whole module graph.
+    // Compare first; only a decklist that actually moved is worth the churn.
+    let current = this.realmDecklists.get(realmURL);
+    if (current && sameDecklist(current, resolved)) {
+      return;
+    }
+    this.realmDecklists.set(realmURL, resolved);
     this.recomputeDecklist();
+    // A REPLACEMENT is announced; a first install is not. Clearing the module
+    // caches is enough for code that has not run yet, but code already
+    // evaluated holds bindings into the old build and no cache invalidation
+    // reaches it — someone has to re-import and re-render. That is what the
+    // listener is for. The first install needs none of this: the ordering
+    // rules mean nothing from the realm has been imported yet, and firing
+    // here would make every realm that has a decklist rebuild the client
+    // once at boot for no reason.
+    if (current) {
+      this.notifyDecklistReplaced();
+    }
   }
 
   /** Drop every decklist mapping. Exists so a test can assert the

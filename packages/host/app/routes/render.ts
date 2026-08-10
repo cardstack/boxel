@@ -540,13 +540,20 @@ export default class RenderRoute extends Route<Model> {
       (globalThis as any).__boxelSetRenderStage?.('buildModel:deriving-type');
       let { derivedCardType, hydratedInstance } = await this.#authGuard.race(
         async () => {
+          // Before the module, not after it. Resolving the realm's meta is
+          // what installs that realm's decklist into the virtual network, so
+          // a card whose module imports a bare specifier the decklist pins
+          // can only resolve it if this has already happened. Load the type
+          // first and the specifier falls through to the packages origin and
+          // 404s, which is how this presented: every card in a realm with
+          // pins indexed as an error.
+          await this.realm.ensureRealmMeta(realmURL);
+
           let derivedCardType = await deriveCardTypeFromDoc(
             doc,
             id,
             this.loaderService.loader,
           );
-
-          await this.realm.ensureRealmMeta(realmURL);
 
           let enhancedDoc: LooseSingleCardDocument = {
             ...doc,
