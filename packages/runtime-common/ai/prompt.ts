@@ -1708,21 +1708,26 @@ export async function buildPromptForModel(
   // The context should be placed where it explains the state of the host.
   // This is either:
   // * After the last tool call message, if the last message was a tool call
-  // * Before the last user message otherwise
-  // OpenAI will error if you put the system message between the
-  // assistant and tool messages.
-  let contextMessage: OpenAIPromptMessage = {
-    role: 'system',
-    content: contextContent,
-  };
+  // * At the front of the last user message otherwise
+  //
+  // Providers disagree about where a `system` message may sit, and the array
+  // has to satisfy the strictest of them: OpenAI rejects one placed between an
+  // assistant and its tool messages, and Anthropic requires one to immediately
+  // precede an `assistant` message or end the array. A `system` message before
+  // the last user turn always has a `user` after it, so it can never satisfy
+  // Anthropic — the context is folded into that user turn instead of standing
+  // as its own message. Trailing it after a tool result keeps its own message,
+  // which is legal everywhere because it ends the array.
   let lastMessage = messages[messages.length - 1];
   if (lastMessage.role === 'tool') {
-    messages.push(contextMessage);
+    messages.push({ role: 'system', content: contextContent });
   } else {
-    // Find the last user message and insert context before it
     let lastUserIndex = findLastIndex(messages, (msg) => msg.role === 'user');
     if (lastUserIndex !== -1) {
-      messages.splice(lastUserIndex, 0, contextMessage);
+      messages[lastUserIndex] = prependContextToMessage(
+        messages[lastUserIndex],
+        contextContent,
+      );
     }
   }
 
@@ -2285,6 +2290,29 @@ export const buildAttachmentsMessagePart = async (
   }
   return { text, mediaParts };
 };
+
+// Puts the host-state context at the front of a user turn, so it reads as the
+// setting for what the user then asks. String content stays a string; content
+// already split into parts gains one leading text part, which keeps any image,
+// file, or audio parts — and their `cache_control` — exactly as they were.
+function prependContextToMessage(
+  message: OpenAIPromptMessage,
+  contextContent: string,
+): OpenAIPromptMessage {
+  if (typeof message.content === 'string') {
+    return {
+      ...message,
+      content: `${contextContent}\n\n${message.content}`,
+    };
+  }
+  return {
+    ...message,
+    content: [
+      { type: 'text', text: contextContent } as TextContent,
+      ...message.content,
+    ],
+  };
+}
 
 export const buildContextMessage = async (
   client: MatrixClient,

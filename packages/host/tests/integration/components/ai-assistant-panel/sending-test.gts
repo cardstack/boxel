@@ -218,7 +218,13 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
     assert.dom('[data-test-ai-assistant-message]').exists({ count: 1 });
     assert.dom('[data-test-user-message]').hasClass('is-pending');
 
-    await waitFor('[data-test-boxel-alert="error"]');
+    // The send is deliberately not awaited above, so this wait races the mock's
+    // own delay: SENDING_DELAY_THEN_FAILURE sleeps 1000ms before it fails,
+    // which is exactly `waitFor`'s default budget. Anything the send does
+    // before reaching the mock — the room's skills are re-uploaded on every
+    // send — spends the whole margin. Wait long enough for the deliberate
+    // delay itself rather than depending on the rest of the send being free.
+    await waitFor('[data-test-boxel-alert="error"]', { timeout: 5000 });
     await settled();
 
     assert.dom('[data-test-message-field]').hasValue('');

@@ -84,10 +84,7 @@ import {
   APP_BOXEL_SYSTEM_CARD_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
-import {
-  type Submode,
-  Submodes,
-} from '@cardstack/host/components/submode-switcher';
+import { Submodes } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
 
 import type IndexController from '@cardstack/host/controllers/index';
@@ -105,15 +102,10 @@ import {
 import { isSkillCard } from '../lib/file-def-manager';
 import { getSkillSourceTools, loadSkillSource } from '../lib/skill-tools';
 import { getUniqueValidToolDefinitions } from '../lib/tool-definitions';
-import {
-  sourceCodeEditingSkillUrl,
-  devSkillId,
-  envSkillId,
-} from '../lib/utils';
+import { skillsIndexId } from '../lib/utils';
 import { importResource } from '../resources/import';
 
 import { getRoom } from '../resources/room';
-import UpdateRoomSkillsTool from '../tools/update-room-skills';
 import { addPatchTools } from '../tools/utils';
 
 import type CardService from './card-service';
@@ -1579,6 +1571,7 @@ export default class MatrixService extends Service {
         // files re-upload their file content. Both contribute commands.
         let skillCardsToReupload: SkillModule.Skill[] = [];
         let markdownSkillFileDefs: FileDef[] = [];
+        let unchangedMarkdownSkillFileDefs: FileAPI.SerializedFile[] = [];
         await Promise.all(
           enabledSkillCardFileDefs.map(async (fileDef) => {
             let source = await loadSkillSource(this.store, fileDef.sourceUrl);
@@ -1590,6 +1583,16 @@ export default class MatrixService extends Service {
             );
             if (isSkillCard in source) {
               skillCardsToReupload.push(source as SkillModule.Skill);
+            } else if (
+              isUnchangedMarkdownSkill(source as unknown as FileDef, fileDef)
+            ) {
+              // Re-uploading a `.md` skill means fetching its source over HTTP
+              // first. The realm-indexed file-meta already carries the hash of
+              // that content, so when it matches what the room recorded there
+              // is nothing to upload — keep the stored fileDef and skip the
+              // fetch. This runs on every message send, so without the check
+              // each send re-downloads every enabled markdown skill.
+              unchangedMarkdownSkillFileDefs.push(fileDef);
             } else {
               markdownSkillFileDefs.push(this.fileAPI.createFileDef(fileDef));
             }
@@ -1601,6 +1604,26 @@ export default class MatrixService extends Service {
         let enabledMarkdownSkillFileDefs = markdownSkillFileDefs.length
           ? await this.uploadFiles(markdownSkillFileDefs)
           : [];
+        // Re-emit the skills in the order the room already had them. Uploading
+        // splits them by kind, so concatenating the two buckets would reorder
+        // any room holding both a skill card and a `.md` skill — a rewrite that
+        // changes nothing but the sequence, which still writes a new state
+        // event on every send. Skills that no longer load drop out, as before.
+        let bySourceUrl = new Map<string, FileAPI.SerializedFile>();
+        for (let fileDef of [
+          ...enabledSkillFileDefs,
+          ...enabledMarkdownSkillFileDefs,
+        ]) {
+          bySourceUrl.set(fileDef.sourceUrl, fileDef.serialize());
+        }
+        for (let fileDef of unchangedMarkdownSkillFileDefs) {
+          bySourceUrl.set(fileDef.sourceUrl, fileDef);
+        }
+        let orderedSkillFileDefs = enabledSkillCardFileDefs
+          .map((fileDef) => bySourceUrl.get(fileDef.sourceUrl))
+          .filter((fileDef): fileDef is FileAPI.SerializedFile =>
+            Boolean(fileDef),
+          );
         // get the unique subset of enabledCommandDefinitions by functionName
         enabledCommandDefinitions = this.getUniqueToolDefinitions(
           enabledCommandDefinitions,
@@ -1609,10 +1632,7 @@ export default class MatrixService extends Service {
           enabledCommandDefinitions,
         );
         return {
-          enabledSkillCards: [
-            ...enabledSkillFileDefs,
-            ...enabledMarkdownSkillFileDefs,
-          ].map((fileDef) => fileDef.serialize()),
+          enabledSkillCards: orderedSkillFileDefs,
           disabledSkillCards: currentSkillsConfig?.disabledSkillCards ?? [],
           toolDefinitions: enabledCommandDefFileDefs.map((fileDef) =>
             fileDef.serialize(),
@@ -2159,10 +2179,13 @@ export default class MatrixService extends Service {
 
   // The default skills for a new AI room, as skill ids. When the user's active
   // system card lists any default skills — legacy `Skill` cards, `.md` skill
-  // files, or both — those win (mode-agnostic). Otherwise we fall back to the
-  // hardcoded, submode-aware set. Ids may name a `.md` skill file or a legacy
-  // `Skill` card; callers resolve them kind-agnostically via `loadSkillSource`.
-  async loadDefaultSkills(submode: Submode): Promise<string[]> {
+  // files, or both — those win. Otherwise the room gets the skills index, whose
+  // body names everything the model can then pull on demand. Either way the set
+  // does not depend on the submode: the index covers coding and runtime work
+  // alike, so entering code mode needs no second activation pass. Ids may name
+  // a `.md` skill file or a legacy `Skill` card; callers resolve them
+  // kind-agnostically via `loadSkillSource`.
+  async loadDefaultSkills(): Promise<string[]> {
     let configuredIds = [
       ...(this.systemCard?.defaultSkillCards ?? []),
       ...(this.systemCard?.defaultSkillFiles ?? []),
@@ -2173,18 +2196,7 @@ export default class MatrixService extends Service {
       return configuredIds;
     }
 
-    let interactModeDefaultSkills = [envSkillId];
-
-    // Code editing is covered by the code-mode entry-point skill (see
-    // activateCodingSkill), so source-code-editing is no longer pushed here.
-    // The two remaining defaults are still legacy pushed cards (full body in
-    // every prompt); they move to markdown + on-demand references once the
-    // bot supports commands on markdown skills, after which this list shrinks.
-    let codeModeDefaultSkills = [devSkillId, envSkillId];
-
-    return submode === 'code'
-      ? codeModeDefaultSkills
-      : interactModeDefaultSkills;
+    return [skillsIndexId];
   }
 
   @cached
@@ -3114,24 +3126,6 @@ export default class MatrixService extends Service {
     window.localStorage.removeItem(SessionLocalStorageKey);
   }
 
-  async activateCodingSkill() {
-    if (!this.currentRoomId) {
-      return;
-    }
-
-    let updateRoomSkillsCommand = new UpdateRoomSkillsTool(
-      this.toolService.toolContext,
-    );
-    let defaultSkillIds = await this.loadDefaultSkills('code');
-    await updateRoomSkillsCommand.execute({
-      roomId: this.currentRoomId,
-      // Dual-path window: the legacy card skills activate alongside the
-      // markdown source-code-editing skill. All are pushed for now; the
-      // on-demand entry point returns as a catalog listing.
-      skillCardIdsToActivate: [...defaultSkillIds, sourceCodeEditingSkillUrl],
-    });
-  }
-
   loadMoreAIRooms() {
     this.loadMoreAIRoomsTask.perform();
   }
@@ -3514,6 +3508,23 @@ async function getStorage() {
   }
 
   return storage;
+}
+
+// True when a `.md` skill's realm-indexed content matches what the room
+// already recorded, so the stored fileDef can be reused as-is. Both hashes come
+// from the same content, one via the realm's index and one from the upload that
+// wrote the room's copy, so equality means an upload would produce the same
+// bytes. A stored def with no uploaded `url` is never reusable.
+function isUnchangedMarkdownSkill(
+  source: FileDef,
+  stored: FileAPI.SerializedFile,
+): boolean {
+  return Boolean(
+    source.contentHash &&
+    stored.contentHash &&
+    source.contentHash === stored.contentHash &&
+    stored.url,
+  );
 }
 
 function serializeFileForPersistence(
