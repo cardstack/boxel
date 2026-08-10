@@ -1021,20 +1021,22 @@ export class RevenueOs extends CardDef {
                       <C @format='embedded' />
                     {{/let}}
                   </button>
-                  {{#if (this.canConvert row.lead)}}
-                    <BoxelButton
-                      @kind='secondary'
-                      @size='extra-small'
-                      @disabled={{this.busy}}
-                      {{on 'click' (fn this.convertLead row.lead)}}
-                    >Convert</BoxelButton>
-                  {{else if row.account}}
-                    <BoxelButton
-                      @kind='text-only'
-                      @size='extra-small'
-                      {{on 'click' (fn this.openCard row.account)}}
-                    >View account →</BoxelButton>
-                  {{/if}}
+                  <div class='lead-action'>
+                    {{#if (this.canConvert row.lead)}}
+                      <BoxelButton
+                        @kind='secondary'
+                        @size='extra-small'
+                        @disabled={{this.busy}}
+                        {{on 'click' (fn this.convertLead row.lead)}}
+                      >Convert</BoxelButton>
+                    {{else if row.account}}
+                      <BoxelButton
+                        @kind='text-only'
+                        @size='extra-small'
+                        {{on 'click' (fn this.openCard row.account)}}
+                      >View account →</BoxelButton>
+                    {{/if}}
+                  </div>
                 </div>
               {{else}}
                 <p class='empty'>No leads</p>
@@ -1413,6 +1415,12 @@ export class RevenueOs extends CardDef {
         .lead-embed {
           flex: 1;
           min-width: 0;
+        }
+        .lead-action {
+          width: 9.5rem;
+          display: flex;
+          justify-content: flex-end;
+          flex-shrink: 0;
         }
         .lead-embed :deep(.boxel-card-container) {
           background: transparent;
