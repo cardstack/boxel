@@ -33,7 +33,7 @@ export default class ShowFileTool extends HostBaseTool<
     await operatorModeStateService.updateCodePath(
       new URL(input.fileIdentifier),
     );
-    await operatorModeStateService.updateSubmode('code');
+    operatorModeStateService.updateSubmode('code');
   }
 }
 

@@ -6,7 +6,10 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, skip, test } from 'qunit';
 
-import { skillCardRef } from '@cardstack/runtime-common';
+import {
+  buildToolFunctionNameFromResolvedRef,
+  skillCardRef,
+} from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import {
@@ -54,6 +57,14 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
   const realmName = 'Operator Mode Workspace';
   const readOnlyRealmName = 'Read Only Workspace';
   const readOnlyRealmURL = 'http://test-realm/read-only/';
+  // The card-search tool as the `Skill/boxel-environment` fixture below
+  // declares it. A room's default skill carries no tools, so any test applying
+  // this tool has to attach that skill first, and name the tool the way the
+  // fixture spells it — the function name is a hash of `module#name`.
+  const searchCardsToolName = buildToolFunctionNameFromResolvedRef({
+    module: '@cardstack/boxel-host/commands/search-cards',
+    name: 'SearchCardsByTypeAndTitleTool',
+  });
   let loader: Loader;
   let operatorModeStateService: OperatorModeStateService;
 
@@ -781,6 +792,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
   test('it can search for card instances that is of the same card type as the card shared', async function (assert) {
     let id = `${testRealmURL}Pet/mango.json`;
     let roomId = await renderAiAssistantPanel(id);
+    await addSkillToAiAssistant(`${testRealmURL}Skill/boxel-environment`);
 
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -790,7 +802,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: 'search1',
-          name: 'SearchCardsByTypeAndTitleCommand_a959',
+          name: searchCardsToolName,
           arguments: JSON.stringify({
             description: 'Searching for card',
             attributes: {
@@ -829,6 +841,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
   test('it can search for card instances based upon title of card', async function (assert) {
     let id = `${testRealmURL}Pet/mango.json`;
     let roomId = await renderAiAssistantPanel(id);
+    await addSkillToAiAssistant(`${testRealmURL}Skill/boxel-environment`);
 
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -838,7 +851,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: 'search1',
-          name: 'SearchCardsByTypeAndTitleCommand_a959',
+          name: searchCardsToolName,
           arguments: JSON.stringify({
             description: 'Searching for card',
             attributes: {
@@ -871,6 +884,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
   test('toggle more search results', async function (assert) {
     let id = `${testRealmURL}Person/fadhlan.json`;
     let roomId = await renderAiAssistantPanel(id);
+    await addSkillToAiAssistant(`${testRealmURL}Skill/boxel-environment`);
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Search for the following card',
@@ -879,7 +893,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: '721c8c78-d8c1-4cc1-a7e9-51d2d3143e4d',
-          name: 'SearchCardsByTypeAndTitleCommand_a959',
+          name: searchCardsToolName,
           arguments: JSON.stringify({
             description: 'Searching for card',
             attributes: {
@@ -926,6 +940,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
   test('it can copy search results card to workspace', async function (assert) {
     const id = `${testRealmURL}Person/fadhlan`;
     const roomId = await renderAiAssistantPanel(`${id}.json`);
+    await addSkillToAiAssistant(`${testRealmURL}Skill/boxel-environment`);
     const toolArgs = {
       description: 'Search for Person cards',
       attributes: {
@@ -944,7 +959,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: 'fd4515fb-ed4d-4005-9782-4e844d7d4d9c',
-          name: 'SearchCardsByTypeAndTitleCommand_a959',
+          name: searchCardsToolName,
           arguments: JSON.stringify(toolArgs),
         },
       ],
@@ -998,6 +1013,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
   test('copy to workspace menu item is shown for writable realm', async function (assert) {
     const id = `${testRealmURL}Person/fadhlan`;
     const roomId = await renderAiAssistantPanel(`${id}.json`);
+    await addSkillToAiAssistant(`${testRealmURL}Skill/boxel-environment`);
     const toolArgs = {
       description: 'Search for Person cards',
       attributes: {
@@ -1016,7 +1032,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: '9a5b7422-87de-4a93-9f07-9b7c40b75b1e',
-          name: 'SearchCardsByTypeAndTitleCommand_a959',
+          name: searchCardsToolName,
           arguments: JSON.stringify(toolArgs),
         },
       ],
@@ -1037,6 +1053,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
   test('copy to workspace menu item is hidden for read-only realm', async function (assert) {
     const id = `${readOnlyRealmURL}Person/ian`;
     const roomId = await renderAiAssistantPanel(`${id}.json`);
+    await addSkillToAiAssistant(`${testRealmURL}Skill/boxel-environment`);
     const toolArgs = {
       description: 'Search for Person cards',
       attributes: {
@@ -1055,7 +1072,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: '6c6e2d73-8e09-4b44-a0d9-688f36b73be8',
-          name: 'SearchCardsByTypeAndTitleCommand_a959',
+          name: searchCardsToolName,
           arguments: JSON.stringify(toolArgs),
         },
       ],
@@ -1078,6 +1095,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
   test('it can copy search results card to workspace (no cards in stack)', async function (assert) {
     const id = `${testRealmURL}Person/fadhlan`;
     const roomId = await renderAiAssistantPanel(`${id}.json`);
+    await addSkillToAiAssistant(`${testRealmURL}Skill/boxel-environment`);
     const toolArgs = {
       description: 'Search for Person cards',
       attributes: {
@@ -1096,7 +1114,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: 'ffd1a3d0-0bd4-491a-a907-b96ec9d8902c',
-          name: 'SearchCardsByTypeAndTitleCommand_a959',
+          name: searchCardsToolName,
           arguments: JSON.stringify(toolArgs),
         },
       ],

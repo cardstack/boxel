@@ -10,6 +10,7 @@ import {
   REPLACE_MARKER,
   SEARCH_MARKER,
   SEPARATOR_MARKER,
+  buildToolFunctionNameFromResolvedRef,
   rri,
   skillCardRef,
 } from '@cardstack/runtime-common';
@@ -27,7 +28,7 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 
 import {
   addSkillToAiAssistant,
-  envSkillId,
+  skillsIndexId,
   testRealmURL,
   setupCardLogs,
   setupIntegrationTestRealm,
@@ -58,6 +59,14 @@ import type { FileDef } from '@cardstack/base/file-api';
 
 module('Integration | ai-assistant-panel | skills', function (hooks) {
   const realmName = 'Operator Mode Workspace';
+  // The tool `Skill/example` declares. A room's default skill is the skills
+  // index, which carries no tools of its own, so an applied tool call has to
+  // name one an attached skill actually declares — anything else is rejected
+  // as an unrecognized tool before the room's skills are re-uploaded.
+  const exampleSkillToolName = buildToolFunctionNameFromResolvedRef({
+    module: `${testRealmURL}search-and-open-card-command`,
+    name: 'default',
+  });
   let loader: Loader;
   let operatorModeStateService: OperatorModeStateService;
 
@@ -880,10 +889,10 @@ Instructions live in the markdown body.
     // different serialization. sourceUrl is the stable identifier.
     assert.strictEqual(
       finalRoomStateSkillsJson.enabledSkillCards.find(
-        (c: FileDef) => c.sourceUrl === envSkillId,
+        (c: FileDef) => c.sourceUrl === skillsIndexId,
       ).sourceUrl,
       initialRoomStateSkillsJson.enabledSkillCards.find(
-        (c: FileDef) => c.sourceUrl === envSkillId,
+        (c: FileDef) => c.sourceUrl === skillsIndexId,
       ).sourceUrl,
       'unchanged skill card is still present',
     );
@@ -943,7 +952,7 @@ Instructions live in the markdown body.
       [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
           id: '721c8c78-d8c1-4cc1-a7e9-51d2d3143e4d',
-          name: 'SearchCardsByTypeAndTitleCommand_a959',
+          name: exampleSkillToolName,
           arguments: JSON.stringify({
             attributes: {
               cardDescription: 'Searching for card',
@@ -975,10 +984,10 @@ Instructions live in the markdown body.
     // different serialization. sourceUrl is the stable identifier.
     assert.strictEqual(
       finalRoomStateSkillsJson.enabledSkillCards.find(
-        (c: FileDef) => c.sourceUrl === envSkillId,
+        (c: FileDef) => c.sourceUrl === skillsIndexId,
       ).sourceUrl,
       initialRoomStateSkillsJson.enabledSkillCards.find(
-        (c: FileDef) => c.sourceUrl === envSkillId,
+        (c: FileDef) => c.sourceUrl === skillsIndexId,
       ).sourceUrl,
       'unchanged skill card is still present',
     );
@@ -1063,10 +1072,10 @@ ${REPLACE_MARKER}
     // different serialization. sourceUrl is the stable identifier.
     assert.strictEqual(
       finalRoomStateSkillsJson.enabledSkillCards.find(
-        (c: FileDef) => c.sourceUrl === envSkillId,
+        (c: FileDef) => c.sourceUrl === skillsIndexId,
       ).sourceUrl,
       initialRoomStateSkillsJson.enabledSkillCards.find(
-        (c: FileDef) => c.sourceUrl === envSkillId,
+        (c: FileDef) => c.sourceUrl === skillsIndexId,
       ).sourceUrl,
       'unchanged skill card is still present',
     );
@@ -1124,17 +1133,6 @@ ${REPLACE_MARKER}
     );
     await settled();
 
-    const afterCodeModeRoomStateSkillsJson = getRoomState(
-      roomId,
-      APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
-    );
-
-    assert.notDeepEqual(
-      afterCodeModeRoomStateSkillsJson,
-      initialRoomStateSkillsJson,
-      'room state has changed to reference new skill card events',
-    );
-
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Interact"]');
 
@@ -1142,8 +1140,11 @@ ${REPLACE_MARKER}
     await click('[data-test-send-message-btn]');
     await waitFor('[data-test-message-idx]');
 
+    // Editing the command source and moving between submodes leave the room's
+    // skills alone — the defaults do not vary by submode — so the state taken
+    // before the edit is still the pre-send baseline.
     let expectedCommandDefinitionCount =
-      afterCodeModeRoomStateSkillsJson.toolDefinitions?.length ?? 0;
+      initialRoomStateSkillsJson.toolDefinitions?.length ?? 0;
 
     await waitUntil(
       () => {
@@ -1170,7 +1171,7 @@ ${REPLACE_MARKER}
         );
         return (
           JSON.stringify(skillsState?.toolDefinitions) !==
-          JSON.stringify(afterCodeModeRoomStateSkillsJson.toolDefinitions)
+          JSON.stringify(initialRoomStateSkillsJson.toolDefinitions)
         );
       },
       {
@@ -1189,8 +1190,8 @@ ${REPLACE_MARKER}
       expectedCommandDefinitionCount
     ) {
       console.log(
-        `command definition count mismatch: afterCodeModeRoomStateSkills:\n${JSON.stringify(
-          afterCodeModeRoomStateSkillsJson,
+        `command definition count mismatch: initialRoomStateSkills:\n${JSON.stringify(
+          initialRoomStateSkillsJson,
           null,
           2,
         )}\nfinalRoomStateSkillsJson:\n${JSON.stringify(
@@ -1205,32 +1206,30 @@ ${REPLACE_MARKER}
     // to async linksTo relationship loading. Compare sourceUrls instead.
     assert.deepEqual(
       finalRoomStateSkillsJson.enabledSkillCards.map((c: any) => c.sourceUrl),
-      afterCodeModeRoomStateSkillsJson.enabledSkillCards.map(
-        (c: any) => c.sourceUrl,
-      ),
+      initialRoomStateSkillsJson.enabledSkillCards.map((c: any) => c.sourceUrl),
       'enabled skill cards are the same',
     );
     assert.deepEqual(
       finalRoomStateSkillsJson.disabledSkillCards.map((c: any) => c.sourceUrl),
-      afterCodeModeRoomStateSkillsJson.disabledSkillCards.map(
+      initialRoomStateSkillsJson.disabledSkillCards.map(
         (c: any) => c.sourceUrl,
       ),
       'disabled skill cards are the same',
     );
     assert.notDeepEqual(
       finalRoomStateSkillsJson.toolDefinitions,
-      afterCodeModeRoomStateSkillsJson.toolDefinitions,
+      initialRoomStateSkillsJson.toolDefinitions,
       'command definitions are different',
     );
 
     let baselineUnchangedCommandDefinitions =
-      afterCodeModeRoomStateSkillsJson.toolDefinitions.filter(
+      initialRoomStateSkillsJson.toolDefinitions.filter(
         (cmd: any) =>
           cmd.sourceUrl !==
           `${testRealmURL}search-and-open-card-command/default`,
       );
     let baselineChangedCommandDefinitions =
-      afterCodeModeRoomStateSkillsJson.toolDefinitions.filter(
+      initialRoomStateSkillsJson.toolDefinitions.filter(
         (cmd: any) =>
           cmd.sourceUrl ===
           `${testRealmURL}search-and-open-card-command/default`,
