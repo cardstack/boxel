@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "LineChart",
+        "module": "../line-chart"
+      },
+      "specType": "component",
+      "readMe": "## Line Chart\n\nThe layer-matrix **Line Chart** element (the charts detour, revived with a real consumer: the Revenue Dashboard's MRR trend). Self-contained SVG \u2014 no chart library: `@points` ({label, value}[]), optional `@formatValue` for axis/endpoint labels. Renders an area fill, faint dashed grid at min/mid/max, the line, and an emphasized endpoint with its value \u2014 the endpoint IS the headline number.\n\n```gts\nimport { LineChart } from '../line-chart';\n<LineChart @points={{this.mrrByMonth}} @formatValue={{this.money}} />\n```\n\nColors route through theme tokens (--primary/--border/--muted-foreground) so themes restyle it.\n\n**Non-goals:** multiple series, tooltips/hover, time-axis math (points arrive ordered; bucketing is the consumer's job), donut/bar variants (deferred \u2014 v1 dashboard is line + CSS bars).",
+      "cardInfo": {
+        "name": "LineChart",
+        "summary": "Dependency-free SVG line chart block: area fill, min/mid/max grid, emphasized endpoint with value. Token-themed.",
+        "notes": null,
+        "cardThumbnailURL": null
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../LineChartDemo/mrr-trend"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
