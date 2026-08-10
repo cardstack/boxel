@@ -1,0 +1,68 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "invoiceNumber": "INV-2026-070",
+      "issueDate": "2026-07-15",
+      "sentDate": "2026-07-16",
+      "dueDate": "2026-08-14",
+      "status": "partial",
+      "lineItems": [
+        {
+          "description": "Data warehouse migration (phase 1)",
+          "quantity": 1,
+          "unitPrice": {
+            "amount": 7500,
+            "currency": {
+              "code": "USD"
+            }
+          }
+        },
+        {
+          "description": "Onboarding sessions",
+          "quantity": 3,
+          "unitPrice": {
+            "amount": 500,
+            "currency": {
+              "code": "USD"
+            }
+          }
+        }
+      ],
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../invoice",
+        "name": "Invoice"
+      }
+    },
+    "relationships": {
+      "account": {
+        "links": {
+          "self": "../Account/acme-industries"
+        }
+      },
+      "owner": {
+        "links": {
+          "self": "../Teammate/marcus-osei"
+        }
+      },
+      "payments.0": {
+        "links": {
+          "self": "../Payment/pay-inv-2026-070-1"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/ledger"
+        }
+      }
+    }
+  }
+}

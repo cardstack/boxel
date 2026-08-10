@@ -28,6 +28,11 @@
         "links": {
           "self": "../Payment/pay-inv-2026-052-1"
         }
+      },
+      "linkedExamples.2": {
+        "links": {
+          "self": "../Payment/pay-inv-2026-070-1"
+        }
       }
     },
     "meta": {
