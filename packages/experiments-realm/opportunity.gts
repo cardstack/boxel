@@ -47,6 +47,17 @@ export function stageSlug(stage: string | undefined): string {
   return (stage ?? '').replace(/\s+/g, '-');
 }
 
+export const STAGE_COLORS: Record<string, string> = {
+  'new lead': '#94a3b8',
+  contacted: '#60a5fa',
+  qualified: '#34d399',
+  discovery: '#2dd4bf',
+  proposal: '#fbbf24',
+  negotiation: '#f59e0b',
+  'closed won': '#16a34a',
+  'closed lost': '#dc2626',
+};
+
 export class Opportunity extends CardDef {
   static displayName = 'Opportunity';
   static icon = TrendingUpIcon;
