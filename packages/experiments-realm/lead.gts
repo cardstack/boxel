@@ -91,7 +91,10 @@ export class Lead extends CardDef {
           {{/if}}
         </div>
         {{#if @model.score}}
-          <span class='score'>{{@model.score}}</span>
+          <span class='score-block'>
+            <span class='score'>{{@model.score}}</span>
+            <span class='score-caption'>score</span>
+          </span>
         {{/if}}
         {{#if @model.status}}
           <span class='status status-{{@model.status}}'>{{@model.status}}</span>
@@ -128,10 +131,24 @@ export class Lead extends CardDef {
           font-size: 0.75rem;
           color: var(--muted-foreground, #6b7280);
         }
+        .score-block {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 0.0625rem;
+        }
         .score {
           font-weight: 700;
           font-variant-numeric: tabular-nums;
           font-size: 0.8125rem;
+          line-height: 1;
+        }
+        .score-caption {
+          font-size: 0.5625rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          color: var(--muted-foreground, #6b7280);
         }
         .status {
           font-size: 0.625rem;
