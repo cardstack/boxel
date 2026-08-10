@@ -4794,7 +4794,6 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://packages/ember-modifier',
         'https://packages/ember-provide-consume-context',
         'https://packages/lodash-es',
-        'https://packages/super-fast-md5',
         'https://packages/tracked-built-ins',
         // Sort the expected list so the assertion is robust against
         // the iconsBase URL scheme/host: standard mode puts icons at
@@ -4990,7 +4989,6 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://packages/ember-provide-consume-context',
         'https://packages/ember-resources',
         'https://packages/lodash-es',
-        'https://packages/super-fast-md5',
         'https://packages/tracked-built-ins',
         // See note on iconsBase ordering above.
       ].sort(),
