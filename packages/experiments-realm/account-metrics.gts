@@ -95,7 +95,8 @@ export class AccountMetrics extends GlimmerComponent<AccountMetricsSignature> {
   }
 
   get metrics() {
-    let { amount: mrr, code } = this.mrr;
+    let { amount: mrr, code: mrrCode } = this.mrr;
+    let code = mrrCode ?? 'USD';
     let open = this.invoices.filter((i) =>
       OPEN_STATUSES.includes(i.status ?? ''),
     );
@@ -112,15 +113,15 @@ export class AccountMetrics extends GlimmerComponent<AccountMetricsSignature> {
       (i) => (i.daysOverdue ?? 0) > 0,
     ).length;
     return [
-      { label: 'MRR', value: formatMoney(mrr, code) || '$0' },
-      { label: 'ARR', value: formatMoney(mrr * 12, code) || '$0' },
+      { label: 'MRR', value: formatMoney(mrr, code) },
+      { label: 'ARR', value: formatMoney(mrr * 12, code) },
       {
         label: 'Outstanding',
-        value: formatMoney(outstanding.total, outstanding.code) || '$0',
+        value: formatMoney(outstanding.total, outstanding.code ?? code),
       },
       {
         label: 'Collected',
-        value: formatMoney(collected.total, collected.code) || '$0',
+        value: formatMoney(collected.total, collected.code ?? code),
       },
       { label: 'Overdue invoices', value: String(overdueCount) },
     ];
