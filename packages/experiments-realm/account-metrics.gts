@@ -8,7 +8,7 @@ import {
 import type { Account } from './account';
 import { Invoice } from './invoice';
 import { Subscription } from './subscription';
-import { formatMoney, sumLineItems } from './money';
+import { formatMoney, outstandingBalance, sumLineItems } from './money';
 
 const OPEN_STATUSES = ['sent', 'viewed', 'partial', 'overdue'];
 
@@ -100,7 +100,13 @@ export class AccountMetrics extends GlimmerComponent<AccountMetricsSignature> {
       OPEN_STATUSES.includes(i.status ?? ''),
     );
     let paid = this.invoices.filter((i) => i.status === 'paid');
-    let outstanding = this.sumInvoices(open);
+    let outstanding = {
+      total: open.reduce(
+        (acc, i) => acc + outstandingBalance(i.lineItems, i.payments),
+        0,
+      ),
+      code: this.sumInvoices(open).code,
+    };
     let collected = this.sumInvoices(paid);
     let overdueCount = this.invoices.filter(
       (i) => (i.daysOverdue ?? 0) > 0,

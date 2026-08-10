@@ -33,7 +33,7 @@ import { Activity } from './activity';
 import ConvertLeadCommand from './convert-lead';
 import CloseWonCommand from './close-won';
 import RecordPaymentCommand from './record-payment';
-import { formatMoney, sumLineItems } from './money';
+import { formatMoney, outstandingBalance, sumLineItems } from './money';
 
 const OPEN_INVOICE_STATUSES = ['sent', 'viewed', 'partial', 'overdue'];
 const OPEN_STAGES = PIPELINE_STAGES.filter(
@@ -70,6 +70,8 @@ export class RevenueOs extends CardDef {
   static isolated = class Isolated extends Component<typeof RevenueOs> {
     @tracked activeTab = 'pipeline';
     @tracked invoiceFilter = 'open';
+    @tracked ownerFilter = 'all';
+    @tracked accountQuery = '';
     @tracked selectedAccountId: string | undefined;
     @tracked statusMessage = '';
     @tracked busy = false;
@@ -158,6 +160,26 @@ export class RevenueOs extends CardDef {
       label: s,
     }));
     columnKeyFor = (item: CardDef) => (item as Opportunity)?.stage;
+
+    get owners(): string[] {
+      let names = new Set<string>();
+      for (let o of this.opportunities) {
+        let n = o.owner?.name?.trim();
+        if (n) names.add(n);
+      }
+      return [...names].sort();
+    }
+
+    get boardItems(): Opportunity[] {
+      if (this.ownerFilter === 'all') return this.opportunities;
+      return this.opportunities.filter(
+        (o) => o.owner?.name === this.ownerFilter,
+      );
+    }
+
+    @action setOwnerFilter(event: Event) {
+      this.ownerFilter = (event.target as HTMLSelectElement).value;
+    }
     onMove = async (item: CardDef, columnKey: string) => {
       (item as Opportunity).stage = columnKey;
       if (this.commandContext && this.realm) {
@@ -279,10 +301,65 @@ export class RevenueOs extends CardDef {
     }
 
     // ── accounts / 360 ────────────────────────────────────────────────
+    get filteredAccounts(): Account[] {
+      let q = this.accountQuery.trim().toLowerCase();
+      if (!q) return this.accounts;
+      let matchingContactAccountIds = new Set(
+        this.contacts
+          .filter((c) => c.email?.toLowerCase().includes(q))
+          .map((c) => c.account?.id)
+          .filter(Boolean),
+      );
+      return this.accounts.filter(
+        (a) =>
+          a.name?.toLowerCase().includes(q) ||
+          a.domain?.toLowerCase().includes(q) ||
+          a.email?.toLowerCase().includes(q) ||
+          (a.id && matchingContactAccountIds.has(a.id)),
+      );
+    }
+
+    @action setAccountQuery(event: Event) {
+      this.accountQuery = (event.target as HTMLInputElement).value;
+    }
+
+    @action async logActivity() {
+      let account = this.selectedAccount;
+      let ref = identifyCard(Activity);
+      if (!ref || !account?.id) return;
+      await (this.args as any).createCard?.(ref, undefined, {
+        realmURL: this.realm ? new URL(this.realm) : undefined,
+        doc: {
+          data: {
+            attributes: {
+              activityType: 'note',
+              occurredAt: new Date().toISOString(),
+            },
+            relationships: { about: { links: { self: account.id } } },
+            meta: { adoptsFrom: ref },
+          },
+        },
+      });
+    }
+
+    @action async newLead() {
+      let ref = identifyCard(Lead);
+      if (!ref) return;
+      await (this.args as any).createCard?.(ref, undefined, {
+        realmURL: this.realm ? new URL(this.realm) : undefined,
+        doc: {
+          data: {
+            attributes: { status: 'new' },
+            meta: { adoptsFrom: ref },
+          },
+        },
+      });
+    }
+
     get selectedAccount(): Account | undefined {
       return (
-        this.accounts.find((a) => a.id === this.selectedAccountId) ??
-        this.accounts[0]
+        this.filteredAccounts.find((a) => a.id === this.selectedAccountId) ??
+        this.filteredAccounts[0]
       );
     }
     @action selectAccount(account: Account) {
@@ -379,13 +456,14 @@ export class RevenueOs extends CardDef {
       let code: string | undefined;
       for (let inv of this.invoices) {
         if (!OPEN_INVOICE_STATUSES.includes(inv.status ?? '')) continue;
-        let { total, code: c } = sumLineItems(inv.lineItems);
+        let { code: c } = sumLineItems(inv.lineItems);
         code = code ?? c;
+        let balance = outstandingBalance(inv.lineItems, inv.payments);
         let days = inv.daysOverdue ?? 0;
-        if (days <= 0) buckets.current += total;
-        else if (days <= 30) buckets.b30 += total;
-        else if (days <= 60) buckets.b60 += total;
-        else buckets.b90 += total;
+        if (days <= 0) buckets.current += balance;
+        else if (days <= 30) buckets.b30 += balance;
+        else if (days <= 60) buckets.b60 += balance;
+        else buckets.b90 += balance;
       }
       let f = (n: number) => formatMoney(n, code) || '$0';
       return [
@@ -402,21 +480,14 @@ export class RevenueOs extends CardDef {
       );
     }
 
-    balanceOf = (inv: Invoice) => {
-      let { total } = sumLineItems(inv.lineItems);
-      let paid = (inv.payments ?? []).reduce(
-        (acc, p) => acc + (p?.amount?.amount ?? 0),
-        0,
-      );
-      return total - paid;
-    };
+    balanceOf = (inv: Invoice) => outstandingBalance(inv.lineItems, inv.payments);
     balanceDisplay = (inv: Invoice) => {
       let { code } = sumLineItems(inv.lineItems);
       return formatMoney(this.balanceOf(inv), code);
     };
 
     @action openCard(item: CardDef) {
-      (this.args as any).context?.actions?.viewCard?.(item);
+      (this.args as any).viewCard?.(item, 'isolated');
     }
 
     @action async recordBalancePayment(inv: Invoice) {
@@ -499,6 +570,22 @@ export class RevenueOs extends CardDef {
           <section class='pane'>
             <div class='pane-head'>
               <h2>Pipeline</h2>
+              {{#if this.owners.length}}
+                <select
+                  class='owner-select'
+                  aria-label='Filter by owner'
+                  {{on 'change' this.setOwnerFilter}}
+                >
+                  <option value='all' selected={{eq this.ownerFilter 'all'}}>All
+                    owners</option>
+                  {{#each this.owners as |name|}}
+                    <option
+                      value={{name}}
+                      selected={{eq this.ownerFilter name}}
+                    >{{name}}</option>
+                  {{/each}}
+                </select>
+              {{/if}}
               <p class='pane-sub'>{{this.stageTotals.count}}
                 open ·
                 {{this.stageTotals.total}}
@@ -509,7 +596,7 @@ export class RevenueOs extends CardDef {
             <div class='board-wrap'>
               <Board
                 @boardLabel='Pipeline'
-                @items={{this.opportunities}}
+                @items={{this.boardItems}}
                 @columns={{this.boardColumns}}
                 @columnKeyFor={{this.columnKeyFor}}
                 @onMove={{this.onMove}}
@@ -578,7 +665,15 @@ export class RevenueOs extends CardDef {
         {{#if (eq this.activeTab 'accounts')}}
           <section class='pane split'>
             <aside class='side-list'>
-              {{#each this.accounts as |account|}}
+              <input
+                class='search'
+                type='search'
+                placeholder='Search name, domain, contact email…'
+                value={{this.accountQuery}}
+                aria-label='Search accounts'
+                {{on 'input' this.setAccountQuery}}
+              />
+              {{#each this.filteredAccounts as |account|}}
                 <button
                   type='button'
                   class='side-item
@@ -595,11 +690,18 @@ export class RevenueOs extends CardDef {
               {{#if this.selectedAccount}}
                 <div class='detail-head'>
                   <h2>{{this.selectedAccount.name}}</h2>
-                  <button
-                    type='button'
-                    class='act'
-                    {{on 'click' (fn this.openCard this.selectedAccount)}}
-                  >Open account</button>
+                  <div class='head-actions'>
+                    <button
+                      type='button'
+                      class='act'
+                      {{on 'click' this.logActivity}}
+                    >Log activity</button>
+                    <button
+                      type='button'
+                      class='act'
+                      {{on 'click' (fn this.openCard this.selectedAccount)}}
+                    >Open account</button>
+                  </div>
                 </div>
                 <AccountMetrics
                   @account={{this.selectedAccount}}
@@ -691,6 +793,14 @@ export class RevenueOs extends CardDef {
 
         {{#if (eq this.activeTab 'leads')}}
           <section class='pane'>
+            <div class='pane-head'>
+              <h2>Leads</h2>
+              <button
+                type='button'
+                class='act'
+                {{on 'click' this.newLead}}
+              >New lead</button>
+            </div>
             <div class='lead-list'>
               {{#each this.leads as |lead|}}
                 <div class='lead-row'>
@@ -1029,6 +1139,30 @@ export class RevenueOs extends CardDef {
           margin: 0;
           font-size: 0.8125rem;
           color: var(--muted-foreground, #6b7280);
+        }
+        .owner-select {
+          font: inherit;
+          font-size: 0.8125rem;
+          padding: 0.25rem 0.5rem;
+          border: 1px solid var(--border, #e5e7eb);
+          border-radius: 0.5rem;
+          background: var(--card, #ffffff);
+          color: var(--foreground, #111111);
+        }
+        .search {
+          font: inherit;
+          font-size: 0.8125rem;
+          padding: 0.4375rem 0.625rem;
+          border: 1px solid var(--border, #e5e7eb);
+          border-radius: 0.5rem;
+          background: var(--card, #ffffff);
+          color: var(--foreground, #111111);
+          width: 100%;
+          box-sizing: border-box;
+        }
+        .head-actions {
+          display: flex;
+          gap: 0.375rem;
         }
       </style>
     </template>
