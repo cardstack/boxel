@@ -118,10 +118,29 @@ function isRealmServerNotInRoomError(error: unknown, roomId: string): boolean {
 export class NodeAdapter implements RealmAdapter {
   private realmDir: string;
   private enableFileWatcher?: boolean;
+  // BPM Phase 0R: notifies the realm-history sidecar after each write/remove
+  // so mutations seal into jj changes. Only wired for opted-in source realms;
+  // must never throw into the write path.
+  private onMutation?: (path: LocalPath) => void;
 
-  constructor(realmDir: string, enableFileWatcher?: boolean) {
+  constructor(
+    realmDir: string,
+    enableFileWatcher?: boolean,
+    onMutation?: (path: LocalPath) => void,
+  ) {
     this.realmDir = realmDir;
     this.enableFileWatcher = enableFileWatcher;
+    this.onMutation = onMutation;
+  }
+
+  private noteMutation(path: LocalPath) {
+    try {
+      this.onMutation?.(path);
+    } catch (e: any) {
+      realmEventsLog.warn(
+        `realm-history mutation hook failed for ${path}: ${e?.message ?? e}`,
+      );
+    }
   }
 
   get dir(): string {
@@ -263,6 +282,7 @@ export class NodeAdapter implements RealmAdapter {
     ensureFileSync(absolutePath);
     writeFileSync(absolutePath, contents);
     let { mtime } = statSync(absolutePath);
+    this.noteMutation(path);
     return {
       path: absolutePath,
       lastModified: unixTime(mtime.getTime()),
@@ -272,6 +292,7 @@ export class NodeAdapter implements RealmAdapter {
   async remove(path: LocalPath): Promise<void> {
     let absolutePath = join(this.realmDir, path);
     removeSync(absolutePath);
+    this.noteMutation(path);
   }
 
   createStreamingResponse(

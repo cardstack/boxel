@@ -13,6 +13,10 @@ import {
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
 } from '@cardstack/runtime-common';
 import { NodeAdapter } from './node-realm.ts';
+import {
+  getRealmHistoryManager,
+  isRealmHistoryEnabled,
+} from './lib/realm-history.ts';
 import yargs from 'yargs';
 import { RealmServer } from './server.ts';
 import { join } from 'path';
@@ -589,7 +593,19 @@ const reportHostShellToManager = async () => {
       } else {
         diskPath = join(realmsRootPath, PUBLISHED_DIRECTORY_NAME, row.disk_id);
       }
-      const reconciledAdapter = new NodeAdapter(diskPath, ENABLE_FILE_WATCHER);
+      // BPM Phase 0R: only user-authored source realms get jj history — never
+      // bootstrap realms (served from the repo checkout, which must not grow
+      // a .jj repo) and never published copies.
+      const onMutation =
+        isRealmHistoryEnabled() && row.kind === 'source'
+          ? (path: string) =>
+              getRealmHistoryManager().noteMutation(diskPath, path)
+          : undefined;
+      const reconciledAdapter = new NodeAdapter(
+        diskPath,
+        ENABLE_FILE_WATCHER,
+        onMutation,
+      );
       let fullIndexOnStartup = resolveFullIndexOnStartup(
         row.kind,
         FULL_INDEX_ON_STARTUP_OVERRIDE,

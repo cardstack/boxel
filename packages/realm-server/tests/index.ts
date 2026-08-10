@@ -386,6 +386,7 @@ const ALL_TEST_FILES: string[] = [
   './markdown-fallback-server-isolation-test',
   './sanitize-head-html-test',
   './node-realm-test',
+  './realm-history-lib-test',
   './session-room-queries-test',
   './session-revocation-test',
   './session-lifetime-test',

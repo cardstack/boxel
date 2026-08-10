@@ -32,6 +32,7 @@ import { createRoutes } from './routes.ts';
 import { JobScopedSearchCache } from './job-scoped-search-cache.ts';
 import { createSendEvent } from './handlers/send-event.ts';
 import { createServeFromRealm } from './handlers/serve-from-realm.ts';
+import handleRealmHistory from './handlers/handle-realm-history.ts';
 import { createServeIndex } from './handlers/serve-index.ts';
 import { findOrMountRealm } from './lib/realm-routing.ts';
 import type { Prerenderer } from '@cardstack/runtime-common';
@@ -1194,6 +1195,17 @@ export class RealmServer {
           requestHeaders: {
             'accept-encoding': 'identity',
           },
+        }),
+      )
+      // BPM Phase 0R: realm-scoped `<realm>/_history` endpoints, intercepted
+      // ahead of the realm fallthrough. Inert (immediate next()) unless
+      // ENABLE_REALM_HISTORY=true.
+      .use(
+        handleRealmHistory({
+          realms: this.realms,
+          reconciler: this.reconciler,
+          dbAdapter: this.dbAdapter,
+          realmSecretSeed: this.realmSecretSeed,
         }),
       )
       .use(serveIndex)

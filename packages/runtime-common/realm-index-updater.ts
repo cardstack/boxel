@@ -390,7 +390,9 @@ export function isIgnored(
   }
   if (
     [`${realmURL.href}.template-lintrc.js`].includes(url.href) ||
-    url.href.startsWith(`${realmURL.href}.git/`)
+    url.href.startsWith(`${realmURL.href}.git/`) ||
+    // the realm-history sidecar's jj store (colocated with .git/)
+    url.href.startsWith(`${realmURL.href}.jj/`)
   ) {
     return true;
   }
