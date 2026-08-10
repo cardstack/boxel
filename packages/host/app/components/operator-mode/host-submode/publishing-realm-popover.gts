@@ -1,13 +1,24 @@
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { LoadingIndicator } from '@cardstack/boxel-ui/components';
+import { LoadingIndicator, ProgressBar } from '@cardstack/boxel-ui/components';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
+import { publishPhaseLabel } from '@cardstack/host/utils/publish-progress';
 
 interface PublishingRealmArgs {
   isOpen: boolean;
+}
+
+interface PublishingTarget {
+  url: string;
+  // What the publish is doing right now, e.g. "Indexing". Present before any
+  // progress arrives so a target never renders as a bare URL.
+  phaseLabel: string;
+  // Only set once the running pass has reported a total, which is what makes a
+  // determinate bar meaningful. Until then the row shows the phase alone.
+  counts?: { completed: number; total: number };
 }
 
 export default class PublishingRealmPopover extends Component<PublishingRealmArgs> {
@@ -16,6 +27,24 @@ export default class PublishingRealmPopover extends Component<PublishingRealmArg
 
   get publishingRealms() {
     return this.realm.publishingRealms(this.realmURL);
+  }
+
+  get publishingTargets(): PublishingTarget[] {
+    return this.publishingRealms.map((url) => {
+      let progress = this.realm.publishProgress(this.realmURL, url);
+      return {
+        url,
+        phaseLabel: publishPhaseLabel(progress),
+        ...(progress && progress.totalFiles > 0
+          ? {
+              counts: {
+                completed: progress.filesCompleted,
+                total: progress.totalFiles,
+              },
+            }
+          : {}),
+      };
+    });
   }
 
   get realmURL() {
@@ -29,24 +58,56 @@ export default class PublishingRealmPopover extends Component<PublishingRealmArg
           Publishing to:
         </div>
         <div class='publishing-realm-content'>
-          {{#if this.publishingRealms.length}}
+          {{#if this.publishingTargets.length}}
             <div class='realm-urls'>
-              {{#each this.publishingRealms as |url|}}
-                <div class='realm-item'>
-                  <div class='realm-icon-container'>
-                    {{#if this.operatorModeStateService.currentRealmInfo}}
-                      <img
-                        src={{this.operatorModeStateService.currentRealmInfo.iconURL}}
-                        alt='Realm icon'
-                        class='realm-icon'
-                      />
-                    {{else}}
-                      <div class='default-realm-icon'></div>
-                    {{/if}}
+              {{#each this.publishingTargets as |target|}}
+                <div
+                  class='realm-item'
+                  data-test-publishing-realm={{target.url}}
+                >
+                  <div class='realm-summary'>
+                    <div class='realm-icon-container'>
+                      {{#if this.operatorModeStateService.currentRealmInfo}}
+                        <img
+                          src={{this.operatorModeStateService.currentRealmInfo.iconURL}}
+                          alt='Realm icon'
+                          class='realm-icon'
+                        />
+                      {{else}}
+                        <div class='default-realm-icon'></div>
+                      {{/if}}
+                    </div>
+                    <div class='realm-url'>{{target.url}}</div>
+                    <div class='status-icon'>
+                      <LoadingIndicator class='loading-icon' />
+                    </div>
                   </div>
-                  <div class='realm-url'>{{url}}</div>
-                  <div class='status-icon'>
-                    <LoadingIndicator class='loading-icon' />
+                  <div class='publish-progress' data-test-publish-progress>
+                    <div class='progress-summary'>
+                      <span data-test-publish-progress-phase>
+                        {{target.phaseLabel}}
+                      </span>
+                      {{#if target.counts}}
+                        <span data-test-publish-progress-counts>
+                          {{target.counts.completed}}
+                          of
+                          {{target.counts.total}}
+                          files
+                        </span>
+                      {{/if}}
+                    </div>
+                    {{#if target.counts}}
+                      {{! Named through `aria-label` rather than `@label`, which
+                          the shared bar also renders as visible text inside the
+                          track — unreadable at this height, and redundant with
+                          the summary above it. }}
+                      <ProgressBar
+                        class='progress-bar'
+                        aria-label='{{target.phaseLabel}} {{target.url}}'
+                        @value={{target.counts.completed}}
+                        @max={{target.counts.total}}
+                      />
+                    {{/if}}
                   </div>
                 </div>
               {{/each}}
@@ -91,12 +152,43 @@ export default class PublishingRealmPopover extends Component<PublishingRealmArg
 
       .realm-item {
         display: flex;
-        align-items: center;
+        flex-direction: column;
+        gap: var(--boxel-sp-5xs);
+        padding-block: var(--boxel-sp-xxs);
         border-bottom: 1px solid var(--boxel-light-200);
       }
 
       .realm-item:last-child {
         border-bottom: none;
+      }
+
+      .realm-summary {
+        display: flex;
+        align-items: center;
+      }
+
+      .publish-progress {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-5xs);
+        /* Align with the realm URL above rather than the icon gutter. */
+        margin-left: 1.8125rem;
+      }
+
+      .progress-summary {
+        display: flex;
+        justify-content: space-between;
+        gap: var(--boxel-sp-xxs);
+        color: var(--muted-foreground);
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
+      }
+
+      /* The shared bar sizes its track in em, so the font size is the height
+         control — this keeps it a slim rule under the URL rather than a
+         full-height labelled bar. */
+      .progress-bar {
+        font-size: 0.375rem;
       }
 
       .realm-icon-container {

@@ -20,11 +20,17 @@ import {
 } from 'ember-concurrency';
 import window from 'ember-window-mock';
 
-import { TrackedSet, TrackedObject, TrackedArray } from 'tracked-built-ins';
+import {
+  TrackedSet,
+  TrackedObject,
+  TrackedArray,
+  TrackedMap,
+} from 'tracked-built-ins';
 
 import type {
   Permissions,
   JWTPayload,
+  PublishProgress,
   RealmClient,
   RealmIdentifier,
   RealmPermissions,
@@ -154,6 +160,11 @@ class RealmResource {
 
   @tracked private _isPublishing = false;
   private _publishingRealms = new TrackedArray<string>();
+  // Latest progress reading per in-flight publish target, keyed by the URL the
+  // caller asked to publish to (the same key `_publishingRealms` holds) so the
+  // UI listing those targets can look a reading up directly. Cleared with the
+  // target when its publish settles.
+  private _publishProgress = new TrackedMap<string, PublishProgress>();
   private _unPublishingRealms = new TrackedArray<string>();
 
   // Hassan: in general i'm questioning the usefulness of using Tasks in this
@@ -632,13 +643,16 @@ class RealmResource {
           // readiness check so "Open Site" only enables once the page is
           // actually viewable. Poll the URL the server actually published to —
           // a server-side domain override can make that differ from `url`.
-          await this.realmServer.waitForRealmReady(result.publishedRealmURL);
+          await this.realmServer.waitForRealmReady(result.publishedRealmURL, {
+            onProgress: (progress) => this._publishProgress.set(url, progress),
+          });
           return result;
         } catch (error) {
           console.error(`Error publishing to URL ${url}:`, error);
           throw error; // Re-throw so Promise.allSettled can capture it as rejected
         } finally {
           this._publishingRealms.splice(this._publishingRealms.indexOf(url), 1);
+          this._publishProgress.delete(url);
         }
       });
 
@@ -685,6 +699,10 @@ class RealmResource {
 
   get publishingRealms(): string[] {
     return this._publishingRealms;
+  }
+
+  publishProgress(publishedRealmURL: string): PublishProgress | undefined {
+    return this._publishProgress.get(publishedRealmURL);
   }
 
   async unpublish(url: string) {
@@ -1341,6 +1359,14 @@ export default class RealmService extends Service {
   publishingRealms = (realmURL: string): string[] => {
     let resource = this.getOrCreateRealmResource(realmURL);
     return resource.publishingRealms;
+  };
+
+  publishProgress = (
+    realmURL: string,
+    publishedRealmURL: string,
+  ): PublishProgress | undefined => {
+    let resource = this.getOrCreateRealmResource(realmURL);
+    return resource.publishProgress(publishedRealmURL);
   };
 
   // By default, this does a tracked read from currentKnownRealms so that your
