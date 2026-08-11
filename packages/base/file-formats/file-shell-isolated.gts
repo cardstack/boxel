@@ -690,6 +690,15 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
       .iso[data-preview-kind='html'] .inspector {
         width: 100%;
       }
+      /* Source code reads as a full-width document too: its metadata follows
+         below in reading order rather than competing for width beside it. */
+      .iso[data-preview-kind='code'] .iso-cols {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 24px;
+      }
+      .iso[data-preview-kind='code'] .inspector {
+        width: 100%;
+      }
       @container (max-width: 760px) {
         .iso-cols {
           grid-template-columns: minmax(0, 1fr);
@@ -712,6 +721,16 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
       .iso[data-preview-kind='html'] .iso-stage {
         height: clamp(560px, 72vh, 920px);
         background: var(--card);
+      }
+      /* A source file grows to its own length rather than scrolling inside a
+         fixed hero: the whole point of the isolated view is to read the file
+         top to bottom. It keeps a floor so a short file still presents as a
+         page, and its own dark surface stays clipped to the rounded frame. */
+      .iso[data-preview-kind='code'] .iso-stage {
+        height: auto;
+        min-height: 240px;
+        overflow: hidden;
+        background: var(--boxel-dark, #1e1e1e);
       }
       /* Exact aspect ratio within useful limits; matte beyond them. */
       .iso[data-preview-kind='video'] .iso-stage {
