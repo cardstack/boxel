@@ -1,6 +1,8 @@
 import { setupTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
+import type { SurfaceObservation } from '@cardstack/runtime-common';
+
 import {
   SandboxSurfaceClient,
   SandboxSurfaceServer,
@@ -152,5 +154,101 @@ module('Unit | Service | surface-service', function (hooks) {
       () => service.present(handle, { headerColor: 'red' }),
       /Unknown or released Surface handle/,
     );
+  });
+
+  // MessagePort.start(), not a QUnit async callback.
+  // eslint-disable-next-line qunit/resolve-async
+  test('sandbox surface observation exists only while the child has subscribers', async function (assert) {
+    let channel = new MessageChannel();
+    let handle = 'surface:subscriber-test' as Parameters<
+      SurfaceService['observe']
+    >[0];
+    let observed = 0;
+    let released = 0;
+    let publish: ((observation: SurfaceObservation) => void) | undefined;
+    let service = {
+      observe: (
+        _handle: typeof handle,
+        callback: (observation: SurfaceObservation) => void,
+      ) => {
+        observed++;
+        publish = callback;
+        return () => {
+          released++;
+          publish = undefined;
+        };
+      },
+      present: () => undefined,
+      layout: () => undefined,
+    } as unknown as SurfaceService;
+    let client = new SandboxSurfaceClient(channel.port1, handle);
+    let server = new SandboxSurfaceServer(channel.port2, service, handle);
+    channel.port1.start();
+    channel.port2.start();
+
+    try {
+      await client.present({});
+      assert.strictEqual(
+        observed,
+        0,
+        'constructing and using a surface does not start observation',
+      );
+      let received = new Promise<void>((resolve) => {
+        let stop = client.observe((observation) => {
+          assert.deepEqual(observation, {
+            width: 320,
+            height: 180,
+            visible: true,
+          });
+          stop();
+          resolve();
+        });
+      });
+      await client.present({});
+      assert.strictEqual(
+        observed,
+        1,
+        'the first subscriber starts observation',
+      );
+      publish?.({ width: 320, height: 180, visible: true });
+      await received;
+      await client.present({});
+      assert.strictEqual(
+        released,
+        1,
+        'removing the last subscriber releases the Host observers',
+      );
+    } finally {
+      client.destroy();
+      server.destroy();
+      channel.port1.close();
+      channel.port2.close();
+    }
+  });
+
+  test('silent and closed surface transports settle exactly once', async function (assert) {
+    let channel = new MessageChannel();
+    let handle = 'surface:timeout-test' as Parameters<
+      SurfaceService['present']
+    >[0];
+    let client = new SandboxSurfaceClient(channel.port1, handle, 5);
+    channel.port1.start();
+    channel.port2.start();
+
+    await assert.rejects(
+      client.present({}),
+      /timed out after 5ms/,
+      'a silent peer cannot retain a pending surface request forever',
+    );
+    client.destroy();
+    client.destroy();
+    await assert.rejects(
+      client.layout({ heightMode: 'intrinsic' }),
+      /client is closed/,
+      'new work fails immediately after teardown',
+    );
+
+    channel.port1.close();
+    channel.port2.close();
   });
 });

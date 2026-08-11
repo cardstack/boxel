@@ -13,6 +13,7 @@ import {
 
 import {
   isSandboxConnect,
+  sandboxRenderDiagnosticAcceptedKind,
   sandboxRuntimeBootstrapProtocol,
 } from './sandbox-runtime-process';
 
@@ -45,7 +46,7 @@ export function installSandboxRuntimeHost(options: {
   createRenderTarget: (
     runtime: BoxelRuntime,
     surface: SandboxSurfaceClient,
-    reportRenderDiagnostic: (diagnostic: SandboxRenderDiagnostic) => void,
+    reportRenderDiagnostic: SandboxRenderDiagnosticReporter,
     /**
      * RP-20.6 child→parent write leg: the sender the render target's owner
      * uses to propose the rendered instance's new state after an authored
@@ -146,6 +147,7 @@ export function installSandboxRuntimeHost(options: {
       let fetchClient: SandboxFetchClient | undefined;
       let writeClient: SandboxWriteClient | undefined;
       let viewCardClient: SandboxViewCardClient | undefined;
+      let diagnosticReporter: SandboxRenderDiagnosticReporter | undefined;
       try {
         fetchClient = new SandboxFetchClient(port);
         console.debug('[sandbox-child] createRuntime begun');
@@ -170,10 +172,11 @@ export function installSandboxRuntimeHost(options: {
         writeClient = createdWriteClient;
         let createdViewCardClient = new SandboxViewCardClient(port);
         viewCardClient = createdViewCardClient;
+        diagnosticReporter = createSandboxRenderDiagnosticReporter(port);
         let renderTarget = await options.createRenderTarget(
           createdRuntime,
           createdSurface,
-          (diagnostic) => postRenderDiagnostic(port, diagnostic),
+          diagnosticReporter,
           createdWriteClient,
           createdViewCardClient,
         );
@@ -210,6 +213,7 @@ export function installSandboxRuntimeHost(options: {
           surface: createdSurface,
           destroy() {
             errorReporter.stop();
+            diagnosticReporter?.destroy();
             createdSurface.destroy();
             createdRenderServer.destroy();
             createdRuntimeServer.destroy();
@@ -232,6 +236,7 @@ export function installSandboxRuntimeHost(options: {
         // rejection listeners) doesn't also post as a redundant
         // 'runtime-error' right after.
         errorReporter.stop();
+        diagnosticReporter?.destroy();
         renderServer?.destroy();
         surface?.destroy();
         runtimeServer?.destroy();
@@ -308,6 +313,42 @@ export interface SandboxRenderDiagnostic {
 interface SandboxRenderDiagnosticMessage extends SandboxRenderDiagnostic {
   kind: 'boxel-sandbox-render-diagnostic';
   transportVersion: number;
+}
+
+export interface SandboxRenderDiagnosticReporter {
+  readonly accepted: boolean;
+  report(diagnostic: SandboxRenderDiagnostic): void;
+  destroy(): void;
+}
+
+/** Child-side one-shot reporter. The parent accepts the first visible paint. */
+export function createSandboxRenderDiagnosticReporter(
+  port: MessagePort,
+): SandboxRenderDiagnosticReporter {
+  let accepted = false;
+  let receive = (event: MessageEvent<unknown>) => {
+    let message = event.data as Record<string, unknown> | null;
+    if (
+      message?.kind === sandboxRenderDiagnosticAcceptedKind &&
+      message.transportVersion === BOXEL_EXECUTION_TRANSPORT_VERSION
+    ) {
+      accepted = true;
+    }
+  };
+  port.addEventListener('message', receive);
+  return {
+    get accepted() {
+      return accepted;
+    },
+    report(diagnostic) {
+      if (!accepted) {
+        postRenderDiagnostic(port, diagnostic);
+      }
+    },
+    destroy() {
+      port.removeEventListener('message', receive);
+    },
+  };
 }
 
 /**

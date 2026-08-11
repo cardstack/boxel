@@ -66,8 +66,10 @@ export default class SurfaceService extends Service {
     registration.attachment = attachment;
     this.applyPresentation(registration);
     this.applyLayout(registration);
-    this.installObservers(registration);
-    this.publishObservation(registration);
+    if (registration.observers.size > 0) {
+      this.installObservers(registration);
+      this.publishObservation(registration);
+    }
     return () => {
       if (
         registration.element !== element ||
@@ -99,11 +101,20 @@ export default class SurfaceService extends Service {
     callback: (observation: SurfaceObservation) => void,
   ): () => void {
     let registration = this.registrationFor(handle);
+    let wasEmpty = registration.observers.size === 0;
     registration.observers.add(callback);
     if (registration.element) {
+      if (wasEmpty) {
+        this.installObservers(registration);
+      }
       callback(this.observationFor(registration));
     }
-    return () => registration.observers.delete(callback);
+    return () => {
+      registration.observers.delete(callback);
+      if (registration.observers.size === 0) {
+        this.detachObservers(registration);
+      }
+    };
   }
 
   release(handle: SurfaceHandle): void {
@@ -177,16 +188,19 @@ export default class SurfaceService extends Service {
 
   private installObservers(registration: SurfaceRegistration): void {
     let element = registration.element;
-    if (!element) {
+    if (!element || registration.observers.size === 0) {
       return;
     }
-    if (typeof ResizeObserver !== 'undefined') {
+    if (!registration.resizeObserver && typeof ResizeObserver !== 'undefined') {
       registration.resizeObserver = new ResizeObserver(() =>
         this.publishObservation(registration),
       );
       registration.resizeObserver.observe(element);
     }
-    if (typeof IntersectionObserver !== 'undefined') {
+    if (
+      !registration.intersectionObserver &&
+      typeof IntersectionObserver !== 'undefined'
+    ) {
       registration.intersectionObserver = new IntersectionObserver(
         ([entry]) => {
           registration.visible = entry?.isIntersecting ?? true;
@@ -205,7 +219,7 @@ export default class SurfaceService extends Service {
   }
 
   private publishObservation(registration: SurfaceRegistration): void {
-    if (!registration.element) {
+    if (!registration.element || registration.observers.size === 0) {
       return;
     }
     let observation = this.observationFor(registration);

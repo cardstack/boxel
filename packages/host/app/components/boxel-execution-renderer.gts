@@ -36,7 +36,7 @@ import type {
   CapsuleComponent,
   CapsuleRenderSlot,
 } from '@cardstack/host/lib/capsule-component';
-import { projectCapsuleContext } from '@cardstack/host/lib/capsule-context-projection';
+import { CapsuleContextProjector } from '@cardstack/host/lib/capsule-context-projection';
 import type { DirectRenderSlot } from '@cardstack/host/lib/direct-boxel-runtime';
 import type { HTMLComponent } from '@cardstack/host/lib/html-component';
 import type { SandboxRenderSlot } from '@cardstack/host/lib/sandbox-runtime-process';
@@ -747,8 +747,10 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
    * these keys (capsule-module-evaluator.ts) so nothing else could ride
    * along even if this projection grew.
    */
+  private capsuleContextProjector = new CapsuleContextProjector();
+
   private get capsuleContextProjection(): unknown {
-    return projectCapsuleContext(this.hostCardContext);
+    return this.capsuleContextProjector.project(this.hostCardContext);
   }
 
   private get effectiveFormat(): Format {

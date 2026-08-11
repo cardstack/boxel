@@ -185,6 +185,10 @@ export function startBoxelExecutionStage(
   return recorder.start(input);
 }
 
+export function boxelExecutionPerformanceEnabled(): boolean {
+  return recorder.enabled;
+}
+
 export function boxelExecutionPerformanceSnapshot(): BoxelExecutionPerformanceSnapshot {
   return recorder.snapshot();
 }

@@ -36,6 +36,8 @@ import { SandboxWriteServer } from './sandbox-write-transport';
 import type { BoxelRuntime, MaterializationPurpose } from './boxel-runtime';
 
 const bootstrapProtocol = 'boxel-sandbox-bootstrap-v1' as const;
+export const sandboxRenderDiagnosticAcceptedKind =
+  'boxel-sandbox-render-diagnostic-accepted' as const;
 
 interface SandboxListening {
   protocol: typeof bootstrapProtocol;
@@ -93,6 +95,8 @@ export interface SandboxRuntimeProcessOptions {
   loadTimeout?: number;
   /** Maximum time for the transport handshake after the child has loaded. */
   connectTimeout?: number;
+  /** Retain post-paint DOM diagnostics for explicit performance debugging. */
+  keepRenderDiagnostics?: boolean;
 }
 
 export interface SandboxRenderSlot {
@@ -956,6 +960,16 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
       listener();
     }
     this.paintListeners.clear();
+    if (!this.options.keepRenderDiagnostics && this.renderDiagnosticPort) {
+      this.renderDiagnosticPort.postMessage({
+        kind: sandboxRenderDiagnosticAcceptedKind,
+        transportVersion: BOXEL_EXECUTION_TRANSPORT_VERSION,
+      });
+      this.renderDiagnosticPort.removeEventListener(
+        'message',
+        this.receiveRenderDiagnostic,
+      );
+    }
   };
 
   private connect(): Promise<SandboxBoxelRuntimeClient> {

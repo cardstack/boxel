@@ -31,6 +31,7 @@ import SandboxMediaBridge from '@cardstack/host/lib/sandbox-media-bridge';
 import type { SandboxRenderTarget } from '@cardstack/host/lib/sandbox-render-transport';
 import {
   installSandboxRuntimeHost,
+  type SandboxRenderDiagnosticReporter,
   type SandboxRenderDiagnostic,
 } from '@cardstack/host/lib/sandbox-runtime-host';
 import { connectSandboxSurface } from '@cardstack/host/lib/sandbox-surface-transport';
@@ -507,9 +508,7 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
   private moduleFetchHandler?: (request: Request) => Promise<Response>;
   /** Bounded declarative-asset lane; see SandboxMediaBridge. */
   private mediaFetch?: (url: string) => Promise<Response>;
-  private reportRenderDiagnostic?: (
-    diagnostic: SandboxRenderDiagnostic,
-  ) => void;
+  private reportRenderDiagnostic?: SandboxRenderDiagnosticReporter;
   /**
    * Resize observation starts as soon as the child render root exists, which
    * is intentionally before the first render request. An empty bootstrap root
@@ -551,10 +550,16 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
    * and reinstalled on every re-render a fresh closure would cause.
    */
   private measureAndReportRenderDiagnostic = (element: HTMLElement): void => {
-    if (!this.hasCommittedRender) {
+    if (
+      !this.hasCommittedRender ||
+      !this.reportRenderDiagnostic ||
+      this.reportRenderDiagnostic.accepted
+    ) {
       return;
     }
-    this.reportRenderDiagnostic?.(measureRenderedOutput(element, this.format));
+    this.reportRenderDiagnostic.report(
+      measureRenderedOutput(element, this.format),
+    );
   };
 
   /**
@@ -797,9 +802,14 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
       // report what actually landed in the DOM. The render-response ack
       // (sandbox-render-transport.ts) only proves this promise resolved,
       // not that anything visible came out of it.
-      let diagnostic = measureRenderedOutput(root, format);
-      console.debug('[sandbox-child] render completed', diagnostic);
-      this.reportRenderDiagnostic?.(diagnostic);
+      if (
+        this.reportRenderDiagnostic &&
+        !this.reportRenderDiagnostic.accepted
+      ) {
+        let diagnostic = measureRenderedOutput(root, format);
+        console.debug('[sandbox-child] render completed', diagnostic);
+        this.reportRenderDiagnostic.report(diagnostic);
+      }
     },
     clear: async (generation: number) => {
       if (this.isGenerationStale?.(generation)) {
@@ -910,9 +920,14 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
       if (this.isGenerationStale?.(generation)) {
         return;
       }
-      let diagnostic = measureRenderedOutput(root, this.format);
-      console.debug('[sandbox-child] draft completed', diagnostic);
-      this.reportRenderDiagnostic?.(diagnostic);
+      if (
+        this.reportRenderDiagnostic &&
+        !this.reportRenderDiagnostic.accepted
+      ) {
+        let diagnostic = measureRenderedOutput(root, this.format);
+        console.debug('[sandbox-child] draft completed', diagnostic);
+        this.reportRenderDiagnostic.report(diagnostic);
+      }
     },
     setStaleCheck: (isStale) => {
       this.isGenerationStale = isStale;

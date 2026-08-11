@@ -49,7 +49,10 @@ interface SandboxFetchResponse {
 interface PendingFetch {
   resolve(response: Response): void;
   reject(error: Error): void;
+  timeout?: ReturnType<typeof setTimeout>;
 }
+
+export const defaultSandboxFetchTimeoutMs = 10_000;
 
 export interface BoundedMediaResponse {
   status: number;
@@ -110,9 +113,14 @@ export async function fetchBoundedSandboxMedia(
 export class SandboxFetchClient {
   private nextRequest = 0;
   private pending = new Map<string, PendingFetch>();
+  private closed = false;
 
-  constructor(private readonly port: MessagePort) {
+  constructor(
+    private readonly port: MessagePort,
+    private readonly timeoutMs = defaultSandboxFetchTimeoutMs,
+  ) {
     port.addEventListener('message', this.receive);
+    port.start();
   }
 
   fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -158,20 +166,45 @@ export class SandboxFetchClient {
   };
 
   private post(message: SandboxFetchRequest): Promise<Response> {
+    if (this.closed) {
+      return Promise.reject(new Error('Sandbox module fetch client is closed'));
+    }
     return new Promise<Response>((resolve, reject) => {
-      this.pending.set(message.requestId, { resolve, reject });
+      let timeout =
+        this.timeoutMs > 0
+          ? setTimeout(() => {
+              if (!this.pending.delete(message.requestId)) {
+                return;
+              }
+              reject(
+                new Error(
+                  `Sandbox module fetch timed out after ${this.timeoutMs}ms`,
+                ),
+              );
+            }, this.timeoutMs)
+          : undefined;
+      this.pending.set(message.requestId, { resolve, reject, timeout });
       try {
         this.port.postMessage(message);
       } catch (error) {
-        this.pending.delete(message.requestId);
+        if (this.pending.delete(message.requestId) && timeout !== undefined) {
+          clearTimeout(timeout);
+        }
         reject(asError(error));
       }
     });
   }
 
   destroy(): void {
+    if (this.closed) {
+      return;
+    }
+    this.closed = true;
     this.port.removeEventListener('message', this.receive);
     for (let pending of this.pending.values()) {
+      if (pending.timeout !== undefined) {
+        clearTimeout(pending.timeout);
+      }
       pending.reject(new Error('Sandbox module fetch was destroyed'));
     }
     this.pending.clear();
@@ -187,6 +220,9 @@ export class SandboxFetchClient {
       return;
     }
     this.pending.delete(message.requestId);
+    if (pending.timeout !== undefined) {
+      clearTimeout(pending.timeout);
+    }
     if (!message.ok || !message.response) {
       pending.reject(new Error(message.error ?? 'Sandbox module fetch failed'));
       return;

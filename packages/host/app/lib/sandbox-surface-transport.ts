@@ -25,19 +25,25 @@ import type { SurfaceClient } from './surface-client';
 interface PendingSurfaceRequest {
   resolve: () => void;
   reject: (error: Error) => void;
+  timeout?: ReturnType<typeof setTimeout>;
 }
+
+export const defaultSandboxSurfaceTimeoutMs = 10_000;
 
 /** Child-side capability stub. It has no DOM or SurfaceService reference. */
 export class SandboxSurfaceClient implements SurfaceClient {
   private nextRequest = 0;
   private pending = new Map<string, PendingSurfaceRequest>();
   private observers = new Set<(observation: SurfaceObservation) => void>();
+  private closed = false;
 
   constructor(
     private readonly port: MessagePort,
     readonly handle: SurfaceHandle,
+    private readonly timeoutMs = defaultSandboxSurfaceTimeoutMs,
   ) {
     port.addEventListener('message', this.receive);
+    port.start();
   }
 
   present(presentation: SurfacePresentation): Promise<void> {
@@ -52,13 +58,38 @@ export class SandboxSurfaceClient implements SurfaceClient {
   }
 
   observe(callback: (observation: SurfaceObservation) => void): () => void {
+    let wasEmpty = this.observers.size === 0;
     this.observers.add(callback);
-    return () => this.observers.delete(callback);
+    if (wasEmpty) {
+      void this.request({ operation: 'observe' }).catch((error) =>
+        console.error('Sandbox Surface observation failed', error),
+      );
+    }
+    let released = false;
+    return () => {
+      if (released) {
+        return;
+      }
+      released = true;
+      this.observers.delete(callback);
+      if (this.observers.size === 0 && !this.closed) {
+        void this.request({ operation: 'unobserve' }).catch((error) =>
+          console.error('Sandbox Surface observation cleanup failed', error),
+        );
+      }
+    };
   }
 
   destroy(): void {
+    if (this.closed) {
+      return;
+    }
+    this.closed = true;
     this.port.removeEventListener('message', this.receive);
     for (let pending of this.pending.values()) {
+      if (pending.timeout !== undefined) {
+        clearTimeout(pending.timeout);
+      }
       pending.reject(new Error('Sandbox Surface client was destroyed'));
     }
     this.pending.clear();
@@ -74,8 +105,19 @@ export class SandboxSurfaceClient implements SurfaceClient {
       | Pick<
           Extract<SurfaceCapabilityRequest, { operation: 'layout' }>,
           'operation' | 'layout'
+        >
+      | Pick<
+          Extract<SurfaceCapabilityRequest, { operation: 'observe' }>,
+          'operation'
+        >
+      | Pick<
+          Extract<SurfaceCapabilityRequest, { operation: 'unobserve' }>,
+          'operation'
         >,
   ): Promise<void> {
+    if (this.closed) {
+      return Promise.reject(new Error('Sandbox Surface client is closed'));
+    }
     let requestId = `surface:${++this.nextRequest}`;
     let request = {
       kind: 'boxel-surface-request',
@@ -85,8 +127,28 @@ export class SandboxSurfaceClient implements SurfaceClient {
       ...body,
     } as SurfaceCapabilityRequest;
     return new Promise((resolve, reject) => {
-      this.pending.set(requestId, { resolve, reject });
-      this.port.postMessage(request);
+      let timeout =
+        this.timeoutMs > 0
+          ? setTimeout(() => {
+              if (!this.pending.delete(requestId)) {
+                return;
+              }
+              reject(
+                new Error(
+                  `Sandbox Surface request timed out after ${this.timeoutMs}ms`,
+                ),
+              );
+            }, this.timeoutMs)
+          : undefined;
+      this.pending.set(requestId, { resolve, reject, timeout });
+      try {
+        this.port.postMessage(request);
+      } catch (error) {
+        if (this.pending.delete(requestId) && timeout !== undefined) {
+          clearTimeout(timeout);
+        }
+        reject(asError(error));
+      }
     });
   }
 
@@ -98,6 +160,9 @@ export class SandboxSurfaceClient implements SurfaceClient {
         return;
       }
       this.pending.delete(message.requestId);
+      if (pending.timeout !== undefined) {
+        clearTimeout(pending.timeout);
+      }
       if (message.ok) {
         pending.resolve();
       } else {
@@ -116,7 +181,7 @@ export class SandboxSurfaceClient implements SurfaceClient {
 
 /** Parent-side adapter that admits only the SurfaceHandle bound at bootstrap. */
 export class SandboxSurfaceServer {
-  private releaseObservation: () => void;
+  private releaseObservation?: () => void;
 
   constructor(
     private readonly port: MessagePort,
@@ -124,20 +189,12 @@ export class SandboxSurfaceServer {
     readonly handle: SurfaceHandle,
   ) {
     port.addEventListener('message', this.receive);
-    this.releaseObservation = service.observe(handle, (observation) => {
-      let message: SurfaceObservationNotification = {
-        kind: 'boxel-surface-observation',
-        protocolVersion: BOXEL_SURFACE_PROTOCOL_VERSION,
-        surface: handle,
-        observation,
-      };
-      port.postMessage(message);
-    });
+    port.start();
   }
 
   destroy(): void {
     this.port.removeEventListener('message', this.receive);
-    this.releaseObservation();
+    this.stopObserving();
   }
 
   private receive = (event: MessageEvent<unknown>) => {
@@ -157,8 +214,12 @@ export class SandboxSurfaceServer {
       }
       if (request.operation === 'present') {
         this.service.present(this.handle, request.presentation);
-      } else {
+      } else if (request.operation === 'layout') {
         this.service.layout(this.handle, request.layout);
+      } else if (request.operation === 'observe') {
+        this.startObserving();
+      } else {
+        this.stopObserving();
       }
       response.ok = true;
     } catch (error) {
@@ -166,6 +227,29 @@ export class SandboxSurfaceServer {
     }
     this.port.postMessage(response);
   };
+
+  private startObserving(): void {
+    if (this.releaseObservation) {
+      return;
+    }
+    this.releaseObservation = this.service.observe(
+      this.handle,
+      (observation) => {
+        let message: SurfaceObservationNotification = {
+          kind: 'boxel-surface-observation',
+          protocolVersion: BOXEL_SURFACE_PROTOCOL_VERSION,
+          surface: this.handle,
+          observation,
+        };
+        this.port.postMessage(message);
+      },
+    );
+  }
+
+  private stopObserving(): void {
+    this.releaseObservation?.();
+    this.releaseObservation = undefined;
+  }
 }
 
 function isSurfaceRequest(value: unknown): value is SurfaceCapabilityRequest {
@@ -174,8 +258,15 @@ function isSurfaceRequest(value: unknown): value is SurfaceCapabilityRequest {
   }
   return (
     typeof value.surface === 'string' &&
-    (value.operation === 'present' || value.operation === 'layout')
+    (value.operation === 'present' ||
+      value.operation === 'layout' ||
+      value.operation === 'observe' ||
+      value.operation === 'unobserve')
   );
+}
+
+function asError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
 }
 
 function isSurfaceResponse(value: unknown): value is SurfaceCapabilityResponse {

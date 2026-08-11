@@ -30,3 +30,39 @@ export function projectCapsuleContext(
       : {}),
   });
 }
+
+/**
+ * Keeps the cloneable Capsule facade referentially stable until one of the
+ * two projected capabilities actually changes. CardContext providers are
+ * commonly getters that return a fresh wrapper object on revalidation; keying
+ * on the wrapper would needlessly invalidate every Capsule consumer.
+ */
+export class CapsuleContextProjector {
+  private initialized = false;
+  private hadContext = false;
+  private cardComponentModifier: CardContext['cardComponentModifier'];
+  private searchResultsComponent:
+    | CardContext['searchResultsComponent']
+    | undefined;
+  private projection: unknown;
+
+  project(context: CardContext | undefined): unknown {
+    let hadContext = context !== undefined;
+    let cardComponentModifier = context?.cardComponentModifier;
+    let searchResultsComponent = context?.searchResultsComponent;
+    if (
+      this.initialized &&
+      this.hadContext === hadContext &&
+      this.cardComponentModifier === cardComponentModifier &&
+      this.searchResultsComponent === searchResultsComponent
+    ) {
+      return this.projection;
+    }
+    this.initialized = true;
+    this.hadContext = hadContext;
+    this.cardComponentModifier = cardComponentModifier;
+    this.searchResultsComponent = searchResultsComponent;
+    this.projection = projectCapsuleContext(context);
+    return this.projection;
+  }
+}

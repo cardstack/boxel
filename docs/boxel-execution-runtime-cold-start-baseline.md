@@ -234,3 +234,25 @@ only, retained zero Sandbox iframes, and dropped zero instrumentation records. D
 size was stable at 957 nodes throughout the batch. A navigation trace was attempted,
 but the DevTools navigation timeout expired under the same Host/staging delay, so no
 trace-level LCP claim is admitted.
+
+## Safe lifecycle batch — 2026-08-11
+
+The next retained batch bounded the remaining fetch and Surface request tables,
+made Surface observation subscriber-driven, acknowledged and stopped ordinary
+post-paint diagnostics, and stabilized unchanged Capsule context projection.
+
+Chrome-native focused measurements found:
+
+| Work item                             |                   Before |                 After |
+| ------------------------------------- | -----------------------: | --------------------: |
+| 100,000 unchanged context projections | 3.1 ms / 100,000 facades |     0.2 ms / 1 facade |
+| 1,000 accepted post-paint diagnostics | 1,000 measurements/posts |                     0 |
+| idle attached Surface                 | 2 observers + 1 box read |   0 observers / reads |
+| silent fetch or Surface request       |                unbounded | bounded to 10 seconds |
+
+Three warmed authenticated `Release/opening-night` samples were semantic-parity
+green, Capsule-only, with nine headings, zero iframes, zero dropped records, and
+946–957 DOM nodes. Median readiness/root request/root render-record were
+26.18 s / 241.2 ms / 612.9 ms. Their mixed movement versus the preceding run is
+classified as Host/staging variance; the retained performance claim is the direct
+work elimination above, not a page-level speedup.

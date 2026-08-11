@@ -3,7 +3,7 @@ import type { LooseSingleCardDocument } from './index.ts';
 
 export const BOXEL_EXECUTION_PROTOCOL_VERSION = 1;
 export const BOXEL_EXECUTION_TRANSPORT_VERSION = 1;
-export const BOXEL_SURFACE_PROTOCOL_VERSION = 1;
+export const BOXEL_SURFACE_PROTOCOL_VERSION = 2;
 
 declare const runtimeHandleBrand: unique symbol;
 declare const boxelTypeHandleBrand: unique symbol;
@@ -117,6 +117,20 @@ export type SurfaceCapabilityRequest =
       operation: 'layout';
       surface: SurfaceHandle;
       layout: SurfaceLayout;
+    }
+  | {
+      kind: 'boxel-surface-request';
+      protocolVersion: number;
+      requestId: string;
+      operation: 'observe';
+      surface: SurfaceHandle;
+    }
+  | {
+      kind: 'boxel-surface-request';
+      protocolVersion: number;
+      requestId: string;
+      operation: 'unobserve';
+      surface: SurfaceHandle;
     };
 
 export interface SurfaceCapabilityResponse {

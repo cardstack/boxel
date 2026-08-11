@@ -404,6 +404,38 @@ The 20.9 s page-navigation median was dominated by current Host/staging delay an
 not comparable to the earlier run. The retained claim is therefore the focused work
 reduction plus the improved render-record median, not a whole-page latency win.
 
+**Safe lifecycle batch implemented and retained on 2026-08-11.** The low-risk parts
+of #6 are now explicit protocol behavior:
+
+- fetch and Surface requests have a 10 s deadline, closed-state rejection,
+  exactly-once settlement, timer cleanup, and harmless late responses;
+- Sandbox Surface observation is subscribed across the port only while the child
+  has a listener, and the Host installs DOM observers only while the service has a
+  subscriber;
+- after the first visible render the parent acknowledges the diagnostic and removes
+  that listener, while the child stops DOM measurement and posts; explicit
+  performance diagnostics keep the lane enabled, and runtime-error reporting remains
+  independent and live; and
+- Capsule context projection preserves object identity across fresh Host context
+  wrappers until one of the two projected presentation capabilities changes.
+
+A Chrome-native alternating benchmark measured unchanged Capsule context projection
+at 3.1 → 0.2 ms per 100,000 accesses (**−93.5%**) and 100,000 → 1 facade allocations.
+The lifecycle gates have stronger exact work counters than timing claims: after
+first-paint acceptance, 1,000 simulated post-paint diagnostics perform 0 DOM
+measurements/posts instead of 1,000; an attached surface with no subscribers creates
+0 observers and performs 0 initial layout reads instead of two observers and one
+read. A silent fetch or Surface request now lives for at most 10 s instead of
+unbounded time.
+
+Three warmed authenticated `Release/opening-night` loads remained parity-green with
+all five semantic signatures, Capsule-only execution, nine headings, zero iframes,
+zero dropped records, and 946–957 DOM nodes. Medians were 26.18 s readiness, 241.2 ms
+root request, and 612.9 ms root render-record. Relative to the prior retained run,
+request was 41.7% lower, render-record was 4.6% higher, and readiness was 25.3%
+higher; this contradictory movement is treated as Host/staging variance, so no
+page-level latency claim is attached to the batch.
+
 ### Sandbox boot decision
 
 The existing 2026-08-09 development record attributes about 4.46 s of a 5.31 s

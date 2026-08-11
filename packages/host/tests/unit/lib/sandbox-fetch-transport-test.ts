@@ -75,7 +75,7 @@ module('Unit | Sandbox module fetch transport', function () {
 
       await assert.rejects(
         client.fetchResource('https://realm.example/files/payroll.pdf'),
-        /outside its projected links/,
+        /outside its projected capabilities/,
         'a sibling URL that was not linked is denied',
       );
       assert.strictEqual(requested.length, 1, 'the denied URL never fetches');
@@ -554,6 +554,29 @@ module('Unit | Sandbox module fetch transport', function () {
       /module fetch was destroyed/,
       'a destroyed runtime leaves no unresolved module read',
     );
+    channel.port1.close();
+    channel.port2.close();
+  });
+
+  test('silent and closed fetch transports settle exactly once', async function (assert) {
+    let channel = new MessageChannel();
+    let client = new SandboxFetchClient(channel.port2, 5);
+    channel.port1.start();
+    channel.port2.start();
+
+    await assert.rejects(
+      client.fetch('https://realm.example/silent.gts'),
+      /timed out after 5ms/,
+      'a silent peer cannot retain a pending module read forever',
+    );
+    client.destroy();
+    client.destroy();
+    await assert.rejects(
+      client.fetch('https://realm.example/after-close.gts'),
+      /client is closed/,
+      'new work fails immediately after teardown',
+    );
+
     channel.port1.close();
     channel.port2.close();
   });

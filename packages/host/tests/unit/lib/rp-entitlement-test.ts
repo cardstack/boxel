@@ -1,6 +1,9 @@
 import { module, test } from 'qunit';
 
-import { projectCapsuleContext } from '@cardstack/host/lib/capsule-context-projection';
+import {
+  CapsuleContextProjector,
+  projectCapsuleContext,
+} from '@cardstack/host/lib/capsule-context-projection';
 import {
   SandboxFetchClient,
   SandboxFetchServer,
@@ -49,6 +52,35 @@ module('Unit | rp-entitlement (RP-21)', function () {
       projectCapsuleContext(undefined),
       undefined,
       'no host context projects to no context — never a fabricated one',
+    );
+  });
+
+  test('Capsule context projection stays stable until a projected capability changes', function (assert) {
+    let projector = new CapsuleContextProjector();
+    let tracker = () => {};
+    let searchSurface = { name: 'search-results-surface' };
+    let first = projector.project({
+      cardComponentModifier: tracker,
+      searchResultsComponent: searchSurface,
+    } as unknown as CardContext);
+    let equivalentWrapper = projector.project({
+      cardComponentModifier: tracker,
+      searchResultsComponent: searchSurface,
+      store: { unrelated: true },
+    } as unknown as CardContext);
+
+    assert.strictEqual(
+      equivalentWrapper,
+      first,
+      'a fresh provider wrapper with the same projected capabilities reuses the facade',
+    );
+    assert.notStrictEqual(
+      projector.project({
+        cardComponentModifier: () => {},
+        searchResultsComponent: searchSurface,
+      } as unknown as CardContext),
+      first,
+      'changing a projected capability creates a fresh facade',
     );
   });
 

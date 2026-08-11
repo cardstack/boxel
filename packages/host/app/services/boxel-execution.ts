@@ -32,6 +32,7 @@ import BoxelExecutionEngine, {
   type BoxelExecutionSession,
 } from '@cardstack/host/lib/boxel-execution-engine';
 import {
+  boxelExecutionPerformanceEnabled,
   startBoxelExecutionStage,
   type BoxelExecutionPerformanceContext,
   type BoxelExecutionStage,
@@ -1170,6 +1171,7 @@ export default class BoxelExecutionService extends Service {
         principal: this.principal,
         surfaceId: surfaceIdentity,
       },
+      keepRenderDiagnostics: boxelExecutionPerformanceEnabled(),
     });
   }
 

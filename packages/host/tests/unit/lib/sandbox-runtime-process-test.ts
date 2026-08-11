@@ -1,18 +1,32 @@
 import { module, test } from 'qunit';
 
-import type {
-  LooseCardResource,
-  LooseSingleCardDocument,
-  RealmResourceIdentifier,
-  SurfaceHandle,
+import {
+  BOXEL_EXECUTION_TRANSPORT_VERSION,
+  type LooseCardResource,
+  type LooseSingleCardDocument,
+  type RealmResourceIdentifier,
+  type SurfaceHandle,
 } from '@cardstack/runtime-common';
+
+import { createSandboxRenderDiagnosticReporter } from '@cardstack/host/lib/sandbox-runtime-host';
 
 import SandboxRuntimeProcess, {
   isSandboxRuntimeControl,
   projectedResourceLinks,
+  sandboxRenderDiagnosticAcceptedKind,
 } from '@cardstack/host/lib/sandbox-runtime-process';
 
 import type SurfaceService from '@cardstack/host/services/surface-service';
+
+async function waitForCondition(condition: () => boolean): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    if (condition()) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  throw new Error('Timed out waiting for MessageChannel delivery');
+}
 
 function fakeSurfaceService(): {
   service: SurfaceService;
@@ -59,6 +73,47 @@ function createTestRuntime(
 }
 
 module('Unit | Sandbox runtime process', function () {
+  test('an accepted first paint stops later diagnostic posts', async function (assert) {
+    let channel = new MessageChannel();
+    let received: unknown[] = [];
+    channel.port2.addEventListener('message', (event) => {
+      received.push(event.data);
+    });
+    channel.port1.start();
+    channel.port2.start();
+    let reporter = createSandboxRenderDiagnosticReporter(channel.port1);
+    let diagnostic = {
+      format: 'isolated',
+      elementCount: 1,
+      textLength: 1,
+      hasVisibleContent: true,
+      bodyChildElementCount: 1,
+      bodyChildren: [],
+      rootRect: { width: 100, height: 100, top: 0, left: 0 },
+      rootHasOffsetParent: true,
+      documentVisibilityState: 'visible',
+    };
+
+    reporter.report(diagnostic);
+    await waitForCondition(() => received.length === 1);
+    channel.port2.postMessage({
+      kind: sandboxRenderDiagnosticAcceptedKind,
+      transportVersion: BOXEL_EXECUTION_TRANSPORT_VERSION,
+    });
+    await waitForCondition(() => reporter.accepted);
+    reporter.report(diagnostic);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.strictEqual(
+      received.length,
+      1,
+      'the child does not post another diagnostic after acceptance',
+    );
+
+    reporter.destroy();
+    channel.port1.close();
+    channel.port2.close();
+  });
+
   test('projected links and scalar FileDef resource projections are exact authored resource authority', function (assert) {
     let id =
       'https://realm.example/cards/annual-report' as RealmResourceIdentifier;
