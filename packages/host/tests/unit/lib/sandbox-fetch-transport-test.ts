@@ -5,6 +5,10 @@ import {
   SandboxFetchServer,
 } from '@cardstack/host/lib/sandbox-fetch-transport';
 import SandboxModuleAuthority from '@cardstack/host/lib/sandbox-module-authority';
+import {
+  isImplicitSandboxModule,
+  isTrustedImport,
+} from '@cardstack/host/lib/trusted-modules';
 
 module('Unit | Sandbox module fetch transport', function () {
   test('the child can read only an admitted module through the Host broker', async function (assert) {
@@ -177,6 +181,42 @@ module('Unit | Sandbox module fetch transport', function () {
       channel.port1.close();
       channel.port2.close();
     }
+  });
+
+  test("Chris's BXL prototype is an exact lazy-import exception without boxel.site origin trust", async function (assert) {
+    let authority = new SandboxModuleAuthority(
+      (identifier) => identifier,
+      (identifier) =>
+        isTrustedImport(identifier) || isImplicitSandboxModule(identifier),
+    );
+
+    assert.false(
+      isTrustedImport('https://bxl.boxel.site/bxl.ts'),
+      'the prototype is not promoted into the Host-trusted Direct/Capsule module set',
+    );
+    assert.true(
+      authority.has('https://bxl.boxel.site/bxl.ts'),
+      'the one BXL prototype URL is available inside the Sandbox even when a static graph cannot discover the lazy import',
+    );
+    assert.false(
+      authority.has('https://bxl.boxel.site/private.ts'),
+      'boxel.site is a user-publishing domain, so the exception never grants origin-wide access',
+    );
+
+    await authority.observe(
+      'https://bxl.boxel.site/bxl.ts',
+      'text/javascript',
+      new TextEncoder().encode("export * from './runtime/evaluate.js';")
+        .buffer as ArrayBuffer,
+    );
+    assert.true(
+      authority.has('https://bxl.boxel.site/runtime/evaluate.js'),
+      "the admitted entry's own literal dependency graph remains loadable",
+    );
+    assert.false(
+      authority.has('https://bxl.boxel.site/runtime/secrets.js'),
+      'an undeclared sibling remains unavailable',
+    );
   });
 
   test('a third-party CDN response admits its own declared imports without a hostname allowlist', async function (assert) {

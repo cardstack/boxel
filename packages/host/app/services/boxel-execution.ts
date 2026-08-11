@@ -50,6 +50,7 @@ import {
 } from '@cardstack/host/lib/html-component';
 import SandboxRuntimeProcess from '@cardstack/host/lib/sandbox-runtime-process';
 import {
+  isImplicitSandboxModule,
   isTrustedImport,
   isTrustedModule,
 } from '@cardstack/host/lib/trusted-modules';
@@ -927,7 +928,12 @@ export default class BoxelExecutionService extends Service {
       fetch: this.network.authedFetch,
       resolveModuleURL: (identifier) =>
         this.resolveSandboxModuleURL(identifier),
-      isTrustedModuleURL: isTrustedImport,
+      // Host-trusted imports and the exact BXL prototype compatibility entry
+      // are both readable inside the origin-isolated child. The latter is
+      // deliberately NOT part of isTrustedImport: it executes only in the
+      // Sandbox and never becomes a Direct/Capsule Host portal.
+      isTrustedModuleURL: (identifier) =>
+        isTrustedImport(identifier) || isImplicitSandboxModule(identifier),
       surfaceService: this.surfaceService,
       identity: {
         mode: 'sandbox',

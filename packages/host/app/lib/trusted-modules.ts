@@ -2,6 +2,18 @@ import { PACKAGES_FAKE_ORIGIN } from '@cardstack/runtime-common/package-shim-han
 
 import config from '@cardstack/host/config/environment';
 
+// One-off compatibility exception for Chris's BXL prototype. `boxel.site` is
+// a user-publishing domain and is NOT trusted; only this exact module URL is
+// admitted because existing cards resolve it lazily through
+// `import.meta.loader`, which static graph classification cannot discover.
+// Once admitted, the ordinary Sandbox rule still applies: only literal ESM
+// dependencies declared by this response may grow its exact module graph.
+const trustedBxlPrototypeModule = 'https://bxl.boxel.site/bxl.ts';
+
+export function isImplicitSandboxModule(moduleIdentifier: string): boolean {
+  return moduleIdentifier === trustedBxlPrototypeModule;
+}
+
 /**
  * The Host's trusted-module boundary (docs/
  * boxel-execution-runtime-architecture.md, "Trusted Cardstack components are

@@ -633,6 +633,16 @@ blank iframe. Errors cross the boundary with their stack and depth-bounded
 wrapper. The prerender placeholder is retained as last-known-good; layout
 crosses via the `layout` capability, not hard-coded per format.
 
+There is currently one explicit compatibility exception to static graph
+admission: `https://bxl.boxel.site/bxl.ts`, Chris's BXL prototype, because
+existing cards load that exact URL lazily with `import.meta.loader`. The
+exception is exact-URL only. `boxel.site` is a user-publishing domain and is
+not trusted; no sibling URL or origin-wide read authority follows from this
+exception. The prototype executes inside the origin-isolated Sandbox; it is
+not promoted into the Host-trusted Direct/Capsule module set. After the entry
+response is admitted, only its literal ESM dependencies may extend the
+process's exact module graph under the ordinary RP-15 rules.
+
 **RP-15.4** Conformance machinery: (a) the **equivalence oracle** — each
 fixture rendered through main's legacy path and through the protocol's
 Direct adapter must agree on visible behavior; (b) the **cross-tier
