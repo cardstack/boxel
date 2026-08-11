@@ -297,6 +297,3 @@ export function findMoov(
     return undefined;
   }
 }
-
-// Codec identity comes from the sample-entry box type itself: `mp4a` for
-// AAC/ALAC-in-MP4, `alac` for Apple Lossless. Only the ones an .m4a realistically

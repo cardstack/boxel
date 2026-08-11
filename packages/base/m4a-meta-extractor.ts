@@ -199,11 +199,8 @@ export async function extractM4aDurationFromStream(
   }
 }
 
-// Follow a path of box types down from a container, e.g. moov → trak → mdia.
-// Returns undefined rather than throwing when any step is missing or the tree is
-// malformed: absent metadata is ordinary, and the duration reader is what decides
-// whether a file is really MP4.
-
+// Codec identity comes from the sample-entry box type itself: `mp4a` for
+// AAC/ALAC-in-MP4, `alac` for Apple Lossless. Only the ones an .m4a realistically
 // carries are named; anything else leaves the codec unset.
 const SAMPLE_ENTRY_CODECS: Record<string, string> = {
   mp4a: 'AAC',
