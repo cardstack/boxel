@@ -44,6 +44,7 @@ import { join } from 'path';
 import { TREE_ROOT } from '@cardstack/deck/import-map';
 import { IMPORT_MAP_PATH } from '@cardstack/deck/import-map';
 import { pack, readTreeFromDir, unpack } from '@cardstack/deck/node';
+import { transpileJS } from '@cardstack/runtime-common/transpile';
 
 export interface RealmPackageDeclaration {
   /** The semver this realm is claiming for the package. */
@@ -111,7 +112,19 @@ export type PackRefusal =
   | 'no-root'
   | 'root-escapes-realm'
   | 'empty-root'
-  | 'root-has-own-map';
+  | 'root-has-own-map'
+  | 'build-output-collision'
+  | 'build-failed';
+
+// What gets compiled on the way into a pack, and what the compiled sibling is
+// called. `.d.ts` is excluded: it is types, not a module, and content-tag has
+// nothing to do to it.
+const TRANSPILABLE = /\.(gts|gjs|ts)$/;
+const IS_DECLARATION = /\.d\.ts$/;
+
+export function builtPathFor(path: string): string {
+  return `${path.replace(TRANSPILABLE, '')}.js`;
+}
 
 export type PackRealmPackageResult =
   | {
@@ -120,6 +133,10 @@ export type PackRealmPackageResult =
       treeHash: string;
       /** Pack-relative paths, for showing what is in the Version. */
       files: string[];
+      /** The AUTHORED files only, keyed by pack-relative path. What the
+       *  structural pass compares and what a diff should show — comparing
+       *  compiled output would report babel's choices as API changes. */
+      sources: Map<string, string>;
       /** Relative imports that appear to leave the pack. Reported rather
        *  than refused — see `findEscapingImports`. */
       warnings: string[];
@@ -189,6 +206,57 @@ export function findEscapingImports(files: Map<string, Buffer>): string[] {
     }
   }
   return warnings;
+}
+
+// Relative specifiers written without an extension, which is how a card
+// module normally imports its sibling: `import Account from './account'`.
+const RELATIVE_SPECIFIER = /(\bfrom\s*|\bimport\s*\(\s*)(['"])(\.[^'"]*)\2/g;
+
+function resolveSibling(fromPath: string, specifier: string): string {
+  let dir = fromPath.includes('/')
+    ? fromPath.slice(0, fromPath.lastIndexOf('/'))
+    : '';
+  let stack = dir ? dir.split('/') : [];
+  for (let segment of specifier.split('/')) {
+    if (segment === '' || segment === '.') continue;
+    if (segment === '..') stack.pop();
+    else stack.push(segment);
+  }
+  return stack.join('/');
+}
+
+/**
+ * Point a compiled module's relative imports at the compiled siblings.
+ *
+ * A realm resolves `./account` by trying extensions against its own file
+ * system. The package store does not: it serves exactly the path asked for,
+ * so an extensionless import inside a published Version is a 404. Rewriting
+ * the specifier is the fix, and it belongs HERE — before the seal — because
+ * after the seal the bytes at an immutable address must not depend on
+ * anything a later server decides to do.
+ *
+ * Only specifiers that resolve to a module actually in this pack are touched.
+ * One that leaves the pack is already reported as a warning and is left
+ * exactly as written, so the published bytes say plainly what they need.
+ */
+export function pointAtBuiltSiblings(
+  source: string,
+  fromPath: string,
+  authored: Set<string>,
+): string {
+  return source.replace(
+    RELATIVE_SPECIFIER,
+    (whole, lead: string, quote: string, specifier: string) => {
+      if (/\.[a-z]+$/i.test(specifier)) {
+        return whole;
+      }
+      let target = resolveSibling(fromPath, specifier);
+      let hit = [...authored].find(
+        (p) => p.replace(TRANSPILABLE, '') === target,
+      );
+      return hit ? `${lead}${quote}${specifier}.js${quote}` : whole;
+    },
+  );
 }
 
 /**
@@ -270,16 +338,76 @@ export async function packRealmPackage({
     };
   }
 
+  // COMPILE BEFORE THE SEAL. A realm transpiles `.gts` on the way out; the
+  // package store serves the bytes it holds and nothing else. Publishing the
+  // source alone therefore ships a module whose first decorator is a syntax
+  // error to whoever loads it.
+  //
+  // The transform runs HERE rather than at serve time because a Version's
+  // bytes are immutable: an address that promises "these exact bytes forever"
+  // cannot have its content decided later by whichever compiler happens to be
+  // deployed. That is the transform-zone rule — a transform may run before
+  // the seal, never after it — and it is why the built module is part of what
+  // gets hashed.
+  //
+  // BOTH ARE KEPT. Source at the path the author wrote it, compiled at a `.js`
+  // sibling. The source is what a human reads and what the structural pass
+  // compares; the `.js` is what a consumer imports. Same split as a published
+  // npm package, for the same reason.
+  let authored = new Set(
+    [...files.keys()].filter(
+      (p) => TRANSPILABLE.test(p) && !IS_DECLARATION.test(p),
+    ),
+  );
+  let built = new Map<string, Buffer>();
+  for (let path of authored) {
+    let target = builtPathFor(path);
+    if (files.has(target)) {
+      return {
+        kind: 'refused',
+        code: 'build-output-collision',
+        detail:
+          `${path} compiles to ${target}, which already exists in ` +
+          `${declaration.root}. Rename one of them — publishing would have to ` +
+          'silently drop the hand-written file.',
+      };
+    }
+    try {
+      let compiled = await transpileJS(
+        files.get(path)!.toString('utf8'),
+        `/${path}`,
+      );
+      built.set(
+        target,
+        Buffer.from(pointAtBuiltSiblings(compiled, path, authored)),
+      );
+    } catch (e: any) {
+      // A module that does not compile cannot be published, and saying which
+      // one and why is the whole value of failing here rather than at the
+      // consumer's import.
+      return {
+        kind: 'refused',
+        code: 'build-failed',
+        detail: `${path} did not compile: ${String(e?.message ?? e)}`,
+      };
+    }
+  }
+
   // Entry and exports are declared realm-relative and must land pack-relative:
   // inside the published Version, `$DECK/` means the pack root, not the realm.
+  // They also name the BUILT module rather than the source — an entry is an
+  // address a consumer imports, and importing the source would hand them the
+  // bytes that do not run.
+  let asBuilt = (p: string) => (authored.has(p) ? builtPathFor(p) : p);
   let entry = declaration.entry
     ? withinRoot(root, declaration.entry)
     : undefined;
+  entry = entry ? asBuilt(entry) : undefined;
   let exports: Record<string, string> = {};
   for (let [alias, target] of Object.entries(declaration.exports ?? {})) {
     let inside = withinRoot(root, target);
     if (inside) {
-      exports[alias] = `${TREE_ROOT}${inside}`;
+      exports[alias] = `${TREE_ROOT}${asBuilt(inside)}`;
     }
   }
 
@@ -301,6 +429,7 @@ export async function packRealmPackage({
       bytes: Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`),
     },
     ...[...files.entries()].map(([path, bytes]) => ({ path, bytes })),
+    ...[...built.entries()].map(([path, bytes]) => ({ path, bytes })),
   ];
   let bytes = pack(inputs);
   return {
@@ -308,6 +437,13 @@ export async function packRealmPackage({
     bytes,
     treeHash: unpack(bytes).treeHash,
     files: inputs.map((f) => f.path).sort(),
+    sources: new Map(
+      [...files.entries()].map(([path, b]) => [path, b.toString('utf8')]),
+    ),
+    // Read from the SOURCE, which is where the author wrote the import. The
+    // compiled sibling has already had its relative specifiers rewritten, so
+    // scanning it would report resolved paths back at somebody looking for
+    // the line they typed.
     warnings: findEscapingImports(files),
   };
 }

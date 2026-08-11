@@ -9,7 +9,7 @@
     },
     "packages": {
       "greeter": {
-        "version": "2.0.0",
+        "version": "2.1.0",
         "root": "$DECK/greeter/",
         "entry": "$DECK/greeter/index.gts",
         "exports": {

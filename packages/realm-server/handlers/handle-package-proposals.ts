@@ -251,10 +251,10 @@ async function proposeFromRealm({
   let priorTree = priorVersion
     ? await treeOf(storeDir, name, priorVersion)
     : undefined;
-  let candidateTree = new Map<string, string>();
-  for (let [path, bytes] of unpack(packed.bytes).files) {
-    candidateTree.set(path, bytes.toString('utf8'));
-  }
+  // The AUTHORED files, not everything in the pack. Comparing compiled output
+  // would report the transpiler's choices as changes to the package's API,
+  // and a compiler upgrade would read as a breaking release.
+  let candidateTree = packed.sources;
 
   let proposal = await proposeVersion({
     storeDir,
