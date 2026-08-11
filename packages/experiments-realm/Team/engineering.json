@@ -23,11 +23,6 @@
         "links": {
           "self": "../Employee/leo-park"
         }
-      },
-      "cardInfo.theme": {
-        "links": {
-          "self": "../Theme/ledger"
-        }
       }
     },
     "meta": {

@@ -1,0 +1,18 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "accessibility (WCAG 2.2)",
+      "category": "practice",
+      "cardInfo": {
+        "name": "accessibility (WCAG 2.2)"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../skill",
+        "name": "Skill"
+      }
+    }
+  }
+}

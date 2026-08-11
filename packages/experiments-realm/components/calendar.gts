@@ -27,6 +27,11 @@ interface CalendarSignature {
     onSelectEvent?: (event: CalendarEvent) => void;
     onRescheduleEvent?: (event: CalendarEvent, newDate: Date) => void;
     onAddMeeting?: (date: Date) => void;
+    // The day currently being created, if any. Drives the spinner and the
+    // disabled state on that day's + button, so a slow create cannot be
+    // clicked three more times — which is exactly how a calendar ends up with
+    // four cards all called "New Meeting".
+    addingDate?: Date;
   };
   Element: HTMLElement;
 }
@@ -43,6 +48,7 @@ export class Calendar extends GlimmerComponent<CalendarSignature> {
   @tracked isTransitioning = false;
   @tracked draggingEvent: CalendarEvent | undefined;
   @tracked dragOverKey: string | undefined;
+  @tracked expandedDayKey: string | undefined;
 
   get weeks(): CalendarDay[][] {
     return monthGrid(this.cursor);
@@ -61,11 +67,27 @@ export class Calendar extends GlimmerComponent<CalendarSignature> {
   };
 
   chipsFor = (day: CalendarDay): CalendarEvent[] => {
-    return this.eventsOn(day).slice(0, MAX_CHIPS);
+    let events = this.eventsOn(day);
+    if (this.dayKey(day) === this.expandedDayKey) {
+      return events;
+    }
+    return events.slice(0, MAX_CHIPS);
   };
 
   overflowCount = (day: CalendarDay): number => {
+    if (this.dayKey(day) === this.expandedDayKey) {
+      return 0;
+    }
     return Math.max(0, this.eventsOn(day).length - MAX_CHIPS);
+  };
+
+  isExpanded = (day: CalendarDay): boolean => {
+    return this.dayKey(day) === this.expandedDayKey;
+  };
+
+  toggleExpand = (day: CalendarDay) => {
+    let key = this.dayKey(day);
+    this.expandedDayKey = this.expandedDayKey === key ? undefined : key;
   };
 
   chipStyle = (event: CalendarEvent) => {
@@ -136,7 +158,14 @@ export class Calendar extends GlimmerComponent<CalendarSignature> {
   };
 
   addMeetingOn = (day: CalendarDay) => {
+    if (this.args.addingDate) {
+      return;
+    }
     this.args.onAddMeeting?.(day.date);
+  };
+
+  isAdding = (day: CalendarDay) => {
+    return sameDay(this.args.addingDate, day.date);
   };
 
   <template>
@@ -189,7 +218,13 @@ export class Calendar extends GlimmerComponent<CalendarSignature> {
                     >+</button>
                   </div>
                   <div class='day-events'>
-                    {{#each (this.chipsFor day) as |event|}}
+                    {{! Keyed by id — chipsFor/eventsOn mint a brand-new
+                      array of new object literals on every call, so without
+                      a stable key Glimmer tears down and rebuilds every chip
+                      on any unrelated re-render. That kills the hovered DOM
+                      node mid-hover, which is why the native title tooltip
+                      was flickering. }}
+                    {{#each (this.chipsFor day) key='id' as |event|}}
                       <button
                         type='button'
                         class='event-chip'
@@ -202,8 +237,18 @@ export class Calendar extends GlimmerComponent<CalendarSignature> {
                       >{{event.title}}</button>
                     {{/each}}
                     {{#if (gt (this.overflowCount day) 0)}}
-                      <span class='overflow'>+{{this.overflowCount day}}
-                        more</span>
+                      <button
+                        type='button'
+                        class='overflow'
+                        {{on 'click' (fn this.toggleExpand day)}}
+                      >+{{this.overflowCount day}}
+                        more</button>
+                    {{else if (this.isExpanded day)}}
+                      <button
+                        type='button'
+                        class='overflow'
+                        {{on 'click' (fn this.toggleExpand day)}}
+                      >show less</button>
                     {{/if}}
                   </div>
                 </td>
@@ -215,6 +260,17 @@ export class Calendar extends GlimmerComponent<CalendarSignature> {
     </div>
     <style scoped>
       .calendar {
+        /* Brand colour darkened until it is legible as a glyph. --primary is a
+           SURFACE: on a light ground the app default computes 1.31:1, so it can
+           fill and it can mark, but it can never be text. Mixing toward
+           --foreground keeps this legible in BOTH themes, because --foreground
+           flips and drags the mix with it. 38% is the highest hue share that
+           still clears 4.5:1 for the palest hues boxel ships. */
+        --cal-brand-text: color-mix(
+          in oklch,
+          var(--primary, var(--boxel-highlight)) 38%,
+          var(--foreground, var(--boxel-dark))
+        );
         background: var(--background, var(--boxel-light));
         color: var(--foreground, var(--boxel-dark));
         font-family: var(--font-sans, var(--boxel-font-family));
@@ -290,7 +346,7 @@ export class Calendar extends GlimmerComponent<CalendarSignature> {
       }
       .day.drag-over {
         background: color-mix(
-          in srgb,
+          in oklch,
           var(--primary, var(--boxel-highlight)) 12%,
           var(--background, var(--boxel-light))
         );
@@ -321,9 +377,37 @@ export class Calendar extends GlimmerComponent<CalendarSignature> {
           color 0.15s ease-out;
       }
       .add-meeting:hover {
-        color: var(--primary, var(--boxel-highlight));
+        color: var(--cal-brand-text);
       }
       @media (prefers-reduced-motion: reduce) {
+        /* Spinner rather than a text swap: the + occupies a fixed 1rem box, so
+           swapping in a glyph would jitter the day cell. */
+        .spinner {
+          display: block;
+          width: 0.7rem;
+          height: 0.7rem;
+          border-radius: 50%;
+          border: 2px solid currentColor;
+          border-top-color: transparent;
+          animation: cal-spin 0.6s linear infinite;
+        }
+        @keyframes cal-spin {
+          to {
+            transform: rotate(360deg);
+          }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .spinner {
+            animation-duration: 2s;
+          }
+        }
+        .add-meeting.is-adding {
+          opacity: 1;
+          cursor: progress;
+        }
+        .add-meeting:disabled {
+          pointer-events: none;
+        }
         .add-meeting {
           transition: none;
         }
@@ -333,23 +417,26 @@ export class Calendar extends GlimmerComponent<CalendarSignature> {
         font-weight: 400;
       }
       .today {
+        /* Fill, ring and number all derive from --cal-brand-text, so the three
+           cannot drift apart and the ring stays visible: a raw --primary ring
+           computes 1.31:1 against a light cell, which fails even the 3:1 floor
+           for a non-text mark that carries meaning. */
         background: color-mix(
-          in srgb,
-          var(--primary, var(--boxel-highlight)) 8%,
+          in oklch,
+          var(--cal-brand-text) 10%,
           var(--background, var(--boxel-light))
         );
-        box-shadow: inset 0 0 0 0.09375rem
-          var(--primary, var(--boxel-highlight));
+        box-shadow: inset 0 0 0 0.09375rem var(--cal-brand-text);
       }
       .today:hover {
         background: color-mix(
-          in srgb,
+          in oklch,
           var(--primary, var(--boxel-highlight)) 14%,
           var(--background, var(--boxel-light))
         );
       }
       .today .day-number {
-        color: var(--primary, var(--boxel-highlight));
+        color: var(--cal-brand-text);
       }
       .day-events {
         display: flex;
@@ -381,6 +468,15 @@ export class Calendar extends GlimmerComponent<CalendarSignature> {
       .overflow {
         font-size: var(--boxel-font-size-xs);
         color: var(--muted-foreground, var(--boxel-450));
+        background: none;
+        border: none;
+        padding: 0;
+        text-align: left;
+        cursor: pointer;
+        font-family: inherit;
+      }
+      .overflow:hover {
+        text-decoration: underline;
       }
     </style>
   </template>

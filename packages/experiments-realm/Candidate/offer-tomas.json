@@ -9,11 +9,70 @@
       "boardOrder": 1,
       "appliedRole": "Platform Engineer",
       "appliedDate": "2026-06-20",
-      "skills": ["Rust", "AWS", "Docker", "CI/CD", "Observability"],
       "overallScore": 5,
       "offerSalary": 145000,
       "cardInfo": {
-        "name": "Tomás Ribeiro (offer)"
+        "name": "Tomás Ribeiro",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "decisionDate": "2026-08-09",
+      "resumeText": null,
+      "linkedInUrl": null,
+      "portfolioUrl": null,
+      "noticePeriodDays": null,
+      "interviewFeedback": [],
+      "rejectionReason": null,
+      "photo": {
+        "url": "https://images.pexels.com/photos/91227/pexels-photo-91227.jpeg",
+        "sourceMode": "url"
+      },
+      "workHistory": [],
+      "education": [],
+      "rejectionNote": null,
+      "offerState": "extended"
+    },
+    "relationships": {
+      "position": {
+        "links": {
+          "self": "../Position/platform-engineer"
+        }
+      },
+      "offer": {
+        "links": {
+          "self": "../Offer/tomas-ribeiro-offer"
+        }
+      },
+      "skills.0": {
+        "links": {
+          "self": "../Skill/rust"
+        }
+      },
+      "skills.1": {
+        "links": {
+          "self": "../Skill/aws"
+        }
+      },
+      "skills.2": {
+        "links": {
+          "self": "../Skill/docker"
+        }
+      },
+      "skills.3": {
+        "links": {
+          "self": "../Skill/ci-cd"
+        }
+      },
+      "skills.4": {
+        "links": {
+          "self": "../Skill/observability"
+        }
+      },
+      "hiredAs": {
+        "links": {
+          "self": "../Employee/124fd97a-4f35-4af9-a68f-74ee6a2020a0"
+        }
       }
     },
     "meta": {

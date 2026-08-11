@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Morgan Lee",
+      "email": "morgan.lee@example.com",
+      "phone": "+14155550188",
+      "source": "Referral",
+      "positionTitle": "Platform Engineer",
+      "referrerName": "Marcus Webb",
+      "appliedDate": "2026-07-25",
+      "status": "converted",
+      "resumeText": "MORGAN LEE\nmorgan.lee@example.com | +1 555 0188\n\nSUMMARY\nPlatform engineer, 6 years, infra/tooling.\n\nEXPERIENCE\nPlatform Engineer \u2014 Cascade Systems (2020\u20132026)\n- Owned CI/CD pipeline serving 40+ services\n- Migrated infra to Kubernetes\n\nSKILLS\nGo, TypeScript, Kubernetes, Terraform, CI/CD",
+      "cardInfo": {
+        "name": "Morgan Lee (application)",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "position": {
+        "links": {
+          "self": "../Position/platform-engineer"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../application",
+        "name": "Application"
+      }
+    }
+  }
+}

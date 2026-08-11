@@ -7,28 +7,24 @@
       "startDate": "2026-08-07",
       "status": "onboarding",
       "salary": 145000,
-      "name": "Tom\u00e1s Ribeiro",
+      "name": "Tomás Ribeiro",
       "email": "tomas.ribeiro@example.com",
       "phone": "+1 555 0142",
-      "photoUrl": null,
       "cardInfo": {
         "name": null,
         "summary": null,
         "cardThumbnailURL": null,
         "notes": null
+      },
+      "photo": {
+        "url": "https://images.pexels.com/photos/936043/pexels-photo-936043.jpeg",
+        "sourceMode": "url"
       }
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../trt-employee",
+        "module": "../employee",
         "name": "Employee"
-      }
-    },
-    "relationships": {
-      "cardInfo.theme": {
-        "links": {
-          "self": "../Theme/ledger"
-        }
       }
     }
   }

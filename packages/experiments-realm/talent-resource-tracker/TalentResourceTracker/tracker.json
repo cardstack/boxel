@@ -56,6 +56,11 @@
           "self": "../../Candidate/rejected-quinn"
         }
       },
+      "candidates.4": {
+        "links": {
+          "self": "../../Candidate/7e615db9-3bf9-4704-9aa0-885d7b79d357"
+        }
+      },
       "meetings.0": {
         "links": {
           "self": "../../Meeting/interview-amara-1"
@@ -74,21 +79,6 @@
       "meetings.3": {
         "links": {
           "self": "../../Meeting/eng-standup"
-        }
-      },
-      "meetings.4": {
-        "links": {
-          "self": null
-        }
-      },
-      "meetings.5": {
-        "links": {
-          "self": null
-        }
-      },
-      "meetings.6": {
-        "links": {
-          "self": "../../Meeting/fa632a5e-c17f-4df6-9758-9a4238a5d4f8"
         }
       },
       "teams.0": {
@@ -121,9 +111,54 @@
           "self": "../../Vendor/paylock-payroll"
         }
       },
+      "positions.0": {
+        "links": {
+          "self": "../../Position/platform-engineer"
+        }
+      },
+      "positions.1": {
+        "links": {
+          "self": "../../Position/frontend-engineer"
+        }
+      },
+      "positions.2": {
+        "links": {
+          "self": "../../Position/senior-backend-engineer"
+        }
+      },
+      "applications.0": {
+        "links": {
+          "self": "../../Application/riley-chen"
+        }
+      },
+      "applications.1": {
+        "links": {
+          "self": "../../Application/morgan-lee"
+        }
+      },
+      "applications.2": {
+        "links": {
+          "self": "../../Application/casey-brooks"
+        }
+      },
+      "applications.3": {
+        "links": {
+          "self": "../../Application/devon-park"
+        }
+      },
+      "offers.0": {
+        "links": {
+          "self": "../../Offer/tomas-ribeiro-offer"
+        }
+      },
+      "offers.1": {
+        "links": {
+          "self": "../../Offer/df5b8208-9ecc-4132-b595-700dd0a73d77"
+        }
+      },
       "cardInfo.theme": {
         "links": {
-          "self": "../../Theme/ledger"
+          "self": null
         }
       }
     },

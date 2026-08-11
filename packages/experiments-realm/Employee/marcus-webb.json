@@ -9,9 +9,15 @@
       "department": "Engineering",
       "startDate": "2023-01-16",
       "status": "active",
+      "employmentType": "full-time",
+      "ptoBalance": 12,
       "salary": 195000,
       "cardInfo": {
         "name": "Marcus Webb"
+      },
+      "photo": {
+        "url": "https://images.pexels.com/photos/2379004/pexels-photo-2379004.jpeg",
+        "sourceMode": "url"
       }
     },
     "relationships": {
@@ -19,16 +25,11 @@
         "links": {
           "self": "../Employee/sofia-reyes"
         }
-      },
-      "cardInfo.theme": {
-        "links": {
-          "self": "../Theme/ledger"
-        }
       }
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../trt-employee",
+        "module": "../employee",
         "name": "Employee"
       }
     }

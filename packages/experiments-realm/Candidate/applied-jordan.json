@@ -4,38 +4,133 @@
     "attributes": {
       "name": "Jordan Ellis",
       "status": "interviewing",
-      "boardOrder": 2,
+      "boardOrder": 1,
       "appliedRole": "Frontend Engineer",
       "appliedDate": "2026-07-28",
-      "resumeText": "JORDAN ELLIS\njordan.ellis@example.com | +1 555 0140 | Portland, OR\n\nSUMMARY\nFrontend engineer with 6 years of experience building design systems and data-heavy SPAs.\n\nEXPERIENCE\nSenior Frontend Engineer — Nimbus Analytics (2022–2026)\n- Led migration of a 400-component dashboard from AngularJS to Ember Octane\n- Built a themeable chart library used by 30+ internal teams (D3, TypeScript)\n- Cut initial bundle size 45% via route-based code splitting\n\nFrontend Engineer — Brightline Health (2019–2022)\n- Shipped a HIPAA-compliant patient portal (React, Redux)\n- Introduced visual regression testing with Playwright\n\nSKILLS\nTypeScript, Ember, React, D3, GraphQL, Playwright, CSS architecture, accessibility (WCAG 2.2)\n\nEDUCATION\nBS Computer Science, University of Oregon, 2019",
+      "resumeText": null,
       "cardInfo": {
-        "name": "Jordan Ellis (applied)",
+        "name": "Jordan Ellis",
         "summary": null,
         "cardThumbnailURL": null,
         "notes": null
       },
-      "decisionDate": null,
-      "skills": [
-        "TypeScript",
-        "Ember",
-        "React",
-        "D3",
-        "GraphQL",
-        "Playwright",
-        "CSS architecture",
-        "accessibility (WCAG 2.2)",
-        "AngularJS",
-        "Redux",
-        "code splitting",
-        "visual regression testing"
-      ],
+      "decisionDate": "2026-08-10",
       "overallScore": null,
-      "generatedQuestions": null,
       "rejectionReason": null,
       "offerSalary": null,
       "email": "jordan.ellis@example.com",
       "phone": "+1 555 0140",
-      "photoUrl": null
+      "linkedInUrl": null,
+      "portfolioUrl": null,
+      "noticePeriodDays": null,
+      "interviewFeedback": [],
+      "workHistory": [
+        {
+          "company": "Nimbus Analytics",
+          "title": "Senior Frontend Engineer",
+          "startDate": "2022-03-01",
+          "endDate": null,
+          "description": "Migrated a 400-component dashboard from AngularJS to Ember Octane and built a themeable D3 chart library adopted by 30+ internal teams."
+        },
+        {
+          "company": "Brightline Health",
+          "title": "Frontend Engineer",
+          "startDate": "2019-06-01",
+          "endDate": "2022-02-15",
+          "description": "Shipped a HIPAA-compliant patient portal and introduced visual regression testing to the team's workflow."
+        }
+      ],
+      "education": [
+        {
+          "school": "University of Washington",
+          "degree": "B.S.",
+          "fieldOfStudy": "Computer Science",
+          "graduationYear": 2019
+        }
+      ],
+      "photo": {
+        "url": "https://images.pexels.com/photos/2182970/pexels-photo-2182970.jpeg",
+        "sourceMode": "url"
+      },
+      "rejectionNote": null,
+      "offerState": "accepted"
+    },
+    "relationships": {
+      "position": {
+        "links": {
+          "self": "../Position/frontend-engineer"
+        }
+      },
+      "skills.0": {
+        "links": {
+          "self": "../Skill/typescript"
+        }
+      },
+      "skills.1": {
+        "links": {
+          "self": "../Skill/ember"
+        }
+      },
+      "skills.2": {
+        "links": {
+          "self": "../Skill/react"
+        }
+      },
+      "skills.3": {
+        "links": {
+          "self": "../Skill/d3"
+        }
+      },
+      "skills.4": {
+        "links": {
+          "self": "../Skill/graphql"
+        }
+      },
+      "skills.5": {
+        "links": {
+          "self": "../Skill/playwright"
+        }
+      },
+      "skills.6": {
+        "links": {
+          "self": "../Skill/css-architecture"
+        }
+      },
+      "skills.7": {
+        "links": {
+          "self": "../Skill/accessibility-wcag"
+        }
+      },
+      "skills.8": {
+        "links": {
+          "self": "../Skill/angularjs"
+        }
+      },
+      "skills.9": {
+        "links": {
+          "self": "../Skill/redux"
+        }
+      },
+      "skills.10": {
+        "links": {
+          "self": "../Skill/code-splitting"
+        }
+      },
+      "skills.11": {
+        "links": {
+          "self": "../Skill/visual-regression-testing"
+        }
+      },
+      "offer": {
+        "links": {
+          "self": null
+        }
+      },
+      "hiredAs": {
+        "links": {
+          "self": "../Employee/cfb2f5a4-edae-4d10-ad7a-c8da5210d137"
+        }
+      }
     },
     "meta": {
       "adoptsFrom": {

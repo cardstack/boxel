@@ -5,24 +5,39 @@
       "name": "Amara Okafor",
       "email": "amara.okafor@example.com",
       "phone": "+1 555 0141",
-      "status": "interviewing",
+      "status": "screening",
       "boardOrder": 1,
       "appliedRole": "Senior Backend Engineer",
       "appliedDate": "2026-07-10",
-      "skills": ["Go", "PostgreSQL", "Kubernetes", "gRPC", "Terraform"],
       "overallScore": 4,
       "cardInfo": {
-        "name": "Amara Okafor (interviewing)",
+        "name": "Amara Okafor",
         "summary": null,
         "cardThumbnailURL": null,
         "notes": null
       },
-      "decisionDate": null,
+      "decisionDate": "2026-08-10",
       "resumeText": null,
-      "generatedQuestions": "## Warm-up (2 questions)\n\n1. **Walk me through your typical day-to-day as a backend engineer.** What does your development workflow look like from picking up a ticket to deploying a change to production?\n2. **How did you first get into backend engineering, and what drew you specifically to Go as a primary language?** What do you appreciate most — and least — about working with it at scale?\n\n---\n\n## Role-specific (4 questions, grounded in the candidate's actual experience — reference specifics from the resume)\n\n> ⚠️ *No resume was provided. The following questions are grounded in the declared skills (Go, PostgreSQL, Kubernetes, gRPC, Terraform) and are representative of Senior Backend Engineer expectations. Replace bracketed placeholders once a resume is supplied.*\n\n1. **Go & gRPC service design:** Describe a gRPC service you designed or owned end-to-end. How did you handle schema evolution (e.g., protobuf versioning), and what was your strategy for backward compatibility when multiple clients consumed the same service?\n2. **PostgreSQL at scale:** Walk me through a time you diagnosed and resolved a significant PostgreSQL performance problem — slow queries, lock contention, or schema design issues. What tooling did you use (e.g., `EXPLAIN ANALYZE`, `pg_stat_statements`), and what was the measurable outcome?\n3. **Kubernetes workload management:** Describe how you've configured and tuned Kubernetes deployments for a production Go service. How did you approach resource requests/limits, liveness vs. readiness probes, and horizontal pod autoscaling?\n4. **Terraform & infrastructure ownership:** Have you owned Terraform modules from scratch or inherited existing state? Describe a situation where infrastructure drift or state corruption became a problem — how did you detect it and remediate it safely?\n\n---\n\n## Behavioral (3 questions)\n\n1. **Handling ambiguity:** Tell me about a time you were handed a vague or under-specified technical requirement. How did you clarify scope, and how did you ensure alignment with stakeholders before writing a line of code?\n2. **Cross-functional collaboration under pressure:** Describe a situation where a production incident required you to coordinate across engineering, product, and/or on-call SRE teams simultaneously. What was your role, and what would you do differently in hindsight?\n3. **Mentorship and technical leadership:** Give me an example of a time you raised the technical quality of a team — through code review culture, documentation, internal tooling, or mentoring a junior engineer. What was the lasting impact?\n\n---\n\n## Red-flag probes (2 questions targeting gaps or ambiguities you notice in the resume)\n\n> ⚠️ *Because no resume was provided, the following probes target the most common gaps and ambiguities seen in Senior Backend Engineer candidates who list these skills without supporting context.*\n\n1. **Depth vs. breadth on Kubernetes:** Many engineers list Kubernetes as a skill after working primarily with managed clusters via a platform team. **Can you walk me through a networking or scheduling problem you personally debugged at the Kubernetes level** — not through a dashboard, but using `kubectl`, logs, or cluster-level tooling directly? What was the root cause?\n2. **Go concurrency in practice:** Go is listed as a core skill, but concurrency bugs can be subtle. **Describe a data race, goroutine leak, or deadlock you encountered in production or during testing.** How did you identify it (e.g., `-race` detector, pprof), and what was the fix?",
-      "rejectionReason": null,
+      "rejectionReason": "Not a fit at this time",
       "offerSalary": null,
-      "photoUrl": null
+      "linkedInUrl": "https://linkedin.com/in/amara-okafor",
+      "portfolioUrl": "https://amaraokafor.dev",
+      "noticePeriodDays": 21,
+      "interviewFeedback": [
+        {
+          "interviewDate": "2026-07-22",
+          "rating": 4,
+          "notes": "Strong distributed-systems fundamentals; clear on gRPC schema evolution tradeoffs."
+        }
+      ],
+      "photo": {
+        "url": "https://images.pexels.com/photos/1373736/pexels-photo-1373736.jpeg",
+        "sourceMode": "url"
+      },
+      "workHistory": [],
+      "education": [],
+      "rejectionNote": null,
+      "offerState": null
     },
     "meta": {
       "adoptsFrom": {
@@ -31,9 +46,44 @@
       }
     },
     "relationships": {
-      "cardInfo.theme": {
+      "position": {
         "links": {
-          "self": "../Theme/ledger"
+          "self": "../Position/senior-backend-engineer"
+        }
+      },
+      "referredBy": {
+        "links": {
+          "self": "../Employee/sofia-reyes"
+        }
+      },
+      "skills.0": {
+        "links": {
+          "self": "../Skill/go"
+        }
+      },
+      "skills.1": {
+        "links": {
+          "self": "../Skill/postgresql"
+        }
+      },
+      "skills.2": {
+        "links": {
+          "self": "../Skill/kubernetes"
+        }
+      },
+      "skills.3": {
+        "links": {
+          "self": "../Skill/grpc"
+        }
+      },
+      "skills.4": {
+        "links": {
+          "self": "../Skill/terraform"
+        }
+      },
+      "offer": {
+        "links": {
+          "self": null
         }
       }
     }

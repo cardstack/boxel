@@ -1,0 +1,55 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Approval Chain Field",
+      "cardDescription": "A sequential, ordered sign-off gate: a list of approval steps (approver, decision, decided-at, comment) plus computed currentStepIndex/status, rendered as a linear stepper with a bottleneck badge on a stalled pending step",
+      "specType": "field",
+      "ref": {
+        "module": "../approval-chain-field",
+        "name": "ApprovalChainField"
+      },
+      "readMe": "# Approval Chain Field\n\n## Summary\nA compound FieldDef holding `steps` (containsMany `ApprovalStepField` — see approval-step-field.gts: `approver` linksTo Employee, `decision` an `ApprovalDecisionField` enum of pending | approved | rejected, `decidedAt`, `comment`) plus `startedAt`. Two computed fields drive everything else: `currentStepIndex` (the index of the first still-`pending` step, or `steps.length` once every step has a decision) and `status` (`not-started` with zero steps, `rejected` if any step is `rejected`, `approved` once every step is `approved`, otherwise `in-progress`).\n\n## Import\n```ts\nimport { ApprovalChainField } from './approval-chain-field';\nimport { ApprovalStepField, ApprovalDecisionField, APPROVAL_DECISION_COLORS } from './approval-step-field';\n```\n\n## Usage — three or more ways this is used\n\n**1. `Position.approvalChain`** — requisition sign-off (headcount/budget owners\nsigning off before a req can be posted/filled). Replaces the old\n`approvers` (`linksToMany(() => Employee)`), which recorded WHO could approve\nbut never WHETHER or IN WHAT ORDER they had. See `Position/platform-engineer`\nfor a live one-step example.\n\n**2. `Offer.approvalChain`** — compensation sign-off before an offer can be\nturned into a hire. Replaces the old `approvedBy` (`linksTo(() => Employee)`\nsingle-approver field). `ApproveOfferCommand` now refuses to hire while\n`offer.approvalChain.status !== 'approved'`, as long as the chain actually has\nsteps configured — an empty/not-started chain is \"no gate\", not \"blocked\nforever\", so existing ungated demo data keeps working. See\n`Offer/tomas-ribeiro-offer` for a live three-step example (2 approved, 1\npending) that also demonstrates `ApprovalStepField`/`ApprovalDecisionField`\nin use.\n\n**3. Contractor Extension approval** *(named future consumer, not built in\nthis PR)* — a hypothetical `ContractorExtension` card gating renewal on\nmanager + finance sign-off would reuse this field exactly as Position/Offer\ndo. Referenced here for the pattern only; no such card exists yet.\n\n## Template Usage\n`<@fields.approvalChain />` renders a read-only linear stepper (an ordered\n`<ol>`, not a tree — every step has exactly one predecessor/successor, unlike\nthe manager-hierarchy forest `components/org-tree.gts` builds). Each step\nshows the approver (atom format), a decision pill (`APPROVAL_DECISION_COLORS`:\namber=pending, green=approved, red=rejected), the decided-at date, and — on\nwhichever step is `currentStepIndex` and still pending — a \"pending Nd ·\nbottleneck\" badge once that step has sat pending 3+ days\n(`BOTTLENECK_THRESHOLD_DAYS`), measured from the prior step's `decidedAt` (or\nthe chain's own `startedAt` for step 0) via `daysBetween` in utils/index.\n\n**Click-to-decide lives on the CONSUMER, not this field.** The field's own\nembedded/isolated format is deliberately read-only: a FieldDef has no\nfirst-class way to mutate one element of its own parent's `containsMany`\narray and persist the OWNING card from inside its own template. Position and\nOffer's own isolated views render Approve/Reject `BoxelButton`s next to\n`<@fields.approvalChain />` and call `ApproveChainStepCommand`\n(commands/approve-chain-step-command.gts), matching how every other\nstage-changing action in this app (`ApproveOfferCommand`,\n`RejectCandidateCommand`) is invoked from the consuming card, not a field.\n`ApproveChainStepCommand` also refuses an out-of-order decision — it checks\n`chain.currentStepIndex === stepIndex` before writing.\n\n## Reuse notes\n`ApprovalStepField.approver` only assumes an Employee-shaped linksTo target;\nthe chain has no opinion on what the owning card is, so any card needing a\nsequential sign-off gate can adopt it as-is.\n\n**Non-goals:** parallel/branching approval (every chain is strictly linear —\none current step at a time); re-opening a decided step (decisions are\nterminal — a rejected/approved step is not un-set by this field); notifying\napprovers (no email/task side-effect is generated when a step becomes\ncurrent).\n\n**Example in use:** `Offer/tomas-ribeiro-offer` — a 3-step chain (Marcus Webb\nand Dana Kim approved on 2026-08-03/04, Sofia Reyes pending since — a\nbottleneck by the time this runs against 2026-08-11). `Position/platform-engineer`\ncarries a simpler single-step, fully-approved chain.\n\n**Deviation note:** the `containedExamples` below omit `approver` — a Spec's\n`containedExamples` are plain attribute JSON and cannot carry a `linksTo`\nrelationship, so the pending/approved shape is shown there without approvers.\nThe real approver links (Marcus Webb, Dana Kim, Sofia Reyes /\nSofia Reyes on the Position) only exist on the `linkedExamples` card\ninstances above, via relationship paths like\n`approvalChain.steps.0.approver`.\n",
+      "containedExamples": [
+        {
+          "startedAt": "2026-08-03T09:00:00.000Z",
+          "steps": [
+            {
+              "decision": "approved",
+              "decidedAt": "2026-08-03T15:00:00.000Z",
+              "comment": "Compensation aligns with the approved band for this req."
+            },
+            {
+              "decision": "approved",
+              "decidedAt": "2026-08-04T11:30:00.000Z",
+              "comment": "Equity grant and offer terms confirmed against policy."
+            },
+            {
+              "decision": "pending",
+              "decidedAt": null,
+              "comment": null
+            }
+          ]
+        }
+      ]
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Offer/tomas-ribeiro-offer"
+        }
+      },
+      "linkedExamples.1": {
+        "links": {
+          "self": "../Position/platform-engineer"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Devon Park",
+      "email": "devon.park@example.com",
+      "phone": "+1 415 555 0122",
+      "source": "Indeed",
+      "positionTitle": "Frontend Engineer",
+      "appliedDate": "2026-06-20",
+      "status": "rejected",
+      "resumeText": "DEVON PARK\ndevon.park@example.com | +1 555 0122\n\nSUMMARY\nJunior frontend developer, 1 year experience.\n\nEXPERIENCE\nFrontend Developer Intern \u2014 Brightpath (2025\u20132026)\n- Built marketing site pages\n\nSKILLS\nHTML, CSS, JavaScript",
+      "cardInfo": {
+        "name": "Devon Park (application)"
+      }
+    },
+    "relationships": {
+      "position": {
+        "links": {
+          "self": "../Position/frontend-engineer"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../application",
+        "name": "Application"
+      }
+    }
+  }
+}

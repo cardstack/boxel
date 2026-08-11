@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Offer",
+      "cardDescription": "The formal offer record: candidate, position, compensation, dates, approver, and offer lifecycle status",
+      "specType": "card",
+      "ref": {
+        "module": "../offer",
+        "name": "Offer"
+      },
+      "readMe": "# Offer\n\n## Summary\nThe formal, auditable offer document: `candidate` and `position` (both linksTo), `offeredTitle`, `salary`, `startDate`, `extendedDate`, `decisionDate`, `approvalChain` (an `ApprovalChainField` — see approval-chain-field.gts), and `status` (draft | extended | accepted | declined | rescinded). `title` is computed from the candidate's name.\n\n## Import\n```ts\nimport { Offer } from './offer';\n```\n\n## Usage — three or more ways this is used\n\n**1. As the lifecycle record between interviewing and hired.** `status`\n(draft | extended | accepted | declined | rescinded) is the offer's own state,\ndistinct from the candidate's pipeline stage. `AdvanceToOfferCommand` creates\nit as `draft`; `ExtendOfferCommand` flips that draft to `extended`.\n\n**2. As the compensation document.** `salary`, `equity` and `bonus` each render\nthrough a label getter that distinguishes zero from unknown —\n`bonusLabel` returns `'$0 · confirmed none'` rather than an em dash, because on\na comp document those are not the same statement.\n\n**3. As the back half of the only bidirectional pair.** `Offer.candidate` ↔\n`Candidate.offer`. `ExtendOfferCommand` writes both sides.\n\n**4. As the terminal-state renderer.** `lifecycleSteps` keeps `draft` and\n`extended` marked done when the status is `declined`/`rescinded`, so a dead\noffer never denies having been sent — and appends a red terminal step.\n\n**5. As an expiry countdown.** `expirationDate` drives `Awaiting reply` versus\n`expires in Nd` in the status label.\n\n**6. As the hiring gate.** `approvalChain` (replacing the old single-approver `approvedBy` linksTo) must reach `status: 'approved'` — or have no steps configured at all — before `ApproveOfferCommand` will hire the candidate. See `Offer/tomas-ribeiro-offer` for a 3-step chain (2 approved, 1 pending) and approval-chain-field.gts for the sequencing rules.\n\n## Template Usage\nFitted shows candidate name, offered title, and status pill at badge size; a populated tile adds salary and start date. Isolated shows the full facts grid including position and approval chain.\n\n## Reuse notes\nOffer only assumes its `candidate` target and each `approvalChain` step's `approver` satisfy the base Candidate/Employee shape — it does not read any tracker-specific field. A second consumer (e.g. a standalone comp-and-offers approval tool) could create/approve Offers against Candidates sourced from a different pipeline app entirely.\n\n**Non-goals:** e-signature or redline tracking, multi-offer negotiation history (status transitions are terminal, not versioned).\n"
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Offer/tomas-ribeiro-offer"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

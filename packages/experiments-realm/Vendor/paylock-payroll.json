@@ -22,13 +22,6 @@
         "module": "../vendor",
         "name": "Vendor"
       }
-    },
-    "relationships": {
-      "cardInfo.theme": {
-        "links": {
-          "self": "../Theme/ledger"
-        }
-      }
     }
   }
 }

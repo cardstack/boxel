@@ -6,11 +6,45 @@ export interface StateColor {
   ring: string;
 }
 
-export const DEFAULT_STATE_COLOR: StateColor = {
-  bg: '#f1f5f9',
-  fg: '#334155',
-  ring: '#94a3b8',
-};
+// A status hue has no semantic theme token — the shadcn set ships only
+// --destructive — so these come from boxel's design tokens instead of literals.
+// Boxel ships no orange and no plain blue, so those two are mixed from the
+// tokens it does ship: that keeps every hue inside the design system, where a
+// single definition can correct it globally.
+const HUE = {
+  green: 'var(--boxel-success)',
+  red: 'var(--boxel-danger)',
+  amber: 'var(--boxel-warning)',
+  orange: 'color-mix(in oklch, var(--boxel-warning) 62%, var(--boxel-danger))',
+  teal: 'var(--boxel-dark-teal)',
+  purple: 'var(--boxel-purple)',
+  blue: 'color-mix(in oklch, var(--boxel-purple) 55%, var(--boxel-highlight))',
+  pink: 'color-mix(in oklch, var(--boxel-danger) 60%, var(--boxel-purple))',
+  slate: 'var(--muted-foreground, var(--boxel-450))',
+} as const;
+
+export type Hue = keyof typeof HUE;
+
+// One hue in, a checked pair out. The fill and the text derive from the SAME
+// hue and from the card's own pair, so they move together: a linked theme flips
+// --card/--card-foreground and both sides follow, and no combination can come
+// apart the way two separately-stored colours can.
+//
+// 14% / 38% are not arbitrary. Percentages were computed against every hue
+// above, and 38% is the highest that still clears 4.5:1 for the palest of them
+// (boxel's mint at 45% gives only 4.19:1 — the number quoted for body text
+// elsewhere is unsafe here). Raising the hue share LOWERS contrast, because it
+// is the card foreground in the mix that supplies the darkness.
+export function stateColor(hue: Hue): StateColor {
+  let h = HUE[hue];
+  return {
+    bg: `color-mix(in oklch, ${h} 14%, var(--card, var(--boxel-light)))`,
+    fg: `color-mix(in oklch, ${h} 38%, var(--card-foreground, var(--boxel-dark)))`,
+    ring: h,
+  };
+}
+
+export const DEFAULT_STATE_COLOR: StateColor = stateColor('slate');
 
 // Generic lookup helper — the color maps themselves live next to the card
 // that owns the state (employee.gts, candidate.gts, meeting.gts), not here.
@@ -19,6 +53,23 @@ export function stateColorOf(
   key?: string | null,
 ): StateColor {
   return (key && map[key]) || DEFAULT_STATE_COLOR;
+}
+
+// Compact mode only kicks in above $1,000 — below that, Math.round(n/1000)
+// collapses an hourly rate like $45 down to "$0k", which is worse than the
+// full number. Compact and full formatting always share this one function
+// so the same dollar amount never renders two different ways across cards.
+export function formatMoney(
+  n?: number | null,
+  opts?: { compact?: boolean },
+): string | undefined {
+  if (n == null) {
+    return undefined;
+  }
+  if (opts?.compact && Math.abs(n) >= 1000) {
+    return `$${Math.round(n / 1000)}k`;
+  }
+  return `$${n.toLocaleString()}`;
 }
 
 export function initialsOf(name?: string | null): string {
@@ -33,7 +84,13 @@ export function initialsOf(name?: string | null): string {
     .join('');
 }
 
-export type DurationUnit = 'minutes' | 'hours' | 'days' | 'weeks' | 'months';
+export type DurationUnit =
+  | 'minutes'
+  | 'hours'
+  | 'days'
+  | 'weeks'
+  | 'months'
+  | 'years';
 
 export const DURATION_UNITS: DurationUnit[] = [
   'minutes',
@@ -41,6 +98,7 @@ export const DURATION_UNITS: DurationUnit[] = [
   'days',
   'weeks',
   'months',
+  'years',
 ];
 
 const DAYS_PER_UNIT: Record<DurationUnit, number> = {
@@ -49,7 +107,30 @@ const DAYS_PER_UNIT: Record<DurationUnit, number> = {
   days: 1,
   weeks: 7,
   months: 30,
+  years: 365,
 };
+
+// Pick the unit that reads naturally for a span measured in days. A tenure of
+// 1303 days is technically correct and useless — nobody thinks in four-digit
+// day counts. Short spans stay in days because that IS how recruiters talk
+// about them ("31 days to hire").
+export function normalizedDuration(days?: number | null):
+  | {
+      value: number;
+      unit: DurationUnit;
+    }
+  | undefined {
+  if (days == null || !Number.isFinite(days)) {
+    return undefined;
+  }
+  if (days >= 365) {
+    return { value: Math.round((days / 365) * 10) / 10, unit: 'years' };
+  }
+  if (days >= 60) {
+    return { value: Math.round((days / 30) * 10) / 10, unit: 'months' };
+  }
+  return { value: Math.round(days), unit: 'days' };
+}
 
 export function durationInDays(
   value?: number | null,
@@ -77,6 +158,7 @@ export function durationLabel(
     days: rounded === 1 ? 'day' : 'days',
     weeks: rounded === 1 ? 'week' : 'weeks',
     months: rounded === 1 ? 'month' : 'months',
+    years: rounded === 1 ? 'year' : 'years',
   };
   return `${rounded} ${singular[u]}`;
 }
@@ -94,6 +176,7 @@ export function durationAtomLabel(
     days: 'd',
     weeks: 'w',
     months: 'mo',
+    years: 'y',
   };
   let rounded = Math.round(value * 10) / 10;
   return `${rounded}${abbrev[(unit ?? 'days') as DurationUnit] ?? 'd'}`;
@@ -202,4 +285,13 @@ function isDescendant<T>(
     }
   }
   return false;
+}
+
+// Count only the links whose target still exists. Deleting a card does not
+// rewrite the cards linking to it, so a linksToMany keeps the dead reference:
+// the slot stays in the array (length is unchanged) but reads as `undefined`.
+// Counting raw `length` therefore reports members/skills/interviewers that are
+// no longer there — a number the user can see is wrong.
+export function liveCount(links: unknown[] | null | undefined): number {
+  return (links ?? []).filter(Boolean).length;
 }

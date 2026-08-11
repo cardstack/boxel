@@ -1,0 +1,44 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Riley Chen",
+      "email": "riley.chen@example.com",
+      "phone": "+14155550177",
+      "source": "LinkedIn",
+      "positionTitle": "Frontend Engineer",
+      "appliedDate": "2026-07-30",
+      "status": "new",
+      "resumeText": "",
+      "cardInfo": {
+        "name": "Riley Chen (application)",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "referrerName": null,
+      "photo": {
+        "url": "https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg",
+        "sourceMode": "url"
+      }
+    },
+    "relationships": {
+      "position": {
+        "links": {
+          "self": "../Position/frontend-engineer"
+        }
+      },
+      "resumeFile": {
+        "links": {
+          "self": "../riley_chen_resume.pdf"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../application",
+        "name": "Application"
+      }
+    }
+  }
+}

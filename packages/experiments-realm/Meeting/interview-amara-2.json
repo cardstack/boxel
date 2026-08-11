@@ -31,7 +31,7 @@
       },
       "cardInfo.theme": {
         "links": {
-          "self": "../Theme/ledger"
+          "self": null
         }
       }
     },

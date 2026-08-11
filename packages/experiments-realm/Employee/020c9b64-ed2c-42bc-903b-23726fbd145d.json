@@ -1,0 +1,36 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "role": "Platform Engineer",
+      "department": null,
+      "startDate": "2026-08-10",
+      "status": "onboarding",
+      "employmentType": null,
+      "terminationDate": null,
+      "ptoBalance": null,
+      "onboardingStatus": null,
+      "salary": null,
+      "weeklyInterviewCapacityHours": null,
+      "name": "Morgan Lee",
+      "email": "morgan.lee@example.com",
+      "phone": "+14155550188",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "photo": {
+        "url": "https://images.pexels.com/photos/220453/pexels-photo-220453.jpeg",
+        "sourceMode": "url"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../employee",
+        "name": "Employee"
+      }
+    }
+  }
+}

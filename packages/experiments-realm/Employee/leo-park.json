@@ -11,24 +11,31 @@
       "status": "onboarding",
       "salary": 128000,
       "cardInfo": {
-        "name": "Leo Park"
-      }
+        "name": "Leo Park",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "photo": {
+        "url": "https://images.pexels.com/photos/1516680/pexels-photo-1516680.jpeg",
+        "sourceMode": "url"
+      },
+      "employmentType": null,
+      "terminationDate": null,
+      "ptoBalance": null,
+      "onboardingStatus": null,
+      "weeklyInterviewCapacityHours": null
     },
     "relationships": {
       "manager": {
         "links": {
-          "self": "../Employee/marcus-webb"
-        }
-      },
-      "cardInfo.theme": {
-        "links": {
-          "self": "../Theme/ledger"
+          "self": "./marcus-webb"
         }
       }
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../trt-employee",
+        "module": "../employee",
         "name": "Employee"
       }
     }

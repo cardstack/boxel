@@ -1,0 +1,75 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "jobTitle": "Platform Engineer",
+      "department": "Engineering",
+      "status": "open",
+      "postedDate": "2026-07-01",
+      "targetStartDate": "2026-09-01",
+      "headcount": 1,
+      "salaryMin": 150000,
+      "salaryMax": 190000,
+      "jobDescription": "Own the internal platform team's build/deploy tooling. Strong TypeScript and infra background preferred.",
+      "cardInfo": {
+        "name": "Platform Engineer",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "workLocation": "Remote (US)",
+      "employmentType": "full-time",
+      "experienceLevel": "senior",
+      "requisitionCode": "REQ-2026-014",
+      "remoteEligible": true,
+      "approvalChain": {
+        "startedAt": "2026-06-28T09:00:00.000Z",
+        "steps": [
+          {
+            "decision": "approved",
+            "decidedAt": "2026-06-30T13:00:00.000Z",
+            "comment": "Headcount confirmed against Q3 budget."
+          }
+        ]
+      }
+    },
+    "relationships": {
+      "hiringManager": {
+        "links": {
+          "self": "../Employee/marcus-webb"
+        }
+      },
+      "interviewPlan": {
+        "links": {
+          "self": "../InterviewPlan/178f4bd9-d637-4c5a-aae2-96eec26fbbd0"
+        }
+      },
+      "approvalChain.steps.0.approver": {
+        "links": {
+          "self": "../Employee/sofia-reyes"
+        }
+      },
+      "requiredSkills.0": {
+        "links": {
+          "self": "../Skill/typescript"
+        }
+      },
+      "requiredSkills.1": {
+        "links": {
+          "self": "../Skill/terraform"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../position",
+        "name": "Position"
+      }
+    }
+  }
+}

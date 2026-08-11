@@ -11,24 +11,26 @@
       "status": "active",
       "salary": 165000,
       "cardInfo": {
-        "name": "Dana Kim"
+        "name": "Dana Kim",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "photo": {
+        "url": "https://images.pexels.com/photos/415829/pexels-photo-415829.jpeg",
+        "sourceMode": "url"
       }
     },
     "relationships": {
       "manager": {
         "links": {
-          "self": "../Employee/sofia-reyes"
-        }
-      },
-      "cardInfo.theme": {
-        "links": {
-          "self": "../Theme/ledger"
+          "self": "./sofia-reyes"
         }
       }
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../trt-employee",
+        "module": "../employee",
         "name": "Employee"
       }
     }

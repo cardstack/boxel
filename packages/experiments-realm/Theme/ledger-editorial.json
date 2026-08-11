@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cssVariables": ":root {\n  --background: #ffffff;\n  --foreground: #0f172a;\n  --card: #ffffff;\n  --card-foreground: #0f172a;\n  --popover: #ffffff;\n  --popover-foreground: #0f172a;\n  --primary: #e85578;\n  --primary-foreground: #ffffff;\n  --secondary: #f1f5f9;\n  --secondary-foreground: #0f172a;\n  --muted: #f8fafc;\n  --muted-foreground: #64748b;\n  --accent: #fff1f3;\n  --accent-foreground: #0f172a;\n  --destructive: #ef4444;\n  --destructive-foreground: #ffffff;\n  --border: #e2e8f0;\n  --input: #ffffff;\n  --ring: #e85578;\n  --radius: 0.875rem;\n  --font-sans: 'Inter', system-ui, sans-serif;\n  --font-serif: 'Inter', system-ui, sans-serif;\n  --font-heading: 'Inter', system-ui, sans-serif;\n  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;\n}",
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+      ],
+      "cardInfo": {
+        "name": "Day Off — Airy SaaS",
+        "summary": "The Talent & Resource Tracker's look — clean white cards on a bordered grid, Inter throughout with heavy-weight display headlines, a coral accent, and soft pastel-tinted icon chips. Modeled on tracker.day-off.app's product feel: light, generous, unfussy.",
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "@cardstack/base/card-api",
+        "name": "Theme"
+      }
+    }
+  }
+}

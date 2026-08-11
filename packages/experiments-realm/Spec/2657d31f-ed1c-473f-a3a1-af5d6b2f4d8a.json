@@ -1,0 +1,22 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Approve Chain Step Command",
+      "cardDescription": "Decides (approves or rejects) the CURRENT pending step of a Position/Offer's approvalChain, refusing out-of-order decisions, and saves the owning card",
+      "specType": "command",
+      "ref": {
+        "module": "../commands/approve-chain-step-command.gts",
+        "name": "ApproveChainStepCommand"
+      },
+      "readMe": "# Approve Chain Step Command\n\n## Summary\nGiven a `target` (a Position or Offer — any CardDef with an `approvalChain` field), a `stepIndex`, and a `decision` (`approved` | `rejected`), validates that `stepIndex` matches `target.approvalChain.currentStepIndex` — refusing the decision otherwise — then writes that step's `decision`/`decidedAt` (and `comment`, if given) and saves `target`.\n\n## Import\n```ts\nimport { ApproveChainStepCommand } from './commands/approve-chain-step-command';\n```\n\n## Usage — three or more ways this is used\n\n**1. From Position's own isolated view.** Next to `<@fields.approvalChain />`,\ntwo `BoxelButton`s (Approve/Reject) appear only while\n`approvalChain.status === 'in-progress'`, and call this command with\n`stepIndex: approvalChain.currentStepIndex`.\n\n**2. From Offer's own isolated view.** Same pattern, next to the Approval\npanel's `<@fields.approvalChain />` — deciding a step here is what eventually\nunblocks `ApproveOfferCommand`'s hiring gate.\n\n**3. As an AI-assistant tool**, with `target`/`stepIndex`/`decision`/`comment`\ninputs — the same guard against out-of-order decisions applies regardless of\ncaller.\n\n**What it does:** loads `target.approvalChain`, finds `steps[stepIndex]`,\nchecks it actually IS the chain's current step, sets `decision`/`decidedAt`/\n`comment`, and saves `target`. It never advances the chain past the step it\nwas asked to decide — `currentStepIndex` recomputes itself from the saved\ndata (it's `computeVia`).\n\n**Why this lives outside ApprovalChainField's own template:** a FieldDef's\nembedded/isolated format has no first-class way to mutate one element of its\nown parent's `containsMany` array and persist the OWNING card — every other\nstage-changing mutation in this app (`ApproveOfferCommand`,\n`RejectCandidateCommand`) goes through a Command invoked from the consuming\ncard, and this command follows the same shape.\n\n**Non-goals:** deciding more than one step per call; re-opening an\nalready-decided step (the current-step check refuses that too, since a\ndecided step is never the current one again); notifying the next approver.\n\n**Guards:** `stepIndex` must equal `target.approvalChain.currentStepIndex`\n(out-of-order decisions throw); `decision` must be `approved` or `rejected`,\nnever `pending`.\n"
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

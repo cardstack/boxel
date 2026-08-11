@@ -1,0 +1,60 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "appliedRole": "Frontend Engineer",
+      "appliedDate": "2026-07-30",
+      "decisionDate": "2026-08-10",
+      "status": "screening",
+      "resumeText": null,
+      "overallScore": null,
+      "rejectionReason": null,
+      "offerSalary": null,
+      "boardOrder": 2,
+      "name": "Riley Chen",
+      "email": "riley.chen@example.com",
+      "phone": null,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "linkedInUrl": null,
+      "portfolioUrl": null,
+      "noticePeriodDays": null,
+      "interviewFeedback": [],
+      "photo": {
+        "url": "https://images.pexels.com/photos/220453/pexels-photo-220453.jpeg",
+        "sourceMode": "url"
+      },
+      "workHistory": [],
+      "education": [],
+      "rejectionNote": null,
+      "offerState": null
+    },
+    "relationships": {
+      "position": {
+        "links": {
+          "self": "../Position/frontend-engineer"
+        }
+      },
+      "offer": {
+        "links": {
+          "self": null
+        }
+      },
+      "hiredAs": {
+        "links": {
+          "self": "../Employee/37b7de71-f79b-4a10-beba-0657aa47ee2b"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../candidate",
+        "name": "Candidate"
+      }
+    }
+  }
+}

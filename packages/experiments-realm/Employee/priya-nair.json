@@ -12,6 +12,10 @@
       "salary": 150000,
       "cardInfo": {
         "name": "Priya Nair"
+      },
+      "photo": {
+        "url": "https://images.pexels.com/photos/1181690/pexels-photo-1181690.jpeg",
+        "sourceMode": "url"
       }
     },
     "relationships": {
@@ -19,16 +23,11 @@
         "links": {
           "self": "../Employee/marcus-webb"
         }
-      },
-      "cardInfo.theme": {
-        "links": {
-          "self": "../Theme/ledger"
-        }
       }
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../trt-employee",
+        "module": "../employee",
         "name": "Employee"
       }
     }

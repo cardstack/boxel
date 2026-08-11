@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "New Meeting",
+      "meetingType": null,
+      "date": "2026-08-12T16:00:00.000Z",
+      "duration": {
+        "value": null,
+        "unit": null
+      },
+      "interviewScore": null,
+      "notes": null,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../meeting",
+        "name": "Meeting"
+      }
+    }
+  }
+}

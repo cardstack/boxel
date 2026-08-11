@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "role": "Frontend Engineer",
+      "department": null,
+      "startDate": "2026-08-10",
+      "status": "onboarding",
+      "employmentType": null,
+      "terminationDate": null,
+      "ptoBalance": null,
+      "onboardingStatus": null,
+      "salary": null,
+      "name": "Jordan Ellis",
+      "email": "jordan.ellis@example.com",
+      "phone": "+1 555 0140",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "photo": {
+        "url": "https://images.pexels.com/photos/927022/pexels-photo-927022.jpeg",
+        "sourceMode": "url"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../employee",
+        "name": "Employee"
+      }
+    }
+  }
+}

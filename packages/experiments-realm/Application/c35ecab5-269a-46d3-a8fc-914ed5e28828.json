@@ -1,0 +1,26 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": null,
+      "email": null,
+      "phone": null,
+      "source": null,
+      "appliedDate": null,
+      "resumeText": null,
+      "status": null,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../application",
+        "name": "Application"
+      }
+    }
+  }
+}

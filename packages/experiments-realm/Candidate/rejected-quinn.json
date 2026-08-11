@@ -5,15 +5,46 @@
       "name": "Quinn Harper",
       "email": "quinn.harper@example.com",
       "status": "rejected",
-      "boardOrder": 1,
+      "boardOrder": 2,
       "appliedRole": "Frontend Engineer",
       "appliedDate": "2026-06-01",
       "decisionDate": "2026-06-25",
-      "skills": ["jQuery", "PHP"],
       "overallScore": 2,
-      "rejectionReason": "Skills did not match the current stack",
+      "rejectionReason": "experience-gap",
+      "rejectionNote": "Skills did not match the current stack \u2014 no production React experience.",
       "cardInfo": {
-        "name": "Quinn Harper (rejected)"
+        "name": "Quinn Harper (rejected)",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "resumeText": null,
+      "linkedInUrl": null,
+      "portfolioUrl": null,
+      "noticePeriodDays": null,
+      "interviewFeedback": [],
+      "offerSalary": null,
+      "phone": null,
+      "photo": {
+        "url": "https://images.pexels.com/photos/1170986/pexels-photo-1170986.jpeg",
+        "sourceMode": "url"
+      }
+    },
+    "relationships": {
+      "position": {
+        "links": {
+          "self": "../Position/frontend-engineer"
+        }
+      },
+      "skills.0": {
+        "links": {
+          "self": "../Skill/jquery"
+        }
+      },
+      "skills.1": {
+        "links": {
+          "self": "../Skill/php"
+        }
       }
     },
     "meta": {

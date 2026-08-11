@@ -12,7 +12,7 @@ import { Command } from '@cardstack/runtime-common';
 import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
 
 import { Candidate } from '../candidate';
-import { Employee } from '../trt-employee';
+import { Employee } from '../employee';
 
 class ApproveOfferInput extends CardDef {
   @field candidate = linksTo(() => Candidate, { searchable: true });
@@ -50,6 +50,18 @@ export class ApproveOfferCommand extends Command<
       );
     }
 
+    // An approval chain with at least one step configured is a real sign-off
+    // gate — hiring cannot proceed until it reads 'approved'. A chain with no
+    // steps means no gate was ever configured for this offer, so existing
+    // demo data (and any offer nobody bothered to gate) keeps working exactly
+    // as it did before this field existed.
+    let chain = candidate.offer?.approvalChain;
+    if (chain?.steps?.length && chain.status !== 'approved') {
+      throw new Error(
+        `This offer's approval chain is not fully approved yet (status: ${chain.status}). Resolve all approval steps before hiring.`,
+      );
+    }
+
     let realm = candidate[realmURL]?.href;
     let employee = new Employee({
       name: candidate.name,
@@ -77,6 +89,15 @@ export class ApproveOfferCommand extends Command<
     await new SaveCardCommand(this.commandContext).execute({
       card: candidate,
     });
+
+    candidate.offerState = 'accepted';
+    if (candidate.offer) {
+      candidate.offer.status = 'accepted';
+      candidate.offer.decisionDate = new Date();
+      await new SaveCardCommand(this.commandContext).execute({
+        card: candidate.offer,
+      });
+    }
 
     return new ApproveOfferResult({
       message: `Offer approved — ${

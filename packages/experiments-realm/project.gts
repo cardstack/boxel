@@ -13,31 +13,57 @@ import { or } from '@cardstack/boxel-ui/helpers';
 import { htmlSafe } from '@ember/template';
 
 import { DurationField } from './duration-field';
-import { Employee } from './trt-employee';
+import { Employee } from './employee';
 import { Team } from './team';
 import { Vendor } from './vendor';
-import { stateColorOf, type StateColor } from './utils/index';
+import {
+  durationInDays,
+  stateColor,
+  stateColorOf,
+  type StateColor,
+} from './utils/index';
+
+const MS_PER_DAY = 1000 * 60 * 60 * 24;
+
+interface ScheduleShape {
+  startDate?: Date | null;
+  estimatedEffort?: { value?: number | null; unit?: string | null } | null;
+}
+
+// One derivation, shared by both formats, so isolated and fitted can never
+// report different progress for the same project.
+function scheduleFacts(model: ScheduleShape) {
+  let start = model.startDate ? new Date(model.startDate) : undefined;
+  if (start && isNaN(start.getTime())) {
+    start = undefined;
+  }
+  let days = durationInDays(
+    model.estimatedEffort?.value,
+    model.estimatedEffort?.unit,
+  );
+  let end: Date | undefined;
+  if (start && days != null && days > 0) {
+    end = new Date(start.getTime() + days * MS_PER_DAY);
+  }
+  let pct: number | undefined;
+  if (start && end) {
+    let span = end.getTime() - start.getTime();
+    pct = Math.max(
+      0,
+      Math.min(100, Math.round(((Date.now() - start.getTime()) / span) * 100)),
+    );
+  }
+  return { start, end, days, pct };
+}
 
 export const PROJECT_STATUSES = ['planned', 'active', 'done'];
 
 // Harmonized with the Ledger identity: active shares the forest-green
 // primary; planned/done stay in the muted stone/slate register.
 export const PROJECT_STATUS_COLORS: Record<string, StateColor> = {
-  planned: {
-    bg: 'var(--project-status-planned-bg, #ece4d0)',
-    fg: 'var(--project-status-planned-fg, #5c5232)',
-    ring: 'var(--project-status-planned-ring, #a8976a)',
-  },
-  active: {
-    bg: 'var(--project-status-active-bg, #dbe6d5)',
-    fg: 'var(--project-status-active-fg, #1f2b1c)',
-    ring: 'var(--project-status-active-ring, #3a4a35)',
-  },
-  done: {
-    bg: 'var(--project-status-done-bg, #dbe3e6)',
-    fg: 'var(--project-status-done-fg, #2f4550)',
-    ring: 'var(--project-status-done-ring, #5f7a85)',
-  },
+  planned: stateColor('amber'),
+  active: stateColor('green'),
+  done: stateColor('blue'),
 };
 
 export const ProjectStatusField = enumField(StringField, {
@@ -58,6 +84,25 @@ export class Project extends CardDef {
   @field startDate = contains(DateField);
   @field estimatedEffort = contains(DurationField);
 
+  // Denormalized for fitted — prerendered fitted does not resolve linksTo.
+  @field leadName = contains(StringField, {
+    computeVia: function (this: Project) {
+      return this.lead?.name ?? '';
+    },
+  });
+
+  @field teamName = contains(StringField, {
+    computeVia: function (this: Project) {
+      return this.team?.name ?? '';
+    },
+  });
+
+  @field vendorName = contains(StringField, {
+    computeVia: function (this: Project) {
+      return this.vendor?.name ?? '';
+    },
+  });
+
   @field title = contains(StringField, {
     computeVia: function (this: Project) {
       return this.name?.trim() || 'Unnamed Project';
@@ -65,6 +110,10 @@ export class Project extends CardDef {
   });
 
   static isolated = class Isolated extends Component<typeof this> {
+    get schedule() {
+      return scheduleFacts(this.args.model ?? {});
+    }
+
     get statusSteps() {
       let current = this.args.model?.status;
       let currentIndex = PROJECT_STATUSES.indexOf(current ?? '');
@@ -75,194 +124,292 @@ export class Project extends CardDef {
       }));
     }
 
+    get statusPillStyle() {
+      let c = stateColorOf(PROJECT_STATUS_COLORS, this.args.model?.status);
+      return htmlSafe(`background: ${c.bg}; color: ${c.fg};`);
+    }
+
+    get endLabel() {
+      let { end } = this.schedule;
+      return end ? end.toISOString().slice(0, 10) : undefined;
+    }
+
+    // Elapsed share of the estimate. Derived, never stored — so it cannot
+    // drift away from startDate + estimatedEffort.
+    get elapsedLabel() {
+      let { pct } = this.schedule;
+      return pct == null ? undefined : `${pct}% of estimate elapsed`;
+    }
+
+    get stepTrail() {
+      return this.statusSteps
+        .map((s) => (s.isPast ? `${s.status} ✓` : s.status))
+        .join(' → ');
+    }
+
     <template>
-      <article
-        class='project-isolated'
-      >
-        <header class='project-header'>
-          <p class='kicker'>Project</p>
-          <h1>{{@model.title}}</h1>
-        </header>
-        <ol class='status-track'>
-          {{#each this.statusSteps as |step|}}
-            <li
-              class='status-step
-                {{if step.isCurrent "is-current"}}
-                {{if step.isPast "is-past"}}'
-            >
-              <span class='status-dot'></span>
-              <span class='status-label'>{{step.status}}</span>
-            </li>
-          {{/each}}
-        </ol>
-        {{#if @model.description}}
-          <p class='description'>{{@model.description}}</p>
-        {{/if}}
-        {{#if (or @model.lead @model.team @model.vendor)}}
-          <div class='team-row'>
-            {{#if @model.lead}}
-              <div class='team-chip'>
-                <span class='chip-label'>Lead</span>
-                <@fields.lead @format='atom' />
-              </div>
-            {{/if}}
-            {{#if @model.team}}
-              <div class='team-chip'>
-                <span class='chip-label'>Team</span>
-                <@fields.team @format='atom' />
-              </div>
-            {{/if}}
-            {{#if @model.vendor}}
-              <div class='team-chip'>
-                <span class='chip-label'>Vendor</span>
-                <@fields.vendor @format='atom' />
-              </div>
-            {{/if}}
+      <article class='project-isolated'>
+        <header class='hero'>
+          <div class='hero-text'>
+            <h1>{{@model.title}}</h1>
+            <p class='byline'>
+              {{#if @model.startDate}}from <@fields.startDate />{{/if}}
+              {{#if @model.estimatedEffort.label}}
+                <span class='sep-dot'>&middot;</span>
+                {{@model.estimatedEffort.label}}
+                estimated
+              {{/if}}
+            </p>
+            <div class='pill-row'>
+              {{#if @model.status}}
+                <span class='pill' style={{this.statusPillStyle}}>
+                  <span class='pill-dot'></span>{{@model.status}}
+                </span>
+              {{/if}}
+              {{#if @model.teamName}}
+                <span class='pill neutral'>{{@model.teamName}}</span>
+              {{/if}}
+              {{#if this.elapsedLabel}}
+                <span class='pill neutral'>{{this.elapsedLabel}}</span>
+              {{/if}}
+            </div>
           </div>
-        {{/if}}
-        <dl class='facts'>
-          <div><dt>Start</dt><dd><@fields.startDate /></dd></div>
-          <div><dt>Effort</dt><dd><@fields.estimatedEffort /></dd></div>
-        </dl>
+          <div class='hero-track'>
+            <div class='steps'>
+              {{#each this.statusSteps as |s|}}
+                <i class='{{if (or s.isPast s.isCurrent) "on"}}'></i>
+              {{/each}}
+            </div>
+            <span class='steps-label'>{{this.stepTrail}}</span>
+          </div>
+        </header>
+
+        <div class='body'>
+          <div class='main'>
+            {{#if @model.description}}
+              <h2 class='panel-title'>Brief</h2>
+              <p class='prose'>{{@model.description}}</p>
+            {{/if}}
+            <h2 class='panel-title spaced'>Schedule</h2>
+            <dl class='facts'>
+              <dt>Starts</dt>
+              <dd>{{#if @model.startDate}}<@fields.startDate
+                  />{{else}}&mdash;{{/if}}</dd>
+              <dt>Estimate</dt>
+              <dd>{{#if
+                  @model.estimatedEffort.label
+                }}{{@model.estimatedEffort.label}}{{else}}&mdash;{{/if}}</dd>
+              <dt>Projected end</dt>
+              <dd>{{if this.endLabel this.endLabel '—'}}</dd>
+              <dt>Elapsed</dt>
+              <dd>{{if this.elapsedLabel this.elapsedLabel '—'}}</dd>
+            </dl>
+          </div>
+
+          <aside class='side'>
+            <h2 class='panel-title'>Ownership</h2>
+            <dl class='facts stacked'>
+              <dt>Lead</dt>
+              <dd>{{#if @model.lead}}<@fields.lead
+                    @format='atom'
+                    @displayContainer={{false}}
+                  />{{else}}&mdash;{{/if}}</dd>
+              <dt>Team</dt>
+              <dd>{{#if @model.team}}<@fields.team
+                    @format='atom'
+                    @displayContainer={{false}}
+                  />{{else}}&mdash;{{/if}}</dd>
+              <dt>Vendor</dt>
+              <dd>{{#if @model.vendor}}<@fields.vendor
+                    @format='atom'
+                    @displayContainer={{false}}
+                  />{{else}}&mdash; internal only{{/if}}</dd>
+            </dl>
+            <h2 class='panel-title spaced'>Status</h2>
+            <dl class='facts stacked'>
+              <dt>Current</dt>
+              <dd>{{if @model.status @model.status '—'}}</dd>
+            </dl>
+          </aside>
+        </div>
       </article>
       <style scoped>
         .project-isolated {
-          padding: var(--boxel-sp-lg);
+          container-type: inline-size;
+          container-name: iso;
+          height: 100%;
+          overflow-y: auto;
+          display: flex;
+          flex-direction: column;
           background: var(--background, var(--boxel-light));
           color: var(--foreground, var(--boxel-dark));
           font-family: var(--font-sans, var(--boxel-font-family));
-          height: 100%;
-          overflow-y: auto;
-          animation: project-fade-in 0.2s ease-out;
+          --proj-id: var(--primary, var(--boxel-highlight));
+          --proj-strong: color-mix(
+            in oklch,
+            var(--proj-id) 45%,
+            var(--foreground, var(--boxel-dark))
+          );
         }
-        @keyframes project-fade-in {
-          from {
-            opacity: 0;
-            transform: translateY(0.25rem);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
+        .hero {
+          flex: none;
+          display: flex;
+          align-items: flex-start;
+          gap: var(--boxel-sp);
+          padding: var(--boxel-sp-lg);
+          border-bottom: 1px solid var(--border, var(--boxel-200));
         }
-        @media (prefers-reduced-motion: reduce) {
-          .project-isolated {
-            animation: none;
-          }
-        }
-        .kicker {
-          margin: 0 0 var(--boxel-sp-5xs);
-          font-size: var(--boxel-font-size-xs);
-          text-transform: uppercase;
-          letter-spacing: 0.08em;
-          color: var(--secondary, var(--boxel-450));
+        .hero-text {
+          flex: 1;
+          min-width: 0;
         }
         h1 {
           margin: 0;
-          font-family: var(--font-serif, serif);
-          font-weight: 600;
-          font-size: var(--boxel-font-size-lg);
+          font-size: var(--boxel-font-size-xl);
+          font-weight: 750;
+          letter-spacing: -0.02em;
+          line-height: 1.2;
+          overflow-wrap: anywhere;
           font-family: var(--font-heading, inherit);
         }
-        .status-track {
-          margin: var(--boxel-sp-lg) 0 0;
-          display: flex;
-          list-style: none;
-          padding: 0;
-        }
-        .status-step {
-          flex: 1;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: var(--boxel-sp-xs);
-          position: relative;
-        }
-        .status-step:not(:first-child)::before {
-          content: '';
-          position: absolute;
-          top: 0.4375rem;
-          right: 50%;
-          width: 100%;
-          height: 2px;
-          background: var(--border, var(--boxel-200));
-          z-index: 0;
-        }
-        .status-step.is-past:not(:first-child)::before,
-        .status-step.is-current:not(:first-child)::before {
-          background: var(--primary, var(--boxel-highlight));
-        }
-        .status-dot {
-          width: 0.9375rem;
-          height: 0.9375rem;
-          border-radius: 50%;
-          background: var(--card, var(--boxel-light));
-          border: 2px solid var(--border, var(--boxel-200));
-          z-index: 1;
-          transition:
-            background-color 0.15s ease-out,
-            border-color 0.15s ease-out;
-        }
-        .status-step.is-past .status-dot {
-          background: var(--primary, var(--boxel-highlight));
-          border-color: var(--primary, var(--boxel-highlight));
-        }
-        .status-step.is-current .status-dot {
-          background: var(--secondary, var(--boxel-highlight));
-          border-color: var(--secondary, var(--boxel-highlight));
-          box-shadow: 0 0 0 0.1875rem var(--muted, var(--boxel-100));
-        }
-        .status-label {
-          font-size: var(--boxel-font-size-xs);
-          text-transform: capitalize;
+        .byline {
+          margin: var(--boxel-sp-5xs) 0 0;
+          font-size: var(--boxel-font-size-sm);
           color: var(--muted-foreground, var(--boxel-450));
         }
-        .status-step.is-current .status-label {
-          font-weight: 600;
-          color: var(--foreground, var(--boxel-dark));
+        .sep-dot {
+          margin: 0 0.25rem;
         }
-        .description {
-          margin-top: var(--boxel-sp-lg);
-          color: var(--muted-foreground, var(--boxel-450));
-        }
-        .team-row {
-          margin-top: var(--boxel-sp-lg);
+        .pill-row {
           display: flex;
           flex-wrap: wrap;
-          gap: var(--boxel-sp-lg);
+          gap: var(--boxel-sp-5xs);
+          margin-top: var(--boxel-sp-xs);
         }
-        .team-chip {
-          display: flex;
+        .pill {
+          display: inline-flex;
           align-items: center;
-          gap: var(--boxel-sp-xs);
-        }
-        .chip-label {
+          gap: 0.3rem;
           font-size: var(--boxel-font-size-xs);
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
+          font-weight: 700;
+          padding: 0.18em 0.5em;
+          border-radius: 3px;
+          white-space: nowrap;
+        }
+        .pill.neutral {
+          background: var(--muted, var(--boxel-100));
           color: var(--muted-foreground, var(--boxel-450));
         }
-        .facts {
-          margin-top: var(--boxel-sp-lg);
-          padding-top: var(--boxel-sp);
-          border-top: 1px solid var(--border, var(--boxel-200));
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-          gap: var(--boxel-sp);
+        .pill-dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: currentColor;
+          flex: none;
         }
-        .facts > div {
+        .hero-track {
+          flex: none;
+          width: 12rem;
+          text-align: right;
+        }
+        .steps {
+          display: flex;
+          gap: 3px;
+        }
+        .steps i {
+          height: 5px;
+          flex: 1;
+          border-radius: 2px;
+          background: var(--border, var(--boxel-200));
+        }
+        .steps i.on {
+          background: var(--proj-id);
+        }
+        .steps-label {
+          display: block;
+          margin-top: 0.25rem;
+          font-size: var(--boxel-font-size-xs);
+          color: var(--muted-foreground, var(--boxel-450));
+        }
+        .body {
+          display: grid;
+          grid-template-columns: 1fr 17rem;
+          /* Fill whatever height is left so the aside's surface reaches the
+             bottom edge. Without this the grid is only as tall as its content
+             and the panel stops mid-card, reading as a cut-off seam. */
+          flex: 1;
+          min-height: 0;
+          align-content: start;
+        }
+        .main {
+          padding: var(--boxel-sp-lg);
           min-width: 0;
+        }
+        .side {
+          padding: var(--boxel-sp-lg);
+          border-left: 1px solid var(--border, var(--boxel-200));
+          background: var(--muted, var(--boxel-100));
+        }
+        .panel-title {
+          margin: 0 0 var(--boxel-sp-xs);
+          font-size: var(--boxel-font-size-sm);
+          font-weight: 700;
+        }
+        .panel-title.spaced {
+          margin-top: var(--boxel-sp-lg);
+        }
+        .prose {
+          margin: 0;
+          font-size: var(--boxel-font-size-sm);
+          line-height: 1.65;
+          max-width: 56ch;
+        }
+        .facts {
+          margin: 0;
+          display: grid;
+          grid-template-columns: 9rem 1fr;
+        }
+        .facts.stacked {
+          grid-template-columns: 1fr;
         }
         .facts dt {
           font-size: var(--boxel-font-size-xs);
           text-transform: uppercase;
           letter-spacing: 0.05em;
           color: var(--muted-foreground, var(--boxel-450));
+          padding: 0.45rem var(--boxel-sp-xs) 0.45rem 0;
+          border-bottom: 1px solid var(--border, var(--boxel-200));
+        }
+        .facts.stacked dt {
+          border-bottom: 0;
+          padding-bottom: 0;
         }
         .facts dd {
-          margin: var(--boxel-sp-5xs) 0 0;
+          margin: 0;
+          padding: 0.45rem 0;
           font-size: var(--boxel-font-size-sm);
+          border-bottom: 1px solid var(--border, var(--boxel-200));
           overflow-wrap: anywhere;
+          font-variant-numeric: tabular-nums;
+        }
+        .facts.stacked dd {
+          padding-top: 0.1rem;
+        }
+        @container iso (max-width: 40rem) {
+          .body {
+            grid-template-columns: 1fr;
+          }
+          .side {
+            border-left: 0;
+            border-top: 1px solid var(--border, var(--boxel-200));
+          }
+          .hero {
+            flex-wrap: wrap;
+          }
+          .hero-track {
+            width: 100%;
+            text-align: left;
+          }
         }
       </style>
     </template>
@@ -280,9 +427,7 @@ export class Project extends CardDef {
     }
 
     <template>
-      <div
-        class='project-embedded'
-      >
+      <div class='project-embedded'>
         <header>
           <h3>{{@model.title}}</h3>
           {{#if @model.status}}
@@ -298,10 +443,16 @@ export class Project extends CardDef {
           <div><dt>Start</dt><dd><@fields.startDate /></dd></div>
           <div><dt>Effort</dt><dd><@fields.estimatedEffort /></dd></div>
           {{#if @model.lead}}
-            <div><dt>Lead</dt><dd><@fields.lead @format='atom' /></dd></div>
+            <div><dt>Lead</dt><dd><@fields.lead
+                  @format='atom'
+                  @displayContainer={{false}}
+                /></dd></div>
           {{/if}}
           {{#if @model.vendor}}
-            <div><dt>Vendor</dt><dd><@fields.vendor @format='atom' /></dd></div>
+            <div><dt>Vendor</dt><dd><@fields.vendor
+                  @format='atom'
+                  @displayContainer={{false}}
+                /></dd></div>
           {{/if}}
         </dl>
       </div>
@@ -373,12 +524,12 @@ export class Project extends CardDef {
           gap: 0.375rem;
           font-size: 0.8125rem;
           font-weight: 500;
-          color: var(--foreground, #111111);
+          color: var(--foreground, var(--boxel-dark));
         }
         .project-atom-icon {
           width: 14px;
           height: 14px;
-          color: var(--muted-foreground, #6b7280);
+          color: var(--muted-foreground, var(--boxel-450));
           flex-shrink: 0;
         }
         .project-atom-name {
@@ -391,96 +542,277 @@ export class Project extends CardDef {
   };
 
   static fitted = class Fitted extends Component<typeof this> {
-    get statusColor() {
-      return stateColorOf(PROJECT_STATUS_COLORS, this.args.model?.status);
+    get schedule() {
+      return scheduleFacts(this.args.model ?? {});
     }
 
-    get iconStyle() {
-      return htmlSafe(`color: ${this.statusColor.ring};`);
+    get statusPillStyle() {
+      let c = stateColorOf(PROJECT_STATUS_COLORS, this.args.model?.status);
+      return htmlSafe(`background: ${c.bg}; color: ${c.fg};`);
+    }
+
+    get steps() {
+      let current = this.args.model?.status;
+      let idx = PROJECT_STATUSES.indexOf(current ?? '');
+      return PROJECT_STATUSES.map((status, i) => ({
+        status,
+        on: idx >= 0 && i <= idx,
+      }));
+    }
+
+    get pctLabel() {
+      let { pct } = this.schedule;
+      return pct == null ? undefined : `${pct}% elapsed`;
+    }
+
+    get startShort() {
+      let { start } = this.schedule;
+      return start ? start.toISOString().slice(0, 7) : undefined;
+    }
+
+    get endShort() {
+      let { end } = this.schedule;
+      return end ? end.toISOString().slice(0, 7) : undefined;
     }
 
     <template>
-      <div
-        class='project-fitted'
-      >
-        <FolderKanbanIcon
-          class='project-icon'
-          role='presentation'
-          style={{this.iconStyle}}
-        />
-        <div class='info'>
-          <span class='name'>{{@model.title}}</span>
-          <span class='meta'>{{@model.status}}</span>
-          {{#if @model.description}}
-            <span class='body-line'>{{@model.description}}</span>
+      <article class='fit'>
+        <div class='fit-top'>
+          <div class='fit-head'>
+            <h3 class='fit-name'>{{@model.title}}</h3>
+            {{#if @model.leadName}}
+              <span class='fit-eb'>{{@model.leadName}}{{#if @model.teamName}}
+                  &middot;
+                  {{@model.teamName}}{{/if}}</span>
+            {{/if}}
+          </div>
+          {{! Status is the last thing dropped — never hidden at any tier. }}
+          {{#if @model.status}}
+            <span class='fit-pill' style={{this.statusPillStyle}}>
+              <span class='pill-dot'></span>{{@model.status}}
+            </span>
           {{/if}}
         </div>
-      </div>
+
+        <div class='fit-track'>
+          <div class='steps'>
+            {{#each this.steps as |s|}}
+              <i class='{{if s.on "on"}}'></i>
+            {{/each}}
+          </div>
+          {{#if this.pctLabel}}
+            <span class='track-label'>{{this.pctLabel}}</span>
+          {{/if}}
+        </div>
+
+        {{#if @model.description}}
+          <p class='fit-prose'>{{@model.description}}</p>
+        {{/if}}
+
+        <dl class='fit-add'>
+          {{#if this.startShort}}
+            <div><dt>From</dt><dd>{{this.startShort}}</dd></div>
+          {{/if}}
+          {{#if @model.estimatedEffort.label}}
+            <div><dt>Est</dt><dd>{{@model.estimatedEffort.label}}</dd></div>
+          {{/if}}
+          {{#if this.endShort}}
+            <div><dt>Until</dt><dd>{{this.endShort}}</dd></div>
+          {{/if}}
+          {{#if @model.vendorName}}
+            <div><dt>Vendor</dt><dd>{{@model.vendorName}}</dd></div>
+          {{/if}}
+        </dl>
+      </article>
       <style scoped>
-        .project-fitted {
-          display: flex;
-          align-items: flex-start;
-          gap: var(--boxel-sp-xs);
-          padding: var(--boxel-sp-xs);
+        /* Four tiers; each larger one ADDS fields. 11px floor throughout. */
+        .fit {
           height: 100%;
-          overflow: hidden;
-          background: var(--card, var(--boxel-light));
-          color: var(--foreground, var(--boxel-dark));
-          font-family: var(--font-sans, var(--boxel-font-family));
-          transition: background-color 0.15s ease-out;
-        }
-        .project-fitted:hover {
-          background: var(--muted, var(--boxel-100));
-        }
-        .project-icon {
-          width: 1.5rem;
-          height: 1.5rem;
-          flex: none;
-          transition: color 0.15s ease-out;
-        }
-        .info {
           display: flex;
           flex-direction: column;
-          gap: 1px;
+          gap: 0.28rem;
+          padding: 0.55rem 0.6rem;
+          overflow: hidden;
+          background: var(--card, var(--boxel-light));
+          color: var(--card-foreground, var(--foreground, var(--boxel-dark)));
+          font-family: var(--font-sans, var(--boxel-font-family));
+          --proj-id: var(--primary, var(--boxel-highlight));
+          --proj-strong: color-mix(
+            in oklch,
+            var(--proj-id) 45%,
+            var(--foreground, var(--boxel-dark))
+          );
+          --fit-name: clamp(11px, 3.2cqi, 15px);
+          --fit-small: clamp(11px, 2.6cqi, 12px);
+        }
+        .fit > * {
+          min-height: 0;
+          overflow: hidden;
+        }
+        .fit-top {
+          flex: none;
+          display: flex;
+          align-items: flex-start;
+          gap: 0.4rem;
+          flex-wrap: wrap;
+        }
+        .fit-head {
+          flex: 1;
           min-width: 0;
         }
-        .name {
-          font-size: var(--boxel-font-size-sm);
-          font-weight: 600;
+        .fit-name {
+          margin: 0;
+          font-size: var(--fit-name);
+          font-weight: 700;
+          line-height: 1.25;
+          letter-spacing: -0.01em;
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+        }
+        .fit-eb {
+          display: none;
+          font-size: var(--fit-small);
+          color: var(--muted-foreground, var(--boxel-450));
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
         }
-        .meta {
-          font-size: var(--boxel-font-size-xs);
-          color: var(--muted-foreground, var(--boxel-450));
-          text-transform: capitalize;
+        .fit-pill {
+          flex: none;
+          align-self: flex-start;
+          display: inline-flex;
+          align-items: center;
+          gap: 0.25rem;
+          font-size: var(--fit-small);
+          font-weight: 700;
+          padding: 0.1em 0.4em;
+          border-radius: 3px;
+          white-space: nowrap;
         }
-        .body-line {
+        .pill-dot {
+          width: 5px;
+          height: 5px;
+          border-radius: 50%;
+          background: currentColor;
+          flex: none;
+        }
+        .fit-track {
+          flex: none;
           display: none;
-          font-size: var(--boxel-font-size-xs);
+        }
+        .steps {
+          display: flex;
+          gap: 3px;
+        }
+        .steps i {
+          height: 4px;
+          flex: 1;
+          border-radius: 2px;
+          background: var(--border, var(--boxel-200));
+        }
+        .steps i.on {
+          background: var(--proj-id);
+        }
+        .track-label {
+          display: block;
+          margin-top: 0.15rem;
+          font-size: var(--fit-small);
           color: var(--muted-foreground, var(--boxel-450));
-          overflow: hidden;
+        }
+        .fit-prose {
           display: none;
+          margin: 0;
+          font-size: var(--fit-small);
+          line-height: 1.5;
+          color: var(--muted-foreground, var(--boxel-450));
           -webkit-line-clamp: 2;
           -webkit-box-orient: vertical;
+          overflow: hidden;
         }
-        .body-strong {
-          color: var(--foreground, var(--boxel-dark));
+        .fit-add {
+          display: none;
+          margin: 0;
+          margin-top: auto;
+          padding-top: 0.3rem;
+          border-top: 1px dashed var(--border, var(--boxel-200));
+          grid-template-columns: 1fr 1fr;
+          gap: 0.05rem 0.5rem;
+        }
+        .fit-add > div {
+          display: flex;
+          gap: 0.25rem;
+          min-width: 0;
+        }
+        .fit-add dt {
+          flex: none;
+          font-size: var(--fit-small);
+          color: var(--muted-foreground, var(--boxel-450));
+        }
+        .fit-add dd {
+          margin: 0;
+          font-size: var(--fit-small);
           font-weight: 600;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          font-variant-numeric: tabular-nums;
         }
-        @container fitted-card (height > 120px) {
-          .body-line {
+
+        /* TIER 2 — add lead + team. No `or` in container queries, so two rules. */
+        @container fitted-card (height > 80px) {
+          .fit-eb {
+            display: block;
+          }
+        }
+        @container fitted-card (width > 240px) {
+          .fit-eb {
+            display: block;
+          }
+        }
+        /* TIER 3 — add the progress track and elapsed share. */
+        @container fitted-card (height > 130px) and (width > 180px) {
+          .fit-track {
+            display: block;
+          }
+          .fit-prose {
             display: -webkit-box;
           }
         }
-        @container fitted-card (height <= 80px) {
-          .project-fitted {
-            align-items: center;
+        /* TIER 4 — width-driven facts. Previously absent entirely. */
+        @container fitted-card (height > 150px) and (width > 180px) {
+          .fit-add {
+            display: grid;
+            grid-template-columns: 1fr;
           }
         }
-        @container fitted-card (height <= 40px) {
-          .meta {
+        @container fitted-card (width > 340px) and (height > 130px) {
+          .fit-add {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+          }
+        }
+        /* Short strip. */
+        @container fitted-card (height <= 90px) {
+          .fit {
+            grid-template-rows: 1fr;
+            align-content: center;
+          }
+          .fit-top {
+            align-items: center;
+            flex-wrap: nowrap;
+          }
+          .fit-pill {
+            align-self: center;
+          }
+          .fit-name {
+            -webkit-line-clamp: 1;
+          }
+        }
+        /* Smallest — the status pill stays. */
+        @container fitted-card (height <= 50px) {
+          .fit-eb {
             display: none;
           }
         }

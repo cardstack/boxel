@@ -10,8 +10,13 @@
         "unit": "minutes"
       },
       "cardInfo": {
-        "name": "Engineering Standup"
-      }
+        "name": "Engineering Standup",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "interviewScore": null,
+      "notes": null
     },
     "relationships": {
       "interviewers.0": {
@@ -27,11 +32,6 @@
       "interviewers.2": {
         "links": {
           "self": "../Employee/leo-park"
-        }
-      },
-      "cardInfo.theme": {
-        "links": {
-          "self": "../Theme/ledger"
         }
       }
     },

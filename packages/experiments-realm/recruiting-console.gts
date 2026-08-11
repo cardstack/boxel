@@ -16,11 +16,14 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 import BriefcaseIcon from '@cardstack/boxel-icons/briefcase';
 
 import { Candidate, CANDIDATE_STAGES } from './candidate';
-import { Employee } from './trt-employee';
+import { Employee } from './employee';
 import { Meeting } from './meeting';
 import { Team } from './team';
 import { Project } from './project';
 import { Vendor } from './vendor';
+import { Position } from './position';
+import { Application } from './application';
+import { Offer } from './offer';
 import { Calendar, type CalendarEvent } from './components/calendar';
 import { OrgTree, type OrgTreeItem } from './components/org-tree';
 import { buildOrgTree, type OrgNode } from './utils/index';
@@ -42,6 +45,9 @@ export class RecruitingConsole extends CardDef {
   @field teams = linksToMany(() => Team);
   @field projects = linksToMany(() => Project);
   @field vendors = linksToMany(() => Vendor);
+  @field positions = linksToMany(() => Position);
+  @field applications = linksToMany(() => Application);
+  @field offers = linksToMany(() => Offer);
 
   @field cardTitle = contains(StringField, {
     computeVia: function (this: RecruitingConsole) {
@@ -83,7 +89,7 @@ export class RecruitingConsole extends CardDef {
         name: e.name,
         role: e.role,
         initials: e.initials,
-        photoUrl: e.photoUrl,
+        photoUrl: e.photo?.resolvedUrl,
         status: e.status,
         managerId: e.manager?.id,
       }));
@@ -97,6 +103,11 @@ export class RecruitingConsole extends CardDef {
     get openCount() {
       return this.candidates.filter(
         (c) => c?.status !== 'hired' && c?.status !== 'rejected',
+      ).length;
+    }
+    get openRequisitions() {
+      return (this.args.model?.positions ?? []).filter(
+        (p) => p?.status === 'open',
       ).length;
     }
     get commandContext() {
@@ -188,8 +199,10 @@ export class RecruitingConsole extends CardDef {
             <h1>{{@model.cardTitle}}</h1>
           </div>
           <dl class='stats'>
+            <div><dt>Open reqs</dt><dd>{{this.openRequisitions}}</dd></div>
             <div><dt>Open candidates</dt><dd>{{this.openCount}}</dd></div>
-            <div><dt>Interviews</dt><dd>{{this.interviewEvents.length}}</dd></div>
+            <div><dt>Interviews</dt><dd
+              >{{this.interviewEvents.length}}</dd></div>
             <div><dt>Onboarding</dt><dd>{{this.onboardingCount}}</dd></div>
           </dl>
         </header>
@@ -279,10 +292,28 @@ export class RecruitingConsole extends CardDef {
           <section class='panel org'>
             <h2>Where Hires Land</h2>
             {{#if this.orgRoots.length}}
-              <OrgTree @roots={{this.orgRoots}} @onSelect={{this.openOrgItem}} />
+              <OrgTree
+                @roots={{this.orgRoots}}
+                @onSelect={{this.openOrgItem}}
+              />
             {{else}}
               <p class='col-empty'>No employees linked yet</p>
             {{/if}}
+          </section>
+        </div>
+
+        <div class='split three'>
+          <section class='panel'>
+            <h2>Open Requisitions</h2>
+            <@fields.positions />
+          </section>
+          <section class='panel'>
+            <h2>Inbound Applications</h2>
+            <@fields.applications />
+          </section>
+          <section class='panel'>
+            <h2>Offers</h2>
+            <@fields.offers />
           </section>
         </div>
 
@@ -511,8 +542,10 @@ export class RecruitingConsole extends CardDef {
         <BriefcaseIcon class='icon' />
         <div>
           <div class='name'>{{@model.cardTitle}}</div>
-          <div class='meta'>{{@model.candidates.length}} candidates ·
-            {{@model.employees.length}} employees</div>
+          <div class='meta'>{{@model.candidates.length}}
+            candidates ·
+            {{@model.employees.length}}
+            employees</div>
         </div>
       </div>
       <style scoped>

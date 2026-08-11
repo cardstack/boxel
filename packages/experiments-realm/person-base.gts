@@ -6,7 +6,7 @@ import {
   StringField,
   type BaseDefComponent,
 } from '@cardstack/base/card-api';
-import UrlField from '@cardstack/base/url';
+import ImageSourceField from '@cardstack/catalog/fields/image-source/image-source';
 import EmailField from '@cardstack/base/email';
 import UserIcon from '@cardstack/boxel-icons/user';
 
@@ -19,7 +19,11 @@ export class PersonBase extends CardDef {
   @field name = contains(StringField);
   @field email = contains(EmailField);
   @field phone = contains(StringField);
-  @field photoUrl = contains(UrlField);
+  // The catalog's ImageSourceField rather than a bare UrlField: it accepts
+  // either a pasted URL or a file uploaded into the realm, and exposes the
+  // winner as `resolvedUrl`. Named `photo`, not `photoUrl`, because it is no
+  // longer a URL — consumers read `photo.resolvedUrl`.
+  @field photo = contains(ImageSourceField);
 
   @field initials = contains(StringField, {
     computeVia: function (this: PersonBase) {
@@ -38,11 +42,9 @@ export class PersonBase extends CardDef {
     typeof this
   > {
     <template>
-      <div
-        class='person-row'
-      >
-        {{#if @model.photoUrl}}
-          <img class='person-avatar' src={{@model.photoUrl}} alt='' />
+      <div class='person-row'>
+        {{#if @model.photo.resolvedUrl}}
+          <img class='person-avatar' src={{@model.photo.resolvedUrl}} alt='' />
         {{else}}
           <span class='person-avatar person-initials'>{{@model.initials}}</span>
         {{/if}}
