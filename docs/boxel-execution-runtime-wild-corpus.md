@@ -165,13 +165,14 @@ let matrix = smoke.summarizeExecutionRuntimeSmokeRun(result);
   both staging and the staging-backed local Host with no alert panels.
 - The 24 non-data-error persisted twins reach their expected substantive
   presentation.
-- `model-2026`, `q4-revenue`, and `state-malformed-export` currently retain the
-  correct inert last-known-good table while the local DEBUG build reports a
-  same-computation tracked-state assertion in the authored `DataFilePreview`.
-  The manifest still expects `sandbox`, so automation reports these three as
-  incomplete live handoffs rather than false passes. The fix belongs in the
-  authored modifier; the execution runtime must not suppress Glimmer's
-  correctness assertion.
+- The authored `DataFilePreview` modifier was repaired on 2026-08-11 by
+  deferring tracked loading state until `afterRender` and cancelling scheduled
+  or asynchronous work on teardown. A targeted authenticated check now renders
+  `q4-revenue` as an interactive eight-column Sandbox grid on both the candidate
+  Host and direct staging, with no last-known-good alert. `model-2026` and
+  `state-malformed-export` still require a matrix rerun before their incomplete
+  handoff rows can be cleared; the execution runtime continues to preserve
+  Glimmer's same-computation assertion rather than suppress it.
 
 ## Run it
 
@@ -201,6 +202,12 @@ the 50 card paths remain identical.
   the workspace mirror.
 - All 50 staging reference URLs returned HTTP 200 on 2026-08-10.
 - The executable manifest validation and its six Node smoke-runner tests pass.
+- A targeted authenticated Img-to-3D check on 2026-08-11 passed the Studio's
+  current model, both history rounds, and a standalone `SculptedModel` on the
+  candidate Host and direct staging. Protected model source returned `200`/`304`
+  through the outer resource capability and the inline viewer no longer made a
+  credentialless nested request that returned `401`. This authored-realm repair
+  is evidence for the matrix case, not a substitute for the full batch.
 - A full signed-in staging-versus-local browser comparison of this refreshed
   batch has **not** yet been claimed. The matrix is the input for that next
   run, and its failures should become reusable protocol tests rather than

@@ -75,8 +75,8 @@ BoxelExecutionRenderer                  ≈ main's CardRenderer (RP-1.5)
   └─ boxelExecution.requestFor(card, format, surfaceId)
        ├─ 1. classify    module + import graph → direct|capsule|sandbox
        ├─ 2. route       lease a runtime per surface identity
-       │                 (a Sandbox process is RETAINED across format
-       │                  switches — isolated↔edit never reloads the iframe)
+       │                 (a compatible, same-card Sandbox isolated↔authored-
+       │                  edit switch RETAINS the exact mounted iframe)
        ├─ 3. materialize serialize canonical instance → projected document
        │                 → runtime builds its own copy via
        │                 createFromSerialized (main's own card-api entry)
@@ -248,7 +248,10 @@ search and arbitrary `fetch` refuse visibly, RP-21.3).
 **Format containment (RP-6.3):** compact formats of a Sandbox module render
 in Capsule — a gallery of fifty fitted tiles is never fifty iframes. `edit`
 renders the trusted Base editor host-side _unless the module authors any
-`static edit`_ (card-level or FieldDef-level):
+`static edit`_ (card-level or FieldDef-level). Only that compatible,
+same-card Sandbox-to-Sandbox transition uses the retained-slot fast path;
+changing cards, template identity, or execution tier takes the ordinary
+request/materialization path:
 
 ```gts
 // This FieldDef makes the whole module's edit surface keep the Sandbox —

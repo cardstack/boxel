@@ -3,7 +3,7 @@
 **Status:** Phase 0 instrumentation implemented; focused live baseline captured,
 full corpus pending. Revised
 2026-08-11 on
-`codex/boxel-execution-runtime-architecture` after checkpoint `6530523caf`.
+`codex/boxel-execution-runtime-architecture` after checkpoint `652dabe7a8`.
 Line references were measured against the audit working tree and will drift.
 No optimization in this document is authorized until Phase 0 records a green
 correctness-qualified baseline.
@@ -435,6 +435,28 @@ root request, and 612.9 ms root render-record. Relative to the prior retained ru
 request was 41.7% lower, render-record was 4.6% higher, and readiness was 25.3%
 higher; this contradictory movement is treated as Host/staging variance, so no
 page-level latency claim is attached to the batch.
+
+**Compatible Sandbox format-switch batch implemented and retained on
+2026-08-11.** A same-card `isolated` ↔ authored-`edit` toggle now keeps one
+component-owned execution session and transfers the already-mounted Sandbox slot
+between resource generations. `switchSandboxFormat()` repeats policy admission
+against the retained source classification; if the destination is not Sandbox, or
+the card or base-template identity changed, it returns to the ordinary full-update
+path.
+
+For an admitted switch, the retained path asks the existing child card handle for
+the new format's render slot. It does not repeat Host request construction, source
+preparation, classification, serialization, projection settlement, child
+materialization, or iframe boot. Instance-sync and lifecycle listeners are
+reconnected for the new resource generation, and the `format-switch` performance
+stage records the remaining child-render work.
+
+Focused engine coverage asserts one child materialization, no child-card disposal,
+and one retained semantic generation across the round trip. Integration coverage
+toggles `isolated → edit → isolated → edit → isolated` and asserts exact iframe DOM
+identity after every switch. These exact work and identity assertions justify the
+retained implementation; comparable before/after browser samples were not captured,
+so no page-level or format-switch latency improvement is claimed here.
 
 ### Sandbox boot decision
 
