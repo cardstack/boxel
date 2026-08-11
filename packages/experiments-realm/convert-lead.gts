@@ -75,6 +75,7 @@ export default class ConvertLeadCommand extends Command<
       new Opportunity({
         name: `${accountName} — first deal`,
         stage: 'qualified',
+        lastStageChangedAt: new Date(),
         account,
       }),
     );

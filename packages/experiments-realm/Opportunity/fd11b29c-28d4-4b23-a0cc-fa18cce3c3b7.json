@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Okafor Logistics — first deal",
+      "name": "Okafor Logistics \u2014 first deal",
       "value": {
         "amount": null,
         "currency": {
@@ -17,7 +17,8 @@
         "summary": null,
         "cardThumbnailURL": null,
         "notes": null
-      }
+      },
+      "lastStageChangedAt": "2026-08-10"
     },
     "relationships": {
       "account": {

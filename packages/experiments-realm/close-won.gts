@@ -63,6 +63,7 @@ export default class CloseWonCommand extends Command<
     let today = new Date();
 
     deal.stage = 'closed won';
+    deal.lastStageChangedAt = today;
     await save(deal);
 
     let subscription = await save(
