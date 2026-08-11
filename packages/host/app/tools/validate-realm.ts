@@ -1,4 +1,4 @@
-import { RealmPaths } from '@cardstack/runtime-common';
+import { RealmPaths, ri } from '@cardstack/runtime-common';
 
 import HostBaseTool from '../lib/host-base-tool';
 
@@ -23,7 +23,7 @@ export default class ValidateRealmTool extends HostBaseTool<
   protected async run(
     input: BaseToolModule.ValidateRealmInput,
   ): Promise<BaseToolModule.ValidateRealmResult> {
-    let realmIdentifier = new RealmPaths(new URL(input.realmIdentifier)).url;
+    let realmIdentifier = new RealmPaths(ri(input.realmIdentifier)).url;
 
     let { realmIdentifiers } = await new GetAvailableRealmIdentifiersTool(
       this.toolContext,
