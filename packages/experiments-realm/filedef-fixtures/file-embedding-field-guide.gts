@@ -15,6 +15,7 @@ export class FileEmbeddingFieldGuide extends CardDef {
   static icon = BookOpenIcon;
   static prefersWideFormat = true;
 
+  @field title = contains(StringField);
   // The document body is a real, typed realm file; its embedded rendering
   // resolves the guide's `::file` references into live FileDef embeds.
   @field file = linksTo(() => MarkdownDef);
