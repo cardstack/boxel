@@ -19,6 +19,8 @@ const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
   // TODO: Replace with realm metadata configuration.
   '.markdown': { module: baseModule('markdown-file-def'), name: 'MarkdownDef' },
   '.md': { module: baseModule('markdown-file-def'), name: 'MarkdownDef' },
+  '.html': { module: baseModule('html-file-def'), name: 'HtmlDef' },
+  '.htm': { module: baseModule('html-file-def'), name: 'HtmlDef' },
   '.png': { module: baseModule('png-image-def'), name: 'PngDef' },
   '.jpg': { module: baseModule('jpg-image-def'), name: 'JpgDef' },
   '.jpeg': { module: baseModule('jpg-image-def'), name: 'JpgDef' },
