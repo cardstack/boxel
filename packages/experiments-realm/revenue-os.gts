@@ -30,6 +30,11 @@ import ChartAreaIcon from '@cardstack/boxel-icons/chart-area';
 import { Board, type BoardColumn } from './board';
 import { Table, type TableColumn } from './table';
 import { ExportButton, type ExportColumn } from './export';
+import {
+  ImportButton,
+  type ImportColumn,
+  type ImportRowResult,
+} from './import';
 import { LineChart, type ChartPoint } from './line-chart';
 import { AccountMetrics } from './account-metrics';
 import { Opportunity, PIPELINE_STAGES, STAGE_COLORS } from './opportunity';
@@ -46,6 +51,14 @@ import DuplicateCommand from './duplicate';
 import { formatMoney, outstandingBalance, sumLineItems } from './money';
 
 const OPEN_INVOICE_STATUSES = ['sent', 'viewed', 'partial'];
+const INVOICE_IMPORT_STATUSES = [
+  'draft',
+  'sent',
+  'viewed',
+  'partial',
+  'paid',
+  'void',
+];
 
 function invoiceStatus(item: CardDef): string {
   return (item as Invoice).displayStatus ?? '';
@@ -569,6 +582,8 @@ export class RevenueOs extends CardDef {
 
     // The Table's own column definitions carry the CSV — same columns, same
     // labels — except money, which exports as a raw number so the column sums.
+    invoiceType = Invoice;
+
     get exportColumns(): ExportColumn[] {
       return this.invoiceColumns
         .filter((c) => c.key !== 'actions')
@@ -585,6 +600,58 @@ export class RevenueOs extends CardDef {
 
     get exportFilename(): string {
       return `invoices-${this.invoiceFilter}`;
+    }
+
+    // Deliberately the same headers Export writes, so a file that leaves this
+    // table can come back into it.
+    importColumns: ImportColumn[] = [
+      { header: 'Invoice #', field: 'invoiceNumber', required: true },
+      {
+        header: 'Status',
+        field: 'status',
+        parse: (raw) => {
+          let value = raw.toLowerCase();
+          // Overdue is derived here, so a file carrying it describes an unpaid
+          // invoice rather than a status this card can store.
+          if (value === 'overdue') return 'sent';
+          if (!INVOICE_IMPORT_STATUSES.includes(value)) {
+            throw new Error(`"${raw}" is not an invoice status`);
+          }
+          return value;
+        },
+      },
+      {
+        header: 'Due',
+        field: 'dueDate',
+        parse: (raw) => {
+          let at = new Date(raw);
+          if (Number.isNaN(at.getTime())) {
+            throw new Error(`"${raw}" is not a date`);
+          }
+          // A date in a CSV is a calendar day, not an instant. Reading the
+          // local parts keeps it on that day; toISOString would shift it back
+          // one for anyone east of UTC.
+          let month = String(at.getMonth() + 1).padStart(2, '0');
+          let day = String(at.getDate()).padStart(2, '0');
+          return `${at.getFullYear()}-${month}-${day}`;
+        },
+      },
+    ];
+
+    @action reportImport(results: ImportRowResult[]) {
+      let added = results.filter((r) => r.ok).length;
+      let failed = results.filter((r) => !r.ok);
+      if (!failed.length) {
+        this.statusMessage = `Imported ${added} invoice${added === 1 ? '' : 's'}`;
+        return;
+      }
+      // Partial success is the point: say what landed, then why the rest did not.
+      let detail = failed
+        .slice(0, 3)
+        .map((r) => `row ${r.row} — ${r.error}`)
+        .join('; ');
+      let more = failed.length > 3 ? `, and ${failed.length - 3} more` : '';
+      this.statusMessage = `Imported ${added}, skipped ${failed.length}: ${detail}${more}`;
     }
 
     get filteredInvoices(): Invoice[] {
@@ -1040,6 +1107,13 @@ export class RevenueOs extends CardDef {
             <div class='pane-head'>
               <h2>Invoices</h2>
               <span class='row-actions'>
+                <ImportButton
+                  @cardType={{this.invoiceType}}
+                  @columns={{this.importColumns}}
+                  @commandContext={{this.commandContext}}
+                  @realm={{this.realm}}
+                  @onComplete={{this.reportImport}}
+                />
                 <ExportButton
                   @rows={{this.filteredInvoices}}
                   @columns={{this.exportColumns}}
