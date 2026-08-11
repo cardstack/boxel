@@ -78,10 +78,7 @@ import {
   type PendingJob,
 } from './handlers/handle-indexing-dashboard.ts';
 import { writeRuntimeMetadataFile } from './lib/runtime-metadata-file.ts';
-import {
-  finalizeOrphanedReservations,
-  finalizeReservationById,
-} from './lib/finalize-orphan-reservations.ts';
+import { finalizeOrphanedReservations } from './lib/finalize-orphan-reservations.ts';
 import { findStuckReservations } from './lib/stuck-reservations.ts';
 import { markFailedJob } from './lib/mark-failed-job.ts';
 import {
@@ -724,27 +721,25 @@ async function monitorWorker(workerId: string, worker: ChildProcess) {
       `Detected stuck jobs for worker ${workerId}. job id(s): ${stuckJobs.map((j) => j.jobId).join()}. recycling worker`,
     );
     log.error(`detected stuck jobs for worker ${workerId}`);
-    for (let { id, jobId, reclaimed } of stuckJobs) {
-      if (reclaimed) {
-        // Another worker has the job now. Close this orphan so it stops
-        // reading as stuck, and leave the job alone: flipping it to
-        // 'rejected' here would make the running worker's finalize see a
-        // job that already has a recorded outcome and discard a completion it
-        // is about to produce. This is the same race
-        // `finalizeOrphanedReservations` declines to run for the same
-        // reason. The index entry is left alone too — the running attempt
-        // is the authority on what those rows should say.
-        log.info(
-          `releasing stale reservation ${id} for job ${jobId} of worker ${workerId}: another worker holds a live reservation`,
-        );
-        await finalizeReservationById(adapter, id);
-        continue;
-      }
+    for (let { id, jobId } of stuckJobs) {
       log.info(`marking job ${jobId} as timed-out for worker ${workerId}`);
       let currentState =
         ((worker as any).__boxelIndexState as IndexState | undefined) ?? {};
       let { url, realm, deps } = currentState;
-      if (url && realm && deps) {
+      // `markFailedJob` decides whether this job is still ours to fail, and
+      // does it in the same statement that writes the outcome. A lapsed lease
+      // makes the job claimable, so any check made out here would be a
+      // snapshot that another worker can invalidate before the write lands.
+      let failed = await markFailedJob(adapter, {
+        reservationId: id,
+        workerId,
+        jobId,
+        message: `Timed-out. Worker manager killed unresponsive worker ${workerId} for job reservation ${id}`,
+      });
+      // Only stamp an error doc for a job we actually failed. When another
+      // worker holds the job, that attempt is the authority on what its index
+      // rows should say.
+      if (failed && url && realm && deps) {
         await markFailedIndexEntry({
           url,
           realm,
@@ -752,12 +747,6 @@ async function monitorWorker(workerId: string, worker: ChildProcess) {
           message: `worker time-out encountered while indexing ${url}`,
         });
       }
-      await markFailedJob(adapter, {
-        reservationId: id,
-        workerId,
-        jobId,
-        message: `Timed-out. Worker manager killed unresponsive worker ${workerId} for job reservation ${id}`,
-      });
     }
     // Kill regardless of which branch each reservation took: holding a
     // reservation open past its lease without finalizing means the child
@@ -899,17 +888,24 @@ async function startWorker(
       );
       if (message.includes('FATAL ERROR')) {
         (async () => {
-          if (currentState?.url && currentState?.realm) {
-            let { url, realm, deps } = currentState;
-            message = `encountered fatal error indexing ${url}: ${message}`;
-            await markFailedIndexEntry({ url, realm, deps, message });
+          if (currentState?.url) {
+            message = `encountered fatal error indexing ${currentState.url}: ${message}`;
           }
+          // Fail the job first, because whether the job is still ours decides
+          // whether the index error doc is ours to write. A job with no id
+          // here has no competing attempt to lose to, so its error doc is
+          // written unconditionally.
+          let ownsOutcome = true;
           if (workerId && currentState?.jobId) {
-            await markFailedJob(adapter, {
+            ownsOutcome = await markFailedJob(adapter, {
               workerId,
               jobId: currentState.jobId,
               message,
             });
+          }
+          if (ownsOutcome && currentState?.url && currentState?.realm) {
+            let { url, realm, deps } = currentState;
+            await markFailedIndexEntry({ url, realm, deps, message });
           }
         })().catch((e) => {
           Sentry.captureException(e);

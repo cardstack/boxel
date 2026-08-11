@@ -67,10 +67,6 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(stuck.length, 1, 'one stuck reservation');
       assert.strictEqual(stuck[0].id, String(reservationId));
       assert.strictEqual(stuck[0].jobId, String(jobId));
-      assert.false(
-        stuck[0].reclaimed,
-        'nothing else holds the job, so the watchdog owns its outcome',
-      );
     });
 
     test('ignores a reservation still inside its lease or its grace period', async function (assert) {
@@ -120,10 +116,11 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('flags a reservation as reclaimed when another worker holds a live one', async function (assert) {
-      // This is the case that must not reject the job: the reclaiming worker
-      // is running it right now, and a rejection would make its finalize
-      // discard the completion it is about to produce.
+    test('reports an orphan even when another worker now holds the job', async function (assert) {
+      // Recycling the child and deciding the job's outcome are separate
+      // questions. This row means the child never returned from its handler,
+      // which is true regardless of who holds the job now — so it is reported,
+      // and `markFailedJob` settles ownership when it writes the outcome.
       let jobId = await insertJob(adapter);
       await insertReservation(adapter, jobId, 'worker-e', {
         leaseOffsetSeconds: -60,
@@ -134,42 +131,8 @@ module(basename(import.meta.filename), function () {
 
       let stuck = await findStuckReservations(adapter, 'worker-e');
 
-      assert.strictEqual(stuck.length, 1, 'the orphan is still reported');
-      assert.true(
-        stuck[0].reclaimed,
-        'flagged as reclaimed so the caller releases it instead of rejecting the job',
-      );
-    });
-
-    test('does not treat an expired or closed newer reservation as a live competitor', async function (assert) {
-      // Nobody is holding the job, so its outcome really is the watchdog's to
-      // decide. Reading these as competitors would leave a genuinely stuck job
-      // pending forever.
-      let expiredJob = await insertJob(adapter);
-      await insertReservation(adapter, expiredJob, 'worker-g', {
-        leaseOffsetSeconds: -600,
-      });
-      await insertReservation(adapter, expiredJob, 'other-worker', {
-        leaseOffsetSeconds: -60,
-      });
-
-      let closedJob = await insertJob(adapter);
-      await insertReservation(adapter, closedJob, 'worker-g', {
-        leaseOffsetSeconds: -600,
-      });
-      await insertReservation(adapter, closedJob, 'other-worker', {
-        leaseOffsetSeconds: 600,
-        closed: true,
-      });
-
-      let stuck = await findStuckReservations(adapter, 'worker-g');
-
-      assert.strictEqual(stuck.length, 2, 'both orphans are reported');
-      assert.deepEqual(
-        stuck.map((s) => s.reclaimed),
-        [false, false],
-        'neither an expired nor a closed sibling counts as holding the job',
-      );
+      assert.strictEqual(stuck.length, 1, 'the orphan is reported');
+      assert.strictEqual(stuck[0].jobId, String(jobId));
     });
 
     test('reports nothing for a worker with no reservations', async function (assert) {

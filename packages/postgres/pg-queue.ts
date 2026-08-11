@@ -520,12 +520,12 @@ const FINALIZE_RETRY_BACKOFF_MS = 25;
 // means another actor already owns the job's outcome, so the verdict is
 // dropped on purpose — but the reservation still has to be closed, or its
 // open row outlives the lease and reads as a stuck job.
-type FinalizeSupersededCause =
+export type FinalizeSupersededCause =
   | 'the job already has a recorded outcome'
   | 'the reservation row is gone or already closed'
   | 'the lease expired and the job was reserved again';
 
-type FinalizeOutcome =
+export type FinalizeOutcome =
   | { type: 'committed' }
   | { type: 'superseded'; cause: FinalizeSupersededCause }
   // Serialization failure. The verdict is still valid; only the transaction
@@ -840,8 +840,9 @@ export class PgQueueRunner implements QueueRunner {
             jobToRun.id,
             newStatus,
           );
-          let outcome = await this.finalizeJob(
+          let outcome = await finalizeJobVerdict(
             query,
+            this.#workerId,
             jobToRun,
             jobReservationId,
             newStatus,
@@ -853,7 +854,12 @@ export class PgQueueRunner implements QueueRunner {
             // indistinguishable, to the worker-manager watchdog, from a
             // worker wedged inside its handler — so it would reject this
             // job and kill this (healthy) worker up to a full lease later.
-            await this.releaseReservation(query, jobToRun, jobReservationId);
+            await releaseJobReservation(
+              query,
+              this.#workerId,
+              jobToRun,
+              jobReservationId,
+            );
             return;
           }
           log.debug(
@@ -879,190 +885,192 @@ export class PgQueueRunner implements QueueRunner {
     });
   }
 
-  // Record the handler's verdict, retrying the transaction through
-  // serialization failures. `jobs` and `job_reservations` are hot tables that
-  // every worker's claim transaction predicate-reads at SERIALIZABLE, so a
-  // conflict here is ordinary contention and says nothing about whether the
-  // verdict is correct.
-  private async finalizeJob(
-    query: Querier,
-    jobToRun: JobsTable,
-    jobReservationId: number,
-    newStatus: string,
-    result: PgPrimitive,
-  ): Promise<FinalizeOutcome> {
-    let outcome: FinalizeOutcome = { type: 'conflict' };
-    for (let attempt = 0; attempt <= FINALIZE_CONFLICT_RETRIES; attempt++) {
-      outcome = await this.attemptFinalize(
-        query,
-        jobToRun,
-        jobReservationId,
-        newStatus,
-        result,
-      );
-      if (outcome.type === 'superseded') {
-        log.warn(
-          `%s: discarding the '%s' verdict for job %s (type=%s) because %s`,
-          this.#workerId,
-          newStatus,
-          jobToRun.id,
-          jobToRun.job_type,
-          outcome.cause,
-        );
-        return outcome;
-      }
-      if (outcome.type === 'committed') {
-        return outcome;
-      }
-      if (attempt < FINALIZE_CONFLICT_RETRIES) {
-        await new Promise((r) =>
-          setTimeout(r, FINALIZE_RETRY_BACKOFF_MS * (attempt + 1)),
-        );
-      }
-    }
-    // Out of retries with the verdict still unrecorded. Unlike the superseded
-    // cases, nothing else owns this job's outcome — the work is simply lost,
-    // and the job goes back in the queue for another attempt.
-    let message =
-      `${this.#workerId}: could not record the '${newStatus}' verdict for job ` +
-      `${jobToRun.id} (type=${jobToRun.job_type}) — the finalize transaction hit a ` +
-      `serialization failure ${FINALIZE_CONFLICT_RETRIES + 1} times`;
-    log.error(message);
-    Sentry.captureMessage(message);
-    return outcome;
-  }
-
-  // One attempt at the finalize transaction. Leaves the reservation open on
-  // every path so its fate is the caller's single decision.
-  private async attemptFinalize(
-    query: Querier,
-    jobToRun: JobsTable,
-    jobReservationId: number,
-    newStatus: string,
-    result: PgPrimitive,
-  ): Promise<FinalizeOutcome> {
-    await query(['BEGIN']);
-    try {
-      await query(['SET TRANSACTION ISOLATION LEVEL SERIALIZABLE']);
-      let jobRows = (await query([
-        'SELECT status FROM jobs WHERE id = ',
-        param(jobToRun.id),
-      ])) as Pick<JobsTable, 'status'>[];
-      if (jobRows.length === 0 || jobRows[0].status !== 'unfulfilled') {
-        await query(['ROLLBACK']);
-        return {
-          type: 'superseded',
-          cause: 'the job already has a recorded outcome',
-        };
-      }
-      let reservationRows = (await query([
-        'SELECT *, locked_until < NOW() as expired FROM job_reservations WHERE id = ',
-        param(jobReservationId),
-      ])) as unknown as (JobReservationsTable & { expired: boolean })[];
-      if (reservationRows.length === 0 || reservationRows[0].completed_at) {
-        await query(['ROLLBACK']);
-        return {
-          type: 'superseded',
-          cause: 'the reservation row is gone or already closed',
-        };
-      }
-      if (reservationRows[0].expired) {
-        // Our lease ran out while the handler was working, so the job became
-        // claimable. Yield only to a reservation that is actually holding it
-        // right now: an expired or closed sibling has no claim on the
-        // outcome, and treating one as a competitor would throw away this
-        // verdict on every retry of every job — the second attempt at a job
-        // always has a sibling row.
-        let [{ live }] = (await query([
-          `SELECT COUNT(*)::int as live FROM job_reservations
-             WHERE completed_at IS NULL AND locked_until > NOW()
-               AND job_id = `,
-          param(jobToRun.id),
-          'AND id != ',
-          param(jobReservationId),
-        ])) as unknown as { live: number }[];
-        if (live > 0) {
-          await query(['ROLLBACK']);
-          return {
-            type: 'superseded',
-            cause: 'the lease expired and the job was reserved again',
-          };
-        }
-      }
-      await query([
-        `UPDATE jobs SET result=`,
-        param(result),
-        ', status=',
-        param(newStatus),
-        `, finished_at=now() WHERE id = `,
-        param(jobToRun.id),
-      ]);
-      await query([
-        `UPDATE job_reservations
-             SET completed_at = now(), completion_reason = 'completed'
-             WHERE id = `,
-        param(jobReservationId),
-      ]);
-      // NOTIFY takes effect when the transaction actually commits. If it
-      // doesn't commit, no notification goes out.
-      await query([`NOTIFY jobs_finished`]);
-      await query(['COMMIT']);
-      return { type: 'committed' };
-    } catch (e: any) {
-      if (e.code === '40001') {
-        await query(['ROLLBACK']);
-        return { type: 'conflict' };
-      }
-      throw e;
-    }
-  }
-
-  // Close a reservation whose finalize did not commit, so the lease is handed
-  // back now instead of aging out. Runs as a bare statement rather than inside
-  // the finalize transaction: that transaction is already rolled back, and a
-  // single-row UPDATE by primary key at the default isolation level is the
-  // least contended write available — which matters most in exactly the case
-  // that brought us here, repeated serialization failures.
-  //
-  // `'interrupted'` keeps the dropped attempt off the per-job cap. The worker
-  // did reach a verdict, so this is not the deterministic-crash case the cap
-  // exists to stop, and burning an attempt on a lost race would abandon a job
-  // that nothing is actually wrong with.
-  private async releaseReservation(
-    query: Querier,
-    jobToRun: JobsTable,
-    jobReservationId: number,
-  ): Promise<void> {
-    try {
-      await query([
-        `UPDATE job_reservations
-         SET completed_at = NOW(), completion_reason = 'interrupted'
-         WHERE completed_at IS NULL AND id = `,
-        param(jobReservationId),
-      ]);
-      // The job may be claimable again now. Wake the runners rather than
-      // leaving it for the poll interval.
-      await query([`NOTIFY jobs`]);
-    } catch (e: any) {
-      // The lease still expires on its own, so the reservation is not stuck
-      // forever — just for as long as the lease has left to run. Worth
-      // reporting, not worth failing the work loop over.
-      log.error(
-        `%s: could not release reservation %s for job %s: %s`,
-        this.#workerId,
-        jobReservationId,
-        jobToRun.id,
-        e?.message ?? e,
-      );
-      Sentry.captureException(e);
-    }
-  }
-
   async destroy() {
     this.#isDestroyed = true;
     if (this.#jobRunner) {
       await this.#jobRunner.shutDown();
     }
+  }
+}
+
+// Record the handler's verdict, retrying the transaction through
+// serialization failures. `jobs` and `job_reservations` are hot tables that
+// every worker's claim transaction predicate-reads at SERIALIZABLE, so a
+// conflict here is ordinary contention and says nothing about whether the
+// verdict is correct.
+export async function finalizeJobVerdict(
+  query: Querier,
+  workerId: string,
+  jobToRun: JobsTable,
+  jobReservationId: number,
+  newStatus: string,
+  result: PgPrimitive,
+): Promise<FinalizeOutcome> {
+  let outcome: FinalizeOutcome = { type: 'conflict' };
+  for (let attempt = 0; attempt <= FINALIZE_CONFLICT_RETRIES; attempt++) {
+    outcome = await attemptJobFinalize(
+      query,
+      jobToRun,
+      jobReservationId,
+      newStatus,
+      result,
+    );
+    if (outcome.type === 'superseded') {
+      log.warn(
+        `%s: discarding the '%s' verdict for job %s (type=%s) because %s`,
+        workerId,
+        newStatus,
+        jobToRun.id,
+        jobToRun.job_type,
+        outcome.cause,
+      );
+      return outcome;
+    }
+    if (outcome.type === 'committed') {
+      return outcome;
+    }
+    if (attempt < FINALIZE_CONFLICT_RETRIES) {
+      await new Promise((r) =>
+        setTimeout(r, FINALIZE_RETRY_BACKOFF_MS * (attempt + 1)),
+      );
+    }
+  }
+  // Out of retries with the verdict still unrecorded. Unlike the superseded
+  // cases, nothing else owns this job's outcome — the work is simply lost,
+  // and the job goes back in the queue for another attempt.
+  let message =
+    `${workerId}: could not record the '${newStatus}' verdict for job ` +
+    `${jobToRun.id} (type=${jobToRun.job_type}) — the finalize transaction hit a ` +
+    `serialization failure ${FINALIZE_CONFLICT_RETRIES + 1} times`;
+  log.error(message);
+  Sentry.captureMessage(message);
+  return outcome;
+}
+
+// One attempt at the finalize transaction. Leaves the reservation open on
+// every path so its fate is the caller's single decision.
+export async function attemptJobFinalize(
+  query: Querier,
+  jobToRun: JobsTable,
+  jobReservationId: number,
+  newStatus: string,
+  result: PgPrimitive,
+): Promise<FinalizeOutcome> {
+  await query(['BEGIN']);
+  try {
+    await query(['SET TRANSACTION ISOLATION LEVEL SERIALIZABLE']);
+    let jobRows = (await query([
+      'SELECT status FROM jobs WHERE id = ',
+      param(jobToRun.id),
+    ])) as Pick<JobsTable, 'status'>[];
+    if (jobRows.length === 0 || jobRows[0].status !== 'unfulfilled') {
+      await query(['ROLLBACK']);
+      return {
+        type: 'superseded',
+        cause: 'the job already has a recorded outcome',
+      };
+    }
+    let reservationRows = (await query([
+      'SELECT *, locked_until < NOW() as expired FROM job_reservations WHERE id = ',
+      param(jobReservationId),
+    ])) as unknown as (JobReservationsTable & { expired: boolean })[];
+    if (reservationRows.length === 0 || reservationRows[0].completed_at) {
+      await query(['ROLLBACK']);
+      return {
+        type: 'superseded',
+        cause: 'the reservation row is gone or already closed',
+      };
+    }
+    if (reservationRows[0].expired) {
+      // Our lease ran out while the handler was working, so the job became
+      // claimable. Yield only to a reservation that is actually holding it
+      // right now: an expired or closed sibling has no claim on the
+      // outcome, and treating one as a competitor would throw away this
+      // verdict on every retry of every job — the second attempt at a job
+      // always has a sibling row.
+      let [{ live }] = (await query([
+        `SELECT COUNT(*)::int as live FROM job_reservations
+           WHERE completed_at IS NULL AND locked_until > NOW()
+             AND job_id = `,
+        param(jobToRun.id),
+        'AND id != ',
+        param(jobReservationId),
+      ])) as unknown as { live: number }[];
+      if (live > 0) {
+        await query(['ROLLBACK']);
+        return {
+          type: 'superseded',
+          cause: 'the lease expired and the job was reserved again',
+        };
+      }
+    }
+    await query([
+      `UPDATE jobs SET result=`,
+      param(result),
+      ', status=',
+      param(newStatus),
+      `, finished_at=now() WHERE id = `,
+      param(jobToRun.id),
+    ]);
+    await query([
+      `UPDATE job_reservations
+           SET completed_at = now(), completion_reason = 'completed'
+           WHERE id = `,
+      param(jobReservationId),
+    ]);
+    // NOTIFY takes effect when the transaction actually commits. If it
+    // doesn't commit, no notification goes out.
+    await query([`NOTIFY jobs_finished`]);
+    await query(['COMMIT']);
+    return { type: 'committed' };
+  } catch (e: any) {
+    if (e.code === '40001') {
+      await query(['ROLLBACK']);
+      return { type: 'conflict' };
+    }
+    throw e;
+  }
+}
+
+// Close a reservation whose finalize did not commit, so the lease is handed
+// back now instead of aging out. Runs as a bare statement rather than inside
+// the finalize transaction: that transaction is already rolled back, and a
+// single-row UPDATE by primary key at the default isolation level is the
+// least contended write available — which matters most in exactly the case
+// that brought us here, repeated serialization failures.
+//
+// `'interrupted'` keeps the dropped attempt off the per-job cap. The worker
+// did reach a verdict, so this is not the deterministic-crash case the cap
+// exists to stop, and burning an attempt on a lost race would abandon a job
+// that nothing is actually wrong with.
+export async function releaseJobReservation(
+  query: Querier,
+  workerId: string,
+  jobToRun: JobsTable,
+  jobReservationId: number,
+): Promise<void> {
+  try {
+    await query([
+      `UPDATE job_reservations
+       SET completed_at = NOW(), completion_reason = 'interrupted'
+       WHERE completed_at IS NULL AND id = `,
+      param(jobReservationId),
+    ]);
+    // The job may be claimable again now. Wake the runners rather than
+    // leaving it for the poll interval.
+    await query([`NOTIFY jobs`]);
+  } catch (e: any) {
+    // The lease still expires on its own, so the reservation is not stuck
+    // forever — just for as long as the lease has left to run. Worth
+    // reporting, not worth failing the work loop over.
+    log.error(
+      `%s: could not release reservation %s for job %s: %s`,
+      workerId,
+      jobReservationId,
+      jobToRun.id,
+      e?.message ?? e,
+    );
+    Sentry.captureException(e);
   }
 }
 

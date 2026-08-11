@@ -289,6 +289,7 @@ const ALL_TEST_FILES: string[] = [
   './finalize-orphan-reservations-test',
   './stuck-reservations-test',
   './mark-failed-job-test',
+  './pg-queue-finalize-test',
   './finalize-child-fatal-failure-test',
   './screenshot-card-test',
   './run-command-task-test',

@@ -8,9 +8,6 @@ import {
 export interface StuckReservation {
   id: string;
   jobId: string;
-  // Another worker holds a live reservation on this job right now, so this
-  // row is a stale orphan and the job's outcome is no longer ours to decide.
-  reclaimed: boolean;
 }
 
 // Reservations owned by `workerId` whose lease has aged out without the worker
@@ -24,28 +21,19 @@ export interface StuckReservation {
 // finalize transaction, so a job that runs to the very edge of its lease would
 // otherwise be reaped while its COMMIT is in flight.
 //
-// `reclaimed` exists because a stale orphan and a live attempt can coexist:
-// the job became claimable the moment the lease lapsed, so another worker may
-// already own it. Rejecting the job in that case would make the running
-// worker's finalize find a row that is no longer 'unfulfilled' and discard a
-// completion it was about to record — the same race
-// `finalizeOrphanedReservations` declines to run. Only a reservation that is
-// both open and unexpired counts as a live competitor; an expired or closed
-// sibling has no claim on the outcome.
+// A row here says the worker should be recycled. It does not say the job is
+// this worker's to fail — the job became claimable the instant the lease
+// lapsed, so another worker may already own it. That question belongs to
+// `markFailedJob`, which settles it in the same statement that writes the
+// outcome; deciding it out here would only produce a snapshot that goes stale
+// before the write lands.
 export async function findStuckReservations(
   dbAdapter: DBAdapter,
   workerId: string,
   gracePeriodSeconds = 30,
 ): Promise<StuckReservation[]> {
   let rows = (await runQuery(dbAdapter, [
-    `SELECT jr.id, jr.job_id,
-       EXISTS (
-         SELECT 1 FROM job_reservations live
-          WHERE live.job_id = jr.job_id
-            AND live.id > jr.id
-            AND live.completed_at IS NULL
-            AND live.locked_until > NOW()
-       ) AS reclaimed
+    `SELECT jr.id, jr.job_id
      FROM job_reservations jr
      WHERE jr.worker_id =`,
     param(workerId),
@@ -62,11 +50,10 @@ export async function findStuckReservations(
           AND newer.id > jr.id
      )
      ORDER BY jr.id`,
-  ] as Expression)) as { id: string; job_id: string; reclaimed: boolean }[];
+  ] as Expression)) as { id: string; job_id: string }[];
 
-  return rows.map(({ id, job_id: jobId, reclaimed }) => ({
+  return rows.map(({ id, job_id: jobId }) => ({
     id: String(id),
     jobId: String(jobId),
-    reclaimed,
   }));
 }
