@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "layer": "05.5",
+      "layerName": "Domain Kits",
+      "lane": "Cards & Models",
+      "concept": "Form Response",
+      "symbol": "FR",
+      "implemented": false,
+      "evidenceTier": "POC realm",
+      "auditStatus": "POC only",
+      "whereImplemented": null,
+      "reference": "institutional-meerkat/legal + audited kit realms",
+      "catalogMatch": null,
+      "provenance": null,
+      "domainKit": "Forms",
+      "owner": null,
+      "workState": null,
+      "notes": null,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../matrix-concept",
+        "name": "MatrixConcept"
+      }
+    }
+  }
+}

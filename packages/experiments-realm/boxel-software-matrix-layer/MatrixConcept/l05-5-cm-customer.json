@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "layer": "05.5",
+      "layerName": "Domain Kits",
+      "lane": "Cards & Models",
+      "concept": "Customer",
+      "symbol": "Cu",
+      "implemented": false,
+      "evidenceTier": null,
+      "auditStatus": "Missing",
+      "whereImplemented": null,
+      "reference": null,
+      "catalogMatch": null,
+      "provenance": null,
+      "domainKit": "Commerce",
+      "owner": "richard",
+      "workState": "Done",
+      "notes": "v1 \u00b7 Built as ACCOUNT \u2014 experiments-realm/account.gts, POC tier. Concept should be renamed Account per the spec Data Architecture",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../matrix-concept",
+        "name": "MatrixConcept"
+      }
+    }
+  }
+}

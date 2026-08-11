@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "headline": "Software Layer Matrix",
+      "cardInfo": {
+        "name": "Software Layer Matrix",
+        "summary": "Live tracker for the 590-concept layer matrix: evidence coverage, per-layer progress, and work in flight.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../matrix-tracker",
+        "name": "MatrixTracker"
+      }
+    }
+  }
+}

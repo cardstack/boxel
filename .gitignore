@@ -32,3 +32,4 @@ boxel-dev-all.pids
 # the /custom/modules/ mount.
 __pycache__/
 *.pyc
+.boxel-history/

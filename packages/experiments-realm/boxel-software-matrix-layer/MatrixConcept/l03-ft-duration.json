@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "layer": "03",
+      "layerName": "Structures",
+      "lane": "Fields & Types",
+      "concept": "Duration",
+      "symbol": "Du",
+      "implemented": true,
+      "evidenceTier": "Platform",
+      "auditStatus": "Implemented",
+      "whereImplemented": "base: base/time/duration.gts",
+      "reference": null,
+      "catalogMatch": null,
+      "provenance": "periodic:Duration",
+      "domainKit": null,
+      "owner": "lucas",
+      "workState": "In Progress",
+      "notes": "App 2: Talent & Resource Tracker",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../matrix-concept",
+        "name": "MatrixConcept"
+      }
+    }
+  }
+}

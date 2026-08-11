@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "layer": "01",
+      "layerName": "Kernel",
+      "lane": "Components & Views",
+      "concept": "Popover",
+      "symbol": "Po",
+      "implemented": false,
+      "evidenceTier": "Catalog listing",
+      "auditStatus": "Extract from listing",
+      "whereImplemented": null,
+      "reference": "catalog: 46f065-popover/popover.gts | catalog: 19dee3-virtual-try-on-application/46f065-popover/popover.gts",
+      "catalogMatch": "catalog: 46f065-popover/popover.gts | catalog: 19dee3-virtual-try-on-application/46f065-popover/popover.gts",
+      "provenance": null,
+      "domainKit": null,
+      "owner": null,
+      "workState": null,
+      "notes": null,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../matrix-concept",
+        "name": "MatrixConcept"
+      }
+    }
+  }
+}

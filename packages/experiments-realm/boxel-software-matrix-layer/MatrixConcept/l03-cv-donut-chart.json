@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "layer": "03",
+      "layerName": "Structures",
+      "lane": "Components & Views",
+      "concept": "Donut Chart",
+      "symbol": "DC",
+      "implemented": false,
+      "evidenceTier": "Catalog listing",
+      "auditStatus": "Extract from listing",
+      "whereImplemented": null,
+      "reference": "catalog: 04868f-mortgage-calculator/components/donut-chart.gts | catalog: boxel-surface-demo/mortgage-surface-demo/components/donut-chart.gts",
+      "catalogMatch": "catalog: 04868f-mortgage-calculator/components/donut-chart.gts | catalog: boxel-surface-demo/mortgage-surface-demo/components/donut-chart.gts",
+      "provenance": "periodic:Chart",
+      "domainKit": null,
+      "owner": "richard",
+      "workState": "Next",
+      "notes": "v1.1 \u00b7 Open \u2014 no v1 consumer; dashboard is line + CSS bars",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../matrix-concept",
+        "name": "MatrixConcept"
+      }
+    }
+  }
+}

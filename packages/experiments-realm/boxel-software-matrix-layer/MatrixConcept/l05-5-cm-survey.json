@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "layer": "05.5",
+      "layerName": "Domain Kits",
+      "lane": "Cards & Models",
+      "concept": "Survey",
+      "symbol": "Su",
+      "implemented": false,
+      "evidenceTier": "Catalog listing",
+      "auditStatus": "Extract from listing",
+      "whereImplemented": null,
+      "reference": "catalog: b6ac3a-survey/survey.gts",
+      "catalogMatch": "catalog: b6ac3a-survey/survey.gts",
+      "provenance": null,
+      "domainKit": "Forms",
+      "owner": null,
+      "workState": null,
+      "notes": null,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../matrix-concept",
+        "name": "MatrixConcept"
+      }
+    }
+  }
+}
