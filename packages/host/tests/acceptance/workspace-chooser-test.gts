@@ -2,6 +2,7 @@ import {
   click,
   focus,
   settled,
+  triggerEvent,
   triggerKeyEvent,
   waitFor,
   waitUntil,
@@ -58,6 +59,21 @@ function withUpdatedRealmInfo(
   return () => {
     realmResource.info = previousInfo;
   };
+}
+
+// Tile counts are loaded lazily from `/_federated-index-counts` into a tracked
+// map on the realm service, keyed by realm URL. Seed that map directly so the
+// assertions don't depend on a fixture realm's incidental contents.
+function withIndexCounts(
+  realmURL: string,
+  counts: {
+    cardCount: number | null;
+    fileCount: number | null;
+    definitionCount: number | null;
+  },
+): void {
+  let realmService = getService('realm') as any;
+  realmService.indexCountsByRealm.set(realmURL, counts);
 }
 
 module('Acceptance | workspace-chooser', function (hooks) {
@@ -185,6 +201,438 @@ module('Acceptance | workspace-chooser', function (hooks) {
       assert
         .dom('[data-test-favorites-list] [data-test-workspace="Workspace A"]')
         .exists('favorited workspace appears in favorites section');
+    });
+
+    test('the star button tooltip reflects the current favorite state', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+
+      let starButton = `[data-test-workspace-favorite-btn="${realmAURL}"]`;
+
+      // Tooltip reveals its content on the wrapping trigger's mouseenter, not
+      // the button's.
+      let hoverStar = async () =>
+        triggerEvent(
+          document
+            .querySelector(starButton)!
+            .closest('[data-tooltip-trigger]')!,
+          'mouseenter',
+        );
+
+      await hoverStar();
+      assert
+        .dom('[data-test-tooltip-content]')
+        .hasText(
+          'Add to Favorites',
+          'an unfavorited workspace offers to add it',
+        );
+
+      await click(starButton);
+      await hoverStar();
+      assert
+        .dom('[data-test-tooltip-content]')
+        .hasText(
+          'Remove from Favorites',
+          'a favorited workspace offers to remove it',
+        );
+    });
+
+    test('the star button is labelled for assistive tech', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+
+      let starButton = `[data-test-workspace-favorite-btn="${realmAURL}"]`;
+      assert.dom(starButton).hasAttribute('aria-label', 'Add to Favorites');
+
+      await click(starButton);
+      assert
+        .dom(starButton)
+        .hasAttribute('aria-label', 'Remove from Favorites');
+    });
+  });
+
+  // Only the enlarged favorite tiles carry a metadata row; the smaller Your
+  // Workspaces tiles show name + visibility instead. The counts arrive
+  // separately from the realm info, via `/_federated-index-counts`
+  // (`RealmIndexCounts`), and are seeded here by `withIndexCounts` so a fixture
+  // realm's incidental contents don't decide what the tile renders.
+  module('favorite tile metadata', function () {
+    // Favorites have to be set after the app boots — the matrix service is
+    // reset during login, which would drop a pre-visit assignment.
+    async function openChooserWithFavorite() {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      let matrixService = getService('matrix-service') as MatrixService;
+      matrixService.workspaceFavorites = [realmAURL];
+      await settled();
+      await waitFor('[data-test-favorites-list] [data-test-workspace]');
+    }
+
+    function favoriteStat(label: string) {
+      return `[data-test-favorites-list] [data-test-workspace-stats="${realmAURL}"] [data-test-workspace-stat="${label}"]`;
+    }
+
+    test('renders Cards, Files and Definitions counts', async function (assert) {
+      await openChooserWithFavorite();
+
+      withIndexCounts(realmAURL, {
+        cardCount: 12,
+        fileCount: 34,
+        definitionCount: 5,
+      });
+      await settled();
+
+      assert.dom(favoriteStat('Cards')).hasText('Cards 12');
+      assert.dom(favoriteStat('Files')).hasText('Files 34');
+      assert.dom(favoriteStat('Definitions')).hasText('Definitions 5');
+      assert
+        .dom(
+          `[data-test-favorites-list] [data-test-workspace-stats="${realmAURL}"] [data-test-workspace-stat]`,
+        )
+        .exists({ count: 3 }, 'all three stats render');
+    });
+
+    test('omits a stat with no count rather than showing zero', async function (assert) {
+      await openChooserWithFavorite();
+
+      withIndexCounts(realmAURL, {
+        cardCount: 7,
+        fileCount: 0,
+        definitionCount: null,
+      });
+      await settled();
+
+      assert.dom(favoriteStat('Cards')).hasText('Cards 7');
+      assert
+        .dom(favoriteStat('Files'))
+        .doesNotExist('a zero count is dropped, not rendered as "Files 0"');
+      assert
+        .dom(favoriteStat('Definitions'))
+        .doesNotExist('an unavailable count is dropped');
+    });
+
+    test('keeps the stats row present, and its height, before counts arrive', async function (assert) {
+      // The row is rendered unconditionally so the numbers land in reserved
+      // space instead of growing the tile. Measure the row before any counts
+      // exist, then again once they do.
+      await openChooserWithFavorite();
+
+      let rowSelector = `[data-test-favorites-list] [data-test-workspace-stats="${realmAURL}"]`;
+      assert
+        .dom(rowSelector)
+        .exists('the stats row is present before counts load');
+      assert
+        .dom(`${rowSelector} [data-test-workspace-stat]`)
+        .doesNotExist('but renders no stats yet');
+
+      let heightBefore = (
+        document.querySelector(rowSelector) as HTMLElement
+      ).getBoundingClientRect().height;
+      assert.ok(
+        heightBefore > 0,
+        `the empty row still reserves height, got ${heightBefore}px`,
+      );
+
+      withIndexCounts(realmAURL, {
+        cardCount: 12,
+        fileCount: 34,
+        definitionCount: 5,
+      });
+      await settled();
+
+      let heightAfter = (
+        document.querySelector(rowSelector) as HTMLElement
+      ).getBoundingClientRect().height;
+      assert.strictEqual(
+        heightAfter,
+        heightBefore,
+        `the row does not grow when counts arrive (${heightBefore}px -> ${heightAfter}px)`,
+      );
+    });
+
+    test('counts refresh after the realm re-indexes, without blanking first', async function (assert) {
+      await openChooserWithFavorite();
+
+      withIndexCounts(realmAURL, {
+        cardCount: 12,
+        fileCount: 34,
+        definitionCount: 5,
+      });
+      await settled();
+      assert.dom(favoriteStat('Cards')).hasText('Cards 12');
+
+      // Stand in for the realm server's answer changing after a write.
+      let realmService = getService('realm') as any;
+      let requestedRealms: string[][] = [];
+      let realmServerService = getService('realm-server') as any;
+      let originalFetch = realmServerService.fetchRealmIndexCounts;
+      realmServerService.fetchRealmIndexCounts = async (urls: string[]) => {
+        requestedRealms.push(urls);
+        return [
+          {
+            id: realmAURL,
+            attributes: { cardCount: 13, fileCount: 34, definitionCount: 5 },
+          },
+        ];
+      };
+
+      try {
+        realmService.markIndexCountsStale(realmAURL);
+        await settled();
+
+        assert.deepEqual(
+          requestedRealms,
+          [[realmAURL]],
+          'the stale realm is re-requested exactly once',
+        );
+        assert
+          .dom(favoriteStat('Cards'))
+          .hasText('Cards 13', 'the tile shows the refreshed count');
+      } finally {
+        realmServerService.fetchRealmIndexCounts = originalFetch;
+      }
+    });
+
+    test('marking a realm stale keeps its previous counts visible', async function (assert) {
+      await openChooserWithFavorite();
+
+      withIndexCounts(realmAURL, {
+        cardCount: 12,
+        fileCount: 34,
+        definitionCount: 5,
+      });
+      await settled();
+
+      // Hold the refetch open so we can observe the interim state: the tile must
+      // keep the old numbers rather than emptying its row on every write.
+      let realmServerService = getService('realm-server') as any;
+      let originalFetch = realmServerService.fetchRealmIndexCounts;
+      realmServerService.fetchRealmIndexCounts = () => new Promise(() => {});
+
+      try {
+        (getService('realm') as any).markIndexCountsStale(realmAURL);
+        await settled();
+
+        assert
+          .dom(favoriteStat('Cards'))
+          .hasText('Cards 12', 'stale counts stay on screen while refetching');
+      } finally {
+        realmServerService.fetchRealmIndexCounts = originalFetch;
+      }
+    });
+
+    test('the metadata row is only on favorite tiles', async function (assert) {
+      await openChooserWithFavorite();
+
+      withIndexCounts(realmAURL, {
+        cardCount: 12,
+        fileCount: 34,
+        definitionCount: 5,
+      });
+      await settled();
+
+      assert
+        .dom(
+          `[data-test-workspace-list] [data-test-workspace-stats="${realmAURL}"]`,
+        )
+        .doesNotExist('the Your Workspaces tile has no metadata row');
+    });
+  });
+
+  module('tile order', function () {
+    test('the New Workspace tile renders ahead of the workspace tiles', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+
+      let tiles = [
+        ...document.querySelectorAll(
+          '[data-test-workspace-list] [data-test-add-workspace], [data-test-workspace-list] [data-test-workspace]',
+        ),
+      ];
+      assert.ok(
+        tiles[0]?.hasAttribute('data-test-add-workspace'),
+        'the first tile in Your Workspaces is the New Workspace tile',
+      );
+      assert.ok(tiles.length > 1, 'the workspace tiles render after it');
+    });
+
+    test('opening the chooser selects a workspace, not the New Workspace tile', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      await waitFor('[data-test-workspace-selected]');
+
+      // The selected tile takes focus, so landing on New Workspace would make
+      // the first Enter create a workspace instead of opening one.
+      assert
+        .dom('[data-test-add-workspace-selected]')
+        .doesNotExist('the New Workspace tile is not selected on open');
+      assert
+        .dom('[data-test-workspace-list] [data-test-workspace-selected]')
+        .exists({ count: 1 }, 'a workspace tile is selected instead');
+    });
+  });
+
+  // Catalog ordering needs two catalog realms to compare. The environment's own
+  // catalog realm URL is unset in tests, so stand up a pair of public realms
+  // and have the realm-server mock advertise them as the catalogs.
+  module('catalog ordering', function (hooks) {
+    const catalogOneURL = 'http://test-realm/catalogs/one/';
+    const catalogTwoURL = 'http://test-realm/catalogs/two/';
+
+    hooks.beforeEach(async function () {
+      for (let [realmURL, name] of [
+        [catalogOneURL, 'Catalog One'],
+        [catalogTwoURL, 'Catalog Two'],
+      ]) {
+        await setupAcceptanceTestRealm({
+          realmURL,
+          mockMatrixUtils,
+          permissions: { '*': ['read'] },
+          contents: {
+            'realm.json': realmConfigCardJSON({ name }),
+            'index.json': {
+              data: {
+                type: 'card',
+                meta: {
+                  adoptsFrom: {
+                    module: '@cardstack/base/cards-grid',
+                    name: 'CardsGrid',
+                  },
+                },
+              },
+            },
+          },
+        });
+      }
+    });
+
+    // Register the pair as catalogs on the realm-server service rather than
+    // through the `/_catalog-realms` mock: `fetchCatalogRealms` early-returns
+    // once any catalog is known, and `resetState()` deliberately carries
+    // catalog realms across logins, so by this point the list is already
+    // populated and a mock override would never be fetched.
+    async function showAsCatalogs() {
+      let realmServer = getService('realm-server') as any;
+      for (let url of [catalogOneURL, catalogTwoURL]) {
+        if (!realmServer.availableRealms.find((r: any) => r.url === url)) {
+          realmServer.availableRealms.push({ type: 'catalog', url });
+        }
+      }
+      await settled();
+      await waitFor('[data-test-catalog-list] [data-test-workspace]');
+    }
+
+    // The skills realm is advertised as a catalog too; compare only the two
+    // realms this module controls.
+    function orderOfOurCatalogs(): string[] {
+      return [
+        ...document.querySelectorAll(
+          '[data-test-catalog-list] [data-test-workspace]',
+        ),
+      ]
+        .map((el) => el.getAttribute('data-test-workspace') ?? '')
+        .filter((name) => name === 'Catalog One' || name === 'Catalog Two');
+    }
+
+    test('catalogs are ordered newest-created first', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      await showAsCatalogs();
+
+      let restoreOne = withUpdatedRealmInfo(catalogOneURL, {
+        createdAt: '2024-01-01T00:00:00.000Z',
+      });
+      let restoreTwo = withUpdatedRealmInfo(catalogTwoURL, {
+        createdAt: '2026-01-01T00:00:00.000Z',
+      });
+      await settled();
+
+      assert.deepEqual(
+        orderOfOurCatalogs(),
+        ['Catalog Two', 'Catalog One'],
+        'the more recently created catalog comes first',
+      );
+
+      restoreTwo();
+      restoreOne();
+
+      // Flip the dates: order must follow createdAt, not the order the realm
+      // server happened to enumerate the catalogs in.
+      restoreOne = withUpdatedRealmInfo(catalogOneURL, {
+        createdAt: '2026-06-01T00:00:00.000Z',
+      });
+      restoreTwo = withUpdatedRealmInfo(catalogTwoURL, {
+        createdAt: '2024-06-01T00:00:00.000Z',
+      });
+      await settled();
+
+      assert.deepEqual(
+        orderOfOurCatalogs(),
+        ['Catalog One', 'Catalog Two'],
+        'reversing the creation dates reverses the render order',
+      );
+
+      restoreTwo();
+      restoreOne();
+    });
+
+    test('a catalog with no createdAt sorts after the dated ones', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      await showAsCatalogs();
+
+      let restoreOne = withUpdatedRealmInfo(catalogOneURL, {
+        createdAt: null,
+      });
+      let restoreTwo = withUpdatedRealmInfo(catalogTwoURL, {
+        createdAt: '2024-01-01T00:00:00.000Z',
+      });
+      await settled();
+
+      assert.deepEqual(
+        orderOfOurCatalogs(),
+        ['Catalog Two', 'Catalog One'],
+        'a realm with no creation date sorts after a dated one',
+      );
+
+      restoreTwo();
+      restoreOne();
+    });
+  });
+
+  module('workspace menu footer', function () {
+    test('shows relative Updated and Created timestamps', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+
+      let restore = withUpdatedRealmInfo(realmAURL, {
+        createdAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
+        updatedAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+      });
+      await settled();
+
+      await click(`[data-test-workspace-menu-trigger="${realmAURL}"]`);
+
+      assert
+        .dom(`[data-test-workspace-menu-footer="${realmAURL}"]`)
+        .includesText('Updated 5 min ago')
+        .includesText('Created')
+        .includesText('3 hrs ago');
+
+      restore();
+    });
+
+    test('omits the footer when neither timestamp is known', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+
+      let restore = withUpdatedRealmInfo(realmAURL, {
+        createdAt: null,
+        updatedAt: null,
+      });
+      await settled();
+
+      await click(`[data-test-workspace-menu-trigger="${realmAURL}"]`);
+
+      assert
+        .dom('[data-test-boxel-menu-item-text="Realm Settings"]')
+        .exists('the menu itself is open');
+      assert
+        .dom(`[data-test-workspace-menu-footer="${realmAURL}"]`)
+        .doesNotExist('no footer without a timestamp to show');
+
+      restore();
     });
   });
 
@@ -535,28 +983,30 @@ module('Acceptance | workspace-chooser', function (hooks) {
         .exists('ArrowRight selects the next workspace');
       assert.dom('[data-test-workspace-selected]').exists({ count: 1 });
 
-      await pressKey('ArrowRight');
+      await pressKey('ArrowLeft');
+      assert
+        .dom(`[data-test-workspace-selected="${first}"]`)
+        .exists('ArrowLeft returns to the first workspace');
+
+      // The New Workspace tile renders ahead of the workspace tiles, so it sits
+      // to the *left* of the first workspace in the navigation sequence.
+      await pressKey('ArrowLeft');
       assert
         .dom('[data-test-add-workspace-selected]')
-        .exists('ArrowRight reaches the New Workspace tile');
+        .exists('ArrowLeft reaches the New Workspace tile');
       assert
         .dom('[data-test-workspace-selected]')
         .doesNotExist('no workspace card is selected while New Workspace is');
 
       await pressKey('ArrowLeft');
       assert
-        .dom(`[data-test-workspace-selected="${second}"]`)
-        .exists('ArrowLeft leaves the New Workspace tile');
+        .dom('[data-test-add-workspace-selected]')
+        .exists('ArrowLeft at the start stays on the New Workspace tile');
 
-      await pressKey('ArrowLeft');
+      await pressKey('ArrowRight');
       assert
         .dom(`[data-test-workspace-selected="${first}"]`)
-        .exists('ArrowLeft returns to the first workspace');
-
-      await pressKey('ArrowLeft');
-      assert
-        .dom(`[data-test-workspace-selected="${first}"]`)
-        .exists('ArrowLeft at the start stays on the first workspace');
+        .exists('ArrowRight leaves the New Workspace tile');
     });
 
     test('up/down arrows move vertically between rows', async function (assert) {
@@ -636,9 +1086,8 @@ module('Acceptance | workspace-chooser', function (hooks) {
       await visitOperatorMode({ workspaceChooserOpened: true });
       await waitFor('[data-test-workspace-selected]');
 
-      // Step right past the two user workspaces to the New Workspace tile.
-      await pressKey('ArrowRight');
-      await pressKey('ArrowRight');
+      // The New Workspace tile sits immediately left of the first workspace.
+      await pressKey('ArrowLeft');
       assert
         .dom('[data-test-add-workspace-selected]')
         .exists('the New Workspace tile is selected');
@@ -656,28 +1105,34 @@ module('Acceptance | workspace-chooser', function (hooks) {
         .exists('the modal shows its form rather than submitting on open');
     });
 
-    test('right arrow advances past the New Workspace tile into the catalog section', async function (assert) {
+    test('right arrow advances past the last workspace into the catalog section', async function (assert) {
       await visitOperatorMode({ workspaceChooserOpened: true });
       await waitFor('[data-test-workspace-selected]');
 
-      // This configuration shows catalog workspaces, so the New Workspace tile
+      // This configuration shows catalog workspaces, so the last user workspace
       // is not the last selectable item.
       assert
         .dom('[data-test-catalog-list]')
         .exists('catalogs are shown in this configuration');
 
-      await pressKey('ArrowRight'); // second user workspace
-      await pressKey('ArrowRight'); // New Workspace tile
+      let [, second] = orderedWorkspaceNames();
+      await pressKey('ArrowRight'); // second user workspace — the last of them
       assert
-        .dom('[data-test-add-workspace-selected]')
-        .exists('reached the New Workspace tile');
+        .dom(`[data-test-workspace-list] [data-test-workspace-selected]`)
+        .exists('reached the last workspace in Your Workspaces');
 
       await pressKey('ArrowRight'); // into the catalog section
       assert
-        .dom('[data-test-add-workspace-selected]')
+        .dom(`[data-test-workspace-list] [data-test-workspace-selected]`)
         .doesNotExist(
-          'ArrowRight advances past the New Workspace tile into the catalogs',
+          'ArrowRight advances out of Your Workspaces into the catalogs',
         );
+      assert
+        .dom('[data-test-catalog-list] [data-test-workspace-selected]')
+        .exists('the selection lands on a catalog tile');
+      assert
+        .dom(`[data-test-workspace-selected="${second}"]`)
+        .doesNotExist('the last user workspace is no longer selected');
     });
 
     test('keys originating from a non-tile control are ignored', async function (assert) {

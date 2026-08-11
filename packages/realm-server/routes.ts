@@ -53,6 +53,7 @@ import handleUnlistedRealmPathRequest from './handlers/handle-unlisted-realm-pat
 import handlePrerenderProxy from './handlers/handle-prerender-proxy.ts';
 import handleSearch from './handlers/handle-search.ts';
 import type { JobScopedSearchCache } from './job-scoped-search-cache.ts';
+import handleRealmIndexCounts from './handlers/handle-realm-index-counts.ts';
 import handleRealmInfo from './handlers/handle-realm-info.ts';
 import handleFederatedTypes from './handlers/handle-federated-types.ts';
 import { multiRealmAuthorization } from './middleware/multi-realm-authorization.ts';
@@ -229,6 +230,14 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_federated-info',
     multiRealmAuthorization(args),
     handleRealmInfo({
+      dbAdapter: args.dbAdapter,
+      reconciler: args.reconciler,
+    }),
+  );
+  router.all(
+    '/_federated-index-counts',
+    multiRealmAuthorization(args),
+    handleRealmIndexCounts({
       dbAdapter: args.dbAdapter,
       reconciler: args.reconciler,
     }),

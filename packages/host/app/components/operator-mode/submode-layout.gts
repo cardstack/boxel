@@ -708,10 +708,27 @@ export default class SubmodeLayout extends Component<Signature> {
       }
 
       .submode-layout-top-bar-center {
+        /* Narrow default: stay in flow as a flex child. `flex: 1` reserves the
+           middle track between the workspace button and the profile controls,
+           so the content can neither slide under those controls nor intercept
+           clicks meant for them — it just sits on the one line between them. */
         flex: 1;
         display: flex;
         justify-content: center;
         min-width: 0;
+      }
+      /* Wider top bars have room to center the content within the whole bar
+         rather than only within the asymmetric middle track (the 160px
+         workspace button makes the flex track off-centre). Take it out of flow
+         and pin it to the bar's centre; the breakpoint is high enough that the
+         centred content clears the workspace button on the left. */
+      @container (min-width: 60rem) {
+        .submode-layout-top-bar-center {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+        }
       }
 
       /* Slot for the expanded stack-item's CardHeader pill. When a
@@ -754,6 +771,10 @@ export default class SubmodeLayout extends Component<Signature> {
       .profile-icon-button {
         --boxel-icon-button-width: var(--container-button-size);
         --boxel-icon-button-height: var(--container-button-size);
+        /* Match the outline treatment used by the search and AI-assistant
+           icon buttons (see .ai-assistant-button/search-sheet), instead of
+           the Avatar component's default 2px solid white border. */
+        --profile-avatar-icon-border: var(--boxel-border-flexible);
 
         background: none;
 

@@ -9,10 +9,11 @@ import type {
   QueueRunner,
   Realm,
 } from '@cardstack/runtime-common';
+import { rri } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.ts';
 import {
-  assertRealmInfoExtras,
+  assertRealmIndexCounts,
   closeServer,
   createVirtualNetwork,
   setupDB,
@@ -24,17 +25,24 @@ import {
 import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
 import type { RealmHttpServer as Server } from '../../server.ts';
 
+const PERSON_SOURCE = `
+  import { contains, field, CardDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
+  export class Person extends CardDef {
+    @field firstName = contains(StringField);
+  }
+`;
+
 module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
-  module('Realm Server Endpoints | /_federated-info', function (hooks) {
+  module('Realm Server Endpoints | /_federated-index-counts', function (hooks) {
     let testRealm: Realm;
     let secondaryRealm: Realm;
     let request: SuperTest<Test>;
-    let dbAdapter: PgAdapter;
     let testRealmHttpServer: Server;
 
     let ownerUserId = '@mango:localhost';
 
-    async function startInfoRealmServer({
+    async function startCountsRealmServer({
       dbAdapter,
       publisher,
       runner,
@@ -55,6 +63,19 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
             realmURL: testRealmURL,
             fileSystem: {
               'realm.json': realmConfigCardJSON({ name: 'Primary Realm' }),
+              'person.gts': PERSON_SOURCE,
+              'mango.json': {
+                data: {
+                  attributes: { firstName: 'Mango' },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('./person.gts'),
+                      name: 'Person',
+                    },
+                  },
+                },
+              },
+              'notes.txt': 'a plain file',
             },
             permissions: {
               '*': ['read'],
@@ -87,31 +108,32 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
       )!;
     }
 
-    async function stopInfoRealmServer() {
-      testRealm.unsubscribe();
-      secondaryRealm.unsubscribe();
-      await closeServer(testRealmHttpServer);
-      resetCatalogRealms();
-    }
-
     setupDB(hooks, {
-      beforeEach: async (_dbAdapter, publisher, runner) => {
-        dbAdapter = _dbAdapter;
-        await startInfoRealmServer({ dbAdapter, publisher, runner });
+      beforeEach: async (dbAdapter, publisher, runner) => {
+        await startCountsRealmServer({ dbAdapter, publisher, runner });
       },
+      // Tolerate a half-finished setup. If the fixture build fails the realms
+      // are never assigned, and an unguarded teardown throws before
+      // `closeServer` — leaking the bound port so every later test in the
+      // process fails with EADDRINUSE instead of the real error.
       afterEach: async () => {
-        await stopInfoRealmServer();
+        testRealm?.unsubscribe();
+        secondaryRealm?.unsubscribe();
+        if (testRealmHttpServer) {
+          await closeServer(testRealmHttpServer);
+        }
+        resetCatalogRealms();
       },
     });
 
-    test('QUERY /_federated-info federates info across realms and includes public list header', async function (assert) {
+    test('QUERY returns counts for every requested realm', async function (assert) {
       let realmServerToken = createRealmServerJWT(
         { user: ownerUserId, sessionRoom: 'session-room-test' },
         realmSecretSeed,
       );
 
       let response = await request
-        .post('/_federated-info')
+        .post('/_federated-index-counts')
         .set('X-HTTP-Method-Override', 'QUERY')
         .set('Accept', 'application/vnd.api+json')
         .set('Authorization', `Bearer ${realmServerToken}`)
@@ -122,120 +144,105 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
         data: {
           id: string;
           type: string;
-          attributes: { name: string } & Record<string, unknown>;
+          attributes: Record<string, unknown>;
         }[];
       };
-      assert.strictEqual(data.length, 2, 'returns info for both realms');
-      let dataById = new Map(data.map((entry) => [entry.id, entry]));
+      assert.strictEqual(data.length, 2, 'returns counts for both realms');
+
+      let byId = new Map(data.map((entry) => [entry.id, entry]));
       assert.strictEqual(
-        dataById.get(testRealm.url)?.attributes.name,
-        'Primary Realm',
-        'primary realm info included',
+        byId.get(testRealm.url)?.type,
+        'realm-index-counts',
+        'resource type is realm-index-counts',
       );
-      assert.strictEqual(
-        dataById.get(secondaryRealm.url)?.attributes.name,
-        'Secondary Realm',
-        'secondary realm info included',
+      // Two cards: `mango.json` plus the realm's own RealmConfig card at
+      // `realm.json`. One definition (`person.gts`) and one plain file
+      // (`notes.txt`) — note that neither card's `.json` lands in the file
+      // count, since an instance and its file row share a url.
+      assertRealmIndexCounts(assert, byId.get(testRealm.url)!.attributes, {
+        cardCount: 2,
+        definitionCount: 1,
+        fileCount: 1,
+      });
+      // The secondary realm holds only its RealmConfig card.
+      assertRealmIndexCounts(assert, byId.get(secondaryRealm.url)!.attributes, {
+        cardCount: 1,
+        definitionCount: 0,
+        fileCount: 0,
+      });
+    });
+
+    test('QUERY reflects a write once the realm re-indexes', async function (assert) {
+      let realmServerToken = createRealmServerJWT(
+        { user: ownerUserId, sessionRoom: 'session-room-test' },
+        realmSecretSeed,
+      );
+      let fetchCardCount = async () => {
+        let response = await request
+          .post('/_federated-index-counts')
+          .set('X-HTTP-Method-Override', 'QUERY')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Authorization', `Bearer ${realmServerToken}`)
+          .send({ realms: [testRealm.url] });
+        return response.body.data[0].attributes.cardCount as number;
+      };
+
+      let before = await fetchCardCount();
+      await testRealm.write(
+        'vanGogh.json',
+        JSON.stringify({
+          data: {
+            attributes: { firstName: 'Van Gogh' },
+            meta: {
+              adoptsFrom: { module: rri('./person.gts'), name: 'Person' },
+            },
+          },
+        }),
       );
 
-      // This endpoint — not each realm's own `/_info` — is what the host's
-      // workspace chooser reads, so it has to carry the tile metadata too.
-      for (let realmURL of [testRealm.url, secondaryRealm.url]) {
-        assertRealmInfoExtras(
-          assert,
-          dataById.get(realmURL)!.attributes as Record<string, unknown>,
-        );
-      }
-
-      let publicHeader =
-        response.headers['x-boxel-realms-public-readable'] ?? '';
-      assert.ok(publicHeader, 'includes public readable realms header');
-      let publicRealms = publicHeader
-        .split(',')
-        .map((value: string) => value.trim());
-      assert.ok(publicRealms.includes(testRealm.url), 'public realm is listed');
-      assert.notOk(
-        publicRealms.includes(secondaryRealm.url),
-        'private realm is not listed',
+      // The counts are memoized per index generation; the index swap has to
+      // drop that cache or the tile would show a stale number forever.
+      assert.strictEqual(
+        await fetchCardCount(),
+        before + 1,
+        'the memoized counts are invalidated by the index swap',
       );
     });
 
-    test('QUERY /_federated-info returns 403 when user lacks read access', async function (assert) {
+    test('QUERY returns 403 when the caller lacks read access', async function (assert) {
       let realmServerToken = createRealmServerJWT(
         { user: '@rando:localhost', sessionRoom: 'session-room-test' },
         realmSecretSeed,
       );
 
       let response = await request
-        .post('/_federated-info')
+        .post('/_federated-index-counts')
         .set('X-HTTP-Method-Override', 'QUERY')
         .set('Accept', 'application/vnd.api+json')
         .set('Authorization', `Bearer ${realmServerToken}`)
         .send({ realms: [testRealm.url, secondaryRealm.url] });
 
       assert.strictEqual(response.status, 403, 'HTTP 403 status');
-      assert.ok(
-        response.body.errors?.[0]?.includes(secondaryRealm.url),
-        'response lists realms without access',
-      );
     });
 
-    test('QUERY /_federated-info returns 401 when unauthenticated user requests non-public realm', async function (assert) {
+    test('QUERY returns 401 for an unauthenticated request to a private realm', async function (assert) {
       let response = await request
-        .post('/_federated-info')
+        .post('/_federated-index-counts')
         .set('X-HTTP-Method-Override', 'QUERY')
         .set('Accept', 'application/vnd.api+json')
         .send({ realms: [secondaryRealm.url] });
 
       assert.strictEqual(response.status, 401, 'HTTP 401 status');
-      assert.ok(
-        response.body.errors?.[0]?.includes(secondaryRealm.url),
-        'response lists realms requiring auth',
-      );
     });
 
-    test('QUERY /_federated-info returns 400 when realms are missing', async function (assert) {
+    test('QUERY returns 400 when realms are missing', async function (assert) {
       let response = await request
-        .post('/_federated-info')
+        .post('/_federated-index-counts')
         .set('X-HTTP-Method-Override', 'QUERY')
         .set('Accept', 'application/vnd.api+json')
         .send({});
 
       assert.strictEqual(response.status, 400, 'HTTP 400 status');
-      assert.ok(
-        response.body.errors?.[0]?.includes(
-          'realms must be supplied in request body',
-        ),
-        'response explains missing realms list',
-      );
-    });
-
-    test('QUERY /_federated-info returns info for a public realm without auth when realms body is provided', async function (assert) {
-      // This tests the scenario where a subdomain-based realm at root path
-      // (e.g. http://hi.localhost:4201/) sends QUERY to /_federated-info. The path /_federated-info
-      // matches the server-level route (not the realm's own handler), so the
-      // request body with realms array is required.
-      let response = await request
-        .post('/_federated-info')
-        .set('X-HTTP-Method-Override', 'QUERY')
-        .set('Accept', 'application/vnd.api+json')
-        .send({ realms: [testRealm.url] });
-
-      assert.strictEqual(response.status, 200, 'HTTP 200 status');
-      let { data } = response.body as {
-        data: {
-          id: string;
-          type: string;
-          attributes: { name: string } & Record<string, unknown>;
-        }[];
-      };
-      assert.strictEqual(data.length, 1, 'returns info for one realm');
-      assert.strictEqual(data[0].id, testRealm.url, 'realm id is correct');
-      assert.strictEqual(
-        data[0].attributes.name,
-        'Primary Realm',
-        'realm name is correct',
-      );
     });
   });
 });
