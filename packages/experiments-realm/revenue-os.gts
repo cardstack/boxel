@@ -1015,9 +1015,11 @@ export class RevenueOs extends CardDef {
                 {{else if (eq column.key 'account')}}
                   {{#let (this.accountOf item) as |account|}}
                     {{#if account}}
-                      {{#let (this.cardComponent account) as |C|}}
-                        <C @format='atom' />
-                      {{/let}}
+                      <span class='cell-account'>
+                        {{#let (this.cardComponent account) as |C|}}
+                          <C @format='atom' />
+                        {{/let}}
+                      </span>
                     {{/if}}
                   {{/let}}
                 {{else if (eq column.key 'actions')}}
@@ -1269,6 +1271,12 @@ export class RevenueOs extends CardDef {
         }
         .tone-zero {
           color: var(--muted-foreground, #6b7280);
+        }
+        /* the account atom is wider than the bare name it replaced; cap it so
+           the row action stays in view instead of scrolling off */
+        .cell-account {
+          display: inline-flex;
+          max-width: 11rem;
         }
         .tstatus {
           font-size: 0.625rem;
