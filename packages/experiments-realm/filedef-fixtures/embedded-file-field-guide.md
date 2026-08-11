@@ -1,5 +1,5 @@
 ---
-deck: A field guide for FileDef embedded rendering—every leaf type rendered inline, backed by a licensed fixture in this directory.
+deck: A field guide for FileDef embedded rendering—every leaf type rendered inline, backed by an openly licensed fixture in this directory.
 ---
 
 # FileDef embeds, family by family

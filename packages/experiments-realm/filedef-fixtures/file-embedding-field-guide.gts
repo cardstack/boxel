@@ -39,7 +39,7 @@ export class FileEmbeddingFieldGuide extends CardDef {
           <div class='document-index' aria-label='Document coverage'>
             <span><strong>36</strong> file types</span>
             <span><strong>3</strong> fixture tiers per type</span>
-            <span><strong>108</strong> licensed fixtures</span>
+            <span><strong>108</strong> openly licensed fixtures</span>
           </div>
         </header>
 
@@ -49,7 +49,7 @@ export class FileEmbeddingFieldGuide extends CardDef {
 
         <footer class='document-foot'>
           <span>FileDef format regression harness</span>
-          <span>Licensed · manifest-verified fixtures</span>
+          <span>Openly licensed · manifest-verified fixtures</span>
         </footer>
       </article>
 
@@ -255,7 +255,7 @@ export class FileEmbeddingFieldGuide extends CardDef {
         <:title>{{@model.cardTitle}}</:title>
         <:subtitle>{{@model.deck}}</:subtitle>
         <:meta><span>Media · documents · data · archives · fonts · 3D</span></:meta>
-        <:footer><span>108 fixtures</span><span>Licensed</span></:footer>
+        <:footer><span>108 fixtures</span><span>Openly licensed</span></:footer>
       </FittedCard>
     </template>
   };

@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "title": "FileDef embeds, family by family",
-      "deck": "A field guide for FileDef embedded rendering—every leaf type rendered inline, backed by a licensed fixture in this directory.",
+      "deck": "A field guide for FileDef embedded rendering—every leaf type rendered inline, backed by an openly licensed fixture in this directory.",
       "cardInfo": {
         "name": "File Embedding Field Guide",
         "summary": "Exercises the embedded format of all 36 FileDef leaf types through live ::file references in one reviewable document."

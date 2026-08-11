@@ -1,6 +1,6 @@
 # FileDef format regression fixtures
 
-A licensed corpus of 108 file fixtures (36 file types × simple/moderate/complex tiers) plus the review surfaces that render them, for auditing FileDef rendering quality across all four card formats.
+An openly licensed corpus of 108 file fixtures (36 file types × simple/moderate/complex tiers) plus the review surfaces that render them, for auditing FileDef rendering quality across all four card formats.
 
 ## Layout
 
