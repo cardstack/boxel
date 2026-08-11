@@ -34,9 +34,16 @@
         "../base/*.d.ts",
         "../base/*"
       ],
-      "@cardstack/host/tests/*": ["../host/tests/*"]
+      "@cardstack/host/tests/*": ["../host/tests/*"],
+      "ember-provide-consume-context": [
+        "../base/node_modules/ember-provide-consume-context/declarations/index.d.ts"
+      ]
     },
     "types": ["@cardstack/local-types"]
   },
-  "include": ["**/*.ts", "**/*.gts"]
+  "include": [
+    "**/*.ts",
+    "**/*.gts",
+    "../host/node_modules/qunit-dom/dist/es/install.d.ts"
+  ]
 }
