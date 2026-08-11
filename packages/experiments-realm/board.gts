@@ -25,7 +25,12 @@ interface BoardSignature {
     columns: BoardColumn[];
     hideEmpty?: boolean;
     items: CardDef[];
+    // KanbanPlane already tells a click apart from a drag; these hand that
+    // through in card terms so a consumer never reasons about placements.
+    onAddCard?: (columnKey: string | null) => void;
     onMove?: (item: CardDef, columnKey: string) => void;
+    onOpen?: (item: CardDef) => void;
+    onSelect?: (item: CardDef | undefined) => void;
   };
   Blocks: {
     card: [CardDef];
@@ -77,6 +82,17 @@ export class Board extends GlimmerComponent<BoardSignature> {
     }
   }
 
+  @action handleOpen(index: number) {
+    let item = this.args.items[index];
+    if (item) this.args.onOpen?.(item);
+  }
+
+  @action handleSelect(index: number | null) {
+    this.args.onSelect?.(
+      index === null ? undefined : this.args.items[index],
+    );
+  }
+
   <template>
     <div class='board' ...attributes>
       <KanbanPlane
@@ -86,6 +102,9 @@ export class Board extends GlimmerComponent<BoardSignature> {
         @hideEmpty={{@hideEmpty}}
         @placements={{this.placements}}
         @onChange={{this.handleChange}}
+        @onOpen={{this.handleOpen}}
+        @onSelect={{this.handleSelect}}
+        @onAddCard={{@onAddCard}}
       >
         <:card as |placement|>
           {{#let (itemAt @items placement.index) as |item|}}
