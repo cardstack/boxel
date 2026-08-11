@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "MatrixTracker",
+        "module": "../matrix-tracker"
+      },
+      "specType": "app",
+      "readMe": "## Matrix Tracker\n\nThe \"how many things have we done\" app over the 590 MatrixConcept cards: a coverage headline, an evidence-tier donut (the Donut Chart element's first consumer), per-layer progress bars, work-in-flight counts, and a filterable, searchable table where every row opens its concept card.\n\n```ts\nimport { MatrixTracker } from '../matrix-tracker';\n```\n\n**It reads the whole matrix through paged queries.** Card-context searches are clamped to 100 items per page (`search-bounds.ts`), so the tracker issues eight sorted 100-row pages and concatenates — live, so an edit to any concept's work state moves the numbers without a refresh. `PAGE_COUNT` is the growth ceiling (800 today); bump it when the matrix outgrows it.\n\n**The lag chip is the honest-data feature.** `workState: Done` with `implemented: false` means a human finished something the crawl has not counted yet; the chip shows the count and filters the table to those rows, so \"the sheet says 177\" and \"we actually finished 34 more\" are both visible instead of one hiding the other.\n\nAggregates are computed from the cards, never stored: the headline, tier composition, and layer bars all recompute from whatever the query returns, so a re-seed or a teammate's edit can never leave a stale rollup behind.\n\nPrerender gets the summary panels only; the filter/table surface mounts in interactive contexts.\n\n**Non-goals:** editing work states inline (open the concept card and edit there), the periodic-table grid view (a later phase alongside Cards Grid), charts over time (the matrix is a snapshot, not a time series), and writing anything back to the source spreadsheet.",
+      "cardInfo": {
+        "name": "Matrix Tracker",
+        "summary": "Live dashboard over the 590-concept matrix: tier donut, layer bars, work-in-flight counts, a built-awaiting-crawl lag filter, and a clickable table.",
+        "notes": null,
+        "cardThumbnailURL": null
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../MatrixTracker/home"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
