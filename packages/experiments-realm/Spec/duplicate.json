@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "default",
+        "module": "../duplicate"
+      },
+      "specType": "command",
+      "readMe": "## Duplicate\n\nClones any card. `@field card = linksTo(CardDef)` means it takes a card of any type — contained fields and links are copied, and a new instance is saved into the given realm.\n\n```ts\nimport DuplicateCommand from '../duplicate';\nlet { card: copy } = await new DuplicateCommand(commandContext).execute({\n  card,\n  realm,\n});\n```\n\nComputed fields are deliberately not copied. The copy recomputes them from its own data, so a duplicated invoice derives its own total and its own overdue state rather than inheriting frozen numbers from the original.\n\n**The block does not decide what should differ about a copy** — that is domain knowledge and it varies. Duplicate clones; the consumer patches. Revenue OS duplicates an invoice and then clears the number, sent date and payments, sets the status back to draft, and re-dates it 30 days out, which is what makes \"bill this customer again next month\" one click:\n\n```ts\nawait new PatchCardInstanceCommand(commandContext, { cardType: Invoice }).execute({\n  cardId: copy.id,\n  patch: {\n    attributes: { invoiceNumber: null, status: 'draft', sentDate: null },\n    relationships: { payments: { links: { self: null } } },\n  },\n});\n```\n\nThe command re-fetches its subject before serializing, so it never depends on the caller's load state — an unresolved link would otherwise be dropped from the copy.\n\nThe linked example is the command's natural target: a multi-line invoice that recurs, where retyping the lines by hand is the thing worth removing.\n\n**Non-goals:** deciding what a copy should reset (the consumer's patch), deep-copying linked cards — links are shared with the original, not cloned, so duplicating an invoice does not duplicate its account.",
+      "cardInfo": {
+        "name": "Duplicate",
+        "summary": "Clones any card into a realm, copying contained fields and links but not computeds. The consumer patches the copy to decide what should differ.",
+        "notes": null,
+        "cardThumbnailURL": null
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Invoice/inv-f-007"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

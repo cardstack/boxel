@@ -25,6 +25,7 @@ import {
   type getCards,
 } from '@cardstack/runtime-common';
 import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
+import PatchCardInstanceCommand from '@cardstack/boxel-host/commands/patch-card-instance';
 import ChartAreaIcon from '@cardstack/boxel-icons/chart-area';
 import { Board, type BoardColumn } from './board';
 import { Table, type TableColumn } from './table';
@@ -40,6 +41,7 @@ import { Activity } from './activity';
 import ConvertLeadCommand from './convert-lead';
 import RecordPaymentCommand from './record-payment';
 import CloseWonCommand from './close-won';
+import DuplicateCommand from './duplicate';
 import { formatMoney, outstandingBalance, sumLineItems } from './money';
 
 const OPEN_INVOICE_STATUSES = ['sent', 'viewed', 'partial'];
@@ -652,6 +654,44 @@ export class RevenueOs extends CardDef {
       });
     }
 
+    // A duplicated invoice is a fresh draft, not a second copy of a sent bill:
+    // the command clones, then the app clears what must not be reused.
+    @action async duplicateCard(item: CardDef) {
+      if (!this.commandContext || !this.realm) return;
+      this.busy = true;
+      try {
+        let result: any = await new DuplicateCommand(
+          this.commandContext,
+        ).execute({ card: item, realm: this.realm } as any);
+        let copy = result?.card as Invoice | undefined;
+        if (copy?.id) {
+          let today = new Date();
+          let due = new Date(today);
+          due.setDate(due.getDate() + 30);
+          await new PatchCardInstanceCommand(this.commandContext, {
+            cardType: Invoice,
+          }).execute({
+            cardId: copy.id,
+            patch: {
+              attributes: {
+                invoiceNumber: null,
+                status: 'draft',
+                issueDate: today.toISOString().slice(0, 10),
+                sentDate: null,
+                dueDate: due.toISOString().slice(0, 10),
+              },
+              relationships: { payments: { links: { self: null } } },
+            },
+          });
+        }
+        this.statusMessage = 'Duplicated as a new draft invoice';
+      } catch (e: any) {
+        this.statusMessage = e?.message ?? 'Duplicate failed';
+      } finally {
+        this.busy = false;
+      }
+    }
+
     @action async convertLead(lead: Lead) {
       if (!this.commandContext || !this.realm) return;
       this.busy = true;
@@ -1023,15 +1063,26 @@ export class RevenueOs extends CardDef {
                     {{/if}}
                   {{/let}}
                 {{else if (eq column.key 'actions')}}
-                  {{#if (gt (this.balanceOf item) 0)}}
+                  <span class='row-actions'>
+                    {{#if (gt (this.balanceOf item) 0)}}
+                      <BoxelButton
+                        @kind='secondary'
+                        @size='extra-small'
+                        @disabled={{this.busy}}
+                        {{on
+                          'click'
+                          (stopThen (fn this.recordBalancePayment item))
+                        }}
+                      >Record
+                        {{this.balanceDisplay item}}</BoxelButton>
+                    {{/if}}
                     <BoxelButton
-                      @kind='secondary'
+                      @kind='text-only'
                       @size='extra-small'
                       @disabled={{this.busy}}
-                      {{on 'click' (stopThen (fn this.recordBalancePayment item))}}
-                    >Record
-                      {{this.balanceDisplay item}}</BoxelButton>
-                  {{/if}}
+                      {{on 'click' (stopThen (fn this.duplicateCard item))}}
+                    >Duplicate</BoxelButton>
+                  </span>
                 {{/if}}
               </:cell>
             </Table>
@@ -1274,6 +1325,12 @@ export class RevenueOs extends CardDef {
         }
         /* the account atom is wider than the bare name it replaced; cap it so
            the row action stays in view instead of scrolling off */
+        .row-actions {
+          display: inline-flex;
+          gap: 0.25rem;
+          align-items: center;
+          justify-content: flex-end;
+        }
         .cell-account {
           display: inline-flex;
           max-width: 11rem;

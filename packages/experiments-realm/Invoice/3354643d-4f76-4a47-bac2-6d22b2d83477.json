@@ -1,0 +1,68 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "invoiceNumber": "INV-2026-062",
+      "issueDate": "2026-08-11",
+      "sentDate": null,
+      "dueDate": "2026-09-10",
+      "status": "draft",
+      "lineItems": [
+        {
+          "description": "Brand system audit",
+          "quantity": 1,
+          "unitPrice": {
+            "amount": 3200,
+            "currency": {
+              "code": "USD"
+            }
+          }
+        },
+        {
+          "description": "Workshop facilitation (2 days)",
+          "quantity": 2,
+          "unitPrice": {
+            "amount": 500,
+            "currency": {
+              "code": "USD"
+            }
+          }
+        }
+      ],
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../invoice",
+        "name": "Invoice"
+      }
+    },
+    "relationships": {
+      "account": {
+        "links": {
+          "self": "../Account/brightleaf-studio"
+        }
+      },
+      "owner": {
+        "links": {
+          "self": "../Teammate/dana-whitfield"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/ledger"
+        }
+      },
+      "payments": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
