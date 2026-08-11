@@ -64,6 +64,14 @@ function invoiceStatus(item: CardDef): string {
   return (item as Invoice).displayStatus ?? '';
 }
 
+// A due date is a calendar day, not an instant — an ISO round-trip moves it
+// back one for anyone east of UTC.
+function asCalendarDay(at: Date): string {
+  let month = String(at.getMonth() + 1).padStart(2, '0');
+  let day = String(at.getDate()).padStart(2, '0');
+  return `${at.getFullYear()}-${month}-${day}`;
+}
+
 function stopThen(action: (...args: any[]) => void) {
   return (event: Event) => {
     event.stopPropagation();
@@ -250,6 +258,7 @@ export class RevenueOs extends CardDef {
         return;
       }
       (item as Opportunity).stage = columnKey;
+      (item as Opportunity).lastStageChangedAt = new Date();
       await new SaveCardCommand(this.commandContext).execute({
         card: item,
         realm: this.realm,
@@ -628,12 +637,7 @@ export class RevenueOs extends CardDef {
           if (Number.isNaN(at.getTime())) {
             throw new Error(`"${raw}" is not a date`);
           }
-          // A date in a CSV is a calendar day, not an instant. Reading the
-          // local parts keeps it on that day; toISOString would shift it back
-          // one for anyone east of UTC.
-          let month = String(at.getMonth() + 1).padStart(2, '0');
-          let day = String(at.getDate()).padStart(2, '0');
-          return `${at.getFullYear()}-${month}-${day}`;
+          return asCalendarDay(at);
         },
       },
     ];
@@ -756,6 +760,12 @@ export class RevenueOs extends CardDef {
           let today = new Date();
           let due = new Date(today);
           due.setDate(due.getDate() + 30);
+          // A linksToMany clears per index, not with a single null: the copy
+          // must not claim the original's payments.
+          let relationships: Record<string, unknown> = {};
+          ((item as Invoice).payments ?? []).forEach((_, i) => {
+            relationships[`payments.${i}`] = { links: { self: null } };
+          });
           await new PatchCardInstanceCommand(this.commandContext, {
             cardType: Invoice,
           }).execute({
@@ -764,11 +774,11 @@ export class RevenueOs extends CardDef {
               attributes: {
                 invoiceNumber: null,
                 status: 'draft',
-                issueDate: today.toISOString().slice(0, 10),
+                issueDate: asCalendarDay(today),
                 sentDate: null,
-                dueDate: due.toISOString().slice(0, 10),
+                dueDate: asCalendarDay(due),
               },
-              relationships: { payments: { links: { self: null } } },
+              relationships,
             },
           });
         }
@@ -801,6 +811,16 @@ export class RevenueOs extends CardDef {
     }
     @action setInvoiceFilter(key: string) {
       this.invoiceFilter = key;
+    }
+
+    // "I'm from Acme, can you check our invoice?" — the spec's reason for the
+    // 360 tab. From an invoice row, the account is the useful destination.
+    @action openAccountFor(item: CardDef) {
+      let account = (item as Invoice).account;
+      if (!account?.id) return;
+      this.selectedAccountId = account.id;
+      this.accountQuery = '';
+      this.setTab('accounts');
     }
 
     @action drillTo(tab: string, filter?: string) {
@@ -1157,11 +1177,16 @@ export class RevenueOs extends CardDef {
                 {{else if (eq column.key 'account')}}
                   {{#let (this.accountOf item) as |account|}}
                     {{#if account}}
-                      <span class='cell-account'>
+                      <button
+                        type='button'
+                        class='cell-account cell-account-link'
+                        title='Open {{account.name}} in Accounts'
+                        {{on 'click' (stopThen (fn this.openAccountFor item))}}
+                      >
                         {{#let (this.cardComponent account) as |C|}}
                           <C @format='atom' />
                         {{/let}}
-                      </span>
+                      </button>
                     {{/if}}
                   {{/let}}
                 {{else if (eq column.key 'actions')}}
@@ -1436,6 +1461,18 @@ export class RevenueOs extends CardDef {
         .cell-account {
           display: inline-flex;
           max-width: 11rem;
+        }
+        .cell-account-link {
+          border: 0;
+          padding: 0;
+          background: none;
+          font: inherit;
+          text-align: left;
+          cursor: pointer;
+          border-radius: 999px;
+        }
+        .cell-account-link:hover {
+          box-shadow: 0 0 0 2px var(--border, #e5e7eb);
         }
         .tstatus {
           font-size: 0.625rem;

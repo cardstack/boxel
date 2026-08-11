@@ -69,6 +69,19 @@ export class Opportunity extends CardDef {
   @field stage = contains(StageField);
   @field probability = contains(PercentageField);
   @field closeDate = contains(DateField);
+  // Written by whoever moves the stage. An event fact rather than a derived
+  // value: how long a deal has sat still is not recoverable after the fact.
+  @field lastStageChangedAt = contains(DateField);
+
+  @field daysInStage = contains(NumberField, {
+    computeVia: function (this: Opportunity) {
+      if (!this.lastStageChangedAt) return 0;
+      let days = Math.floor(
+        (Date.now() - new Date(this.lastStageChangedAt).getTime()) / 86400000,
+      );
+      return days > 0 ? days : 0;
+    },
+  });
 
   @field effectiveProbability = contains(NumberField, {
     computeVia: function (this: Opportunity) {
@@ -218,12 +231,29 @@ export class Opportunity extends CardDef {
       let p = this.args.model?.effectiveProbability;
       return typeof p === 'number' ? `${p}%` : '';
     }
+    get isOpen() {
+      let stage = this.args.model?.stage;
+      return stage !== 'closed won' && stage !== 'closed lost';
+    }
+    get ageDisplay() {
+      let days = this.args.model?.daysInStage;
+      if (!this.isOpen || !days) return '';
+      return days === 1 ? '1 day in stage' : `${days} days in stage`;
+    }
+    // Fitted formats take no arguments, so the threshold is the block's call
+    // rather than the consumer's. Seven days is the spec's default.
+    get isStuck() {
+      return this.isOpen && (this.args.model?.daysInStage ?? 0) >= 7;
+    }
     <template>
-      <div class='fitted'>
+      <div class='fitted {{if this.isStuck "stuck"}}'>
         <div class='top'>
           <TrendingUpIcon class='icon' />
           {{#if @model.stage}}
             <span class='stage stage-{{this.stageClass}}'>{{@model.stage}}</span>
+          {{/if}}
+          {{#if this.isStuck}}
+            <span class='stuck-flag' title={{this.ageDisplay}}>stalled</span>
           {{/if}}
         </div>
         <span class='name'>{{@model.cardTitle}}</span>
@@ -239,6 +269,9 @@ export class Opportunity extends CardDef {
             }}
               · closes
               <@fields.closeDate />{{/if}}</span>
+        {{/if}}
+        {{#if this.ageDisplay}}
+          <span class='meta line-age'>{{this.ageDisplay}}</span>
         {{/if}}
       </div>
       <style scoped>
@@ -312,8 +345,27 @@ export class Opportunity extends CardDef {
           color: var(--stage-late-fg, #92400e);
         }
         .line-account,
-        .line-prob {
+        .line-prob,
+        .line-age {
           display: none;
+        }
+        .stuck-flag {
+          margin-left: auto;
+          font-size: 0.5625rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.06em;
+          padding: 0.0625rem 0.375rem;
+          border-radius: 999px;
+          background: var(--state-overdue-bg, #fee2e2);
+          color: var(--state-overdue-fg, #991b1b);
+          white-space: nowrap;
+          flex-shrink: 0;
+        }
+        /* A stalled deal reads as needing attention at every size, including
+           the badge tier where the age line itself is hidden. */
+        .fitted.stuck {
+          box-shadow: inset 3px 0 0 var(--state-overdue-fg, #991b1b);
         }
         @container fitted-card (min-height: 170px) {
           .line-account {
@@ -321,7 +373,8 @@ export class Opportunity extends CardDef {
           }
         }
         @container fitted-card (min-width: 400px) and (min-height: 170px) {
-          .line-prob {
+          .line-prob,
+          .line-age {
             display: block;
           }
         }

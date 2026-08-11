@@ -19,7 +19,8 @@
         "cardThumbnailURL": null
       },
       "terms": null,
-      "probability": null
+      "probability": null,
+      "lastStageChangedAt": null
     },
     "meta": {
       "adoptsFrom": {
