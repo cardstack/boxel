@@ -941,10 +941,82 @@ class MockLocalIndexer extends Service {
   }
 }
 
-export function setupLocalIndexing(hooks: NestedHooks) {
+// Set while a module has opted into reusing one indexed realm across its
+// tests (see the `reuseIndexAcrossTests` option below). Tests run serially in
+// a single page, so module-scoped state is enough to coordinate the two
+// halves of this: `setupLocalIndexing`'s beforeEach, which decides whether
+// this test starts from a snapshot, and `setupTestRealm`, which skips the
+// boot index when it does and captures the snapshot when it doesn't.
+let reusableIndex:
+  | { snapshotName: string; captured: boolean; restored: boolean }
+  | undefined;
+
+export function setupLocalIndexing(
+  hooks: NestedHooks,
+  opts?: {
+    // Index this module's realm once and restore that result before each
+    // subsequent test, instead of re-indexing per test. Pass a snapshot name
+    // unique to the module (matching /^[A-Za-z][A-Za-z0-9_]*$/).
+    //
+    // Worth it when a module's fixtures are the same for every test and cost
+    // real time to index — the per-test cost of rendering and serializing
+    // every fixture is the single largest line in the host suite. Each test
+    // still gets a fresh app, owner and loader, and still starts from an
+    // identical pristine index: the snapshot is *restored* (a full table
+    // replace), not carried over, so one test's writes cannot reach another.
+    //
+    // Not usable yet by a module that builds more than one realm per test:
+    // the snapshot is captured after the first realm finishes indexing, so
+    // later realms' rows would be missing from it.
+    //
+    // Also not usable by a module whose tests are *about* indexing. A test
+    // whose index was restored runs against a realm started with
+    // `skipBootIndex`, so anything the boot index does beyond populating those
+    // tables — evicting a module from the loader, recording that it was flushed
+    // — has not happened. `Integration | Store` is the worked example: 71 of
+    // its 73 tests are indifferent, while two assert on exactly that
+    // module-rebuild bookkeeping and fail. Identical fixtures are necessary but
+    // not sufficient; the module also has to not care how its index got there.
+    reuseIndexAcrossTests?: string;
+  },
+) {
+  hooks.before(function () {
+    reusableIndex = opts?.reuseIndexAcrossTests
+      ? {
+          snapshotName: opts.reuseIndexAcrossTests,
+          captured: false,
+          restored: false,
+        }
+      : undefined;
+  });
+
+  hooks.after(async function () {
+    if (reusableIndex?.captured) {
+      // A snapshot is a separate in-memory database that `exportSnapshot`
+      // opens and leaves ATTACHed, since `importSnapshot` reads from it; only
+      // `deleteSnapshot` detaches and closes it. Nothing restores this module's
+      // snapshot after its last test, and the adapter is a page singleton whose
+      // `close()` never runs mid-shard, so without this every opted-in module
+      // would leave its indexed fixtures resident — and hold an ATTACH slot,
+      // which SQLite caps — for the rest of the shard.
+      let dbAdapter = await getDbAdapter();
+      await dbAdapter.deleteSnapshot(reusableIndex.snapshotName);
+    }
+    reusableIndex = undefined;
+  });
+
   hooks.beforeEach(async function () {
     let dbAdapter = await getDbAdapter();
-    await dbAdapter.reset();
+    if (reusableIndex?.captured) {
+      // Replaces every table from the snapshot, so this subsumes reset().
+      await dbAdapter.importSnapshot(reusableIndex.snapshotName);
+      reusableIndex.restored = true;
+    } else {
+      await dbAdapter.reset();
+      if (reusableIndex) {
+        reusableIndex.restored = false;
+      }
+    }
     this.owner.register('service:local-indexer', MockLocalIndexer);
   });
 
@@ -1324,6 +1396,9 @@ async function setupTestRealm({
       Number(
         process.env.FILE_SIZE_LIMIT_BYTES ?? DEFAULT_FILE_SIZE_LIMIT_BYTES,
       ),
+    // This test's index was restored from a snapshot taken after the same
+    // fixtures were indexed, so there is nothing to index; mount and serve.
+    ...(reusableIndex?.restored ? { skipBootIndex: true as const } : {}),
   });
 
   // Register the realm early so realm-server mock _info lookups can resolve
@@ -1345,6 +1420,14 @@ async function setupTestRealm({
   await adapter.ready;
   await worker.run();
   await realm.start();
+  if (reusableIndex && !reusableIndex.captured) {
+    // First test of a module that reuses its index: this start() just did the
+    // indexing, so keep the result for the rest of the module. Captured before
+    // the test body runs, so what later tests restore is the fixtures as
+    // indexed and nothing a test went on to write.
+    await dbAdapter.exportSnapshot(reusableIndex.snapshotName);
+    reusableIndex.captured = true;
+  }
   if (startMatrix) {
     await mockMatrixUtils.start();
   }
