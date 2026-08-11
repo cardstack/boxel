@@ -16,6 +16,7 @@ import { Deferred, baseRealm, param, query } from '@cardstack/runtime-common';
 import ENV from '@cardstack/host/config/environment';
 
 import {
+  withCachedRealmSetup,
   getDbAdapter,
   setupLocalIndexing,
   setupOnSave,
@@ -254,9 +255,15 @@ module('Acceptance | host submode', function (hooks) {
           },
         },
       };
-      await setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        contents: realmContents,
+      // Each of these nested modules builds the same realm for every one of its
+      // tests, so the indexed result is cached per module and restored instead
+      // of being rebuilt. The seeded realm_metadata row above is part of what
+      // the snapshot captures, so a restored test starts from the same state.
+      await withCachedRealmSetup(async () => {
+        await setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          contents: realmContents,
+        });
       });
     });
 
@@ -283,9 +290,15 @@ module('Acceptance | host submode', function (hooks) {
 
   module('with a realm that is not publishable', function (hooks) {
     hooks.beforeEach(async function () {
-      await setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        contents: realmContents,
+      // Each of these nested modules builds the same realm for every one of its
+      // tests, so the indexed result is cached per module and restored instead
+      // of being rebuilt. The seeded realm_metadata row above is part of what
+      // the snapshot captures, so a restored test starts from the same state.
+      await withCachedRealmSetup(async () => {
+        await setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          contents: realmContents,
+        });
       });
     });
 
@@ -324,9 +337,15 @@ module('Acceptance | host submode', function (hooks) {
         param(true),
         `) ON CONFLICT (url) DO UPDATE SET publishable = true`,
       ]);
-      await setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        contents: realmContents,
+      // Each of these nested modules builds the same realm for every one of its
+      // tests, so the indexed result is cached per module and restored instead
+      // of being rebuilt. The seeded realm_metadata row above is part of what
+      // the snapshot captures, so a restored test starts from the same state.
+      await withCachedRealmSetup(async () => {
+        await setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          contents: realmContents,
+        });
       });
     });
 

@@ -20,6 +20,7 @@ import type { Realm } from '@cardstack/runtime-common/realm';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
 import {
+  withCachedRealmSetup,
   SYSTEM_CARD_FIXTURE_CONTENTS,
   percySnapshot,
   testRealmURL,
@@ -167,147 +168,154 @@ module('Integration | card-copy', function (hooks) {
 
     // Defer matrix startup until all test realms (including read-only) are
     // registered to avoid _info fetch races during matrix boot.
-    ({ realm: realm1 } = await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'person.gts': { Person },
-        'pet.gts': { Pet },
-        'index.json': {
-          data: {
-            type: 'card',
-            meta: {
-              adoptsFrom: {
-                module: '@cardstack/base/cards-grid',
-                name: 'CardsGrid',
-              },
-            },
-          },
-        },
-        'Person/hassan.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              firstName: 'Hassan',
-            },
-            relationships: {
-              pet: {
-                links: {
-                  self: '../Pet/mango',
+    // These three realms are the same for every test in this module, so the
+    // indexed result is cached and restored rather than rebuilt. The fourth
+    // realm one test builds for itself stays outside this: a cache hit
+    // replaces every table, which would discard the realms that test already
+    // has.
+    await withCachedRealmSetup(async () => {
+      ({ realm: realm1 } = await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'person.gts': { Person },
+          'pet.gts': { Pet },
+          'index.json': {
+            data: {
+              type: 'card',
+              meta: {
+                adoptsFrom: {
+                  module: '@cardstack/base/cards-grid',
+                  name: 'CardsGrid',
                 },
               },
             },
-            meta: {
-              adoptsFrom: {
-                module: `../person`,
-                name: 'Person',
+          },
+          'Person/hassan.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'Hassan',
+              },
+              relationships: {
+                pet: {
+                  links: {
+                    self: '../Pet/mango',
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `../person`,
+                  name: 'Person',
+                },
               },
             },
           },
-        },
-        'Pet/mango.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              firstName: 'Mango',
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../pet',
-                name: 'Pet',
+          'Pet/mango.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'Mango',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../pet',
+                  name: 'Pet',
+                },
               },
             },
           },
-        },
-        'Pet/vangogh.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              firstName: 'Van Gogh',
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../pet',
-                name: 'Pet',
+          'Pet/vangogh.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'Van Gogh',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../pet',
+                  name: 'Pet',
+                },
               },
             },
           },
+          'realm.json': realmConfigCardJSON({
+            name: 'Test Workspace 1',
+            backgroundURL:
+              'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+            iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+          }),
         },
-        'realm.json': realmConfigCardJSON({
-          name: 'Test Workspace 1',
-          backgroundURL:
-            'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-          iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-        }),
-      },
-      startMatrix: false,
-    }));
+        startMatrix: false,
+      }));
 
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      realmURL: testRealm2URL,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'index.json': {
-          data: {
-            type: 'card',
-            meta: {
-              adoptsFrom: {
-                module: '@cardstack/base/cards-grid',
-                name: 'CardsGrid',
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        realmURL: testRealm2URL,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'index.json': {
+            data: {
+              type: 'card',
+              meta: {
+                adoptsFrom: {
+                  module: '@cardstack/base/cards-grid',
+                  name: 'CardsGrid',
+                },
               },
             },
           },
-        },
-        'Pet/paper.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              firstName: 'Paper',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}pet`,
-                name: 'Pet',
+          'Pet/paper.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'Paper',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}pet`,
+                  name: 'Pet',
+                },
               },
             },
           },
+          'realm.json': realmConfigCardJSON({
+            name: 'Test Workspace 2',
+            backgroundURL:
+              'https://i.postimg.cc/tgRHRV8C/pawel-czerwinski-h-Nrd99q5pe-I-unsplash.jpg',
+            iconURL: 'https://boxel-images.boxel.ai/icons/cardstack.png',
+          }),
         },
-        'realm.json': realmConfigCardJSON({
-          name: 'Test Workspace 2',
-          backgroundURL:
-            'https://i.postimg.cc/tgRHRV8C/pawel-czerwinski-h-Nrd99q5pe-I-unsplash.jpg',
-          iconURL: 'https://boxel-images.boxel.ai/icons/cardstack.png',
-        }),
-      },
-      startMatrix: false,
-    });
+        startMatrix: false,
+      });
 
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      realmURL: readOnlyRealmURL,
-      permissions: { '@testuser:localhost': ['read'] },
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'index.json': {
-          data: {
-            type: 'card',
-            meta: {
-              adoptsFrom: {
-                module: '@cardstack/base/cards-grid',
-                name: 'CardsGrid',
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        realmURL: readOnlyRealmURL,
+        permissions: { '@testuser:localhost': ['read'] },
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'index.json': {
+            data: {
+              type: 'card',
+              meta: {
+                adoptsFrom: {
+                  module: '@cardstack/base/cards-grid',
+                  name: 'CardsGrid',
+                },
               },
             },
           },
+          'realm.json': realmConfigCardJSON({
+            name: 'Read Only Workspace',
+            backgroundURL:
+              'https://i.postimg.cc/4xyCDpGq/pawel-czerwinski-5n-L-IMto-KEw-unsplash.jpg',
+            iconURL: 'https://i.postimg.cc/W4fZgT3j/icon.png',
+          }),
         },
-        'realm.json': realmConfigCardJSON({
-          name: 'Read Only Workspace',
-          backgroundURL:
-            'https://i.postimg.cc/4xyCDpGq/pawel-czerwinski-5n-L-IMto-KEw-unsplash.jpg',
-          iconURL: 'https://i.postimg.cc/W4fZgT3j/icon.png',
-        }),
-      },
-      startMatrix: false,
+        startMatrix: false,
+      });
     });
 
     await mockMatrixUtils.start();
