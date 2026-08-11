@@ -19,7 +19,8 @@
         "notes": null,
         "cardThumbnailURL": null
       },
-      "probability": null
+      "probability": null,
+      "lastStageChangedAt": "2026-08-08"
     },
     "meta": {
       "adoptsFrom": {

@@ -5,11 +5,14 @@ import {
   field,
   linksTo,
 } from 'https://cardstack.com/base/card-api';
+import { on } from '@ember/modifier';
 import StringField from 'https://cardstack.com/base/string';
 import EmailField from 'https://cardstack.com/base/email';
 import PhoneNumberField from 'https://cardstack.com/base/phone-number';
 import enumField from 'https://cardstack.com/base/enum';
 import ContactIcon from '@cardstack/boxel-icons/address-book';
+import PhoneIcon from '@cardstack/boxel-icons/phone';
+import MailIcon from '@cardstack/boxel-icons/mail';
 import { Avatar } from '@cardstack/boxel-ui/components';
 import { Account } from './account';
 
@@ -87,6 +90,9 @@ export class Contact extends CardDef {
     get subtitle() {
       return this.args.model?.jobTitle;
     }
+    // A consumer may wrap this row in its own click target; reaching the person
+    // should not also open their card.
+    stopClick = (event: Event) => event.stopPropagation();
     <template>
       <div class='contact'>
         <Avatar
@@ -101,6 +107,24 @@ export class Contact extends CardDef {
             <div class='meta'>{{this.subtitle}}</div>
           {{/if}}
         </div>
+        <span class='reach'>
+          {{#if @model.phone}}
+            <a
+              class='reach-link'
+              href='tel:{{@model.phone}}'
+              title='Call {{@model.name}}'
+              {{on 'click' this.stopClick}}
+            ><PhoneIcon /></a>
+          {{/if}}
+          {{#if @model.email}}
+            <a
+              class='reach-link'
+              href='mailto:{{@model.email}}'
+              title='Email {{@model.name}}'
+              {{on 'click' this.stopClick}}
+            ><MailIcon /></a>
+          {{/if}}
+        </span>
         {{#if @model.role}}
           <span class='role'>{{@model.role}}</span>
         {{/if}}
@@ -121,6 +145,33 @@ export class Contact extends CardDef {
         .info {
           min-width: 0;
           flex: 1;
+        }
+        /* Constant-width slot so rows line up whether or not a contact is
+           reachable — see the column-alignment rule. */
+        .reach {
+          display: inline-flex;
+          gap: 0.25rem;
+          width: 3.25rem;
+          justify-content: flex-end;
+          flex-shrink: 0;
+        }
+        .reach-link {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 22px;
+          height: 22px;
+          border-radius: 50%;
+          color: var(--muted-foreground, #6b7280);
+          background: var(--muted, #f3f4f6);
+        }
+        .reach-link:hover {
+          color: var(--primary-foreground, #ffffff);
+          background: var(--primary, #111111);
+        }
+        .reach-link :deep(svg) {
+          width: 13px;
+          height: 13px;
         }
         .name {
           font-weight: 600;
