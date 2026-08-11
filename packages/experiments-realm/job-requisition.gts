@@ -15,9 +15,13 @@ import { htmlSafe } from '@ember/template';
 
 import { Position } from './position';
 import { ApprovalChainField } from './approval-chain-field';
-import { RequisitionStatusField } from './requisition-field';
+import {
+  RequisitionStatusField,
+  REQUISITION_STATUS_COLORS,
+} from './requisition-field';
 import {
   formatMoney,
+  liveCount,
   stateColorOf,
   type StateColor,
 } from './utils/index';
@@ -75,6 +79,15 @@ export class JobRequisition extends CardDef {
   @field status = contains(StringField, {
     computeVia: function (this: JobRequisition) {
       return this.requisitionStatus || 'draft';
+    },
+  });
+
+  // Denormalized for fitted — prerendered fitted does not resolve
+  // linksToMany, so the fitted view reads this instead of positions.length.
+  @field positionTally = contains(StringField, {
+    computeVia: function (this: JobRequisition) {
+      let n = liveCount(this.positions);
+      return n === 0 ? '' : String(n);
     },
   });
 
@@ -428,25 +441,68 @@ export class JobRequisition extends CardDef {
       );
     }
 
+    get statusColor(): StateColor {
+      return stateColorOf(REQUISITION_STATUS_COLORS, this.args.model?.status);
+    }
+
+    get statusPillStyle() {
+      let c = this.statusColor;
+      return htmlSafe(`background: ${c.bg}; color: ${c.fg};`);
+    }
+
+    get targetFillLabel(): string | undefined {
+      let d = this.args.model?.targetFillDate;
+      if (!d) {
+        return undefined;
+      }
+      let date = new Date(d);
+      if (isNaN(date.getTime())) {
+        return undefined;
+      }
+      return date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      });
+    }
+
     <template>
       <article class='fit'>
-        <div class='fit-head'>
-          <h3 class='fit-title'>{{@model.displayTitle}}</h3>
-          {{#if @model.department}}
-            <p class='fit-department'>{{@model.department}}</p>
-          {{/if}}
-          {{#if this.salaryRange}}
-            <span class='fit-salary'>{{this.salaryRange}}</span>
-          {{/if}}
-          {{#if @model.approvalChain.status}}
-            <span class='fit-approval'>{{@model.approvalChain.status}}</span>
+        <div class='fit-top'>
+          <div class='fit-head'>
+            <h3 class='fit-name'>{{@model.displayTitle}}</h3>
+          </div>
+          {{! The req's own lifecycle status, not the approval chain's. }}
+          {{#if @model.status}}
+            <span class='fit-pill' style={{this.statusPillStyle}}>
+              <span class='pill-dot'></span>{{@model.status}}
+            </span>
           {{/if}}
         </div>
-        {{#if @model.positions.length}}
-          <div class='fit-badge'>{{@model.positions.length}}</div>
-        {{/if}}
+
+        <div class='fit-mid'>
+          {{#if @model.department}}
+            <span class='fit-sub'>{{@model.department}}</span>
+          {{/if}}
+          {{#if this.salaryRange}}
+            <span class='money'>{{this.salaryRange}}</span>
+          {{/if}}
+        </div>
+
+        <dl class='fit-add'>
+          {{#if this.targetFillLabel}}
+            <div><dt>Target</dt><dd>{{this.targetFillLabel}}</dd></div>
+          {{/if}}
+          {{#if @model.approvalChain.status}}
+            <div><dt>Approval</dt><dd>{{@model.approvalChain.status}}</dd></div>
+          {{/if}}
+          {{#if @model.positionTally}}
+            <div><dt>Positions</dt><dd>{{@model.positionTally}}</dd></div>
+          {{/if}}
+        </dl>
       </article>
       <style scoped>
+        /* Four tiers, each ADDING fields. 11px floor. Title never hidden. */
         .fit {
           height: 100%;
           display: flex;
@@ -457,20 +513,27 @@ export class JobRequisition extends CardDef {
           background: var(--card, var(--boxel-light));
           color: var(--card-foreground, var(--foreground, var(--boxel-dark)));
           font-family: var(--font-sans, var(--boxel-font-family));
-          --fit-title: clamp(11px, 3.2cqi, 15px);
-          --fit-small: clamp(9px, 2.2cqi, 11px);
+          --fit-name: clamp(11px, 3.2cqi, 15px);
+          --fit-small: clamp(11px, 2.6cqi, 12px);
         }
         .fit > * {
           min-height: 0;
           overflow: hidden;
         }
+        .fit-top {
+          flex: none;
+          display: flex;
+          align-items: flex-start;
+          gap: 0.4rem;
+          flex-wrap: wrap;
+        }
         .fit-head {
           flex: 1;
           min-width: 0;
         }
-        .fit-title {
+        .fit-name {
           margin: 0;
-          font-size: var(--fit-title);
+          font-size: var(--fit-name);
           font-weight: 700;
           line-height: 1.25;
           letter-spacing: -0.01em;
@@ -479,44 +542,121 @@ export class JobRequisition extends CardDef {
           -webkit-box-orient: vertical;
           overflow: hidden;
         }
-        .fit-department {
-          margin: 0.15em 0 0;
-          font-size: var(--fit-small);
-          color: var(--muted-foreground, var(--boxel-450));
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-        .fit-salary {
-          display: block;
-          margin-top: 0.15em;
-          font-size: var(--fit-small);
-          font-weight: 600;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-        .fit-approval {
-          display: block;
-          margin-top: 0.15em;
-          font-size: var(--fit-small);
-          color: var(--muted-foreground, var(--boxel-450));
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-        .fit-badge {
+        .fit-pill {
           flex: none;
-          display: inline-flex;
+          align-self: flex-start;
+          display: none;
           align-items: center;
-          justify-content: center;
-          width: 1.5rem;
-          height: 1.5rem;
-          background: var(--primary, var(--boxel-highlight));
-          color: var(--primary-foreground, var(--boxel-light));
-          border-radius: 50%;
+          gap: 0.25rem;
           font-size: var(--fit-small);
           font-weight: 700;
+          padding: 0.1em 0.4em;
+          border-radius: 3px;
+          white-space: nowrap;
+        }
+        .pill-dot {
+          width: 5px;
+          height: 5px;
+          border-radius: 50%;
+          background: currentColor;
+          flex: none;
+        }
+        .fit-mid {
+          flex: none;
+          display: none;
+          flex-direction: column;
+          gap: 1px;
+        }
+        .fit-sub {
+          font-size: var(--fit-small);
+          color: var(--muted-foreground, var(--boxel-450));
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .money {
+          font-size: calc(var(--fit-name) * 1.15);
+          font-weight: 800;
+          letter-spacing: -0.02em;
+          font-variant-numeric: tabular-nums;
+        }
+        .fit-add {
+          display: none;
+          margin: 0;
+          margin-top: auto;
+          padding-top: 0.3rem;
+          border-top: 1px dashed var(--border, var(--boxel-200));
+          grid-template-columns: 1fr 1fr;
+          gap: 0.05rem 0.5rem;
+        }
+        .fit-add > div {
+          display: flex;
+          gap: 0.25rem;
+          min-width: 0;
+        }
+        .fit-add dt {
+          flex: none;
+          font-size: var(--fit-small);
+          color: var(--muted-foreground, var(--boxel-450));
+        }
+        .fit-add dd {
+          margin: 0;
+          font-size: var(--fit-small);
+          font-weight: 600;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          font-variant-numeric: tabular-nums;
+        }
+
+        /* TIER 2 — lifecycle pill joins above the 50px strip. */
+        @container fitted-card (height > 50px) {
+          .fit-pill {
+            display: inline-flex;
+          }
+        }
+        /* TIER 3 — department + salary. */
+        @container fitted-card (height > 80px) {
+          .fit-mid {
+            display: flex;
+          }
+        }
+        @container fitted-card (width > 240px) and (height > 50px) {
+          .fit-mid {
+            display: flex;
+          }
+        }
+        /* TIER 4 — target fill date, approval state, positions tally. */
+        @container fitted-card (height > 130px) and (width >= 170px) {
+          .fit-add {
+            display: grid;
+            grid-template-columns: 1fr;
+          }
+        }
+        @container fitted-card (width > 340px) and (height > 130px) {
+          .fit-add {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+          }
+        }
+        /* Short strip: horizontal, single-line name; the tall salary figure
+           yields to the strip and only the small department line remains. */
+        @container fitted-card (height <= 80px) {
+          .money {
+            display: none;
+          }
+        }
+        @container fitted-card (height <= 90px) {
+          .fit-top {
+            align-items: center;
+            flex-wrap: nowrap;
+          }
+          .fit-pill {
+            align-self: center;
+          }
+          .fit-name {
+            -webkit-line-clamp: 1;
+          }
         }
       </style>
     </template>

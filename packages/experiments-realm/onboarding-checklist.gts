@@ -210,6 +210,15 @@ export class OnboardingChecklist extends CardDef {
   @field createdDate = contains(DateField);
   @field completedDate = contains(DateField);
 
+  // Denormalized for fitted — prerendered fitted does not resolve linksTo,
+  // so the fitted view reads this instead of walking employee/contractor.
+  // (computeVia runs at index time, when the links ARE loaded.)
+  @field personName = contains(StringField, {
+    computeVia: function (this: OnboardingChecklist) {
+      return this.employee?.name ?? this.contractor?.name ?? '';
+    },
+  });
+
   @field title = contains(StringField, {
     computeVia: function (this: OnboardingChecklist) {
       let person = this.employee || this.contractor;
@@ -619,31 +628,71 @@ export class OnboardingChecklist extends CardDef {
   static fitted: BaseDefComponent = class Fitted extends Component<
     typeof this
   > {
+    // Reads the denormalized personName own-attribute — prerendered fitted
+    // does not resolve linksTo, so walking employee/contractor here would
+    // always render "Unknown".
     get personName() {
-      return this.args.model?.employee?.name ||
-        this.args.model?.contractor?.name ||
-        'Unknown';
+      return this.args.model?.personName || 'Onboarding';
+    }
+
+    get statusColor() {
+      return stateColorOf(
+        ONBOARDING_CHECKLIST_STATUS_COLORS,
+        this.args.model?.status,
+      );
+    }
+
+    get statusPillStyle() {
+      let c = this.statusColor;
+      return htmlSafe(`background: ${c.bg}; color: ${c.fg};`);
+    }
+
+    // tasks is containsMany — its data lives on the instance itself, so it
+    // is safe to read in prerendered fitted (unlike linksTo/linksToMany).
+    get completedTaskCount(): number {
+      let tasks = this.args.model?.tasks ?? [];
+      return tasks.filter((t) => t && t.status === 'complete').length;
     }
 
     get completionPercentage(): number {
       let tasks = this.args.model?.tasks ?? [];
       if (tasks.length === 0) return 0;
-      let completed = tasks.filter((t) => t && t.status === 'complete').length;
-      return Math.round((completed / tasks.length) * 100);
+      return Math.round((this.completedTaskCount / tasks.length) * 100);
+    }
+
+    get progressBarStyle() {
+      return htmlSafe(`width: ${this.completionPercentage}%`);
     }
 
     <template>
       <article class='fit'>
-        <div class='fit-head'>
-          <h3 class='fit-name'>{{this.personName}}</h3>
+        <div class='fit-top'>
+          <div class='fit-head'>
+            <h3 class='fit-name'>{{this.personName}}</h3>
+          </div>
+          <span class='fit-pct'>{{this.completionPercentage}}%</span>
+          {{#if @model.status}}
+            <span class='fit-pill' style={{this.statusPillStyle}}>
+              <span class='pill-dot'></span>{{@model.status}}
+            </span>
+          {{/if}}
         </div>
-        <div class='fit-badge'>
-          <div class='badge-progress'>
-            <span class='badge-number'>{{this.completionPercentage}}%</span>
+
+        <div class='fit-mid'>
+          <span class='fit-sub'>{{this.completedTaskCount}}
+            of
+            {{@model.tasks.length}}
+            tasks complete</span>
+        </div>
+
+        <div class='fit-add'>
+          <div class='bar-bg'>
+            <div class='bar' style={{this.progressBarStyle}}></div>
           </div>
         </div>
       </article>
       <style scoped>
+        /* Four tiers, each ADDING content. 11px floor. Percent never hidden. */
         .fit {
           height: 100%;
           display: flex;
@@ -655,11 +704,18 @@ export class OnboardingChecklist extends CardDef {
           color: var(--card-foreground, var(--foreground, var(--boxel-dark)));
           font-family: var(--font-sans, var(--boxel-font-family));
           --fit-name: clamp(11px, 3.2cqi, 15px);
-          --fit-small: clamp(9px, 2.6cqi, 11px);
+          --fit-small: clamp(11px, 2.6cqi, 12px);
         }
         .fit > * {
           min-height: 0;
           overflow: hidden;
+        }
+        .fit-top {
+          flex: none;
+          display: flex;
+          align-items: flex-start;
+          gap: 0.4rem;
+          flex-wrap: wrap;
         }
         .fit-head {
           flex: 1;
@@ -676,26 +732,100 @@ export class OnboardingChecklist extends CardDef {
           -webkit-box-orient: vertical;
           overflow: hidden;
         }
-        .fit-badge {
+        .fit-pct {
           flex: none;
-          display: inline-flex;
+          font-size: var(--fit-name);
+          font-weight: 800;
+          letter-spacing: -0.02em;
+          font-variant-numeric: tabular-nums;
+          color: var(--primary, var(--boxel-highlight));
+        }
+        .fit-pill {
+          flex: none;
+          align-self: flex-start;
+          display: none;
           align-items: center;
-          justify-content: center;
-          width: 2rem;
-          height: 2rem;
-          background: var(--primary, var(--boxel-highlight));
-          color: var(--primary-foreground, var(--boxel-light));
-          border-radius: 50%;
+          gap: 0.25rem;
           font-size: var(--fit-small);
           font-weight: 700;
+          padding: 0.1em 0.4em;
+          border-radius: 3px;
+          white-space: nowrap;
         }
-        .badge-progress {
-          display: flex;
-          align-items: center;
-          justify-content: center;
+        .pill-dot {
+          width: 5px;
+          height: 5px;
+          border-radius: 50%;
+          background: currentColor;
+          flex: none;
         }
-        .badge-number {
-          line-height: 1;
+        .fit-mid {
+          flex: none;
+          display: none;
+          flex-direction: column;
+          gap: 1px;
+        }
+        .fit-sub {
+          font-size: var(--fit-small);
+          color: var(--muted-foreground, var(--boxel-450));
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .fit-add {
+          display: none;
+          margin-top: auto;
+          padding-top: 0.3rem;
+        }
+        /* Same bar style the embedded format uses. */
+        .bar-bg {
+          width: 100%;
+          height: 6px;
+          background: var(--muted, var(--boxel-100));
+          border-radius: 3px;
+          overflow: hidden;
+        }
+        .bar {
+          height: 100%;
+          background: var(--primary, var(--boxel-highlight));
+          border-radius: 3px;
+        }
+
+        /* TIER 2 — status pill joins above the 50px strip. */
+        @container fitted-card (height > 50px) {
+          .fit-pill {
+            display: inline-flex;
+          }
+        }
+        /* TIER 3 — task tally line. */
+        @container fitted-card (height > 80px) {
+          .fit-mid {
+            display: flex;
+          }
+        }
+        @container fitted-card (width > 240px) and (height > 50px) {
+          .fit-mid {
+            display: flex;
+          }
+        }
+        /* TIER 4 — progress bar pinned to the bottom edge. */
+        @container fitted-card (height > 130px) and (width >= 170px) {
+          .fit-add {
+            display: block;
+          }
+        }
+        /* Short strip: horizontal, single-line name. */
+        @container fitted-card (height <= 90px) {
+          .fit-top {
+            align-items: center;
+            flex-wrap: nowrap;
+          }
+          .fit-pill {
+            align-self: center;
+          }
+          .fit-name {
+            -webkit-line-clamp: 1;
+          }
         }
       </style>
     </template>

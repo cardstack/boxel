@@ -213,16 +213,45 @@ export class OnboardingTemplate extends CardDef {
   };
 
   static fitted = class Fitted extends Component<typeof this> {
+    // tasks is containsMany — its data lives on the instance itself, so it
+    // is safe to read in prerendered fitted (unlike linksTo/linksToMany).
+    get previewTasks() {
+      return (this.args.model?.tasks ?? []).slice(0, 4);
+    }
+
+    get moreCount(): number {
+      let n = this.args.model?.tasks?.length ?? 0;
+      return Math.max(0, n - 4);
+    }
+
     <template>
       <article class='fit'>
-        <div class='fit-head'>
-          <h3 class='fit-name'>{{@model.title}}</h3>
+        <div class='fit-top'>
+          <div class='fit-head'>
+            <h3 class='fit-name'>{{@model.title}}</h3>
+          </div>
+          <span class='fit-count'>{{@model.tasks.length}} tasks</span>
         </div>
-        {{#if @model.tasks.length}}
-          <div class='fit-badge'>{{@model.tasks.length}}</div>
+
+        {{#if @model.description}}
+          <div class='fit-mid'>
+            <p class='fit-desc'>{{@model.description}}</p>
+          </div>
+        {{/if}}
+
+        {{#if this.previewTasks.length}}
+          <ul class='fit-add'>
+            {{#each this.previewTasks as |task|}}
+              <li class='fit-task'>{{task.title}}</li>
+            {{/each}}
+            {{#if this.moreCount}}
+              <li class='fit-task fit-more'>+{{this.moreCount}} more</li>
+            {{/if}}
+          </ul>
         {{/if}}
       </article>
       <style scoped>
+        /* Four tiers, each ADDING content. 11px floor. Count never hidden. */
         .fit {
           height: 100%;
           display: flex;
@@ -240,6 +269,13 @@ export class OnboardingTemplate extends CardDef {
           min-height: 0;
           overflow: hidden;
         }
+        .fit-top {
+          flex: none;
+          display: flex;
+          align-items: flex-start;
+          gap: 0.4rem;
+          flex-wrap: wrap;
+        }
         .fit-head {
           flex: 1;
           min-width: 0;
@@ -255,18 +291,86 @@ export class OnboardingTemplate extends CardDef {
           -webkit-box-orient: vertical;
           overflow: hidden;
         }
-        .fit-badge {
+        .fit-count {
           flex: none;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 1.5rem;
-          height: 1.5rem;
-          background: var(--primary, var(--boxel-highlight));
-          color: var(--primary-foreground, var(--boxel-light));
-          border-radius: 50%;
           font-size: var(--fit-small);
           font-weight: 700;
+          font-variant-numeric: tabular-nums;
+          color: var(--muted-foreground, var(--boxel-450));
+          white-space: nowrap;
+        }
+        .fit-mid {
+          flex: none;
+          display: none;
+        }
+        .fit-desc {
+          margin: 0;
+          font-size: var(--fit-small);
+          color: var(--muted-foreground, var(--boxel-450));
+          line-height: 1.4;
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+        }
+        .fit-add {
+          display: none;
+          list-style: none;
+          margin: 0;
+          margin-top: auto;
+          padding: 0.3rem 0 0;
+          border-top: 1px dashed var(--border, var(--boxel-200));
+        }
+        .fit-task {
+          font-size: var(--fit-small);
+          font-weight: 600;
+          line-height: 1.5;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .fit-task::before {
+          content: '·';
+          margin-right: 0.35em;
+          color: var(--muted-foreground, var(--boxel-450));
+        }
+        .fit-more {
+          font-weight: 400;
+          color: var(--muted-foreground, var(--boxel-450));
+        }
+        .fit-more::before {
+          content: none;
+        }
+
+        /* TIER 3 — description joins on taller (or wide-strip) cells. */
+        @container fitted-card (height > 80px) {
+          .fit-mid {
+            display: block;
+          }
+        }
+        @container fitted-card (width > 240px) and (height > 50px) {
+          .fit-mid {
+            display: block;
+          }
+        }
+        /* TIER 4 — first task titles, pinned to the bottom edge. */
+        @container fitted-card (height > 130px) and (width >= 170px) {
+          .fit-add {
+            display: block;
+          }
+        }
+        /* Short strip: horizontal, single-line name and description. */
+        @container fitted-card (height <= 90px) {
+          .fit-top {
+            align-items: center;
+            flex-wrap: nowrap;
+          }
+          .fit-name {
+            -webkit-line-clamp: 1;
+          }
+          .fit-desc {
+            -webkit-line-clamp: 1;
+          }
         }
       </style>
     </template>

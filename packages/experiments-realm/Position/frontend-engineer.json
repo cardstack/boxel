@@ -21,7 +21,11 @@
       "employmentType": "full-time",
       "experienceLevel": "mid",
       "requisitionCode": null,
-      "remoteEligible": false
+      "remoteEligible": false,
+      "approvalChain": {
+        "steps": [],
+        "startedAt": null
+      }
     },
     "relationships": {
       "hiringManager": {

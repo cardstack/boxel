@@ -18,11 +18,13 @@
         {
           "title": "Team introduction & scope review",
           "status": "in-progress",
+          "completedDate": null,
           "notes": "Initial scope meeting scheduled"
         },
         {
           "title": "Project kickoff",
           "status": "pending",
+          "completedDate": null,
           "notes": null
         }
       ],
@@ -32,7 +34,8 @@
         "summary": null,
         "cardThumbnailURL": null,
         "notes": null
-      }
+      },
+      "completedDate": null
     },
     "relationships": {
       "contractor": {

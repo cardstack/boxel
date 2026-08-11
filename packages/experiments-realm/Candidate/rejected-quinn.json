@@ -5,13 +5,13 @@
       "name": "Quinn Harper",
       "email": "quinn.harper@example.com",
       "status": "rejected",
-      "boardOrder": 2,
+      "boardOrder": 1,
       "appliedRole": "Frontend Engineer",
       "appliedDate": "2026-06-01",
       "decisionDate": "2026-06-25",
       "overallScore": 2,
       "rejectionReason": "experience-gap",
-      "rejectionNote": "Skills did not match the current stack \u2014 no production React experience.",
+      "rejectionNote": "Skills did not match the current stack — no production React experience.",
       "cardInfo": {
         "name": "Quinn Harper (rejected)",
         "summary": null,
@@ -28,7 +28,10 @@
       "photo": {
         "url": "https://images.pexels.com/photos/1170986/pexels-photo-1170986.jpeg",
         "sourceMode": "url"
-      }
+      },
+      "workHistory": [],
+      "education": [],
+      "offerState": null
     },
     "relationships": {
       "position": {

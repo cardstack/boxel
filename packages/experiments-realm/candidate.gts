@@ -459,15 +459,21 @@ export class Candidate extends PersonBase {
             {{! Actions live in the aside rather than behind a tab — hiding
                 them one click away taxes every single use. }}
             <h2 class='panel-title'>Actions</h2>
-            <div class='actions'>
-              <Button
-                type='button'
-                @kind='secondary'
-                class='act'
-                @disabled={{this.extractDisabled}}
-                {{on 'click' this.extractResume}}
-              >Extract resume</Button>
-            </div>
+            {{#if @model.resumeText}}
+              {{! Extract only renders when there is resume text to extract
+                  from — a tool with an unmet precondition is noise, and the
+                  Resume panel's empty state already explains how to enable
+                  it. }}
+              <div class='actions'>
+                <Button
+                  type='button'
+                  @kind='secondary'
+                  class='act'
+                  @disabled={{this.extractDisabled}}
+                  {{on 'click' this.extractResume}}
+                >Extract resume</Button>
+              </div>
+            {{/if}}
             <p class='act-hint round-label'>Round to generate questions
               for</p>
             <div class='round-toggle' role='group' aria-label='Interview round'>

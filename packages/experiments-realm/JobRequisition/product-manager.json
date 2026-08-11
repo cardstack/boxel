@@ -26,7 +26,8 @@
         "summary": null,
         "cardThumbnailURL": null,
         "notes": null
-      }
+      },
+      "filledDate": null
     },
     "relationships": {
       "approvalChain.steps.0.approver": {

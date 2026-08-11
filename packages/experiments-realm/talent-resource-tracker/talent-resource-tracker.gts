@@ -3,16 +3,16 @@ import {
   Component,
   field,
   contains,
-  linksToMany,
   realmURL,
   StringField,
+  type BaseDef,
   type Format,
   type ViewCardFn,
   type CreateCardFn,
 } from '@cardstack/base/card-api';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
-import { fn, get } from '@ember/helper';
+import { fn } from '@ember/helper';
 import { eq, or } from '@cardstack/boxel-ui/helpers';
 import {
   KanbanPlane,
@@ -29,6 +29,7 @@ import type { NormalizeRangeActionValue } from 'ember-power-calendar/utils';
 import { debounce } from 'lodash-es';
 import {
   codeRef,
+  identifyCard,
   type Query,
   type Filter,
   type LooseSingleCardDocument,
@@ -51,9 +52,14 @@ import { Meeting } from '../meeting';
 import { Team } from '../team';
 import { Project, PROJECT_STATUS_COLORS } from '../project';
 import { Vendor } from '../vendor';
-import { Contractor } from '../contractor';
+import { Contractor, CONTRACTOR_STATUS_COLORS } from '../contractor';
 import { JobRequisition } from '../job-requisition';
-import { OnboardingChecklist } from '../onboarding-checklist';
+import { REQUISITION_STATUS_COLORS } from '../requisition-field';
+import {
+  OnboardingChecklist,
+  ONBOARDING_CHECKLIST_STATUS_COLORS,
+} from '../onboarding-checklist';
+import { OnboardingTemplate } from '../onboarding-template';
 import CardList from '@cardstack/base/components/card-list';
 import { Calendar, type CalendarEvent } from '../components/calendar';
 import { OrgTree, type OrgTreeItem } from '../components/org-tree';
@@ -63,7 +69,6 @@ import { Application, APPLICATION_STATUS_COLORS } from '../application';
 import { Offer, offerStatusLabel } from '../offer';
 import { RejectCandidateCommand } from '../commands/reject-candidate-command';
 import { ApproveOfferCommand } from '../commands/approve-offer-command';
-import { ExtractResumeCommand } from '../commands/extract-resume-command';
 import { ScreenApplicationCommand } from '../commands/screen-application-command';
 import { ExtendOfferCommand } from '../commands/extend-offer-command';
 import { AdvanceToOfferCommand } from '../commands/advance-to-offer-command';
@@ -81,6 +86,15 @@ import {
 const here: string = import.meta.url;
 const employeeRef = codeRef(here, '../employee', 'Employee');
 const meetingRef = codeRef(here, '../meeting', 'Meeting');
+
+// Renders a card instance fetched from a live query (which has no @fields
+// entry to hand the template) via its own class's component.
+function getComponent(cardOrField: BaseDef | undefined) {
+  if (!cardOrField) {
+    return undefined;
+  }
+  return (cardOrField.constructor as typeof BaseDef).getComponent(cardOrField);
+}
 
 const TABS = [
   'Dashboard',
@@ -123,9 +137,12 @@ class Isolated extends Component<typeof TalentResourceTracker> {
   @tracked offersView: 'grid' | 'strip' = 'grid';
   @tracked requisitionsSearch = '';
   @tracked requisitionStatusFilter = 'all';
+  @tracked requisitionsView: 'grid' | 'strip' | 'table' = 'grid';
   @tracked onboardingSearch = '';
+  @tracked onboardingView: 'grid' | 'strip' | 'table' = 'grid';
   @tracked contractorSearch = '';
   @tracked contractorStatusFilter = 'all';
+  @tracked contractorsView: 'grid' | 'strip' | 'table' = 'grid';
   @tracked reviewMode = false;
   @tracked reviewIndex = 0;
   @tracked reviewedCount = 0;
@@ -147,6 +164,15 @@ class Isolated extends Component<typeof TalentResourceTracker> {
   };
   setOffersView = (view: 'grid' | 'strip') => {
     this.offersView = view;
+  };
+  setRequisitionsView = (view: 'grid' | 'strip' | 'table') => {
+    this.requisitionsView = view;
+  };
+  setOnboardingView = (view: 'grid' | 'strip' | 'table') => {
+    this.onboardingView = view;
+  };
+  setContractorsView = (view: 'grid' | 'strip' | 'table') => {
+    this.contractorsView = view;
   };
 
   private debouncedSetPositionsSearch = debounce((value: string) => {
@@ -306,14 +332,10 @@ class Isolated extends Component<typeof TalentResourceTracker> {
   }
 
   get employeeQuery(): Query {
-    // Scoped to exactly this tracker's own linked employees — the same
-    // source `departments` reads from — so the chip list and the search
-    // results can never disagree about who's in the directory.
-    let ids = this.employees.map((e) => e.id).filter(Boolean) as string[];
-    let every: Filter[] = [
-      { type: employeeRef },
-      { on: employeeRef, in: { id: ids } },
-    ];
+    // The directory lists every Employee in the realm — the same population
+    // the live `employeesQuery` feeds `departments` from — so the chip list
+    // and the search results can never disagree about who's in the directory.
+    let every: Filter[] = [{ type: employeeRef }];
     if (this.directorySearch) {
       every.push({ on: employeeRef, contains: { name: this.directorySearch } });
     }
@@ -335,35 +357,60 @@ class Isolated extends Component<typeof TalentResourceTracker> {
     this.debouncedSetDirectorySearch(value);
   };
 
+  // Every collection is a live realm query rather than a hand-maintained
+  // linksToMany on the tracker card: new cards show up here the moment they
+  // index, with no "append to the tracker and save it" bookkeeping step.
+  private liveQuery(cardClass: typeof CardDef) {
+    return this.args.context?.getCards(
+      this,
+      () => {
+        let ref = identifyCard(cardClass);
+        return ref ? { filter: { type: ref } } : undefined;
+      },
+      () => this.realms,
+      { isLive: true },
+    );
+  }
+
+  employeesQuery = this.liveQuery(Employee);
+  candidatesQuery = this.liveQuery(Candidate);
+  meetingsQuery = this.liveQuery(Meeting);
+  teamsQuery = this.liveQuery(Team);
+  projectsQuery = this.liveQuery(Project);
+  vendorsQuery = this.liveQuery(Vendor);
+  positionsQuery = this.liveQuery(Position);
+  applicationsQuery = this.liveQuery(Application);
+  offersQuery = this.liveQuery(Offer);
+  contractorsQuery = this.liveQuery(Contractor);
+  requisitionsQuery = this.liveQuery(JobRequisition);
+  onboardingChecklistsQuery = this.liveQuery(OnboardingChecklist);
+
   get employees(): Employee[] {
-    return (this.args.model.employees ?? []).filter(Boolean) as Employee[];
+    return (this.employeesQuery?.instances ?? []) as Employee[];
   }
 
   get candidates(): Candidate[] {
-    return (this.args.model.candidates ?? []).filter(Boolean) as Candidate[];
+    return (this.candidatesQuery?.instances ?? []) as Candidate[];
   }
 
   get meetings(): Meeting[] {
-    return (this.args.model.meetings ?? []).filter(Boolean) as Meeting[];
+    return (this.meetingsQuery?.instances ?? []) as Meeting[];
   }
 
   get positions(): Position[] {
-    return (this.args.model.positions ?? []).filter(Boolean) as Position[];
+    return (this.positionsQuery?.instances ?? []) as Position[];
   }
 
-  // Deleting a card does not rewrite the cards that link to it, so a
-  // linksToMany can hold a reference whose target is gone. A dead slot reads
-  // as `undefined`, which would otherwise render as an empty row here.
   get teams(): Team[] {
-    return (this.args.model.teams ?? []).filter(Boolean) as Team[];
+    return (this.teamsQuery?.instances ?? []) as Team[];
   }
 
   get projects(): Project[] {
-    return (this.args.model.projects ?? []).filter(Boolean) as Project[];
+    return (this.projectsQuery?.instances ?? []) as Project[];
   }
 
   get vendors(): Vendor[] {
-    return (this.args.model.vendors ?? []).filter(Boolean) as Vendor[];
+    return (this.vendorsQuery?.instances ?? []) as Vendor[];
   }
 
   // Positions need horizontal comparison, not a card grid — which is open
@@ -428,25 +475,24 @@ class Isolated extends Component<typeof TalentResourceTracker> {
   }
 
   get applications(): Application[] {
-    return (this.args.model.applications ?? []).filter(
-      Boolean,
-    ) as Application[];
+    return (this.applicationsQuery?.instances ?? []) as Application[];
   }
 
   get offers(): Offer[] {
-    return (this.args.model.offers ?? []).filter(Boolean) as Offer[];
+    return (this.offersQuery?.instances ?? []) as Offer[];
   }
 
   get requisitions(): JobRequisition[] {
-    return (this.args.model.requisitions ?? []).filter(Boolean) as JobRequisition[];
+    return (this.requisitionsQuery?.instances ?? []) as JobRequisition[];
   }
 
   get contractors(): Contractor[] {
-    return (this.args.model.contractors ?? []).filter(Boolean) as Contractor[];
+    return (this.contractorsQuery?.instances ?? []) as Contractor[];
   }
 
   get activeChecklists(): OnboardingChecklist[] {
-    let all = (this.args.model.onboardingChecklists ?? []).filter(Boolean) as OnboardingChecklist[];
+    let all = (this.onboardingChecklistsQuery?.instances ??
+      []) as OnboardingChecklist[];
     return all.filter((c) => c.status !== 'complete');
   }
 
@@ -1181,12 +1227,12 @@ class Isolated extends Component<typeof TalentResourceTracker> {
       this.candidates,
       this.employees,
       this.meetings,
-      this.args.model.teams ?? [],
-      this.args.model.projects ?? [],
-      this.args.model.vendors ?? [],
-      this.args.model.positions ?? [],
-      this.args.model.applications ?? [],
-      this.args.model.offers ?? [],
+      this.teams,
+      this.projects,
+      this.vendors,
+      this.positions,
+      this.applications,
+      this.offers,
     ];
     for (let pool of pools) {
       let hit = (pool as any[]).find((c) => c?.id === id);
@@ -1243,16 +1289,12 @@ class Isolated extends Component<typeof TalentResourceTracker> {
   // Uses the host's own createCard action (same primitive blog-app's "New
   // Post" button uses) instead of a manual SaveCardCommand-then-openCard
   // pair. createCard opens the new card in the stack itself, in edit format,
-  // as ONE round trip — that's the whole reason this used to feel slow:
-  // two sequential awaited saves (the meeting, then the whole tracker) had
-  // to finish before the user saw anything at all. Linking the new meeting
-  // into this tracker's own `meetings` array now happens AFTER the stack is
-  // already open, since it's no longer on the path the user is waiting on.
+  // as ONE round trip. The Calendar picks the new meeting up through the
+  // live `meetingsQuery` the moment it indexes — no linking step.
   private addMeetingTask = restartableTask(async (date: Date) => {
     this.actionError = undefined;
     let createCard = (this.args as any).createCard as CreateCardFn | undefined;
-    let store = this.args.context?.store;
-    if (!createCard || !store) {
+    if (!createCard) {
       this.actionError = 'Commands are unavailable in this mode';
       return;
     }
@@ -1267,23 +1309,10 @@ class Isolated extends Component<typeof TalentResourceTracker> {
           meta: { adoptsFrom: meetingRef },
         },
       };
-      let newId = await createCard(meetingRef, realm, {
+      await createCard(meetingRef, realm, {
         realmURL: realm,
         doc,
       });
-      if (!newId) {
-        return;
-      }
-      let saved = await store.get<Meeting>(newId);
-      if (saved instanceof Meeting) {
-        this.args.model.meetings = [...(this.args.model.meetings ?? []), saved];
-        let commandContext = this.args.context?.commandContext;
-        if (commandContext) {
-          await new SaveCardCommand(commandContext).execute({
-            card: this.args.model,
-          } as any);
-        }
-      }
     } catch (error: any) {
       this.actionError = error?.message ?? String(error);
     } finally {
@@ -1313,8 +1342,7 @@ class Isolated extends Component<typeof TalentResourceTracker> {
   private scheduleInterviewTask = restartableTask(async (candidate: Candidate) => {
     this.actionError = undefined;
     let createCard = (this.args as any).createCard as CreateCardFn | undefined;
-    let store = this.args.context?.store;
-    if (!createCard || !store) {
+    if (!createCard) {
       this.actionError = 'Commands are unavailable in this mode';
       return;
     }
@@ -1341,31 +1369,57 @@ class Isolated extends Component<typeof TalentResourceTracker> {
       if (!newId) {
         return;
       }
-      let saved = await store.get<Meeting>(newId);
-      if (saved instanceof Meeting) {
-        this.args.model.meetings = [...(this.args.model.meetings ?? []), saved];
-        let commandContext = this.args.context?.commandContext;
-        if (commandContext) {
+      // Scheduling an interview is the real-world action that starts
+      // interviewing — same "advance the stage as a side effect" pattern
+      // ExtractResumeCommand uses for applied → screening. The meeting
+      // itself reaches the Calendar via the live `meetingsQuery`.
+      if (candidate.status === 'screening') {
+        await this.runCommand(candidate, async (commandContext) => {
+          candidate.status = 'interviewing';
           await new SaveCardCommand(commandContext).execute({
-            card: this.args.model,
+            card: candidate,
           } as any);
-        }
-        // Scheduling an interview is the real-world action that starts
-        // interviewing — same "advance the stage as a side effect" pattern
-        // ExtractResumeCommand uses for applied → screening.
-        if (candidate.status === 'screening') {
-          await this.runCommand(candidate, async (commandContext) => {
-            candidate.status = 'interviewing';
-            await new SaveCardCommand(commandContext).execute({
-              card: candidate,
-            } as any);
-          });
-        }
+        });
       }
     } catch (error: any) {
       this.actionError = error?.message ?? String(error);
     } finally {
       this.schedulingCandidateId = undefined;
+    }
+  });
+
+  // Generic "+ Add" for every collection tab — same blog-app idiom as
+  // addMeetingTask: hand the host a bare adoptsFrom doc and let createCard
+  // open the new card in the stack in edit format. The live queries pick the
+  // card up on index, so there is no linking step afterward.
+  get canCreate(): boolean {
+    return Boolean((this.args as any).createCard);
+  }
+
+  addNew = (cardClass: typeof CardDef) => {
+    void this.addCard.perform(cardClass);
+  };
+
+  addCard = restartableTask(async (cardClass: typeof CardDef) => {
+    this.actionError = undefined;
+    let createCard = (this.args as any).createCard as CreateCardFn | undefined;
+    let ref = identifyCard(cardClass);
+    if (!createCard || !ref) {
+      this.actionError = 'Commands are unavailable in this mode';
+      return;
+    }
+    try {
+      let realmHref = this.args.model[realmURL]?.href;
+      let realm = realmHref ? new URL(realmHref) : undefined;
+      let doc: LooseSingleCardDocument = {
+        data: {
+          type: 'card',
+          meta: { adoptsFrom: ref },
+        },
+      };
+      await createCard(ref, realm, { realmURL: realm, doc });
+    } catch (error: any) {
+      this.actionError = error?.message ?? String(error);
     }
   });
 
@@ -1425,28 +1479,14 @@ class Isolated extends Component<typeof TalentResourceTracker> {
     });
   };
 
-  extractResume = async (candidate: Candidate) => {
-    await this.runCommand(candidate, async (commandContext) => {
-      await new ExtractResumeCommand(commandContext).execute({
-        candidate,
-      } as any);
-    });
-  };
-
   extendOffer = async (candidate: Candidate) => {
-    let result = await this.runCommand(candidate, async (commandContext) => {
+    // The new Offer reaches the Offers tab via the live `offersQuery` —
+    // nothing to link back onto the tracker.
+    await this.runCommand(candidate, async (commandContext) => {
       return (await new ExtendOfferCommand(commandContext).execute({
         candidate,
       } as any)) as any;
     });
-    let offer = result?.offer;
-    if (offer) {
-      let commandContext = this.args.context?.commandContext;
-      this.args.model.offers = [...(this.args.model.offers ?? []), offer];
-      await new SaveCardCommand(commandContext).execute({
-        card: this.args.model,
-      } as any);
-    }
   };
 
   advanceToOffer = async (candidate: Candidate) => {
@@ -1505,6 +1545,30 @@ class Isolated extends Component<typeof TalentResourceTracker> {
   positionStatusStyle = (status: string | undefined) => {
     let color = stateColorOf(POSITION_STATUS_COLORS, status);
     return htmlSafe(`background: ${color.bg}; color: ${color.fg};`);
+  };
+
+  requisitionStatusStyle = (status: string | undefined) => {
+    let color = stateColorOf(REQUISITION_STATUS_COLORS, status);
+    return htmlSafe(`background: ${color.bg}; color: ${color.fg};`);
+  };
+
+  checklistStatusStyle = (status: string | undefined) => {
+    let color = stateColorOf(ONBOARDING_CHECKLIST_STATUS_COLORS, status);
+    return htmlSafe(`background: ${color.bg}; color: ${color.fg};`);
+  };
+
+  contractorStatusStyle = (status: string | undefined) => {
+    let color = stateColorOf(CONTRACTOR_STATUS_COLORS, status);
+    return htmlSafe(`background: ${color.bg}; color: ${color.fg};`);
+  };
+
+  completedTaskCount = (checklist: OnboardingChecklist): number => {
+    let tasks = checklist.tasks ?? [];
+    return tasks.filter((t) => t && t.status === 'complete').length;
+  };
+
+  rateLabel = (rate: number | undefined): string => {
+    return rate ? `$${rate}/hr` : '—';
   };
 
   // Review mode — a full-screen triage queue instead of clicking Screen on
@@ -1616,19 +1680,11 @@ class Isolated extends Component<typeof TalentResourceTracker> {
     }
     this.busyApplicationId = application.id;
     try {
-      let result = (await new ScreenApplicationCommand(commandContext).execute({
+      // The created Candidate reaches the Pipeline via the live
+      // `candidatesQuery` — nothing to link back onto the tracker.
+      await new ScreenApplicationCommand(commandContext).execute({
         application,
-      } as any)) as any;
-      let candidate = result?.candidate;
-      if (candidate) {
-        this.args.model.candidates = [
-          ...(this.args.model.candidates ?? []),
-          candidate,
-        ];
-        await new SaveCardCommand(commandContext).execute({
-          card: this.args.model,
-        } as any);
-      }
+      } as any);
     } catch (error: any) {
       this.actionError = error?.message ?? String(error);
     } finally {
@@ -2000,7 +2056,18 @@ class Isolated extends Component<typeof TalentResourceTracker> {
 
               <div class='accounts'>
                 <section class='account-col'>
-                  <h2>Teams</h2>
+                  <div class='account-col-head'>
+                    <h2>Teams</h2>
+                    {{#if this.canCreate}}
+                      <Button
+                        type='button'
+                        @kind='primary'
+                        class='btn-review'
+                        @loading={{this.addCard.isRunning}}
+                        {{on 'click' (fn this.addNew Team)}}
+                      >+ Add</Button>
+                    {{/if}}
+                  </div>
                   {{#if this.teams.length}}
                     <ul class='account-list'>
                       {{#each this.teams as |team|}}
@@ -2016,12 +2083,25 @@ class Isolated extends Component<typeof TalentResourceTracker> {
                         </li>
                       {{/each}}
                     </ul>
+                  {{else if this.teamsQuery.isLoading}}
+                    <p class='empty-note'>Loading…</p>
                   {{else}}
                     <p class='empty-note'>No teams yet</p>
                   {{/if}}
                 </section>
                 <section class='account-col'>
-                  <h2>Projects</h2>
+                  <div class='account-col-head'>
+                    <h2>Projects</h2>
+                    {{#if this.canCreate}}
+                      <Button
+                        type='button'
+                        @kind='primary'
+                        class='btn-review'
+                        @loading={{this.addCard.isRunning}}
+                        {{on 'click' (fn this.addNew Project)}}
+                      >+ Add</Button>
+                    {{/if}}
+                  </div>
                   {{#if this.projects.length}}
                     <ul class='account-list'>
                       {{#each this.projects as |project|}}
@@ -2041,12 +2121,25 @@ class Isolated extends Component<typeof TalentResourceTracker> {
                         </li>
                       {{/each}}
                     </ul>
+                  {{else if this.projectsQuery.isLoading}}
+                    <p class='empty-note'>Loading…</p>
                   {{else}}
                     <p class='empty-note'>No projects yet</p>
                   {{/if}}
                 </section>
                 <section class='account-col'>
-                  <h2>Vendors</h2>
+                  <div class='account-col-head'>
+                    <h2>Vendors</h2>
+                    {{#if this.canCreate}}
+                      <Button
+                        type='button'
+                        @kind='primary'
+                        class='btn-review'
+                        @loading={{this.addCard.isRunning}}
+                        {{on 'click' (fn this.addNew Vendor)}}
+                      >+ Add</Button>
+                    {{/if}}
+                  </div>
                   {{#if this.vendors.length}}
                     <ul class='account-list'>
                       {{#each this.vendors as |vendor|}}
@@ -2064,6 +2157,8 @@ class Isolated extends Component<typeof TalentResourceTracker> {
                         </li>
                       {{/each}}
                     </ul>
+                  {{else if this.vendorsQuery.isLoading}}
+                    <p class='empty-note'>Loading…</p>
                   {{else}}
                     <p class='empty-note'>No vendors yet</p>
                   {{/if}}
@@ -2079,6 +2174,15 @@ class Isolated extends Component<typeof TalentResourceTracker> {
                   <h2>Open Positions</h2>
                   <p class='byline'>Requisitions open across the org</p>
                 </div>
+                {{#if this.canCreate}}
+                  <Button
+                    type='button'
+                    @kind='primary'
+                    class='btn-review'
+                    @loading={{this.addCard.isRunning}}
+                    {{on 'click' (fn this.addNew Position)}}
+                  >+ Add position</Button>
+                {{/if}}
               </div>
               <div class='list-toolbar'>
                 <div class='list-search'>
@@ -2192,10 +2296,7 @@ class Isolated extends Component<typeof TalentResourceTracker> {
                       {{if (eq this.positionsView "strip") "strip-view"}}'
                   >
                     {{#each this.filteredPositions as |entry|}}
-                      {{#let
-                        (get @fields.positions entry.index)
-                        as |PositionField|
-                      }}
+                      {{#let (getComponent entry.item) as |PositionField|}}
                         {{#if PositionField}}
                           <div
                             class='tile
@@ -2214,6 +2315,8 @@ class Isolated extends Component<typeof TalentResourceTracker> {
                     {{/each}}
                   </div>
                 {{/if}}
+              {{else if this.positionsQuery.isLoading}}
+                <p class='empty-note'>Loading…</p>
               {{else}}
                 <p class='empty-note'>No open positions yet</p>
               {{/if}}
@@ -2228,6 +2331,15 @@ class Isolated extends Component<typeof TalentResourceTracker> {
                   <p class='byline'>Inbound, not yet promoted to the pipeline</p>
                 </div>
                 {{#unless this.reviewMode}}
+                  {{#if this.canCreate}}
+                    <Button
+                      type='button'
+                      @kind='primary'
+                      class='btn-review'
+                      @loading={{this.addCard.isRunning}}
+                      {{on 'click' (fn this.addNew Application)}}
+                    >+ Add application</Button>
+                  {{/if}}
                   {{#if this.reviewQueue.length}}
                     <Button
                       type='button'
@@ -2424,10 +2536,7 @@ class Isolated extends Component<typeof TalentResourceTracker> {
                         {{if (eq this.applicationsView "strip") "strip-view"}}'
                     >
                       {{#each this.filteredApplications as |entry|}}
-                        {{#let
-                          (get @fields.applications entry.index)
-                          as |ApplicationField|
-                        }}
+                        {{#let (getComponent entry.item) as |ApplicationField|}}
                           <div
                             class='tile app-tile
                               {{if
@@ -2467,6 +2576,8 @@ class Isolated extends Component<typeof TalentResourceTracker> {
                       {{/each}}
                     </div>
                   {{/if}}
+                {{else if this.applicationsQuery.isLoading}}
+                  <p class='empty-note'>Loading…</p>
                 {{else}}
                   <p class='empty-note'>No applications yet</p>
                 {{/if}}
@@ -2481,6 +2592,15 @@ class Isolated extends Component<typeof TalentResourceTracker> {
                   <h2>Directory</h2>
                   <p class='byline'>Every standing entry, searchable</p>
                 </div>
+                {{#if this.canCreate}}
+                  <Button
+                    type='button'
+                    @kind='primary'
+                    class='btn-review'
+                    @loading={{this.addCard.isRunning}}
+                    {{on 'click' (fn this.addNew Employee)}}
+                  >+ Add employee</Button>
+                {{/if}}
               </div>
               <div class='directory-filters'>
                 <div class='directory-search'>
@@ -2543,6 +2663,15 @@ class Isolated extends Component<typeof TalentResourceTracker> {
                   <h2>Candidate Pipeline</h2>
                   <p class='byline'>By stage — screening through offer</p>
                 </div>
+                {{#if this.canCreate}}
+                  <Button
+                    type='button'
+                    @kind='primary'
+                    class='btn-review'
+                    @loading={{this.addCard.isRunning}}
+                    {{on 'click' (fn this.addNew Candidate)}}
+                  >+ Add candidate</Button>
+                {{/if}}
               </div>
               <KanbanPlane
                 @boardLabel='Candidate Pipeline'
@@ -2554,7 +2683,7 @@ class Isolated extends Component<typeof TalentResourceTracker> {
               >
                 <:card as |placement|>
                   {{#let
-                    (get @fields.candidates placement.index)
+                    (getComponent (this.candidateAt placement.index))
                     (this.candidateAt placement.index)
                     (this.statusAt placement.index)
                     as |CandidateField candidateModel candidateStatus|
@@ -2605,22 +2734,11 @@ class Isolated extends Component<typeof TalentResourceTracker> {
                             <span class='avg-chip'>{{avg.label}}</span>
                           {{/if}}
                         {{/let}}
-                        {{#if (eq candidateStatus 'applied')}}
-                          <Button
-                            type='button'
-                            @kind='secondary'
-                            class='stage-act'
-                            @disabled={{this.isBusyCandidate candidateModel}}
-                            {{on
-                              'click'
-                              (fn this.extractResume candidateModel)
-                            }}
-                          >{{if
-                              (this.isBusyCandidate candidateModel)
-                              'Extracting…'
-                              'Extract résumé'
-                            }}</Button>
-                        {{/if}}
+                        {{! No action button at `applied` — résumé extraction
+                            is a tool with a resume-text precondition, so it
+                            lives on the candidate's detail page, not the
+                            board. The board only offers HR's next pipeline
+                            move. }}
                         {{#if (eq candidateStatus 'screening')}}
                           <Button
                             type='button'
@@ -2683,6 +2801,11 @@ class Isolated extends Component<typeof TalentResourceTracker> {
                         {{/if}}
                         {{#if (eq candidateStatus 'offer')}}
                           {{#if candidateModel.offerState}}
+                            {{! Offer is out — the ball is with the candidate,
+                                so HR has no board move here. Recording the
+                                reply (and the approval chain) lives on the
+                                Offer card; hiring happens by dragging the card
+                                to Hired, rejecting by dragging to Rejected. }}
                             <Button
                               type='button'
                               @kind='secondary'
@@ -2693,21 +2816,10 @@ class Isolated extends Component<typeof TalentResourceTracker> {
                               }}
                             >Offer &middot;
                               {{this.offerLabel candidateModel}}</Button>
-                            <Button
-                              type='button'
-                              @kind='primary'
-                              class='stage-act approve'
-                              @disabled={{this.isBusyCandidate candidateModel}}
-                              {{on
-                                'click'
-                                (fn this.approveOrReviewChain candidateModel)
-                              }}
-                            >Approve</Button>
                           {{else}}
                             {{! Reaching the offer stage only drafts the
-                                Offer (see AdvanceToOfferCommand) — nothing
-                                has gone to the candidate yet, so Approve
-                                has nothing to approve. Send it first. }}
+                                Offer (see AdvanceToOfferCommand) — sending it
+                                is HR's one legitimate move at this point. }}
                             <Button
                               type='button'
                               @kind='primary'
@@ -2723,20 +2835,16 @@ class Isolated extends Component<typeof TalentResourceTracker> {
                                 'Send offer'
                               }}</Button>
                           {{/if}}
-                          <Button
-                            type='button'
-                            @kind='secondary'
-                            class='stage-act danger'
-                            @disabled={{this.isBusyCandidate candidateModel}}
-                            {{on 'click' (fn this.reject candidateModel)}}
-                          >Reject</Button>
                         {{/if}}
                       </div>
                     {{/if}}
                   {{/let}}
                 </:card>
                 <:ghost as |dragIdx|>
-                  {{#let (get @fields.candidates dragIdx) as |CandidateField|}}
+                  {{#let
+                    (getComponent (this.candidateAt dragIdx))
+                    as |CandidateField|
+                  }}
                     {{#if CandidateField}}
                       <CandidateField
                         @format='fitted'
@@ -2756,18 +2864,99 @@ class Isolated extends Component<typeof TalentResourceTracker> {
                   <h2>Requisitions</h2>
                   <p class='byline'>Job openings by approval status</p>
                 </div>
+                {{#if this.canCreate}}
+                  <Button
+                    type='button'
+                    @kind='primary'
+                    class='btn-review'
+                    @loading={{this.addCard.isRunning}}
+                    {{on 'click' (fn this.addNew JobRequisition)}}
+                  >+ Add requisition</Button>
+                {{/if}}
+              </div>
+              <div class='list-toolbar'>
+                <div class='view-toggle' role='group' aria-label='View'>
+                  <IconButton
+                    type='button'
+                    class='view-btn
+                      {{if (eq this.requisitionsView "grid") "active"}}'
+                    aria-label='Grid view'
+                    {{on 'click' (fn this.setRequisitionsView 'grid')}}
+                  ><LayoutGridIcon class='view-icon' /></IconButton>
+                  <IconButton
+                    type='button'
+                    class='view-btn
+                      {{if (eq this.requisitionsView "strip") "active"}}'
+                    aria-label='List view'
+                    {{on 'click' (fn this.setRequisitionsView 'strip')}}
+                  ><ListIcon class='view-icon' /></IconButton>
+                  <IconButton
+                    type='button'
+                    class='view-btn
+                      {{if (eq this.requisitionsView "table") "active"}}'
+                    aria-label='Table view'
+                    {{on 'click' (fn this.setRequisitionsView 'table')}}
+                  ><TableIcon class='view-icon' /></IconButton>
+                </div>
               </div>
               {{#if this.requisitions.length}}
-                <div class='tile-grid'>
-                  {{#each this.requisitions as |req|}}
-                    <div class='tile req-tile' {{on 'click' (fn this.openCard req)}}>
-                      <h4 class='req-title'>{{req.displayTitle}}</h4>
-                      {{#if req.department}}<p class='req-dept'>{{req.department}}</p>{{/if}}
-                      {{#if req.headcount}}<p class='req-headcount'>{{req.headcount}} positions</p>{{/if}}
-                      <p class='req-status'>Status: {{or req.requisitionStatus 'draft'}}</p>
-                    </div>
-                  {{/each}}
-                </div>
+                {{#if (eq this.requisitionsView 'table')}}
+                  <div class='data-table-wrap'>
+                    <table class='data-table'>
+                      <thead>
+                        <tr>
+                          <th>Title</th>
+                          <th>Department</th>
+                          <th>Headcount</th>
+                          <th>Status</th>
+                          <th>Target fill date</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {{#each this.requisitions as |req|}}
+                          <tr>
+                            <td>{{req.displayTitle}}</td>
+                            <td>{{if req.department req.department '—'}}</td>
+                            <td>{{if req.headcount req.headcount '—'}}</td>
+                            <td>
+                              <span
+                                class='status-pill'
+                                style={{this.requisitionStatusStyle req.status}}
+                              >{{req.status}}</span>
+                            </td>
+                            <td>{{this.formatDate req.targetFillDate}}</td>
+                          </tr>
+                        {{/each}}
+                      </tbody>
+                    </table>
+                  </div>
+                {{else}}
+                  <div
+                    class='tile-grid
+                      {{if (eq this.requisitionsView "strip") "strip-view"}}'
+                  >
+                    {{#each this.requisitions as |req|}}
+                      {{#let (getComponent req) as |ReqField|}}
+                        {{#if ReqField}}
+                          <div
+                            class='tile
+                              {{if
+                                (eq this.requisitionsView "strip")
+                                "strip-tile"
+                              }}'
+                          >
+                            <ReqField
+                              @format='fitted'
+                              @displayContainer={{false}}
+                            />
+                          </div>
+                        {{/if}}
+                      {{/let}}
+                    {{/each}}
+                  </div>
+                {{/if}}
+              {{else if this.requisitionsQuery.isLoading}}
+                <p class='empty-note'>Loading…</p>
               {{else}}
                 <p class='empty-note'>No requisitions yet</p>
               {{/if}}
@@ -2781,26 +2970,111 @@ class Isolated extends Component<typeof TalentResourceTracker> {
                   <h2>Onboarding</h2>
                   <p class='byline'>Active onboarding checklists</p>
                 </div>
+                {{#if this.canCreate}}
+                  <Button
+                    type='button'
+                    @kind='primary'
+                    class='btn-review'
+                    @loading={{this.addCard.isRunning}}
+                    {{on 'click' (fn this.addNew OnboardingChecklist)}}
+                  >+ Add checklist</Button>
+                  <Button
+                    type='button'
+                    @kind='secondary'
+                    class='btn-review-exit'
+                    @loading={{this.addCard.isRunning}}
+                    {{on 'click' (fn this.addNew OnboardingTemplate)}}
+                  >New template</Button>
+                {{/if}}
+              </div>
+              <div class='list-toolbar'>
+                <div class='view-toggle' role='group' aria-label='View'>
+                  <IconButton
+                    type='button'
+                    class='view-btn
+                      {{if (eq this.onboardingView "grid") "active"}}'
+                    aria-label='Grid view'
+                    {{on 'click' (fn this.setOnboardingView 'grid')}}
+                  ><LayoutGridIcon class='view-icon' /></IconButton>
+                  <IconButton
+                    type='button'
+                    class='view-btn
+                      {{if (eq this.onboardingView "strip") "active"}}'
+                    aria-label='List view'
+                    {{on 'click' (fn this.setOnboardingView 'strip')}}
+                  ><ListIcon class='view-icon' /></IconButton>
+                  <IconButton
+                    type='button'
+                    class='view-btn
+                      {{if (eq this.onboardingView "table") "active"}}'
+                    aria-label='Table view'
+                    {{on 'click' (fn this.setOnboardingView 'table')}}
+                  ><TableIcon class='view-icon' /></IconButton>
+                </div>
               </div>
               {{#if this.activeChecklists.length}}
-                <div class='tile-grid'>
-                  {{#each this.activeChecklists as |checklist|}}
-                    <div class='tile ob-tile' {{on 'click' (fn this.openCard checklist)}}>
-                      <div class='ob-header'>
-                        <h4>{{checklist.title}}</h4>
-                      </div>
-                      {{#if checklist.employee}}
-                        <p class='ob-person'>{{checklist.employee.name}}</p>
-                      {{else if checklist.contractor}}
-                        <p class='ob-person'>{{checklist.contractor.name}}</p>
-                      {{/if}}
-                      <p class='ob-status'>{{checklist.status}}</p>
-                      {{#if checklist.tasks.length}}
-                        <p class='ob-tasks'>{{checklist.tasks.length}} tasks</p>
-                      {{/if}}
-                    </div>
-                  {{/each}}
-                </div>
+                {{#if (eq this.onboardingView 'table')}}
+                  <div class='data-table-wrap'>
+                    <table class='data-table'>
+                      <thead>
+                        <tr>
+                          <th>Person</th>
+                          <th>Status</th>
+                          <th>Progress</th>
+                          <th>Started</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {{#each this.activeChecklists as |checklist|}}
+                          <tr>
+                            <td>{{if
+                                checklist.personName
+                                checklist.personName
+                                checklist.title
+                              }}</td>
+                            <td>
+                              <span
+                                class='status-pill'
+                                style={{this.checklistStatusStyle
+                                  checklist.status
+                                }}
+                              >{{checklist.status}}</span>
+                            </td>
+                            <td>{{this.completedTaskCount checklist}}/{{checklist.tasks.length}}
+                              tasks</td>
+                            <td>{{this.formatDate checklist.createdDate}}</td>
+                          </tr>
+                        {{/each}}
+                      </tbody>
+                    </table>
+                  </div>
+                {{else}}
+                  <div
+                    class='tile-grid
+                      {{if (eq this.onboardingView "strip") "strip-view"}}'
+                  >
+                    {{#each this.activeChecklists as |checklist|}}
+                      {{#let (getComponent checklist) as |ChecklistField|}}
+                        {{#if ChecklistField}}
+                          <div
+                            class='tile
+                              {{if
+                                (eq this.onboardingView "strip")
+                                "strip-tile"
+                              }}'
+                          >
+                            <ChecklistField
+                              @format='fitted'
+                              @displayContainer={{false}}
+                            />
+                          </div>
+                        {{/if}}
+                      {{/let}}
+                    {{/each}}
+                  </div>
+                {{/if}}
+              {{else if this.onboardingChecklistsQuery.isLoading}}
+                <p class='empty-note'>Loading…</p>
               {{else}}
                 <p class='empty-note'>No active onboarding checklists</p>
               {{/if}}
@@ -2814,24 +3088,103 @@ class Isolated extends Component<typeof TalentResourceTracker> {
                   <h2>Contractors</h2>
                   <p class='byline'>Current contractor roster</p>
                 </div>
+                {{#if this.canCreate}}
+                  <Button
+                    type='button'
+                    @kind='primary'
+                    class='btn-review'
+                    @loading={{this.addCard.isRunning}}
+                    {{on 'click' (fn this.addNew Contractor)}}
+                  >+ Add contractor</Button>
+                {{/if}}
+              </div>
+              <div class='list-toolbar'>
+                <div class='view-toggle' role='group' aria-label='View'>
+                  <IconButton
+                    type='button'
+                    class='view-btn
+                      {{if (eq this.contractorsView "grid") "active"}}'
+                    aria-label='Grid view'
+                    {{on 'click' (fn this.setContractorsView 'grid')}}
+                  ><LayoutGridIcon class='view-icon' /></IconButton>
+                  <IconButton
+                    type='button'
+                    class='view-btn
+                      {{if (eq this.contractorsView "strip") "active"}}'
+                    aria-label='List view'
+                    {{on 'click' (fn this.setContractorsView 'strip')}}
+                  ><ListIcon class='view-icon' /></IconButton>
+                  <IconButton
+                    type='button'
+                    class='view-btn
+                      {{if (eq this.contractorsView "table") "active"}}'
+                    aria-label='Table view'
+                    {{on 'click' (fn this.setContractorsView 'table')}}
+                  ><TableIcon class='view-icon' /></IconButton>
+                </div>
               </div>
               {{#if this.contractors.length}}
-                <div class='tile-grid'>
-                  {{#each this.contractors as |contractor|}}
-                    <div class='tile contractor-tile' {{on 'click' (fn this.openCard contractor)}}>
-                      <h4 class='contractor-name'>{{contractor.name}}</h4>
-                      {{#if contractor.contractStatus}}
-                        <p class='contractor-status'>{{contractor.contractStatus}}</p>
-                      {{/if}}
-                      {{#if contractor.billableRate}}
-                        <p class='contractor-rate'>${{contractor.billableRate}}/hr</p>
-                      {{/if}}
-                      {{#if contractor.invoiceFrequency}}
-                        <p class='contractor-freq'>{{contractor.invoiceFrequency}}</p>
-                      {{/if}}
-                    </div>
-                  {{/each}}
-                </div>
+                {{#if (eq this.contractorsView 'table')}}
+                  <div class='data-table-wrap'>
+                    <table class='data-table'>
+                      <thead>
+                        <tr>
+                          <th>Name</th>
+                          <th>Status</th>
+                          <th>Rate</th>
+                          <th>Invoice frequency</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {{#each this.contractors as |contractor|}}
+                          <tr>
+                            <td>{{contractor.name}}</td>
+                            <td>
+                              <span
+                                class='status-pill'
+                                style={{this.contractorStatusStyle
+                                  contractor.contractStatus
+                                }}
+                              >{{contractor.contractStatus}}</span>
+                            </td>
+                            <td>{{this.rateLabel contractor.billableRate}}</td>
+                            <td>{{if
+                                contractor.invoiceFrequency
+                                contractor.invoiceFrequency
+                                '—'
+                              }}</td>
+                          </tr>
+                        {{/each}}
+                      </tbody>
+                    </table>
+                  </div>
+                {{else}}
+                  <div
+                    class='tile-grid
+                      {{if (eq this.contractorsView "strip") "strip-view"}}'
+                  >
+                    {{#each this.contractors as |contractor|}}
+                      {{#let (getComponent contractor) as |ContractorField|}}
+                        {{#if ContractorField}}
+                          <div
+                            class='tile
+                              {{if
+                                (eq this.contractorsView "strip")
+                                "strip-tile"
+                              }}'
+                          >
+                            <ContractorField
+                              @format='fitted'
+                              @displayContainer={{false}}
+                            />
+                          </div>
+                        {{/if}}
+                      {{/let}}
+                    {{/each}}
+                  </div>
+                {{/if}}
+              {{else if this.contractorsQuery.isLoading}}
+                <p class='empty-note'>Loading…</p>
               {{else}}
                 <p class='empty-note'>No contractors</p>
               {{/if}}
@@ -2902,7 +3255,7 @@ class Isolated extends Component<typeof TalentResourceTracker> {
                     {{if (eq this.offersView "strip") "strip-view"}}'
                 >
                   {{#each this.filteredOffers as |entry|}}
-                    {{#let (get @fields.offers entry.index) as |OfferField|}}
+                    {{#let (getComponent entry.item) as |OfferField|}}
                       {{#if OfferField}}
                         <div
                           class='tile
@@ -2921,6 +3274,8 @@ class Isolated extends Component<typeof TalentResourceTracker> {
                     {{/let}}
                   {{/each}}
                 </div>
+              {{else if this.offersQuery.isLoading}}
+                <p class='empty-note'>Loading…</p>
               {{else}}
                 <p class='empty-note'>No offers extended yet</p>
               {{/if}}
@@ -2934,6 +3289,15 @@ class Isolated extends Component<typeof TalentResourceTracker> {
                   <h2>Calendar</h2>
                   <p class='byline'>Interview activity this cycle</p>
                 </div>
+                {{#if this.canCreate}}
+                  <Button
+                    type='button'
+                    @kind='primary'
+                    class='btn-review'
+                    @loading={{this.addCard.isRunning}}
+                    {{on 'click' (fn this.addNew Meeting)}}
+                  >+ Add meeting</Button>
+                {{/if}}
               </div>
               {{#if this.interviewerLoad.length}}
                 <div class='capacity-row'>
@@ -3146,6 +3510,11 @@ class Isolated extends Component<typeof TalentResourceTracker> {
         padding-bottom: var(--boxel-sp);
         border-bottom: 2px solid var(--text);
         margin: 0 0 var(--boxel-sp-lg);
+      }
+      /* Pushes the tab's action buttons (+ Add, Review mode) to the right
+         edge of the section header. */
+      .sec-head .htext {
+        margin-right: auto;
       }
       .sec-head .htext h2 {
         font-family: 'Inter', system-ui, sans-serif;
@@ -3847,6 +4216,25 @@ class Isolated extends Component<typeof TalentResourceTracker> {
         padding-bottom: var(--boxel-sp-5xs);
         border-bottom: 1px solid var(--text);
       }
+      /* Header row for an account column: the underline moves from the h2
+         to the row so the + Add button sits inside it. */
+      .account-col-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--boxel-sp-xs);
+        border-bottom: 1px solid var(--text);
+        margin-bottom: var(--boxel-sp-xs);
+      }
+      .account-col-head h2 {
+        border-bottom: none;
+        margin-bottom: 0;
+      }
+      .account-col-head .btn-review {
+        --boxel-button-padding: 0.125rem 0.5rem;
+        font-size: 10px;
+        margin-bottom: var(--boxel-sp-5xs);
+      }
       .account-list {
         list-style: none;
         margin: 0;
@@ -4216,61 +4604,9 @@ export class TalentResourceTracker extends CardDef {
   static icon = UsersRoundIcon;
   static prefersWideFormat = true;
 
+  // The tracker holds no collection links: every tab in the Isolated view
+  // sources its cards from live realm queries, so the schema is identity only.
   @field name = contains(StringField);
-  @field employees = linksToMany(() => Employee);
-  @field candidates = linksToMany(() => Candidate);
-  @field meetings = linksToMany(() => Meeting);
-  @field teams = linksToMany(() => Team);
-  @field projects = linksToMany(() => Project);
-  @field vendors = linksToMany(() => Vendor);
-  @field positions = linksToMany(() => Position);
-  @field applications = linksToMany(() => Application);
-  @field offers = linksToMany(() => Offer);
-
-  // Denormalized counts. A prerendered fitted card cannot resolve linksToMany,
-  // so every number the fitted view shows has to exist as an own attribute.
-  // These are computed at index time, when the links ARE resolved.
-  @field headcountTally = contains(StringField, {
-    computeVia: function (this: TalentResourceTracker) {
-      let n = (this.employees ?? []).filter(
-        (e) => e && e.status !== 'offboarded',
-      ).length;
-      return String(n);
-    },
-  });
-
-  @field pipelineTally = contains(StringField, {
-    computeVia: function (this: TalentResourceTracker) {
-      let n = (this.candidates ?? []).filter(
-        (c) => c && c.status !== 'hired' && c.status !== 'rejected',
-      ).length;
-      return String(n);
-    },
-  });
-
-  @field openReqTally = contains(StringField, {
-    computeVia: function (this: TalentResourceTracker) {
-      let n = (this.positions ?? []).filter((p) => p?.status === 'open').length;
-      return String(n);
-    },
-  });
-
-  // The one number that says whether anyone needs to act today: candidates
-  // sitting at a stage where the next move is ours.
-  @field needsUsTally = contains(StringField, {
-    computeVia: function (this: TalentResourceTracker) {
-      let n = (this.candidates ?? []).filter((c) => {
-        if (!c || c.status === 'hired' || c.status === 'rejected') {
-          return false;
-        }
-        if (c.status === 'offer') {
-          return c.offerState !== 'extended';
-        }
-        return true;
-      }).length;
-      return String(n);
-    },
-  });
 
   @field title = contains(StringField, {
     computeVia: function (this: TalentResourceTracker) {
@@ -4321,42 +4657,17 @@ export class TalentResourceTracker extends CardDef {
             <h3 class='fit-name'>{{@model.title}}</h3>
             <span class='fit-eb'>Applicant tracking &amp; people ops</span>
           </div>
-          {{! The one number worth surfacing at every size: how many people are
-              waiting on us. It is the reason to open the app at all. }}
-          {{#if @model.needsUsTally}}
-            <span class='fit-pill'>
-              <span class='pill-dot'></span>{{@model.needsUsTally}}
-              need us
-            </span>
-          {{/if}}
         </div>
 
-        <dl class='fit-stats'>
-          <div>
-            <dt>On staff</dt>
-            <dd>{{if @model.headcountTally @model.headcountTally '0'}}</dd>
-          </div>
-          <div>
-            <dt>In pipeline</dt>
-            <dd>{{if @model.pipelineTally @model.pipelineTally '0'}}</dd>
-          </div>
-        </dl>
-
-        <dl class='fit-add'>
-          <div>
-            <dt>Open reqs</dt>
-            <dd>{{if @model.openReqTally @model.openReqTally '0'}}</dd>
-          </div>
-          <div>
-            <dt>Needs action</dt>
-            <dd>{{if @model.needsUsTally @model.needsUsTally '0'}}</dd>
-          </div>
-        </dl>
+        {{! Identity only — no live counts. The collections behind the numbers
+            now come from live queries in the isolated view, which a
+            prerendered fitted card cannot run; the dashboard inside shows
+            every metric. }}
+        <p class='fit-desc'>Recruiting pipeline, directory &amp; analytics</p>
       </article>
       <style scoped>
-        /* Four tiers, each ADDING numbers. 11px floor. The "needs us" pill
-           survives to the smallest size because it is the only figure that
-           tells the reader whether to open the app right now. */
+        /* Identity tile: icon, name, subtitle, then a one-line descriptor at
+           larger sizes. 11px floor. */
         .fit {
           height: 100%;
           display: flex;
@@ -4425,65 +4736,14 @@ export class TalentResourceTracker extends CardDef {
           overflow: hidden;
           text-overflow: ellipsis;
         }
-        .fit-pill {
-          flex: none;
-          align-self: flex-start;
-          display: inline-flex;
-          align-items: center;
-          gap: 0.25rem;
-          font-size: var(--fit-small);
-          font-weight: 700;
-          padding: 0.1em 0.4em;
-          border-radius: 3px;
-          white-space: nowrap;
-          background: var(--muted, var(--boxel-100));
-          color: var(--trt-strong);
-        }
-        .pill-dot {
-          width: 5px;
-          height: 5px;
-          border-radius: 50%;
-          background: currentColor;
-          flex: none;
-        }
-        .fit-stats,
-        .fit-add {
+        .fit-desc {
           display: none;
-          margin: 0;
-          grid-template-columns: 1fr 1fr;
-          gap: 0.05rem 0.5rem;
-        }
-        .fit-stats {
-          flex: none;
-        }
-        .fit-add {
-          margin-top: auto;
+          margin: auto 0 0;
           padding-top: 0.3rem;
           border-top: 1px dashed var(--border, var(--boxel-200));
-        }
-        .fit-stats > div,
-        .fit-add > div {
-          min-width: 0;
-        }
-        .fit-stats dt,
-        .fit-add dt {
           font-size: var(--fit-small);
           color: var(--muted-foreground, var(--boxel-450));
-          white-space: nowrap;
-        }
-        .fit-stats dd {
-          margin: 0;
-          font-size: calc(var(--fit-name) * 1.35);
-          font-weight: 800;
-          line-height: 1.05;
-          letter-spacing: -0.02em;
-          font-variant-numeric: tabular-nums;
-        }
-        .fit-add dd {
-          margin: 0;
-          font-size: var(--fit-small);
-          font-weight: 700;
-          font-variant-numeric: tabular-nums;
+          line-height: 1.4;
         }
 
         /* TIER 2 — add the subtitle. Two rules: container queries have no `or`. */
@@ -4497,26 +4757,13 @@ export class TalentResourceTracker extends CardDef {
             display: block;
           }
         }
-        /* TIER 3 — add the two headline counts. */
+        /* TIER 3 — add the descriptor line. */
         @container fitted-card (height > 130px) and (width > 180px) {
-          .fit-stats {
-            display: grid;
+          .fit-desc {
+            display: block;
           }
         }
-        /* TIER 4 — add the secondary counts. */
-        @container fitted-card (height > 150px) and (width > 180px) {
-          .fit-add {
-            display: grid;
-            grid-template-columns: 1fr;
-          }
-        }
-        @container fitted-card (width > 340px) and (height > 130px) {
-          .fit-add {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-          }
-        }
-        /* Short strip: horizontal, counts drop, pill stays. */
+        /* Short strip: horizontal, descriptor drops. */
         @container fitted-card (height <= 90px) {
           .fit {
             justify-content: center;
@@ -4524,9 +4771,6 @@ export class TalentResourceTracker extends CardDef {
           .fit-top {
             align-items: center;
             flex-wrap: nowrap;
-          }
-          .fit-pill {
-            align-self: center;
           }
           .fit-name {
             -webkit-line-clamp: 1;

@@ -594,7 +594,7 @@ export class Contractor extends PersonBase {
             display: flex;
           }
         }
-        @container fitted-card (height > 130px) and (width > 180px) {
+        @container fitted-card (height > 130px) and (width >= 170px) {
           .fit-add {
             display: grid;
             grid-template-columns: 1fr;
