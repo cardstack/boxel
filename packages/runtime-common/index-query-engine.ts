@@ -5,6 +5,7 @@ import {
   type CardResource,
   type CodeRef,
   type PgPrimitive,
+  logger,
   baseCardRef,
   internalKeysFor,
   isResolvedCodeRef,
@@ -304,6 +305,8 @@ function flipPolarity(polarity: FilterPolarity): FilterPolarity {
 // `instance-filter-matcher.ts` — lives in
 // `.claude/skills/index-query-engine/SKILL.md`. Read it before changing how
 // queries compile or adding a filter operator / synthetic search-doc key.
+const log = logger('index-query-engine');
+
 export class IndexQueryEngine {
   #dbAdapter: DBAdapter;
   #definitionLookup: DefinitionLookup;
@@ -862,6 +865,17 @@ export class IndexQueryEngine {
       };
     } catch (error) {
       if (isFilterRefersToNonexistentTypeError(error)) {
+        // An empty result is the right ANSWER — a filter naming a type that
+        // does not exist matches nothing, and 500-ing on it would be worse.
+        // But it is the same answer for "that type is not a thing" and "that
+        // type exists and its definition could not be loaded", and the second
+        // is a defect wearing the first one's clothes. Say which, at warn:
+        // the query still succeeds, and the cause stops being invisible.
+        log.warn(
+          `filter refers to a type whose definition could not be resolved, ` +
+            `returning no results: ${(error as Error).message}` +
+            ((error as any).cause ? ` (cause: ${(error as any).cause})` : ''),
+        );
         return {
           results: [],
           meta: {
