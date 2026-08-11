@@ -74,7 +74,10 @@ interface QueryFieldState {
   surfacedErrorSource?: readonly unknown[];
 }
 
-type QueryFieldStore = Pick<CardStore, 'getSearchResource' | 'trackLoad'>;
+type QueryFieldStore = Pick<
+  CardStore,
+  'getSearchResource' | 'realmForId' | 'trackLoad'
+>;
 
 const queryFieldSeedFromSearchSymbol = Symbol.for(
   'cardstack-query-field-seed-from-search',
@@ -227,9 +230,10 @@ export function peekQueryFieldSearchResource(
  * to prepare a bounded snapshot before any Glimmer consumer exists.
  */
 export function resolveQueryFieldRequest(
+  store: QueryFieldStore,
   instance: BaseDef,
   field: Field,
-): { realm: string; query: Query } | undefined {
+): { realms: string[]; query: Query } | undefined {
   if (!field.queryDefinition) {
     return undefined;
   }
@@ -237,9 +241,9 @@ export function resolveQueryFieldRequest(
   if (!fieldDefinition) {
     return undefined;
   }
-  let resolved = resolveQueryAndRealm(instance, field, fieldDefinition);
+  let resolved = resolveQueryAndRealm(store, instance, field, fieldDefinition);
   return resolved
-    ? { realm: resolved.realmHref, query: resolved.query }
+    ? { realms: resolved.realmHrefs, query: resolved.query }
     : undefined;
 }
 
@@ -615,7 +619,7 @@ export function captureQueryFieldSeedData(
 }
 
 function resolveQueryAndRealm(
-  store: CardStore,
+  store: QueryFieldStore,
   instance: BaseDef,
   field: Field,
   fieldDefinition: FieldDefinition,

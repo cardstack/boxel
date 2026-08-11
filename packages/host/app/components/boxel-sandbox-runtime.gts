@@ -1007,7 +1007,10 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
           }}
         >
           {{#if this.renderedComponent}}
-            <this.renderedComponent @format={{this.format}} />
+            <this.renderedComponent
+              @format={{this.format}}
+              @context={{this.cardContext}}
+            />
           {{/if}}
         </main>
       {{/if}}

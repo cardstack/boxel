@@ -760,9 +760,14 @@ export default class BoxelExecutionService extends Service {
           markQueryResolved(instance, fieldName, []);
           continue;
         }
-        let request = resolveBoundaryQueryFieldRequest(instance, field, api);
+        let request = resolveBoundaryQueryFieldRequest(
+          this.store,
+          instance,
+          field,
+          api,
+        );
         let instances = request
-          ? await this.store.search<CardDef>(request.query, [request.realm], {
+          ? await this.store.search<CardDef>(request.query, request.realms, {
               cardInitiated: true,
             })
           : [];
@@ -1312,7 +1317,7 @@ export default class BoxelExecutionService extends Service {
   }
 }
 
-type BoundaryQueryRequest = { realm: string; query: Query };
+type BoundaryQueryRequest = { realms: string[]; query: Query };
 
 /**
  * Resolve a query field without depending on its render-lifetime modifier.
@@ -1324,6 +1329,7 @@ type BoundaryQueryRequest = { realm: string; query: Query };
  * version the Host supports has the explicit operation.
  */
 function resolveBoundaryQueryFieldRequest(
+  store: StoreService,
   instance: BaseDef,
   field: Field<BaseDefConstructor>,
   api: typeof import('@cardstack/base/card-api'),
@@ -1331,13 +1337,14 @@ function resolveBoundaryQueryFieldRequest(
   let explicitResolver = (
     api as typeof api & {
       resolveQueryFieldRequest?: (
+        store: StoreService,
         instance: BaseDef,
         field: Field<BaseDefConstructor>,
       ) => BoundaryQueryRequest | undefined;
     }
   ).resolveQueryFieldRequest;
   if (typeof explicitResolver === 'function') {
-    return explicitResolver(instance, field);
+    return explicitResolver(store, instance, field);
   }
 
   let realm = (instance as BaseDef & { [realmURLSymbol]?: URL })[
@@ -1369,7 +1376,7 @@ function resolveBoundaryQueryFieldRequest(
         : realm,
   });
   return normalized
-    ? { realm: normalized.realm, query: normalized.query }
+    ? { realms: normalized.realms, query: normalized.query }
     : undefined;
 }
 

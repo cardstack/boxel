@@ -602,6 +602,10 @@ export default class StoreService extends Service implements StoreInterface {
     this.store.trackLoad(load);
   }
 
+  realmForId(id: string): string | undefined {
+    return this.store.realmForId(id);
+  }
+
   // CS-10872: pass-through so SearchResource / other callers can tag
   // their load promises with the metadata we want to see in a timeout
   // error document ("what query fields were still pending").

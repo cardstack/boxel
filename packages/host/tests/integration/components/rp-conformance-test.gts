@@ -714,11 +714,11 @@ module('Integration | rp-conformance', function (hooks) {
       }) as Record<string, CardAPIModule.Field>
     ).recipes;
     let queryRequest = recipesField
-      ? api.resolveQueryFieldRequest(card, recipesField)
+      ? api.resolveQueryFieldRequest(store, card, recipesField)
       : undefined;
     assert.ok(queryRequest, 'the fixture resolves its declarative query');
     let fixtureMatches = queryRequest
-      ? await store.search(queryRequest.query, [queryRequest.realm], {
+      ? await store.search(queryRequest.query, queryRequest.realms, {
           cardInitiated: true,
         })
       : [];
