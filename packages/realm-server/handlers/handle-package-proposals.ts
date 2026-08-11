@@ -27,26 +27,37 @@
 // exists. `acceptedBy` matters even more: it is the signature on the claim.
 
 import type Koa from 'koa';
+import { join } from 'path';
+import { readFile } from 'fs/promises';
 import semver from 'semver';
 import {
   pack,
   publishToStore,
   readStoreMeta,
   readStoredFile,
+  readStoredPack,
   unpack,
 } from '@cardstack/deck/node';
+import { IMPORT_MAP_PATH } from '@cardstack/deck/import-map';
 import {
   fetchRequestFromContext,
   setContextResponse,
 } from '../middleware/index.ts';
 import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
+import { findOrMountRealm } from '../lib/realm-routing.ts';
 import {
   acceptProposal,
   listProposals,
   proposeVersion,
+  readProposalPack,
   withdrawProposal,
 } from '../lib/package-proposals.ts';
+import {
+  packRealmPackage,
+  readRealmPackages,
+  storeNameFor,
+} from '../lib/realm-packages.ts';
 import { suggestBump, type Bump } from '../lib/semver-delta.ts';
 
 const ENTRY = 'index.js';
@@ -123,9 +134,150 @@ async function priorOf(
   return bytes ? { version, source: bytes.toString('utf8') } : undefined;
 }
 
-export default function handlePackageProposals({
-  packageStorePath,
-}: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
+/** Every module in a published Version, keyed by pack-relative path. */
+async function treeOf(
+  storeDir: string,
+  name: string,
+  version: string,
+): Promise<Map<string, string> | undefined> {
+  let bytes = await readStoredPack(storeDir, name, version);
+  if (!bytes) {
+    return undefined;
+  }
+  let tree = new Map<string, string>();
+  for (let [path, content] of unpack(bytes).files) {
+    tree.set(path, content.toString('utf8'));
+  }
+  return tree;
+}
+
+/**
+ * Propose a Version of a package the realm itself declares.
+ *
+ * THE VERSION IS NOT IN THE REQUEST. It is read out of the realm's
+ * `importmap.json`, which is the design doc's gate rule: the manifest check
+ * reads `boxel.packages[<name>].version` rather than trusting a number the
+ * caller passed. That puts the claim in a file that lives with the code,
+ * moves with it, and is reviewable in the same diff — instead of in a form
+ * field somebody filled in once.
+ *
+ * The bytes are FROZEN here, not re-derived at acceptance. Re-packing on
+ * accept would publish whatever the realm says at that moment, which is not
+ * what the reviewer read; the seal check at acceptance then becomes a real
+ * guard on exactly that.
+ */
+async function proposeFromRealm({
+  args,
+  storeDir,
+  name,
+  actor,
+  input,
+}: {
+  args: CreateRoutesArgs;
+  storeDir: string;
+  name: string;
+  actor: string;
+  input: Record<string, any>;
+}): Promise<Response> {
+  let { realm: realmURL, package: key } = input.from ?? {};
+  if (typeof realmURL !== 'string' || typeof key !== 'string') {
+    return error(
+      400,
+      'malformed-from',
+      'from must be { realm: <url>, package: <name declared by that realm> }',
+    );
+  }
+  if (typeof input.body !== 'string' || !input.body.trim()) {
+    return error(
+      400,
+      'no-changelog',
+      'a proposal needs a body: what is a consumer taking on?',
+    );
+  }
+
+  let realm = await findOrMountRealm(new URL(realmURL), {
+    realms: args.realms,
+    reconciler: args.reconciler,
+    dbAdapter: args.dbAdapter,
+  });
+  if (!realm) {
+    return error(404, 'unknown-realm', `no realm at ${realmURL}`);
+  }
+  // A realm this server serves but does not hold on disk has no tree to pack.
+  // Distinct from "no such realm", and a caller can act on the difference.
+  let realmDir = realm.dir;
+  if (!realmDir) {
+    return error(
+      409,
+      'realm-not-local',
+      `${realmURL} is not backed by a directory on this server`,
+    );
+  }
+
+  let mapPath = join(realmDir, IMPORT_MAP_PATH);
+  let mapText: string;
+  try {
+    mapText = await readFile(mapPath, 'utf8');
+  } catch {
+    return error(
+      404,
+      'no-import-map',
+      `${realmURL} has no ${IMPORT_MAP_PATH}, so it declares no packages`,
+    );
+  }
+  let { publisher, packages } = readRealmPackages(mapText);
+
+  // The address the caller used has to agree with what the realm declares.
+  // Deriving the name and then accepting a different one in the URL would
+  // let a realm's app be published under somebody else's namespace.
+  let derived = storeNameFor(publisher, key);
+  if (derived !== name) {
+    return error(
+      409,
+      'name-mismatch',
+      `${realmURL} publishes "${key}" as ${derived}, not ${name}`,
+    );
+  }
+
+  let declaration = packages[key];
+  let packed = await packRealmPackage({ realmDir, key, declaration });
+  if (packed.kind === 'refused') {
+    return json(409, { refused: { code: packed.code, detail: packed.detail } });
+  }
+
+  let version = declaration!.version!;
+  let meta = await readStoreMeta(storeDir, name);
+  let priorVersion = currentVersion(Object.keys(meta?.versions ?? {}));
+  let priorTree = priorVersion
+    ? await treeOf(storeDir, name, priorVersion)
+    : undefined;
+  let candidateTree = new Map<string, string>();
+  for (let [path, bytes] of unpack(packed.bytes).files) {
+    candidateTree.set(path, bytes.toString('utf8'));
+  }
+
+  let proposal = await proposeVersion({
+    storeDir,
+    name,
+    version,
+    treeHash: packed.treeHash,
+    body: input.body,
+    proposedBy: actor,
+    packBytes: packed.bytes,
+    candidateTree,
+    priorTree,
+    priorVersion,
+    origin: { realm: realmURL, root: declaration!.root },
+    warnings: packed.warnings,
+    meta: meta ?? undefined,
+  });
+  return json(201, { proposal, files: packed.files });
+}
+
+export default function handlePackageProposals(
+  args: CreateRoutesArgs,
+): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
+  let { packageStorePath } = args;
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     if (!packageStorePath) {
       return setContextResponse(
@@ -219,10 +371,27 @@ export default function handlePackageProposals({
       }
 
       case 'propose': {
+        // Two ways to supply the candidate, and only one of them is the
+        // interesting one. `source` is a module handed over directly — the
+        // fixture path. `from` names a realm and a package the realm's own
+        // `importmap.json` declares, and the bytes are packed out of that
+        // realm's tree. The second is how a card someone actually wrote
+        // becomes an address another realm can pin.
         if (typeof input.source !== 'string' || !input.source.trim()) {
+          if (!input.from) {
+            return setContextResponse(
+              ctxt,
+              error(
+                400,
+                'no-source',
+                'a proposal needs candidate bytes: either `source`, or ' +
+                  '`from: { realm, package }` naming a package the realm declares',
+              ),
+            );
+          }
           return setContextResponse(
             ctxt,
-            error(400, 'no-source', 'a proposal needs the candidate source'),
+            await proposeFromRealm({ args, storeDir, name, actor, input }),
           );
         }
         // §1.1: a Version needs a body. Refused here rather than defaulted to
@@ -278,21 +447,29 @@ export default function handlePackageProposals({
           acceptedBy: actor,
           overrideReason: input.overrideReason,
           commit: async (proposal) => {
-            if (!proposal.source) {
+            // A tree proposal froze its bytes at propose time; a single-module
+            // one re-packs from the source it recorded. Either way the seal
+            // below is checked against what the proposal claimed, so the two
+            // paths make the same promise.
+            let bytes =
+              (await readProposalPack(storeDir, name, proposal)) ??
+              (proposal.source
+                ? packLibrary(name, proposal.version, proposal.source)
+                : undefined);
+            if (!bytes) {
               throw new Error(
-                `proposal ${proposal.id} carries no source, so there are no ` +
-                  'bytes to publish',
+                `proposal ${proposal.id} carries neither a pack nor a source, ` +
+                  'so there are no bytes to publish',
               );
             }
             // The seal is re-derived and checked rather than trusted. It
-            // costs one pack and it is the difference between "these are the
-            // bytes that were reviewed" being enforced and being assumed.
-            let bytes = packLibrary(name, proposal.version, proposal.source);
+            // costs one unpack and it is the difference between "these are
+            // the bytes that were reviewed" being enforced and being assumed.
             let seal = unpack(bytes).treeHash;
             if (seal !== proposal.treeHash) {
               throw new Error(
-                `the proposal sealed as ${proposal.treeHash} but its source ` +
-                  `now packs to ${seal}; refusing to publish bytes that are ` +
+                `the proposal sealed as ${proposal.treeHash} but its bytes ` +
+                  `now seal as ${seal}; refusing to publish bytes that are ` +
                   'not the ones that were reviewed',
               );
             }

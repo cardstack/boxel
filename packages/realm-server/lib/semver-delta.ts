@@ -192,3 +192,68 @@ export function suggestBump(before: string, after: string): Verdict {
   );
   return { bump, reasons, blindTo: BLIND };
 }
+
+const MODULE = /\.(gts|gjs|ts|js|mjs)$/;
+
+const TREE_BLIND =
+  `${BLIND} Across a tree it is blind to one more thing: each module is ` +
+  'compared only against the module at the same path. A member that MOVED ' +
+  'between modules reads as a removal and an addition rather than a move, ' +
+  'and an effect that crosses module boundaries is not visible at all.';
+
+/**
+ * The structural pass over a whole pack rather than one module.
+ *
+ * A published Version is a tree, so comparing one module only ever described
+ * the entry point — which, for an app of four cards, is most of the surface
+ * missing.
+ *
+ * A REMOVED MODULE IS MAJOR, which is stronger than it may look. Every file
+ * in a pack serves at its own address, so a module is reachable whether or
+ * not anything re-exports it: deleting one removes an address somebody's
+ * import may name. Treating an internal-looking file as safe to drop would be
+ * guessing about callers this cannot see. A removed non-module — a README, a
+ * fixture — carries no address anyone imports, and stays a patch.
+ */
+export function suggestBumpForTree(
+  before: Map<string, string>,
+  after: Map<string, string>,
+): Verdict {
+  let reasons: DeltaReason[] = [];
+
+  for (let [path, source] of before) {
+    let next = after.get(path);
+    if (next === undefined) {
+      if (MODULE.test(path)) {
+        reasons.push({
+          bump: 'major',
+          member: path,
+          detail: 'module removed — the address it served is gone',
+        });
+      }
+      continue;
+    }
+    if (!MODULE.test(path) || next === source) {
+      continue;
+    }
+    for (let reason of suggestBump(source, next).reasons) {
+      reasons.push({ ...reason, member: `${path} › ${reason.member}` });
+    }
+  }
+
+  for (let path of after.keys()) {
+    if (!before.has(path) && MODULE.test(path)) {
+      reasons.push({
+        bump: 'minor',
+        member: path,
+        detail: 'new module — additive, nothing existing depends on it',
+      });
+    }
+  }
+
+  let bump = reasons.reduce<Bump>(
+    (worst, r) => (RANK[r.bump] > RANK[worst] ? r.bump : worst),
+    'patch',
+  );
+  return { bump, reasons, blindTo: TREE_BLIND };
+}

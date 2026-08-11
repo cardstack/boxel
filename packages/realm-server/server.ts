@@ -33,6 +33,7 @@ import { JobScopedSearchCache } from './job-scoped-search-cache.ts';
 import { createSendEvent } from './handlers/send-event.ts';
 import { createServeFromRealm } from './handlers/serve-from-realm.ts';
 import handleRealmHistory from './handlers/handle-realm-history.ts';
+import handleRealmPackageAlias from './handlers/handle-realm-package-alias.ts';
 import { createServeIndex } from './handlers/serve-index.ts';
 import { findOrMountRealm } from './lib/realm-routing.ts';
 import type { Prerenderer } from '@cardstack/runtime-common';
@@ -1206,6 +1207,20 @@ export class RealmServer {
           reconciler: this.reconciler,
           dbAdapter: this.dbAdapter,
           realmSecretSeed: this.realmSecretSeed,
+        }),
+      )
+      // `<realm>/@<package>@<version>/…` — the short realm-relative name for
+      // a Version this realm published, redirected into the package store.
+      // Defers on anything it does not recognise, so a realm path that merely
+      // contains an `@` reaches the realm's own router unchanged.
+      .use(
+        handleRealmPackageAlias({
+          realms: this.realms,
+          reconciler: this.reconciler,
+          dbAdapter: this.dbAdapter,
+          packageStorePath:
+            process.env.PACKAGE_STORE_PATH ??
+            join(this.realmsRootPath, '.package-store'),
         }),
       )
       .use(serveIndex)

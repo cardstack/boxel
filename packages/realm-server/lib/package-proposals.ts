@@ -23,9 +23,23 @@
 import fsExtra from 'fs-extra';
 import { join } from 'path';
 import { checkPublish, type PublishVerdict } from './package-registry.ts';
-import { suggestBump, type Bump, type Verdict } from './semver-delta.ts';
+import {
+  suggestBump,
+  suggestBumpForTree,
+  type Bump,
+  type Verdict,
+} from './semver-delta.ts';
 
-const { ensureDir, pathExists, readJson, readdir, writeJson, remove } = fsExtra;
+const {
+  ensureDir,
+  pathExists,
+  readFile,
+  readJson,
+  readdir,
+  writeFile,
+  writeJson,
+  remove,
+} = fsExtra;
 
 export type ProposalState = 'open' | 'accepted' | 'withdrawn';
 
@@ -60,10 +74,27 @@ export interface Proposal {
    * reviewer read. Carrying the source lets the accepting side re-derive the
    * seal and refuse if it does not match what was proposed.
    *
-   * Single-string because this demo's package is one module. A real pack is a
-   * tree, and this field is the shape that has to grow first.
+   * For a single-module package this is the module. A package that is a TREE
+   * carries its bytes as a pack instead — see `packFile`.
    */
   source?: string;
+  /**
+   * The proposed pack, stored beside this record as `<id>.pack`.
+   *
+   * A tree cannot live in a JSON string, and re-packing the realm at accept
+   * time would publish whatever the tree says THEN — which is not what anyone
+   * reviewed. Freezing the bytes at propose time is what makes the review
+   * about a fixed thing, and it makes the seal check at acceptance a real
+   * guard rather than a formality: if the realm moved on, the proposal still
+   * holds the Version that was read.
+   */
+  packFile?: string;
+  /** Where a tree proposal came from, for a reader deciding whether to trust
+   *  it. Absent on a proposal whose bytes were supplied directly. */
+  origin?: { realm: string; root?: string };
+  /** Structural findings that are worth a reviewer's attention but are not
+   *  certain enough to refuse on — see `findEscapingImports`. */
+  warnings?: string[];
 }
 
 export interface ProposeInput {
@@ -80,6 +111,15 @@ export interface ProposeInput {
   priorVersion?: string;
   /** Kept on the record; defaults to `candidateSource`. */
   source?: string;
+  /** A whole-tree candidate and its predecessor, keyed by pack-relative path.
+   *  Supplied instead of the single-source pair, and compared with the
+   *  tree-level structural pass. */
+  candidateTree?: Map<string, string>;
+  priorTree?: Map<string, string>;
+  /** The pack bytes to freeze beside the record. */
+  packBytes?: Buffer;
+  origin?: { realm: string; root?: string };
+  warnings?: string[];
   meta?: Parameters<typeof checkPublish>[0]['meta'];
   now?: Date;
   id?: string;
@@ -134,15 +174,21 @@ export async function proposeVersion(input: ProposeInput): Promise<Proposal> {
   });
 
   let delta: Proposal['delta'] | undefined;
-  if (input.candidateSource != null && input.priorSource != null) {
+  if (input.candidateTree && input.priorTree) {
+    delta = {
+      ...suggestBumpForTree(input.priorTree, input.candidateTree),
+      comparedWith: input.priorVersion ?? 'previous',
+    };
+  } else if (input.candidateSource != null && input.priorSource != null) {
     delta = {
       ...suggestBump(input.priorSource, input.candidateSource),
       comparedWith: input.priorVersion ?? 'previous',
     };
   }
 
+  let id = input.id ?? `${input.version}-${now.getTime().toString(36)}`;
   let proposal: Proposal = {
-    id: input.id ?? `${input.version}-${now.getTime().toString(36)}`,
+    id,
     name: input.name,
     version: input.version,
     treeHash: input.treeHash,
@@ -155,12 +201,34 @@ export async function proposeVersion(input: ProposeInput): Promise<Proposal> {
     ...((input.source ?? input.candidateSource)
       ? { source: input.source ?? input.candidateSource }
       : {}),
+    ...(input.packBytes ? { packFile: `${id}.pack` } : {}),
+    ...(input.origin ? { origin: input.origin } : {}),
+    ...(input.warnings?.length ? { warnings: input.warnings } : {}),
   };
 
   let dir = proposalsDir(input.storeDir, input.name);
   await ensureDir(dir);
+  // The bytes land BEFORE the record that points at them. A record naming a
+  // pack that is not there yet is a proposal nobody can accept; a pack with
+  // no record yet is inert, and the next propose overwrites it.
+  if (input.packBytes) {
+    await writeFile(join(dir, `${id}.pack`), input.packBytes);
+  }
   await writeJson(join(dir, `${proposal.id}.json`), proposal, { spaces: 2 });
   return proposal;
+}
+
+/** The frozen bytes of a tree proposal, if it has any. */
+export async function readProposalPack(
+  storeDir: string,
+  name: string,
+  proposal: Proposal,
+): Promise<Buffer | undefined> {
+  if (!proposal.packFile) {
+    return undefined;
+  }
+  let file = join(proposalsDir(storeDir, name), proposal.packFile);
+  return (await pathExists(file)) ? await readFile(file) : undefined;
 }
 
 export async function listProposals(
