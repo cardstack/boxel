@@ -231,10 +231,10 @@ function sandboxRuntimeSecurityHeaders() {
         [
           `default-src 'self'`,
           `script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:`,
-          `style-src 'self' 'unsafe-inline'`,
+          `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com`,
           `connect-src 'self' ${parentSource}`,
           `img-src 'self' data: blob:`,
-          `font-src 'self' data: blob:`,
+          `font-src 'self' data: blob: https://fonts.gstatic.com`,
           `media-src 'self' data: blob:`,
           `worker-src 'none'`,
           `child-src 'none'`,

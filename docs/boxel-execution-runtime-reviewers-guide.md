@@ -424,6 +424,13 @@ Worker routes in `wrangler.jsonc` plus a proxied wildcard DNS record (`AAAA *`
 to the originless placeholder `100::`). The Host refuses same-origin/missing
 configuration and browsers without `credentialless` support; deployment must
 stay disabled until that edge boundary resolves and `/healthz` succeeds.
+The CSP has one deliberate third-party egress exception: stylesheets may load
+from the exact `https://fonts.googleapis.com` origin and font binaries from
+the exact `https://fonts.gstatic.com` origin. It does not allow wildcard
+Google origins or Google access from script, connect, image, or media lanes.
+Google receives the requested URL, client IP, and user agent, while
+`credentialless` plus `Referrer-Policy: no-referrer` exclude cookies and the
+parent/card URL.
 
 Failure posture: fail closed and say so. Silence after an ack is a protocol
 violation (RP-15.3); unavailability must refuse visibly (RP-21.3); nothing

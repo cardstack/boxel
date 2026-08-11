@@ -110,6 +110,18 @@ test('adds restrictive response policy and removes cookies', async () => {
   );
   assert.match(
     response.headers.get('content-security-policy'),
+    /style-src 'self' 'unsafe-inline' https:\/\/fonts\.googleapis\.com/,
+  );
+  assert.match(
+    response.headers.get('content-security-policy'),
+    /font-src 'self' data: https:\/\/fonts\.gstatic\.com/,
+  );
+  assert.doesNotMatch(
+    response.headers.get('content-security-policy'),
+    /\*\.googleapis\.com|\*\.gstatic\.com/,
+  );
+  assert.match(
+    response.headers.get('content-security-policy'),
     /frame-ancestors https:\/\/boxel-host-staging\.stack\.cards/,
   );
   assert.equal(response.headers.get('x-frame-options'), null);
