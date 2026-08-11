@@ -5,7 +5,7 @@
       "name": "Sara Okafor",
       "company": "Okafor Logistics",
       "email": "sara@okafor-logistics.example",
-      "source": "referral",
+      "source": "webinar",
       "status": "converted",
       "score": 88,
       "cardInfo": {
@@ -26,6 +26,11 @@
       "cardInfo.theme": {
         "links": {
           "self": "../Theme/ledger"
+        }
+      },
+      "campaign": {
+        "links": {
+          "self": "../Campaign/q3-webinar-series"
         }
       }
     }
