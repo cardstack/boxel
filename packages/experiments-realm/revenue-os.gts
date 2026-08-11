@@ -121,6 +121,7 @@ export class RevenueOs extends CardDef {
     @tracked showAllStages = false;
     @tracked accountQuery = '';
     @tracked selectedAccountId: string | undefined;
+    @tracked selectedDeal: Opportunity | undefined;
     @tracked statusMessage = '';
     @tracked busy = false;
 
@@ -319,6 +320,48 @@ export class RevenueOs extends CardDef {
 
     @action toggleAllStages() {
       this.showAllStages = !this.showAllStages;
+    }
+
+    // Actions hang off the selected card rather than sitting on the card face:
+    // the face is the drag handle, and the toolbar has room for real labels.
+    @action selectDeal(item: CardDef | undefined) {
+      this.selectedDeal = item as Opportunity | undefined;
+    }
+
+    @action async addDealToStage(columnKey: string | null) {
+      let ref = identifyCard(Deal);
+      if (!ref) return;
+      await (this.args as any).createCard?.(ref, undefined, {
+        realmURL: this.realm ? new URL(this.realm) : undefined,
+        doc: {
+          data: {
+            attributes: {
+              stage: columnKey ?? 'qualified',
+              lastStageChangedAt: asCalendarDay(new Date()),
+            },
+            meta: { adoptsFrom: ref },
+          },
+        },
+      });
+    }
+
+    @action async logDealActivity() {
+      let deal = this.selectedDeal;
+      let ref = identifyCard(Activity);
+      if (!ref || !deal?.id) return;
+      await (this.args as any).createCard?.(ref, undefined, {
+        realmURL: this.realm ? new URL(this.realm) : undefined,
+        doc: {
+          data: {
+            attributes: {
+              activityType: 'note',
+              occurredAt: new Date().toISOString(),
+            },
+            relationships: { about: { links: { self: deal.id } } },
+            meta: { adoptsFrom: ref },
+          },
+        },
+      });
     }
     onMove = async (item: CardDef, columnKey: string) => {
       if (!this.commandContext || !this.realm) return;
@@ -1140,6 +1183,21 @@ export class RevenueOs extends CardDef {
                   weighted</span>
               </div>
             </div>
+            {{#if this.selectedDeal}}
+              <div class='selection-bar'>
+                <span class='selection-name'>{{this.selectedDeal.cardTitle}}</span>
+                <BoxelButton
+                  @kind='secondary'
+                  @size='extra-small'
+                  {{on 'click' (fn this.openCard this.selectedDeal)}}
+                >Open</BoxelButton>
+                <BoxelButton
+                  @kind='secondary'
+                  @size='extra-small'
+                  {{on 'click' this.logDealActivity}}
+                >Log activity</BoxelButton>
+              </div>
+            {{/if}}
             <div class='board-wrap'>
               {{#if this.queriesSettled}}
                 <Board
@@ -1148,6 +1206,9 @@ export class RevenueOs extends CardDef {
                   @columns={{this.boardColumns}}
                   @columnKeyFor={{this.columnKeyFor}}
                   @onMove={{this.onMove}}
+                  @onOpen={{this.openCard}}
+                  @onSelect={{this.selectDeal}}
+                  @onAddCard={{this.addDealToStage}}
                   @hideEmpty={{unless this.showAllStages true}}
                 />
               {{else}}
@@ -1732,6 +1793,20 @@ export class RevenueOs extends CardDef {
           gap: 0.25rem;
           align-items: center;
           justify-content: flex-end;
+        }
+        .selection-bar {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          padding: 0.5rem 0.75rem;
+          border: 1px solid var(--border, #e5e7eb);
+          border-radius: 8px;
+          background: var(--card, #ffffff);
+        }
+        .selection-name {
+          font-weight: 600;
+          font-size: 0.8125rem;
+          margin-right: auto;
         }
         .dash-toolbar {
           display: flex;
