@@ -43,6 +43,7 @@ import { Invoice } from './invoice';
 import { Subscription } from './subscription';
 import { Lead } from './lead';
 import { Contact } from './contact';
+import { Deal } from './deal';
 import { Activity } from './activity';
 import ConvertLeadCommand from './convert-lead';
 import RecordPaymentCommand from './record-payment';
@@ -113,6 +114,10 @@ export class RevenueOs extends CardDef {
     @tracked activeTab = 'pipeline';
     @tracked invoiceFilter = 'open';
     @tracked ownerFilter = 'all';
+    @tracked closeWindow = 'all';
+    @tracked boardSort = 'value';
+    @tracked period = 'month';
+    @tracked comparePrevious = false;
     @tracked showAllStages = false;
     @tracked accountQuery = '';
     @tracked selectedAccountId: string | undefined;
@@ -230,10 +235,74 @@ export class RevenueOs extends CardDef {
     }
 
     get boardItems(): Opportunity[] {
-      if (this.ownerFilter === 'all') return this.opportunities;
-      return this.opportunities.filter(
-        (o) => o.owner?.name === this.ownerFilter,
-      );
+      let items = this.opportunities;
+      if (this.ownerFilter !== 'all') {
+        items = items.filter((o) => o.owner?.name === this.ownerFilter);
+      }
+      let closesBy = this.closeWindowEnd;
+      if (closesBy) {
+        // A forecast window looks forward: a date that has already passed is
+        // overdue, not "closing this week". And a deal with no close date has
+        // not been forecast at all, so it cannot be claimed to close in one.
+        let from = new Date();
+        from.setHours(0, 0, 0, 0);
+        items = items.filter((o) => {
+          if (!o.closeDate) return false;
+          let at = new Date(o.closeDate);
+          return at >= from && at <= closesBy;
+        });
+      }
+      // Board keeps whatever order it is handed, per column.
+      let sorted = [...items];
+      if (this.boardSort === 'value') {
+        sorted.sort((a, b) => (b.value?.amount ?? 0) - (a.value?.amount ?? 0));
+      } else if (this.boardSort === 'probability') {
+        sorted.sort(
+          (a, b) => (b.effectiveProbability ?? 0) - (a.effectiveProbability ?? 0),
+        );
+      } else if (this.boardSort === 'stale') {
+        sorted.sort((a, b) => (b.daysInStage ?? 0) - (a.daysInStage ?? 0));
+      }
+      return sorted;
+    }
+
+    private get closeWindowEnd(): Date | undefined {
+      if (this.closeWindow === 'all') return undefined;
+      let now = new Date();
+      let end = new Date(now);
+      if (this.closeWindow === 'week') end.setDate(end.getDate() + 7);
+      if (this.closeWindow === 'month') end.setMonth(end.getMonth() + 1);
+      if (this.closeWindow === 'quarter') end.setMonth(end.getMonth() + 3);
+      return end;
+    }
+
+    closeWindowOptions = [
+      { key: 'all', label: 'Any close date' },
+      { key: 'week', label: 'Closing this week' },
+      { key: 'month', label: 'Closing this month' },
+      { key: 'quarter', label: 'Closing this quarter' },
+    ];
+
+    boardSortOptions = [
+      { key: 'value', label: 'Highest value' },
+      { key: 'probability', label: 'Most likely' },
+      { key: 'stale', label: 'Stalest first' },
+    ];
+
+    get closeWindowSelection() {
+      return this.closeWindowOptions.find((o) => o.key === this.closeWindow);
+    }
+
+    get boardSortSelection() {
+      return this.boardSortOptions.find((o) => o.key === this.boardSort);
+    }
+
+    @action setCloseWindow(option: { key: string }) {
+      this.closeWindow = option.key;
+    }
+
+    @action setBoardSort(option: { key: string }) {
+      this.boardSort = option.key;
     }
 
     get ownerOptions(): string[] {
@@ -289,7 +358,9 @@ export class RevenueOs extends CardDef {
     }
 
     get stageTotals() {
-      let open = this.opportunities.filter((o) =>
+      // Counts the board you are looking at, not the whole pipeline — totals
+      // beside a filtered board have to describe the filtered board.
+      let open = this.boardItems.filter((o) =>
         OPEN_STAGES.includes(o.stage as (typeof OPEN_STAGES)[number]),
       );
       let total = 0;
@@ -309,6 +380,110 @@ export class RevenueOs extends CardDef {
     }
 
     // ── dashboard ─────────────────────────────────────────────────────
+    periodOptions = [
+      { key: 'month', label: 'This month' },
+      { key: 'quarter', label: 'This quarter' },
+      { key: 'year', label: 'This year' },
+    ];
+
+    get periodSelection() {
+      return this.periodOptions.find((o) => o.key === this.period);
+    }
+
+    @action setPeriod(option: { key: string }) {
+      this.period = option.key;
+    }
+
+    @action toggleCompare() {
+      this.comparePrevious = !this.comparePrevious;
+    }
+
+    // Two equal-length windows ending now and immediately before it.
+    private get windows() {
+      let now = new Date();
+      let months = this.period === 'month' ? 1 : this.period === 'quarter' ? 3 : 12;
+      let start = new Date(now);
+      start.setMonth(start.getMonth() - months);
+      let priorStart = new Date(start);
+      priorStart.setMonth(priorStart.getMonth() - months);
+      return { start, end: now, priorStart, priorEnd: start };
+    }
+
+    private inWindow(value: any, start: Date, end: Date): boolean {
+      if (!value) return false;
+      let at = new Date(value).getTime();
+      return at >= start.getTime() && at < end.getTime();
+    }
+
+    // A closed deal's lastStageChangedAt is when it reached its terminal
+    // stage, which is the only close timestamp these records carry.
+    private closedIn(start: Date, end: Date) {
+      let won = this.opportunities.filter(
+        (o) =>
+          o.stage === 'closed won' &&
+          this.inWindow(o.lastStageChangedAt, start, end),
+      );
+      let lost = this.opportunities.filter(
+        (o) =>
+          o.stage === 'closed lost' &&
+          this.inWindow(o.lastStageChangedAt, start, end),
+      );
+      return { won, lost };
+    }
+
+    private collectedIn(start: Date, end: Date): number {
+      let total = 0;
+      for (let invoice of this.invoices) {
+        for (let payment of invoice.payments ?? []) {
+          if (this.inWindow(payment?.paidAt, start, end)) {
+            total += payment?.amount?.amount ?? 0;
+          }
+        }
+      }
+      return total;
+    }
+
+    private delta(now: number, before: number): string {
+      if (!this.comparePrevious) return '';
+      if (!before) return now ? 'new' : '';
+      let change = Math.round(((now - before) / before) * 100);
+      if (!change) return 'flat';
+      return change > 0 ? `+${change}% vs prior` : `${change}% vs prior`;
+    }
+
+    get periodMetrics() {
+      let { start, end, priorStart, priorEnd } = this.windows;
+      let current = this.closedIn(start, end);
+      let prior = this.closedIn(priorStart, priorEnd);
+      let wonValue = (list: Opportunity[]) =>
+        list.reduce((acc, o) => acc + (o.value?.amount ?? 0), 0);
+      let rate = (c: { won: Opportunity[]; lost: Opportunity[] }) => {
+        let closed = c.won.length + c.lost.length;
+        return closed ? (c.won.length / closed) * 100 : 0;
+      };
+      let collected = this.collectedIn(start, end);
+      let collectedBefore = this.collectedIn(priorStart, priorEnd);
+      return [
+        {
+          label: 'Closed won',
+          value: formatMoney(wonValue(current.won), 'USD'),
+          note: this.delta(wonValue(current.won), wonValue(prior.won)),
+        },
+        {
+          label: 'Win rate',
+          value: current.won.length + current.lost.length
+            ? `${Math.round(rate(current))}%`
+            : 'no closed deals',
+          note: this.delta(rate(current), rate(prior)),
+        },
+        {
+          label: 'Cash collected',
+          value: formatMoney(collected, 'USD'),
+          note: this.delta(collected, collectedBefore),
+        },
+      ];
+    }
+
     get dash() {
       let mrr = 0;
       let code: string | undefined;
@@ -319,20 +494,14 @@ export class RevenueOs extends CardDef {
         code = code ?? s.price?.currency?.code ?? undefined;
       }
       code = code ?? 'USD';
-      let won = this.opportunities.filter((o) => o.stage === 'closed won');
-      let lost = this.opportunities.filter((o) => o.stage === 'closed lost');
-      let closed = won.length + lost.length;
       let open = this.invoices.filter((i) =>
         OPEN_INVOICE_STATUSES.includes(i.status ?? ''),
       );
-      let paid = this.invoices.filter((i) => i.status === 'paid');
       let balanceOf = (list: Invoice[]) =>
         list.reduce(
           (acc, i) => acc + outstandingBalance(i.lineItems, i.payments),
           0,
         );
-      let sumOf = (list: Invoice[]) =>
-        list.reduce((acc, i) => acc + sumLineItems(i.lineItems).total, 0);
       return {
         mrr: formatMoney(mrr, code),
         arr: formatMoney(mrr * 12, code),
@@ -343,22 +512,10 @@ export class RevenueOs extends CardDef {
             value: this.stageTotals.weighted,
           },
           {
-            label: 'Win rate',
-            value: closed
-              ? `${won.length} of ${closed} won`
-              : 'no closed deals yet',
-          },
-          {
             label: 'Outstanding',
             value: formatMoney(balanceOf(open), code),
             tab: 'invoices',
             filter: 'open',
-          },
-          {
-            label: 'Collected',
-            value: formatMoney(sumOf(paid), code),
-            tab: 'invoices',
-            filter: 'paid',
           },
         ],
       };
@@ -474,8 +631,45 @@ export class RevenueOs extends CardDef {
           data: {
             attributes: {
               status: 'draft',
-              issueDate: new Date().toISOString().slice(0, 10),
+              issueDate: asCalendarDay(new Date()),
             },
+            meta: { adoptsFrom: ref },
+          },
+        },
+      });
+    }
+
+    // Quick-add from the 360 arrives already belonging to the account on
+    // screen — that is what makes it quick.
+    @action async newContact() {
+      let account = this.selectedAccount;
+      let ref = identifyCard(Contact);
+      if (!ref || !account?.id) return;
+      await (this.args as any).createCard?.(ref, undefined, {
+        realmURL: this.realm ? new URL(this.realm) : undefined,
+        doc: {
+          data: {
+            attributes: {},
+            relationships: { account: { links: { self: account.id } } },
+            meta: { adoptsFrom: ref },
+          },
+        },
+      });
+    }
+
+    @action async newDeal() {
+      let account = this.selectedAccount;
+      let ref = identifyCard(Deal);
+      if (!ref || !account?.id) return;
+      await (this.args as any).createCard?.(ref, undefined, {
+        realmURL: this.realm ? new URL(this.realm) : undefined,
+        doc: {
+          data: {
+            attributes: {
+              stage: 'qualified',
+              lastStageChangedAt: asCalendarDay(new Date()),
+            },
+            relationships: { account: { links: { self: account.id } } },
             meta: { adoptsFrom: ref },
           },
         },
@@ -906,6 +1100,30 @@ export class RevenueOs extends CardDef {
                     </BoxelSelect>
                   </div>
                 {{/if}}
+                <div class='owner-select'>
+                  <BoxelSelect
+                    @options={{this.closeWindowOptions}}
+                    @selected={{this.closeWindowSelection}}
+                    @onChange={{this.setCloseWindow}}
+                    @renderInPlace={{true}}
+                    aria-label='Filter by close date'
+                    as |option|
+                  >
+                    {{option.label}}
+                  </BoxelSelect>
+                </div>
+                <div class='owner-select'>
+                  <BoxelSelect
+                    @options={{this.boardSortOptions}}
+                    @selected={{this.boardSortSelection}}
+                    @onChange={{this.setBoardSort}}
+                    @renderInPlace={{true}}
+                    aria-label='Sort deals'
+                    as |option|
+                  >
+                    {{option.label}}
+                  </BoxelSelect>
+                </div>
               </div>
               <div class='board-stats'>
                 <span class='stat'><span
@@ -953,6 +1171,37 @@ export class RevenueOs extends CardDef {
                   @formatValue={{this.chartMoney}}
                 />
               </div>
+            </div>
+            <div class='dash-toolbar'>
+              <div class='owner-select'>
+                <BoxelSelect
+                  @options={{this.periodOptions}}
+                  @selected={{this.periodSelection}}
+                  @onChange={{this.setPeriod}}
+                  @renderInPlace={{true}}
+                  aria-label='Date range'
+                  as |option|
+                >
+                  {{option.label}}
+                </BoxelSelect>
+              </div>
+              <div class='switch-wrap'>
+                <Switch
+                  @isEnabled={{this.comparePrevious}}
+                  @onChange={{this.toggleCompare}}
+                  @label='Compare to previous'
+                />
+                <span class='switch-text'>Compare to previous</span>
+              </div>
+            </div>
+            <div class='metric-grid'>
+              {{#each this.periodMetrics as |m|}}
+                <div class='metric metric-flat'>
+                  <span class='m-label'>{{m.label}}</span>
+                  <span class='m-value'>{{m.value}}</span>
+                  {{#if m.note}}<span class='m-note'>{{m.note}}</span>{{/if}}
+                </div>
+              {{/each}}
             </div>
             <div class='metric-grid'>
               {{#each this.dash.secondary as |m|}}
@@ -1048,7 +1297,14 @@ export class RevenueOs extends CardDef {
                 />
                 <div class='detail-cols'>
                   <div class='panel'>
-                    <h3>Deals</h3>
+                    <div class='panel-head'>
+                      <h3>Deals</h3>
+                      <BoxelButton
+                        @kind='text-only'
+                        @size='extra-small'
+                        {{on 'click' this.newDeal}}
+                      >+ Add</BoxelButton>
+                    </div>
                     {{#each this.accountDeals as |deal|}}
                       <button
                         type='button'
@@ -1080,7 +1336,14 @@ export class RevenueOs extends CardDef {
                     {{/each}}
                   </div>
                   <div class='panel'>
-                    <h3>Contacts</h3>
+                    <div class='panel-head'>
+                      <h3>Contacts</h3>
+                      <BoxelButton
+                        @kind='text-only'
+                        @size='extra-small'
+                        {{on 'click' this.newContact}}
+                      >+ Add</BoxelButton>
+                    </div>
                     {{#each this.accountContacts as |contact|}}
                       <button
                         type='button'
@@ -1469,6 +1732,23 @@ export class RevenueOs extends CardDef {
           gap: 0.25rem;
           align-items: center;
           justify-content: flex-end;
+        }
+        .dash-toolbar {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          flex-wrap: wrap;
+        }
+        .m-note {
+          font-size: 0.6875rem;
+          font-weight: 600;
+          color: var(--muted-foreground, #6b7280);
+        }
+        .panel-head {
+          display: flex;
+          align-items: baseline;
+          justify-content: space-between;
+          gap: 0.5rem;
         }
         .cell-account {
           display: inline-flex;
