@@ -106,6 +106,7 @@ import { searchCacheKey } from '../lib/search-cache-key';
 import { searchInFlightKey } from '../lib/search-in-flight-key';
 import { errorJsonApiToErrorEntry } from '../lib/window-error-handler';
 import { getSearch } from '../resources/search';
+import { isBoxelSandboxRuntimeBoot } from '../routes/boxel-sandbox-runtime';
 
 import { FileDefAttributesExtractor } from '../utils/file-def-attributes-extractor';
 import {
@@ -1900,6 +1901,13 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   private async setup() {
+    if (isBoxelSandboxRuntimeBoot()) {
+      // The Sandbox child constructs its own broker-backed CardStore in
+      // boxel-sandbox-runtime.gts. Booting the regular Host Store here would
+      // try to load base/card-api directly, which the child CSP correctly
+      // denies and which is unnecessary for the isolated render process.
+      return;
+    }
     let api = await this.cardService.getAPI();
     if (isDestroyed(this) || isDestroying(this)) {
       return;
