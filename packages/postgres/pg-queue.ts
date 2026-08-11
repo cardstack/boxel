@@ -39,6 +39,8 @@ import '@cardstack/runtime-common/tasks/prerender-html-reconcile';
 import type { PgAdapter } from './pg-adapter.ts';
 import type { JobReservationsTable, JobsTable } from './job-tables.ts';
 import { acquireConcurrencyGroupLock } from './job-concurrency-lock.ts';
+import { flattenErrorForJsonb } from './flatten-error-for-jsonb.ts';
+import { WorkLoop } from './work-loop.ts';
 import { finalizeJobVerdict, releaseJobReservation } from './job-finalize.ts';
 import * as Sentry from '@sentry/node';
 
@@ -59,72 +61,6 @@ interface CoalesceCandidateRow extends Pick<
   JobsTable,
   'id' | 'job_type' | 'concurrency_group' | 'timeout' | 'priority' | 'args'
 > {}
-
-// Tracks a task that should loop with a timeout and an interruptible sleep.
-export class WorkLoop {
-  private internalWaker: Deferred<void> | undefined;
-  private timeout: NodeJS.Timeout | undefined;
-  private _shuttingDown = false;
-  private runnerPromise: Promise<void> | undefined;
-  private label: string;
-  private pollInterval: number;
-
-  constructor(label: string, pollInterval: number) {
-    this.label = label;
-    this.pollInterval = pollInterval;
-  }
-
-  // 1. Your fn should loop until workLoop.shuttingDown is true.
-  // 2. When it has no work to do, it should await workLoop.sleep().
-  // 3. It can be awoke with workLoop.wake().
-  // 4. Remember to await workLoop.shutdown() when you're done.
-  //
-  // This is separate from the constructor so you can store your WorkLoop first,
-  // *before* the runner starts doing things.
-  run(fn: (loop: WorkLoop) => Promise<void>) {
-    this.runnerPromise = fn(this);
-  }
-
-  async shutDown(): Promise<void> {
-    log.debug(`[workloop %s] shutting down`, this.label);
-    this._shuttingDown = true;
-    this.wake();
-    await this.runnerPromise;
-    log.debug(`[workloop %s] completed shutdown`, this.label);
-  }
-
-  get shuttingDown(): boolean {
-    return this._shuttingDown;
-  }
-
-  private get waker() {
-    if (!this.internalWaker) {
-      this.internalWaker = new Deferred();
-    }
-    return this.internalWaker;
-  }
-
-  wake() {
-    log.debug(`[workloop %s] waking up`, this.label);
-    this.waker.fulfill();
-  }
-
-  async sleep() {
-    if (this.shuttingDown) {
-      return;
-    }
-    let timerPromise = new Promise((resolve) => {
-      this.timeout = setTimeout(resolve, this.pollInterval).unref();
-    });
-    log.debug(`[workloop %s] entering promise race`, this.label);
-    await Promise.race([this.waker.promise, timerPromise]);
-    log.debug(`[workloop] leaving promise race`, this.label);
-    if (this.timeout != null) {
-      clearTimeout(this.timeout);
-    }
-    this.internalWaker = undefined;
-  }
-}
 
 export class PgQueuePublisher implements QueuePublisher {
   #isDestroyed = false;
@@ -788,7 +724,7 @@ export class PgQueueRunner implements QueueRunner {
                 err,
               );
             }
-            result = serializableError(err);
+            result = flattenErrorForJsonb(err);
             newStatus = 'rejected';
           }
           log.debug(
@@ -848,26 +784,5 @@ export class PgQueueRunner implements QueueRunner {
     if (this.#jobRunner) {
       await this.#jobRunner.shutDown();
     }
-  }
-}
-
-export function serializableError(err: any): Record<string, any> {
-  try {
-    let result = Object.create(null);
-    for (let field of Object.getOwnPropertyNames(err)) {
-      result[field] = err[field];
-    }
-    return result;
-  } catch (megaError) {
-    let stringish: string | undefined;
-    try {
-      stringish = String(err);
-    } catch (_ignored) {
-      // ignoring
-    }
-    return {
-      failedToSerializeError: true,
-      string: stringish,
-    };
   }
 }
