@@ -5,16 +5,43 @@ export interface TokenSource {
   reauthenticate(realmURL: string): Promise<string | undefined>;
 }
 
+export function shouldSkipReauthenticationForContext({
+  inRenderContext,
+  interactiveRenderContextDepth,
+  isBrowserTestEnv,
+}: {
+  inRenderContext: boolean;
+  interactiveRenderContextDepth: number;
+  isBrowserTestEnv: boolean;
+}): boolean {
+  return (
+    inRenderContext && interactiveRenderContextDepth <= 0 && !isBrowserTestEnv
+  );
+}
+
 function shouldSkipReauthentication(): boolean {
   try {
-    let inRenderContext = Boolean((globalThis as any).__boxelRenderContext);
+    let globals = globalThis as {
+      __boxelRenderContext?: unknown;
+      __boxelInteractiveRenderContextDepth?: unknown;
+      QUnit?: unknown;
+    };
+    let inRenderContext = Boolean(globals.__boxelRenderContext);
+    let interactiveRenderContextDepth =
+      typeof globals.__boxelInteractiveRenderContextDepth === 'number'
+        ? globals.__boxelInteractiveRenderContextDepth
+        : 0;
     // Host tests also run the indexer and the app in the same js runtime which
     // can be very confusing. We err on the side of host tests needing
     // reauthentication retries enabled so browser-loaded assets can recover
     // from transient 401s.
     let isBrowserTestEnv =
-      typeof window !== 'undefined' && Boolean((globalThis as any).QUnit);
-    return inRenderContext && !isBrowserTestEnv;
+      typeof window !== 'undefined' && Boolean(globals.QUnit);
+    return shouldSkipReauthenticationForContext({
+      inRenderContext,
+      interactiveRenderContextDepth,
+      isBrowserTestEnv,
+    });
   } catch {
     return false;
   }

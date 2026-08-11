@@ -66,6 +66,10 @@ import { fetchBoundedSandboxMedia } from '@cardstack/host/lib/sandbox-fetch-tran
 import SandboxMediaBridge, {
   protectSandboxMediaSources,
 } from '@cardstack/host/lib/sandbox-media-bridge';
+import {
+  allocateSandboxRuntimeOrigin,
+  newSandboxRuntimeNonce,
+} from '@cardstack/host/lib/sandbox-runtime-origin';
 import SandboxRuntimeProcess, {
   supportsCredentiallessIframe,
 } from '@cardstack/host/lib/sandbox-runtime-process';
@@ -1237,20 +1241,16 @@ export default class BoxelExecutionService extends Service {
   }
 
   private get sandboxChildURL(): string {
-    let configured = config.boxelSandboxRuntimeURL;
-    if (typeof configured === 'string' && configured.length > 0) {
-      return new URL('/_boxel-sandbox-runtime', configured).href;
-    }
     if (typeof globalThis.location === 'undefined') {
       throw new Error('Boxel Sandbox runtime origin is not configured');
     }
-    let local = new URL(globalThis.location.href);
-    if (local.hostname === 'localhost') {
-      local.hostname = 'user.localhost';
-      local.pathname = '/_boxel-sandbox-runtime';
-      local.search = '';
-      local.hash = '';
-      return local.href;
+    let origin = allocateSandboxRuntimeOrigin(
+      config.boxelSandboxRuntimeURL,
+      globalThis.location.origin,
+      newSandboxRuntimeNonce(),
+    );
+    if (origin) {
+      return new URL('/_boxel-sandbox-runtime', origin).href;
     }
     throw new Error('Boxel Sandbox runtime origin is not configured');
   }

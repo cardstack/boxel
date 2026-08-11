@@ -413,11 +413,17 @@ execution is a production-hardening follow-up, not something this branch
 claims to solve.
 
 **Sandbox deployment gate:** a hosted environment must set an explicit
-`BOXEL_SANDBOX_RUNTIME_URL` on a distinct realm-user origin and serve the
-runtime route with the restrictive CSP/referrer/nosniff headers represented
-by `sandboxRuntimeSecurityHeaders()` in `vite.config.mjs`. The Host refuses
-same-origin/missing configuration and browsers without `credentialless`
-support; deployment must stay disabled until equivalent edge headers exist.
+`BOXEL_SANDBOX_RUNTIME_URL` on a distinct realm-user origin. The Host allocates
+a fresh 128-bit nonce hostname for each Sandbox process; staging uses
+`<nonce>.boxelusercontent.dev` and production uses
+`<nonce>.boxelusercontent.com`. The Worker in
+`host/sandbox-runtime-worker/` serves only the bootstrap document and its
+content-addressed Host assets, strips credentials, and applies restrictive
+CSP/referrer/permissions/nosniff headers. Each zone therefore needs the
+Worker routes in `wrangler.jsonc` plus a proxied wildcard DNS record (`AAAA *`
+to the originless placeholder `100::`). The Host refuses same-origin/missing
+configuration and browsers without `credentialless` support; deployment must
+stay disabled until that edge boundary resolves and `/healthz` succeeds.
 
 Failure posture: fail closed and say so. Silence after an ack is a protocol
 violation (RP-15.3); unavailability must refuse visibly (RP-21.3); nothing
