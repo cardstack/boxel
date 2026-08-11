@@ -40,8 +40,10 @@ import {
   uuidv4,
   RealmPaths,
   PUBLISHED_DIRECTORY_NAME,
+  DEFAULT_AUDIO_SIZE_LIMIT_BYTES,
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
+  DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
   type MatrixConfig,
   type QueuePublisher,
   type QueueRunner,
@@ -1230,6 +1232,8 @@ export async function createRealm({
   enableFileWatcher = false,
   cardSizeLimitBytes,
   fileSizeLimitBytes,
+  audioSizeLimitBytes,
+  videoSizeLimitBytes,
   transpileCoordinator,
   fullIndexOnStartup,
 }: {
@@ -1248,6 +1252,8 @@ export async function createRealm({
   enableFileWatcher?: boolean;
   cardSizeLimitBytes?: number;
   fileSizeLimitBytes?: number;
+  audioSizeLimitBytes?: number;
+  videoSizeLimitBytes?: number;
   // CS-11030: optional cross-process transpile coordinator. Tests that
   // simulate two peer realms need each peer to hold its own coordinator
   // pointing at the same dbAdapter so the advisory-lock + NOTIFY plumbing
@@ -1328,6 +1334,16 @@ export async function createRealm({
         Number(
           process.env.FILE_SIZE_LIMIT_BYTES ?? DEFAULT_FILE_SIZE_LIMIT_BYTES,
         ),
+      audioSizeLimitBytes:
+        audioSizeLimitBytes ??
+        Number(
+          process.env.AUDIO_SIZE_LIMIT_BYTES ?? DEFAULT_AUDIO_SIZE_LIMIT_BYTES,
+        ),
+      videoSizeLimitBytes:
+        videoSizeLimitBytes ??
+        Number(
+          process.env.VIDEO_SIZE_LIMIT_BYTES ?? DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
+        ),
       transpileCoordinator,
     },
     fullIndexOnStartup ? { fullIndexOnStartup: true as const } : undefined,
@@ -1371,6 +1387,8 @@ export async function runTestRealmServer({
   enableFileWatcher = false,
   cardSizeLimitBytes,
   fileSizeLimitBytes,
+  audioSizeLimitBytes,
+  videoSizeLimitBytes,
   domainsForPublishedRealms = {
     boxelSpace: 'localhost',
     boxelSite: 'localhost',
@@ -1391,6 +1409,8 @@ export async function runTestRealmServer({
   enableFileWatcher?: boolean;
   cardSizeLimitBytes?: number;
   fileSizeLimitBytes?: number;
+  audioSizeLimitBytes?: number;
+  videoSizeLimitBytes?: number;
   domainsForPublishedRealms?: {
     boxelSpace?: string;
     boxelSite?: string;
@@ -1431,6 +1451,8 @@ export async function runTestRealmServer({
     definitionLookup,
     cardSizeLimitBytes,
     fileSizeLimitBytes,
+    audioSizeLimitBytes,
+    videoSizeLimitBytes,
   });
 
   await testRealm.logInToMatrix();
@@ -2085,6 +2107,8 @@ type InternalPermissionedRealmSetupOptions = {
   published?: boolean;
   cardSizeLimitBytes?: number;
   fileSizeLimitBytes?: number;
+  audioSizeLimitBytes?: number;
+  videoSizeLimitBytes?: number;
 };
 
 async function startPermissionedRealmFixture(
@@ -2101,6 +2125,8 @@ async function startPermissionedRealmFixture(
     published = false,
     cardSizeLimitBytes,
     fileSizeLimitBytes,
+    audioSizeLimitBytes,
+    videoSizeLimitBytes,
   }: InternalPermissionedRealmSetupOptions,
 ): Promise<{
   testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
@@ -2167,6 +2193,8 @@ async function startPermissionedRealmFixture(
     enableFileWatcher: subscribeToRealmEvents,
     cardSizeLimitBytes,
     fileSizeLimitBytes,
+    audioSizeLimitBytes,
+    videoSizeLimitBytes,
     prerenderer,
   });
 
@@ -2234,6 +2262,8 @@ export function setupPermissionedRealm(
     published = false,
     cardSizeLimitBytes,
     fileSizeLimitBytes,
+    audioSizeLimitBytes,
+    videoSizeLimitBytes,
   }: {
     permissions: RealmPermissions;
     realmURL?: URL;
@@ -2260,6 +2290,8 @@ export function setupPermissionedRealm(
     published?: boolean;
     cardSizeLimitBytes?: number;
     fileSizeLimitBytes?: number;
+    audioSizeLimitBytes?: number;
+    videoSizeLimitBytes?: number;
   },
 ) {
   let testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
@@ -2287,6 +2319,8 @@ export function setupPermissionedRealm(
         published,
         cardSizeLimitBytes,
         fileSizeLimitBytes,
+        audioSizeLimitBytes,
+        videoSizeLimitBytes,
       });
       testRealmServer = server;
 
@@ -2339,6 +2373,8 @@ function permissionedRealmTemplateCacheKey(
     published: Boolean(options.published),
     cardSizeLimitBytes: options.cardSizeLimitBytes ?? null,
     fileSizeLimitBytes: options.fileSizeLimitBytes ?? null,
+    audioSizeLimitBytes: options.audioSizeLimitBytes ?? null,
+    videoSizeLimitBytes: options.videoSizeLimitBytes ?? null,
     prerenderer: prerendererCacheKeyPart(options.prerenderer),
   });
 }

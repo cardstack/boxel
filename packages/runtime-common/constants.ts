@@ -124,6 +124,12 @@ export const DEFAULT_CARD_SIZE_LIMIT_BYTES = 512 * 1024; //512 KB
 // Default max file (module / binary) payload size, in bytes.
 export const DEFAULT_FILE_SIZE_LIMIT_BYTES = 5 * 1024 * 1024; // 5 MB
 
+// Media assets run an order of magnitude larger than the source files, images,
+// and documents that make up the rest of a realm, so audio and video carry
+// their own ceilings instead of the general file limit.
+export const DEFAULT_AUDIO_SIZE_LIMIT_BYTES = 20 * 1024 * 1024; // 20 MB
+export const DEFAULT_VIDEO_SIZE_LIMIT_BYTES = 50 * 1024 * 1024; // 50 MB
+
 // Above this content length, markdown rendering skips the synchronous parse
 // and renders a bounded notice with a short plain-text preview instead. This
 // is a render-thread guardrail, not a byte-precise bound: it compares string

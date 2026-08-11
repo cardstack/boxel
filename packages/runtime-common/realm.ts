@@ -61,8 +61,10 @@ import type { LocalPath } from './paths.ts';
 import { RealmPaths, ensureTrailingSlash, join } from './paths.ts';
 import type ms from 'ms';
 import {
+  DEFAULT_AUDIO_SIZE_LIMIT_BYTES,
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
+  DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
 } from './constants.ts';
 import {
   persistFileMeta,
@@ -183,8 +185,11 @@ import { fetcher } from './fetcher.ts';
 import { RealmIndexQueryEngine } from './realm-index-query-engine.ts';
 import { RealmIndexUpdater } from './realm-index-updater.ts';
 import serialize from './file-serializer.ts';
-import { validateWriteSize } from './write-size-validation.ts';
-import { md5 } from 'super-fast-md5';
+import {
+  fileSizeLimitFor,
+  validateWriteSize,
+} from './write-size-validation.ts';
+import { computeContentHash, isSampledContentHash } from './content-hash.ts';
 import { resolveFileDefCodeRef } from './file-def-code-ref.ts';
 
 import type { Utils } from './matrix-backend-authentication.ts';
@@ -454,7 +459,8 @@ type CachedSourceFileEntry = {
   ref: FileRef;
   defaultHeaders: Record<string, string>;
   canonicalPath: LocalPath;
-  // md5 of the materialized body, computed once on cache populate. Used
+  // Content fingerprint of the materialized body, computed once on cache
+  // populate. Used
   // as the ETag base so two writes within the same unix second still
   // produce distinct ETags — see `buildEtag` for the rationale.
   contentHash: string | undefined;
@@ -499,7 +505,7 @@ type ModuleTranspileResult = {
   dependencyKeys: Set<string>;
 };
 
-// ETag base prefers a content fingerprint (md5 of the file body) over
+// ETag base prefers a content fingerprint (derived from the file body) over
 // `lastModified` because the unix-second timestamp collides for two
 // writes that land in the same second — and `cachedFetch` (loader →
 // cached-fetch) will then serve a stale 304-cached body. We compute the
@@ -508,6 +514,31 @@ type ModuleTranspileResult = {
 // cache entry so subsequent serves reuse it. Adapters that don't yet
 // surface a content fingerprint fall back to `lastModified` and keep the
 // pre-existing behavior.
+//
+// An `etagBase` must be a TOTAL identity of the body, because displacing
+// `lastModified` gives up the only signal that sees every write. A sampled
+// fingerprint (see `computeContentHash`) is not total — it cannot see a large
+// file's middle — so it is joined with `lastModified` rather than replacing
+// it: the hash resolves two writes inside one second, and the timestamp
+// covers a same-length middle-only edit the hash misses. An mtime-only touch
+// then busts the cache, which is the safe direction and already how every
+// file without a fingerprint behaves.
+// Joins a sampled fingerprint with the file's mtime so the ETag base is a
+// total identity again. Returns a whole fingerprint unchanged, and undefined
+// when there is none (the caller then falls back to mtime alone).
+function totalEtagBase(
+  etagBase: string | undefined,
+  lastModified: number | undefined,
+): string | undefined {
+  if (etagBase == null) {
+    return undefined;
+  }
+  if (lastModified == null || !isSampledContentHash(etagBase)) {
+    return etagBase;
+  }
+  return `${etagBase}:${lastModified}`;
+}
+
 function buildEtag(
   base: string | number | undefined,
   variant?: string,
@@ -596,24 +627,9 @@ export function ifNoneMatchMatches(headerValue: string, etag: string): boolean {
     .some((token) => token.trim().replace(/^W\//, '') === normalizedEtag);
 }
 
-function computeContentHash(content: string | Uint8Array): string {
-  try {
-    if (content instanceof Uint8Array) {
-      return md5(content);
-    }
-    return md5(new TextEncoder().encode(content));
-  } catch {
-    try {
-      return md5(String(content));
-    } catch {
-      throw new Error('Failed to compute content hash');
-    }
-  }
-}
-
-// Cheap helper for the source endpoint: returns md5 of the body when the
-// ref has already been materialized to a string or Uint8Array. Returns
-// undefined for stream refs (the caller falls back to lastModified).
+// Cheap helper for the source endpoint: returns the content fingerprint of the
+// body when the ref has already been materialized to a string or Uint8Array.
+// Returns undefined for stream refs (the caller falls back to lastModified).
 function contentHashFromMaterializedRef(ref: FileRef): string | undefined {
   let { content } = ref;
   if (typeof content === 'string' || content instanceof Uint8Array) {
@@ -902,6 +918,8 @@ export class Realm {
   #transpileCoordinator?: PopulateCoordinator;
   #cardSizeLimitBytes: number;
   #fileSizeLimitBytes: number;
+  #audioSizeLimitBytes: number;
+  #videoSizeLimitBytes: number;
 
   #publicEndpoints: RouteTable<true> = new Map([
     [
@@ -989,6 +1007,8 @@ export class Realm {
       definitionLookup,
       cardSizeLimitBytes,
       fileSizeLimitBytes,
+      audioSizeLimitBytes,
+      videoSizeLimitBytes,
       transpileCoordinator,
     }: {
       url: string;
@@ -1002,6 +1022,8 @@ export class Realm {
       definitionLookup: DefinitionLookup;
       cardSizeLimitBytes?: number;
       fileSizeLimitBytes?: number;
+      audioSizeLimitBytes?: number;
+      videoSizeLimitBytes?: number;
       // CS-11030: when set, the realm coalesces concurrent cross-process
       // transpiles through an advisory-lock + NOTIFY winner/loser flow
       // and persists the resulting bytes to `module_transpile_cache` so
@@ -1033,6 +1055,10 @@ export class Realm {
       cardSizeLimitBytes ?? DEFAULT_CARD_SIZE_LIMIT_BYTES;
     this.#fileSizeLimitBytes =
       fileSizeLimitBytes ?? DEFAULT_FILE_SIZE_LIMIT_BYTES;
+    this.#audioSizeLimitBytes =
+      audioSizeLimitBytes ?? DEFAULT_AUDIO_SIZE_LIMIT_BYTES;
+    this.#videoSizeLimitBytes =
+      videoSizeLimitBytes ?? DEFAULT_VIDEO_SIZE_LIMIT_BYTES;
     this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
     this.#copiedFromRealm = opts?.copiedFromRealm;
     let owner: string | undefined;
@@ -2193,7 +2219,7 @@ export class Realm {
         isCardDocumentString(content)
           ? 'card'
           : 'file';
-      this.assertWriteSize(content, sizeType);
+      this.assertWriteSize(content, sizeType, path);
       let isNewFile: boolean;
       if (typeof content === 'string') {
         let existingFile = await readFileAsText(path, (p) =>
@@ -2563,14 +2589,14 @@ export class Realm {
         }
         if (isModuleResource(resource)) {
           let content = resource.attributes?.content ?? '';
-          this.assertWriteSize(content, 'file');
+          this.assertWriteSize(content, 'file', localPath);
           files.set(localPath, content);
         } else if (isCardResource(resource)) {
           let doc = {
             data: resource,
           };
           let jsonString = JSON.stringify(doc, null, 2);
-          this.assertWriteSize(jsonString, 'card');
+          this.assertWriteSize(jsonString, 'card', localPath);
           files.set(localPath, jsonString);
         } else {
           return createResponse({
@@ -3890,7 +3916,7 @@ export class Realm {
     options?: {
       defaultHeaders?: Record<string, string>;
       etagVariant?: string;
-      // Optional content-derived fingerprint (e.g. md5 of body bytes).
+      // Optional content-derived fingerprint derived from the body bytes.
       // Takes precedence over `ref.lastModified` for the ETag — see
       // `buildEtag`. Callers that have the materialized body already
       // (the source endpoint cache-miss path) compute this for free.
@@ -3912,7 +3938,7 @@ export class Realm {
       ? `${cacheVisibility}, max-age=60, must-revalidate`
       : `${cacheVisibility}, max-age=0`;
     let etag = buildEtag(
-      options?.etagBase ?? ref.lastModified,
+      totalEtagBase(options?.etagBase, ref.lastModified) ?? ref.lastModified,
       options?.etagVariant,
     );
     let lastModified = formatRFC7231(ref.lastModified * 1000);
@@ -4180,9 +4206,19 @@ export class Realm {
     });
   }
 
-  private assertWriteSize(content: string | Uint8Array, type: 'card' | 'file') {
+  private assertWriteSize(
+    content: string | Uint8Array,
+    type: 'card' | 'file',
+    path: LocalPath,
+  ) {
     let limit =
-      type === 'card' ? this.#cardSizeLimitBytes : this.#fileSizeLimitBytes;
+      type === 'card'
+        ? this.#cardSizeLimitBytes
+        : fileSizeLimitFor(path, {
+            default: this.#fileSizeLimitBytes,
+            audio: this.#audioSizeLimitBytes,
+            video: this.#videoSizeLimitBytes,
+          });
     try {
       validateWriteSize(content, limit, type);
     } catch (error: any) {
@@ -4335,7 +4371,7 @@ export class Realm {
         }
         // Compute the content fingerprint while we have the body in
         // memory — `cachedRef.content` is already a string/Uint8Array
-        // post-materialization, so this is a single md5 with no extra I/O.
+        // post-materialization, so this is a single hash with no extra I/O.
         let contentHash = contentHashFromMaterializedRef(cachedRef);
         if (
           sourceCacheGenSnapshot &&

@@ -1011,10 +1011,13 @@ module('Acceptance | file chooser keyboard tests', function (hooks) {
 module('Acceptance | file chooser tests | upload size limit', function (hooks) {
   let FILE_SIZE_LIMIT = 512;
 
+  let AUDIO_SIZE_LIMIT = 4096;
+
   setupInteractSubmodeTests(hooks, {
     reuseIndexAcrossTests: 'fileChooserUploadSizeLimit',
     setRealm() {},
     fileSizeLimitBytes: FILE_SIZE_LIMIT,
+    audioSizeLimitBytes: AUDIO_SIZE_LIMIT,
   });
 
   test('shows error when uploaded file exceeds size limit', async function (assert) {
@@ -1083,6 +1086,113 @@ module('Acceptance | file chooser tests | upload size limit', function (hooks) {
     assert
       .dom('[data-test-choose-file-modal-upload-button]')
       .hasText('Retry\u2026', 'retry button is shown');
+
+    await click('[data-test-choose-file-modal-cancel-button]');
+  });
+
+  test('audio is measured against the audio limit, not the general file limit', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}FileLinkCard/empty`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click(`[data-test-operator-mode-stack="0"] [data-test-edit-button]`);
+    await click(
+      '[data-test-links-to-editor="attachment"] [data-test-add-new="attachment"]',
+    );
+    await click('[data-test-choose-file-modal-upload-button]');
+
+    let fileUpload = getService('file-upload') as FileUploadService;
+    await waitUntil(() => fileUpload.activeUploads.length > 0, {
+      timeout: 2000,
+      timeoutMessage: 'upload task was not created',
+    });
+
+    // Over the general file limit but under the audio limit: an .mp3 this size
+    // is accepted, where a .bin of the same size is not.
+    let task = fileUpload.activeUploads[0];
+    task.__provideFileForTesting(
+      new File(
+        [new Uint8Array(FILE_SIZE_LIMIT + 100).fill(0xff)],
+        'theme.mp3',
+        {
+          type: 'audio/mpeg',
+        },
+      ),
+    );
+
+    // Wait for a terminal state: settling for "left picking" would pass on
+    // 'uploading' even if the upload went on to fail.
+    await waitUntil(() => task.state === 'complete' || task.state === 'error', {
+      timeout: 10000,
+      timeoutMessage: 'upload task never reached a terminal state',
+    });
+
+    assert.strictEqual(
+      task.state,
+      'complete',
+      'audio under the audio limit uploads instead of being rejected',
+    );
+    assert
+      .dom('[data-test-choose-file-modal-upload-error]')
+      .doesNotExist('no size error is displayed');
+  });
+
+  test('audio over the audio limit is still rejected', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}FileLinkCard/empty`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click(`[data-test-operator-mode-stack="0"] [data-test-edit-button]`);
+    await click(
+      '[data-test-links-to-editor="attachment"] [data-test-add-new="attachment"]',
+    );
+    await click('[data-test-choose-file-modal-upload-button]');
+
+    let fileUpload = getService('file-upload') as FileUploadService;
+    await waitUntil(() => fileUpload.activeUploads.length > 0, {
+      timeout: 2000,
+      timeoutMessage: 'upload task was not created',
+    });
+
+    let task = fileUpload.activeUploads[0];
+    task.__provideFileForTesting(
+      new File(
+        [new Uint8Array(AUDIO_SIZE_LIMIT + 100).fill(0xff)],
+        'too-long.mp3',
+        { type: 'audio/mpeg' },
+      ),
+    );
+
+    await waitUntil(
+      () =>
+        document.querySelector('[data-test-choose-file-modal-upload-error]') !==
+        null,
+      {
+        timeout: 10000,
+        timeoutMessage: 'upload error was not displayed',
+      },
+    );
+
+    assert
+      .dom('[data-test-choose-file-modal-upload-error]')
+      .includesText(
+        `exceeds maximum allowed size (${AUDIO_SIZE_LIMIT} bytes)`,
+        'error names the audio limit',
+      );
 
     await click('[data-test-choose-file-modal-cancel-button]');
   });

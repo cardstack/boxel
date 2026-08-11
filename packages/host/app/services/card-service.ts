@@ -16,7 +16,10 @@ import {
 } from '@cardstack/runtime-common';
 import type { AtomicOperation } from '@cardstack/runtime-common/atomic-document';
 import { createAtomicDocument } from '@cardstack/runtime-common/atomic-document';
-import { validateWriteSize } from '@cardstack/runtime-common/write-size-validation';
+import {
+  fileSizeLimitFor,
+  validateWriteSize,
+} from '@cardstack/runtime-common/write-size-validation';
 
 import LimitedSet from '../lib/limited-set';
 
@@ -416,7 +419,11 @@ export default class CardService extends Service {
     let maxSizeBytes =
       type === 'card'
         ? this.environmentService.cardSizeLimitBytes
-        : this.environmentService.fileSizeLimitBytes;
+        : fileSizeLimitFor(url, {
+            default: this.environmentService.fileSizeLimitBytes,
+            audio: this.environmentService.audioSizeLimitBytes,
+            video: this.environmentService.videoSizeLimitBytes,
+          });
     try {
       this.sizeLimitError.delete(url);
       validateWriteSize(content, maxSizeBytes, type);
