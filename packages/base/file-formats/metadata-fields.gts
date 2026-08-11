@@ -15,11 +15,15 @@
 // in the deps of every card in every realm. A family attaches its metadata on
 // its own subclass module instead, so only realms holding that file type pay.
 
+import AudioWaveformIcon from '@cardstack/boxel-icons/audio-waveform';
 import CameraIcon from '@cardstack/boxel-icons/camera';
+import FileAudioIcon from '@cardstack/boxel-icons/file-audio';
 import MapPinIcon from '@cardstack/boxel-icons/map-pin';
 import PaletteIcon from '@cardstack/boxel-icons/palette';
 import RulerIcon from '@cardstack/boxel-icons/ruler';
 import TagIcon from '@cardstack/boxel-icons/tag';
+import KeyboardMusicIcon from '@cardstack/boxel-icons/keyboard-music';
+import TagsIcon from '@cardstack/boxel-icons/tags';
 
 import FileInfoIcon from '@cardstack/boxel-icons/file-info';
 
@@ -28,7 +32,9 @@ import {
   FieldDef,
   NumberField,
   StringField,
+  TextAreaField,
   contains,
+  containsMany,
   field,
 } from '../card-api';
 import BooleanField from '../boolean';
@@ -65,6 +71,24 @@ export const METADATA_VOCABULARIES: Record<
     'exif-gps': 'EXIF GPS IFD',
     'ios-photos': 'iOS Photos convention',
     'android-photos': 'Android Photos convention',
+  },
+  // Which tagging convention the track's descriptive metadata came from. Worth
+  // recording because the schemes disagree about what a field means — an ID3v2
+  // `TRCK` is "4/12" while an MP4 `trkn` atom is a pair of integers — so a
+  // consumer comparing two files needs to know which it is reading.
+  'tag-scheme': {
+    id3v2: 'ID3v2',
+    'riff-info': 'RIFF LIST-INFO',
+    'mp4-atoms': 'MP4 metadata atoms',
+    'vorbis-comment': 'Vorbis comment',
+    xmp: 'XMP',
+  },
+  'channel-mode': {
+    mono: 'Mono',
+    stereo: 'Stereo',
+    'joint-stereo': 'Joint stereo',
+    'dual-mono': 'Dual mono',
+    surround: 'Surround',
   },
   'color-space': {
     srgb: 'sRGB',
@@ -460,6 +484,398 @@ export class ExifMetadataField extends FieldDef {
         .exif {
           display: grid;
           gap: 0.75rem;
+        }
+      </style>
+    </template>
+  };
+}
+
+// How a media stream is encoded. Shared by sampled audio and, as that family
+// lands, video — a sample rate means the same thing in an MP3 and in an MP4's
+// audio track, so asking "what was this encoded at" shouldn't depend on the
+// container.
+//
+// Fields a given container cannot state are left unset. FLAC declares its bit
+// depth outright; MP3 has no such concept, and reporting a plausible 16 would
+// invent a fact the file never carried.
+export class MediaEncodingField extends FieldDef {
+  static displayName = 'Media Encoding';
+  static icon = FileAudioIcon;
+
+  @field container = contains(StringField);
+  @field audioCodec = contains(StringField);
+  @field sampleRate = contains(QuantityField);
+  @field bitrate = contains(QuantityField);
+  @field bitDepth = contains(NumberField);
+  @field channels = contains(NumberField);
+  @field channelMode = contains(CodedValueField);
+  // Whether the bitrate figure describes the whole stream or one frame of it.
+  // A VBR file's per-frame bitrate says almost nothing about the file, so a
+  // consumer comparing two numbers needs to know which kind it has.
+  @field isVariableBitrate = contains(BooleanField);
+
+  static embedded = class Embedded extends Component<
+    typeof MediaEncodingField
+  > {
+    <template>
+      <dl class='metadata-rows'>
+        {{#if @model.container}}
+          <div class='row'><dt>Container</dt><dd
+              class='mono'
+            >{{@model.container}}</dd></div>
+        {{/if}}
+        {{#if @model.audioCodec}}
+          <div class='row'><dt>Codec</dt><dd class='mono'>{{@model.audioCodec}}</dd></div>
+        {{/if}}
+        {{#if @model.sampleRate.display}}
+          <div class='row'><dt>Sample rate</dt><dd><@fields.sampleRate
+              /></dd></div>
+        {{/if}}
+        {{#if @model.bitrate.display}}
+          <div class='row'><dt>Bitrate</dt><dd><@fields.bitrate />{{#if
+                @model.isVariableBitrate
+              }}<span class='qualifier'>VBR</span>{{/if}}</dd></div>
+        {{/if}}
+        {{#if @model.bitDepth}}
+          <div class='row'><dt>Bit depth</dt><dd>{{@model.bitDepth}}-bit</dd></div>
+        {{/if}}
+        {{#if @model.channels}}
+          <div class='row'><dt>Channels</dt><dd>{{@model.channels}}{{#if
+                @model.channelMode.label
+              }}<span class='qualifier'><@fields.channelMode
+                /></span>{{/if}}</dd></div>
+        {{/if}}
+      </dl>
+      <style scoped>
+        .metadata-rows {
+          margin: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 0.3125rem;
+          font-size: 0.75rem;
+        }
+        .row {
+          display: flex;
+          gap: 0.625rem;
+          align-items: baseline;
+        }
+        dt {
+          flex: 0 0 5.75rem;
+          font-family: var(--font-mono);
+          font-size: 0.5625rem;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          color: var(--muted-foreground);
+        }
+        dd {
+          margin: 0;
+          min-width: 0;
+        }
+        .mono {
+          font-family: var(--font-mono);
+          font-size: 0.6875rem;
+        }
+        .qualifier {
+          margin-left: 0.375rem;
+          font-size: 0.6875rem;
+          color: var(--muted-foreground);
+        }
+      </style>
+    </template>
+  };
+}
+
+// What a track says about itself. One shape across every tagging convention;
+// `scheme` records which one supplied the values, because the conventions
+// disagree on meaning — an ID3v2 `TRCK` is the string "4/12" while an MP4 `trkn`
+// atom is a pair of integers — so `track` stays a string rather than being
+// coerced into a number that loses the total.
+export class MediaTagsField extends FieldDef {
+  static displayName = 'Media Tags';
+  static icon = TagsIcon;
+
+  @field scheme = contains(CodedValueField);
+  // Not `title`: FileDef's own name is the file's identity, and a field called
+  // `title` here would read as though it renamed the file.
+  @field trackTitle = contains(StringField);
+  @field artist = contains(StringField);
+  @field album = contains(StringField);
+  @field albumArtist = contains(StringField);
+  @field composer = contains(StringField);
+  @field year = contains(NumberField);
+  @field track = contains(StringField);
+  @field disc = contains(StringField);
+  @field genre = contains(StringField);
+  @field comment = contains(TextAreaField);
+
+  static embedded = class Embedded extends Component<typeof MediaTagsField> {
+    <template>
+      <dl class='metadata-rows'>
+        {{#if @model.trackTitle}}
+          <div class='row'><dt>Title</dt><dd>{{@model.trackTitle}}</dd></div>
+        {{/if}}
+        {{#if @model.artist}}
+          <div class='row'><dt>Artist</dt><dd>{{@model.artist}}</dd></div>
+        {{/if}}
+        {{#if @model.album}}
+          <div class='row'><dt>Album</dt><dd>{{@model.album}}</dd></div>
+        {{/if}}
+        {{#if @model.albumArtist}}
+          <div class='row'><dt>Album artist</dt><dd>{{@model.albumArtist}}</dd></div>
+        {{/if}}
+        {{#if @model.composer}}
+          <div class='row'><dt>Composer</dt><dd>{{@model.composer}}</dd></div>
+        {{/if}}
+        {{#if @model.year}}
+          <div class='row'><dt>Year</dt><dd>{{@model.year}}</dd></div>
+        {{/if}}
+        {{#if @model.track}}
+          <div class='row'><dt>Track</dt><dd>{{@model.track}}</dd></div>
+        {{/if}}
+        {{#if @model.disc}}
+          <div class='row'><dt>Disc</dt><dd>{{@model.disc}}</dd></div>
+        {{/if}}
+        {{#if @model.genre}}
+          <div class='row'><dt>Genre</dt><dd>{{@model.genre}}</dd></div>
+        {{/if}}
+        {{#if @model.comment}}
+          <div class='row'><dt>Comment</dt><dd>{{@model.comment}}</dd></div>
+        {{/if}}
+        {{#if @model.scheme.label}}
+          <div class='row'><dt>Scheme</dt><dd><@fields.scheme /></dd></div>
+        {{/if}}
+      </dl>
+      <style scoped>
+        .metadata-rows {
+          margin: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 0.3125rem;
+          font-size: 0.75rem;
+        }
+        .row {
+          display: flex;
+          gap: 0.625rem;
+          align-items: baseline;
+        }
+        dt {
+          flex: 0 0 5.75rem;
+          font-family: var(--font-mono);
+          font-size: 0.5625rem;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          color: var(--muted-foreground);
+        }
+        dd {
+          margin: 0;
+          min-width: 0;
+          overflow-wrap: anywhere;
+        }
+      </style>
+    </template>
+  };
+}
+
+// A decoded amplitude envelope, produced by actually decoding the audio rather
+// than by reading a header — so unlike every other field here it depends on Web
+// Audio being available, and records why it isn't when it fails.
+//
+// `bars` is the envelope itself, resampled at extract time to a fixed count so
+// the stored payload is bounded no matter how long the track is. It is stored as
+// a JSON string rather than a `containsMany(NumberField)` deliberately: a
+// hundred-odd separate field instances would cost far more to serialize, index,
+// and rehydrate than one short string, and nothing queries an individual bar.
+export class WaveformMetadataField extends FieldDef {
+  static displayName = 'Waveform Analysis';
+  static icon = AudioWaveformIcon;
+
+  // 'ok' | 'unsupported' | 'failed' — a renderer needs to tell "no waveform yet"
+  // from "this file cannot produce one", and an operator needs to know which.
+  @field decodeStatus = contains(StringField);
+  @field decodeError = contains(StringField);
+  // Names the resampling so a stored envelope stays interpretable if the
+  // algorithm changes; a consumer can tell an old envelope from a new one.
+  @field algorithm = contains(StringField);
+  @field barsJson = contains(TextAreaField);
+  @field barCount = contains(NumberField);
+  @field durationSeconds = contains(NumberField);
+  @field sampleRateHz = contains(NumberField);
+  @field channelCount = contains(NumberField);
+  @field peakAmplitude = contains(NumberField);
+  @field rmsAmplitude = contains(NumberField);
+
+  static embedded = class Embedded extends Component<
+    typeof WaveformMetadataField
+  > {
+    <template>
+      <dl class='metadata-rows'>
+        {{#if @model.decodeStatus}}
+          <div class='row'><dt>Status</dt><dd>{{@model.decodeStatus}}</dd></div>
+        {{/if}}
+        {{#if @model.barCount}}
+          <div class='row'><dt>Envelope</dt><dd>{{@model.barCount}} bars ·
+              {{@model.algorithm}}</dd></div>
+        {{/if}}
+        {{#if @model.durationSeconds}}
+          <div class='row'><dt>Duration</dt><dd>{{@model.durationSeconds}} s</dd></div>
+        {{/if}}
+        {{#if @model.sampleRateHz}}
+          <div class='row'><dt>Sample rate</dt><dd>{{@model.sampleRateHz}} Hz</dd></div>
+        {{/if}}
+        {{#if @model.channelCount}}
+          <div class='row'><dt>Channels</dt><dd>{{@model.channelCount}}</dd></div>
+        {{/if}}
+        {{#if @model.peakAmplitude}}
+          <div class='row'><dt>Peak</dt><dd>{{@model.peakAmplitude}}</dd></div>
+        {{/if}}
+        {{#if @model.rmsAmplitude}}
+          <div class='row'><dt>RMS</dt><dd>{{@model.rmsAmplitude}}</dd></div>
+        {{/if}}
+        {{#if @model.decodeError}}
+          <div class='row'><dt>Decode</dt><dd class='decode-error'>{{@model.decodeError}}</dd></div>
+        {{/if}}
+      </dl>
+      <style scoped>
+        .metadata-rows {
+          margin: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 0.3125rem;
+          font-size: 0.75rem;
+        }
+        .row {
+          display: flex;
+          gap: 0.625rem;
+          align-items: baseline;
+        }
+        dt {
+          flex: 0 0 5.75rem;
+          font-family: var(--font-mono);
+          font-size: 0.5625rem;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          color: var(--muted-foreground);
+        }
+        dd {
+          margin: 0;
+          min-width: 0;
+          overflow-wrap: anywhere;
+        }
+        .decode-error {
+          color: var(--destructive, var(--foreground));
+        }
+      </style>
+    </template>
+  };
+}
+
+// What a MIDI file will play. Symbolic performance data, not encoded audio —
+// there is no sample rate or amplitude here, because a MIDI file has no sound
+// until a synthesizer gives it one. That's why it is a family of its own rather
+// than a variety of `MediaEncodingField`.
+export class MidiMetadataField extends FieldDef {
+  static displayName = 'MIDI Metadata';
+  static icon = KeyboardMusicIcon;
+
+  // 0 = single track, 1 = simultaneous tracks, 2 = independent sequences.
+  @field format = contains(NumberField);
+  // Ticks per quarter note. Unset for a file timed in SMPTE timecode instead,
+  // where ticks don't convert to musical time.
+  @field ppq = contains(NumberField);
+  @field durationSeconds = contains(NumberField);
+  // What the header declares, which is usually more than actually sound: a
+  // format 1 file's first track conventionally holds only tempo and meter.
+  @field fileTrackCount = contains(NumberField);
+  @field trackCount = contains(NumberField);
+  @field noteCount = contains(NumberField);
+  @field tempoMap = containsMany(StringField);
+  @field timeSignatures = containsMany(StringField);
+  @field keySignatures = containsMany(StringField);
+  // General MIDI program numbers, excluding the percussion channel where a
+  // program names a drum kit rather than an instrument.
+  @field programs = containsMany(NumberField);
+  @field channels = containsMany(NumberField);
+  @field pitchRange = contains(StringField);
+  @field hasPercussion = contains(BooleanField);
+
+  static embedded = class Embedded extends Component<
+    typeof MidiMetadataField
+  > {
+    <template>
+      <dl class='metadata-rows'>
+        {{#if @model.trackCount}}
+          <div class='row'><dt>Tracks</dt><dd>{{@model.trackCount}}{{#if
+                @model.fileTrackCount
+              }}
+                of
+                {{@model.fileTrackCount}}{{/if}}</dd></div>
+        {{/if}}
+        {{#if @model.noteCount}}
+          <div class='row'><dt>Notes</dt><dd>{{@model.noteCount}}</dd></div>
+        {{/if}}
+        {{#if @model.durationSeconds}}
+          <div class='row'><dt>Duration</dt><dd>{{@model.durationSeconds}} s</dd></div>
+        {{/if}}
+        {{#if @model.keySignatures.length}}
+          <div class='row'><dt>Key</dt><dd class='list'>{{#each
+                @model.keySignatures as |key|
+              }}<span>{{key}}</span>{{/each}}</dd></div>
+        {{/if}}
+        {{#if @model.timeSignatures.length}}
+          <div class='row'><dt>Meter</dt><dd class='list'>{{#each
+                @model.timeSignatures as |meter|
+              }}<span>{{meter}}</span>{{/each}}</dd></div>
+        {{/if}}
+        {{#if @model.pitchRange}}
+          <div class='row'><dt>Range</dt><dd>{{@model.pitchRange}}</dd></div>
+        {{/if}}
+        {{#if @model.tempoMap.length}}
+          <div class='row'><dt>Tempo</dt><dd class='list'>{{#each
+                @model.tempoMap as |tempo|
+              }}<span>{{tempo}}</span>{{/each}}</dd></div>
+        {{/if}}
+        {{#if @model.channels.length}}
+          <div class='row'><dt>Channels</dt><dd class='list'>{{#each
+                @model.channels as |channel|
+              }}<span>{{channel}}</span>{{/each}}</dd></div>
+        {{/if}}
+        <div class='row'><dt>Percussion</dt><dd>{{if
+              @model.hasPercussion
+              'Yes'
+              'No'
+            }}</dd></div>
+      </dl>
+      <style scoped>
+        .metadata-rows {
+          margin: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 0.3125rem;
+          font-size: 0.75rem;
+        }
+        .row {
+          display: flex;
+          gap: 0.625rem;
+          align-items: baseline;
+        }
+        dt {
+          flex: 0 0 5.75rem;
+          font-family: var(--font-mono);
+          font-size: 0.5625rem;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          color: var(--muted-foreground);
+        }
+        dd {
+          margin: 0;
+          min-width: 0;
+          overflow-wrap: anywhere;
+        }
+        /* Several values on one row read as a list, not a run-on string. */
+        .list {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.125rem 0.5rem;
         }
       </style>
     </template>
