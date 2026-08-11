@@ -83,8 +83,8 @@ const SAMPLES: Sample[] = [
     }),
   },
   {
-    label: 'Range AND a field predicate (known 0)',
-    note: 'Returns nothing today — NOT the range rewrite. `eq` on a field of a package-hosted type matches nothing even at an exact version, so this is a separate defect in field predicates over store-hosted modules.',
+    label: 'Range AND a field predicate',
+    note: 'The composition the whole feature is for: `on` carries the range, and the `eq` rides along onto every expanded branch.',
     build: (o) => ({
       filter: { on: greeterRef(o, '^2.0.0'), eq: { person: 'Ada' } },
     }),

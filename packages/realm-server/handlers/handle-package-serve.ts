@@ -222,6 +222,12 @@ export default function handlePackageServe({
       );
     }
 
+    // HTTP-date, from the moment the Version was sealed.
+    let publishedAtRaw = meta?.versions?.[resolution.version]?.publishedAt;
+    let publishedAt = publishedAtRaw
+      ? new Date(publishedAtRaw).toUTCString()
+      : undefined;
+
     let servedPath = path;
     let bytes = await readStoredFile(
       packageStorePath,
@@ -284,6 +290,18 @@ export default function handlePackageServe({
         'content-type':
           lookupMimeType(servedPath) || 'application/octet-stream',
         'content-length': String(bytes.byteLength),
+        // The module loader will not accept a module without one. It probes
+        // with `HEAD (accept: card-source)` and stamps the mtime from this
+        // header; absent, it refuses the module with "has no last-modified
+        // time header", the definition never populates, and every field
+        // predicate over a package-hosted type silently matches nothing.
+        //
+        // `publishedAt` rather than a filesystem mtime, and that is the more
+        // correct clock: a Version is sealed once and is immutable
+        // thereafter, so its publish time is identical on every mirror
+        // serving that pack, while an mtime records when THIS disk happened
+        // to receive it and would differ per replica.
+        ...(publishedAt ? { 'last-modified': publishedAt } : {}),
         // An exact version is immutable by construction (Deck L4) — the
         // registry gate refuses to republish one with different bytes, so
         // this promise is enforced rather than hoped for. PR 6 generalises
