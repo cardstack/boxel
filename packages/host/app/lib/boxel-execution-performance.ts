@@ -13,7 +13,8 @@ export type BoxelExecutionStage =
   | 'materialize'
   | 'runtime-create'
   | 'render-record'
-  | 'generation';
+  | 'generation'
+  | 'format-switch';
 
 export type BoxelExecutionStageStatus = 'ok' | 'error' | 'obsolete';
 

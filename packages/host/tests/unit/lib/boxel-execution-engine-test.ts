@@ -44,6 +44,11 @@ const sandboxSource: BoxelSourceClassification = {
   authoredEditTemplate: false,
 };
 
+const sandboxSourceWithEdit: BoxelSourceClassification = {
+  ...sandboxSource,
+  authoredEditTemplate: true,
+};
+
 function policy(
   overrides: Partial<BoxelExecutionPolicyInput> = {},
 ): BoxelExecutionPolicyInput {
@@ -65,6 +70,7 @@ class TestRuntime {
   createdFromSerialized = 0;
   retainedCanonical?: object;
   allowedModules: readonly string[] = [];
+  renderSlotCalls: { format: string; hostOwnsBox?: boolean }[] = [];
   private nextInstance = 0;
 
   constructor(readonly mode: BoxelRuntime['mode']) {}
@@ -147,12 +153,19 @@ class TestRuntime {
     return { owner: 'direct' as const, component: {} as never };
   }
 
-  async getRenderSlot() {
+  async getRenderSlot(
+    _card?: BoxelInstanceHandle,
+    format = 'isolated',
+    hostOwnsBox?: boolean,
+  ) {
+    this.renderSlotCalls.push({ format, hostOwnsBox });
     if (this.mode === 'sandbox') {
       return {
         owner: 'sandbox' as const,
         iframe: document.createElement('iframe'),
         surface: 'surface:test' as never,
+        mountToken: {},
+        process: this as unknown as SandboxRuntimeProcess,
       };
     }
     return {
@@ -321,6 +334,55 @@ module('Unit | Boxel execution engine', function () {
         await session.destroy();
       }
     } finally {
+      engine.destroy();
+    }
+  });
+
+  test('a live Sandbox generation switches isolated/edit format without rematerializing its card', async function (assert) {
+    let direct = new TestRuntime('direct');
+    let capsule = new TestRuntime('capsule');
+    let sandbox = new TestRuntime('sandbox');
+    let router = new BoxelRuntimeRouter(
+      direct as unknown as DirectBoxelRuntime,
+      () => capsule as unknown as CapsuleBoxelRuntime,
+      () => sandbox as unknown as SandboxRuntimeProcess,
+    );
+    let engine = new BoxelExecutionEngine(
+      router,
+      async () => sandboxSourceWithEdit,
+    );
+    let session = engine.createSession();
+
+    try {
+      await session.update(executionRequest('sandbox-with-edit'));
+      let initialGeneration = session.snapshot.current;
+
+      let editSlot = await session.switchSandboxFormat('edit', true);
+      let isolatedSlot = await session.switchSandboxFormat('isolated', true);
+
+      assert.strictEqual(editSlot?.owner, 'sandbox');
+      assert.strictEqual(isolatedSlot?.owner, 'sandbox');
+      assert.strictEqual(
+        session.snapshot.current,
+        initialGeneration,
+        'the same semantic generation and child card handle stay live',
+      );
+      assert.strictEqual(
+        sandbox.createdFromSerialized,
+        1,
+        'the child card is materialized only once',
+      );
+      assert.deepEqual(
+        sandbox.disposed,
+        [],
+        'the live child card is not disposed during either toggle',
+      );
+      assert.deepEqual(sandbox.renderSlotCalls, [
+        { format: 'edit', hostOwnsBox: true },
+        { format: 'isolated', hostOwnsBox: true },
+      ]);
+    } finally {
+      await session.destroy();
       engine.destroy();
     }
   });

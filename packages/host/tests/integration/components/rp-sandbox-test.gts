@@ -147,7 +147,7 @@ const plainWidgetSource = `
 
 // RP-6.3 exception fixture: a Sandbox-classified module (raw ember-modifier
 // import) that ALSO authors its own in-place edit template — this module
-// keeps the Sandbox iframe for its edit surface.
+// keeps the same live Sandbox iframe across a pencil-toggle round trip.
 const inPlaceEditorSource = `
   import {
     CardDef,
@@ -419,6 +419,64 @@ module('Integration | rp-sandbox', function (hooks) {
       .exists(
         'the same retained iframe mechanism serves the edit surface — in-iframe state survives the isolated↔edit switch',
       );
+  });
+
+  test('RP-6.3 exception: Sandbox isolated/edit surfaces keep the exact live iframe across repeated format toggles', async function (assert) {
+    let card = await createFromResource({
+      attributes: { label: 'in place' },
+      meta: {
+        adoptsFrom: {
+          module: testRRI('in-place-editor'),
+          name: 'InPlaceEditor',
+        },
+      },
+    });
+
+    class FormatState {
+      @tracked format: Format = 'isolated';
+    }
+    let state = new FormatState();
+
+    await render(
+      <template>
+        <CardRenderer @card={{card}} @format={{state.format}} />
+      </template>,
+    );
+
+    let slotSelector = '[data-boxel-execution="sandbox"]';
+    let iframeSelector = `${slotSelector} iframe.boxel-sandbox-process`;
+    await waitFor(iframeSelector, { timeout: 5000 });
+    await waitUntil(
+      () =>
+        document
+          .querySelector(slotSelector)
+          ?.getAttribute('data-boxel-execution-reason') ===
+        'browser-runtime:ember-modifier',
+      { timeout: 5000 },
+    );
+    let initialIframe = document.querySelector(iframeSelector);
+    assert.ok(initialIframe, 'isolated starts with a live Sandbox iframe');
+
+    for (let nextFormat of ['edit', 'isolated', 'edit', 'isolated'] as const) {
+      state.format = nextFormat;
+      await waitUntil(
+        () => {
+          let slot = document.querySelector(slotSelector);
+          return (
+            slot?.getAttribute('data-boxel-card-format') === nextFormat &&
+            slot.getAttribute('data-boxel-ready-format') === nextFormat &&
+            slot.getAttribute('data-boxel-execution-reason') ===
+              'browser-runtime:ember-modifier'
+          );
+        },
+        { timeout: 5000 },
+      );
+      assert.strictEqual(
+        document.querySelector(iframeSelector),
+        initialIframe,
+        `${nextFormat} reuses the exact iframe element`,
+      );
+    }
   });
 
   test('RP-7.2: a forward-referenced linksTo(() => X) thunk stays lazy through Capsule evaluation — resolution is first-access, never definition time', async function (assert) {

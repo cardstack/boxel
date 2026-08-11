@@ -1,3 +1,4 @@
+import { registerDestructor } from '@ember/destroyable';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
@@ -30,6 +31,7 @@ import HeadFormatPreview from '@cardstack/host/components/head-format-preview';
 import ErrorDisplay from '@cardstack/host/components/operator-mode/error-display';
 import type {
   BoxelExecutionRenderSlot,
+  BoxelExecutionSession,
   BoxelExecutionSessionSnapshot,
 } from '@cardstack/host/lib/boxel-execution-engine';
 import type {
@@ -124,6 +126,8 @@ type ExecutionRendererState = {
    * first-render diagnostic confirms real output landed.
    */
   sandboxPainted?: boolean;
+  /** The Sandbox format whose child render request has completed. */
+  sandboxReadyFormat?: Format;
 };
 
 type HeadComponent = ComponentLike<{
@@ -132,6 +136,13 @@ type HeadComponent = ComponentLike<{
     model?: Record<string, unknown>;
   };
 }>;
+
+function isIsolatedEditToggle(from: Format, to: Format): boolean {
+  return (
+    (from === 'isolated' && to === 'edit') ||
+    (from === 'edit' && to === 'isolated')
+  );
+}
 
 /**
  * Matches `DEFAULT_CARD_CONTEXT`'s no-op in `@cardstack/base`: when no
@@ -265,10 +276,30 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
   );
 
   private readonly surfaceId: string;
+  private readonly session: BoxelExecutionSession;
+  /**
+   * A Sandbox card's isolated/edit toggle is one continuous presentation
+   * surface even when the two formats use different component classes.
+   * The execution resource still replaces its tracked view state when the
+   * requested format changes, but the component-level session and the
+   * previous Sandbox slot survive that replacement. Seeding the new state
+   * keeps Glimmer on the same DOM branch and lets the slot modifier transfer
+   * ownership of the already-live iframe in place. Without this handoff, the
+   * resource's short async gap removes the slot, whose teardown necessarily
+   * kills the iframe before the retained runtime can serve the return trip.
+   */
+  private previousExecution?: {
+    card: BaseDef;
+    format: Format;
+    baseTemplateRef?: CodeRef;
+    state: ExecutionRendererState;
+  };
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.surfaceId = this.boxelExecution.surfaceId();
+    this.session = this.boxelExecution.createSession();
+    registerDestructor(this, () => void this.session.destroy());
   }
 
   /**
@@ -295,15 +326,37 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
   }
 
   @use private execution = resource(({ on }) => {
-    let session = this.boxelExecution.createSession();
+    let session = this.session;
     let card = this.args.card;
     let format = this.args.format;
     let relativeTo = this.args.relativeTo;
     let baseTemplateRef = this.args.baseTemplateRef;
     let hostOwnsBox = this.args.hostOwnsBox;
+    let effectiveFormat = format ?? 'isolated';
+    let previousExecution = this.previousExecution;
+    let retainedSandboxState =
+      previousExecution &&
+      previousExecution.card === card &&
+      previousExecution.baseTemplateRef === baseTemplateRef &&
+      isIsolatedEditToggle(previousExecution.format, effectiveFormat) &&
+      previousExecution.state.slot?.owner === 'sandbox'
+        ? previousExecution.state
+        : undefined;
     let state = new TrackedObject<ExecutionRendererState>({
-      snapshot: session.snapshot,
+      snapshot: retainedSandboxState?.snapshot ?? session.snapshot,
+      slot: retainedSandboxState?.slot,
+      model: retainedSandboxState?.model,
+      fields: retainedSandboxState?.fields,
+      placeholder: retainedSandboxState?.placeholder,
+      sandboxPainted: retainedSandboxState?.sandboxPainted,
+      sandboxReadyFormat: retainedSandboxState?.sandboxReadyFormat,
     });
+    this.previousExecution = {
+      card,
+      format: effectiveFormat,
+      baseTemplateRef,
+      state,
+    };
     let unsubscribe = session.subscribe((snapshot) => {
       state.snapshot = snapshot;
       if (snapshot.current) {
@@ -323,6 +376,47 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
       }
     });
     let active = true;
+    let activateSandboxSlot = (
+      slot: SandboxRenderSlot,
+      mountFailureWatched = false,
+    ) => {
+      // RP-20.5: the Sandbox tier's views cannot read the canonical
+      // instance live, so parent-side mutations cross as explicit instance
+      // pushes. Reconnect this subscription for every resource generation,
+      // including the format-only fast path.
+      on.cleanup(
+        this.boxelExecution.connectSandboxInstanceSync(card, slot.process),
+      );
+      let stopWatchingPaint = slot.process.onFirstPaint(() => {
+        if (active) {
+          state.sandboxPainted = true;
+          state.sandboxReadyFormat = effectiveFormat;
+        }
+      });
+      let stopWatchingMountFailure = mountFailureWatched
+        ? undefined
+        : slot.process.onMountFailed((error) => {
+            if (!active) {
+              return;
+            }
+            state.slot = undefined;
+            state.snapshot = {
+              ...session.snapshot,
+              status: 'error',
+              error,
+            };
+          });
+      let stopWatchingReload = slot.process.onReload(() => {
+        if (active) {
+          state.sandboxPainted = false;
+        }
+      });
+      on.cleanup(stopWatchingPaint);
+      if (stopWatchingMountFailure) {
+        on.cleanup(stopWatchingMountFailure);
+      }
+      on.cleanup(stopWatchingReload);
+    };
     // Volatile promotion (docs/boxel-volatile-execution-plan.md): read
     // isVolatile() SYNCHRONOUSLY, here in this resource's own tracking
     // frame — reading it later, inside the async IIFE below, would not
@@ -355,6 +449,28 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
       () =>
         void (async () => {
           try {
+            // The pencil toggle is a render-format change, not a new card
+            // generation. When both ends route to the already-live Sandbox,
+            // ask that child to render its retained card handle in the new
+            // format. This skips Host serialization/source preparation,
+            // classification, and child materialization entirely. The
+            // session method repeats policy admission; a destination that
+            // belongs host-side simply returns undefined and continues down
+            // the ordinary full-update path below.
+            if (retainedSandboxState) {
+              let retainedSlot = await session.switchSandboxFormat(
+                effectiveFormat,
+                hostOwnsBox,
+              );
+              if (!active) {
+                return;
+              }
+              if (retainedSlot) {
+                state.slot = retainedSlot;
+                activateSandboxSlot(retainedSlot);
+                return;
+              }
+            }
             let request = await this.boxelExecution.requestFor(
               card,
               format,
@@ -500,70 +616,7 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
                 this.surfaceId,
               );
             } else {
-              // RP-20.5: the Sandbox tier's views cannot read the canonical
-              // instance live, so parent-side mutations cross as explicit
-              // instance pushes (serialized current state, applied in place
-              // by the child). Connected once per mounted generation;
-              // teardown stops the subscription with the resource.
-              on.cleanup(
-                this.boxelExecution.connectSandboxInstanceSync(
-                  card,
-                  slot.process,
-                ),
-              );
-              // Fires once — immediately if this process (retained across
-              // format switches by surface identity) has already painted
-              // before, otherwise the first time its child reports a render
-              // with real visible output. Either way, that's the signal to
-              // stop showing the prerendered placeholder over the iframe.
-              let stopWatchingPaint = slot.process.onFirstPaint(() => {
-                if (active) {
-                  state.sandboxPainted = true;
-                }
-              });
-              // getRenderSlot() no longer awaits the full handshake first (it
-              // can't: the iframe needs this slot's element to exist before it
-              // can even start booting), so a failed connect (most commonly
-              // the timeout) is no longer a thrown rejection this async
-              // block's own try/catch would see — it surfaces through
-              // onMountFailed instead. Normally that listener was ALREADY
-              // registered right after the reservation above (it never
-              // re-arms after firing, so one registration covers this
-              // process's whole lifecycle) — this second registration exists
-              // only for the rarer case where no reservation was made at all
-              // (classification decided non-Sandbox, but materialize()'s own
-              // prefersFullSandbox escalation chose Sandbox anyway), so this
-              // is the first and only chance to watch it.
-              let stopWatchingMountFailure = mountFailureWatched
-                ? undefined
-                : slot.process.onMountFailed((error) => {
-                    if (!active) {
-                      return;
-                    }
-                    state.slot = undefined;
-                    state.snapshot = {
-                      ...session.snapshot,
-                      status: 'error',
-                      error,
-                    };
-                  });
-              // An explicit hard reload (session.reloadSandbox(), dossier step
-              // 6) remints this process's child from scratch — unlike ordinary
-              // HMR (session.pushDraft()), which never re-arms onFirstPaint by
-              // design (RP-15.3's placeholder is retained, not re-entered, for
-              // an in-place edit). A reload is exactly the case that DOES need
-              // the placeholder back: the new child hasn't painted anything
-              // yet, so this state must invalidate before its next paint.
-              let stopWatchingReload = slot.process.onReload(() => {
-                if (active) {
-                  state.sandboxPainted = false;
-                }
-              });
-              on.cleanup(stopWatchingPaint);
-              if (stopWatchingMountFailure) {
-                on.cleanup(stopWatchingMountFailure);
-              }
-              on.cleanup(stopWatchingReload);
+              activateSandboxSlot(slot, mountFailureWatched);
             }
           } catch (error) {
             if (active) {
@@ -591,7 +644,6 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
       if (state.surface) {
         this.boxelExecution.releaseSurface(state.surface);
       }
-      void session.destroy();
     });
     return state;
   });
@@ -848,6 +900,7 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
         data-boxel-execution-reason={{this.executionReason}}
         data-boxel-card-id={{this.cardURL}}
         data-boxel-card-format={{this.effectiveFormat}}
+        data-boxel-ready-format={{this.state.sandboxReadyFormat}}
         data-test-card={{this.cardURL}}
         data-test-card-format={{this.effectiveFormat}}
         {{this.cardComponentModifier

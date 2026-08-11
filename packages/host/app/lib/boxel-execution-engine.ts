@@ -13,6 +13,7 @@ import {
   startBoxelExecutionStage,
   type BoxelExecutionPerformanceContext,
 } from './boxel-execution-performance';
+import { decideBoxelExecution } from './boxel-execution-policy';
 import {
   classifyBoxelSource,
   type BoxelSourceClassification,
@@ -81,6 +82,7 @@ export interface BoxelExecutionGeneration {
   readonly lease: BoxelRuntimeLease;
   readonly card: BoxelInstanceHandle;
   readonly renderRecord: BoxelRenderRecord;
+  readonly source: BoxelSourceClassification;
 }
 
 export type BoxelExecutionStatus = 'idle' | 'loading' | 'ready' | 'error';
@@ -132,6 +134,7 @@ export class BoxelExecutionSession {
   private error?: Error;
   private closed = false;
   private listeners = new Set<BoxelExecutionSessionListener>();
+  private nextFormatSwitch = 0;
   /**
    * The request that produced `currentGeneration` — retained only for
    * `pushDraft()`'s authority-growth step (`documentDeclaredModules`), which
@@ -195,6 +198,65 @@ export class BoxelExecutionSession {
           hostOwnsBox,
         );
     }
+  }
+
+  /**
+   * Switches an already-live Sandbox generation between its full-card
+   * formats without serializing or materializing the card again. The policy
+   * check is repeated with the retained classification, so this fast path is
+   * available only when the destination format belongs in the SAME Sandbox;
+   * a default trusted editor or compact format falls back to an ordinary
+   * session update instead.
+   */
+  async switchSandboxFormat(
+    format: string,
+    hostOwnsBox?: boolean,
+  ): Promise<SandboxRenderSlot | undefined> {
+    this.assertOpen();
+    let current = this.currentGeneration;
+    let request = this.lastRequest;
+    if (!current || !request || current.lease.runtime.mode !== 'sandbox') {
+      return undefined;
+    }
+    let decision = decideBoxelExecution({
+      trusted: request.trusted,
+      format,
+      source: current.source,
+      prefersFullSandbox: request.prefersFullSandbox ?? false,
+      volatile: this.isModuleVolatile(request.moduleIdentifier),
+    });
+    if (decision.mode !== 'sandbox') {
+      return undefined;
+    }
+    let formatSwitch = ++this.nextFormatSwitch;
+    let requestedGeneration = this.requestedGeneration;
+    let formatSwitchStage = startBoxelExecutionStage({
+      operationId: `${request.surfaceId}:format-${formatSwitch}`,
+      occurrenceId: request.surfaceId,
+      stage: 'format-switch',
+      tier: 'sandbox',
+    });
+    let slot: SandboxRenderSlot;
+    try {
+      slot = await (
+        current.lease.runtime as SandboxRuntimeProcess
+      ).getRenderSlot(current.card, format, hostOwnsBox);
+    } catch (error) {
+      formatSwitchStage.finish({ status: 'error' });
+      throw error;
+    }
+    if (
+      this.closed ||
+      current !== this.currentGeneration ||
+      requestedGeneration !== this.requestedGeneration ||
+      formatSwitch !== this.nextFormatSwitch
+    ) {
+      formatSwitchStage.finish({ status: 'obsolete' });
+      return undefined;
+    }
+    formatSwitchStage.finish();
+    this.lastRequest = { ...request, format };
+    return slot;
   }
 
   /**
@@ -504,7 +566,7 @@ export class BoxelExecutionSession {
       );
       this.assertCurrent(generation);
       materializeStage.finish();
-      return { generation, lease, card, renderRecord };
+      return { generation, lease, card, renderRecord, source };
     } catch (error) {
       materializeStage.finish({
         status:
