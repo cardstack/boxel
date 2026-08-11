@@ -42,10 +42,10 @@ import RecordPaymentCommand from './record-payment';
 import CloseWonCommand from './close-won';
 import { formatMoney, outstandingBalance, sumLineItems } from './money';
 
-const OPEN_INVOICE_STATUSES = ['sent', 'viewed', 'partial', 'overdue'];
+const OPEN_INVOICE_STATUSES = ['sent', 'viewed', 'partial'];
 
 function invoiceStatus(item: CardDef): string {
-  return (item as Invoice).status ?? '';
+  return (item as Invoice).displayStatus ?? '';
 }
 
 function stopThen(action: (...args: any[]) => void) {
@@ -569,7 +569,7 @@ export class RevenueOs extends CardDef {
       if (f === 'all') return this.invoices;
       if (f === 'paid') return this.invoices.filter((i) => i.status === 'paid');
       if (f === 'overdue') {
-        return this.invoices.filter((i) => (i.daysOverdue ?? 0) > 0);
+        return this.invoices.filter((i) => i.isOverdue);
       }
       return this.invoices.filter((i) =>
         OPEN_INVOICE_STATUSES.includes(i.status ?? ''),
