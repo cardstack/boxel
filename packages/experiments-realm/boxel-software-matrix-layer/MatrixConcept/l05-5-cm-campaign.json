@@ -17,14 +17,14 @@
       "domainKit": "Sales & Marketing",
       "owner": "richard",
       "workState": "Done",
-      "notes": "v1.1 · Built — experiments-realm/campaign.gts; budget/spend with computed budgetUsedPercent + isOverBudget; attribution via Lead.campaign (lead points at campaign, counts are queries). POC tier",
+      "notes": "v1.1 \u00b7 Built \u2014 experiments-realm/campaign.gts; budget/spend with computed budgetUsedPercent + isOverBudget; attribution via Lead.campaign (lead points at campaign, counts are queries). POC tier",
+      "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/campaign",
       "cardInfo": {
         "name": null,
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      },
-      "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/campaign"
+      }
     },
     "meta": {
       "adoptsFrom": {

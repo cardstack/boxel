@@ -17,14 +17,14 @@
       "domainKit": "Legal",
       "owner": "richard",
       "workState": "Done",
-      "notes": "v1.1 · Built — experiments-realm/contract.gts; signedAt event fact + daysToExpiry; unblocked Order.contract, Subscription.contract and the Close Won contract step. POC tier",
+      "notes": "v1.1 \u00b7 Built \u2014 experiments-realm/contract.gts; signedAt event fact + daysToExpiry; unblocked Order.contract, Subscription.contract and the Close Won contract step. POC tier",
+      "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/contract",
       "cardInfo": {
         "name": null,
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      },
-      "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/contract"
+      }
     },
     "meta": {
       "adoptsFrom": {

@@ -17,14 +17,14 @@
       "domainKit": null,
       "owner": "richard",
       "workState": "Done",
-      "notes": "v1 · Built — experiments-realm/table.gts, POC tier",
+      "notes": "v1 \u00b7 Built \u2014 experiments-realm/table.gts, POC tier",
+      "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/table",
       "cardInfo": {
         "name": null,
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      },
-      "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/table"
+      }
     },
     "meta": {
       "adoptsFrom": {

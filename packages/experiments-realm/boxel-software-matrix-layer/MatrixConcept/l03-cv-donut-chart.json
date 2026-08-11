@@ -17,14 +17,14 @@
       "domainKit": null,
       "owner": "richard",
       "workState": "Done",
-      "notes": "v1.1 · Built — boxel-software-matrix-layer/donut-chart.gts, dependency-free SVG; first consumer is the Matrix Tracker's evidence-coverage panel. POC tier",
+      "notes": "v1.1 \u00b7 Built \u2014 boxel-software-matrix-layer/donut-chart.gts, dependency-free SVG; first consumer is the Matrix Tracker's evidence-coverage panel. POC tier",
+      "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/donut-chart",
       "cardInfo": {
         "name": null,
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      },
-      "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/donut-chart"
+      }
     },
     "meta": {
       "adoptsFrom": {
