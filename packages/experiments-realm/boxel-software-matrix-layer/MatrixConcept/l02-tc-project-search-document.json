@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "layer": "02",
+      "layerName": "Contracts",
+      "lane": "Tools & Commands",
+      "concept": "Project Search Document",
+      "symbol": "PS",
+      "implemented": true,
+      "evidenceTier": "Platform",
+      "auditStatus": "Implemented",
+      "whereImplemented": "runtime-common: index-runner (search doc projection)",
+      "reference": null,
+      "catalogMatch": null,
+      "provenance": null,
+      "domainKit": null,
+      "owner": null,
+      "workState": null,
+      "notes": null,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../matrix-concept",
+        "name": "MatrixConcept"
+      }
+    }
+  }
+}

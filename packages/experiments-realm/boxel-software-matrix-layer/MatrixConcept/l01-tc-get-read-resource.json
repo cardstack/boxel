@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "layer": "01",
+      "layerName": "Kernel",
+      "lane": "Tools & Commands",
+      "concept": "GET Read Resource",
+      "symbol": "GR",
+      "implemented": true,
+      "evidenceTier": "Platform",
+      "auditStatus": "Implemented",
+      "whereImplemented": "runtime-common: realm.ts (JSON:API GET) + realm-server/routes.ts",
+      "reference": null,
+      "catalogMatch": null,
+      "provenance": null,
+      "domainKit": null,
+      "owner": null,
+      "workState": null,
+      "notes": null,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../matrix-concept",
+        "name": "MatrixConcept"
+      }
+    }
+  }
+}

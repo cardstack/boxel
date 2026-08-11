@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "layer": "01",
+      "layerName": "Kernel",
+      "lane": "Components & Views",
+      "concept": "Card Header",
+      "symbol": "CH",
+      "implemented": true,
+      "evidenceTier": "Platform",
+      "auditStatus": "Implemented",
+      "whereImplemented": "boxel-ui: boxel-ui/addon/src/components/card-header/index.gts | boxel-ui: components/card-header",
+      "reference": null,
+      "catalogMatch": null,
+      "provenance": null,
+      "domainKit": null,
+      "owner": null,
+      "workState": null,
+      "notes": null,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../matrix-concept",
+        "name": "MatrixConcept"
+      }
+    }
+  }
+}

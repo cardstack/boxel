@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "layer": "05",
+      "layerName": "Records",
+      "lane": "Cards & Models",
+      "concept": "Contact",
+      "symbol": "Co",
+      "implemented": false,
+      "evidenceTier": "POC realm",
+      "auditStatus": "POC only",
+      "whereImplemented": null,
+      "reference": "experiments: experiments-realm/contact-card.gts | experiments: experiments-realm/crm/contact.gts",
+      "catalogMatch": null,
+      "provenance": "periodic:Contact",
+      "domainKit": null,
+      "owner": "richard",
+      "workState": "Done",
+      "notes": "v1 \u00b7 Built \u2014 experiments-realm/contact.gts, POC tier. Existing POC-tier evidence is the old crm/ demo card, not this block",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../matrix-concept",
+        "name": "MatrixConcept"
+      }
+    }
+  }
+}

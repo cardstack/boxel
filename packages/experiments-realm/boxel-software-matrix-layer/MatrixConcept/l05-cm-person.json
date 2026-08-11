@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "layer": "05",
+      "layerName": "Records",
+      "lane": "Cards & Models",
+      "concept": "Person",
+      "symbol": "Pe",
+      "implemented": true,
+      "evidenceTier": "Platform",
+      "auditStatus": "Implemented",
+      "whereImplemented": "runtime: runtime-common/etc/test-fixtures.ts",
+      "reference": null,
+      "catalogMatch": "catalog: 41e20f-wedding-table-seating-planner/person.gts",
+      "provenance": "periodic:Person",
+      "domainKit": null,
+      "owner": null,
+      "workState": null,
+      "notes": null,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../matrix-concept",
+        "name": "MatrixConcept"
+      }
+    }
+  }
+}

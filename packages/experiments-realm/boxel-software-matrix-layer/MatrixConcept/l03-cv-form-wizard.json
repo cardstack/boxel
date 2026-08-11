@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "layer": "03",
+      "layerName": "Structures",
+      "lane": "Components & Views",
+      "concept": "Form Wizard",
+      "symbol": "FW",
+      "implemented": true,
+      "evidenceTier": "Catalog shared",
+      "auditStatus": "Implemented",
+      "whereImplemented": "catalog: boxel-surface/src/components/form-wizard.gts",
+      "reference": null,
+      "catalogMatch": "catalog: boxel-surface/src/components/form-wizard.gts | catalog: b6ac3a-survey/components/form-wizard.gts",
+      "provenance": null,
+      "domainKit": null,
+      "owner": null,
+      "workState": null,
+      "notes": null,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../matrix-concept",
+        "name": "MatrixConcept"
+      }
+    }
+  }
+}

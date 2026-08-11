@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "layer": "05.5",
+      "layerName": "Domain Kits",
+      "lane": "Cards & Models",
+      "concept": "Payment",
+      "symbol": "Pa",
+      "implemented": false,
+      "evidenceTier": null,
+      "auditStatus": "Missing",
+      "whereImplemented": null,
+      "reference": null,
+      "catalogMatch": null,
+      "provenance": "periodic:Payment",
+      "domainKit": "Commerce",
+      "owner": "richard",
+      "workState": "Done",
+      "notes": "v1 \u00b7 Built \u2014 experiments-realm/payment.gts, POC tier",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../matrix-concept",
+        "name": "MatrixConcept"
+      }
+    }
+  }
+}

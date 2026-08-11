@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "layer": "03",
+      "layerName": "Structures",
+      "lane": "Components & Views",
+      "concept": "Card List",
+      "symbol": "Ca",
+      "implemented": true,
+      "evidenceTier": "Platform",
+      "auditStatus": "Implemented",
+      "whereImplemented": "base: base/components/card-list.gts \u2014 consumed directly by App 2: Talent & Resource Tracker (no reimplementation)",
+      "reference": null,
+      "catalogMatch": null,
+      "provenance": "periodic:Calendar",
+      "domainKit": null,
+      "owner": "lucas",
+      "workState": "In Progress",
+      "notes": "App 2: Talent & Resource Tracker",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../matrix-concept",
+        "name": "MatrixConcept"
+      }
+    }
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "layer": "03",
+      "layerName": "Structures",
+      "lane": "Tools & Commands",
+      "concept": "Classify",
+      "symbol": "Cl",
+      "implemented": false,
+      "evidenceTier": null,
+      "auditStatus": "Missing",
+      "whereImplemented": null,
+      "reference": null,
+      "catalogMatch": null,
+      "provenance": "periodic:Classify",
+      "domainKit": null,
+      "owner": "richard",
+      "workState": "Done",
+      "notes": "v1.1 \u00b7 Built \u2014 experiments-realm/classify.gts on OneShotLlmRequestCommand; generic criteria+facts\u2192label/score/rationale contract; Revenue OS supplies lead-scoring criteria and writes Lead.score from a Score button in the Leads tab. POC tier",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../matrix-concept",
+        "name": "MatrixConcept"
+      }
+    }
+  }
+}

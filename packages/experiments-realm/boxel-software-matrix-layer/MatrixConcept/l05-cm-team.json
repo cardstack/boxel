@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "layer": "05",
+      "layerName": "Records",
+      "lane": "Cards & Models",
+      "concept": "Team",
+      "symbol": "Te",
+      "implemented": false,
+      "evidenceTier": "POC realm",
+      "auditStatus": "POC only",
+      "whereImplemented": null,
+      "reference": "experiments: experiments-realm/sprint-task.gts",
+      "catalogMatch": null,
+      "provenance": "periodic:Team",
+      "domainKit": null,
+      "owner": "lucas",
+      "workState": "In Progress",
+      "notes": "App 2: Talent & Resource Tracker",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../matrix-concept",
+        "name": "MatrixConcept"
+      }
+    }
+  }
+}

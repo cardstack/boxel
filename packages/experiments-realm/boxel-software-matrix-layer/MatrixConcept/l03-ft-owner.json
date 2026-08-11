@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "layer": "03",
+      "layerName": "Structures",
+      "lane": "Fields & Types",
+      "concept": "Owner",
+      "symbol": "Ow",
+      "implemented": false,
+      "evidenceTier": null,
+      "auditStatus": "Missing",
+      "whereImplemented": null,
+      "reference": null,
+      "catalogMatch": null,
+      "provenance": "periodic:Owner | BSL",
+      "domainKit": null,
+      "owner": "richard",
+      "workState": "Done",
+      "notes": "v1 \u00b7 Built as linksTo(User) on Account/Opportunity/Deal/Invoice \u2014 experiments-realm, POC tier",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../matrix-concept",
+        "name": "MatrixConcept"
+      }
+    }
+  }
+}

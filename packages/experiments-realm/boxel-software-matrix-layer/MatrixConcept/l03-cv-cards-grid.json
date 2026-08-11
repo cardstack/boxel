@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "layer": "03",
+      "layerName": "Structures",
+      "lane": "Components & Views",
+      "concept": "Cards Grid",
+      "symbol": "CG",
+      "implemented": true,
+      "evidenceTier": "Catalog shared",
+      "auditStatus": "Implemented",
+      "whereImplemented": "catalog: components/grid.gts | catalog: catalog-app/components/grid.gts",
+      "reference": null,
+      "catalogMatch": "catalog: components/grid.gts | catalog: catalog-app/components/grid.gts",
+      "provenance": "periodic:Grid",
+      "domainKit": null,
+      "owner": "richard",
+      "workState": "Done",
+      "notes": "v1.1 \u00b7 Catalog implementation exists but Revenue OS does not consume it \u2014 no v1 site; wraps platform @context.searchResultsComponent; lands with Campaign Tracker",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../matrix-concept",
+        "name": "MatrixConcept"
+      }
+    }
+  }
+}

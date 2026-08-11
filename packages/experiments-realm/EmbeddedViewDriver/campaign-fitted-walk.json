@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Campaign fitted walk",
+      "cardDescription": null,
+      "cardThumbnailURL": null
+    },
+    "relationships": {
+      "card": {
+        "links": {
+          "self": "../Campaign/always-on-search-ads"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../embedded-view-driver",
+        "name": "EmbeddedViewDriver"
+      }
+    }
+  }
+}

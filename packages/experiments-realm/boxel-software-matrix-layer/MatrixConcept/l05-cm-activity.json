@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "layer": "05",
+      "layerName": "Records",
+      "lane": "Cards & Models",
+      "concept": "Activity",
+      "symbol": "Ac",
+      "implemented": false,
+      "evidenceTier": null,
+      "auditStatus": "Missing",
+      "whereImplemented": null,
+      "reference": null,
+      "catalogMatch": null,
+      "provenance": "periodic:Activity",
+      "domainKit": null,
+      "owner": "richard",
+      "workState": "Done",
+      "notes": "v1 \u00b7 Built \u2014 experiments-realm/activity.gts, typed timeline entry, POC tier",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../matrix-concept",
+        "name": "MatrixConcept"
+      }
+    }
+  }
+}

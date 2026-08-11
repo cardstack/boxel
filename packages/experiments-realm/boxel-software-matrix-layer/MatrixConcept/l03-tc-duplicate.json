@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "layer": "03",
+      "layerName": "Structures",
+      "lane": "Tools & Commands",
+      "concept": "Duplicate",
+      "symbol": "Du",
+      "implemented": false,
+      "evidenceTier": null,
+      "auditStatus": "Missing",
+      "whereImplemented": null,
+      "reference": null,
+      "catalogMatch": null,
+      "provenance": "periodic:Duplicate",
+      "domainKit": null,
+      "owner": "richard",
+      "workState": "Done",
+      "notes": "v1 \u00b7 Built \u2014 experiments-realm/duplicate.gts, POC tier. Clones any card (contained fields + links, not computeds); the consumer patches the copy to decide what differs. Exercised live: invoice \u2192 new draft",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../matrix-concept",
+        "name": "MatrixConcept"
+      }
+    }
+  }
+}

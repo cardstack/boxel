@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "layer": "03",
+      "layerName": "Structures",
+      "lane": "Fields & Types",
+      "concept": "Percentage",
+      "symbol": "Pe",
+      "implemented": true,
+      "evidenceTier": "Platform",
+      "auditStatus": "Implemented",
+      "whereImplemented": "base: base/percentage.gts",
+      "reference": null,
+      "catalogMatch": null,
+      "provenance": "periodic:Percent",
+      "domainKit": null,
+      "owner": "richard",
+      "workState": "Done",
+      "notes": "v1 \u00b7 Consumed from base \u2014 Opportunity.probability, Order.taxRate",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../matrix-concept",
+        "name": "MatrixConcept"
+      }
+    }
+  }
+}

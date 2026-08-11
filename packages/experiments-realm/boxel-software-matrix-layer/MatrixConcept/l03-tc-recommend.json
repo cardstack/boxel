@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "layer": "03",
+      "layerName": "Structures",
+      "lane": "Tools & Commands",
+      "concept": "Recommend",
+      "symbol": "Re",
+      "implemented": false,
+      "evidenceTier": null,
+      "auditStatus": "Missing",
+      "whereImplemented": null,
+      "reference": null,
+      "catalogMatch": null,
+      "provenance": "periodic:Recommend",
+      "domainKit": null,
+      "owner": "richard",
+      "workState": "Next",
+      "notes": "v1.1 \u00b7 Open, NOT blocked \u2014 contract templates for Contract Generator. Same LLM primitive as Classify (OneShotLlmRequestCommand); depends on Contract existing first",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../matrix-concept",
+        "name": "MatrixConcept"
+      }
+    }
+  }
+}

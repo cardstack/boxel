@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "layer": "01",
+      "layerName": "Kernel",
+      "lane": "Tools & Commands",
+      "concept": "Switch Submode",
+      "symbol": "SS",
+      "implemented": true,
+      "evidenceTier": "Platform",
+      "auditStatus": "Implemented",
+      "whereImplemented": "host tool: host/app/tools/switch-submode.ts",
+      "reference": null,
+      "catalogMatch": null,
+      "provenance": "BSL | BSL-addition",
+      "domainKit": null,
+      "owner": null,
+      "workState": null,
+      "notes": null,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../matrix-concept",
+        "name": "MatrixConcept"
+      }
+    }
+  }
+}

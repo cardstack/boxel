@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "layer": "03",
+      "layerName": "Structures",
+      "lane": "Components & Views",
+      "concept": "Waveform Player",
+      "symbol": "WP",
+      "implemented": true,
+      "evidenceTier": "Catalog shared",
+      "auditStatus": "Implemented",
+      "whereImplemented": "catalog: fields/audio/components/waveform-player.gts",
+      "reference": null,
+      "catalogMatch": "catalog: fields/audio/components/waveform-player.gts",
+      "provenance": null,
+      "domainKit": null,
+      "owner": null,
+      "workState": null,
+      "notes": null,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../matrix-concept",
+        "name": "MatrixConcept"
+      }
+    }
+  }
+}

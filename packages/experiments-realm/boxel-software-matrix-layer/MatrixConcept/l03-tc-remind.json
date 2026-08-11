@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "layer": "03",
+      "layerName": "Structures",
+      "lane": "Tools & Commands",
+      "concept": "Remind",
+      "symbol": "Re",
+      "implemented": false,
+      "evidenceTier": null,
+      "auditStatus": "Missing",
+      "whereImplemented": null,
+      "reference": null,
+      "catalogMatch": null,
+      "provenance": "periodic:Remind",
+      "domainKit": null,
+      "owner": "richard",
+      "workState": "Blocked",
+      "notes": "v1 \u00b7 BLOCKED on platform, not on effort \u2014 needs (1) an identity concept (same gap as \"my deals\"), (2) a card-reachable scheduler (the only queue is realm-server indexing/prerender), (3) a notification/email channel. All three verified absent. A block named Remind that cannot notify would mislead adopters; the record-only shape is already Activity + a future date. Also blocks Feature 1 set-reminder, Feature 3 bulk reminders, and v1.1 Smart Reminders. See spec Second Review Addendum \u00a79",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../matrix-concept",
+        "name": "MatrixConcept"
+      }
+    }
+  }
+}

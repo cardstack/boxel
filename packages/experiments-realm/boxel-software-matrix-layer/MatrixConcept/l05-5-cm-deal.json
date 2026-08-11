@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "layer": "05.5",
+      "layerName": "Domain Kits",
+      "lane": "Cards & Models",
+      "concept": "Deal",
+      "symbol": "De",
+      "implemented": false,
+      "evidenceTier": "POC realm",
+      "auditStatus": "POC only",
+      "whereImplemented": null,
+      "reference": "experiments: experiments-realm/crm/deal.gts",
+      "catalogMatch": null,
+      "provenance": "periodic:Deal",
+      "domainKit": "Sales & Marketing",
+      "owner": "richard",
+      "workState": "Done",
+      "notes": "v1 \u00b7 Built \u2014 experiments-realm/deal.gts, literal adoption of Opportunity. POC tier",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../matrix-concept",
+        "name": "MatrixConcept"
+      }
+    }
+  }
+}
