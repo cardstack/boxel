@@ -1092,6 +1092,8 @@ export class SpecTag extends GlimmerComponent<SpecTagSignature> {
     {{/if}}
     <style scoped>
       .spec-tag-pill {
+        --boxel-pill-padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
+
         word-break: initial;
         text-transform: uppercase;
       }
