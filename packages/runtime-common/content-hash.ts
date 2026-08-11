@@ -4,6 +4,13 @@ const textEncoder = new TextEncoder();
 
 // Content at or below this size is hashed whole. Above it, the hash samples
 // the head and tail instead — see `computeContentHash`.
+//
+// Invariant: HEAD + TAIL === WHOLE_LIMIT. This is what makes the unhashed
+// middle open at zero width exactly at the threshold and widen from there,
+// instead of a file a byte over the limit suddenly carrying a large hole. It
+// also means the sampled path never costs more than the whole path did at the
+// threshold, so there is no cost cliff in either direction. Retuning any of
+// the three has to preserve it.
 export const CONTENT_HASH_WHOLE_LIMIT_BYTES = 5 * 1024 * 1024; // 5 MB
 export const CONTENT_HASH_HEAD_BYTES = 4 * 1024 * 1024; // 4 MB
 export const CONTENT_HASH_TAIL_BYTES = 1 * 1024 * 1024; // 1 MB
@@ -17,9 +24,15 @@ function toBytes(content: string | Uint8Array): Uint8Array {
   return content instanceof Uint8Array ? content : textEncoder.encode(content);
 }
 
-// A content fingerprint used to tell one file's bytes from another's: it keys
-// the upload dedupe cache, decides whether a thumbnail still matches the file
-// it was rendered from, and serves as a source ETag.
+// A content fingerprint used to tell one file's bytes from another's. Its
+// consumers do not tolerate a false equality equally, so each one states how it
+// treats a sampled value:
+//   - upload dedupe (`FileDefManager`): refuses sampled values outright — a
+//     false match there would attach content the user never picked.
+//   - source ETag (`totalEtagBase` in realm.ts): joins a sampled value with the
+//     file's mtime, restoring a total identity before it can drive a 304.
+//   - thumbnail freshness (`file-view-model`): accepts sampled values; a false
+//     match is a cosmetically stale thumbnail.
 //
 // md5 is linear in content length and runs synchronously on the main thread,
 // so hashing whole files makes a single large write a multi-hundred-millisecond
@@ -30,19 +43,16 @@ function toBytes(content: string | Uint8Array): Uint8Array {
 // with identical ends would not have distinguished cheaply either.
 //
 // Content at or below the limit is hashed whole, so the common case — source,
-// cards, images, anything the source cache ETags — keeps exactly the md5 it
-// has always had, and only files large enough to be expensive change shape.
+// cards, and images, each held under a ceiling at or below this limit — keeps
+// exactly the md5 it has always had, and only files large enough to be
+// expensive change shape.
 export function computeContentHash(content: string | Uint8Array): string {
-  let bytes: Uint8Array;
-  try {
-    bytes = toBytes(content);
-  } catch {
-    try {
-      return md5(String(content));
-    } catch {
-      throw new Error('Failed to compute content hash');
-    }
-  }
+  // No fallback to hashing `content` directly on an encode failure: the only
+  // way to reach that is an allocation failure encoding a string, and hashing
+  // the string whole would be the unbounded synchronous stall this function
+  // exists to bound — in the error path, and under a marker-less value that
+  // would read as a whole-content identity.
+  let bytes = toBytes(content);
   if (bytes.length <= CONTENT_HASH_WHOLE_LIMIT_BYTES) {
     return md5(bytes);
   }

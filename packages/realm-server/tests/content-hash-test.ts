@@ -111,4 +111,47 @@ module(basename(import.meta.filename), function () {
       'tail component covers exactly the last TAIL bytes',
     );
   });
+
+  test('the head and tail together cover exactly the whole-hash limit', function (assert) {
+    // Load-bearing: it makes the unhashed middle open at zero width right at
+    // the threshold rather than appearing as a large hole a byte past it, and
+    // it keeps the sampled path from ever costing more than the whole path did.
+    assert.strictEqual(
+      CONTENT_HASH_HEAD_BYTES + CONTENT_HASH_TAIL_BYTES,
+      CONTENT_HASH_WHOLE_LIMIT_BYTES,
+    );
+  });
+
+  test('the blind spot opens at one byte wide and grows from there', function (assert) {
+    // At one byte over the limit the head covers [0, HEAD) and the tail covers
+    // [HEAD+1, len), so exactly one byte — index HEAD — is unhashed. That the
+    // hole opens at width 1 rather than jumping to something large is the point
+    // of HEAD + TAIL === WHOLE_LIMIT.
+    let len = CONTENT_HASH_WHOLE_LIMIT_BYTES + 1;
+    let base = computeContentHash(bytes(len));
+
+    let flip = (index: number) => {
+      let b = bytes(len);
+      b[index] ^= 0xff;
+      return computeContentHash(b);
+    };
+
+    assert.strictEqual(
+      flip(CONTENT_HASH_HEAD_BYTES),
+      base,
+      'the single middle byte is invisible',
+    );
+    assert.notStrictEqual(
+      flip(CONTENT_HASH_HEAD_BYTES - 1),
+      base,
+      'the last byte of the head is covered',
+    );
+    assert.notStrictEqual(
+      flip(CONTENT_HASH_HEAD_BYTES + 1),
+      base,
+      'the first byte of the tail is covered',
+    );
+    assert.notStrictEqual(flip(0), base, 'the first byte is covered');
+    assert.notStrictEqual(flip(len - 1), base, 'the last byte is covered');
+  });
 });

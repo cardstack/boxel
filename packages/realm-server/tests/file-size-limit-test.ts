@@ -117,4 +117,17 @@ module(basename(import.meta.filename), function () {
       DEFAULT_VIDEO_SIZE_LIMIT_BYTES > DEFAULT_AUDIO_SIZE_LIMIT_BYTES,
     );
   });
+
+  test('a non-finite media limit degrades to the general ceiling', function (assert) {
+    // `Number(process.env.AUDIO_SIZE_LIMIT_BYTES)` yields NaN for a value like
+    // "20MB". Math.max would propagate it, and `size > NaN` is false, so the
+    // floor would silently become no ceiling at all.
+    let typoed = { default: 100, audio: NaN, video: NaN };
+    assert.strictEqual(fileSizeLimitFor('theme.mp3', typoed), 100);
+    assert.strictEqual(fileSizeLimitFor('intro.mp4', typoed), 100);
+
+    let infinite = { default: 100, audio: Infinity, video: Infinity };
+    assert.strictEqual(fileSizeLimitFor('theme.mp3', infinite), 100);
+    assert.strictEqual(fileSizeLimitFor('intro.mp4', infinite), 100);
+  });
 });

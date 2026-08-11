@@ -8,6 +8,7 @@ import {
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   codeRefWithAbsoluteIdentifier,
   computeContentHash,
+  isSampledContentHash,
   getClass,
   getToolDefinitions,
   inferContentType,
@@ -176,6 +177,15 @@ export default class FileDefManagerImpl
     content: string | Uint8Array,
   ): Promise<string | null> {
     const hash = await this.getContentHash(content);
+    // A sampled fingerprint is not a total identity of the content, so it
+    // cannot answer "these are the same bytes" — and this cache acts on that
+    // answer by skipping the upload and handing back the earlier file's URL.
+    // A false match would therefore attach content the user never picked, with
+    // nothing surfacing the substitution. A miss only costs one redundant
+    // upload, so large media re-uploads rather than risk it.
+    if (isSampledContentHash(hash)) {
+      return null;
+    }
     let cachedUrl = this.contentHashCache.get(hash) || null;
     if (cachedUrl && !this.isMatrixMediaUrl(cachedUrl)) {
       // Self-heal stale/poisoned cache entries so uploads always produce
@@ -204,9 +214,12 @@ export default class FileDefManagerImpl
       throw new Error('Failed to convert mxcUrl to http');
     }
 
-    // Cache the content hash and URL
+    // Only a whole-content fingerprint may key this cache; see
+    // getCachedUrlForContent.
     const hash = await this.getContentHash(content);
-    this.contentHashCache.set(hash, url);
+    if (!isSampledContentHash(hash)) {
+      this.contentHashCache.set(hash, url);
+    }
 
     return url;
   }
@@ -258,6 +271,11 @@ export default class FileDefManagerImpl
   // other non-Matrix URLs are skipped to prevent cache poisoning.
   async recacheContentHash(contentHash: string, url: string) {
     if (!this.isMatrixMediaUrl(url)) {
+      return;
+    }
+    // Same rule as the upload path: only a whole-content fingerprint is a
+    // safe key for content-addressed reuse.
+    if (isSampledContentHash(contentHash)) {
       return;
     }
     const canonicalKey = canonicalizeMatrixMediaKey(url) || url;

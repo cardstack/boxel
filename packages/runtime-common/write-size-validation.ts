@@ -28,12 +28,23 @@ export interface FileSizeLimits {
 export function fileSizeLimitFor(path: string, limits: FileSizeLimits): number {
   let contentType = inferContentType(path.split(/[?#]/)[0]);
   if (contentType.startsWith('audio/')) {
-    return Math.max(limits.default, limits.audio);
+    return floorOverDefault(limits.default, limits.audio);
   }
   if (contentType.startsWith('video/')) {
-    return Math.max(limits.default, limits.video);
+    return floorOverDefault(limits.default, limits.video);
   }
   return limits.default;
+}
+
+// A media limit that isn't a finite number degrades to the general ceiling,
+// which is what the floor semantics promise. `Math.max` alone would propagate
+// `NaN` — and since `size > NaN` is false, the floor would silently become no
+// ceiling at all. A mis-parsed limit therefore rejects oversized media (and
+// gets noticed) rather than accepting everything (and not).
+function floorOverDefault(defaultLimit: number, mediaLimit: number): number {
+  return Number.isFinite(mediaLimit)
+    ? Math.max(defaultLimit, mediaLimit)
+    : defaultLimit;
 }
 
 export function validateWriteSize(

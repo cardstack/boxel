@@ -189,7 +189,7 @@ import {
   fileSizeLimitFor,
   validateWriteSize,
 } from './write-size-validation.ts';
-import { computeContentHash } from './content-hash.ts';
+import { computeContentHash, isSampledContentHash } from './content-hash.ts';
 import { resolveFileDefCodeRef } from './file-def-code-ref.ts';
 
 import type { Utils } from './matrix-backend-authentication.ts';
@@ -514,6 +514,31 @@ type ModuleTranspileResult = {
 // cache entry so subsequent serves reuse it. Adapters that don't yet
 // surface a content fingerprint fall back to `lastModified` and keep the
 // pre-existing behavior.
+//
+// An `etagBase` must be a TOTAL identity of the body, because displacing
+// `lastModified` gives up the only signal that sees every write. A sampled
+// fingerprint (see `computeContentHash`) is not total — it cannot see a large
+// file's middle — so it is joined with `lastModified` rather than replacing
+// it: the hash resolves two writes inside one second, and the timestamp
+// covers a same-length middle-only edit the hash misses. An mtime-only touch
+// then busts the cache, which is the safe direction and already how every
+// file without a fingerprint behaves.
+// Joins a sampled fingerprint with the file's mtime so the ETag base is a
+// total identity again. Returns a whole fingerprint unchanged, and undefined
+// when there is none (the caller then falls back to mtime alone).
+function totalEtagBase(
+  etagBase: string | undefined,
+  lastModified: number | undefined,
+): string | undefined {
+  if (etagBase == null) {
+    return undefined;
+  }
+  if (lastModified == null || !isSampledContentHash(etagBase)) {
+    return etagBase;
+  }
+  return `${etagBase}:${lastModified}`;
+}
+
 function buildEtag(
   base: string | number | undefined,
   variant?: string,
@@ -3913,7 +3938,7 @@ export class Realm {
       ? `${cacheVisibility}, max-age=60, must-revalidate`
       : `${cacheVisibility}, max-age=0`;
     let etag = buildEtag(
-      options?.etagBase ?? ref.lastModified,
+      totalEtagBase(options?.etagBase, ref.lastModified) ?? ref.lastModified,
       options?.etagVariant,
     );
     let lastModified = formatRFC7231(ref.lastModified * 1000);
