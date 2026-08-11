@@ -17,13 +17,14 @@
       "domainKit": "Sales & Marketing",
       "owner": "richard",
       "workState": "Done",
-      "notes": "v1 \u00b7 Built \u2014 experiments-realm/deal.gts, literal adoption of Opportunity. POC tier",
+      "notes": "v1 · Built — experiments-realm/deal.gts, literal adoption of Opportunity. POC tier",
       "cardInfo": {
         "name": null,
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      }
+      },
+      "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/deal"
     },
     "meta": {
       "adoptsFrom": {

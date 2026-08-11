@@ -17,13 +17,14 @@
       "domainKit": "Sales & Marketing",
       "owner": "richard",
       "workState": "Done",
-      "notes": "v1 \u00b7 Built \u2014 experiments-realm/lead.gts, POC tier. Existing POC evidence is the old crm/ demo card, not this block",
+      "notes": "v1 · Built — experiments-realm/lead.gts, POC tier. Existing POC evidence is the old crm/ demo card, not this block",
       "cardInfo": {
         "name": null,
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      }
+      },
+      "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/lead"
     },
     "meta": {
       "adoptsFrom": {

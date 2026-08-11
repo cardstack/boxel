@@ -17,13 +17,14 @@
       "domainKit": null,
       "owner": "richard",
       "workState": "Done",
-      "notes": "v1.1 \u00b7 Built \u2014 experiments-realm/classify.gts on OneShotLlmRequestCommand; generic criteria+facts\u2192label/score/rationale contract; Revenue OS supplies lead-scoring criteria and writes Lead.score from a Score button in the Leads tab. POC tier",
+      "notes": "v1.1 · Built — experiments-realm/classify.gts on OneShotLlmRequestCommand; generic criteria+facts→label/score/rationale contract; Revenue OS supplies lead-scoring criteria and writes Lead.score from a Score button in the Leads tab. POC tier",
       "cardInfo": {
         "name": null,
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      }
+      },
+      "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/classify"
     },
     "meta": {
       "adoptsFrom": {

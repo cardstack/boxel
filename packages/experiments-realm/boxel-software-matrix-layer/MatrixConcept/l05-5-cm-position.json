@@ -23,7 +23,8 @@
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      }
+      },
+      "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/0e80d79f-27ee-441f-8f79-439798466e4d"
     },
     "meta": {
       "adoptsFrom": {
