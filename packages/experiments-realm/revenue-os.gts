@@ -29,6 +29,7 @@ import PatchCardInstanceCommand from '@cardstack/boxel-host/commands/patch-card-
 import ChartAreaIcon from '@cardstack/boxel-icons/chart-area';
 import { Board, type BoardColumn } from './board';
 import { Table, type TableColumn } from './table';
+import { ExportButton, type ExportColumn } from './export';
 import { LineChart, type ChartPoint } from './line-chart';
 import { AccountMetrics } from './account-metrics';
 import { Opportunity, PIPELINE_STAGES, STAGE_COLORS } from './opportunity';
@@ -536,7 +537,7 @@ export class RevenueOs extends CardDef {
         key: 'status',
         label: 'Status',
         custom: true,
-        value: (item) => (item as Invoice).status,
+        value: (item) => (item as Invoice).displayStatus,
       },
       {
         key: 'due',
@@ -565,6 +566,26 @@ export class RevenueOs extends CardDef {
         value: () => '',
       },
     ];
+
+    // The Table's own column definitions carry the CSV — same columns, same
+    // labels — except money, which exports as a raw number so the column sums.
+    get exportColumns(): ExportColumn[] {
+      return this.invoiceColumns
+        .filter((c) => c.key !== 'actions')
+        .map((c) =>
+          c.key === 'amount'
+            ? {
+                ...c,
+                exportValue: (item: CardDef) =>
+                  sumLineItems((item as Invoice).lineItems).total,
+              }
+            : c,
+        );
+    }
+
+    get exportFilename(): string {
+      return `invoices-${this.invoiceFilter}`;
+    }
 
     get filteredInvoices(): Invoice[] {
       let f = this.invoiceFilter;
@@ -1018,11 +1039,18 @@ export class RevenueOs extends CardDef {
           <section class='pane'>
             <div class='pane-head'>
               <h2>Invoices</h2>
-              <BoxelButton
-                @kind='secondary'
-                @size='extra-small'
-                {{on 'click' this.newInvoice}}
-              >New invoice</BoxelButton>
+              <span class='row-actions'>
+                <ExportButton
+                  @rows={{this.filteredInvoices}}
+                  @columns={{this.exportColumns}}
+                  @filename={{this.exportFilename}}
+                />
+                <BoxelButton
+                  @kind='secondary'
+                  @size='extra-small'
+                  {{on 'click' this.newInvoice}}
+                >New invoice</BoxelButton>
+              </span>
             </div>
             <div class='aging-strip'>
               {{#each this.aging as |bucket|}}
