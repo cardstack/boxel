@@ -33,6 +33,10 @@ export class Subscription extends CardDef {
   @field billingCycle = contains(BillingCycleField);
   @field startDate = contains(DateField);
   @field status = contains(SubscriptionStatusField);
+  // Written whenever status becomes canceled. Without it a cancellation is
+  // undated, and any history recomputed from these records silently rewrites
+  // itself every time a customer churns.
+  @field canceledAt = contains(DateField);
 
   @field renewalDate = contains(DateField, {
     computeVia: function (this: Subscription) {

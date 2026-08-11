@@ -364,6 +364,19 @@ export class RevenueOs extends CardDef {
       };
     }
 
+    // A subscription earned in a past month if it had started by then and had
+    // not been cancelled by then. Reading today's status alone would erase a
+    // churned subscription from the months it was live, which makes the series
+    // incapable of ever declining — the one thing an MRR trend exists to show.
+    private earnedIn(s: Subscription, at: Date): boolean {
+      if (!s.startDate || new Date(s.startDate) > at) return false;
+      if (s.status === 'canceled') {
+        // An undated cancellation is unknowable, so don't claim the revenue.
+        return s.canceledAt ? new Date(s.canceledAt) > at : false;
+      }
+      return ['active', 'trial'].includes(s.status ?? '');
+    }
+
     get mrrTrend(): ChartPoint[] {
       let now = new Date();
       let months: ChartPoint[] = [];
@@ -371,8 +384,7 @@ export class RevenueOs extends CardDef {
         let at = new Date(now.getFullYear(), now.getMonth() - back + 1, 0);
         let mrr = 0;
         for (let s of this.subscriptions) {
-          if (!['active', 'trial'].includes(s.status ?? '')) continue;
-          if (!s.startDate || new Date(s.startDate) > at) continue;
+          if (!this.earnedIn(s, at)) continue;
           let p = s.price?.amount ?? 0;
           mrr += s.billingCycle === 'yearly' ? p / 12 : p;
         }
