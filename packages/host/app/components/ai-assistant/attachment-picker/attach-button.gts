@@ -128,7 +128,7 @@ export default class AttachButton extends Component<Signature> {
   }
 
   @action
-  handleSelection(option: string) {
+  handleSelection(option: string | null) {
     if (option === 'Attach a Card') {
       this.onAttachCard();
     } else if (option === 'Attach a File (Workspace)') {

@@ -24,6 +24,7 @@ import {
   waitForReady as waitForReadyOperation,
   type RealmClient,
   type RealmIdentifier,
+  type RealmIndexCounts,
   type RealmInfo,
   type JWTPayload,
 } from '@cardstack/runtime-common';
@@ -162,6 +163,14 @@ export default class RealmServerService extends Service {
     // for the rest of the page's life after a re-login.
     this._ready = new Deferred<void>();
     this._ready.fulfill();
+  }
+
+  // Whether a matrix client has been handed to this service yet. Until it
+  // has, `login()` (and everything that needs a realm-server session) cannot
+  // succeed, so pre-login callers can check this instead of attempting a
+  // doomed login.
+  get hasClient(): boolean {
+    return Boolean(this.client);
   }
 
   setClient(client: ExtendedClient) {
@@ -781,6 +790,49 @@ export default class RealmServerService extends Service {
     return { data: json.data ?? [], publicReadableRealms };
   }
 
+  // Cards / files / definitions per realm, for the workspace chooser's favorite
+  // tiles. Deliberately separate from `fetchRealmInfos`: the counts are an
+  // aggregate over every index row in a realm, and only a favorited realm's
+  // tile renders them, so callers ask for the handful they need instead of
+  // paying it for every realm at boot.
+  async fetchRealmIndexCounts(
+    realmUrls: string[],
+  ): Promise<{ id: string; attributes: RealmIndexCounts }[]> {
+    if (realmUrls.length === 0) {
+      return [];
+    }
+
+    let uniqueRealmUrls = Array.from(new Set(realmUrls));
+    let realmServerURLs = this.getRealmServersForRealms(uniqueRealmUrls);
+    // TODO remove this assertion after multi-realm server/federated identity is supported
+    this.assertOwnRealmServer(realmServerURLs);
+    let [realmServerURL] = realmServerURLs;
+
+    await this.login();
+
+    let countsURL = new URL('_federated-index-counts', realmServerURL);
+    let response = await this.authedFetch(countsURL.href, {
+      method: 'QUERY',
+      headers: {
+        Accept: SupportedMimeType.JSONAPI,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ realms: uniqueRealmUrls }),
+    });
+
+    if (!response.ok) {
+      let responseText = await response.text();
+      throw new Error(
+        `Failed to fetch realm index counts: ${response.status} - ${responseText}`,
+      );
+    }
+
+    let json = (await response.json()) as {
+      data: { id: string; attributes: RealmIndexCounts }[];
+    };
+    return json.data ?? [];
+  }
+
   async fetchCardTypeSummaries(
     realmUrls: string[],
     options?: {
@@ -991,10 +1043,14 @@ export default class RealmServerService extends Service {
   }
 
   private loginTask = task(async () => {
-    if (!this.client) {
-      throw new Error(`Cannot login to realm server without matrix client`);
-    }
+    // `loggingIn` must be cleared on every exit — including the no-client
+    // throw — or each later `login()` call awaits this already-rejected
+    // instance instead of performing a fresh attempt, and login stays broken
+    // even once the client exists.
     try {
+      if (!this.client) {
+        throw new Error(`Cannot login to realm server without matrix client`);
+      }
       let realmAuthClient = new RealmAuthClient(
         this.url,
         this.client,
@@ -1008,6 +1064,12 @@ export default class RealmServerService extends Service {
       let token = await realmAuthClient.getJWT();
       this.token = token;
     } catch (e: any) {
+      if (!this.client) {
+        // Precondition failure rather than an auth failure: the caller ran
+        // ahead of `setClient`. Propagate it so the caller hears about it —
+        // there is no session to fall back to.
+        throw e;
+      }
       console.error(
         `RealmServerService - failed to login to realm: ${e.message}`,
         e,

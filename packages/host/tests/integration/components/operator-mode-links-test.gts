@@ -22,7 +22,9 @@ import { setupOperatorModeTests } from './operator-mode/setup';
 import type { TestContextWithSave } from '../../helpers';
 
 module('Integration | operator-mode | links', function (hooks) {
-  let ctx = setupOperatorModeTests(hooks);
+  let ctx = setupOperatorModeTests(hooks, {
+    reuseIndexAcrossTests: 'operatorModeLinks',
+  });
 
   let noop = () => {};
 

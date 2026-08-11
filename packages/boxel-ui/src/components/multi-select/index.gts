@@ -2,49 +2,48 @@ import 'ember-power-select/styles';
 
 import Component from '@glimmer/component';
 import type { ComponentLike } from '@glint/template';
-import type {
-  PowerSelectArgs,
-  Select,
-} from 'ember-power-select/components/power-select';
+import type { PowerSelectArgs } from 'ember-power-select/components/power-select';
 import PowerSelect from 'ember-power-select/components/power-select';
 import BeforeOptions from 'ember-power-select/components/power-select/before-options';
+import type {
+  Option,
+  PowerSelectAfterOptionsSignature,
+  PowerSelectSelectedItemSignature,
+  Select,
+} from 'ember-power-select/types';
 
 import { cn, not } from '../../helpers.gts';
 import { BoxelAfterOptionsComponent } from './after-options.gts';
-import BoxelSelectedItem, {
-  type SelectedItemSignature,
-} from './selected-item.gts';
-import BoxelMultiSelectDefaultTrigger, {
-  type TriggerComponentSignature,
-} from './trigger.gts';
+import BoxelSelectedItem from './selected-item.gts';
+import BoxelMultiSelectDefaultTrigger from './trigger.gts';
 
-export interface BoxelMultiSelectArgs<ItemT> extends PowerSelectArgs {
-  afterOptionsComponent?: ComponentLike<any>;
-  ariaLabel?: string;
-  beforeOptionsComponent?: ComponentLike<any>;
-  closeOnSelect?: boolean;
-  destination?: string;
-  disabled?: boolean;
-  dropdownClass?: string;
-  extra?: any;
-  matchTriggerWidth?: boolean;
-  onBlur?: (select: Select, e: Event) => boolean | undefined;
-  onClose?: (select: Select, e: Event) => boolean | undefined;
-  onOpen?: (select: Select, e: Event) => boolean | undefined;
-  options: ItemT[];
-  placeholder?: string;
-  renderInPlace?: boolean;
-  searchEnabled?: boolean;
-  searchField?: string;
-  selected: ItemT[];
-  selectedItemComponent?: ComponentLike<SelectedItemSignature<ItemT>>;
-  triggerComponent?: ComponentLike<TriggerComponentSignature<ItemT>>;
+// The default subcomponents are generic classes whose inferred ComponentLike
+// shapes glint cannot match against power-select's expected unions; their
+// signatures are structurally compatible (verified by the suite), so pin
+// them to the expected member types once here.
+const DefaultAfterOptions =
+  BoxelAfterOptionsComponent as unknown as ComponentLike<
+    PowerSelectAfterOptionsSignature<any, any, true>
+  >;
+
+const DefaultSelectedItem = BoxelSelectedItem as unknown as ComponentLike<
+  PowerSelectSelectedItemSignature<any, any, true>
+>;
+
+// Everything else is inherited from ember-power-select's own args;
+// options/selected are re-declared only to make them required.
+export interface BoxelMultiSelectArgs<ItemT> extends PowerSelectArgs<
+  ItemT,
+  true
+> {
+  options: NonNullable<PowerSelectArgs<ItemT, true>['options']>;
+  selected: NonNullable<PowerSelectArgs<ItemT, true>['selected']>;
 }
 
 export interface Signature<ItemT> {
   Args: BoxelMultiSelectArgs<ItemT>;
   Blocks: {
-    default: [any, Select];
+    default: [Option<ItemT>, Select<ItemT, true>];
   };
   Element: HTMLElement;
 }
@@ -100,8 +99,8 @@ export class BoxelMultiSelectBasic<ItemT> extends Component<Signature<ItemT>> {
       @afterOptionsComponent={{@afterOptionsComponent}}
       @beforeOptionsComponent={{if
         @beforeOptionsComponent
-        (component @beforeOptionsComponent)
-        (component BeforeOptions)
+        @beforeOptionsComponent
+        BeforeOptions
       }}
       ...attributes
       as |option select|
@@ -216,11 +215,11 @@ export default class BoxelMultiSelect<ItemT> extends Component<
       @selectedItemComponent={{if
         @selectedItemComponent
         @selectedItemComponent
-        (component BoxelSelectedItem)
+        DefaultSelectedItem
       }}
-      @triggerComponent={{component BoxelMultiSelectDefaultTrigger}}
-      @beforeOptionsComponent={{component BeforeOptions}}
-      @afterOptionsComponent={{component BoxelAfterOptionsComponent}}
+      @triggerComponent={{BoxelMultiSelectDefaultTrigger}}
+      @beforeOptionsComponent={{BeforeOptions}}
+      @afterOptionsComponent={{DefaultAfterOptions}}
       ...attributes
       as |option select|
     >

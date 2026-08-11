@@ -275,6 +275,57 @@ export const testRealmInfo = {
   includePrerenderedDefaultRealmIndex: null,
 };
 
+import {
+  realmInfoExtraKeys,
+  withoutRealmInfoExtras,
+} from '@cardstack/runtime-common/helpers/const';
+export { realmInfoExtraKeys, withoutRealmInfoExtras };
+
+// Asserts the realm-lifecycle timestamps `/_federated-info` adds on top of the
+// plain RealmInfo. Their values move with wall-clock time, so this checks
+// presence and parseability rather than exact values.
+export function assertRealmInfoExtras(
+  assert: Assert,
+  attributes: Record<string, unknown>,
+  label = '_federated-info',
+): void {
+  for (let key of realmInfoExtraKeys) {
+    let value = attributes[key];
+    assert.ok(key in attributes, `${label} includes ${key}`);
+    assert.ok(
+      value === null ||
+        (typeof value === 'string' && !Number.isNaN(Date.parse(value))),
+      `${label} ${key} is null or a parseable timestamp, got ${JSON.stringify(value)}`,
+    );
+  }
+}
+
+// Asserts a `/_federated-index-counts` attributes payload. Each count is either
+// null (index tables unavailable) or a non-negative integer; pass `expected` to
+// pin specific values.
+export function assertRealmIndexCounts(
+  assert: Assert,
+  attributes: Record<string, unknown>,
+  expected: {
+    cardCount?: number;
+    fileCount?: number;
+    definitionCount?: number;
+  } = {},
+): void {
+  for (let key of ['cardCount', 'fileCount', 'definitionCount'] as const) {
+    if (expected[key] !== undefined) {
+      assert.strictEqual(attributes[key], expected[key], `${key}`);
+      continue;
+    }
+    let value = attributes[key];
+    assert.ok(
+      value === null ||
+        (typeof value === 'number' && Number.isInteger(value) && value >= 0),
+      `${key} is null or a non-negative integer, got ${JSON.stringify(value)}`,
+    );
+  }
+}
+
 export const realmServerTestMatrix: MatrixConfig = {
   url: matrixURL,
   username: 'node-test_realm-server',

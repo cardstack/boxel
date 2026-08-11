@@ -90,6 +90,7 @@ export default class Menu extends Component<Signature> {
                   type='button'
                   class='boxel-menu__item__content'
                   role='menuitem'
+                  data-menu-item-id={{menuItem.id}}
                   data-test-boxel-menu-item-text={{menuItem.label}}
                   {{on 'click' (fn this.invokeMenuItemAction menuItem.action)}}
                   disabled={{menuItem.disabled}}

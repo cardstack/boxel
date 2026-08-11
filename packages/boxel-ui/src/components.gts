@@ -82,7 +82,13 @@ import ResizablePanelGroup, {
   ResizablePanel,
   ResizeHandle,
 } from './components/resizable-panel-group/index.gts';
-import BoxelSelect from './components/select/index.gts';
+import BoxelSelect, {
+  toAfterOptionsComponent,
+  toBeforeOptionsComponent,
+  toMultiSelectTriggerComponent,
+  toSelectedItemComponent,
+  toTriggerComponent,
+} from './components/select/index.gts';
 import SelectionCheckmark from './components/selection-checkmark/index.gts';
 import SelectionMenu from './components/selection-menu/index.gts';
 import SkeletonPlaceholder from './components/skeleton-placeholder/index.gts';
@@ -193,6 +199,11 @@ export {
   Switch,
   TabbedHeader,
   TagList,
+  toAfterOptionsComponent,
+  toBeforeOptionsComponent,
+  toMultiSelectTriggerComponent,
   Tooltip,
+  toSelectedItemComponent,
+  toTriggerComponent,
   ViewSelector,
 };

@@ -4,7 +4,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import type { ComponentLike } from '@glint/template';
 import { modifier } from 'ember-modifier';
-import type { Select } from 'ember-power-select/components/power-select';
+import type { Select } from 'ember-power-select/types';
 
 import type { Icon } from '../../icons/types.ts';
 import LoadingIndicator from '../loading-indicator/index.gts';
@@ -131,28 +131,29 @@ class PickerLoadingOverlay extends Component<PickerAfterOptionsSignature> {
   </template>
 }
 
+// Exported for direct testing: throwing from a component constructor
+// aborts the glimmer render mid-flight, which cannot be exercised safely
+// from a rendering test.
+export function validateSelectAllOption(options: PickerOption[]): void {
+  const hasSelectAll = options.some((option) => option.type === 'select-all');
+  if (!hasSelectAll) {
+    throw new Error(
+      'Picker requires a select-all option in @options (type: "select-all").',
+    );
+  }
+}
+
 export default class Picker extends Component<PickerSignature> {
   @tracked searchTerm = '';
 
   constructor(owner: Owner, args: PickerSignature['Args']) {
     super(owner, args);
-    this.validateSelectAllOption();
+    validateSelectAllOption(this.args.options);
     scheduleOnce('afterRender', this, this.ensureDefaultSelection);
   }
 
   get renderInPlace() {
     return this.args.renderInPlace ?? true;
-  }
-
-  private validateSelectAllOption() {
-    const hasSelectAll = this.args.options.some(
-      (option) => option.type === 'select-all',
-    );
-    if (!hasSelectAll) {
-      throw new Error(
-        'Picker requires a select-all option in @options (type: "select-all").',
-      );
-    }
   }
 
   private ensureDefaultSelection() {

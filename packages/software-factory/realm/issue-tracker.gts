@@ -1989,10 +1989,15 @@ class ProjectEdit extends Component<typeof Project> {
     return defaultColumns.map((col) => ({ key: col.key, value: col.label }));
   }
 
-  changeSelectedIssueConfig = (option: {
-    key: string;
-    value: string;
-  }): void => {
+  changeSelectedIssueConfig = (
+    option: {
+      key: string;
+      value: string;
+    } | null,
+  ): void => {
+    if (!option) {
+      return;
+    }
     this.selectedIssueConfig = option;
   };
 
@@ -2741,7 +2746,10 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
     return defaultColumns.find((d) => d.key === this.activeGroupBy);
   }
 
-  updateGroupBy = (dim: Column): void => {
+  updateGroupBy = (dim: Column | null): void => {
+    if (!dim) {
+      return;
+    }
     this.args.model.groupBy = dim.key;
     this.args.model.columns = [];
     this.uncategorizedCollapsed = false;

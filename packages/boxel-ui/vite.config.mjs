@@ -1,4 +1,4 @@
-import { classicEmberSupport, ember, extensions } from '@embroider/vite';
+import { ember, extensions } from '@embroider/vite';
 import { babel } from '@rollup/plugin-babel';
 import { scopedCSS } from 'glimmer-scoped-css/rollup';
 import { defineConfig } from 'vite';
@@ -9,10 +9,6 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   plugins: [
     scopedCSS(),
-    // Several dependencies still ship loose-mode templates (e.g.
-    // ember-power-calendar); the compat pipeline resolves the virtual
-    // imports their compilation produces.
-    classicEmberSupport(),
     ember(),
     babel({
       babelHelpers: 'runtime',
