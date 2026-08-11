@@ -190,7 +190,27 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
   // A `contains` FieldDef is always an instance, so presence has to mean "has
   // at least one meaningful value" rather than "is not null".
   get hasExif() {
-    return Boolean(this.args.model?.exif);
+    let e = this.args.model?.exif;
+    return Boolean(
+      e?.capture?.cameraName ||
+      e?.capture?.lensModel ||
+      e?.capture?.iso ||
+      e?.capture?.exposureTime?.display ||
+      e?.capture?.capturedAt ||
+      e?.location?.coordinates ||
+      e?.location?.place,
+    );
+  }
+
+  get hasColorProfile() {
+    let c = this.args.model?.colorProfile;
+    return Boolean(
+      c?.colorSpace?.code ||
+      c?.bitDepth ||
+      c?.channels ||
+      c?.iccProfile ||
+      c?.hasAlpha != null,
+    );
   }
 
   get hasEncoding() {
@@ -491,6 +511,10 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
           {{#if this.hasExif}}
             <h2 class='insp-group'>EXIF metadata</h2>
             <div class='insp-family'><@fields.exif /></div>
+          {{/if}}
+          {{#if this.hasColorProfile}}
+            <h2 class='insp-group'>Color profile</h2>
+            <div class='insp-family'><@fields.colorProfile /></div>
           {{/if}}
           {{#if this.hasEncoding}}
             <h2 class='insp-group'>Encoding</h2>
