@@ -119,6 +119,7 @@ export class ApproveOfferCommand extends Command<
       }
     } catch (err) {
       // Silently fail if template creation doesn't work — don't block the hire
+      // eslint-disable-next-line no-console
       console.error(
         'Failed to create onboarding checklist:',
         err instanceof Error ? err.message : String(err),

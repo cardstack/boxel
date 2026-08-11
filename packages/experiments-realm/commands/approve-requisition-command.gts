@@ -3,6 +3,7 @@ import {
   field,
   contains,
   linksTo,
+  realmURL,
   StringField,
   BooleanField,
 } from '@cardstack/base/card-api';
@@ -13,7 +14,7 @@ import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
 
 import { JobRequisition } from '../job-requisition';
 import { Position } from '../position';
-import { ApprovalChainStepCommand } from './approve-chain-step-command';
+import { ApproveChainStepCommand } from './approve-chain-step-command';
 
 class ApproveRequisitionInput extends CardDef {
   @field requisition = linksTo(() => JobRequisition, { searchable: true });

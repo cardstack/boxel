@@ -6,7 +6,6 @@ import {
   StringField,
 } from '@cardstack/base/card-api';
 import NumberField from '@cardstack/base/number';
-import TextAreaField from '@cardstack/base/text-area';
 import { Command } from '@cardstack/runtime-common';
 import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
 
