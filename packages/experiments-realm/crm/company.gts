@@ -10,7 +10,7 @@ import {
   linksTo,
 } from '@cardstack/base/card-api';
 
-import { CrmApp } from '../crm-app';
+import { CrmApp } from './app';
 import {
   EntityDisplayWithIcon,
   FieldContainer,

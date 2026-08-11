@@ -6,7 +6,7 @@
       "cardDescription": "Spec for CRM App",
       "specType": "app",
       "ref": {
-        "module": "../crm-app",
+        "module": "../crm/app",
         "name": "CrmApp"
       }
     },

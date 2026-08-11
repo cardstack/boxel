@@ -6,7 +6,7 @@
       "cardDescription": "Spec for AppCard",
       "specType": "app",
       "ref": {
-        "module": "../app-card",
+        "module": "../library/app-card",
         "name": "AppCard"
       }
     },

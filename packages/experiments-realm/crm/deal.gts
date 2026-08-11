@@ -32,7 +32,7 @@ import { on } from '@ember/modifier';
 import { Account } from './account';
 import { Company } from './company';
 import { Contact } from './contact';
-import { CrmApp } from '../crm-app';
+import { CrmApp } from './app';
 import { DealEvent } from './deal-event';
 import { DealPriority } from './deal-priority';
 import { DealStatus } from './deal-status';
@@ -69,7 +69,7 @@ interface DealSizeSummary {
   positive: boolean;
 }
 
-const taskSource = codeRef(here, './task', 'CRMTask');
+const taskSource = codeRef(here, 'experiments/library/task', 'CRMTask');
 
 class EditTemplate extends Component<typeof Deal> {
   <template>

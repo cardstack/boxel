@@ -14,8 +14,8 @@ import { codeRef } from '@cardstack/runtime-common';
 const here: string = import.meta.url;
 import type { Query, Filter } from '@cardstack/runtime-common/query';
 import { DndItem } from '@cardstack/boxel-ui/components';
-import { AppCard } from '../app-card';
-import { CRMTask } from './task';
+import { AppCard } from 'experiments/library/app-card';
+import { CRMTask } from 'experiments/library/task';
 
 export type TaskSortBy = 'dueDate' | 'priority';
 export type TaskSortOrder = 'asc' | 'desc';
@@ -267,14 +267,14 @@ export class CRMTaskPlanner extends GlimmerComponent<CRMTaskPlannerArgs> {
         orderBy: this.getOrderBy(),
       },
       taskSource: {
-        ...codeRef(here, './task', 'CRMTask'),
+        ...codeRef(here, 'experiments/library/task', 'CRMTask'),
         getQuery: () => this.getTaskQuery,
       },
       filters: {
         status: {
           searchKey: 'label',
           label: 'Status',
-          codeRef: codeRef(here, './task', 'Status'),
+          codeRef: codeRef(here, 'experiments/library/task', 'Status'),
           options: () => CRMTaskStatusField.values,
         },
         assignee: {

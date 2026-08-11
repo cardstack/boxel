@@ -17,13 +17,13 @@ import {
 import CheckboxIcon from '@cardstack/boxel-icons/checkbox';
 import Calendar from '@cardstack/boxel-icons/calendar';
 
-import { CrmApp } from '../crm-app';
+import { CrmApp } from './app';
 import { Contact } from './contact';
 import { Account } from './account';
 import { Deal } from './deal';
 import { Representative } from './representative';
 
-import { Task, getDueDateStatus, TaskCompletionStatus } from '../task';
+import { Task, getDueDateStatus, TaskCompletionStatus } from 'experiments/library/task';
 import { CRMTaskStatusField } from './shared';
 
 export class Issues extends CardDef {

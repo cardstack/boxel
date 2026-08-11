@@ -22,7 +22,7 @@ import Email from '@cardstack/boxel-icons/mail';
 import Linkedin from '@cardstack/boxel-icons/linkedin';
 import XIcon from '@cardstack/boxel-icons/brand-x';
 
-import { CrmApp } from '../crm-app';
+import { CrmApp } from './app';
 import { Company } from './company';
 import { StatusTagField } from './contact-status-tag';
 

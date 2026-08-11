@@ -35,7 +35,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../task",
+        "module": "../library/task",
         "name": "Task"
       }
     }

@@ -10,7 +10,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../todo",
+        "module": "../library/todo",
         "name": "Todo"
       }
     }

@@ -1,0 +1,17 @@
+{
+  "deck": {
+    "publisher": "experiments",
+    "packages": {
+      "library": {
+        "version": "1.1.0",
+        "exports": {
+          "./app-card": "$DECK/app-card.gts",
+          "./tag": "$DECK/tag.gts",
+          "./task": "$DECK/task.gts",
+          "./todo": "$DECK/todo.gts",
+          "./user": "$DECK/user.gts"
+        }
+      }
+    }
+  }
+}

@@ -6,7 +6,7 @@
       "cardDescription": "Spec for Todo",
       "ref": {
         "name": "Todo",
-        "module": "../todo"
+        "module": "../library/todo"
       },
       "specType": "card"
     },

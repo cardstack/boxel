@@ -4,7 +4,7 @@ import CalendarMonth from '@cardstack/boxel-icons/calendar-month';
 import ChevronsUp from '@cardstack/boxel-icons/chevrons-up';
 import UserQuestion from '@cardstack/boxel-icons/user-question';
 
-import { TaskStatusField } from '../task';
+import { TaskStatusField } from 'experiments/library/task';
 
 export const taskStatusValues = [
   {

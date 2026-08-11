@@ -399,6 +399,59 @@ function resolveSibling(fromPath: string, specifier: string): string {
 }
 
 /**
+ * Relative imports that stay inside the pack and point at nothing.
+ *
+ * THE SIBLING OF `findEscapingImports`, and the one that was missing. An
+ * import climbing out of the pack is obvious in the text — it starts with
+ * `..`. An import that stays inside and names a file that is not there looks
+ * completely ordinary:
+ *
+ *     // in crm/app.gts, which used to live one directory up
+ *     import { taskStatusValues } from './crm/shared';
+ *
+ * Read from the realm root that was right. Read from inside the package it is
+ * `crm/shared` relative to a pack whose root IS `crm/`, so it resolves to
+ * nothing and the Version cannot load. That shipped — `crm@1.2.0` was
+ * published with zero warnings and a broken entry — because the escape
+ * detector had no opinion about a path that never leaves.
+ *
+ * WARNINGS, NOT REFUSALS, matching `findEscapingImports`. The same caveat
+ * applies: this reads `.gts` with a regex rather than a parser, so it can be
+ * wrong, and blocking a publish over a string in a comment is worse than
+ * putting the judgement in front of a reviewer. A dangling import is more
+ * certain than an escape — nothing legitimate resolves to a file that is not
+ * in the pack — but "more certain" is not "certain".
+ */
+export function findDanglingImports(files: Map<string, Buffer>): string[] {
+  let warnings: string[] = [];
+  // Every path a specifier could legitimately name, with the extension taken
+  // off, because a card module imports its sibling as `./account`.
+  let reachable = new Set<string>();
+  for (let path of files.keys()) {
+    reachable.add(path);
+    reachable.add(path.replace(/\.[a-z]+$/i, ''));
+  }
+  for (let [path, bytes] of files) {
+    if (!/\.(gts|gjs|ts|js|mjs)$/.test(path)) {
+      continue;
+    }
+    for (let match of bytes.toString('utf8').matchAll(RELATIVE_SPECIFIER)) {
+      let specifier = match[3];
+      // One that leaves the pack is `findEscapingImports`' business; saying
+      // it twice in different words helps nobody.
+      if (specifier.startsWith('..')) {
+        continue;
+      }
+      let target = resolveSibling(path, specifier);
+      if (!reachable.has(target)) {
+        warnings.push(`${path} imports ${specifier}, which is not in the pack`);
+      }
+    }
+  }
+  return warnings;
+}
+
+/**
  * Point a compiled module's relative imports at the compiled siblings.
  *
  * A realm resolves `./account` by trying extensions against its own file
@@ -617,6 +670,6 @@ export async function packRealmPackage({
     // compiled sibling has already had its relative specifiers rewritten, so
     // scanning it would report resolved paths back at somebody looking for
     // the line they typed.
-    warnings: findEscapingImports(files),
+    warnings: [...findEscapingImports(files), ...findDanglingImports(files)],
   };
 }

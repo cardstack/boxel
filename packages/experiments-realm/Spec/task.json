@@ -6,7 +6,7 @@
       "cardDescription": "Spec for Task",
       "ref": {
         "name": "Task",
-        "module": "../task"
+        "module": "../library/task"
       },
       "specType": "card"
     },

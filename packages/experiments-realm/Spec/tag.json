@@ -6,7 +6,7 @@
       "cardDescription": "Spec for Tag",
       "ref": {
         "name": "Tag",
-        "module": "../tag"
+        "module": "../library/tag"
       },
       "specType": "card"
     },

@@ -1,10 +1,11 @@
 {
   "imports": {
-    "palette": "/_packages/lib/palette@4.1.0/index.js",
+    "experiments/components/": "./components/",
+    "experiments/fields/": "./fields/",
+    "experiments/library/": "./library/",
     "experiments/welcome": "/_packages/experiments/welcome@1.0.0/index.js",
     "experiments/welcome/": "/_packages/experiments/welcome@1.0.0/",
-    "experiments/components/": "./components/",
-    "experiments/fields/": "./fields/"
+    "palette": "/_packages/lib/palette@4.1.0/index.js"
   },
   "boxel": {
     "dependencies": {

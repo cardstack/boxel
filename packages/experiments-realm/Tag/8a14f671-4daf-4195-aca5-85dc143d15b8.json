@@ -9,7 +9,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../tag",
+        "module": "../library/tag",
         "name": "Tag"
       }
     }

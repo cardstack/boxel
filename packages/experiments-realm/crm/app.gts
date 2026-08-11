@@ -1,12 +1,12 @@
-import { CardsGrid } from './components/grid';
-import { CardList } from './components/card-list';
-import { Layout, TitleGroup, type LayoutFilter } from './components/layout';
+import { CardsGrid } from 'experiments/components/grid';
+import { CardList } from 'experiments/components/card-list';
+import { Layout, TitleGroup, type LayoutFilter } from 'experiments/components/layout';
 import {
   SortMenu,
   type SortOption,
   sortByCardTitleAsc,
-} from './components/sort';
-import { SearchInput } from './components/search-input';
+} from 'experiments/components/sort';
+import { SearchInput } from 'experiments/components/search-input';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
@@ -43,17 +43,17 @@ import TargetArrowIcon from '@cardstack/boxel-icons/target-arrow';
 import CalendarExclamation from '@cardstack/boxel-icons/calendar-exclamation';
 import PresentationAnalytics from '@cardstack/boxel-icons/presentation-analytics';
 import ListDetails from '@cardstack/boxel-icons/list-details';
-import { taskStatusValues } from './crm/shared';
-import { URGENCY_TAG_VALUES } from './crm/urgency-tag';
-import { DEAL_STATUS_VALUES } from './crm/deal-status';
-import DealSummary from './crm/deal-summary';
-import { CRMTaskPlanner } from './crm/task-planner';
+import { taskStatusValues } from './shared';
+import { URGENCY_TAG_VALUES } from './urgency-tag';
+import { DEAL_STATUS_VALUES } from './deal-status';
+import DealSummary from './deal-summary';
+import { CRMTaskPlanner } from './task-planner';
 import type {
   LooseSingleCardDocument,
   RealmResourceIdentifier,
   Sort,
 } from '@cardstack/runtime-common';
-import type { TaskSortBy, TaskSortOrder } from './crm/task-planner';
+import type { TaskSortBy, TaskSortOrder } from './task-planner';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import {
   Card as CardIcon,

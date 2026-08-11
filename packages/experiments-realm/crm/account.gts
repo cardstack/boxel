@@ -21,7 +21,7 @@ import { restartableTask } from 'ember-concurrency';
 
 import { Company } from './company';
 import { Contact } from './contact';
-import { CrmApp } from '../crm-app';
+import { CrmApp } from './app';
 import { Deal } from './deal';
 import { StatusTagField } from './contact-status-tag';
 import { UrgencyTag } from './urgency-tag';
@@ -46,7 +46,7 @@ import ContactIcon from '@cardstack/boxel-icons/contact';
 import PlusIcon from '@cardstack/boxel-icons/plus';
 import TrendingUp from '@cardstack/boxel-icons/trending-up';
 
-const taskSource = codeRef(here, './task', 'CRMTask');
+const taskSource = codeRef(here, 'experiments/library/task', 'CRMTask');
 
 class EditTemplate extends Component<typeof Account> {
   <template>

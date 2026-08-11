@@ -3,17 +3,19 @@
     "publisher": "experiments",
     "dependencies": {
       "experiments/components": "^1.0.0",
-      "experiments/fields": "^1.0.0"
+      "experiments/fields": "^1.0.0",
+      "experiments/library": "^1.0.0"
     },
     "packages": {
       "crm": {
-        "version": "1.1.0",
+        "version": "1.2.1",
         "entry": "$DECK/account.gts",
         "exports": {
           "./account": "$DECK/account.gts",
+          "./app": "$DECK/app.gts",
           "./contact": "$DECK/contact.gts",
-          "./lead": "$DECK/lead.gts",
-          "./deal": "$DECK/deal.gts"
+          "./deal": "$DECK/deal.gts",
+          "./lead": "$DECK/lead.gts"
         }
       }
     }

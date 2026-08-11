@@ -7,6 +7,7 @@ import { publishToStore, readStoredFile, unpack } from '@cardstack/deck/node';
 import {
   authoredOnly,
   discoverRealmPackages,
+  findDanglingImports,
   findEscapingImports,
   packRealmPackage,
   pointAtBuiltSiblings,
@@ -460,6 +461,35 @@ module(basename(import.meta.filename), function () {
       );
       assert.strictEqual(warnings.length, 1, 'only the real escape');
       assert.true(warnings[0].startsWith('app.gts'));
+    });
+
+    test('an import that stays in the pack and points at nothing is reported', function (assert) {
+      // The sibling case the escape detector cannot see, and the one that
+      // shipped: `crm/app.gts` was moved into the package it belongs to and
+      // kept importing `./crm/shared`, which was right from the realm root and
+      // resolves to nothing from a pack whose root IS `crm/`. That published
+      // as `crm@1.2.0` with zero warnings and a broken entry module.
+      let warnings = findDanglingImports(
+        new Map([
+          [
+            'app.gts',
+            Buffer.from(
+              "import { a } from './crm/shared';\n" +
+                "import { b } from './shared';\n" +
+                "import c from '../outside';\n" +
+                "import d from './nested/thing.gts';\n",
+            ),
+          ],
+          ['shared.gts', Buffer.from('export const b = 1;')],
+          ['nested/thing.gts', Buffer.from('export default 1;')],
+        ]),
+      );
+      assert.deepEqual(
+        warnings,
+        ['app.gts imports ./crm/shared, which is not in the pack'],
+        'the dangling one only: a real sibling resolves, an extension is ' +
+          'optional, and an escape belongs to the other detector',
+      );
     });
   });
 
