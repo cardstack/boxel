@@ -138,6 +138,20 @@ export default function handlePublishProgress({
   };
 }
 
+// Reports on whichever job holds the realm's index and prerender lanes. No
+// publish or job identity is threaded through, and that is deliberate rather
+// than an approximation: readiness gates on those same two lanes (see
+// `awaitRealmIndexSettled` and `publishedHtmlHasCaughtUp`), so whatever occupies
+// them is exactly the work a publish is waiting on, whether the publish
+// enqueued it or not. A reindex triggered from elsewhere mid-publish does hold
+// that publish up, and reporting its progress is the honest reading. Narrowing
+// this to the publish's own job would report `done` while readiness kept waiting
+// — the disagreement this endpoint exists to prevent.
+//
+// What lane scoping doesn't carry is intent. Polled with no publish in flight,
+// this answers "how far along is this realm's indexing", which is a weaker claim
+// than the endpoint's name makes; a caller outside a `waitForReady` window
+// should read it that way.
 async function readPublishProgress(
   dbAdapter: DBAdapter,
   realmURL: string,
