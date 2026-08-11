@@ -45,8 +45,6 @@ import {
   userInitiatedPrerenderHtmlPriority,
   systemInitiatedPrerenderHtmlPriority,
   query as _query,
-  param,
-  separatedByCommas,
   IndexWriter,
   isUrlLike,
   VirtualNetwork,
@@ -85,6 +83,7 @@ import {
   finalizeReservationById,
 } from './lib/finalize-orphan-reservations.ts';
 import { findStuckReservations } from './lib/stuck-reservations.ts';
+import { markFailedJob } from './lib/mark-failed-job.ts';
 import {
   decodeWorkerRequestIpc,
   dispatchWorkerRequest,
@@ -753,7 +752,7 @@ async function monitorWorker(workerId: string, worker: ChildProcess) {
           message: `worker time-out encountered while indexing ${url}`,
         });
       }
-      await markFailedJob({
+      await markFailedJob(adapter, {
         reservationId: id,
         workerId,
         jobId,
@@ -807,64 +806,6 @@ async function markFailedIndexEntry({
     });
   }
   await batch.done();
-}
-
-async function markFailedJob({
-  workerId,
-  jobId,
-  reservationId,
-  message,
-}: {
-  workerId: string | undefined;
-  jobId: string;
-  message: string;
-  reservationId?: string;
-}) {
-  log.info(`marking job ${jobId} as failed for worker ${workerId}`);
-  let id: string;
-  if (!reservationId) {
-    [{ id }] = (await query([
-      `SELECT id FROM job_reservations WHERE job_id=`,
-      param(jobId),
-      `AND completed_at IS NULL`,
-    ])) as { id: string }[];
-    if (!id) {
-      log.error(
-        `Cannot determine job_reservation id for failed job ${jobId} of worker ${workerId}`,
-      );
-      return;
-    }
-  } else {
-    id = reservationId;
-  }
-
-  await query([
-    `UPDATE jobs SET `,
-    ...separatedByCommas([
-      [
-        `result =`,
-        param({
-          status: 500,
-          message: `Worker manager detected fatal error in worker ${workerId} for job ${jobId} with job_reservation id ${id}: ${message}`,
-        }),
-      ],
-      [`status = 'rejected'`],
-      [`finished_at = NOW()`],
-    ]),
-    'WHERE id =',
-    param(jobId),
-  ] as Expression);
-  // The worker had uninterrupted access to the job and produced no
-  // verdict before being killed by the watchdog (stuck) or after a fatal
-  // error log line. That counts as a real attempt for cap purposes,
-  // unlike the SIGTERM/child-crash paths which mark 'interrupted'.
-  await query([
-    `UPDATE job_reservations
-     SET completed_at = NOW(), completion_reason = 'completed'
-     WHERE id =`,
-    param(id),
-  ]);
-  await query([`NOTIFY jobs_finished`]);
 }
 
 async function startWorker(
@@ -964,7 +905,7 @@ async function startWorker(
             await markFailedIndexEntry({ url, realm, deps, message });
           }
           if (workerId && currentState?.jobId) {
-            await markFailedJob({
+            await markFailedJob(adapter, {
               workerId,
               jobId: currentState.jobId,
               message,
