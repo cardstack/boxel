@@ -22,6 +22,15 @@ export interface HtmlDocumentMetadata {
   isInteractive: boolean;
 }
 
+// An entity above the Unicode range would make `fromCodePoint` throw, and this
+// decoder runs inside the index pass against hostile markup — so an invalid
+// reference stays as written rather than crashing the extract.
+function decodedCodePoint(raw: string, point: number): string {
+  return Number.isInteger(point) && point >= 0 && point <= 0x10ffff
+    ? String.fromCodePoint(point)
+    : raw;
+}
+
 // Small metadata strings need common entity decoding, not a DOM dependency.
 function decodeHtmlText(value: string): string {
   return value
@@ -31,10 +40,12 @@ function decodeHtmlText(value: string): string {
     .replace(/&gt;/gi, '>')
     .replace(/&quot;/gi, '"')
     .replace(/&#39;|&apos;/gi, "'")
-    .replace(/&#x([0-9a-f]+);/gi, (_match, code) =>
-      String.fromCodePoint(parseInt(code, 16)),
+    .replace(/&#x([0-9a-f]+);/gi, (match, code) =>
+      decodedCodePoint(match, parseInt(code, 16)),
     )
-    .replace(/&#(\d+);/g, (_match, code) => String.fromCodePoint(Number(code)));
+    .replace(/&#(\d+);/g, (match, code) =>
+      decodedCodePoint(match, Number(code)),
+    );
 }
 
 // The document's readable prose with scripts, styles, and markup stripped.

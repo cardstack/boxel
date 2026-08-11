@@ -83,7 +83,9 @@ export class HtmlDef extends FileDef {
 
     return {
       ...base,
-      title: htmlMetadata.documentTitle ?? fallbackTitle ?? 'Untitled page',
+      // `||`, not `??`: a file named bare `.html` leaves an empty-string
+      // fallback title, which must not persist as the title.
+      title: (htmlMetadata.documentTitle ?? fallbackTitle) || 'Untitled page',
       excerpt: extractHtmlExcerpt(text, EXCERPT_MAX_LENGTH),
       htmlMetadata,
     };

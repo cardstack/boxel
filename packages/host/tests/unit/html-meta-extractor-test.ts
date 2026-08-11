@@ -34,6 +34,17 @@ module('Unit | html-meta-extractor', function (hooks) {
     assert.strictEqual(meta.documentTitle, 'Fish & Chips — menu');
   });
 
+  test('an out-of-range numeric entity stays as written rather than throwing', function (assert) {
+    let meta = extractHtmlMetadata(
+      `<title>bad &#9999999999; and &#x110000; but ok &#x1F600;</title>`,
+    );
+    assert.strictEqual(
+      meta.documentTitle,
+      'bad &#9999999999; and &#x110000; but ok 😀',
+      'invalid references survive verbatim while valid ones decode',
+    );
+  });
+
   test('a titleless fragment yields no documentTitle rather than inventing one', function (assert) {
     let meta = extractHtmlMetadata(`<p>hello</p>`);
     assert.strictEqual(meta.documentTitle, undefined);

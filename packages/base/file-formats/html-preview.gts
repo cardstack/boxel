@@ -51,7 +51,7 @@ export class HtmlPreview extends GlimmerComponent<FilePreviewSignature> {
   @tracked view: 'rendered' | 'source' = 'rendered';
   @tracked sourceText: string | undefined;
   @tracked loadError = '';
-  @tracked copied = false;
+  @tracked copyState: 'idle' | 'copied' | 'failed' = 'idle';
   copyFeedbackTimer?: ReturnType<typeof setTimeout>;
 
   constructor(owner: Owner, args: FilePreviewSignature['Args']) {
@@ -138,18 +138,34 @@ export class HtmlPreview extends GlimmerComponent<FilePreviewSignature> {
     this.view = 'source';
   };
 
-  // Keep the clipboard write inside the gesture that asked for it.
+  get copyLabel() {
+    if (this.copyState === 'copied') {
+      return 'Copied';
+    }
+    if (this.copyState === 'failed') {
+      return 'Copy failed';
+    }
+    return 'Copy';
+  }
+
+  // Keep the clipboard write inside the gesture that asked for it. The write
+  // can be refused (permissions, an unfocused document), and a refusal is
+  // feedback for the button, not an unhandled rejection.
   copySource = async () => {
     if (this.sourceText == null) {
       return;
     }
-    await navigator.clipboard.writeText(this.sourceText);
+    try {
+      await navigator.clipboard.writeText(this.sourceText);
+      this.copyState = 'copied';
+    } catch {
+      this.copyState = 'failed';
+    }
     if (this.copyFeedbackTimer) {
       clearTimeout(this.copyFeedbackTimer);
     }
-    this.copied = true;
     this.copyFeedbackTimer = setTimeout(() => {
-      this.copied = false;
+      this.copyState = 'idle';
     }, COPY_FEEDBACK_MS);
   };
 
@@ -203,7 +219,7 @@ export class HtmlPreview extends GlimmerComponent<FilePreviewSignature> {
               aria-live='polite'
               data-test-html-copy-source
               {{on 'click' this.copySource}}
-            >{{if this.copied 'Copied' 'Copy'}}</button>
+            >{{this.copyLabel}}</button>
           {{/if}}
         </div>
       {{/if}}
