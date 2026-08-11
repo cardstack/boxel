@@ -1,0 +1,26 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Q3 Manufacturing Webinar Series",
+      "campaignType": "webinar",
+      "status": "completed",
+      "startDate": "2026-06-01",
+      "endDate": "2026-07-31",
+      "budget": { "amount": 12000, "currency": { "code": "USD" } },
+      "spend": { "amount": 9450, "currency": { "code": "USD" } },
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": { "module": "../campaign", "name": "Campaign" }
+    },
+    "relationships": {
+      "cardInfo.theme": { "links": { "self": "../Theme/ledger" } }
+    }
+  }
+}
