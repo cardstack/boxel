@@ -467,8 +467,15 @@ export class MatrixConcept extends CardDef {
               <dd class='mono'>{{@model.catalogMatch}}</dd>
             {{/if}}
             {{#if @model.sharedSpec}}
-              <dt>Shared-realm Spec</dt>
-              <dd class='mono'>{{@model.sharedSpec}}</dd>
+              <dt>Spec</dt>
+              <dd>
+                <a
+                  class='spec-link'
+                  href={{@model.sharedSpec}}
+                  target='_blank'
+                  rel='noopener noreferrer'
+                >Open the Spec to review ↗</a>
+              </dd>
             {{/if}}
             {{#if @model.reference}}
               <dt>Reference (not counted)</dt>
@@ -581,6 +588,21 @@ export class MatrixConcept extends CardDef {
         .mono {
           font-family: var(--font-mono, monospace);
           font-size: 0.75rem;
+        }
+        .spec-link {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.25rem;
+          font-size: 0.8125rem;
+          font-weight: 600;
+          color: var(--tier-shared-fg, #1e40af);
+          text-decoration: none;
+          border: 1px solid currentColor;
+          border-radius: 0.5rem;
+          padding: 0.25rem 0.625rem;
+        }
+        .spec-link:hover {
+          background: var(--tier-shared-bg, #dbeafe);
         }
         .notes {
           margin: 0;
