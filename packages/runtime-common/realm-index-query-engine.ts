@@ -2032,6 +2032,12 @@ function relativizeResource(
   // resource reads the same whether it is a document's primary or embedded in
   // another document's `included[]`. For the primary resource `resourceURL` is
   // the primary URL, so only `included[]` / collection members shift base.
+  //
+  // `rebaseReferencesFor` in card-serialization applies this same own-id-or-
+  // primary rule when the client serializes a document, so both sides encode
+  // included references identically. Changing the rule in one place alone makes
+  // client-serialized and server-served documents deserialize to different ids,
+  // and nothing fails loudly when they diverge — so change them together.
   visitInstanceURLs(resource, (url, setURL) => {
     // Scoped RRIs (e.g. @cardstack/catalog/foo) are already in their canonical
     // portable form — don't resolve or relativize them. A scoped reference is
