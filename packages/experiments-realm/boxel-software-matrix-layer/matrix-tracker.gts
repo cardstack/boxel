@@ -21,6 +21,7 @@ import {
 import LayoutGridIcon from '@cardstack/boxel-icons/layout-grid';
 import { DonutChart, type DonutSegment } from './donut-chart';
 import { MatrixConcept } from './matrix-concept';
+import { ConceptReview } from './concept-review';
 
 const TIER_ORDER = [
   { key: 'Platform', color: '#16a34a' },
@@ -52,14 +53,17 @@ export class MatrixTracker extends CardDef {
   });
 
   static isolated = class Isolated extends Component<typeof MatrixTracker> {
+    @tracked activeTab = 'overview';
     @tracked layerFilter = ALL;
     @tracked laneFilter = ALL;
     @tracked tierFilter = ALL;
     @tracked stateFilter = ALL;
+    @tracked ownerFilter = ALL;
     @tracked lagOnly = false;
     @tracked query = '';
 
     private conceptPages: (ReturnType<getCards> | undefined)[] = [];
+    private reviewList: ReturnType<getCards> | undefined;
 
     constructor(owner: Owner, args: any) {
       super(owner, args);
@@ -80,6 +84,16 @@ export class MatrixTracker extends CardDef {
           () => this.realms,
           { isLive: true },
         ),
+      );
+      // Reviews are young; one page is plenty until the team outgrows it.
+      this.reviewList = ctx?.getCards(
+        this,
+        () => {
+          let ref = identifyCard(ConceptReview);
+          return ref ? { filter: { type: ref } } : undefined;
+        },
+        () => this.realms,
+        { isLive: true },
       );
     }
 
@@ -142,6 +156,55 @@ export class MatrixTracker extends CardDef {
     isVerified = (c: MatrixConcept) =>
       Boolean(c.catalogMatch || c.sharedSpec || c.implemented);
 
+    get allReviews(): ConceptReview[] {
+      return ((this.reviewList?.instances ?? []) as ConceptReview[])
+        .filter(Boolean)
+        .sort(
+          (a, b) =>
+            (b.createdAt?.getTime?.() ?? 0) - (a.createdAt?.getTime?.() ?? 0),
+        );
+    }
+
+    reviewsFor = (c: MatrixConcept) =>
+      this.allReviews.filter((r) => (r.concept as any)?.id === (c as any).id);
+
+    // Review status is derived from the thread, never stored: an unresolved
+    // "needs work" blocks; an approve verdict accepts; Done with neither is
+    // waiting on the review team.
+    reviewStatus = (c: MatrixConcept): string | undefined => {
+      let reviews = this.reviewsFor(c);
+      if (reviews.some((r) => r.verdict === 'needs work' && !r.resolved)) {
+        return 'changes requested';
+      }
+      if (reviews.some((r) => r.verdict === 'approve')) {
+        return 'approved';
+      }
+      if (c.workState === 'Done') {
+        return 'awaiting review';
+      }
+      return undefined;
+    };
+
+    openReviewCount = (c: MatrixConcept) =>
+      this.reviewsFor(c).filter((r) => !r.resolved).length;
+
+    get awaitingReview(): MatrixConcept[] {
+      return this.concepts.filter(
+        (c) => this.reviewStatus(c) === 'awaiting review',
+      );
+    }
+    get changesRequested(): MatrixConcept[] {
+      return this.concepts.filter(
+        (c) => this.reviewStatus(c) === 'changes requested',
+      );
+    }
+    get approved(): MatrixConcept[] {
+      return this.concepts.filter((c) => this.reviewStatus(c) === 'approved');
+    }
+    get recentReviews(): ConceptReview[] {
+      return this.allReviews.slice(0, 15);
+    }
+
     get doneVerifiedCount() {
       return this.concepts.filter(
         (c) => c.workState === 'Done' && this.isVerified(c),
@@ -190,6 +253,21 @@ export class MatrixTracker extends CardDef {
     get stateOptions() {
       return STATE_ORDER;
     }
+    get ownerOptions() {
+      return [...new Set(this.concepts.map((c) => c.owner))].filter(
+        Boolean,
+      ) as string[];
+    }
+    get tabs() {
+      return [
+        { key: 'overview', label: 'Overview' },
+        { key: 'queue', label: 'Review queue' },
+        { key: 'concepts', label: 'Concepts' },
+      ];
+    }
+    get showOverview() {
+      return !this.isInteractive || this.activeTab === 'overview';
+    }
 
     get filtered(): MatrixConcept[] {
       let q = this.query.trim().toLowerCase();
@@ -205,6 +283,8 @@ export class MatrixTracker extends CardDef {
           )
             return false;
           if (this.stateFilter !== ALL && c.workState !== this.stateFilter)
+            return false;
+          if (this.ownerFilter !== ALL && c.owner !== this.ownerFilter)
             return false;
           if (
             this.lagOnly &&
@@ -242,9 +322,17 @@ export class MatrixTracker extends CardDef {
     @action setState(e: Event) {
       this.stateFilter = (e.target as HTMLSelectElement).value;
     }
+    @action setOwner(e: Event) {
+      this.ownerFilter = (e.target as HTMLSelectElement).value;
+    }
+    @action setTab(key: string) {
+      this.activeTab = key;
+    }
     @action setQuery(value: string) {
       this.query = value;
     }
+    reviewComponent = (card: ConceptReview) =>
+      (card.constructor as typeof CardDef).getComponent(card);
     @action toggleLagOnly() {
       this.lagOnly = !this.lagOnly;
     }
@@ -265,6 +353,19 @@ export class MatrixTracker extends CardDef {
             concepts counted implemented ({{this.implementedPercent}}%)</p>
         </header>
 
+        {{#if this.isInteractive}}
+          <nav class='tab-bar'>
+            {{#each this.tabs as |tab|}}
+              <button
+                type='button'
+                class='tab {{if (eq this.activeTab tab.key) "active"}}'
+                {{on 'click' (fn this.setTab tab.key)}}
+              >{{tab.label}}</button>
+            {{/each}}
+          </nav>
+        {{/if}}
+
+        {{#if this.showOverview}}
         <section class='summary'>
           <div class='panel donut-panel'>
             <h2>Evidence coverage</h2>
@@ -327,9 +428,92 @@ export class MatrixTracker extends CardDef {
               {{/if}}
             </div>
           </div>
-        </section>
 
-        {{#if this.isInteractive}}
+          <div class='panel'>
+            <h2>Review pipeline</h2>
+            <div class='state-list'>
+              <div class='state-row'>
+                <span class='state-name'>Awaiting review</span>
+                <span class='state-count'>{{this.awaitingReview.length}}</span>
+              </div>
+              <div class='state-row'>
+                <span class='state-name'>Changes requested</span>
+                <span
+                  class='state-count'
+                >{{this.changesRequested.length}}</span>
+              </div>
+              <div class='state-row'>
+                <span class='state-name'>Approved</span>
+                <span class='state-count'>{{this.approved.length}}</span>
+              </div>
+            </div>
+          </div>
+        </section>
+        {{/if}}
+
+        {{#if (eq this.activeTab 'queue')}}
+          {{#if this.isInteractive}}
+            <section class='queue-grid'>
+              <div class='panel'>
+                <h2>Awaiting review ({{this.awaitingReview.length}})</h2>
+                <div class='queue-list'>
+                  {{#each this.awaitingReview as |c|}}
+                    <button
+                      type='button'
+                      class='queue-row'
+                      {{on 'click' (fn this.openCard c)}}
+                    >
+                      <span class='cell-symbol'>{{c.symbol}}</span>
+                      <span class='cell-concept'>{{c.concept}}</span>
+                      <span class='cell-owner'>{{if c.owner c.owner ''}}</span>
+                    </button>
+                  {{else}}
+                    <p class='empty'>Nothing waiting — the queue is clear</p>
+                  {{/each}}
+                </div>
+              </div>
+              <div class='panel'>
+                <h2>Changes requested ({{this.changesRequested.length}})</h2>
+                <div class='queue-list'>
+                  {{#each this.changesRequested as |c|}}
+                    <button
+                      type='button'
+                      class='queue-row'
+                      {{on 'click' (fn this.openCard c)}}
+                    >
+                      <span class='cell-symbol'>{{c.symbol}}</span>
+                      <span class='cell-concept'>{{c.concept}}</span>
+                      <span class='cell-owner'>{{if c.owner c.owner ''}}</span>
+                    </button>
+                  {{else}}
+                    <p class='empty'>No open change requests</p>
+                  {{/each}}
+                </div>
+              </div>
+              <div class='panel feed-panel'>
+                <h2>Recent activity</h2>
+                <div class='feed'>
+                  {{#each this.recentReviews as |r|}}
+                    <button
+                      type='button'
+                      class='feed-item'
+                      {{on 'click' (fn this.openCard r)}}
+                    >
+                      {{#let (this.reviewComponent r) as |R|}}
+                        <R @format='embedded' />
+                      {{/let}}
+                    </button>
+                  {{else}}
+                    <p class='empty'>No reviews yet — open a concept and file
+                      the first one</p>
+                  {{/each}}
+                </div>
+              </div>
+            </section>
+          {{/if}}
+        {{/if}}
+
+        {{#if (eq this.activeTab 'concepts')}}
           <section class='panel table-panel'>
             <div class='table-head'>
               <h2>Concepts</h2>
@@ -376,6 +560,16 @@ export class MatrixTracker extends CardDef {
                   >{{opt}}</option>
                 {{/each}}
               </select>
+              <select aria-label='Owner' {{on 'change' this.setOwner}}>
+                <option value='all' selected={{eq this.ownerFilter 'all'}}>Any
+                  owner</option>
+                {{#each this.ownerOptions as |opt|}}
+                  <option
+                    value={{opt}}
+                    selected={{eq this.ownerFilter opt}}
+                  >{{opt}}</option>
+                {{/each}}
+              </select>
               <BoxelInput
                 class='search'
                 @type='search'
@@ -399,6 +593,17 @@ export class MatrixTracker extends CardDef {
                   <span class='cell-state'>{{if c.workState c.workState ''}}
                   </span>
                   <span class='cell-owner'>{{if c.owner c.owner ''}}</span>
+                  <span class='cell-review'>
+                    {{#if (eq (this.reviewStatus c) 'approved')}}
+                      <span class='badge badge-approved'>✓</span>
+                    {{else if (eq (this.reviewStatus c) 'changes requested')}}
+                      <span
+                        class='badge badge-changes'
+                      >{{this.openReviewCount c}}</span>
+                    {{else if (eq (this.reviewStatus c) 'awaiting review')}}
+                      <span class='badge badge-waiting'>?</span>
+                    {{/if}}
+                  </span>
                 </button>
               {{else}}
                 <p class='empty'>No concepts match the current filters</p>
@@ -594,9 +799,101 @@ export class MatrixTracker extends CardDef {
           border: 1px solid var(--border, #e5e7eb);
           border-radius: 0.5rem;
         }
+        .tab-bar {
+          display: flex;
+          gap: 0.25rem;
+          border-bottom: 1px solid var(--border, #e5e7eb);
+        }
+        .tab {
+          font: inherit;
+          font-size: 0.8125rem;
+          font-weight: 600;
+          padding: 0.5rem 0.875rem;
+          background: transparent;
+          border: none;
+          border-bottom: 2px solid transparent;
+          color: var(--muted-foreground, #6b7280);
+          cursor: pointer;
+        }
+        .tab.active {
+          color: var(--foreground, #111111);
+          border-bottom-color: var(--foreground, #111111);
+        }
+        .queue-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+          gap: 1rem;
+          align-items: start;
+        }
+        .queue-list,
+        .feed {
+          display: flex;
+          flex-direction: column;
+          gap: 0.375rem;
+          max-height: 28rem;
+          overflow-y: auto;
+        }
+        .queue-row {
+          display: grid;
+          grid-template-columns: 2.5rem 1fr 4.5rem;
+          gap: 0.5rem;
+          align-items: center;
+          padding: 0.4375rem 0.625rem;
+          font: inherit;
+          font-size: 0.8125rem;
+          text-align: left;
+          background: transparent;
+          border: 1px solid var(--border, #e5e7eb);
+          border-radius: 0.5rem;
+          cursor: pointer;
+          color: inherit;
+        }
+        .queue-row:hover {
+          background: var(--muted, #f3f4f6);
+        }
+        .feed-item {
+          padding: 0;
+          font: inherit;
+          text-align: left;
+          background: transparent;
+          border: 1px solid var(--border, #e5e7eb);
+          border-radius: 0.5rem;
+          cursor: pointer;
+          color: inherit;
+        }
+        .feed-item:hover {
+          background: var(--muted, #f3f4f6);
+        }
+        .feed-item :deep(.boxel-card-container) {
+          box-shadow: none;
+          background: transparent;
+        }
+        .badge {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-width: 1.25rem;
+          height: 1.25rem;
+          padding: 0 0.25rem;
+          border-radius: 999px;
+          font-size: 0.6875rem;
+          font-weight: 700;
+        }
+        .badge-approved {
+          background: var(--state-done-bg, #dcfce7);
+          color: var(--state-done-fg, #166534);
+        }
+        .badge-changes {
+          background: var(--state-blocked-bg, #fee2e2);
+          color: var(--state-blocked-fg, #991b1b);
+        }
+        .badge-waiting {
+          background: var(--state-next-bg, #fef3c7);
+          color: var(--state-next-fg, #92400e);
+        }
         .row {
           display: grid;
-          grid-template-columns: 3rem 1fr 3rem 9.5rem 7.5rem 6.5rem 4.5rem;
+          grid-template-columns: 3rem 1fr 3rem 9.5rem 7.5rem 6.5rem 4.5rem 2.5rem;
           gap: 0.5rem;
           align-items: center;
           padding: 0.4375rem 0.75rem;
