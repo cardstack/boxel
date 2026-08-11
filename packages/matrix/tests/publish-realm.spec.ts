@@ -144,6 +144,15 @@ test.describe('Publish realm', () => {
     ).toBeChecked();
     await page.locator('[data-test-publish-button]').click();
 
+    // Gate on the publish finishing before reaching for the button it reveals.
+    // Publishing a brand-new realm runs a from-scratch index plus a prerender
+    // pass server-side, and the modal only swaps in the open/unpublish controls
+    // once the realm passes its readiness check. Waiting on that transition
+    // explicitly means a publish that stalls fails here, naming the stage that
+    // stalled — rather than surfacing as whichever later step happened to be
+    // in flight when the test's overall budget ran out.
+    await page.waitForSelector('[data-test-unpublish-button]');
+
     let newTabPromise = page.waitForEvent('popup');
 
     await page

@@ -4,6 +4,7 @@ import {
   indexingConcurrencyGroup,
 } from './jobs/indexing.ts';
 import { awaitPublishedHtmlReady } from './jobs/prerender-html.ts';
+import { settledBy } from './settled-by.ts';
 import type { RealmVisibility } from './realm-visibility.ts';
 import type { SearchOpts } from './search-utils.ts';
 import { buildSearchErrorBody, SearchRequestError } from './search-utils.ts';
@@ -328,6 +329,13 @@ const COALESCE_NOTIFY_WAIT_MS = 180_000;
 // so the exemption holds for header-less probes too. Keep in sync with
 // `#publicEndpoints`.
 const ARCHIVED_SEAL_EXEMPT_PATHS = new Set(['_readiness-check', '_session']);
+// How long `_readiness-check` holds a request while this process's own startup
+// and in-flight indexing settle, before answering not-ready instead. Matches
+// the budget the shared index-lane gate uses, and for the same reason: the hold
+// is a courtesy to the poller, `Retry-After` already tells it to come back, and
+// a hold longer than a caller's per-attempt deadline yields a connection
+// timeout instead of a status the loop can read.
+const IN_PROCESS_READINESS_BUDGET_MS = 10_000;
 const MODULE_ETAG_VARIANT = 'module';
 const SOURCE_ETAG_VARIANT = 'source';
 // Card+JSON ETag is `"<indexed_at>-<realmInfoHash>:card"` — quoted
@@ -1283,10 +1291,10 @@ export class Realm {
     // Report not-ready as a 503 with a retry hint rather than a false 200: a
     // poller keeps waiting, and a single-shot caller sees the failure instead
     // of treating the work it is waiting on as complete. `X-Boxel-Not-Ready`
-    // names which stage is outstanding — the two have different causes and
-    // different remedies, and the poll loops that consume this discard the
+    // names which stage is outstanding — each has a different cause and a
+    // different remedy, and the poll loops that consume this discard the
     // body, so the header is the only place an operator can read it from.
-    let notReady = (stage: 'index' | 'prerender-html') =>
+    let notReady = (stage: 'startup' | 'index' | 'prerender-html') =>
       createResponse({
         body: null,
         init: {
@@ -1300,16 +1308,39 @@ export class Realm {
         requestContext,
       });
 
-    await this.#startedUp.promise;
     // #startedUp is a one-time gate that resolves after the first start()'s
     // from-scratch index. On a republish the realm is already mounted with a
     // resolved #startedUp, so awaiting it alone would report ready before the
     // reindex of the swapped files completes. Also await any in-flight full or
     // incremental index so a publish poll only succeeds once the just-published
     // content is indexed.
+    //
+    // Both waits are budgeted for the same reason the shared-state gates below
+    // are: this endpoint's contract is that a not-yet answers, not that the
+    // connection is held until the answer is yes. An unbounded wait here is
+    // worse than no answer, because the canonical caller
+    // (`realm-operations.waitForReady`) polls serially with no per-request
+    // deadline and only re-checks its own overall budget between requests — so
+    // one held-open request parks the whole poll loop for as long as the gate
+    // stalls, and the client sees a hung connection rather than a status it can
+    // read. Returning 503 keeps the loop ticking against its own deadline, and
+    // a gate that clears later is picked up by the next poll.
+    //
+    // One budget spans both in-process waits, so adding the bound costs the
+    // request a single extra hold rather than one per gate.
+    let inProcessDeadline = Date.now() + IN_PROCESS_READINESS_BUDGET_MS;
+    if (!(await settledBy(this.#startedUp.promise, inProcessDeadline))) {
+      this.#log.warn(
+        `readiness check for ${this.url} is still waiting on realm startup after ${IN_PROCESS_READINESS_BUDGET_MS}ms`,
+      );
+      return notReady('startup');
+    }
     let inflight = this.indexing();
-    if (inflight) {
-      await inflight;
+    if (inflight && !(await settledBy(inflight, inProcessDeadline))) {
+      this.#log.warn(
+        `readiness check for ${this.url} is still waiting on in-flight indexing after ${IN_PROCESS_READINESS_BUDGET_MS}ms`,
+      );
+      return notReady('index');
     }
 
     // Both gates above read per-process state: they see only the indexing this
