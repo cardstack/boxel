@@ -2,7 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Ada"
+      "name": "Ada",
+      "mood": " ."
     },
     "meta": {
       "adoptsFrom": {

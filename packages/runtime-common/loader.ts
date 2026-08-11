@@ -335,8 +335,12 @@ export class Loader {
 
   shimModule(moduleIdentifier: string, module: Record<string, any>) {
     moduleIdentifier = this.resolveImport(moduleIdentifier);
-    this.captureIdentitiesOfModuleExports(module, moduleIdentifier);
+    // Canonical URL first: `captureIdentitiesOfModuleExports` reads it. A
+    // shim is its own canonical URL, so the two orders agree here — but the
+    // invariant "canonical is known before identities are taken" should hold
+    // at every call site, not at two of the three.
     this.setCanonicalModuleURL(moduleIdentifier, moduleIdentifier);
+    this.captureIdentitiesOfModuleExports(module, moduleIdentifier);
 
     this.moduleShims.set(moduleIdentifier, module);
 
@@ -913,7 +917,35 @@ export class Loader {
   }
 
   private setModule(moduleIdentifier: string, module: Module) {
-    this.modules.set(this.moduleCacheKey(moduleIdentifier), module);
+    let key = this.moduleCacheKey(moduleIdentifier);
+    this.modules.set(key, module);
+    // ONE SLOT PER MODULE, INCLUDING ACROSS A REDIRECT. `moduleCacheKey`
+    // already collapses the spellings it can see without asking the server —
+    // extensions, RRI prefixes — for the reason stated on it: spellings that
+    // evaluate separately produce separate class objects, and `instanceof`
+    // then disagrees with itself. A redirect creates exactly that situation
+    // and `moduleCacheKey` cannot see it, because the answer only exists once
+    // the server has given it.
+    //
+    // So mirror the finished module onto the key its canonical URL implies.
+    // `greeter@^2.0.0` and `greeter@2.2.0` are then one entry, one evaluation
+    // and one class — which is what makes the range a way of ADDRESSING a
+    // Version rather than a second copy of it.
+    //
+    // Only a settled module is mirrored. A `fetching` placeholder is this
+    // load's private bookkeeping, and publishing it under another key would
+    // hand a second importer a deferred that nothing it can see will resolve.
+    if (module.state === 'fetching') {
+      return;
+    }
+    let canonical = this.moduleCanonicalURLs.get(key);
+    if (!canonical) {
+      return;
+    }
+    let canonicalKey = this.moduleCacheKey(canonical);
+    if (canonicalKey !== key) {
+      this.modules.set(canonicalKey, module);
+    }
   }
 
   private setCanonicalModuleURL(
@@ -952,10 +984,34 @@ export class Loader {
     module: any,
     moduleIdentifier: string,
   ) {
-    // Identities are recorded in canonical identifier form so that
-    // `identify()` output matches the form persisted in code refs.
+    // A CLASS IS IDENTIFIED BY THE MODULE IT CAME FROM, not by the address
+    // somebody used to ask for it. Those differ whenever the server answers
+    // with a redirect, and the versioned package space redirects on purpose:
+    //
+    //   GET  /_packages/experiments/greeter@^2.0.0/index.js
+    //   302  /_packages/experiments/greeter@2.2.0/index.js
+    //
+    // `deck-the-range-is-on-disk.md` says an instance may pin a RANGE, so
+    // that a compatible release moves it forward without rewriting a file —
+    // and that the type which runs is whatever the resolver picked. Capturing
+    // the requested spelling contradicted the second half: one class reached
+    // through `@^1.0.0`, `@^2.0.0` and `@2.2.0` got three identities, so the
+    // index recorded three types for it, and a search for one found none of
+    // the others. Observed exactly that, on three instances of one Greeter.
+    //
+    // The redirect is the authority on which Version answered, and by this
+    // point it has already been followed. Nothing else has to agree about
+    // ranges, because no range survives into a key.
+    //
+    // This is not only about versions: the realm resolves an extensionless
+    // request the same way, via `X-Boxel-Canonical-Path`. That case is a
+    // no-op here — `trimModuleIdentifier` takes the extension back off — so
+    // the only spellings this collapses are the ones that genuinely named a
+    // different module.
     let moduleId = this.canonicalIdentifier(
-      trimModuleIdentifier(moduleIdentifier),
+      trimModuleIdentifier(
+        this.getCanonicalModuleURL(moduleIdentifier) ?? moduleIdentifier,
+      ),
     );
     for (let propName of Object.keys(module)) {
       let exportedEntity = module[propName];
@@ -1033,6 +1089,28 @@ export class Loader {
       this.getCanonicalModuleURL(moduleIdentifier) ||
       moduleIdentifier;
     this.setCanonicalModuleURL(moduleIdentifier, canonicalURL);
+
+    // The redirect may have landed on something already loaded — the ordinary
+    // case being an exact pin imported first and a range pin second. Adopt it
+    // rather than evaluating the same bytes again: a second evaluation is a
+    // second class object, and `instanceof` across the two spellings would
+    // then be false for one Version. `setModule` handles the other order.
+    //
+    // A module still `fetching` is skipped on purpose. Waiting on its deferred
+    // would be correct and is not worth the deadlock surface — two spellings
+    // racing is rare, and losing the race costs one extra evaluation, which is
+    // exactly what happened before any of this.
+    let adopted = this.modules.get(this.moduleCacheKey(canonicalURL));
+    if (
+      adopted &&
+      adopted.state !== 'fetching' &&
+      this.moduleCacheKey(canonicalURL) !==
+        this.moduleCacheKey(moduleIdentifier)
+    ) {
+      this.setModule(moduleIdentifier, adopted);
+      module.deferred.fulfill();
+      return;
+    }
 
     if (loaded.type === 'shimmed') {
       this.captureIdentitiesOfModuleExports(loaded.module, moduleIdentifier);
