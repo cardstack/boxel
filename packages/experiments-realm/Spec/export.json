@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "ExportButton",
+        "module": "../export"
+      },
+      "specType": "component",
+      "readMe": "## Export\n\nTurns a list of records into a CSV file the browser downloads. Ships `toCsv(rows, columns)` as a pure function, `downloadCsv(filename, csv)` for the side effect, and `<ExportButton>` when you just want the button.\n\n```gts\nimport { ExportButton } from '../export';\n<ExportButton @rows={{this.filtered}} @columns={{this.columns}} @filename='invoices' />\n```\n\n**It composes with Table rather than duplicating it.** A table already knows every column's label and how to read that column out of a record — which is exactly what a CSV row needs. So Export declares the smallest contract it can use, `{ key, label?, value }`, and a `TableColumn` satisfies it structurally. Neither block imports the other; passing the same column array to both is the whole integration, and the export cannot drift out of sync with the table it sits under.\n\nWhat you see is what you get: whatever the table shows for a cell is what the CSV contains. Where the display form is wrong for a spreadsheet, a column adds `exportValue` — money renders as `$4,200.00` and exports as `4200` so the column sums. That opt-in lives on the column because only the consumer knows which of its cells are formatted.\n\n`toCsv` is separately exported precisely because it is pure: it is the part worth testing, and the part a caller wanting to POST the CSV somewhere instead of downloading it needs.\n\nQuoting follows RFC 4180 — cells containing a comma, quote or newline are wrapped and inner quotes doubled — and the file leads with a BOM so Excel does not mangle non-ASCII names on open.\n\n**Non-goals:** choosing which rows to export (pass the filtered list — the consumer owns the filter), XLSX or PDF, server-side generation for lists too large to hold in memory, and column reordering.",
+      "cardInfo": {
+        "name": "Export",
+        "summary": "CSV export for any record list. Consumes the same column definitions the Table block takes, so the file always matches the table on screen.",
+        "notes": null,
+        "cardThumbnailURL": null
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../InvoiceTableDemo/invoice-tracker"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

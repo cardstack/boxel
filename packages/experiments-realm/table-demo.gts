@@ -6,6 +6,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import TableIcon from '@cardstack/boxel-icons/table';
 import { Table, type TableColumn } from './table';
+import { ExportButton } from './export';
 import { Invoice } from './invoice';
 import { formatMoney, sumLineItems } from './money';
 
@@ -68,6 +69,13 @@ export class InvoiceTableDemo extends CardDef {
 
     <template>
       <div class='demo'>
+        <div class='demo-bar'>
+          <ExportButton
+            @rows={{this.items}}
+            @columns={{this.columns}}
+            @filename='invoices'
+          />
+        </div>
         <Table
           @items={{this.items}}
           @columns={{this.columns}}
@@ -77,6 +85,11 @@ export class InvoiceTableDemo extends CardDef {
       <style scoped>
         .demo {
           padding: 1rem;
+        }
+        .demo-bar {
+          display: flex;
+          justify-content: flex-end;
+          padding-bottom: 0.5rem;
         }
       </style>
     </template>
