@@ -28,6 +28,7 @@
 
 import type Koa from 'koa';
 import semver from 'semver';
+import { logger } from '@cardstack/runtime-common';
 import {
   pack,
   publishToStore,
@@ -57,6 +58,12 @@ import {
   storeNameFor,
 } from '../lib/realm-packages.ts';
 import { suggestBump, type Bump } from '../lib/semver-delta.ts';
+import {
+  realmsToInvalidateOnPublish,
+  type RealmInvalidation,
+} from '../lib/package-publish-invalidation.ts';
+
+const log = logger('realm-server:package-proposals');
 
 const ENTRY = 'index.js';
 
@@ -298,6 +305,69 @@ async function proposeFromRealm({
   return json(201, { proposal, files: packed.files });
 }
 
+// Seed a reindex in every realm holding a row whose range now resolves to the
+// Version just published. Returns what was selected so the publish response
+// can say it out loud — "your 2.3.0 moved 12 files in 2 realms" is the kind of
+// thing a publisher should learn at publish time rather than from a support
+// ticket.
+//
+// Deliberately never throws. A publish that succeeded has succeeded; failing
+// the response because a downstream realm could not be reindexed would report
+// a stored, sealed, addressable Version as an error.
+async function invalidateRangesNowResolvingTo(options: {
+  args: CreateRoutesArgs;
+  storeDir: string;
+  name: string;
+  version: string | undefined;
+}): Promise<RealmInvalidation[]> {
+  let { args, storeDir, name, version } = options;
+  if (!version) {
+    return [];
+  }
+  let selected: RealmInvalidation[] = [];
+  try {
+    selected = await realmsToInvalidateOnPublish({
+      dbAdapter: args.dbAdapter,
+      storeDir,
+      name,
+      version,
+    });
+  } catch (err: any) {
+    log.error(
+      `could not work out what ${name}@${version} invalidates: ${err.message}`,
+    );
+    return [];
+  }
+
+  for (let { realmURL, urls, ranges } of selected) {
+    // Only realms this instance is actually serving. A realm mounted on a
+    // peer is that peer's to reindex, and this handler has no way to reach
+    // its indexer — see the note in the response block about what is still
+    // missing here.
+    let realm = args.realms.find((r) => r.url === realmURL);
+    if (!realm) {
+      log.info(
+        `${name}@${version} invalidates ${urls.length} file(s) in ${realmURL}, ` +
+          'which is not mounted here — skipping',
+      );
+      continue;
+    }
+    log.info(
+      `${name}@${version} now answers ${ranges.join(', ')}; reindexing ` +
+        `${urls.length} file(s) in ${realmURL}`,
+    );
+    // Not awaited: the publisher gets their 200 without waiting on the
+    // indexer. The catch is what keeps an unhandled rejection from taking
+    // the process down.
+    realm.realmIndexUpdater
+      .update(urls.map((u) => new URL(u)))
+      .catch((err: any) =>
+        log.error(`reindex of ${realmURL} after ${name}@${version}: ${err}`),
+      );
+  }
+  return selected;
+}
+
 export default function handlePackageProposals(
   args: CreateRoutesArgs,
 ): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
@@ -520,9 +590,21 @@ export default function handlePackageProposals(
             }),
           );
         }
+        // The Version is in the store now, so the resolver answers with it —
+        // which means every range that now resolves here is describing code
+        // that changed under it. Selecting is cheap (one query) and is done
+        // inline so the publisher gets told what their release moved; the
+        // reindex it seeds is not awaited, because a publish should not block
+        // on however long other realms take to catch up.
+        let invalidated = await invalidateRangesNowResolvingTo({
+          args,
+          storeDir,
+          name,
+          version: published?.version,
+        });
         return setContextResponse(
           ctxt,
-          json(200, { proposal: result.proposal, published }),
+          json(200, { proposal: result.proposal, published, invalidated }),
         );
       }
 
