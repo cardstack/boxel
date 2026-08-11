@@ -29,6 +29,11 @@
         "links": {
           "self": "../Account/acme-industries"
         }
+      },
+      "contract": {
+        "links": {
+          "self": "../Contract/acme-msa-2026"
+        }
       }
     },
     "meta": {

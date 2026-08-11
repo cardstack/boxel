@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Contract fitted walk",
+      "cardDescription": null,
+      "cardThumbnailURL": null
+    },
+    "relationships": {
+      "card": {
+        "links": {
+          "self": "../Contract/acme-msa-2026"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../embedded-view-driver",
+        "name": "EmbeddedViewDriver"
+      }
+    }
+  }
+}

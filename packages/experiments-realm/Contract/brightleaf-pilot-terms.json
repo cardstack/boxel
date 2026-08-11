@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Brightleaf Studio — Pilot Terms",
+      "status": "out for signature",
+      "startDate": "2026-08-15",
+      "endDate": "2026-11-14",
+      "value": {
+        "amount": 6800,
+        "currency": { "code": "USD" }
+      },
+      "terms": "## Pilot\n\nThree months from 15 August 2026. Either party may end the pilot with 14 days' notice.\n\n## Fees\n\nUSD 6,800 for the pilot period, invoiced on signature.",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../contract",
+        "name": "Contract"
+      }
+    },
+    "relationships": {
+      "account": { "links": { "self": "../Account/brightleaf-studio" } },
+      "deal": { "links": { "self": "../Opportunity/brightleaf-workspace" } },
+      "cardInfo.theme": { "links": { "self": "../Theme/ledger" } }
+    }
+  }
+}

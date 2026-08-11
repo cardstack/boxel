@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Acme Industries — Master Services Agreement 2026",
+      "status": "signed",
+      "startDate": "2026-07-15",
+      "endDate": "2027-07-14",
+      "signedAt": "2026-07-14",
+      "value": {
+        "amount": 5880,
+        "currency": { "code": "USD" }
+      },
+      "documentUrl": "https://example.com/contracts/acme-msa-2026.pdf",
+      "terms": "## Term\n\nOne year from 15 July 2026, renewing annually unless either party gives 60 days' notice.\n\n## Fees\n\nUSD 5,880 billed annually in advance. Late payment accrues 1.5% monthly.\n\n## Scope\n\nWorkspace Pro for up to 50 seats. Additional seats billed pro rata at the then-current list price.",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../contract",
+        "name": "Contract"
+      }
+    },
+    "relationships": {
+      "account": { "links": { "self": "../Account/acme-industries" } },
+      "deal": { "links": { "self": "../Deal/acme-enterprise-renewal" } },
+      "cardInfo.theme": { "links": { "self": "../Theme/ledger" } }
+    }
+  }
+}
