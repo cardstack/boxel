@@ -49,7 +49,18 @@ import ConvertLeadCommand from './convert-lead';
 import RecordPaymentCommand from './record-payment';
 import CloseWonCommand from './close-won';
 import DuplicateCommand from './duplicate';
+import ClassifyCommand from './classify';
 import { formatMoney, outstandingBalance, sumLineItems } from './money';
+
+// The scoring rules are the app's domain knowledge; the Classify block only
+// carries the classifier contract (criteria + facts in, label/score out).
+const LEAD_SCORING_CRITERIA = `Score this sales lead 0-100 for how likely it is to become a paying customer, and label it: "hot" (70-100), "warm" (40-69), or "cold" (0-39).
+Signals, strongest first:
+- Status progression: qualified is strong, contacted is moderate, new is neutral, disqualified scores near 0.
+- Source and campaign agreement: a lead whose source matches its campaign's type (e.g. source "webinar" from a webinar campaign) shows real engagement; a lead with no campaign from "website" or "referral" is normal inbound, not a penalty.
+- Campaign health: a running or completed campaign is a live channel; a canceled campaign weakens attribution.
+- Firmographics: a named company and a business email domain (not gmail/yahoo/hotmail/outlook) suggest a real buyer.
+Score conservatively when facts are missing rather than assuming the best.`;
 
 const OPEN_INVOICE_STATUSES = ['sent', 'viewed', 'partial'];
 const INVOICE_IMPORT_STATUSES = [
@@ -1054,6 +1065,44 @@ export class RevenueOs extends CardDef {
       }
     }
 
+    @action async scoreLead(lead: Lead) {
+      if (!this.commandContext || !this.realm) return;
+      this.busy = true;
+      try {
+        let campaign = lead.campaign;
+        let result = await new ClassifyCommand(this.commandContext).execute({
+          criteria: LEAD_SCORING_CRITERIA,
+          facts: JSON.stringify({
+            name: lead.name ?? null,
+            company: lead.company ?? null,
+            emailDomain: lead.email?.split('@')[1] ?? null,
+            source: lead.source ?? null,
+            status: lead.status ?? null,
+            campaign: campaign
+              ? {
+                  name: campaign.name ?? null,
+                  type: campaign.campaignType ?? null,
+                  status: campaign.status ?? null,
+                }
+              : null,
+          }),
+        } as any);
+        let score = Math.max(0, Math.min(100, Math.round(result.score ?? 0)));
+        lead.score = score;
+        await new SaveCardCommand(this.commandContext).execute({
+          card: lead,
+          realm: this.realm,
+        } as any);
+        this.statusMessage = `${lead.name} scored ${score} (${
+          result.label ?? '—'
+        }): ${result.rationale ?? ''}`;
+      } catch (e: any) {
+        this.statusMessage = e?.message ?? 'Scoring failed';
+      } finally {
+        this.busy = false;
+      }
+    }
+
     @action setTab(key: string) {
       this.activeTab = key;
       this.statusMessage = '';
@@ -1577,6 +1626,12 @@ export class RevenueOs extends CardDef {
                   <div class='lead-action'>
                     {{#if (this.canConvert row.lead)}}
                       <BoxelButton
+                        @kind='text-only'
+                        @size='extra-small'
+                        @disabled={{this.busy}}
+                        {{on 'click' (fn this.scoreLead row.lead)}}
+                      >Score</BoxelButton>
+                      <BoxelButton
                         @kind='secondary'
                         @size='extra-small'
                         @disabled={{this.busy}}
@@ -2016,9 +2071,10 @@ export class RevenueOs extends CardDef {
           min-width: 0;
         }
         .lead-action {
-          width: 9.5rem;
+          width: 12.5rem;
           display: flex;
           justify-content: flex-end;
+          gap: 0.375rem;
           flex-shrink: 0;
         }
         .lead-embed :deep(.boxel-card-container) {
