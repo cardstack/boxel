@@ -1,0 +1,55 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Senior Backend Engineer",
+      "department": "Engineering",
+      "description": "We are seeking an experienced backend engineer to lead the development of our core platform services. You will work with TypeScript/Node.js and take ownership of critical infrastructure components.",
+      "headcount": 1,
+      "salaryRangeMin": 150000,
+      "salaryRangeMax": 190000,
+      "requisitionStatus": "posted",
+      "targetFillDate": "2026-10-01",
+      "createdDate": "2026-07-15",
+      "approvalChain": {
+        "startedAt": "2026-07-15T10:00:00.000Z",
+        "steps": [
+          {
+            "decision": "approved",
+            "decidedAt": "2026-07-16T14:30:00.000Z",
+            "comment": "Approved for engineering team expansion"
+          },
+          {
+            "decision": "approved",
+            "decidedAt": "2026-07-17T09:15:00.000Z",
+            "comment": "Budget confirmed for Q3"
+          }
+        ]
+      },
+      "cardInfo": {
+        "name": "Senior Backend Engineer",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "approvalChain.steps.0.approver": {
+        "links": {
+          "self": "../Employee/marcus-webb"
+        }
+      },
+      "approvalChain.steps.1.approver": {
+        "links": {
+          "self": "../Employee/sofia-reyes"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../job-requisition",
+        "name": "JobRequisition"
+      }
+    }
+  }
+}

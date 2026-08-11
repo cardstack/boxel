@@ -1,0 +1,22 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Approve Offer Command (Updated)",
+      "cardDescription": "Approves a candidate's job offer, creates employee record, and auto-creates onboarding checklist",
+      "specType": "command",
+      "ref": {
+        "module": "../commands/approve-offer-command.gts",
+        "name": "ApproveOfferCommand"
+      },
+      "readMe": "# Approve Offer Command (Updated)\n\n## Summary\nApproves a Candidate's job offer after checking the approval chain is complete, creates a new Employee record, and automatically creates an OnboardingChecklist using the first available template.\n\n## Input Fields\n- **candidate**: The Candidate to hire (linksTo)\n- **approver**: The Employee approving the hire (linksTo)\n- **salary**: Override salary for the hire (NumberField, optional)\n- **startDate**: Employee start date (DateField, optional, defaults to today)\n\n## Output Fields\n- **message**: Status message confirming hire (StringField)\n- **employee**: The newly created Employee record (linksTo)\n\n## Phase C Changes\n**NEW:** After creating the employee, this command now calls CreateOnboardingChecklistCommand to automatically create an OnboardingChecklist using the first available OnboardingTemplate in the realm. If template creation fails, the hire completes normally but a warning is logged.\n\n## Usage\n1. From Candidate pipeline board: click Approve on offer-stage card\n2. As AI-assistant tool\n3. Typical approver is a hiring manager\n\n## Behavior\n- Validates candidate.status === 'offer'\n- Checks approval chain is fully approved (if configured)\n- Creates Employee with candidate's data, new start date/salary if provided\n- Updates Candidate.status = 'hired', sets hiredAs reference\n- **NEW:** Creates OnboardingChecklist for the new employee\n- Returns newly created employee\n\n## Guards\n- Candidate must be at 'offer' stage\n- Approval chain must be completed (if steps exist)\n- Salary must be a valid number\n"
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

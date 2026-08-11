@@ -51,6 +51,9 @@ import { Meeting } from '../meeting';
 import { Team } from '../team';
 import { Project, PROJECT_STATUS_COLORS } from '../project';
 import { Vendor } from '../vendor';
+import { Contractor } from '../contractor';
+import { JobRequisition } from '../job-requisition';
+import { OnboardingChecklist } from '../onboarding-checklist';
 import CardList from '@cardstack/base/components/card-list';
 import { Calendar, type CalendarEvent } from '../components/calendar';
 import { OrgTree, type OrgTreeItem } from '../components/org-tree';
@@ -85,6 +88,9 @@ const TABS = [
   'Applications',
   'Pipeline',
   'Offers',
+  'Requisitions',
+  'Onboarding',
+  'Contractors',
   'Directory',
   'Calendar',
   'Org Chart',
@@ -115,6 +121,11 @@ class Isolated extends Component<typeof TalentResourceTracker> {
   @tracked applicationsView: 'grid' | 'strip' | 'table' = 'grid';
   @tracked offersSearch = '';
   @tracked offersView: 'grid' | 'strip' = 'grid';
+  @tracked requisitionsSearch = '';
+  @tracked requisitionStatusFilter = 'all';
+  @tracked onboardingSearch = '';
+  @tracked contractorSearch = '';
+  @tracked contractorStatusFilter = 'all';
   @tracked reviewMode = false;
   @tracked reviewIndex = 0;
   @tracked reviewedCount = 0;
@@ -425,6 +436,23 @@ class Isolated extends Component<typeof TalentResourceTracker> {
   get offers(): Offer[] {
     return (this.args.model.offers ?? []).filter(Boolean) as Offer[];
   }
+
+  get requisitions(): JobRequisition[] {
+    return (this.args.model.requisitions ?? []).filter(Boolean) as JobRequisition[];
+  }
+
+  get contractors(): Contractor[] {
+    return (this.args.model.contractors ?? []).filter(Boolean) as Contractor[];
+  }
+
+  get activeChecklists(): OnboardingChecklist[] {
+    let all = (this.args.model.onboardingChecklists ?? []).filter(Boolean) as OnboardingChecklist[];
+    return all.filter((c) => c.status !== 'complete');
+  }
+
+  isRequisitionStatus = (req: JobRequisition, status: string): boolean => {
+    return (req.requisitionStatus ?? 'draft') === status;
+  };
 
   // True when `date` falls inside `dashboardRange`, or when no range is set
   // (both ends undefined) — the Dashboard's unfiltered, show-everything
@@ -2719,6 +2747,95 @@ class Isolated extends Component<typeof TalentResourceTracker> {
                 </:ghost>
               </KanbanPlane>
             </div>
+          {{/if}}
+
+          {{#if (eq this.activeTab 'Requisitions')}}
+            <section class='tab-section'>
+              <div class='sec-head'>
+                <div class='htext'>
+                  <h2>Requisitions</h2>
+                  <p class='byline'>Job openings by approval status</p>
+                </div>
+              </div>
+              {{#if this.requisitions.length}}
+                <div class='tile-grid'>
+                  {{#each this.requisitions as |req|}}
+                    <div class='tile req-tile' {{on 'click' (fn this.openCard req)}}>
+                      <h4 class='req-title'>{{req.displayTitle}}</h4>
+                      {{#if req.department}}<p class='req-dept'>{{req.department}}</p>{{/if}}
+                      {{#if req.headcount}}<p class='req-headcount'>{{req.headcount}} positions</p>{{/if}}
+                      <p class='req-status'>Status: {{or req.requisitionStatus 'draft'}}</p>
+                    </div>
+                  {{/each}}
+                </div>
+              {{else}}
+                <p class='empty-note'>No requisitions yet</p>
+              {{/if}}
+            </section>
+          {{/if}}
+
+          {{#if (eq this.activeTab 'Onboarding')}}
+            <section class='tab-section'>
+              <div class='sec-head'>
+                <div class='htext'>
+                  <h2>Onboarding</h2>
+                  <p class='byline'>Active onboarding checklists</p>
+                </div>
+              </div>
+              {{#if this.activeChecklists.length}}
+                <div class='tile-grid'>
+                  {{#each this.activeChecklists as |checklist|}}
+                    <div class='tile ob-tile' {{on 'click' (fn this.openCard checklist)}}>
+                      <div class='ob-header'>
+                        <h4>{{checklist.title}}</h4>
+                      </div>
+                      {{#if checklist.employee}}
+                        <p class='ob-person'>{{checklist.employee.name}}</p>
+                      {{else if checklist.contractor}}
+                        <p class='ob-person'>{{checklist.contractor.name}}</p>
+                      {{/if}}
+                      <p class='ob-status'>{{checklist.status}}</p>
+                      {{#if checklist.tasks.length}}
+                        <p class='ob-tasks'>{{checklist.tasks.length}} tasks</p>
+                      {{/if}}
+                    </div>
+                  {{/each}}
+                </div>
+              {{else}}
+                <p class='empty-note'>No active onboarding checklists</p>
+              {{/if}}
+            </section>
+          {{/if}}
+
+          {{#if (eq this.activeTab 'Contractors')}}
+            <section class='tab-section'>
+              <div class='sec-head'>
+                <div class='htext'>
+                  <h2>Contractors</h2>
+                  <p class='byline'>Current contractor roster</p>
+                </div>
+              </div>
+              {{#if this.contractors.length}}
+                <div class='tile-grid'>
+                  {{#each this.contractors as |contractor|}}
+                    <div class='tile contractor-tile' {{on 'click' (fn this.openCard contractor)}}>
+                      <h4 class='contractor-name'>{{contractor.name}}</h4>
+                      {{#if contractor.contractStatus}}
+                        <p class='contractor-status'>{{contractor.contractStatus}}</p>
+                      {{/if}}
+                      {{#if contractor.billableRate}}
+                        <p class='contractor-rate'>${{contractor.billableRate}}/hr</p>
+                      {{/if}}
+                      {{#if contractor.invoiceFrequency}}
+                        <p class='contractor-freq'>{{contractor.invoiceFrequency}}</p>
+                      {{/if}}
+                    </div>
+                  {{/each}}
+                </div>
+              {{else}}
+                <p class='empty-note'>No contractors</p>
+              {{/if}}
+            </section>
           {{/if}}
 
           {{#if (eq this.activeTab 'Offers')}}

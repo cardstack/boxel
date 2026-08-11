@@ -1,0 +1,107 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "tasks": [
+        {
+          "title": "Laptop & equipment setup",
+          "status": "complete",
+          "completedDate": "2026-08-04",
+          "notes": "Laptop received and configured"
+        },
+        {
+          "title": "Code repository access",
+          "status": "complete",
+          "completedDate": "2026-08-04",
+          "notes": "GitHub access enabled"
+        },
+        {
+          "title": "Team introduction & codebase walkthrough",
+          "status": "complete",
+          "completedDate": "2026-08-05",
+          "notes": "Architecture overview completed"
+        },
+        {
+          "title": "First sprint planning",
+          "status": "in-progress",
+          "notes": null
+        },
+        {
+          "title": "Pair programming session",
+          "status": "pending",
+          "notes": null
+        },
+        {
+          "title": "First PR review",
+          "status": "pending",
+          "notes": null
+        },
+        {
+          "title": "30-day check-in",
+          "status": "pending",
+          "notes": null
+        }
+      ],
+      "createdDate": "2026-08-01",
+      "cardInfo": {
+        "name": "Dana Kim's Onboarding",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "employee": {
+        "links": {
+          "self": "../Employee/dana-kim"
+        }
+      },
+      "template": {
+        "links": {
+          "self": "../OnboardingTemplate/engineering-onboarding"
+        }
+      },
+      "tasks.0.assignee": {
+        "links": {
+          "self": "../Employee/marcus-webb"
+        }
+      },
+      "tasks.1.assignee": {
+        "links": {
+          "self": "../Employee/priya-nair"
+        }
+      },
+      "tasks.2.assignee": {
+        "links": {
+          "self": "../Employee/priya-nair"
+        }
+      },
+      "tasks.3.assignee": {
+        "links": {
+          "self": "../Employee/priya-nair"
+        }
+      },
+      "tasks.4.assignee": {
+        "links": {
+          "self": "../Employee/priya-nair"
+        }
+      },
+      "tasks.5.assignee": {
+        "links": {
+          "self": "../Employee/priya-nair"
+        }
+      },
+      "tasks.6.assignee": {
+        "links": {
+          "self": "../Employee/priya-nair"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../onboarding-checklist",
+        "name": "OnboardingChecklist"
+      }
+    }
+  }
+}

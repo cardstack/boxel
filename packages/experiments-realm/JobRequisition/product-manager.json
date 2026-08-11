@@ -1,0 +1,45 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Product Manager",
+      "department": "Product",
+      "description": "Lead product strategy and development for our flagship platform. Work cross-functionally with engineering, design, and marketing to deliver innovative features that drive customer value.",
+      "headcount": 1,
+      "salaryRangeMin": 130000,
+      "salaryRangeMax": 170000,
+      "requisitionStatus": "approved",
+      "targetFillDate": "2026-09-15",
+      "createdDate": "2026-07-20",
+      "approvalChain": {
+        "startedAt": "2026-07-20T11:00:00.000Z",
+        "steps": [
+          {
+            "decision": "approved",
+            "decidedAt": "2026-07-21T16:45:00.000Z",
+            "comment": "Headcount approved for Q3 initiatives"
+          }
+        ]
+      },
+      "cardInfo": {
+        "name": "Product Manager",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "approvalChain.steps.0.approver": {
+        "links": {
+          "self": "../Employee/sofia-reyes"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../job-requisition",
+        "name": "JobRequisition"
+      }
+    }
+  }
+}

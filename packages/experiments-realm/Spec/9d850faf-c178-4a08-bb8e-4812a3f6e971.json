@@ -1,0 +1,22 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Assign Onboarding Task Command",
+      "cardDescription": "Assigns an onboarding task to an employee",
+      "specType": "command",
+      "ref": {
+        "module": "../commands/assign-onboarding-task-command.gts",
+        "name": "AssignOnboardingTaskCommand"
+      },
+      "readMe": "# Assign Onboarding Task Command\n\n## Summary\nGiven an OnboardingChecklist, a task index, and an Employee, assigns that task to the employee.\n\n## Input Fields\n- **onboardingChecklist**: The OnboardingChecklist containing the task (linksTo)\n- **taskIndex**: 0-based index of the task to assign (NumberField)\n- **assignee**: The Employee to assign the task to (linksTo)\n\n## Output Fields\n- **message**: Status message describing the assignment (StringField)\n- **checklist**: The updated OnboardingChecklist (linksTo)\n\n## Usage\n1. From OnboardingChecklist isolated view: each task row has an Assign button\n2. As AI-assistant tool with checklist/taskIndex/assignee\n3. Manager typically assigns tasks to team members\n\n## Behavior\n- Sets task.assignee = employee\n- Saves the checklist with updated task\n- Task now appears in that employee's task list\n\n## Guards\n- taskIndex must be within bounds\n- assignee must be a valid Employee reference\n"
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

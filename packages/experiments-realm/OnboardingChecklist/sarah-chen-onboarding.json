@@ -1,0 +1,76 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "tasks": [
+        {
+          "title": "Contract & paperwork setup",
+          "status": "complete",
+          "completedDate": "2026-08-05",
+          "notes": "Contract signed and filed"
+        },
+        {
+          "title": "Equipment & access provisioning",
+          "status": "complete",
+          "completedDate": "2026-08-05",
+          "notes": "VPN and tools access configured"
+        },
+        {
+          "title": "Team introduction & scope review",
+          "status": "in-progress",
+          "notes": "Initial scope meeting scheduled"
+        },
+        {
+          "title": "Project kickoff",
+          "status": "pending",
+          "notes": null
+        }
+      ],
+      "createdDate": "2026-08-03",
+      "cardInfo": {
+        "name": "Sarah Chen's Onboarding",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "contractor": {
+        "links": {
+          "self": "../Contractor/sarah-chen"
+        }
+      },
+      "template": {
+        "links": {
+          "self": "../OnboardingTemplate/sales-onboarding"
+        }
+      },
+      "tasks.0.assignee": {
+        "links": {
+          "self": "../Employee/dana-kim"
+        }
+      },
+      "tasks.1.assignee": {
+        "links": {
+          "self": "../Employee/marcus-webb"
+        }
+      },
+      "tasks.2.assignee": {
+        "links": {
+          "self": "../Employee/sofia-reyes"
+        }
+      },
+      "tasks.3.assignee": {
+        "links": {
+          "self": "../Employee/sofia-reyes"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../onboarding-checklist",
+        "name": "OnboardingChecklist"
+      }
+    }
+  }
+}

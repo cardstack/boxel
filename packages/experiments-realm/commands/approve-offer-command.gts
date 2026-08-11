@@ -13,6 +13,8 @@ import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
 
 import { Candidate } from '../candidate';
 import { Employee } from '../employee';
+import { OnboardingTemplate } from '../onboarding-template';
+import { CreateOnboardingChecklistCommand } from './create-onboarding-checklist-command';
 
 class ApproveOfferInput extends CardDef {
   @field candidate = linksTo(() => Candidate, { searchable: true });
@@ -97,6 +99,30 @@ export class ApproveOfferCommand extends Command<
       await new SaveCardCommand(this.commandContext).execute({
         card: candidate.offer,
       });
+    }
+
+    // Automatically create an OnboardingChecklist for the new employee
+    try {
+      // Try to find a default template (e.g., based on role or department)
+      // For now, just fetch templates and use the first one
+      let templates = await this.commandContext.store.query(OnboardingTemplate);
+      let template = templates?.[0];
+
+      if (template) {
+        let createChecklistCmd = new CreateOnboardingChecklistCommand(
+          this.commandContext,
+        );
+        await createChecklistCmd.execute({
+          employee: saved,
+          template: template,
+        } as any);
+      }
+    } catch (err) {
+      // Silently fail if template creation doesn't work — don't block the hire
+      console.error(
+        'Failed to create onboarding checklist:',
+        err instanceof Error ? err.message : String(err),
+      );
     }
 
     return new ApproveOfferResult({

@@ -32,7 +32,10 @@
         ]
       },
       "cardInfo": {
-        "name": "Tomás Ribeiro — Offer"
+        "name": "Tomás Ribeiro — Offer",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
       }
     },
     "relationships": {

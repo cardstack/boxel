@@ -1,0 +1,22 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Create Onboarding Checklist Command",
+      "cardDescription": "Creates an onboarding checklist from a template for a new hire",
+      "specType": "command",
+      "ref": {
+        "module": "../commands/create-onboarding-checklist-command.gts",
+        "name": "CreateOnboardingChecklistCommand"
+      },
+      "readMe": "# Create Onboarding Checklist Command\n\n## Summary\nGiven an Employee or Contractor and an OnboardingTemplate, instantiates a new OnboardingChecklist with tasks copied from the template, computing due dates from template offsets + creation date.\n\n## Input Fields\n- **employee**: The Employee to create a checklist for (linksTo)\n- **contractor**: The Contractor to create a checklist for (linksTo)\n- **template**: The OnboardingTemplate to use as source (linksTo)\n\n## Output Fields\n- **message**: Status message describing creation (StringField)\n- **checklist**: The newly created OnboardingChecklist (linksTo)\n\n## Usage\n1. Automatically called by ApproveOfferCommand after hiring an employee\n2. Manually called from app's New Checklist flow\n3. As AI-assistant tool with employee/contractor + template\n\n## Behavior\n- Creates OnboardingChecklistTaskField entries from template.tasks\n- For each task: computes dueDate = createdDate + template.dueDate.value days\n- Sets all tasks to status='pending' initially (assignee left empty)\n- Returns newly saved checklist\n\n## Design\nTasks are templated but assignee is empty \u2014 the manager must assign tasks via AssignOnboardingTaskCommand. This keeps the checklist flexible across team members.\n\n## Guards\n- Exactly one of employee or contractor must be provided\n- template must exist and have tasks\n"
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

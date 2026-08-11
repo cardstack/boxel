@@ -1,0 +1,22 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Approve Requisition Command",
+      "cardDescription": "Approves a job requisition via its approval chain and optionally creates a Position when fully approved",
+      "specType": "command",
+      "ref": {
+        "module": "../commands/approve-requisition-command.gts",
+        "name": "ApproveRequisitionCommand"
+      },
+      "readMe": "# Approve Requisition Command\n\n## Summary\nApproves the current pending step of a JobRequisition's approvalChain, advancing the chain sequence. When the chain becomes fully approved, optionally creates a Position linked to the requisition.\n\n## Input Fields\n- **requisition**: The JobRequisition to approve (linksTo)\n- **stepIndex**: Index of the approval step to decide on (NumberField)\n- **decision**: 'approved' or 'rejected' (StringField)\n- **comment**: Optional approval comment (StringField)\n- **createPosition**: Whether to create a Position when fully approved (BooleanField)\n- **positionTitle**: Title for the new Position if createPosition=true (StringField)\n- **positionDescription**: Description for the new Position if createPosition=true (TextAreaField)\n\n## Output Fields\n- **message**: Status message describing the action (StringField)\n- **requisition**: The updated JobRequisition (linksTo)\n- **position**: The newly created Position if created (linksTo)\n\n## Usage\n1. From JobRequisition isolated view: next to approvalChain, an Approve/Reject button calls this command\n2. As AI-assistant tool with all inputs specified\n3. Automatically validates approval chain sequence (no out-of-order decisions)\n\n## Behavior\n- Delegates to ApproveChainStepCommand for actual approval step logic\n- Checks if approval chain is fully approved after the step\n- If fully approved and createPosition=true: creates a new Position\n- Updates requisition.requisitionStatus to 'approved' when chain completes\n\n## Guards\n- stepIndex must match current step in the chain (out-of-order throws)\n- decision must be 'approved' or 'rejected'\n- Cannot skip approval steps\n"
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
