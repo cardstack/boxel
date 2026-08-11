@@ -1,0 +1,15 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "person": "Alan",
+      "mood": "debugging a heisenbug"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://realm-server.deck-at-rest-poc.localhost/_packages/experiments/greeter@2.1.0/index.js",
+        "name": "Greeter"
+      }
+    }
+  }
+}

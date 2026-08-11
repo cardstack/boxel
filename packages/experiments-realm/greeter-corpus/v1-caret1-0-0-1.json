@@ -1,0 +1,15 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Grace",
+      "mood": "quietly optimistic"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://realm-server.deck-at-rest-poc.localhost/_packages/experiments/greeter@%5E1.0.0/index.js",
+        "name": "Greeter"
+      }
+    }
+  }
+}

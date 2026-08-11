@@ -3,7 +3,7 @@
     "publisher": "experiments",
     "packages": {
       "greeter": {
-        "version": "2.3.0",
+        "version": "2.5.0",
         "entry": "$DECK/index.gts",
         "exports": {
           "./greeter": "$DECK/index.gts"

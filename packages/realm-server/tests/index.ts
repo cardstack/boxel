@@ -403,6 +403,7 @@ const ALL_TEST_FILES: string[] = [
   './module-identity-test',
   './import-map-invalidation-test',
   './package-publish-invalidation-test',
+  './package-range-query-test',
 ];
 
 // TEST_FILES limits which test files are loaded (parsed and executed). Useful

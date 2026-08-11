@@ -1,0 +1,15 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "person": "Donald",
+      "mood": "thinking about version ranges"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://realm-server.deck-at-rest-poc.localhost/_packages/experiments/greeter@2.x/index.js",
+        "name": "Greeter"
+      }
+    }
+  }
+}

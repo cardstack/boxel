@@ -1,0 +1,15 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "person": "Margaret",
+      "mood": "sceptical of the benchmark"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://realm-server.deck-at-rest-poc.localhost/_packages/experiments/greeter@2.2.0/index.js",
+        "name": "Greeter"
+      }
+    }
+  }
+}

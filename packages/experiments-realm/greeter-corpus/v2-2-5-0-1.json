@@ -1,0 +1,15 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "person": "Barbara",
+      "mood": "delighted by a proof"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://realm-server.deck-at-rest-poc.localhost/_packages/experiments/greeter@2.5.0/index.js",
+        "name": "Greeter"
+      }
+    }
+  }
+}

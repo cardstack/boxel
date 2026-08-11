@@ -4,6 +4,7 @@ import stringify from 'safe-stable-stringify';
 import {
   type CardResource,
   type CodeRef,
+  type PgPrimitive,
   baseCardRef,
   internalKeysFor,
   isResolvedCodeRef,
@@ -320,6 +321,47 @@ export class IndexQueryEngine {
 
   async #query(expression: Expression) {
     return await query(this.#dbAdapter, expression, coerceTypes);
+  }
+
+  // The versions of a package that instances are ACTUALLY typed against,
+  // read out of the index rather than out of the package store.
+  //
+  // The store is on disk and holds every Version ever published; the index
+  // holds the ones something adopts from. For expanding a range query, the
+  // index is both the cheaper source (no round-trip to the store, same
+  // database as the query it is feeding) and the more precise one: a
+  // published Version with no instances cannot match any row, so expanding
+  // to it only adds branches that are guaranteed to return nothing.
+  //
+  // This is a scan — jsonb array expansion plus a substring test, which no
+  // GIN index can serve, since `types` is indexed for CONTAINMENT and the
+  // question here is prefix-shaped. It is bounded by realm when the caller
+  // scopes the query. At a realm size where it stops being cheap, the fix is
+  // a supporting expression index (or a materialized package-version table
+  // maintained by the indexer) rather than moving range evaluation into SQL.
+  async candidateVersionsFor(options: {
+    name: string;
+    realmURLs?: string[];
+  }): Promise<string[]> {
+    let { name, realmURLs } = options;
+    let marker = `%/_packages/${name}@%`;
+    let pattern = `_packages/${name.replace(/([%_\\])/g, '\\$1')}@([^/]+)/`;
+    let binds: PgPrimitive[] = [marker, pattern];
+    let realmClause = '';
+    if (realmURLs?.length) {
+      realmClause = ` AND i.realm_url = ANY($3)`;
+      binds.push(realmURLs as unknown as PgPrimitive);
+    }
+    let rows = await this.#dbAdapter.execute(
+      `SELECT DISTINCT substring(t from $2) AS version
+         FROM boxel_index i, jsonb_array_elements_text(i.types) t
+        WHERE t LIKE $1
+          AND i.is_deleted IS NOT TRUE${realmClause}`,
+      { bind: binds },
+    );
+    return rows
+      .map((row) => row.version as string | null)
+      .filter((v): v is string => Boolean(v));
   }
 
   // Split the two phases so the search-timing line can attribute the SQL

@@ -1,0 +1,15 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Radia",
+      "mood": "pleased with the migration"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://realm-server.deck-at-rest-poc.localhost/_packages/experiments/greeter@1.1.0/index.js",
+        "name": "Greeter"
+      }
+    }
+  }
+}

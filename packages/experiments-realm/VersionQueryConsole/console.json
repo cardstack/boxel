@@ -1,0 +1,15 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Version Query Console",
+      "query": ""
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../version-query-console",
+        "name": "VersionQueryConsole"
+      }
+    }
+  }
+}

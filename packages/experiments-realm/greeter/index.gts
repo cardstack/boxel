@@ -38,7 +38,7 @@ export class Greeter extends CardDef {
         {{#if @model.mood}}
           <p class='mood'>feeling {{@model.mood}}</p>
         {{/if}}
-        <p class='v'>greeter v2.3</p>
+        <p class='v'>greeter v2.5.0</p>
       </section>
       <style scoped>
         .greeter {

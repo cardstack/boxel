@@ -38,6 +38,11 @@ import type {
 } from './realm-identifiers.ts';
 import { rri } from './realm-identifiers.ts';
 import type { Filter, Query } from './query.ts';
+import {
+  collectPackageSpecs,
+  expandPackageRanges,
+  versionsSatisfying,
+} from './package-range-query.ts';
 import { CardError, type SerializedError } from './error.ts';
 import {
   isCodeRef,
@@ -276,6 +281,47 @@ export class RealmIndexQueryEngine {
   // result's own native type (`types[0]`) is in play; an explicit predicate
   // opens the full adoption-chain universe. The applied htmlQuery is echoed
   // once as `meta.htmlQuery` whenever the html branch is in play.
+  // Turn `greeter@^2.0.0/index/Greeter` into an `any` over the exact versions
+  // present in the index. Returns the query untouched when its filter names no
+  // ranges, which is every query that does not mention a package — so the
+  // common path costs one synchronous tree walk and no SQL.
+  async #expandPackageRanges<T extends { filter?: Filter }>(
+    query: T,
+  ): Promise<T> {
+    let requests = collectPackageSpecs(query.filter);
+    if (requests.length === 0) {
+      return query;
+    }
+    // One lookup per distinct package, not per filter node.
+    let names = [...new Set(requests.map((r) => r.name))];
+    let versionsByName = new Map<string, string[]>();
+    await Promise.all(
+      names.map(async (name) => {
+        try {
+          versionsByName.set(
+            name,
+            await this.#indexQueryEngine.candidateVersionsFor({
+              name,
+              realmURLs: [this.#realm.url],
+            }),
+          );
+        } catch (err: any) {
+          // A lookup that fails leaves the range un-rewritten, which matches
+          // nothing. Failing the whole search would turn a degraded index
+          // into an error for queries that never mentioned a package.
+          this.#log.error(
+            `could not read candidate versions for ${name}: ${err.message}`,
+          );
+        }
+      }),
+    );
+    let expanded = expandPackageRanges(query.filter, ({ name, spec }) => {
+      let versions = versionsByName.get(name);
+      return versions ? versionsSatisfying({ spec, versions }) : undefined;
+    });
+    return { ...query, filter: expanded };
+  }
+
   async searchEntries(
     searchEntryQuery: SearchEntryQuery,
     opts?: Options,
@@ -326,10 +372,14 @@ export class RealmIndexQueryEngine {
     } else {
       sqlOpts = engineOpts;
     }
+    // A range-spelled type reference is rewritten into an `any` over the exact
+    // versions the index actually holds, BEFORE the filter is compiled.
+    // Everything downstream then sees ordinary exact-key predicates.
+    let expandedQuery = await this.#expandPackageRanges(query);
     let runSql = () =>
       this.#indexQueryEngine.search(
         new URL(this.#realm.url),
-        query,
+        expandedQuery,
         sqlOpts,
         projection,
         entryTypeScope,

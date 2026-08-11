@@ -1,0 +1,15 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "person": "Ken",
+      "mood": "annoyed by flaky tests"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://realm-server.deck-at-rest-poc.localhost/_packages/experiments/greeter@2.3.0/index.js",
+        "name": "Greeter"
+      }
+    }
+  }
+}

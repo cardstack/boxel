@@ -89,6 +89,7 @@
     "qunit": "catalog:",
     "recast": "catalog:",
     "safe-stable-stringify": "catalog:",
+    "semver": "^7.7.0",
     "super-fast-md5": "catalog:",
     "transform-modules-amd-plugin": "workspace:*",
     "uuid": "catalog:",
@@ -97,19 +98,20 @@
   },
   "devDependencies": {
     "@babel/core": "catalog:",
+    "@glint/ember-tsc": "catalog:",
     "@types/dompurify": "catalog:",
     "@types/js-string-escape": "catalog:",
     "@types/mime-types": "catalog:",
     "@types/ms": "catalog:",
     "@types/qunit": "catalog:",
+    "@types/semver": "^7.7.0",
     "@types/statuses": "catalog:",
     "concurrently": "catalog:",
     "dompurify": "catalog:",
     "ember-cli-htmlbars": "^6.3.0",
+    "es-module-lexer": "^1.7.0",
     "monaco-editor": "catalog:",
-    "statuses": "catalog:",
-    "@glint/ember-tsc": "catalog:",
-    "es-module-lexer": "^1.7.0"
+    "statuses": "catalog:"
   },
   "peerDependencies": {
     "@babel/core": "catalog:",
