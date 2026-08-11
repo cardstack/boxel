@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 
-import { RealmPaths, rri } from '@cardstack/runtime-common';
+import { RealmPaths, rri, toSafeFileName } from '@cardstack/runtime-common';
 
 module('Unit | RealmPaths', function (hooks) {
   let realmPaths: RealmPaths;
@@ -109,5 +109,71 @@ module('Unit | RealmPaths', function (hooks) {
       realmPaths.inRealm(rri('https://cardstack.com/hümans/example?a=1&b=2')),
       'local path with a query string is in realm',
     );
+  });
+
+  test('#toSafeFileName leaves ordinary names alone', function (assert) {
+    for (let name of [
+      'New Recording 3.m4a',
+      'Recording 2026-08-11 at 10.32.15 AM.m4a',
+      'Voice Memo (1).m4a',
+      'Q&A session.m4a',
+      'notes re: budget.m4a',
+      'Récital.m4a',
+      '会議.m4a',
+      'card-api.gts',
+    ]) {
+      assert.strictEqual(toSafeFileName(name), name, `${name} is unchanged`);
+    }
+  });
+
+  test('#toSafeFileName replaces characters that URL syntax would eat', function (assert) {
+    assert.strictEqual(toSafeFileName('Standup #3.m4a'), 'Standup -3.m4a');
+    assert.strictEqual(toSafeFileName('notes?.m4a'), 'notes-.m4a');
+    assert.strictEqual(
+      toSafeFileName('meeting 100% done.m4a'),
+      'meeting 100- done.m4a',
+    );
+    assert.strictEqual(toSafeFileName('a\\b.m4a'), 'a-b.m4a');
+    assert.strictEqual(toSafeFileName('a/b.m4a'), 'a-b.m4a');
+    assert.strictEqual(toSafeFileName('Rec\tx.m4a'), 'Rec-x.m4a');
+
+    // A run of unsafe characters collapses to a single replacement.
+    assert.strictEqual(toSafeFileName('a#?%b.m4a'), 'a-b.m4a');
+
+    // Surrounding whitespace is what the URL parser would strip anyway.
+    assert.strictEqual(toSafeFileName('  Rec.m4a  '), 'Rec.m4a');
+
+    // Names that resolve to a directory rather than a file.
+    for (let name of ['', '   ', '.', '..', '/']) {
+      assert.strictEqual(toSafeFileName(name), '-', `${name} is replaced`);
+    }
+  });
+
+  test('a safe file name survives the fileURL -> local round trip', function (assert) {
+    // The invariant the sanitizer exists for, asserted as a property rather
+    // than against a fixed character list: whatever `toSafeFileName` returns,
+    // the realm stores under exactly that name. A file whose name is mangled
+    // in transit loses its extension, and with it the content type every layer
+    // re-derives from the path.
+    for (let name of [
+      'Standup #3.m4a',
+      'notes?.m4a',
+      'meeting 100% done.m4a',
+      'a%zz.m4a',
+      'a\\b.m4a',
+      'Rec\tx.m4a',
+      '  Rec.m4a  ',
+      'New Recording 3.m4a',
+      'Récital.m4a',
+      '会議.m4a',
+    ]) {
+      let safe = toSafeFileName(name);
+      assert.strictEqual(
+        realmPaths.local(realmPaths.fileURL(safe)),
+        safe,
+        `${JSON.stringify(name)} round trips as ${JSON.stringify(safe)}`,
+      );
+      assert.true(safe.endsWith('.m4a'), `${safe} keeps its extension`);
+    }
   });
 });

@@ -204,6 +204,38 @@ function beforeQuery(value: string): string {
 //
 export type LocalPath = string;
 
+// Characters that a file name cannot survive a trip through this module with.
+// `fileURL` builds the URL with `new URL(name, realmURL)` and `local` recovers
+// the path with `decodeURI`, and that pair mangles each of these:
+//
+//   #   opens a fragment, so "Standup #3.m4a" is written as "Standup "
+//   ?   opens a query, which `local` strips, so "notes?.m4a" becomes "notes"
+//   \   is normalized to "/", silently turning the name into a directory
+//   /   is a path separator, so a name would gain a directory it didn't ask for
+//   %   either mis-decodes ("a%20b" comes back as "a b") or, on an escape that
+//       isn't valid hex, makes `decodeURI` throw URIError
+//
+// Tab, newline, and carriage return are dropped outright by the URL parser, and
+// leading/trailing whitespace is trimmed by it, so both are handled too.
+//
+// Losing the extension this way is the damage that carries: every layer
+// re-derives a file's content type from its name (see `inferContentType`), so a
+// truncated name reads as application/octet-stream and an uploaded recording
+// stops being audio.
+const UNSAFE_FILE_NAME_CHARS = /[#?\\/%\t\n\r]+/g;
+
+// Make a single file name safe to hand to `fileURL`, so that the local path the
+// realm stores is the name the caller intended. Takes a bare name, never a
+// path — `/` is replaced rather than preserved, so a caller assembling
+// something like `skills/<slug>/SKILL.md` sanitizes the segments and joins them
+// afterward.
+export function toSafeFileName(name: string): string {
+  let safe = name.trim().replace(UNSAFE_FILE_NAME_CHARS, '-');
+  // "" resolves to the containing directory and "."/".." to a directory
+  // traversal, none of which name a file.
+  return safe === '' || safe === '.' || safe === '..' ? '-' : safe;
+}
+
 const MARKDOWN_FILE_EXTENSION = /\.(md|markdown)$/i;
 
 // True when the id/URL names a markdown file (`.md` / `.markdown`). Matches
