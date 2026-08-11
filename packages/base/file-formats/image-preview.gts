@@ -4,7 +4,8 @@
 // how the pixels meet the frame the shell hands it.
 import GlimmerComponent from '@glimmer/component';
 
-import { FileImage } from './file-resources';
+import { FileImage } from './file-image';
+import { letterboxImage } from './file-presentation';
 import type { FilePreviewSignature } from './file-preview-stage';
 
 export class ImagePreview extends GlimmerComponent<FilePreviewSignature> {
@@ -16,18 +17,20 @@ export class ImagePreview extends GlimmerComponent<FilePreviewSignature> {
   }
 
   // How the pixels meet the frame. A fitted cell is a fixed collection tile:
-  // ordinary shapes fill it edge to edge, and only proportions a center-crop
-  // would destroy (a panorama, a skyscraper) letterbox instead — the same rule
-  // the fitted shell applies to its thumbnail rail. The reading formats never
-  // crop and never upscale a raster; blowing a small image up to the stage
-  // would trade real pixels for blur.
+  // ordinary shapes fill it edge to edge, and only what `letterboxImage`
+  // exempts (vectors, crop-destroying proportions) contains instead — the
+  // shared rule the fitted shell's thumbnail rail also applies. The reading
+  // formats never crop and never upscale a raster; blowing a small image up
+  // to the stage would trade real pixels for blur.
   get fit() {
     if (this.isSvg) {
       return 'contain';
     }
     if (this.args.mode === 'fitted') {
-      let ratio = this.args.model?.aspectRatio;
-      return ratio != null && (ratio >= 2.5 || ratio <= 0.4)
+      return letterboxImage(
+        this.args.model?.previewKind,
+        this.args.model?.aspectRatio,
+      )
         ? 'contain'
         : 'cover';
     }

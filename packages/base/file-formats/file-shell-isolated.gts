@@ -188,17 +188,27 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
   }
 
   // A `contains` FieldDef is always an instance, so presence has to mean "has
-  // at least one meaningful value" rather than "is not null".
+  // at least one meaningful value" rather than "is not null" — and the value
+  // list must cover every field the pane's templates can render, or a thinly
+  // tagged photo hides rows the pane would have shown.
   get hasExif() {
-    let e = this.args.model?.exif;
+    let capture = this.args.model?.exif?.capture;
+    let location = this.args.model?.exif?.location;
     return Boolean(
-      e?.capture?.cameraName ||
-      e?.capture?.lensModel ||
-      e?.capture?.iso ||
-      e?.capture?.exposureTime?.display ||
-      e?.capture?.capturedAt ||
-      e?.location?.coordinates ||
-      e?.location?.place,
+      capture?.cameraName ||
+      capture?.lensModel ||
+      capture?.focalLength?.display ||
+      capture?.aperture?.display ||
+      capture?.exposureTime?.display ||
+      capture?.iso ||
+      capture?.flash?.label ||
+      capture?.orientation?.label ||
+      capture?.capturedAt ||
+      capture?.software ||
+      location?.coordinates ||
+      location?.altitude?.display ||
+      location?.place ||
+      location?.source?.label,
     );
   }
 
