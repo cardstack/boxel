@@ -31,6 +31,7 @@ import {
   type FromScratchResult,
   type IncrementalDoneResult,
 } from '@cardstack/runtime-common/tasks/indexer';
+import { FULL_REINDEX_JOB_TIMEOUT_SEC } from '@cardstack/runtime-common/tasks/full-reindex';
 import queueTests from '@cardstack/runtime-common/tests/queue-test';
 import { basename } from 'path';
 
@@ -1056,14 +1057,14 @@ module(basename(import.meta.filename), function () {
             publisher.publish<void>({
               jobType: 'full-reindex',
               concurrencyGroup: 'full-reindex-group',
-              timeout: 6 * 60,
+              timeout: FULL_REINDEX_JOB_TIMEOUT_SEC,
               priority: 0,
               args: { realmUrls: ['http://example.com/a/'] },
             }),
             publisher2.publish<void>({
               jobType: 'full-reindex',
               concurrencyGroup: 'full-reindex-group',
-              timeout: 6 * 60,
+              timeout: FULL_REINDEX_JOB_TIMEOUT_SEC,
               priority: 0,
               args: {
                 realmUrls: ['http://example.com/a/', 'http://example.com/b/'],

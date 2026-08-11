@@ -41,6 +41,16 @@ import type { PgAdapter } from './pg-adapter.ts';
 import * as Sentry from '@sentry/node';
 
 const log = logger('queue');
+
+// Ceiling on how long any single job may occupy a worker, whatever timeout it
+// declares. It clamps the reservation's lease — and with it the handler's abort
+// deadline, which is the same value — so it is the backstop behind every job
+// type's own budget rather than a deadline competing with it.
+//
+// Set to the largest timeout any job type declares, so in a deployed worker it
+// never binds: `Math.min` always picks the job's own, shorter budget. What it
+// bounds is a caller declaring something absurd, and it is how a test runner
+// keeps aborts short without restating a smaller timeout at every publish site.
 const MAX_JOB_TIMEOUT_SEC = FROM_SCRATCH_JOB_TIMEOUT_SEC;
 
 export interface JobsTable {
