@@ -84,10 +84,7 @@ import {
   APP_BOXEL_SYSTEM_CARD_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
-import {
-  type Submode,
-  Submodes,
-} from '@cardstack/host/components/submode-switcher';
+import { Submodes } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
 
 import type IndexController from '@cardstack/host/controllers/index';
@@ -96,20 +93,19 @@ import type { TempEvent } from '@cardstack/host/lib/matrix-classes/room';
 import Room from '@cardstack/host/lib/matrix-classes/room';
 import { getRandomBackgroundURL, iconURLFor } from '@cardstack/host/lib/utils';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
-import { clearLocalStorage } from '@cardstack/host/utils/local-storage-keys';
+import {
+  clearLocalStorage,
+  RealmServerSessionLocalStorageKey,
+  SessionLocalStorageKey,
+} from '@cardstack/host/utils/local-storage-keys';
 
 import { isSkillCard } from '../lib/file-def-manager';
 import { getSkillSourceTools, loadSkillSource } from '../lib/skill-tools';
 import { getUniqueValidToolDefinitions } from '../lib/tool-definitions';
-import {
-  sourceCodeEditingSkillUrl,
-  devSkillId,
-  envSkillId,
-} from '../lib/utils';
+import { skillsIndexId } from '../lib/utils';
 import { importResource } from '../resources/import';
 
 import { getRoom } from '../resources/room';
-import UpdateRoomSkillsTool from '../tools/update-room-skills';
 import { addPatchTools } from '../tools/utils';
 
 import type CardService from './card-service';
@@ -1254,7 +1250,18 @@ export default class MatrixService extends Service {
         );
         window.location.href = indexController.authRedirect;
       } else if (refreshRoutes) {
-        await this.router.refresh();
+        // The index route's model hook redirects when the URL carries no
+        // operatorModeState, aborting the refresh that ran it. Expected.
+        try {
+          await this.router.refresh();
+        } catch (error: any) {
+          if (
+            error?.name !== 'TransitionAborted' &&
+            error?.code !== 'TRANSITION_ABORTED'
+          ) {
+            throw error;
+          }
+        }
       }
     } else if (isTesting()) {
       // start() did nothing because the client wasn't logged in at this point,
@@ -1564,6 +1571,7 @@ export default class MatrixService extends Service {
         // files re-upload their file content. Both contribute commands.
         let skillCardsToReupload: SkillModule.Skill[] = [];
         let markdownSkillFileDefs: FileDef[] = [];
+        let unchangedMarkdownSkillFileDefs: FileAPI.SerializedFile[] = [];
         await Promise.all(
           enabledSkillCardFileDefs.map(async (fileDef) => {
             let source = await loadSkillSource(this.store, fileDef.sourceUrl);
@@ -1575,6 +1583,16 @@ export default class MatrixService extends Service {
             );
             if (isSkillCard in source) {
               skillCardsToReupload.push(source as SkillModule.Skill);
+            } else if (
+              isUnchangedMarkdownSkill(source as unknown as FileDef, fileDef)
+            ) {
+              // Re-uploading a `.md` skill means fetching its source over HTTP
+              // first. The realm-indexed file-meta already carries the hash of
+              // that content, so when it matches what the room recorded there
+              // is nothing to upload — keep the stored fileDef and skip the
+              // fetch. This runs on every message send, so without the check
+              // each send re-downloads every enabled markdown skill.
+              unchangedMarkdownSkillFileDefs.push(fileDef);
             } else {
               markdownSkillFileDefs.push(this.fileAPI.createFileDef(fileDef));
             }
@@ -1586,6 +1604,26 @@ export default class MatrixService extends Service {
         let enabledMarkdownSkillFileDefs = markdownSkillFileDefs.length
           ? await this.uploadFiles(markdownSkillFileDefs)
           : [];
+        // Re-emit the skills in the order the room already had them. Uploading
+        // splits them by kind, so concatenating the two buckets would reorder
+        // any room holding both a skill card and a `.md` skill — a rewrite that
+        // changes nothing but the sequence, which still writes a new state
+        // event on every send. Skills that no longer load drop out, as before.
+        let bySourceUrl = new Map<string, FileAPI.SerializedFile>();
+        for (let fileDef of [
+          ...enabledSkillFileDefs,
+          ...enabledMarkdownSkillFileDefs,
+        ]) {
+          bySourceUrl.set(fileDef.sourceUrl, fileDef.serialize());
+        }
+        for (let fileDef of unchangedMarkdownSkillFileDefs) {
+          bySourceUrl.set(fileDef.sourceUrl, fileDef);
+        }
+        let orderedSkillFileDefs = enabledSkillCardFileDefs
+          .map((fileDef) => bySourceUrl.get(fileDef.sourceUrl))
+          .filter((fileDef): fileDef is FileAPI.SerializedFile =>
+            Boolean(fileDef),
+          );
         // get the unique subset of enabledCommandDefinitions by functionName
         enabledCommandDefinitions = this.getUniqueToolDefinitions(
           enabledCommandDefinitions,
@@ -1594,10 +1632,7 @@ export default class MatrixService extends Service {
           enabledCommandDefinitions,
         );
         return {
-          enabledSkillCards: [
-            ...enabledSkillFileDefs,
-            ...enabledMarkdownSkillFileDefs,
-          ].map((fileDef) => fileDef.serialize()),
+          enabledSkillCards: orderedSkillFileDefs,
           disabledSkillCards: currentSkillsConfig?.disabledSkillCards ?? [],
           toolDefinitions: enabledCommandDefFileDefs.map((fileDef) =>
             fileDef.serialize(),
@@ -2052,6 +2087,11 @@ export default class MatrixService extends Service {
     clientSecret: string,
     sendAttempt: number,
   ) {
+    // The standalone /cli-auth route can reach registration before the SDK has
+    // finished loading (operator mode always boots first, so the register form
+    // is only reached once `ready` has resolved). Wait for it here so the client
+    // exists before the first registration request touches it.
+    await this.ready;
     return await this.client.requestEmailToken(
       'registration',
       email,
@@ -2139,10 +2179,13 @@ export default class MatrixService extends Service {
 
   // The default skills for a new AI room, as skill ids. When the user's active
   // system card lists any default skills — legacy `Skill` cards, `.md` skill
-  // files, or both — those win (mode-agnostic). Otherwise we fall back to the
-  // hardcoded, submode-aware set. Ids may name a `.md` skill file or a legacy
-  // `Skill` card; callers resolve them kind-agnostically via `loadSkillSource`.
-  async loadDefaultSkills(submode: Submode): Promise<string[]> {
+  // files, or both — those win. Otherwise the room gets the skills index, whose
+  // body names everything the model can then pull on demand. Either way the set
+  // does not depend on the submode: the index covers coding and runtime work
+  // alike, so entering code mode needs no second activation pass. Ids may name
+  // a `.md` skill file or a legacy `Skill` card; callers resolve them
+  // kind-agnostically via `loadSkillSource`.
+  async loadDefaultSkills(): Promise<string[]> {
     let configuredIds = [
       ...(this.systemCard?.defaultSkillCards ?? []),
       ...(this.systemCard?.defaultSkillFiles ?? []),
@@ -2153,18 +2196,7 @@ export default class MatrixService extends Service {
       return configuredIds;
     }
 
-    let interactModeDefaultSkills = [envSkillId];
-
-    // Code editing is covered by the code-mode entry-point skill (see
-    // activateCodingSkill), so source-code-editing is no longer pushed here.
-    // The two remaining defaults are still legacy pushed cards (full body in
-    // every prompt); they move to markdown + on-demand references once the
-    // bot supports commands on markdown skills, after which this list shrinks.
-    let codeModeDefaultSkills = [devSkillId, envSkillId];
-
-    return submode === 'code'
-      ? codeModeDefaultSkills
-      : interactModeDefaultSkills;
+    return [skillsIndexId];
   }
 
   @cached
@@ -2456,6 +2488,9 @@ export default class MatrixService extends Service {
   }
 
   async registerRequest(data: MatrixSDK.RegisterRequest, kind?: string) {
+    // See requestRegisterEmailToken: registration can run before the SDK has
+    // loaded on the standalone /cli-auth route.
+    await this.ready;
     return await this.client.registerRequest(data, kind);
   }
 
@@ -2468,6 +2503,9 @@ export default class MatrixService extends Service {
   }
 
   async isUsernameAvailable(username: string) {
+    // See requestRegisterEmailToken: the username check runs while the register
+    // form is filled, which on /cli-auth can precede the SDK finishing loading.
+    await this.ready;
     return await this.client.isUsernameAvailable(username);
   }
 
@@ -3005,11 +3043,17 @@ export default class MatrixService extends Service {
       event.content?.body &&
       event.content?.isStreamingFinished
     ) {
-      // Check if the message contains code patches by looking for search/replace blocks
+      // Any marker is enough to queue. An answer too long for one event is
+      // split at a character count that knows nothing about what it is cutting
+      // through, so a SEARCH/REPLACE block routinely straddles the boundary and
+      // no single event holds all three markers — requiring all three here left
+      // exactly those patches unqueued, while the UI, which reads the joined
+      // message, still offered an apply button for them. Whether there is
+      // anything to apply is decided later against the whole answer.
       let body = event.content.body as string;
       if (
-        body.includes(SEARCH_MARKER) &&
-        body.includes(SEPARATOR_MARKER) &&
+        body.includes(SEARCH_MARKER) ||
+        body.includes(SEPARATOR_MARKER) ||
         body.includes(REPLACE_MARKER)
       ) {
         this.toolService.queueEventForCodePatchProcessing(event);
@@ -3062,22 +3106,24 @@ export default class MatrixService extends Service {
     this.localPersistenceService.setCurrentRoomId(undefined);
   }
 
-  async activateCodingSkill() {
-    if (!this.currentRoomId) {
-      return;
-    }
-
-    let updateRoomSkillsCommand = new UpdateRoomSkillsTool(
-      this.toolService.toolContext,
-    );
-    let defaultSkillIds = await this.loadDefaultSkills('code');
-    await updateRoomSkillsCommand.execute({
-      roomId: this.currentRoomId,
-      // Dual-path window: the legacy card skills activate alongside the
-      // markdown source-code-editing skill. All are pushed for now; the
-      // on-demand entry point returns as a catalog listing.
-      skillCardIdsToActivate: [...defaultSkillIds, sourceCodeEditingSkillUrl],
-    });
+  // Drop this browser's persisted session locally, without the server-side
+  // logout() performs — that would revoke the device. The CLI-auth register
+  // flow uses this after handing the just-minted registration device to the
+  // CLI: the CLI is that device's sole owner, so the browser must not keep it
+  // as its own persisted session (a later browser-side logout would otherwise
+  // revoke the CLI's session too). Account-level bootstrap side-effects
+  // (personal realm, realm auth) stay put; only this browser's local link to
+  // the device is forgotten.
+  //
+  // Storage-only, and all three keys of it. The realm tokens are persisted
+  // apart from the Matrix session, and a session-room claim inside the
+  // realm-server token is the identity a later realm-auth handshake adopts:
+  // leaving it behind hands the next account a session room belonging to this
+  // one, which it is not invited to and cannot join.
+  forgetPersistedSession() {
+    this.clearAuth();
+    window.localStorage.removeItem(RealmServerSessionLocalStorageKey);
+    window.localStorage.removeItem(SessionLocalStorageKey);
   }
 
   loadMoreAIRooms() {
@@ -3462,6 +3508,23 @@ async function getStorage() {
   }
 
   return storage;
+}
+
+// True when a `.md` skill's realm-indexed content matches what the room
+// already recorded, so the stored fileDef can be reused as-is. Both hashes come
+// from the same content, one via the realm's index and one from the upload that
+// wrote the room's copy, so equality means an upload would produce the same
+// bytes. A stored def with no uploaded `url` is never reusable.
+function isUnchangedMarkdownSkill(
+  source: FileDef,
+  stored: FileAPI.SerializedFile,
+): boolean {
+  return Boolean(
+    source.contentHash &&
+    stored.contentHash &&
+    source.contentHash === stored.contentHash &&
+    stored.url,
+  );
 }
 
 function serializeFileForPersistence(

@@ -3,6 +3,8 @@ import { click, visit, waitFor } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
+import { baseRealm } from '@cardstack/runtime-common';
+
 import {
   setupLocalIndexing,
   setupAcceptanceTestRealm,
@@ -113,6 +115,30 @@ module('Acceptance | workspace card', function (hooks) {
     }
     return chip;
   }
+
+  test('the "New card" chooser searches across all available realms, not just this workspace', async function (assert) {
+    await visit('/');
+    await click('[data-test-workspace-button="Unnamed Workspace"]');
+    await waitFor(`${STACK} nav.tabs`);
+
+    // The empty-space welcome hero offers a "New card" affordance that opens
+    // the Spec chooser. The chosen Spec may live in any realm the user can
+    // reach; the new card still lands in this workspace's realm.
+    await click(`${STACK} .welcome-alt`);
+    await waitFor('[data-test-card-chooser-modal]');
+
+    // The realm scope must not be locked to the workspace's own realm — the
+    // picker stays interactive and offers other reachable realms.
+    await waitFor('[data-test-realm-picker] [data-test-boxel-picker-trigger]');
+    await click('[data-test-realm-picker] [data-test-boxel-picker-trigger]');
+    await waitFor('[data-test-boxel-picker-option-row]');
+    assert
+      .dom(`[data-test-boxel-picker-option-row="${baseRealm.url}"]`)
+      .exists('a realm other than the workspace realm is selectable');
+    assert
+      .dom(`[data-test-boxel-picker-option-row="${testRealmURL}"]`)
+      .exists('the workspace realm is also among the choices');
+  });
 
   // The Home "Browse" module renders one pill per realm card/file type with
   // that type's instance count, and clicking a pill opens the Library filtered

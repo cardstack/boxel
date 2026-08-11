@@ -4,7 +4,7 @@ import {
   realmURL,
   ensureTrailingSlash,
   devSkillLocalPath,
-  envSkillLocalPath,
+  skillsIndexLocalPath,
 } from '@cardstack/runtime-common';
 export {
   iconURLFor,
@@ -97,8 +97,10 @@ export function skillFileURL(skillName: string): string {
 }
 
 export const devSkillId = `@cardstack/skills/${devSkillLocalPath}`;
-export const envSkillId = `@cardstack/skills/${envSkillLocalPath}`;
 
-// The markdown-first source-code-editing skill, enabled directly in code
-// mode alongside the card defaults.
-export const sourceCodeEditingSkillUrl = `${skillsRealmURL}skills/source-code-editing/SKILL.md`;
+// The skills index, the default skill for every new AI room. Spelled as a
+// resolved absolute URL rather than an `@cardstack/skills/` reference because
+// the index routes to its siblings entirely through document-relative markdown
+// links: the prompt resolves those against the skill's own id, and only an
+// absolute id can anchor that resolution.
+export const skillsIndexId = `${skillsRealmURL}${skillsIndexLocalPath}`;

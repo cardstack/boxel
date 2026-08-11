@@ -23,7 +23,7 @@ import {
   THIS_INTERPOLATION_PREFIX,
   THIS_REALM_TOKEN,
   realmURL as realmURLSymbol,
-  parseSearchURL,
+  parseRealmsParam,
 } from '@cardstack/runtime-common';
 import {
   buildQuerySearchURL,
@@ -149,7 +149,7 @@ export function ensureQueryFieldSearchResource(
   let seedRecords = fieldState?.seedRecords;
   let seedSearchURL = fieldState?.seedSearchURL;
   let args = () => {
-    return resolveQueryAndRealm(instance, field, fieldDefinition);
+    return resolveQueryAndRealm(store, instance, field, fieldDefinition);
   };
 
   // Inside a prerender the parent doc's `relationships.{field}.data` is
@@ -174,8 +174,15 @@ export function ensureQueryFieldSearchResource(
     instance,
     () => args()?.query,
     () => {
-      let realm = args()?.realmHref;
-      return realm ? [realm] : undefined;
+      // Prefer the realm set the indexer resolved and advertised on
+      // `links.search`: it was derived where the realm mappings live, so it
+      // covers cross-realm references this side can't place on its own.
+      let seeded = fieldState?.seedRealms;
+      if (seeded?.length) {
+        return seeded;
+      }
+      let realms = args()?.realmHrefs;
+      return realms?.length ? realms : undefined;
     },
     {
       isLive,
@@ -597,17 +604,22 @@ export function captureQueryFieldSeedData(
   fieldState.seedSearchURL = shouldTreatEmptySeedAsUnresolved
     ? null
     : (relationship?.links?.search ?? null);
+  // Read the whole realm set off the seed URL's `realms` param, not just the
+  // realm the URL is addressed to: a query-backed field spanning realms
+  // advertises all of them, and keeping only the first would silently narrow
+  // the client's re-query back to one realm.
   fieldState.seedRealms = fieldState.seedSearchURL
-    ? [parseSearchURL(new URL(fieldState.seedSearchURL)).realm.href]
+    ? parseRealmsParam(new URL(fieldState.seedSearchURL))
     : [];
   fieldState.seedErrors = (relationship?.meta as any)?.errors ?? undefined;
 }
 
 function resolveQueryAndRealm(
+  store: CardStore,
   instance: BaseDef,
   field: Field,
   fieldDefinition: FieldDefinition,
-): { realmHref: string; searchURL: string; query: Query } | undefined {
+): { realmHrefs: string[]; searchURL: string; query: Query } | undefined {
   let realmURL: URL | undefined = (instance as any)[realmURLSymbol];
   if (!realmURL) {
     return undefined;
@@ -631,6 +643,18 @@ function resolveQueryAndRealm(
     relativeTo: (instance as CardDef).id
       ? rri((instance as CardDef).id)
       : realmURL,
+    // A card definition never holds the realm mappings, so the store answers
+    // which realm a reference belongs to — the same boundary `resolveURL` and
+    // `canonicalizeId` sit on. A reference the store can't place falls back to
+    // the containing realm only when it actually lives there; otherwise the
+    // normalizer drops it rather than searching the wrong realm.
+    resolveRealmForReference: (reference) => {
+      let realm = store.realmForId(reference);
+      if (realm) {
+        return realm;
+      }
+      return reference.startsWith(realmURL.href) ? realmURL.href : undefined;
+    },
   });
 
   if (!normalized) {
@@ -638,8 +662,8 @@ function resolveQueryAndRealm(
   }
 
   return {
-    realmHref: normalized.realm,
-    searchURL: buildQuerySearchURL(normalized.realm, normalized.query),
+    realmHrefs: normalized.realms,
+    searchURL: buildQuerySearchURL(normalized.realms, normalized.query),
     query: normalized.query,
   };
 }

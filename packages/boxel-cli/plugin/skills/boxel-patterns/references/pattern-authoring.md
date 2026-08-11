@@ -55,7 +55,6 @@ Filenames are how agents discover content. Stick to these:
 - **No duplicate filenames across the tree.** Two references named the same thing confuse agents and cross-references. Disambiguate by domain (`template-syntax.md` for Glimmer syntax patterns; `template-patterns.md` for UI template patterns).
 - **References live under a skill.** Pattern READMEs cross-link references via path: `boxel/references/<topic>.md`. References don't have an `example.gts`; their job is to explain mechanics, not ship recipes.
 - **`SKILL.md` is the skill entry point.** Every skill folder has exactly one `SKILL.md`. References live under `<skill>/references/<topic>.md`. Don't create a second `SKILL.md` or rename it.
-- **Commands use the `boxel-` prefix.** Every action command in `commands/` is `boxel-<verb>.md` so they cluster together in slash-command menus. Exception: cross-cutting commands (`distill-learnings.md`).
 
 ## Validation frontmatter
 

@@ -41,7 +41,7 @@ The host previews fitted cards at 16 specific size boxes when validating a CardD
 |---|---|---|
 | Small Tile | 150 × 170 | Grid thumbnail — square-ish |
 | Regular Tile | 250 × 170 | Wider thumbnail |
-| CardsGrid Tile | 170 × 250 | Portrait thumbnail — the default in CardsGrid |
+| CardsGrid Tile | 170 × 250 | Portrait thumbnail — the default tile in a workspace's card lists |
 | Tall Tile | 150 × 275 | Tall thumbnail |
 | Large Tile | 250 × 275 | Full tile |
 

@@ -260,6 +260,23 @@ test.describe('Commands', () => {
       ],
     };
 
+    // A room's default skill is the skills index, which declares no tools of
+    // its own, so the search tool has to come from a skill attached here.
+    await page
+      .locator('[data-test-skill-menu][data-test-pill-menu-button]')
+      .click();
+    await page
+      .locator('[data-test-skill-menu] [data-test-pill-menu-add-button]')
+      .click();
+    await page
+      .locator(`[data-test-item-button="${appURL}/skill-search-cards"]`)
+      .click();
+    await page.locator('[data-test-card-chooser-go-button]').click();
+    await expect(
+      page.locator(`[data-test-pill-menu-item="${appURL}/skill-search-cards"]`),
+    ).toHaveCount(1);
+    await page.locator('[data-test-pill-menu-detail-close]').click();
+
     await showAllCards(page);
     let hassanCard = page.locator(`[data-test-cards-grid-item="${cardId}"]`);
     await hassanCard.waitFor();

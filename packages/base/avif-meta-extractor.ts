@@ -1,4 +1,8 @@
 import { FileContentMismatchError } from './file-api';
+import {
+  prunedColorProfile,
+  type ImageColorProfile,
+} from './image-color-profile';
 
 // AVIF uses ISO Base Media File Format (ISOBMFF).
 // The file starts with a "ftyp" box whose brand is "avif" or "avis".
@@ -6,6 +10,10 @@ import { FileContentMismatchError } from './file-api';
 const FTYP_MARKER = new Uint8Array([0x66, 0x74, 0x79, 0x70]); // "ftyp"
 const AVIF_BRAND = new Uint8Array([0x61, 0x76, 0x69, 0x66]); // "avif"
 const AVIS_BRAND = new Uint8Array([0x61, 0x76, 0x69, 0x73]); // "avis"
+
+// Reused across every auxC box inspected, rather than allocating a decoder per
+// box while scanning — mirrors the module-level decoder in the EXIF extractor.
+const LATIN1 = new TextDecoder('latin1');
 
 // Minimum: ftyp box header (8) + major brand (4) = 12 bytes
 const MIN_BYTES = 12;
@@ -64,6 +72,33 @@ function findBox(
   return undefined;
 }
 
+// Every sibling box of a given type within a region. `findBox` returns only the
+// first, which is right for the single `ispe` that carries dimensions but wrong
+// for `auxC`: an alpha plane is one of several item properties and need not come
+// first.
+function findAllBoxes(
+  view: DataView,
+  bytes: Uint8Array,
+  start: number,
+  end: number,
+  targetType: string,
+): { start: number; end: number }[] {
+  let found: { start: number; end: number }[] = [];
+  let offset = start;
+  while (offset + 8 <= end) {
+    let size = view.getUint32(offset);
+    let boxEnd = size === 0 ? end : offset + size;
+    if ((size !== 0 && size < 8) || boxEnd > end) {
+      break;
+    }
+    if (readBoxType(bytes, offset + 4) === targetType) {
+      found.push({ start: offset, end: boxEnd });
+    }
+    offset = boxEnd;
+  }
+  return found;
+}
+
 function validateAvifSignature(bytes: Uint8Array): void {
   if (bytes.length < MIN_BYTES) {
     throw new FileContentMismatchError(
@@ -119,9 +154,7 @@ export function extractAvifDimensions(bytes: Uint8Array): {
   // Walk the ISOBMFF box tree: top-level → meta → iprp → ipco → ispe
   let meta = findBox(view, bytes, 0, bytes.length, 'meta');
   if (!meta) {
-    throw new FileContentMismatchError(
-      'AVIF file does not contain a meta box',
-    );
+    throw new FileContentMismatchError('AVIF file does not contain a meta box');
   }
 
   // meta is a "full box": 8-byte header + 4-byte version/flags before children
@@ -161,4 +194,106 @@ export function extractAvifDimensions(bytes: Uint8Array): {
   }
 
   return { width, height };
+}
+
+// The URN an `auxC` box carries when the auxiliary image it describes is an
+// alpha plane. AVIF stores transparency as a separate coded image rather than a
+// fourth channel of the primary one, so this is the only reliable signal.
+const ALPHA_AUX_TYPE = 'urn:mpeg:mpegB:cicp:systems:auxiliary:alpha';
+
+// CICP colour primaries, from the `colr`/`nclx` box. These are the four an
+// encoder realistically writes; anything else is left unnamed rather than
+// guessed at.
+const CICP_PRIMARIES: Record<number, string> = {
+  1: 'srgb', // BT.709
+  9: 'rec2020',
+  11: 'display-p3', // DCI-P3
+  12: 'display-p3', // Display P3 (P3-D65)
+};
+
+// AVIF states its encoding across three item-property boxes rather than one
+// header: `pixi` for bit depth and channel count, `colr` for the color space,
+// and `auxC` for whether a separate alpha plane exists. All three sit under
+// meta > iprp > ipco, so one walk collects them.
+//
+// Returns undefined when the box tree isn't reachable — the dimension reader is
+// what decides whether that constitutes a content mismatch.
+export function extractAvifColorProfile(
+  bytes: Uint8Array,
+): ImageColorProfile | undefined {
+  let view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let meta = findBox(view, bytes, 0, bytes.length, 'meta');
+  if (!meta) {
+    return undefined;
+  }
+  // meta is a "full box": 8-byte header plus 4 bytes of version/flags.
+  let iprp = findBox(view, bytes, meta.start + 12, meta.end, 'iprp');
+  let ipco = iprp
+    ? findBox(view, bytes, iprp.start + 8, iprp.end, 'ipco')
+    : undefined;
+  if (!ipco) {
+    return undefined;
+  }
+  let properties = ipco.start + 8;
+
+  // pixi: [size:4] [type:4] [version+flags:4] [num_channels:1] [depth × n]
+  let bitDepth: number | undefined;
+  let channels: number | undefined;
+  let pixi = findBox(view, bytes, properties, ipco.end, 'pixi');
+  if (pixi && pixi.end - pixi.start >= 14) {
+    let channelCount = view.getUint8(pixi.start + 12);
+    if (
+      channelCount > 0 &&
+      pixi.start + 13 + channelCount <= pixi.end &&
+      pixi.start + 13 + channelCount <= bytes.length
+    ) {
+      channels = channelCount;
+      // Every channel carries its own depth; they agree in every real encoder
+      // output, so the first is representative.
+      bitDepth = view.getUint8(pixi.start + 13);
+    }
+  }
+
+  // colr: [size:4] [type:4] [colour_type:4] then, for 'nclx',
+  // [primaries:2] [transfer:2] [matrix:2] [full_range:1]
+  let colorSpace: string | undefined;
+  let iccProfile: string | undefined;
+  for (let colr of findAllBoxes(view, bytes, properties, ipco.end, 'colr')) {
+    if (colr.end - colr.start < 12) {
+      continue;
+    }
+    let colourType = readBoxType(bytes, colr.start + 8);
+    if (colourType === 'nclx' && colr.end - colr.start >= 14) {
+      colorSpace ??= CICP_PRIMARIES[view.getUint16(colr.start + 12)];
+    } else if (colourType === 'rICC' || colourType === 'prof') {
+      // The profile bytes themselves are here, but naming the profile means
+      // parsing an ICC header; recording that one is embedded is the honest
+      // summary.
+      iccProfile ??= 'embedded';
+    }
+  }
+
+  let hasAlpha = findAllBoxes(view, bytes, properties, ipco.end, 'auxC').some(
+    (auxC) => {
+      // auxC: [size:4] [type:4] [version+flags:4] [aux_type: NUL-terminated]
+      let start = auxC.start + 12;
+      if (start >= auxC.end) {
+        return false;
+      }
+      let text = LATIN1.decode(
+        bytes.subarray(start, Math.min(auxC.end, bytes.length)),
+      );
+      return text.startsWith(ALPHA_AUX_TYPE);
+    },
+  );
+
+  return prunedColorProfile({
+    colorSpace: colorSpace ?? (channels === 1 ? 'grayscale' : undefined),
+    bitDepth,
+    channels,
+    // An `auxC` alpha plane is positive evidence; its absence within a header
+    // window that may have been truncated is not, so only report the positive.
+    hasAlpha: hasAlpha ? true : undefined,
+    iccProfile,
+  });
 }

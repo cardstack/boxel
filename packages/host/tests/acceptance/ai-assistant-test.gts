@@ -51,7 +51,7 @@ import {
   type TestContextWithSave,
   delay,
   getMonacoContent,
-  envSkillId,
+  skillsIndexId,
   catalogRealmURL,
   realmConfigCardJSON,
 } from '../helpers';
@@ -142,7 +142,13 @@ function modelNameFor(llmId: string): string {
 
 module('Acceptance | AI Assistant tests', function (hooks) {
   setupApplicationTest(hooks);
-  setupLocalIndexing(hooks);
+  // Every test in this module builds the same realm fixtures in the beforeEach
+  // below, so the realm is indexed once and that index restored for each
+  // subsequent test. What a test writes afterwards stays with that test — the
+  // snapshot is restored, not carried forward.
+  setupLocalIndexing(hooks, {
+    reuseIndexAcrossTests: 'aiAssistant',
+  });
   setupOnSave(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -3072,7 +3078,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       ).map((el) => el.getAttribute('data-test-attached-card'));
       assert.ok(
         false,
-        `Default skill never rendered on the new session's skill menu. Attached cards seen: ${JSON.stringify(attached)}; expected exactly [${envSkillId}].`,
+        `Default skill never rendered on the new session's skill menu. Attached cards seen: ${JSON.stringify(attached)}; expected exactly [${skillsIndexId}].`,
       );
       return;
     }
@@ -3080,7 +3086,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       .dom('[data-test-skill-menu] [data-test-attached-card]')
       .exists({ count: 1 });
     assert
-      .dom(`[data-test-skill-menu] [data-test-attached-card="${envSkillId}"]`)
+      .dom(
+        `[data-test-skill-menu] [data-test-attached-card="${skillsIndexId}"]`,
+      )
       .exists();
   });
 

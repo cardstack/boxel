@@ -217,10 +217,32 @@ for (const { key } of testFiles) {
 // often the file is rewritten, never which shard a test runs on.
 // ---------------------------------------------------------------------------
 
+// Keep in step with MIN_MODULE_WEIGHT_SECONDS in tests/helpers/shard-modules.ts,
+// which explains why a floor is needed at all. Predicting with unfloored weights
+// would model the packing that helper no longer performs: zero-weight files —
+// there are dozens, since junit only clocks test callbacks — would all collect
+// in one bucket here while the real assignment spreads them.
+const MIN_MODULE_WEIGHT_SECONDS = 1;
+
+function weightLookup(timings) {
+  const known = Object.values(timings)
+    .map((weight) => Math.max(weight, MIN_MODULE_WEIGHT_SECONDS))
+    .sort((a, b) => a - b);
+  const defaultWeight = known.length
+    ? known[Math.floor(known.length / 2)]
+    : MIN_MODULE_WEIGHT_SECONDS;
+  return (id) => {
+    const measured = timings[id];
+    // `== null`, not `??` on a floored value: a file measured at 0 must take
+    // the floor, not the median a missing file gets.
+    return measured == null
+      ? defaultWeight
+      : Math.max(measured, MIN_MODULE_WEIGHT_SECONDS);
+  };
+}
+
 function pack(moduleIds, timings) {
-  const known = Object.values(timings).sort((a, b) => a - b);
-  const defaultWeight = known.length ? known[Math.floor(known.length / 2)] : 1;
-  const weightOf = (id) => timings[id] ?? defaultWeight;
+  const weightOf = weightLookup(timings);
   const ordered = [...moduleIds].sort((a, b) => {
     const diff = weightOf(b) - weightOf(a);
     if (diff !== 0) return diff;
@@ -242,12 +264,9 @@ function pack(moduleIds, timings) {
 }
 
 function slowestShardSeconds(assignment, trueTimings) {
-  const known = Object.values(trueTimings).sort((a, b) => a - b);
-  const defaultWeight = known.length ? known[Math.floor(known.length / 2)] : 1;
+  const weightOf = weightLookup(trueTimings);
   return Math.max(
-    ...assignment.map((ids) =>
-      ids.reduce((sum, id) => sum + (trueTimings[id] ?? defaultWeight), 0),
-    ),
+    ...assignment.map((ids) => ids.reduce((sum, id) => sum + weightOf(id), 0)),
   );
 }
 

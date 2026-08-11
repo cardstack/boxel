@@ -41,6 +41,7 @@ import {
   getSerializer,
   humanReadable,
   identifyCard,
+  computeContentHash,
   inferContentType,
   isBaseInstance,
   isCardError,
@@ -130,6 +131,7 @@ import FileDefAtomTemplate from './default-templates/file-def-atom';
 import FileDefEmbeddedTemplate from './default-templates/file-def-embedded';
 import FileDefFittedTemplate from './default-templates/file-def-fitted';
 import FileDefIsolatedTemplate from './default-templates/file-def-isolated';
+import type { FilePreviewComponent } from './file-formats/file-preview-stage';
 import ImageDefAtomTemplate from './default-templates/image-def-atom';
 import ImageDefEmbeddedTemplate from './default-templates/image-def-embedded';
 import ImageDefFittedTemplate from './default-templates/image-def-fitted';
@@ -149,7 +151,6 @@ import HashIcon from '@cardstack/boxel-icons/hash';
 // normalizeEnumOptions used by enum moved to packages/base/enum.gts
 import PatchThemeTool from '@cardstack/boxel-host/commands/patch-theme';
 import CopyAndEditTool from '@cardstack/boxel-host/commands/copy-and-edit';
-import { md5 } from 'super-fast-md5';
 
 import {
   callSerializeHook,
@@ -157,6 +158,7 @@ import {
   deserialize,
   makeMetaForField,
   makeRelativeURL,
+  rebaseReferencesFor,
   serialize,
   serializeCard,
   serializeCardResource,
@@ -531,6 +533,13 @@ export interface CardStore {
   // interior form without holding the network. Returns the input unchanged
   // when no network is available.
   canonicalizeId(id: string): string;
+  // The realm holding `id`, as a real URL href, or undefined when this store's
+  // network can't place it. Completes the same boundary as the two above: card
+  // code can ask which realm a reference belongs to without holding the realm
+  // mappings itself. A realm root is whatever was registered, at whatever
+  // depth, so it can't be recovered from the path — `/user/alice/` is a realm
+  // and `/user/` is not.
+  realmForId(id: string): string | undefined;
   getCard(url: string): CardDef | undefined;
   getFileMeta(url: string): FileDef | undefined;
   setCard(url: string, instance: CardDef): void;
@@ -1104,9 +1113,15 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
         return { attributes: { [this.name]: serialized } };
       }
     } else {
+      // `opts` reaches the nested resource so a composite field serializes the
+      // same way whether it is reached through `contains` or `containsMany` —
+      // most visibly `includeComputeds`, without which a computed declared
+      // inside a FieldDef is filtered out of the nested resource. `visited` is
+      // deliberately a fresh set here, matching the other three field
+      // serialize sites.
       let serialized: JSONAPISingleResourceDocument['data'] & {
         meta: Record<string, any>;
-      } = callSerializeHook(this.card, value, doc);
+      } = callSerializeHook(this.card, value, doc, undefined, opts);
       let resource: JSONAPIResource = {
         attributes: {
           [this.name]: serialized?.attributes,
@@ -1415,9 +1430,13 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
 
     visited.add(value.id ?? (value as CardDef)[localId]);
 
-    let serialized = callSerializeHook(this.card, value, doc, visited, opts) as
-      | (JSONAPIResource & { id: string; type: string })
-      | null;
+    let serialized = callSerializeHook(
+      this.card,
+      value,
+      doc,
+      visited,
+      rebaseReferencesFor(value, opts),
+    ) as (JSONAPIResource & { id: string; type: string }) | null;
     if (serialized) {
       let resource: JSONAPIResource = {
         relationships: {
@@ -1974,7 +1993,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         value,
         doc,
         visited,
-        opts,
+        rebaseReferencesFor(value, opts),
       );
       if (serialized.meta && Object.keys(serialized.meta).length === 0) {
         delete serialized.meta;
@@ -3054,7 +3073,11 @@ export class FileContentMismatchError extends Error {
 export class FileDef extends BaseDef {
   static displayName = 'File';
   static isFileDef = true;
-  static icon = FileIcon;
+  // Annotated with the declared type rather than inferred from the assignment:
+  // the shared format shells render whatever a subclass puts here, so a family
+  // must be free to supply any icon component, not just the
+  // `TemplateOnlyComponent` shape that inference would pin this to.
+  static icon: CardOrFieldTypeIcon = FileIcon;
   [isSavedInstance] = true;
 
   get [realmURL](): URL | undefined {
@@ -3087,6 +3110,26 @@ export class FileDef extends BaseDef {
   @field contentHash = contains(StringField);
   @field contentSize = contains(NumberField);
 
+  // The four shared format shells own identity, facts, budgets, and state for
+  // every file family. What they can't know is how to draw the file itself — a
+  // waveform, a page, a 3D scene — so a family supplies that one renderer here
+  // and inherits the rest. A family that hasn't landed a renderer yet gets an
+  // honest generic pane rather than a broken one.
+  //
+  // The shells take their glyph from this class's `static icon`, so a family
+  // declares its icon once and every format picks it up — and that icon's
+  // module stays in the family's own file rather than in card-api's dependency
+  // graph, which every card in every realm inherits.
+  static previewComponent?: FilePreviewComponent;
+  // Pin a profile axis when the file's MIME type is ambiguous — a `.ts` file
+  // served as `text/plain`, say. Left unset, these are derived from the file's
+  // name and content type by the taxonomy registry.
+  static fileKind?: string;
+  static fileFamily?: string;
+  static previewKind?: string;
+  static previewAdapter?: string;
+  static previewSource?: string;
+
   static embedded: BaseDefComponent = FileDefEmbeddedTemplate;
   static fitted: BaseDefComponent = FileDefFittedTemplate;
   static isolated: BaseDefComponent = FileDefIsolatedTemplate;
@@ -3115,11 +3158,7 @@ export class FileDef extends BaseDef {
     if (!contentHash || contentSize === undefined) {
       let bytes = await byteStreamToUint8Array(await getStream());
       if (!contentHash) {
-        try {
-          contentHash = md5(bytes);
-        } catch {
-          contentHash = md5(new TextDecoder().decode(bytes));
-        }
+        contentHash = computeContentHash(bytes);
       }
       if (contentSize === undefined) {
         contentSize = bytes.byteLength;
@@ -3174,7 +3213,7 @@ export { getDefaultFileMenuItems } from './file-menu-items';
 
 export class ImageDef extends FileDef {
   static displayName = 'Image';
-  static icon = ImageIcon;
+  static icon: CardOrFieldTypeIcon = ImageIcon;
   static acceptTypes = 'image/*';
 
   @field width = contains(NumberField);
@@ -3678,11 +3717,11 @@ function lazilyLoadLink(
       }
       if (pluralArgs) {
         let { value } = pluralArgs;
-        // Match against the raw backing array (the proxy hides not-loaded
-        // sentinels from index access); swap through the proxy so the in-place
-        // mutation notifies subscribers and Glimmer re-renders.
+        // Match against the raw backing array — the proxy hides not-loaded
+        // sentinels from index access.
         let indices: number[] = [];
-        for (let [index, item] of rawArrayValues(value).entries()) {
+        let raw = rawArrayValues(value);
+        for (let [index, item] of raw.entries()) {
           if (!isNotLoadedValue(item)) {
             continue;
           }
@@ -3694,11 +3733,22 @@ function lazilyLoadLink(
             indices.push(index);
           }
         }
-        for (let index of indices) {
-          value[index] = fieldValue;
+        if (indices.length > 0) {
+          // Write into the backing array rather than through the proxy: the
+          // proxy's set trap announces a change to subscribers, which marks the
+          // instance dirty and auto-saves it — a write triggered by reading the
+          // card, exactly as in the singular case. The getter entangles card
+          // tracking, so notifying it is what re-renders.
+          for (let index of indices) {
+            raw[index] = fieldValue;
+          }
+          notifyCardTracking(instance);
         }
       } else {
-        (instance as any)[field.name] = fieldValue;
+        // Not `instance[field.name] = fieldValue`: assigning through the field
+        // setter announces a change, which marks the instance dirty and
+        // auto-saves it — a write triggered by reading the card.
+        setResolvedField(instance, field, fieldValue);
       }
     } catch (e) {
       let error = e as Error;
@@ -3764,12 +3814,15 @@ function lazilyLoadLink(
         : { type: 'link-error', reference, errorDoc };
       if (pluralArgs) {
         // Swap the sentinel into the slot(s) whose reference just failed,
-        // leaving the WatchedArray identity intact so Glimmer re-renders. We
-        // match the same not-loaded entries the success path would have
-        // replaced with the loaded card. Match against the raw backing array
-        // (the proxy hides sentinels) but write through the proxy to notify.
+        // leaving the WatchedArray identity intact. We match the same
+        // not-loaded entries the success path would have replaced with the
+        // loaded card, and write into the backing array rather than through the
+        // proxy for the same reason the success path does: the proxy's set trap
+        // announces a change, which auto-saves a card that was only read.
         let { value } = pluralArgs;
-        for (let [index, item] of rawArrayValues(value).entries()) {
+        let raw = rawArrayValues(value);
+        let planted = false;
+        for (let [index, item] of raw.entries()) {
           if (!isNotLoadedValue(item)) {
             continue;
           }
@@ -3778,16 +3831,21 @@ function lazilyLoadLink(
             instance.id ?? instance[relativeTo],
           );
           if (reference === notLoadedRef) {
-            value[index] = sentinel;
+            raw[index] = sentinel;
+            planted = true;
           }
         }
+        if (planted) {
+          notifyCardTracking(instance);
+        }
       } else {
-        // Mirror `setField`'s notification (minus validate, which rejects a
-        // non-card value): write the bucket, notify change subscribers, then
-        // card tracking. Without the `notifySubscribers` call, `subscribeToChanges`
-        // listeners would observe a successful lazy load but not a failed one.
+        // Write the bucket and notify card tracking, but not change
+        // subscribers: a failed load is still the resolution of a link the
+        // instance already referenced, not an edit of it. No subscriber acts on
+        // a link-field change anyway — the recent-cards, spec-panel and
+        // playground listeners each ignore any field but `id` — so announcing
+        // it would only reach auto-save, writing the card back on read.
         getDataBucket(instance).set(field.name, sentinel);
-        notifySubscribers(instance, field.name, sentinel);
         notifyCardTracking(instance);
       }
     } finally {
@@ -4669,6 +4727,18 @@ function makeDescriptor<
   return descriptor;
 }
 
+// Fill in a field value that resolution produced rather than a user edit — the
+// loaded target of a link the instance already referenced. Change subscribers
+// drive auto-save, so announcing this as a change writes the card back to the
+// server merely because it was read, bumping its version and scheduling a
+// reindex. Glimmer's tracking is still notified, so rendering updates.
+function setResolvedField(instance: BaseDef, field: Field, value: any) {
+  propagateRealmContext(value, instance);
+  value = field.validate(instance, value);
+  getDataBucket(instance).set(field.name, value);
+  notifyCardTracking(instance);
+}
+
 function setField(instance: BaseDef, field: Field, value: any) {
   propagateRealmContext(value, instance);
   // TODO: refactor validate to not have a return value and accomplish this normalization another way
@@ -5017,6 +5087,16 @@ class FallbackCardStore implements CardStore {
       return id;
     }
     return vn ? vn.unresolveURL(id) : id;
+  }
+
+  realmForId(id: string): string | undefined {
+    let vn: VirtualNetwork | undefined;
+    try {
+      vn = myLoader().getVirtualNetwork();
+    } catch {
+      return undefined;
+    }
+    return vn?.realmForReference(id);
   }
 
   // Mirror the host stores' bucket-key fold: every spelling of the same

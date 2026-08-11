@@ -95,7 +95,7 @@ const HOST_TYPES_PATH = BUNDLED_TYPES_DIR
   : join(PACKAGES_PATH, 'host', 'types');
 const BOXEL_UI_PATH = BUNDLED_TYPES_DIR
   ? join(BUNDLED_TYPES_DIR, 'boxel-ui')
-  : join(PACKAGES_PATH, 'boxel-ui', 'addon', 'src');
+  : join(PACKAGES_PATH, 'boxel-ui', 'src');
 const LOCAL_TYPES_PATH = BUNDLED_TYPES_DIR
   ? join(BUNDLED_TYPES_DIR, 'local-types')
   : join(PACKAGES_PATH, 'local-types');

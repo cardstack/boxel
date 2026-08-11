@@ -35,7 +35,7 @@ export class Person extends CardDef {
   static displayName = 'Person';
 
   @field firstName = contains(StringField);
-  @field lastName = contains(StringField);
+  @field lastName  = contains(StringField);
 
   @field cardTitle = contains(StringField, {
     computeVia: function (this: Person) {
@@ -43,9 +43,7 @@ export class Person extends CardDef {
         return this.cardInfo.name;
       }
       let parts = [this.firstName, this.lastName].filter(Boolean);
-      return parts.length
-        ? parts.join(' ')
-        : `Untitled ${this.constructor.displayName}`;
+      return parts.length ? parts.join(' ') : `Untitled ${this.constructor.displayName}`;
     },
   });
 }
@@ -55,9 +53,9 @@ export class Person extends CardDef {
 export class Recipe extends CardDef {
   static displayName = 'Recipe';
 
-  @field title = contains(StringField);
+  @field title        = contains(StringField);
   @field totalMinutes = contains(NumberField);
-  @field servings = contains(NumberField);
+  @field servings     = contains(NumberField);
 
   @field cardTitle = contains(StringField, {
     computeVia: function (this: Recipe) {
@@ -74,7 +72,7 @@ export class Recipe extends CardDef {
       }
       let pieces: string[] = [];
       if (this.totalMinutes) pieces.push(`${this.totalMinutes} min`);
-      if (this.servings) pieces.push(`${this.servings} servings`);
+      if (this.servings)     pieces.push(`${this.servings} servings`);
       return pieces.join(' · ');
     },
   });

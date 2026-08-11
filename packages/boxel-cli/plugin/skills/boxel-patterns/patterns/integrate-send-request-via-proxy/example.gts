@@ -22,9 +22,7 @@ export default class WeatherFetchCommand extends Command<
 > {
   static actionVerb = 'Fetch weather';
 
-  async getInputType() {
-    return WeatherFetchInput;
-  }
+  async getInputType() { return WeatherFetchInput; }
 
   protected async run(input: WeatherFetchInput): Promise<WeatherResult> {
     if (!input.city) throw new Error('city is required');
@@ -44,9 +42,7 @@ export default class WeatherFetchCommand extends Command<
     });
 
     if (response.status >= 400) {
-      throw new Error(
-        `Weather API failed: ${response.status} ${response.body.slice(0, 200)}`,
-      );
+      throw new Error(`Weather API failed: ${response.status} ${response.body.slice(0, 200)}`);
     }
 
     // 3) Body is a string — parse it.

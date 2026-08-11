@@ -498,7 +498,7 @@ jobs:
       # The env-mode host dist (with realm-server.ci.localhost URLs
       # baked in by environment.js) is built once in test-web-assets and
       # downloaded here, avoiding a per-shard rebuild. The artifact
-      # bundles boxel-icons/dist, boxel-ui/addon/dist, packages/host/dist,
+      # bundles boxel-icons/dist, boxel-ui/dist, packages/host/dist,
       # and the build manifest.
       - name: Download test web assets
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1

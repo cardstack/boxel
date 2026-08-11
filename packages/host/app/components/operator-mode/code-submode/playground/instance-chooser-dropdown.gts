@@ -1,10 +1,14 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
+import { fn } from '@ember/helper';
 import Component from '@glimmer/component';
 
 import {
   BoxelSelect,
   CardContainer,
   Menu,
+  toAfterOptionsComponent,
+  toBeforeOptionsComponent,
+  toSelectedItemComponent,
 } from '@cardstack/boxel-ui/components';
 import type { MenuItem } from '@cardstack/boxel-ui/helpers';
 
@@ -200,36 +204,55 @@ function componentOf(item: OptionItem) {
   return (item as RenderableSearchEntryLike).component;
 }
 
+// A SelectedInstance is a display-only stand-in that never appears in
+// @options; power-select only compares this value against options for
+// highlighting, so passing it through as an OptionItem is safe.
+function selectedOptionItem(
+  selected: OptionsDropdownSignature['Args']['selected'],
+): OptionItem | null {
+  return (selected ?? null) as OptionItem | null;
+}
+
+function guardedOnSelect(
+  onSelect: OptionsDropdownSignature['Args']['onSelect'],
+  item: OptionItem | null,
+) {
+  if (item) {
+    onSelect(item);
+  }
+}
+
 export const OptionsDropdown: TemplateOnlyComponent<OptionsDropdownSignature> =
   <template>
     <BoxelSelect
       class='instance-chooser'
       @dropdownClass='instances-dropdown-content'
       @options={{optionItems @options}}
-      @selected={{@selected}}
-      @selectedItemComponent={{component
-        SelectedItem
-        title=(getItemTitle @selection)
-        label=@selectedItemLabel
+      @selected={{selectedOptionItem @selected}}
+      @selectedItemComponent={{toSelectedItemComponent
+        (component
+          SelectedItem title=(getItemTitle @selection) label=@selectedItemLabel
+        )
       }}
       @renderInPlace={{true}}
-      @onChange={{@onSelect}}
+      @onChange={{fn guardedOnSelect @onSelect}}
       @placeholder='Select {{if
         @isFileMeta
         "file"
         (if @isField "field" "card")
       }} instance'
-      @beforeOptionsComponent={{component
-        BeforeOptions
-        label=@beforeOptionsLabel
+      @beforeOptionsComponent={{toBeforeOptionsComponent
+        (component BeforeOptions label=@beforeOptionsLabel)
       }}
       @afterOptionsComponent={{if
         @afterMenuOptions.length
-        (component
-          AfterOptions
-          menuItems=@afterMenuOptions
-          closeMenu=closeInstanceChooser
-          hideTitle=@hideAfterOptionsTitle
+        (toAfterOptionsComponent
+          (component
+            AfterOptions
+            menuItems=@afterMenuOptions
+            closeMenu=closeInstanceChooser
+            hideTitle=@hideAfterOptionsTitle
+          )
         )
       }}
       @verticalPosition='above'

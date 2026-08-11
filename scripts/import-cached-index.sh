@@ -9,7 +9,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/env-slug.sh"
 
-DB_NAME="${PGDATABASE:-boxel}"
+# The database to load into. Defaults to the dev realms' database; the live
+# test realms keep their index in a separate one, so a caller importing that
+# snapshot passes INDEX_CACHE_DB=$PGDATABASE_TEST.
+DB_NAME="${INDEX_CACHE_DB:-${PGDATABASE:-boxel}}"
 REPO="cardstack/boxel"
 # Artifacts to try, in order. `boxel-index-cache` carries every realm the
 # export job indexes; `boxel-index-cache-host` carries only the realms a host
@@ -18,11 +21,17 @@ REPO="cardstack/boxel"
 # fallback: a caller that wants the scoped one still works when it is missing
 # or expired, just with more rows than it needs. Each artifact holds a single
 # `<artifact-name>.sql.gz`.
+#
+# `boxel-index-cache-test` (the live test realms) is deliberately NOT given
+# that fallback: it targets a different database, and loading the dev realms'
+# rows there would be wrong rather than merely wasteful. A caller naming it
+# gets it or gets nothing.
 DEFAULT_ARTIFACT="boxel-index-cache"
 ARTIFACT_NAMES="${INDEX_CACHE_ARTIFACT:-$DEFAULT_ARTIFACT}"
-if [ "$ARTIFACT_NAMES" != "$DEFAULT_ARTIFACT" ]; then
-  ARTIFACT_NAMES="$ARTIFACT_NAMES $DEFAULT_ARTIFACT"
-fi
+case "$ARTIFACT_NAMES" in
+  "$DEFAULT_ARTIFACT" | boxel-index-cache-test) ;;
+  *) ARTIFACT_NAMES="$ARTIFACT_NAMES $DEFAULT_ARTIFACT" ;;
+esac
 DOWNLOAD_DIR="/tmp/boxel-index-cache-$$"
 
 cleanup() {
@@ -110,9 +119,14 @@ if [ -n "${BOXEL_ENVIRONMENT:-}" ]; then
   # the env-mode realm server and icons host register their realms and
   # URLs under https://<service>.<slug>.localhost, so http-form rows
   # would never match a served realm and the cache would be ignored.
+  #
+  # 4202 is the live test realms' port. Their snapshot also carries base-realm
+  # references pointing at the dev server (4201) and icon URLs (4206), so every
+  # rule applies to every snapshot; a rule that matches nothing is a no-op.
   gunzip -c "$CACHE_FILE" \
     | sed -E \
       -e "s|https?://localhost:4201|https://realm-server.${SLUG}.localhost|g" \
+      -e "s|https?://localhost:4202|https://realm-test.${SLUG}.localhost|g" \
       -e "s|https?://localhost:4206|https://icons.${SLUG}.localhost|g" \
     | docker exec -i boxel-pg psql $PSQL_OPTS
 else

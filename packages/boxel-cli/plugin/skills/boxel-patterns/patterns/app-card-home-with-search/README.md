@@ -9,7 +9,7 @@ validated: source-proven
 **When to use:** Whenever you build a card *family* — 2+ related CardDefs (Meet + Swimmer + Club, Project + Task + Person, Show + Listing + Venue, etc.). Building a single utility card? Skip this pattern. Building anything where the user will accumulate instances over time? Build the home.
 
 **Why it matters:**
-- **Discoverability.** A realm with 5 CardDefs and no home shows users an `index.json` `CardsGrid` of mixed cards in adoption order. A home puts the brand voice up front and arranges the suite the way the designer intended.
+- **Discoverability.** A workspace with 5 CardDefs and no home falls back to its default index card, which lists everything the workspace holds under one Library view. That is a competent inventory, not a pitch: it can't say which of the five types a visitor should open first, or why. A home puts the brand voice up front and arranges the suite the way the designer intended.
 - **Editorial framing.** The home is where you set the typography pairing, the eyebrow voice, the color story. Children inherit through the theme cascade.
 - **Live by construction.** `@context.searchResultsComponent` re-runs as the realm changes — new instances appear automatically, no manual relationship-wiring on the home.
 
@@ -245,7 +245,7 @@ See `boxel/references/query-systems.md` for the canonical reference and `~/Proje
 - `import.meta.url` works in `.gts` at runtime but TS complains — declare `const here: string = import.meta.url;` once at top with `@ts-expect-error` on the line above.
 - Compound sort paths like `dates.start` work for fields-of-fields (`DateRangeField.start`).
 - The home loads when `model.id` is undefined briefly — the realmURL getter handles this by returning `[]` instead of throwing, and `@context.searchResultsComponent` reports `results.isLoading` until realms is non-empty.
-- If you want to open this card by default when someone visits the realm root, rely on `index.json`'s `CardsGrid` showing this as the first card (with a thumbnail + clear title).
+- To surface this card when someone visits the workspace root, link it from the default index card's `entryPoints` (`linksToMany(CardDef)`). Those render as pinned tiles on the index card's Home view, so the home is the first thing a visitor sees instead of something they have to spot in a list. Don't rely on list ordering to do this for you — it isn't a promise, and a card added later can displace you.
 
 ## Host-mode click-through — MANDATORY for any app card that publishes
 

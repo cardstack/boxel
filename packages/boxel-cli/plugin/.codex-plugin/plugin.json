@@ -1,0 +1,26 @@
+{
+  "name": "boxel-cli",
+  "version": "0.15.1",
+  "description": "Skills for working with Boxel realms via @cardstack/boxel-cli. Requires @cardstack/boxel-cli >= 0.0.1 installed on PATH (npm install -g @cardstack/boxel-cli).",
+  "skills": "./skills/",
+  "author": {
+    "name": "Cardstack",
+    "url": "https://boxel.ai"
+  },
+  "homepage": "https://github.com/cardstack/boxel/tree/main/packages/boxel-cli/plugin",
+  "repository": "https://github.com/cardstack/boxel.git",
+  "license": "MIT",
+  "interface": {
+    "displayName": "Boxel CLI",
+    "shortDescription": "Author and sync Boxel cards, realms, and workspaces",
+    "longDescription": "Create and edit Boxel cards, fields, and templates, then sync them between local disk and a Boxel realm — with skills covering card authoring, theming, catalog listings, federated search, and realm indexing diagnostics.",
+    "developerName": "Cardstack",
+    "category": "Developer Tools",
+    "capabilities": ["Interactive", "Read", "Write"],
+    "defaultPrompt": [
+      "Create a Boxel card for the data I describe",
+      "Pull my Boxel workspace down so I can edit it locally"
+    ],
+    "websiteURL": "https://boxel.ai"
+  }
+}

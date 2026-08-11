@@ -62,6 +62,15 @@ export function buildBoxelProgram(version: string): Command {
       '--host-url <url>',
       'Origin serving the browser sign-in page, when it is not the realm server (for add command)',
     )
+    .option('--production', 'Target production — the default (for add command)')
+    .option(
+      '--staging',
+      'Target staging instead of production (for add command)',
+    )
+    .option(
+      '--local',
+      'Target a local dev server instead of production (for add command)',
+    )
     .addHelpText(
       'after',
       `
@@ -72,13 +81,24 @@ Sign-in (for 'add'):
   instead. Supplying -u with a password (or BOXEL_PASSWORD) stays fully
   non-interactive and never opens a browser, which is the path to use in CI.
 
+Environment (for 'add'):
+  Defaults to production. Pass --staging or --local for another environment
+  (at most one of --production / --staging / --local), or point at your own
+  URLs with --matrix-url / --realm-server-url / --host-url, which override
+  the chosen environment field by field. With -u, the Matrix ID's own domain
+  picks the environment — boxel.ai, stack.cards, and localhost are
+  recognized, and any other domain requires --matrix-url and
+  --realm-server-url.
+
 Environment variables (for 'add'):
   BOXEL_PASSWORD       Password; preferred over -p to avoid shell history.
   BOXEL_ENVIRONMENT    An env-mode slug (e.g. a branch name), interpreted
                        like scripts/env-slug.sh: URLs are derived as
                        https://matrix.<slug>.localhost and
                        https://realm-server.<slug>.localhost/. Overridden
-                       by --matrix-url / --realm-server-url if provided.`,
+                       by --matrix-url / --realm-server-url, by
+                       --production / --staging / --local, and by a -u
+                       Matrix ID on a recognized domain.`,
     )
     .action(
       async (
@@ -92,6 +112,9 @@ Environment variables (for 'add'):
           realmServerUrl?: string;
           browser?: boolean;
           hostUrl?: string;
+          production?: boolean;
+          staging?: boolean;
+          local?: boolean;
         },
       ) => {
         if (options?.password) {

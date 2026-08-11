@@ -1,0 +1,12 @@
+# unconventional js
+/blueprints/*/files/
+
+# nested docs app (its own package with its own config)
+/docs-app/
+
+# compiled output
+/declarations/
+/dist/
+
+# misc
+/coverage/

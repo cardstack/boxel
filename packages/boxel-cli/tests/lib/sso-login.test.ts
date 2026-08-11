@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import { connect } from 'node:net';
 
 import { describe, it, expect } from 'vitest';
@@ -10,6 +11,7 @@ import {
   describeDuration,
   redeemLoginToken,
   startLoopbackCallback,
+  watchForCopyKey,
 } from '../../src/lib/sso-login.ts';
 
 const MATRIX_URL = 'https://matrix.example.com';
@@ -46,10 +48,10 @@ function sendRawRequest(port: number, target: string): Promise<string> {
 }
 
 describe('the wait for the browser', () => {
-  // A password reset mid-flow links back to the same listener, so the window
-  // has to outlast an email round trip.
-  it('lasts a quarter of an hour', () => {
-    expect(DEFAULT_TIMEOUT_MS).toBe(15 * 60 * 1000);
+  // A password reset or a sign-up mid-flow links back to the same listener, so
+  // the window has to outlast an interactive email round trip.
+  it('lasts half an hour', () => {
+    expect(DEFAULT_TIMEOUT_MS).toBe(30 * 60 * 1000);
   });
 
   it('is described in whichever unit the reader thinks in', () => {
@@ -448,5 +450,112 @@ describe('browserLogin', () => {
 
     expect(logged.join('\n')).toMatch(/Open this URL in your browser/);
     expect(logged.join('\n')).toContain('/cli-auth');
+  });
+});
+
+describe('watchForCopyKey', () => {
+  // Stands in for a TTY stdin: an emitter with the raw-mode surface the
+  // watcher touches.
+  function fakeStdin(overrides?: { isTTY?: boolean }) {
+    const emitter = new EventEmitter() as EventEmitter & {
+      isTTY?: boolean;
+      readableFlowing: boolean | null;
+      setRawMode: (mode: boolean) => void;
+      resume: () => void;
+      pause: () => void;
+      rawMode?: boolean;
+      paused?: boolean;
+    };
+    emitter.isTTY = overrides?.isTTY ?? true;
+    emitter.readableFlowing = null;
+    emitter.setRawMode = (mode: boolean) => (emitter.rawMode = mode);
+    emitter.resume = () => (emitter.paused = false);
+    emitter.pause = () => (emitter.paused = true);
+    return emitter;
+  }
+
+  it('does not arm without a TTY, where there are no keys to press', () => {
+    expect(
+      watchForCopyKey('https://example.com/cli-auth', {
+        stdin: fakeStdin({ isTTY: false }),
+        log: () => {},
+      }),
+    ).toBeUndefined();
+  });
+
+  it('copies the URL when c is pressed and says so', async () => {
+    const stdin = fakeStdin();
+    const logged: string[] = [];
+    const copies: string[] = [];
+    const stop = watchForCopyKey('https://example.com/cli-auth?port=1', {
+      stdin,
+      log: (message) => logged.push(message),
+      copyFn: async (text) => {
+        copies.push(text);
+        return true;
+      },
+    });
+    expect(stop).toBeDefined();
+    expect(stdin.rawMode).toBe(true);
+
+    stdin.emit('data', Buffer.from('c'));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(copies).toEqual(['https://example.com/cli-auth?port=1']);
+    expect(logged.join('\n')).toContain('Copied the sign-in URL');
+    stop!();
+    expect(stdin.rawMode).toBe(false);
+    expect(stdin.paused).toBe(true);
+  });
+
+  it('points back at the printed URL when no clipboard tool answers', async () => {
+    const stdin = fakeStdin();
+    const logged: string[] = [];
+    const stop = watchForCopyKey('https://example.com/cli-auth', {
+      stdin,
+      log: (message) => logged.push(message),
+      copyFn: async () => false,
+    });
+
+    stdin.emit('data', Buffer.from('C'));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(logged.join('\n')).toContain('copy the URL printed above');
+    stop!();
+  });
+
+  it('still stops on Ctrl-C, which raw mode would otherwise swallow', () => {
+    const stdin = fakeStdin();
+    const exits: (number | undefined)[] = [];
+    watchForCopyKey('https://example.com/cli-auth', {
+      stdin,
+      log: () => {},
+      copyFn: async () => true,
+      exit: (code) => exits.push(code),
+    });
+
+    stdin.emit('data', Buffer.from('\u0003'));
+
+    expect(exits).toEqual([130]);
+    expect(stdin.rawMode).toBe(false);
+  });
+
+  it('stops listening once the wait ends', () => {
+    const stdin = fakeStdin();
+    const copies: string[] = [];
+    const stop = watchForCopyKey('https://example.com/cli-auth', {
+      stdin,
+      log: () => {},
+      copyFn: async (text) => {
+        copies.push(text);
+        return true;
+      },
+    });
+
+    stop!();
+    stdin.emit('data', Buffer.from('c'));
+
+    expect(copies).toEqual([]);
+    expect(stdin.listenerCount('data')).toBe(0);
   });
 });

@@ -72,9 +72,13 @@ var(--sidebar-ring)        /* sidebar focus-ring color */
 
 - `--muted-foreground` must only be used on `--muted`, `--background`, or `--card` surfaces. Do not place it on `--primary`, `--accent`, or any other surface — contrast is not guaranteed.
 
-- Declare `background-color` and the corresponding `color` on a parent container. All children will inherit the color, so you don't need to repeat the color declaration unless you need to override the color.
+- A rule that sets a semantic `background-color` also sets the paired `--*-foreground` as `color` **in the same rule**, once, at that surface's root. All children inherit the color — never re-declare on descendants what they already inherit.
 
-- You would only redeclare background and color, if you make a special box that uses one of the special color pairings. For example: `background-color: var(--accent); color: var(--accent-foreground);`.
+- You would only redeclare background and color, if you make a nested surface that diverges from its parent — that is the sanctioned case for declaring both: `background-color: var(--card); color: var(--card-foreground);`, `--sidebar`/`--sidebar-foreground`, `--accent`/`--accent-foreground`, `--primary`/`--primary-foreground`, etc.
+
+- Exception: `color: var(--foreground)` on a `--muted` background is fine — theme generation must always guarantee that contrast pair (as it must for `--muted-foreground` on `--background`/`--card`).
+
+- Isolated-format roots do not repeat `background-color: var(--background); color: var(--foreground);` — `CardContainer` already provides that pairing.
 
 - Nested component layout example. This is just an example for how different color pairing can be used.
   - Outer parent: `background-color: var(--background); color: var(--foreground);`
@@ -140,6 +144,8 @@ As with spacing, you have the same three options for font sizes:
 3. **Semantic tokens** (`--boxel-heading-font-size` etc.) — scale with the theme and also carry role-based meaning.
 
 Choose based on whether you want the text to respond to the linked theme.
+
+**`font:` shorthand pitfall.** The composite `--boxel-font-*` tokens (`font: var(--boxel-font-sm);` etc.) bundle size/line-height *and* `--boxel-font-family` — the fixed IBM Plex stack. Using the shorthand therefore pins the Boxel family and stomps the theme's `--font-sans`. On themeable content, set the individual `font-size` / `font-weight` / `line-height` properties instead so the theme's family inherits. The shorthand stays valid where Boxel chrome styling is the intent — it's a deliberate theme opt-out, so judge each occurrence by intent, not mechanically.
 
 #### Semantic typography variables
 
@@ -224,7 +230,7 @@ var(--boxel-border-radius-xs) /* scales with theme */
 var(--boxel-border-radius-sm) /* scales with theme */
 var(--boxel-border-radius-lg) /* scales with theme */
 var(--boxel-border-radius-xl) /* scales with theme */
-var(--boxel-border-radius-xxl) /* scales with theme */
+var(--boxel-border-radius-2xl) /* scales with theme */
 ```
 
 ### Shadow & Effects Tokens

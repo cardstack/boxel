@@ -11,6 +11,11 @@ import window from 'ember-window-mock';
 import { BoxelInput, Button } from '@cardstack/boxel-ui/components';
 import { GoogleColor } from '@cardstack/boxel-ui/icons';
 
+import {
+  CLI_AUTH_TIMEOUT_MS,
+  describeDuration,
+} from '@cardstack/runtime-common/cli-auth';
+
 import ENV from '@cardstack/host/config/environment';
 import { cliAuthLoopbackUrl } from '@cardstack/host/lib/cli-auth-loopback';
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -19,12 +24,17 @@ import AuthButton from './auth-button';
 import AuthContainer from './auth-container';
 import AuthFormField from './auth-form-field';
 import ForgotPassword from './forgot-password';
+import RegisterUser from './register-user';
 
 import type { AuthMode } from './auth';
 import type { ResetPasswordParams } from './forgot-password';
+import type { LoginResponse } from 'matrix-js-sdk';
 
 const { matrixURL } = ENV;
 const GOOGLE_IDP_ID = 'oidc-google';
+// Carries "show the register form" across the reload that entering register
+// mode from a signed-in session performs.
+const REGISTER_PARAM = 'register';
 
 interface MatrixLoginResponse {
   access_token: string;
@@ -37,17 +47,23 @@ interface LoginFlow {
   identity_providers?: { id: string }[];
 }
 
-// The page boxel-cli opens to authorize a machine. It offers the same two
-// choices as the web sign-in, and each finishes by handing a session to the
-// loopback listener the CLI is holding open:
+// The page boxel-cli opens to authorize a machine. It offers the same choices
+// as the web sign-in, and each finishes by handing a session to the loopback
+// listener the CLI is holding open:
 //
 //   Google   — Synapse redirects there itself with a single-use login token,
 //              which the CLI redeems.
 //   Password — this page signs in against the homeserver, producing a device
 //              that belongs to the CLI, and POSTs it over.
+//   Register — a brand-new user signs up through the same <RegisterUser> flow
+//              the web app uses (email verification, invite token, personal
+//              realm bootstrap); the device registration mints is POSTed over.
 //
-// Nothing here touches the browser's own session: the credential produced is
-// the CLI's, and this app stays signed in (or out) exactly as it was.
+// The credential produced belongs to the CLI, never to this browser. The Google
+// and password paths leave the browser's own session exactly as it was.
+// Registration is the one exception, and only locally: it needs a page free of
+// another account's session to bootstrap onto, so it signs this browser out
+// without revoking anything server-side.
 export default class CliAuth extends Component {
   <template>
     <AuthContainer>
@@ -64,6 +80,20 @@ export default class CliAuth extends Component {
           @nullifyResetPasswordParams={{this.nullifyResetPasswordParams}}
           @resetPasswordParams={{this.resetPasswordParams}}
         />
+      {{else if this.registering}}
+        <span class='title'>Authorize Boxel CLI</span>
+        <p class='subtitle'>Create a Boxel account to give the Boxel CLI running
+          on this computer access to your workspaces.{{#if
+            this.endedSignedInSession
+          }}
+            <span data-test-cli-auth-signed-out-note>This browser has been
+              signed out of the account it was using; that account itself is
+              untouched.</span>
+          {{/if}}</p>
+        <RegisterUser
+          @setMode={{this.setMode}}
+          @onComplete={{this.onRegisterComplete}}
+        />
       {{else}}
         <span class='title'>Authorize Boxel CLI</span>
         {{#if this.signedInUserId}}
@@ -79,7 +109,8 @@ export default class CliAuth extends Component {
         {{/if}}
         {{#if this.resumedFromEmail}}
           <p class='notice' data-test-cli-auth-resumed>The CLI stops waiting
-            after 15 minutes. If signing in doesn't reach it, run
+            after
+            {{this.cliWaitWindow}}. If signing in doesn't reach it, run
             <code>boxel profile add</code>
             again.</p>
         {{/if}}
@@ -143,6 +174,16 @@ export default class CliAuth extends Component {
               data-test-cli-auth-form-error
             >{{this.error}}</div>
           {{/if}}
+          <p class='register-prompt'>
+            <span class='register-prompt-text'>Don't have an account?</span>
+            <Button
+              type='button'
+              class='register-link'
+              @kind='link-primary'
+              data-test-cli-auth-register
+              {{on 'click' this.startRegister}}
+            >Create a new Boxel account</Button>
+          </p>
         </form>
       {{/if}}
     </AuthContainer>
@@ -217,6 +258,20 @@ export default class CliAuth extends Component {
         font: 500 var(--boxel-font-xs);
         margin: var(--boxel-sp-2xs) auto 0 auto;
       }
+      .register-prompt {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: var(--boxel-sp-3xs);
+        margin: var(--boxel-sp) 0 0;
+        font: 500 var(--boxel-font-sm);
+      }
+      .register-prompt-text {
+        color: var(--muted-foreground);
+      }
+      .register-link {
+        --host-outline-offset: 2px;
+      }
     </style>
   </template>
 
@@ -227,11 +282,22 @@ export default class CliAuth extends Component {
   @tracked private error: string | undefined;
   @tracked private googleSsoAvailable = false;
   @tracked private completed = false;
+  @tracked private registering = false;
+  // True when entering register mode signed this browser out, which is worth
+  // saying out loud: the person did not ask to be signed out, they asked for a
+  // new account.
+  @tracked private endedSignedInSession = false;
   @tracked private resettingPassword = false;
   @tracked private resetPasswordParams: ResetPasswordParams | undefined;
   // True when this page load came from a reset email, which means the CLI has
   // been waiting since before the email was sent and may have given up.
   @tracked private resumedFromEmail = false;
+
+  // How long the CLI holds its listener open, in the CLI's own words, read from
+  // the value the CLI enforces so the page cannot quote a stale number.
+  private get cliWaitWindow() {
+    return describeDuration(CLI_AUTH_TIMEOUT_MS);
+  }
 
   constructor(owner: unknown, args: object) {
     super(owner as never, args);
@@ -255,16 +321,91 @@ export default class CliAuth extends Component {
       this.resetPasswordParams = { sid, clientSecret };
       this.resumedFromEmail = true;
     }
+
+    // The far side of the reload enterRegister() performs: come back up in
+    // register mode, and say why this browser is no longer signed in. Forget the
+    // session again here — a request already in flight when the reload started
+    // can land after the clearing that preceded it and persist a token again,
+    // and localStorage outlives the reload. Nothing of the old session is alive
+    // in this document to write another one.
+    if (params.get(REGISTER_PARAM)) {
+      this.matrixService.forgetPersistedSession();
+      this.registering = true;
+      this.endedSignedInSession = true;
+    }
   }
 
   private get showingPasswordReset() {
     return this.resettingPassword || Boolean(this.resetPasswordParams);
   }
 
-  // ForgotPassword speaks in AuthMode, where 'login' means "done here". This
-  // page has only the one other state to return to.
+  // ForgotPassword and RegisterUser speak in AuthMode, where 'login' means
+  // "done here — return to the sign-in form". This page reads the other modes
+  // as which panel to show instead. The password form is the 'login' state.
   @action private setMode(mode: AuthMode) {
+    if (mode === 'register') {
+      this.enterRegister();
+    } else {
+      this.registering = false;
+      // Leaving register mode drops the marker, so a refresh lands on the
+      // sign-in form rather than re-entering registration. The port and nonce
+      // stay, since the CLI is still waiting on them.
+      let url = new URL(window.location.href);
+      if (url.searchParams.has(REGISTER_PARAM)) {
+        url.searchParams.delete(REGISTER_PARAM);
+        window.history.replaceState(
+          {},
+          '',
+          url.pathname + url.search + url.hash,
+        );
+      }
+    }
     this.resettingPassword = mode === 'forgot-password';
+  }
+
+  @action private startRegister(ev: Event) {
+    ev.preventDefault();
+    this.enterRegister();
+  }
+
+  // Registration bootstraps a brand-new account onto this page's Matrix client,
+  // so a session already held here has to be gone before it starts — otherwise
+  // the bootstrap runs across both identities, and the realm-auth handshake
+  // hands the new account a session room that belongs to the old one and cannot
+  // be joined, failing the bootstrap before the personal realm exists.
+  //
+  // Ending the session in place is not enough: requests already in flight under
+  // the old identity land after it and re-seed what they touch. So end it and
+  // reload — a fresh document starts with nothing of the old session in it,
+  // which is why registering works in a window that was never signed in. The
+  // port and nonce stay in the URL, so the CLI is still waiting on the other
+  // side of the reload. The account itself is untouched; only this browser
+  // forgets it.
+  private enterRegister() {
+    if (this.signedInUserId) {
+      this.matrixService.forgetPersistedSession();
+      let url = new URL(window.location.href);
+      url.searchParams.set(REGISTER_PARAM, 'true');
+      window.location.replace(url.href);
+      return;
+    }
+    this.registering = true;
+  }
+
+  // Registration bootstrapped a full account and minted one device; hand that
+  // device to the CLI, and forget it locally so this browser doesn't keep it as
+  // its own session (see MatrixService.forgetPersistedSession). Reads the
+  // callback captured at page load rather than the URL: the bootstrap that
+  // precedes this refreshes routes, and a transition would take the port and
+  // nonce out of the URL before the hand-off got to read them.
+  @action private onRegisterComplete(session: LoginResponse) {
+    let redirect = this.capturedRedirect;
+    if (!redirect) {
+      return;
+    }
+    this.completed = true;
+    this.matrixService.forgetPersistedSession();
+    this.deliver(redirect, session);
   }
 
   @action private nullifyResetPasswordParams() {
@@ -292,6 +433,11 @@ export default class CliAuth extends Component {
     let params = new URLSearchParams(window.location.search);
     return cliAuthLoopbackUrl(params.get('port'), params.get('state'));
   }
+
+  // The callback as of page load. Every path that finishes here keeps the port
+  // and nonce in the URL, but registration's bootstrap refreshes routes on its
+  // way out, so the hand-off cannot rely on the URL still holding them.
+  private capturedRedirect = this.redirect;
 
   private get redirectError(): string | undefined {
     if (!this.redirect) {
@@ -412,7 +558,7 @@ export default class CliAuth extends Component {
   // and a top-level navigation isn't subject to the private-network preflight
   // a cross-origin subresource request would need. It also keeps the access
   // token out of a URL.
-  private deliver(redirect: string, session: MatrixLoginResponse) {
+  private deliver(redirect: string, session: LoginResponse) {
     let state = new URL(redirect).searchParams.get('state') ?? '';
     let form = window.document.createElement('form');
     form.method = 'POST';
@@ -420,7 +566,9 @@ export default class CliAuth extends Component {
     for (let [name, value] of Object.entries({
       state,
       access_token: session.access_token,
-      device_id: session.device_id,
+      // Always present for both the password login and the registration device;
+      // `?? ''` only narrows away LoginResponse's optional typing.
+      device_id: session.device_id ?? '',
       user_id: session.user_id,
     })) {
       let input = window.document.createElement('input');

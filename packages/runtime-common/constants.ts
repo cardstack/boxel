@@ -28,14 +28,17 @@ export function baseRRI(path: string): RealmResourceIdentifier {
   return rri(`${baseRealmRRI}${path}`);
 }
 
-// Hardcoded fallback default skills for new AI rooms when the user's active
-// system card configures none. These are the legacy `Skill/*` cards; flipping
-// the fallback to the `.md` skill files is tracked separately (CS-11783) and
-// waits on those files being served in every skills realm. Note the room-
-// creation path already resolves either kind, and the system card's
-// `defaultSkillCards` / `defaultSkillFiles` already accept both.
+// The skills realm's index — the pull-model entry point. Its body names every
+// skill and command the assistant can reach and is short enough to push into
+// every room, so a room needs no other skill up front: the model reads what a
+// task actually calls for. This is the default skill for new AI rooms, and the
+// skill the system card's `defaultSkillFiles` names.
+export const skillsIndexLocalPath = 'index.md';
+
+// The legacy `Skill` card carrying the Boxel coding guidance, enabled by the
+// build-listing and readme-spec flows, which set up their own skill lists
+// rather than going through the room defaults.
 export const devSkillLocalPath = 'Skill/boxel-development';
-export const envSkillLocalPath = 'Skill/boxel-environment';
 
 export const baseRef: ResolvedCodeRef = {
   module: `${baseRealmRRI}card-api` as RealmResourceIdentifier,
@@ -120,6 +123,12 @@ export const DEFAULT_CARD_SIZE_LIMIT_BYTES = 512 * 1024; //512 KB
 
 // Default max file (module / binary) payload size, in bytes.
 export const DEFAULT_FILE_SIZE_LIMIT_BYTES = 5 * 1024 * 1024; // 5 MB
+
+// Media assets run an order of magnitude larger than the source files, images,
+// and documents that make up the rest of a realm, so audio and video carry
+// their own ceilings instead of the general file limit.
+export const DEFAULT_AUDIO_SIZE_LIMIT_BYTES = 20 * 1024 * 1024; // 20 MB
+export const DEFAULT_VIDEO_SIZE_LIMIT_BYTES = 50 * 1024 * 1024; // 50 MB
 
 // Above this content length, markdown rendering skips the synchronous parse
 // and renders a bounded notice with a short plain-text preview instead. This

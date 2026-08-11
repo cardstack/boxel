@@ -40,6 +40,13 @@ export type OperatorModeTestSetup = {
 
 export function setupOperatorModeTests(
   hooks: NestedHooks,
+  opts?: {
+    // Forwarded to setupLocalIndexing: index this helper's realm once for the
+    // module instead of once per test. The name has to be unique across
+    // modules, since every module using this helper builds the same fixtures
+    // and each keeps its own snapshot.
+    reuseIndexAcrossTests?: string;
+  },
 ): OperatorModeTestSetup {
   setupRenderingTest(hooks);
   setupOperatorModeStateCleanup(hooks);
@@ -55,7 +62,7 @@ export function setupOperatorModeTests(
     operatorModeStateService = getService('operator-mode-state-service');
   });
 
-  setupLocalIndexing(hooks);
+  setupLocalIndexing(hooks, opts);
   setupOnSave(hooks);
   setupCardLogs(
     hooks,

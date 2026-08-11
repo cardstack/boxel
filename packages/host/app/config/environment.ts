@@ -65,4 +65,6 @@ export default config as {
   defaultFieldSpecId?: string;
   cardSizeLimitBytes: number;
   fileSizeLimitBytes: number;
+  audioSizeLimitBytes: number;
+  videoSizeLimitBytes: number;
 } & Record<string, unknown>;

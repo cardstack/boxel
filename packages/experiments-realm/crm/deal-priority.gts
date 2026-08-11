@@ -29,7 +29,10 @@ class DealPriorityEdit extends Component<typeof DealPriority> {
     });
   }
 
-  @action onSelectStatus(status: DealPriority): void {
+  @action onSelectStatus(status: DealPriority | null): void {
+    if (!status) {
+      return;
+    }
     this.label = status.label;
     this.args.model.label = this.selectedStatus?.label;
     this.args.model.index = this.selectedStatus?.index;

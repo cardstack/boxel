@@ -1,4 +1,8 @@
 import { FileContentMismatchError } from './file-api';
+import {
+  prunedColorProfile,
+  type ImageColorProfile,
+} from './image-color-profile';
 
 // WebP files start with "RIFF" (4 bytes) + file size (4 bytes) + "WEBP" (4 bytes)
 const RIFF_SIGNATURE = new Uint8Array([0x52, 0x49, 0x46, 0x46]); // "RIFF"
@@ -95,14 +99,67 @@ export function extractWebpDimensions(bytes: Uint8Array): {
         'VP8X chunk is too small to contain dimensions',
       );
     }
-    let width =
-      (bytes[24]! | (bytes[25]! << 8) | (bytes[26]! << 16)) + 1;
-    let height =
-      (bytes[27]! | (bytes[28]! << 8) | (bytes[29]! << 16)) + 1;
+    let width = (bytes[24]! | (bytes[25]! << 8) | (bytes[26]! << 16)) + 1;
+    let height = (bytes[27]! | (bytes[28]! << 8) | (bytes[29]! << 16)) + 1;
     return { width, height };
   }
 
   throw new FileContentMismatchError(
     `WebP file has unrecognized chunk type: ${chunkFourCC}`,
   );
+}
+
+// Each WebP flavor declares alpha in its own place.
+//
+//   VP8   lossy — no alpha in the bitstream at all.
+//   VP8L  lossless — bit 28 of the 32-bit little-endian header word that
+//         follows the signature byte, the same word the dimensions come from.
+//   VP8X  extended — bit 4 of the flags byte, set when a separate ALPH chunk
+//         follows. This is also the flavor an animated or ICC-carrying file
+//         uses, so it's the one where the flag actually varies.
+//
+// WebP is 8 bits per channel in every mode, so bit depth is a constant rather
+// than something read from the file.
+const VP8X_FLAGS_OFFSET = 20;
+const VP8X_ALPHA_FLAG = 0x10;
+const VP8X_ICC_FLAG = 0x20;
+const VP8L_HEADER_OFFSET = 21;
+const VP8L_ALPHA_BIT = 28;
+
+export function extractWebpColorProfile(
+  bytes: Uint8Array,
+): ImageColorProfile | undefined {
+  if (bytes.length < 16) {
+    return undefined;
+  }
+  let chunkFourCC = String.fromCharCode(
+    bytes[12]!,
+    bytes[13]!,
+    bytes[14]!,
+    bytes[15]!,
+  );
+  let view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let hasAlpha: boolean;
+  let iccProfile: string | undefined;
+  if (chunkFourCC === 'VP8 ') {
+    hasAlpha = false;
+  } else if (chunkFourCC === 'VP8L' && bytes.length >= VP8L_HEADER_OFFSET + 4) {
+    let header = view.getUint32(VP8L_HEADER_OFFSET, true);
+    hasAlpha = ((header >>> VP8L_ALPHA_BIT) & 1) === 1;
+  } else if (chunkFourCC === 'VP8X' && bytes.length > VP8X_FLAGS_OFFSET) {
+    let flags = bytes[VP8X_FLAGS_OFFSET]!;
+    hasAlpha = (flags & VP8X_ALPHA_FLAG) !== 0;
+    // The flag says an ICC chunk is present but not which profile it holds;
+    // naming it would mean parsing the chunk itself.
+    iccProfile = (flags & VP8X_ICC_FLAG) !== 0 ? 'embedded' : undefined;
+  } else {
+    return undefined;
+  }
+  return prunedColorProfile({
+    colorSpace: 'srgb',
+    bitDepth: 8,
+    channels: hasAlpha ? 4 : 3,
+    hasAlpha,
+    iccProfile,
+  });
 }

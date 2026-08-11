@@ -820,14 +820,37 @@ export default class StoreService extends Service implements StoreInterface {
         localDir: opts?.localDir,
       });
     } else if (!opts?.doNotPersist) {
-      if (instance.id) {
-        this.save(instance.id);
-      } else {
-        return (await this.persistAndUpdate(instance, {
+      // An existing card in a realm the user cannot write to is left alone:
+      // `useEphemeralState` is the store's only write-permission check and it
+      // guards `doAutoSave`, which this path no longer goes through, while
+      // `persistAndUpdate` has no guard of its own. Returning the instance
+      // keeps the mutation in memory and the durable document untouched, which
+      // is what the autosave path did.
+      //
+      // Scoped to cards that already exist, mirroring what this branch used to
+      // do: a card with no id yet was always persisted directly, and generally
+      // has no realm to check against anyway.
+      if (instance.id && this.useEphemeralState(instance)) {
+        return instance;
+      }
+      // Await durable persistence for both new and existing cards. Existing
+      // cards used to queue a fire-and-forget autosave here, which let `add()`
+      // (and callers like SaveCardCommand) resolve before serialization and
+      // the realm PATCH completed, allowing a "saved" result to be reported
+      // while the durable resource still held the pre-mutation state and any
+      // late persistence error never reached the caller. Callers that want
+      // optimistic behavior must opt in explicitly with `doNotWaitForPersist`.
+      //
+      // Wrapped in `trackingSaveState` so the save indicator reflects this save
+      // too. Bypassing the autosave queue would otherwise leave `lastSaved` and
+      // `lastSaveError` reporting only whatever the queue last did.
+      let stateKey = instance.id ?? instance[localIdSymbol];
+      return (await this.trackingSaveState(instance, stateKey, () =>
+        this.persistAndUpdate(instance, {
           realm: opts?.realm,
           localDir: opts?.localDir,
-        })) as T | CardErrorJSONAPI;
-      }
+        }),
+      )) as T | CardErrorJSONAPI;
     }
 
     return instance;
@@ -2904,34 +2927,63 @@ export default class StoreService extends Service implements StoreInterface {
       let autoSaves = [...(this.autoSaveQueues.get(queueName) ?? [])];
       this.autoSaveQueues.set(queueName, []);
       if (autoSaves && autoSaves.length > 0) {
-        let autoSaveState = this.initOrGetAutoSaveState(instance);
         // favor isImmediate saves
         let isImmediate = Boolean(autoSaves.find((a) => a.isImmediate));
         try {
-          let maybeError = await this.saveInstance(
-            instance,
-            isImmediate ? { isImmediate } : undefined,
+          await this.trackingSaveState(instance, queueName, () =>
+            this.saveInstance(
+              instance,
+              isImmediate ? { isImmediate } : undefined,
+            ),
           );
-          autoSaveState.hasUnsavedChanges = false;
-          autoSaveState.lastSaved = Date.now();
-          autoSaveState.lastSavedErrorMsg = undefined;
-          autoSaveState.lastSaveError =
-            maybeError && !isCardInstance(maybeError) ? maybeError : undefined;
-        } catch (error) {
-          // error will already be logged in CardService
-          if (autoSaveState) {
-            autoSaveState.lastSaveError = error as Error;
-          }
-        } finally {
-          autoSaveState.isSaving = false;
-          this.calculateLastSavedMsg(autoSaveState);
-          if (isLocalId(queueName) && instance.id) {
-            this.autoSaveStates.set(instance.id, autoSaveState);
-          }
+        } catch {
+          // Swallowed on purpose: an autosave is not something a caller awaited,
+          // so a throw here has nowhere to go but an unhandled rejection. The
+          // error is already logged in CardService and recorded on the save
+          // state for the indicator to surface. `add()` awaits its own save and
+          // therefore lets the throw propagate.
         }
       }
       done!();
     });
+  }
+
+  // Runs a save and folds its outcome into the instance's `AutoSaveState` —
+  // the state `getSaveState` exposes and the save indicator renders. Shared by
+  // the autosave queue and by `add()`'s awaited persist, so a save reports
+  // itself the same way regardless of which path issued it; before this was
+  // factored out, only the queue updated the indicator.
+  //
+  // `isSaving` is expected to already be true: the queue sets it when work is
+  // enqueued, which is earlier than this runs.
+  private async trackingSaveState(
+    instance: CardDef,
+    stateKey: string,
+    save: () => Promise<CardDef | CardErrorJSONAPI | undefined | void>,
+  ) {
+    let autoSaveState = this.initOrGetAutoSaveState(instance);
+    try {
+      let maybeError = await save();
+      autoSaveState.hasUnsavedChanges = false;
+      autoSaveState.lastSaved = Date.now();
+      autoSaveState.lastSavedErrorMsg = undefined;
+      autoSaveState.lastSaveError =
+        maybeError && !isCardInstance(maybeError) ? maybeError : undefined;
+      return maybeError;
+    } catch (error) {
+      // error will already be logged in CardService
+      autoSaveState.lastSaveError = error as Error;
+      throw error;
+    } finally {
+      autoSaveState.isSaving = false;
+      this.calculateLastSavedMsg(autoSaveState);
+      // A card saved under its local id gains a remote id during the save, so
+      // republish the same state object under that id — otherwise a later
+      // lookup by remote id would mint a fresh, empty state.
+      if (isLocalId(stateKey) && instance.id) {
+        this.autoSaveStates.set(instance.id, autoSaveState);
+      }
+    }
   }
 
   private initOrGetAutoSaveState(instance: CardDef): AutoSaveState {

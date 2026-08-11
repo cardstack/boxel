@@ -103,7 +103,10 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
   }
 
   @action
-  private selectFormat(option: FormatOption) {
+  private selectFormat(option: FormatOption | null) {
+    if (!option) {
+      return;
+    }
     this.args.selection.selectFormat(option);
   }
 

@@ -12,7 +12,11 @@ import {
   createTestRealmViaCli,
 } from '../helpers/integration.ts';
 import { runBoxel } from '../helpers/run-boxel.ts';
-import { TINY_PNG_BYTES, TINY_PDF_BYTES } from '../helpers/binary-fixtures.ts';
+import {
+  TINY_PNG_BYTES,
+  TINY_PDF_BYTES,
+  NON_UTF8_BYTES,
+} from '../helpers/binary-fixtures.ts';
 
 // `boxel file write <path> --realm <url>` reads content from STDIN (text)
 // or `--file <local>` (binary). We drive the installed binary and verify
@@ -124,6 +128,81 @@ describe('file write (integration)', () => {
     let response = await readBack('doc.pdf');
     let remote = Buffer.from(await response.arrayBuffer());
     expect(remote.equals(Buffer.from(TINY_PDF_BYTES))).toBe(true);
+  });
+
+  it('writes a .bin file byte-identically', async () => {
+    // .bin maps to application/octet-stream, the default for unknown
+    // extensions — the payload's invalid UTF-8 sequences survive only if
+    // that classification routes the upload through the binary path.
+    let src = path.join(os.tmpdir(), `boxel-write-${Date.now()}.bin`);
+    fs.writeFileSync(src, Buffer.from(NON_UTF8_BYTES));
+    try {
+      let res = await runBoxel(
+        ['file', 'write', 'blob.bin', '--realm', realmUrl, '--file', src],
+        { home },
+      );
+      expect(res.ok, res.stderr).toBe(true);
+    } finally {
+      fs.rmSync(src, { force: true });
+    }
+
+    let response = await readBack('blob.bin');
+    expect(response.ok).toBe(true);
+    let remote = Buffer.from(await response.arrayBuffer());
+    expect(remote.equals(Buffer.from(NON_UTF8_BYTES))).toBe(true);
+  });
+
+  it('writes a .zip file byte-identically', async () => {
+    let src = path.join(os.tmpdir(), `boxel-write-${Date.now()}.zip`);
+    fs.writeFileSync(src, Buffer.from(NON_UTF8_BYTES));
+    try {
+      let res = await runBoxel(
+        ['file', 'write', 'archive.zip', '--realm', realmUrl, '--file', src],
+        { home },
+      );
+      expect(res.ok, res.stderr).toBe(true);
+    } finally {
+      fs.rmSync(src, { force: true });
+    }
+
+    let response = await readBack('archive.zip');
+    expect(response.ok).toBe(true);
+    let remote = Buffer.from(await response.arrayBuffer());
+    expect(remote.equals(Buffer.from(NON_UTF8_BYTES))).toBe(true);
+  });
+
+  it('writes string content from STDIN to a non-textual path', async () => {
+    // STDIN can only produce a string, so refusing string content at a path
+    // that is binary by extension would make such paths unwritable. The
+    // string is UTF-8 encoded onto the byte path instead, which is lossless.
+    let script = '#!/usr/bin/env python3\nprint("hi")\n';
+    let res = await runBoxel(
+      ['file', 'write', 'scripts/hello.py', '--realm', realmUrl],
+      { home, input: script },
+    );
+    expect(res.ok, res.stderr).toBe(true);
+
+    let response = await readBack('scripts/hello.py');
+    expect(response.ok).toBe(true);
+    let remote = Buffer.from(await response.arrayBuffer());
+    expect(remote.toString('utf8')).toBe(script);
+  });
+
+  it('refuses binary source content at a text destination', async () => {
+    // The destructive direction stays blocked: raw bytes at a text extension
+    // would be served back as text and mangled by the UTF-8 decode.
+    let src = path.join(os.tmpdir(), `boxel-write-${Date.now()}-guard.png`);
+    fs.writeFileSync(src, Buffer.from(TINY_PNG_BYTES));
+    try {
+      let res = await runBoxel(
+        ['file', 'write', 'notes.md', '--realm', realmUrl, '--file', src],
+        { home },
+      );
+      expect(res.exitCode).toBe(1);
+      expect(res.stderr).toContain('Refusing to write');
+    } finally {
+      fs.rmSync(src, { force: true });
+    }
   });
 
   it('exits non-zero with a clear error when there is no active profile', async () => {
