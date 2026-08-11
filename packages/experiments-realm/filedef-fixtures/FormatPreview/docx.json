@@ -1,0 +1,47 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "docx · Format Preview",
+      "cardInfo": {
+        "name": "docx · Format Preview",
+        "summary": "Simple, moderate, and complex docx fixtures across atom, embedded, isolated, and the 16 fitted envelopes."
+      }
+    },
+    "relationships": {
+      "previewFiles.0": {
+        "links": {
+          "self": "../samples/docx-simple.docx"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/docx-simple.docx"
+        }
+      },
+      "previewFiles.1": {
+        "links": {
+          "self": "../samples/docx-moderate.docx"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/docx-moderate.docx"
+        }
+      },
+      "previewFiles.2": {
+        "links": {
+          "self": "../samples/docx-complex.docx"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/docx-complex.docx"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../format-preview",
+        "name": "FileDefFormatPreview"
+      }
+    }
+  }
+}

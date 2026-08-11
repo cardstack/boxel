@@ -1,0 +1,47 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "webm · Format Preview",
+      "cardInfo": {
+        "name": "webm · Format Preview",
+        "summary": "Simple, moderate, and complex webm fixtures across atom, embedded, isolated, and the 16 fitted envelopes."
+      }
+    },
+    "relationships": {
+      "previewFiles.0": {
+        "links": {
+          "self": "../samples/webm-simple.webm"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/webm-simple.webm"
+        }
+      },
+      "previewFiles.1": {
+        "links": {
+          "self": "../samples/webm-moderate.webm"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/webm-moderate.webm"
+        }
+      },
+      "previewFiles.2": {
+        "links": {
+          "self": "../samples/webm-complex.webm"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "../samples/webm-complex.webm"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../format-preview",
+        "name": "FileDefFormatPreview"
+      }
+    }
+  }
+}
