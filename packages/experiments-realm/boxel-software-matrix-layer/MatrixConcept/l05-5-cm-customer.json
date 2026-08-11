@@ -17,7 +17,7 @@
       "domainKit": "Commerce",
       "owner": "richard",
       "workState": "Done",
-      "notes": "v1 \u00b7 Built as ACCOUNT \u2014 experiments-realm/account.gts, POC tier. Concept should be renamed Account per the spec Data Architecture",
+      "notes": "v1 · Built as ACCOUNT — experiments-realm/account.gts, POC tier. Concept should be renamed Account per the spec Data Architecture",
       "cardInfo": {
         "name": null,
         "summary": null,
