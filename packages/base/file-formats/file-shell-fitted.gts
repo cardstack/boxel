@@ -9,7 +9,12 @@
 // component ever sees the data.
 import GlimmerComponent from '@glimmer/component';
 
-import { fileIconFor, humanSize, relativeDate } from './file-presentation';
+import {
+  fileIconFor,
+  humanSize,
+  letterboxImage,
+  relativeDate,
+} from './file-presentation';
 import {
   FilePreviewStage,
   type FilePreviewComponent,
@@ -123,14 +128,13 @@ export class FileFittedShell extends GlimmerComponent<FileFittedShellSignature> 
       : '';
   }
 
+  // The rail presents the same picture the stage does, so it letterboxes by
+  // the same shared rule.
   get thumbContain() {
-    if (this.args.model?.previewKind === 'svg') {
-      return true;
-    }
-    // A square center-crop of a panorama or a skyscraper is meaningless, so
-    // contain those; ordinary shapes may cover.
-    let r = this.args.model?.aspectRatio;
-    return r != null && (r >= 2.5 || r <= 0.4);
+    return letterboxImage(
+      this.args.model?.previewKind,
+      this.args.model?.aspectRatio,
+    );
   }
 
   <template>

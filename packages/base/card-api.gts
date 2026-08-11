@@ -130,10 +130,7 @@ import FileDefEmbeddedTemplate from './default-templates/file-def-embedded';
 import FileDefFittedTemplate from './default-templates/file-def-fitted';
 import FileDefIsolatedTemplate from './default-templates/file-def-isolated';
 import type { FilePreviewComponent } from './file-formats/file-preview-stage';
-import ImageDefAtomTemplate from './default-templates/image-def-atom';
-import ImageDefEmbeddedTemplate from './default-templates/image-def-embedded';
-import ImageDefFittedTemplate from './default-templates/image-def-fitted';
-import ImageDefIsolatedTemplate from './default-templates/image-def-isolated';
+import { ImagePreview } from './file-formats/image-preview';
 import CaptionsIcon from '@cardstack/boxel-icons/captions';
 import FileIcon from '@cardstack/boxel-icons/file';
 import ImageIcon from '@cardstack/boxel-icons/image';
@@ -3202,14 +3199,18 @@ export class ImageDef extends FileDef {
   static displayName = 'Image';
   static icon: CardOrFieldTypeIcon = ImageIcon;
   static acceptTypes = 'image/*';
+  // An image whose content type never arrived — a hand-linked thumbnail, say —
+  // must still present as an image rather than a generic file, so the family
+  // is pinned instead of left to MIME/extension inference. `previewKind` stays
+  // inferred: photo, gif, and svg genuinely differ per instance.
+  static fileFamily = 'image';
 
   @field width = contains(NumberField);
   @field height = contains(NumberField);
 
-  static isolated: BaseDefComponent = ImageDefIsolatedTemplate;
-  static atom: BaseDefComponent = ImageDefAtomTemplate;
-  static embedded: BaseDefComponent = ImageDefEmbeddedTemplate;
-  static fitted: BaseDefComponent = ImageDefFittedTemplate;
+  // The four formats come from FileDef's shared shells; the family supplies
+  // only the renderer that draws its pixels.
+  static previewComponent: FilePreviewComponent = ImagePreview;
 
   // CS-10787: emit a markdown image reference. If no URL is available we
   // fall back to a placeholder that names the image — useful to downstream
