@@ -953,6 +953,11 @@ let reusableIndex:
       captured: boolean;
       restored: boolean;
       manual: boolean;
+      // The realms the snapshot actually contains, recorded when it was taken.
+      // `restored` says whether this test restored; only this says *what* it
+      // restored, which is what a realm appearing for the first time in a later
+      // test has to be checked against.
+      realmURLs: Set<string>;
     }
   | undefined;
 
@@ -1003,6 +1008,7 @@ export function setupLocalIndexing(
           captured: false,
           restored: false,
           manual: opts.captureIndexManually ?? false,
+          realmURLs: new Set<string>(),
         }
       : undefined;
   });
@@ -1086,6 +1092,13 @@ export function setupLocalIndexing(
   });
 }
 
+// Registry keys come from RealmPaths, which stores `ensureTrailingSlash(decodeURI(href))`.
+// Compare against that exact form so a realm isn't reported missing over a
+// trailing slash or an encoded character.
+function normalizeRealmKey(url: string): string {
+  return ensureTrailingSlash(url.includes('%') ? decodeURI(url) : url);
+}
+
 // Capture the reusable index now, for a module that opted in with
 // `captureIndexManually` because it builds several realms per test. Call it
 // once, from wherever the last realm is built — a setup helper that builds them
@@ -1104,6 +1117,9 @@ export async function captureReusableIndex() {
   let dbAdapter = await getDbAdapter();
   await dbAdapter.exportSnapshot(reusableIndex.snapshotName);
   reusableIndex.captured = true;
+  reusableIndex.realmURLs = new Set(
+    [...getTestRealmRegistry().keys()].map(normalizeRealmKey),
+  );
 }
 
 export function setupOnSave(hooks: NestedHooks) {
@@ -1407,23 +1423,35 @@ async function setupTestRealm({
     ) as DefinitionLookup;
   }
 
-  // A realm built in the same test that captured the snapshot cannot be in it —
-  // the capture already happened. Later tests would restore an index missing
-  // this realm and, because they also skip the boot index, serve it with
-  // nothing indexed at all. That reads as "these cards don't exist": a search
-  // returns nothing, an assertion that a card is absent passes, a list renders
-  // short. Nothing looks broken, and the first test still passes, because the
-  // live database did hold both. So fail here, on the first test, naming what
-  // to do about it. `restored` distinguishes the capturing test (false) from
-  // every later one (true, where realms are expected to come from the
-  // snapshot).
-  if (reusableIndex?.captured && !reusableIndex.restored) {
-    throw new Error(
-      `reuseIndexAcrossTests ('${reusableIndex.snapshotName}'): a realm is being built after this module's index snapshot was captured, so the snapshot cannot contain it. ` +
-        (reusableIndex.manual
-          ? 'captureReusableIndex() ran too early — move it after the last realm this module builds.'
-          : 'This module builds more than one realm per test: pass captureIndexManually and call captureReusableIndex() once, after the last realm.'),
-    );
+  // A realm the snapshot doesn't contain, in a module that reuses one, is the
+  // failure this whole mechanism has to avoid: the realm mounts with
+  // `skipBootIndex` and is served with nothing indexed, which reads as "these
+  // cards don't exist" — a search returns nothing, an assertion that a card is
+  // absent passes, a list renders short. Nothing looks broken. So fail loudly
+  // instead, as early as the mistake is detectable, and say what to do.
+  //
+  // Two ways in, and they need different advice. Building a realm in the test
+  // that captured (`restored === false`) means the capture came too early —
+  // that test's own later realms are missing from it. Building one in a test
+  // that restored means this realm was never in the snapshot at all, which is
+  // what `realmURLs` is for: `restored` says whether this test restored, only
+  // the set says what it restored.
+  if (reusableIndex?.captured) {
+    let context = `reuseIndexAcrossTests ('${reusableIndex.snapshotName}'): `;
+    if (!reusableIndex.restored) {
+      throw new Error(
+        `${context}a realm is being built after this module's index snapshot was captured, so the snapshot cannot contain it. ` +
+          (reusableIndex.manual
+            ? 'captureReusableIndex() ran too early — move it after the last realm this module builds.'
+            : 'This module builds more than one realm per test: pass captureIndexManually and call captureReusableIndex() once, after the last realm.'),
+      );
+    }
+    if (!reusableIndex.realmURLs.has(normalizeRealmKey(realmURL))) {
+      throw new Error(
+        `${context}'${realmURL}' is not one of the realms the snapshot was taken from (${[...reusableIndex.realmURLs].join(', ')}), so it would be served with an empty index. ` +
+          'A module that builds a realm only some of its tests need cannot reuse an index; build it in the shared setup, or drop the option for this module.',
+      );
+    }
   }
   await insertPermissions(dbAdapter, new URL(realmURL), permissions);
   let worker = new Worker({
@@ -1496,6 +1524,9 @@ async function setupTestRealm({
     // realm, since capturing here would omit the realms still to come.
     await dbAdapter.exportSnapshot(reusableIndex.snapshotName);
     reusableIndex.captured = true;
+    reusableIndex.realmURLs = new Set(
+      [...getTestRealmRegistry().keys()].map(normalizeRealmKey),
+    );
   }
   if (startMatrix) {
     await mockMatrixUtils.start();
