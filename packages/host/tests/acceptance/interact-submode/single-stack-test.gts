@@ -29,6 +29,7 @@ module('Acceptance | interact submode | single stack tests', function (hooks) {
   let realm: Realm;
 
   setupInteractSubmodeTests(hooks, {
+    reuseIndexAcrossTests: 'interactSingleStack',
     setRealm(value) {
       realm = value;
     },

@@ -22,6 +22,7 @@ module('Acceptance | interact submode | index changes tests', function (hooks) {
   let realm: Realm;
 
   setupInteractSubmodeTests(hooks, {
+    reuseIndexAcrossTests: 'interactIndexChanges',
     setRealm(value) {
       realm = value;
     },
