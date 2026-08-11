@@ -1,6 +1,7 @@
-import { logger } from '@cardstack/runtime-common';
-import { Deferred } from '@cardstack/runtime-common';
+import { Deferred, logger } from '@cardstack/runtime-common';
 
+// Same channel as the queue that used to host this, so existing log filters
+// keep working.
 const log = logger('queue');
 
 // Tracks a task that should loop with a timeout and an interruptible sleep.
