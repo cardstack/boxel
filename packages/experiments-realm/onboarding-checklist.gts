@@ -256,6 +256,10 @@ export class OnboardingChecklist extends CardDef {
       return `${Math.round((completed / tasks.length) * 100)}%`;
     }
 
+    get progressBarStyle() {
+      return htmlSafe(`width: ${this.completionPercentage}`);
+    }
+
     get completedTaskCount(): number {
       let tasks = this.args.model?.tasks ?? [];
       return tasks.filter((t) => t && t.status === 'complete').length;
@@ -307,7 +311,7 @@ export class OnboardingChecklist extends CardDef {
               <div class='progress-bar-bg'>
                 <div
                   class='progress-bar'
-                  style={{htmlSafe (concat 'width: ' this.completionPercentage)}}
+                  style={{this.progressBarStyle}}
                 ></div>
               </div>
               <span class='progress-count'>
@@ -496,6 +500,10 @@ export class OnboardingChecklist extends CardDef {
       return Math.round((completed / tasks.length) * 100);
     }
 
+    get progressBarStyle() {
+      return htmlSafe(`width: ${this.completionPercentage}%`);
+    }
+
     <template>
       <div class='checklist-embedded'>
         {{#if @model.employee}}
@@ -527,7 +535,7 @@ export class OnboardingChecklist extends CardDef {
             <div class='progress-bar-bg'>
               <div
                 class='progress-bar'
-                style={{htmlSafe (concat 'width: ' this.completionPercentage '%')}}
+                style={{this.progressBarStyle}}
               ></div>
             </div>
             <span class='progress-text'>{{this.completionPercentage}}%</span>

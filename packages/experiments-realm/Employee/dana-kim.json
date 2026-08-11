@@ -19,7 +19,12 @@
       "photo": {
         "url": "https://images.pexels.com/photos/415829/pexels-photo-415829.jpeg",
         "sourceMode": "url"
-      }
+      },
+      "employmentType": null,
+      "terminationDate": null,
+      "ptoBalance": null,
+      "onboardingStatus": null,
+      "weeklyInterviewCapacityHours": null
     },
     "relationships": {
       "manager": {
