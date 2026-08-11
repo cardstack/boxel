@@ -8,7 +8,10 @@ import {
   type DBAdapter,
 } from '@cardstack/runtime-common';
 import { indexingConcurrencyGroup } from '@cardstack/runtime-common/jobs/indexing';
-import { prerenderHtmlConcurrencyGroup } from '@cardstack/runtime-common/jobs/prerender-html';
+import {
+  prerenderHtmlConcurrencyGroup,
+  publishedHtmlHasCaughtUp,
+} from '@cardstack/runtime-common/jobs/prerender-html';
 import {
   sendResponseForBadRequest,
   sendResponseForForbiddenRequest,
@@ -168,8 +171,10 @@ async function readPublishProgress(
   }
   // An empty lane does not mean the render is done: the index pass enqueues its
   // prerender job fire-and-forget, so the work can be pending with nothing yet
-  // in the lane. Fall back to the generation signal readiness itself gates on,
-  // or a publish would be told it had finished before its page existed.
+  // in the lane. Fall back to the same landed-HTML signal readiness itself gates
+  // on — shared with `awaitPublishedHtmlReady` rather than restated here, so the
+  // two can't drift into disagreeing about whether a publish has finished — or a
+  // publish would be told it had finished before its page existed.
   if (!(await publishedHtmlHasCaughtUp(dbAdapter, realmURL))) {
     return { phase: 'render', filesCompleted: 0, totalFiles: 0 };
   }
@@ -205,31 +210,6 @@ async function currentJobProgress(
     `ORDER BY has_worker DESC, j.id ASC LIMIT 1`,
   ])) as PublishProgressRow[];
   return row;
-}
-
-// Mirrors `awaitPublishedHtmlReady`'s signal: a `prerendered_html` row at or
-// beyond the realm's current generation means that generation's render batch
-// has landed. A realm with no generation has never been indexed and has no
-// render to wait on.
-async function publishedHtmlHasCaughtUp(
-  dbAdapter: DBAdapter,
-  realmURL: string,
-): Promise<boolean> {
-  let [genRow] = (await query(dbAdapter, [
-    'SELECT current_generation FROM realm_generations WHERE realm_url =',
-    param(realmURL),
-  ])) as { current_generation: number }[];
-  if (genRow?.current_generation == null) {
-    return true;
-  }
-  let rows = await query(dbAdapter, [
-    'SELECT 1 FROM prerendered_html WHERE realm_url =',
-    param(realmURL),
-    'AND generation >=',
-    param(genRow.current_generation),
-    'LIMIT 1',
-  ]);
-  return rows.length > 0;
 }
 
 // Postgres returns these as strings through the adapter's row shape; coerce
