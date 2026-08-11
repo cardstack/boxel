@@ -7,14 +7,19 @@ import type {
   JobsTable,
   PgAdapter,
 } from '@cardstack/postgres';
+import { acquireConcurrencyGroupLock } from '@cardstack/postgres';
 import { markFailedJob } from '../lib/mark-failed-job.ts';
+import { Deferred } from '@cardstack/runtime-common';
 import { createTestPgAdapter, prepareTestDB } from './helpers/index.ts';
+
+const GROUP = 'indexing:https://example.com/a-realm/';
 
 async function insertJob(adapter: PgAdapter): Promise<JobsTable['id']> {
   let rows = (await adapter.execute(
-    `INSERT INTO jobs (job_type, args, status, timeout)
-     VALUES ('from-scratch-index', '{}'::jsonb, 'unfulfilled', 7200)
+    `INSERT INTO jobs (job_type, args, status, timeout, concurrency_group)
+     VALUES ('from-scratch-index', '{}'::jsonb, 'unfulfilled', 7200, $1)
      RETURNING id`,
+    { bind: [GROUP] },
   )) as unknown as Pick<JobsTable, 'id'>[];
   return rows[0].id;
 }
@@ -261,6 +266,79 @@ module(basename(import.meta.filename), function () {
       let reservation = await fetchReservation(adapter, reservationId);
       assert.notEqual(
         reservation.completed_at,
+        null,
+        'the orphan is still closed so it stops reading as stuck',
+      );
+    });
+
+    test('waits for an in-flight claim rather than deciding against a stale read', async function (assert) {
+      // The reject is a check-then-write, and its `NOT EXISTS` reads
+      // `job_reservations` as of statement start. Blocking on the claim's row
+      // lock would not re-evaluate that, so without holding the claim path's own
+      // concurrency-group lock a job claimed microseconds earlier would still be
+      // rejected. Here a transaction holds that lock and inserts a live
+      // reservation, standing in for a claim in flight.
+      let jobId = await insertJob(adapter);
+      let staleId = await insertReservation(
+        adapter,
+        jobId,
+        'crashed-worker',
+        -60,
+      );
+
+      let claimHasLock = new Deferred<void>();
+      let releaseClaim = new Deferred<void>();
+      let claim = adapter.withConnection(async (query) => {
+        await query(['BEGIN']);
+        await acquireConcurrencyGroupLock(query, GROUP);
+        await query([
+          `INSERT INTO job_reservations (job_id, worker_id, locked_until)
+           VALUES (${jobId}, 'claiming-worker', NOW() + INTERVAL '10 minutes')`,
+        ]);
+        claimHasLock.fulfill();
+        await releaseClaim.promise;
+        await query(['COMMIT']);
+      });
+
+      await claimHasLock.promise;
+      let decision = markFailedJob(adapter, {
+        workerId: 'crashed-worker',
+        jobId: String(jobId),
+        reservationId: String(staleId),
+        message: 'FATAL ERROR',
+      });
+
+      // The reject must still be blocked on the lock. If it were not, it would
+      // have read a snapshot without the claim's reservation and rejected.
+      let raced = await Promise.race([
+        decision,
+        new Promise<'still-blocked'>((r) =>
+          setTimeout(() => r('still-blocked'), 500),
+        ),
+      ]);
+      assert.strictEqual(
+        raced,
+        'still-blocked',
+        'the reject waits for the claim to finish rather than racing it',
+      );
+
+      releaseClaim.fulfill();
+      await claim;
+      assert.strictEqual(
+        await decision,
+        'not-ours',
+        'once the claim is visible the job is left to the worker holding it',
+      );
+
+      let job = await fetchJob(adapter, jobId);
+      assert.strictEqual(
+        job.status,
+        'unfulfilled',
+        'the freshly claimed job was not rejected out from under its worker',
+      );
+      let stale = await fetchReservation(adapter, staleId);
+      assert.notEqual(
+        stale.completed_at,
         null,
         'the orphan is still closed so it stops reading as stuck',
       );
