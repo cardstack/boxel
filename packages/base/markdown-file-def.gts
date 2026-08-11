@@ -10,10 +10,14 @@ import {
   type ToolContext,
 } from '@cardstack/runtime-common';
 import MarkdownIcon from '@cardstack/boxel-icons/align-box-left-middle';
+import GlimmerComponent from '@glimmer/component';
+import { htmlSafe } from '@ember/template';
+import { markdownToHtml } from '@cardstack/runtime-common/marked-sync';
 import {
   BaseDefComponent,
   CardDef,
   Component,
+  NumberField,
   StringField,
   contains,
   containsMany,
@@ -27,6 +31,7 @@ import {
   type ByteStream,
   type SerializedFile,
 } from './file-api';
+import type { FilePreviewSignature } from './file-formats/file-preview-stage';
 import { FrontmatterField } from './frontmatter-field';
 import {
   frontmatterFieldForKind,
@@ -149,310 +154,137 @@ function markdownTitle(
   return model?.title ?? model?.name ?? 'Untitled markdown';
 }
 
-class Isolated extends Component<typeof MarkdownDef> {
-  get title() {
-    return markdownTitle(this.args.model);
+// The family renderer the four shared shells mount into. Embedded and isolated
+// get the full Boxel-flavored-markdown render — rendered markdown with the
+// linked-card and linked-file slots resolved — while a fitted collection cell
+// gets a lighter, non-interactive rendition of the projection's already-budgeted
+// head snippet, so a grid tile never mounts the slot-collection machinery over a
+// truncated body.
+class MarkdownPreview extends GlimmerComponent<FilePreviewSignature> {
+  // The FileDef instance behind the shared projection, reached for the fields
+  // the generic view model doesn't carry: the linked cards/files and the id the
+  // BFM renderer resolves relative references against.
+  get source(): any {
+    return this.args.model?.source;
   }
 
-  get content() {
-    return this.args.model?.content ?? null;
+  get content(): string {
+    return String(this.source?.content ?? '');
   }
 
-  get hasContent() {
-    return Boolean(this.args.model?.content?.trim());
+  get hasContent(): boolean {
+    return Boolean(this.content.trim());
   }
 
-  <template>
-    <article class='markdown-isolated' data-test-markdown-isolated>
-      {{#if this.hasContent}}
-        <MarkdownTemplate
-          @content={{this.content}}
-          @linkedCards={{@model.linkedCards}}
-          @linkedFiles={{@model.linkedFiles}}
-          @cardReferenceBaseUrl={{@model.id}}
-        />
-      {{else}}
-        <header class='markdown-isolated__title'>{{this.title}}</header>
-      {{/if}}
-    </article>
-    <style scoped>
-      .markdown-isolated {
-        padding: var(--boxel-sp-lg);
-        max-width: 100%;
-      }
-
-      .markdown-isolated__title {
-        color: var(--boxel-900);
-        font-weight: 600;
-        font-size: var(--boxel-font-size-lg);
-      }
-
-      .markdown-isolated :deep(h1:first-child),
-      .markdown-isolated :deep(h2:first-child),
-      .markdown-isolated :deep(h3:first-child),
-      .markdown-isolated :deep(h4:first-child),
-      .markdown-isolated :deep(h5:first-child),
-      .markdown-isolated :deep(h6:first-child) {
-        margin-top: 0;
-      }
-    </style>
-  </template>
-}
-
-class Embedded extends Component<typeof MarkdownDef> {
-  get title() {
-    return markdownTitle(this.args.model);
+  get isFitted(): boolean {
+    return this.args.mode === 'fitted';
   }
 
-  get content() {
-    return this.args.model?.content ?? null;
-  }
-
-  get contentStartsWithTitle() {
-    let content = this.args.model?.content?.trim();
-    if (!content) {
-      return false;
-    }
-    let firstLine = content.split('\n')[0].trim();
-    let match = firstLine.match(/^\s*#{1,6}\s+(.+?)\s*#*\s*$/);
-    if (!match?.[1]) {
-      return false;
-    }
-    let headingText = stripMarkdown(match[1]);
-    return headingText === this.title;
+  // `contentPreview` is truncated to the fitted character/line budget in
+  // `fileViewModel`, so the snippet parse stays bounded no matter the file size.
+  get snippetHtml() {
+    return htmlSafe(markdownToHtml(this.args.model?.contentPreview ?? ''));
   }
 
   <template>
-    <article class='markdown-embedded' data-test-markdown-embedded>
-      {{#unless this.contentStartsWithTitle}}
-        <header class='markdown-embedded__title'>{{this.title}}</header>
-      {{/unless}}
-      <div class='markdown-embedded__content'>
-        <MarkdownTemplate
-          @content={{this.content}}
-          @linkedCards={{@model.linkedCards}}
-          @linkedFiles={{@model.linkedFiles}}
-          @cardReferenceBaseUrl={{@model.id}}
-        />
-      </div>
-    </article>
-    <style scoped>
-      .markdown-embedded {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-xs);
-        padding: var(--boxel-sp);
-      }
-
-      .markdown-embedded__title {
-        color: var(--boxel-900);
-        font-weight: 600;
-      }
-
-      /*
-        Embedded markdown is a bounded preview by default: a max-height clip
-        plus a bottom fade hinting that there is more to open and read. The
-        embedding context can retune this across the embed boundary via two
-        custom properties (the only lever it has, since it cannot pass args
-        into a framework-driven embedded render):
-          - a taller bounded preview:
-              --markdown-embedded-max-height: 500px;
-          - full, unbounded content (drop the clip AND the fade together):
-              --markdown-embedded-max-height: none;
-              --markdown-embedded-mask: none;
-      */
-      .markdown-embedded__content {
-        max-height: var(--markdown-embedded-max-height, 200px);
-        overflow: hidden;
-        mask-image: var(
-          --markdown-embedded-mask,
-          linear-gradient(to bottom, black 60%, transparent 100%)
-        );
-        -webkit-mask-image: var(
-          --markdown-embedded-mask,
-          linear-gradient(to bottom, black 60%, transparent 100%)
-        );
-      }
-
-      .markdown-embedded__content :deep(h1:first-child),
-      .markdown-embedded__content :deep(h2:first-child),
-      .markdown-embedded__content :deep(h3:first-child),
-      .markdown-embedded__content :deep(h4:first-child),
-      .markdown-embedded__content :deep(h5:first-child),
-      .markdown-embedded__content :deep(h6:first-child) {
-        margin-top: 0;
-      }
-    </style>
-  </template>
-}
-
-class Fitted extends Component<typeof MarkdownDef> {
-  get title() {
-    return markdownTitle(this.args.model);
-  }
-
-  get excerpt() {
-    return this.args.model?.excerpt ?? '';
-  }
-
-  get hasExcerpt() {
-    return Boolean(this.excerpt);
-  }
-
-  <template>
-    <article class='markdown-fitted' data-test-markdown-fitted>
-      <div class='markdown-fitted__icon'>
-        <MarkdownIcon width='100%' height='100%' />
-      </div>
-      <div class='markdown-fitted__text'>
-        <header class='markdown-fitted__title'>{{this.title}}</header>
-        {{#if this.hasExcerpt}}
-          <p class='markdown-fitted__excerpt'>{{this.excerpt}}</p>
+    {{#if this.isFitted}}
+      <div class='md-preview md-preview--fitted' data-test-markdown-preview>
+        {{#if this.hasContent}}
+          <div class='md-snippet'>{{this.snippetHtml}}</div>
+        {{else}}
+          <p class='md-preview__empty'>No content</p>
         {{/if}}
       </div>
-    </article>
+    {{else}}
+      <div
+        class='md-preview md-preview--full'
+        data-mode={{@mode}}
+        data-test-markdown-preview
+      >
+        {{#if this.hasContent}}
+          <MarkdownTemplate
+            @content={{this.content}}
+            @linkedCards={{this.source.linkedCards}}
+            @linkedFiles={{this.source.linkedFiles}}
+            @cardReferenceBaseUrl={{this.source.id}}
+          />
+        {{else}}
+          <p class='md-preview__empty'>No content</p>
+        {{/if}}
+      </div>
+    {{/if}}
     <style scoped>
-      .markdown-fitted {
-        container-name: fitted-card;
-        container-type: size;
+      .md-preview {
         width: 100%;
         height: 100%;
-        display: flex;
-        align-items: flex-start;
-        gap: var(--boxel-sp-xs);
-        padding: var(--boxel-sp-xs);
-        overflow: hidden;
+        min-height: 0;
+        overflow: auto;
+        background: var(--card);
+        color: var(--foreground);
+        text-align: left;
       }
-
-      .markdown-fitted__icon {
-        flex-shrink: 0;
-        width: 20px;
-        height: 20px;
-        color: var(--boxel-600);
+      .md-preview--full {
+        padding: var(--boxel-sp-lg);
       }
-
-      .markdown-fitted__text {
-        min-width: 0;
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-4xs);
+      /* Inside the embedded shell's bounded body, keep the first heading from
+         pushing a gap above the render. */
+      .md-preview--full :deep(h1:first-child),
+      .md-preview--full :deep(h2:first-child),
+      .md-preview--full :deep(h3:first-child),
+      .md-preview--full :deep(h4:first-child),
+      .md-preview--full :deep(h5:first-child),
+      .md-preview--full :deep(h6:first-child) {
+        margin-top: 0;
       }
-
-      .markdown-fitted__title {
-        color: var(--boxel-900);
-        font-weight: 600;
-        font-size: var(--boxel-font-sm);
-        overflow: hidden;
-        display: -webkit-box;
-        -webkit-box-orient: vertical;
-        -webkit-line-clamp: 2;
-      }
-
-      .markdown-fitted__excerpt {
-        color: var(--boxel-600);
-        font-size: var(--boxel-font-xs);
+      .md-preview__empty {
         margin: 0;
-        overflow: hidden;
-        display: -webkit-box;
-        -webkit-box-orient: vertical;
-        -webkit-line-clamp: 3;
-      }
-
-      /* Portrait tall: icon above text */
-      @container fitted-card (aspect-ratio <= 1.0) and (height >= 120px) {
-        .markdown-fitted {
-          flex-direction: column;
-          align-items: center;
-          text-align: center;
-        }
-
-        .markdown-fitted__icon {
-          width: 28px;
-          height: 28px;
-        }
-
-        .markdown-fitted__title {
-          -webkit-line-clamp: 3;
-        }
-      }
-
-      /* Portrait short: hide excerpt */
-      @container fitted-card (aspect-ratio <= 1.0) and (height < 120px) {
-        .markdown-fitted__excerpt {
-          display: none;
-        }
-      }
-
-      /* Portrait very short: hide icon too */
-      @container fitted-card (aspect-ratio <= 1.0) and (height < 80px) {
-        .markdown-fitted__icon {
-          display: none;
-        }
-      }
-
-      /* Landscape: icon left of text */
-      @container fitted-card (1.0 < aspect-ratio) {
-        .markdown-fitted {
-          align-items: flex-start;
-        }
-      }
-
-      /* Landscape short: hide excerpt */
-      @container fitted-card (1.0 < aspect-ratio) and (height < 80px) {
-        .markdown-fitted__excerpt {
-          display: none;
-        }
-      }
-
-      /* Very small: title only, smaller font */
-      @container fitted-card (height <= 57px) {
-        .markdown-fitted__icon {
-          display: none;
-        }
-
-        .markdown-fitted__excerpt {
-          display: none;
-        }
-
-        .markdown-fitted__title {
-          font-size: var(--boxel-font-xs);
-          -webkit-line-clamp: 1;
-        }
-      }
-    </style>
-  </template>
-}
-
-class Atom extends Component<typeof MarkdownDef> {
-  get title() {
-    return markdownTitle(this.args.model);
-  }
-
-  <template>
-    <span class='markdown-atom' data-test-markdown-atom>
-      <MarkdownIcon class='markdown-atom__icon' width='16' height='16' />
-      <span class='markdown-atom__title'>{{this.title}}</span>
-    </span>
-    <style scoped>
-      .markdown-atom {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--boxel-sp-4xs);
-        min-width: 0;
-      }
-
-      .markdown-atom__icon {
-        flex-shrink: 0;
-        color: var(--boxel-600);
-      }
-
-      .markdown-atom__title {
-        color: var(--boxel-900);
+        padding: var(--boxel-sp);
+        color: var(--muted-foreground);
         font-size: var(--boxel-font-sm);
+      }
+
+      /* Fitted: a glanceable mini-page. Rendered, but with its own compact type
+         scale and a fade so the clip reads as "more below". */
+      .md-preview--fitted {
         overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        position: relative;
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        -webkit-mask-image: linear-gradient(to bottom, black 74%, transparent);
+        mask-image: linear-gradient(to bottom, black 74%, transparent);
+      }
+      .md-snippet {
+        font-size: 0.6875rem;
+        line-height: 1.5;
+      }
+      .md-snippet :deep(h1),
+      .md-snippet :deep(h2),
+      .md-snippet :deep(h3),
+      .md-snippet :deep(h4) {
+        font-weight: 700;
+        font-size: 0.8125rem;
+        margin: 0 0 0.25em;
+        line-height: 1.25;
+      }
+      .md-snippet :deep(p),
+      .md-snippet :deep(ul),
+      .md-snippet :deep(ol) {
+        margin: 0 0 0.5em;
+      }
+      .md-snippet :deep(ul),
+      .md-snippet :deep(ol) {
+        padding-left: 1.2em;
+      }
+      .md-snippet :deep(pre),
+      .md-snippet :deep(code) {
+        font-family: var(--font-mono, monospace);
+        font-size: 0.625rem;
+      }
+      .md-snippet :deep(pre) {
+        white-space: pre-wrap;
+        overflow: hidden;
+      }
+      .md-snippet :deep(img) {
+        max-width: 100%;
       }
     </style>
   </template>
@@ -491,9 +323,22 @@ export class MarkdownDef extends FileDef {
   static icon = MarkdownIcon;
   static acceptTypes = '.md,.markdown';
 
+  // A `.md` served without (or with an uninformative) content type would route
+  // to a generic profile by extension alone, so pin the document axes the four
+  // shells present — the family, the labeled kind, and the text renderer — off
+  // the class rather than depending on every instance carrying `text/markdown`.
+  static fileFamily = 'document';
+  static fileKind = 'Markdown';
+  static previewKind = 'markdown';
+  static previewAdapter = 'text';
+  static previewSource = 'extracted';
+
   @field title = contains(StringField);
   @field excerpt = contains(StringField);
   @field content = contains(StringField);
+  // Surfaced by the shells as an isolated inspector row; the hero fact for a
+  // markdown file is its word count, computed by the shared projection.
+  @field lineCount = contains(NumberField);
 
   // The frontmatter's `boxel.kind`, surfaced as a direct, indexed field so
   // skills are findable via `searchFiles({ filter: { eq: { kind: 'skill' } } })`.
@@ -544,10 +389,11 @@ export class MarkdownDef extends FileDef {
     },
   });
 
-  static isolated: BaseDefComponent = Isolated;
-  static embedded: BaseDefComponent = Embedded;
-  static fitted: BaseDefComponent = Fitted;
-  static atom: BaseDefComponent = Atom;
+  // The bespoke isolated/embedded/fitted/atom are gone: MarkdownDef now inherits
+  // the four shared shells from FileDef and supplies only the renderer they
+  // mount, so identity, facts, budgets, and state handling stay in one place
+  // across every file family.
+  static previewComponent = MarkdownPreview;
   static head: BaseDefComponent = Head;
 
   // CS-10787: markdown files already are markdown, so pass the content
@@ -574,6 +420,7 @@ export class MarkdownDef extends FileDef {
       title: string;
       excerpt: string;
       content: string;
+      lineCount: number;
       cardReferenceUrls: string[];
       fileReferenceUrls: string[];
       // The frontmatter's `boxel.kind`, as a direct searchable field (e.g.
@@ -626,6 +473,7 @@ export class MarkdownDef extends FileDef {
       title: string;
       excerpt: string;
       content: string;
+      lineCount: number;
       cardReferenceUrls: string[];
       fileReferenceUrls: string[];
       kind?: string;
@@ -639,6 +487,9 @@ export class MarkdownDef extends FileDef {
       // `frontmatter.rawContent`, and the verbatim file is always served from
       // the realm, so nothing is lost.
       content: body,
+      // Counted over the rendered body, not the frontmatter; a trailing newline
+      // shouldn't inflate it and empty content is zero lines.
+      lineCount: body ? body.replace(/\n$/, '').split('\n').length : 0,
       cardReferenceUrls: extractCardReferenceUrls(body, url),
       fileReferenceUrls: extractFileReferenceUrls(body, url),
     };

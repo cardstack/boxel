@@ -42,7 +42,7 @@ You are a Boxel UI specialist. Whenever you write or review GTS templates and ca
   - **Plural-field wrapper trap** — `.linksToMany-field` ≠ `.containsMany-field`; target `.plural-field` + `.linksToMany-itemContainer`/`.containsMany-item` with `display: contents`.
   - **Atom alignment & invisibility** — default chrome has near-white background; `@displayContainer={{false}}` or recolor when on dark surfaces.
   - **Stagger animations through `display: contents`** — CSS-variable cascade trick (nth-child on wrapper, animation-delay reads var on card).
-  - **Embedded MarkdownDef bounded preview** — tune with the `--markdown-embedded-max-height` / `--markdown-embedded-mask` custom properties (set both to `none` for full content). A framework-driven embedded render takes no component args, so an inherited custom property is the cross-boundary lever.
+  - **Embedded MarkdownDef bounded preview** — MarkdownDef/TextFileDef compose the shared FileDef format shells; embedded is a fixed-height, scroll-within bounded preview with no height custom-property lever. Use `@format='isolated'` for the full-width document stage.
   - Embedded grid chrome, image bleed, isolated previews, and what NOT to override (child container queries, fitted's width/height).
   - The child-side contract — what every format MUST NOT decorate on its outermost element.
 - `references/checklist.md` — Checklist
