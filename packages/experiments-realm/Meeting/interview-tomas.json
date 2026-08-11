@@ -17,6 +17,11 @@
         "summary": null,
         "cardThumbnailURL": null,
         "notes": null
+      },
+      "scorecard": {
+        "criteria": [],
+        "recommendation": null,
+        "overallNotes": null
       }
     },
     "relationships": {
