@@ -74,7 +74,11 @@ module(`Integration | search resource`, function (hooks) {
     storeService = getService('store');
   });
 
-  setupLocalIndexing(hooks);
+  // Every test builds the same fixtures in the beforeEach below, so the realm
+  // is indexed once and that index restored per test.
+  setupLocalIndexing(hooks, {
+    reuseIndexAcrossTests: 'resourcesSearch',
+  });
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
