@@ -200,8 +200,9 @@ export class RealmRegistryReconciler {
     // realms' indexing — requests to /skills/_readiness-check would
     // 404 while /base/ is still indexing. Publishing all realms up
     // front means every URL routes through the realm immediately;
-    // requests block on the realm's #startedUp gate (e.g.,
-    // readinessCheck awaits #startedUp.promise) but don't 404.
+    // requests wait on the realm's #startedUp gate (readinessCheck
+    // waits on it for a bounded budget, then reports not-ready) but
+    // don't 404.
     //
     // Why sequential start() rather than Promise.all: indexing has
     // cross-realm dependencies and parallel fullIndex jobs queue up

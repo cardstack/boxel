@@ -12,6 +12,17 @@
 // deadline arrives first. A rejection that wins the race propagates, because
 // work having failed is a different answer from work still being outstanding
 // and callers generally need to tell them apart.
+//
+// `deadline` is an absolute `Date.now()`-style timestamp, not a duration, so
+// that several gates in one request can share a single deadline and the request
+// spends one budget rather than one per gate. Passing a duration yields a
+// deadline in 1970 — i.e. immediately expired.
+//
+// Ties go to the work: an already-fulfilled promise reports settled even when
+// the deadline has already passed, because the fulfilment is observed on the
+// microtask queue and the deadline on a macrotask. That ordering is relied on —
+// work that is demonstrably finished must never be reported as outstanding, or
+// a gate would answer "not ready" about something already done.
 export async function settledBy(
   promise: Promise<unknown>,
   deadline: number,
@@ -22,19 +33,17 @@ export async function settledBy(
       () => resolve(false),
       Math.max(0, deadline - Date.now()),
     );
-    // Never keep the process alive for this timer alone. Present on node,
-    // absent on the browser's timer handles.
-    timer.unref?.();
+    // Deliberately not `unref`'d. This timer is what makes the deadline
+    // binding: if the awaited work is the only other pending thing, an
+    // unref'd timer lets the process exit with this promise never settling,
+    // so the caller never gets its answer at all. The hold it adds is capped
+    // by the deadline and released below the moment the race settles.
   });
   let fulfilled = promise.then(() => true as const);
-  // A rejection arriving after the deadline has already lost the race, so no
-  // caller is left to observe it. Mark it handled rather than letting it
-  // surface as an unhandled rejection.
-  fulfilled.catch(() => {});
   try {
     return await Promise.race([fulfilled, expired]);
   } finally {
-    if (timer) {
+    if (timer !== undefined) {
       clearTimeout(timer);
     }
   }

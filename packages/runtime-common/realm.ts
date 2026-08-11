@@ -329,13 +329,16 @@ const COALESCE_NOTIFY_WAIT_MS = 180_000;
 // so the exemption holds for header-less probes too. Keep in sync with
 // `#publicEndpoints`.
 const ARCHIVED_SEAL_EXEMPT_PATHS = new Set(['_readiness-check', '_session']);
-// How long `_readiness-check` holds a request while this process's own startup
-// and in-flight indexing settle, before answering not-ready instead. Matches
-// the budget the shared index-lane gate uses, and for the same reason: the hold
-// is a courtesy to the poller, `Retry-After` already tells it to come back, and
-// a hold longer than a caller's per-attempt deadline yields a connection
-// timeout instead of a status the loop can read.
-const IN_PROCESS_READINESS_BUDGET_MS = 10_000;
+// How long one `_readiness-check` request holds while the gates it clears
+// settle, before answering not-ready instead. Shared across those gates rather
+// than granted per gate: the hold is a courtesy to the poller, `Retry-After`
+// already tells it to come back, and a hold longer than a caller's per-attempt
+// deadline yields a connection timeout instead of a status the loop can read.
+// Sized to the same per-attempt deadline the index-lane budget is sized to.
+// `awaitPrerenderHtml` readiness gates on rendered HTML after this budget and
+// carries its own, longer one — a published realm's HTML can take minutes and
+// its callers are pollers with deadlines to match.
+const READINESS_REQUEST_BUDGET_MS = 10_000;
 const MODULE_ETAG_VARIANT = 'module';
 const SOURCE_ETAG_VARIANT = 'source';
 // Card+JSON ETag is `"<indexed_at>-<realmInfoHash>:card"` — quoted
@@ -1326,19 +1329,26 @@ export class Realm {
     // read. Returning 503 keeps the loop ticking against its own deadline, and
     // a gate that clears later is picked up by the next poll.
     //
-    // One budget spans both in-process waits, so adding the bound costs the
-    // request a single extra hold rather than one per gate.
-    let inProcessDeadline = Date.now() + IN_PROCESS_READINESS_BUDGET_MS;
-    if (!(await settledBy(this.#startedUp.promise, inProcessDeadline))) {
+    // One deadline spans every gate below, so a request costs one hold no
+    // matter how many gates it clears. Each log line reports the time that gate
+    // actually spent, not the budget: when startup consumes most of it the
+    // later gates expire almost immediately, and a message naming the full
+    // budget would send an operator looking for a slow index that never
+    // happened.
+    let waitStartedAt = Date.now();
+    let requestDeadline = waitStartedAt + READINESS_REQUEST_BUDGET_MS;
+    if (!(await settledBy(this.#startedUp.promise, requestDeadline))) {
       this.#log.warn(
-        `readiness check for ${this.url} is still waiting on realm startup after ${IN_PROCESS_READINESS_BUDGET_MS}ms`,
+        `readiness check for ${this.url} is still waiting on realm startup after ${Date.now() - waitStartedAt}ms`,
       );
       return notReady('startup');
     }
+    let startupSettledAt = Date.now();
     let inflight = this.indexing();
-    if (inflight && !(await settledBy(inflight, inProcessDeadline))) {
+    if (inflight && !(await settledBy(inflight, requestDeadline))) {
       this.#log.warn(
-        `readiness check for ${this.url} is still waiting on in-flight indexing after ${IN_PROCESS_READINESS_BUDGET_MS}ms`,
+        `readiness check for ${this.url} is still waiting on in-flight indexing after ${Date.now() - startupSettledAt}ms ` +
+          `(realm startup used ${startupSettledAt - waitStartedAt}ms of the ${READINESS_REQUEST_BUDGET_MS}ms budget)`,
       );
       return notReady('index');
     }
@@ -1354,7 +1364,18 @@ export class Realm {
     // rows, so the realm's index lane holding no outstanding work is the same
     // answer everywhere. A realm with no server-side queue has no such lane and
     // reports settled without a query.
-    if (!(await awaitRealmIndexSettled(this.#dbAdapter, this.url))) {
+    // This gate shares the in-process gates' deadline rather than starting a
+    // fresh budget, so one request costs one hold no matter how many gates it
+    // clears. That keeps the endpoint inside the per-attempt deadline the
+    // budget is sized against — the CI readiness probes cap each attempt at
+    // `curl --max-time 15`, and a request that spent its budget on startup and
+    // then started another full budget here would blow past that and hand the
+    // probe a connection timeout instead of a status it can read.
+    if (
+      !(await awaitRealmIndexSettled(this.#dbAdapter, this.url, {
+        timeoutMs: Math.max(0, requestDeadline - Date.now()),
+      }))
+    ) {
       // The lane never drained within budget — a job queued behind a long
       // backlog, or one whose worker died and has yet to be reaped. Keep the
       // caller polling instead of reporting a realm ready whose index is
