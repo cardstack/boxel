@@ -8,6 +8,14 @@
       "palette": "live"
     },
     "packages": {
+      "greeter": {
+        "version": "2.0.0",
+        "root": "$DECK/greeter/",
+        "entry": "$DECK/greeter/index.gts",
+        "exports": {
+          "./greeter": "$DECK/greeter/index.gts"
+        }
+      },
       "crm": {
         "version": "1.0.0",
         "root": "$DECK/crm/",

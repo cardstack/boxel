@@ -80,7 +80,7 @@ export class PaletteSwatches extends CardDef {
       <section class='swatches'>
         <header>
           <span class='badge'>palette v{{VERSION}}</span>
-          <p>This card imports <code>palette</code> with no version anywhere in
+          <p>Hellow Hassan. This card imports <code>palette</code> with no version anywhere in
             its source. The Version Lock decides which build that is.</p>
         </header>
 
