@@ -1,7 +1,7 @@
 import { Deferred, logger } from '@cardstack/runtime-common';
 
-// Same channel as the queue that used to host this, so existing log filters
-// keep working.
+// Logs on the `queue` channel, shared with pg-queue, so one LOG_LEVELS entry
+// covers both loops.
 const log = logger('queue');
 
 // Tracks a task that should loop with a timeout and an interruptible sleep.

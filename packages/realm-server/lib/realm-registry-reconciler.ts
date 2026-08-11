@@ -56,7 +56,7 @@ export interface ReconcilerDeps {
 //                    concurrent callers serialize per URL. Used by the
 //                    Phase 3 request path.
 //
-// The loop is driven by a WorkLoop (shared with pg-queue). Every mutation
+// The loop is driven by a WorkLoop. Every mutation
 // handler emits `NOTIFY realm_registry` after its DB write; the LISTEN
 // wakes the loop, which re-reads the registry and applies the diff. A 30s
 // poll is the safety net for missed notifications (pg_reconnect, LISTEN
