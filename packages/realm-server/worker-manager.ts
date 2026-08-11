@@ -80,7 +80,11 @@ import {
   type PendingJob,
 } from './handlers/handle-indexing-dashboard.ts';
 import { writeRuntimeMetadataFile } from './lib/runtime-metadata-file.ts';
-import { finalizeOrphanedReservations } from './lib/finalize-orphan-reservations.ts';
+import {
+  finalizeOrphanedReservations,
+  finalizeReservationById,
+} from './lib/finalize-orphan-reservations.ts';
+import { findStuckReservations } from './lib/stuck-reservations.ts';
 import {
   decodeWorkerRequestIpc,
   dispatchWorkerRequest,
@@ -714,25 +718,29 @@ let adapter: PgAdapter;
 });
 
 async function monitorWorker(workerId: string, worker: ChildProcess) {
-  let stuckJobs = (await query([
-    `SELECT id, job_id FROM job_reservations jr WHERE worker_id=`,
-    param(workerId),
-    `AND completed_at IS NULL AND locked_until < NOW() - INTERVAL '30 seconds'`,
-    `AND NOT EXISTS (`,
-    // Skip stale reservations if this worker has already retried the job with a newer reservation.
-    `  SELECT 1 FROM job_reservations newer WHERE`,
-    `    newer.worker_id = jr.worker_id AND`,
-    `    newer.job_id = jr.job_id AND`,
-    `    newer.id > jr.id`,
-    `)`,
-  ])) as { id: string; job_id: string }[];
+  let stuckJobs = await findStuckReservations(adapter, workerId);
 
   if (stuckJobs.length > 0) {
     Sentry.captureMessage(
-      `Detected stuck jobs for worker ${workerId}. job id(s): ${stuckJobs.map((j) => j.job_id).join()}. recycling worker`,
+      `Detected stuck jobs for worker ${workerId}. job id(s): ${stuckJobs.map((j) => j.jobId).join()}. recycling worker`,
     );
     log.error(`detected stuck jobs for worker ${workerId}`);
-    for (let { id, job_id: jobId } of stuckJobs) {
+    for (let { id, jobId, reclaimed } of stuckJobs) {
+      if (reclaimed) {
+        // Another worker has the job now. Close this orphan so it stops
+        // reading as stuck, and leave the job alone: flipping it to
+        // 'rejected' here would make the running worker's finalize see a
+        // job that already has a recorded outcome and discard a completion it
+        // is about to produce. This is the same race
+        // `finalizeOrphanedReservations` declines to run for the same
+        // reason. The index entry is left alone too — the running attempt
+        // is the authority on what those rows should say.
+        log.info(
+          `releasing stale reservation ${id} for job ${jobId} of worker ${workerId}: another worker holds a live reservation`,
+        );
+        await finalizeReservationById(adapter, id);
+        continue;
+      }
       log.info(`marking job ${jobId} as timed-out for worker ${workerId}`);
       let currentState =
         ((worker as any).__boxelIndexState as IndexState | undefined) ?? {};
@@ -752,6 +760,9 @@ async function monitorWorker(workerId: string, worker: ChildProcess) {
         message: `Timed-out. Worker manager killed unresponsive worker ${workerId} for job reservation ${id}`,
       });
     }
+    // Kill regardless of which branch each reservation took: holding a
+    // reservation open past its lease without finalizing means the child
+    // never returned from its handler, whoever owns the job now.
     log.info(`killing worker ${workerId} due to stuck jobs`);
     worker.kill();
   }

@@ -1410,6 +1410,171 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    // Wait for a reservation row to close, then hand it back. Used by the
+    // finalize tests below, whose jobs never reach a verdict — so there is no
+    // `job.done` to await.
+    async function waitForClosedReservation(jobId: number) {
+      let started = Date.now();
+      while (Date.now() - started < 5000) {
+        let rows = (await adapter.execute(
+          `SELECT * FROM job_reservations WHERE job_id = $1 ORDER BY id`,
+          { bind: [jobId] },
+        )) as unknown as {
+          id: number;
+          completed_at: Date | null;
+          completion_reason: string | null;
+        }[];
+        if (rows[0]?.completed_at) {
+          return rows;
+        }
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      throw new Error(`reservation for job ${jobId} never closed`);
+    }
+
+    test('releases its reservation when the job was decided while the handler ran', async function (assert) {
+      // The verdict is unavoidably lost here — something else already wrote
+      // this job's outcome, and overwriting it would be worse. Leaving the
+      // reservation open is what must not happen: its lease outlives the
+      // attempt, and the worker-manager watchdog cannot tell an open row
+      // whose lease lapsed from a worker wedged inside its handler. It would
+      // reject the job a second time and kill this (healthy) worker.
+      let jobIdFromHandler: number | undefined;
+      runner.register('logJob', async (args: any) => {
+        jobIdFromHandler = args.jobInfo.jobId;
+        // Stand in for the watchdog deciding the job out from under us.
+        await adapter.execute(
+          `UPDATE jobs SET status='rejected', finished_at=NOW(),
+             result='{"status":500,"message":"watchdog"}'::jsonb
+           WHERE id=$1`,
+          { bind: [args.jobInfo.jobId] },
+        );
+        return null;
+      });
+
+      let job = await publisher.publish({
+        jobType: 'logJob',
+        concurrencyGroup: 'decided-underneath',
+        timeout: 5,
+        args: {},
+      });
+      let reservations = await waitForClosedReservation(job.id);
+
+      assert.strictEqual(
+        jobIdFromHandler,
+        job.id,
+        'the handler ran for the published job',
+      );
+      assert.strictEqual(
+        reservations.length,
+        1,
+        'exactly one reservation was created',
+      );
+      assert.strictEqual(
+        reservations[0].completion_reason,
+        'interrupted',
+        'the reservation is closed as interrupted, not left open for the watchdog',
+      );
+
+      let [jobRow] = (await adapter.execute(
+        `SELECT status, result FROM jobs WHERE id = $1`,
+        { bind: [job.id] },
+      )) as unknown as {
+        status: string;
+        result: { message?: string } | null;
+      }[];
+      assert.strictEqual(
+        jobRow.status,
+        'rejected',
+        'the outcome already on the job row is left alone',
+      );
+      assert.strictEqual(
+        jobRow.result?.message,
+        'watchdog',
+        'the finalize did not overwrite the existing result',
+      );
+    });
+
+    test('commits a verdict produced past the lease when no live reservation competes', async function (assert) {
+      // A retried job always has a sibling reservation row, so treating any
+      // sibling as a competitor would discard the verdict of every retry that
+      // overran its lease — and an unrecorded verdict is what strands the
+      // reservation in the first place. Only a reservation that is still open
+      // AND unexpired owns the job.
+      runner.register('logJob', async (args: any) => {
+        await adapter.execute(
+          `UPDATE job_reservations SET locked_until = NOW() - INTERVAL '1 second'
+           WHERE id=$1`,
+          { bind: [args.jobInfo.reservationId] },
+        );
+        await adapter.execute(
+          `INSERT INTO job_reservations
+             (job_id, worker_id, locked_until, completed_at, completion_reason)
+           VALUES ($1, 'earlier-attempt', NOW() - INTERVAL '1 minute', NOW(), 'completed')`,
+          { bind: [args.jobInfo.jobId] },
+        );
+        return 42;
+      });
+
+      let job = await publisher.publish<number>({
+        jobType: 'logJob',
+        concurrencyGroup: 'lease-lapsed-uncontested',
+        timeout: 5,
+        args: {},
+      });
+
+      assert.strictEqual(
+        await job.done,
+        42,
+        'the verdict is recorded even though the lease had lapsed',
+      );
+    });
+
+    test('yields a verdict produced past the lease to the worker now holding the job', async function (assert) {
+      runner.register('logJob', async (args: any) => {
+        await adapter.execute(
+          `UPDATE job_reservations SET locked_until = NOW() - INTERVAL '1 second'
+           WHERE id=$1`,
+          { bind: [args.jobInfo.reservationId] },
+        );
+        await adapter.execute(
+          `INSERT INTO job_reservations (job_id, worker_id, locked_until)
+           VALUES ($1, 'worker-that-reclaimed-it', NOW() + INTERVAL '5 minutes')`,
+          { bind: [args.jobInfo.jobId] },
+        );
+        return null;
+      });
+
+      let job = await publisher.publish({
+        jobType: 'logJob',
+        concurrencyGroup: 'lease-lapsed-contested',
+        timeout: 5,
+        args: {},
+      });
+      let reservations = await waitForClosedReservation(job.id);
+
+      assert.strictEqual(
+        reservations[0].completion_reason,
+        'interrupted',
+        'our lapsed reservation is closed rather than left to age out',
+      );
+      assert.strictEqual(
+        reservations[1].completed_at,
+        null,
+        "the reclaiming worker's reservation is untouched",
+      );
+
+      let [jobRow] = (await adapter.execute(
+        `SELECT status FROM jobs WHERE id = $1`,
+        { bind: [job.id] },
+      )) as unknown as { status: string }[];
+      assert.strictEqual(
+        jobRow.status,
+        'unfulfilled',
+        'the job is left for the worker that holds it',
+      );
+    });
+
     test('worker stops waiting for job after its been running longer than max time-out', async function (assert) {
       let events: string[] = [];
       let runs = 0;

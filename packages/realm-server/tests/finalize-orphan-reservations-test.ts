@@ -7,7 +7,10 @@ import type {
   JobsTable,
   PgAdapter,
 } from '@cardstack/postgres';
-import { finalizeOrphanedReservations } from '../lib/finalize-orphan-reservations.ts';
+import {
+  finalizeOrphanedReservations,
+  finalizeReservationById,
+} from '../lib/finalize-orphan-reservations.ts';
 import { createTestPgAdapter, prepareTestDB } from './helpers/index.ts';
 
 async function insertJob(
@@ -182,6 +185,73 @@ module(basename(import.meta.filename), function () {
         secondClose,
         firstClose,
         'second call did not move completed_at',
+      );
+    });
+  });
+
+  module('finalizeReservationById', function (hooks) {
+    let adapter: PgAdapter;
+
+    hooks.beforeEach(async function () {
+      prepareTestDB();
+      adapter = await createTestPgAdapter();
+    });
+
+    hooks.afterEach(async function () {
+      await adapter.close();
+    });
+
+    test('closes only the named reservation and leaves the job alone', async function (assert) {
+      let jobId = await insertJob(adapter);
+      let target = await insertReservation(adapter, jobId, 'stale-worker');
+      let sibling = await insertReservation(adapter, jobId, 'live-worker');
+
+      await finalizeReservationById(adapter, String(target));
+
+      let closed = await fetchReservation(adapter, target);
+      let untouched = await fetchReservation(adapter, sibling);
+      assert.notEqual(closed.completed_at, null, 'target reservation closed');
+      assert.strictEqual(
+        closed.completion_reason,
+        'interrupted',
+        'closed as interrupted so the dropped attempt stays off the per-job cap',
+      );
+      assert.strictEqual(
+        untouched.completed_at,
+        null,
+        "the other worker's reservation on the same job is untouched",
+      );
+
+      // Same contract as finalizeOrphanedReservations: closing a reservation
+      // makes the job claimable, so writing a verdict here would race whoever
+      // claims it next.
+      let job = await fetchJob(adapter, jobId);
+      assert.strictEqual(job.status, 'unfulfilled', 'job status is unchanged');
+    });
+
+    test('does not reopen or restamp a reservation that is already closed', async function (assert) {
+      let jobId = await insertJob(adapter);
+      let reservationId = await insertReservation(adapter, jobId, 'a-worker');
+
+      await finalizeReservationById(
+        adapter,
+        String(reservationId),
+        'timeout-expired',
+      );
+      let firstClose = await fetchReservation(adapter, reservationId);
+
+      await finalizeReservationById(adapter, String(reservationId));
+      let secondClose = await fetchReservation(adapter, reservationId);
+
+      assert.deepEqual(
+        secondClose.completed_at,
+        firstClose.completed_at,
+        'completed_at did not move',
+      );
+      assert.strictEqual(
+        secondClose.completion_reason,
+        'timeout-expired',
+        'the original reason survives a later call with a different reason',
       );
     });
   });

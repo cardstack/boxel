@@ -287,6 +287,7 @@ const ALL_TEST_FILES: string[] = [
   './prerender-v8-prof-test',
   './queue-test',
   './finalize-orphan-reservations-test',
+  './stuck-reservations-test',
   './finalize-child-fatal-failure-test',
   './screenshot-card-test',
   './run-command-task-test',
