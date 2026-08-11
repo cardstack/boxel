@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "ImportButton",
+        "module": "../import"
+      },
+      "specType": "component",
+      "readMe": "## Import\n\nReads a CSV and creates one card per row. Ships `parseCsv(text)` and `mapRows(rows, columns)` as pure functions, and `<ImportButton>` for the file-picking and saving.\n\n```gts\nimport { ImportButton } from '../import';\n<ImportButton\n  @cardType={{this.invoiceType}}\n  @columns={{this.importColumns}}\n  @commandContext={{this.commandContext}}\n  @realm={{this.realm}}\n  @onComplete={{this.reportImport}}\n/>\n```\n\n**A bad row fails alone.** Every row is mapped and saved independently, and the component hands back one `ImportRowResult` per row — `{ row, ok, error?, id? }` — numbered as the spreadsheet shows them, so \"row 4\" means row 4 to the person looking at the file. Partial success is the normal outcome of a migration, not an error case, and the consumer decides how to present it.\n\nA column says which header it reads, which field it writes, whether it is required, and how to convert the text:\n\n```ts\n{ header: 'Due', field: 'dueDate', parse: (raw) => …asCalendarDay(raw) }\n```\n\n`parse` belongs to the consumer because only it knows that this column is a date rather than a string, and that throwing is how a cell reports itself unreadable — the thrown message becomes that row's error. Two traps worth knowing, both found by importing a real file: a date in a CSV is a **calendar day**, so reading `getFullYear/getMonth/getDate` keeps it on that day where `toISOString` moves it back one for anyone east of UTC; and a file may carry a value the card cannot store — Revenue OS maps an incoming `overdue` status onto `sent`, because overdue is derived from the due date rather than stored.\n\nQuoting is RFC 4180, so a quoted cell may contain commas, newlines and doubled quotes. Headers are matched case-insensitively and trimmed.\n\nThe example is Revenue OS itself, whose invoice import round-trips with the Export block: the headers Import reads are the headers Export writes.\n\n**Non-goals:** resolving links from text (an account column cannot become an `Account` link without a lookup strategy — imported invoices arrive unlinked), compound fields, de-duplicating against existing records, and files too large to hold in memory.",
+      "cardInfo": {
+        "name": "Import",
+        "summary": "CSV import that creates one card per row, where a bad row fails on its own and the consumer gets a per-row report instead of an all-or-nothing result.",
+        "notes": null,
+        "cardThumbnailURL": null
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../RevenueOs/main"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
