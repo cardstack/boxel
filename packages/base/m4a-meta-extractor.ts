@@ -75,9 +75,7 @@ function durationFromMoov(
   return { duration: duration / timescale };
 }
 
-// Pull reader over a byte stream: lets the box walk read exact-length headers
-// and reassemble the small `moov` box while skipping (discarding) the large
-// `mdat` payload, so a long recording never has to be buffered whole.
+// Parse duration from a standalone `moov` box (its own bytes, header at offset
 // 0) reassembled by the streaming walk.
 function durationFromMoovBox(moovBytes: Uint8Array): { duration: number } {
   let view = new DataView(

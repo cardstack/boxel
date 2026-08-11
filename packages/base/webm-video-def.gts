@@ -4,7 +4,6 @@ import VideoDef, {
   videoAttributes,
   type VideoAttributes,
 } from './video-file-def';
-import { FileContentMismatchError } from './file-api';
 import type { ByteStream, SerializedFile } from './file-api';
 import {
   assertWebmContainer,
@@ -34,12 +33,9 @@ export class WebmDef extends VideoDef {
     );
     assertWebmContainer(bytes);
 
+    // Metadata past the window or a truncated tree yields no encoding; the
+    // file keeps its WebM type with identity only.
     let encoding = extractWebmEncoding(bytes);
-    if (!encoding) {
-      throw new FileContentMismatchError(
-        'WebM file has no readable Segment in the header window',
-      );
-    }
 
     return {
       ...base,

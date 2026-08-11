@@ -4,7 +4,6 @@ import VideoDef, {
   videoAttributes,
   type VideoAttributes,
 } from './video-file-def';
-import { FileContentMismatchError } from './file-api';
 import type { ByteStream, SerializedFile } from './file-api';
 import {
   assertMp4Container,
@@ -42,12 +41,9 @@ export class Mp4Def extends VideoDef {
     // knows to fall back to the base FileDef.
     assertMp4Container(bytes);
 
+    // No `moov` in the window (a non-faststart file keeps it at the end)
+    // yields no encoding; the file keeps its MP4 type with identity only.
     let encoding = extractMp4VideoEncoding(bytes, this.containerLabel);
-    if (!encoding) {
-      throw new FileContentMismatchError(
-        'MP4 file has no readable moov box in the header window',
-      );
-    }
 
     return {
       ...base,

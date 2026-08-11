@@ -155,6 +155,9 @@ export function parseMvhd(
   );
 }
 
+// Pull reader over a byte stream: lets the box walk read exact-length headers
+// and reassemble the small `moov` box while skipping (discarding) the large
+// `mdat` payload, so a long recording never has to be buffered whole.
 export class ChunkReader {
   #reader: ReadableStreamDefaultReader<Uint8Array>;
   #queue: Uint8Array[] = [];
@@ -254,8 +257,10 @@ export class ChunkReader {
   }
 }
 
-// Parse duration from a standalone `moov` box (its own bytes, header at offset
-
+// Follow a path of box types down from a container, e.g. moov → trak → mdia.
+// Returns undefined rather than throwing when any step is missing or the tree
+// is malformed: absent metadata is ordinary, and each format's container
+// assertion is what decides whether a file is really ISO BMFF.
 export function descend(
   bytes: Uint8Array,
   view: DataView,
