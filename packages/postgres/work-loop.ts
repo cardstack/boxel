@@ -62,7 +62,7 @@ export class WorkLoop {
     });
     log.debug(`[workloop %s] entering promise race`, this.label);
     await Promise.race([this.waker.promise, timerPromise]);
-    log.debug(`[workloop] leaving promise race`, this.label);
+    log.debug(`[workloop %s] leaving promise race`, this.label);
     if (this.timeout != null) {
       clearTimeout(this.timeout);
     }
