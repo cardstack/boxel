@@ -37,6 +37,7 @@ import {
 } from '@cardstack/host/utils/local-storage-keys';
 
 import {
+  captureReusableIndex,
   percySnapshot,
   setupLocalIndexing,
   setupOnSave,
@@ -72,7 +73,14 @@ let realm2URL = 'http://test-realm/user/test2/';
 module('Acceptance | operator mode tests', function (hooks) {
   let testRealm: Realm;
   setupApplicationTest(hooks);
-  setupLocalIndexing(hooks);
+  // This module builds two realms per test with identical fixtures, so the
+  // index is taken once and restored per test. The capture is explicit
+  // because the automatic one lands after the first realm, which would omit
+  // the second.
+  setupLocalIndexing(hooks, {
+    reuseIndexAcrossTests: 'operatorModeAcceptance',
+    captureIndexManually: true,
+  });
   setupOnSave(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -487,6 +495,10 @@ module('Acceptance | operator mode tests', function (hooks) {
         },
       },
     });
+
+    // Both realms are built and indexed and no test body has run yet, so this
+    // is the moment this module's reusable index has to be taken.
+    await captureReusableIndex();
 
     setRealmPermissions({
       [realm2URL]: ['read', 'write'],

@@ -27,6 +27,7 @@ import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import {
+  captureReusableIndex,
   addSkillToAiAssistant,
   percySnapshot,
   testRealmURL,
@@ -76,7 +77,14 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     loader = getService('loader-service').loader;
   });
 
-  setupLocalIndexing(hooks);
+  // This module builds two realms per test with identical fixtures, so the
+  // index is taken once and restored per test. The capture is explicit
+  // because the automatic one lands after the first realm, which would omit
+  // the second.
+  setupLocalIndexing(hooks, {
+    reuseIndexAcrossTests: 'aiAssistantPanelTools',
+    captureIndexManually: true,
+  });
   setupOnSave(hooks);
   setupCardLogs(
     hooks,
@@ -324,6 +332,10 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         'realm.json': realmConfigCardJSON({ name: readOnlyRealmName }),
       },
     });
+
+    // Both realms are built and indexed and no test body has run yet, so this
+    // is the moment this module's reusable index has to be taken.
+    await captureReusableIndex();
   });
 
   function setCardInOperatorModeState(
