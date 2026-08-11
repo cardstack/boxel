@@ -5,7 +5,7 @@
       "name": "Pavel Novak",
       "company": "Novak Consulting",
       "email": "pavel@novak-consulting.example",
-      "source": "cold outreach",
+      "source": "ad",
       "status": "disqualified",
       "score": 15,
       "cardInfo": {
@@ -25,6 +25,11 @@
       "cardInfo.theme": {
         "links": {
           "self": "../Theme/ledger"
+        }
+      },
+      "campaign": {
+        "links": {
+          "self": "../Campaign/always-on-search-ads"
         }
       }
     }

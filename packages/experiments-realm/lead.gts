@@ -3,6 +3,7 @@ import {
   Component,
   contains,
   field,
+  linksTo,
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
@@ -11,6 +12,7 @@ import PhoneNumberField from 'https://cardstack.com/base/phone-number';
 import enumField from 'https://cardstack.com/base/enum';
 import TargetIcon from '@cardstack/boxel-icons/target';
 import { ProgressBar } from '@cardstack/boxel-ui/components';
+import { Campaign } from './campaign';
 
 const LeadStatusField = enumField(StringField, {
   options: ['new', 'contacted', 'qualified', 'converted', 'disqualified'],
@@ -41,6 +43,10 @@ export class Lead extends CardDef {
   @field source = contains(LeadSourceField);
   @field status = contains(LeadStatusField);
   @field score = contains(NumberField);
+  // Which specific activity produced this lead. `source` names the channel;
+  // this names the campaign. The lead points at the campaign, never the
+  // reverse — a campaign's lead count is a query, not a stored list.
+  @field campaign = linksTo(Campaign);
 
   @field cardTitle = contains(StringField, {
     computeVia: function (this: Lead) {
