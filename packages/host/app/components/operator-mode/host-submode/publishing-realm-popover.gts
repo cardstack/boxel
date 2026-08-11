@@ -163,11 +163,9 @@ export default class PublishingRealmPopover extends Component<PublishingRealmArg
         line-height: var(--boxel-line-height-xs);
       }
 
-      /* The shared bar sizes its track in em, so the font size is the height
-         control — this keeps it a slim rule under the URL rather than a
-         full-height labelled bar. */
+      /* A slim rule under the URL rather than a full-height labelled bar. */
       .progress-bar {
-        font-size: 0.375rem;
+        --boxel-progress-bar-height: 0.5rem;
       }
 
       .realm-icon-container {

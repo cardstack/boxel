@@ -24,6 +24,8 @@ export default class ProgressBarUsage extends Component {
   declare boxelProgressBarBorderRadius: CSSVariableInfo;
   @cssVariable({ cssClassName: 'progress-bar-freestyle-container' })
   declare boxelProgressBarFontColor: CSSVariableInfo;
+  @cssVariable({ cssClassName: 'progress-bar-freestyle-container' })
+  declare boxelProgressBarHeight: CSSVariableInfo;
 
   get progressValue() {
     const max = Math.round(Math.min(this.max));
@@ -39,6 +41,7 @@ export default class ProgressBarUsage extends Component {
         boxel-progress-bar-fill-color=this.boxelProgressBarFillColor.value
         boxel-progress-bar-border-radius=this.boxelProgressBarBorderRadius.value
         boxel-progress-bar-font-color=this.boxelProgressBarFontColor.value
+        boxel-progress-bar-height=this.boxelProgressBarHeight.value
       }}
     >
       <FreestyleUsage @name='Progress'>
@@ -112,6 +115,15 @@ export default class ProgressBarUsage extends Component {
             @defaultValue={{this.boxelProgressBarFontColor.defaults}}
             @value={{this.boxelProgressBarFontColor.value}}
             @onInput={{this.boxelProgressBarFontColor.update}}
+          />
+          <Css.Basic
+            @name='boxel-progress-bar-height'
+            @type='length'
+            @description='Height of the progress bar track. Defaults to 1.5em;
+              set a length to get a slim rule without restyling the font.'
+            @defaultValue={{this.boxelProgressBarHeight.defaults}}
+            @value={{this.boxelProgressBarHeight.value}}
+            @onInput={{this.boxelProgressBarHeight.update}}
           />
         </:cssVars>
       </FreestyleUsage>
