@@ -43,7 +43,9 @@ export default function handleRealmInfo({
         continue;
       }
       try {
-        let info = await realm.getRealmInfo();
+        // The detailed variant: this endpoint feeds the host's workspace
+        // chooser, which renders each realm's index counts and timestamps.
+        let info = await realm.getDetailedRealmInfo();
         data.push({ id: realmURL, type: 'realm-info', attributes: info });
       } catch (error) {
         log.warn(`Failed to fetch realm info for ${realmURL}: ${error}`);

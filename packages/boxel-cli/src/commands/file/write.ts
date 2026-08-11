@@ -34,10 +34,11 @@ interface WriteCliOptions {
 /**
  * Write a file to a realm. Path should include the file extension.
  *
- * String content is sent with the card+source MIME type (the text path
- * .gts / .json / .md / etc. always took). Binary content (a `Uint8Array`,
- * including the `Buffer` subclass) is sent with `application/octet-stream`,
- * which the realm-server routes to `upsertBinaryFile` and writes verbatim.
+ * Content bound for a path that is textual by extension (.gts / .json / .md
+ * / etc.) is sent with the card+source MIME type. Everything else — raw
+ * `Uint8Array` content, and strings bound for a path that is not textual —
+ * is sent with `application/octet-stream`, which the realm-server routes to
+ * `upsertBinaryFile` and writes verbatim.
  *
  * Auth is resolved via `resolveRealmAuthenticator`: a realm secret seed (when
  * supplied) mints a JWT locally as the realm-server bot; otherwise the active
@@ -68,24 +69,32 @@ export async function write(
   let authenticator = resolution.authenticator;
 
   let url = new URL(path, ensureTrailingSlash(realmUrl)).href;
-  let isBinary = typeof content !== 'string';
+  let pathIsBinary = isBinaryFilename(path);
 
   // Defense-in-depth for programmatic callers (BoxelClient.write, tests).
   // The CLI wrapper has an earlier guard against `--file image.png` →
   // `notes.md` style misuse, but the library function is also reachable
-  // without going through that branch. Reject the mismatch here so raw
-  // bytes never land at a text extension (corrupt-on-read) and a UTF-8
-  // string never lands at a binary extension (corrupt-on-write).
-  let pathIsBinary = isBinaryFilename(path);
-  if (pathIsBinary !== isBinary) {
+  // without going through that branch. Raw bytes at a text extension are
+  // refused: the realm would serve them back as text and the UTF-8 decode
+  // would corrupt them.
+  if (typeof content !== 'string' && !pathIsBinary) {
     return {
       ok: false,
       error:
-        `Path ${path} is ${pathIsBinary ? 'binary' : 'text'} by extension ` +
-        `but content is ${isBinary ? 'bytes' : 'a string'}. ` +
+        `Path ${path} is text by extension but content is bytes. ` +
         `Refusing to write to avoid silent corruption.`,
     };
   }
+
+  // The mirror case is safe and stays allowed: a string bound for a path that
+  // is binary by extension (or has no extension at all) is UTF-8 encoded and
+  // sent down the byte path, which stores it verbatim. Encoding a string is
+  // lossless, so nothing is corrupted by taking this route.
+  let body: string | Uint8Array =
+    typeof content === 'string' && pathIsBinary
+      ? new TextEncoder().encode(content)
+      : content;
+  let isBinary = typeof body !== 'string';
 
   try {
     let response = await authenticator.authedRealmFetch(url, {
@@ -96,10 +105,10 @@ export async function write(
             Accept: SupportedMimeType.CardSource,
             'Content-Type': SupportedMimeType.CardSource,
           },
-      // Both branches of `content: string | Uint8Array` are valid
-      // BodyInit values, but TS narrows them as a union that doesn't
-      // unify against the fetch signature without a hint.
-      body: content as BodyInit,
+      // Both branches of `body: string | Uint8Array` are valid BodyInit
+      // values, but TS narrows them as a union that doesn't unify against
+      // the fetch signature without a hint.
+      body: body as BodyInit,
     });
 
     if (!response.ok) {
@@ -168,25 +177,25 @@ export function registerWriteCommand(parent: Command): void {
 
       let content: string | Uint8Array;
       if (opts.file) {
-        // Refuse a source/destination binary-classification mismatch
-        // (e.g., `write notes.md --file image.png`) — otherwise raw
-        // bytes would land at a text extension and corrupt-on-read.
+        // Refuse a binary source bound for a text destination (e.g.
+        // `write notes.md --file image.png`) — the realm would serve those
+        // bytes back as text and the UTF-8 decode would corrupt them. The
+        // mirror case (a text source at a binary destination) is lossless,
+        // so it is allowed and rides the byte path.
         const srcIsBinary = isBinaryFilename(opts.file);
         const dstIsBinary = isBinaryFilename(filePath);
-        if (srcIsBinary !== dstIsBinary) {
+        if (srcIsBinary && !dstIsBinary) {
           stderr(
-            `${FG_RED}Error:${RESET} source file ${opts.file} is ${
-              srcIsBinary ? 'binary' : 'text'
-            } but destination path ${filePath} is ${
-              dstIsBinary ? 'binary' : 'text'
-            }. Refusing to write to avoid silent corruption — rename the destination to match.`,
+            `${FG_RED}Error:${RESET} source file ${opts.file} is binary but ` +
+              `destination path ${filePath} is text. Refusing to write to ` +
+              `avoid silent corruption — rename the destination to match.`,
           );
           process.exit(1);
         }
         try {
           // Binary source files are read as raw bytes so write() can
           // hand them to the realm unchanged; forcing utf-8 would
-          // corrupt PNG / PDF / font / etc. payloads silently.
+          // corrupt their payloads silently.
           content = srcIsBinary
             ? readFileSync(opts.file)
             : readFileSync(opts.file, 'utf-8');

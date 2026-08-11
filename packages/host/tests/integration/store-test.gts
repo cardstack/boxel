@@ -1698,7 +1698,20 @@ module('Integration | Store', function (hooks) {
     let originalError = console.error;
     let captured: unknown[] = [];
     console.error = (...args: unknown[]) => {
-      captured.push(args);
+      // Scope the count to the invalidation-subscriber errors this test is
+      // about. Setup can emit unrelated console.error noise whose timing is not
+      // fixed relative to this window — e.g. the fixture realm has no
+      // SystemCard, so matrix-service's async load of it 404s and reports here
+      // — and that must not race into the assertion. Forward everything else so
+      // genuine problems still surface.
+      if (
+        typeof args[0] === 'string' &&
+        args[0].includes('card invalidation subscriber')
+      ) {
+        captured.push(args);
+      } else {
+        originalError(...args);
+      }
     };
 
     let secondFired = 0;
@@ -1742,7 +1755,20 @@ module('Integration | Store', function (hooks) {
     let originalError = console.error;
     let captured: unknown[] = [];
     console.error = (...args: unknown[]) => {
-      captured.push(args);
+      // Scope the count to the invalidation-subscriber errors this test is
+      // about. Setup can emit unrelated console.error noise whose timing is not
+      // fixed relative to this window — e.g. the fixture realm has no
+      // SystemCard, so matrix-service's async load of it 404s and reports here
+      // — and that must not race into the assertion. Forward everything else so
+      // genuine problems still surface.
+      if (
+        typeof args[0] === 'string' &&
+        args[0].includes('card invalidation subscriber')
+      ) {
+        captured.push(args);
+      } else {
+        originalError(...args);
+      }
     };
 
     let secondFired = 0;
@@ -1826,6 +1852,173 @@ module('Integration | Store', function (hooks) {
       [germaine],
       'the linksToMany field was patched',
     );
+  });
+
+  // Loading is a read. Resolving a linksTo assigns the loaded target back onto
+  // the field, which notifies change subscribers — the same signal a user edit
+  // produces — so without care the mere act of viewing a card can dirty it and
+  // trigger an auto-save. That write is invisible to the user, bumps the
+  // instance's version, and schedules a reindex.
+  test<TestContextWithSave>('resolving a linksTo lazily issues no save', async function (assert) {
+    let hassanId = `${testRealmURL}Person/hassan`;
+    // A target of its own: deserialization resolves a link straight from the
+    // identity map when the target is already in the store, which skips the
+    // lazy path just as surely as side-loading does.
+    await testRealm.write(
+      'Person/ghost-friend.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'Ghost' },
+          meta: { adoptsFrom: { module: testRRI('person'), name: 'Person' } },
+        },
+      }),
+    );
+    await testRealm.write(
+      'Person/hassan.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'Hassan' },
+          relationships: {
+            bestFriend: {
+              links: { self: `${testRealmURL}Person/ghost-friend` },
+            },
+          },
+          meta: {
+            adoptsFrom: { module: testRRI('person'), name: 'Person' },
+          },
+        },
+      }),
+    );
+
+    // A card GET side-loads its linksTo targets into `included`, and
+    // deserialization resolves the field from there synchronously — never
+    // touching the lazy path this test is about. Writing the link unresolved
+    // on disk does not change that. Drop the side-load for this one document
+    // so the field deserializes to a not-loaded marker, and reading it drives
+    // the real lazy load — the path that assigns the target onto the field.
+    let cardService = getService('card-service');
+    let fetchJSON = cardService.fetchJSON.bind(cardService);
+    let intercepted = 0;
+    cardService.fetchJSON = (async (
+      url: string | URL,
+      args?: Parameters<typeof fetchJSON>[1],
+    ) => {
+      let doc = await fetchJSON(url, args);
+      if (String(url).replace(/\.json$/, '') === hassanId) {
+        intercepted++;
+        delete (doc as any)?.included;
+      }
+      return doc;
+    }) as typeof cardService.fetchJSON;
+
+    let saved: string[] = [];
+    this.onSave((url) => {
+      saved.push(url.href);
+    });
+
+    try {
+      let instance = (await storeService.get(hassanId)) as any;
+
+      // These two keep the test honest rather than describing behaviour: if
+      // the fetch is never intercepted, or the link arrives already resolved,
+      // the lazy path did not run and a save during it would go unnoticed.
+      assert.ok(intercepted > 0, 'the card fetch was intercepted');
+      assert.strictEqual(
+        instance.bestFriend,
+        undefined,
+        'the link is not loaded yet, so reading it takes the lazy path',
+      );
+
+      await storeService.flush();
+      await settled();
+
+      assert.strictEqual(
+        instance.bestFriend?.name,
+        'Ghost',
+        'the lazy load resolved the target and assigned it to the field',
+      );
+      assert.deepEqual(saved, [], 'no save was issued while loading');
+    } finally {
+      cardService.fetchJSON = fetchJSON;
+    }
+  });
+
+  // The plural sibling of the test above. It resolves through a different
+  // mechanism — a WatchedArray slot rather than a field setter — so suppressing
+  // the change notification in one says nothing about the other.
+  test<TestContextWithSave>('resolving a linksToMany lazily issues no save', async function (assert) {
+    let hassanId = `${testRealmURL}Person/hassan`;
+    await testRealm.write(
+      'Person/ghost-friend.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'Ghost' },
+          meta: { adoptsFrom: { module: testRRI('person'), name: 'Person' } },
+        },
+      }),
+    );
+    await testRealm.write(
+      'Person/hassan.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'Hassan' },
+          relationships: {
+            'friends.0': {
+              links: { self: `${testRealmURL}Person/ghost-friend` },
+            },
+          },
+          meta: {
+            adoptsFrom: { module: testRRI('person'), name: 'Person' },
+          },
+        },
+      }),
+    );
+
+    let cardService = getService('card-service');
+    let fetchJSON = cardService.fetchJSON.bind(cardService);
+    let intercepted = 0;
+    cardService.fetchJSON = (async (
+      url: string | URL,
+      args?: Parameters<typeof fetchJSON>[1],
+    ) => {
+      let doc = await fetchJSON(url, args);
+      if (String(url).replace(/\.json$/, '') === hassanId) {
+        intercepted++;
+        delete (doc as any)?.included;
+      }
+      return doc;
+    }) as typeof cardService.fetchJSON;
+
+    let saved: string[] = [];
+    this.onSave((url) => {
+      saved.push(url.href);
+    });
+
+    try {
+      let instance = (await storeService.get(hassanId)) as any;
+
+      assert.ok(intercepted > 0, 'the card fetch was intercepted');
+      // The proxy hides an unresolved slot, so an unloaded element reads as
+      // absent. Seeing the target here instead would mean it arrived resolved
+      // and the lazy path never ran.
+      assert.deepEqual(
+        instance.friends.map((f: any) => f?.name),
+        [undefined],
+        'the element is not loaded yet, so reading it takes the lazy path',
+      );
+
+      await storeService.flush();
+      await settled();
+
+      assert.deepEqual(
+        instance.friends.map((f: any) => f?.name),
+        ['Ghost'],
+        'the lazy load resolved the target into its slot',
+      );
+      assert.deepEqual(saved, [], 'no save was issued while loading');
+    } finally {
+      cardService.fetchJSON = fetchJSON;
+    }
   });
 
   test('a concurrent field write during store.patch is not clobbered by the patch’s stale snapshot', async function (assert) {

@@ -57,7 +57,10 @@ export class TaskStatusEdit extends Component<typeof TaskStatusField> {
     return (this.args.model.constructor as any).values as TaskStatusField[];
   }
 
-  @action onSelectStatus(status: TaskStatusField): void {
+  @action onSelectStatus(status: TaskStatusField | null): void {
+    if (!status) {
+      return;
+    }
     this.label = status.label;
     this.args.model.label = this.selectedStatus?.label;
     this.args.model.index = this.selectedStatus?.index;

@@ -12,6 +12,7 @@ import type {
 import type { PgAdapter } from '@cardstack/postgres';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.ts';
 import {
+  assertRealmInfoExtras,
   closeServer,
   createVirtualNetwork,
   setupDB,
@@ -118,7 +119,11 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
 
       assert.strictEqual(response.status, 200, 'HTTP 200 status');
       let { data } = response.body as {
-        data: { id: string; type: string; attributes: { name: string } }[];
+        data: {
+          id: string;
+          type: string;
+          attributes: { name: string } & Record<string, unknown>;
+        }[];
       };
       assert.strictEqual(data.length, 2, 'returns info for both realms');
       let dataById = new Map(data.map((entry) => [entry.id, entry]));
@@ -132,6 +137,15 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
         'Secondary Realm',
         'secondary realm info included',
       );
+
+      // This endpoint — not each realm's own `/_info` — is what the host's
+      // workspace chooser reads, so it has to carry the tile metadata too.
+      for (let realmURL of [testRealm.url, secondaryRealm.url]) {
+        assertRealmInfoExtras(
+          assert,
+          dataById.get(realmURL)!.attributes as Record<string, unknown>,
+        );
+      }
 
       let publicHeader =
         response.headers['x-boxel-realms-public-readable'] ?? '';
@@ -209,7 +223,11 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
 
       assert.strictEqual(response.status, 200, 'HTTP 200 status');
       let { data } = response.body as {
-        data: { id: string; type: string; attributes: { name: string } }[];
+        data: {
+          id: string;
+          type: string;
+          attributes: { name: string } & Record<string, unknown>;
+        }[];
       };
       assert.strictEqual(data.length, 1, 'returns info for one realm');
       assert.strictEqual(data[0].id, testRealm.url, 'realm id is correct');

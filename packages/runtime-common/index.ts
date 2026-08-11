@@ -1147,6 +1147,7 @@ export type {
   Kind,
   RealmAdapter,
   FileRef,
+  RealmIndexCounts,
   RealmInfo,
   TokenClaims,
   RealmSession,

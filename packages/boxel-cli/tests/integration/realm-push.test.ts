@@ -18,6 +18,7 @@ import {
   TINY_PNG_BYTES,
   TINY_PDF_BYTES,
   TINY_MP3_BYTES,
+  NON_UTF8_BYTES,
 } from '../helpers/binary-fixtures.ts';
 
 // `boxel realm push <local-dir> <realm-url>` is driven as a subprocess. The
@@ -809,6 +810,46 @@ describe('realm push (integration)', () => {
       'doc.pdf',
       'image.png',
     ]);
+  });
+
+  it('pushes .zip, .bin, and .mp4 files byte-identically', async () => {
+    // These three span the range that has to reach the byte path: an archive
+    // type, a video type, and application/octet-stream — the type unknown
+    // extensions resolve to. A text-pipeline round-trip would replace the
+    // payload's invalid UTF-8 sequences with U+FFFD, so recovering the bytes
+    // intact is the proof that each one stayed on the byte path.
+    let realmUrl = await createTestRealm();
+    let localDir = makeLocalDir();
+
+    writeLocalBytes(localDir, 'archive.zip', NON_UTF8_BYTES);
+    writeLocalBytes(localDir, 'blob.bin', NON_UTF8_BYTES);
+    writeLocalBytes(localDir, 'clip.mp4', NON_UTF8_BYTES);
+
+    let res = await runPush(localDir, realmUrl);
+    expect(res.ok, res.stderr).toBe(true);
+
+    for (let relPath of ['archive.zip', 'blob.bin', 'clip.mp4']) {
+      let remote = await fetchRemoteBytes(realmUrl, relPath);
+      expect(
+        remote.equals(Buffer.from(NON_UTF8_BYTES)),
+        `${relPath} should round-trip byte-identically`,
+      ).toBe(true);
+    }
+  });
+
+  it('pushes an extensionless file byte-identically via the binary path', async () => {
+    // No extension means no MIME mapping, which defaults to
+    // application/octet-stream — the binary side of the classification.
+    let realmUrl = await createTestRealm();
+    let localDir = makeLocalDir();
+
+    writeLocalBytes(localDir, 'LICENSE', NON_UTF8_BYTES);
+
+    let res = await runPush(localDir, realmUrl);
+    expect(res.ok, res.stderr).toBe(true);
+
+    let remote = await fetchRemoteBytes(realmUrl, 'LICENSE');
+    expect(remote.equals(Buffer.from(NON_UTF8_BYTES))).toBe(true);
   });
 
   it('treats SVG as text — round-trips through /_atomic without corruption', async () => {

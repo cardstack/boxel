@@ -50,6 +50,7 @@ import type RealmServer from '@cardstack/host/services/realm-server';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
+import { removeTopmost, unwindOrPush } from '../utils/host-mode-stack';
 import {
   AiAssistantOpen,
   ModuleInspectorSelections,
@@ -116,6 +117,8 @@ interface SerializedExpandedStackItem {
 
 export type FileView = 'inspector' | 'browser';
 
+export type ProfileSettingsSection = 'subscription';
+
 type SerializedItem = CardItem;
 type SerializedStack = SerializedItem[];
 
@@ -158,7 +161,9 @@ export default class OperatorModeStateService extends Service {
     submode: Submodes.Interact,
     codePath: null,
     hostModePrimaryCard: null,
-    hostModeStack: [],
+    // TrackedArray like the ones restoreState installs, so mutations before the
+    // first restore are reactive too
+    hostModeStack: new TrackedArray<string>([]),
     openDirs: new TrackedMap<string, string[]>(),
     aiAssistantOpen: readPersistedAiAssistantOpen(),
     newFileDropdownOpen: false,
@@ -172,6 +177,7 @@ export default class OperatorModeStateService extends Service {
   private moduleInspectorHistory: Record<string, ModuleInspectorView>;
 
   @tracked profileSettingsOpen = false;
+  @tracked profileSettingsSection: ProfileSettingsSection | undefined;
   @tracked createListingModalPayload?: CreateListingModalPayload;
 
   // Per-card expanded-mode intent. Keyed by stack-item instance id so the
@@ -252,6 +258,14 @@ export default class OperatorModeStateService extends Service {
 
   toggleProfileSettings = () => {
     this.profileSettingsOpen = !this.profileSettingsOpen;
+    if (!this.profileSettingsOpen) {
+      this.profileSettingsSection = undefined;
+    }
+  };
+
+  openProfileSettings = (section?: ProfileSettingsSection) => {
+    this.profileSettingsSection = section;
+    this.profileSettingsOpen = true;
   };
 
   get state() {
@@ -327,6 +341,7 @@ export default class OperatorModeStateService extends Service {
     this.cardTitles = new TrackedMap();
     this.moduleInspectorHistory = {};
     this.profileSettingsOpen = false;
+    this.profileSettingsSection = undefined;
     this.createListingModalPayload = undefined;
     this.expandedStackItems.clear();
     window.localStorage.removeItem(ModuleInspectorSelections);
@@ -619,15 +634,21 @@ export default class OperatorModeStateService extends Service {
       .map((stack) => stack[stack.length - 1]);
   }
 
+  // Opening a card that is already behind you in the trail is a navigation
+  // *back* to it — an in-page "up" link, or a second visit to the same page —
+  // so unwind to it rather than stacking another copy of a page the user is
+  // already inside. Pushing is only right for a card not yet on the trail.
   addToHostModeStack(cardId: string) {
-    this._state.hostModeStack.push(cardId);
+    unwindOrPush(
+      this._state.hostModeStack,
+      cardId,
+      this._state.hostModePrimaryCard,
+    );
     this.schedulePersist();
   }
 
   removeFromHostModeStack(cardId: string) {
-    let index = this._state.hostModeStack.findIndex((item) => item === cardId);
-    if (index !== -1) {
-      this._state.hostModeStack.splice(index, 1);
+    if (removeTopmost(this._state.hostModeStack, cardId)) {
       this.schedulePersist();
     }
   }

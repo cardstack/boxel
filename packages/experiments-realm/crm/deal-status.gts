@@ -78,7 +78,10 @@ class DealStatusEdit extends Component<typeof DealStatus> {
     });
   }
 
-  @action onSelectStatus(status: DealStatus): void {
+  @action onSelectStatus(status: DealStatus | null): void {
+    if (!status) {
+      return;
+    }
     this.label = status.label;
     this.args.model.label = this.selectedStatus?.label;
     this.args.model.index = this.selectedStatus?.index;

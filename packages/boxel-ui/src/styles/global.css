@@ -9,6 +9,8 @@
    This layering system allows for easier overrides and customizations of styles at different levels.
    More info: https://developer.mozilla.org/en-US/docs/Web/CSS/@layer
 */
+@import url('./ember-basic-dropdown.css');
+
 @layer reset, utilities, boxelComponentL1, boxelComponentL2, boxelComponentL3;
 
 @layer reset {

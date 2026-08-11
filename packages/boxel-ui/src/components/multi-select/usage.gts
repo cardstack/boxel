@@ -7,7 +7,7 @@ import {
   type CSSVariableInfo,
   cssVariable,
 } from 'ember-freestyle/decorators/css-variable';
-import type { Select } from 'ember-power-select/components/power-select';
+import type { Select } from 'ember-power-select/types';
 import { includes } from 'lodash-es';
 import pluralize from 'pluralize';
 
@@ -140,7 +140,7 @@ export class SelectedCountry extends BoxelSelectedItem<Country> {
   <template>
     <div class='selected-country'>
       <CheckMark width='12' height='12' />
-      {{@option.name}}
+      {{@selected.name}}
     </div>
   </template>
 }

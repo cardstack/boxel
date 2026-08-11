@@ -55,7 +55,7 @@ export default class BoxelSelectUsage extends Component {
   }
 
   @tracked selectedItem: Country | null = null;
-  @tracked selectedItem2: SortOption | undefined = this.items2[0];
+  @tracked selectedItem2: SortOption | null = this.items2[0] ?? null;
   @tracked placeholder = 'Select Item';
   @tracked verticalPosition = 'auto' as const;
   @tracked variant:
@@ -105,7 +105,7 @@ export default class BoxelSelectUsage extends Component {
     this.selectedItem = item;
   }
 
-  @action onSelectItem2(item: SortOption): void {
+  @action onSelectItem2(item: SortOption | null): void {
     this.selectedItem2 = item;
   }
 

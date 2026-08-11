@@ -4,9 +4,8 @@ import { action } from '@ember/object';
 import { guidFor } from '@ember/object/internals';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
-import BasicDropdown, {
-  type Dropdown,
-} from 'ember-basic-dropdown/components/basic-dropdown';
+import BasicDropdown from 'ember-basic-dropdown/components/basic-dropdown';
+import type { Dropdown } from 'ember-basic-dropdown/types';
 import focusTrap from 'ember-focus-trap/modifiers/focus-trap';
 import {
   type FunctionBasedModifier,
@@ -185,8 +184,10 @@ class BoxelDropdown extends Component<Signature> {
     this.themeObserver = null;
   }
 
-  @action registerAPI(publicAPI: DropdownAPI) {
-    this.args.registerAPI?.(publicAPI);
+  @action registerAPI(publicAPI: DropdownAPI | null) {
+    if (publicAPI) {
+      this.args.registerAPI?.(publicAPI);
+    }
   }
 
   @action onMouseLeave(dropdown?: Dropdown) {

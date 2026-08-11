@@ -23,6 +23,17 @@ export const TINY_PDF_BYTES = new Uint8Array([
   0x0a, 0x25, 0x25, 0x45, 0x4f, 0x46, 0x0a,
 ]);
 
+// Byte blob built from sequences that are invalid UTF-8: nulls, 0xFF/0xFE,
+// a lone continuation byte (0x80), an overlong encoding (0xC0 0x80), and a
+// truncated multi-byte sequence (0xE0 0x28). Extension — not payload
+// validity — drives binary classification, so this one blob stands in for
+// any format (.zip, .bin, .mp4, extensionless) whose byte-for-byte
+// round-trip fidelity is under test.
+export const NON_UTF8_BYTES = new Uint8Array([
+  0x50, 0x4b, 0x03, 0x04, 0x00, 0x00, 0xff, 0xfe, 0x80, 0xc0, 0x80, 0xe0, 0x28,
+  0x00, 0xff, 0x00, 0x9f, 0x92, 0x96, 0xff, 0xd8, 0xff, 0xe0, 0x00,
+]);
+
 // Tiny MP3-shaped byte blob: ID3v2.4 tag header (`ID3 04 00 …`) followed
 // by an MPEG-1 Layer III frame sync (`FF FB …`). Like `TINY_PDF_BYTES`,
 // the realm-server treats `.mp3` as binary purely based on the

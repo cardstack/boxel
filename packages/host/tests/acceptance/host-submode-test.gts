@@ -545,6 +545,59 @@ module('Acceptance | host submode', function (hooks) {
         .hasAttribute('data-test-view-card-demo-active-tab', 'details');
     });
 
+    // Submode counterpart, through operator-mode-state-service. ViewCardDemo
+    // cycles 1 → 2 → 3 → 1, so 1 above 2 is an "up" link (CS-12434).
+    test('viewing a card already in the trail unwinds to it', async function (assert) {
+      let belowCardId = `${testRealmURL}ViewCardDemo/2`;
+      let topCardId = `${testRealmURL}ViewCardDemo/1`;
+
+      // 3 as primary keeps both stack cards off the root, so this takes the
+      // unwind branch rather than the close-everything one.
+      await visitOperatorMode({
+        submode: 'host',
+        trail: [
+          `${testRealmURL}ViewCardDemo/3.json`,
+          `${belowCardId}.json`,
+          `${topCardId}.json`,
+        ],
+      });
+
+      let topSelector = `[data-test-host-mode-stack-item="${topCardId}"]`;
+      let belowSelector = `[data-test-host-mode-stack-item="${belowCardId}"]`;
+      await waitFor(`${topSelector} [data-test-view-card-demo-button]`);
+
+      await click(`${topSelector} [data-test-view-card-demo-button]`);
+
+      await waitUntil(() => !document.querySelector(topSelector));
+      assert
+        .dom(belowSelector)
+        .exists('unwinds to the targeted card rather than stacking a copy');
+    });
+
+    test('clicking the scrim closes the top card of the trail', async function (assert) {
+      let belowCardId = `${testRealmURL}ViewCardDemo/2`;
+      let topCardId = `${testRealmURL}ViewCardDemo/3`;
+
+      await visitOperatorMode({
+        submode: 'host',
+        trail: [
+          `${testRealmURL}ViewCardDemo/1.json`,
+          `${belowCardId}.json`,
+          `${topCardId}.json`,
+        ],
+      });
+
+      let topSelector = `[data-test-host-mode-stack-item="${topCardId}"]`;
+      await waitFor(topSelector);
+
+      await click('[data-test-host-mode-stack]');
+
+      await waitUntil(() => !document.querySelector(topSelector));
+      assert
+        .dom(`[data-test-host-mode-stack-item="${belowCardId}"]`)
+        .exists('only the top card closes');
+    });
+
     test('breadcrumbs can close stacked cards', async function (assert) {
       let card1Id = `${testRealmURL}Person/1`;
       let card2Id = `${testRealmURL}index`;

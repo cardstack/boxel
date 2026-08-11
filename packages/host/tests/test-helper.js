@@ -2,6 +2,7 @@ import Application from '@cardstack/host/app';
 import config from '@cardstack/host/config/environment';
 import * as QUnit from 'qunit';
 import { setApplication } from '@ember/test-helpers';
+import { setConfig as setBasicDropdownConfig } from 'ember-basic-dropdown/config';
 import setupOperatorModeParametersMatchAssertion from '@cardstack/host/tests/helpers/operator-mode-parameters-match';
 import { start as examStart } from 'ember-exam/test-support';
 // eslint-disable-next-line ember/no-test-import-export
@@ -12,6 +13,11 @@ import { selectShardModules } from './helpers/shard-modules';
 import testModuleTimings from './test-module-timings.json';
 
 export async function start(examOptions) {
+  // ember-basic-dropdown 9 has no boot-time initializer, and in a test
+  // build it prefers the page-level wormhole div, which sits outside the
+  // test root where scoped DOM helpers cannot see teleported content.
+  setBasicDropdownConfig({ destination: 'ember-testing' });
+
   const application = Application.create({
     ...config.APP,
     rootElement: '#ember-testing',

@@ -1,6 +1,9 @@
 import GlimmerComponent from '@glimmer/component';
 import { isEqual } from 'lodash-es';
-import { BoxelSelect } from '@cardstack/boxel-ui/components';
+import {
+  BoxelSelect,
+  toSelectedItemComponent,
+} from '@cardstack/boxel-ui/components';
 import { getField } from '@cardstack/runtime-common';
 import { resolveFieldConfiguration } from './field-support';
 import type { FieldDefConstructor } from './card-api';
@@ -187,12 +190,15 @@ function enumField<BaseT extends FieldDefConstructor>(
     };
 
     static selectedItem = class SelectedItem extends GlimmerComponent<{
-      Args: { option: any; configuration?: any };
+      Args: { selected: any; configuration?: any };
     }> {
       <template>
-        {{#if @option}}
+        {{#if @selected}}
           {{#let (component EnumField.atom) as |Atom|}}
-            <Atom @model={{@option.value}} @configuration={{@configuration}} />
+            <Atom
+              @model={{@selected.value}}
+              @configuration={{@configuration}}
+            />
           {{/let}}
         {{/if}}
       </template>
@@ -255,7 +261,9 @@ function enumField<BaseT extends FieldDefConstructor>(
           @onChange={{this.update}}
           @selectedItemComponent={{if
             this.selectedOption
-            (component EnumField.selectedItem configuration=@configuration)
+            (toSelectedItemComponent
+              (component EnumField.selectedItem configuration=@configuration)
+            )
           }}
           @disabled={{not @canEdit}}
           @renderInPlace={{true}}
