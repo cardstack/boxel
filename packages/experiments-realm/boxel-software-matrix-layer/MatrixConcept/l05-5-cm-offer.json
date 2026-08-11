@@ -18,13 +18,13 @@
       "owner": "lucas",
       "workState": "Done",
       "notes": "App 2: Talent & Resource Tracker (v1)",
+      "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/74385ab3-e12c-49e4-850f-8b36780f8159",
       "cardInfo": {
         "name": null,
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      },
-      "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/74385ab3-e12c-49e4-850f-8b36780f8159"
+      }
     },
     "meta": {
       "adoptsFrom": {

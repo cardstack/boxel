@@ -18,13 +18,13 @@
       "owner": null,
       "workState": null,
       "notes": null,
+      "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/account",
       "cardInfo": {
         "name": null,
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      },
-      "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/account"
+      }
     },
     "meta": {
       "adoptsFrom": {
