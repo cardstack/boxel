@@ -295,7 +295,7 @@ module('Integration | linksTo error sentinel producer', function (hooks) {
     }
   });
 
-  test('a failed singular lazy load notifies change subscribers with the sentinel', async function (assert) {
+  test('a failed singular lazy load does not notify change subscribers', async function (assert) {
     await setupRealm();
     let person = await createPerson({
       pet: { links: { self: `${testRealmURL}Pet/ghost` } },
@@ -311,12 +311,18 @@ module('Integration | linksTo error sentinel producer', function (hooks) {
       person.pet;
       await waitUntil(() => isLinkNotFound(bucketEntry(person, 'pet')));
 
-      let petChange = changes.find(
-        (c) => c.fieldName === 'pet' && isLinkNotFound(c.value),
-      );
-      assert.ok(
+      let petChange = changes.find((c) => c.fieldName === 'pet');
+      // Change propagation matches a successful load, which also stays silent:
+      // resolving a link — to a target or to a failure — is the completion of
+      // something the instance already referenced, not an edit of it. A
+      // notification would reach only auto-save, writing the card back merely
+      // because it was read. The failure stays observable through
+      // `getRelationshipMembershipState` / `getBrokenLinks`, which is how
+      // callers are meant to read it.
+      assert.strictEqual(
         petChange,
-        'subscribeToChanges listeners observe the failed lazy load — change propagation matches a successful load',
+        undefined,
+        'reading a card with a broken link announces no change',
       );
     } finally {
       unsubscribeFromChanges(person, subscriber);

@@ -3690,11 +3690,11 @@ function lazilyLoadLink(
       }
       if (pluralArgs) {
         let { value } = pluralArgs;
-        // Match against the raw backing array (the proxy hides not-loaded
-        // sentinels from index access); swap through the proxy so the in-place
-        // mutation notifies subscribers and Glimmer re-renders.
+        // Match against the raw backing array — the proxy hides not-loaded
+        // sentinels from index access.
         let indices: number[] = [];
-        for (let [index, item] of rawArrayValues(value).entries()) {
+        let raw = rawArrayValues(value);
+        for (let [index, item] of raw.entries()) {
           if (!isNotLoadedValue(item)) {
             continue;
           }
@@ -3706,11 +3706,22 @@ function lazilyLoadLink(
             indices.push(index);
           }
         }
-        for (let index of indices) {
-          value[index] = fieldValue;
+        if (indices.length > 0) {
+          // Write into the backing array rather than through the proxy: the
+          // proxy's set trap announces a change to subscribers, which marks the
+          // instance dirty and auto-saves it — a write triggered by reading the
+          // card, exactly as in the singular case. The getter entangles card
+          // tracking, so notifying it is what re-renders.
+          for (let index of indices) {
+            raw[index] = fieldValue;
+          }
+          notifyCardTracking(instance);
         }
       } else {
-        (instance as any)[field.name] = fieldValue;
+        // Not `instance[field.name] = fieldValue`: assigning through the field
+        // setter announces a change, which marks the instance dirty and
+        // auto-saves it — a write triggered by reading the card.
+        setResolvedField(instance, field, fieldValue);
       }
     } catch (e) {
       let error = e as Error;
@@ -3776,12 +3787,15 @@ function lazilyLoadLink(
         : { type: 'link-error', reference, errorDoc };
       if (pluralArgs) {
         // Swap the sentinel into the slot(s) whose reference just failed,
-        // leaving the WatchedArray identity intact so Glimmer re-renders. We
-        // match the same not-loaded entries the success path would have
-        // replaced with the loaded card. Match against the raw backing array
-        // (the proxy hides sentinels) but write through the proxy to notify.
+        // leaving the WatchedArray identity intact. We match the same
+        // not-loaded entries the success path would have replaced with the
+        // loaded card, and write into the backing array rather than through the
+        // proxy for the same reason the success path does: the proxy's set trap
+        // announces a change, which auto-saves a card that was only read.
         let { value } = pluralArgs;
-        for (let [index, item] of rawArrayValues(value).entries()) {
+        let raw = rawArrayValues(value);
+        let planted = false;
+        for (let [index, item] of raw.entries()) {
           if (!isNotLoadedValue(item)) {
             continue;
           }
@@ -3790,16 +3804,21 @@ function lazilyLoadLink(
             instance.id ?? instance[relativeTo],
           );
           if (reference === notLoadedRef) {
-            value[index] = sentinel;
+            raw[index] = sentinel;
+            planted = true;
           }
         }
+        if (planted) {
+          notifyCardTracking(instance);
+        }
       } else {
-        // Mirror `setField`'s notification (minus validate, which rejects a
-        // non-card value): write the bucket, notify change subscribers, then
-        // card tracking. Without the `notifySubscribers` call, `subscribeToChanges`
-        // listeners would observe a successful lazy load but not a failed one.
+        // Write the bucket and notify card tracking, but not change
+        // subscribers: a failed load is still the resolution of a link the
+        // instance already referenced, not an edit of it. No subscriber acts on
+        // a link-field change anyway — the recent-cards, spec-panel and
+        // playground listeners each ignore any field but `id` — so announcing
+        // it would only reach auto-save, writing the card back on read.
         getDataBucket(instance).set(field.name, sentinel);
-        notifySubscribers(instance, field.name, sentinel);
         notifyCardTracking(instance);
       }
     } finally {
@@ -4679,6 +4698,18 @@ function makeDescriptor<
   }
   (descriptor.get as any)[isField] = field;
   return descriptor;
+}
+
+// Fill in a field value that resolution produced rather than a user edit — the
+// loaded target of a link the instance already referenced. Change subscribers
+// drive auto-save, so announcing this as a change writes the card back to the
+// server merely because it was read, bumping its version and scheduling a
+// reindex. Glimmer's tracking is still notified, so rendering updates.
+function setResolvedField(instance: BaseDef, field: Field, value: any) {
+  propagateRealmContext(value, instance);
+  value = field.validate(instance, value);
+  getDataBucket(instance).set(field.name, value);
+  notifyCardTracking(instance);
 }
 
 function setField(instance: BaseDef, field: Field, value: any) {
