@@ -21,6 +21,7 @@
 import { Readable } from 'node:stream';
 import { lookup as lookupMimeType } from 'mime-types';
 import type { ResponseWithNodeStream } from '@cardstack/runtime-common';
+import { executableExtensions } from '@cardstack/runtime-common';
 import {
   readStoreMeta,
   readStoredFile,
@@ -221,12 +222,41 @@ export default function handlePackageServe({
       );
     }
 
+    let servedPath = path;
     let bytes = await readStoredFile(
       packageStorePath,
       name,
       resolution.version,
       path,
     );
+    if (!bytes) {
+      // An EXTENSIONLESS module path resolves to its executable file, the same
+      // way a realm resolves one. This is not a convenience. Type identity is
+      // formed by `internalKeyFor`, which TRIMS the executable extension, so
+      // the canonical address of a card type is `…/greeter@2.4.0/index` and
+      // never `…/index.js`. Anything that starts from a type key and then
+      // fetches the module — the definition lookup, and through it every field
+      // predicate in a query — asks for the trimmed form. A realm answers it.
+      // Without this the package store 404s, the definition never populates,
+      // and `eq` against a package-hosted type silently matches NOTHING
+      // instead of erroring, which is the worst failure shape available.
+      //
+      // Tried only on a miss, so an exact file always wins and a package that
+      // genuinely holds both `x` and `x.js` is unaffected.
+      for (let extension of executableExtensions) {
+        let candidate = `${path}${extension}`;
+        bytes = await readStoredFile(
+          packageStorePath,
+          name,
+          resolution.version,
+          candidate,
+        );
+        if (bytes) {
+          servedPath = candidate;
+          break;
+        }
+      }
+    }
     if (!bytes) {
       return setContextResponse(
         ctxt,
@@ -247,7 +277,12 @@ export default function handlePackageServe({
     let response = new Response(null, {
       status: 200,
       headers: {
-        'content-type': lookupMimeType(path) || 'application/octet-stream',
+        // The SERVED path, not the requested one: an extensionless module
+        // request resolved to `index.gts`/`index.js` above, and typing it from
+        // the bare request would hand a browser `application/octet-stream` for
+        // something it is about to evaluate as a module.
+        'content-type':
+          lookupMimeType(servedPath) || 'application/octet-stream',
         'content-length': String(bytes.byteLength),
         // An exact version is immutable by construction (Deck L4) — the
         // registry gate refuses to republish one with different bytes, so
