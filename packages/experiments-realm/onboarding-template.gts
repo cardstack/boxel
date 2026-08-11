@@ -4,6 +4,7 @@ import {
   field,
   contains,
   containsMany,
+  FieldDef,
   StringField,
   type BaseDefComponent,
 } from '@cardstack/base/card-api';
@@ -12,7 +13,12 @@ import ChecklistIcon from '@cardstack/boxel-icons/checklist';
 
 import { DurationField } from './duration-field';
 
-export class OnboardingTemplateTaskField extends CardDef {
+// containsMany takes a FieldDef, never a CardDef: this type's data lives inline
+// on the OnboardingTemplate instance and it is never addressable on its own, so
+// CardDef's identity apparatus (cardInfo, thumbnailURL, its own URL) was never
+// used and never serialized. Its sibling OnboardingChecklistTaskField was
+// already declared correctly; this one was the outlier.
+export class OnboardingTemplateTaskField extends FieldDef {
   static displayName = 'Onboarding Template Task';
 
   @field title = contains(StringField);
