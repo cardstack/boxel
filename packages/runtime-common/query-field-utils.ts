@@ -199,22 +199,6 @@ export function normalizeQueryDefinition({
   // targets the realm holding the instance.
   let specifiedRealms: any =
     queryAny.realms ?? queryAny.realm ?? THIS_REALM_TOKEN;
-  // Whether the target was authored as an interpolation — i.e. whatever the
-  // instance's data holds — rather than as realm names written into the query.
-  // Recorded before interpolation substitutes values, because afterwards a
-  // reference id and a realm href are both just strings, and the two need
-  // opposite treatment when the resolver can't place them.
-  let realmsAreInterpolated =
-    isInterpolationToken(specifiedRealms) ||
-    (Array.isArray(specifiedRealms) &&
-      specifiedRealms.some(isInterpolationToken));
-  let interpolatedRealms = interpolateNode(
-    specifiedRealms,
-    queryAny.realms ? 'realms' : 'realm',
-  );
-  if (interpolatedRealms !== undefined) {
-    specifiedRealms = interpolatedRealms;
-  }
   delete queryAny.realm;
   delete queryAny.realms;
 
@@ -222,29 +206,53 @@ export function normalizeQueryDefinition({
     return null;
   }
 
+  // Expand the authored target into one entry per realm, each carrying where it
+  // came from. Realms are interpolated here rather than through
+  // `interpolateNode` for two reasons: that pass substitutes values in place,
+  // losing which entries were written into the query and which came from the
+  // instance's data — a distinction the two need opposite treatment for — and
+  // it leaves an interpolation that yields a list as a nested array. Expanding
+  // per entry keeps provenance and flattens in one step, so a list mixing
+  // literal realms with interpolations behaves as each entry was authored.
+  type RealmEntry = { value: unknown; interpolated: boolean };
+  const expandRealmEntries = (authored: any): RealmEntry[] => {
+    let authoredEntries = Array.isArray(authored) ? authored : [authored];
+    let expanded: RealmEntry[] = [];
+    for (let entry of authoredEntries) {
+      if (!isInterpolationToken(entry)) {
+        expanded.push({ value: entry, interpolated: false });
+        continue;
+      }
+      let resolved = resolvePathValue(
+        resolveInterpolationPath(entry.slice(THIS_INTERPOLATION_PREFIX.length)),
+      );
+      if (resolved == null) {
+        continue;
+      }
+      for (let value of Array.isArray(resolved) ? resolved : [resolved]) {
+        expanded.push({ value, interpolated: true });
+      }
+    }
+    return expanded;
+  };
+
   // One entry -> zero or more realms. An entry naming a realm resolves to it;
   // an entry naming a resource inside a realm resolves to that realm, which is
   // what lets a field say "search wherever these references live" without the
   // card needing to know the realm layout.
-  const resolveOneRealm = (value: any): string | undefined => {
+  const resolveOneRealm = ({
+    value,
+    interpolated,
+  }: RealmEntry): string | undefined => {
     if (typeof value !== 'string' || value.length === 0) {
       throw new Error(
-        `query field "${fieldName}" must resolve realm to a non-empty string`,
+        interpolated
+          ? `query field "${fieldName}" must resolve realm interpolation to non-empty strings`
+          : `query field "${fieldName}" must resolve realm to a non-empty string`,
       );
     }
     if (value === THIS_REALM_TOKEN) {
       return realmURL.href;
-    }
-    if (value.startsWith(THIS_INTERPOLATION_PREFIX)) {
-      let interpolated = resolvePathValue(
-        resolveInterpolationPath(value.slice(THIS_INTERPOLATION_PREFIX.length)),
-      );
-      if (typeof interpolated === 'string' && interpolated.length > 0) {
-        return resolveOneRealm(interpolated);
-      }
-      throw new Error(
-        `query field "${fieldName}" must resolve realm interpolation "${value}" to a non-empty string`,
-      );
     }
     if (!resolveRealmForReference) {
       return value;
@@ -264,14 +272,14 @@ export function normalizeQueryDefinition({
     // written without a trailing slash (`buildQuerySearchURL` and
     // `parseRealmsParam` both normalize that), so shape says nothing about
     // whether a string names a realm or a resource.
-    return realmsAreInterpolated ? undefined : value;
+    return interpolated ? undefined : value;
   };
 
-  const resolveRealms = (value: any): string[] => {
-    if (value == null) {
+  const resolveRealms = (authored: any): string[] => {
+    if (authored == null) {
       return [realmURL.href];
     }
-    let entries = Array.isArray(value) ? value : [value];
+    let entries = expandRealmEntries(authored);
     if (entries.length === 0) {
       return [realmURL.href];
     }

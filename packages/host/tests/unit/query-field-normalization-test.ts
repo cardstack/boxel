@@ -505,6 +505,40 @@ module('normalizeQueryDefinition', function () {
       ]);
     });
 
+    test('a mixed list keeps each entry to how it was authored', function (assert) {
+      // The literal was written into the query, so it is honored as written
+      // even when the resolver cannot place it; the interpolated sibling is the
+      // instance's data, so an unplaceable one is dropped. A single verdict for
+      // the whole list would have to get one of the two wrong.
+      let normalized = normalize(['https://peer.example/', '$this.refs'], {
+        refs: [
+          'https://other.realm/Pet/mango',
+          'https://nowhere.example/Pet/x',
+        ],
+      });
+      assert.deepEqual(
+        normalized?.realms,
+        ['https://peer.example/', 'https://other.realm/'],
+        'the literal survives, the placeable reference resolves, the unplaceable one is dropped',
+      );
+    });
+
+    test('an interpolation yielding a list is flattened, not nested', function (assert) {
+      // Inside a list, an interpolation standing in for several realms expands
+      // in place rather than becoming an array entry.
+      let normalized = normalize([realmURL.href, '$this.refs'], {
+        refs: [
+          'https://other.realm/Pet/mango',
+          'https://other.realm/deep/Pet/x',
+        ],
+      });
+      assert.deepEqual(normalized?.realms, [
+        realmURL.href,
+        'https://other.realm/',
+        'https://other.realm/deep/',
+      ]);
+    });
+
     test('a realm named directly is honored even when the resolver cannot place it', function (assert) {
       // A field may target a peer realm this process holds no mapping for.
       // What it was authored as decides this, not how it is spelled: a realm
