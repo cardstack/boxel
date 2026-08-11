@@ -17,7 +17,7 @@
       "domainKit": null,
       "owner": "richard",
       "workState": "Done",
-      "notes": "v1 · Built — experiments-realm/export.gts, POC tier. Consumes the same column definitions the Table block takes, so the CSV cannot drift from the table; neither block imports the other",
+      "notes": "v1 \u00b7 Built \u2014 experiments-realm/export.gts, POC tier. Consumes the same column definitions the Table block takes, so the CSV cannot drift from the table; neither block imports the other",
       "cardInfo": {
         "name": null,
         "summary": null,

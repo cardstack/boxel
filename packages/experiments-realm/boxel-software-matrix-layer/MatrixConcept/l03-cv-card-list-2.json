@@ -10,7 +10,7 @@
       "implemented": true,
       "evidenceTier": "Platform",
       "auditStatus": "Implemented",
-      "whereImplemented": "base: base/components/card-list.gts — consumed directly by App 2: Talent & Resource Tracker (no reimplementation)",
+      "whereImplemented": "base: base/components/card-list.gts \u2014 consumed directly by App 2: Talent & Resource Tracker (no reimplementation)",
       "reference": null,
       "catalogMatch": null,
       "provenance": "periodic:Calendar",

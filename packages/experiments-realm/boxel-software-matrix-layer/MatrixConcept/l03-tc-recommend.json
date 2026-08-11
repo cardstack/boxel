@@ -17,7 +17,7 @@
       "domainKit": null,
       "owner": "richard",
       "workState": "Next",
-      "notes": "v1.1 · Open, NOT blocked — contract templates for Contract Generator. Same LLM primitive as Classify (OneShotLlmRequestCommand); depends on Contract existing first",
+      "notes": "v1.1 \u00b7 Open, NOT blocked \u2014 contract templates for Contract Generator. Same LLM primitive as Classify (OneShotLlmRequestCommand); depends on Contract existing first",
       "cardInfo": {
         "name": null,
         "summary": null,
