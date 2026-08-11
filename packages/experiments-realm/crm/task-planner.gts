@@ -6,7 +6,7 @@ import {
 } from '@cardstack/base/card-api';
 import { CRMTaskStatusField } from './shared';
 import GlimmerComponent from '@glimmer/component';
-import { TaskPlanner, TaskCard } from '../components/base-task-planner';
+import { TaskPlanner, TaskCard } from 'experiments/components/base-task-planner';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { codeRef } from '@cardstack/runtime-common';
 

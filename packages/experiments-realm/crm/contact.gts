@@ -15,7 +15,7 @@ import {
   FieldContainer,
   EntityDisplayWithThumbnail,
 } from '@cardstack/boxel-ui/components';
-import AvatarGroup from '../components/avatar-group';
+import AvatarGroup from 'experiments/components/avatar-group';
 
 import ContactIcon from '@cardstack/boxel-icons/contact';
 import Email from '@cardstack/boxel-icons/mail';
@@ -26,7 +26,7 @@ import { CrmApp } from '../crm-app';
 import { Company } from './company';
 import { StatusTagField } from './contact-status-tag';
 
-import { ContactLinkField } from '../fields/contact-link';
+import { ContactLinkField } from 'experiments/fields/contact-link';
 
 export class SocialLinkField extends ContactLinkField {
   static displayName = 'social-link';

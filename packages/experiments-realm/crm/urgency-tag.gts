@@ -12,7 +12,7 @@ import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
 
-import { StatusPill } from '../components/status-pill';
+import { StatusPill } from 'experiments/components/status-pill';
 
 import ClockExclamation from '@cardstack/boxel-icons/clock-exclamation';
 import Clock24 from '@cardstack/boxel-icons/clock-24';

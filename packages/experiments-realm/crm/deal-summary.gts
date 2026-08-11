@@ -3,8 +3,8 @@ import Component from '@glimmer/component';
 import type { Deal } from './deal';
 import type { Query } from '@cardstack/runtime-common';
 
-import SummaryCard from '../components/summary-card';
-import SummaryGridContainer from '../components/summary-grid-container';
+import SummaryCard from 'experiments/components/summary-card';
+import SummaryGridContainer from 'experiments/components/summary-grid-container';
 
 import TrendingUpIcon from '@cardstack/boxel-icons/trending-up';
 import CalculatorIcon from '@cardstack/boxel-icons/calculator';

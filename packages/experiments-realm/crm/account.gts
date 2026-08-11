@@ -26,10 +26,10 @@ import { Deal } from './deal';
 import { StatusTagField } from './contact-status-tag';
 import { UrgencyTag } from './urgency-tag';
 
-import AccountHeader from '../components/account-header';
-import PageLayout from '../components/page-layout';
-import SummaryCard from '../components/summary-card';
-import SummaryGridContainer from '../components/summary-grid-container';
+import AccountHeader from 'experiments/components/account-header';
+import PageLayout from 'experiments/components/page-layout';
+import SummaryCard from 'experiments/components/summary-card';
+import SummaryGridContainer from 'experiments/components/summary-grid-container';
 
 import {
   BoxelButton,

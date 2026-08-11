@@ -1,0 +1,32 @@
+{
+  "deck": {
+    "publisher": "experiments",
+    "packages": {
+      "components": {
+        "version": "1.0.0",
+        "exports": {
+          "./account-header": "$DECK/account-header.gts",
+          "./activity-card": "$DECK/activity-card.gts",
+          "./avatar-group": "$DECK/avatar-group.gts",
+          "./base-task-planner": "$DECK/base-task-planner.gts",
+          "./card-list": "$DECK/card-list.gts",
+          "./chips-editor": "$DECK/chips-editor.gts",
+          "./contact-row": "$DECK/contact-row.gts",
+          "./crm-progress-bar": "$DECK/crm-progress-bar.gts",
+          "./filter/filter-display": "$DECK/filter/filter-display.gts",
+          "./filter/filter-dropdown": "$DECK/filter/filter-dropdown.gts",
+          "./filter/filter-dropdown-item": "$DECK/filter/filter-dropdown-item.gts",
+          "./filter/filter-trigger": "$DECK/filter/filter-trigger.gts",
+          "./grid": "$DECK/grid.gts",
+          "./layout": "$DECK/layout.gts",
+          "./page-layout": "$DECK/page-layout.gts",
+          "./search-input": "$DECK/search-input.gts",
+          "./sort": "$DECK/sort.gts",
+          "./status-pill": "$DECK/status-pill.gts",
+          "./summary-card": "$DECK/summary-card.gts",
+          "./summary-grid-container": "$DECK/summary-grid-container.gts"
+        }
+      }
+    }
+  }
+}

@@ -1,9 +1,13 @@
 {
   "deck": {
     "publisher": "experiments",
+    "dependencies": {
+      "experiments/components": "^1.0.0",
+      "experiments/fields": "^1.0.0"
+    },
     "packages": {
       "crm": {
-        "version": "1.0.0",
+        "version": "1.1.0",
         "entry": "$DECK/account.gts",
         "exports": {
           "./account": "$DECK/account.gts",

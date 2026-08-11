@@ -1,0 +1,19 @@
+{
+  "deck": {
+    "publisher": "experiments",
+    "dependencies": {
+      "experiments/components": "^1.0.0"
+    },
+    "packages": {
+      "fields": {
+        "version": "1.0.0",
+        "exports": {
+          "./amount-with-currency": "$DECK/amount-with-currency.gts",
+          "./contact-link": "$DECK/contact-link.gts",
+          "./currency": "$DECK/currency.gts",
+          "./featured-image": "$DECK/featured-image.gts"
+        }
+      }
+    }
+  }
+}

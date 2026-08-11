@@ -13,7 +13,7 @@ import UrlField from '@cardstack/base/url';
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 import { FailureBordered } from '@cardstack/boxel-ui/icons';
 import PhotoIcon from '@cardstack/boxel-icons/photo';
-import { setBackgroundImage } from '../components/layout';
+import { setBackgroundImage } from 'experiments/components/layout';
 
 function cssForFeaturedImage({
   imageUrl,

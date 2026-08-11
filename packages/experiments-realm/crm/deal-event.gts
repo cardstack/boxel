@@ -4,7 +4,7 @@ import {
   CardDef,
   linksTo,
 } from '@cardstack/base/card-api';
-import { Representative } from '../crm/representative';
+import { Representative } from './representative';
 import { Component } from '@cardstack/base/card-api';
 import StringField from '@cardstack/base/string';
 import NumberField from '@cardstack/base/number';

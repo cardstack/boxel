@@ -37,14 +37,14 @@ import { DealEvent } from './deal-event';
 import { DealPriority } from './deal-priority';
 import { DealStatus } from './deal-status';
 
-import { AmountWithCurrency as AmountWithCurrencyField } from '../fields/amount-with-currency';
+import { AmountWithCurrency as AmountWithCurrencyField } from 'experiments/fields/amount-with-currency';
 
-import AccountHeader from '../components/account-header';
-import { ContactRow } from '../components/contact-row';
-import CrmProgressBar from '../components/crm-progress-bar';
-import PageLayout from '../components/page-layout';
-import SummaryCard from '../components/summary-card';
-import SummaryGridContainer from '../components/summary-grid-container';
+import AccountHeader from 'experiments/components/account-header';
+import { ContactRow } from 'experiments/components/contact-row';
+import CrmProgressBar from 'experiments/components/crm-progress-bar';
+import PageLayout from 'experiments/components/page-layout';
+import SummaryCard from 'experiments/components/summary-card';
+import SummaryGridContainer from 'experiments/components/summary-grid-container';
 
 import {
   BoxelButton,
