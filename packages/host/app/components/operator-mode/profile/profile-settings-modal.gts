@@ -64,7 +64,7 @@ export default class ProfileSettingsModal extends Component<Signature> {
         <ProfileInfo />
       </:sidebar>
       <:content>
-        <form {{on 'submit' this.onSubmit}}>
+        <form class='settings-form' {{on 'submit' this.onSubmit}}>
           {{#unless (bool this.submode)}}
             <FieldContainer @label='Name' @tag='label' class='profile-field'>
               <BoxelInput
@@ -88,7 +88,7 @@ export default class ProfileSettingsModal extends Component<Signature> {
             <FieldContainer
               @label='Current Password'
               @tag='label'
-              class='profile-field'
+              class='profile-field password-settings-field'
             >
               <BoxelInput
                 data-test-current-password-field
@@ -102,7 +102,7 @@ export default class ProfileSettingsModal extends Component<Signature> {
             <FieldContainer
               @label='New Password'
               @tag='label'
-              class='profile-field'
+              class='profile-field password-settings-field'
             >
               <BoxelInput
                 data-test-new-password-field
@@ -117,7 +117,7 @@ export default class ProfileSettingsModal extends Component<Signature> {
             <FieldContainer
               @label='Confirm New Password'
               @tag='label'
-              class='profile-field'
+              class='profile-field password-settings-field'
             >
               <BoxelInput
                 data-test-confirm-password-field
@@ -159,10 +159,11 @@ export default class ProfileSettingsModal extends Component<Signature> {
         <div class='buttons'>
           {{#unless (eq this.submode 'password')}}
             <BoxelButton
-              data-test-change-password-button
+              class='profile-settings-change-pw-button'
               @size='tall'
               @kind='secondary-light'
               {{on 'click' this.changePassword}}
+              data-test-change-password-button
             >
               Change Password
             </BoxelButton>
@@ -209,7 +210,7 @@ export default class ProfileSettingsModal extends Component<Signature> {
         display: flex;
       }
       :deep(.profile-settings) {
-        height: 70vh;
+        height: 80vh;
       }
       .error-message {
         color: var(--boxel-error-100);
@@ -218,9 +219,46 @@ export default class ProfileSettingsModal extends Component<Signature> {
       .profile-field :deep(.invalid) {
         box-shadow: none;
       }
-      .profile-field + .profile-field,
+
+      .settings-form,
       .profile-settings-subscription {
-        margin-top: var(--boxel-sp-xl);
+        --settings-modal-gap: var(--boxel-sp-xl);
+        display: grid;
+        gap: var(--settings-modal-gap);
+      }
+
+      @container dialog-box (width <= 48rem) {
+        .settings-form,
+        .profile-settings-subscription {
+          --settings-modal-gap: var(--boxel-sp);
+        }
+        .password-settings-field {
+          grid-template-columns: 1fr;
+          gap: var(--boxel-sp-xs);
+        }
+        .profile-settings-change-pw-button {
+          margin-right: auto;
+          padding-inline: var(--boxel-sp-xs);
+          font-size: 0.8175rem;
+        }
+        .buttons {
+          gap: var(--boxel-sp-xs);
+        }
+        .right-buttons > :not(:first-child) {
+          margin-left: 0;
+        }
+        .right-buttons {
+          display: flex;
+          gap: var(--boxel-sp-xs);
+        }
+      }
+
+      /* FieldContainer's 8rem label column is 40% of a phone-width modal,
+         shredding the values beside it. Inherited from the form. */
+      @container dialog-box (width <= 28rem) {
+        .settings-form {
+          --boxel-field-label-size: 5.5rem;
+        }
       }
     </style>
   </template>

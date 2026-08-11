@@ -333,9 +333,6 @@ export default class ProfileEmail extends Component<Signature> {
       .profile-field :deep(.invalid) {
         box-shadow: none;
       }
-      .profile-field + .profile-field {
-        margin-top: var(--boxel-sp-xl);
-      }
       .warning-box {
         margin-top: var(--boxel-sp-xl);
         border-radius: var(--boxel-border-radius);
@@ -408,6 +405,13 @@ export default class ProfileEmail extends Component<Signature> {
       .pending-email {
         display: flex;
         justify-content: space-between;
+      }
+
+      @container dialog-box (width <= 48rem) {
+        .profile-field {
+          grid-template-columns: 1fr;
+          gap: var(--boxel-sp-xs);
+        }
       }
     </style>
   </template>
