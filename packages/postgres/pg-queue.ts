@@ -510,7 +510,7 @@ const MAX_RESERVATION_COUNT_PER_JOB = 2;
 // worker. Retrying is cheap — five single-row statements — and the
 // conflicting writer is another worker's claim or finalize, which clears in
 // milliseconds.
-const FINALIZE_CONFLICT_RETRIES = 3;
+export const FINALIZE_CONFLICT_RETRIES = 3;
 
 // Stagger between finalize retries. Two workers that conflicted once will
 // otherwise retry in lockstep and conflict again.
@@ -520,6 +520,14 @@ const FINALIZE_RETRY_BACKOFF_MS = 25;
 // means another actor already owns the job's outcome, so the verdict is
 // dropped on purpose — but the reservation still has to be closed, or its
 // open row outlives the lease and reads as a stuck job.
+// Postgres aborts a transaction with one of these when it cannot be
+// serialized against a concurrent one. Both are the database asking for the
+// same transaction again, not a verdict on whether it should have succeeded:
+// `40001` serialization_failure, `40P01` deadlock_detected.
+function isRetryableTransactionError(e: any): boolean {
+  return e?.code === '40001' || e?.code === '40P01';
+}
+
 export type FinalizeSupersededCause =
   | 'the job already has a recorded outcome'
   | 'the reservation row is gone or already closed'
@@ -738,13 +746,17 @@ export class PgQueueRunner implements QueueRunner {
             continue;
           }
 
+          let effectiveTimeoutSec = Math.min(
+            jobToRun.timeout,
+            this.#maxTimeoutSec,
+          );
           let [{ id: jobReservationId }] = (await query([
             'INSERT INTO job_reservations (job_id, locked_until, worker_id) values (',
             ...separatedByCommas([
               [param(jobToRun.id)],
               [
                 '(',
-                param(Math.min(jobToRun.timeout, this.#maxTimeoutSec)),
+                param(effectiveTimeoutSec),
                 ` || ' seconds')::interval + now()`,
               ],
               [param(this.#workerId)],
@@ -788,7 +800,18 @@ export class PgQueueRunner implements QueueRunner {
                 priority: jobToRun.priority,
               }),
               // we race the job so that it doesn't hold this worker hostage if
-              // the job's promise never resolves
+              // the job's promise never resolves.
+              //
+              // This ceiling is the WORKER's, and it can exceed the job's own
+              // lease (`effectiveTimeoutSec` below). A handler that outlives
+              // its lease leaves the job claimable while it is still running,
+              // so a peer can pick it up and run it concurrently — which is
+              // the redelivery this queue relies on when a worker dies, and
+              // also the reason the stuck-job watchdog can reap a healthy
+              // worker on a job whose declared timeout is shorter than the
+              // ceiling. Aligning the two would fix that at the cost of
+              // changing what a timed-out job does: aborted here rather than
+              // handed to a peer.
               new Promise<'timeout'>((r) =>
                 setTimeout(() => {
                   r('timeout');
@@ -857,8 +880,9 @@ export class PgQueueRunner implements QueueRunner {
             await releaseJobReservation(
               query,
               this.#workerId,
-              jobToRun,
+              jobToRun.id,
               jobReservationId,
+              outcome,
             );
             return;
           }
@@ -956,8 +980,8 @@ export async function attemptJobFinalize(
   newStatus: string,
   result: PgPrimitive,
 ): Promise<FinalizeOutcome> {
-  await query(['BEGIN']);
   try {
+    await query(['BEGIN']);
     await query(['SET TRANSACTION ISOLATION LEVEL SERIALIZABLE']);
     let jobRows = (await query([
       'SELECT status FROM jobs WHERE id = ',
@@ -1024,7 +1048,7 @@ export async function attemptJobFinalize(
     await query(['COMMIT']);
     return { type: 'committed' };
   } catch (e: any) {
-    if (e.code === '40001') {
+    if (isRetryableTransactionError(e)) {
       await query(['ROLLBACK']);
       return { type: 'conflict' };
     }
@@ -1039,21 +1063,38 @@ export async function attemptJobFinalize(
 // least contended write available — which matters most in exactly the case
 // that brought us here, repeated serialization failures.
 //
-// `'interrupted'` keeps the dropped attempt off the per-job cap. The worker
-// did reach a verdict, so this is not the deterministic-crash case the cap
-// exists to stop, and burning an attempt on a lost race would abandon a job
-// that nothing is actually wrong with.
+// The reason decides whether the per-job cap counts this attempt, which is
+// what stops a job retrying forever. The cap counts `'completed'` and still-
+// open rows; `'interrupted'` is excluded. So the question is only ever "would
+// running this job again plausibly go better?":
+//
+//   - Lease lapsed and the job was reserved again: no. The handler now runs
+//     under the same deadline it just overran, so a job that deterministically
+//     outlasts its lease would loop forever. This counts.
+//   - Serialization failures exhausted the retries: yes. The work itself
+//     succeeded and only the bookkeeping transaction failed, so the next
+//     attempt is very likely to record a verdict. Burning an attempt here
+//     would abandon a job with nothing wrong with it.
+//   - The job already has an outcome, or the reservation is already closed:
+//     moot. The job is terminal and will never be claimed again, so the reason
+//     is bookkeeping only.
 export async function releaseJobReservation(
   query: Querier,
   workerId: string,
-  jobToRun: JobsTable,
+  jobId: JobsTable['id'],
   jobReservationId: number,
+  outcome: FinalizeOutcome,
 ): Promise<void> {
+  let countsAsAttempt =
+    outcome.type === 'superseded' &&
+    outcome.cause === 'the lease expired and the job was reserved again';
+  let reason = countsAsAttempt ? 'completed' : 'interrupted';
   try {
     await query([
       `UPDATE job_reservations
-       SET completed_at = NOW(), completion_reason = 'interrupted'
-       WHERE completed_at IS NULL AND id = `,
+       SET completed_at = NOW(), completion_reason = `,
+      param(reason),
+      `WHERE completed_at IS NULL AND id = `,
       param(jobReservationId),
     ]);
     // The job may be claimable again now. Wake the runners rather than
@@ -1067,7 +1108,7 @@ export async function releaseJobReservation(
       `%s: could not release reservation %s for job %s: %s`,
       workerId,
       jobReservationId,
-      jobToRun.id,
+      jobId,
       e?.message ?? e,
     );
     Sentry.captureException(e);

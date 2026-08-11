@@ -7,9 +7,18 @@ import {
   type Expression,
 } from '@cardstack/runtime-common';
 
-import { finalizeReservationById } from './finalize-orphan-reservations.ts';
-
 const log = logger('worker-manager');
+
+// `failed`         - the job now carries this worker's failure.
+// `not-ours`       - the job already has an outcome, or another worker holds a
+//                    live reservation on it. That worker is the authority on
+//                    the job AND on its index rows, so the caller must not
+//                    stamp error docs either.
+// `no-reservation` - no open reservation for this worker on this job, so there
+//                    is nothing to attribute the failure to. Nothing else owns
+//                    the outcome either, so index error docs are still the
+//                    caller's to write.
+export type MarkFailedJobResult = 'failed' | 'not-ours' | 'no-reservation';
 
 // Record a worker's failure to produce a verdict onto the job itself, and
 // close the reservation it was holding.
@@ -25,9 +34,8 @@ const log = logger('worker-manager');
 // a job becomes claimable the moment its lease lapses, so an unscoped lookup
 // can return the reservation of whichever worker holds the job *now*.
 //
-// Returns whether the job was actually failed. `false` means another worker
-// owns its outcome, and the caller must not write index error docs for it
-// either: the attempt that holds the job is the authority on those rows.
+// The result tells the caller whether the job's outcome — and with it the
+// authority over its index rows — ended up here or somewhere else.
 export async function markFailedJob(
   dbAdapter: DBAdapter,
   {
@@ -41,8 +49,7 @@ export async function markFailedJob(
     message: string;
     reservationId?: string;
   },
-): Promise<boolean> {
-  log.info(`marking job ${jobId} as failed for worker ${workerId}`);
+): Promise<MarkFailedJobResult> {
   let id: string;
   if (reservationId) {
     id = reservationId;
@@ -51,7 +58,7 @@ export async function markFailedJob(
       log.error(
         `Cannot determine job_reservation id for failed job ${jobId}: neither a reservation id nor a worker id was supplied`,
       );
-      return false;
+      return 'no-reservation';
     }
     let rows = (await runQuery(dbAdapter, [
       `SELECT id FROM job_reservations
@@ -65,7 +72,7 @@ export async function markFailedJob(
       log.error(
         `Cannot determine job_reservation id for failed job ${jobId} of worker ${workerId}`,
       );
-      return false;
+      return 'no-reservation';
     }
     id = String(rows[0].id);
   }
@@ -102,23 +109,30 @@ export async function markFailedJob(
      RETURNING id`,
   ] as Expression)) as { id: string }[];
 
-  if (rejected.length === 0) {
-    // Releasing our own reservation is the whole job in this branch: an open
-    // row past its lease is what the stuck-job watchdog reads as a wedged
-    // worker, and leaving it would strand the lease for whoever owns the job.
-    log.info(
-      `not failing job ${jobId} for worker ${workerId}: it already has an outcome or another worker holds a live reservation. Releasing stale reservation ${id} instead`,
-    );
-    await finalizeReservationById(dbAdapter, id);
-    return false;
-  }
-
+  // Close our own reservation either way. An open row past its lease is what
+  // the stuck-job watchdog reads as a wedged worker, and leaving it would
+  // strand the lease for whoever owns the job.
+  //
+  // `'completed'` either way too, and that matters: the cap excludes
+  // `'interrupted'`, so recording one here would mean a job that wedges its
+  // worker never accumulates attempts and never gets abandoned — it would be
+  // reclaimed, wedge the next worker, and repeat, killing a worker per round.
+  // Losing the race for the job's outcome doesn't change what this worker did,
+  // which is hold the job uninterrupted and produce nothing.
   await runQuery(dbAdapter, [
     `UPDATE job_reservations
      SET completed_at = NOW(), completion_reason = 'completed'
-     WHERE id =`,
+     WHERE completed_at IS NULL AND id =`,
     param(id),
   ] as Expression);
+
+  if (rejected.length === 0) {
+    log.info(
+      `not failing job ${jobId} for worker ${workerId}: it already has an outcome or another worker holds a live reservation. Closed stale reservation ${id} instead`,
+    );
+    return 'not-ours';
+  }
+
   await runQuery(dbAdapter, [`NOTIFY jobs_finished`] as Expression);
-  return true;
+  return 'failed';
 }

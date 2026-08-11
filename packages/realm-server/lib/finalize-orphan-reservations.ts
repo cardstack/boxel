@@ -64,33 +64,3 @@ export async function finalizeOrphanedReservations(
     );
   }
 }
-
-// Close one reservation by id, for the caller that has already decided this
-// specific row is an orphan and that the job it belongs to must not be
-// touched. Same `'interrupted'` semantics and same deliberate silence about
-// the job's status as `finalizeOrphanedReservations` above — see the reasoning
-// there, which applies in full: closing the reservation makes the job
-// claimable, so any separate verdict written afterward races whoever claims
-// it next.
-export async function finalizeReservationById(
-  dbAdapter: DBAdapter,
-  reservationId: string,
-  reason: 'interrupted' | 'timeout-expired' = 'interrupted',
-): Promise<void> {
-  try {
-    await runQuery(dbAdapter, [
-      `UPDATE job_reservations
-       SET completed_at = NOW(), completion_reason =`,
-      param(reason),
-      `WHERE id =`,
-      param(reservationId),
-      `AND completed_at IS NULL`,
-    ] as Expression);
-  } catch (e) {
-    Sentry.captureException(e);
-    log.error(
-      `worker: failed to finalize orphan reservation ${reservationId}`,
-      e,
-    );
-  }
-}

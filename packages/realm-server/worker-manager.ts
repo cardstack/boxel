@@ -80,7 +80,10 @@ import {
 import { writeRuntimeMetadataFile } from './lib/runtime-metadata-file.ts';
 import { finalizeOrphanedReservations } from './lib/finalize-orphan-reservations.ts';
 import { findStuckReservations } from './lib/stuck-reservations.ts';
-import { markFailedJob } from './lib/mark-failed-job.ts';
+import {
+  markFailedJob,
+  type MarkFailedJobResult,
+} from './lib/mark-failed-job.ts';
 import {
   decodeWorkerRequestIpc,
   dispatchWorkerRequest,
@@ -730,16 +733,15 @@ async function monitorWorker(workerId: string, worker: ChildProcess) {
       // does it in the same statement that writes the outcome. A lapsed lease
       // makes the job claimable, so any check made out here would be a
       // snapshot that another worker can invalidate before the write lands.
-      let failed = await markFailedJob(adapter, {
+      let outcome = await markFailedJob(adapter, {
         reservationId: id,
         workerId,
         jobId,
         message: `Timed-out. Worker manager killed unresponsive worker ${workerId} for job reservation ${id}`,
       });
-      // Only stamp an error doc for a job we actually failed. When another
-      // worker holds the job, that attempt is the authority on what its index
-      // rows should say.
-      if (failed && url && realm && deps) {
+      // Skip the error doc only when another worker holds the job — that
+      // attempt is the authority on what its index rows should say.
+      if (outcome !== 'not-ours' && url && realm && deps) {
         await markFailedIndexEntry({
           url,
           realm,
@@ -887,24 +889,30 @@ async function startWorker(
         `[worker ${name} priority ${priority}]${maybeLogUrl}: ${message}`,
       );
       if (message.includes('FATAL ERROR')) {
+        // Snapshot the render state before any await: a `status|…` message
+        // from the child can replace `currentState` mid-flight, and this error
+        // belongs to whatever the child was rendering when it died.
+        let { url, realm, deps, jobId } = currentState ?? {};
         (async () => {
-          if (currentState?.url) {
-            message = `encountered fatal error indexing ${currentState.url}: ${message}`;
+          if (url) {
+            message = `encountered fatal error indexing ${url}: ${message}`;
           }
-          // Fail the job first, because whether the job is still ours decides
-          // whether the index error doc is ours to write. A job with no id
-          // here has no competing attempt to lose to, so its error doc is
-          // written unconditionally.
-          let ownsOutcome = true;
-          if (workerId && currentState?.jobId) {
-            ownsOutcome = await markFailedJob(adapter, {
+          // Fail the job first, because whether the job's outcome landed here
+          // decides whether the index error doc is ours to write.
+          let outcome: MarkFailedJobResult = 'no-reservation';
+          if (workerId && jobId) {
+            outcome = await markFailedJob(adapter, {
               workerId,
-              jobId: currentState.jobId,
+              jobId,
               message,
             });
           }
-          if (ownsOutcome && currentState?.url && currentState?.realm) {
-            let { url, realm, deps } = currentState;
+          // `not-ours` is the only case that yields those rows to someone
+          // else. With no reservation to attribute the failure to, nothing
+          // else owns them, so the error doc is still worth writing — the
+          // child's own exit handler closing the reservation first is a race
+          // this path can lose.
+          if (outcome !== 'not-ours' && url && realm) {
             await markFailedIndexEntry({ url, realm, deps, message });
           }
         })().catch((e) => {
@@ -928,7 +936,16 @@ async function startWorker(
           // (`shutdown()`) can run finalizeOrphanedReservations against
           // every live child without having to capture closure scope.
           (worker as any).__workerId = id;
-          watchdog = setInterval(() => monitorWorker(id, worker), 60_000);
+          // `findStuckReservations` and `markFailedJob` both throw on a DB
+          // error, and an unhandled rejection out of an interval callback
+          // would take the whole manager down over a transient blip. The
+          // next tick retries in a minute.
+          watchdog = setInterval(() => {
+            monitorWorker(id, worker).catch((e) => {
+              Sentry.captureException(e);
+              log.error(`worker: monitorWorker failed for worker ${id}`, e);
+            });
+          }, 60_000);
           log.info(`[worker ${name} priority ${priority}]: worker ready`);
           r();
         } else if (

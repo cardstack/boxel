@@ -1414,8 +1414,11 @@ module(basename(import.meta.filename), function () {
     // finalize tests below, whose jobs never reach a verdict — so there is no
     // `job.done` to await.
     async function waitForClosedReservation(jobId: number) {
+      // Budget has to clear the runner's 10s poll interval: `start()` returns
+      // before `LISTEN jobs` is established, so a `NOTIFY` from publish can be
+      // lost and the poll is then the only thing that picks the job up.
       let started = Date.now();
-      while (Date.now() - started < 5000) {
+      while (Date.now() - started < 20000) {
         let rows = (await adapter.execute(
           `SELECT * FROM job_reservations WHERE job_id = $1 ORDER BY id`,
           { bind: [jobId] },
@@ -1458,6 +1461,10 @@ module(basename(import.meta.filename), function () {
         timeout: 5,
         args: {},
       });
+      // The job ends up rejected by the seeded outcome, and nothing awaits it.
+      // Without a handler attached, the publisher's poll would surface an
+      // unhandled rejection if it drained before teardown.
+      job.done.catch(() => {});
       let reservations = await waitForClosedReservation(job.id);
 
       assert.strictEqual(
@@ -1555,8 +1562,10 @@ module(basename(import.meta.filename), function () {
 
       assert.strictEqual(
         reservations[0].completion_reason,
-        'interrupted',
-        'our lapsed reservation is closed rather than left to age out',
+        'completed',
+        'closed rather than left to age out, and counted: the retry would run ' +
+          'under the same deadline this attempt just overran, so a job that ' +
+          'always overruns must still run out of attempts',
       );
       assert.strictEqual(
         reservations[1].completed_at,

@@ -103,7 +103,7 @@ module(basename(import.meta.filename), function () {
       await insertReservation(adapter, jobId, 'worker-d', {
         leaseOffsetSeconds: -600,
       });
-      await insertReservation(adapter, jobId, 'worker-d', {
+      let newest = await insertReservation(adapter, jobId, 'worker-d', {
         leaseOffsetSeconds: -60,
       });
 
@@ -113,6 +113,11 @@ module(basename(import.meta.filename), function () {
         stuck.length,
         1,
         'only the newest of the worker’s own attempts is reported',
+      );
+      assert.strictEqual(
+        stuck[0].id,
+        String(newest),
+        'and it is the newest one, not the superseded row',
       );
     });
 

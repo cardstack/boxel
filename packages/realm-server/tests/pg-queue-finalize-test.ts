@@ -6,6 +6,7 @@ import {
   attemptJobFinalize,
   finalizeJobVerdict,
   releaseJobReservation,
+  FINALIZE_CONFLICT_RETRIES,
   type JobReservationsTable,
   type JobsTable,
   type PgAdapter,
@@ -208,11 +209,17 @@ module(basename(import.meta.filename), function () {
           );
           assert.deepEqual(
             statements.filter((s) => ['BEGIN', 'COMMIT'].includes(s)),
-            ['BEGIN', 'BEGIN', 'BEGIN', 'BEGIN'],
+            new Array(FINALIZE_CONFLICT_RETRIES + 1).fill('BEGIN'),
             'every attempt opened a transaction and none committed',
           );
           // The caller closes the reservation once the verdict is gone.
-          await releaseJobReservation(wrapped, WORKER_ID, job, reservationId);
+          await releaseJobReservation(
+            wrapped,
+            WORKER_ID,
+            job.id,
+            reservationId,
+            result,
+          );
           return { outcome: result, attempts: injectedCount() };
         },
       );
@@ -222,7 +229,11 @@ module(basename(import.meta.filename), function () {
         'conflict',
         'exhausted retries report a conflict, not a false verdict',
       );
-      assert.strictEqual(attempts, 4, 'four attempts were made in total');
+      assert.strictEqual(
+        attempts,
+        FINALIZE_CONFLICT_RETRIES + 1,
+        'the initial attempt plus the full retry budget',
+      );
 
       let [row] = (await adapter.execute(
         `SELECT status FROM jobs WHERE id = $1`,
@@ -249,7 +260,8 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(
         reservation.completion_reason,
         'interrupted',
-        'a lost race does not burn an attempt against the per-job cap',
+        'the work succeeded and only its bookkeeping failed, so retrying is ' +
+          'likely to record a verdict — this must not burn an attempt',
       );
     });
 
