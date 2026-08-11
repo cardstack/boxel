@@ -11,6 +11,7 @@ import AmountWithCurrency from 'https://cardstack.com/base/amount-with-currency'
 import enumField from 'https://cardstack.com/base/enum';
 import RefreshIcon from '@cardstack/boxel-icons/refresh';
 import { Account } from './account';
+import { Contract } from './contract';
 import { formatMoney } from './money';
 
 const BillingCycleField = enumField(StringField, {
@@ -37,6 +38,8 @@ export class Subscription extends CardDef {
   // undated, and any history recomputed from these records silently rewrites
   // itself every time a customer churns.
   @field canceledAt = contains(DateField);
+  // What this subscription is sold under, when there is a signed agreement.
+  @field contract = linksTo(() => Contract);
 
   @field renewalDate = contains(DateField, {
     computeVia: function (this: Subscription) {

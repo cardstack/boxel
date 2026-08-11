@@ -1,0 +1,43 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "Contract",
+        "module": "../contract"
+      },
+      "specType": "card",
+      "readMe": "## Contract\n\nThe agreement a customer is billed under: `title`, linked Account, `status` enum (draft → out for signature → signed, plus expired and terminated), term dates, `value` (base `AmountWithCurrency`), `terms` as markdown, and `documentUrl` for the executed copy.\n\n```ts\nimport { Contract } from '../contract';\n@field contract = linksTo(Contract);\n```\n\n`deal` links to **Opportunity**, not Deal, so a Deal — or any future subtype — is assignable. Same reason `owner` links to User rather than Teammate.\n\nSigning is an event fact: `signedAt` is written once and `isSigned` computes from it, so a signature survives a later status change and can be reported on. `daysToExpiry` computes from `endDate` and reads 0 for a terminated agreement, which is what lets a renewal view sort by urgency without storing a countdown.\n\n**The document is referenced, not held.** Most teams sign in DocuSign or similar, so `documentUrl` points at the artifact. A `linksTo(FileDef)` would be the better model once files are actually in the realm, but an always-empty link is unexercised surface, so it is deliberately absent until there is a file to put in it.\n\n### What it unblocks\n\nThis card is the reason three things elsewhere were deferred. `Subscription.contract` and `Order.contract` now exist, and the Close Won command opens its chain with a draft agreement instead of a message saying the step was skipped — the deal closes, an agreement is prepared, the subscription is activated under it, and the first invoice is drafted.\n\nExamples cover a signed annual agreement governing a live subscription, one out for signature, and one that has expired.\n\n**Non-goals:** generating a document (that is the Recommend tool's flow), e-signature integration, renewal automation, clause libraries or redlining, and holding the executed file itself.",
+      "cardInfo": {
+        "name": "Contract",
+        "summary": "The agreement a customer is billed under: term, value, markdown terms, and a signed-at event fact. Governs subscriptions and orders, and completes the close-won chain.",
+        "notes": null,
+        "cardThumbnailURL": null
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Contract/acme-msa-2026"
+        }
+      },
+      "linkedExamples.1": {
+        "links": {
+          "self": "../Contract/brightleaf-pilot-terms"
+        }
+      },
+      "linkedExamples.2": {
+        "links": {
+          "self": "../Contract/nadia-lapsed"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
