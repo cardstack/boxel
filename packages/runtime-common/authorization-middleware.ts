@@ -5,6 +5,32 @@ export interface TokenSource {
   reauthenticate(realmURL: string): Promise<string | undefined>;
 }
 
+/**
+ * Let an explicitly interactive operation recover a realm session even when
+ * an unrelated render has set the tab-wide render-context marker. The depth
+ * counter makes nested and overlapping operations restore one another safely.
+ */
+export async function withReauthenticationAllowed<T>(
+  callback: () => Promise<T>,
+): Promise<T> {
+  let globals = globalThis as {
+    __boxelInteractiveRenderContextDepth?: number;
+  };
+  globals.__boxelInteractiveRenderContextDepth =
+    (globals.__boxelInteractiveRenderContextDepth ?? 0) + 1;
+  try {
+    return await callback();
+  } finally {
+    let remainingDepth =
+      (globals.__boxelInteractiveRenderContextDepth ?? 1) - 1;
+    if (remainingDepth > 0) {
+      globals.__boxelInteractiveRenderContextDepth = remainingDepth;
+    } else {
+      delete globals.__boxelInteractiveRenderContextDepth;
+    }
+  }
+}
+
 export function shouldSkipReauthenticationForContext({
   inRenderContext,
   interactiveRenderContextDepth,

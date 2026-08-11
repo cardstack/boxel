@@ -16,6 +16,7 @@ import {
   realmURL as realmURLSymbol,
   relativeTo as relativeToSymbol,
   rri,
+  withReauthenticationAllowed,
   type CodeRef,
   type FieldDefinition,
   type JSONValue,
@@ -1264,15 +1265,23 @@ export default class BoxelExecutionService extends Service {
   }
 
   private async sourceFor(moduleIdentifier: string): Promise<string> {
-    let result = await this.cardService.getSource(
-      moduleIdentifier as RealmResourceIdentifier,
-    );
+    let load = () =>
+      this.cardService.getSource(moduleIdentifier as RealmResourceIdentifier);
+    let result = await (this.isDedicatedPrerenderApp()
+      ? load()
+      : withReauthenticationAllowed(load));
     if (result.status < 200 || result.status >= 300) {
       throw new Error(
         `Unable to load Boxel source ${moduleIdentifier} (${result.status})`,
       );
     }
     return result.content;
+  }
+
+  private isDedicatedPrerenderApp(): boolean {
+    return Boolean(
+      (globalThis as { __boxelPrerenderApp?: unknown }).__boxelPrerenderApp,
+    );
   }
 
   /**

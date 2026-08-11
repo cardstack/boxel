@@ -1,6 +1,9 @@
 import { module, test } from 'qunit';
 
-import { shouldSkipReauthenticationForContext } from '@cardstack/runtime-common/authorization-middleware';
+import {
+  shouldSkipReauthenticationForContext,
+  withReauthenticationAllowed,
+} from '@cardstack/runtime-common/authorization-middleware';
 
 module('Unit | authorization middleware render context', function () {
   test('dedicated prerender contexts remain storage-token only', function (assert) {
@@ -38,5 +41,22 @@ module('Unit | authorization middleware render context', function () {
         isBrowserTestEnv: true,
       }),
     );
+  });
+
+  test('an interactive source load scopes and restores its reauthentication allowance', async function (assert) {
+    let globals = globalThis as {
+      __boxelInteractiveRenderContextDepth?: number;
+    };
+    delete globals.__boxelInteractiveRenderContextDepth;
+
+    await withReauthenticationAllowed(async () => {
+      assert.strictEqual(globals.__boxelInteractiveRenderContextDepth, 1);
+      await withReauthenticationAllowed(async () => {
+        assert.strictEqual(globals.__boxelInteractiveRenderContextDepth, 2);
+      });
+      assert.strictEqual(globals.__boxelInteractiveRenderContextDepth, 1);
+    });
+
+    assert.strictEqual(globals.__boxelInteractiveRenderContextDepth, undefined);
   });
 });
