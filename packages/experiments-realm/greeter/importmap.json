@@ -1,0 +1,14 @@
+{
+  "deck": {
+    "publisher": "experiments",
+    "packages": {
+      "greeter": {
+        "version": "2.2.0",
+        "entry": "$DECK/index.gts",
+        "exports": {
+          "./greeter": "$DECK/index.gts"
+        }
+      }
+    }
+  }
+}

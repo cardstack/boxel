@@ -27,8 +27,6 @@
 // exists. `acceptedBy` matters even more: it is the signature on the claim.
 
 import type Koa from 'koa';
-import { join } from 'path';
-import { readFile } from 'fs/promises';
 import semver from 'semver';
 import {
   pack,
@@ -38,7 +36,6 @@ import {
   readStoredPack,
   unpack,
 } from '@cardstack/deck/node';
-import { IMPORT_MAP_PATH } from '@cardstack/deck/import-map';
 import {
   fetchRequestFromContext,
   setContextResponse,
@@ -54,8 +51,9 @@ import {
   withdrawProposal,
 } from '../lib/package-proposals.ts';
 import {
+  authoredOnly,
+  discoverRealmPackages,
   packRealmPackage,
-  readRealmPackages,
   storeNameFor,
 } from '../lib/realm-packages.ts';
 import { suggestBump, type Bump } from '../lib/semver-delta.ts';
@@ -214,42 +212,63 @@ async function proposeFromRealm({
     );
   }
 
-  let mapPath = join(realmDir, IMPORT_MAP_PATH);
-  let mapText: string;
-  try {
-    mapText = await readFile(mapPath, 'utf8');
-  } catch {
-    return error(
-      404,
-      'no-import-map',
-      `${realmURL} has no ${IMPORT_MAP_PATH}, so it declares no packages`,
-    );
+  // Found by scanning for manifests, not read out of a registry the realm
+  // keeps: a package's name lives in the package, so that moving it does not
+  // rename it and break every pin.
+  let { packages, problems } = await discoverRealmPackages(realmDir);
+  let found = packages.find((p) => p.key === key);
+  if (!found) {
+    return json(404, {
+      errors: [
+        {
+          code: 'no-such-package',
+          detail: `${realmURL} holds no package named "${key}"`,
+        },
+      ],
+      // A manifest this scan could not read is the likeliest reason a package
+      // somebody knows exists was not found, so say so rather than leaving
+      // them to guess.
+      problems,
+    });
   }
-  let { publisher, packages } = readRealmPackages(mapText);
 
-  // The address the caller used has to agree with what the realm declares.
-  // Deriving the name and then accepting a different one in the URL would
-  // let a realm's app be published under somebody else's namespace.
-  let derived = storeNameFor(publisher, key);
+  // The address the caller used has to agree with what the package says it is.
+  // Accepting a different name in the URL would let a package be published
+  // into somebody else's namespace.
+  let derived = storeNameFor(found.publisher, key);
   if (derived !== name) {
     return error(
       409,
       'name-mismatch',
-      `${realmURL} publishes "${key}" as ${derived}, not ${name}`,
+      `${found.path} calls itself ${derived}, not ${name}`,
+    );
+  }
+  if (!found.publisher && name.includes('/')) {
+    return error(
+      409,
+      'no-namespace',
+      `${found.path} declares no publisher, so "${key}" is depot-local and ` +
+        'cannot be published under a namespace. Add "publisher" to its manifest.',
     );
   }
 
-  let declaration = packages[key];
-  let packed = await packRealmPackage({ realmDir, key, declaration });
+  let packed = await packRealmPackage({
+    packageDir: found.dir,
+    key,
+    declaration: found.declaration,
+  });
   if (packed.kind === 'refused') {
     return json(409, { refused: { code: packed.code, detail: packed.detail } });
   }
 
-  let version = declaration!.version!;
+  let version = found.declaration.version!;
   let meta = await readStoreMeta(storeDir, name);
   let priorVersion = currentVersion(Object.keys(meta?.versions ?? {}));
+  // Authored files on both sides. A published pack holds source AND compiled
+  // output; the candidate side is authored-only, so comparing against the
+  // whole pack would read every built module as deleted.
   let priorTree = priorVersion
-    ? await treeOf(storeDir, name, priorVersion)
+    ? authoredOnly((await treeOf(storeDir, name, priorVersion)) ?? new Map())
     : undefined;
   // The AUTHORED files, not everything in the pack. Comparing compiled output
   // would report the transpiler's choices as changes to the package's API,
@@ -267,7 +286,7 @@ async function proposeFromRealm({
     candidateTree,
     priorTree,
     priorVersion,
-    origin: { realm: realmURL, root: declaration!.root },
+    origin: { realm: realmURL, root: found.path },
     warnings: packed.warnings,
     meta: meta ?? undefined,
   });

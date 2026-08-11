@@ -3,30 +3,8 @@
     "palette": "/_packages/lib/palette@4.1.0/index.js"
   },
   "boxel": {
-    "publisher": "experiments",
     "dependencies": {
       "palette": "live"
-    },
-    "packages": {
-      "greeter": {
-        "version": "2.1.0",
-        "root": "$DECK/greeter/",
-        "entry": "$DECK/greeter/index.gts",
-        "exports": {
-          "./greeter": "$DECK/greeter/index.gts"
-        }
-      },
-      "crm": {
-        "version": "1.0.0",
-        "root": "$DECK/crm/",
-        "entry": "$DECK/crm/account.gts",
-        "exports": {
-          "./account": "$DECK/crm/account.gts",
-          "./contact": "$DECK/crm/contact.gts",
-          "./lead": "$DECK/crm/lead.gts",
-          "./deal": "$DECK/crm/deal.gts"
-        }
-      }
     }
   }
 }

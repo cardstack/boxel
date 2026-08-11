@@ -29,7 +29,37 @@ import type { DBAdapter, Realm } from '@cardstack/runtime-common';
 import { setContextResponse } from '../middleware/index.ts';
 import { findOrMountRealm } from '../lib/realm-routing.ts';
 import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.ts';
-import { readRealmPackages, storeNameFor } from '../lib/realm-packages.ts';
+import {
+  discoverRealmPackages,
+  readPackageManifest,
+  storeNameFor,
+  type RealmPackage,
+} from '../lib/realm-packages.ts';
+
+/** The conventional location, read directly. Undefined if it is not there or
+ *  does not name the package asked for. */
+async function packageAt(
+  realmDir: string,
+  key: string,
+): Promise<RealmPackage | undefined> {
+  let text = await readFile(join(realmDir, key, IMPORT_MAP_PATH), 'utf8').catch(
+    () => undefined,
+  );
+  if (!text) {
+    return undefined;
+  }
+  let manifest = readPackageManifest(text);
+  if (manifest.kind !== 'package' || manifest.key !== key) {
+    return undefined;
+  }
+  return {
+    dir: join(realmDir, key),
+    path: key,
+    key,
+    publisher: manifest.publisher,
+    declaration: manifest.declaration,
+  };
+}
 
 // `<prefix>/@<key>@<version>` plus an optional path.
 //
@@ -114,22 +144,25 @@ export default function handleRealmPackageAlias({
       return next();
     }
 
-    let mapText: string;
-    try {
-      mapText = await readFile(join(realm.dir, IMPORT_MAP_PATH), 'utf8');
-    } catch {
-      return next();
+    // The convention first: a package's directory is normally named after it,
+    // so `<realm>/<key>/importmap.json` is one read rather than a tree walk on
+    // a request path. `deck-a-package-carries-its-own-name.md` §2.1 makes the
+    // manifest authoritative and the layout a convention — so this is an index
+    // into the scan, and the manifest still decides.
+    let found = await packageAt(realm.dir, key);
+    if (!found) {
+      // Fall back to a scan, because the convention is only a convention.
+      let { packages } = await discoverRealmPackages(realm.dir);
+      found = packages.find((p) => p.key === key);
     }
-    let { publisher, packages } = readRealmPackages(mapText);
-    let declaration = packages[key];
-    if (!declaration) {
-      // The realm does not claim this name. Deferring rather than 404-ing
-      // leaves the realm's own router free to answer, which is right: a file
+    if (!found) {
+      // The realm holds no such package. Deferring rather than 404-ing leaves
+      // the realm's own router free to answer, which is right: a file
       // literally called `@crm@2.0.0` is a legal realm path.
       return next();
     }
 
-    let name = storeNameFor(publisher, key);
+    let name = storeNameFor(found.publisher, key);
     let meta = await readStoreMeta(storeDir, name);
     if (!meta?.versions?.[version]) {
       // The realm declares the package but the store has no such Version —

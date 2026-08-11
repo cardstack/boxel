@@ -1,0 +1,17 @@
+{
+  "deck": {
+    "publisher": "experiments",
+    "packages": {
+      "crm": {
+        "version": "1.0.0",
+        "entry": "$DECK/account.gts",
+        "exports": {
+          "./account": "$DECK/account.gts",
+          "./contact": "$DECK/contact.gts",
+          "./lead": "$DECK/lead.gts",
+          "./deal": "$DECK/deal.gts"
+        }
+      }
+    }
+  }
+}

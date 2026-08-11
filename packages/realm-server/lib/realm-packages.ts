@@ -6,21 +6,34 @@
 // card-level, none. `AccountCard.gts` was a live mutable URL and there was no
 // path from it to an address another realm could depend on.
 //
-// WHAT A REALM DECLARES. `deck-multi-package-design.md` §2: one realm holds
-// many packages, each with its own semver, declared in the realm's own
-// `importmap.json` under the vendor key.
+// WHERE THE DECLARATION LIVES. In the package, not in a registry the realm
+// keeps — `deck-a-package-carries-its-own-name.md`. A package named by the
+// depot holding it gets renamed when it moves, and since a pin is a name,
+// every pin breaks on a move that changed no bytes. So `crm/importmap.json`
+// says what `crm/` is, and copying that directory elsewhere carries its
+// identity along:
 //
-//   "boxel": {
-//     "publisher": "experiments",
-//     "packages": {
-//       "crm": {
-//         "version": "2.0.0",
-//         "root":    "$DECK/crm/",
-//         "entry":   "$DECK/crm/app.gts",
-//         "exports": { "./account": "$DECK/crm/account.gts" }
+//   {
+//     "deck": {
+//       "publisher": "acme",
+//       "packages": {
+//         "crm": {
+//           "version": "2.0.0",
+//           "entry":   "$DECK/app.gts",
+//           "exports": { "./account": "$DECK/account.gts" }
+//         }
 //       }
 //     }
 //   }
+//
+// Paths are pack-relative because inside a package `$DECK/` means the
+// package's own root. There is no `root` to declare — the package IS the
+// directory holding its manifest — and nothing to translate.
+//
+// A publisher is OPTIONAL, and absent means depot-local: held and served,
+// never published where anyone outside can pin it. No ceremony while a
+// package is nobody else's business; adding a namespace is the visible moment
+// it went public.
 //
 // THE GRAIN IS THE APP, not the card, and that is a decision rather than a
 // limitation. `crm` ships CRMApp, AccountCard, LeadCard and ContactCard,
@@ -40,6 +53,7 @@
 // `$DECK`-relative spelling in the design doc still works without putting a
 // mutable tree on the read path.
 
+import { readdir, readFile } from 'fs/promises';
 import { join } from 'path';
 import { TREE_ROOT } from '@cardstack/deck/import-map';
 import { IMPORT_MAP_PATH } from '@cardstack/deck/import-map';
@@ -47,57 +61,180 @@ import { pack, readTreeFromDir, unpack } from '@cardstack/deck/node';
 import { transpileJS } from '@cardstack/runtime-common/transpile';
 
 export interface RealmPackageDeclaration {
-  /** The semver this realm is claiming for the package. */
+  /** The semver this package claims. */
   version?: string;
-  /** The subtree that becomes the pack, as `$DECK/<path>/`. */
-  root?: string;
-  /** The module a bare import of the package resolves to. */
+  /** The module a bare import of the package resolves to, pack-relative:
+   *  inside a package, `$DECK/` means the package's own root. */
   entry?: string;
-  /** Short public names for modules inside the pack. */
+  /** Short public names for modules inside the pack, pack-relative. */
   exports?: Record<string, string>;
 }
 
-export interface RealmPackageMap {
-  /** The publishing identity for this realm; store names are
-   *  `<publisher>/<key>`. */
+export interface RealmPackage {
+  /** Directory holding the manifest. Everything under it is the package. */
+  dir: string;
+  /** Realm-relative path of that directory, for messages. */
+  path: string;
+  /** The short name. The store name is `<publisher>/<key>`. */
+  key: string;
+  /** Absent means depot-local: held and served, never published beyond the
+   *  depot holding it. */
   publisher?: string;
-  packages: Record<string, RealmPackageDeclaration>;
+  declaration: RealmPackageDeclaration;
 }
 
+export type ManifestReadResult =
+  | {
+      kind: 'package';
+      key: string;
+      publisher?: string;
+      declaration: RealmPackageDeclaration;
+    }
+  | { kind: 'none' }
+  | { kind: 'invalid'; detail: string };
+
 /**
- * What a realm declares it publishes.
+ * Read a package's own manifest.
  *
- * Tolerant on purpose: a realm with no packages block is the ordinary case,
- * not an error, and it should read as "publishes nothing" rather than
- * throwing somewhere up the call stack.
+ * The manifest is IN the package, which is the whole point — a package that
+ * is named by the depot holding it gets renamed when it moves, and since a
+ * pin is a name, every pin breaks on a move that changed no bytes. Deck has
+ * always worked this way: `discoverDecks` finds decks by scanning for
+ * manifests, because packages say what they are.
+ *
+ * One package per directory. `deck.packages` is a map because a pack may
+ * describe several, but a DIRECTORY is one package, and a manifest naming two
+ * leaves no way to say which one the directory is.
  */
-export function readRealmPackages(jsonText: string): RealmPackageMap {
+export function readPackageManifest(jsonText: string): ManifestReadResult {
   let parsed: any;
   try {
     parsed = JSON.parse(jsonText);
-  } catch {
-    return { packages: {} };
+  } catch (e: any) {
+    return { kind: 'invalid', detail: `not valid JSON: ${e?.message ?? e}` };
   }
-  let vendor = parsed?.boxel ?? parsed?.deck ?? {};
+  let vendor = parsed?.deck ?? parsed?.boxel ?? {};
   let packages = vendor.packages;
+  if (!packages || typeof packages !== 'object' || Array.isArray(packages)) {
+    // An importmap.json with no packages block is a resolution map, not a
+    // package manifest. Ordinary, not an error.
+    return { kind: 'none' };
+  }
+  let keys = Object.keys(packages);
+  if (keys.length !== 1) {
+    return {
+      kind: 'invalid',
+      detail:
+        `declares ${keys.length} packages (${keys.join(', ') || 'none'}); a ` +
+        'directory is one package',
+    };
+  }
   return {
+    kind: 'package',
+    key: keys[0],
     publisher:
       typeof vendor.publisher === 'string' ? vendor.publisher : undefined,
-    packages:
-      packages && typeof packages === 'object' && !Array.isArray(packages)
-        ? packages
-        : {},
+    declaration: packages[keys[0]] ?? {},
   };
+}
+
+// Directories that never hold a package, skipped so a scan does not walk a
+// dependency tree or a VCS store.
+const SKIP = new Set(['node_modules', '.git', '.jj', '.package-store']);
+
+/**
+ * Find the packages a realm holds, by scanning for manifests.
+ *
+ * Nothing registers and nothing is configured — the same rule `discoverDecks`
+ * states for a depot. The realm's own `importmap.json` is skipped: it is the
+ * realm's resolution map, not a package manifest, and per
+ * `deck-a-package-resolves-through-its-own-map.md` those are different jobs.
+ *
+ * Depth-limited because a realm is an arbitrary tree rather than a depot's
+ * fixed two-level layout, and an unbounded walk on every lookup would put a
+ * full-tree scan on a request path. Three levels covers `crm/`, `apps/crm/`
+ * and `team/apps/crm/`, which is further than anyone has needed.
+ */
+export async function discoverRealmPackages(
+  realmDir: string,
+  maxDepth = 3,
+): Promise<{ packages: RealmPackage[]; problems: string[] }> {
+  let packages: RealmPackage[] = [];
+  let problems: string[] = [];
+
+  async function walk(dir: string, path: string, depth: number) {
+    let entries;
+    try {
+      entries = await readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    // The realm root is skipped (depth 0): its map resolves the realm, it does
+    // not describe a package.
+    if (
+      depth > 0 &&
+      entries.some((e) => e.isFile() && e.name === IMPORT_MAP_PATH)
+    ) {
+      let text = await readFile(join(dir, IMPORT_MAP_PATH), 'utf8').catch(
+        () => undefined,
+      );
+      let result = text
+        ? readPackageManifest(text)
+        : ({ kind: 'none' } as const);
+      if (result.kind === 'invalid') {
+        problems.push(`${path}/${IMPORT_MAP_PATH} ${result.detail}`);
+      } else if (result.kind === 'package') {
+        // The manifest is authoritative and the layout is a convention that
+        // should agree with it. A disagreement is reported rather than
+        // resolved by a precedence rule nobody would remember.
+        let folder = path.split('/').at(-1);
+        if (folder !== result.key) {
+          problems.push(
+            `${path}/${IMPORT_MAP_PATH} names the package "${result.key}" but ` +
+              `it lives in "${folder}"`,
+          );
+        }
+        packages.push({
+          dir,
+          path,
+          key: result.key,
+          publisher: result.publisher,
+          declaration: result.declaration,
+        });
+        // A package does not contain another package.
+        return;
+      }
+    }
+    if (depth >= maxDepth) {
+      return;
+    }
+    for (let entry of entries) {
+      if (entry.isDirectory() && !SKIP.has(entry.name)) {
+        await walk(
+          join(dir, entry.name),
+          path ? `${path}/${entry.name}` : entry.name,
+          depth + 1,
+        );
+      }
+    }
+  }
+
+  await walk(realmDir, '', 0);
+  return { packages, problems };
 }
 
 /**
  * The name this package takes in the store.
  *
- * `<publisher>/<key>`, so the key stays the short app name the realm's own
- * map is written in terms of. That is not cosmetic: the store's manifest
- * check looks the package up by the LAST segment of its name, so a map keyed
- * by the full name would look up a key that isn't there and silently skip the
- * check that ties a pack to the version it is published under.
+ * A bare key — no publisher — means depot-local. It resolves inside the depot
+ * holding it and is not publishable beyond it, so no ceremony is owed while a
+ * package is nobody else's business, and adding a namespace is the visible
+ * moment it went public.
+ *
+ * The key stays the SHORT name, never the full one: the store's manifest check
+ * looks a package up by the last segment of its name, so a manifest keyed by
+ * `acme/crm` would look up a key that is not there and silently skip the check
+ * tying a pack to the version it is published under.
  */
 export function storeNameFor(
   publisher: string | undefined,
@@ -109,10 +246,7 @@ export function storeNameFor(
 export type PackRefusal =
   | 'no-such-package'
   | 'no-version'
-  | 'no-root'
-  | 'root-escapes-realm'
-  | 'empty-root'
-  | 'root-has-own-map'
+  | 'empty-package'
   | 'build-output-collision'
   | 'build-failed';
 
@@ -124,6 +258,33 @@ const IS_DECLARATION = /\.d\.ts$/;
 
 export function builtPathFor(path: string): string {
   return `${path.replace(TRANSPILABLE, '')}.js`;
+}
+
+/**
+ * Drop build output from a pack's file list, leaving what a human wrote.
+ *
+ * A published pack holds both, so a comparison against it has to take the
+ * same side of that split — otherwise a candidate's authored files look like
+ * a tree with every compiled module deleted, and the structural pass reports
+ * MAJOR for a republish that changed nothing. Which it did, once.
+ *
+ * Derived files are recognised structurally rather than from a manifest
+ * entry: a `.js` whose transpilable sibling sits beside it in the same pack
+ * is output. A hand-written `.js` with no such sibling is authored and stays.
+ */
+export function authoredOnly<T>(tree: Map<string, T>): Map<string, T> {
+  let out = new Map<string, T>();
+  for (let [path, value] of tree) {
+    let isDerived =
+      path.endsWith('.js') &&
+      ['gts', 'gjs', 'ts'].some((ext) =>
+        tree.has(`${path.slice(0, -'.js'.length)}.${ext}`),
+      );
+    if (!isDerived) {
+      out.set(path, value);
+    }
+  }
+  return out;
 }
 
 export type PackRealmPackageResult =
@@ -143,21 +304,12 @@ export type PackRealmPackageResult =
     }
   | { kind: 'refused'; code: PackRefusal; detail: string };
 
-// `$DECK/crm/` → `crm/`. A value that does not carry the token is taken as
-// already realm-relative, which is what a hand-edited map tends to contain.
+// `$DECK/app.gts` → `app.gts`. Inside a package manifest the token means the
+// package's own root, so stripping it yields a pack-relative path directly —
+// there is nothing to translate, which is the simplification that came free
+// when identity moved into the package.
 function stripTreeRoot(value: string): string {
   return value.startsWith(TREE_ROOT) ? value.slice(TREE_ROOT.length) : value;
-}
-
-function withinRoot(root: string, path: string): string | undefined {
-  let normalizedRoot = root.replace(/\/+$/, '');
-  let rel = stripTreeRoot(path);
-  if (!normalizedRoot) {
-    return rel;
-  }
-  return rel.startsWith(`${normalizedRoot}/`)
-    ? rel.slice(normalizedRoot.length + 1)
-    : undefined;
 }
 
 /**
@@ -260,23 +412,24 @@ export function pointAtBuiltSiblings(
 }
 
 /**
- * Build the pack for one declared package, out of the realm's tree on disk.
+ * Build the pack for one package, out of the directory that holds its
+ * manifest.
  *
- * The pack gets its OWN `importmap.json`, generated here rather than copied,
- * with entry and export paths rewritten pack-relative. That file is what
- * makes the published bytes self-describing: the store's publish gate reads
- * the version out of it and refuses a pack that disagrees with the version it
- * is being published under, and the serve door resolves the entry through it.
- * A realm subtree that already carries its own map at its root is refused
- * rather than overwritten — two maps claiming the same root is a question
- * only the author can answer.
+ * The package IS its directory — there is no root to declare and no realm
+ * path to translate, because the manifest sits inside the thing it describes.
+ *
+ * The manifest in the pack is DERIVED from the authored one rather than
+ * copied verbatim: entry and exports are moved onto the compiled modules,
+ * since an entry is an address a consumer imports and the source does not
+ * run. Everything else passes through. That derivation is a transform before
+ * the seal, which is where transforms belong.
  */
 export async function packRealmPackage({
-  realmDir,
+  packageDir,
   key,
   declaration,
 }: {
-  realmDir: string;
+  packageDir: string;
   key: string;
   declaration: RealmPackageDeclaration | undefined;
 }): Promise<PackRealmPackageResult> {
@@ -284,7 +437,7 @@ export async function packRealmPackage({
     return {
       kind: 'refused',
       code: 'no-such-package',
-      detail: `this realm's importmap.json declares no package "${key}"`,
+      detail: `no package "${key}" in this realm`,
     };
   }
   if (!declaration.version) {
@@ -294,47 +447,15 @@ export async function packRealmPackage({
       detail: `package "${key}" declares no version`,
     };
   }
-  if (!declaration.root) {
-    return {
-      kind: 'refused',
-      code: 'no-root',
-      detail:
-        `package "${key}" declares no root, so there is no way to know which ` +
-        'files it is. Add "root": "$DECK/<path>/".',
-    };
-  }
 
-  let root = stripTreeRoot(declaration.root).replace(/\/+$/, '');
-  // A root that climbs out of the realm would pack somebody else's files.
-  // Checked here rather than trusted to the filesystem: `join` would happily
-  // resolve it and the read would succeed.
-  if (
-    root.startsWith('/') ||
-    root.split('/').some((segment) => segment === '..')
-  ) {
+  let files = await readTreeFromDir(packageDir);
+  // The manifest is always there — it is how the package was found — so the
+  // only way to be empty is to hold nothing else.
+  if (files.size <= 1) {
     return {
       kind: 'refused',
-      code: 'root-escapes-realm',
-      detail: `root ${declaration.root} leaves the realm`,
-    };
-  }
-
-  let files = await readTreeFromDir(root ? join(realmDir, root) : realmDir);
-  if (files.size === 0) {
-    return {
-      kind: 'refused',
-      code: 'empty-root',
-      detail: `${declaration.root} holds no files`,
-    };
-  }
-  if (files.has(IMPORT_MAP_PATH)) {
-    return {
-      kind: 'refused',
-      code: 'root-has-own-map',
-      detail:
-        `${declaration.root} already contains ${IMPORT_MAP_PATH}. Publishing ` +
-        'would have to overwrite it with the generated manifest, and which ' +
-        'map wins is not a question this can answer for you.',
+      code: 'empty-package',
+      detail: `package "${key}" holds nothing but its manifest`,
     };
   }
 
@@ -356,7 +477,12 @@ export async function packRealmPackage({
   // npm package, for the same reason.
   let authored = new Set(
     [...files.keys()].filter(
-      (p) => TRANSPILABLE.test(p) && !IS_DECLARATION.test(p),
+      (p) =>
+        TRANSPILABLE.test(p) &&
+        !IS_DECLARATION.test(p) &&
+        // The manifest is authored too, but it is data and it is replaced by
+        // the derived one below.
+        p !== IMPORT_MAP_PATH,
     ),
   );
   let built = new Map<string, Buffer>();
@@ -367,9 +493,9 @@ export async function packRealmPackage({
         kind: 'refused',
         code: 'build-output-collision',
         detail:
-          `${path} compiles to ${target}, which already exists in ` +
-          `${declaration.root}. Rename one of them — publishing would have to ` +
-          'silently drop the hand-written file.',
+          `${path} compiles to ${target}, which already exists in package ` +
+          `"${key}". Rename one of them — publishing would have to silently ` +
+          'drop the hand-written file.',
       };
     }
     try {
@@ -393,22 +519,16 @@ export async function packRealmPackage({
     }
   }
 
-  // Entry and exports are declared realm-relative and must land pack-relative:
-  // inside the published Version, `$DECK/` means the pack root, not the realm.
-  // They also name the BUILT module rather than the source — an entry is an
-  // address a consumer imports, and importing the source would hand them the
-  // bytes that do not run.
+  // Entry and exports name the BUILT module rather than the source. An entry
+  // is an address a consumer imports, and handing them the source would hand
+  // them the bytes that do not run.
   let asBuilt = (p: string) => (authored.has(p) ? builtPathFor(p) : p);
   let entry = declaration.entry
-    ? withinRoot(root, declaration.entry)
+    ? asBuilt(stripTreeRoot(declaration.entry))
     : undefined;
-  entry = entry ? asBuilt(entry) : undefined;
   let exports: Record<string, string> = {};
   for (let [alias, target] of Object.entries(declaration.exports ?? {})) {
-    let inside = withinRoot(root, target);
-    if (inside) {
-      exports[alias] = `${TREE_ROOT}${asBuilt(inside)}`;
-    }
+    exports[alias] = `${TREE_ROOT}${asBuilt(stripTreeRoot(target))}`;
   }
 
   let manifest = {
@@ -424,11 +544,15 @@ export async function packRealmPackage({
   };
 
   let inputs = [
+    // The derived manifest replaces the authored one at the same path, so it
+    // is written last-wins rather than added alongside.
+    ...[...files.entries()]
+      .filter(([path]) => path !== IMPORT_MAP_PATH)
+      .map(([path, bytes]) => ({ path, bytes })),
     {
       path: IMPORT_MAP_PATH,
       bytes: Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`),
     },
-    ...[...files.entries()].map(([path, bytes]) => ({ path, bytes })),
     ...[...built.entries()].map(([path, bytes]) => ({ path, bytes })),
   ];
   let bytes = pack(inputs);

@@ -5,27 +5,45 @@ import { tmpdir } from 'os';
 import { mkdtemp, mkdir, rm, writeFile } from 'fs/promises';
 import { publishToStore, readStoredFile, unpack } from '@cardstack/deck/node';
 import {
+  authoredOnly,
+  discoverRealmPackages,
   findEscapingImports,
   packRealmPackage,
   pointAtBuiltSiblings,
-  readRealmPackages,
+  readPackageManifest,
   storeNameFor,
 } from '../lib/realm-packages.ts';
 
-const MAP = JSON.stringify({
-  imports: { palette: '/_packages/lib/palette@4.1.0/index.js' },
-  boxel: {
-    publisher: 'experiments',
+// A package's manifest, in the package. Paths are pack-relative because
+// inside a package `$DECK/` means the package's own root — there is nothing
+// to translate.
+const CRM_MANIFEST = JSON.stringify({
+  deck: {
+    publisher: 'acme',
     packages: {
       crm: {
         version: '2.0.0',
-        root: '$DECK/crm/',
-        entry: '$DECK/crm/app.gts',
-        exports: { './account': '$DECK/crm/account.gts' },
+        entry: '$DECK/app.gts',
+        exports: { './account': '$DECK/account.gts' },
       },
     },
   },
 });
+
+// The realm's own map. Resolution for unpackaged content, and nothing about
+// what the realm publishes.
+const REALM_MAP = JSON.stringify({
+  imports: { palette: '/_packages/lib/palette@4.1.0/index.js' },
+});
+
+const REALM = {
+  'importmap.json': REALM_MAP,
+  'crm/importmap.json': CRM_MANIFEST,
+  'crm/app.gts': `import AccountCard from './account';\nexport default class CRMApp {}\n`,
+  'crm/account.gts': `export default class AccountCard {}\n`,
+  'crm/lead.gts': `import AccountCard from './account';\nexport default class LeadCard {}\n`,
+  'other/unrelated.gts': `export default class Nope {}\n`,
+};
 
 async function withRealm(
   files: Record<string, string>,
@@ -55,43 +73,141 @@ function packedOrThrow(
   return result;
 }
 
-const CRM = {
-  'importmap.json': MAP,
-  'crm/app.gts': `import AccountCard from './account';\nexport default class CRMApp {}\n`,
-  'crm/account.gts': `export default class AccountCard {}\n`,
-  'crm/lead.gts': `import AccountCard from './account';\nexport default class LeadCard {}\n`,
-  'other/unrelated.gts': `export default class Nope {}\n`,
-};
+async function crmOf(dir: string) {
+  let { packages } = await discoverRealmPackages(dir);
+  return packages.find((p) => p.key === 'crm')!;
+}
 
 module(basename(import.meta.filename), function () {
-  module('a realm publishing its own app', function () {
-    test('the declaration reads, and names the package in the store', function (assert) {
-      let map = readRealmPackages(MAP);
-      assert.strictEqual(map.publisher, 'experiments');
-      assert.strictEqual(map.packages.crm?.version, '2.0.0');
-      assert.strictEqual(storeNameFor(map.publisher, 'crm'), 'experiments/crm');
-      // The key stays the SHORT name on purpose: the store looks a package up
-      // by the last segment of its name when it checks that a pack agrees
-      // with the version it is published under, so a map keyed by the full
-      // name would skip that check silently.
+  module('a package carries its own name', function () {
+    test('the manifest names the package, and the store name follows', function (assert) {
+      let manifest = readPackageManifest(CRM_MANIFEST);
+      let publisher =
+        manifest.kind === 'package' ? manifest.publisher : undefined;
+      assert.strictEqual(manifest.kind, 'package');
       assert.strictEqual(
-        storeNameFor(map.publisher, 'crm').split('/').at(-1),
+        manifest.kind === 'package' ? manifest.key : undefined,
+        'crm',
+      );
+      assert.strictEqual(publisher, 'acme');
+      assert.strictEqual(storeNameFor(publisher, 'crm'), 'acme/crm');
+      // The key stays the SHORT name: the store looks a package up by the last
+      // segment when it checks a pack against the version it is published
+      // under, so a manifest keyed `acme/crm` would skip that check silently.
+      assert.strictEqual(
+        storeNameFor(publisher, 'crm').split('/').at(-1),
         'crm',
       );
     });
 
-    test('a realm with no packages block publishes nothing, and is not an error', function (assert) {
-      assert.deepEqual(readRealmPackages('{}').packages, {});
-      assert.deepEqual(readRealmPackages('not json').packages, {});
+    test('no publisher means depot-local', function (assert) {
+      // Not an error, and not a namespace either. A bare name resolves inside
+      // the depot holding it; adding a publisher is the visible moment the
+      // package went public.
+      let manifest = readPackageManifest(
+        JSON.stringify({ deck: { packages: { crm: { version: '1.0.0' } } } }),
+      );
+      assert.strictEqual(
+        manifest.kind === 'package' ? manifest.publisher : 'unexpected',
+        undefined,
+      );
+      assert.strictEqual(storeNameFor(undefined, 'crm'), 'crm');
     });
 
-    test('the pack holds the declared subtree and nothing else', async function (assert) {
-      await withRealm(CRM, async (dir) => {
+    test('an importmap with no packages block is a resolution map', function (assert) {
+      // The realm's own map is exactly this shape, and reading it as a broken
+      // manifest would make every realm look misconfigured.
+      assert.strictEqual(readPackageManifest(REALM_MAP).kind, 'none');
+    });
+
+    test('a manifest naming two packages is refused', function (assert) {
+      // `deck.packages` is a map because a pack may describe several, but a
+      // DIRECTORY is one package, and two leaves no way to say which.
+      let manifest = readPackageManifest(
+        JSON.stringify({
+          deck: { packages: { crm: { version: '1.0.0' }, erp: {} } },
+        }),
+      );
+      assert.strictEqual(manifest.kind, 'invalid');
+    });
+  });
+
+  module('discovering what a realm holds', function () {
+    test('packages are found by scanning for manifests', async function (assert) {
+      // Nothing registers and nothing is configured — the rule discoverDecks
+      // states for a depot, applied to a realm's arbitrary tree.
+      await withRealm(REALM, async (dir) => {
+        let { packages, problems } = await discoverRealmPackages(dir);
+        assert.deepEqual(
+          packages.map(
+            (p) => `${p.publisher}/${p.key}@${p.declaration.version}`,
+          ),
+          ['acme/crm@2.0.0'],
+        );
+        assert.deepEqual(problems, []);
+      });
+    });
+
+    test("the realm's own map is not a package", async function (assert) {
+      // It sits at the root and it is a resolution map. Treating it as a
+      // manifest would make every realm publish itself.
+      await withRealm(
+        { 'importmap.json': REALM_MAP, 'a.gts': 'export const a = 1;\n' },
+        async (dir) => {
+          let { packages } = await discoverRealmPackages(dir);
+          assert.deepEqual(packages, []);
+        },
+      );
+    });
+
+    test('a manifest disagreeing with its folder is reported, not resolved', async function (assert) {
+      // The manifest is authoritative and the layout is a convention that
+      // should agree. A disagreement is an error to surface rather than a
+      // precedence rule nobody would remember.
+      await withRealm(
+        {
+          ...REALM,
+          'crm/importmap.json': CRM_MANIFEST.replace('"crm"', '"sales"'),
+        },
+        async (dir) => {
+          let { packages, problems } = await discoverRealmPackages(dir);
+          assert.strictEqual(packages[0]?.key, 'sales', 'the manifest wins');
+          assert.true(
+            problems.some((p) => p.includes('"sales"') && p.includes('"crm"')),
+            'and the disagreement is named',
+          );
+        },
+      );
+    });
+
+    test('a package does not contain another package', async function (assert) {
+      await withRealm(
+        {
+          ...REALM,
+          'crm/nested/importmap.json': JSON.stringify({
+            deck: { packages: { nested: { version: '1.0.0' } } },
+          }),
+        },
+        async (dir) => {
+          let { packages } = await discoverRealmPackages(dir);
+          assert.deepEqual(
+            packages.map((p) => p.key),
+            ['crm'],
+          );
+        },
+      );
+    });
+  });
+
+  module('packing what the manifest describes', function () {
+    test('the pack is the directory, and nothing outside it', async function (assert) {
+      await withRealm(REALM, async (dir) => {
+        let crm = await crmOf(dir);
         let result = packedOrThrow(
           await packRealmPackage({
-            realmDir: dir,
-            key: 'crm',
-            declaration: readRealmPackages(MAP).packages.crm,
+            packageDir: crm.dir,
+            key: crm.key,
+            declaration: crm.declaration,
           }),
         );
         assert.deepEqual(result.files, [
@@ -103,31 +219,27 @@ module(basename(import.meta.filename), function () {
           'lead.gts',
           'lead.js',
         ]);
-        // `other/` is in the realm and not in the package. A pack is the
-        // subtree it declares, not the realm it came from.
         assert.false(result.files.some((f) => f.includes('unrelated')));
       });
     });
 
-    test('the generated manifest is pack-relative, not realm-relative', async function (assert) {
-      // Inside a published Version `$DECK/` means the pack root. An entry
-      // still pointing at `$DECK/crm/app.gts` would resolve to a path that
-      // does not exist in the pack it describes.
-      await withRealm(CRM, async (dir) => {
+    test('the sealed manifest is derived from the authored one', async function (assert) {
+      // Entry and exports move onto the compiled modules, because an entry is
+      // an address a consumer imports and the source does not run. Everything
+      // else passes through.
+      await withRealm(REALM, async (dir) => {
+        let crm = await crmOf(dir);
         let result = packedOrThrow(
           await packRealmPackage({
-            realmDir: dir,
-            key: 'crm',
-            declaration: readRealmPackages(MAP).packages.crm,
+            packageDir: crm.dir,
+            key: crm.key,
+            declaration: crm.declaration,
           }),
         );
         let manifest = JSON.parse(
           unpack(result.bytes).files.get('importmap.json')!.toString('utf8'),
         );
         assert.strictEqual(manifest.deck.packages.crm.version, '2.0.0');
-        // `$DECK/crm/app.gts` in the realm becomes `$DECK/app.js` in the
-        // pack — root stripped because the pack IS the root, and extension
-        // changed because an entry names the module a consumer imports.
         assert.strictEqual(manifest.deck.packages.crm.entry, '$DECK/app.js');
         assert.strictEqual(
           manifest.deck.packages.crm.exports['./account'],
@@ -136,226 +248,117 @@ module(basename(import.meta.filename), function () {
       });
     });
 
-    test('the pack publishes, and its modules serve back byte-identical', async function (assert) {
-      // The end of the whole point: a card written in a realm becomes an
-      // address another realm can pin.
-      await withRealm(CRM, async (dir) => {
+    test('the pack publishes, and its modules serve back', async function (assert) {
+      await withRealm(REALM, async (dir) => {
         let store = join(dir, '.store');
+        let crm = await crmOf(dir);
         let result = packedOrThrow(
           await packRealmPackage({
-            realmDir: dir,
-            key: 'crm',
-            declaration: readRealmPackages(MAP).packages.crm,
+            packageDir: crm.dir,
+            key: crm.key,
+            declaration: crm.declaration,
           }),
         );
         let record = await publishToStore(
           store,
-          'experiments/crm',
+          'acme/crm',
           '2.0.0',
           result.bytes,
         );
         assert.strictEqual(record.treeHash, result.treeHash);
         let served = await readStoredFile(
           store,
-          'experiments/crm',
+          'acme/crm',
           '2.0.0',
           'account.gts',
         );
-        assert.strictEqual(served?.toString('utf8'), CRM['crm/account.gts']);
+        assert.strictEqual(served?.toString('utf8'), REALM['crm/account.gts']);
       });
     });
 
-    test('a manifest that disagrees with the version it is published under is refused', async function (assert) {
-      // The generated manifest is what makes the pack self-describing, and
-      // the store checks it. Publishing 2.0.0's bytes as 3.0.0 has to fail,
-      // or the manifest is decoration.
-      await withRealm(CRM, async (dir) => {
+    test('publishing under a version the manifest does not claim is refused', async function (assert) {
+      await withRealm(REALM, async (dir) => {
+        let crm = await crmOf(dir);
         let result = packedOrThrow(
           await packRealmPackage({
-            realmDir: dir,
-            key: 'crm',
-            declaration: readRealmPackages(MAP).packages.crm,
+            packageDir: crm.dir,
+            key: crm.key,
+            declaration: crm.declaration,
           }),
         );
         await assert.rejects(
           publishToStore(
             join(dir, '.store'),
-            'experiments/crm',
+            'acme/crm',
             '3.0.0',
             result.bytes,
           ),
-          /declares experiments\/crm@2\.0\.0/,
+          /declares acme\/crm@2\.0\.0/,
         );
       });
     });
 
-    test('a root that climbs out of the realm is refused', async function (assert) {
-      await withRealm(CRM, async (dir) => {
-        let result = await packRealmPackage({
-          realmDir: dir,
-          key: 'crm',
-          declaration: { version: '1.0.0', root: '$DECK/../elsewhere/' },
-        });
-        assert.strictEqual(
-          result.kind === 'refused' ? result.code : result.kind,
-          'root-escapes-realm',
-        );
-      });
-    });
-
-    test('a subtree with its own map is refused rather than overwritten', async function (assert) {
-      await withRealm({ ...CRM, 'crm/importmap.json': '{}' }, async (dir) => {
-        let result = await packRealmPackage({
-          realmDir: dir,
-          key: 'crm',
-          declaration: readRealmPackages(MAP).packages.crm,
-        });
-        assert.strictEqual(
-          result.kind === 'refused' ? result.code : result.kind,
-          'root-has-own-map',
-        );
-      });
-    });
-
-    test('a package with no root cannot be packed, and says why', async function (assert) {
-      await withRealm(CRM, async (dir) => {
-        let result = await packRealmPackage({
-          realmDir: dir,
-          key: 'crm',
-          declaration: { version: '1.0.0' },
-        });
-        assert.strictEqual(
-          result.kind === 'refused' ? result.code : result.kind,
-          'no-root',
-        );
-      });
-    });
-
-    test('the pack carries a compiled module beside every source', async function (assert) {
-      // THE THING THAT MADE PUBLISHED CARDS UNUSABLE. A realm transpiles
-      // `.gts` on the way out; the store serves the bytes it holds. Publishing
-      // source alone ships a module whose first decorator is a syntax error to
-      // whoever loads it — verified against a running server before this
-      // existed.
-      await withRealm(CRM, async (dir) => {
+    test('a compiled module sits beside every source', async function (assert) {
+      await withRealm(REALM, async (dir) => {
+        let crm = await crmOf(dir);
         let result = packedOrThrow(
           await packRealmPackage({
-            realmDir: dir,
-            key: 'crm',
-            declaration: readRealmPackages(MAP).packages.crm,
+            packageDir: crm.dir,
+            key: crm.key,
+            declaration: crm.declaration,
           }),
-        );
-        assert.true(
-          result.files.includes('account.js'),
-          'the compiled sibling is in the pack',
-        );
-        assert.true(
-          result.files.includes('account.gts'),
-          'and so is the source a human reads',
         );
         let compiled = unpack(result.bytes)
           .files.get('account.js')!
           .toString('utf8');
-        assert.false(
-          compiled.includes('<template>'),
-          'the template is compiled away',
-        );
-      });
-    });
-
-    test('the manifest names the compiled module, not the source', async function (assert) {
-      // An entry is an address a consumer imports. Pointing it at the source
-      // would hand them the bytes that do not run.
-      await withRealm(CRM, async (dir) => {
-        let result = packedOrThrow(
-          await packRealmPackage({
-            realmDir: dir,
-            key: 'crm',
-            declaration: readRealmPackages(MAP).packages.crm,
-          }),
-        );
-        let manifest = JSON.parse(
-          unpack(result.bytes).files.get('importmap.json')!.toString('utf8'),
-        );
-        assert.strictEqual(manifest.deck.packages.crm.entry, '$DECK/app.js');
-        assert.strictEqual(
-          manifest.deck.packages.crm.exports['./account'],
-          '$DECK/account.js',
-        );
+        assert.false(compiled.includes('<template>'));
       });
     });
 
     test('the structural pass is given source, never compiled output', async function (assert) {
-      // Comparing compiled output would report the transpiler's choices as
-      // changes to the package's API, so a compiler upgrade would read as a
-      // breaking release.
-      await withRealm(CRM, async (dir) => {
+      await withRealm(REALM, async (dir) => {
+        let crm = await crmOf(dir);
         let result = packedOrThrow(
           await packRealmPackage({
-            realmDir: dir,
-            key: 'crm',
-            declaration: readRealmPackages(MAP).packages.crm,
+            packageDir: crm.dir,
+            key: crm.key,
+            declaration: crm.declaration,
           }),
         );
         assert.deepEqual(
-          [...result.sources.keys()].sort(),
+          [...result.sources.keys()].filter((p) => p.endsWith('.gts')).sort(),
           ['account.gts', 'app.gts', 'lead.gts'],
-          'authored files only',
         );
       });
     });
 
-    test('relative imports are pointed at the compiled siblings', function (assert) {
-      // A realm resolves `./account` by trying extensions; the store serves
-      // exactly the path asked for, so an extensionless import inside a
-      // published Version is a 404.
-      let authored = new Set(['app.gts', 'account.gts', 'deep/thing.gts']);
-      assert.strictEqual(
-        pointAtBuiltSiblings(`import A from './account';`, 'app.gts', authored),
-        `import A from './account.js';`,
-      );
-      assert.strictEqual(
-        pointAtBuiltSiblings(
-          `import A from '../account';`,
-          'deep/thing.gts',
-          authored,
-        ),
-        `import A from '../account.js';`,
-      );
-      // Left exactly as written: a specifier that leaves the pack is already
-      // reported as a warning, and rewriting it would hide what the module
-      // actually needs.
-      assert.strictEqual(
-        pointAtBuiltSiblings(
-          `import x from '../components/thing';`,
-          'app.gts',
-          authored,
-        ),
-        `import x from '../components/thing';`,
-      );
-      // Already extensioned, and a bare specifier: neither is ours to touch.
-      assert.strictEqual(
-        pointAtBuiltSiblings(`import a from './a.css';`, 'app.gts', authored),
-        `import a from './a.css';`,
-      );
-      assert.strictEqual(
-        pointAtBuiltSiblings(
-          `import { CardDef } from '@cardstack/base/card-api';`,
-          'app.gts',
-          authored,
-        ),
-        `import { CardDef } from '@cardstack/base/card-api';`,
+    test('a package holding nothing but a manifest is refused', async function (assert) {
+      await withRealm(
+        { 'importmap.json': REALM_MAP, 'crm/importmap.json': CRM_MANIFEST },
+        async (dir) => {
+          let crm = await crmOf(dir);
+          let result = await packRealmPackage({
+            packageDir: crm.dir,
+            key: crm.key,
+            declaration: crm.declaration,
+          });
+          assert.strictEqual(
+            result.kind === 'refused' ? result.code : result.kind,
+            'empty-package',
+          );
+        },
       );
     });
 
     test('a hand-written file in the way of build output is refused', async function (assert) {
       await withRealm(
-        { ...CRM, 'crm/account.js': '// mine\n' },
+        { ...REALM, 'crm/account.js': '// mine\n' },
         async (dir) => {
+          let crm = await crmOf(dir);
           let result = await packRealmPackage({
-            realmDir: dir,
-            key: 'crm',
-            declaration: readRealmPackages(MAP).packages.crm,
+            packageDir: crm.dir,
+            key: crm.key,
+            declaration: crm.declaration,
           });
           assert.strictEqual(
             result.kind === 'refused' ? result.code : result.kind,
@@ -366,15 +369,14 @@ module(basename(import.meta.filename), function () {
     });
 
     test('a module that does not compile is refused, by name', async function (assert) {
-      // Failing here names the file. Failing later names nothing a consumer
-      // can act on.
       await withRealm(
-        { ...CRM, 'crm/broken.gts': 'export class {{{ oops\n' },
+        { ...REALM, 'crm/broken.gts': 'export class {{{ oops\n' },
         async (dir) => {
+          let crm = await crmOf(dir);
           let result = await packRealmPackage({
-            realmDir: dir,
-            key: 'crm',
-            declaration: readRealmPackages(MAP).packages.crm,
+            packageDir: crm.dir,
+            key: crm.key,
+            declaration: crm.declaration,
           });
           assert.strictEqual(
             result.kind === 'refused' ? result.code : result.kind,
@@ -390,11 +392,64 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('relative imports are pointed at the compiled siblings', function (assert) {
+      let authored = new Set(['app.gts', 'account.gts', 'deep/thing.gts']);
+      assert.strictEqual(
+        pointAtBuiltSiblings(`import A from './account';`, 'app.gts', authored),
+        `import A from './account.js';`,
+      );
+      assert.strictEqual(
+        pointAtBuiltSiblings(
+          `import A from '../account';`,
+          'deep/thing.gts',
+          authored,
+        ),
+        `import A from '../account.js';`,
+      );
+      // Left as written: a specifier leaving the pack is already a warning,
+      // and rewriting it would hide what the module needs.
+      assert.strictEqual(
+        pointAtBuiltSiblings(
+          `import x from '../components/thing';`,
+          'app.gts',
+          authored,
+        ),
+        `import x from '../components/thing';`,
+      );
+      assert.strictEqual(
+        pointAtBuiltSiblings(`import a from './a.css';`, 'app.gts', authored),
+        `import a from './a.css';`,
+      );
+      assert.strictEqual(
+        pointAtBuiltSiblings(
+          `import { CardDef } from '@cardstack/base/card-api';`,
+          'app.gts',
+          authored,
+        ),
+        `import { CardDef } from '@cardstack/base/card-api';`,
+      );
+    });
+
+    test('build output is dropped when comparing against a published pack', function (assert) {
+      // A published pack holds source and compiled output; a candidate's
+      // authored side holds only source. Compared naively, every built module
+      // reads as deleted and the structural pass reports MAJOR for a
+      // republish that changed nothing — which it did, once, against a live
+      // store.
+      let published = new Map([
+        ['importmap.json', '{}'],
+        ['index.gts', 'source'],
+        ['index.js', 'compiled'],
+        ['vendored.js', 'hand-written, no sibling'],
+      ]);
+      assert.deepEqual(
+        [...authoredOnly(published).keys()].sort(),
+        ['importmap.json', 'index.gts', 'vendored.js'],
+        'derived output goes, a hand-written .js stays',
+      );
+    });
+
     test('imports that leave the pack are reported, not refused', function (assert) {
-      // A text scan over `.gts`, which is not JavaScript — so it can be wrong,
-      // and a wrong refusal would block a publish over a string in a comment.
-      // Reporting puts the judgement in front of the reviewer, where the
-      // ruling puts every other judgement about a proposal.
       let warnings = findEscapingImports(
         new Map([
           ['app.gts', Buffer.from(`import x from '../shared/thing';\n`)],
@@ -405,9 +460,6 @@ module(basename(import.meta.filename), function () {
       );
       assert.strictEqual(warnings.length, 1, 'only the real escape');
       assert.true(warnings[0].startsWith('app.gts'));
-      // `deep/nested.gts` climbing one level lands back inside the pack, and
-      // a `$DECK/` import is the design's deliberate live reference — neither
-      // is an escape.
     });
   });
 });
