@@ -18,7 +18,10 @@ export async function settledBy(
 ): Promise<boolean> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let expired = new Promise<false>((resolve) => {
-    timer = setTimeout(() => resolve(false), Math.max(0, deadline - Date.now()));
+    timer = setTimeout(
+      () => resolve(false),
+      Math.max(0, deadline - Date.now()),
+    );
     // Never keep the process alive for this timer alone. Present on node,
     // absent on the browser's timer handles.
     timer.unref?.();
