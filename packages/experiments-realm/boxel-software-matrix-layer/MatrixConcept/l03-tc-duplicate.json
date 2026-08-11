@@ -17,13 +17,14 @@
       "domainKit": null,
       "owner": "richard",
       "workState": "Done",
-      "notes": "v1 \u00b7 Built \u2014 experiments-realm/duplicate.gts, POC tier. Clones any card (contained fields + links, not computeds); the consumer patches the copy to decide what differs. Exercised live: invoice \u2192 new draft",
+      "notes": "v1 · Built — experiments-realm/duplicate.gts, POC tier. Clones any card (contained fields + links, not computeds); the consumer patches the copy to decide what differs. Exercised live: invoice → new draft",
       "cardInfo": {
         "name": null,
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      }
+      },
+      "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/duplicate"
     },
     "meta": {
       "adoptsFrom": {
