@@ -228,7 +228,7 @@ cross as data — no tier re-implements or vendors trusted Base behavior.
 resolved import-graph facts to a tier:
 
 ```
-R1  Module in the trusted graph (base, catalog, @cardstack/*)      → Direct
+R1  Module has trusted Base/Cardstack-package provenance           → Direct
 R2  Module's import closure requires browser authority,
     or contains an unresolvable import (fail closed + diagnostic) → Sandbox
 R3  Module declares `static prefersFullSandbox = true`             → Sandbox
@@ -263,9 +263,13 @@ standard Base editor chrome renders inside the child around those
 authored editors; entitlement arrives via the RP-9.1 context push and
 persistence via the RP-20.6 write leg.
 
-**RP-6.4** Routing inputs come from the resolved import graph produced by
-the canonical transpiler, not from regex over source text or compiled wire
-opcodes. The mounted tier is stamped as `data-boxel-execution`
+**RP-6.4** Static import edges come from the canonical transpiler/parser.
+Browser-authority candidates come from comment/string-masked source and are
+confirmed with scope-aware Babel AST checks (including `globalThis`, `self`,
+computed properties, and destructuring), not from compiled wire opcodes or
+an unscoped token-regex decision. The complete reachable graph is collected
+before deterministic promotion, so import order and cycles cannot change the
+answer. The mounted tier is stamped as `data-boxel-execution`
 (`direct|capsule|sandbox|prerender`) with `data-boxel-execution-reason` —
 a diagnostic, not an author API. Every top-level `CardRenderer` invocation
 enters this router by default. A trusted caller must explicitly request the
@@ -626,7 +630,11 @@ none). The record-diff suite (RP-15.4) enforces this.
 **RP-15.2** Capsule specifics: authored component state is retained across
 argument updates (destroy only on definition change); a live iframe is
 never created; authored code receives no browser globals; stylesheets obey
-RP-12.4.
+RP-12.4. The real Host Loader never crosses through `import.meta.loader`;
+transpiled dynamic import receives the named
+`CAPSULE_DYNAMIC_IMPORT_DENIED` refusal. Capsule currently runs on the Host
+main thread: SES limits authority, not CPU time, and there is no preemptive
+termination for an infinite loop. This is an explicit prototype limitation.
 
 **RP-15.3** Sandbox specifics: origin-isolated, credentialless iframe; a
 transferred private MessageChannel; **a live iframe is never re-parented**;
@@ -639,6 +647,12 @@ blank iframe. Errors cross the boundary with their stack and depth-bounded
 `cause` chain so the presentation shows the root cause, not the boundary
 wrapper. The prerender placeholder is retained as last-known-good; layout
 crosses via the `layout` capability, not hard-coded per format.
+
+A hosted deployment is admitted only with an explicit distinct-origin
+`BOXEL_SANDBOX_RUNTIME_URL`, browser support for credentialless iframes, and
+restrictive response headers on the child route (CSP, `no-referrer`, and
+`nosniff`). Local Vite serve/preview installs those headers; production edge
+configuration must provide an equivalent policy before enabling Sandbox.
 
 There is currently one explicit compatibility exception to static graph
 admission: `https://bxl.boxel.site/bxl.ts`, Chris's BXL prototype, because
@@ -877,11 +891,14 @@ writer's own view — the writer must never pay that remount for its own
 edit, exactly as on main.
 
 **RP-20.4** Declarative media never blanks on rehydration. The Sandbox
-media bridge caches one authorized blob per resolved source URL for the
+media bridge accepts only exact URLs in the parent-projected resource set,
+rejects non-success and non-image responses before reading their body, and
+caches one authorized blob per resolved source URL for the
 bridge's lifetime: a re-created `<img>` with an already-hydrated source
 swaps in synchronously with no second fetch; concurrent requests for the
 same source share one fetch. Cache entries are revoked only at bridge
-teardown.
+teardown. A denial leaves the child source removed; it never restores an
+arbitrary authored URL as an ambient image egress path.
 
 **RP-20.5** Cross-surface synchronization is a core Boxel guarantee no
 execution tier may break: every mounted view of one canonical instance —
@@ -917,7 +934,10 @@ like the RP-20.5 push loop. Authority is entirely parent-side: the one
 registered receiver (`connectSandboxInstanceSync`) validates the
 document's identity against the ONE canonical instance the process
 renders (a write for any other card is refused before anything
-applies), applies it in place (`updateFromSerialized`), and persists
+applies), constrains relationship targets to the current declared
+projection, replaces incoming `included` resources with the parent's
+canonical projection (declared related data is read-only), applies the root
+in place (`updateFromSerialized`), and persists
 through the store's own debounced autosave lane (`scheduleSave`) — the
 realm write, permissions, and post-save arbitration never move into the
 child. An applied write fans out to every OTHER connected view of the
@@ -999,7 +1019,7 @@ would diverge in _what_ (not _how_) is a spec bug. Status: ✅ built,
 | Declared `linksTo`/`linksToMany` data                     | declared                       | native lazy-load            | host-side Base field portals ✅                                                                       | `withIncluded` serialization in every push ✅; lazy-load of a not-yet-included link resolves parent-side into the next push 🔜 | RP-7 / RP-20.5            |
 | Declared query fields (`options.query`, RP-7.6)           | declared                       | native                      | host-evaluated ✅                                                                                     | parent-evaluated, results delivered as data through the push lane 🔜                                                           | RP-7.6 / RP-17.1          |
 | Theme (scope token, CSS, imports)                         | declared                       | native                      | host-derived cloneable strings ✅                                                                     | same cloneable strings in the render record ✅                                                                                 | RP-5.4                    |
-| Media (authored `<img>` under realm auth)                 | declared                       | native                      | native (shared document) ✅                                                                           | bounded media lane, blob-cached ✅                                                                                             | RP-20.4                   |
+| Media (authored `<img>` under realm auth)                 | declared                       | native                      | native (shared document) ✅                                                                           | exact projected-resource lane; successful images only; blob-cached ✅                                                          | RP-20.4                   |
 | Browser events into authored handlers                     | declared                       | native events               | reduced `SafeEvent` projection ✅                                                                     | native events (child owns its DOM) ✅                                                                                          | RP-14.1                   |
 | Surface capabilities (height, presentation)               | declared                       | host-native                 | `SurfaceService` attach ✅                                                                            | `surface*` request/response over the port ✅                                                                                   | RP-16                     |
 | Source drafts / HMR                                       | declared                       | host loader invalidation    | deferred 🔜                                                                                           | draft override + invalidate-rerender ✅                                                                                        | RP-18                     |

@@ -43,6 +43,12 @@ export interface DirectRenderSlot {
 
 export interface DirectRenderSlotOptions {
   componentCodeRef?: CodeRef;
+  /**
+   * Explicit trusted owner for Host-side fallback rendering. When omitted,
+   * Direct preserves main's virtual static dispatch for a trusted card. An
+   * untrusted caller must supply the trusted ancestor selected by Host policy.
+   */
+  componentProvider?: BaseDefConstructor;
 }
 
 type GetCardAPI = () => Promise<typeof CardAPI>;
@@ -66,6 +72,8 @@ export default class DirectBoxelRuntime implements BoxelRuntime {
     BaseDef,
     Map<Field<BaseDefConstructor> | undefined, Map<string, DirectRenderSlot>>
   >();
+  private componentProviderIds = new WeakMap<object, number>();
+  private nextComponentProviderId = 0;
   /**
    * Sandbox HMR: the exact arguments used to create each live instance,
    * retained for `redeserialize()`. Only the Sandbox child's own
@@ -250,9 +258,15 @@ export default class DirectBoxelRuntime implements BoxelRuntime {
       byCodeRef = new Map();
       byField.set(field, byCodeRef);
     }
-    let key = options?.componentCodeRef
-      ? JSON.stringify(options.componentCodeRef)
-      : '';
+    let componentProvider = options?.componentProvider ?? card.constructor;
+    let providerId = this.componentProviderIds.get(componentProvider);
+    if (providerId === undefined) {
+      providerId = ++this.nextComponentProviderId;
+      this.componentProviderIds.set(componentProvider, providerId);
+    }
+    let key = `${
+      options?.componentCodeRef ? JSON.stringify(options.componentCodeRef) : ''
+    }:provider:${providerId}`;
     let existing = byCodeRef.get(key);
     if (existing) {
       return existing;
@@ -261,7 +275,9 @@ export default class DirectBoxelRuntime implements BoxelRuntime {
     // This is the only method in the first Direct slice that handles a live
     // component definition. It remains inside the trusted Host execution
     // owner and is intentionally absent from BoxelRenderRecord.
-    let component = card.constructor.getComponent(card, field, options);
+    let component = componentProvider.getComponent(card, field, {
+      componentCodeRef: options?.componentCodeRef,
+    });
     let slot: DirectRenderSlot = {
       owner: 'direct',
       component,

@@ -22,21 +22,18 @@ import { setupRenderingTest } from '../../helpers/setup';
 
 import type { BaseDef, Format } from '@cardstack/base/card-api';
 
-// PoC for finding #1: an authored user-realm module can override the
+// Regression for finding #1: an authored user-realm module can override the
 // `static getComponent` class method it inherits from CardDef. That override
-// runs host-side and its returned Glimmer component is rendered by the Host in
-// the trusted document under `data-boxel-execution="direct"` — i.e. authored
-// code reaching the Direct execution owner even though the module classifies
-// Capsule (it carries no browser signal).
+// method, but trusted-Base fallback must bind to the trusted ancestor's static
+// rather than dispatch through that authored override.
 //
-// The escape component here does two things a contained render must never be
-// able to do from authored code:
+// If the regression returns, the escape component does two things a contained
+// render must never be able to do from authored code:
 //   1. writes a marker into the Host document, and
 //   2. reads the Host DI container via getOwner(this) and names a Host service.
 //
 // The trigger is the trusted-base fallback: the card authors NO template for
-// the requested format, so the renderer asks for the trusted Base slot — which
-// resolves through `card.constructor.getComponent(...)`, i.e. the override.
+// the requested format, so the renderer asks for a trusted Base slot.
 
 const escapeSource = `
   import {
@@ -102,7 +99,7 @@ async function renderThroughExecutionRenderer(card: BaseDef, format?: Format) {
   );
 }
 
-module('Integration | rp-getcomponent-escape (PoC)', function (hooks) {
+module('Integration | rp-getcomponent-escape', function (hooks) {
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -113,8 +110,7 @@ module('Integration | rp-getcomponent-escape (PoC)', function (hooks) {
   setupRealmCacheTeardown(hooks);
 
   hooks.beforeEach(async function () {
-    (globalThis as Record<string, unknown>).__rpEscapeReachedHostOwner =
-      undefined;
+    (globalThis as Record<string, unknown>).__rpEscapeDiag = undefined;
     await withCachedRealmSetup(async () =>
       setupIntegrationTestRealm({
         mockMatrixUtils,
@@ -133,48 +129,26 @@ module('Integration | rp-getcomponent-escape (PoC)', function (hooks) {
     );
   });
 
-  test('an authored static getComponent override renders under the Direct owner', async function (assert) {
+  test('RP-6.5: an authored static getComponent override cannot choose a Direct component', async function (assert) {
     let store = getService('store');
     let card = (await store.get(`${testRealmURL}Escape/one`)) as BaseDef;
     await renderThroughExecutionRenderer(card, 'isolated');
     await waitUntil(() =>
-      document.querySelector('[data-test-getcomponent-escape]'),
+      document.querySelector('[data-boxel-execution="direct"]'),
     );
 
-    // The authored component rendered in the Host document.
     assert
       .dom('[data-test-getcomponent-escape]')
-      .exists('authored getComponent override rendered its own component');
-
-    // ...under the Direct execution owner, not contained in a Capsule/iframe.
-    let escapeEl = document.querySelector('[data-test-getcomponent-escape]');
-    let directAncestor = escapeEl?.closest('[data-boxel-execution="direct"]');
-    assert.ok(
-      directAncestor,
-      'the authored component is rendered under data-boxel-execution="direct"',
-    );
-
-    // ...and it holds real ambient browser authority (the thing Capsule denies).
-    let diag = (globalThis as Record<string, unknown>).__rpEscapeDiag as {
-      window: string;
-      document: string;
-      fetch: string;
-      localStorage: string;
-      sawHostDom: boolean;
-    };
+      .doesNotExist(
+        'the authored override never supplies the trusted Base component',
+      );
+    assert
+      .dom('[data-boxel-execution="direct"]')
+      .exists('the legitimate trusted Base fallback still renders in the Host');
     assert.strictEqual(
-      diag?.window,
-      'object',
-      'authored code in the Direct slot has the real window',
-    );
-    assert.strictEqual(
-      diag?.fetch,
-      'function',
-      'authored code in the Direct slot has the real fetch',
-    );
-    assert.true(
-      diag?.sawHostDom,
-      `authored code reached Host-app DOM outside its own subtree (window=${diag?.window}, document=${diag?.document}, fetch=${diag?.fetch}, localStorage=${diag?.localStorage})`,
+      (globalThis as Record<string, unknown>).__rpEscapeDiag,
+      undefined,
+      'the authored component executed no Host-authority getter',
     );
   });
 });

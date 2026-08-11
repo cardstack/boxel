@@ -14,6 +14,7 @@ import SandboxRuntimeProcess, {
   isSandboxRuntimeControl,
   projectedResourceLinks,
   sandboxRenderDiagnosticAcceptedKind,
+  supportsCredentiallessIframe,
 } from '@cardstack/host/lib/sandbox-runtime-process';
 
 import type SurfaceService from '@cardstack/host/services/surface-service';
@@ -73,6 +74,17 @@ function createTestRuntime(
 }
 
 module('Unit | Sandbox runtime process', function () {
+  test('credentialless support is an explicit browser capability gate', function (assert) {
+    assert.true(
+      supportsCredentiallessIframe({ credentialless: true }),
+      'a browser implementation exposing credentialless is admitted',
+    );
+    assert.false(
+      supportsCredentiallessIframe({}),
+      'a browser without credentialless support is refused',
+    );
+  });
+
   test('an accepted first paint stops later diagnostic posts', async function (assert) {
     let channel = new MessageChannel();
     let received: unknown[] = [];

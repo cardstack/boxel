@@ -99,6 +99,12 @@ export interface SandboxRuntimeProcessOptions {
   keepRenderDiagnostics?: boolean;
 }
 
+export function supportsCredentiallessIframe(
+  prototype: object = HTMLIFrameElement.prototype,
+): boolean {
+  return 'credentialless' in prototype;
+}
+
 export interface SandboxRenderSlot {
   readonly owner: 'sandbox';
   readonly iframe: HTMLIFrameElement;

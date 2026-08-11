@@ -55,7 +55,7 @@ module('Unit | rp-entitlement (RP-21)', function () {
     );
   });
 
-  test('Capsule context projection stays stable until a projected capability changes', function (assert) {
+  test('RP-21.1: Capsule context projection stays stable until a projected capability changes', function (assert) {
     let projector = new CapsuleContextProjector();
     let tracker = () => {};
     let searchSurface = { name: 'search-results-surface' };

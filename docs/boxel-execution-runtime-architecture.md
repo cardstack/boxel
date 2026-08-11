@@ -210,21 +210,25 @@ flowchart LR
 
 ### Runtime matrix
 
-| Tier    | One true executable module       | Semantic owner | Glimmer/DOM owner | Trusted Base presentation                                  |
-| ------- | -------------------------------- | -------------- | ----------------- | ---------------------------------------------------------- |
-| Direct  | Host Loader                      | Host module    | Host              | Shared Host module graph                                   |
-| Capsule | Per-principal Compartment Loader | SES module     | Host              | Shared Host module graph through trusted component portals |
-| Sandbox | Iframe Loader                    | Iframe module  | Iframe            | Loaded in the isolated child as allowed by child policy    |
+| Tier    | Executable owners                                 | Semantic owner                             | Glimmer/DOM owner | Trusted Base presentation                                  |
+| ------- | ------------------------------------------------- | ------------------------------------------ | ----------------- | ---------------------------------------------------------- |
+| Direct  | Host Loader                                       | Host module                                | Host              | Shared Host module graph                                   |
+| Capsule | Host canonical module + Compartment render module | Host canonical class + SES presentation    | Host              | Shared Host module graph through trusted component portals |
+| Sandbox | Host canonical module + iframe render module      | Host canonical class + iframe presentation | Iframe            | Loaded in the isolated child as allowed by child policy    |
 
-“One true module” does not mean every module executes in the Host. It means a
-consumer never mixes multiple partially reconstructed executable classes for
-the same module generation:
+The shipped prototype deliberately keeps canonical Card API evaluation in the
+Host while separately evaluating presentation code in its selected cage. A
+consumer must not mix identities between those owners:
 
 - trusted source has one executable Host module;
-- Capsule source has one executable Compartment module;
-- Sandbox source has one executable child module;
-- the Host sees records and handles for untrusted modules, never a second live
-  constructor.
+- authored Capsule/Sandbox source has a Host canonical constructor for
+  deserialization, getters/computeds, relationships, and serialization;
+- its render owner uses a separate Compartment/iframe module and receives only
+  projected records/capabilities for presentation.
+
+This is a presentation-containment boundary, not a claim that all authored
+JavaScript is absent from the Host. Removing canonical authored evaluation
+requires the larger store/Card API split described as future architecture.
 
 ### Two layers, not one giant sandbox service
 

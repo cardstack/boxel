@@ -33,10 +33,43 @@ export function isImplicitSandboxModule(moduleIdentifier: string): boolean {
  */
 export function isTrustedModule(moduleIdentifier: string): boolean {
   return (
-    moduleIdentifier.startsWith('@cardstack/') ||
-    moduleIdentifier.startsWith(`${PACKAGES_FAKE_ORIGIN}@cardstack/`) ||
+    isSafeCardstackPackageSpecifier(moduleIdentifier) ||
+    isURLWithin(moduleIdentifier, `${PACKAGES_FAKE_ORIGIN}@cardstack/`) ||
     isURLWithin(moduleIdentifier, 'https://cardstack.com/base/') ||
     isURLWithin(moduleIdentifier, config.resolvedBaseRealmURL)
+  );
+}
+
+/**
+ * Bare package spellings are admitted before the Loader resolves them, so
+ * URL normalization cannot protect this boundary. Dot segments (including
+ * encoded or backslash spellings) would let an apparently trusted
+ * `@cardstack/*` import resolve outside its package root.
+ */
+function isSafeCardstackPackageSpecifier(identifier: string): boolean {
+  if (!identifier.startsWith('@cardstack/')) {
+    return false;
+  }
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(identifier);
+  } catch {
+    return false;
+  }
+  if (
+    decoded.includes('\\') ||
+    decoded.includes('%') ||
+    decoded.includes('?') ||
+    decoded.includes('#')
+  ) {
+    return false;
+  }
+  let segments = decoded.split('/');
+  return (
+    segments.length >= 2 &&
+    segments[0] === '@cardstack' &&
+    segments[1] !== '' &&
+    segments.every((segment) => segment !== '.' && segment !== '..')
   );
 }
 
@@ -56,6 +89,8 @@ export function isTrustedImport(moduleIdentifier: string): boolean {
     moduleIdentifier === '@glimmer/component' ||
     moduleIdentifier === '@glimmer/tracking' ||
     moduleIdentifier === 'ember-provide-consume-context' ||
+    moduleIdentifier ===
+      `${PACKAGES_FAKE_ORIGIN}ember-provide-consume-context` ||
     moduleIdentifier === '@cardstack/runtime-common'
   );
 }

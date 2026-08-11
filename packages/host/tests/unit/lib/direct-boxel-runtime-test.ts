@@ -22,6 +22,40 @@ const resource = {
 const document = { data: resource } as unknown as LooseSingleCardDocument;
 
 module('Unit | Direct Boxel runtime', function () {
+  test('RP-6.5: an explicit trusted component provider prevents authored static dispatch', function (assert) {
+    let authoredCalls = 0;
+    let trustedCalls = 0;
+    let authoredComponent = {};
+    let trustedComponent = {};
+    let card = {
+      constructor: {
+        getComponent() {
+          authoredCalls++;
+          return authoredComponent;
+        },
+      },
+    };
+    let trustedProvider = {
+      getComponent() {
+        trustedCalls++;
+        return trustedComponent;
+      },
+    };
+    let runtime = new DirectBoxelRuntime(async () => ({}) as typeof CardAPI);
+
+    let slot = runtime.getRenderSlot(card as never, undefined, {
+      componentProvider: trustedProvider as never,
+    });
+
+    assert.strictEqual(slot.component, trustedComponent);
+    assert.strictEqual(trustedCalls, 1, 'the Host-selected provider executes');
+    assert.strictEqual(
+      authoredCalls,
+      0,
+      'the authored constructor override is never dispatched',
+    );
+  });
+
   test("RP-15.3: redeserialize() re-derives the instance under the SAME handle from the identical retained document — the Sandbox child's own Direct runtime uses this for HMR module-identity churn", async function (assert) {
     let created: { resource: unknown; document: unknown }[] = [];
     let currentInstance: { tag: string } = { tag: 'first' };

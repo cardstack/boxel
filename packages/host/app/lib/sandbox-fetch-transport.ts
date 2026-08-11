@@ -90,8 +90,11 @@ export async function fetchBoundedSandboxMedia(
     referrerPolicy: 'no-referrer',
     redirect: 'error',
   });
+  if (!response.ok) {
+    throw new Error('Sandbox media response was unavailable');
+  }
   let contentType = response.headers.get('content-type')?.toLowerCase();
-  if (response.ok && !contentType?.startsWith('image/')) {
+  if (!contentType?.startsWith('image/')) {
     throw new Error('Sandbox media response was not an image');
   }
   let body = await response.arrayBuffer();
@@ -396,19 +399,20 @@ export class SandboxFetchServer {
   }
 
   /**
-   * Declarative-media read (`purpose: 'media'`): never consults the
-   * classified module graph, the draft overrides, or observeModule — an
-   * image is not executable and must never become admitted module state.
-   * The Host fetch carries the user's realm authorization, which is the
-   * SAME authority main grants every in-document `<img>` via the browser
-   * session; the credentialless iframe merely lost it. Bounded to GET,
-   * image/* responses, and the shared size cap. Non-image or oversized
-   * responses fail the request; the child-side bridge then restores the
-   * authored URL so public assets still render credentiallessly.
+   * Declarative-media read (`purpose: 'media'`): checks a separate exact
+   * projected-resource capability and never grows executable module state.
+   * The Host fetch carries the user's realm authorization, bounded to GET,
+   * successful image/* responses, and the shared size cap. A refusal exposes
+   * neither an error body nor an ambient authored-URL fallback in the child.
    */
   private async respondMedia(request: SandboxFetchRequest): Promise<void> {
     let message: SandboxFetchResponse;
     try {
+      if (!this.isResourceAllowed(request.url)) {
+        throw new Error(
+          `Sandbox media read is outside its projected capabilities: ${request.url}`,
+        );
+      }
       let response = await fetchBoundedSandboxMedia(
         this.fetch,
         request.url,

@@ -201,6 +201,62 @@ function quietOptimizedDepSourcemapWarnings() {
   };
 }
 
+function sandboxRuntimeSecurityHeaders() {
+  let install = (server) => {
+    server.middlewares.use((req, res, next) => {
+      let pathname;
+      try {
+        pathname = decodeURI((req.url ?? '').split('?')[0]);
+      } catch {
+        next();
+        return;
+      }
+      let hostname = (req.headers.host ?? '').split(':')[0];
+      let expectedSandboxHostnames = [
+        'user.localhost',
+        process.env.BOXEL_SANDBOX_HOSTNAME,
+      ].filter(Boolean);
+      if (
+        pathname !== '/_boxel-sandbox-runtime' ||
+        !expectedSandboxHostnames.includes(hostname)
+      ) {
+        next();
+        return;
+      }
+      let parentSource = process.env.BOXEL_HOST_HOSTNAME
+        ? `https://${process.env.BOXEL_HOST_HOSTNAME}`
+        : 'http://localhost:* https://localhost:*';
+      res.setHeader(
+        'Content-Security-Policy',
+        [
+          `default-src 'self'`,
+          `script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:`,
+          `style-src 'self' 'unsafe-inline'`,
+          `connect-src 'self' ${parentSource}`,
+          `img-src 'self' data: blob:`,
+          `font-src 'self' data: blob:`,
+          `media-src 'self' data: blob:`,
+          `worker-src 'none'`,
+          `child-src 'none'`,
+          `object-src 'none'`,
+          `base-uri 'none'`,
+          `form-action 'none'`,
+          `frame-ancestors ${parentSource}`,
+        ].join('; '),
+      );
+      res.setHeader('Referrer-Policy', 'no-referrer');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      next();
+    });
+  };
+  return {
+    name: 'boxel-sandbox-runtime-security-headers',
+    apply: 'serve',
+    configureServer: install,
+    configurePreviewServer: install,
+  };
+}
+
 // In environment mode (BOXEL_ENVIRONMENT set), scripts/vite-with-traefik.js
 // exposes the public Traefik hostname via BOXEL_HOST_HOSTNAME so we can let it
 // through Vite's host check (for both `vite` and `vite preview`) and tell the
@@ -335,6 +391,7 @@ export default defineConfig(({ mode }) => ({
     classicEmberSupport(),
     ember(),
     quietOptimizedDepSourcemapWarnings(),
+    sandboxRuntimeSecurityHeaders(),
     isolatedEnvironmentConfigPlugin(mode),
     // extra plugins here
     babel({

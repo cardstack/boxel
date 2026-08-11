@@ -164,15 +164,9 @@ export default class SandboxMediaBridge {
       })
       .catch((error) => {
         console.error('Sandbox media bridge failed', error);
-        // Keep the authored URL in place for a public resource. An allowed
-        // private Realm asset is replaced above; a denied URL gains no Host
-        // credential or error detail through this compatibility shim.
-        if (
-          this.generationByImage.get(image) === generation &&
-          image.isConnected
-        ) {
-          image.src = authoredSource;
-        }
+        // Leave the source removed. Restoring an arbitrary authored URL would
+        // turn the child document into an ambient image-request/egress lane
+        // and bypass the exact projected-resource capability above.
       });
     this.hydrationByImage.set(image, hydration);
     return hydration;

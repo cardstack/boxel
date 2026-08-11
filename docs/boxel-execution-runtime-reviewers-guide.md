@@ -18,11 +18,13 @@ store, or service.
 
 Three corollaries explain most of the code:
 
-1. **Rendering is tiered; data is not.** The Host still evaluates every
-   module and holds every canonical instance, exactly as main does. Search,
-   save, indexing, SSE, and chrome (`card.constructor`) are untouched — the
-   branch deletes only 75 lines of main. "Tier" always answers _who renders
-   the template, in whose document_ — never who owns the data.
+1. **Rendering is tiered; canonical data semantics are not.** The Host still
+   evaluates authored modules and holds every canonical instance, exactly as
+   main does. That evaluation includes class statics, getters, `computeVia`,
+   relationship logic, deserialization, and serialization. Search, save,
+   indexing, SSE, and chrome (`card.constructor`) therefore keep main's
+   behavior. "Tier" answers _who renders the component/template, in whose
+   document_ — it is not a general authored-JavaScript sandbox.
 2. **Boundaries speak one grammar.** Validated envelopes, serial dispatch,
    monotonic ordering, bounded timeouts, self-naming refusals. Review one
    lane, and you know the shape of all five.
@@ -36,7 +38,7 @@ Three corollaries explain most of the code:
 
 | Tier        | Who executes                                                  | Whose DOM                                  | When                                                  |
 | ----------- | ------------------------------------------------------------- | ------------------------------------------ | ----------------------------------------------------- |
-| **Direct**  | Host loader + Host Glimmer                                    | Host document                              | Trusted realms (Base, catalog, skills)                |
+| **Direct**  | Host loader + Host Glimmer                                    | Host document                              | Trusted Base and Cardstack package provenance         |
 | **Capsule** | SES compartment in the Host process                           | Host document, via reconstructed templates | Authored code with no browser-authority needs         |
 | **Sandbox** | Full child app in an origin-isolated, `credentialless` iframe | The child's own document                   | Authored code that needs real DOM / browser libraries |
 
@@ -58,15 +60,15 @@ Every render is stamped for triage:
 
 Read those two attributes first when debugging any render (RP-6.4).
 
-**The load-bearing bet.** The frozen reference branch removed authored
-classes from the Host entirely — and then had to rewrite ~a dozen chrome
-call sites that read `card.constructor`, add search hooks, and split the
-store. This branch keeps host-side evaluation for _data_ (construction,
-identity, search, save) and cages only template _rendering_. Running an
-authored class to deserialize JSON is a different risk from running an
-authored template against the live page; the branch treats them
-differently on purpose (RP-6). That is why the diff is additive: main is
-surrounded, not modified.
+**The load-bearing bet.** This branch keeps host-side evaluation for
+canonical Card API semantics (construction, statics, getters/computeds,
+identity, search, serialization, and save) and cages component/template
+rendering. Running an authored class to implement those semantics remains a
+real Host-authority risk; this prototype does not claim otherwise. What the
+tiers remove is authored presentation code's direct access to the Host DOM,
+services, Loader, and ambient browser APIs. A future design that also cages
+canonical data evaluation requires a store/Card API split and is outside
+this branch (RP-6).
 
 ## Layer 2 — the spine of a render
 
@@ -111,7 +113,7 @@ Five lanes multiplex on the port by envelope `kind`:
 | ------------- | -------------- | -------------------------------------------------------------------------------------- |
 | Runtime RPC   | parent → child | `loadBoxel`, `createFromSerialized`, `describeBoxel`, `serializeCard`…                 |
 | Render family | parent → child | `render`, `clear`, `draft` (HMR), `updateInstance` (RP-20.5), `updateContext` (RP-9.1) |
-| Fetch         | child → parent | module reads + bounded media lane                                                      |
+| Fetch         | child → parent | exact admitted module reads + exact projected, bounded image reads                     |
 | Surface       | child → parent | height/presentation requests (RP-16)                                                   |
 | Write         | child → parent | instance-write proposals (RP-20.6)                                                     |
 
@@ -243,7 +245,9 @@ pick = (ev: SafeEvent) => {
 Sandbox cards get a full, real document — real events, real modifiers,
 three.js, canvas — but their _data world_ is the declared world (own
 document, declared links delivered in pushes, declared queries; ambient
-search and arbitrary `fetch` refuse visibly, RP-21.3).
+search and arbitrary `fetch` refuse visibly, RP-21.3). Declarative images
+also require an exact parent-projected resource URL; denial leaves the image
+unloaded instead of restoring the authored URL as an ambient egress path.
 
 **Format containment (RP-6.3):** compact formats of a Sandbox module render
 in Capsule — a gallery of fifty fitted tiles is never fifty iframes. `edit`
@@ -288,6 +292,13 @@ Details that matter:
   dependency do NOT promote importers — libraries often carry dormant
   browser adapters SES can safely leave unavailable.
 - **`typeof` probes are exempt** — feature detection is not a dependency.
+- Candidate source signals are found in comment/string-masked text, then
+  confirmed with Babel scope/AST checks. `window`, `document`,
+  `globalThis.document`, `self['document']`, and destructured global access
+  are covered; shadowed bindings and `typeof` probes remain exempt.
+- Classification collects the complete reachable static graph first, then
+  computes promotion in a deterministic second pass. Diamond/cyclic graph
+  import order cannot change the answer.
 - **Every ambiguity resolves upward** (R5): a false positive costs an
   iframe boot (smoothness); a false negative would cost containment. We
   always pay the smoothness price. Escape hatch upward exists
@@ -365,6 +376,7 @@ What to verify rather than trust, with the code that enforces it:
 ```ts
 // Sandbox: distinct origin is mandatory, credentialless is set
 if (childOrigin === globalThis.location.origin) reject(...)
+if (!supportsCredentiallessIframe()) reject(...)
 iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin');
 iframe.setAttribute('credentialless', '');
 
@@ -373,6 +385,11 @@ if (!this.isAllowed(request.url)) throw new Error('...outside its classified gra
 if (!this.isAllowed(response.url)) throw new Error('...escaped its classified graph...')
 if (body.byteLength > maxModuleBytes) throw ...
 
+// media uses a separate exact projected-resource set; only successful image
+// responses cross, and error bodies are never exposed to authored code
+if (!isProjectedResource(request.url)) throw ...
+if (!response.ok || !contentType.startsWith('image/')) throw ...
+
 // Capsule: the @context handed to authored code is frozen to exactly two
 // presentation keys — unit-pinned against a deliberately fat host context
 projectCapsuleContext(fatContext) // → { cardComponentModifier?, searchResultsComponent? }
@@ -380,7 +397,27 @@ projectCapsuleContext(fatContext) // → { cardComponentModifier?, searchResults
 // write authority: ONE entitled receiver per process, identity-checked
 if (unresolve(document.data.id) !== unresolve(card.id))
   throw new Error(`... does not match the card this process renders`);
+// related resources are read-only: relationship targets must already be in
+// the parent's projection and incoming `included` is replaced canonically
+constrainSandboxWriteDocument(incoming, currentProjection)
 ```
+
+Capsule dynamic imports receive the named
+`CAPSULE_DYNAMIC_IMPORT_DENIED` policy refusal; the real Host Loader never
+crosses as `import.meta.loader`.
+
+**Known containment limit:** Capsule executes on the Host main thread. SES
+removes ambient capabilities but does not preempt computation, so an infinite
+loop can wedge the tab and has no termination control. Worker/process
+execution is a production-hardening follow-up, not something this branch
+claims to solve.
+
+**Sandbox deployment gate:** a hosted environment must set an explicit
+`BOXEL_SANDBOX_RUNTIME_URL` on a distinct realm-user origin and serve the
+runtime route with the restrictive CSP/referrer/nosniff headers represented
+by `sandboxRuntimeSecurityHeaders()` in `vite.config.mjs`. The Host refuses
+same-origin/missing configuration and browsers without `credentialless`
+support; deployment must stay disabled until equivalent edge headers exist.
 
 Failure posture: fail closed and say so. Silence after an ack is a protocol
 violation (RP-15.3); unavailability must refuse visibly (RP-21.3); nothing

@@ -898,7 +898,7 @@ export async function loadThree() {
     }
   });
 
-  test('G-07: trusted Base and authored children compose inside one Sandbox-local Loader', async function (assert) {
+  test('RP-6.4 | G-07: trusted Base and authored children compose inside one Sandbox-local Loader', async function (assert) {
     let channel = new MessageChannel();
     let sources: Record<string, string> = {
       'https://realm.example/browser-card': `

@@ -358,7 +358,14 @@ function executableBrowserSignals(source: string): {
   let possibleDOMMethods = iframeDOMMethodPatterns
     .filter(([, pattern]) => pattern.test(source))
     .map(([method]) => method);
-  if (possibleGlobals.length === 0 && possibleDOMMethods.length === 0) {
+  let possibleGlobalObjectAccess = /\b(?:globalThis|self)\b/.test(
+    maskStringsAndComments(source),
+  );
+  if (
+    possibleGlobals.length === 0 &&
+    possibleDOMMethods.length === 0 &&
+    !possibleGlobalObjectAccess
+  ) {
     return { globals: [], domMethods: [] };
   }
 
@@ -409,6 +416,71 @@ function executableBrowserSignals(source: string): {
             )
           ) {
             domMethodCalls.add(callee.property.name);
+          }
+        },
+        MemberExpression(path) {
+          let object = path.node.object;
+          if (
+            !babel.types.isIdentifier(object) ||
+            !['globalThis', 'self'].includes(object.name) ||
+            path.scope.getBinding(object.name) !== undefined
+          ) {
+            return;
+          }
+          let property = path.node.property;
+          let name =
+            !path.node.computed && babel.types.isIdentifier(property)
+              ? property.name
+              : path.node.computed && babel.types.isStringLiteral(property)
+                ? property.value
+                : undefined;
+          if (
+            name &&
+            iframeGlobalSignals.includes(
+              name as (typeof iframeGlobalSignals)[number],
+            )
+          ) {
+            unboundBrowserGlobals.add(name);
+          } else {
+            // Any other property still acquires authority from the ambient
+            // browser global object. This also closes computed spellings such
+            // as globalThis['doc' + 'ument'] without trying to outsmart every
+            // JavaScript constant-expression form.
+            unboundBrowserGlobals.add('window');
+          }
+        },
+        VariableDeclarator(path) {
+          if (
+            !babel.types.isObjectPattern(path.node.id) ||
+            !babel.types.isIdentifier(path.node.init) ||
+            !['globalThis', 'self'].includes(path.node.init.name) ||
+            path.scope.getBinding(path.node.init.name) !== undefined
+          ) {
+            return;
+          }
+          for (let property of path.node.id.properties) {
+            if (babel.types.isRestElement(property)) {
+              unboundBrowserGlobals.add('window');
+              continue;
+            }
+            if (!babel.types.isObjectProperty(property)) {
+              continue;
+            }
+            let name = babel.types.isIdentifier(property.key)
+              ? property.key.name
+              : babel.types.isStringLiteral(property.key)
+                ? property.key.value
+                : undefined;
+            if (
+              name &&
+              iframeGlobalSignals.includes(
+                name as (typeof iframeGlobalSignals)[number],
+              )
+            ) {
+              unboundBrowserGlobals.add(name);
+            } else {
+              unboundBrowserGlobals.add('window');
+            }
           }
         },
       },
@@ -627,26 +699,39 @@ export class BoxelModuleGraphClassifier {
     entrySource?: string,
     observedDependencies = new Set<string>(),
   ): Promise<BoxelSourceClassification> {
-    let visited = new Set<string>();
     let maxModules = this.options.maxModules ?? 256;
+    let graph = new Map<
+      string,
+      { own: BoxelSourceClassification; dependencies: string[] }
+    >();
+    let visiting = new Set<string>();
+    let graphFailure: BoxelSourceClassification | undefined;
 
-    let visit = async (
-      identifier: string,
-      suppliedSource?: string,
-    ): Promise<BoxelSourceClassification> => {
-      if (this.options.isTrustedModule(identifier) || visited.has(identifier)) {
-        return capsuleClassification();
+    let collect = async (identifier: string, suppliedSource?: string) => {
+      if (
+        this.options.isTrustedModule(identifier) ||
+        graph.has(identifier) ||
+        visiting.has(identifier) ||
+        graphFailure
+      ) {
+        return;
       }
-      visited.add(identifier);
-      if (visited.size > maxModules) {
-        return unavailableClassification('module-graph-limit');
+      if (graph.size + visiting.size >= maxModules) {
+        graphFailure = unavailableClassification('module-graph-limit');
+        return;
       }
+      visiting.add(identifier);
 
       let source: string;
       try {
         source = suppliedSource ?? (await this.options.loadSource(identifier));
       } catch {
-        return unavailableClassification(`module-load:${identifier}`);
+        graph.set(identifier, {
+          own: unavailableClassification(`module-load:${identifier}`),
+          dependencies: [],
+        });
+        visiting.delete(identifier);
+        return;
       }
       let own = await classifyBoxelSource(source);
       let dependencies: string[] = [];
@@ -667,65 +752,66 @@ export class BoxelModuleGraphClassifier {
         try {
           dependency = this.options.resolveImport(specifier, identifier);
         } catch {
-          return unavailableClassification(`module-resolve:${specifier}`);
+          graphFailure = unavailableClassification(
+            `module-resolve:${specifier}`,
+          );
+          visiting.delete(identifier);
+          return;
         }
         observedDependencies.add(dependency);
         dependencies.push(dependency);
       }
-      if (own.tier === 'sandbox') {
-        // The stronger boundary is already decided, but the Sandbox loader
-        // still needs the complete, statically observed module graph. Walk
-        // authored dependencies for authority discovery without allowing a
-        // dependency to weaken or otherwise replace the root decision.
-        for (let dependency of dependencies) {
-          if (!this.options.isTrustedModule(dependency)) {
-            await visit(dependency);
-          }
-        }
-        return own;
-      }
-
+      dependencies.sort();
+      graph.set(identifier, { own, dependencies });
       for (let dependency of dependencies) {
         if (this.options.isTrustedModule(dependency)) {
           continue;
         }
-        let dependencyClassification = await visit(dependency);
-        if (
-          dependencyClassification.tier === 'sandbox' &&
-          dependencyClassification.propagatesToImporters
-        ) {
-          return {
-            tier: 'sandbox',
-            reason: `dependency-runtime:${dependency}`,
-            imports: own.imports,
-            signals: dependencyClassification.signals,
-            moduleGraph: [],
-            propagatesToImporters: true,
-            authoredEditTemplate: own.authoredEditTemplate,
-          };
-        }
+        await collect(dependency);
       }
-      return own;
+      visiting.delete(identifier);
     };
 
-    let result = await visit(moduleIdentifier, entrySource);
+    await collect(moduleIdentifier, entrySource);
+    let moduleGraph = [
+      moduleIdentifier,
+      ...[...observedDependencies]
+        .filter((identifier) => identifier !== moduleIdentifier)
+        .sort(),
+    ];
+    if (graphFailure) {
+      return { ...graphFailure, moduleGraph };
+    }
+    let root = graph.get(moduleIdentifier)?.own;
+    if (!root) {
+      root = unavailableClassification(`module-load:${moduleIdentifier}`);
+    }
+    if (root.tier === 'sandbox') {
+      return { ...root, moduleGraph };
+    }
+    let propagatingDependency = [...graph.entries()]
+      .filter(([identifier]) => identifier !== moduleIdentifier)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .find(
+        ([, node]) =>
+          node.own.tier === 'sandbox' && node.own.propagatesToImporters,
+      );
+    let result = propagatingDependency
+      ? {
+          tier: 'sandbox' as const,
+          reason: `dependency-runtime:${propagatingDependency[0]}`,
+          imports: root.imports,
+          signals: propagatingDependency[1].own.signals,
+          moduleGraph: [],
+          propagatesToImporters: true,
+          authoredEditTemplate: root.authoredEditTemplate,
+        }
+      : root;
     return {
       ...result,
-      moduleGraph: [moduleIdentifier, ...observedDependencies],
+      moduleGraph,
     };
   }
-}
-
-function capsuleClassification(): BoxelSourceClassification {
-  return {
-    tier: 'capsule',
-    reason: 'trusted-or-visited-module',
-    imports: [],
-    signals: [],
-    moduleGraph: [],
-    propagatesToImporters: false,
-    authoredEditTemplate: false,
-  };
 }
 
 function unavailableClassification(reason: string): BoxelSourceClassification {

@@ -6,6 +6,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import {
+  constrainSandboxWriteDocument,
   SandboxWriteClient,
   SandboxWriteServer,
 } from '@cardstack/host/lib/sandbox-write-transport';
@@ -22,6 +23,63 @@ function documentFor(id: string, headline: string): LooseSingleCardDocument {
 }
 
 module('Unit | Sandbox write transport', function () {
+  test('included resources are read-only and relationship writes stay within the projected neighborhood', function (assert) {
+    let authorized = {
+      data: {
+        type: 'card',
+        id: 'https://realm.example/parent',
+        relationships: {
+          child: {
+            data: { type: 'card', id: 'https://realm.example/child' },
+          },
+        },
+      },
+      included: [
+        {
+          type: 'card',
+          id: 'https://realm.example/child',
+          attributes: { title: 'canonical child' },
+        },
+      ],
+    } as unknown as LooseSingleCardDocument;
+    let proposed = {
+      ...authorized,
+      data: {
+        ...authorized.data,
+        attributes: { title: 'edited parent' },
+      },
+      included: [
+        {
+          type: 'card',
+          id: 'https://realm.example/child',
+          attributes: { title: 'attacker changed child' },
+        },
+      ],
+    } as unknown as LooseSingleCardDocument;
+
+    let constrained = constrainSandboxWriteDocument(proposed, authorized);
+    assert.deepEqual(
+      constrained.included,
+      authorized.included,
+      'attacker-controlled included payload is replaced by the canonical projection',
+    );
+    assert.deepEqual(constrained.data.attributes, {
+      title: 'edited parent',
+    });
+
+    let escaped = structuredClone(proposed);
+    escaped.data.relationships = {
+      child: {
+        data: { type: 'card', id: 'https://realm.example/other-card' },
+      },
+    };
+    assert.throws(
+      () => constrainSandboxWriteDocument(escaped, authorized),
+      /outside its projected capabilities/,
+      'the root cannot point at an undeclared Store instance',
+    );
+  });
+
   test('RP-20.6: a child write resolves once the parent confirms applying it', async function (assert) {
     let channel = new MessageChannel();
     let applied: LooseSingleCardDocument[] = [];

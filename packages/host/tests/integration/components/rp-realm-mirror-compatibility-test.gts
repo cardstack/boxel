@@ -811,7 +811,7 @@ module(
         .hasText('Harbor relay 7');
     });
 
-    test('G-06 | a Capsule parent re-enters Host policy for a browser-dependent linked child', async function (assert) {
+    test('RP-6.2 | G-06: a Capsule parent re-enters Host policy for a browser-dependent linked child', async function (assert) {
       let childClassification = await classifyBoxelSource(
         browserDependentChildSource,
       );

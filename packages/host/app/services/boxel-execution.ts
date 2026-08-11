@@ -8,6 +8,7 @@ import {
   isCssResource,
   isHtmlResource,
   identifyCard,
+  getAncestor,
   Loader,
   localId,
   normalizeQueryDefinition,
@@ -65,7 +66,10 @@ import { fetchBoundedSandboxMedia } from '@cardstack/host/lib/sandbox-fetch-tran
 import SandboxMediaBridge, {
   protectSandboxMediaSources,
 } from '@cardstack/host/lib/sandbox-media-bridge';
-import SandboxRuntimeProcess from '@cardstack/host/lib/sandbox-runtime-process';
+import SandboxRuntimeProcess, {
+  supportsCredentiallessIframe,
+} from '@cardstack/host/lib/sandbox-runtime-process';
+import { constrainSandboxWriteDocument } from '@cardstack/host/lib/sandbox-write-transport';
 import {
   isImplicitSandboxModule,
   isTrustedImport,
@@ -606,7 +610,13 @@ export default class BoxelExecutionService extends Service {
             `Sandbox instance write for '${String(incomingId)}' does not match the card this process renders`,
           );
         }
-        await api.updateFromSerialized(card as never, document);
+        let authorizedDocument = await this.serializeForExecution(card);
+        let constrainedDocument = constrainSandboxWriteDocument(
+          document,
+          authorizedDocument,
+          (id) => this.network.virtualNetwork.unresolveURL(id),
+        );
+        await api.updateFromSerialized(card as never, constrainedDocument);
         this.store.scheduleSave(cardId);
         console.debug('[sandbox-parent] child write applied', { id: cardId });
         for (let trigger of [
@@ -996,7 +1006,8 @@ export default class BoxelExecutionService extends Service {
     card: BaseDef,
     requestedRef: CodeRef,
   ): DirectRenderSlot {
-    let { name } = normalizeCodeRef(requestedRef);
+    let normalizedRef = normalizeCodeRef(requestedRef);
+    let { name } = normalizedRef;
     switch (name) {
       case 'CardDef':
       case 'FieldDef':
@@ -1005,9 +1016,46 @@ export default class BoxelExecutionService extends Service {
       default:
         throw new Error(`Unsupported trusted Base format provider ${name}`);
     }
+    if (!isTrustedModule(normalizedRef.module)) {
+      throw new Error(
+        `Refusing untrusted Host format provider ${normalizedRef.module}::${name}`,
+      );
+    }
+    let componentProvider = this.trustedComponentProviderFor(card, name);
     return this.directBoxelRuntime.runtime.getRenderSlot(card, undefined, {
       componentCodeRef: requestedRef,
+      componentProvider,
     });
+  }
+
+  /**
+   * Selects the first trusted constructor in the authored card's ancestry.
+   * Host fallback rendering must never invoke an overridable static through
+   * the authored subclass: that would let a Capsule card choose a Direct
+   * component. Matching an expected Base name additionally binds an inert
+   * trusted-base CodeRef to the constructor that actually owns it.
+   */
+  private trustedComponentProviderFor(
+    card: BaseDef,
+    expectedName?: string,
+  ): BaseDefConstructor {
+    let current: BaseDefConstructor | undefined = card.constructor;
+    while (current) {
+      let identity = Loader.identify(current);
+      if (
+        identity &&
+        isTrustedModule(identity.module) &&
+        (!expectedName || identity.name === expectedName)
+      ) {
+        return current;
+      }
+      current = getAncestor(current);
+    }
+    throw new Error(
+      `Could not resolve trusted Base component provider${
+        expectedName ? ` ${expectedName}` : ''
+      }`,
+    );
   }
 
   private ensureExecutionEngine(): BoxelExecutionEngine {
@@ -1048,8 +1096,11 @@ export default class BoxelExecutionService extends Service {
     let fields = api.getFields(card, {
       includeComputeds: true,
     }) as unknown as Record<string, Field<BaseDefConstructor>>;
-    let rootComponent = this.directBoxelRuntime.runtime.getRenderSlot(card)
-      .component as unknown as Record<PropertyKey, unknown>;
+    let rootComponent = this.directBoxelRuntime.runtime.getRenderSlot(
+      card,
+      undefined,
+      { componentProvider: this.trustedComponentProviderFor(card) },
+    ).component as unknown as Record<PropertyKey, unknown>;
     let authored = new Map<string, BoxComponent>();
 
     return new Proxy(Object.create(null) as Record<string, BoxComponent>, {
@@ -1141,6 +1192,11 @@ export default class BoxelExecutionService extends Service {
   private createSandbox(surfaceIdentity: string): SandboxRuntimeProcess {
     if (typeof document === 'undefined') {
       throw new Error('Sandbox rendering requires a browser document');
+    }
+    if (!supportsCredentiallessIframe()) {
+      throw new Error(
+        'Boxel Sandbox requires browser support for credentialless iframes',
+      );
     }
     // Parent-side counterpart of the child's own boot breadcrumbs
     // ([sandbox-child] route model resolved / listening posted): a Sandbox

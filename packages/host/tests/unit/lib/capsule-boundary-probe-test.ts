@@ -154,7 +154,7 @@ module('Unit | Capsule boundary probe', function () {
     );
   });
 
-  test('GAP: a dynamic import in a real card fails closed but opaquely', async function (assert) {
+  test('a dynamic import in a real card fails closed with a policy refusal', async function (assert) {
     // Real card source is transpiled before it reaches the compartment. The
     // transpiler rewrites `import(x)` to `import.meta.loader.import(...)`, so
     // SES censorship never sees an import expression; the compartment then
@@ -195,18 +195,11 @@ module('Unit | Capsule boundary probe', function () {
     } finally {
       evaluator.destroy?.();
     }
-    if (loadError) {
-      // Also acceptable as fail-closed: refused at evaluation.
-      assert.ok(loadError, `dynamic-import card refused at load: ${loadError}`);
-    } else {
-      assert.strictEqual(r.loader, 'undefined', 'import.meta.loader stripped');
-      let opaque =
-        /import/i.test(String(r.dyn)) && /undefined/i.test(String(r.dyn));
-      assert.true(
-        opaque,
-        `GAP: dynamic import fails with an opaque TypeError, not a policy message: ${r.dyn}`,
-      );
-    }
+    let refusal = loadError ?? String(r.dyn);
+    assert.true(
+      refusal.includes('CAPSULE_DYNAMIC_IMPORT_DENIED'),
+      `dynamic import names the policy boundary: ${refusal}`,
+    );
   });
 
   test('GAP: the main-thread compartment blocks the event loop', async function (assert) {

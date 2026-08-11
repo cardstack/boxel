@@ -11,6 +11,99 @@ import {
 } from '@cardstack/host/lib/trusted-modules';
 
 module('Unit | Sandbox module fetch transport', function () {
+  test('authenticated media reads require exact projected authority and never expose error bodies', async function (assert) {
+    let channel = new MessageChannel();
+    let requested: string[] = [];
+    let allowedMedia = 'https://realm.example/images/cover.png';
+    let server = new SandboxFetchServer(
+      channel.port1,
+      async (input) => {
+        let url = String(input);
+        requested.push(url);
+        if (url === allowedMedia) {
+          return new Response(new Uint8Array([1, 2, 3]), {
+            headers: { 'content-type': 'image/png' },
+          });
+        }
+        return new Response('private error details', {
+          status: 403,
+          headers: { 'content-type': 'text/plain' },
+        });
+      },
+      () => false,
+      undefined,
+      undefined,
+      undefined,
+      (url) => url === allowedMedia,
+    );
+    let client = new SandboxFetchClient(channel.port2);
+    channel.port1.start();
+    channel.port2.start();
+
+    try {
+      let response = await client.fetchMedia(allowedMedia);
+      assert.deepEqual(
+        [...new Uint8Array(await response.arrayBuffer())],
+        [1, 2, 3],
+        'an exactly projected protected image remains available',
+      );
+      await assert.rejects(
+        client.fetchMedia('https://realm.example/images/private.png'),
+        /outside its projected capabilities/,
+        'an undeclared URL is denied before authenticated fetch',
+      );
+      assert.deepEqual(
+        requested,
+        [allowedMedia],
+        'the denied media URL never reaches the network',
+      );
+    } finally {
+      client.destroy();
+      server.destroy();
+      channel.port1.close();
+      channel.port2.close();
+    }
+  });
+
+  test('media rejects non-success and non-image responses before body transfer', async function (assert) {
+    for (let response of [
+      new Response('private error details', {
+        status: 403,
+        headers: { 'content-type': 'text/plain' },
+      }),
+      new Response('not an image', {
+        status: 200,
+        headers: { 'content-type': 'text/plain' },
+      }),
+    ]) {
+      let channel = new MessageChannel();
+      let allowed = 'https://realm.example/images/declared.png';
+      let server = new SandboxFetchServer(
+        channel.port1,
+        async () => response,
+        () => false,
+        undefined,
+        undefined,
+        undefined,
+        (url) => url === allowed,
+      );
+      let client = new SandboxFetchClient(channel.port2);
+      channel.port1.start();
+      channel.port2.start();
+      try {
+        await assert.rejects(
+          client.fetchMedia(allowed),
+          /unavailable|not an image/,
+        );
+      } finally {
+        client.destroy();
+        server.destroy();
+        channel.port1.close();
+        channel.port2.close();
+      }
+    }
+  });
+
   test('authored resource reads use exact non-executable authority', async function (assert) {
     let channel = new MessageChannel();
     let requested: Request[] = [];

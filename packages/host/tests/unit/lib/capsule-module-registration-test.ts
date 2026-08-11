@@ -8,6 +8,7 @@ import type {
   LooseSingleCardDocument,
   RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
+import { PACKAGES_FAKE_ORIGIN } from '@cardstack/runtime-common/package-shim-handler';
 
 import CapsuleBoxelRuntime from '@cardstack/host/lib/capsule-boxel-runtime';
 import { createCapsuleRenderSlot } from '@cardstack/host/lib/capsule-component';
@@ -38,9 +39,11 @@ function evaluatorFor(
         : new Response(source, { status: 200 });
     },
     resolveImport: (moduleIdentifier) =>
-      moduleIdentifier.startsWith('@')
-        ? `https://packages.example/${moduleIdentifier}`
-        : moduleIdentifier,
+      moduleIdentifier === 'ember-provide-consume-context'
+        ? `${PACKAGES_FAKE_ORIGIN}${moduleIdentifier}`
+        : moduleIdentifier.startsWith('@')
+          ? `https://packages.example/${moduleIdentifier}`
+          : moduleIdentifier,
     isTrustedImport,
   });
 }
@@ -76,8 +79,16 @@ module('Unit | Capsule module registration', function () {
       import { setComponentTemplate } from '@ember/component';
       import { createTemplateFactory } from '@ember/template-factory';
 
-      if (import.meta.loader !== undefined) {
-        throw new Error('host Loader leaked through import.meta');
+      if (typeof import.meta.loader?.import !== 'function') {
+        throw new Error('dynamic import policy facade is missing');
+      }
+      try {
+        import.meta.loader.fetch('https://example.test/private');
+        throw new Error('dynamic fetch policy facade did not refuse');
+      } catch (error) {
+        if (!String(error).includes('CAPSULE_DYNAMIC_FETCH_DENIED')) {
+          throw error;
+        }
       }
       export class ArticleCard extends CardDef {}
       ArticleCard.isolated = class Isolated extends Component {};
@@ -761,7 +772,7 @@ module('Unit | Capsule module registration', function () {
     };
     let runtime = new CapsuleBoxelRuntime(evaluator);
     let ref = {
-      module: '../../article.js' as RealmResourceIdentifier,
+      module: '../cards/article.js' as RealmResourceIdentifier,
       name: 'Flight',
     };
     let resource = {

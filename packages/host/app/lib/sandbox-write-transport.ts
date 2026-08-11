@@ -20,6 +20,79 @@ interface PendingWriteRequest {
 export const defaultSandboxWriteTimeoutMs = 10_000;
 
 /**
+ * A Sandbox may mutate only the rendered root resource. Included resources
+ * are read authority, not transitive write authority: replace them with the
+ * parent's current projection and reject root relationship targets outside
+ * that exact declared neighborhood.
+ */
+export function constrainSandboxWriteDocument(
+  incoming: LooseSingleCardDocument,
+  authorized: LooseSingleCardDocument,
+  normalizeId: (id: string) => string = (id) => id,
+): LooseSingleCardDocument {
+  let allowedIds = new Set<string>();
+  for (let resource of [authorized.data, ...(authorized.included ?? [])]) {
+    if (typeof resource.id === 'string') {
+      allowedIds.add(normalizeId(resource.id));
+    }
+    let relationships = resource.relationships;
+    if (!relationships || typeof relationships !== 'object') {
+      continue;
+    }
+    for (let relationship of Object.values(relationships)) {
+      if (!relationship || typeof relationship !== 'object') {
+        continue;
+      }
+      let data = (relationship as { data?: unknown }).data;
+      let identifiers = Array.isArray(data) ? data : data ? [data] : [];
+      for (let identifier of identifiers) {
+        if (
+          identifier &&
+          typeof identifier === 'object' &&
+          'id' in identifier &&
+          typeof identifier.id === 'string'
+        ) {
+          allowedIds.add(normalizeId(identifier.id));
+        }
+      }
+    }
+  }
+  let relationships = incoming.data.relationships;
+  if (relationships && typeof relationships === 'object') {
+    for (let [name, relationship] of Object.entries(relationships)) {
+      if (!relationship || typeof relationship !== 'object') {
+        continue;
+      }
+      let data = (relationship as { data?: unknown }).data;
+      let identifiers = Array.isArray(data) ? data : data ? [data] : [];
+      for (let identifier of identifiers) {
+        let id =
+          identifier &&
+          typeof identifier === 'object' &&
+          'id' in identifier &&
+          typeof identifier.id === 'string'
+            ? identifier.id
+            : undefined;
+        if (!id || !allowedIds.has(normalizeId(id))) {
+          throw new Error(
+            `Sandbox instance write relationship '${name}' is outside its projected capabilities`,
+          );
+        }
+      }
+    }
+  }
+  return {
+    ...incoming,
+    data: {
+      ...incoming.data,
+      id: authorized.data.id,
+      type: authorized.data.type,
+    },
+    included: authorized.included,
+  };
+}
+
+/**
  * Child-side sender for RP-20.6 instance writes — the reverse polarity of
  * `SandboxRenderClient` (there the parent requests and the child confirms;
  * here the child proposes and the parent confirms). One instance per

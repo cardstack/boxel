@@ -545,6 +545,56 @@ module('Unit | Boxel execution engine', function () {
     assert.strictEqual(browser.tier, 'sandbox');
     assert.true(browser.signals.includes('document'));
 
+    for (let expression of [
+      'globalThis.document.createElement("canvas")',
+      'self.document.createElement("canvas")',
+      'globalThis["document"].createElement("canvas")',
+      '(() => { let { document } = globalThis; return document.createElement("canvas"); })()',
+    ]) {
+      let alternateGlobal = await classifyBoxelSource(`
+        import { CardDef } from '@cardstack/base/card-api';
+        export class Example extends CardDef {
+          static isolated = ${expression};
+        }
+      `);
+      assert.strictEqual(
+        alternateGlobal.tier,
+        'sandbox',
+        `${expression} is recognized as browser authority`,
+      );
+      assert.true(alternateGlobal.signals.includes('document'));
+    }
+
+    for (let expression of [
+      'globalThis["doc" + "ument"].createElement("canvas")',
+      'globalThis.crypto.getRandomValues(new Uint8Array(1))',
+    ]) {
+      let ambientGlobalObject = await classifyBoxelSource(`
+        import { CardDef } from '@cardstack/base/card-api';
+        export class Example extends CardDef {
+          static isolated = ${expression};
+        }
+      `);
+      assert.strictEqual(
+        ambientGlobalObject.tier,
+        'sandbox',
+        `${expression} cannot hide browser authority behind the global object`,
+      );
+      assert.true(ambientGlobalObject.signals.includes('window'));
+    }
+
+    let shadowedGlobalObject = await classifyBoxelSource(`
+      import { CardDef } from '@cardstack/base/card-api';
+      export class Example extends CardDef {
+        static isolated = ((globalThis: { document: string }) => globalThis.document)({ document: 'data' });
+      }
+    `);
+    assert.strictEqual(
+      shadowedGlobalObject.tier,
+      'capsule',
+      'a lexically shadowed globalThis is ordinary authored data',
+    );
+
     let canvas = await classifyBoxelSource(`
       import { CardDef } from '@cardstack/base/card-api';
       export class Example extends CardDef {
@@ -723,6 +773,57 @@ module('Unit | Boxel execution engine', function () {
       dependencyLoads,
       2,
       'a changed source snapshot replaces the cached graph',
+    );
+  });
+
+  test('module graph classification is stable across diamond import order and cycles', async function (assert) {
+    let sources: Record<string, string> = {
+      'https://example.test/left.gts': `import Shared from './shared.gts'; export default Shared;`,
+      'https://example.test/right.gts': `import Shared from './shared.gts'; export default Shared;`,
+      'https://example.test/shared.gts': `import * as THREE from 'three'; export default THREE.Scene;`,
+      'https://example.test/cycle-a.gts': `import B from './cycle-b.gts'; export default B;`,
+      'https://example.test/cycle-b.gts': `import A from './cycle-a.gts'; import * as THREE from 'three'; export default A || THREE.Scene;`,
+    };
+    let classifier = new BoxelModuleGraphClassifier({
+      loadSource: async (identifier) => sources[identifier]!,
+      resolveImport: (specifier, relativeTo) =>
+        specifier.startsWith('.')
+          ? new URL(specifier, relativeTo).href
+          : specifier,
+      isTrustedModule: () => false,
+    });
+    let entry = (imports: string) => `
+      ${imports}
+      export default [Left, Right];
+    `;
+    let leftFirst = entry(
+      `import Left from './left.gts'; import Right from './right.gts';`,
+    );
+    let rightFirst = entry(
+      `import Right from './right.gts'; import Left from './left.gts';`,
+    );
+
+    // eslint-disable-next-line ember/no-string-prototype-extensions -- graph classifier API
+    let first = await classifier.classify(
+      'https://example.test/entry.gts',
+      leftFirst,
+    );
+    // eslint-disable-next-line ember/no-string-prototype-extensions -- graph classifier API
+    let second = await classifier.classify(
+      'https://example.test/entry.gts',
+      rightFirst,
+    );
+    assert.strictEqual(first.tier, 'sandbox');
+    assert.strictEqual(second.tier, 'sandbox');
+    assert.deepEqual(first.signals, second.signals);
+
+    classifier.invalidate();
+    // eslint-disable-next-line ember/no-string-prototype-extensions -- graph classifier API
+    let cycle = await classifier.classify('https://example.test/cycle-a.gts');
+    assert.strictEqual(
+      cycle.tier,
+      'sandbox',
+      'a propagating browser signal survives a cycle without recursion or order dependence',
     );
   });
 

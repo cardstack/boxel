@@ -5,7 +5,6 @@ import { provide, consume } from 'ember-provide-consume-context';
 
 import { eq } from '@cardstack/boxel-ui/helpers';
 
-import type { ResolvedCodeRef } from '@cardstack/runtime-common';
 import {
   CardContextName,
   CardCrudFunctionsContextName,
@@ -14,6 +13,8 @@ import {
   GetCardContextName,
   GetCardsContextName,
   GetCardCollectionContextName,
+  Loader,
+  type ResolvedCodeRef,
   type getCard,
   type getCards,
   type getCardCollection,
@@ -21,6 +22,7 @@ import {
 
 import BoxelExecutionRenderer from '@cardstack/host/components/boxel-execution-renderer';
 import HeadFormatPreview from '@cardstack/host/components/head-format-preview';
+import { isTrustedModule } from '@cardstack/host/lib/trusted-modules';
 import type DirectBoxelRuntimeService from '@cardstack/host/services/direct-boxel-runtime';
 
 import type {
@@ -114,9 +116,10 @@ export default class CardRenderer extends Component<Signature> {
     // safe default for every product surface that adopts CardRenderer; new
     // surfaces cannot accidentally execute authored modules in the Host.
     //
-    // A field render stays inside its parent's already-selected execution
-    // environment. Routing it again would create a boundary per delegated
-    // field instead of preserving Boxel's compositional render graph.
+    // A field render must stay inside its parent's already-selected execution
+    // environment. CardRenderer therefore accepts a delegated field only on
+    // the explicit trusted Direct path; an authored caller cannot use the
+    // legacy field argument as a second Host-rendering escape hatch.
     //
     // Under automatic execution, a codeRef is only ever the standard-view
     // Base-template override (baseCardRef from stack-item / preview-panel).
@@ -126,6 +129,16 @@ export default class CardRenderer extends Component<Signature> {
     // tier
     // (RP-6.5): host-side trusted Base for Direct/Capsule, refused for
     // Sandbox.
-    return this.args.execution !== 'direct' && this.args.field === undefined;
+    let identity = Loader.identify(this.args.card.constructor);
+    let trustedDirectRequest =
+      this.args.execution === 'direct' &&
+      identity !== undefined &&
+      isTrustedModule(identity.module);
+    if (this.args.field !== undefined && !trustedDirectRequest) {
+      throw new Error(
+        'Untrusted delegated fields must render inside their selected Boxel execution runtime',
+      );
+    }
+    return !trustedDirectRequest;
   }
 }

@@ -41,6 +41,7 @@ import type { VirtualNetwork } from '@cardstack/runtime-common/virtual-network';
 
 import { installBoxelLoaderCompatibilityModules } from '@cardstack/host/lib/boxel-loader-compatibility';
 import { capsuleSearchEntryWireQueryFromQuery } from '@cardstack/host/lib/capsule-runtime-helpers';
+import { isTrustedImport as isHostTrustedImport } from '@cardstack/host/lib/trusted-modules';
 
 import { createCapsuleCompartment } from '../../workers/capsule-module-registration-evaluator';
 
@@ -623,9 +624,27 @@ export default class CapsuleModuleEvaluator {
       virtualNetwork: options.virtualNetwork,
       moduleEvaluator: (source, moduleIdentifier) =>
         this.evaluateRegistration(source, moduleIdentifier),
-      // The ordinary Loader exposes itself as import.meta.loader. That is a
-      // trusted-runtime convenience and must never cross into realm code.
-      moduleMeta: (moduleIdentifier) => harden({ url: moduleIdentifier }),
+      // The ordinary Loader exposes itself as import.meta.loader. Capsule
+      // source still receives a denial-shaped facade because the transpiler
+      // rewrites dynamic import() to import.meta.loader.import(). A named
+      // refusal is safer and more actionable than leaking the real Loader or
+      // failing later with an opaque "undefined.import" TypeError.
+      moduleMeta: (moduleIdentifier) =>
+        harden({
+          url: moduleIdentifier,
+          loader: harden({
+            import(): never {
+              throw new Error(
+                'CAPSULE_DYNAMIC_IMPORT_DENIED: dynamic import requires Sandbox execution',
+              );
+            },
+            fetch(): never {
+              throw new Error(
+                'CAPSULE_DYNAMIC_FETCH_DENIED: resource fetch requires an explicit capability',
+              );
+            },
+          }),
+        }),
     });
     installBoxelLoaderCompatibilityModules(this.loader);
     this.installRuntimeFacades();
@@ -945,7 +964,8 @@ export default class CapsuleModuleEvaluator {
   ): unknown {
     let liveInstance = this.componentInstanceByHandle.get(handle);
     if (liveInstance) {
-      return this.jsonClone(liveInstance[property]);
+      let value = liveInstance[property];
+      return value === undefined ? undefined : this.jsonClone(value);
     }
     let instance = this.instantiateComponent(handle, args);
     return this.readComponentProperty(instance.handle, property);
@@ -990,6 +1010,9 @@ export default class CapsuleModuleEvaluator {
             : (this.explicitRuntimeFacades.get(trustedIdentity) ??
               this.trustedModuleFacade(trustedIdentity));
         this.loader.shimModule(dependency, facade);
+        if (trustedIdentity !== dependency) {
+          this.loader.shimModule(trustedIdentity, facade);
+        }
       }
     }
 
@@ -1226,6 +1249,10 @@ export default class CapsuleModuleEvaluator {
     let provideConsumeContextFacade = this.provideConsumeContextFacade();
     this.installExplicitRuntimeFacade(
       'ember-provide-consume-context',
+      provideConsumeContextFacade,
+    );
+    this.installExplicitRuntimeFacade(
+      `${PACKAGES_FAKE_ORIGIN}ember-provide-consume-context`,
       provideConsumeContextFacade,
     );
     // The Capsule is retained by viewer principal and may execute modules
@@ -2629,33 +2656,5 @@ export default class CapsuleModuleEvaluator {
 }
 
 function defaultTrustedImport(moduleIdentifier: string): boolean {
-  let decoded: string;
-  try {
-    decoded = decodeURIComponent(moduleIdentifier).split('\\').join('/');
-  } catch {
-    return false;
-  }
-  if (
-    decoded
-      .split(/[/?#]/)
-      .some((segment) => segment === '.' || segment === '..')
-  ) {
-    return false;
-  }
-  return (
-    moduleIdentifier === '@ember/component' ||
-    moduleIdentifier === '@ember/object' ||
-    moduleIdentifier === '@ember/helper' ||
-    moduleIdentifier === '@ember/modifier' ||
-    moduleIdentifier === '@ember/component/template-only' ||
-    moduleIdentifier === '@ember/template-factory' ||
-    moduleIdentifier === 'ember-provide-consume-context' ||
-    moduleIdentifier === '@glimmer/component' ||
-    moduleIdentifier === '@glimmer/tracking' ||
-    moduleIdentifier === '@cardstack/runtime-common' ||
-    moduleIdentifier.startsWith('@cardstack/') ||
-    moduleIdentifier.startsWith(`${PACKAGES_FAKE_ORIGIN}@cardstack/`) ||
-    moduleIdentifier.startsWith('https://cardstack.com/base/') ||
-    moduleIdentifier.startsWith('https://cardstack.com/catalog/')
-  );
+  return isHostTrustedImport(moduleIdentifier);
 }
