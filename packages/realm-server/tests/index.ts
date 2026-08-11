@@ -398,6 +398,10 @@ const ALL_TEST_FILES: string[] = [
   './worker-reader-test',
   './worker-job-registration-test',
   './realm-index-updater-test',
+  './realm-packages-test',
+  './sealed-scopes-test',
+  './module-identity-test',
+  './import-map-invalidation-test',
 ];
 
 // TEST_FILES limits which test files are loaded (parsed and executed). Useful
