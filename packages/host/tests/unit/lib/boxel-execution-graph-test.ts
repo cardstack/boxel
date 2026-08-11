@@ -177,12 +177,12 @@ module('Unit | Boxel execution graph', function () {
 
     assert.strictEqual(
       ids.size,
-      13,
-      'all thirteen graph scenarios are declared',
+      15,
+      'all fifteen graph scenarios are declared',
     );
     assert.strictEqual(
       proofCounts.exact,
-      13,
+      15,
       'the minimum gate has an exact browser-backed proof for every scenario',
     );
     assert.strictEqual(

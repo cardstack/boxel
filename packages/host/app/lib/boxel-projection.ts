@@ -94,15 +94,39 @@ export interface HostBoxelProjectionOptions {
    * settle → republish → `@model` refresh chain takes over unchanged.
    */
   ensureRelationshipLoaded?: (reference: string) => Promise<unknown>;
+  /**
+   * Reports that at least one relationship was observed before its Store
+   * resource settled. The projection still returns immediately with the
+   * currently-present values; boundary owners can use this signal to wait
+   * for the loads they just triggered and publish a complete serialized
+   * snapshot to runtimes that cannot read the canonical Store instance.
+   */
+  onRelationship?: (relationship: RelationshipObservation) => void;
+  /**
+   * A Host-resolved query result prepared before a process boundary exists.
+   * Query SearchResources normally become live through Glimmer's modifier
+   * lifecycle; a Sandbox materialization deliberately happens before that
+   * lifecycle. Supplying the bounded Store result here lets projection use
+   * the canonical query membership without pretending a render resource has
+   * already mounted.
+   */
+  resolvedQueryValues?: (
+    instance: BaseDef,
+    fieldName: string,
+  ) => CardDef[] | undefined;
 }
 
 /**
- * One `linksTo`/`linksToMany` field observed mid-resolution (RP-7.1: not yet
- * `present`, not yet a terminal failure) while building a projection.
+ * One `linksTo`/`linksToMany` field that needs Host participation while
+ * building a projection. Query-backed fields are always reported because an
+ * empty, not-loading SearchResource may simply not have entered its Glimmer
+ * modifier lifecycle yet. Declared links are reported only while pending.
  */
-interface PendingRelationship {
+export interface RelationshipObservation {
   instance: BaseDef;
   fieldName: string;
+  queryBacked: boolean;
+  pending: boolean;
 }
 
 /**
@@ -214,8 +238,9 @@ export function projectHostBoxelSemantics(
     fields: resolveBoxelFields(
       instance,
       api,
-      undefined,
+      options.onRelationship,
       options.ensureRelationshipLoaded,
+      options.resolvedQueryValues,
     ),
     presentation: projectInstancePresentation(
       instance,
@@ -275,8 +300,12 @@ export function describeBoxelType(
 export function resolveBoxelFields(
   instance: BaseDef,
   api: CardAPIModule,
-  onPendingRelationship?: (pending: PendingRelationship) => void,
+  onRelationship?: (relationship: RelationshipObservation) => void,
   ensureLoaded?: (reference: string) => Promise<unknown>,
+  resolvedQueryValues?: (
+    instance: BaseDef,
+    fieldName: string,
+  ) => CardDef[] | undefined,
 ): ResolvedField[] {
   return Object.entries(
     api.getFields(instance, { includeComputeds: true }),
@@ -295,9 +324,11 @@ export function resolveBoxelFields(
         fieldName,
         field.fieldType,
         api,
-        onPendingRelationship,
+        onRelationship,
         undefined,
         ensureLoaded,
+        false,
+        resolvedQueryValues,
       ),
       resolvedConfiguration:
         projectJSONValue(resolveFieldConfiguration(api, field, instance)) ??
@@ -900,19 +931,24 @@ function projectValue(
   fieldName: string,
   fieldType: Field<BaseDefConstructor>['fieldType'],
   api: CardAPIModule,
-  onPending: ((pending: PendingRelationship) => void) | undefined,
+  onRelationship: ((relationship: RelationshipObservation) => void) | undefined,
   seen = new WeakSet<object>(),
   ensureLoaded?: (reference: string) => Promise<unknown>,
   pure = false,
+  resolvedQueryValues?: (
+    instance: BaseDef,
+    fieldName: string,
+  ) => CardDef[] | undefined,
 ): JSONValue | BoxelValueReference | BoxelValueReference[] {
   if (fieldType === 'linksTo' || fieldType === 'linksToMany') {
     let present = presentRelationshipValues(
       instance,
       fieldName,
       api,
-      onPending,
+      onRelationship,
       ensureLoaded,
       pure,
+      resolvedQueryValues,
     );
     if (fieldType === 'linksToMany') {
       let projected = present.map(
@@ -920,10 +956,11 @@ function projectValue(
           projectExpandedValue(
             target,
             api,
-            onPending,
+            onRelationship,
             seen,
             ensureLoaded,
             pure,
+            resolvedQueryValues,
           ) as JSONValue,
       );
       return projected;
@@ -932,10 +969,11 @@ function projectValue(
       ? (projectExpandedValue(
           present[0],
           api,
-          onPending,
+          onRelationship,
           seen,
           ensureLoaded,
           pure,
+          resolvedQueryValues,
         ) as JSONValue)
       : null;
   }
@@ -943,18 +981,35 @@ function projectValue(
   if (fieldType === 'containsMany') {
     return Array.isArray(value)
       ? value.map((entry) =>
-          projectExpandedValue(entry, api, onPending, seen, ensureLoaded, pure),
+          projectExpandedValue(
+            entry,
+            api,
+            onRelationship,
+            seen,
+            ensureLoaded,
+            pure,
+            resolvedQueryValues,
+          ),
         )
       : [];
   }
-  return projectExpandedValue(value, api, onPending, seen, ensureLoaded, pure);
+  return projectExpandedValue(
+    value,
+    api,
+    onRelationship,
+    seen,
+    ensureLoaded,
+    pure,
+    resolvedQueryValues,
+  );
 }
 
 /**
  * Every slot of a `linksTo`/`linksToMany` field currently in the RP-7.1
- * `present` state, in document order. Reports the field to `onPending` when
- * it is not (yet) fully settled (RP-7.3), so a caller can watch for it to
- * settle later without re-deriving which fields those were.
+ * `present` state, in document order. Reports query-backed fields on every
+ * materialization pass and declared fields when they are not fully settled,
+ * so the Host can distinguish “query lifecycle has not started” from a
+ * genuinely settled empty result.
  *
  * Reading the field's own getter first (`instance[fieldName]`) is what
  * starts resolution at all (RP-7.2: "the field getter is the lazy-load
@@ -971,10 +1026,24 @@ function presentRelationshipValues(
   instance: BaseDef,
   fieldName: string,
   api: CardAPIModule,
-  onPending: ((pending: PendingRelationship) => void) | undefined,
+  onRelationship: ((relationship: RelationshipObservation) => void) | undefined,
   ensureLoaded?: (reference: string) => Promise<unknown>,
   pure = false,
+  resolvedQueryValues?: (
+    instance: BaseDef,
+    fieldName: string,
+  ) => CardDef[] | undefined,
 ): CardDef[] {
+  let resolvedQuery = resolvedQueryValues?.(instance, fieldName);
+  if (resolvedQuery) {
+    onRelationship?.({
+      instance,
+      fieldName,
+      queryBacked: true,
+      pending: false,
+    });
+    return resolvedQuery;
+  }
   if (!pure) {
     // The lazy-load trigger (RP-7.2) — materialize-time only. A pure
     // refresh read (RP-20.2) must never start a load: materialize already
@@ -989,11 +1058,16 @@ function presentRelationshipValues(
   let notLoaded = (membership ?? []).filter(
     (entry) => entry.kind === 'not-loaded',
   );
-  if (
-    onPending &&
-    (isLoading || membership === undefined || notLoaded.length > 0)
-  ) {
-    onPending({ instance, fieldName });
+  let pending = isLoading || membership === undefined || notLoaded.length > 0;
+  let queryBacked = Boolean(
+    (
+      api.getFields(instance, {
+        includeComputeds: true,
+      }) as Record<string, import('@cardstack/base/card-api').Field>
+    )[fieldName]?.queryDefinition,
+  );
+  if (onRelationship && (queryBacked || pending)) {
+    onRelationship({ instance, fieldName, queryBacked, pending });
   }
   if (ensureLoaded && !pure) {
     // A not-loaded slot's `reference` is the relationship's own serialized
@@ -1049,10 +1123,14 @@ function presentRelationshipValues(
 function projectExpandedValue(
   value: unknown,
   api: CardAPIModule,
-  onPending: ((pending: PendingRelationship) => void) | undefined,
+  onRelationship: ((relationship: RelationshipObservation) => void) | undefined,
   seen: WeakSet<object>,
   ensureLoaded?: (reference: string) => Promise<unknown>,
   pure = false,
+  resolvedQueryValues?: (
+    instance: BaseDef,
+    fieldName: string,
+  ) => CardDef[] | undefined,
 ): JSONValue {
   if (!isBaseDefInstance(value)) {
     return projectJSONValue(value) ?? null;
@@ -1074,10 +1152,11 @@ function projectExpandedValue(
         name,
         field.fieldType,
         api,
-        onPending,
+        onRelationship,
         seen,
         ensureLoaded,
         pure,
+        resolvedQueryValues,
       ) as JSONValue;
     }
     return result;

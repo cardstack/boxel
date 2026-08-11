@@ -13,7 +13,10 @@ import { PermissionsContextName } from '@cardstack/runtime-common';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
 import { createLiveBoxelModel } from '@cardstack/host/lib/boxel-projection';
-import SandboxMediaBridge from '@cardstack/host/lib/sandbox-media-bridge';
+import { htmlComponent } from '@cardstack/host/lib/html-component';
+import SandboxMediaBridge, {
+  protectSandboxMediaSources,
+} from '@cardstack/host/lib/sandbox-media-bridge';
 import type SandboxRuntimeProcess from '@cardstack/host/lib/sandbox-runtime-process';
 
 import {
@@ -415,6 +418,61 @@ module('Integration | rp-continuity', function (hooks) {
       bridge.stop();
       root.remove();
     }
+  });
+
+  test('RP-20.4: a Sandbox prerender handoff never exposes a private media URL before its bounded Host fetch settles', async function (assert) {
+    let releaseFetch!: (response: Response) => void;
+    let fetches: string[] = [];
+    let fetchMedia = (url: string) => {
+      fetches.push(url);
+      return new Promise<Response>((resolve) => (releaseFetch = resolve));
+    };
+    let privateSource = 'https://realm.example/assets/private-logo.png';
+    let placeholder = document.createElement('div');
+    placeholder.dataset.boxelPrerenderPlaceholder = '';
+    placeholder.innerHTML = `<img data-test-prerender-image src="${privateSource}">`;
+
+    // This is the exact prerender → HTMLComponent → media-bridge handoff
+    // used by BoxelExecutionService. Protecting while detached is what makes
+    // the initial state deterministic: the browser never gets a chance to
+    // issue the authored URL without the Realm authorization held by Host.
+    protectSandboxMediaSources(placeholder);
+    let Placeholder = htmlComponent(placeholder.outerHTML, {}, (element) => {
+      let bridge = new SandboxMediaBridge(element as HTMLElement, fetchMedia);
+      bridge.start();
+      return () => bridge.stop();
+    });
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><Placeholder /></template>
+      },
+    );
+
+    let image = document.querySelector<HTMLImageElement>(
+      '[data-test-prerender-image]',
+    )!;
+    assert.false(
+      image.hasAttribute('src'),
+      'the private source is absent while the Host-owned fetch is pending',
+    );
+    assert.deepEqual(
+      fetches,
+      [privateSource],
+      'the prerender uses the same bounded media lane as the live Sandbox',
+    );
+
+    releaseFetch(
+      new Response(new Blob([new Uint8Array([137, 80, 78, 71])]), {
+        status: 200,
+        headers: { 'content-type': 'image/png' },
+      }),
+    );
+    await waitUntil(() => image.src.startsWith('blob:'), { timeout: 5000 });
+    assert.true(
+      image.src.startsWith('blob:'),
+      'the authorized result becomes the only visible media source',
+    );
   });
 
   test('RP-20.5: a canonical-instance mutation reaches a mounted Sandbox process as a coalesced updateInstance push carrying the projected CURRENT state', async function (assert) {

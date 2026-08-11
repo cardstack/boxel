@@ -16,6 +16,7 @@ export type ExecutionGraphEdge =
   | 'runtime-local'
   | 'host-capability'
   | 'store-update'
+  | 'boundary-projection'
   | 'prerender-placeholder';
 
 export type ExecutionGraphProof = 'exact' | 'protocol-only' | 'browser-gated';
@@ -370,6 +371,69 @@ export const executionGraphScenarios: ExecutionGraphScenario[] = [
       ),
     ],
   },
+  {
+    id: 'G-14',
+    description:
+      'Sandbox query relationship is resolved by Host and crosses as bounded data',
+    proof: 'exact',
+    evidence: [
+      'rp-conformance-test.gts: RP-7.2/RP-8.4 query-backed relationship settlement',
+    ],
+    nodes: [
+      routedNode('query-card', 'sandbox', {
+        policy: { source: sandboxSource },
+        reason: sandboxSource.reason,
+      }),
+      fixedNode('host-query', 'host', 'host-capability', 'query-card'),
+      fixedNode(
+        'bounded-query-result',
+        'sandbox',
+        'boundary-projection',
+        'host-query',
+      ),
+    ],
+  },
+  {
+    id: 'G-15',
+    description:
+      'private media remains Host-brokered across prerender and live Sandbox handoff',
+    proof: 'exact',
+    evidence: [
+      'rp-continuity-test.gts: RP-20.4 prerender media handoff',
+      'rp-continuity-test.gts: RP-20.4 live Sandbox media cache',
+    ],
+    nodes: [
+      fixedNode(
+        'protected-prerender',
+        'prerender',
+        'prerender-placeholder',
+        undefined,
+      ),
+      fixedNode(
+        'bounded-media-fetch',
+        'host',
+        'host-capability',
+        'protected-prerender',
+      ),
+      fixedNode(
+        'hydrated-prerender',
+        'prerender',
+        'boundary-projection',
+        'bounded-media-fetch',
+      ),
+      fixedNode(
+        'sandbox-mount',
+        'host',
+        'host-capability',
+        'hydrated-prerender',
+      ),
+      routedNode('live-sandbox', 'sandbox', {
+        parent: 'sandbox-mount',
+        policy: { source: sandboxSource },
+        reason: sandboxSource.reason,
+      }),
+    ],
+  },
 ];
 
 export const requiredExecutionGraphEdges: ReadonlyArray<
@@ -387,6 +451,8 @@ export const requiredExecutionGraphEdges: ReadonlyArray<
   ['host', 'store-update', 'host'],
   ['host', 'store-update', 'capsule'],
   ['host', 'store-update', 'sandbox'],
+  ['host', 'boundary-projection', 'sandbox'],
+  ['host', 'boundary-projection', 'prerender'],
 ];
 
 export function graphEdgeKey(

@@ -1,7 +1,8 @@
 import 'ses';
 
-import { waitFor, waitUntil } from '@ember/test-helpers';
+import { render, settled, waitFor, waitUntil } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -31,6 +32,7 @@ import {
   initialize as initializeSandboxMatrixServiceStub,
 } from '@cardstack/host/instance-initializers/stub-matrix-service-for-sandbox';
 import { classifyBoxelSource } from '@cardstack/host/lib/boxel-source-classifier';
+import { htmlComponent } from '@cardstack/host/lib/html-component';
 import {
   SandboxFetchClient,
   SandboxFetchServer,
@@ -216,6 +218,13 @@ module('Integration | rp-sandbox', function (hooks) {
   });
   setupRealmCacheTeardown(hooks);
 
+  let restorePrerenderedComponentFor: (() => void) | undefined;
+
+  hooks.afterEach(function () {
+    restorePrerenderedComponentFor?.();
+    restorePrerenderedComponentFor = undefined;
+  });
+
   hooks.beforeEach(async function () {
     await withCachedRealmSetup(async () =>
       setupIntegrationTestRealm({
@@ -342,6 +351,52 @@ module('Integration | rp-sandbox', function (hooks) {
       .doesNotExist('no iframe is created for the edit surface');
   });
 
+  test('RP-6.3: returning from a host-side default editor reuses the live Sandbox process', async function (assert) {
+    let card = await createWidget();
+
+    class FormatState {
+      @tracked format: Format = 'isolated';
+    }
+    let state = new FormatState();
+
+    await render(
+      <template>
+        <CardRenderer @card={{card}} @format={{state.format}} />
+      </template>,
+    );
+
+    await waitFor('[data-boxel-execution="sandbox"]', { timeout: 5000 });
+    let initialIframe = document.querySelector(
+      '[data-boxel-execution="sandbox"] iframe',
+    );
+    assert.ok(initialIframe, 'the isolated format starts in the Sandbox');
+
+    state.format = 'edit';
+    await settled();
+    await waitFor('[data-boxel-execution]', { timeout: 20000 });
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-boxel-execution]')
+          ?.getAttribute('data-boxel-execution') !== 'sandbox',
+      { timeout: 20000 },
+    );
+    assert
+      .dom('.boxel-execution-sandbox-slot iframe')
+      .doesNotExist('the trusted Base editor owns the edit surface');
+
+    state.format = 'isolated';
+    await settled();
+    await waitFor('[data-boxel-execution="sandbox"]', { timeout: 5000 });
+
+    assert
+      .dom('[data-boxel-execution="sandbox"]')
+      .exists('the isolated format returns through the Sandbox path');
+    assert
+      .dom('.boxel-execution-error')
+      .doesNotExist('the format transition does not surface a runtime error');
+  });
+
   test('RP-6.3 exception: a module authoring its own `static edit` template keeps the Sandbox iframe for edit', async function (assert) {
     let card = await createFromResource({
       attributes: { label: 'in place' },
@@ -413,6 +468,16 @@ module('Integration | rp-sandbox', function (hooks) {
 
   test('RP-15.3, RP-6.4: mounting a Sandbox-routed card creates a real, credentialless iframe BORN inside its own presentation slot, and fails closed to the chrome error presentation when the child cannot complete its bootstrap', async function (assert) {
     let card = await createWidget();
+    let execution = getService('boxel-execution');
+    let originalPrerenderedComponentFor =
+      execution.prerenderedComponentFor.bind(execution);
+    execution.prerenderedComponentFor = async () =>
+      htmlComponent(
+        '<div data-test-last-known-good>hello from the last good generation</div>',
+      );
+    restorePrerenderedComponentFor = () => {
+      execution.prerenderedComponentFor = originalPrerenderedComponentFor;
+    };
 
     await renderThroughExecutionRenderer(card, 'isolated');
 
@@ -458,11 +523,12 @@ module('Integration | rp-sandbox', function (hooks) {
     // This integration-test harness does not serve the Sandbox child's
     // origin (`user.localhost`), so the bootstrap handshake this iframe just
     // started can never complete. RP-15.3 requires that a Sandbox render
-    // never go silently blank when that happens: it must fail closed to the
-    // same chrome error presentation Direct/Capsule use, tearing down the
-    // Sandbox slot (and the failed process/iframe with it — the presentation
-    // slot modifier's own teardown calls unmount()) rather than leaving a
-    // dead, booting-forever iframe on screen. (SandboxRuntimeProcess's
+    // never go silently blank when that happens: it must fail closed to a
+    // Host-owned error presentation, tearing down the Sandbox slot (and the
+    // failed process/iframe with it — the presentation slot modifier's own
+    // teardown calls unmount()) rather than leaving a dead, booting-forever
+    // iframe on screen. The inert server-prerendered generation remains
+    // visible beneath that error. (SandboxRuntimeProcess's
     // document loading and the connect handshake have independent bounded
     // deadlines; onMountFailed is what turns either background failure into
     // this visible state, since getRenderSlot() already returned before the
@@ -473,13 +539,29 @@ module('Integration | rp-sandbox', function (hooks) {
       .hasAttribute(
         'role',
         'alert',
-        'chrome owns the error presentation, matching the Direct/Capsule failure contract (RP-15.1)',
+        'chrome owns the error presentation (RP-15.1)',
       );
     assert
-      .dom('[data-test-webgl-widget]')
-      .doesNotExist(
-        'no authored content ever renders around the failed handshake',
+      .dom('[data-boxel-execution="last-known-good"]')
+      .hasTextContaining(
+        'hello from the last good generation',
+        'the substantive last-known-good generation remains visible',
       );
+    assert
+      .dom(
+        '[data-boxel-execution="last-known-good"] .boxel-execution-placeholder',
+      )
+      .hasAttribute(
+        'inert',
+        '',
+        'the failed generation cannot be interacted with',
+      );
+    assert
+      .dom('.boxel-execution-error--overlay')
+      .exists('the diagnostic floats over the retained generation');
+    assert
+      .dom('.boxel-execution-error--overlay [data-test-error-display]')
+      .exists('the diagnostic uses the canonical Host warning panel');
     assert
       .dom('[data-boxel-execution="sandbox"]')
       .doesNotExist(

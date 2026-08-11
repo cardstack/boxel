@@ -68,6 +68,7 @@ function environmentDefaults() {
       skillsRealmURL: 'https://localhost:4201/skills/',
       openRouterRealmURL: 'https://localhost:4201/openrouter/',
       testRealmURL: 'https://localhost:4202/test/',
+      boxelSandboxRuntimeURL: undefined,
     };
   }
   let slug = getEnvSlug();
@@ -92,12 +93,20 @@ function environmentDefaults() {
     // `https://realm-test.${slug}.localhost/test/` in env mode (the
     // counterpart to standard mode's `https://localhost:4202/test/`).
     testRealmURL: `https://realm-test.${slug}.localhost/test/`,
+    boxelSandboxRuntimeURL: `https://sandbox.${slug}.localhost`,
   };
 }
 
 module.exports = function (environment) {
   let defaults = environmentDefaults();
   let skipCatalog = process.env.SKIP_CATALOG === 'true';
+  // Environment mode normally ignores inherited service URLs because a stale
+  // mise shell can otherwise point one isolated worktree at another one's
+  // Matrix/icons processes. A local Host that is deliberately exercising the
+  // staging control plane opts in explicitly; merely setting MATRIX_URL is
+  // not enough to weaken the isolation default.
+  let useEnvironmentServiceOverrides =
+    process.env.BOXEL_ENVIRONMENT_REMOTE_SERVICES === 'true';
 
   const ENV = {
     modulePrefix: '@cardstack/host',
@@ -132,9 +141,10 @@ module.exports = function (environment) {
     // which may be stale from mise's shell-activation cache in standard
     // mode and would otherwise force an http:// matrix URL onto an
     // https:// host page).
-    matrixURL: process.env.BOXEL_ENVIRONMENT
-      ? defaults.matrixURL
-      : process.env.MATRIX_URL || defaults.matrixURL,
+    matrixURL:
+      process.env.BOXEL_ENVIRONMENT && !useEnvironmentServiceOverrides
+        ? defaults.matrixURL
+        : process.env.MATRIX_URL || defaults.matrixURL,
     matrixServerName: process.env.MATRIX_SERVER_NAME || 'localhost',
     autoSaveDelayMs: 500,
     monacoDebounceMs: 500,
@@ -153,9 +163,10 @@ module.exports = function (environment) {
     ),
     // In environment mode, use computed Traefik hostname (not env var, which
     // may be stale from mise's shell-activation cache in standard mode).
-    iconsURL: process.env.BOXEL_ENVIRONMENT
-      ? defaults.iconsURL
-      : process.env.ICONS_URL || defaults.iconsURL,
+    iconsURL:
+      process.env.BOXEL_ENVIRONMENT && !useEnvironmentServiceOverrides
+        ? defaults.iconsURL
+        : process.env.ICONS_URL || defaults.iconsURL,
     publishedRealmBoxelSpaceDomain:
       process.env.PUBLISHED_REALM_BOXEL_SPACE_DOMAIN || defaults.realmHost,
     publishedRealmBoxelSiteDomain:
@@ -177,9 +188,12 @@ module.exports = function (environment) {
     resolvedOpenRouterRealmURL:
       process.env.RESOLVED_OPENROUTER_REALM_URL || defaults.openRouterRealmURL,
     // A Sandbox child must be served from an origin distinct from the Host.
-    // Local development derives user.localhost from the active Host port when
-    // this is absent; hosted builds must supply the deployed runtime origin.
-    boxelSandboxRuntimeURL: process.env.BOXEL_SANDBOX_RUNTIME_URL || undefined,
+    // Standard local development derives user.localhost from the active Host
+    // port when this is absent. Environment mode gets a dedicated
+    // sandbox.<slug>.localhost origin from the defaults above. Hosted builds
+    // must supply the deployed runtime origin.
+    boxelSandboxRuntimeURL:
+      process.env.BOXEL_SANDBOX_RUNTIME_URL || defaults.boxelSandboxRuntimeURL,
     // The live test realm-server's /test/ realm — used by host tests
     // that load source modules from it via
     // `tests/helpers#testModuleRealm`. Derived from BOXEL_ENVIRONMENT via

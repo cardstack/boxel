@@ -3,38 +3,22 @@
 Date: 2026-08-07. Companion to `boxel-rendering-protocol.md` and
 `boxel-simplification-opportunities.md`.
 
-`CardRenderer` routes a render through `BoxelExecutionRenderer` only when
-`@execution='auto'` AND no `@field` AND no `@codeRef` is passed
-(`card-renderer.gts:107`). Everything else renders through the direct
-runtime — main's path, executing card code in the main document.
+Every top-level `CardRenderer` now routes through `BoxelExecutionRenderer` by
+default. `@execution='direct'` is the explicit trusted/legacy escape hatch;
+passing `@field` keeps a delegated field inside the parent render graph rather
+than opening a second execution boundary. `@codeRef` is a standard-view Base
+template override and does not bypass policy routing.
 
 ## Surfaces that route through the execution tiers today
 
-| Surface                           | File                                        | Status               |
-| --------------------------------- | ------------------------------------------- | -------------------- |
-| Interact-mode stacks              | `operator-mode/stack-item.gts:1182`         | `execution='auto'` ✓ |
-| Code-mode card-JSON preview panel | `operator-mode/preview-panel/index.gts:319` | `execution='auto'` ✓ |
-| Host submode                      | `host-mode/card.gts:142`                    | `execution='auto'` ✓ |
+All ordinary product surfaces now inherit automatic routing, including
+interact-mode stacks, Host mode, search results, room-message cards, markdown
+embeds, and card-JSON preview panels. This makes the safety property live at
+the render entry instead of a manually maintained list of call-site flags.
 
-## Surfaces that still render card code directly
+## Deliberate Direct exceptions
 
-Ranked by trust impact — "untrusted" means the surface can render cards from
-realms the user has never opted into executing.
-
-1. **Search sheet results** (`search/result-tile.gts`,
-   `search/hydratable-card.gts`) — embedded-format renders of hits from _every
-   subscribed realm_ (~250 on staging). This is the widest untrusted surface
-   in the app; a malicious card def in any searchable realm executes in the
-   main document the moment it appears in results. Highest-priority candidate
-   for `execution='auto'` (needs the embedded/fitted formats to be cheap in
-   the sandbox tier — prerendered records make this viable).
-2. **AI-assistant room messages** (`matrix/room-message-tool.gts`) — cards
-   attached to or produced by assistant messages render directly. Cards can
-   arrive from other rooms/realms; should route through the tiers.
-3. **Markdown card embeds** (`markdown-embed-chooser/preview/index.gts`,
-   `preview-panel/rendered-markdown.gts`) — embedded renders of cards linked
-   from markdown content. Content-driven, so effectively untrusted.
-4. **Code-mode playground** (`code-submode/playground/playground-preview.gts`,
+1. **Code-mode playground** (`code-submode/playground/playground-preview.gts`,
    4 call sites; also `instance-chooser-dropdown.gts`,
    `field-chooser-modal.gts`, `spec-preview.gts`) — renders the module the
    user is _actively editing_. Direct execution here matches the volatile
@@ -42,16 +26,40 @@ realms the user has never opted into executing.
    edit→preview HMR loop behaves identically to main. Leave direct for v1,
    but note nested `linksTo` cards from foreign realms also render direct
    here.
-5. **`form` synthetic format in the preview panel** — passing
-   `@codeRef=baseCardRef` (preview-panel `effectiveCodeRef`) silently opts
-   the render OUT of the execution runtime even on a surface that otherwise
-   routes auto. Inconsistent: a sandbox-tier card's "Toggle Standard View"
-   renders direct. Fix direction: teach the execution renderer a
-   base-template override instead of using `codeRef` as the escape hatch.
-6. **Fitted format gallery / metadata panel** (`preview-panel/*`) — code-mode
-   own-module context; low priority.
-7. **Command runner route** (`templates/command-runner.gts`) — headless,
-   server-invoked context; out of scope for the browser trust boundary.
+2. **The protocol equivalence oracle** explicitly requests Direct in tests so
+   the policy-routed Direct tier can be compared with main's legacy mount.
+
+## Realm-mirror regression coverage
+
+`rp-realm-mirror-compatibility-test.gts` indexes ordinary realm source and
+instances, then renders them through an unannotated top-level `CardRenderer`.
+It covers the combinations that have repeatedly exposed boundary gaps:
+
+- nested `FieldDef` delegation and the trusted Base default edit surface;
+- `linksTo` and `linksToMany` rendering, including format fallback;
+- primitive Base fields, function-form `computeVia`, and presentation statics;
+- isolated, embedded, fitted, and atom formats from one authored module;
+- trusted Boxel UI and icon imports inside authored Capsule templates; and
+- RichMarkdown card embeds plus the asynchronously loaded CodeMirror editor.
+
+These are compact mirrors of real workspace patterns, not special protocol
+fixtures. A failure is repaired in the shared runtime or trusted Base surface;
+the suite does not add fixture-specific classification or serialization rules.
+
+## Authenticated FileDef resource reads
+
+A Sandbox has no ambient session credentials. Authored `fetch()` therefore
+uses a Host-brokered, GET-only resource channel. Authority is exact and comes
+from either a projected relationship link or the conventional scalar
+`resourceUrl` field used by FileDef adapters when a polymorphic FileDef link
+cannot be represented. Other URL-looking attributes do not grant access.
+
+`resourceUrl` is a capability-bearing Boxel convention, not a generic network
+escape hatch: the Host canonicalizes the one projected URL, strips the hash,
+caps the response, and grants only that exact resource to that retained
+Sandbox process. This is what lets private PDF, GLB, MIDI, and similar bytes
+load without giving authored code a Store, Loader, session token, or ambient
+realm search capability.
 
 ## Verified behavior of the code-mode edit loop (2026-08-07)
 

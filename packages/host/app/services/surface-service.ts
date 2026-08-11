@@ -17,6 +17,7 @@ export interface SurfaceExecutionIdentity {
 interface SurfaceRegistration {
   identity: SurfaceExecutionIdentity;
   element?: HTMLElement;
+  attachment?: object;
   presentation: SurfacePresentation;
   layout: SurfaceLayout;
   observers: Set<(observation: SurfaceObservation) => void>;
@@ -59,18 +60,24 @@ export default class SurfaceService extends Service {
 
   attach(handle: SurfaceHandle, element: HTMLElement): () => void {
     let registration = this.registrationFor(handle);
+    let attachment = {};
     this.detachObservers(registration);
     registration.element = element;
+    registration.attachment = attachment;
     this.applyPresentation(registration);
     this.applyLayout(registration);
     this.installObservers(registration);
     this.publishObservation(registration);
     return () => {
-      if (registration.element !== element) {
+      if (
+        registration.element !== element ||
+        registration.attachment !== attachment
+      ) {
         return;
       }
       this.detachObservers(registration);
       registration.element = undefined;
+      registration.attachment = undefined;
     };
   }
 

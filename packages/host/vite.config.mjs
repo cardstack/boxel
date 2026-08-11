@@ -206,6 +206,47 @@ function quietOptimizedDepSourcemapWarnings() {
 // through Vite's host check (for both `vite` and `vite preview`) and tell the
 // HMR client where to reconnect (dev only).
 const envHostname = process.env.BOXEL_HOST_HOSTNAME;
+const sandboxHostname = process.env.BOXEL_SANDBOX_HOSTNAME;
+const envAllowedHosts = [envHostname, sandboxHostname].filter(Boolean);
+
+// Embroider materializes the app's config meta tag in the shared
+// node_modules/.embroider/content-for.json file. A focused `ember test` build
+// uses that same file and can replace a running environment-mode Host's
+// staging URLs with localhost URLs. Vite reads content-for.json again for the
+// next document request, so the already-running Host silently changes control
+// planes after a test run.
+//
+// Capture this Vite process's config at startup and restore only that meta tag
+// after Embroider has transformed the document. This does not change normal
+// builds. It makes an explicitly isolated environment own its document config
+// just as it already owns its Traefik route and dynamic port.
+function isolatedEnvironmentConfigPlugin(mode) {
+  if (!process.env.BOXEL_ENVIRONMENT) {
+    return;
+  }
+
+  let environment = mode === 'production' ? 'production' : 'development';
+  let config = require('./config/environment')(environment);
+  let encodedConfig = encodeURIComponent(JSON.stringify(config));
+  let configMetaRE =
+    /(<meta\s+name="@cardstack\/host\/config\/environment"\s+content=")[^"]*("\s*\/?>)/;
+
+  return {
+    name: 'boxel-isolated-environment-config',
+    enforce: 'post',
+    transformIndexHtml: {
+      order: 'post',
+      handler(html) {
+        if (!configMetaRE.test(html)) {
+          throw new Error(
+            'Unable to isolate Boxel environment config: config meta tag is missing',
+          );
+        }
+        return html.replace(configMetaRE, `$1${encodedConfig}$2`);
+      },
+    },
+  };
+}
 
 export default defineConfig(({ mode }) => ({
   // Preserve function/class names. Boxel's card runtime introspects
@@ -294,6 +335,7 @@ export default defineConfig(({ mode }) => ({
     classicEmberSupport(),
     ember(),
     quietOptimizedDepSourcemapWarnings(),
+    isolatedEnvironmentConfigPlugin(mode),
     // extra plugins here
     babel({
       babelHelpers: 'runtime',
@@ -317,7 +359,7 @@ export default defineConfig(({ mode }) => ({
       'Cache-Control': 'no-store',
       'Document-Policy': 'js-profiling',
     },
-    ...(envHostname ? { allowedHosts: [envHostname] } : {}),
+    ...(envAllowedHosts.length > 0 ? { allowedHosts: envAllowedHosts } : {}),
     ...(_devHttps ? { https: _devHttps } : {}),
   },
   server: {
@@ -345,7 +387,7 @@ export default defineConfig(({ mode }) => ({
       clientFiles: ['./app/app.ts'],
     },
     ...(envHostname && {
-      allowedHosts: [envHostname],
+      allowedHosts: envAllowedHosts,
       hmr: {
         host: envHostname,
         // The page is served by Traefik over https on :443, so the

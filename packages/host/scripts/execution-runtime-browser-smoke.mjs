@@ -23,6 +23,14 @@ const FATAL_SANDBOX_LOG_TEXT = [
   'render acked but produced no visible output',
 ];
 
+export function normalizeVisibleText(value) {
+  return value
+    .normalize('NFKC')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLocaleLowerCase();
+}
+
 export const executionRuntimeSmokeCases = [
   {
     id: 'release-composition',
@@ -354,22 +362,38 @@ function urlFor(origin, path) {
 }
 
 async function settle(tab, expectedText, timeoutMs) {
+  let normalizedExpectedText = expectedText.map(normalizeVisibleText);
   let deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     let state = await tab.playwright.evaluate(
-      ({ expectedText, fatalText }) => {
+      ({ fatalText, normalizedExpectedText }) => {
         let text = document.body?.innerText ?? '';
-        let normalizedText = text.toLocaleLowerCase();
+        let normalizedText = text
+          .normalize('NFKC')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .toLocaleLowerCase();
         return {
+          cardReady: Boolean(
+            document.querySelector(
+              '[data-boxel-card-id], [data-boxel-card-container], .boxel-card-container',
+            ),
+          ),
           fatal: fatalText.some((value) => text.includes(value)),
           ready:
-            expectedText.every((value) =>
-              normalizedText.includes(value.toLocaleLowerCase()),
-            ) && text.trim() !== 'Loading…',
+            (normalizedExpectedText.length > 0
+              ? normalizedExpectedText.every((value) =>
+                  normalizedText.includes(value),
+                )
+              : Boolean(
+                  document.querySelector(
+                    '[data-boxel-card-id], [data-boxel-card-container], .boxel-card-container',
+                  ),
+                )) && text.trim() !== 'Loading…',
           signIn: text.includes('Sign in to your Boxel Account'),
         };
       },
-      { expectedText, fatalText: FATAL_TEXT },
+      { fatalText: FATAL_TEXT, normalizedExpectedText },
     );
     if (state.ready || state.fatal || state.signIn) {
       return state;
@@ -377,6 +401,118 @@ async function settle(tab, expectedText, timeoutMs) {
     await tab.playwright.waitForTimeout(250);
   }
   return { fatal: false, ready: false, signIn: false };
+}
+
+async function settlePageImages(tab, timeoutMs) {
+  let deadline = Date.now() + Math.min(timeoutMs, 8_000);
+  let lastPrimedSignature;
+  let previousSignature;
+  let stableSince = Date.now();
+  do {
+    let state = await tab.playwright.evaluate(() => {
+      let images = [...document.images].filter(
+        (image) => image.currentSrc.length > 0 || image.hasAttribute('src'),
+      );
+      let complete = images.filter((image) => image.complete).length;
+      return {
+        complete,
+        pending: images.length - complete,
+        signature: `${images.length}:${complete}`,
+      };
+    });
+    if (state.signature !== previousSignature) {
+      previousSignature = state.signature;
+      stableSince = Date.now();
+    }
+    if (state.pending > 0 && state.signature !== lastPrimedSignature) {
+      lastPrimedSignature = state.signature;
+      await primePageLazyImages(tab);
+      stableSince = Date.now();
+      continue;
+    }
+    if (state.pending === 0 && Date.now() - stableSince >= 500) {
+      return true;
+    }
+    await tab.playwright.waitForTimeout(100);
+  } while (Date.now() < deadline);
+  return false;
+}
+
+async function primePageLazyImages(tab) {
+  let viewport = await tab.playwright.evaluate(() => ({
+    height: window.innerHeight,
+    maximum: Math.max(
+      document.body.scrollHeight,
+      document.documentElement.scrollHeight,
+    ),
+    x: window.scrollX,
+    y: window.scrollY,
+  }));
+  let step = Math.max(viewport.height * 0.75, 320);
+  for (let position = 0; position < viewport.maximum; position += step) {
+    await tab.playwright.evaluate((y) => window.scrollTo(0, y), position);
+    await tab.playwright.waitForTimeout(50);
+  }
+  await tab.playwright.evaluate(({ x, y }) => window.scrollTo(x, y), viewport);
+}
+
+async function settleFrameImages(tab, timeoutMs) {
+  let frame = tab.playwright.frameLocator('iframe.boxel-sandbox-process');
+  let deadline = Date.now() + Math.min(timeoutMs, 8_000);
+  let lastPrimedSignature;
+  let previousSignature;
+  let stableSince = Date.now();
+  do {
+    try {
+      let state = await frame.locator('img').evaluateAll((candidates) => {
+        let images = candidates.filter(
+          (image) => image.currentSrc.length > 0 || image.hasAttribute('src'),
+        );
+        let complete = images.filter((image) => image.complete).length;
+        return {
+          complete,
+          pending: images.length - complete,
+          signature: `${images.length}:${complete}`,
+        };
+      });
+      if (state.signature !== previousSignature) {
+        previousSignature = state.signature;
+        stableSince = Date.now();
+      }
+      if (state.pending > 0 && state.signature !== lastPrimedSignature) {
+        lastPrimedSignature = state.signature;
+        await primeFrameLazyImages(frame);
+        stableSince = Date.now();
+        continue;
+      }
+      if (state.pending === 0 && Date.now() - stableSince >= 500) {
+        return true;
+      }
+    } catch {
+      // The child may still be replacing its bootstrap document.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  } while (Date.now() < deadline);
+  return false;
+}
+
+async function primeFrameLazyImages(frame) {
+  let body = frame.locator('body');
+  let viewport = await body.evaluate(() => ({
+    height: window.innerHeight,
+    maximum: Math.max(
+      document.body.scrollHeight,
+      document.documentElement.scrollHeight,
+    ),
+    x: window.scrollX,
+    y: window.scrollY,
+  }));
+  let step = Math.max(viewport.height * 0.75, 320);
+  for (let position = 0; position < viewport.maximum; position += step) {
+    await body.evaluate((_element, y) => window.scrollTo(0, y), position);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  await body.evaluate((_element, { x, y }) => window.scrollTo(x, y), viewport);
 }
 
 async function settleSandboxHandoff(tab, timeoutMs) {
@@ -424,7 +560,7 @@ async function settleSandboxFrame(
   try {
     let frame = tab.playwright.frameLocator('iframe.boxel-sandbox-process');
     let text = await frame.locator('body').innerText({ timeoutMs });
-    let normalizedText = text.toLocaleLowerCase();
+    let normalizedText = normalizeVisibleText(text);
     let selectorsReady = (
       await Promise.all(
         requiredSelectors.map(async (selector) =>
@@ -437,7 +573,7 @@ async function settleSandboxFrame(
       ready:
         selectorsReady &&
         expectedText.every((value) =>
-          normalizedText.includes(value.toLocaleLowerCase()),
+          normalizedText.includes(normalizeVisibleText(value)),
         ),
       signIn: false,
     };
@@ -455,19 +591,41 @@ async function probe(tab, smokeCase, origin, timeoutMs, checkExecution) {
     timeoutMs,
   });
   let settled = await settle(tab, smokeCase.mustContain, timeoutMs);
+  let detectedExecution = checkExecution
+    ? await tab.playwright.evaluate(() => [
+        ...new Set(
+          [...document.querySelectorAll('[data-boxel-execution]')]
+            .map((element) => element.getAttribute('data-boxel-execution'))
+            .filter((value) => value && value !== 'prerender'),
+        ),
+      ])
+    : [];
+  let candidateRunsInSandbox = detectedExecution.includes('sandbox');
   // The prerender placeholder deliberately contains the same semantic text
   // as the live Sandbox child. Text parity therefore proves only that the
   // fast placeholder worked, not that the iframe booted or became
   // interactive. Candidate Sandbox cases must cross that second barrier
   // before we inspect controls or run an interaction.
   let sandboxHandoff =
-    checkExecution && smokeCase.expectedExecution === 'sandbox'
+    checkExecution &&
+    (smokeCase.expectedExecution === 'sandbox' || candidateRunsInSandbox)
       ? await settleSandboxHandoff(tab, timeoutMs)
       : undefined;
+  let mediaSettled = await settlePageImages(tab, timeoutMs);
+  let normalizedExpectedText = smokeCase.mustContain.map(normalizeVisibleText);
   let result = await tab.playwright.evaluate(
-    ({ expectedText, fatalText, requiredSelectors }) => {
+    ({
+      expectedText,
+      fatalText,
+      normalizedExpectedText,
+      requiredSelectors,
+    }) => {
       let text = document.body?.innerText ?? '';
-      let normalizedText = text.toLocaleLowerCase();
+      let normalizedText = text
+        .normalize('NFKC')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLocaleLowerCase();
       let headings = [...document.querySelectorAll('h1,h2,h3')]
         .map((element) => element.textContent?.trim())
         .filter(Boolean);
@@ -475,6 +633,7 @@ async function probe(tab, smokeCase, origin, timeoutMs, checkExecution) {
         alt: image.alt,
         complete: image.complete,
         height: image.naturalHeight,
+        source: Boolean(image.currentSrc || image.getAttribute('src')),
         width: image.naturalWidth,
       }));
       let executionSlots = [
@@ -523,12 +682,20 @@ async function probe(tab, smokeCase, origin, timeoutMs, checkExecution) {
           (selector) => !document.querySelector(selector),
         ),
         missingText: expectedText.filter(
-          (value) => !normalizedText.includes(value.toLocaleLowerCase()),
+          (_value, index) =>
+            !normalizedText.includes(normalizedExpectedText[index]),
         ),
         signIn: text.includes('Sign in to your Boxel Account'),
         sandboxBooting: Boolean(
           document.querySelector('[aria-label="Loading interactive card"]'),
         ),
+        semanticTokens: [
+          ...new Set(
+            text
+              .toLocaleLowerCase()
+              .match(/[\p{L}\p{N}][\p{L}\p{N}._%$-]{2,}/gu) ?? [],
+          ),
+        ].sort(),
         textSample: text.replace(/\s+/g, ' ').slice(0, 600),
         title: document.title,
       };
@@ -536,19 +703,21 @@ async function probe(tab, smokeCase, origin, timeoutMs, checkExecution) {
     {
       expectedText: smokeCase.mustContain,
       fatalText: FATAL_TEXT,
+      normalizedExpectedText,
       requiredSelectors: smokeCase.requiredSelectors ?? [],
     },
   );
   if (
     checkExecution &&
-    smokeCase.expectedExecution === 'sandbox' &&
+    (smokeCase.expectedExecution === 'sandbox' || candidateRunsInSandbox) &&
     !sandboxHandoff?.booting &&
     !sandboxHandoff?.fatal &&
     !sandboxHandoff?.signIn
   ) {
     let frame = tab.playwright.frameLocator('iframe.boxel-sandbox-process');
+    mediaSettled = await settleFrameImages(tab, timeoutMs);
     let frameText = await frame.locator('body').innerText({ timeoutMs });
-    let normalizedFrameText = frameText.toLocaleLowerCase();
+    let normalizedFrameText = normalizeVisibleText(frameText);
     let frameHeadings = await frame
       .locator('h1,h2,h3')
       .allTextContents({ timeoutMs });
@@ -557,6 +726,7 @@ async function probe(tab, smokeCase, origin, timeoutMs, checkExecution) {
         alt: image.alt,
         complete: image.complete,
         height: image.naturalHeight,
+        source: Boolean(image.currentSrc || image.getAttribute('src')),
         width: image.naturalWidth,
       })),
     );
@@ -586,14 +756,23 @@ async function probe(tab, smokeCase, origin, timeoutMs, checkExecution) {
         .count(),
       missingRequiredSelectors,
       missingText: smokeCase.mustContain.filter(
-        (value) => !normalizedFrameText.includes(value.toLocaleLowerCase()),
+        (_value, index) =>
+          !normalizedFrameText.includes(normalizedExpectedText[index]),
       ),
+      semanticTokens: [
+        ...new Set(
+          frameText
+            .toLocaleLowerCase()
+            .match(/[\p{L}\p{N}][\p{L}\p{N}._%$-]{2,}/gu) ?? [],
+        ),
+      ].sort(),
       textSample: frameText.replace(/\s+/g, ' ').slice(0, 600),
     };
   }
   return {
     ...result,
     elapsedMs: Math.round(performance.now() - startedAt),
+    mediaSettled,
     ready: settled.ready,
     sandboxHandoff,
     url: await tab.url(),
@@ -756,34 +935,68 @@ async function runInteraction(tab, smokeCase, timeoutMs, checkExecution) {
       checkExecution && smokeCase.expectedExecution === 'sandbox'
         ? tab.playwright.frameLocator('iframe.boxel-sandbox-process')
         : tab.playwright;
+    let playName = smokeCase.interaction.playName ?? 'Play';
+    let pauseName = smokeCase.interaction.pauseName ?? 'Pause';
     let play = interactionRoot.getByRole('button', {
       exact: true,
-      name: 'Play',
+      name: playName,
     });
     let startedAt = performance.now();
-    await play.click({ timeoutMs });
-    await tab.playwright.waitForTimeout(500);
-    let pauseVisible = await interactionRoot
-      .getByRole('button', { exact: true, name: 'Pause' })
-      .isVisible();
+    await play.click({ force: true, timeoutMs });
+    let pause = interactionRoot.getByRole('button', {
+      exact: true,
+      name: pauseName,
+    });
+    await pause.waitFor({ state: 'visible', timeoutMs });
+    await tab.playwright.waitForTimeout(
+      smokeCase.interaction.requireProgress ? 750 : 100,
+    );
+    let pauseVisible = await pause.isVisible();
+    let progress;
+    if (smokeCase.interaction.requireProgress) {
+      let slider = interactionRoot.getByRole('slider').first();
+      let progressDeadline = performance.now() + Math.min(timeoutMs, 3_000);
+      do {
+        progress = Number(await slider.evaluate((element) => element.value));
+        if (progress > 0) break;
+        await tab.playwright.waitForTimeout(250);
+      } while (performance.now() < progressDeadline);
+    }
     return {
       actionElapsedMs: Math.round(performance.now() - startedAt),
       kind: 'media-play',
-      pass: pauseVisible,
+      pass:
+        pauseVisible &&
+        (!smokeCase.interaction.requireProgress || progress > 0),
       pauseVisible,
+      progress,
     };
   }
   throw new Error(`Unknown smoke interaction: ${smokeCase.interaction.kind}`);
 }
 
 function assess(probeResult, interaction, smokeCase, checkExecution) {
-  let healthyImages = probeResult.images.filter(
+  let healthyImages = (probeResult.images ?? []).filter(
     (image) => image.complete && image.width > 0 && image.height > 0,
   ).length;
   let failures = [];
   if (probeResult.signIn) failures.push('authentication-required');
   if (!probeResult.ready) failures.push('did-not-settle');
   if (probeResult.fatalText.length) failures.push('fatal-card-error');
+  if (
+    !probeResult.mediaSettled &&
+    probeResult.images.some(({ source }) => source)
+  ) {
+    failures.push('media-settlement-timeout');
+  }
+  if (
+    probeResult.images.some(
+      ({ complete, height, source, width }) =>
+        source && complete && (width === 0 || height === 0),
+    )
+  ) {
+    failures.push('broken-image');
+  }
   if (probeResult.missingText.length) failures.push('missing-semantic-text');
   if (probeResult.headingCount < (smokeCase.minimumHeadings ?? 0)) {
     failures.push('missing-heading-structure');
@@ -806,6 +1019,7 @@ function assess(probeResult, interaction, smokeCase, checkExecution) {
   }
   if (
     checkExecution &&
+    smokeCase.expectedExecution !== 'discover' &&
     !probeResult.executions.includes(smokeCase.expectedExecution)
   ) {
     failures.push('wrong-execution-tier');
@@ -825,6 +1039,118 @@ function assess(probeResult, interaction, smokeCase, checkExecution) {
     failures.push('host-chrome-style-drift');
   }
   return { failures, pass: failures.length === 0 };
+}
+
+export function assessReferenceParity(candidate, reference, smokeCase) {
+  if (!smokeCase.referenceParity) {
+    return { failures: [], skipped: true };
+  }
+
+  let ignoredTokens = new Set([
+    'card',
+    'close',
+    'code',
+    'copy',
+    'direct',
+    'edit',
+    'execution',
+    'interact',
+    'more',
+    'new',
+    'reload',
+    'sandbox',
+    'capsule',
+    'workspace',
+  ]);
+  let referenceTokens = (reference.semanticTokens ?? []).filter(
+    (token) => !ignoredTokens.has(token),
+  );
+  let candidateTokens = new Set(candidate.semanticTokens ?? []);
+  let matchedTokens = referenceTokens.filter((token) =>
+    candidateTokens.has(token),
+  );
+  let tokenCoverage = referenceTokens.length
+    ? matchedTokens.length / referenceTokens.length
+    : 1;
+  let healthyImages = (page) =>
+    (page.images ?? []).filter(
+      (image) => image.complete && image.width > 0 && image.height > 0,
+    ).length;
+  let candidateImages = healthyImages(candidate);
+  let referenceImages = healthyImages(reference);
+  let failures = [];
+
+  // A candidate Sandbox frame does not contain the Host-owned realm icon.
+  // The one-image allowance accounts for that chrome while still detecting
+  // loss of an authored image (the common ImageDef/private-media regression).
+  if (candidateImages + 1 < referenceImages) {
+    failures.push('reference-image-parity');
+  }
+  if (candidate.headingCount + 1 < reference.headingCount) {
+    failures.push('reference-heading-parity');
+  }
+  if (candidate.inputCount < reference.inputCount) {
+    failures.push('reference-control-parity');
+  }
+  if (tokenCoverage < 0.7) {
+    failures.push('reference-semantic-parity');
+  }
+
+  return {
+    candidateHealthyImages: candidateImages,
+    failures,
+    matchedTokens: matchedTokens.length,
+    referenceHealthyImages: referenceImages,
+    referenceTokens: referenceTokens.length,
+    skipped: false,
+    tokenCoverage: Number(tokenCoverage.toFixed(3)),
+  };
+}
+
+export function summarizeExecutionRuntimeSmokeRun(run) {
+  let candidateById = new Map(
+    (run.candidate?.results ?? []).map((result) => [result.id, result]),
+  );
+
+  return run.reference.results.map((referenceResult) => {
+    let candidateResult = candidateById.get(referenceResult.id);
+    let candidateFailures = candidateResult?.assessment.failures ?? [];
+    let diagnosis = !referenceResult.assessment.pass
+      ? 'reference-drift'
+      : !candidateResult
+        ? 'candidate-not-run'
+        : candidateFailures.includes('authentication-required')
+          ? 'authentication-required'
+          : candidateResult.assessment.pass
+            ? 'pass'
+            : 'candidate-regression';
+    let healthyImages = (result) =>
+      result
+        ? (result.page.images ?? []).filter(
+            (image) => image.complete && image.width > 0 && image.height > 0,
+          ).length
+        : null;
+
+    return {
+      candidate: candidateResult
+        ? {
+            elapsedMs: candidateResult.page.elapsedMs,
+            executions: candidateResult.page.executions,
+            failures: candidateFailures,
+            healthyImages: healthyImages(candidateResult),
+            parity: candidateResult.referenceParity ?? null,
+          }
+        : null,
+      diagnosis,
+      id: referenceResult.id,
+      reference: {
+        elapsedMs: referenceResult.page.elapsedMs,
+        failures: referenceResult.assessment.failures,
+        healthyImages: healthyImages(referenceResult),
+        signatureReady: referenceResult.page.missingText.length === 0,
+      },
+    };
+  });
 }
 
 async function auditSandboxLifecycle(tab, smokeCases) {
@@ -1061,6 +1387,7 @@ export async function runExecutionRuntimeBrowserSmoke({
   candidateTab,
   candidateOrigin,
   cases = executionRuntimeSmokeCases,
+  continueOnReferenceDrift = false,
   performanceRepeats = 0,
   referenceTab,
   referenceOrigin = DEFAULT_REFERENCE_ORIGIN,
@@ -1075,7 +1402,10 @@ export async function runExecutionRuntimeBrowserSmoke({
     tab: referenceTab,
     timeoutMs,
   });
-  if (reference.results.some((result) => !result.assessment.pass)) {
+  let referenceFailures = reference.results.filter(
+    (result) => !result.assessment.pass,
+  );
+  if (referenceFailures.length && !continueOnReferenceDrift) {
     return {
       candidate: null,
       reference,
@@ -1083,20 +1413,55 @@ export async function runExecutionRuntimeBrowserSmoke({
     };
   }
 
-  let candidate = await runOrigin(browser, candidateOrigin, cases, {
+  let candidateCases = referenceFailures.length
+    ? cases.filter((smokeCase) =>
+        reference.results.some(
+          (result) => result.id === smokeCase.id && result.assessment.pass,
+        ),
+      )
+    : cases;
+  let candidate = await runOrigin(browser, candidateOrigin, candidateCases, {
     checkExecution: true,
     performanceRepeats,
     tab: candidateTab,
     timeoutMs,
   });
+  for (let result of candidate.results) {
+    let referenceResult = reference.results.find(
+      (referenceCandidate) => referenceCandidate.id === result.id,
+    );
+    let smokeCase = cases.find(
+      (candidateCase) => candidateCase.id === result.id,
+    );
+    if (!referenceResult || !smokeCase) continue;
+    if (result.assessment.failures.includes('authentication-required')) {
+      result.referenceParity = {
+        failures: [],
+        reason: 'candidate-authentication-required',
+        skipped: true,
+      };
+      continue;
+    }
+    result.referenceParity = assessReferenceParity(
+      result.page,
+      referenceResult.page,
+      smokeCase,
+    );
+    result.assessment.failures.push(...result.referenceParity.failures);
+    result.assessment.failures = [...new Set(result.assessment.failures)];
+    result.assessment.pass = result.assessment.failures.length === 0;
+  }
   let failures = candidate.results.filter((result) => !result.assessment.pass);
   let sandboxTeardown = await auditSandboxTeardown(
     candidate.tab,
     candidateOrigin,
-    cases,
+    candidateCases,
     timeoutMs,
   );
-  let sandboxLifecycle = await auditSandboxLifecycle(candidate.tab, cases);
+  let sandboxLifecycle = await auditSandboxLifecycle(
+    candidate.tab,
+    candidateCases,
+  );
   let stoppedAtAuthentication = failures.some((result) =>
     result.assessment.failures.includes('authentication-required'),
   );
@@ -1130,7 +1495,7 @@ export async function runExecutionRuntimeBrowserSmoke({
   return {
     candidate,
     performanceBaseline: {
-      candidate: summarizePerformance(candidate, cases),
+      candidate: summarizePerformance(candidate, candidateCases),
       reference: summarizePerformance(reference, cases),
     },
     performanceWarnings,
@@ -1139,11 +1504,18 @@ export async function runExecutionRuntimeBrowserSmoke({
     sandboxTeardown,
     status: stoppedAtAuthentication
       ? 'candidate-authentication-required'
-      : failures.length ||
-          sandboxLifecycle.failures.length ||
-          sandboxTeardown.failures.length
-        ? 'candidate-regression'
-        : 'pass',
+      : referenceFailures.length &&
+          (failures.length ||
+            sandboxLifecycle.failures.length ||
+            sandboxTeardown.failures.length)
+        ? 'reference-and-candidate-regression'
+        : referenceFailures.length
+          ? 'reference-drift'
+          : failures.length ||
+              sandboxLifecycle.failures.length ||
+              sandboxTeardown.failures.length
+            ? 'candidate-regression'
+            : 'pass',
   };
 }
 

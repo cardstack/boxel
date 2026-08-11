@@ -1,9 +1,15 @@
 import { module, test } from 'qunit';
 
-import type { SurfaceHandle } from '@cardstack/runtime-common';
+import type {
+  LooseCardResource,
+  LooseSingleCardDocument,
+  RealmResourceIdentifier,
+  SurfaceHandle,
+} from '@cardstack/runtime-common';
 
 import SandboxRuntimeProcess, {
   isSandboxRuntimeControl,
+  projectedResourceLinks,
 } from '@cardstack/host/lib/sandbox-runtime-process';
 
 import type SurfaceService from '@cardstack/host/services/surface-service';
@@ -53,6 +59,51 @@ function createTestRuntime(
 }
 
 module('Unit | Sandbox runtime process', function () {
+  test('projected links and scalar FileDef resource projections are exact authored resource authority', function (assert) {
+    let id =
+      'https://realm.example/cards/annual-report' as RealmResourceIdentifier;
+    let resource = {
+      id,
+      type: 'card',
+      attributes: {
+        // A URL-looking attribute alone is not an authority grant.
+        secretURL: 'https://realm.example/private/payroll.pdf',
+        // FileDef adapters deliberately use this one named scalar projection
+        // when a polymorphic FileDef relationship cannot cross the boundary.
+        resourceUrl: '../files/annual-report.bin#download',
+      },
+      relationships: {
+        sourceFile: { links: { self: '../files/annual-report.pdf#page=1' } },
+        relatedCard: { links: { related: './details' } },
+        search: { links: { search: '../_search?q=*' } },
+      },
+      meta: {
+        adoptsFrom: { module: '../annual-report', name: 'AnnualReport' },
+      },
+    } as unknown as LooseCardResource;
+    let included = {
+      id: 'https://realm.example/cards/details',
+      type: 'card',
+      relationships: {
+        attachment: { links: { self: '../files/notes.txt' } },
+      },
+      meta: {
+        adoptsFrom: { module: '../details', name: 'Details' },
+      },
+    } as unknown as LooseCardResource;
+    let document = {
+      data: resource,
+      included: [included],
+    } as unknown as LooseSingleCardDocument;
+
+    assert.deepEqual(projectedResourceLinks(resource, document, id).sort(), [
+      'https://realm.example/cards/details',
+      'https://realm.example/files/annual-report.bin',
+      'https://realm.example/files/annual-report.pdf',
+      'https://realm.example/files/notes.txt',
+    ]);
+  });
+
   test("RP-15.3: the control envelope accepts the child's post-ready 'runtime-error' report — and still rejects malformed shapes", function (assert) {
     let base = {
       kind: 'boxel-sandbox-control',
@@ -261,6 +312,128 @@ module('Unit | Sandbox runtime process', function () {
     } finally {
       runtime.destroy();
       slotElement.remove();
+    }
+  });
+
+  test('a replacement slot mounted before the old modifier tears down gets a fresh iframe and owns its teardown', function (assert) {
+    let { service } = fakeSurfaceService();
+    let runtime = new SandboxRuntimeProcess({
+      childURL: 'https://sandbox.example.test/_boxel-sandbox-runtime',
+      childOrigin: 'https://sandbox.example.test',
+      surfaceService: service,
+      fetch: globalThis.fetch,
+      resolveModuleURL: (identifier) => identifier,
+      isTrustedModuleURL: () => false,
+      identity: {
+        mode: 'sandbox',
+        principal: 'user:test',
+        surfaceId: 'sandbox-slot-handoff-test',
+      },
+      connectTimeout: 60_000,
+    });
+    let oldSlot = document.createElement('div');
+    let newSlot = document.createElement('div');
+    document.body.append(oldSlot, newSlot);
+
+    try {
+      runtime.mount(oldSlot);
+      let oldIframe = runtime.iframe;
+
+      runtime.mount(newSlot);
+      let newIframe = runtime.iframe;
+      assert.notStrictEqual(
+        newIframe,
+        oldIframe,
+        'a different slot receives a new browsing context rather than re-parenting the live iframe',
+      );
+      assert.strictEqual(
+        newIframe.parentElement,
+        newSlot,
+        'the replacement iframe is born in the replacement slot',
+      );
+      assert.false(
+        oldIframe.isConnected,
+        'the superseded browsing context is removed',
+      );
+
+      runtime.unmount(oldSlot);
+      assert.true(
+        newIframe.isConnected,
+        "the old modifier's late teardown cannot remove the replacement slot's iframe",
+      );
+
+      runtime.unmount(newSlot);
+      assert.false(
+        newIframe.isConnected,
+        'the owning modifier can tear down the replacement iframe',
+      );
+    } finally {
+      runtime.destroy();
+      oldSlot.remove();
+      newSlot.remove();
+    }
+  });
+
+  test('a replacement modifier on the same slot takes mount and teardown ownership without closing the live child', async function (assert) {
+    let { service } = fakeSurfaceService();
+    let runtime = new SandboxRuntimeProcess({
+      childURL: 'https://sandbox.example.test/_boxel-sandbox-runtime',
+      childOrigin: 'https://sandbox.example.test',
+      surfaceService: service,
+      fetch: globalThis.fetch,
+      resolveModuleURL: (identifier) => identifier,
+      isTrustedModuleURL: () => false,
+      identity: {
+        mode: 'sandbox',
+        principal: 'user:test',
+        surfaceId: 'sandbox-same-slot-handoff-test',
+      },
+      connectTimeout: 60_000,
+    });
+    let slot = document.createElement('div');
+    document.body.append(slot);
+
+    try {
+      let oldMountToken = runtime.reserveMount();
+      let releaseOldModifier = runtime.mount(slot, oldMountToken);
+      let iframe = runtime.iframe;
+      let newMountToken = runtime.reserveMount();
+      let newMountReady = false;
+      let awaitingNewMount = runtime.whenMounted(newMountToken).then(() => {
+        newMountReady = true;
+      });
+      await Promise.resolve();
+      assert.false(
+        newMountReady,
+        "a successor generation cannot borrow the predecessor's about-to-close client",
+      );
+
+      let releaseNewModifier = runtime.mount(slot, newMountToken);
+      await awaitingNewMount;
+
+      assert.strictEqual(
+        runtime.iframe,
+        iframe,
+        'the live browsing context stays in place when the DOM slot is reused',
+      );
+      assert.true(
+        newMountReady,
+        'the successor can materialize after its own modifier owns the mount',
+      );
+      releaseOldModifier();
+      assert.true(
+        iframe.isConnected,
+        "the superseded modifier's cleanup cannot close the replacement generation",
+      );
+
+      releaseNewModifier();
+      assert.false(
+        iframe.isConnected,
+        'the current modifier still owns deterministic teardown',
+      );
+    } finally {
+      runtime.destroy();
+      slot.remove();
     }
   });
 

@@ -27,6 +27,36 @@ module('Unit | Sandbox Boxel runtime client', function () {
     }
   });
 
+  test('an admitted cold materialization has a completion budget independent of peer silence', async function (assert) {
+    let channel = new MessageChannel();
+    let runtime = {
+      createFromSerialized: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        return 'instance:ready';
+      },
+    } as unknown as BoxelRuntime;
+    let server = new SandboxBoxelRuntimeServer(channel.port1, runtime);
+    let client = new SandboxBoxelRuntimeClient(channel.port2, 20, 100);
+
+    try {
+      assert.strictEqual(
+        await client.createFromSerialized(
+          {} as never,
+          {} as never,
+          undefined,
+          'host-display',
+        ),
+        'instance:ready',
+        'the immediate admission ack moves a cold operation onto its longer completion deadline',
+      );
+    } finally {
+      client.destroy();
+      server.destroy();
+      channel.port1.close();
+      channel.port2.close();
+    }
+  });
+
   test('RP-15.3: a hung RPC (e.g. createFromSerialized for an interactive-edit purpose) fails closed on a bounded timeout instead of hanging BoxelExecutionSession.update() forever', async function (assert) {
     // No server on the other end: this is the shape of a child that never
     // acks an operation — the case behind "switching to edit format leaves

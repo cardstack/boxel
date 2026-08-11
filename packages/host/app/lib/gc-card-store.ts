@@ -1277,12 +1277,32 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     opts?: GetSearchResourceFuncOpts,
   ) {
     if (!this.#storeHooks?.getSearchResource) {
+      // A boundary-local Store has no ambient authority to issue realm
+      // searches. It can, however, consume the bounded query projection that
+      // the Host serialized into the execution document. Keep that seed live
+      // in the resource instead of silently replacing it with an empty list.
+      // This is the Sandbox equivalent of iOS's selected-photo grant: the
+      // child receives exactly the objects the Host authorized, not access to
+      // the collection they came from.
+      let instances = (opts?.seed?.cards ?? []) as T[];
+      let meta: QueryResultsMeta = { page: { total: instances.length } };
       return {
-        instances: [],
-        instancesByRealm: [],
+        get instances() {
+          return instances;
+        },
+        get instancesByRealm() {
+          let realm = opts?.seed?.realms?.[0];
+          return realm ? [{ realm, cards: instances }] : [];
+        },
         isLoading: false,
-        meta: { page: { total: 0 } },
+        get meta() {
+          return meta;
+        },
         errors: undefined,
+        async prime(nextInstances, nextMeta) {
+          instances = nextInstances;
+          meta = nextMeta ?? { page: { total: nextInstances.length } };
+        },
       } as StoreSearchResource<T>;
     }
     return this.#storeHooks.getSearchResource(

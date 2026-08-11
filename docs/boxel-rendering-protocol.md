@@ -267,7 +267,14 @@ persistence via the RP-20.6 write leg.
 the canonical transpiler, not from regex over source text or compiled wire
 opcodes. The mounted tier is stamped as `data-boxel-execution`
 (`direct|capsule|sandbox|prerender`) with `data-boxel-execution-reason` —
-a diagnostic, not an author API.
+a diagnostic, not an author API. Every top-level `CardRenderer` invocation
+enters this router by default. A trusted caller must explicitly request the
+legacy Direct path; delegated field renders remain inside the execution
+environment already selected for their parent instead of recursively opening
+one boundary per field. The stamped execution mode describes the provider of
+the mounted format: a Capsule-classified definition with no authored `edit`
+format therefore stamps `direct`, because trusted Base owns and renders that
+format against the canonical Store instance.
 
 **RP-6.5** The standard-view base-template override (interact mode's
 "Toggle Standard View", the preview panel's synthetic `form` format — a
@@ -642,6 +649,39 @@ exception. The prototype executes inside the origin-isolated Sandbox; it is
 not promoted into the Host-trusted Direct/Capsule module set. After the entry
 response is admitted, only its literal ESM dependencies may extend the
 process's exact module graph under the ordinary RP-15 rules.
+
+Sandbox readiness is a sequence of externally observable protocol states,
+not one boolean named `ready`:
+
+| phase                       | owner                | evidence                                                | deadline and failure                                                     |
+| --------------------------- | -------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------ |
+| child document loaded       | browser              | iframe `load`                                           | 90s; discard the process                                                 |
+| control transport ready     | child bootstrap      | private port transferred and bootstrap `ready` received | 15s after document load; discard the process                             |
+| semantic RPC admitted       | child runtime server | `boxel-runtime-accepted(requestId, operation)`          | 10s peer-silence deadline; fail the request                              |
+| semantic RPC completed      | child runtime        | matching success/failure response                       | cold `loadBoxel` / `createFromSerialized`: 90s; ordinary operations: 10s |
+| first live render committed | child renderer       | generation-matched render response                      | render deadline; retain prerender/last-known-good on failure             |
+
+Admission means only that the child owns the request. It is not success and
+does not extend the deadline without bound. A late response is stale after its
+request has timed out and is ignored. Before `createFromSerialized` is sent,
+the Host must freeze the bounded canonical input projection, including
+query-backed relationship membership. A Glimmer modifier that may mount after
+materialization is not a valid readiness dependency. These rules deliberately
+mirror a microservice request path: process health, transport health, admission,
+application completion, and presentation readiness are separate signals with
+separate owners.
+
+Operationally, `bootstrapId` identifies one child process, `requestId`
+identifies one semantic RPC, and `generation` identifies one render-family
+revision. Logs and diagnostics must retain all identifiers available at their
+layer plus `operation`, elapsed time, and terminal status, so a timeout can be
+localized without inferring causality from timestamps. The Host does not retry
+an admitted semantic operation in place: `createFromSerialized`, rendering,
+and future mutation capabilities are not assumed idempotent. A failed process
+is replaced only through the explicit reload/recovery path, while the mounted
+surface retains prerender or last-known-good output. Superseded generations
+are cancellation by obsolescence—their late replies are dropped and cannot
+resurrect older state.
 
 **RP-15.4** Conformance machinery: (a) the **equivalence oracle** — each
 fixture rendered through main's legacy path and through the protocol's

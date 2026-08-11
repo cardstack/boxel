@@ -7,14 +7,20 @@ import { TrackedObject } from 'tracked-built-ins';
 import {
   isCssResource,
   isHtmlResource,
+  identifyCard,
   Loader,
   localId,
+  normalizeQueryDefinition,
   normalizeCodeRef,
+  realmURL as realmURLSymbol,
   relativeTo as relativeToSymbol,
+  rri,
   type CodeRef,
+  type FieldDefinition,
   type JSONValue,
   type LooseSingleCardDocument,
   type PrerenderedHtmlFormat,
+  type Query,
   type RealmResourceIdentifier,
   type SurfaceHandle,
 } from '@cardstack/runtime-common';
@@ -30,6 +36,7 @@ import {
   projectBoxelExecutionDocument,
   projectHostBoxelSemantics,
   projectInstancePresentation,
+  type HostBoxelProjection,
 } from '@cardstack/host/lib/boxel-projection';
 import type { BoxelExecutionMode } from '@cardstack/host/lib/boxel-runtime';
 import BoxelRuntimeRouter from '@cardstack/host/lib/boxel-runtime-router';
@@ -48,6 +55,10 @@ import {
   htmlComponent,
   type HTMLComponent,
 } from '@cardstack/host/lib/html-component';
+import { fetchBoundedSandboxMedia } from '@cardstack/host/lib/sandbox-fetch-transport';
+import SandboxMediaBridge, {
+  protectSandboxMediaSources,
+} from '@cardstack/host/lib/sandbox-media-bridge';
 import SandboxRuntimeProcess from '@cardstack/host/lib/sandbox-runtime-process';
 import {
   isImplicitSandboxModule,
@@ -66,6 +77,7 @@ import type {
   BaseDef,
   BaseDefConstructor,
   BoxComponent,
+  CardDef,
   Field,
   Format,
 } from '@cardstack/base/card-api';
@@ -272,7 +284,13 @@ export default class BoxelExecutionService extends Service {
     format: string | undefined,
     source: BoxelSourceClassification,
     volatile = false,
-  ): { process: SandboxRuntimeProcess; release: () => void } | undefined {
+  ):
+    | {
+        process: SandboxRuntimeProcess;
+        mountToken: object;
+        release: () => void;
+      }
+    | undefined {
     this.ensureExecutionEngine();
     let router = this.router;
     if (!router) {
@@ -293,6 +311,7 @@ export default class BoxelExecutionService extends Service {
     }
     return {
       process: lease.runtime as SandboxRuntimeProcess,
+      mountToken: (lease.runtime as SandboxRuntimeProcess).reserveMount(),
       release: lease.release,
     };
   }
@@ -309,10 +328,11 @@ export default class BoxelExecutionService extends Service {
     }
     let moduleIdentifier = identity.module;
     this.ensureLocalIdentity(card);
-    let [source, document, api] = await Promise.all([
+    let [source, initialDocument, api] = await Promise.all([
       this.sourceFor(moduleIdentifier),
       this.cardService.serializeCard(card as never, {
         withIncluded: true,
+        includeUnrenderedFields: true,
         // Execution documents cross Loader and process boundaries. Keep type
         // identities absolute so a side-loaded card from another directory or
         // realm cannot accidentally rebase its adoptsFrom module against the
@@ -324,8 +344,33 @@ export default class BoxelExecutionService extends Service {
     // Captured for the synchronous live-model reads (`liveModelFor`) —
     // every render that needs it necessarily passed through here first.
     this.cardAPI = api;
-    if (!document.data) {
+    if (!initialDocument.data) {
       throw new Error('Cannot execute a Boxel without a serialized resource');
+    }
+    let document = initialDocument;
+
+    // A query-backed relationship is a Host-owned Store semantic. The initial
+    // serialization is intentionally concurrent with source/API loading and
+    // can therefore describe the pre-query empty state. Direct and Capsule
+    // can keep reading the canonical instance; a Sandbox cannot. Before
+    // crossing that process boundary, explicitly resolve the bounded query
+    // projection (without depending on a later Glimmer modifier), then
+    // serialize once more so the child receives relationship data and
+    // included resources rather than an empty snapshot that cannot repair
+    // itself.
+    let { projection: hostProjection, hadPendingRelationship } =
+      await this.settleHostProjection(card, api);
+    if (hadPendingRelationship) {
+      document = await this.cardService.serializeCard(card as never, {
+        withIncluded: true,
+        includeUnrenderedFields: true,
+        useAbsoluteURL: true,
+      });
+      if (!document.data) {
+        throw new Error(
+          'Cannot execute a Boxel without a serialized resource after relationship resolution',
+        );
+      }
     }
     let projectedDocument = projectBoxelExecutionDocument(
       card,
@@ -374,10 +419,7 @@ export default class BoxelExecutionService extends Service {
       // distinguishes. Routing every pending reference through the same
       // `StoreService.get` the classic path uses, then writing the result
       // back onto the field, makes the fetch happen regardless.
-      hostProjection: projectHostBoxelSemantics(card, api, {
-        unresolveURL: (url) => this.network.virtualNetwork.unresolveURL(url),
-        ensureRelationshipLoaded: (reference) => this.store.get(reference),
-      }),
+      hostProjection,
     };
   }
 
@@ -546,13 +588,18 @@ export default class BoxelExecutionService extends Service {
   private async serializeForExecution(
     card: BaseDef,
   ): Promise<LooseSingleCardDocument> {
-    let [document, api] = await Promise.all([
-      this.cardService.serializeCard(card as never, {
-        withIncluded: true,
-        useAbsoluteURL: true,
-      }),
-      this.cardService.getAPI(),
-    ]);
+    let api = await this.cardService.getAPI();
+    // A mutation can invalidate a query-backed relationship. Its change
+    // notification arrives before the replacement SearchResource settles;
+    // publish only after the same bounded graph projection used at initial
+    // materialization is stable, so the push lane never sends a transient
+    // empty membership that has no later mutation to repair it.
+    await this.settleHostProjection(card, api);
+    let document = await this.cardService.serializeCard(card as never, {
+      withIncluded: true,
+      includeUnrenderedFields: true,
+      useAbsoluteURL: true,
+    });
     if (!document.data) {
       throw new Error('Cannot push a Boxel without a serialized resource');
     }
@@ -562,6 +609,115 @@ export default class BoxelExecutionService extends Service {
       api,
       isTrustedModule,
     );
+  }
+
+  /**
+   * Resolve every pending relationship encountered by the bounded Host
+   * projection. A settled edge can reveal another query/link in a nested
+   * Boxel, so repeat until the full projected graph is stable. Runtimes still
+   * receive only the resulting data; Store and search remain Host-owned.
+   */
+  private async settleHostProjection(
+    card: BaseDef,
+    api: typeof import('@cardstack/base/card-api'),
+  ): Promise<{
+    projection: HostBoxelProjection;
+    hadPendingRelationship: boolean;
+  }> {
+    let relationshipSettlementPasses = 0;
+    let sawPendingRelationship = false;
+    let resolvedQueries = new WeakMap<BaseDef, Map<string, CardDef[]>>();
+    let pendingRelationships: Array<{
+      instance: BaseDef;
+      fieldName: string;
+    }> = [];
+    let resolvedQueryValues = (instance: BaseDef, fieldName: string) =>
+      resolvedQueries.get(instance)?.get(fieldName);
+    let markQueryResolved = (
+      instance: BaseDef,
+      fieldName: string,
+      values: CardDef[],
+    ) => {
+      let fields = resolvedQueries.get(instance);
+      if (!fields) {
+        fields = new Map();
+        resolvedQueries.set(instance, fields);
+      }
+      fields.set(fieldName, values);
+    };
+    let project = () => {
+      sawPendingRelationship = false;
+      pendingRelationships = [];
+      return projectHostBoxelSemantics(card, api, {
+        unresolveURL: (url) => this.network.virtualNetwork.unresolveURL(url),
+        ensureRelationshipLoaded: (reference) => this.store.get(reference),
+        onRelationship: (relationship) => {
+          if (
+            relationship.queryBacked &&
+            resolvedQueryValues(
+              relationship.instance,
+              relationship.fieldName,
+            ) === undefined
+          ) {
+            sawPendingRelationship = true;
+            pendingRelationships.push(relationship);
+          } else if (!relationship.queryBacked && relationship.pending) {
+            sawPendingRelationship = true;
+          }
+        },
+        resolvedQueryValues,
+      });
+    };
+    let projection = project();
+    while (sawPendingRelationship) {
+      if (relationshipSettlementPasses++ >= 32) {
+        throw new Error(
+          'Cannot execute a Boxel whose relationship graph did not settle',
+        );
+      }
+      // A query SearchResource does not actually start until its Glimmer
+      // modifier mounts. A Sandbox request is deliberately prepared before
+      // any child render exists, so waiting for `store.loaded()` alone can
+      // never make that query complete. Resolve the declarative request here,
+      // under the card-facing Store bounds, and freeze the result into the
+      // execution document before the child is asked to materialize it.
+      for (let { instance, fieldName } of pendingRelationships) {
+        if (resolvedQueryValues(instance, fieldName) !== undefined) {
+          continue;
+        }
+        let field = (
+          api.getFields(instance, { includeComputeds: true }) as Record<
+            string,
+            Field<BaseDefConstructor> | undefined
+          >
+        )[fieldName];
+        if (!field?.queryDefinition) {
+          markQueryResolved(instance, fieldName, []);
+          continue;
+        }
+        let request = resolveBoundaryQueryFieldRequest(instance, field, api);
+        let instances = request
+          ? await this.store.search<CardDef>(request.query, [request.realm], {
+              cardInitiated: true,
+            })
+          : [];
+        markQueryResolved(instance, fieldName, instances);
+        await primeBoundaryQueryField(
+          instance,
+          field,
+          instances,
+          api,
+          this.store,
+        );
+      }
+      // Declared links still settle through the Store's ordinary load lane.
+      await this.store.loaded();
+      projection = project();
+    }
+    return {
+      projection,
+      hadPendingRelationship: relationshipSettlementPasses > 0,
+    };
   }
 
   /**
@@ -670,9 +826,28 @@ export default class BoxelExecutionService extends Service {
         );
         // Indexed isolated HTML may have several root nodes; htmlComponent
         // requires exactly one, so the placeholder gets a neutral wrapper.
-        return htmlComponent(
-          `<div data-boxel-prerender-placeholder>${rendering.attributes.html!}</div>`,
-        );
+        let placeholder = document.createElement('div');
+        placeholder.dataset.boxelPrerenderPlaceholder = '';
+        placeholder.innerHTML = rendering.attributes.html!;
+        protectSandboxMediaSources(placeholder);
+        return htmlComponent(placeholder.outerHTML, {}, (element) => {
+          let bridge = new SandboxMediaBridge(
+            element as HTMLElement,
+            async (url) => {
+              let response = await fetchBoundedSandboxMedia(
+                this.network.authedFetch,
+                url,
+              );
+              return new Response(response.body, {
+                status: response.status,
+                statusText: response.statusText,
+                headers: response.headers,
+              });
+            },
+          );
+          bridge.start();
+          return () => bridge.stop();
+        });
       } catch {
         // A missing or stale prerender must never delay or fail live execution.
       }
@@ -1022,6 +1197,117 @@ export default class BoxelExecutionService extends Service {
     this.classifier = undefined;
     this.router = undefined;
   }
+}
+
+type BoundaryQueryRequest = { realm: string; query: Query };
+
+/**
+ * Resolve a query field without depending on its render-lifetime modifier.
+ *
+ * New Base versions expose this operation directly. The compatibility path
+ * deliberately uses only the same stable Boxel field metadata and
+ * runtime-common normalizer, so a locally-built Host can still execute cards
+ * against an older deployed Base realm. Remove it only after the oldest Base
+ * version the Host supports has the explicit operation.
+ */
+function resolveBoundaryQueryFieldRequest(
+  instance: BaseDef,
+  field: Field<BaseDefConstructor>,
+  api: typeof import('@cardstack/base/card-api'),
+): BoundaryQueryRequest | undefined {
+  let explicitResolver = (
+    api as typeof api & {
+      resolveQueryFieldRequest?: (
+        instance: BaseDef,
+        field: Field<BaseDefConstructor>,
+      ) => BoundaryQueryRequest | undefined;
+    }
+  ).resolveQueryFieldRequest;
+  if (typeof explicitResolver === 'function') {
+    return explicitResolver(instance, field);
+  }
+
+  let realm = (instance as BaseDef & { [realmURLSymbol]?: URL })[
+    realmURLSymbol
+  ];
+  let fieldOrCard = identifyCard(field.card);
+  if (!realm || !fieldOrCard || !field.queryDefinition) {
+    return undefined;
+  }
+  let fieldDefinition: FieldDefinition = {
+    type: field.fieldType,
+    isPrimitive: false,
+    isComputed: Boolean(field.computeVia),
+    fieldOrCard,
+  };
+  let fieldPath = field.name.includes('.')
+    ? field.name.slice(0, field.name.lastIndexOf('.'))
+    : undefined;
+  let normalized = normalizeQueryDefinition({
+    fieldDefinition,
+    queryDefinition: field.queryDefinition,
+    realmURL: realm,
+    fieldName: field.name,
+    fieldPath,
+    resolvePathValue: (path) => resolveInstancePathValue(instance, path),
+    relativeTo:
+      'id' in instance && typeof instance.id === 'string'
+        ? rri(instance.id)
+        : realm,
+  });
+  return normalized
+    ? { realm: normalized.realm, query: normalized.query }
+    : undefined;
+}
+
+async function primeBoundaryQueryField(
+  instance: BaseDef,
+  field: Field<BaseDefConstructor>,
+  instances: CardDef[],
+  api: typeof import('@cardstack/base/card-api'),
+  store: StoreService,
+): Promise<void> {
+  let explicitPrimer = (
+    api as typeof api & {
+      primeQueryFieldSearchResource?: (
+        store: StoreService,
+        instance: BaseDef,
+        field: Field<BaseDefConstructor>,
+        instances: CardDef[],
+      ) => Promise<void>;
+    }
+  ).primeQueryFieldSearchResource;
+  if (typeof explicitPrimer === 'function') {
+    await explicitPrimer(store, instance, field, instances);
+    return;
+  }
+  // Older Base versions serialize relationship membership from this bucket.
+  // This is a bounded data snapshot, never a Store or SearchResource crossing
+  // the execution boundary.
+  api.getDataBucket(instance).set(field.name, instances);
+}
+
+function resolveInstancePathValue(instance: BaseDef, path: string): unknown {
+  let current: unknown = instance;
+  for (let segment of path.split('.')) {
+    if (current == null) {
+      return undefined;
+    }
+    if (Array.isArray(current)) {
+      let index = Number(segment);
+      if (!Number.isInteger(index)) {
+        return undefined;
+      }
+      current = current[index];
+      continue;
+    }
+    if (typeof current === 'object' && segment in current) {
+      current = (current as Record<string, unknown>)[segment];
+      continue;
+    }
+    return undefined;
+  }
+  return current;
 }
 
 function executionRelativeTo(

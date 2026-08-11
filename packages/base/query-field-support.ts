@@ -74,6 +74,8 @@ interface QueryFieldState {
   surfacedErrorSource?: readonly unknown[];
 }
 
+type QueryFieldStore = Pick<CardStore, 'getSearchResource' | 'trackLoad'>;
+
 const queryFieldSeedFromSearchSymbol = Symbol.for(
   'cardstack-query-field-seed-from-search',
 );
@@ -86,7 +88,7 @@ const queryFieldStates = initSharedState(
 const log = runtimeLogger('query-field-support');
 
 export function ensureQueryFieldSearchResource(
-  store: CardStore,
+  store: QueryFieldStore,
   instance: BaseDef,
   field: Field,
   dependencyTrackingContext?: RuntimeDependencyTrackingContext,
@@ -212,6 +214,54 @@ export function peekQueryFieldSearchResource(
   return queryFieldStates.get(instance)?.get(fieldName)?.searchResource;
 }
 
+/**
+ * Resolve the declarative query owned by a relationship field without
+ * starting its render-lifetime SearchResource. Execution boundaries use this
+ * to prepare a bounded snapshot before any Glimmer consumer exists.
+ */
+export function resolveQueryFieldRequest(
+  instance: BaseDef,
+  field: Field,
+): { realm: string; query: Query } | undefined {
+  if (!field.queryDefinition) {
+    return undefined;
+  }
+  let fieldDefinition = buildFieldDefinition(field);
+  if (!fieldDefinition) {
+    return undefined;
+  }
+  let resolved = resolveQueryAndRealm(instance, field, fieldDefinition);
+  return resolved
+    ? { realm: resolved.realmHref, query: resolved.query }
+    : undefined;
+}
+
+/**
+ * Prime the query field's ordinary SearchResource with a Host-resolved result.
+ * The resource remains the single reactive owner: once rendered, its normal
+ * live search and subscriptions can replace this initial snapshot.
+ */
+export async function primeQueryFieldSearchResource(
+  store: QueryFieldStore,
+  instance: BaseDef,
+  field: Field,
+  instances: CardDef[],
+): Promise<void> {
+  let resource = ensureQueryFieldSearchResource(store, instance, field);
+  if (!resource) {
+    return;
+  }
+  await resource.prime(instances, { page: { total: instances.length } });
+  // Query fields normally keep their live value in SearchResource, while the
+  // data bucket retains the server-provided seed used by serialization. A
+  // Host-resolved boundary snapshot has no server-provided seed, so mirror
+  // the settled membership into that same bucket slot. The field getter still
+  // reads SearchResource; this only gives serializeCard the ordinary
+  // relationship value it already expects to find there.
+  getDataBucket(instance).set(field.name, instances);
+  bumpFieldLoadingSignal(instance, field.name);
+}
+
 // Mirror the SearchResource's resource-level error state onto the data bucket
 // so the field getter and `getRelationshipMembershipState` recognize the same sentinels they
 // already handle for direct `linksTo`. Reading `searchResource.errors` here
@@ -305,7 +355,7 @@ function queryFieldErrorReference(instance: BaseDef, field: Field): string {
 }
 
 function trackQueryFieldLoads(
-  store: CardStore,
+  store: QueryFieldStore,
   fieldName: string,
   fieldState: QueryFieldState,
 ) {

@@ -37,6 +37,11 @@ import {
   field,
 } from '@cardstack/base/card-api';
 import StringField from '@cardstack/base/string';
+import enumField from '@cardstack/base/enum';
+
+const StatusField = enumField(StringField, {
+  options: ['draft', 'ready'],
+});
 
 export class PostalAddress extends FieldDef {
   @field street = contains(StringField);
@@ -64,6 +69,7 @@ export class NestedFieldHost extends CardDef {
   static displayName = 'Nested Field Host';
 
   @field title = contains(StringField);
+  @field status = contains(StatusField);
   @field address = contains(PostalAddress);
 
   static isolated = class Isolated extends Component<typeof this> {
@@ -400,6 +406,7 @@ module(
                 type: 'card',
                 attributes: {
                   title: 'Northlight Test Kitchen',
+                  status: 'ready',
                   address: {
                     street: '18 Orchard Lane',
                     city: 'Hudson',
@@ -651,6 +658,15 @@ module(
           `the default editor contains the '${expected}' field value`,
         );
       }
+      assert
+        .dom('[data-test-field="status"]')
+        .containsText('ready', 'the generated enum field renders in edit');
+      assert
+        .dom('[data-test-field="address"]')
+        .containsText(
+          '18 Orchard Lane',
+          'fields after the generated enum continue rendering',
+        );
     });
 
     test('G-04 | RP-2.6, RP-6.4, RP-8.4: relationship-backed mirror composition loads and delegates one and many linked cards inside Capsule', async function (assert) {

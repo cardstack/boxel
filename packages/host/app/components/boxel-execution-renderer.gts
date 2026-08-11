@@ -19,6 +19,7 @@ import {
   DefaultFormatsContextName,
   isCardInstance,
   PermissionsContextName,
+  rri,
   type CodeRef,
   type Permissions,
   type RealmResourceIdentifier,
@@ -26,6 +27,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import HeadFormatPreview from '@cardstack/host/components/head-format-preview';
+import ErrorDisplay from '@cardstack/host/components/operator-mode/error-display';
 import type {
   BoxelExecutionRenderSlot,
   BoxelExecutionSessionSnapshot,
@@ -227,6 +229,41 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
     },
   );
 
+  /**
+   * Installs the parent half of nested-card navigation for this live
+   * Sandbox slot. The child sends an identifier plus Base's render metadata;
+   * the Host invokes the same `viewCard` closure used by direct/capsule
+   * rendering. No Store, router, or card instance enters the child.
+   */
+  private syncSandboxViewCard = modifier(
+    (
+      _element: Element,
+      [slot, viewCard, containingFormat]: [
+        SandboxRenderSlot | undefined,
+        ViewCardFn | undefined,
+        Format,
+      ],
+    ) => {
+      if (!slot || !viewCard) {
+        return;
+      }
+      return slot.process.setChildViewCardReceiver(
+        (cardId, _requestedFormat, options) => {
+          let url = new URL(cardId);
+          if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+            throw new Error(
+              `Sandbox cannot navigate to unsupported URL protocol '${url.protocol}'`,
+            );
+          }
+          // OperatorModeOverlays intentionally opens nested cards in the
+          // containing stack item's format, not the tile's own fitted
+          // format. Preserve that established UX across the boundary.
+          viewCard(rri(url.href), containingFormat, options);
+        },
+      );
+    },
+  );
+
   private readonly surfaceId: string;
 
   constructor(owner: Owner, args: Signature['Args']) {
@@ -379,11 +416,12 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
                   });
               }
               on.cleanup(reservation.release);
-              let { process } = reservation;
+              let { process, mountToken } = reservation;
               state.slot = {
                 owner: 'sandbox',
                 iframe: process.iframe,
                 surface: process.surface,
+                mountToken,
                 process,
               };
               let stopWatchingMountFailure = process.onMountFailed((error) => {
@@ -403,7 +441,7 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
               // before the presentation slot modifier can call mount() on it —
               // wait for that so materialize() (below) never asks for a client
               // before mount() has at least started connecting one.
-              await process.whenMounted();
+              await process.whenMounted(mountToken);
               if (!active) {
                 return;
               }
@@ -670,6 +708,19 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
     return sections.length ? sections.join('\n\nCaused by: ') : undefined;
   }
 
+  /**
+   * A Sandbox can fail after the Host has already acquired an inert server
+   * rendering. That rendering is the last-known-good generation: keep it
+   * visible while the Host presents the failure, rather than replacing a
+   * recognizable card with a blank error page. It stays inert because the
+   * live child never completed the boundary handshake.
+   */
+  private get hasFailedPlaceholder(): boolean {
+    return (
+      this.state.snapshot.status === 'error' && Boolean(this.state.placeholder)
+    );
+  }
+
   private get executionReason(): string | undefined {
     return this.state.snapshot.current?.lease.decision.reason;
   }
@@ -805,6 +856,11 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
         }}
         {{boxelSandboxSlot this.sandboxSlot}}
         {{this.syncSandboxContext this.sandboxSlot this.hostPermissions}}
+        {{this.syncSandboxViewCard
+          this.sandboxSlot
+          @viewCard
+          this.effectiveFormat
+        }}
         ...attributes
       >
         {{! RP-15.3: the iframe the modifier above mounts into this element
@@ -845,6 +901,27 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
           @displayContainer={{@displayContainer}}
           ...attributes
         />
+      </div>
+    {{else if this.hasFailedPlaceholder}}
+      <div
+        class='boxel-execution-failed-placeholder'
+        data-boxel-execution='last-known-good'
+        ...attributes
+      >
+        <div class='boxel-execution-placeholder' aria-hidden='true' inert>
+          <this.state.placeholder />
+        </div>
+        <div
+          class='boxel-execution-error boxel-execution-error--overlay'
+          role='alert'
+        >
+          <ErrorDisplay
+            @type='runtime'
+            @headerText='Unable to make this card interactive'
+            @message={{this.errorMessage}}
+            @stack={{this.errorStack}}
+          />
+        </div>
       </div>
     {{else if (eq this.state.snapshot.status 'error')}}
       <section class='boxel-execution-error' role='alert' ...attributes>
@@ -961,10 +1038,26 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
         width: 100%;
       }
 
+      .boxel-execution-failed-placeholder {
+        min-width: 0;
+        position: relative;
+        width: 100%;
+      }
+
       .boxel-execution-error {
         background: var(--boxel-light-100);
         color: var(--boxel-dark);
         padding: 1rem;
+      }
+
+      .boxel-execution-error--overlay {
+        bottom: var(--boxel-sp);
+        left: var(--boxel-sp);
+        max-height: calc(100% - calc(var(--boxel-sp) * 2));
+        padding: 0;
+        position: absolute;
+        right: var(--boxel-sp);
+        z-index: 10;
       }
 
       .boxel-execution-error p {

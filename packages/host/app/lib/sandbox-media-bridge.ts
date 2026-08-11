@@ -1,6 +1,24 @@
 type MediaFetch = (url: string) => Promise<Response>;
 
 const networkProtocols = new Set(['http:', 'https:']);
+const protectedSourceAttribute = 'data-boxel-media-source';
+
+/**
+ * Remove declarative network reads while prerendered HTML is still detached.
+ * The media bridge restores them only after the Host's bounded authenticated
+ * read succeeds, so a placeholder can never race an unauthenticated browser
+ * request with its live Sandbox rendering.
+ */
+export function protectSandboxMediaSources(root: ParentNode): void {
+  for (let image of root.querySelectorAll('img[src]')) {
+    let source = image.getAttribute('src');
+    if (!source || source.startsWith('blob:') || source.startsWith('data:')) {
+      continue;
+    }
+    image.setAttribute(protectedSourceAttribute, source);
+    image.removeAttribute('src');
+  }
+}
 
 /**
  * Declarative media does not call the Sandbox Loader's fetch — an authored
@@ -89,7 +107,9 @@ export default class SandboxMediaBridge {
       hydrations.push(this.hydrateImage(node as HTMLImageElement));
     }
     if (node instanceof view.Element) {
-      for (let image of node.querySelectorAll('img[src]')) {
+      for (let image of node.querySelectorAll(
+        `img[src], img[${protectedSourceAttribute}]`,
+      )) {
         hydrations.push(this.hydrateImage(image as HTMLImageElement));
       }
     }
@@ -97,7 +117,8 @@ export default class SandboxMediaBridge {
   }
 
   private hydrateImage(image: HTMLImageElement): Promise<void> {
-    let authoredSource = image.getAttribute('src');
+    let authoredSource =
+      image.getAttribute('src') ?? image.getAttribute(protectedSourceAttribute);
     if (!authoredSource || authoredSource.startsWith('blob:')) {
       return Promise.resolve();
     }
@@ -115,6 +136,7 @@ export default class SandboxMediaBridge {
     }
 
     this.sourceByImage.set(image, sourceURL.href);
+    image.removeAttribute(protectedSourceAttribute);
     // RP-20.4: an already-hydrated source swaps in synchronously — a
     // recreated image never blanks for a resource this bridge has.
     let cached = this.objectURLByHref.get(sourceURL.href);

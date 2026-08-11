@@ -109,6 +109,48 @@ const explosiveSource = `
   }
 `;
 
+// Matrix cell: Sandbox x query-backed linksToMany. The modifier is only a
+// deterministic classifier signal; the behavior under test is that the Host
+// settles its Store-owned query before publishing the child's JSON:API
+// execution document.
+const queryGallerySource = `
+  import {
+    CardDef,
+    Component,
+    contains,
+    field,
+    linksToMany,
+  } from 'https://cardstack.com/base/card-api';
+  import StringField from 'https://cardstack.com/base/string';
+  import { modifier } from 'ember-modifier';
+
+  const recipeRef = {
+    module: '${testRRI('query-gallery')}',
+    name: 'QueryRecipe',
+  };
+  const requiresSandbox = modifier(() => undefined);
+
+  export class QueryRecipe extends CardDef {
+    @field title = contains(StringField);
+  }
+
+  export class QueryGallery extends CardDef {
+    @field recipes = linksToMany(() => QueryRecipe, {
+      query: {
+        filter: { type: recipeRef },
+        sort: [{ by: 'title', on: recipeRef, direction: 'asc' }],
+      },
+    });
+    static isolated = class Isolated extends Component<typeof QueryGallery> {
+      <template>
+        <div {{requiresSandbox}} data-test-query-gallery>
+          {{@model.recipes.length}}
+        </div>
+      </template>
+    };
+  }
+`;
+
 async function renderThroughExecutionRenderer(card: BaseDef, format?: Format) {
   await renderComponent(
     class TestDriver extends GlimmerComponent {
@@ -136,6 +178,40 @@ module('Integration | rp-conformance', function (hooks) {
         contents: {
           'gadget.gts': gadgetSource,
           'explosive.gts': explosiveSource,
+          'query-gallery.gts': queryGallerySource,
+          'QueryGallery/home.json': {
+            data: {
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: testRRI('query-gallery'),
+                  name: 'QueryGallery',
+                },
+              },
+            },
+          },
+          'QueryRecipe/apple.json': {
+            data: {
+              attributes: { title: 'Apple' },
+              meta: {
+                adoptsFrom: {
+                  module: testRRI('query-gallery'),
+                  name: 'QueryRecipe',
+                },
+              },
+            },
+          },
+          'QueryRecipe/banana.json': {
+            data: {
+              attributes: { title: 'Banana' },
+              meta: {
+                adoptsFrom: {
+                  module: testRRI('query-gallery'),
+                  name: 'QueryRecipe',
+                },
+              },
+            },
+          },
           'Friend/buddy.json': {
             data: {
               attributes: {
@@ -625,6 +701,84 @@ module('Integration | rp-conformance', function (hooks) {
       (partnerAdoptsFrom?.module ?? '.').startsWith('.'),
       "the included module identity is never spelled relative to the delivering document's instance ids",
     );
+  });
+
+  test('RP-7.2, RP-8.4: a query-backed relationship settles before its Sandbox execution document crosses the boundary', async function (assert) {
+    let store = getService('store');
+    let card = (await store.get(`${testRealmURL}QueryGallery/home`)) as CardDef;
+    let cardService = getService('card-service');
+    let api = await cardService.getAPI();
+    let recipesField = (
+      api.getFields(card, {
+        includeComputeds: true,
+      }) as Record<string, CardAPIModule.Field>
+    ).recipes;
+    let queryRequest = recipesField
+      ? api.resolveQueryFieldRequest(card, recipesField)
+      : undefined;
+    assert.ok(queryRequest, 'the fixture resolves its declarative query');
+    let fixtureMatches = queryRequest
+      ? await store.search(queryRequest.query, [queryRequest.realm], {
+          cardInitiated: true,
+        })
+      : [];
+    assert.deepEqual(
+      fixtureMatches.map((match) => match.id),
+      [`${testRealmURL}QueryRecipe/apple`, `${testRealmURL}QueryRecipe/banana`],
+      'the bounded Host query itself finds the two indexed fixtures',
+    );
+
+    let boxelExecution = getService('boxel-execution');
+    let request = await boxelExecution.requestFor(
+      card,
+      'isolated',
+      boxelExecution.surfaceId(),
+    );
+    let relationshipIds = Object.entries(
+      request.document.data?.relationships ?? {},
+    )
+      .filter(([fieldName]) => fieldName.startsWith('recipes.'))
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([, relationship]) => {
+        if (Array.isArray(relationship)) {
+          return undefined;
+        }
+        let data = relationship.data;
+        return !Array.isArray(data) && data && 'id' in data
+          ? data.id
+          : undefined;
+      });
+
+    assert.ok(request.hostProjection, 'the Host projection is available');
+    let projectedRecipes = request.hostProjection?.fields.find(
+      (field) => field.fieldName === 'recipes',
+    )?.value as { id?: string | null }[] | undefined;
+    assert.deepEqual(
+      projectedRecipes?.map((item) => item.id),
+      [`${testRealmURL}QueryRecipe/apple`, `${testRealmURL}QueryRecipe/banana`],
+      'the canonical Host projection settles the query before any execution tier consumes it',
+    );
+
+    assert.deepEqual(
+      relationshipIds,
+      [`${testRealmURL}QueryRecipe/apple`, `${testRealmURL}QueryRecipe/banana`],
+      'the child snapshot carries the settled, sorted query membership',
+    );
+    assert.deepEqual(
+      (request.document.included ?? []).map((item) => item.id).sort(),
+      [testRRI('QueryRecipe/apple'), testRRI('QueryRecipe/banana')],
+      'the matching cards cross as bounded included resources, not a Store/search capability',
+    );
+
+    await renderThroughExecutionRenderer(card, 'isolated');
+    await waitFor('[data-boxel-execution="sandbox"]', { timeout: 10000 });
+    await waitFor('[data-test-query-gallery]', { timeout: 10000 });
+    assert
+      .dom('[data-test-query-gallery]')
+      .hasText(
+        '2',
+        'the Sandbox query getter consumes the Host-authorized seed instead of starting an unprivileged child search',
+      );
   });
 
   test('RP-2.4: an explicit renderable root format sets the rendered format', async function (assert) {

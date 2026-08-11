@@ -664,6 +664,20 @@ export class SearchResource<
     return this._errors;
   }
 
+  /**
+   * Install an execution-boundary snapshot without requiring this resource's
+   * Glimmer modifier lifecycle to have run. A later live search replaces it
+   * through the same update path.
+   */
+  async prime(instances: T[], meta?: QueryResultsMeta): Promise<void> {
+    this._meta = meta ?? { page: { total: instances.length } };
+    this._errors = undefined;
+    await this.updateInstances(
+      instances,
+      this.dependencyTrackingContext('search-resource:prime'),
+    );
+  }
+
   private async updateInstances(
     newInstances: T[],
     dependencyTrackingContext?: RuntimeDependencyTrackingContext,

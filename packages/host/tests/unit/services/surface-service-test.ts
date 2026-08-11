@@ -109,6 +109,35 @@ module('Unit | Service | surface-service', function (hooks) {
     }
   });
 
+  test('a replacement attachment on the same element owns teardown', function (assert) {
+    let service = this.owner.lookup(
+      'service:surface-service',
+    ) as SurfaceService;
+    let handle = service.register({
+      mode: 'sandbox',
+      principal: 'test-user',
+      surfaceId: 'same-element-handoff',
+    });
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+    let detachOld = service.attach(handle, element);
+    let detachCurrent = service.attach(handle, element);
+
+    try {
+      detachOld();
+      service.present(handle, { containerBackground: '#112233' });
+      assert.strictEqual(
+        element.style.getPropertyValue('--boxel-surface-container-background'),
+        '#112233',
+        "a superseded modifier's cleanup does not detach the current attachment",
+      );
+    } finally {
+      detachCurrent();
+      service.release(handle);
+      element.remove();
+    }
+  });
+
   test('released handles fail closed', function (assert) {
     let service = this.owner.lookup(
       'service:surface-service',

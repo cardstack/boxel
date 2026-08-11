@@ -4,6 +4,7 @@ import {
   type BoxelDescription,
   type BoxelInstanceHandle,
   type BoxelRenderRecord,
+  type BoxelRuntimeAccepted,
   type BoxelRuntimeRequest,
   type BoxelRuntimeResponse,
   type BoxelTypeHandle,
@@ -22,6 +23,7 @@ interface PendingRequest {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
   timeout?: ReturnType<typeof setTimeout>;
+  operation: BoxelRuntimeRequest['operation'];
 }
 
 // RP-15.3: any Sandbox RPC (not only `render`) can wedge — e.g. a purpose
@@ -30,9 +32,12 @@ interface PendingRequest {
 // hang never resolves `BoxelExecutionSession.update()`, so the session never
 // reaches `error` and the caller (`boxel-execution-renderer.gts`) is left
 // showing its last placeholder forever with no failure ever surfacing. Every
-// request gets the same bounded fail-closed timeout `SandboxRenderClient`
-// uses for the render RPC.
+// request has a bounded fail-closed timeout. The first deadline detects a
+// silent/dead peer. Once the child admits the request, cold materialization
+// gets a separate bounded completion budget: transport readiness is not
+// module-graph readiness.
 export const defaultSandboxRuntimeRequestTimeoutMs = 10_000;
+export const defaultSandboxRuntimeMaterializationTimeoutMs = 90_000;
 
 /**
  * Parent-side semantic adapter for an origin-isolated Boxel Sandbox.
@@ -48,12 +53,22 @@ export default class SandboxBoxelRuntimeClient implements BoxelRuntime {
   private pending = new Map<string, PendingRequest>();
   private closed = false;
   private readonly requestTimeoutMs: number;
+  private readonly materializationTimeoutMs: number;
 
   constructor(
     private readonly port: MessagePort,
-    requestTimeoutMs = defaultSandboxRuntimeRequestTimeoutMs,
+    requestTimeoutMs?: number,
+    materializationTimeoutMs?: number,
   ) {
-    this.requestTimeoutMs = requestTimeoutMs;
+    this.requestTimeoutMs =
+      requestTimeoutMs ?? defaultSandboxRuntimeRequestTimeoutMs;
+    // A caller that supplies the old single timeout keeps the old behavior;
+    // production defaults get the separate cold-materialization budget.
+    this.materializationTimeoutMs =
+      materializationTimeoutMs ??
+      (requestTimeoutMs === undefined
+        ? defaultSandboxRuntimeMaterializationTimeoutMs
+        : this.requestTimeoutMs);
     this.port.addEventListener('message', this.onMessage);
     this.port.start();
   }
@@ -171,6 +186,7 @@ export default class SandboxBoxelRuntimeClient implements BoxelRuntime {
         resolve: (value) => resolve(value as T),
         reject,
         timeout,
+        operation,
       });
       try {
         this.port.postMessage(request);
@@ -185,6 +201,38 @@ export default class SandboxBoxelRuntimeClient implements BoxelRuntime {
 
   private onMessage = (event: MessageEvent<unknown>) => {
     let response = event.data;
+    if (isBoxelRuntimeAccepted(response)) {
+      try {
+        assertBoxelExecutionTransportVersion(response.transportVersion);
+      } catch (error) {
+        this.failAll(error instanceof Error ? error : new Error(String(error)));
+        return;
+      }
+      let pending = this.pending.get(response.requestId);
+      if (!pending || pending.operation !== response.operation) {
+        return;
+      }
+      if (pending.timeout !== undefined) {
+        clearTimeout(pending.timeout);
+      }
+      let completionTimeoutMs = isColdMaterialization(response.operation)
+        ? this.materializationTimeoutMs
+        : this.requestTimeoutMs;
+      pending.timeout =
+        completionTimeoutMs > 0
+          ? setTimeout(() => {
+              if (!this.pending.delete(response.requestId)) {
+                return;
+              }
+              pending.reject(
+                new Error(
+                  `Sandbox ${response.operation} timed out after ${completionTimeoutMs}ms completing in the child`,
+                ),
+              );
+            }, completionTimeoutMs)
+          : undefined;
+      return;
+    }
     if (!isBoxelRuntimeResponse(response)) {
       return;
     }
@@ -231,6 +279,27 @@ export default class SandboxBoxelRuntimeClient implements BoxelRuntime {
     }
     this.pending.clear();
   }
+}
+
+function isColdMaterialization(
+  operation: BoxelRuntimeRequest['operation'],
+): boolean {
+  return operation === 'loadBoxel' || operation === 'createFromSerialized';
+}
+
+function isBoxelRuntimeAccepted(value: unknown): value is BoxelRuntimeAccepted {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'kind' in value &&
+    value.kind === 'boxel-runtime-accepted' &&
+    'transportVersion' in value &&
+    typeof value.transportVersion === 'number' &&
+    'requestId' in value &&
+    typeof value.requestId === 'string' &&
+    'operation' in value &&
+    typeof value.operation === 'string'
+  );
 }
 
 function isBoxelRuntimeResponse(value: unknown): value is BoxelRuntimeResponse {

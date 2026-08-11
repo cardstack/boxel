@@ -107,6 +107,8 @@ import {
 import {
   captureQueryFieldSeedData,
   ensureQueryFieldSearchResource,
+  primeQueryFieldSearchResource,
+  resolveQueryFieldRequest,
   peekQueryFieldSearchResource,
   validateRelationshipQuery,
 } from './query-field-support';
@@ -248,6 +250,8 @@ export {
   serializeCard,
   serializeFileDef,
   ensureQueryFieldSearchResource,
+  primeQueryFieldSearchResource,
+  resolveQueryFieldRequest,
   getStore,
   type BoxComponent,
   type BrokenLinkFinding,
@@ -480,6 +484,7 @@ export interface StoreSearchResource<T extends CardDef | FileDef = CardDef> {
   readonly isLoading: boolean;
   readonly meta: QueryResultsMeta;
   readonly errors?: ErrorEntry[];
+  prime(instances: T[], meta?: QueryResultsMeta): Promise<void>;
 }
 
 export type GetSearchResourceFuncOpts = {
@@ -5106,14 +5111,33 @@ class FallbackCardStore implements CardStore {
     _parent: object,
     _getQuery: () => any,
     _getRealms?: () => string[] | undefined,
-    _opts?: any,
+    opts?: GetSearchResourceFuncOpts,
   ): StoreSearchResource<T> {
+    // The fallback store is used by process-local runtimes (notably the
+    // origin-isolated Sandbox). It has no authority to execute a live realm
+    // search, but a Host-built execution document can carry an already
+    // authorized query result as seed cards. Preserve that bounded result
+    // instead of replacing it with an empty pseudo-search: query fields must
+    // read the same membership on both sides of the execution boundary.
+    let instances = (opts?.seed?.cards ?? []) as T[];
+    let meta: QueryResultsMeta = { page: { total: instances.length } };
     return {
-      instances: [] as T[],
-      instancesByRealm: [],
+      get instances() {
+        return instances;
+      },
+      get instancesByRealm() {
+        let realm = opts?.seed?.realms?.[0];
+        return realm ? [{ realm, cards: instances }] : [];
+      },
       isLoading: false,
-      meta: { page: { total: 0 } },
+      get meta() {
+        return meta;
+      },
       errors: undefined,
-    } as StoreSearchResource<T>;
+      async prime(nextInstances, nextMeta) {
+        instances = nextInstances;
+        meta = nextMeta ?? { page: { total: nextInstances.length } };
+      },
+    };
   }
 }

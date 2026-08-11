@@ -16,6 +16,7 @@ class _DynamicHTMLComponent {
     readonly component: TopElement,
     readonly attrs: Record<string, string | SafeString>,
     readonly children: Node[],
+    readonly onMount?: HTMLComponentMount,
   ) {}
 }
 
@@ -24,6 +25,8 @@ class _SimpleHTMLComponent {
 }
 
 export type HTMLComponent = ComponentLike<{ Args: {}; Element: Element }>;
+
+export type HTMLComponentMount = (element: Element) => void | (() => void);
 
 const cache = new Map<string, TopElement>();
 
@@ -39,6 +42,7 @@ type TopElement = ComponentLike<{
 export function htmlComponent(
   html: string,
   extraAttributes: Record<string, string> = {},
+  onMount?: HTMLComponentMount,
 ): HTMLComponent {
   let testContainer = document.createElement('div');
   testContainer.innerHTML = html;
@@ -79,9 +83,12 @@ export function htmlComponent(
       cache.set(source, component);
     }
 
-    return new _DynamicHTMLComponent(component, attrs, [
-      ...cardElement.childNodes,
-    ]) as unknown as HTMLComponent;
+    return new _DynamicHTMLComponent(
+      component,
+      attrs,
+      [...cardElement.childNodes],
+      onMount,
+    ) as unknown as HTMLComponent;
   } else {
     console.warn(
       `htmlComponent expected exactly one childNode that is a childNode, found ${JSON.stringify(testContainer.childNodes)}`,
@@ -92,10 +99,10 @@ export function htmlComponent(
 
 setComponentTemplate(
   precompileTemplate(
-    '<this.component @attrs={{this.attrs}} {{withChildren this.children}} ...attributes />',
+    '<this.component @attrs={{this.attrs}} {{withChildren this.children}} {{mountHTMLComponent this.onMount}} ...attributes />',
     {
       strictMode: true,
-      scope: () => ({ withChildren }),
+      scope: () => ({ mountHTMLComponent, withChildren }),
     },
   ),
   _DynamicHTMLComponent.prototype,
@@ -142,3 +149,8 @@ const withChildren = modifier((element: Element, [children]: [Node[]]) => {
     element.appendChild(child);
   }
 });
+
+const mountHTMLComponent = modifier(
+  (element: Element, [onMount]: [HTMLComponentMount | undefined]) =>
+    onMount?.(element),
+);

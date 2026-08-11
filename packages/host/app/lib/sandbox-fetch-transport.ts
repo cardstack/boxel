@@ -1,6 +1,6 @@
 const requestKind = 'boxel-sandbox-fetch-request' as const;
 const responseKind = 'boxel-sandbox-fetch-response' as const;
-const maxModuleBytes = 8 * 1024 * 1024;
+const maxResponseBytes = 8 * 1024 * 1024;
 const forwardedRequestHeaders = new Set([
   'accept',
   'if-modified-since',
@@ -20,14 +20,16 @@ interface SandboxFetchRequest {
   headers: [string, string][];
   /**
    * 'module' (default): an executable read, checked against the classified
-   * module graph. 'media': a declarative-asset read (an authored `<img>`)
-   * — never executable, never admitted to the module graph, validated as
-   * image content instead. The two purposes exist because a credentialless
+   * module graph. 'resource': an authored fetch of an exact relationship
+   * link from the projected execution document. 'media': a declarative-asset
+   * read (an authored `<img>`) — never executable, never admitted to the
+   * module graph, validated as image content instead. The purposes exist
+   * because a credentialless
    * iframe strips the browser session that lets main render private-realm
    * images in-document; the Host re-brokers exactly that ability, bounded
    * to GET + image/* + a size cap (see SandboxMediaBridge).
    */
-  purpose?: 'module' | 'media';
+  purpose?: 'module' | 'resource' | 'media';
 }
 
 interface SandboxFetchResponse {
@@ -47,6 +49,61 @@ interface SandboxFetchResponse {
 interface PendingFetch {
   resolve(response: Response): void;
   reject(error: Error): void;
+}
+
+export interface BoundedMediaResponse {
+  status: number;
+  statusText: string;
+  url: string;
+  headers: [string, string][];
+  body: ArrayBuffer;
+}
+
+/**
+ * The one Host-owned policy for declarative media crossing an execution
+ * boundary. Both a live Sandbox and its inert prerender handoff use this
+ * function, so neither path can acquire broader read authority than the
+ * other.
+ */
+export async function fetchBoundedSandboxMedia(
+  fetch: typeof globalThis.fetch,
+  input: string,
+  requestHeaders: Iterable<[string, string]> = [['accept', 'image/*']],
+): Promise<BoundedMediaResponse> {
+  let url = new URL(input);
+  if (!['http:', 'https:'].includes(url.protocol)) {
+    throw new Error('Sandbox media reads support only HTTP(S)');
+  }
+  let headers = new Headers();
+  for (let [name, value] of requestHeaders) {
+    if (forwardedRequestHeaders.has(name.toLowerCase())) {
+      headers.set(name, value);
+    }
+  }
+  let response = await fetch(url.href, {
+    method: 'GET',
+    headers,
+    credentials: 'omit',
+    referrerPolicy: 'no-referrer',
+    redirect: 'error',
+  });
+  let contentType = response.headers.get('content-type')?.toLowerCase();
+  if (response.ok && !contentType?.startsWith('image/')) {
+    throw new Error('Sandbox media response was not an image');
+  }
+  let body = await response.arrayBuffer();
+  if (body.byteLength > maxResponseBytes) {
+    throw new Error('Sandbox media response exceeds the size limit');
+  }
+  return {
+    status: response.status,
+    statusText: response.statusText,
+    url: response.url || input,
+    headers: [...response.headers.entries()].filter(([name]) =>
+      forwardedResponseHeaders.has(name.toLowerCase()),
+    ),
+    body,
+  };
 }
 
 /** Child-side fetch function backed only by the private Sandbox port. */
@@ -79,6 +136,24 @@ export class SandboxFetchClient {
       url,
       headers: [['accept', 'image/*']],
       purpose: 'media',
+    });
+  };
+
+  /** Authored non-executable read; see SandboxFetchRequest['purpose']. */
+  fetchResource = async (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ): Promise<Response> => {
+    let request = input instanceof Request ? input : new Request(input, init);
+    if (request.method !== 'GET') {
+      throw new Error('Sandbox resource reads support only GET');
+    }
+    return this.post({
+      kind: requestKind,
+      requestId: `resource:${++this.nextRequest}`,
+      url: request.url,
+      headers: [...request.headers.entries()],
+      purpose: 'resource',
     });
   };
 
@@ -167,6 +242,8 @@ export class SandboxFetchServer {
      * configured URL.
      */
     private readonly resolveModuleURL: (url: string) => string = (url) => url,
+    /** Exact projected resource capabilities this process may read as data. */
+    private readonly isResourceAllowed: (url: string) => boolean = () => false,
   ) {
     port.addEventListener('message', this.receive);
   }
@@ -186,6 +263,9 @@ export class SandboxFetchServer {
   private async respond(request: SandboxFetchRequest): Promise<void> {
     if ((request.purpose ?? 'module') === 'media') {
       return this.respondMedia(request);
+    }
+    if (request.purpose === 'resource') {
+      return this.respondResource(request);
     }
     let message: SandboxFetchResponse;
     try {
@@ -243,7 +323,7 @@ export class SandboxFetchServer {
         );
       }
       let body = await response.arrayBuffer();
-      if (body.byteLength > maxModuleBytes) {
+      if (body.byteLength > maxResponseBytes) {
         throw new Error('Sandbox module response exceeds the size limit');
       }
       await this.observeModule?.(
@@ -293,9 +373,51 @@ export class SandboxFetchServer {
   private async respondMedia(request: SandboxFetchRequest): Promise<void> {
     let message: SandboxFetchResponse;
     try {
-      let url = new URL(request.url);
-      if (!['http:', 'https:'].includes(url.protocol)) {
-        throw new Error('Sandbox media reads support only HTTP(S)');
+      let response = await fetchBoundedSandboxMedia(
+        this.fetch,
+        request.url,
+        request.headers,
+      );
+      message = {
+        kind: responseKind,
+        requestId: request.requestId,
+        ok: true,
+        response: {
+          ...response,
+        },
+      };
+    } catch (error) {
+      message = {
+        kind: responseKind,
+        requestId: request.requestId,
+        ok: false,
+        error: asError(error).message,
+      };
+    }
+    this.port.postMessage(
+      message,
+      message.response ? [message.response.body] : [],
+    );
+  }
+
+  /**
+   * Authored resource read: exact-link authority, never executable authority.
+   *
+   * Boxel rewrites authored `fetch()` to `import.meta.loader.fetch()`. In a
+   * Sandbox that must not share the Loader's module-fetch capability: a PDF,
+   * GLB, MIDI, or protected media file is data even when a library reads it
+   * from authored code. The Host grants only resource capabilities already
+   * present in the bounded execution document (relationship links or the
+   * conventional scalar FileDef `resourceUrl`), strips child authority, caps
+   * the response, and deliberately does not call `observeModule`.
+   */
+  private async respondResource(request: SandboxFetchRequest): Promise<void> {
+    let message: SandboxFetchResponse;
+    try {
+      if (!this.isResourceAllowed(request.url)) {
+        throw new Error(
+          `Sandbox resource read is outside its projected capabilities: ${request.url}`,
+        );
       }
       let headers = new Headers();
       for (let [name, value] of request.headers) {
@@ -303,20 +425,16 @@ export class SandboxFetchServer {
           headers.set(name, value);
         }
       }
-      let response = await this.fetch(url.href, {
+      let response = await this.fetch(request.url, {
         method: 'GET',
         headers,
         credentials: 'omit',
         referrerPolicy: 'no-referrer',
         redirect: 'error',
       });
-      let contentType = response.headers.get('content-type')?.toLowerCase();
-      if (response.ok && !contentType?.startsWith('image/')) {
-        throw new Error('Sandbox media response was not an image');
-      }
       let body = await response.arrayBuffer();
-      if (body.byteLength > maxModuleBytes) {
-        throw new Error('Sandbox media response exceeds the size limit');
+      if (body.byteLength > maxResponseBytes) {
+        throw new Error('Sandbox resource response exceeds the size limit');
       }
       message = {
         kind: responseKind,
@@ -371,6 +489,7 @@ function isFetchRequest(value: unknown): value is SandboxFetchRequest {
     (!('purpose' in value) ||
       value.purpose === undefined ||
       value.purpose === 'module' ||
+      value.purpose === 'resource' ||
       value.purpose === 'media')
   );
 }

@@ -30,7 +30,7 @@ function getTraefikDynamicDir() {
   return path.resolve(__dirname, '..', '..', '..', 'traefik', 'dynamic');
 }
 
-function registerWithTraefik(slug, hostname, port) {
+function registerWithTraefik(slug, hostname, port, aliases = []) {
   const dynamicDir = getTraefikDynamicDir();
   const configPath = path.join(dynamicDir, `${slug}-host.yml`);
   const routerKey = `host-${slug}`;
@@ -40,17 +40,20 @@ function registerWithTraefik(slug, hostname, port) {
   // 308-redirects to https so stale http:// links still work. Both
   // point at the same upstream — vite serves plain HTTP on the dynamic
   // internal port; Traefik is the only place TLS is terminated locally.
+  const hostRule = [hostname, ...aliases]
+    .map((candidate) => `Host(\`${candidate}\`)`)
+    .join(' || ');
   const entry = [
     'http:',
     '  routers:',
     `    ${routerKey}:`,
-    '      rule: "Host(`' + hostname + '`)"',
+    `      rule: "${hostRule}"`,
     `      service: ${routerKey}`,
     '      entryPoints:',
     '        - websecure',
     '      tls: {}',
     `    ${routerKey}-http:`,
-    '      rule: "Host(`' + hostname + '`)"',
+    `      rule: "${hostRule}"`,
     '      entryPoints:',
     '        - web',
     '      middlewares:',

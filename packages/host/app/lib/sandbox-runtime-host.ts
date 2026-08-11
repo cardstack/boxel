@@ -17,6 +17,7 @@ import {
 } from './sandbox-runtime-process';
 
 import { SandboxSurfaceClient } from './sandbox-surface-transport';
+import { SandboxViewCardClient } from './sandbox-view-card-transport';
 import { SandboxWriteClient } from './sandbox-write-transport';
 
 import type { BoxelRuntime } from './boxel-runtime';
@@ -39,6 +40,7 @@ export function installSandboxRuntimeHost(options: {
   createRuntime: (
     fetch: typeof globalThis.fetch,
     fetchMedia: (url: string) => Promise<Response>,
+    fetchResource: typeof globalThis.fetch,
   ) => BoxelRuntime | Promise<BoxelRuntime>;
   createRenderTarget: (
     runtime: BoxelRuntime,
@@ -50,6 +52,12 @@ export function installSandboxRuntimeHost(options: {
      * mutation — see `SandboxWriteClient`.
      */
     writeClient: SandboxWriteClient,
+    /**
+     * Narrow UI capability used by Base's nested-card render registration.
+     * It can ask the parent to open an identified card, but cannot read from
+     * the parent's Store or manipulate its router directly.
+     */
+    viewCardClient: SandboxViewCardClient,
   ) => SandboxRenderTarget | Promise<SandboxRenderTarget>;
   announceInterval?: number;
   signal?: AbortSignal;
@@ -137,12 +145,14 @@ export function installSandboxRuntimeHost(options: {
       let renderServer: SandboxRenderServer | undefined;
       let fetchClient: SandboxFetchClient | undefined;
       let writeClient: SandboxWriteClient | undefined;
+      let viewCardClient: SandboxViewCardClient | undefined;
       try {
         fetchClient = new SandboxFetchClient(port);
         console.debug('[sandbox-child] createRuntime begun');
         let createdRuntime = await options.createRuntime(
           fetchClient.fetch,
           fetchClient.fetchMedia,
+          fetchClient.fetchResource,
         );
         runtime = createdRuntime;
         console.debug('[sandbox-child] createRuntime completed', {
@@ -158,11 +168,14 @@ export function installSandboxRuntimeHost(options: {
         console.debug('[sandbox-child] createRenderTarget begun');
         let createdWriteClient = new SandboxWriteClient(port);
         writeClient = createdWriteClient;
+        let createdViewCardClient = new SandboxViewCardClient(port);
+        viewCardClient = createdViewCardClient;
         let renderTarget = await options.createRenderTarget(
           createdRuntime,
           createdSurface,
           (diagnostic) => postRenderDiagnostic(port, diagnostic),
           createdWriteClient,
+          createdViewCardClient,
         );
         console.debug('[sandbox-child] createRenderTarget completed');
         let createdRenderServer = new SandboxRenderServer(port, renderTarget);
@@ -201,6 +214,7 @@ export function installSandboxRuntimeHost(options: {
             createdRenderServer.destroy();
             createdRuntimeServer.destroy();
             createdWriteClient.destroy();
+            createdViewCardClient.destroy();
             fetchClient?.destroy();
             if (
               'destroy' in createdRuntime &&
@@ -222,6 +236,7 @@ export function installSandboxRuntimeHost(options: {
         surface?.destroy();
         runtimeServer?.destroy();
         writeClient?.destroy();
+        viewCardClient?.destroy();
         fetchClient?.destroy();
         if (
           runtime &&

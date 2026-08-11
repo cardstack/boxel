@@ -20,6 +20,42 @@ import PowerSelectOptions from 'ember-power-select/components/power-select/optio
 import cn from '../../helpers/cn.ts';
 import { BoxelSelectDefaultTrigger } from './trigger.gts';
 
+// These adapters are intentionally runtime identities. Base realm templates
+// use them to make their custom ember-power-select components acceptable to
+// Glint without importing ember-power-select's private types. They are part of
+// the trusted Boxel UI module surface: a Host can render a Base module built
+// against a newer release than its local source, so removing them would turn a
+// type-only upgrade into a runtime missing-export failure.
+export function toTriggerComponent<ComponentT>(
+  component: ComponentT,
+): ComponentT {
+  return component;
+}
+
+export function toMultiSelectTriggerComponent<ComponentT>(
+  component: ComponentT,
+): ComponentT {
+  return component;
+}
+
+export function toBeforeOptionsComponent<ComponentT>(
+  component: ComponentT,
+): ComponentT {
+  return component;
+}
+
+export function toSelectedItemComponent<ComponentT>(
+  component: ComponentT,
+): ComponentT {
+  return component;
+}
+
+export function toAfterOptionsComponent<ComponentT>(
+  component: ComponentT,
+): ComponentT {
+  return component;
+}
+
 export interface BoxelSelectArgs<ItemT> extends PowerSelectArgs {
   options: ItemT[];
   variant?: 'primary' | 'secondary' | 'muted' | 'destructive' | 'default';

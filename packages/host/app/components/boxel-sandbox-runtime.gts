@@ -4,10 +4,12 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import { modifier } from 'ember-modifier';
-import { provide } from 'ember-provide-consume-context';
+import { consume, provide } from 'ember-provide-consume-context';
+import ContextProvider from 'ember-provide-consume-context/components/context-provider';
 import { initSync, parse } from 'es-module-lexer';
 
 import {
+  CardContextName,
   DefaultFormatsContextName,
   Loader,
   PermissionsContextName,
@@ -24,6 +26,7 @@ import {
 
 import { installBoxelLoaderCompatibilityModules } from '@cardstack/host/lib/boxel-loader-compatibility';
 import DirectBoxelRuntime from '@cardstack/host/lib/direct-boxel-runtime';
+import CardStoreWithGarbageCollection from '@cardstack/host/lib/gc-card-store';
 import SandboxMediaBridge from '@cardstack/host/lib/sandbox-media-bridge';
 import type { SandboxRenderTarget } from '@cardstack/host/lib/sandbox-render-transport';
 import {
@@ -32,19 +35,30 @@ import {
 } from '@cardstack/host/lib/sandbox-runtime-host';
 import { connectSandboxSurface } from '@cardstack/host/lib/sandbox-surface-transport';
 import type { SandboxSurfaceClient } from '@cardstack/host/lib/sandbox-surface-transport';
+import {
+  createSandboxToolContext,
+  installSandboxToolCompatibilityModules,
+} from '@cardstack/host/lib/sandbox-tool-compatibility';
+import type { SandboxViewCardClient } from '@cardstack/host/lib/sandbox-view-card-transport';
 import type { SandboxWriteClient } from '@cardstack/host/lib/sandbox-write-transport';
 import type { BoxelSandboxRuntimeModel } from '@cardstack/host/routes/boxel-sandbox-runtime';
 import type NetworkService from '@cardstack/host/services/network';
 
-import type { Format } from '@cardstack/base/card-api';
+import type {
+  CardContext,
+  CardDef,
+  FieldType,
+  Format,
+} from '@cardstack/base/card-api';
 import type { ComponentLike } from '@glint/template';
+import type Modifier from 'ember-modifier';
 
 interface Signature {
   Args: { model: BoxelSandboxRuntimeModel };
 }
 
 interface SandboxComponentSignature {
-  Args: { format: string };
+  Args: { format: string; context: CardContext };
   Element: Element;
 }
 
@@ -218,34 +232,61 @@ const attachSurface = modifier<{
  * loop. Send failures are logged, never thrown: the next mutation's write
  * carries full current state, so a missed one self-heals.
  */
-export function forwardInstanceWrites(
+export interface SandboxInstanceWriteForwarder {
+  flush(): Promise<void>;
+  stop(): void;
+}
+
+export function coordinateInstanceWrites(
   runtime: DirectBoxelRuntime,
   handle: BoxelInstanceHandle,
   writeClient: SandboxWriteClient,
-): () => void {
+): SandboxInstanceWriteForwarder {
   let stopped = false;
   let dirty = false;
   let queue = Promise.resolve();
+  let active: Promise<void> | undefined;
+  let scheduled = false;
   let unsubscribe: (() => void) | undefined;
-  let subscriber = () => {
+
+  let flush = (): Promise<void> => {
     dirty = true;
-    queue = queue.then(async () => {
-      if (stopped || !dirty) {
-        return;
-      }
-      dirty = false;
-      try {
-        let document = await runtime.serializeInstanceForWrite(handle);
-        if (stopped) {
-          return;
+    if (!scheduled) {
+      scheduled = true;
+      active = queue.then(async () => {
+        while (!stopped && dirty) {
+          dirty = false;
+          let document = await runtime.serializeInstanceForWrite(handle);
+          if (stopped) {
+            return;
+          }
+          await writeClient.write(document);
+          // The one child-observable breadcrumb that the parent ACKED
+          // applying this write — mirrors '[sandbox-parent] instance push
+          // applied'.
+          console.debug('[sandbox-child] instance write applied');
         }
-        await writeClient.write(document);
-        // The one child-observable breadcrumb that the parent ACKED applying
-        // this write — mirrors '[sandbox-parent] instance push applied'.
-        console.debug('[sandbox-child] instance write applied');
-      } catch (error) {
-        console.warn('[sandbox-child] instance write failed', error);
-      }
+      });
+      // Keep the internal tail recoverable so one rejected save cannot poison
+      // every later mutation, while returning `active` itself to explicit
+      // callers so SaveCardTool still observes a parent rejection.
+      queue = active
+        .catch(() => undefined)
+        .finally(() => {
+          scheduled = false;
+          active = undefined;
+          // A mutation can land between the loop's final dirty check and this
+          // continuation. Schedule it rather than leaving it stranded.
+          if (!stopped && dirty) {
+            void flush();
+          }
+        });
+    }
+    return active ?? queue;
+  };
+  let subscriber = () => {
+    void flush().catch((error) => {
+      console.warn('[sandbox-child] instance write failed', error);
     });
   };
   void runtime.subscribeToInstanceChanges(handle, subscriber).then(
@@ -260,10 +301,22 @@ export function forwardInstanceWrites(
       console.warn('[sandbox-child] instance write subscription failed', error);
     },
   );
-  return () => {
-    stopped = true;
-    unsubscribe?.();
+  return {
+    flush,
+    stop() {
+      stopped = true;
+      unsubscribe?.();
+    },
   };
+}
+
+export function forwardInstanceWrites(
+  runtime: DirectBoxelRuntime,
+  handle: BoxelInstanceHandle,
+  writeClient: SandboxWriteClient,
+): () => void {
+  let forwarder = coordinateInstanceWrites(runtime, handle, writeClient);
+  return () => forwarder.stop();
 }
 
 let esModuleLexerInitialized = false;
@@ -468,8 +521,18 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
   private renderedCardHandle?: BoxelInstanceHandle;
   /** RP-20.6: sender for child→parent instance writes, set at bootstrap. */
   private writeClient?: SandboxWriteClient;
-  /** Teardown for the current `forwardInstanceWrites` subscription. */
-  private stopWriteForwarding?: () => void;
+  /** Narrow user-navigation capability; never exposes the Host router. */
+  private viewCardClient?: SandboxViewCardClient;
+  /** The root is already open. Only nested card registrations navigate. */
+  private renderedCardId?: string;
+  /** Coordinator for implicit mutations and explicit SaveCardTool flushes. */
+  private instanceWriteForwarder?: SandboxInstanceWriteForwarder;
+  /**
+   * Opaque token accepted only by trusted child-local tool facades. It must
+   * exist before the first CardContext provider render; the private-port
+   * handshake later installs facades that recognize this same identity.
+   */
+  private readonly sandboxToolContext = createSandboxToolContext();
   /**
    * RP-17.1 HMR un-deferral: a live check against every generation the
    * parent-facing `SandboxRenderServer` has seen arrive, not just ones
@@ -514,10 +577,76 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
     return this.contextPermissions;
   }
 
+  /**
+   * Base applies this modifier to every nested card container. Main injects
+   * ElementTracker here; an origin-isolated child cannot register its DOM in
+   * the parent, so it forwards the same semantic identity over the private
+   * port instead. This preserves the existing Boxel composition API rather
+   * than teaching authored cards about iframes or message channels.
+   */
+  private cardNavigationModifier = modifier(
+    (
+      element: Element,
+      _positional: never[],
+      named: {
+        card?: CardDef;
+        cardId?: string;
+        format: Format | 'data';
+        fieldType?: FieldType;
+        fieldName?: string;
+      },
+    ) => {
+      let cardId = named.cardId ?? named.card?.id;
+      if (
+        !(element instanceof HTMLElement) ||
+        typeof cardId !== 'string' ||
+        cardId === this.renderedCardId
+      ) {
+        return;
+      }
+      let click = (event: MouseEvent) => {
+        // Match operator-mode overlays: the innermost composed card wins.
+        event.stopPropagation();
+        // Authored code cannot manufacture Host navigation. A genuine user
+        // gesture is the sole way to exercise this UI capability.
+        if (!event.isTrusted) {
+          return;
+        }
+        void this.viewCardClient
+          ?.viewCard(cardId, named.format, {
+            ...(named.fieldType ? { fieldType: named.fieldType } : {}),
+            ...(named.fieldName ? { fieldName: named.fieldName } : {}),
+          })
+          .catch((error) => {
+            console.error('Sandbox nested-card navigation failed', error);
+          });
+      };
+      element.addEventListener('click', click);
+      element.style.cursor = 'pointer';
+      return () => element.removeEventListener('click', click);
+    },
+  );
+
+  @consume(CardContextName)
+  declare private inheritedCardContext: CardContext | undefined;
+
+  private get cardContext(): CardContext {
+    // Preserve every capability already provided inside the child. This
+    // component only replaces the semantic hook whose implementation must
+    // differ across the origin boundary.
+    return {
+      ...this.inheritedCardContext,
+      toolContext: this.sandboxToolContext,
+      commandContext: this.sandboxToolContext,
+      cardComponentModifier: this
+        .cardNavigationModifier as unknown as typeof Modifier,
+    } as CardContext;
+  }
+
   private runtimeHost = installSandboxRuntimeHost({
     parentOrigin: this.args.model.parentOrigin,
     bootstrapId: this.args.model.bootstrapId,
-    createRuntime: (moduleFetch, mediaFetch) => {
+    createRuntime: (moduleFetch, mediaFetch, resourceFetch) => {
       this.mediaFetch = mediaFetch;
       this.moduleFetchHandler = (request) => moduleFetch(request);
       this.network.mount(this.moduleFetchHandler);
@@ -529,14 +658,58 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
         ],
         this.network.virtualNetwork,
       );
+      let loaderFacade: Loader;
       this.loader = new Loader(fetch, this.network.resolveImport, {
         virtualNetwork: this.network.virtualNetwork,
         moduleEvaluator: createSandboxModuleEvaluator(() => this.loader!),
+        moduleMeta: (moduleIdentifier) => ({
+          url: moduleIdentifier,
+          loader: loaderFacade,
+        }),
+      });
+      // Static and dynamic imports remain on the classified module graph.
+      // Only authored `fetch()` (rewritten by loaderPlugin to
+      // `import.meta.loader.fetch()`) receives the projected-resource lane.
+      // A denied Host grant falls back to the child origin's credentialless
+      // native fetch, preserving ordinary public CORS resources without
+      // broadening authenticated Realm access.
+      let authoredFetch: typeof globalThis.fetch = async (input, init) => {
+        try {
+          return await resourceFetch(input, init);
+        } catch {
+          return globalThis.fetch(input, {
+            ...init,
+            credentials: 'omit',
+          });
+        }
+      };
+      loaderFacade = new Proxy(this.loader, {
+        get(target, property) {
+          if (property === 'fetch') {
+            return authoredFetch;
+          }
+          let value = Reflect.get(target, property, target);
+          return typeof value === 'function' ? value.bind(target) : value;
+        },
       });
       installBoxelLoaderCompatibilityModules(this.loader);
+      installSandboxToolCompatibilityModules(
+        [this.network.virtualNetwork, this.loader],
+        {
+          saveCard: (card, realm) => this.saveRenderedCard(card, realm),
+        },
+        this.sandboxToolContext,
+      );
+      let store = new CardStoreWithGarbageCollection(
+        new Map(),
+        fetch,
+        this.network.virtualNetwork,
+      );
       this.runtime = new DirectBoxelRuntime(
         () => this.loader!.import('@cardstack/base/card-api'),
         () => this.loader!,
+        undefined,
+        store,
       );
       return this.runtime;
     },
@@ -545,10 +718,12 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
       surface,
       reportRenderDiagnostic,
       writeClient,
+      viewCardClient,
     ) => {
       join(() => (this.surface = surface));
       this.reportRenderDiagnostic = reportRenderDiagnostic;
       this.writeClient = writeClient;
+      this.viewCardClient = viewCardClient;
       return this.renderTarget;
     },
     signal: this.abortBootstrap.signal,
@@ -579,6 +754,7 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
       if (!this.runtime) {
         throw new Error('Sandbox runtime is unavailable');
       }
+      this.renderedCardId = this.runtime.getInstanceId(card);
       // Some authored cards size a canvas or renderer exactly once from
       // their mount point's geometry, with no ResizeObserver of their own
       // (a reasonable assumption on main, where a card only ever mounts at
@@ -635,8 +811,8 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
       });
       this.hasCommittedRender = false;
       this.renderedCardHandle = undefined;
-      this.stopWriteForwarding?.();
-      this.stopWriteForwarding = undefined;
+      this.instanceWriteForwarder?.stop();
+      this.instanceWriteForwarder = undefined;
       await afterRender();
     },
     updateInstance: async (
@@ -744,17 +920,48 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
   };
 
   private installWriteForwarder(card: BoxelInstanceHandle): void {
-    this.stopWriteForwarding?.();
-    this.stopWriteForwarding =
+    this.instanceWriteForwarder?.stop();
+    this.instanceWriteForwarder =
       this.runtime && this.writeClient
-        ? forwardInstanceWrites(this.runtime, card, this.writeClient)
+        ? coordinateInstanceWrites(this.runtime, card, this.writeClient)
         : undefined;
+  }
+
+  private async saveRenderedCard(card: unknown, realm?: string) {
+    if (
+      !this.runtime ||
+      !this.renderedCardHandle ||
+      !this.instanceWriteForwarder
+    ) {
+      throw new Error('Sandbox save requires an already-rendered Boxel');
+    }
+    let renderedId = this.runtime.getInstanceId(this.renderedCardHandle);
+    let requestedId =
+      typeof card === 'object' && card !== null && 'id' in card
+        ? card.id
+        : undefined;
+    if (
+      typeof renderedId !== 'string' ||
+      renderedId.length === 0 ||
+      requestedId !== renderedId
+    ) {
+      throw new Error(
+        'Sandbox SaveCardTool can save only the Boxel rendered by this process',
+      );
+    }
+    if (realm !== undefined && !renderedId.startsWith(realm)) {
+      throw new Error(
+        'Sandbox SaveCardTool cannot move a Boxel to a different realm',
+      );
+    }
+    await this.instanceWriteForwarder.flush();
+    return card;
   }
 
   willDestroy(): void {
     super.willDestroy();
-    this.stopWriteForwarding?.();
-    this.stopWriteForwarding = undefined;
+    this.instanceWriteForwarder?.stop();
+    this.instanceWriteForwarder = undefined;
     this.abortBootstrap.abort();
     void this.runtimeHost.then((host) => host?.destroy());
     this.loader?.dispose();
@@ -767,27 +974,29 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
   }
 
   <template>
-    {{#if this.error}}
-      <p class='boxel-sandbox-runtime__error' role='alert'>
-        {{this.error.message}}
-      </p>
-    {{else if this.surface}}
-      <main
-        class='boxel-sandbox-runtime boxel-sandbox-runtime--{{this.format}}
-          boxel-sandbox-runtime--{{this.heightMode}}'
-        data-boxel-sandbox-runtime
-        {{attachSurface
-          this.surface
-          this.measureAndReportRenderDiagnostic
-          this.heightMode
-          this.mediaFetch
-        }}
-      >
-        {{#if this.renderedComponent}}
-          <this.renderedComponent @format={{this.format}} />
-        {{/if}}
-      </main>
-    {{/if}}
+    <ContextProvider @key={{CardContextName}} @value={{this.cardContext}}>
+      {{#if this.error}}
+        <p class='boxel-sandbox-runtime__error' role='alert'>
+          {{this.error.message}}
+        </p>
+      {{else if this.surface}}
+        <main
+          class='boxel-sandbox-runtime boxel-sandbox-runtime--{{this.format}}
+            boxel-sandbox-runtime--{{this.heightMode}}'
+          data-boxel-sandbox-runtime
+          {{attachSurface
+            this.surface
+            this.measureAndReportRenderDiagnostic
+            this.heightMode
+            this.mediaFetch
+          }}
+        >
+          {{#if this.renderedComponent}}
+            <this.renderedComponent @format={{this.format}} />
+          {{/if}}
+        </main>
+      {{/if}}
+    </ContextProvider>
     <style scoped>
       :global(html),
       :global(body) {
@@ -823,6 +1032,23 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
         cards rendering at ~60px. */
       .boxel-sandbox-runtime--allocated {
         height: 100vh;
+      }
+
+      /* Main places the caller's `stack-item-preview` class directly on the
+        CardContainer, where it supplies `overflow: auto`. A cross-origin
+        Sandbox cannot move that Host class through the document boundary,
+        so allocated surfaces reproduce the same box contract here: the
+        immediate Boxel container fills the child viewport and owns scrolling.
+        The full selector is global because this dynamically-rendered child
+        does not carry this template's scoped-CSS attribute. It remains
+        confined to the separate Sandbox document. */
+      :global(
+        [data-boxel-sandbox-runtime].boxel-sandbox-runtime--allocated
+          > .boxel-card-container
+      ) {
+        height: 100%;
+        min-height: 0;
+        overflow: auto;
       }
 
       .boxel-sandbox-runtime__error {

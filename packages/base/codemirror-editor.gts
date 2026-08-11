@@ -236,7 +236,6 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
 
   @tracked _cm: CodeMirrorContext | null = null;
   @tracked _widgetTargets: CardWidgetTarget[] = [];
-  @tracked _isLoaded = false;
 
   // ── Card search state ────────────────────────────────────────────────────
   @tracked _cardSearchMode = false;
@@ -257,6 +256,15 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
   private _slotUpdatePending = false;
   private _currentLivePreview: boolean | undefined;
 
+  constructor(owner: any, args: CodeMirrorEditorSignature['Args']) {
+    super(owner, args);
+    // Loading from the `cm` getter mutates tracked state while Glimmer is
+    // consuming that getter. Start the lazy import after the first render
+    // instead, so both direct and boundary-selected Base edit surfaces follow
+    // the same legal one-way transition from loading UI to editor UI.
+    scheduleOnce('afterRender', this, this._loadCodeMirror);
+  }
+
   get livePreview(): boolean {
     return this.args.livePreview !== false;
   }
@@ -264,20 +272,17 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
   // ── Lazy loading ─────────────────────────────────────────────────────────
 
   get cm(): CodeMirrorContext | null {
-    if (!this._cm && !this._isLoaded) {
-      this._loadCodeMirror();
-    }
     return this._cm;
   }
 
   private async _loadCodeMirror() {
     let loadCodeMirror = (globalThis as any).__loadCodeMirror;
     if (typeof loadCodeMirror !== 'function') {
-      this._isLoaded = true;
       return;
     }
-    this._cm = await loadCodeMirror();
-    this._isLoaded = true;
+    let cm = await loadCodeMirror();
+    if (isDestroying(this) || isDestroyed(this)) return;
+    this._cm = cm;
   }
 
   // ── Card search logic ────────────────────────────────────────────────────

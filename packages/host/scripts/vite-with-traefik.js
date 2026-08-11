@@ -301,6 +301,7 @@ function startWithTraefik({ subcommand, defaultPort, label, nodeMemory }) {
   ensureTraefik();
 
   const hostname = `host.${slug}.localhost`;
+  const sandboxHostname = `sandbox.${slug}.localhost`;
 
   // Point the client at the per-environment Synapse via Traefik
   if (!process.env.MATRIX_URL) {
@@ -327,14 +328,15 @@ function startWithTraefik({ subcommand, defaultPort, label, nodeMemory }) {
           // preview.allowedHosts (and server.hmr.host for dev) so requests
           // routed through Traefik aren't rejected by Vite's host check.
           BOXEL_HOST_HOSTNAME: hostname,
+          BOXEL_SANDBOX_HOSTNAME: sandboxHostname,
         },
         nodeMemory,
       });
 
       try {
-        registerWithTraefik(slug, hostname, port);
+        registerWithTraefik(slug, hostname, port, [sandboxHostname]);
         console.log(
-          `[environment-mode] Registered host at ${hostname} -> localhost:${port}`,
+          `[environment-mode] Registered host at ${hostname} and ${sandboxHostname} -> localhost:${port}`,
         );
       } catch (e) {
         console.error(

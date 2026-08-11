@@ -2,6 +2,7 @@ import {
   BOXEL_EXECUTION_TRANSPORT_VERSION,
   assertBoxelExecutionTransportVersion,
   type BoxelInstanceHandle,
+  type BoxelRuntimeAccepted,
   type BoxelRuntimeRequest,
   type BoxelRuntimeResponse,
   type BoxelTypeHandle,
@@ -53,6 +54,16 @@ export default class SandboxBoxelRuntimeServer {
     let response: BoxelRuntimeResponse;
     try {
       assertBoxelExecutionTransportVersion(request.transportVersion);
+      let accepted: BoxelRuntimeAccepted = {
+        kind: 'boxel-runtime-accepted',
+        transportVersion: BOXEL_EXECUTION_TRANSPORT_VERSION,
+        requestId: request.requestId,
+        operation: request.operation,
+      };
+      // Admission is a protocol phase, not a progress guess: once this is
+      // sent the child owns the request and the parent switches from its
+      // short peer-silence deadline to the operation's completion deadline.
+      this.port.postMessage(accepted);
       let value = (await this.dispatch(request)) as JSONValue;
       response = {
         kind: 'boxel-runtime-response',

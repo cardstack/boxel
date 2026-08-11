@@ -27,6 +27,10 @@ import {
   reconstructedError,
 } from './sandbox-render-transport';
 import { SandboxSurfaceServer } from './sandbox-surface-transport';
+import {
+  SandboxViewCardServer,
+  type SandboxViewCardOptions,
+} from './sandbox-view-card-transport';
 import { SandboxWriteServer } from './sandbox-write-transport';
 
 import type { BoxelRuntime, MaterializationPurpose } from './boxel-runtime';
@@ -95,6 +99,13 @@ export interface SandboxRenderSlot {
   readonly owner: 'sandbox';
   readonly iframe: HTMLIFrameElement;
   readonly surface: SurfaceHandle;
+  /**
+   * Identifies the renderer generation entitled to use this mount. A retained
+   * process can still be mounted by the generation being replaced when its
+   * successor starts materializing; waiting for this exact token prevents the
+   * successor from issuing requests through that about-to-close client.
+   */
+  readonly mountToken: object;
   /**
    * The process itself, not just its iframe/surface — the presentation slot
    * modifier needs to call `mount()`/`unmount()` on it directly (RP-15.3: a
@@ -169,22 +180,29 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
 
   private _iframe: HTMLIFrameElement = createDetachedSandboxIframe();
   private mounted = false;
+  private mountedElement?: HTMLElement;
+  private mountOwner?: object;
   private pendingRequest?: {
     card: BoxelInstanceHandle;
     format: string;
     hostOwnsBox?: boolean;
   };
   private client?: Promise<SandboxBoxelRuntimeClient>;
+  private runtimeClient?: SandboxBoxelRuntimeClient;
   private renderDiagnosticPort?: MessagePort;
   private paintListeners = new Set<() => void>();
   private painted = false;
-  private mountListeners = new Set<() => void>();
+  private mountListeners = new Set<{
+    token?: object;
+    resolve: () => void;
+  }>();
   private mountFailedListeners = new Set<(error: Error) => void>();
   private mountError?: Error;
   private surfaceServer?: SandboxSurfaceServer;
   private fetchServer?: SandboxFetchServer;
   private renderClient?: SandboxRenderClient;
   private writeServer?: SandboxWriteServer;
+  private viewCardServer?: SandboxViewCardServer;
   /**
    * RP-20.6: the one consumer entitled to apply this process's child writes
    * — registered by `BoxelExecutionService.connectSandboxInstanceSync`,
@@ -196,10 +214,17 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
   private childWriteReceiver?: (
     document: LooseSingleCardDocument,
   ) => void | Promise<void>;
+  private childViewCardReceiver?: (
+    cardId: string,
+    format: string,
+    options?: SandboxViewCardOptions,
+  ) => void | Promise<void>;
   private renderedCard?: BoxelInstanceHandle;
   private cancelConnection?: (error: Error) => void;
   private closed = false;
   private readonly moduleAuthority: SandboxModuleAuthority;
+  /** Exact non-executable links carried by projected execution documents. */
+  private readonly resourceAuthority = new Set<string>();
   /**
    * RP-17.1 HMR un-deferral: a monotonic sequence number bumped for every
    * render-family request this process issues (render, clear, and draft
@@ -232,6 +257,7 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
    */
   private readonly draftOverrides = new Map<string, string>();
   private reloadListeners = new Set<() => void>();
+  private reservedMountToken?: object;
 
   constructor(private readonly options: SandboxRuntimeProcessOptions) {
     this.surface = options.surfaceService.register(options.identity);
@@ -320,13 +346,24 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
    * `withClient()` awaits it either way) — before letting materialize()
    * proceed.
    */
-  whenMounted(): Promise<void> {
-    if (this.mounted) {
+  whenMounted(token?: object): Promise<void> {
+    if (this.mounted && (!token || this.mountOwner === token)) {
       return Promise.resolve();
     }
     return new Promise((resolve) => {
-      this.mountListeners.add(resolve);
+      this.mountListeners.add({ token, resolve });
     });
+  }
+
+  /**
+   * Reserves the next presentation ownership generation before materialize.
+   * `whenMounted(token)` deliberately does not accept an older live mount:
+   * Glimmer must first install (or transfer) the replacement modifier.
+   */
+  reserveMount(): object {
+    let token = {};
+    this.reservedMountToken = token;
+    return token;
   }
 
   /**
@@ -359,11 +396,33 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
    * already booting/live — re-appending would re-parent it, which is
    * exactly the reload this design avoids).
    */
-  mount(element: HTMLElement): void {
-    if (this.closed || this.mounted) {
-      return;
+  mount(
+    element: HTMLElement,
+    owner = this.reservedMountToken ?? {},
+  ): () => void {
+    if (this.closed) {
+      return () => undefined;
+    }
+    if (this.mounted) {
+      if (this.mountedElement === element) {
+        // Glimmer can reuse the same element while replacing the modifier
+        // instance that owns it. Transfer teardown ownership without moving
+        // the live iframe: the previous modifier's late cleanup must not
+        // close the replacement generation's MessageChannel.
+        this.mountOwner = owner;
+        this.resolveMountListeners(owner);
+        return () => this.unmount(element, owner);
+      }
+      // Glimmer may install the replacement slot before it tears down the
+      // previous modifier instance. A live iframe cannot be re-parented, so
+      // end the old browsing context and mint the replacement directly in
+      // its new permanent slot. The old modifier's later teardown is scoped
+      // to its own element and therefore cannot tear this new mount down.
+      this.unmount();
     }
     this.mounted = true;
+    this.mountedElement = element;
+    this.mountOwner = owner;
     // Establish the child URL and all bootstrap listeners before inserting
     // the iframe. Besides closing the first-message race, this means the
     // `load` event below can only belong to the requested child document —
@@ -376,10 +435,7 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
         error instanceof Error ? error : new Error(String(error)),
       );
     });
-    for (let listener of [...this.mountListeners]) {
-      listener();
-    }
-    this.mountListeners.clear();
+    this.resolveMountListeners(owner);
     let pending = this.pendingRequest;
     if (pending) {
       this.pendingRequest = undefined;
@@ -401,6 +457,7 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
         );
       });
     }
+    return () => this.unmount(element, owner);
   }
 
   /**
@@ -412,11 +469,19 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
    * surface identity) mints a fresh, still-detached iframe and reconnects;
    * `allowModules()` need not be called again.
    */
-  unmount(): void {
+  unmount(element?: HTMLElement, owner?: object): void {
     if (!this.mounted) {
       return;
     }
+    if (element && this.mountedElement !== element) {
+      return;
+    }
+    if (owner && this.mountOwner !== owner) {
+      return;
+    }
     this.mounted = false;
+    this.mountedElement = undefined;
+    this.mountOwner = undefined;
     this.pendingRequest = undefined;
     // A remount gets an independent chance to connect: a failure from the
     // PREVIOUS mount must not immediately fail a brand new one.
@@ -424,6 +489,8 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
     this.mountFailedListeners.clear();
     this.cancelConnection?.(new Error('Sandbox runtime process was unmounted'));
     this.cancelConnection = undefined;
+    this.runtimeClient?.destroy('Sandbox runtime process was unmounted');
+    this.runtimeClient = undefined;
     this.client = undefined;
     this.renderDiagnosticPort?.removeEventListener(
       'message',
@@ -442,6 +509,8 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
     this.renderClient = undefined;
     this.writeServer?.destroy();
     this.writeServer = undefined;
+    this.viewCardServer?.destroy();
+    this.viewCardServer = undefined;
     this.renderedCard = undefined;
     // This exact iframe is dead the moment it loses its mount point — a
     // detached iframe's document does not resume, and even if it did, this
@@ -472,6 +541,7 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
     relativeTo: RealmResourceIdentifier | undefined,
     purpose: MaterializationPurpose,
   ): Promise<BoxelInstanceHandle> {
+    this.allowDocumentResources(resource, document, relativeTo);
     return this.withClient((client) =>
       client.createFromSerialized(resource, document, relativeTo, purpose),
     );
@@ -540,6 +610,8 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
       owner: 'sandbox',
       iframe: this._iframe,
       surface: this.surface,
+      mountToken:
+        this.reservedMountToken ?? this.mountOwner ?? this.reserveMount(),
       process: this,
     };
   }
@@ -558,7 +630,7 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
     // forever — the caller is expected to re-check `active`/closed state
     // once it resumes.
     for (let listener of [...this.mountListeners]) {
-      listener();
+      listener.resolve();
     }
     this.mountListeners.clear();
     this.options.surfaceService.release(this.surface);
@@ -653,6 +725,7 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
         error: new Error('Sandbox runtime process is closed'),
       };
     }
+    this.allowDocumentResources(document.data, document, undefined);
     let generation = ++this.nextGeneration;
     try {
       await this.client;
@@ -690,7 +763,7 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
     // for the mount (resolved immediately if already mounted; released by
     // destroy() too) keeps that first push from being lost, since nothing
     // re-pushes until the consumed permissions value actually changes.
-    await this.whenMounted();
+    await this.whenMounted(this.reservedMountToken);
     let generation = ++this.nextGeneration;
     try {
       await this.client;
@@ -720,6 +793,27 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
     return () => {
       if (this.childWriteReceiver === receiver) {
         this.childWriteReceiver = undefined;
+      }
+    };
+  }
+
+  /**
+   * Registers the Host UI capability for nested cards rendered by this
+   * process. Unlike the write receiver this carries no data authority: the
+   * child can only request the same `viewCard` action that main's
+   * ElementTracker would invoke for an in-document render.
+   */
+  setChildViewCardReceiver(
+    receiver: (
+      cardId: string,
+      format: string,
+      options?: SandboxViewCardOptions,
+    ) => void | Promise<void>,
+  ): () => void {
+    this.childViewCardReceiver = receiver;
+    return () => {
+      if (this.childViewCardReceiver === receiver) {
+        this.childViewCardReceiver = undefined;
       }
     };
   }
@@ -803,6 +897,15 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
       return Promise.reject(new Error('Sandbox runtime process is closed'));
     }
     return this.client.then(callback);
+  }
+
+  private resolveMountListeners(owner: object): void {
+    for (let listener of [...this.mountListeners]) {
+      if (!listener.token || listener.token === owner) {
+        listener.resolve();
+        this.mountListeners.delete(listener);
+      }
+    }
   }
 
   /**
@@ -919,6 +1022,9 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
         settled = true;
         cleanupBootstrap();
         client?.destroy(error.message);
+        if (this.runtimeClient === client) {
+          this.runtimeClient = undefined;
+        }
         this.renderClient?.destroy(error.message);
         this.renderClient = undefined;
         this.surfaceServer?.destroy();
@@ -927,6 +1033,8 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
         this.fetchServer = undefined;
         this.writeServer?.destroy();
         this.writeServer = undefined;
+        this.viewCardServer?.destroy();
+        this.viewCardServer = undefined;
         reject(error);
       };
       let receiveControl = (event: MessageEvent<unknown>) => {
@@ -948,6 +1056,7 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
         }
         settled = true;
         cleanupBootstrap();
+        this.runtimeClient = client;
         resolve(client);
       };
       let receive = (event: MessageEvent<unknown>) => {
@@ -980,6 +1089,7 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
             this.moduleAuthority.observe(url, contentType, body),
           (url) => this.draftOverrides.get(url),
           (url) => this.options.resolveModuleURL(url),
+          (url) => this.resourceAuthority.has(canonicalURL(url)),
         );
         // RP-20.6 child→parent write leg: applies through the registered
         // receiver (connectSandboxInstanceSync's entitlement to the ONE
@@ -995,6 +1105,18 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
           }
           return receiver(document);
         });
+        this.viewCardServer = new SandboxViewCardServer(
+          channel.port1,
+          (cardId, format, options) => {
+            let receiver = this.childViewCardReceiver;
+            if (!receiver) {
+              throw new Error(
+                'No sandbox view-card receiver is registered for this process',
+              );
+            }
+            return receiver(cardId, format, options);
+          },
+        );
         // Independent of, and outlives, the bootstrap-scoped receiveControl
         // above (which cleanupBootstrap detaches once the handshake
         // completes): the child posts a render diagnostic after every
@@ -1031,6 +1153,77 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
       iframe.src = child.href;
     });
   }
+
+  private allowDocumentResources(
+    resource: LooseCardResource,
+    document: LooseSingleCardDocument,
+    relativeTo: RealmResourceIdentifier | undefined,
+  ): void {
+    for (let url of projectedResourceLinks(resource, document, relativeTo)) {
+      this.resourceAuthority.add(url);
+    }
+  }
+}
+
+/**
+ * Exact data-resource authority carried by a projected Boxel document.
+ * Relationship links are the protocol's general explicit grant. The one
+ * scalar exception is `resourceUrl`: FileDef adapters use that deliberately
+ * named field as their wrapper-free projection of a binary resource when the
+ * underlying polymorphic FileDef relationship cannot cross a boundary. No
+ * other URL-looking string becomes authenticated Host fetch authority merely
+ * because authored code can name it.
+ */
+export function projectedResourceLinks(
+  resource: LooseCardResource,
+  document: LooseSingleCardDocument,
+  relativeTo: RealmResourceIdentifier | undefined,
+): string[] {
+  let result = new Set<string>();
+  for (let candidate of [resource, ...(document.included ?? [])]) {
+    let base =
+      candidate.id ?? (candidate === resource ? relativeTo : undefined);
+    if (!base) {
+      continue;
+    }
+    let resourceUrl = candidate.attributes?.resourceUrl;
+    if (typeof resourceUrl === 'string') {
+      try {
+        let url = new URL(resourceUrl, base);
+        if (url.protocol === 'http:' || url.protocol === 'https:') {
+          result.add(canonicalURL(url.href));
+        }
+      } catch {
+        // A malformed scalar resource projection grants nothing.
+      }
+    }
+    for (let relationship of Object.values(candidate.relationships ?? {})) {
+      for (let entry of Array.isArray(relationship)
+        ? relationship
+        : [relationship]) {
+        for (let link of [entry?.links?.self, entry?.links?.related]) {
+          if (!link) {
+            continue;
+          }
+          try {
+            let url = new URL(link, base);
+            if (url.protocol === 'http:' || url.protocol === 'https:') {
+              result.add(canonicalURL(url.href));
+            }
+          } catch {
+            // A malformed projected link grants nothing.
+          }
+        }
+      }
+    }
+  }
+  return [...result];
+}
+
+function canonicalURL(input: string): string {
+  let url = new URL(input);
+  url.hash = '';
+  return url.href;
 }
 
 function isSandboxListening(value: unknown): value is SandboxListening {

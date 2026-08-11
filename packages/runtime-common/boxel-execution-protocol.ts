@@ -158,6 +158,22 @@ export interface BoxelRuntimeRequest {
   args: JSONValue[];
 }
 
+/**
+ * The child has admitted an RPC and begun executing it.
+ *
+ * This is deliberately distinct from the bootstrap `ready` message. A ready
+ * transport can still need to fetch, transpile, and evaluate a cold authored
+ * module before `createFromSerialized` can complete. The parent uses this
+ * acknowledgement to distinguish a dead/unresponsive peer from useful work
+ * that needs the bounded cold-operation budget.
+ */
+export interface BoxelRuntimeAccepted {
+  kind: 'boxel-runtime-accepted';
+  transportVersion: number;
+  requestId: string;
+  operation: BoxelRuntimeOperation;
+}
+
 export interface BoxelRuntimeSuccess {
   kind: 'boxel-runtime-response';
   transportVersion: number;
@@ -314,6 +330,43 @@ export type SandboxWriteResponse =
        * child's state (the newer write already carried it).
        */
       dropped?: boolean;
+    };
+
+/**
+ * Child→parent request to open a card that was rendered inside an
+ * origin-isolated Sandbox. Base's `cardComponentModifier` supplies this
+ * semantic identity at the render site; the child forwards only the card
+ * identifier and the same format/relationship metadata that main's
+ * ElementTracker passes to `viewCard`.
+ *
+ * This is deliberately a UI capability, not data authority. The child does
+ * not receive the Host router, Store, or a card instance. The parent remains
+ * responsible for resolving the identifier and enforcing ordinary read
+ * permissions when operator mode handles the request.
+ */
+export interface SandboxViewCardRequest {
+  kind: 'boxel-sandbox-view-card-request';
+  transportVersion: number;
+  requestId: string;
+  cardId: string;
+  format: string;
+  fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany';
+  fieldName?: string;
+}
+
+export type SandboxViewCardResponse =
+  | {
+      kind: 'boxel-sandbox-view-card-response';
+      transportVersion: number;
+      requestId: string;
+      ok: true;
+    }
+  | {
+      kind: 'boxel-sandbox-view-card-response';
+      transportVersion: number;
+      requestId: string;
+      ok: false;
+      error: SandboxProjectedError;
     };
 
 /**

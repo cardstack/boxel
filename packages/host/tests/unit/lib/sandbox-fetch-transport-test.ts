@@ -11,6 +11,87 @@ import {
 } from '@cardstack/host/lib/trusted-modules';
 
 module('Unit | Sandbox module fetch transport', function () {
+  test('authored resource reads use exact non-executable authority', async function (assert) {
+    let channel = new MessageChannel();
+    let requested: Request[] = [];
+    let observedModules: string[] = [];
+    let allowedResource = 'https://realm.example/files/annual-report.pdf';
+    let server = new SandboxFetchServer(
+      channel.port1,
+      async (input, init) => {
+        requested.push(new Request(input, init));
+        return new Response(new Uint8Array([0x25, 0x50, 0x44, 0x46]), {
+          headers: {
+            'content-type': 'application/pdf',
+            'x-realm-internal': 'must-not-cross',
+          },
+        });
+      },
+      () => false,
+      async (url) => {
+        observedModules.push(url);
+      },
+      undefined,
+      undefined,
+      (url) => url === allowedResource,
+    );
+    let client = new SandboxFetchClient(channel.port2);
+    channel.port1.start();
+    channel.port2.start();
+
+    try {
+      let response = await client.fetchResource(allowedResource, {
+        credentials: 'include',
+        headers: {
+          Accept: 'application/pdf',
+          Authorization: 'must-not-cross',
+        },
+      });
+
+      assert.deepEqual(
+        [...new Uint8Array(await response.arrayBuffer())],
+        [0x25, 0x50, 0x44, 0x46],
+        'the linked binary response crosses as data',
+      );
+      assert.strictEqual(requested.length, 1);
+      assert.strictEqual(
+        requested[0]?.headers.get('accept'),
+        'application/pdf',
+      );
+      assert.false(
+        requested[0]?.headers.has('authorization'),
+        'child-provided authority is stripped',
+      );
+      assert.strictEqual(
+        response.headers.get('x-realm-internal'),
+        null,
+        'private response headers do not cross',
+      );
+      assert.deepEqual(
+        observedModules,
+        [],
+        'a resource response never grows executable module authority',
+      );
+
+      await assert.rejects(
+        client.fetchResource('https://realm.example/files/payroll.pdf'),
+        /outside its projected links/,
+        'a sibling URL that was not linked is denied',
+      );
+      assert.strictEqual(requested.length, 1, 'the denied URL never fetches');
+      await assert.rejects(
+        client.fetchResource(allowedResource, { method: 'POST' }),
+        /support only GET/,
+        'the data capability cannot mutate a resource',
+      );
+    } finally {
+      client.destroy();
+      server.destroy();
+      channel.port1.close();
+      channel.port2.close();
+    }
+  });
+
   test('the child can read only an admitted module through the Host broker', async function (assert) {
     let channel = new MessageChannel();
     let requests: Request[] = [];

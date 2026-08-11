@@ -31,6 +31,7 @@ import type {
   BaseDef,
   BaseDefConstructor,
   BoxComponent,
+  CardStore,
   Field,
 } from '@cardstack/base/card-api';
 import type * as CardAPI from '@cardstack/base/card-api';
@@ -93,6 +94,14 @@ export default class DirectBoxelRuntime implements BoxelRuntime {
      * instance ids unnormalized.
      */
     private unresolveURL?: (url: string) => string,
+    /**
+     * Runtime-local Store used when this adapter materializes a serialized
+     * Boxel. Direct Host rendering normally retains the canonical Store
+     * instance instead. An origin-isolated Sandbox supplies its own Store so
+     * the child can preserve identity and consume Host-authorized query seeds
+     * without gaining live realm-search authority.
+     */
+    private store?: CardStore,
   ) {}
 
   async loadBoxel(ref: CodeRef): Promise<BoxelTypeHandle> {
@@ -114,6 +123,7 @@ export default class DirectBoxelRuntime implements BoxelRuntime {
       resource,
       document,
       relativeTo,
+      this.store ? { store: this.store } : undefined,
     );
     let handle = asBoxelInstanceHandle(this.instances.add(instance));
     this.creationArgs.set(handle, { resource, document, relativeTo });
@@ -144,6 +154,7 @@ export default class DirectBoxelRuntime implements BoxelRuntime {
       args.resource,
       args.document,
       args.relativeTo,
+      this.store ? { store: this.store } : undefined,
     );
     this.instances.replace(handle, instance);
   }
@@ -186,6 +197,18 @@ export default class DirectBoxelRuntime implements BoxelRuntime {
    */
   retainCanonicalInstance(instance: BaseDef): BoxelInstanceHandle {
     return asBoxelInstanceHandle(this.instances.addDistinct(instance));
+  }
+
+  /**
+   * Returns only the public identity needed to distinguish the render root
+   * from nested cards inside the Sandbox. The live instance remains owned by
+   * this runtime and never crosses a boundary.
+   */
+  getInstanceId(handle: BoxelInstanceHandle): string | undefined {
+    let instance = this.instances.get(handle);
+    return 'id' in instance && typeof instance.id === 'string'
+      ? instance.id
+      : undefined;
   }
 
   async describeBoxel(boxel: BoxelTypeHandle): Promise<BoxelDescription> {
