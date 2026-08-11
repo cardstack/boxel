@@ -746,6 +746,8 @@ export class PgQueueRunner implements QueueRunner {
             continue;
           }
 
+          // Serves both the lease and the handler's abort timer, so a healthy
+          // handler can never outlive the reservation protecting it.
           let effectiveTimeoutSec = Math.min(
             jobToRun.timeout,
             this.#maxTimeoutSec,
@@ -800,27 +802,23 @@ export class PgQueueRunner implements QueueRunner {
                 priority: jobToRun.priority,
               }),
               // we race the job so that it doesn't hold this worker hostage if
-              // the job's promise never resolves.
-              //
-              // This ceiling is the WORKER's, and it can exceed the job's own
-              // lease (`effectiveTimeoutSec` below). A handler that outlives
-              // its lease leaves the job claimable while it is still running,
-              // so a peer can pick it up and run it concurrently — which is
-              // the redelivery this queue relies on when a worker dies, and
-              // also the reason the stuck-job watchdog can reap a healthy
-              // worker on a job whose declared timeout is shorter than the
-              // ceiling. Aligning the two would fix that at the cost of
-              // changing what a timed-out job does: aborted here rather than
-              // handed to a peer.
+              // the job's promise never resolves. The deadline is the lease,
+              // clamped by the worker's own ceiling — never the ceiling alone.
+              // A handler allowed to run past its own reservation leaves the
+              // job claimable while it is still working, so a peer can run it
+              // concurrently, and it puts a healthy worker in front of the
+              // stuck-job watchdog. Nothing renews a lease, so sharing one
+              // deadline is what makes "reservation open past its lease" mean
+              // the worker died rather than the worker is slow.
               new Promise<'timeout'>((r) =>
                 setTimeout(() => {
                   r('timeout');
-                }, this.#maxTimeoutSec * 1000).unref(),
+                }, effectiveTimeoutSec * 1000).unref(),
               ),
             ]);
             if (result === 'timeout') {
               throw new Error(
-                `Timed-out after ${this.#maxTimeoutSec}s waiting for job ${
+                `Timed-out after ${effectiveTimeoutSec}s waiting for job ${
                   jobToRun.id
                 } to complete`,
               );

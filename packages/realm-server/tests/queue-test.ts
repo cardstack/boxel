@@ -1584,7 +1584,10 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('worker stops waiting for job after its been running longer than max time-out', async function (assert) {
+    test('worker stops waiting for a job that outruns its lease', async function (assert) {
+      // The abort deadline is the reservation's lease — the job's own timeout
+      // clamped by the worker ceiling — so here the job's 1s timeout binds
+      // under a 2s ceiling.
       let events: string[] = [];
       let runs = 0;
       let logJob = async () => {
@@ -1612,7 +1615,7 @@ module(basename(import.meta.filename), function () {
       } catch (error: any) {
         assert.strictEqual(
           error.message,
-          'Timed-out after 2s waiting for job 1 to complete',
+          'Timed-out after 1s waiting for job 1 to complete',
         );
       }
     });
@@ -1724,7 +1727,13 @@ module(basename(import.meta.filename), function () {
         );
       });
 
-      test('job can timeout; timed out job is picked up by another worker', async function (assert) {
+      test('a job that outruns its lease is failed rather than handed to a peer mid-flight', async function (assert) {
+        // A handler that kept running past its lease would leave the job
+        // claimable while still working on it, so a peer would run the same job
+        // concurrently — two workers writing the same rows. Aborting at the
+        // lease instead costs the peer retry: a job that cannot finish inside
+        // its own timeout fails, and that failure is attributable to the
+        // attempt that actually ran.
         let events: string[] = [];
         let runs = 0;
         let logJob = async () => {
@@ -1747,19 +1756,29 @@ module(basename(import.meta.filename), function () {
           args: null,
         });
 
-        // just after our job has timed out, kick the queue so that another worker
-        // will notice it. Otherwise we'd be stuck until the polling comes around.
-        await new Promise((r) => setTimeout(r, 1100));
+        // Well past the 1s lease, then kick the queue so a peer would claim
+        // the job if it were still claimable.
+        await new Promise((r) => setTimeout(r, 1500));
         await adapter.execute('NOTIFY jobs');
 
-        let result = await job.done;
+        try {
+          await job.done;
+          throw new Error('expected the timed-out job to be rejected');
+        } catch (error: any) {
+          assert.strictEqual(
+            error.message,
+            'Timed-out after 1s waiting for job 1 to complete',
+            'the attempt that ran owns the failure',
+          );
+        }
 
-        assert.strictEqual(result, 1);
-
-        // at this point the long-running first job is still stuck. it will
-        // eventually also log "job0 finish", but that is absorbed by our test
-        // afterEach
-        assert.deepEqual(events, ['job0 start', 'job1 start', 'job1 finish']);
+        // Give a peer a chance to pick it up, so the assertion below means
+        // "nobody claimed it" rather than "nobody has got round to it yet".
+        await new Promise((r) => setTimeout(r, 300));
+        assert.false(
+          events.includes('job1 start'),
+          `no peer re-ran the job; events=${JSON.stringify(events)}`,
+        );
       });
     });
   });
