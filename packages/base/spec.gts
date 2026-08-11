@@ -755,7 +755,7 @@ class Fitted extends Component<typeof Spec> {
       </:thumbnail>
       <:default>
         {{#if @model.specType}}
-          <SpecTag @specType={{@model.specType}} />
+          <SpecTag class='spec-type-tag' @specType={{@model.specType}} />
         {{/if}}
       </:default>
     </BasicFitted>
@@ -763,6 +763,11 @@ class Fitted extends Component<typeof Spec> {
       @layer {
         .spec-fitted {
           align-items: center;
+        }
+        @container fitted-card (1.0 < aspect-ratio) {
+          .spec-type-tag {
+            margin-right: var(--boxel-sp-xs);
+          }
         }
         @container fitted-card (aspect-ratio <= 1 / 1) and (150px <= width) and (170px <= height <= 250px) {
           .spec-fitted :deep(.thumbnail-section) {
