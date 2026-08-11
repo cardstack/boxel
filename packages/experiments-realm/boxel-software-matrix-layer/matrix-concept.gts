@@ -86,6 +86,9 @@ export class MatrixConcept extends CardDef {
   @field owner = contains(StringField);
   @field workState = contains(WorkStateField);
   @field notes = contains(StringField);
+  // Verifier-owned: URL of the Spec in the shared realm that evidences this
+  // concept. Written by verify-specs.py, never by hand or by the crawl.
+  @field sharedSpec = contains(StringField);
 
   @field cardTitle = contains(StringField, {
     computeVia: function (this: MatrixConcept) {
@@ -462,6 +465,10 @@ export class MatrixConcept extends CardDef {
             {{#if @model.catalogMatch}}
               <dt>Catalog match</dt>
               <dd class='mono'>{{@model.catalogMatch}}</dd>
+            {{/if}}
+            {{#if @model.sharedSpec}}
+              <dt>Shared-realm Spec</dt>
+              <dd class='mono'>{{@model.sharedSpec}}</dd>
             {{/if}}
             {{#if @model.reference}}
               <dt>Reference (not counted)</dt>

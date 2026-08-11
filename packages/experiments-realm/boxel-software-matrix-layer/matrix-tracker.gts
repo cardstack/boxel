@@ -137,11 +137,20 @@ export class MatrixTracker extends CardDef {
       }));
     }
 
-    // Built by hand but the crawl has not counted it yet: workState says Done
-    // while the machine columns still say not implemented.
-    get lagCount() {
-      return this.concepts.filter((c) => c.workState === 'Done' && !c.implemented)
-        .length;
+    // A Done claim is verified when the catalog has the concept or the shared
+    // realm holds its Spec; anything else is a claim awaiting evidence.
+    isVerified = (c: MatrixConcept) =>
+      Boolean(c.catalogMatch || c.sharedSpec || c.implemented);
+
+    get doneVerifiedCount() {
+      return this.concepts.filter(
+        (c) => c.workState === 'Done' && this.isVerified(c),
+      ).length;
+    }
+    get doneUnverifiedCount() {
+      return this.concepts.filter(
+        (c) => c.workState === 'Done' && !this.isVerified(c),
+      ).length;
     }
 
     get layerRows() {
@@ -197,7 +206,10 @@ export class MatrixTracker extends CardDef {
             return false;
           if (this.stateFilter !== ALL && c.workState !== this.stateFilter)
             return false;
-          if (this.lagOnly && !(c.workState === 'Done' && !c.implemented))
+          if (
+            this.lagOnly &&
+            !(c.workState === 'Done' && !this.isVerified(c))
+          )
             return false;
           if (
             q &&
@@ -293,18 +305,27 @@ export class MatrixTracker extends CardDef {
                 </div>
               {{/each}}
             </div>
-            {{#if this.lagCount}}
-              {{#if this.isInteractive}}
-                <button
-                  type='button'
-                  class='lag-chip {{if this.lagOnly "active"}}'
-                  {{on 'click' this.toggleLagOnly}}
-                >{{this.lagCount}} built, awaiting crawl</button>
-              {{else}}
-                <span class='lag-chip'>{{this.lagCount}}
-                  built, awaiting crawl</span>
+            <div class='verify-row'>
+              {{#if this.doneVerifiedCount}}
+                <span
+                  class='verify-chip'
+                >{{this.doneVerifiedCount}}
+                  done, verified</span>
               {{/if}}
-            {{/if}}
+              {{#if this.doneUnverifiedCount}}
+                {{#if this.isInteractive}}
+                  <button
+                    type='button'
+                    class='lag-chip {{if this.lagOnly "active"}}'
+                    {{on 'click' this.toggleLagOnly}}
+                  >{{this.doneUnverifiedCount}}
+                    done, no evidence yet</button>
+                {{else}}
+                  <span class='lag-chip'>{{this.doneUnverifiedCount}}
+                    done, no evidence yet</span>
+                {{/if}}
+              {{/if}}
+            </div>
           </div>
         </section>
 
@@ -498,8 +519,23 @@ export class MatrixTracker extends CardDef {
           font-weight: 700;
           font-variant-numeric: tabular-nums;
         }
-        .lag-chip {
+        .verify-row {
           margin-top: 0.75rem;
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.375rem;
+        }
+        .verify-chip {
+          display: inline-flex;
+          font-size: 0.75rem;
+          font-weight: 600;
+          padding: 0.25rem 0.625rem;
+          border-radius: 999px;
+          border: 1px solid var(--state-done-fg, #166534);
+          background: var(--state-done-bg, #dcfce7);
+          color: var(--state-done-fg, #166534);
+        }
+        .lag-chip {
           display: inline-flex;
           font-size: 0.75rem;
           font-weight: 600;
