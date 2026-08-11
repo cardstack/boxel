@@ -10,7 +10,7 @@ import { Invoice } from './invoice';
 import { Subscription } from './subscription';
 import { formatMoney, outstandingBalance, sumLineItems } from './money';
 
-const OPEN_STATUSES = ['sent', 'viewed', 'partial', 'overdue'];
+const OPEN_STATUSES = ['sent', 'viewed', 'partial'];
 
 interface AccountMetricsSignature {
   Args: {

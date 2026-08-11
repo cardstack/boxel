@@ -6,7 +6,7 @@
       "issueDate": "2026-06-25",
       "sentDate": "2026-06-25",
       "dueDate": "2026-07-25",
-      "status": "overdue",
+      "status": "sent",
       "lineItems": [
         {
           "description": "Brand system audit",
