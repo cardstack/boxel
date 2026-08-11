@@ -1,4 +1,5 @@
 import { ignore, type Ignore } from './ignore.ts';
+import { invalidationsNameImportMap } from './import-map-file.ts';
 // Isomorphic UUID — works in both Node and the browser (host tests
 // instantiate IndexRunner inside a Chrome tab, so Node's built-in
 // `crypto.randomUUID` is not available).
@@ -488,13 +489,35 @@ export class IndexRunner {
             invalidations,
           );
         orderMs = Date.now() - orderStart;
+        // THE IMPORT MAP COUNTS AS A CODE CHANGE, though it is data.
+        //
+        // A loader reset is scheduled when something EXECUTABLE was
+        // invalidated, because what an already-resolved module means has
+        // changed. Editing `<realm>/importmap.json` changes what every bare
+        // specifier in the realm RESOLVES TO, which is the same fact reached
+        // from the other side. `.json` is not an executable extension, so the
+        // map slipped past the one test that would have caught it.
+        //
+        // The symptom is a realm that keeps indexing against a map it no
+        // longer has: a card's `palette` still resolves to the pin that was
+        // current when the render tab first booted, and only restarting the
+        // prerenderer corrects it. That is not a slow update — a pinned tab
+        // never re-reads on its own, so the stale answer is permanent.
         let hasExecutableInvalidation = invalidations.some((url) =>
           hasExecutableExtension(url.href),
         );
-        if (hasExecutableInvalidation) {
+        let importMapInvalidated = invalidationsNameImportMap(
+          invalidations.map((url) => url.href),
+          current.realmURL.href,
+        );
+        if (hasExecutableInvalidation || importMapInvalidated) {
           if (!current.#shouldClearCacheForNextRender) {
             current.#log.debug(
-              `${jobIdentity(current.#jobInfo)} detected executable invalidation, scheduling loader reset`,
+              `${jobIdentity(current.#jobInfo)} detected ${
+                importMapInvalidated && !hasExecutableInvalidation
+                  ? 'import-map'
+                  : 'executable'
+              } invalidation, scheduling loader reset`,
             );
           }
           current.#scheduleClearCacheForNextRender();

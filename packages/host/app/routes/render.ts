@@ -390,6 +390,14 @@ export default class RenderRoute extends Route<Model> {
         clearFetchCache: true,
         reason: 'render-route clearCache',
       });
+      // The decklist is stale for the same reason the loader is, and it has
+      // to go FIRST: a fresh loader that resolves `palette` through the old
+      // pins produces the same wrong answer with a clean cache. The memo is
+      // per-realm-resource and a resource outlives the tab's renders, so
+      // nothing else here would ever drop it — the prerenderer receives no
+      // realm events, so `reloadDecklistFor` (the targeted path) never fires
+      // in a render tab at all.
+      this.realm.forgetDecklists();
       let resetKey = `${id}:${nonce}`;
       if (this.lastStoreResetKey !== resetKey) {
         this.store.resetCache();

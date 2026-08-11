@@ -465,6 +465,14 @@ class RealmResource {
   //
   // A transport failure is not an answer and is not memoized — otherwise one
   // blip would leave a realm unpinned for the rest of the session.
+  // Drop the memo so the next `ensureDecklist` re-reads the file. The memo is
+  // per-resource and a resource outlives many renders, which is exactly why
+  // the prerenderer needed a way to say "that answer is no longer definite"
+  // without knowing which realm moved.
+  forgetDecklist(): void {
+    this.decklistSettled = false;
+  }
+
   private async ensureDecklist(): Promise<void> {
     if (this.decklistSettled) {
       return;
@@ -987,6 +995,29 @@ export default class RealmService extends Service {
   async reloadDecklistFor(realmURL: string): Promise<void> {
     let resource = this.getOrCreateRealmResource(realmURL);
     await resource.loadDecklist();
+  }
+
+  /**
+   * Drop every realm's decklist memo, so the next thing that needs pins
+   * re-reads the map.
+   *
+   * `reloadDecklistFor` is for the caller that saw the invalidation and knows
+   * which realm moved. This is for the one that only knows EVERYTHING is
+   * stale — the prerenderer, whose tabs are pinned per realm for the life of
+   * the process and which receives no realm events at all, because a render
+   * tab runs no Matrix sync. Its decklist would otherwise be frozen at
+   * whatever the map said when the tab first rendered a card in that realm,
+   * and no amount of waiting would correct it.
+   *
+   * Deliberately a FORGET rather than a reload: the re-read happens lazily
+   * inside `ensureDecklist`, on a realm that is actually about to resolve
+   * something. Reloading eagerly here would fetch a map per known realm on
+   * every cache clear, most of them for realms this render will not touch.
+   */
+  forgetDecklists(): void {
+    for (let realmURL of this._realms.keys()) {
+      this.knownRealm(realmURL, { tracked: false })?.forgetDecklist();
+    }
   }
 
   async login(realmURL: string): Promise<void> {
