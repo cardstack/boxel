@@ -1206,6 +1206,61 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       return normalizedModuleURL.startsWith(normalizedRealmURL);
     });
 
+    // A module in the package store is owned by its PACKAGE NAMESPACE, not by
+    // whichever realm happens to be asking — `deck-a-package-carries-its-own-
+    // name.md`. Ownership-by-realm-prefix above cannot name an owner for
+    // `/_packages/…` because it sits under no realm, and with no owner the
+    // lookup throws `FilterRefersToNonexistentTypeError`, which the query
+    // engine turns into an empty result. That is what made every field
+    // predicate over a package-hosted type match nothing.
+    //
+    // Two things are needed here and they are NOT the same thing:
+    //
+    //   - the OWNER, which keys the cache and scopes invalidation. That is the
+    //     package address space, so a package's definitions can be dropped
+    //     without touching any realm's, and an entry does not move when a
+    //     different realm asks the same question. Rows stay unique because the
+    //     cache is keyed on (owner, moduleURL).
+    //
+    //   - the HOST, a realm whose prerender page can actually evaluate the
+    //     module. That is an implementation detail of rendering, not
+    //     ownership: package pins are origin-relative, so any realm on this
+    //     origin can load it. Chosen by origin match, so the choice is stable
+    //     rather than "whichever realm asked first".
+    //
+    // Public scope, because the serve door is itself unauthenticated: a
+    // published Version is immutable and readable by anyone who can reach it.
+    if (!localRealm) {
+      let marker = '/_packages/';
+      let at = moduleURL.indexOf(marker);
+      if (at !== -1) {
+        let moduleOrigin: string | undefined;
+        try {
+          moduleOrigin = new URL(moduleURL).origin;
+        } catch {
+          moduleOrigin = undefined;
+        }
+        let host = moduleOrigin
+          ? this.#realms.find((realm) => {
+              try {
+                return new URL(realm.url).origin === moduleOrigin;
+              } catch {
+                return false;
+              }
+            })
+          : undefined;
+        if (host) {
+          return {
+            realmURL: host.url,
+            resolvedRealmURL: moduleURL.slice(0, at + marker.length),
+            cacheScope: 'public',
+            cacheUserId: '',
+            prerenderUserId: await host.getRealmOwnerUserId(),
+          };
+        }
+      }
+    }
+
     if (localRealm) {
       let prerenderUserId = await localRealm.getRealmOwnerUserId();
       let isPublic = (await localRealm.visibility()) === 'public';
