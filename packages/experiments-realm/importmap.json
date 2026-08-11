@@ -1,6 +1,8 @@
 {
   "imports": {
-    "palette": "/_packages/lib/palette@4.1.0/index.js"
+    "palette": "/_packages/lib/palette@4.1.0/index.js",
+    "experiments/welcome": "/_packages/experiments/welcome@1.0.0/index.js",
+    "experiments/welcome/": "/_packages/experiments/welcome@1.0.0/"
   },
   "boxel": {
     "dependencies": {

@@ -95,6 +95,17 @@ export interface Proposal {
   /** Structural findings that are worth a reviewer's attention but are not
    *  certain enough to refuse on — see `findEscapingImports`. */
   warnings?: string[];
+  /**
+   * What each declared dependency range resolved to, sealed into this
+   * candidate.
+   *
+   * On the record because a reviewer approves a LOCK as much as a diff. Two
+   * proposals with identical source can pin different versions of a
+   * dependency — that is the ordinary effect of time passing between them —
+   * and a review that cannot see which one it is approving is reviewing half
+   * the artefact.
+   */
+  pins?: { key: string; spec: string; version?: string }[];
 }
 
 export interface ProposeInput {
@@ -120,6 +131,7 @@ export interface ProposeInput {
   packBytes?: Buffer;
   origin?: { realm: string; root?: string };
   warnings?: string[];
+  pins?: { key: string; spec: string; version?: string }[];
   meta?: Parameters<typeof checkPublish>[0]['meta'];
   now?: Date;
   id?: string;
@@ -204,6 +216,7 @@ export async function proposeVersion(input: ProposeInput): Promise<Proposal> {
     ...(input.packBytes ? { packFile: `${id}.pack` } : {}),
     ...(input.origin ? { origin: input.origin } : {}),
     ...(input.warnings?.length ? { warnings: input.warnings } : {}),
+    ...(input.pins?.length ? { pins: input.pins } : {}),
   };
 
   let dir = proposalsDir(input.storeDir, input.name);

@@ -59,6 +59,11 @@ import { TREE_ROOT } from '@cardstack/deck/import-map';
 import { IMPORT_MAP_PATH } from '@cardstack/deck/import-map';
 import { pack, readTreeFromDir, unpack } from '@cardstack/deck/node';
 import { transpileJS } from '@cardstack/runtime-common/transpile';
+import {
+  lockDependencies,
+  type DependencyPin,
+  type LockRefusal,
+} from './package-lock.ts';
 
 export interface RealmPackageDeclaration {
   /** The semver this package claims. */
@@ -80,6 +85,9 @@ export interface RealmPackage {
   /** Absent means depot-local: held and served, never published beyond the
    *  depot holding it. */
   publisher?: string;
+  /** What this package depends on, as RANGES. Sealed into pins at publish —
+   *  see `lib/package-lock.ts`. */
+  dependencies?: Record<string, string>;
   declaration: RealmPackageDeclaration;
 }
 
@@ -88,6 +96,7 @@ export type ManifestReadResult =
       kind: 'package';
       key: string;
       publisher?: string;
+      dependencies?: Record<string, string>;
       declaration: RealmPackageDeclaration;
     }
   | { kind: 'none' }
@@ -129,11 +138,18 @@ export function readPackageManifest(jsonText: string): ManifestReadResult {
         'directory is one package',
     };
   }
+  let dependencies =
+    vendor.dependencies &&
+    typeof vendor.dependencies === 'object' &&
+    !Array.isArray(vendor.dependencies)
+      ? (vendor.dependencies as Record<string, string>)
+      : undefined;
   return {
     kind: 'package',
     key: keys[0],
     publisher:
       typeof vendor.publisher === 'string' ? vendor.publisher : undefined,
+    ...(dependencies ? { dependencies } : {}),
     declaration: packages[keys[0]] ?? {},
   };
 }
@@ -199,6 +215,7 @@ export async function discoverRealmPackages(
           path,
           key: result.key,
           publisher: result.publisher,
+          ...(result.dependencies ? { dependencies: result.dependencies } : {}),
           declaration: result.declaration,
         });
         // A package does not contain another package.
@@ -248,7 +265,8 @@ export type PackRefusal =
   | 'no-version'
   | 'empty-package'
   | 'build-output-collision'
-  | 'build-failed';
+  | 'build-failed'
+  | LockRefusal;
 
 // What gets compiled on the way into a pack, and what the compiled sibling is
 // called. `.d.ts` is excluded: it is types, not a module, and content-tag has
@@ -298,6 +316,9 @@ export type PackRealmPackageResult =
        *  structural pass compares and what a diff should show — comparing
        *  compiled output would report babel's choices as API changes. */
       sources: Map<string, string>;
+      /** What each declared dependency range resolved to. Shown on a
+       *  proposal so a reviewer approves a lock, not just a diff. */
+      pins: DependencyPin[];
       /** Relative imports that appear to leave the pack. Reported rather
        *  than refused — see `findEscapingImports`. */
       warnings: string[];
@@ -421,17 +442,25 @@ export function pointAtBuiltSiblings(
  * The manifest in the pack is DERIVED from the authored one rather than
  * copied verbatim: entry and exports are moved onto the compiled modules,
  * since an entry is an address a consumer imports and the source does not
- * run. Everything else passes through. That derivation is a transform before
- * the seal, which is where transforms belong.
+ * run, and declared dependency ranges are resolved into pins. Everything else
+ * passes through. Those derivations are transforms before the seal, which is
+ * where transforms belong.
  */
 export async function packRealmPackage({
   packageDir,
   key,
   declaration,
+  dependencies,
+  storeDir,
 }: {
   packageDir: string;
   key: string;
   declaration: RealmPackageDeclaration | undefined;
+  /** Declared ranges, resolved into sealed pins. */
+  dependencies?: Record<string, string>;
+  /** The store the ranges resolve against. Required to lock anything; a
+   *  package with no dependencies does not need one. */
+  storeDir?: string;
 }): Promise<PackRealmPackageResult> {
   if (!declaration) {
     return {
@@ -531,8 +560,27 @@ export async function packRealmPackage({
     exports[alias] = `${TREE_ROOT}${asBuilt(stripTreeRoot(target))}`;
   }
 
+  // THE LOCK. Declared ranges become exact pins, sealed alongside the ranges
+  // that produced them. A consumer of `crm@2.0.0` gets the `greeter` that
+  // `crm@2.0.0` was published against, not whichever one the depot currently
+  // holds — which is the whole of `deck-a-package-resolves-through-its-own-map.md`.
+  let lock = await lockDependencies({
+    storeDir: storeDir ?? '',
+    // Without a store there is nothing to resolve against, so a package that
+    // declares dependencies is refused rather than sealed with the ranges
+    // silently dropped.
+    dependencies,
+  });
+  if (lock.kind === 'refused') {
+    return { kind: 'refused', code: lock.code, detail: lock.detail };
+  }
+
   let manifest = {
+    ...(Object.keys(lock.imports).length ? { imports: lock.imports } : {}),
     deck: {
+      ...(dependencies && Object.keys(dependencies).length
+        ? { dependencies }
+        : {}),
       packages: {
         [key]: {
           version: declaration.version,
@@ -564,6 +612,7 @@ export async function packRealmPackage({
     sources: new Map(
       [...files.entries()].map(([path, b]) => [path, b.toString('utf8')]),
     ),
+    pins: lock.pins,
     // Read from the SOURCE, which is where the author wrote the import. The
     // compiled sibling has already had its relative specifiers rewritten, so
     // scanning it would report resolved paths back at somebody looking for

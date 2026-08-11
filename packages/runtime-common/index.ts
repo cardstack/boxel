@@ -1150,6 +1150,7 @@ export {
   parentImportMapURL,
   parseImportMapFile,
   resolveImportMap,
+  resolveSealedScopes,
   type DecklistLink,
 } from './import-map-file.ts';
 export { RealmAuthDataSource } from './realm-auth-data-source.ts';

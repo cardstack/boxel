@@ -462,4 +462,189 @@ module(basename(import.meta.filename), function () {
       assert.true(warnings[0].startsWith('app.gts'));
     });
   });
+
+  module('a pack carries its lock', function () {
+    // A realm holding two packages, one depending on the other by range.
+    const DEPENDENT = {
+      'importmap.json': REALM_MAP,
+      'greeter/importmap.json': JSON.stringify({
+        deck: {
+          publisher: 'acme',
+          packages: {
+            greeter: {
+              version: '1.2.0',
+              entry: '$DECK/index.gts',
+              exports: { './greeter': '$DECK/index.gts' },
+            },
+          },
+        },
+      }),
+      'greeter/index.gts': `export default class Greeter {}\n`,
+      'crm/importmap.json': JSON.stringify({
+        deck: {
+          publisher: 'acme',
+          dependencies: { 'acme/greeter': '^1.0.0' },
+          packages: { crm: { version: '2.0.0', entry: '$DECK/app.gts' } },
+        },
+      }),
+      'crm/app.gts': `import G from 'acme/greeter';\nexport default class CRMApp {}\n`,
+    };
+
+    // Publish the dependency, then pack the dependent against that store.
+    async function withPublishedGreeter(
+      fn: (ctx: { dir: string; store: string }) => Promise<void>,
+    ) {
+      await withRealm(DEPENDENT, async (dir) => {
+        let store = join(dir, '.store');
+        let { packages } = await discoverRealmPackages(dir);
+        let greeter = packages.find((p) => p.key === 'greeter')!;
+        let packed = packedOrThrow(
+          await packRealmPackage({
+            packageDir: greeter.dir,
+            key: greeter.key,
+            declaration: greeter.declaration,
+          }),
+        );
+        await publishToStore(store, 'acme/greeter', '1.2.0', packed.bytes);
+        await fn({ dir, store });
+      });
+    }
+
+    function sealedManifest(bytes: Buffer): any {
+      return JSON.parse(
+        unpack(bytes).files.get('importmap.json')!.toString('utf8'),
+      );
+    }
+
+    test('a declared range is sealed as an exact pin', async function (assert) {
+      await withPublishedGreeter(async ({ dir, store }) => {
+        let crm = await crmOf(dir);
+        let packed = packedOrThrow(
+          await packRealmPackage({
+            packageDir: crm.dir,
+            key: crm.key,
+            declaration: crm.declaration,
+            dependencies: crm.dependencies,
+            storeDir: store,
+          }),
+        );
+        let manifest = sealedManifest(packed.bytes);
+        assert.deepEqual(manifest.imports, {
+          'acme/greeter/': '/_packages/acme/greeter@1.2.0/',
+          'acme/greeter': '/_packages/acme/greeter@1.2.0/index.js',
+          // The alias points at the BUILT module, because the sealed manifest
+          // it was read from names built modules — the entry a consumer
+          // imports has to be the bytes that run.
+          'acme/greeter/greeter': '/_packages/acme/greeter@1.2.0/index.js',
+        });
+        // The RANGE is kept beside the pin, not consumed by it. A reader can
+        // see what the author would have accepted, and an operator advancing
+        // a pin within the declared range has the permission in writing.
+        assert.deepEqual(manifest.deck.dependencies, {
+          'acme/greeter': '^1.0.0',
+        });
+        assert.deepEqual(packed.pins, [
+          { key: 'acme/greeter', spec: '^1.0.0', version: '1.2.0' },
+        ]);
+      });
+    });
+
+    test('the pins are origin-relative, so the pack can be mirrored', async function (assert) {
+      await withPublishedGreeter(async ({ dir, store }) => {
+        let crm = await crmOf(dir);
+        let packed = packedOrThrow(
+          await packRealmPackage({
+            packageDir: crm.dir,
+            key: crm.key,
+            declaration: crm.declaration,
+            dependencies: crm.dependencies,
+            storeDir: store,
+          }),
+        );
+        // What a seal owes its consumer is the VERSION. Welding the host into
+        // the pin would make the Version unmirrorable, which is the opposite
+        // of what a content-addressed store is for.
+        assert.deepEqual(
+          Object.values(sealedManifest(packed.bytes).imports).filter((value) =>
+            /^https?:/i.test(String(value)),
+          ),
+          [],
+        );
+      });
+    });
+
+    test('a range nothing satisfies refuses the publish', async function (assert) {
+      await withPublishedGreeter(async ({ dir, store }) => {
+        let crm = await crmOf(dir);
+        let result = await packRealmPackage({
+          packageDir: crm.dir,
+          key: crm.key,
+          declaration: crm.declaration,
+          dependencies: { 'acme/greeter': '^9.0.0' },
+          storeDir: store,
+        });
+        // Fails CLOSED. A seal that certifies bytes it cannot make run is
+        // worth less than no seal: the hole would surface at a consumer's
+        // import, on another machine, weeks later.
+        assert.strictEqual(
+          result.kind === 'refused' ? result.code : 'unexpected',
+          'unsatisfiable-dependency',
+        );
+      });
+    });
+
+    test('a dependency with no published versions refuses', async function (assert) {
+      await withPublishedGreeter(async ({ dir, store }) => {
+        let crm = await crmOf(dir);
+        let result = await packRealmPackage({
+          packageDir: crm.dir,
+          key: crm.key,
+          declaration: crm.declaration,
+          dependencies: { 'acme/nothing': '^1.0.0' },
+          storeDir: store,
+        });
+        assert.strictEqual(
+          result.kind === 'refused' ? result.code : 'unexpected',
+          'unknown-dependency',
+        );
+      });
+    });
+
+    test('a live dependency is not pinned', async function (assert) {
+      await withPublishedGreeter(async ({ dir, store }) => {
+        let crm = await crmOf(dir);
+        let packed = packedOrThrow(
+          await packRealmPackage({
+            packageDir: crm.dir,
+            key: crm.key,
+            declaration: crm.declaration,
+            dependencies: { 'acme/greeter': 'live' },
+            storeDir: store,
+          }),
+        );
+        // `live` is the author asking for volatility on purpose, so it
+        // contributes no pin and the depot's map answers — the escape hatch,
+        // taken knowingly.
+        assert.strictEqual(sealedManifest(packed.bytes).imports, undefined);
+        assert.deepEqual(packed.pins, [{ key: 'acme/greeter', spec: 'live' }]);
+      });
+    });
+
+    test('a package with no dependencies seals no imports block', async function (assert) {
+      await withRealm(REALM, async (dir) => {
+        let crm = await crmOf(dir);
+        let packed = packedOrThrow(
+          await packRealmPackage({
+            packageDir: crm.dir,
+            key: crm.key,
+            declaration: crm.declaration,
+          }),
+        );
+        let manifest = sealedManifest(packed.bytes);
+        assert.strictEqual(manifest.imports, undefined);
+        assert.strictEqual(manifest.deck.dependencies, undefined);
+        assert.deepEqual(packed.pins, []);
+      });
+    });
+  });
 });

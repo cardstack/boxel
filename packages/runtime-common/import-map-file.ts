@@ -132,6 +132,122 @@ export function flattenImportMaps(
   return narrow(flattenInheritance(chain));
 }
 
+// A Version's own address space: `…/_packages/<publisher>/<name>@<version>/`
+// or `…/_packages/<name>@<version>/` for a depot-local one. Neither the name
+// segments nor the version may contain a further `@` or `/`, the same grammar
+// the serve door parses.
+const PACKAGE_BASE = /^(.*\/_packages\/(?:[^/@]+\/)?[^/@]+@([^/@]+)\/)/;
+const EXACT_VERSION = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)*$/;
+
+/** The Version base a mapped value points into, if it points into one. */
+function packageBaseOf(value: string): string | undefined {
+  let match = value.match(PACKAGE_BASE);
+  if (!match) {
+    return undefined;
+  }
+  // A RANGE-SPELLED pin — `greeter@%5E2.0.0/` — is deliberately skipped. The
+  // sealed map would have to be fetched through a redirect, and the scope key
+  // it produced would name the range while the module that gets loaded is
+  // addressed by the exact version it redirected to, so the scope would match
+  // nothing. Attaching a scope that silently never applies is worse than
+  // attaching none: it looks configured. This is the same range-spelling gap
+  // that `internalKeyFor` has, and it wants the same fix.
+  return EXACT_VERSION.test(decodeURIComponent(match[2]))
+    ? match[1]
+    : undefined;
+}
+
+/**
+ * Give every pinned Version its own sealed resolution scope.
+ *
+ * THE RULING. `deck-a-package-resolves-through-its-own-map.md` §0: a module
+ * inside a published Version resolves its imports through that Version's own
+ * sealed map. §4 names the two halves that were missing — a pack carrying no
+ * lock, and nothing consulting it if it did. The packer emits the lock now;
+ * this is the consulting half.
+ *
+ * The mechanism is the one already there. A Version is served from a URL
+ * prefix, its sealed `imports` become `scopes[<that prefix>]`, and import-maps
+ * resolution does the rest. Nothing new decides precedence: a realm's own map
+ * is installed as a scope over the REALM, a packaged module is not under the
+ * realm, so the sealed answer is the only answer a packaged module can get.
+ * That is the ruling's §4 precedence rule, obtained by construction rather
+ * than by a rule somebody has to remember.
+ *
+ * Transitive, breadth-first, because `crm` depending on `greeter` depending on
+ * `palette` has to work for any of this to be worth having. Cycles terminate
+ * on the visited set; depth is bounded so a malformed chain cannot spin.
+ *
+ * FAILS OPEN, unlike `extends`. A parent that cannot be loaded takes the whole
+ * map down because inheritance is a declared, total dependency — half of an
+ * inherited map is a lie about what the realm resolves. A sealed lock is
+ * neither: it is scoped to one Version, and losing it costs exactly that
+ * Version's imports, which will then fail loudly at their own import. Taking a
+ * realm's whole map down because one pinned package is unreachable would turn
+ * a local outage into a global one.
+ */
+export async function resolveSealedScopes(options: {
+  flat: DecklistInput;
+  load: (importMapURL: string) => Promise<DecklistLink | undefined>;
+  maxDepth?: number;
+}): Promise<{
+  imports: Record<string, string>;
+  scopes: Record<string, Record<string, string>>;
+}> {
+  let { flat, load, maxDepth = 8 } = options;
+  let scopes: Record<string, Record<string, string>> = { ...flat.scopes };
+  let visited = new Set<string>();
+
+  let bases = (table: Record<string, string> | undefined) =>
+    Object.values(table ?? {})
+      .map(packageBaseOf)
+      .filter((base): base is string => base !== undefined);
+
+  let queue = [...bases(flat.imports)].map((base) => ({ base, depth: 0 }));
+  for (let table of Object.values(flat.scopes ?? {})) {
+    queue.push(...bases(table).map((base) => ({ base, depth: 0 })));
+  }
+
+  while (queue.length > 0) {
+    let { base, depth } = queue.shift()!;
+    if (visited.has(base) || depth > maxDepth) {
+      continue;
+    }
+    visited.add(base);
+    let mapURL = `${base}${IMPORT_MAP_PATH}`;
+    let link: DecklistLink | undefined;
+    try {
+      link = await load(mapURL);
+    } catch {
+      // See "fails open" above.
+      continue;
+    }
+    if (!link?.imports || Object.keys(link.imports).length === 0) {
+      continue;
+    }
+    // Resolved against the VERSION's own base, not the realm's. A sealed pin
+    // is written origin-relative (`/_packages/…`) on purpose — see
+    // `realm-server/lib/package-lock.ts` — so it means the package space of
+    // whichever host is serving this Version, which is what resolving against
+    // the Version's own URL produces.
+    let resolved = resolveLinkAgainst(link, mapURL);
+    let sealed = narrow({
+      imports: resolved.imports ?? {},
+      scopes: {},
+    }).imports;
+    // The realm's own scope entry for this base, if it wrote one, is an
+    // override the author chose and can read back — the ruling's §3 "deliberate
+    // override" — so it is applied ON TOP of the sealed table rather than
+    // under it.
+    scopes[base] = { ...sealed, ...(scopes[base] ?? {}) };
+    queue.push(
+      ...bases(sealed).map((child) => ({ base: child, depth: depth + 1 })),
+    );
+  }
+
+  return { imports: flat.imports ?? {}, scopes };
+}
+
 /**
  * Walk a map's ancestry and flatten it into the single map the loader gets.
  *
@@ -146,8 +262,13 @@ export async function resolveImportMap(options: {
 }): Promise<DecklistInput> {
   let { start, load, realmURL } = options;
   if (!start.extends) {
-    // The overwhelmingly common case, and worth not paying a walk for.
-    return flattenImportMaps([resolveLinkAgainst(start, realmURL)]);
+    // The overwhelmingly common case, and worth not paying an INHERITANCE
+    // walk for. The sealed-scope walk still runs: it is driven by the pins a
+    // map holds, which a map with no parent has just as often as one with.
+    return resolveSealedScopes({
+      flat: flattenImportMaps([resolveLinkAgainst(start, realmURL)]),
+      load,
+    });
   }
   // EVERY LINK IS RESOLVED AGAINST THE URL IT CAME FROM, before the merge.
   //
@@ -170,7 +291,7 @@ export async function resolveImportMap(options: {
       return link && resolveLinkAgainst(link, parentURL);
     },
   });
-  return narrow(flat);
+  return resolveSealedScopes({ flat: narrow(flat), load });
 }
 
 /**

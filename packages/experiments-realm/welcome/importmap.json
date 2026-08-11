@@ -1,0 +1,17 @@
+{
+  "deck": {
+    "publisher": "experiments",
+    "dependencies": {
+      "experiments/greeter": "^2.0.0"
+    },
+    "packages": {
+      "welcome": {
+        "version": "1.0.0",
+        "entry": "$DECK/index.gts",
+        "exports": {
+          "./welcome": "$DECK/index.gts"
+        }
+      }
+    }
+  }
+}

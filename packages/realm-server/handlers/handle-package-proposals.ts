@@ -256,6 +256,10 @@ async function proposeFromRealm({
     packageDir: found.dir,
     key,
     declaration: found.declaration,
+    // Ranges in the package's own manifest, resolved against this server's
+    // store into the pins that get sealed with it.
+    dependencies: found.dependencies,
+    storeDir,
   });
   if (packed.kind === 'refused') {
     return json(409, { refused: { code: packed.code, detail: packed.detail } });
@@ -288,6 +292,7 @@ async function proposeFromRealm({
     priorVersion,
     origin: { realm: realmURL, root: found.path },
     warnings: packed.warnings,
+    pins: packed.pins,
     meta: meta ?? undefined,
   });
   return json(201, { proposal, files: packed.files });
