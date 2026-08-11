@@ -138,3 +138,99 @@ staging buckets were 2,162 ms and 2,129 ms. These are navigation observations,
 not isolated compiler benchmarks, but they preserve an important constraint:
 future cache work must improve these timings without weakening the same
 semantic, DOM-primitive, execution-tier, lifecycle, and teardown assertions.
+
+## Focused Capsule parser optimization — 2026-08-11
+
+This is a focused, correctness-qualified comparison for performance-plan item #1,
+not completion of the full Phase 0 corpus. Chrome DevTools MCP drove five pre-change
+and five post-change document loads of
+`Release/opening-night` against the authenticated staging-backed development Host at
+`https://host.codex-execution-runtime.localhost`. Every admitted sample rendered all
+five declared semantic signatures, selected only Capsule, retained zero iframes, and
+reported zero dropped instrumentation records.
+
+| Metric                         | Before median / p95 | After median / p95 | Interpretation                                            |
+| ------------------------------ | ------------------: | -----------------: | --------------------------------------------------------- |
+| Full document navigation       |    6,119 / 7,849 ms |   6,314 / 8,306 ms | +3.2% median; inside the 5% guardrail                     |
+| Host request construction      |        235 / 379 ms |       356 / 520 ms | +51%; direct evidence of non-comparable Host/staging load |
+| Root Capsule render record     |        587 / 687 ms |       656 / 725 ms | +11.7%; inconclusive under the common variance above      |
+| DOM nodes at readiness         |             893–902 |            893–902 | no growth                                                 |
+| Live iframes / dropped records |               0 / 0 |              0 / 0 | unchanged                                                 |
+
+The matching DevTools traces reinforce the variance diagnosis rather than a
+page-level regression claim: the pre-change trace observed 204 ms TTFB and 11.35 s
+LCP, while the post-change trace hit 6.42 s TTFB and 35.30 s LCP. Render-blocking
+insights estimated 0 ms savings in the pre-change trace. These development-load LCP
+values are not used to assess the local parser change.
+
+The focused benchmark compares the removed implementation with the captured parser
+in one process, alternating order across nine rounds of 250 clones. The payload is
+2,412 bytes and includes HTML-comment tokens, Mermaid arrows, and JavaScript line
+separators.
+
+| Boundary clone                    | Median per clone | p95 batch (250) |
+| --------------------------------- | ---------------: | --------------: |
+| Per-read `Compartment.evaluate`   |         55.81 µs |        19.99 ms |
+| Captured compartment `JSON.parse` |         14.38 µs |         3.85 ms |
+
+The captured parser is **3.88× faster**, a **74.2% reduction**. Two further
+independent runs measured 3.99–4.22× and 74.9–76.3%, supporting the same result.
+Reproduce with
+`pnpm --dir packages/host bench:execution-runtime-clone`.
+
+Raw root-operation samples, in milliseconds:
+
+```text
+before render-record: 541.2, 678.4, 587.3, 511.0, 686.8
+before navigation:    5076.3, 7528.3, 7848.5, 6119.0, 6021.3
+after render-record:  534.0, 689.2, 572.3, 655.9, 724.5
+after navigation:     6045.0, 5515.7, 7935.2, 8305.9, 6313.5
+```
+
+The new JSON-text boundary test passes in the clean prebuilt Host runner. The broader
+render-record parity filter could not run because its required local Base realm at
+`https://localhost:4201` was not started; the authenticated real Release card
+nevertheless preserved the parity signatures exercised by this focused comparison.
+
+## Runtime simplification batch — 2026-08-11
+
+This follow-up retains three small, ownership-preserving changes: the Capsule render
+projection is cloned only by the shared render-record assembler; browser globals and
+DOM-method signals are collected in one Babel pass; and Capsule CSS confinement
+reuses the stylesheet parsed by validation. No tier, authority, occurrence, protocol,
+or lifecycle rule changed.
+
+Focused alternating-order benchmarks compared the removed implementations with the
+new paths and asserted output equality before timing:
+
+| Operation                                       |      Legacy |    Retained |            Result |
+| ----------------------------------------------- | ----------: | ----------: | ----------------: |
+| Classifier Babel traversal                      | 3,389.96 µs | 1,556.67 µs | **2.18×; −54.1%** |
+| Render-record projection assembly               |   216.86 µs |   151.42 µs | **1.43×; −30.2%** |
+| ContentTag preprocessor construction            |    55.59 µs |    56.63 µs |    median-neutral |
+| CSS validation + confinement (Chrome, 80 rules) |    1,320 µs |      902 µs | **1.46×; −31.7%** |
+
+Reproduce the Node cases with
+`pnpm --dir packages/host bench:execution-runtime-simplifications`. The stylesheet
+case used Chrome's native `CSSStyleSheet`, 50 operations per round, and nine
+alternating rounds.
+
+Five warmed authenticated loads of `Release/opening-night` produced:
+
+```text
+render-record: 623.4, 570.3, 581.0, 586.2, 1113.7 ms
+root request:  413.8, 528.0, 408.8, 376.7, 580.0 ms
+navigation:    22081.8, 20261.5, 19803.3, 21477.5, 20898.0 ms
+```
+
+| Metric                                  | Previous retained run | Simplification batch | Interpretation                                |
+| --------------------------------------- | --------------------: | -------------------: | --------------------------------------------- |
+| Root Capsule render-record median / p95 |      655.9 / 724.5 ms |   586.2 / 1,113.7 ms | **−10.6% median**; p95 has one outlier        |
+| Root request median / p95               |          356 / 520 ms |       413.8 / 580 ms | +16.2% median; Host/staging variance worsened |
+| Full navigation median / p95            |  6,313.5 / 8,305.9 ms | 20,898 / 22,081.8 ms | non-comparable current environment delay      |
+
+All five samples rendered the five declared semantic signatures, selected Capsule
+only, retained zero Sandbox iframes, and dropped zero instrumentation records. DOM
+size was stable at 957 nodes throughout the batch. A navigation trace was attempted,
+but the DevTools navigation timeout expired under the same Host/staging delay, so no
+trace-level LCP claim is admitted.

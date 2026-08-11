@@ -45,6 +45,11 @@ export function validateCapsuleInlineStyle(style: string): string {
 
 /** Validate compiled Glimmer scoped CSS before installing it in the Host. */
 export function validateCapsuleStylesheet(css: string): string {
+  parseAndValidateCapsuleStylesheet(css);
+  return css;
+}
+
+function parseAndValidateCapsuleStylesheet(css: string): CSSStyleSheet {
   rejectNetworkBearingCSS(css, 'stylesheet');
   rejectDocumentGlobalCSS(css);
   if (typeof CSSStyleSheet === 'undefined') {
@@ -61,7 +66,7 @@ export function validateCapsuleStylesheet(css: string): string {
   rejectNetworkBearingCSS(normalized, 'stylesheet');
   rejectDocumentGlobalCSS(normalized);
   validateScopedRules(sheet.cssRules);
-  return css;
+  return sheet;
 }
 
 /**
@@ -72,9 +77,7 @@ export function validateCapsuleStylesheet(css: string): string {
  * a scope attribute is reused by a component that also renders in a Capsule.
  */
 export function confineCapsuleStylesheet(css: string): string {
-  validateCapsuleStylesheet(css);
-  let sheet = new CSSStyleSheet();
-  sheet.replaceSync(css);
+  let sheet = parseAndValidateCapsuleStylesheet(css);
   confineScopedRules(sheet.cssRules);
   return [...sheet.cssRules].map((rule) => rule.cssText).join('\n');
 }

@@ -164,6 +164,13 @@ const iframeDOMMethodSignals = [
 ] as const;
 
 let lexerReady = Promise.resolve(init);
+const contentTagPreprocessor = new ContentTag.Preprocessor();
+const iframeGlobalPatterns = iframeGlobalSignals.map(
+  (signal) => [signal, new RegExp(`\\b${signal}\\b`)] as const,
+);
+const iframeDOMMethodPatterns = iframeDOMMethodSignals.map(
+  (method) => [method, new RegExp(`\\.${method}\\s*\\(`)] as const,
+);
 
 function analyzeEmbeddedTemplates(source: string): {
   javascript: string;
@@ -181,7 +188,7 @@ function analyzeEmbeddedTemplates(source: string): {
   let hasGlobalStyleSelector = false;
   let hasTopLayerAttribute = false;
   let hasUnscopedStyle = false;
-  for (let match of new ContentTag.Preprocessor().parse(source)) {
+  for (let match of contentTagPreprocessor.parse(source)) {
     // Boxel UI's cssVar helper is a trusted, declaration-only presentation
     // primitive. It does not require a browser-global runtime and is resolved
     // by reference in the Host when a Capsule template is reified. Keep every
@@ -338,24 +345,32 @@ function iframeImportSignal(moduleIdentifier: string): string | undefined {
 
 function usedBrowserGlobals(source: string): string[] {
   let code = maskStringsAndComments(source);
-  return iframeGlobalSignals.filter((signal) =>
-    new RegExp(`\\b${signal}\\b`).test(code),
-  );
+  return iframeGlobalPatterns
+    .filter(([, pattern]) => pattern.test(code))
+    .map(([signal]) => signal);
 }
 
-function executableBrowserGlobals(source: string): string[] {
-  let possibleSignals = usedBrowserGlobals(source);
-  if (possibleSignals.length === 0) {
-    return [];
+function executableBrowserSignals(source: string): {
+  globals: string[];
+  domMethods: string[];
+} {
+  let possibleGlobals = usedBrowserGlobals(source);
+  let possibleDOMMethods = iframeDOMMethodPatterns
+    .filter(([, pattern]) => pattern.test(source))
+    .map(([method]) => method);
+  if (possibleGlobals.length === 0 && possibleDOMMethods.length === 0) {
+    return { globals: [], domMethods: [] };
   }
 
   try {
     // Card source is TypeScript. A DOM name in an interface, type annotation,
     // or `as HTMLElement` assertion does not request browser authority. Strip
     // type-only syntax before deciding whether the module needs an iframe.
-    // We only pay for this parse when a possible browser global was found.
+    // We only pay for this parse when a possible browser signal was found,
+    // and collect globals and capability-bearing member calls in one walk.
     let unboundBrowserGlobals = new Set<string>();
-    let collectUnboundBrowserGlobals: babel.PluginObj = {
+    let domMethodCalls = new Set<string>();
+    let collectBrowserSignals: babel.PluginObj = {
       visitor: {
         ReferencedIdentifier(path) {
           let name = path.node.name;
@@ -383,41 +398,6 @@ function executableBrowserGlobals(source: string): string[] {
           }
           unboundBrowserGlobals.add(name);
         },
-      },
-    };
-    babel.transformSync(source, {
-      filename: 'boxel-source.ts',
-      babelrc: false,
-      configFile: false,
-      compact: true,
-      plugins: [
-        [typescriptPlugin, { allowDeclareFields: true }],
-        collectUnboundBrowserGlobals,
-      ],
-      parserOpts: { plugins: ['decorators-legacy'] },
-    });
-    return iframeGlobalSignals.filter((signal) =>
-      unboundBrowserGlobals.has(signal),
-    );
-  } catch {
-    // Classification is a security boundary. Unknown or incomplete syntax
-    // keeps the conservative result instead of silently gaining SES access.
-    return possibleSignals;
-  }
-}
-
-function executableDOMMethodCalls(source: string): string[] {
-  let possibleSignals = iframeDOMMethodSignals.filter((method) =>
-    new RegExp(`\\.${method}\\s*\\(`).test(source),
-  );
-  if (possibleSignals.length === 0) {
-    return [];
-  }
-
-  try {
-    let calls = new Set<string>();
-    let collectCalls: babel.PluginObj = {
-      visitor: {
         CallExpression(path) {
           let callee = path.node.callee;
           if (
@@ -428,7 +408,7 @@ function executableDOMMethodCalls(source: string): string[] {
               callee.property.name as (typeof iframeDOMMethodSignals)[number],
             )
           ) {
-            calls.add(callee.property.name);
+            domMethodCalls.add(callee.property.name);
           }
         },
       },
@@ -438,16 +418,27 @@ function executableDOMMethodCalls(source: string): string[] {
       babelrc: false,
       configFile: false,
       compact: true,
-      plugins: [[typescriptPlugin, { allowDeclareFields: true }], collectCalls],
+      plugins: [
+        [typescriptPlugin, { allowDeclareFields: true }],
+        collectBrowserSignals,
+      ],
       parserOpts: { plugins: ['decorators-legacy'] },
     });
-    return iframeDOMMethodSignals
-      .filter((method) => calls.has(method))
-      .map((method) => `dom-method:${method}`);
+    return {
+      globals: iframeGlobalSignals.filter((signal) =>
+        unboundBrowserGlobals.has(signal),
+      ),
+      domMethods: iframeDOMMethodSignals
+        .filter((method) => domMethodCalls.has(method))
+        .map((method) => `dom-method:${method}`),
+    };
   } catch {
-    // As with unbound globals, ambiguous executable syntax fails toward the
-    // stronger process boundary instead of silently receiving SES access.
-    return possibleSignals.map((method) => `dom-method:${method}`);
+    // Classification is a security boundary. Unknown or incomplete syntax
+    // keeps the conservative result instead of silently gaining SES access.
+    return {
+      globals: possibleGlobals,
+      domMethods: possibleDOMMethods.map((method) => `dom-method:${method}`),
+    };
   }
 }
 
@@ -511,8 +502,8 @@ export async function classifyBoxelSource(
   let importSignals = imports
     .map(iframeImportSignal)
     .filter((signal): signal is string => Boolean(signal));
-  let globalSignals = executableBrowserGlobals(javascript);
-  let domMethodSignals = executableDOMMethodCalls(javascript);
+  let { globals: globalSignals, domMethods: domMethodSignals } =
+    executableBrowserSignals(javascript);
   let signals = [
     ...new Set([
       ...importSignals,

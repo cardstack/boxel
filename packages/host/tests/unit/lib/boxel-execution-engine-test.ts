@@ -483,6 +483,18 @@ module('Unit | Boxel execution engine', function () {
     assert.strictEqual(browser.tier, 'sandbox');
     assert.true(browser.signals.includes('document'));
 
+    let canvas = await classifyBoxelSource(`
+      import { CardDef } from '@cardstack/base/card-api';
+      export class Example extends CardDef {
+        static isolated = document.createElement('canvas').getContext('2d');
+      }
+    `);
+    assert.deepEqual(
+      canvas.signals,
+      ['document', 'dom-method:getContext'],
+      'one executable-source walk retains both global and DOM method signals',
+    );
+
     let externalRenderer = await classifyBoxelSource(`
       import { CardDef } from '@cardstack/base/card-api';
       import * as THREE from 'three';

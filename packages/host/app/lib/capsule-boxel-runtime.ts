@@ -194,7 +194,7 @@ export default class CapsuleBoxelRuntime implements BoxelRuntime {
         instanceId: host.instanceId,
         fields: host.fields,
         presentation: host.presentation,
-        modelExtensions: cloneJSONRecord(projection),
+        modelExtensions: projection as Record<string, JSONValue>,
       });
     }
     return buildBoxelRenderRecord({
@@ -202,7 +202,7 @@ export default class CapsuleBoxelRuntime implements BoxelRuntime {
       instanceId: instance.resource.id ?? null,
       fields: await this.fieldsFor(instance),
       presentation: await this.presentationFor(instance),
-      modelExtensions: cloneJSONRecord(projection),
+      modelExtensions: projection as Record<string, JSONValue>,
     });
   }
 
@@ -652,12 +652,6 @@ function cloneJSONValue(value: unknown): JSONValue {
     return null;
   }
   return structuredClone(value) as JSONValue;
-}
-
-function cloneJSONRecord(
-  value: Record<string, unknown>,
-): Record<string, JSONValue> {
-  return structuredClone(value) as Record<string, JSONValue>;
 }
 
 function stringOrNull(value: unknown): string | null {

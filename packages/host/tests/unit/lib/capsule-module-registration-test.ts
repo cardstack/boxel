@@ -174,6 +174,35 @@ module('Unit | Capsule module registration', function () {
     }
   });
 
+  test('Capsule data cloning preserves text that is unsafe to embed in source', async function (assert) {
+    let source = `
+      import { CardDef } from 'https://cardstack.com/base/card-api';
+
+      export class TextCard extends CardDef {
+        echo(value) {
+          return value;
+        }
+      }
+    `;
+    let evaluator = evaluatorFor({ [moduleId]: source });
+    let value = {
+      htmlComments: '<!-- authored -->',
+      mermaid: 'left --> right',
+      separators: 'line one\u2028line two\u2029line three',
+    };
+    try {
+      assert.deepEqual(
+        await evaluator.invokeCardMethod(moduleId, 'TextCard', {}, 'echo', [
+          value,
+        ]),
+        { returnValue: value },
+        'JSON text is parsed as data inside the compartment without source escaping',
+      );
+    } finally {
+      evaluator.destroy();
+    }
+  });
+
   test('template capture defers component construction until render arguments exist', async function (assert) {
     let source = `
       import { CardDef, Component } from 'https://cardstack.com/base/card-api';

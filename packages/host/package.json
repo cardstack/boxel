@@ -11,6 +11,8 @@
     "test": "tests"
   },
   "scripts": {
+    "bench:execution-runtime-clone": "node scripts/execution-runtime-compartment-clone-benchmark.mjs",
+    "bench:execution-runtime-simplifications": "node scripts/execution-runtime-simplification-benchmark.mjs",
     "build": "vite build --mode=development",
     "build:production": "NODE_OPTIONS='--max-old-space-size=8192' vite build",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",

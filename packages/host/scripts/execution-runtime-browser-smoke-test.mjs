@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import {
   assessReferenceParity,
   normalizeVisibleText,
+  summarizeExecutionStages,
   summarizeExecutionRuntimeSmokeRun,
 } from './execution-runtime-browser-smoke.mjs';
 import {
@@ -276,4 +277,33 @@ test('the smoke summary preserves reference, execution, and diagnosis', () => {
       },
     ],
   );
+});
+
+test('execution stage summaries preserve tiers and calculate median and p95', () => {
+  let result = (samples) => ({
+    page: {
+      executionPerformance: {
+        droppedRecords: 0,
+        records: samples.map((durationMs, index) => ({
+          durationMs,
+          occurrenceId: `surface:${index}`,
+          operationId: `operation:${index}`,
+          sequence: index + 1,
+          stage: 'runtime-create',
+          startedAt: 0,
+          endedAt: durationMs,
+          status: 'ok',
+          tier: 'sandbox',
+        })),
+      },
+    },
+  });
+
+  assert.deepEqual(summarizeExecutionStages([result([5, 10, 20, 40])]), {
+    'sandbox:runtime-create': {
+      medianMs: 20,
+      p95Ms: 40,
+      samples: 4,
+    },
+  });
 });

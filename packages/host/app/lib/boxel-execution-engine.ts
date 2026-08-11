@@ -9,13 +9,10 @@ import {
   type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 
-/**
- * The semantic-protocol features this Host understands. Producers stamp
- * requiredFeatures on their records; anything outside this set fails closed
- * at record admission rather than rendering a partial semantic.
- */
-const SUPPORTED_EXECUTION_FEATURES: ReadonlySet<string> = new Set();
-
+import {
+  startBoxelExecutionStage,
+  type BoxelExecutionPerformanceContext,
+} from './boxel-execution-performance';
 import {
   classifyBoxelSource,
   type BoxelSourceClassification,
@@ -39,6 +36,13 @@ import type { SandboxRenderSlot } from './sandbox-runtime-process';
 import type SandboxRuntimeProcess from './sandbox-runtime-process';
 
 import type { BaseDef } from '@cardstack/base/card-api';
+
+/**
+ * The semantic-protocol features this Host understands. Producers stamp
+ * requiredFeatures on their records; anything outside this set fails closed
+ * at record admission rather than rendering a partial semantic.
+ */
+const SUPPORTED_EXECUTION_FEATURES: ReadonlySet<string> = new Set();
 
 export interface BoxelExecutionRequest {
   /** Viewer/app execution principal, never inferred from the Realm URL. */
@@ -68,6 +72,8 @@ export interface BoxelExecutionRequest {
   hostProjection?: HostBoxelProjection;
   /** A Host-known stronger-boundary request, if already available. */
   prefersFullSandbox?: boolean;
+  /** Host-only diagnostic correlation. Never sent to a runtime boundary. */
+  performance?: BoxelExecutionPerformanceContext;
 }
 
 export interface BoxelExecutionGeneration {
@@ -283,6 +289,14 @@ export class BoxelExecutionSession {
   ): Promise<BoxelExecutionGeneration | undefined> {
     this.assertOpen();
     let generation = ++this.requestedGeneration;
+    let performance = request.performance ?? {
+      operationId: `${request.surfaceId}:${generation}`,
+      occurrenceId: request.surfaceId,
+    };
+    let generationStage = startBoxelExecutionStage({
+      ...performance,
+      stage: 'generation',
+    });
     this.status = 'loading';
     this.error = undefined;
     // Only broadcast this "now loading" transition when there is no
@@ -303,12 +317,31 @@ export class BoxelExecutionSession {
 
     let candidate: BoxelExecutionGeneration | undefined;
     try {
-      let source = await this.classifySource(
-        request.moduleIdentifier,
-        request.source,
-      );
+      let classifyStage = startBoxelExecutionStage({
+        ...performance,
+        stage: 'classify',
+      });
+      let source: BoxelSourceClassification;
+      try {
+        source = await this.classifySource(
+          request.moduleIdentifier,
+          request.source,
+        );
+        classifyStage.finish({
+          counters: { modules: source.moduleGraph.length },
+        });
+      } catch (error) {
+        classifyStage.finish({ status: 'error' });
+        throw error;
+      }
       this.assertCurrent(generation);
-      candidate = await this.materialize(generation, request, source);
+      candidate = await this.materialize(
+        generation,
+        request,
+        source,
+        request.prefersFullSandbox ?? false,
+        performance,
+      );
 
       // The type itself may request the stronger process boundary. This hint
       // is authoritative only in the upward direction: it can never select a
@@ -318,7 +351,13 @@ export class BoxelExecutionSession {
         candidate.renderRecord.boxel.executionHints.prefersFullSandbox
       ) {
         await disposeGeneration(candidate);
-        candidate = await this.materialize(generation, request, source, true);
+        candidate = await this.materialize(
+          generation,
+          request,
+          source,
+          true,
+          performance,
+        );
       }
 
       this.assertCurrent(generation);
@@ -332,6 +371,7 @@ export class BoxelExecutionSession {
       if (previous) {
         await disposeGeneration(previous);
       }
+      generationStage.finish();
       // RP-7.3: this generation renders immediately with any not-yet-settled
       // relationship absent — first paint never awaits settlement. No tier
       // needs a settle watch: Direct reads the canonical instance natively,
@@ -345,11 +385,13 @@ export class BoxelExecutionSession {
         await disposeGeneration(candidate);
       }
       if (this.closed || generation !== this.requestedGeneration) {
+        generationStage.finish({ status: 'obsolete' });
         return undefined;
       }
       this.status = 'error';
       this.error = asError(error);
       this.notify();
+      generationStage.finish({ status: 'error' });
       return undefined;
     }
   }
@@ -375,6 +417,11 @@ export class BoxelExecutionSession {
     request: BoxelExecutionRequest,
     source: BoxelSourceClassification,
     prefersFullSandbox = request.prefersFullSandbox ?? false,
+    performance = request.performance ??
+      ({
+        operationId: `${request.surfaceId}:${generation}`,
+        occurrenceId: request.surfaceId,
+      } satisfies BoxelExecutionPerformanceContext),
   ): Promise<BoxelExecutionGeneration> {
     let route: BoxelRuntimeRouteInput = {
       principal: request.principal,
@@ -386,6 +433,11 @@ export class BoxelExecutionSession {
       volatile: this.isModuleVolatile(request.moduleIdentifier),
     };
     let lease = this.router.route(route);
+    let materializeStage = startBoxelExecutionStage({
+      ...performance,
+      stage: 'materialize',
+      tier: lease.runtime.mode,
+    });
     if (lease.runtime.mode === 'sandbox') {
       (lease.runtime as SandboxRuntimeProcess).allowModules([
         ...source.moduleGraph,
@@ -394,17 +446,28 @@ export class BoxelExecutionSession {
     }
     let card: BoxelInstanceHandle | undefined;
     try {
-      card =
-        lease.runtime.mode === 'direct' && request.canonicalCard
-          ? (lease.runtime as DirectBoxelRuntime).retainCanonicalInstance(
-              request.canonicalCard,
-            )
-          : await lease.runtime.createFromSerialized(
-              request.resource,
-              request.document,
-              request.relativeTo,
-              request.purpose,
-            );
+      let createStage = startBoxelExecutionStage({
+        ...performance,
+        stage: 'runtime-create',
+        tier: lease.runtime.mode,
+      });
+      try {
+        card =
+          lease.runtime.mode === 'direct' && request.canonicalCard
+            ? (lease.runtime as DirectBoxelRuntime).retainCanonicalInstance(
+                request.canonicalCard,
+              )
+            : await lease.runtime.createFromSerialized(
+                request.resource,
+                request.document,
+                request.relativeTo,
+                request.purpose,
+              );
+        createStage.finish();
+      } catch (error) {
+        createStage.finish({ status: 'error' });
+        throw error;
+      }
       if (request.hostProjection && lease.runtime.mode === 'capsule') {
         (lease.runtime as CapsuleBoxelRuntime).adoptHostProjection(
           card,
@@ -412,7 +475,24 @@ export class BoxelExecutionSession {
         );
       }
       this.assertCurrent(generation);
-      let renderRecord = await lease.runtime.buildRenderRecord(card);
+      let renderRecordStage = startBoxelExecutionStage({
+        ...performance,
+        stage: 'render-record',
+        tier: lease.runtime.mode,
+      });
+      let renderRecord: BoxelRenderRecord;
+      try {
+        renderRecord = await lease.runtime.buildRenderRecord(card);
+        renderRecordStage.finish({
+          counters: {
+            fields: renderRecord.boxel.fields.length,
+            formats: renderRecord.boxel.formats.length,
+          },
+        });
+      } catch (error) {
+        renderRecordStage.finish({ status: 'error' });
+        throw error;
+      }
       // Semantic-record admission (RP-14.3): an unsupported protocol version
       // or required feature rejects the whole generation here, so the session
       // retains its last-known-good output instead of rendering an unknown
@@ -423,8 +503,15 @@ export class BoxelExecutionSession {
         SUPPORTED_EXECUTION_FEATURES,
       );
       this.assertCurrent(generation);
+      materializeStage.finish();
       return { generation, lease, card, renderRecord };
     } catch (error) {
+      materializeStage.finish({
+        status:
+          error instanceof ObsoleteBoxelExecutionGeneration
+            ? 'obsolete'
+            : 'error',
+      });
       if (card) {
         await lease.runtime.dispose(card).catch(() => undefined);
       }

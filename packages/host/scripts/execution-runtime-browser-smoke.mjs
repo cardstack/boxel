@@ -357,8 +357,12 @@ export const executionRuntimeNavigationSoakCases = [
   },
 ];
 
-function urlFor(origin, path) {
-  return `${origin.replace(/\/$/, '')}${path}`;
+function urlFor(origin, path, collectPerformance = false) {
+  let url = new URL(path, `${origin.replace(/\/$/, '')}/`);
+  if (collectPerformance) {
+    url.searchParams.set('boxelExecutionPerformance', '1');
+  }
+  return url.href;
 }
 
 async function settle(tab, expectedText, timeoutMs) {
@@ -582,8 +586,26 @@ async function settleSandboxFrame(
   }
 }
 
-async function probe(tab, smokeCase, origin, timeoutMs, checkExecution) {
-  let url = urlFor(origin, smokeCase.path);
+async function probe(
+  tab,
+  smokeCase,
+  origin,
+  timeoutMs,
+  checkExecution,
+  collectPerformance = false,
+) {
+  let url = urlFor(origin, smokeCase.path, collectPerformance);
+  if (collectPerformance) {
+    // A same-document transition keeps the diagnostics singleton alive.
+    // Clear the preceding occurrence so every sample describes exactly one
+    // navigation rather than a cumulative history of the tab.
+    await tab.playwright
+      .evaluate(() => {
+        window.__boxelExecutionPerformance?.enable();
+        window.__boxelExecutionPerformance?.reset();
+      })
+      .catch(() => undefined);
+  }
   let startedAt = performance.now();
   await tab.goto(url);
   await tab.playwright.waitForLoadState({
@@ -769,9 +791,15 @@ async function probe(tab, smokeCase, origin, timeoutMs, checkExecution) {
       textSample: frameText.replace(/\s+/g, ' ').slice(0, 600),
     };
   }
+  let executionPerformance = collectPerformance
+    ? await tab.playwright.evaluate(
+        () => window.__boxelExecutionPerformance?.snapshot() ?? null,
+      )
+    : undefined;
   return {
     ...result,
     elapsedMs: Math.round(performance.now() - startedAt),
+    executionPerformance,
     mediaSettled,
     ready: settled.ready,
     sandboxHandoff,
@@ -1229,6 +1257,7 @@ async function runOrigin(browser, origin, smokeCases, options) {
         origin,
         options.timeoutMs,
         options.checkExecution,
+        options.collectPerformance,
       );
     } catch (error) {
       results.push({
@@ -1279,6 +1308,7 @@ async function runOrigin(browser, origin, smokeCases, options) {
     }
     let warmSamplesMs = [];
     let warmSandboxHandoffSamplesMs = [];
+    let warmExecutionPerformance = [];
     for (let repeat = 0; repeat < options.performanceRepeats; repeat++) {
       let warmPage = await probe(
         tab,
@@ -1286,6 +1316,7 @@ async function runOrigin(browser, origin, smokeCases, options) {
         origin,
         options.timeoutMs,
         options.checkExecution,
+        options.collectPerformance,
       );
       if (
         !warmPage.ready ||
@@ -1296,6 +1327,9 @@ async function runOrigin(browser, origin, smokeCases, options) {
         break;
       }
       warmSamplesMs.push(warmPage.elapsedMs);
+      if (warmPage.executionPerformance) {
+        warmExecutionPerformance.push(warmPage.executionPerformance);
+      }
       if (typeof warmPage.sandboxHandoff?.elapsedMs === 'number') {
         warmSandboxHandoffSamplesMs.push(warmPage.sandboxHandoff.elapsedMs);
       }
@@ -1306,6 +1340,9 @@ async function runOrigin(browser, origin, smokeCases, options) {
     }
     if (warmSandboxHandoffSamplesMs.length) {
       page.warmSandboxHandoffMs = median(warmSandboxHandoffSamplesMs);
+    }
+    if (warmExecutionPerformance.length) {
+      page.warmExecutionPerformance = warmExecutionPerformance;
     }
     results.push({
       id: smokeCase.id,
@@ -1351,6 +1388,7 @@ function summarizePerformance(run, smokeCases) {
         .map((result) => result.page.warmElapsedMs)
         .filter((value) => typeof value === 'number'),
     ),
+    stages: summarizeExecutionStages(results),
   });
   return {
     // Direct is entered through the trusted Base edit portal in these cases;
@@ -1376,6 +1414,43 @@ function summarizePerformance(run, smokeCases) {
   };
 }
 
+export function summarizeExecutionStages(results) {
+  let values = new Map();
+  for (let result of results) {
+    let snapshots = [
+      result.page.executionPerformance,
+      ...(result.page.warmExecutionPerformance ?? []),
+    ].filter(Boolean);
+    for (let snapshot of snapshots) {
+      for (let record of snapshot.records ?? []) {
+        if (record.status !== 'ok') continue;
+        let key = `${record.tier ?? 'host'}:${record.stage}`;
+        let samples = values.get(key) ?? [];
+        samples.push(record.durationMs);
+        values.set(key, samples);
+      }
+    }
+  }
+  return Object.fromEntries(
+    [...values.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([stage, samples]) => [
+        stage,
+        {
+          medianMs: median(samples),
+          p95Ms: percentile(samples, 0.95),
+          samples: samples.length,
+        },
+      ]),
+  );
+}
+
+function percentile(values, percentile) {
+  if (!values.length) return undefined;
+  let sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.ceil((sorted.length - 1) * percentile)];
+}
+
 /**
  * Run the curated smoke cohort against staging/main and the current branch.
  *
@@ -1398,6 +1473,7 @@ export async function runExecutionRuntimeBrowserSmoke({
 
   let reference = await runOrigin(browser, referenceOrigin, cases, {
     checkExecution: false,
+    collectPerformance: false,
     performanceRepeats,
     tab: referenceTab,
     timeoutMs,
@@ -1422,6 +1498,7 @@ export async function runExecutionRuntimeBrowserSmoke({
     : cases;
   let candidate = await runOrigin(browser, candidateOrigin, candidateCases, {
     checkExecution: true,
+    collectPerformance: performanceRepeats > 0,
     performanceRepeats,
     tab: candidateTab,
     timeoutMs,

@@ -555,6 +555,7 @@ export default class CapsuleModuleEvaluator {
   private evaluatingStylesheets: string[] = [];
   private evaluatingModuleIdentifier: string | undefined;
   private compartment: Compartment;
+  private readonly compartmentParse: (json: string) => unknown;
   private loader: Loader;
   private moduleEvaluator: ReturnType<
     typeof createCapsuleCompartment
@@ -599,6 +600,9 @@ export default class CapsuleModuleEvaluator {
       globals,
     );
     this.compartment = capsule.compartment;
+    this.compartmentParse = this.compartment.evaluate('JSON.parse') as (
+      json: string,
+    ) => unknown;
     this.moduleEvaluator = capsule.moduleEvaluator;
     this.isTrustedImport = options.isTrustedImport ?? defaultTrustedImport;
     this.ambientReport = harden(
@@ -2562,22 +2566,11 @@ export default class CapsuleModuleEvaluator {
   }
 
   private cloneIntoCompartment(value: unknown): unknown {
-    // This is a data boundary, but Compartment.evaluate still applies SES's
-    // mandatory source transforms to the expression below. Escape characters
-    // that can form HTML-comment tokens before embedding the JSON text in
-    // source. JSON.parse restores the original data inside the compartment.
-    // This keeps strings such as Mermaid's `-->` and authored `<!-- ... -->`
-    // comments from being mistaken for executable legacy HTML comments.
-    let json = JSON.stringify(value)
-      .split('<')
-      .join('\\u003c')
-      .split('>')
-      .join('\\u003e')
-      .split('\u2028')
-      .join('\\u2028')
-      .split('\u2029')
-      .join('\\u2029');
-    return this.compartment.evaluate(`JSON.parse(${JSON.stringify(json)})`);
+    // The parser was captured from the compartment during construction, so
+    // its result is allocated inside that compartment. Only the inert JSON
+    // string crosses the boundary; it is data, not source code, and therefore
+    // does not require HTML-comment or JavaScript-line-separator escaping.
+    return this.compartmentParse(JSON.stringify(value));
   }
 
   private scopeReference(

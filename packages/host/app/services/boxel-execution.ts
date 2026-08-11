@@ -32,6 +32,11 @@ import BoxelExecutionEngine, {
   type BoxelExecutionSession,
 } from '@cardstack/host/lib/boxel-execution-engine';
 import {
+  startBoxelExecutionStage,
+  type BoxelExecutionPerformanceContext,
+  type BoxelExecutionStage,
+} from '@cardstack/host/lib/boxel-execution-performance';
+import {
   createLiveBoxelModel,
   projectBoxelExecutionDocument,
   projectHostBoxelSemantics,
@@ -112,6 +117,7 @@ export default class BoxelExecutionService extends Service {
     Promise<Record<string, BoxComponent>>
   >();
   private nextSurface = 0;
+  private nextPerformanceOperation = 0;
   private nextLocalBoxel = 0;
   private sandboxCreationCount = 0;
   /** Set on first `requestFor()`; see `liveModelFor()`. */
@@ -322,6 +328,14 @@ export default class BoxelExecutionService extends Service {
     surfaceId: string,
     relativeTo?: RealmResourceIdentifier,
   ): Promise<BoxelExecutionRequest> {
+    let performance: BoxelExecutionPerformanceContext = {
+      operationId: `${surfaceId}:${++this.nextPerformanceOperation}`,
+      occurrenceId: surfaceId,
+    };
+    let requestStage = startBoxelExecutionStage({
+      ...performance,
+      stage: 'request',
+    });
     let identity = Loader.identify(card.constructor);
     if (!identity) {
       throw new Error('Cannot execute a Boxel whose module is unidentified');
@@ -329,17 +343,29 @@ export default class BoxelExecutionService extends Service {
     let moduleIdentifier = identity.module;
     this.ensureLocalIdentity(card);
     let [source, initialDocument, api] = await Promise.all([
-      this.sourceFor(moduleIdentifier),
-      this.cardService.serializeCard(card as never, {
-        withIncluded: true,
-        includeUnrenderedFields: true,
-        // Execution documents cross Loader and process boundaries. Keep type
-        // identities absolute so a side-loaded card from another directory or
-        // realm cannot accidentally rebase its adoptsFrom module against the
-        // primary card when the receiving runtime deserializes it.
-        useAbsoluteURL: true,
-      }),
-      this.cardService.getAPI(),
+      recordExecutionPromise(
+        performance,
+        'source',
+        this.sourceFor(moduleIdentifier),
+      ),
+      recordExecutionPromise(
+        performance,
+        'serialize',
+        this.cardService.serializeCard(card as never, {
+          withIncluded: true,
+          includeUnrenderedFields: true,
+          // Execution documents cross Loader and process boundaries. Keep type
+          // identities absolute so a side-loaded card from another directory or
+          // realm cannot accidentally rebase its adoptsFrom module against the
+          // primary card when the receiving runtime deserializes it.
+          useAbsoluteURL: true,
+        }),
+      ),
+      recordExecutionPromise(
+        performance,
+        'card-api',
+        this.cardService.getAPI(),
+      ),
     ]);
     // Captured for the synchronous live-model reads (`liveModelFor`) —
     // every render that needs it necessarily passed through here first.
@@ -358,14 +384,33 @@ export default class BoxelExecutionService extends Service {
     // serialize once more so the child receives relationship data and
     // included resources rather than an empty snapshot that cannot repair
     // itself.
-    let { projection: hostProjection, hadPendingRelationship } =
-      await this.settleHostProjection(card, api);
-    if (hadPendingRelationship) {
-      document = await this.cardService.serializeCard(card as never, {
-        withIncluded: true,
-        includeUnrenderedFields: true,
-        useAbsoluteURL: true,
+    let projectionStage = startBoxelExecutionStage({
+      ...performance,
+      stage: 'projection-settle',
+    });
+    let hostProjection: HostBoxelProjection;
+    let hadPendingRelationship: boolean;
+    try {
+      let settled = await this.settleHostProjection(card, api);
+      hostProjection = settled.projection;
+      hadPendingRelationship = settled.hadPendingRelationship;
+      projectionStage.finish({
+        counters: { passes: settled.relationshipSettlementPasses },
       });
+    } catch (error) {
+      projectionStage.finish({ status: 'error' });
+      throw error;
+    }
+    if (hadPendingRelationship) {
+      document = await recordExecutionPromise(
+        performance,
+        'serialize',
+        this.cardService.serializeCard(card as never, {
+          withIncluded: true,
+          includeUnrenderedFields: true,
+          useAbsoluteURL: true,
+        }),
+      );
       if (!document.data) {
         throw new Error(
           'Cannot execute a Boxel without a serialized resource after relationship resolution',
@@ -378,7 +423,7 @@ export default class BoxelExecutionService extends Service {
       api,
       isTrustedModule,
     );
-    return {
+    let request: BoxelExecutionRequest = {
       principal: this.principal,
       surfaceId,
       // A Loader-shimmed module is host-defined by construction: its class
@@ -420,7 +465,15 @@ export default class BoxelExecutionService extends Service {
       // `StoreService.get` the classic path uses, then writing the result
       // back onto the field, makes the fetch happen regardless.
       hostProjection,
+      performance,
     };
+    requestStage.finish({
+      counters: {
+        includedResources: projectedDocument.included?.length ?? 0,
+        sourceCharacters: source.length,
+      },
+    });
+    return request;
   }
 
   /**
@@ -623,6 +676,7 @@ export default class BoxelExecutionService extends Service {
   ): Promise<{
     projection: HostBoxelProjection;
     hadPendingRelationship: boolean;
+    relationshipSettlementPasses: number;
   }> {
     let relationshipSettlementPasses = 0;
     let sawPendingRelationship = false;
@@ -717,6 +771,7 @@ export default class BoxelExecutionService extends Service {
     return {
       projection,
       hadPendingRelationship: relationshipSettlementPasses > 0,
+      relationshipSettlementPasses,
     };
   }
 
@@ -1308,6 +1363,22 @@ function resolveInstancePathValue(instance: BaseDef, path: string): unknown {
     return undefined;
   }
   return current;
+}
+
+async function recordExecutionPromise<T>(
+  performance: BoxelExecutionPerformanceContext,
+  stage: BoxelExecutionStage,
+  promise: Promise<T>,
+): Promise<T> {
+  let token = startBoxelExecutionStage({ ...performance, stage });
+  try {
+    let value = await promise;
+    token.finish();
+    return value;
+  } catch (error) {
+    token.finish({ status: 'error' });
+    throw error;
+  }
 }
 
 function executionRelativeTo(
