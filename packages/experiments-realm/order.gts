@@ -13,6 +13,7 @@ import enumField from 'https://cardstack.com/base/enum';
 import PackageIcon from '@cardstack/boxel-icons/package';
 import PercentageField from 'https://cardstack.com/base/percentage';
 import { Account } from './account';
+import { Contract } from './contract';
 import { LineItem } from './line-item';
 import { formatMoney, lineTotal, orderTotals, sumLineItems } from './money';
 
@@ -32,6 +33,8 @@ export class Order extends CardDef {
   @field status = contains(OrderStatusField);
   @field lineItems = containsMany(LineItem);
   @field taxRate = contains(PercentageField);
+  // The agreement this order is placed under, when there is one.
+  @field contract = linksTo(() => Contract);
 
   @field cardTitle = contains(StringField, {
     computeVia: function (this: Order) {

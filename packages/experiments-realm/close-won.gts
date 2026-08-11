@@ -12,6 +12,7 @@ import PatchCardInstanceCommand from '@cardstack/boxel-host/commands/patch-card-
 import { Opportunity } from './opportunity';
 import { Subscription } from './subscription';
 import { Invoice } from './invoice';
+import { Contract } from './contract';
 
 export class CloseWonInput extends CardDef {
   @field deal = linksTo(Opportunity, { searchable: true });
@@ -19,6 +20,7 @@ export class CloseWonInput extends CardDef {
 }
 
 export class CloseWonResult extends CardDef {
+  @field contract = linksTo(Contract);
   @field subscription = linksTo(Subscription);
   @field invoice = linksTo(Invoice);
   @field message = contains(StringField);
@@ -66,6 +68,32 @@ export default class CloseWonCommand extends Command<
     deal.lastStageChangedAt = today;
     await save(deal);
 
+    // A one-year term starting today, matching the subscription it governs.
+    let termEnd = new Date(today);
+    termEnd.setFullYear(termEnd.getFullYear() + 1);
+    let contract = await save(
+      new Contract({
+        title: `${deal.name} — agreement`,
+        status: 'draft',
+        startDate: today,
+        endDate: termEnd,
+        account: deal.account,
+        deal,
+      }),
+    );
+    if (typeof amount === 'number') {
+      await new PatchCardInstanceCommand(this.commandContext, {
+        cardType: Contract,
+      }).execute({
+        cardId: contract.id,
+        patch: {
+          attributes: {
+            value: { amount, currency: { code: currencyCode } },
+          },
+        },
+      });
+    }
+
     let subscription = await save(
       new Subscription({
         planName: deal.name,
@@ -73,6 +101,7 @@ export default class CloseWonCommand extends Command<
         startDate: today,
         status: 'active',
         account: deal.account,
+        contract,
       }),
     );
     if (typeof amount === 'number') {
@@ -124,9 +153,10 @@ export default class CloseWonCommand extends Command<
     }
 
     return new CloseWonResult({
+      contract,
       subscription,
       invoice,
-      message: `${deal.name} closed won: subscription activated and draft ${invoiceNumber} created. Contract step is deferred until the Contract block exists.`,
+      message: `${deal.name} closed won: draft agreement prepared, subscription activated under it, and draft ${invoiceNumber} created.`,
     });
   }
 }
