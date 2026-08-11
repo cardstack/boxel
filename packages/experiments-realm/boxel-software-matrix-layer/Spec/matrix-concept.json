@@ -1,0 +1,43 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "MatrixConcept",
+        "module": "../matrix-concept"
+      },
+      "specType": "card",
+      "readMe": "## Matrix Concept\n\nOne row of the software layer matrix as a card: identity (`layer`, `layerName`, `lane`, `concept`, `symbol`), the crawl-owned evidence columns (`implemented`, `evidenceTier`, `auditStatus`, `whereImplemented`, `reference`, `catalogMatch`, `provenance`, `domainKit`), and the human-owned tracking columns (`owner`, `workState`, `notes`).\n\n```ts\nimport { MatrixConcept } from '../matrix-concept';\n@field concept = linksTo(MatrixConcept);\n```\n\n**Two owners, one card.** Columns A–M mirror the crawl and are overwritten wholesale on refresh; N–P (`owner`, `workState`, `notes`) are edited in this realm and preserved across refreshes — the seed script's `--refresh` mode keeps them. That split is why `workState: Done` can honestly coexist with `implemented: false`: the human said done, the crawl has not counted it yet, and the tracker surfaces exactly that disagreement instead of hiding it.\n\nEvidence tiers are ranked: Platform and Catalog shared count as implemented; Catalog listing and POC realm are evidence on the way there; no tier means no evidence. The fitted tile carries the tier as a colored edge so a wall of tiles reads as a coverage heat map.\n\nThe linked examples span the range: a Platform kernel concept, a built-by-hand row the crawl has not counted, and a domain-kit concept at POC tier.\n\n**Non-goals:** holding rollups (counts live in the tracker's queries), linking to the implementing modules (where-implemented is a crawl-written string, not a link, because most targets live outside any realm), and enforcing the crawl/human column split at the field level — the seed script owns that contract.",
+      "cardInfo": {
+        "name": "Matrix Concept",
+        "summary": "One layer-matrix row as a card: crawl-owned evidence columns plus human-owned owner/work-state/notes, split so refreshes never clobber tracking.",
+        "notes": null,
+        "cardThumbnailURL": null
+      },
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../MatrixConcept/l01-cm-card-definition"
+        }
+      },
+      "linkedExamples.1": {
+        "links": {
+          "self": "../MatrixConcept/l03-tc-classify"
+        }
+      },
+      "linkedExamples.2": {
+        "links": {
+          "self": "../MatrixConcept/l05-5-cm-campaign"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

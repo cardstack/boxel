@@ -92,10 +92,20 @@ export class MatrixTracker extends CardDef {
       return Boolean((this.args as any).viewCard);
     }
 
+    // Pages can overlap while the realm is mid-index (windows shift as the
+    // total grows), so identity — not page position — decides uniqueness.
     get concepts(): MatrixConcept[] {
-      return this.conceptPages
-        .flatMap((page) => (page?.instances ?? []) as MatrixConcept[])
-        .filter(Boolean);
+      let seen = new Set<string>();
+      let out: MatrixConcept[] = [];
+      for (let page of this.conceptPages) {
+        for (let c of (page?.instances ?? []) as MatrixConcept[]) {
+          let id = (c as any)?.id;
+          if (!c || !id || seen.has(id)) continue;
+          seen.add(id);
+          out.push(c);
+        }
+      }
+      return out;
     }
 
     get total() {
