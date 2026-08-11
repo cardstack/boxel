@@ -9,6 +9,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
+import BooleanField from 'https://cardstack.com/base/boolean';
 import DateField from 'https://cardstack.com/base/date';
 import enumField from 'https://cardstack.com/base/enum';
 import { eq } from '@cardstack/boxel-ui/helpers';
@@ -21,8 +22,11 @@ import { Subscription } from './subscription';
 import { Payment } from './payment';
 import { formatMoney, lineTotal, sumLineItems } from './money';
 
+// Overdue is not a state anyone sets — it is what being unpaid past the due
+// date looks like, so it is derived rather than stored and cannot drift from
+// the balance and the calendar.
 const InvoiceStatusField = enumField(StringField, {
-  options: ['draft', 'sent', 'viewed', 'partial', 'paid', 'overdue', 'void'],
+  options: ['draft', 'sent', 'viewed', 'partial', 'paid', 'void'],
   displayName: 'Invoice Status',
 });
 
@@ -53,6 +57,20 @@ export class Invoice extends CardDef {
     },
   });
 
+  @field isOverdue = contains(BooleanField, {
+    computeVia: function (this: Invoice) {
+      return (this.daysOverdue ?? 0) > 0;
+    },
+  });
+
+  // What every consumer should render and filter on: the stored status except
+  // when the calendar overrides it.
+  @field displayStatus = contains(StringField, {
+    computeVia: function (this: Invoice) {
+      return this.isOverdue ? 'overdue' : this.status;
+    },
+  });
+
   @field cardTitle = contains(StringField, {
     computeVia: function (this: Invoice) {
       return this.invoiceNumber?.trim()?.length
@@ -70,7 +88,7 @@ export class Invoice extends CardDef {
       <div class='invoice-row'>
         <FileInvoiceIcon class='icon' />
         <span class='number'>{{@model.cardTitle}}</span>
-        <span class='status status-{{@model.status}}'>{{@model.status}}</span>
+        <span class='status status-{{@model.displayStatus}}'>{{@model.displayStatus}}</span>
         <span class='total'>{{this.total}}</span>
       </div>
       <style scoped>
@@ -164,18 +182,18 @@ export class Invoice extends CardDef {
         <div class='fmt badge'>
           <FileInvoiceIcon class='doc-icon' />
           <span class='name'>{{@model.cardTitle}}</span>
-          {{#if @model.status}}
-            <span class='status status-{{@model.status}}'>{{@model.status}}</span>
+          {{#if @model.displayStatus}}
+            <span class='status status-{{@model.displayStatus}}'>{{@model.displayStatus}}</span>
           {{/if}}
         </div>
         <div class='fmt strip'>
           <FileInvoiceIcon class='doc-icon' />
           <div class='info'>
             <span class='name'>{{@model.cardTitle}}</span>
-            {{#if @model.status}}
+            {{#if @model.displayStatus}}
               <span
-                class='status status-{{@model.status}}'
-              >{{@model.status}}</span>
+                class='status status-{{@model.displayStatus}}'
+              >{{@model.displayStatus}}</span>
             {{/if}}
           </div>
           <span class='figure'>{{this.total}}</span>
@@ -183,10 +201,10 @@ export class Invoice extends CardDef {
         <div class='fmt tile'>
           <div class='row'>
             <FileInvoiceIcon class='doc-icon' />
-            {{#if @model.status}}
+            {{#if @model.displayStatus}}
               <span
-                class='status status-{{@model.status}}'
-              >{{@model.status}}</span>
+                class='status status-{{@model.displayStatus}}'
+              >{{@model.displayStatus}}</span>
             {{/if}}
           </div>
           <span class='name'>{{@model.cardTitle}}</span>
@@ -200,10 +218,10 @@ export class Invoice extends CardDef {
             <div class='row'>
               <FileInvoiceIcon class='doc-icon' />
               <span class='name name-lg'>{{@model.cardTitle}}</span>
-              {{#if @model.status}}
+              {{#if @model.displayStatus}}
                 <span
-                  class='status status-{{@model.status}}'
-                >{{@model.status}}</span>
+                  class='status status-{{@model.displayStatus}}'
+                >{{@model.displayStatus}}</span>
               {{/if}}
             </div>
             {{#if @model.account.name}}
@@ -397,8 +415,8 @@ export class Invoice extends CardDef {
             <p class='doc-kind'>Invoice</p>
             <h1>{{this.number}}</h1>
           </div>
-          {{#if @model.status}}
-            <span class='status status-{{@model.status}}'>{{@model.status}}</span>
+          {{#if @model.displayStatus}}
+            <span class='status status-{{@model.displayStatus}}'>{{@model.displayStatus}}</span>
           {{/if}}
         </header>
 
