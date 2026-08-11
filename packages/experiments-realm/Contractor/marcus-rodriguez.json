@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Marcus Rodriguez",
+      "email": "marcus.rodriguez@contractor.com",
+      "phone": "+1 555 0202",
+      "contractStatus": "active",
+      "billableRate": 120,
+      "vatId": "VAT-2024-002",
+      "invoiceFrequency": "quarterly",
+      "photo": {
+        "url": "https://images.pexels.com/photos/1222271/pexels-photo-1222271.jpeg",
+        "sourceMode": "url"
+      },
+      "cardInfo": {
+        "name": "Marcus Rodriguez",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../contractor",
+        "name": "Contractor"
+      }
+    }
+  }
+}

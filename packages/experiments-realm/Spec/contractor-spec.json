@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Contractor",
+      "cardDescription": "Contractor profile: name, contact, contract status, billable rate, VAT ID, and invoice frequency",
+      "specType": "card",
+      "ref": {
+        "module": "../contractor",
+        "name": "Contractor"
+      },
+      "readMe": "# Contractor\n\n## Summary\nA contractor resource linked from Offers and Projects. Extends PersonBase with `contractStatus` (active | inactive | terminated), `billableRate` (hourly/daily rate in dollars), `vatId` (for invoicing), and `invoiceFrequency` (monthly | quarterly | annually). `title` is computed from `name`, defaulting to \"Contractor\".\n\n## Import\n```ts\nimport { Contractor } from './contractor';\n```\n\n## Usage — three or more ways this is used\n\n**1. As the external resource pool.** Contractors are linked from Offers as alternative hiring paths — when a requisition is filled via contract labor instead of permanent hire, the offer points at a Contractor instance instead of creating an Employee record.\n\n**2. As the invoicing source.** The `billableRate`, `invoiceFrequency`, and `vatId` drive invoice generation; the billing system queries contractors by `invoiceFrequency` to batch-generate monthly/quarterly/annual invoices.\n\n**3. As the project staffing model.** Projects can link contractors for specialized work (QA, DevOps, security) separate from the employee roster; the project dashboard shows billable cost alongside headcount.\n\n## Template Usage\nIsolated displays contact info, rate & terms, and contract status in a 2-column layout (main + side panel). Embedded is a one-liner with avatar, name, and status pill. Fitted degrades from a card showing name and rate through progressively smaller tiers. Atom is just the name.\n\n## Reuse notes\nContractors reuse the PersonBase avatar/initials/name infrastructure so they render consistently across the app. Contract status colors (active=green, inactive=amber, terminated=red) follow the same v1 pattern as Employee and Candidate statuses.\n\n**Non-goals:** Contract documents/file storage (separate document management); billable hours tracking (belongs in time-tracking integration); benefit eligibility (Contractors are out-of-scope for benefits).\n"
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Contractor/sarah-chen"
+        }
+      },
+      "linkedExamples.1": {
+        "links": {
+          "self": "../Contractor/marcus-rodriguez"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
