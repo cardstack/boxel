@@ -7,7 +7,23 @@ import {
 import StringField from 'https://cardstack.com/base/string';
 import BooleanField from 'https://cardstack.com/base/boolean';
 import enumField from 'https://cardstack.com/base/enum';
+import type Owner from '@ember/owner';
+import { tracked } from '@glimmer/tracking';
+import { action } from '@ember/object';
+import { on } from '@ember/modifier';
+import { fn } from '@ember/helper';
+import { eq } from '@cardstack/boxel-ui/helpers';
+import { BoxelButton } from '@cardstack/boxel-ui/components';
+import {
+  identifyCard,
+  realmURL,
+  type getCards,
+} from '@cardstack/runtime-common';
+import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
 import LayoutGridIcon from '@cardstack/boxel-icons/layout-grid';
+import { ConceptReview } from './concept-review';
+import { Teammate } from './teammate';
+import ChangeWorkStateCommand from './change-work-state';
 
 const LaneField = enumField(StringField, {
   options: [
@@ -425,6 +441,167 @@ export class MatrixConcept extends CardDef {
   };
 
   static isolated = class Isolated extends Component<typeof MatrixConcept> {
+    @tracked reviewVerdict = 'comment';
+    @tracked reviewBody = '';
+    @tracked reviewerId = '';
+    @tracked newState = '';
+    @tracked stateReason = '';
+    @tracked statusMessage = '';
+    @tracked busy = false;
+
+    private reviewList: ReturnType<getCards> | undefined;
+    private teammateList: ReturnType<getCards> | undefined;
+
+    constructor(owner: Owner, args: any) {
+      super(owner, args);
+      let ctx = this.args.context;
+      let realms = () => this.realms;
+      this.reviewList = ctx?.getCards(
+        this,
+        () => {
+          let id = (this.args.model as any)?.id;
+          let ref = identifyCard(ConceptReview);
+          return id && ref
+            ? { filter: { on: ref, eq: { 'concept.id': id } } }
+            : undefined;
+        },
+        realms,
+        { isLive: true },
+      );
+      this.teammateList = ctx?.getCards(
+        this,
+        () => {
+          let ref = identifyCard(Teammate);
+          return ref ? { filter: { type: ref } } : undefined;
+        },
+        realms,
+        { isLive: true },
+      );
+    }
+
+    private get realms(): string[] | undefined {
+      let url = (this.args.model as any)?.[realmURL];
+      return url ? [url.href] : undefined;
+    }
+    private get realm(): string | undefined {
+      return this.realms?.[0];
+    }
+    private get commandContext() {
+      return (this.args as any).context?.commandContext;
+    }
+    private get isInteractive() {
+      return Boolean((this.args as any).viewCard);
+    }
+
+    get reviews(): ConceptReview[] {
+      return ((this.reviewList?.instances ?? []) as ConceptReview[])
+        .filter(Boolean)
+        .sort(
+          (a, b) =>
+            (b.createdAt?.getTime?.() ?? 0) - (a.createdAt?.getTime?.() ?? 0),
+        );
+    }
+    get teammates(): Teammate[] {
+      return ((this.teammateList?.instances ?? []) as Teammate[]).filter(
+        Boolean,
+      );
+    }
+    get workStates() {
+      return ['Done', 'In Progress', 'Next', 'Blocked'];
+    }
+    get verdicts() {
+      return ['comment', 'approve', 'needs work'];
+    }
+    get selectedReviewer(): Teammate | undefined {
+      return this.teammates.find((t) => (t as any).id === this.reviewerId);
+    }
+
+    @action setVerdict(e: Event) {
+      this.reviewVerdict = (e.target as HTMLSelectElement).value;
+    }
+    @action setReviewer(e: Event) {
+      this.reviewerId = (e.target as HTMLSelectElement).value;
+    }
+    @action setBody(e: Event) {
+      this.reviewBody = (e.target as HTMLTextAreaElement).value;
+    }
+    @action setNewState(e: Event) {
+      this.newState = (e.target as HTMLSelectElement).value;
+    }
+    @action setStateReason(e: Event) {
+      this.stateReason = (e.target as HTMLInputElement).value;
+    }
+
+    @action async submitReview() {
+      if (!this.commandContext || !this.realm) return;
+      if (!this.reviewBody.trim()) {
+        this.statusMessage = 'Write something first';
+        return;
+      }
+      this.busy = true;
+      try {
+        await new SaveCardCommand(this.commandContext).execute({
+          card: new ConceptReview({
+            concept: this.args.model as MatrixConcept,
+            reviewer: this.selectedReviewer,
+            verdict: this.reviewVerdict,
+            body: this.reviewBody.trim(),
+            createdAt: new Date(),
+            resolved: this.reviewVerdict !== 'needs work',
+          }),
+          realm: this.realm,
+        } as any);
+        this.reviewBody = '';
+        this.statusMessage = '';
+      } catch (e: any) {
+        this.statusMessage = e?.message ?? 'Review failed to save';
+      } finally {
+        this.busy = false;
+      }
+    }
+
+    @action async changeState() {
+      if (!this.commandContext || !this.realm || !this.newState) return;
+      this.busy = true;
+      try {
+        let result: any = await new ChangeWorkStateCommand(
+          this.commandContext,
+        ).execute({
+          concept: this.args.model as MatrixConcept,
+          author: this.selectedReviewer,
+          newState: this.newState,
+          reason: this.stateReason,
+          realm: this.realm,
+        } as any);
+        this.statusMessage = result?.message ?? 'State changed';
+        this.newState = '';
+        this.stateReason = '';
+      } catch (e: any) {
+        this.statusMessage = e?.message ?? 'State change failed';
+      } finally {
+        this.busy = false;
+      }
+    }
+
+    @action async resolveReview(review: ConceptReview) {
+      if (!this.commandContext || !this.realm) return;
+      this.busy = true;
+      try {
+        review.resolved = true;
+        await new SaveCardCommand(this.commandContext).execute({
+          card: review,
+          realm: this.realm,
+        } as any);
+      } catch (e: any) {
+        this.statusMessage = e?.message ?? 'Resolve failed';
+      } finally {
+        this.busy = false;
+      }
+    }
+
+    reviewComponent = (card: ConceptReview) =>
+      (card.constructor as typeof CardDef).getComponent(card);
+
     <template>
       <article class='concept-page'>
         <header class='ch'>
@@ -508,6 +685,103 @@ export class MatrixConcept extends CardDef {
             <p class='notes'>{{@model.notes}}</p>
           </section>
         {{/if}}
+
+        {{#if this.isInteractive}}
+          <section class='panel'>
+            <h2>Workflow</h2>
+            <div class='action-row'>
+              <select aria-label='Acting as' {{on 'change' this.setReviewer}}>
+                <option value='' selected={{eq this.reviewerId ''}}>Acting
+                  as…</option>
+                {{#each this.teammates as |t|}}
+                  <option
+                    value={{t.id}}
+                    selected={{eq this.reviewerId t.id}}
+                  >{{t.name}}</option>
+                {{/each}}
+              </select>
+              <select aria-label='New state' {{on 'change' this.setNewState}}>
+                <option value='' selected={{eq this.newState ''}}>Change state
+                  to…</option>
+                {{#each this.workStates as |s|}}
+                  <option
+                    value={{s}}
+                    selected={{eq this.newState s}}
+                  >{{s}}</option>
+                {{/each}}
+              </select>
+              <input
+                type='text'
+                placeholder='Reason (one line)'
+                value={{this.stateReason}}
+                aria-label='Reason'
+                {{on 'input' this.setStateReason}}
+              />
+              <BoxelButton
+                @kind='secondary'
+                @size='extra-small'
+                @disabled={{this.busy}}
+                {{on 'click' this.changeState}}
+              >Change state</BoxelButton>
+            </div>
+            {{#if this.statusMessage}}
+              <p class='status'>{{this.statusMessage}}</p>
+            {{/if}}
+          </section>
+        {{/if}}
+
+        <section class='panel'>
+          <h2>Reviews</h2>
+          {{#if this.isInteractive}}
+            <div class='review-form'>
+              <div class='action-row'>
+                <select aria-label='Verdict' {{on 'change' this.setVerdict}}>
+                  {{#each this.verdicts as |v|}}
+                    <option
+                      value={{v}}
+                      selected={{eq this.reviewVerdict v}}
+                    >{{v}}</option>
+                  {{/each}}
+                </select>
+                <span class='hint'>reviewing as
+                  {{if this.selectedReviewer.name this.selectedReviewer.name '…'}}</span>
+              </div>
+              <textarea
+                rows='3'
+                placeholder='What did you find? Approvals and change requests both deserve a reason.'
+                aria-label='Review body'
+                {{on 'input' this.setBody}}
+              >{{this.reviewBody}}</textarea>
+              <BoxelButton
+                @kind='primary'
+                @size='extra-small'
+                @disabled={{this.busy}}
+                {{on 'click' this.submitReview}}
+              >Submit review</BoxelButton>
+            </div>
+          {{/if}}
+          <div class='thread'>
+            {{#each this.reviews as |r|}}
+              <div class='thread-item'>
+                {{#let (this.reviewComponent r) as |R|}}
+                  <R @format='embedded' />
+                {{/let}}
+                {{#if this.isInteractive}}
+                  {{#unless r.resolved}}
+                    <BoxelButton
+                      @kind='text-only'
+                      @size='extra-small'
+                      @disabled={{this.busy}}
+                      {{on 'click' (fn this.resolveReview r)}}
+                    >Mark resolved</BoxelButton>
+                  {{/unless}}
+                {{/if}}
+              </div>
+            {{else}}
+              <p class='empty'>No reviews yet</p>
+            {{/each}}
+          </div>
+        </section>
       </article>
       <style scoped>
         .concept-page {
@@ -608,6 +882,69 @@ export class MatrixConcept extends CardDef {
           margin: 0;
           font-size: 0.875rem;
           line-height: 1.5;
+        }
+        .action-row {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.5rem;
+          align-items: center;
+        }
+        .action-row select,
+        .action-row input,
+        .review-form textarea {
+          font: inherit;
+          font-size: 0.8125rem;
+          padding: 0.375rem 0.5rem;
+          border: 1px solid var(--border, #e5e7eb);
+          border-radius: 0.5rem;
+          background: var(--card, #ffffff);
+          color: inherit;
+        }
+        .action-row input {
+          flex: 1;
+          min-width: 10rem;
+        }
+        .review-form {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+          margin-bottom: 1rem;
+          padding-bottom: 1rem;
+          border-bottom: 1px solid var(--border, #e5e7eb);
+        }
+        .review-form textarea {
+          width: 100%;
+          box-sizing: border-box;
+          resize: vertical;
+        }
+        .review-form :deep(button) {
+          align-self: flex-start;
+        }
+        .hint {
+          font-size: 0.75rem;
+          color: var(--muted-foreground, #6b7280);
+        }
+        .status {
+          margin: 0.5rem 0 0;
+          font-size: 0.75rem;
+          color: var(--muted-foreground, #6b7280);
+        }
+        .thread {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+        }
+        .thread-item {
+          border: 1px solid var(--border, #e5e7eb);
+          border-radius: 0.5rem;
+        }
+        .thread-item > :deep(.boxel-card-container) {
+          box-shadow: none;
+        }
+        .empty {
+          margin: 0;
+          font-size: 0.8125rem;
+          color: var(--muted-foreground, #6b7280);
         }
         .state {
           font-size: 0.6875rem;

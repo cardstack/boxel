@@ -1,0 +1,22 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Richard Tan",
+      "email": "richard.tan@cardstack.com",
+      "jobTitle": "Builder",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../teammate",
+        "name": "Teammate"
+      }
+    }
+  }
+}

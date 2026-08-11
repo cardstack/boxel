@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "default",
+        "module": "../change-work-state"
+      },
+      "specType": "command",
+      "readMe": "## Change Work State\n\nMoves a concept's `workState` and logs the move in one step: patches the concept, then writes an attributed ConceptReview entry (`State: In Progress → Done — reason`) into its thread.\n\n```ts\nimport ChangeWorkStateCommand from '../change-work-state';\nawait new ChangeWorkStateCommand(commandContext).execute({\n  concept, author, newState: 'Done', reason: 'built + spec pushed', realm,\n});\n```\n\n**Why a command instead of editing the field:** the realm is the team's tracker, and a tracker without history is just a label. The command makes every state move carry who, when, and why — the log entry is a resolved comment, so it narrates the timeline without polluting the review queues.\n\nEditing `workState` by hand remains possible; it just leaves no trace, which makes it visible as exactly that — an unexplained state.\n\nThe same compound-write pattern as Close Won: one user intent, several writes, one command.\n\n**Non-goals:** state-machine enforcement (any state can move to any state — the matrix tracks work, it does not gate it), permissions (shared account), and notifications.",
+      "cardInfo": {
+        "name": "Change Work State",
+        "summary": "State change + attributed thread entry in one command, so every move carries who, when, and why.",
+        "notes": null,
+        "cardThumbnailURL": null
+      },
+      "containedExamples": []
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
