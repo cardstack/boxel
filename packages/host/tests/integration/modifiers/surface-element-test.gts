@@ -67,7 +67,16 @@ module('Integration | Modifier | surface-element', function (hooks) {
         '#f8f4ee',
       );
       assert.strictEqual(root.dataset.boxelSurfaceHeightMode, 'allocated');
-      assert.strictEqual(root.style.minHeight, '360px');
+      assert.strictEqual(
+        root.style.height,
+        '100%',
+        'an allocated surface fills the box assigned by its owner',
+      );
+      assert.strictEqual(
+        root.style.minHeight,
+        '',
+        'a child minimum-height report cannot resize an allocated surface',
+      );
       assert.true(Boolean(observation), 'surfaceObserve received a projection');
       assert.strictEqual(typeof observation?.width, 'number');
       assert.strictEqual(typeof observation?.height, 'number');
