@@ -616,12 +616,14 @@ export default class AiAssistantMessage extends Component<Signature> {
         width: fit-content;
         margin-left: auto;
         /* Bare muted text, no surface: it should read like the timestamp
-           meta above the message, not like content. The assistant panel is
-           a fixed dark surface, so this follows its local palette (the
-           timestamp meta uses the same ink) rather than the light-themed
+           meta above the message, not like content — but one step brighter
+           and heavier than the meta, since the counts are what a reader in
+           debug mode came for. The assistant panel is a fixed dark surface,
+           so this follows its local palette rather than the light-themed
            semantic role tokens. */
-        color: var(--boxel-450);
-        font-size: var(--boxel-font-size-2xs);
+        color: var(--boxel-400);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 500;
         font-variant-numeric: tabular-nums;
       }
     </style>

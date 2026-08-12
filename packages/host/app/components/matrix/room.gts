@@ -502,15 +502,17 @@ export default class Room extends Component<Signature> {
         /* Extra top margin keeps the summary clear of the last message's own
            usage line, so the two never read as an accidental pair. */
         margin: var(--boxel-sp) auto 0;
-        padding: 0.125rem 0.625rem;
-        /* Bordered chip: distinct from the bare per-message usage lines.
+        padding: 0.1875rem 0.75rem;
+        /* Bordered chip, one notch brighter and heavier than the
+           per-message lines: the session total is the headline figure.
            Palette note: the assistant panel is a fixed dark surface, so this
            follows its local palette rather than the light-themed semantic
            role tokens. */
-        border: 1px solid var(--boxel-650);
+        border: 1px solid var(--boxel-600);
         border-radius: var(--boxel-border-radius-sm);
-        color: var(--boxel-450);
-        font-size: var(--boxel-font-size-2xs);
+        color: var(--boxel-300);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 600;
         font-variant-numeric: tabular-nums;
       }
 
