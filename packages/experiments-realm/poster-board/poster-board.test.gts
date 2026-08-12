@@ -1,12 +1,10 @@
 import type { TOC } from '@ember/component/template-only';
 import type Owner from '@ember/owner';
-import { click, render, triggerEvent } from '@ember/test-helpers';
+import { click, triggerEvent } from '@ember/test-helpers';
 
 import GlimmerComponent from '@glimmer/component';
 
 import { getService } from '@universal-ember/test-support';
-
-import { provide } from 'ember-provide-consume-context';
 
 import { module, test } from 'qunit';
 
@@ -18,23 +16,30 @@ import {
   type SearchResultsComponentSignature,
 } from '@cardstack/runtime-common';
 
-import { saveCard, testRealmURL } from '@cardstack/host/tests/helpers';
+import {
+  provideConsumeContext,
+  saveCard,
+  testRealmURL,
+} from '@cardstack/host/tests/helpers';
 import {
   CardDef,
   setupBaseRealm,
 } from '@cardstack/host/tests/helpers/base-realm';
+import { renderCard } from '@cardstack/host/tests/helpers/render-component';
 import { setupRenderingTest } from '@cardstack/host/tests/helpers/setup';
 
 import { FrameSettingsField, PosterBoard } from './poster-board';
 
-// Host services register themselves in this registry from their own app files,
-// which this package's TS project never loads. Declare the one service these
-// tests touch, structurally, with just the member they use — `Loader` is the
-// real type, so downstream `saveCard` / `loader.import` calls check for real.
-declare module '@ember/service' {
-  interface Registry {
-    'loader-service': { loader: Loader };
-  }
+import type { CardContext } from 'https://cardstack.com/base/card-api';
+
+// This file is type-checked by two projects: experiments-realm's (which never
+// loads host's service-registry augmentations, so `getService` returns a bare
+// object) and host's (which loads the real `LoaderService` registry entry). A
+// registry augmentation here would conflict with host's, so cast structurally
+// to just the member these tests use — `Loader` is the real type, so
+// downstream `saveCard` / `loader.import` calls check for real.
+function loaderService(): { loader: Loader } {
+  return getService('loader-service') as unknown as { loader: Loader };
 }
 
 // The board renders its tiles through `@context.searchResultsComponent`, which
@@ -81,38 +86,13 @@ class StubSearchResults extends GlimmerComponent<SearchResultsComponentSignature
   <template>{{yield this.results}}</template>
 }
 
-class TestCardContextProvider extends GlimmerComponent<{
-  Blocks: { default: [] };
-}> {
-  @provide(CardContextName)
-  get cardContext() {
-    return { searchResultsComponent: StubSearchResults };
-  }
-
-  <template>
-    {{! template-lint-disable no-yield-only }}
-    {{yield}}
-  </template>
-}
-
 async function renderPosterBoard(board?: PosterBoard) {
-  let loader = getService('loader-service').loader;
-  let api = await loader.import<
-    typeof import('https://cardstack.com/base/card-api')
-  >('https://cardstack.com/base/card-api');
-  let card = board ?? new PosterBoard({});
-  let Board = api.getComponent(card);
-  await render(
-    <template>
-      <TestCardContextProvider>
-        <Board @format='isolated' />
-      </TestCardContextProvider>
-    </template>,
-  );
+  let loader = loaderService().loader;
+  await renderCard(loader, board ?? new PosterBoard({}), 'isolated');
 }
 
 async function makeSavedNotes() {
-  let loader = getService('loader-service').loader;
+  let loader = loaderService().loader;
   class Note extends CardDef {
     static displayName = 'Note';
   }
@@ -132,6 +112,11 @@ export function runTests() {
     hooks.beforeEach(function () {
       stubEntries = [];
       capturedQueries = [];
+      // Partial by design: CardContextConsumer spreads defaults over what the
+      // provider supplies, so only the member the board reads is stubbed.
+      provideConsumeContext(CardContextName, {
+        searchResultsComponent: StubSearchResults,
+      } as unknown as CardContext);
     });
 
     test('poster-board renders its zoom toolbar and the controls zoom, reset, and fit', async function (assert) {

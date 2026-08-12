@@ -34,10 +34,7 @@
         "../base/*.d.ts",
         "../base/*"
       ],
-      "@cardstack/host/tests/*": ["../host/tests/*"],
-      "ember-provide-consume-context": [
-        "../base/node_modules/ember-provide-consume-context/declarations/index.d.ts"
-      ]
+      "@cardstack/host/tests/*": ["../host/tests/*"]
     },
     "types": ["@cardstack/local-types"]
   },
