@@ -2,15 +2,59 @@ import {
   Component,
   field,
   contains,
+  linksTo,
   StringField,
 } from '@cardstack/base/card-api';
+import DateField from '@cardstack/base/date';
 import NumberField from '@cardstack/base/number';
 import enumField from '@cardstack/base/enum';
 import ShieldIcon from '@cardstack/boxel-icons/shield';
 import { htmlSafe } from '@ember/template';
 
 import { PersonBase } from './person-base';
+import { Project } from './project';
+import { Vendor } from './vendor';
 import { stateColor, stateColorOf, type StateColor } from './utils/index';
+
+// Inside this window the contract window turns amber; past zero it turns red.
+const EXPIRY_WARNING_DAYS = 30;
+
+// Signed variant of utils' daysBetween — that helper clamps at 0
+// (Math.max(0, …)), which is right for "days since applied" but erases the
+// difference between "ends today" and "ended three weeks ago". A contract
+// window needs the sign.
+function signedDaysUntil(date?: Date | string | null): number | undefined {
+  if (!date) {
+    return undefined;
+  }
+  let end = new Date(date);
+  if (isNaN(end.getTime())) {
+    return undefined;
+  }
+  return Math.round((end.getTime() - Date.now()) / 86400000);
+}
+
+// Shared by every format so a tile and the isolated view can never disagree
+// about how urgent the same end date is.
+export function expiryTone(
+  days: number | undefined,
+): 'expired' | 'warning' | undefined {
+  if (days == null) {
+    return undefined;
+  }
+  if (days < 0) {
+    return 'expired';
+  }
+  if (days <= EXPIRY_WARNING_DAYS) {
+    return 'warning';
+  }
+  return undefined;
+}
+
+export const EXPIRY_TONE_COLORS: Record<string, StateColor> = {
+  warning: stateColor('amber'),
+  expired: stateColor('red'),
+};
 
 export const CONTRACTOR_STATUSES = ['active', 'inactive', 'terminated'];
 
@@ -42,7 +86,7 @@ export class Contractor extends PersonBase {
   static displayName = 'Contractor';
   static icon = ShieldIcon;
 
-  @field contractStatus = contains(ContractorStatusField);
+  @field status = contains(ContractorStatusField);
   @field billableRate = contains(NumberField, {
     description: 'Hourly or day rate in dollars',
   });
@@ -50,6 +94,64 @@ export class Contractor extends PersonBase {
     description: 'VAT ID for invoicing',
   });
   @field invoiceFrequency = contains(InvoiceFrequencyField);
+  @field contractStartDate = contains(DateField);
+  @field contractEndDate = contains(DateField, {
+    description: 'When the current contract window closes',
+  });
+  // One-directional by design — a deliberate live-query choice over a
+  // linksToMany back-reference on Contractor, matching PtoRequest's employee link.
+  @field vendor = linksTo(() => Vendor, {
+    description: 'Agency or supplier this contractor comes through',
+  });
+  // One-directional by design — a deliberate live-query choice over a
+  // linksToMany back-reference on Contractor, matching PtoRequest's employee link.
+  @field project = linksTo(() => Project, {
+    description: 'Project this contractor is currently staffed on',
+  });
+
+  // Signed days until the contract window closes; negative once expired,
+  // undefined when no end date is set (an open-ended engagement is not the
+  // same fact as one expiring today).
+  @field daysRemaining = contains(NumberField, {
+    computeVia: function (this: Contractor) {
+      return signedDaysUntil(this.contractEndDate);
+    },
+  });
+
+  // Denormalized for fitted — prerendered fitted reads this own attribute
+  // instead of re-deriving from contractEndDate at render time, and the
+  // grid stays truthful even before hydration. '' (not undefined) when
+  // open-ended so the tile row simply doesn't render.
+  @field expiryLabel = contains(StringField, {
+    computeVia: function (this: Contractor) {
+      let days = signedDaysUntil(this.contractEndDate);
+      if (days == null) {
+        return '';
+      }
+      if (days < 0) {
+        return 'expired';
+      }
+      if (days === 0) {
+        return 'ends today';
+      }
+      return `${days}d left`;
+    },
+  });
+
+  // Denormalized for fitted — prerendered fitted does not resolve linksTo,
+  // so the tall tiles read these own attributes instead of walking
+  // vendor/project. Same pattern as OnboardingChecklist.personName.
+  @field vendorName = contains(StringField, {
+    computeVia: function (this: Contractor) {
+      return this.vendor?.name ?? '';
+    },
+  });
+
+  @field projectName = contains(StringField, {
+    computeVia: function (this: Contractor) {
+      return this.project?.name ?? '';
+    },
+  });
 
   @field title = contains(StringField, {
     computeVia: function (this: Contractor) {
@@ -61,7 +163,7 @@ export class Contractor extends PersonBase {
     get statusColor() {
       return stateColorOf(
         CONTRACTOR_STATUS_COLORS,
-        this.args.model?.contractStatus,
+        this.args.model?.status,
       );
     }
 
@@ -77,6 +179,33 @@ export class Contractor extends PersonBase {
         return undefined;
       }
       return `$${rate}/hr`;
+    }
+
+    get expiryToneKey(): string | undefined {
+      return expiryTone(this.args.model?.daysRemaining ?? undefined);
+    }
+
+    get daysRemainingLabel(): string | undefined {
+      let days = this.args.model?.daysRemaining;
+      if (days == null) {
+        return undefined;
+      }
+      if (days < 0) {
+        return `expired ${Math.abs(days)}d ago`;
+      }
+      if (days === 0) {
+        return 'ends today';
+      }
+      return `${days} days remaining`;
+    }
+
+    get daysRemainingStyle() {
+      let tone = this.expiryToneKey;
+      if (!tone) {
+        return htmlSafe('');
+      }
+      let c = stateColorOf(EXPIRY_TONE_COLORS, tone);
+      return htmlSafe(`background: ${c.bg}; color: ${c.fg};`);
     }
 
     <template>
@@ -95,9 +224,9 @@ export class Contractor extends PersonBase {
             <h1>{{@model.title}}</h1>
             <p class='byline'>Contractor</p>
             <div class='pill-row'>
-              {{#if @model.contractStatus}}
+              {{#if @model.status}}
                 <span class='pill' style={{this.statusPillStyle}}>
-                  <span class='pill-dot'></span>{{@model.contractStatus}}
+                  <span class='pill-dot'></span>{{@model.status}}
                 </span>
               {{/if}}
               {{#if this.rateLabel}}
@@ -134,7 +263,30 @@ export class Contractor extends PersonBase {
             <h2 class='panel-title'>Contract</h2>
             <dl class='facts stacked'>
               <dt>Status</dt>
-              <dd>{{if @model.contractStatus @model.contractStatus '—'}}</dd>
+              <dd>{{if @model.status @model.status '—'}}</dd>
+              <dt>Starts</dt>
+              <dd>{{#if @model.contractStartDate}}<@fields.contractStartDate
+                  />{{else}}&mdash;{{/if}}</dd>
+              <dt>Ends</dt>
+              <dd>{{#if @model.contractEndDate}}<@fields.contractEndDate
+                  />{{else}}&mdash; open-ended{{/if}}</dd>
+              <dt>Remaining</dt>
+              <dd>{{#if this.daysRemainingLabel}}
+                  <span
+                    class='remaining {{if this.expiryToneKey "toned"}}'
+                    style={{this.daysRemainingStyle}}
+                  >{{this.daysRemainingLabel}}</span>
+                {{else}}&mdash;{{/if}}</dd>
+              <dt>Vendor</dt>
+              <dd>{{#if @model.vendor}}<@fields.vendor
+                    @format='atom'
+                    @displayContainer={{false}}
+                  />{{else}}&mdash; direct{{/if}}</dd>
+              <dt>Project</dt>
+              <dd>{{#if @model.project}}<@fields.project
+                    @format='atom'
+                    @displayContainer={{false}}
+                  />{{else}}&mdash; unassigned{{/if}}</dd>
               <dt>VAT ID</dt>
               <dd>{{if @model.vatId @model.vatId '—'}}</dd>
             </dl>
@@ -281,6 +433,14 @@ export class Contractor extends PersonBase {
         .facts.stacked dd {
           padding-top: 0.1rem;
         }
+        .remaining.toned {
+          display: inline-flex;
+          font-size: var(--boxel-font-size-xs);
+          font-weight: 700;
+          padding: 0.18em 0.5em;
+          border-radius: 3px;
+          white-space: nowrap;
+        }
         @container iso (max-width: 40rem) {
           .body {
             grid-template-columns: 1fr;
@@ -301,8 +461,19 @@ export class Contractor extends PersonBase {
     get statusStyle() {
       let c = stateColorOf(
         CONTRACTOR_STATUS_COLORS,
-        this.args.model?.contractStatus,
+        this.args.model?.status,
       );
+      return htmlSafe(`background: ${c.bg}; color: ${c.fg};`);
+    }
+
+    // Chip only appears when the window is closing (or closed) — an
+    // expiry that needs no action is noise in a one-line row.
+    get expiryChipStyle() {
+      let tone = expiryTone(this.args.model?.daysRemaining ?? undefined);
+      if (!tone) {
+        return undefined;
+      }
+      let c = stateColorOf(EXPIRY_TONE_COLORS, tone);
       return htmlSafe(`background: ${c.bg}; color: ${c.fg};`);
     }
 
@@ -317,11 +488,17 @@ export class Contractor extends PersonBase {
           <span class='ce-name'>{{if @model.name @model.name 'Unnamed'}}</span>
         </div>
         <div class='ce-side'>
-          {{#if @model.contractStatus}}
+          {{#if @model.status}}
             <span
               class='ce-status'
               style={{this.statusStyle}}
-            >{{@model.contractStatus}}</span>
+            >{{@model.status}}</span>
+          {{/if}}
+          {{#if this.expiryChipStyle}}
+            <span
+              class='ce-status'
+              style={{this.expiryChipStyle}}
+            >{{@model.expiryLabel}}</span>
           {{/if}}
         </div>
       </div>
@@ -382,9 +559,24 @@ export class Contractor extends PersonBase {
   };
 
   static atom = class Atom extends Component<typeof this> {
+    get expiryChipStyle() {
+      let tone = expiryTone(this.args.model?.daysRemaining ?? undefined);
+      if (!tone) {
+        return undefined;
+      }
+      let c = stateColorOf(EXPIRY_TONE_COLORS, tone);
+      return htmlSafe(`background: ${c.bg}; color: ${c.fg};`);
+    }
+
     <template>
       <span class='contractor-atom'>
         <span class='contractor-atom-name'>{{@model.title}}</span>
+        {{#if this.expiryChipStyle}}
+          <span
+            class='contractor-atom-chip'
+            style={{this.expiryChipStyle}}
+          >{{@model.expiryLabel}}</span>
+        {{/if}}
       </span>
       <style scoped>
         .contractor-atom {
@@ -400,6 +592,14 @@ export class Contractor extends PersonBase {
           text-overflow: ellipsis;
           white-space: nowrap;
         }
+        .contractor-atom-chip {
+          flex: none;
+          font-size: 0.6875rem;
+          font-weight: 700;
+          padding: 0.1em 0.4em;
+          border-radius: 3px;
+          white-space: nowrap;
+        }
       </style>
     </template>
   };
@@ -408,7 +608,7 @@ export class Contractor extends PersonBase {
     get statusColor() {
       return stateColorOf(
         CONTRACTOR_STATUS_COLORS,
-        this.args.model?.contractStatus,
+        this.args.model?.status,
       );
     }
 
@@ -426,6 +626,18 @@ export class Contractor extends PersonBase {
       return `$${rate}/hr`;
     }
 
+    // Attribute-only: expiryLabel and daysRemaining are the contractor's OWN
+    // (denormalized/computed-scalar) attributes — no linksTo read happens in
+    // this prerendered format.
+    get expiryChipStyle() {
+      let tone = expiryTone(this.args.model?.daysRemaining ?? undefined);
+      if (!tone) {
+        return undefined;
+      }
+      let c = stateColorOf(EXPIRY_TONE_COLORS, tone);
+      return htmlSafe(`background: ${c.bg}; color: ${c.fg};`);
+    }
+
     <template>
       <article class='fit'>
         <div class='fit-top'>
@@ -441,9 +653,9 @@ export class Contractor extends PersonBase {
           <div class='fit-head'>
             <h3 class='fit-name'>{{@model.title}}</h3>
           </div>
-          {{#if @model.contractStatus}}
+          {{#if @model.status}}
             <span class='fit-pill' style={{this.statusPillStyle}}>
-              <span class='pill-dot'></span>{{@model.contractStatus}}
+              <span class='pill-dot'></span>{{@model.status}}
             </span>
           {{/if}}
         </div>
@@ -452,14 +664,34 @@ export class Contractor extends PersonBase {
           {{#if this.rateLabel}}
             <span class='money'>{{this.rateLabel}}</span>
           {{/if}}
+          {{#if @model.expiryLabel}}
+            {{#if this.expiryChipStyle}}
+              <span
+                class='fit-expiry'
+                style={{this.expiryChipStyle}}
+              >{{@model.expiryLabel}}</span>
+            {{else}}
+              <span class='fit-sub'>{{@model.expiryLabel}}</span>
+            {{/if}}
+          {{/if}}
         </div>
 
         <dl class='fit-add'>
+          {{#if @model.contractEndDate}}
+            <div><dt>Ends</dt><dd><@fields.contractEndDate /></dd></div>
+          {{/if}}
           {{#if @model.invoiceFrequency}}
             <div><dt>Invoice</dt><dd>{{@model.invoiceFrequency}}</dd></div>
           {{/if}}
           {{#if @model.vatId}}
             <div><dt>VAT</dt><dd>{{@model.vatId}}</dd></div>
+          {{/if}}
+          {{! Denormalized own attributes — safe in prerendered fitted. }}
+          {{#if @model.vendorName}}
+            <div class='deep'><dt>Vendor</dt><dd>{{@model.vendorName}}</dd></div>
+          {{/if}}
+          {{#if @model.projectName}}
+            <div class='deep'><dt>Project</dt><dd>{{@model.projectName}}</dd></div>
           {{/if}}
         </dl>
       </article>
@@ -556,6 +788,21 @@ export class Contractor extends PersonBase {
           letter-spacing: -0.02em;
           font-variant-numeric: tabular-nums;
         }
+        .fit-sub {
+          font-size: var(--fit-small);
+          color: var(--muted-foreground, var(--boxel-450));
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .fit-expiry {
+          align-self: flex-start;
+          font-size: var(--fit-small);
+          font-weight: 700;
+          padding: 0.1em 0.4em;
+          border-radius: 3px;
+          white-space: nowrap;
+        }
         .fit-add {
           display: none;
           margin: 0;
@@ -584,6 +831,11 @@ export class Contractor extends PersonBase {
           text-overflow: ellipsis;
         }
 
+        /* Vendor/project rows only join on the tall cells. */
+        .fit-add > .deep {
+          display: none;
+        }
+
         @container fitted-card (height > 80px) {
           .fit-mid {
             display: flex;
@@ -592,6 +844,14 @@ export class Contractor extends PersonBase {
         @container fitted-card (width > 240px) {
           .fit-mid {
             display: flex;
+          }
+        }
+        /* Double Strip (250×65): the expiry chip row half-clips — the rate
+           figure alone fits, so the chip yields below 105px. */
+        @container fitted-card (height < 105px) {
+          .fit-expiry,
+          .fit-mid .fit-sub {
+            display: none;
           }
         }
         @container fitted-card (height > 130px) and (width >= 170px) {
@@ -604,6 +864,12 @@ export class Contractor extends PersonBase {
           .fit-add {
             display: grid;
             grid-template-columns: 1fr 1fr;
+          }
+        }
+        /* TIER 5 — vendor + project names on tall cells. */
+        @container fitted-card (height >= 170px) and (width >= 170px) {
+          .fit-add > .deep {
+            display: flex;
           }
         }
         @container fitted-card (height <= 90px) {

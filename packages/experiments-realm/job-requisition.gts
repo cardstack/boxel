@@ -64,7 +64,7 @@ export class JobRequisition extends CardDef {
     description: 'Maximum salary in dollars',
   });
   @field approvalChain = contains(ApprovalChainField);
-  @field requisitionStatus = contains(RequisitionStatusField);
+  @field status = contains(RequisitionStatusField);
   @field targetFillDate = contains(DateField);
   @field createdDate = contains(DateField);
   @field filledDate = contains(DateField);
@@ -73,12 +73,6 @@ export class JobRequisition extends CardDef {
   @field displayTitle = contains(StringField, {
     computeVia: function (this: JobRequisition) {
       return this.title?.trim() || 'Unnamed Requisition';
-    },
-  });
-
-  @field status = contains(StringField, {
-    computeVia: function (this: JobRequisition) {
-      return this.requisitionStatus || 'draft';
     },
   });
 
@@ -489,6 +483,10 @@ export class JobRequisition extends CardDef {
           {{/if}}
         </div>
 
+        {{#if @model.description}}
+          <p class='fit-desc'>{{@model.description}}</p>
+        {{/if}}
+
         <dl class='fit-add'>
           {{#if this.targetFillLabel}}
             <div><dt>Target</dt><dd>{{this.targetFillLabel}}</dd></div>
@@ -580,6 +578,16 @@ export class JobRequisition extends CardDef {
           letter-spacing: -0.02em;
           font-variant-numeric: tabular-nums;
         }
+        .fit-desc {
+          display: none;
+          margin: 0;
+          font-size: var(--fit-small);
+          color: var(--muted-foreground, var(--boxel-450));
+          line-height: 1.45;
+          -webkit-line-clamp: 3;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+        }
         .fit-add {
           display: none;
           margin: 0;
@@ -637,6 +645,12 @@ export class JobRequisition extends CardDef {
           .fit-add {
             display: grid;
             grid-template-columns: 1fr 1fr;
+          }
+        }
+        /* TIER 5 — description excerpt on tall cells. */
+        @container fitted-card (height >= 170px) and (width >= 170px) {
+          .fit-desc {
+            display: -webkit-box;
           }
         }
         /* Short strip: horizontal, single-line name; the tall salary figure

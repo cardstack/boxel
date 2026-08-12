@@ -16,7 +16,8 @@
       "photo": {
         "url": "https://images.pexels.com/photos/1181690/pexels-photo-1181690.jpeg",
         "sourceMode": "url"
-      }
+      },
+      "ptoAllowanceDays": 25
     },
     "relationships": {
       "manager": {

@@ -2,23 +2,22 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Jordan Ellis",
+      "name": "Theo Bramwell",
       "status": "interviewing",
-      "boardOrder": 1,
+      "boardOrder": 2,
       "appliedRole": "Frontend Engineer",
       "appliedDate": "2026-07-28",
       "resumeText": null,
       "cardInfo": {
-        "name": "Jordan Ellis",
+        "name": "Theo Bramwell",
         "summary": null,
         "cardThumbnailURL": null,
         "notes": null
       },
-      "decisionDate": "2026-08-10",
+      "decisionDate": null,
       "overallScore": null,
       "rejectionReason": null,
-      "offerSalary": null,
-      "email": "jordan.ellis@example.com",
+      "email": "theo.bramwell@example.com",
       "phone": "+1 555 0140",
       "linkedInUrl": null,
       "portfolioUrl": null,
@@ -53,7 +52,14 @@
         "sourceMode": "url"
       },
       "rejectionNote": null,
-      "offerState": "accepted"
+      "offerState": "",
+      "backgroundCheck": {
+        "status": null,
+        "provider": null,
+        "requestedDate": null,
+        "completedDate": null,
+        "notes": null
+      }
     },
     "relationships": {
       "position": {
@@ -124,11 +130,6 @@
       "offer": {
         "links": {
           "self": null
-        }
-      },
-      "hiredAs": {
-        "links": {
-          "self": "../Employee/cfb2f5a4-edae-4d10-ad7a-c8da5210d137"
         }
       }
     },

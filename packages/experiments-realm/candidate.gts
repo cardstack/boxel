@@ -28,6 +28,7 @@ import { Employee } from './employee';
 import { Position } from './position';
 import { Offer } from './offer';
 import { Skill, SKILL_CATEGORY_COLORS } from './skill';
+import { BackgroundCheckField } from './background-check-field';
 import { InterviewFeedbackField } from './interview-feedback-field';
 import { RejectionReasonField } from './rejection-reason-field';
 import { WorkHistoryEntryField } from './work-history-entry-field';
@@ -103,12 +104,14 @@ export class Candidate extends PersonBase {
   @field workHistory = containsMany(WorkHistoryEntryField);
   @field education = containsMany(EducationEntryField);
   @field overallScore = contains(ScoreField);
+  // Status-tracking only — recording what the screening vendor reported, not
+  // running the check. See background-check-field.gts for the boundary.
+  @field backgroundCheck = contains(BackgroundCheckField);
   @field rejectionReason = contains(RejectionReasonField);
   // Free-text detail alongside the categorical reason — the reason drives
   // the Offers dashboard breakdown, this is the human-readable "what
   // happened" a recruiter can read back later.
   @field rejectionNote = contains(StringField);
-  @field offerSalary = contains(NumberField);
 
   // Scalar mirror of the linked Offer's lifecycle, written by the offer
   // commands. The Pipeline board needs to tell "drafted but not sent" from
@@ -119,7 +122,6 @@ export class Candidate extends PersonBase {
     description:
       "One of draft | extended | accepted | declined — mirrors the linked Offer's status for cheap board-side checks",
   });
-  @field offerApprovedBy = linksTo(() => Employee);
   @field hiredAs = linksTo(() => Employee);
   @field boardOrder = contains(NumberField, {
     description:
@@ -423,6 +425,13 @@ export class Candidate extends PersonBase {
                     {{/if}}{{fb.notes}}</dd>
                 {{/each}}
               </dl>
+            {{/if}}
+
+            <h2 class='panel-title spaced'>Background check</h2>
+            {{#if @model.backgroundCheck.status}}
+              <@fields.backgroundCheck />
+            {{else}}
+              <p class='empty'>No background check started.</p>
             {{/if}}
 
             {{#if @model.position.interviewPlan}}

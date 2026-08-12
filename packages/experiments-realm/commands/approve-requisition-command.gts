@@ -106,14 +106,14 @@ export class ApproveRequisitionCommand extends Command<
 
     // Update requisition status to 'approved' after chain approval
     if (isFullyApproved) {
-      requisition.requisitionStatus = 'approved';
+      requisition.status = 'approved';
       await new SaveCardCommand(this.commandContext).execute({
         card: requisition,
       });
     }
 
     return new ApproveRequisitionResult({
-      message: `Requisition approval step processed. Status: ${requisition.requisitionStatus || 'pending'}`,
+      message: `Requisition approval step processed. Status: ${requisition.status || 'pending'}`,
       requisition: requisition,
       position: createdPosition,
     });

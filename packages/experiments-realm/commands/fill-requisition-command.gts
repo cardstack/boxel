@@ -54,7 +54,7 @@ export class FillRequisitionCommand extends Command<
       );
     }
 
-    let currentStatus = requisition.requisitionStatus;
+    let currentStatus = requisition.status;
     if (currentStatus !== 'posted' && currentStatus !== 'approved') {
       throw new Error(
         `Requisition must be in "posted" or "approved" status to be filled (current status: ${
@@ -65,7 +65,7 @@ export class FillRequisitionCommand extends Command<
 
     // Mark as filled if all positions are filled
     if (filledCount >= headcount) {
-      requisition.requisitionStatus = 'filled';
+      requisition.status = 'filled';
       requisition.filledDate = new Date();
     }
 
@@ -75,7 +75,7 @@ export class FillRequisitionCommand extends Command<
 
     return new FillRequisitionResult({
       message: `Requisition updated: ${filledCount}/${headcount} positions filled. Status: ${
-        requisition.requisitionStatus
+        requisition.status
       }`,
       requisition: requisition,
     });

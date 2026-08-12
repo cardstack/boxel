@@ -63,7 +63,21 @@ import {
   Contractor,
   CONTRACTOR_STATUSES,
   CONTRACTOR_STATUS_COLORS,
+  EXPIRY_TONE_COLORS,
+  expiryTone,
 } from '../contractor';
+import {
+  PtoRequest,
+  PTO_STATUSES,
+  PTO_STATUS_COLORS,
+  PTO_TYPE_COLORS,
+} from '../pto-request';
+import {
+  PerformanceReview,
+  ReviewCycle,
+  REVIEW_STATUSES,
+  REVIEW_STATUS_COLORS,
+} from '../performance-review';
 import { JobRequisition } from '../job-requisition';
 import {
   REQUISITION_STATUSES,
@@ -87,7 +101,9 @@ import { ApproveOfferCommand } from '../commands/approve-offer-command';
 import { ScreenApplicationCommand } from '../commands/screen-application-command';
 import { ExtendOfferCommand } from '../commands/extend-offer-command';
 import { AdvanceToOfferCommand } from '../commands/advance-to-offer-command';
+import { ScheduleInterviewCommand } from '../commands/schedule-interview-command';
 import { RejectCandidateDialog } from '../components/reject-candidate-dialog';
+import { ScheduleInterviewDialog } from '../components/schedule-interview-dialog';
 import { REJECTION_REASON_LABELS } from '../rejection-reason-field';
 import {
   buildOrgTree,
@@ -120,6 +136,8 @@ const TABS = [
   'Requisitions',
   'Onboarding',
   'Contractors',
+  'PTO',
+  'Reviews',
   'Directory',
   'Calendar',
   'Org Chart',
@@ -132,6 +150,29 @@ interface PositionNavFilter extends NavFilter {
 
 class Isolated extends Component<typeof TalentResourceTracker> {
   tabs = TABS;
+
+  // Rail IA: same 13 destinations, grouped. Labels only regroup — the tab
+  // keys stay identical so deep-links from dashboard chips keep working.
+  // Dashboard rides in an unlabeled first group.
+  get railGroups(): { label?: string; tabs: Tab[] }[] {
+    return [
+      { tabs: ['Dashboard'] },
+      {
+        label: 'Hiring',
+        tabs: [
+          'Requisitions',
+          'Positions',
+          'Applications',
+          'Pipeline',
+          'Offers',
+          'Onboarding',
+        ],
+      },
+      { label: 'People', tabs: ['Directory', 'Org Chart', 'PTO', 'Reviews'] },
+      { label: 'Resources', tabs: ['Contractors'] },
+      { label: 'Planning', tabs: ['Calendar'] },
+    ];
+  }
 
   @tracked activeTab: Tab = 'Dashboard';
   @tracked actionError: string | undefined;
@@ -151,7 +192,7 @@ class Isolated extends Component<typeof TalentResourceTracker> {
   @tracked offersSearch = '';
   @tracked offersView: 'grid' | 'strip' = 'grid';
   @tracked requisitionsSearch = '';
-  @tracked requisitionStatusFilter = 'all';
+  @tracked requisitionsStatusFilter = 'all';
   @tracked requisitionsView: 'grid' | 'strip' | 'table' = 'grid';
   @tracked onboardingSearch = '';
   @tracked onboardingStatusFilter = 'all';
@@ -159,6 +200,12 @@ class Isolated extends Component<typeof TalentResourceTracker> {
   @tracked contractorSearch = '';
   @tracked contractorStatusFilter = 'all';
   @tracked contractorsView: 'grid' | 'strip' | 'table' = 'grid';
+  @tracked ptoSearch = '';
+  @tracked ptoStatusFilter = 'all';
+  @tracked ptoView: 'grid' | 'strip' | 'table' = 'grid';
+  @tracked reviewsSearch = '';
+  @tracked reviewStatusFilter = 'all';
+  @tracked reviewsView: 'grid' | 'strip' | 'table' = 'grid';
   @tracked reviewMode = false;
   @tracked reviewIndex = 0;
   @tracked reviewedCount = 0;
@@ -189,6 +236,12 @@ class Isolated extends Component<typeof TalentResourceTracker> {
   };
   setContractorsView = (view: 'grid' | 'strip' | 'table') => {
     this.contractorsView = view;
+  };
+  setPtoView = (view: 'grid' | 'strip' | 'table') => {
+    this.ptoView = view;
+  };
+  setReviewsView = (view: 'grid' | 'strip' | 'table') => {
+    this.reviewsView = view;
   };
 
   private debouncedSetPositionsSearch = debounce((value: string) => {
@@ -239,14 +292,32 @@ class Isolated extends Component<typeof TalentResourceTracker> {
     this.debouncedSetContractorSearch(value);
   };
 
+  private debouncedSetPtoSearch = debounce((value: string) => {
+    this.ptoSearch = value;
+  }, 250);
+
+  setPtoSearch = (value: string) => {
+    this.debouncedSetPtoSearch(value);
+  };
+
+  private debouncedSetReviewsSearch = debounce((value: string) => {
+    this.reviewsSearch = value;
+  }, 250);
+
+  setReviewsSearch = (value: string) => {
+    this.debouncedSetReviewsSearch(value);
+  };
+
   // Status chip rows for the three v2 tabs — the same idiom as the
   // Directory's department chips, but over each type's fixed enum.
-  requisitionStatuses = REQUISITION_STATUSES;
+  requisitionsStatuses = REQUISITION_STATUSES;
   onboardingStatuses = ONBOARDING_CHECKLIST_STATUSES;
   contractorStatuses = CONTRACTOR_STATUSES;
+  ptoStatuses = PTO_STATUSES;
+  reviewStatuses = REVIEW_STATUSES;
 
-  setRequisitionStatusFilter = (status: string) => {
-    this.requisitionStatusFilter = status;
+  setRequisitionsStatusFilter = (status: string) => {
+    this.requisitionsStatusFilter = status;
   };
 
   setOnboardingStatusFilter = (status: string) => {
@@ -255,6 +326,14 @@ class Isolated extends Component<typeof TalentResourceTracker> {
 
   setContractorStatusFilter = (status: string) => {
     this.contractorStatusFilter = status;
+  };
+
+  setPtoStatusFilter = (status: string) => {
+    this.ptoStatusFilter = status;
+  };
+
+  setReviewStatusFilter = (status: string) => {
+    this.reviewStatusFilter = status;
   };
 
   get filteredPositions(): { item: Position; index: number }[] {
@@ -411,6 +490,8 @@ class Isolated extends Component<typeof TalentResourceTracker> {
   contractorsQuery = this.liveQuery(Contractor);
   requisitionsQuery = this.liveQuery(JobRequisition);
   onboardingChecklistsQuery = this.liveQuery(OnboardingChecklist);
+  ptoRequestsQuery = this.liveQuery(PtoRequest);
+  reviewsQuery = this.liveQuery(PerformanceReview);
 
   // ── Entry-API wire queries for the grid/strip views ─────────────────────
   // The six list tabs render their tiles through
@@ -488,10 +569,10 @@ class Isolated extends Component<typeof TalentResourceTracker> {
       return undefined;
     }
     let every: Filter[] = [this.searchTextFilter(ref, this.requisitionsSearch)];
-    if (this.requisitionStatusFilter !== 'all') {
+    if (this.requisitionsStatusFilter !== 'all') {
       every.push({
         on: ref,
-        eq: { requisitionStatus: this.requisitionStatusFilter },
+        eq: { status: this.requisitionsStatusFilter },
       });
     }
     return {
@@ -535,13 +616,51 @@ class Isolated extends Component<typeof TalentResourceTracker> {
     if (this.contractorStatusFilter !== 'all') {
       every.push({
         on: ref,
-        eq: { contractStatus: this.contractorStatusFilter },
+        eq: { status: this.contractorStatusFilter },
       });
     }
     return {
       ...searchEntryWireQueryFromQuery({
         filter: { every },
         sort: [{ by: 'name', on: ref, direction: 'asc' }],
+      }),
+      realms: this.realms,
+    };
+  }
+
+  // Newest requests first — the one filed this morning is the one the
+  // approver is looking for.
+  get ptoSearchQuery(): SearchEntryWireQuery | undefined {
+    let ref = identifyCard(PtoRequest);
+    if (!ref || !this.realms.length) {
+      return undefined;
+    }
+    let every: Filter[] = [this.searchTextFilter(ref, this.ptoSearch)];
+    if (this.ptoStatusFilter !== 'all') {
+      every.push({ on: ref, eq: { status: this.ptoStatusFilter } });
+    }
+    return {
+      ...searchEntryWireQueryFromQuery({
+        filter: { every },
+        sort: [{ by: 'requestedDate', on: ref, direction: 'desc' }],
+      }),
+      realms: this.realms,
+    };
+  }
+
+  get reviewsSearchQuery(): SearchEntryWireQuery | undefined {
+    let ref = identifyCard(PerformanceReview);
+    if (!ref || !this.realms.length) {
+      return undefined;
+    }
+    let every: Filter[] = [this.searchTextFilter(ref, this.reviewsSearch)];
+    if (this.reviewStatusFilter !== 'all') {
+      every.push({ on: ref, eq: { status: this.reviewStatusFilter } });
+    }
+    return {
+      ...searchEntryWireQueryFromQuery({
+        filter: { every },
+        sort: [{ by: 'employeeName', on: ref, direction: 'asc' }],
       }),
       realms: this.realms,
     };
@@ -660,8 +779,8 @@ class Isolated extends Component<typeof TalentResourceTracker> {
     let q = this.requisitionsSearch.trim().toLowerCase();
     return this.requisitions.filter((req) => {
       let statusOk =
-        this.requisitionStatusFilter === 'all' ||
-        (req.requisitionStatus ?? 'draft') === this.requisitionStatusFilter;
+        this.requisitionsStatusFilter === 'all' ||
+        (req.status ?? 'draft') === this.requisitionsStatusFilter;
       let textOk =
         !q ||
         req.displayTitle?.toLowerCase().includes(q) ||
@@ -692,14 +811,107 @@ class Isolated extends Component<typeof TalentResourceTracker> {
     return this.contractors.filter((contractor) => {
       let statusOk =
         this.contractorStatusFilter === 'all' ||
-        contractor.contractStatus === this.contractorStatusFilter;
+        contractor.status === this.contractorStatusFilter;
       let textOk = !q || contractor.name?.toLowerCase().includes(q);
       return statusOk && Boolean(textOk);
     });
   }
 
+  get ptoRequests(): PtoRequest[] {
+    return (this.ptoRequestsQuery?.instances ?? []) as PtoRequest[];
+  }
+
+  get performanceReviews(): PerformanceReview[] {
+    return (this.reviewsQuery?.instances ?? []) as PerformanceReview[];
+  }
+
+  // Client-side mirrors of the PTO/Reviews wire queries for their TABLE
+  // views — same mirroring contract as filteredContractors above. Sorted to
+  // match the wire query so grid ↔ table shows the same rows in the same
+  // order.
+  get filteredPtoRequests(): PtoRequest[] {
+    let q = this.ptoSearch.trim().toLowerCase();
+    return this.ptoRequests
+      .filter((req) => {
+        let statusOk =
+          this.ptoStatusFilter === 'all' ||
+          (req.status ?? 'draft') === this.ptoStatusFilter;
+        let textOk =
+          !q ||
+          req.employeeName?.toLowerCase().includes(q) ||
+          req.ptoType?.toLowerCase().includes(q);
+        return statusOk && Boolean(textOk);
+      })
+      .sort((a, b) => {
+        let aT = a.requestedDate ? new Date(a.requestedDate).getTime() : 0;
+        let bT = b.requestedDate ? new Date(b.requestedDate).getTime() : 0;
+        return bT - aT;
+      });
+  }
+
+  get filteredReviews(): PerformanceReview[] {
+    let q = this.reviewsSearch.trim().toLowerCase();
+    return this.performanceReviews
+      .filter((review) => {
+        let statusOk =
+          this.reviewStatusFilter === 'all' ||
+          (review.status ?? 'draft') === this.reviewStatusFilter;
+        let textOk =
+          !q ||
+          review.employeeName?.toLowerCase().includes(q) ||
+          review.cycleName?.toLowerCase().includes(q);
+        return statusOk && Boolean(textOk);
+      })
+      .sort((a, b) =>
+        (a.employeeName ?? '').localeCompare(b.employeeName ?? ''),
+      );
+  }
+
+  // Per-employee PTO balance for the current year: allowance minus days on
+  // APPROVED requests starting this year. Matches on the denormalized
+  // employeeId scalar, never the `employee` linksTo — this runs once per
+  // employee per render (see whoseTurn's comment for the race).
+  get ptoBalances(): Array<{
+    employee: Employee;
+    allowance: number;
+    used: number;
+    balance: number;
+  }> {
+    let year = new Date().getFullYear();
+    return this.employees
+      .filter((e) => e.status !== 'offboarded' && e.ptoAllowanceDays != null)
+      .map((employee) => {
+        let used = this.ptoRequests
+          .filter(
+            (r) =>
+              r.status === 'approved' &&
+              r.employeeId === employee.id &&
+              r.startDate &&
+              new Date(r.startDate).getFullYear() === year,
+          )
+          .reduce((sum, r) => sum + (r.days ?? 0), 0);
+        let allowance = employee.ptoAllowanceDays as number;
+        return { employee, allowance, used, balance: allowance - used };
+      })
+      .sort((a, b) => a.balance - b.balance);
+  }
+
+  // ── Dashboard "needs attention" counts ─────────────────────────────────
+  get ptoAwaitingApprovalCount(): number {
+    return this.ptoRequests.filter((r) => r.status === 'in-progress').length;
+  }
+
+  get expiringContractorCount(): number {
+    return this.contractors.filter(
+      (c) =>
+        c.status === 'active' &&
+        c.daysRemaining != null &&
+        c.daysRemaining <= 30,
+    ).length;
+  }
+
   isRequisitionStatus = (req: JobRequisition, status: string): boolean => {
-    return (req.requisitionStatus ?? 'draft') === status;
+    return (req.status ?? 'draft') === status;
   };
 
   // True when `date` falls inside `dashboardRange`, or when no range is set
@@ -890,6 +1102,19 @@ class Isolated extends Component<typeof TalentResourceTracker> {
   // Whose turn is it — a candidate's own status tells you WHERE they are;
   // this tells you WHO needs to act next. Dashboard's "needs us" count and
   // Pipeline's card badges both read from this single source of truth.
+  // Same denormalized-id matching rationale as whoseTurn below.
+  hasUpcomingInterview = (candidate: Candidate | undefined): boolean => {
+    if (!candidate?.id) {
+      return false;
+    }
+    return this.meetings.some(
+      (m) =>
+        m.candidateId === candidate.id &&
+        m.date &&
+        new Date(m.date).getTime() > Date.now(),
+    );
+  };
+
   whoseTurn = (
     candidate: Candidate,
   ): { tone: 'red' | 'amber' | 'green'; label: string } => {
@@ -1283,6 +1508,24 @@ class Isolated extends Component<typeof TalentResourceTracker> {
         void this.advanceToOffer(candidate);
         continue;
       }
+      // Dragging backwards past a live offer must reconcile the offer too,
+      // or the board manufactures contradictions (a card at "interviewing"
+      // whose offer still reads extended/accepted).
+      if (
+        candidate.offerState &&
+        (targetStage === 'applied' ||
+          targetStage === 'screening' ||
+          targetStage === 'interviewing')
+      ) {
+        if (candidate.offerState === 'accepted') {
+          this.actionError = `${
+            candidate.name ?? 'This candidate'
+          } already accepted the offer — drag to Hired, or rescind it on the Offer card first.`;
+          continue;
+        }
+        void this.moveBackPastOffer(candidate, targetStage);
+        continue;
+      }
       void this.moveCandidateStage(candidate, targetStage);
     }
     if (reordered.length) {
@@ -1304,6 +1547,37 @@ class Isolated extends Component<typeof TalentResourceTracker> {
 
   private async moveCandidateStage(candidate: Candidate, status: string) {
     candidate.status = status as Candidate['status'];
+    await this.saveCandidates([candidate]);
+  }
+
+  // A backward drag past a live offer withdraws it on the record: a draft
+  // or extended offer becomes `rescinded` (the vocabulary's word for "we
+  // pulled it back"), a declined/rescinded one just stops mirroring onto
+  // the candidate — either way the pipeline card resets cleanly and the
+  // Offer card keeps the honest history. Accepted offers never reach here
+  // (blocked in handleKanbanChange).
+  private async moveBackPastOffer(candidate: Candidate, targetStage: string) {
+    let commandContext = this.args.context?.commandContext;
+    if (!commandContext) {
+      this.actionError = 'Commands are unavailable in this mode';
+      return;
+    }
+    // Resolve via the live offers query by denormalized id — never the
+    // `candidate.offer` linksTo (render/click race, see openCandidateOffer).
+    let offer = this.offers.find(
+      (o) => o?.candidateId && o.candidateId === candidate.id,
+    );
+    if (
+      offer &&
+      (offer.status === 'draft' || offer.status === 'extended')
+    ) {
+      offer.status = 'rescinded';
+      await new SaveCardCommand(commandContext).execute({
+        card: offer,
+      } as any);
+    }
+    candidate.offerState = undefined;
+    candidate.status = targetStage as Candidate['status'];
     await this.saveCandidates([candidate]);
   }
 
@@ -1435,6 +1709,8 @@ class Isolated extends Component<typeof TalentResourceTracker> {
       this.positions,
       this.applications,
       this.offers,
+      this.ptoRequests,
+      this.performanceReviews,
     ];
     for (let pool of pools) {
       let hit = (pool as any[]).find((c) => c?.id === id);
@@ -1559,79 +1835,79 @@ class Isolated extends Component<typeof TalentResourceTracker> {
     }
   });
 
-  // The candidate currently being scheduled — disables the button mid-flight
-  // for the same reason addingMeetingOn does on the Calendar tab.
-  @tracked schedulingCandidateId: string | undefined;
+  // The candidate currently targeted by the schedule-interview dialog. Like
+  // rejectDialogCandidate, one dialog instance renders near the top of the
+  // template — and the {{#if}} wrapper means each open starts from a fresh
+  // component (no stale slot/interviewer selection carried across opens).
+  @tracked scheduleDialogCandidate: Candidate | undefined;
+  // The last conflict (or other) error ScheduleInterviewCommand threw —
+  // rendered inside the dialog with role='alert', next to the deliberate
+  // "book anyway" override.
+  @tracked scheduleError: string | undefined;
 
   isScheduling = (candidate: Candidate | undefined): boolean => {
     return (
-      Boolean(candidate?.id) && this.schedulingCandidateId === candidate?.id
+      Boolean(candidate?.id) && this.scheduleDialogCandidate?.id === candidate?.id
     );
   };
 
+  // v1.2: opens the availability-aware slot-picker dialog instead of the old
+  // create-then-edit flow. The dialog computes free hourly slots from the
+  // live meetingsQuery; ScheduleInterviewCommand re-checks for double
+  // bookings server-side and throws on a clash, which lands in
+  // scheduleError → the dialog's role='alert' line.
   scheduleInterview = (candidate: Candidate) => {
-    void this.scheduleInterviewTask.perform(candidate);
+    this.scheduleError = undefined;
+    this.scheduleDialogCandidate = candidate;
   };
 
-  // Mirrors addMeetingTask's create-then-edit idiom rather than building a
-  // bespoke inline date/interviewer picker: create the Meeting pre-linked to
-  // the candidate via the host's own createCard action, then hand the user
-  // straight to its edit form to fill in date, round type and interviewers.
-  // ScheduleInterviewCommand (commands/schedule-interview-command.gts) covers
-  // the fully scripted path — e.g. an AI assistant flow — but the click here
-  // stays on the same one-round-trip primitive the Calendar tab already uses.
+  closeScheduleDialog = () => {
+    this.scheduleDialogCandidate = undefined;
+    this.scheduleError = undefined;
+  };
+
+  confirmScheduleInterview = (opts: {
+    date: Date;
+    interviewers: Employee[];
+    roundType: string;
+    ignoreConflicts: boolean;
+  }) => {
+    void this.scheduleInterviewTask.perform(opts);
+  };
+
   private scheduleInterviewTask = restartableTask(
-    async (candidate: Candidate) => {
-      this.actionError = undefined;
-      let createCard = (this.args as any).createCard as
-        | CreateCardFn
-        | undefined;
-      if (!createCard) {
-        this.actionError = 'Commands are unavailable in this mode';
+    async (opts: {
+      date: Date;
+      interviewers: Employee[];
+      roundType: string;
+      ignoreConflicts: boolean;
+    }) => {
+      let candidate = this.scheduleDialogCandidate;
+      if (!candidate) {
         return;
       }
-      this.schedulingCandidateId = candidate.id;
+      this.scheduleError = undefined;
+      let commandContext = this.args.context?.commandContext;
+      if (!commandContext) {
+        this.scheduleError = 'Commands are unavailable in this mode';
+        return;
+      }
       try {
-        let realmHref = this.args.model[realmURL]?.href;
-        let realm = realmHref ? new URL(realmHref) : undefined;
-        let doc: LooseSingleCardDocument = {
-          data: {
-            type: 'card',
-            attributes: {
-              name: `Interview: ${candidate.name ?? 'Candidate'}`,
-              meetingType: 'interview',
-            },
-            relationships: {
-              candidate: {
-                links: { self: candidate.id ?? null },
-              },
-            },
-            meta: { adoptsFrom: meetingRef },
-          },
-        };
-        let newId = await createCard(meetingRef, realm, {
-          realmURL: realm,
-          doc,
-        });
-        if (!newId) {
-          return;
-        }
-        // Scheduling an interview is the real-world action that starts
-        // interviewing — same "advance the stage as a side effect" pattern
-        // ExtractResumeCommand uses for applied → screening. The meeting
-        // itself reaches the Calendar via the live `meetingsQuery`.
-        if (candidate.status === 'screening') {
-          await this.runCommand(candidate, async (commandContext) => {
-            candidate.status = 'interviewing';
-            await new SaveCardCommand(commandContext).execute({
-              card: candidate,
-            } as any);
-          });
-        }
+        // The command creates the Meeting (which reaches the Calendar via
+        // the live meetingsQuery), advances screening → interviewing, and
+        // throws a named-interviewer conflict error unless ignoreConflicts.
+        await new ScheduleInterviewCommand(commandContext).execute({
+          candidate,
+          date: opts.date,
+          interviewers: opts.interviewers,
+          roundType: opts.roundType,
+          ignoreConflicts: opts.ignoreConflicts,
+        } as any);
+        this.closeScheduleDialog();
       } catch (error: any) {
-        this.actionError = error?.message ?? String(error);
-      } finally {
-        this.schedulingCandidateId = undefined;
+        // Keep the dialog open so the recruiter can pick another slot or
+        // deliberately override.
+        this.scheduleError = error?.message ?? String(error);
       }
     },
   );
@@ -1730,19 +2006,27 @@ class Isolated extends Component<typeof TalentResourceTracker> {
   extendOffer = async (candidate: Candidate) => {
     // The new Offer reaches the Offers tab via the live `offersQuery` —
     // nothing to link back onto the tracker.
-    await this.runCommand(candidate, async (commandContext) => {
-      return (await new ExtendOfferCommand(commandContext).execute({
-        candidate,
-      } as any)) as any;
-    });
+    await this.runCommand(
+      candidate,
+      async (commandContext) => {
+        return (await new ExtendOfferCommand(commandContext).execute({
+          candidate,
+        } as any)) as any;
+      },
+      'send',
+    );
   };
 
   advanceToOffer = async (candidate: Candidate) => {
-    await this.runCommand(candidate, async (commandContext) => {
-      await new AdvanceToOfferCommand(commandContext).execute({
-        candidate,
-      } as any);
-    });
+    await this.runCommand(
+      candidate,
+      async (commandContext) => {
+        await new AdvanceToOfferCommand(commandContext).execute({
+          candidate,
+        } as any);
+      },
+      'create',
+    );
   };
 
   // Label for the offer link. Reads the scalar mirror rather than the
@@ -1754,7 +2038,14 @@ class Isolated extends Component<typeof TalentResourceTracker> {
   // racing the same async link-load assertion this guard was meant to avoid.
   // Wrapping the access inside this action defers it to actual click time.
   openCandidateOffer = (candidate: Candidate) => {
-    this.openCard(candidate.offer);
+    // Never dereference `candidate.offer` here — with live-query instances
+    // the linksTo is not eagerly loaded, so a synchronous read races the
+    // async link load and the click opens nothing. Match the Offer from the
+    // live offers query by its denormalized own-attribute id instead.
+    let offer = this.offers.find(
+      (o) => o?.candidateId && o.candidateId === candidate.id,
+    );
+    this.openCard(offer);
   };
 
   offerLabel = (candidate: Candidate | undefined): string => {
@@ -1795,7 +2086,7 @@ class Isolated extends Component<typeof TalentResourceTracker> {
     return htmlSafe(`background: ${color.bg}; color: ${color.fg};`);
   };
 
-  requisitionStatusStyle = (status: string | undefined) => {
+  requisitionsStatusStyle = (status: string | undefined) => {
     let color = stateColorOf(REQUISITION_STATUS_COLORS, status);
     return htmlSafe(`background: ${color.bg}; color: ${color.fg};`);
   };
@@ -1807,6 +2098,33 @@ class Isolated extends Component<typeof TalentResourceTracker> {
 
   contractorStatusStyle = (status: string | undefined) => {
     let color = stateColorOf(CONTRACTOR_STATUS_COLORS, status);
+    return htmlSafe(`background: ${color.bg}; color: ${color.fg};`);
+  };
+
+  // Amber/red tint on the Contractors table's end-date cell — the same tone
+  // map (expiryTone + EXPIRY_TONE_COLORS) contractor.gts's own formats use,
+  // so table and tile can never disagree about what "expiring" means.
+  contractorEndDateStyle = (contractor: Contractor) => {
+    let tone = expiryTone(contractor.daysRemaining ?? undefined);
+    if (!tone) {
+      return undefined;
+    }
+    let color = stateColorOf(EXPIRY_TONE_COLORS, tone);
+    return htmlSafe(`background: ${color.bg}; color: ${color.fg};`);
+  };
+
+  ptoTypeStyle = (ptoType: string | undefined) => {
+    let color = stateColorOf(PTO_TYPE_COLORS, ptoType);
+    return htmlSafe(`background: ${color.bg}; color: ${color.fg};`);
+  };
+
+  ptoStatusStyle = (status: string | undefined) => {
+    let color = stateColorOf(PTO_STATUS_COLORS, status);
+    return htmlSafe(`background: ${color.bg}; color: ${color.fg};`);
+  };
+
+  reviewStatusStyle = (status: string | undefined) => {
+    let color = stateColorOf(REVIEW_STATUS_COLORS, status);
     return htmlSafe(`background: ${color.bg}; color: ${color.fg};`);
   };
 
@@ -1996,6 +2314,7 @@ class Isolated extends Component<typeof TalentResourceTracker> {
   private async runCommand<T>(
     candidate: Candidate,
     action: (commandContext: any) => Promise<T>,
+    verb?: string,
   ): Promise<T | undefined> {
     this.actionError = undefined;
     let commandContext = this.args.context?.commandContext;
@@ -2004,6 +2323,7 @@ class Isolated extends Component<typeof TalentResourceTracker> {
       return undefined;
     }
     this.busyCandidateId = candidate.id;
+    this.busyVerb = verb;
     try {
       return await action(commandContext);
     } catch (error: any) {
@@ -2011,8 +2331,20 @@ class Isolated extends Component<typeof TalentResourceTracker> {
       return undefined;
     } finally {
       this.busyCandidateId = undefined;
+      this.busyVerb = undefined;
     }
   }
+
+  // Which action is running, not just which candidate: a command can flip
+  // the card into a new UI state mid-flight (AdvanceToOffer sets
+  // offerState='draft' before its save settles), and the new state's button
+  // must not claim the OLD action's progress — "Sending…" on a card whose
+  // only running action is a draft creation misleads.
+  @tracked busyVerb: string | undefined;
+
+  isBusyWith = (candidate: Candidate | undefined, verb: string): boolean => {
+    return this.isBusyCandidate(candidate) && this.busyVerb === verb;
+  };
 
   <template>
     <RejectCandidateDialog
@@ -2021,6 +2353,17 @@ class Isolated extends Component<typeof TalentResourceTracker> {
       @onConfirm={{this.confirmReject}}
       @onCancel={{this.closeRejectDialog}}
     />
+    {{#if this.scheduleDialogCandidate}}
+      <ScheduleInterviewDialog
+        @candidate={{this.scheduleDialogCandidate}}
+        @employees={{this.employees}}
+        @meetings={{this.meetings}}
+        @isRunning={{this.scheduleInterviewTask.isRunning}}
+        @error={{this.scheduleError}}
+        @onConfirm={{this.confirmScheduleInterview}}
+        @onCancel={{this.closeScheduleDialog}}
+      />
+    {{/if}}
     <section class='tracker'>
       <div class='shell'>
         <aside class='rail'>
@@ -2032,25 +2375,35 @@ class Isolated extends Component<typeof TalentResourceTracker> {
             }}</h1>
           <div class='rail-sub'>Posted through {{this.todayLabel}}</div>
           <nav class='rail-nav'>
-            {{#each this.tabs as |tab|}}
-              {{#if (eq tab 'Positions')}}
-                <FilterList
-                  class='rail-filter-list'
-                  @filters={{this.positionsNavFilters}}
-                  @activeFilter={{this.activePositionsFilter}}
-                  @onChanged={{this.handlePositionsNavChange}}
-                />
-              {{else}}
-                <Button
-                  type='button'
-                  @kind='text-only'
-                  class='rail-link {{if (eq tab this.activeTab) "current"}}'
-                  {{on 'click' (fn this.setTab tab)}}
-                >
-                  <span class='t'>{{tab}}</span>
-                </Button>
-              {{/if}}
-            {{/each}}
+            <ul class='rail-list'>
+              {{#each this.railGroups as |group|}}
+                {{#if group.label}}
+                  <li class='rail-group'>{{group.label}}</li>
+                {{/if}}
+                {{#each group.tabs as |tab|}}
+                  <li class='rail-item'>
+                    {{#if (eq tab 'Positions')}}
+                      <FilterList
+                        class='rail-filter-list'
+                        @filters={{this.positionsNavFilters}}
+                        @activeFilter={{this.activePositionsFilter}}
+                        @onChanged={{this.handlePositionsNavChange}}
+                      />
+                    {{else}}
+                      <Button
+                        type='button'
+                        @kind='text-only'
+                        class='rail-link
+                          {{if (eq tab this.activeTab) "current"}}'
+                        {{on 'click' (fn this.setTab tab)}}
+                      >
+                        <span class='t'>{{tab}}</span>
+                      </Button>
+                    {{/if}}
+                  </li>
+                {{/each}}
+              {{/each}}
+            </ul>
           </nav>
         </aside>
 
@@ -2140,6 +2493,43 @@ class Isolated extends Component<typeof TalentResourceTracker> {
                       {{/if}}
                     </div>
                   </div>
+
+                  {{#if
+                    (or this.expiringContractorCount this.ptoAwaitingApprovalCount)
+                  }}
+                    <div class='attn-row' role='group' aria-label='Needs attention'>
+                      {{#if this.expiringContractorCount}}
+                        <Button
+                          type='button'
+                          @kind='text-only'
+                          class='attn-chip attn-amber'
+                          {{on 'click' (fn this.setTab 'Contractors')}}
+                        >{{this.expiringContractorCount}}
+                          contractor
+                          {{if
+                            (eq this.expiringContractorCount 1)
+                            'contract'
+                            'contracts'
+                          }}
+                          ending ≤30d →</Button>
+                      {{/if}}
+                      {{#if this.ptoAwaitingApprovalCount}}
+                        <Button
+                          type='button'
+                          @kind='text-only'
+                          class='attn-chip attn-red'
+                          {{on 'click' (fn this.setTab 'PTO')}}
+                        >{{this.ptoAwaitingApprovalCount}}
+                          PTO
+                          {{if
+                            (eq this.ptoAwaitingApprovalCount 1)
+                            'request'
+                            'requests'
+                          }}
+                          awaiting approval →</Button>
+                      {{/if}}
+                    </div>
+                  {{/if}}
 
                   <div class='board-head'>
                     <h2>Candidate Pipeline</h2>
@@ -3014,56 +3404,16 @@ class Isolated extends Component<typeof TalentResourceTracker> {
                             }}</Button>
                         {{/if}}
                         {{#if (eq candidateStatus 'interviewing')}}
-                          {{! One link out to the Offer card instead of a second set of
-                              offer controls on the board. Terms, dates and the draft-to-sent
-                              flip all live there. Guarded on the offerState scalar, not on
-                              the `offer` linksTo — and the link itself is dereferenced only
-                              inside openCandidateOffer's action body, which runs on click,
-                              not `fn`'s eager arg evaluation at render time. }}
                           {{#if candidateModel.offerState}}
-                            <Button
-                              type='button'
-                              @kind='secondary'
-                              class='offer-link'
-                              {{on
-                                'click'
-                                (fn this.openCandidateOffer candidateModel)
-                              }}
-                            >Offer &middot;
-                              {{this.offerLabel candidateModel}}</Button>
-                          {{/if}}
-                          <Button
-                            type='button'
-                            @kind='secondary'
-                            class='stage-act'
-                            @disabled={{this.isScheduling candidateModel}}
-                            {{on
-                              'click'
-                              (fn this.scheduleInterview candidateModel)
-                            }}
-                          >{{if
-                              (this.isScheduling candidateModel)
-                              'Scheduling…'
-                              'Schedule interview'
-                            }}</Button>
-                          <Button
-                            type='button'
-                            @kind='primary'
-                            class='stage-act approve'
-                            @disabled={{this.isBusyCandidate candidateModel}}
-                            {{on
-                              'click'
-                              (fn this.advanceToOffer candidateModel)
-                            }}
-                          >Advance to offer</Button>
-                        {{/if}}
-                        {{#if (eq candidateStatus 'offer')}}
-                          {{#if candidateModel.offerState}}
-                            {{! Offer is out — the ball is with the candidate,
-                                so HR has no board move here. Recording the
-                                reply (and the approval chain) lives on the
-                                Offer card; hiring happens by dragging the card
-                                to Hired, rejecting by dragging to Rejected. }}
+                            {{! An offer already exists (this card was dragged
+                                back, or the data moved around it) — offering
+                                "Advance to offer" would create a contradiction
+                                and scheduling more rounds past a live offer is
+                                not HR's next move. The only affordance is the
+                                Offer itself; stage moves happen by drag.
+                                Guarded on the offerState scalar, not the
+                                `offer` linksTo, for the render-race reason
+                                documented on openCandidateOffer. }}
                             <Button
                               type='button'
                               @kind='secondary'
@@ -3075,9 +3425,58 @@ class Isolated extends Component<typeof TalentResourceTracker> {
                             >Offer &middot;
                               {{this.offerLabel candidateModel}}</Button>
                           {{else}}
-                            {{! Reaching the offer stage only drafts the
-                                Offer (see AdvanceToOfferCommand) — sending it
-                                is HR's one legitimate move at this point. }}
+                            <Button
+                              type='button'
+                              @kind='secondary'
+                              class='stage-act'
+                              @disabled={{this.isScheduling candidateModel}}
+                              {{on
+                                'click'
+                                (fn this.scheduleInterview candidateModel)
+                              }}
+                            >{{if
+                                (this.isScheduling candidateModel)
+                                'Scheduling…'
+                                (if
+                                  (this.hasUpcomingInterview candidateModel)
+                                  'Schedule next round'
+                                  'Schedule interview'
+                                )
+                              }}</Button>
+                            <Button
+                              type='button'
+                              @kind='primary'
+                              class='stage-act approve'
+                              @disabled={{this.isBusyCandidate candidateModel}}
+                              {{on
+                                'click'
+                                (fn this.advanceToOffer candidateModel)
+                              }}
+                            >{{if
+                                (this.isBusyWith candidateModel 'create')
+                                'Creating draft…'
+                                'Advance to offer'
+                              }}</Button>
+                          {{/if}}
+                        {{/if}}
+                        {{#if (eq candidateStatus 'offer')}}
+                          {{! Three states, matching the offer lifecycle:
+                              1. no offer yet → Create offer (drafts it, no send)
+                              2. draft → Edit offer (review terms + letter on the
+                                 Offer card) and Send offer (the deliberate act)
+                              3. sent/answered → status link only; the ball is
+                                 with the candidate, replies are recorded on the
+                                 Offer card, hire/reject via drag. }}
+                          {{#if (eq candidateModel.offerState 'draft')}}
+                            <Button
+                              type='button'
+                              @kind='secondary'
+                              class='stage-act'
+                              {{on
+                                'click'
+                                (fn this.openCandidateOffer candidateModel)
+                              }}
+                            >Edit offer</Button>
                             <Button
                               type='button'
                               @kind='primary'
@@ -3088,9 +3487,35 @@ class Isolated extends Component<typeof TalentResourceTracker> {
                                 (fn this.extendOffer candidateModel)
                               }}
                             >{{if
-                                (this.isBusyCandidate candidateModel)
+                                (this.isBusyWith candidateModel 'send')
                                 'Sending…'
                                 'Send offer'
+                              }}</Button>
+                          {{else if candidateModel.offerState}}
+                            <Button
+                              type='button'
+                              @kind='secondary'
+                              class='offer-link'
+                              {{on
+                                'click'
+                                (fn this.openCandidateOffer candidateModel)
+                              }}
+                            >Offer &middot;
+                              {{this.offerLabel candidateModel}}</Button>
+                          {{else}}
+                            <Button
+                              type='button'
+                              @kind='primary'
+                              class='stage-act approve'
+                              @disabled={{this.isBusyCandidate candidateModel}}
+                              {{on
+                                'click'
+                                (fn this.advanceToOffer candidateModel)
+                              }}
+                            >{{if
+                                (this.isBusyWith candidateModel 'create')
+                                'Creating…'
+                                'Create offer'
                               }}</Button>
                           {{/if}}
                         {{/if}}
@@ -3147,19 +3572,19 @@ class Isolated extends Component<typeof TalentResourceTracker> {
                     type='button'
                     @kind='default'
                     class='chip
-                      {{if (eq this.requisitionStatusFilter "all") "active"}}'
-                    {{on 'click' (fn this.setRequisitionStatusFilter 'all')}}
+                      {{if (eq this.requisitionsStatusFilter "all") "active"}}'
+                    {{on 'click' (fn this.setRequisitionsStatusFilter 'all')}}
                   >All</Button>
-                  {{#each this.requisitionStatuses as |status|}}
+                  {{#each this.requisitionsStatuses as |status|}}
                     <Button
                       type='button'
                       @kind='default'
                       class='chip
                         {{if
-                          (eq this.requisitionStatusFilter status)
+                          (eq this.requisitionsStatusFilter status)
                           "active"
                         }}'
-                      {{on 'click' (fn this.setRequisitionStatusFilter status)}}
+                      {{on 'click' (fn this.setRequisitionsStatusFilter status)}}
                     >{{status}}</Button>
                   {{/each}}
                 </div>
@@ -3209,7 +3634,7 @@ class Isolated extends Component<typeof TalentResourceTracker> {
                             <td>
                               <span
                                 class='status-pill'
-                                style={{this.requisitionStatusStyle req.status}}
+                                style={{this.requisitionsStatusStyle req.status}}
                               >{{req.status}}</span>
                             </td>
                             <td>{{this.formatDate req.targetFillDate}}</td>
@@ -3499,6 +3924,7 @@ class Isolated extends Component<typeof TalentResourceTracker> {
                           <th>Status</th>
                           <th>Rate</th>
                           <th>Invoice frequency</th>
+                          <th>Contract end</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -3509,9 +3935,9 @@ class Isolated extends Component<typeof TalentResourceTracker> {
                               <span
                                 class='status-pill'
                                 style={{this.contractorStatusStyle
-                                  contractor.contractStatus
+                                  contractor.status
                                 }}
-                              >{{contractor.contractStatus}}</span>
+                              >{{contractor.status}}</span>
                             </td>
                             <td>{{this.rateLabel contractor.billableRate}}</td>
                             <td>{{if
@@ -3519,6 +3945,29 @@ class Isolated extends Component<typeof TalentResourceTracker> {
                                 contractor.invoiceFrequency
                                 '—'
                               }}</td>
+                            <td>
+                              {{#if contractor.contractEndDate}}
+                                {{#let
+                                  (this.contractorEndDateStyle contractor)
+                                  as |endTone|
+                                }}
+                                  {{#if endTone}}
+                                    <span class='status-pill' style={{endTone}}>
+                                      {{this.formatDate
+                                        contractor.contractEndDate
+                                      }}
+                                      · {{contractor.expiryLabel}}
+                                    </span>
+                                  {{else}}
+                                    {{this.formatDate
+                                      contractor.contractEndDate
+                                    }}
+                                  {{/if}}
+                                {{/let}}
+                              {{else}}
+                                —
+                              {{/if}}
+                            </td>
                           </tr>
                         {{/each}}
                       </tbody>
@@ -3559,6 +4008,334 @@ class Isolated extends Component<typeof TalentResourceTracker> {
                           <p class='empty-note'>Loading…</p>
                         {{else}}
                           <p class='empty-note'>No contractors</p>
+                        {{/if}}
+                      {{/each}}
+                    </div>
+                  </Search>
+                {{/let}}
+              {{/if}}
+            </section>
+          {{/if}}
+
+          {{#if (eq this.activeTab 'PTO')}}
+            <section class='tab-section'>
+              <div class='sec-head'>
+                <div class='htext'>
+                  <h2>PTO Requests</h2>
+                  <p class='byline'>Time-off requests, newest first</p>
+                </div>
+                {{#if this.canCreate}}
+                  <Button
+                    type='button'
+                    @kind='primary'
+                    class='btn-review'
+                    @loading={{this.addCard.isRunning}}
+                    {{on 'click' (fn this.addNew PtoRequest)}}
+                  >+ Add request</Button>
+                {{/if}}
+              </div>
+              {{#if this.ptoBalances.length}}
+                <div class='capacity-row'>
+                  <span class='capacity-label'>Balance this year</span>
+                  {{#each this.ptoBalances key='employee.id' as |row|}}
+                    <span
+                      class='turn-chip
+                        {{if (eq row.balance 0) "turn-amber" "turn-green"}}'
+                    >
+                      {{row.employee.name}}
+                      {{row.balance}}d /
+                      {{row.allowance}}d
+                    </span>
+                  {{/each}}
+                </div>
+              {{/if}}
+              <div class='list-toolbar'>
+                <div class='list-search'>
+                  <BoxelInput
+                    @type='search'
+                    @value={{this.ptoSearch}}
+                    @placeholder='Search PTO requests…'
+                    @onInput={{this.setPtoSearch}}
+                    aria-label='Search PTO requests'
+                  />
+                </div>
+                <div class='directory-chips'>
+                  <Button
+                    type='button'
+                    @kind='default'
+                    class='chip
+                      {{if (eq this.ptoStatusFilter "all") "active"}}'
+                    {{on 'click' (fn this.setPtoStatusFilter 'all')}}
+                  >All</Button>
+                  {{#each this.ptoStatuses as |status|}}
+                    <Button
+                      type='button'
+                      @kind='default'
+                      class='chip
+                        {{if (eq this.ptoStatusFilter status) "active"}}'
+                      {{on 'click' (fn this.setPtoStatusFilter status)}}
+                    >{{status}}</Button>
+                  {{/each}}
+                </div>
+                <div class='view-toggle' role='group' aria-label='View'>
+                  <IconButton
+                    type='button'
+                    class='view-btn {{if (eq this.ptoView "grid") "active"}}'
+                    aria-label='Grid view'
+                    {{on 'click' (fn this.setPtoView 'grid')}}
+                  ><LayoutGridIcon class='view-icon' /></IconButton>
+                  <IconButton
+                    type='button'
+                    class='view-btn {{if (eq this.ptoView "strip") "active"}}'
+                    aria-label='List view'
+                    {{on 'click' (fn this.setPtoView 'strip')}}
+                  ><ListIcon class='view-icon' /></IconButton>
+                  <IconButton
+                    type='button'
+                    class='view-btn {{if (eq this.ptoView "table") "active"}}'
+                    aria-label='Table view'
+                    {{on 'click' (fn this.setPtoView 'table')}}
+                  ><TableIcon class='view-icon' /></IconButton>
+                </div>
+              </div>
+              {{#if (eq this.ptoView 'table')}}
+                {{#if this.filteredPtoRequests.length}}
+                  <div class='data-table-wrap'>
+                    <table class='data-table'>
+                      <thead>
+                        <tr>
+                          <th>Person</th>
+                          <th>Type</th>
+                          <th>Dates</th>
+                          <th>Days</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {{#each this.filteredPtoRequests key='id' as |req|}}
+                          <tr>
+                            <td>{{if
+                                req.employeeName
+                                req.employeeName
+                                '—'
+                              }}</td>
+                            <td>
+                              {{#if req.ptoType}}
+                                <span
+                                  class='status-pill'
+                                  style={{this.ptoTypeStyle req.ptoType}}
+                                >{{req.ptoType}}</span>
+                              {{else}}
+                                —
+                              {{/if}}
+                            </td>
+                            <td>{{this.formatDate req.startDate}}
+                              –
+                              {{this.formatDate req.endDate}}</td>
+                            <td>{{if req.days req.days '—'}}</td>
+                            <td>
+                              <span
+                                class='status-pill'
+                                style={{this.ptoStatusStyle req.status}}
+                              >{{req.status}}</span>
+                            </td>
+                          </tr>
+                        {{/each}}
+                      </tbody>
+                    </table>
+                  </div>
+                {{else if this.ptoRequestsQuery.isLoading}}
+                  <p class='empty-note'>Loading…</p>
+                {{else}}
+                  <p class='empty-note'>No PTO requests yet</p>
+                {{/if}}
+              {{else}}
+                {{#let (component @context.searchResultsComponent) as |Search|}}
+                  <Search
+                    @query={{this.ptoSearchQuery}}
+                    @mode='none'
+                    as |results|
+                  >
+                    <div
+                      class='tile-grid
+                        {{if (eq this.ptoView "strip") "strip-view"}}'
+                    >
+                      {{#each results.entries key='id' as |entry|}}
+                        <div
+                          class='tile
+                            {{if (eq this.ptoView "strip") "strip-tile"}}'
+                          role={{if this.cardCrudFunctions.viewCard 'button'}}
+                          tabindex={{if this.cardCrudFunctions.viewCard '0'}}
+                          {{on 'click' (fn this.viewEntry entry.id)}}
+                          {{on 'keydown' (fn this.viewEntryOnKeydown entry.id)}}
+                        >
+                          <entry.component />
+                        </div>
+                      {{else}}
+                        {{#if results.isLoading}}
+                          <p class='empty-note'>Loading…</p>
+                        {{else}}
+                          <p class='empty-note'>No PTO requests yet</p>
+                        {{/if}}
+                      {{/each}}
+                    </div>
+                  </Search>
+                {{/let}}
+              {{/if}}
+            </section>
+          {{/if}}
+
+          {{#if (eq this.activeTab 'Reviews')}}
+            <section class='tab-section'>
+              <div class='sec-head'>
+                <div class='htext'>
+                  <h2>Performance Reviews</h2>
+                  <p class='byline'>Review records by sign-off status</p>
+                </div>
+                {{#if this.canCreate}}
+                  <div class='sec-head-actions'>
+                    <Button
+                      type='button'
+                      @kind='secondary'
+                      class='btn-review'
+                      @loading={{this.addCard.isRunning}}
+                      {{on 'click' (fn this.addNew ReviewCycle)}}
+                    >New cycle</Button>
+                    <Button
+                      type='button'
+                      @kind='primary'
+                      class='btn-review'
+                      @loading={{this.addCard.isRunning}}
+                      {{on 'click' (fn this.addNew PerformanceReview)}}
+                    >+ Add review</Button>
+                  </div>
+                {{/if}}
+              </div>
+              <div class='list-toolbar'>
+                <div class='list-search'>
+                  <BoxelInput
+                    @type='search'
+                    @value={{this.reviewsSearch}}
+                    @placeholder='Search reviews by person…'
+                    @onInput={{this.setReviewsSearch}}
+                    aria-label='Search performance reviews'
+                  />
+                </div>
+                <div class='directory-chips'>
+                  <Button
+                    type='button'
+                    @kind='default'
+                    class='chip
+                      {{if (eq this.reviewStatusFilter "all") "active"}}'
+                    {{on 'click' (fn this.setReviewStatusFilter 'all')}}
+                  >All</Button>
+                  {{#each this.reviewStatuses as |status|}}
+                    <Button
+                      type='button'
+                      @kind='default'
+                      class='chip
+                        {{if (eq this.reviewStatusFilter status) "active"}}'
+                      {{on 'click' (fn this.setReviewStatusFilter status)}}
+                    >{{status}}</Button>
+                  {{/each}}
+                </div>
+                <div class='view-toggle' role='group' aria-label='View'>
+                  <IconButton
+                    type='button'
+                    class='view-btn
+                      {{if (eq this.reviewsView "grid") "active"}}'
+                    aria-label='Grid view'
+                    {{on 'click' (fn this.setReviewsView 'grid')}}
+                  ><LayoutGridIcon class='view-icon' /></IconButton>
+                  <IconButton
+                    type='button'
+                    class='view-btn
+                      {{if (eq this.reviewsView "strip") "active"}}'
+                    aria-label='List view'
+                    {{on 'click' (fn this.setReviewsView 'strip')}}
+                  ><ListIcon class='view-icon' /></IconButton>
+                  <IconButton
+                    type='button'
+                    class='view-btn
+                      {{if (eq this.reviewsView "table") "active"}}'
+                    aria-label='Table view'
+                    {{on 'click' (fn this.setReviewsView 'table')}}
+                  ><TableIcon class='view-icon' /></IconButton>
+                </div>
+              </div>
+              {{#if (eq this.reviewsView 'table')}}
+                {{#if this.filteredReviews.length}}
+                  <div class='data-table-wrap'>
+                    <table class='data-table'>
+                      <thead>
+                        <tr>
+                          <th>Person</th>
+                          <th>Cycle</th>
+                          <th>Score</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {{#each this.filteredReviews key='id' as |review|}}
+                          <tr>
+                            <td>{{if
+                                review.employeeName
+                                review.employeeName
+                                '—'
+                              }}</td>
+                            <td>{{if
+                                review.cycleName
+                                review.cycleName
+                                '—'
+                              }}</td>
+                            <td>{{if
+                                review.scoreLabel
+                                review.scoreLabel
+                                '—'
+                              }}</td>
+                            <td>
+                              <span
+                                class='status-pill'
+                                style={{this.reviewStatusStyle review.status}}
+                              >{{review.status}}</span>
+                            </td>
+                          </tr>
+                        {{/each}}
+                      </tbody>
+                    </table>
+                  </div>
+                {{else if this.reviewsQuery.isLoading}}
+                  <p class='empty-note'>Loading…</p>
+                {{else}}
+                  <p class='empty-note'>No performance reviews yet</p>
+                {{/if}}
+              {{else}}
+                {{#let (component @context.searchResultsComponent) as |Search|}}
+                  <Search
+                    @query={{this.reviewsSearchQuery}}
+                    @mode='none'
+                    as |results|
+                  >
+                    <div
+                      class='tile-grid
+                        {{if (eq this.reviewsView "strip") "strip-view"}}'
+                    >
+                      {{#each results.entries key='id' as |entry|}}
+                        <div
+                          class='tile
+                            {{if (eq this.reviewsView "strip") "strip-tile"}}'
+                          role={{if this.cardCrudFunctions.viewCard 'button'}}
+                          tabindex={{if this.cardCrudFunctions.viewCard '0'}}
+                          {{on 'click' (fn this.viewEntry entry.id)}}
+                          {{on 'keydown' (fn this.viewEntryOnKeydown entry.id)}}
+                        >
+                          <entry.component />
+                        </div>
+                      {{else}}
+                        {{#if results.isLoading}}
+                          <p class='empty-note'>Loading…</p>
+                        {{else}}
+                          <p class='empty-note'>No performance reviews yet</p>
                         {{/if}}
                       {{/each}}
                     </div>
@@ -3759,8 +4536,13 @@ class Isolated extends Component<typeof TalentResourceTracker> {
         --tracker-radius: var(--radius, 0.875rem);
         container-type: inline-size;
         container-name: tracker;
+        /* The tracker root does NOT scroll — each shell column owns its own
+           scrollbar, so the rail stays put while the page content moves.
+           (A sticky rail inside a root scroller travels whenever the rail is
+           taller than the visible card box — 100vh always is, inside the
+           host's stack item.) */
         height: 100%;
-        overflow-y: auto;
+        overflow: hidden;
         background: var(--surface-alt);
         color: var(--text);
         /* Fonts come from the linked Theme's cssImports, never an @import
@@ -3775,31 +4557,42 @@ class Isolated extends Component<typeof TalentResourceTracker> {
            would push this whole track wider than the container instead of
            shrinking to fit it. */
         grid-template-columns: 230px minmax(0, 1fr);
-        min-height: 100%;
+        /* Fill the non-scrolling root exactly; minmax(0,...) rows are not
+           needed — the two children scroll themselves. */
+        height: 100%;
       }
       .rail {
         background: var(--surface-alt);
         border-right: 1px solid var(--line);
         padding: var(--boxel-sp-lg) var(--boxel-sp-lg);
-        position: sticky;
-        top: 0;
-        align-self: start;
-        height: 100vh;
+        /* Own scrollbar; never moves with the page column. */
+        height: 100%;
         overflow-y: auto;
+        box-sizing: border-box;
       }
       /* container queries react to the tracker's own rendered width (a
          narrow stack panel, an embedded fitted preview) — @media only sees
          the browser viewport, which can be wide while this card's actual
          box is narrow, so a viewport breakpoint never fires when it should. */
       @container tracker (max-width: 40rem) {
+        /* Single column: the rail stacks above the page, so split scrolling
+           makes no sense. A container query cannot style its own container
+           (.tracker), so the shell — a descendant — becomes the one scroller
+           for the stacked flow instead. */
         .shell {
           grid-template-columns: minmax(0, 1fr);
+          height: 100%;
+          overflow-y: auto;
         }
         .rail {
-          position: static;
           height: auto;
+          overflow-y: visible;
           border-right: none;
           border-bottom: 1px solid var(--line);
+        }
+        .page {
+          height: auto;
+          overflow-y: visible;
         }
       }
       .rail-kicker {
@@ -3829,6 +4622,30 @@ class Isolated extends Component<typeof TalentResourceTracker> {
         display: flex;
         flex-direction: column;
         gap: 3px;
+      }
+      .rail-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+      }
+      .rail-item {
+        display: flex;
+        flex-direction: column;
+      }
+      /* Non-interactive group heading inside the same list so list
+         semantics hold for assistive tech. */
+      .rail-group {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--text-muted, var(--muted-foreground, var(--boxel-450)));
+        padding: var(--boxel-sp-sm) var(--boxel-sp-xs) var(--boxel-sp-5xs)
+          calc(var(--boxel-sp-xs) + 4px);
       }
       .rail-filter-list {
         --boxel-filter-selected-background: var(--card, var(--boxel-light));
@@ -3880,6 +4697,10 @@ class Isolated extends Component<typeof TalentResourceTracker> {
         padding: var(--boxel-sp-xl) var(--boxel-sp-xxl, 3.5rem)
           var(--boxel-sp-xxxl, 6rem);
         min-width: 0;
+        /* The scrolling column — independent of the fixed rail. */
+        height: 100%;
+        overflow-y: auto;
+        box-sizing: border-box;
       }
       .sec-head {
         display: flex;
@@ -4012,6 +4833,47 @@ class Isolated extends Component<typeof TalentResourceTracker> {
         gap: var(--boxel-sp-xs);
         flex-wrap: wrap;
         margin-bottom: var(--boxel-sp);
+      }
+      /* Dashboard "needs attention" chips — same self-diluting tone recipe
+         as .turn-*, but as real buttons that jump to the relevant tab. */
+      .attn-row {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+        flex-wrap: wrap;
+        margin-bottom: var(--boxel-sp);
+      }
+      .attn-chip {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.6875rem;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        padding: 0.25rem 0.625rem;
+        border-radius: 999px;
+        border: none;
+        cursor: pointer;
+        min-height: 0;
+      }
+      .attn-amber {
+        background: color-mix(in oklch, var(--warn) 14%, var(--surface));
+        color: color-mix(in oklch, var(--warn) 38%, var(--text));
+      }
+      .attn-red {
+        background: color-mix(
+          in oklch,
+          var(--destructive, var(--boxel-danger)) 14%,
+          var(--surface)
+        );
+        color: color-mix(
+          in oklch,
+          var(--destructive, var(--boxel-danger)) 38%,
+          var(--text)
+        );
+      }
+      .sec-head-actions {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
       }
       .capacity-label {
         font-family: 'IBM Plex Mono', monospace;

@@ -7,39 +7,46 @@
           "title": "Laptop & equipment setup",
           "status": "complete",
           "completedDate": "2026-08-04",
-          "notes": "Laptop received and configured"
+          "notes": "Laptop received and configured",
+          "dueDate": "2026-08-02"
         },
         {
           "title": "Code repository access",
           "status": "complete",
           "completedDate": "2026-08-04",
-          "notes": "GitHub access enabled"
+          "notes": "GitHub access enabled",
+          "dueDate": "2026-08-02"
         },
         {
           "title": "Team introduction & codebase walkthrough",
           "status": "complete",
           "completedDate": "2026-08-05",
-          "notes": "Architecture overview completed"
+          "notes": "Architecture overview completed",
+          "dueDate": "2026-08-03"
         },
         {
           "title": "First sprint planning",
           "status": "in-progress",
-          "notes": null
+          "notes": null,
+          "dueDate": "2026-08-06"
         },
         {
           "title": "Pair programming session",
           "status": "pending",
-          "notes": null
+          "notes": null,
+          "dueDate": "2026-08-08"
         },
         {
           "title": "First PR review",
           "status": "pending",
-          "notes": null
+          "notes": null,
+          "dueDate": "2026-08-11"
         },
         {
           "title": "30-day check-in",
           "status": "pending",
-          "notes": null
+          "notes": null,
+          "dueDate": "2026-08-31"
         }
       ],
       "createdDate": "2026-08-01",

@@ -13,6 +13,22 @@
         "unit": "months"
       },
       "performanceRating": 4,
+      "rateCard": [
+        {
+          "role": "Senior Backend Engineer",
+          "hourlyRate": 120
+        },
+        {
+          "role": "Platform / DevOps Engineer",
+          "hourlyRate": 110
+        },
+        {
+          "role": "QA Engineer",
+          "hourlyRate": 85
+        }
+      ],
+      "agreementTerms": "Net-30 payment on monthly invoices. 15% placement fee on conversion to permanent hire. Either party may terminate an engagement with 20 business days written notice. Rates locked through 2027-01-15.",
+      "spendYtd": 187400,
       "cardInfo": {
         "name": "TalentBridge Agency"
       }

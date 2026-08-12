@@ -4,15 +4,14 @@
     "attributes": {
       "appliedRole": "Frontend Engineer",
       "appliedDate": "2026-07-30",
-      "decisionDate": "2026-08-10",
-      "status": "screening",
+      "decisionDate": null,
+      "status": "interviewing",
       "resumeText": null,
       "overallScore": null,
       "rejectionReason": null,
-      "offerSalary": null,
       "boardOrder": 2,
-      "name": "Riley Chen",
-      "email": "riley.chen@example.com",
+      "name": "Nadia Fontaine",
+      "email": "nadia.fontaine@example.com",
       "phone": null,
       "cardInfo": {
         "name": null,
@@ -31,7 +30,14 @@
       "workHistory": [],
       "education": [],
       "rejectionNote": null,
-      "offerState": null
+      "offerState": null,
+      "backgroundCheck": {
+        "status": null,
+        "provider": null,
+        "requestedDate": null,
+        "completedDate": null,
+        "notes": null
+      }
     },
     "relationships": {
       "position": {

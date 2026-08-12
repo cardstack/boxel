@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Amara Okafor — System Design",
+      "name": "Amara Okafor \u2014 System Design",
       "meetingType": "interview",
       "date": "2026-08-11T14:00:00.000Z",
       "duration": {
@@ -10,13 +10,19 @@
         "unit": "minutes"
       },
       "cardInfo": {
-        "name": "Amara — System Design",
+        "name": "Amara \u2014 System Design",
         "summary": null,
         "cardThumbnailURL": null,
         "notes": null
       },
       "interviewScore": null,
-      "notes": null
+      "notes": null,
+      "roundType": "onsite",
+      "scorecard": {
+        "criteria": [],
+        "recommendation": null,
+        "overallNotes": null
+      }
     },
     "relationships": {
       "candidate": {

@@ -19,7 +19,6 @@
       "decisionDate": "2026-08-10",
       "resumeText": null,
       "rejectionReason": "Not a fit at this time",
-      "offerSalary": null,
       "linkedInUrl": "https://linkedin.com/in/amara-okafor",
       "portfolioUrl": "https://amaraokafor.dev",
       "noticePeriodDays": 21,
@@ -37,7 +36,14 @@
       "workHistory": [],
       "education": [],
       "rejectionNote": null,
-      "offerState": null
+      "offerState": "",
+      "backgroundCheck": {
+        "status": "pending",
+        "provider": "Checkr",
+        "requestedDate": "2026-08-08",
+        "completedDate": null,
+        "notes": null
+      }
     },
     "meta": {
       "adoptsFrom": {

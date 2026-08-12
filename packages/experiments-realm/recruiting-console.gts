@@ -163,7 +163,7 @@ export class RecruitingConsole extends CardDef {
         new ApproveOfferCommand(this.commandContext!).execute({
           candidate,
           approver: this.args.model?.hiringLead,
-          salary: candidate.offerSalary,
+          salary: candidate.offer?.salary,
         } as any),
       );
     }

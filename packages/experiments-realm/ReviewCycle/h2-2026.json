@@ -1,0 +1,25 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "H2 2026 Review Cycle",
+      "periodStart": "2026-07-01",
+      "periodEnd": "2026-12-31",
+      "status": "active",
+      "description": "Second-half review cycle. Managers draft scorecards through August, employees add self-assessments by mid-September, and sign-offs (employee acknowledgement, then HR approval) close out by the end of the quarter.",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../performance-review",
+        "name": "ReviewCycle"
+      }
+    }
+  }
+}

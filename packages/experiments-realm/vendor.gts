@@ -1,11 +1,15 @@
 import {
   CardDef,
   Component,
+  FieldDef,
   field,
   contains,
+  containsMany,
   StringField,
 } from '@cardstack/base/card-api';
 import DateField from '@cardstack/base/date';
+import NumberField from '@cardstack/base/number';
+import TextAreaField from '@cardstack/base/text-area';
 import UrlField from '@cardstack/base/url';
 import EmailField from '@cardstack/base/email';
 import BuildingIcon from '@cardstack/boxel-icons/building';
@@ -16,11 +20,61 @@ import { ScoreField } from './score-field';
 import { DurationField } from './duration-field';
 import {
   durationInDays,
+  formatMoney,
   initialsOf,
   stateColor,
   stateColorOf,
   type StateColor,
 } from './utils/index';
+
+// One row of a vendor's rate card. A containsMany of these rather than a
+// free-text blob: role→rate pairs are the thing a staffing conversation
+// actually queries ("what does TalentBridge charge for a senior QE?"), and
+// structured rows can later be compared against Contractor.billableRate.
+export class RateCardEntryField extends FieldDef {
+  static displayName = 'Rate Card Entry';
+
+  @field role = contains(StringField, {
+    description: 'Role or seniority band, e.g. "Senior Backend Engineer"',
+  });
+  @field hourlyRate = contains(NumberField, {
+    description: 'Billable hourly rate in dollars',
+  });
+
+  static embedded = class Embedded extends Component<typeof this> {
+    get rateLabel(): string {
+      let rate = formatMoney(this.args.model?.hourlyRate);
+      return rate ? `${rate}/hr` : '—';
+    }
+
+    <template>
+      <span class='rate-entry'>
+        <span class='rate-role'>{{if @model.role @model.role 'Any role'}}</span>
+        <span class='rate-amount'>{{this.rateLabel}}</span>
+      </span>
+      <style scoped>
+        .rate-entry {
+          display: flex;
+          align-items: baseline;
+          justify-content: space-between;
+          gap: var(--boxel-sp-xs);
+          font-size: var(--boxel-font-size-sm);
+        }
+        .rate-role {
+          min-width: 0;
+          overflow-wrap: anywhere;
+        }
+        .rate-amount {
+          flex: none;
+          font-weight: 700;
+          font-variant-numeric: tabular-nums;
+        }
+      </style>
+    </template>
+  };
+
+  static atom = RateCardEntryField.embedded;
+}
 
 // Contract lifecycle colours. The state is DERIVED — a contract is "expiring"
 // when its computed end date falls inside the renewal window — so the palette
@@ -91,6 +145,13 @@ export class Vendor extends CardDef {
   @field contractStart = contains(DateField);
   @field contractLength = contains(DurationField);
   @field performanceRating = contains(ScoreField);
+  @field rateCard = containsMany(RateCardEntryField);
+  @field agreementTerms = contains(TextAreaField, {
+    description: 'Key commercial terms: payment schedule, notice, exclusivity',
+  });
+  @field spendYtd = contains(NumberField, {
+    description: 'Total spend with this vendor year-to-date, in dollars',
+  });
 
   @field title = contains(StringField, {
     computeVia: function (this: Vendor) {
@@ -160,6 +221,10 @@ export class Vendor extends CardDef {
     get ratingLabel() {
       let v = this.args.model?.performanceRating;
       return typeof v === 'number' ? `${v} / ${MAX_STARS}` : undefined;
+    }
+
+    get spendLabel() {
+      return formatMoney(this.args.model?.spendYtd);
     }
 
     // One getter rather than branching in the template — keeps the template
@@ -246,7 +311,28 @@ export class Vendor extends CardDef {
                   this.ratingLabel
                   '— not yet rated'
                 }}</dd>
+              <dt>Spend YTD</dt>
+              <dd>{{if this.spendLabel this.spendLabel '—'}}</dd>
             </dl>
+
+            <h2 class='panel-title spaced'>Rate card</h2>
+            {{#if @model.rateCard.length}}
+              <ul class='rate-card'>
+                {{#each @fields.rateCard as |Entry|}}
+                  <li><Entry @format='embedded' @displayContainer={{false}} /></li>
+                {{/each}}
+              </ul>
+            {{else}}
+              <p class='empty'>No rate card on file — rates are negotiated per
+                engagement.</p>
+            {{/if}}
+
+            <h2 class='panel-title spaced'>Agreement terms</h2>
+            {{#if @model.agreementTerms}}
+              <p class='prose'>{{@model.agreementTerms}}</p>
+            {{else}}
+              <p class='empty'>No agreement terms recorded.</p>
+            {{/if}}
           </div>
 
           <aside class='side'>
@@ -439,6 +525,30 @@ export class Vendor extends CardDef {
           margin: 0;
           font-size: var(--boxel-font-size-sm);
           line-height: 1.6;
+          color: var(--muted-foreground, var(--boxel-450));
+        }
+        .rate-card {
+          list-style: none;
+          margin: 0;
+          padding: 0;
+        }
+        .rate-card > li {
+          padding: 0.45rem 0;
+          border-bottom: 1px solid var(--border, var(--boxel-200));
+        }
+        .rate-card > li:last-child {
+          border-bottom: 0;
+        }
+        .prose {
+          margin: 0;
+          font-size: var(--boxel-font-size-sm);
+          line-height: 1.65;
+          max-width: 56ch;
+          white-space: pre-line;
+        }
+        .empty {
+          margin: 0;
+          font-size: var(--boxel-font-size-sm);
           color: var(--muted-foreground, var(--boxel-450));
         }
         /* ---------- narrow container collapses to one column ---------- */

@@ -1,0 +1,84 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "scorecard": {
+        "criteria": [
+          {
+            "name": "Delivery",
+            "score": 4,
+            "notes": "Component library refresh landed on schedule; two sprint goals slipped during the design-system freeze."
+          },
+          {
+            "name": "Collaboration",
+            "score": 3,
+            "notes": "Great async writeups; needs to loop design in earlier rather than at review time."
+          },
+          {
+            "name": "Craft",
+            "score": null,
+            "notes": "To be scored after the accessibility audit results land next week."
+          }
+        ],
+        "recommendation": null,
+        "overallNotes": "Draft pending the accessibility audit — Craft score and final summary to follow."
+      },
+      "selfAssessment": "The component library refresh was my biggest lift this half. I underestimated the design-system freeze impact and want to get better at flagging scope risk earlier.",
+      "managerSummary": "Solid half with clear ownership of the component library. Final summary pending the accessibility audit outcome.",
+      "signOff": {
+        "startedAt": "2026-08-08T09:00:00.000Z",
+        "steps": [
+          {
+            "decision": "pending",
+            "decidedAt": null,
+            "comment": null
+          },
+          {
+            "decision": "pending",
+            "decidedAt": null,
+            "comment": null
+          }
+        ]
+      },
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "employee": {
+        "links": {
+          "self": "../Employee/leo-park"
+        }
+      },
+      "reviewer": {
+        "links": {
+          "self": "../Employee/marcus-webb"
+        }
+      },
+      "cycle": {
+        "links": {
+          "self": "../ReviewCycle/h2-2026"
+        }
+      },
+      "signOff.steps.0.approver": {
+        "links": {
+          "self": "../Employee/leo-park"
+        }
+      },
+      "signOff.steps.1.approver": {
+        "links": {
+          "self": "../Employee/dana-kim"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../performance-review",
+        "name": "PerformanceReview"
+      }
+    }
+  }
+}

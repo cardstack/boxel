@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Riley Chen",
-      "email": "riley.chen@example.com",
+      "name": "Jamie Torres",
+      "email": "jamie.torres@example.com",
       "phone": "+14155550177",
       "source": "LinkedIn",
       "positionTitle": "Frontend Engineer",
@@ -11,7 +11,7 @@
       "status": "new",
       "resumeText": "",
       "cardInfo": {
-        "name": "Riley Chen (application)",
+        "name": "Jamie Torres (application)",
         "summary": null,
         "cardThumbnailURL": null,
         "notes": null
@@ -30,7 +30,7 @@
       },
       "resumeFile": {
         "links": {
-          "self": "../riley_chen_resume.pdf"
+          "self": null
         }
       }
     },

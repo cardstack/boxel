@@ -24,7 +24,8 @@
       "terminationDate": null,
       "ptoBalance": null,
       "onboardingStatus": null,
-      "weeklyInterviewCapacityHours": null
+      "weeklyInterviewCapacityHours": null,
+      "ptoAllowanceDays": 25
     },
     "relationships": {
       "manager": {

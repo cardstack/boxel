@@ -7,6 +7,7 @@ import {
   StringField,
 } from '@cardstack/base/card-api';
 import DateField from '@cardstack/base/date';
+import MarkdownField from '@cardstack/base/markdown';
 import NumberField from '@cardstack/base/number';
 import enumField from '@cardstack/base/enum';
 import { FileDef } from '@cardstack/base/file-api';
@@ -21,6 +22,7 @@ import { Candidate } from './candidate';
 import { Position } from './position';
 import { ApprovalChainField } from './approval-chain-field';
 import { ApproveChainStepCommand } from './commands/approve-chain-step-command';
+import { GenerateOfferLetterCommand } from './commands/generate-offer-letter-command';
 import {
   daysBetween,
   initialsOf,
@@ -98,12 +100,27 @@ export class Offer extends CardDef {
   @field decisionDate = contains(DateField);
   @field approvalChain = contains(ApprovalChainField);
   @field offerLetterFile = linksTo(FileDef, { searchable: true });
+  // The generated letter itself — written by GenerateOfferLetterCommand from
+  // an OfferLetterTemplate's merge fields. The print stylesheet in the
+  // isolated view is the export path (browser print-to-PDF); distinct from
+  // offerLetterFile, which holds an externally-produced signed document.
+  @field letter = contains(MarkdownField);
   @field status = contains(OfferStatusField);
 
   // Denormalized for fitted — prerendered fitted does not resolve linksTo.
   @field candidateName = contains(StringField, {
     computeVia: function (this: Offer) {
       return this.candidate?.name ?? '';
+    },
+  });
+
+  // Denormalized id, same rationale as Meeting.candidateId: the tracker's
+  // board resolves a candidate's Offer from the live offers query by this
+  // own-attribute match — dereferencing `candidate.offer` at click time
+  // races the async linksTo load and silently opens nothing.
+  @field candidateId = contains(StringField, {
+    computeVia: function (this: Offer) {
+      return this.candidate?.id ?? '';
     },
   });
 
@@ -212,6 +229,44 @@ export class Offer extends CardDef {
     // invoked from the consuming card/tracker rather than from a field.
     @tracked approvalBusy = false;
     @tracked approvalError: string | undefined;
+
+    // Generate-letter action. The command resolves the template itself (the
+    // linked one, else the first OfferLetterTemplate in the realm), so the
+    // button needs no picker UI — one template is the common case here.
+    @tracked letterBusy = false;
+    @tracked letterError: string | undefined;
+    @tracked letterMessage: string | undefined;
+
+    generateLetter = () => {
+      void this.generateLetterTask();
+    };
+
+    private generateLetterTask = async () => {
+      let model = this.args.model;
+      if (!model) {
+        return;
+      }
+      let commandContext = this.args.context?.commandContext;
+      if (!commandContext) {
+        this.letterError = 'Commands are unavailable in this mode';
+        return;
+      }
+      this.letterError = undefined;
+      this.letterMessage = undefined;
+      this.letterBusy = true;
+      try {
+        let result = await new GenerateOfferLetterCommand(
+          commandContext,
+        ).execute({
+          offer: model,
+        } as any);
+        this.letterMessage = (result as any)?.message;
+      } catch (error: any) {
+        this.letterError = error?.message ?? String(error);
+      } finally {
+        this.letterBusy = false;
+      }
+    };
 
     get canDecideApproval(): boolean {
       return this.args.model?.approvalChain?.status === 'in-progress';
@@ -330,6 +385,38 @@ export class Offer extends CardDef {
               <dd>{{#if @model.decisionDate}}<@fields.decisionDate
                   />{{else}}&mdash; awaiting response{{/if}}</dd>
             </dl>
+
+            <section class='letter-panel'>
+              <h2 class='panel-title spaced letter-ui'>Offer letter</h2>
+              {{#if @model.letter}}
+                <div class='letter-doc'>
+                  <@fields.letter />
+                </div>
+              {{else}}
+                <p class='empty letter-ui'>No letter generated yet — Generate
+                  letter merges this offer's values into an Offer Letter
+                  Template. Print this page to save the result as a PDF.</p>
+              {{/if}}
+              <div class='letter-actions letter-ui'>
+                <BoxelButton
+                  @kind='secondary'
+                  @size='small'
+                  class='letter-btn'
+                  @loading={{this.letterBusy}}
+                  @disabled={{this.letterBusy}}
+                  {{on 'click' this.generateLetter}}
+                >{{if @model.letter 'Regenerate letter' 'Generate letter'}}
+                </BoxelButton>
+              </div>
+              {{#if this.letterMessage}}
+                <p class='letter-msg letter-ui' role='status'>
+                  {{this.letterMessage}}</p>
+              {{/if}}
+              {{#if this.letterError}}
+                <p class='approval-error letter-ui' role='alert'>
+                  {{this.letterError}}</p>
+              {{/if}}
+            </section>
           </div>
 
           <aside class='side'>
@@ -611,6 +698,62 @@ export class Offer extends CardDef {
             var(--destructive, var(--boxel-danger)) 38%,
             var(--card-foreground, var(--boxel-dark))
           );
+        }
+        .letter-doc {
+          border: 1px solid var(--border, var(--boxel-200));
+          border-radius: var(--boxel-border-radius-sm);
+          padding: var(--boxel-sp);
+          background: var(--card, var(--boxel-light));
+          font-size: var(--boxel-font-size-sm);
+          line-height: 1.65;
+          max-width: 62ch;
+        }
+        .letter-actions {
+          display: flex;
+          gap: var(--boxel-sp-xs);
+          margin-top: var(--boxel-sp-xs);
+        }
+        .letter-btn {
+          --boxel-button-secondary-background: transparent;
+          --boxel-button-secondary-foreground: var(--offer-strong);
+          --boxel-button-secondary-border: var(--offer-strong);
+          --boxel-button-border-radius: var(--boxel-border-radius-sm);
+        }
+        .letter-msg {
+          margin: var(--boxel-sp-xs) 0 0;
+          font-size: var(--boxel-font-size-xs);
+          color: var(--muted-foreground, var(--boxel-450));
+        }
+        /* Print = the letter's export path. The browser's print-to-PDF is
+           the spec's "PDF" pragmatically: everything that is app chrome
+           (hero, aside, facts, actions) disappears, and the letter reforms
+           as a serif document with document margins. */
+        @media print {
+          .hero,
+          .side,
+          .letter-ui,
+          .main > *:not(.letter-panel) {
+            display: none;
+          }
+          .offer-isolated {
+            overflow: visible;
+            background: transparent;
+          }
+          .body {
+            display: block;
+          }
+          .main {
+            padding: 0;
+          }
+          .letter-doc {
+            border: 0;
+            padding: 2.5cm 2cm;
+            max-width: none;
+            background: transparent;
+            font-family: Georgia, 'Times New Roman', serif;
+            font-size: 12pt;
+            line-height: 1.6;
+          }
         }
         @container iso (max-width: 40rem) {
           .body {

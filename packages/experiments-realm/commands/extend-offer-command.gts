@@ -94,7 +94,7 @@ export class ExtendOfferCommand extends Command<
         candidate,
         position: candidate.position,
         offeredTitle: candidate.appliedRole,
-        salary: salary ?? candidate.offerSalary,
+        salary,
         startDate,
         extendedDate: new Date(),
         approvalChain: approver
@@ -113,9 +113,6 @@ export class ExtendOfferCommand extends Command<
     }
 
     candidate.offerState = 'extended';
-    if (salary != null) {
-      candidate.offerSalary = salary;
-    }
     await new SaveCardCommand(this.commandContext).execute({
       card: candidate,
     });

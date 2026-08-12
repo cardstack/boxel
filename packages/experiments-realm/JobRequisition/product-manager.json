@@ -8,7 +8,6 @@
       "headcount": 1,
       "salaryRangeMin": 130000,
       "salaryRangeMax": 170000,
-      "requisitionStatus": "approved",
       "targetFillDate": "2026-09-15",
       "createdDate": "2026-07-20",
       "approvalChain": {
@@ -27,7 +26,8 @@
         "cardThumbnailURL": null,
         "notes": null
       },
-      "filledDate": null
+      "filledDate": null,
+      "status": "approved"
     },
     "relationships": {
       "approvalChain.steps.0.approver": {

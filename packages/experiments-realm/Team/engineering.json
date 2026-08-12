@@ -5,7 +5,10 @@
       "name": "Engineering",
       "mission": "Build and run the product platform.",
       "cardInfo": {
-        "name": "Engineering Team"
+        "name": "Engineering Team",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
       }
     },
     "relationships": {

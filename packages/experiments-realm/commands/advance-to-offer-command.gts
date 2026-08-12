@@ -40,9 +40,17 @@ export class AdvanceToOfferCommand extends Command<
     if (!candidate) {
       throw new Error('candidate is required');
     }
-    if (candidate.status !== 'interviewing') {
+    // Two legitimate entry points: advancing an interviewing candidate, and
+    // drafting the missing Offer for a candidate already AT the offer stage
+    // (e.g. the stage was set by hand, or the draft was deleted) — the
+    // board's "Create offer" button is the second case. Anything else is a
+    // wrong-stage call.
+    if (
+      candidate.status !== 'interviewing' &&
+      !(candidate.status === 'offer' && !candidate.offerState)
+    ) {
       throw new Error(
-        `Only candidates at the "interviewing" stage can be advanced to offer (current stage: ${
+        `Only candidates at the "interviewing" stage (or at "offer" with no draft yet) can be advanced to offer (current stage: ${
           candidate.status ?? 'none'
         })`,
       );
@@ -61,7 +69,6 @@ export class AdvanceToOfferCommand extends Command<
         candidate,
         position: candidate.position,
         offeredTitle: candidate.appliedRole,
-        salary: candidate.offerSalary,
         status: 'draft',
       }) as Offer;
       offer = (await new SaveCardCommand(this.commandContext).execute({

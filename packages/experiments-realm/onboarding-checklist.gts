@@ -53,19 +53,17 @@ export const OnboardingChecklistStatusField = enumField(StringField, {
 });
 
 // One task in an OnboardingChecklist — tracking completion state for a
-// templated task instance. The dueDate is COMPUTED from the template's
-// duration offset + checklist.createdDate, not stored.
+// templated task instance. The dueDate is computed ONCE, at checklist
+// creation time, from the template's duration offset + checklist.createdDate
+// (see create-onboarding-checklist-command.gts) — it is stored, not
+// computeVia, because a FieldDef cannot see its containing checklist.
 export class OnboardingChecklistTaskField extends FieldDef {
   static displayName = 'Onboarding Checklist Task';
 
   @field title = contains(StringField);
   @field dueDate = contains(DateField, {
     description:
-      'Computed from template task offset + checklist creation date',
-    computeVia: function (this: OnboardingChecklistTaskField) {
-      // This will be computed by the containing checklist when rendering
-      return undefined;
-    },
+      'Due date, computed once at checklist creation from the template task offset + checklist creation date',
   });
   @field assignee = linksTo(() => Employee);
   @field status = contains(enumField(StringField, {
@@ -188,6 +186,8 @@ export class OnboardingChecklist extends CardDef {
   static displayName = 'Onboarding Checklist';
   static icon = ChecklistIcon;
 
+  // One-directional by design — a deliberate live-query choice over a
+  // linksToMany back-reference on Employee, matching PtoRequest's employee link.
   @field employee = linksTo(() => Employee);
   @field contractor = linksTo(() => Contractor);
   @field template = linksTo(() => OnboardingTemplate);
@@ -442,7 +442,7 @@ export class OnboardingChecklist extends CardDef {
         .progress-value {
           font-size: var(--boxel-font-size-sm);
           font-weight: 700;
-          color: var(--primary, var(--boxel-highlight));
+          color: var(--card-foreground, var(--boxel-dark));
         }
         .progress-bar-bg {
           width: 100%;
@@ -664,6 +664,17 @@ export class OnboardingChecklist extends CardDef {
       return htmlSafe(`width: ${this.completionPercentage}%`);
     }
 
+    // First few task rows for tall cells — same containsMany-preview
+    // treatment onboarding-template's fitted uses.
+    get previewTasks() {
+      return (this.args.model?.tasks ?? []).slice(0, 4);
+    }
+
+    get moreCount(): number {
+      let n = this.args.model?.tasks?.length ?? 0;
+      return Math.max(0, n - 4);
+    }
+
     <template>
       <article class='fit'>
         <div class='fit-top'>
@@ -684,6 +695,23 @@ export class OnboardingChecklist extends CardDef {
             {{@model.tasks.length}}
             tasks complete</span>
         </div>
+
+        {{#if this.previewTasks.length}}
+          <ul class='fit-tasks'>
+            {{#each this.previewTasks as |task|}}
+              <li
+                class='fit-task {{if (eq task.status "complete") "done"}}'
+              ><span class='fit-tick'>{{if
+                    (eq task.status 'complete')
+                    '✓'
+                    '○'
+                  }}</span>{{task.title}}</li>
+            {{/each}}
+            {{#if this.moreCount}}
+              <li class='fit-task fit-more'>+{{this.moreCount}} more</li>
+            {{/if}}
+          </ul>
+        {{/if}}
 
         <div class='fit-add'>
           <div class='bar-bg'>
@@ -738,7 +766,7 @@ export class OnboardingChecklist extends CardDef {
           font-weight: 800;
           letter-spacing: -0.02em;
           font-variant-numeric: tabular-nums;
-          color: var(--primary, var(--boxel-highlight));
+          color: var(--card-foreground, var(--boxel-dark));
         }
         .fit-pill {
           flex: none;
@@ -771,6 +799,32 @@ export class OnboardingChecklist extends CardDef {
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
+        }
+        .fit-tasks {
+          display: none;
+          list-style: none;
+          margin: 0;
+          padding: 0.3rem 0 0;
+          border-top: 1px dashed var(--border, var(--boxel-200));
+        }
+        .fit-task {
+          font-size: var(--fit-small);
+          font-weight: 600;
+          line-height: 1.5;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .fit-tick {
+          margin-right: 0.35em;
+          color: var(--muted-foreground, var(--boxel-450));
+        }
+        .fit-task.done .fit-tick {
+          color: var(--card-foreground, var(--boxel-dark));
+        }
+        .fit-more {
+          font-weight: 400;
+          color: var(--muted-foreground, var(--boxel-450));
         }
         .fit-add {
           display: none;
@@ -811,6 +865,12 @@ export class OnboardingChecklist extends CardDef {
         /* TIER 4 — progress bar pinned to the bottom edge. */
         @container fitted-card (height > 130px) and (width >= 170px) {
           .fit-add {
+            display: block;
+          }
+        }
+        /* TIER 5 — first task rows on tall cells (Full Card, Expanded). */
+        @container fitted-card (height >= 170px) and (width >= 170px) {
+          .fit-tasks {
             display: block;
           }
         }

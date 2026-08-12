@@ -87,6 +87,10 @@ export class Employee extends PersonBase {
   @field ptoBalance = contains(NumberField, {
     description: 'Remaining PTO balance, in days',
   });
+  @field ptoAllowanceDays = contains(NumberField, {
+    description:
+      'Annual PTO allowance, in days/year. The balance MATH (allowance minus approved PtoRequest days) happens app-side via a live query over PtoRequest cards — deliberately NOT a linksToMany here, so requests never have to be manually attached.',
+  });
   @field onboardingStatus = contains(OnboardingStatusField);
   @field salary = contains(NumberField);
   @field manager = linksTo(() => Employee);

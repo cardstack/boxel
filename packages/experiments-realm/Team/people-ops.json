@@ -5,7 +5,10 @@
       "name": "People Ops",
       "mission": "Hire, onboard, and support the team.",
       "cardInfo": {
-        "name": "People Ops Team"
+        "name": "People Ops Team",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
       }
     },
     "relationships": {

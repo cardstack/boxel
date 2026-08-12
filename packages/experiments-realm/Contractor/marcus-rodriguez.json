@@ -5,10 +5,11 @@
       "name": "Marcus Rodriguez",
       "email": "marcus.rodriguez@contractor.com",
       "phone": "+1 555 0202",
-      "contractStatus": "active",
       "billableRate": 120,
       "vatId": "VAT-2024-002",
       "invoiceFrequency": "quarterly",
+      "contractStartDate": "2026-05-15",
+      "contractEndDate": "2027-02-15",
       "photo": {
         "url": "https://images.pexels.com/photos/1222271/pexels-photo-1222271.jpeg",
         "sourceMode": "url"
@@ -18,9 +19,21 @@
         "summary": null,
         "cardThumbnailURL": null,
         "notes": null
+      },
+      "status": "active"
+    },
+    "relationships": {
+      "vendor": {
+        "links": {
+          "self": "../Vendor/talentbridge-agency"
+        }
+      },
+      "project": {
+        "links": {
+          "self": "../Project/benefits-migration"
+        }
       }
     },
-    "relationships": {},
     "meta": {
       "adoptsFrom": {
         "module": "../contractor",

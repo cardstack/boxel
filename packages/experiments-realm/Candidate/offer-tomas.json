@@ -5,12 +5,11 @@
       "name": "Tomás Ribeiro",
       "email": "tomas.ribeiro@example.com",
       "phone": "+1 555 0142",
-      "status": "offer",
+      "status": "interviewing",
       "boardOrder": 1,
       "appliedRole": "Platform Engineer",
       "appliedDate": "2026-06-20",
       "overallScore": 5,
-      "offerSalary": 145000,
       "cardInfo": {
         "name": "Tomás Ribeiro",
         "summary": null,
@@ -31,7 +30,14 @@
       "workHistory": [],
       "education": [],
       "rejectionNote": null,
-      "offerState": "extended"
+      "offerState": "",
+      "backgroundCheck": {
+        "status": "clear",
+        "provider": "Certn",
+        "requestedDate": "2026-07-28",
+        "completedDate": "2026-08-04",
+        "notes": "Criminal, employment, and education verification all clear."
+      }
     },
     "relationships": {
       "position": {
@@ -41,7 +47,7 @@
       },
       "offer": {
         "links": {
-          "self": "../Offer/tomas-ribeiro-offer"
+          "self": null
         }
       },
       "skills.0": {

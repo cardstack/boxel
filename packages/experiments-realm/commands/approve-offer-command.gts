@@ -40,7 +40,7 @@ export class ApproveOfferCommand extends Command<
   }
 
   protected async run(input: ApproveOfferInput): Promise<ApproveOfferResult> {
-    let { candidate, approver, salary, startDate } = input;
+    let { candidate, salary, startDate } = input;
     if (!candidate) {
       throw new Error('candidate is required');
     }
@@ -72,7 +72,7 @@ export class ApproveOfferCommand extends Command<
       role: candidate.appliedRole,
       startDate: startDate ?? new Date(),
       status: 'onboarding',
-      salary: salary ?? candidate.offerSalary,
+      salary: salary ?? candidate.offer?.salary,
     });
     let saved = (await new SaveCardCommand(this.commandContext).execute({
       card: employee,
@@ -81,12 +81,6 @@ export class ApproveOfferCommand extends Command<
 
     candidate.status = 'hired';
     candidate.decisionDate = new Date();
-    if (salary != null) {
-      candidate.offerSalary = salary;
-    }
-    if (approver) {
-      candidate.offerApprovedBy = approver;
-    }
     candidate.hiredAs = saved;
     await new SaveCardCommand(this.commandContext).execute({
       card: candidate,

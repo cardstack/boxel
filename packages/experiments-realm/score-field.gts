@@ -13,6 +13,12 @@ function numericValue(model: number | null | undefined): number {
   return typeof model === 'number' && Number.isFinite(model) ? model : 0;
 }
 
+// Distinguishes an explicit score of 0 from an unscored (null/undefined)
+// criterion — embedded/atom render an em-dash when unset.
+function isSet(model: number | null | undefined): boolean {
+  return typeof model === 'number' && Number.isFinite(model);
+}
+
 const STARS = Array.from({ length: MAX_STARS }, (_, idx) => idx + 1);
 
 export class ScoreField extends NumberField {
@@ -59,7 +65,11 @@ export class ScoreField extends NumberField {
           gap: var(--boxel-sp-4xs);
         }
         .star {
-          --score-star: #f59e0b;
+          --score-star: color-mix(
+            in oklch,
+            #f59e0b 55%,
+            var(--foreground, var(--boxel-dark))
+          );
           background: none;
           border: none;
           font-size: 1.25rem;
@@ -97,20 +107,32 @@ export class ScoreField extends NumberField {
       return numericValue(this.args.model);
     }
 
+    get isSet() {
+      return isSet(this.args.model);
+    }
+
     <template>
       <div class='score-embedded'>
-        {{#each this.stars as |star|}}
-          <span class='star {{if (lte star this.numericValue) "filled"}}'>{{if
-              (lte star this.numericValue)
-              '★'
-              '☆'
-            }}</span>
-        {{/each}}
-        <span class='score-value'>{{this.numericValue}}/5</span>
+        {{#if this.isSet}}
+          {{#each this.stars as |star|}}
+            <span class='star {{if (lte star this.numericValue) "filled"}}'>{{if
+                (lte star this.numericValue)
+                '★'
+                '☆'
+              }}</span>
+          {{/each}}
+          <span class='score-value'>{{this.numericValue}}/5</span>
+        {{else}}
+          <span class='score-unset' aria-label='Not scored'>—</span>
+        {{/if}}
       </div>
       <style scoped>
         .score-embedded {
-          --score-star: #f59e0b;
+          --score-star: color-mix(
+            in oklch,
+            #f59e0b 55%,
+            var(--foreground, var(--boxel-dark))
+          );
           display: inline-flex;
           align-items: center;
           gap: var(--boxel-sp-4xs);
@@ -129,6 +151,10 @@ export class ScoreField extends NumberField {
           line-height: 1;
           color: var(--muted-foreground, var(--boxel-450));
         }
+        .score-unset {
+          font-weight: 600;
+          color: var(--muted-foreground, var(--boxel-450));
+        }
       </style>
     </template>
   };
@@ -138,14 +164,26 @@ export class ScoreField extends NumberField {
       return numericValue(this.args.model);
     }
 
+    get isSet() {
+      return isSet(this.args.model);
+    }
+
     <template>
       <span class='score-atom'>
-        <span class='star {{if this.numericValue "filled"}}'>★</span>
-        {{this.numericValue}}
+        {{#if this.isSet}}
+          <span class='star {{if this.numericValue "filled"}}'>★</span>
+          {{this.numericValue}}
+        {{else}}
+          <span class='score-unset' aria-label='Not scored'>—</span>
+        {{/if}}
       </span>
       <style scoped>
         .score-atom {
-          --score-star: #f59e0b;
+          --score-star: color-mix(
+            in oklch,
+            #f59e0b 55%,
+            var(--foreground, var(--boxel-dark))
+          );
           display: inline-flex;
           align-items: center;
           gap: var(--boxel-sp-5xs);
@@ -160,6 +198,9 @@ export class ScoreField extends NumberField {
         }
         .star.filled {
           color: var(--score-star);
+        }
+        .score-unset {
+          color: var(--muted-foreground, var(--boxel-450));
         }
       </style>
     </template>
