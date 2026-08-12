@@ -76,7 +76,7 @@ import {
   newSandboxRuntimeNonce,
 } from '@cardstack/host/lib/sandbox-runtime-origin';
 import SandboxRuntimeProcess, {
-  supportsCredentiallessIframe,
+  sandboxIframeIsolationMode,
 } from '@cardstack/host/lib/sandbox-runtime-process';
 import { constrainSandboxWriteDocument } from '@cardstack/host/lib/sandbox-write-transport';
 import {
@@ -1311,11 +1311,7 @@ export default class BoxelExecutionService extends Service {
     if (typeof document === 'undefined') {
       throw new Error('Sandbox rendering requires a browser document');
     }
-    if (!supportsCredentiallessIframe()) {
-      throw new Error(
-        'Boxel Sandbox requires browser support for credentialless iframes',
-      );
-    }
+    let isolationMode = sandboxIframeIsolationMode();
     // Parent-side counterpart of the child's own boot breadcrumbs
     // ([sandbox-child] route model resolved / listening posted): a Sandbox
     // process being created more than once for the same surface in quick
@@ -1324,6 +1320,7 @@ export default class BoxelExecutionService extends Service {
     // side knows the surface identity that ties the boots together.
     console.debug('[sandbox-parent] process created', {
       surfaceId: surfaceIdentity,
+      isolationMode,
       priorCreationsThisSession: this.sandboxCreationCount++,
     });
     let childURL = this.sandboxChildURL;
@@ -1346,6 +1343,7 @@ export default class BoxelExecutionService extends Service {
         surfaceId: surfaceIdentity,
       },
       keepRenderDiagnostics: boxelExecutionPerformanceEnabled(),
+      isolationMode,
     });
   }
 

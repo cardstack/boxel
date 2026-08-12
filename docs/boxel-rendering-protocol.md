@@ -636,8 +636,9 @@ transpiled dynamic import receives the named
 main thread: SES limits authority, not CPU time, and there is no preemptive
 termination for an infinite loop. This is an explicit prototype limitation.
 
-**RP-15.3** Sandbox specifics: origin-isolated, credentialless iframe; a
-transferred private MessageChannel; **a live iframe is never re-parented**;
+**RP-15.3** Sandbox specifics: an origin-isolated iframe using the browser's
+strongest supported credential isolation; a transferred private
+MessageChannel; **a live iframe is never re-parented**;
 Host-brokered module fetches limited to the admitted graph; a post-render
 error is reported to the parent (silence after `render()` resolves is a
 protocol violation) as a `runtime-error` control message, which the parent
@@ -648,11 +649,24 @@ blank iframe. Errors cross the boundary with their stack and depth-bounded
 wrapper. The prerender placeholder is retained as last-known-good; layout
 crosses via the `layout` capability, not hard-coded per format.
 
+A browser exposing the `credentialless` iframe attribute uses
+`sandbox="allow-scripts allow-same-origin" credentialless`. A browser without
+that attribute (notably Safari and Firefox) uses `sandbox="allow-scripts"`:
+omitting
+`allow-same-origin` gives the child a unique opaque origin with no cookie or
+storage access. Its bootstrap announcement consequently has origin `null` and
+is accepted only from the exact iframe `WindowProxy` with the per-process
+unguessable `bootstrapId`; the parent targets that already captured window and
+the child still authenticates the real parent origin before accepting the one
+transferred private port. `*` is never used as a source of authority.
+
 A hosted deployment is admitted only with an explicit distinct-origin
-`BOXEL_SANDBOX_RUNTIME_URL`, browser support for credentialless iframes, and
-restrictive response headers on the child route (CSP, `no-referrer`, and
-`nosniff`). Local Vite serve/preview installs those headers; production edge
-configuration must provide an equivalent policy before enabling Sandbox.
+`BOXEL_SANDBOX_RUNTIME_URL` and restrictive response headers on the child route
+(CSP, `no-referrer`, and `nosniff`). The nonce-origin edge strips request
+credentials before fetching public Host assets upstream, removes `Set-Cookie`,
+and marks those assets CORS/CORP-readable so an opaque-origin child can boot.
+Local Vite serve/preview installs equivalent headers. Production edge
+configuration must provide the same policy before enabling Sandbox.
 
 There is currently one explicit compatibility exception to static graph
 admission: `https://bxl.boxel.site/bxl.ts`, Chris's BXL prototype, because

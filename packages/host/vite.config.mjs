@@ -216,26 +216,34 @@ function sandboxRuntimeSecurityHeaders() {
         'user.localhost',
         process.env.BOXEL_SANDBOX_HOSTNAME,
       ].filter(Boolean);
-      if (
-        pathname !== '/_boxel-sandbox-runtime' ||
-        !expectedSandboxHostnames.includes(hostname)
-      ) {
+      if (!expectedSandboxHostnames.includes(hostname)) {
+        next();
+        return;
+      }
+      // Safari and Firefox use an opaque-origin sandbox rather than Chromium's
+      // credentialless attribute. Let that opaque document load this sandbox
+      // hostname's public Vite assets while the route CSP and MessageChannel
+      // still deny ambient Host/realm authority.
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      if (pathname !== '/_boxel-sandbox-runtime') {
         next();
         return;
       }
       let parentSource = process.env.BOXEL_HOST_HOSTNAME
         ? `https://${process.env.BOXEL_HOST_HOSTNAME}`
         : 'http://localhost:* https://localhost:*';
+      let resourceSource = `https://${req.headers.host}`;
       res.setHeader(
         'Content-Security-Policy',
         [
           `default-src 'self'`,
-          `script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:`,
-          `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com`,
-          `connect-src 'self' ${parentSource}`,
-          `img-src 'self' data: blob:`,
-          `font-src 'self' data: blob: https://fonts.gstatic.com`,
-          `media-src 'self' data: blob:`,
+          `script-src 'self' ${resourceSource} 'unsafe-inline' 'unsafe-eval' blob:`,
+          `style-src 'self' ${resourceSource} 'unsafe-inline' https://fonts.googleapis.com`,
+          `connect-src 'self' ${resourceSource} ${parentSource}`,
+          `img-src 'self' ${resourceSource} data: blob:`,
+          `font-src 'self' ${resourceSource} data: blob: https://fonts.gstatic.com`,
+          `media-src 'self' ${resourceSource} data: blob:`,
           `worker-src 'none'`,
           `child-src 'none'`,
           `object-src 'none'`,

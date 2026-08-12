@@ -58,26 +58,36 @@ export function isAllowedParentOrigin(origin, configuredOrigins) {
   });
 }
 
-function rendererCSP(configuredOrigins, inlineScriptHashes = []) {
+function rendererCSP(
+  configuredOrigins,
+  inlineScriptHashes = [],
+  resourceOrigin,
+) {
   let frameAncestors = splitAllowedOrigins(configuredOrigins).join(' ');
   let scriptHashes = inlineScriptHashes.join(' ');
+  // The fallback sandbox used by Safari and Firefox has an opaque document
+  // origin. In that mode CSP `self` matches no network URL, so name the nonce
+  // resource origin explicitly. The Worker serves only the selected public
+  // Host build assets from this origin and strips credentials before fetching
+  // them upstream.
+  let resourceSource = resourceOrigin ? ` ${resourceOrigin}` : '';
   return [
     "default-src 'none'",
     "base-uri 'none'",
     "object-src 'none'",
     "form-action 'none'",
-    "connect-src 'self'",
+    `connect-src 'self'${resourceSource}`,
     "frame-src 'none'",
     "worker-src 'none'",
     "child-src 'none'",
     "manifest-src 'none'",
-    `script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval' blob:${
+    `script-src 'self'${resourceSource} 'unsafe-eval' 'wasm-unsafe-eval' blob:${
       scriptHashes ? ` ${scriptHashes}` : ''
     }`,
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    "img-src 'self' data: blob:",
-    "font-src 'self' data: https://fonts.gstatic.com",
-    "media-src 'self' data: blob:",
+    `style-src 'self'${resourceSource} 'unsafe-inline' https://fonts.googleapis.com`,
+    `img-src 'self'${resourceSource} data: blob:`,
+    `font-src 'self'${resourceSource} data: https://fonts.gstatic.com`,
+    `media-src 'self'${resourceSource} data: blob:`,
     `frame-ancestors ${frameAncestors || "'none'"}`,
   ].join('; ');
 }
@@ -141,7 +151,12 @@ async function readBoundedText(response, maxBytes) {
   }
 }
 
-export async function secureResponse(response, configuredOrigins, isHTML) {
+export async function secureResponse(
+  response,
+  configuredOrigins,
+  isHTML,
+  resourceOrigin,
+) {
   let headers = new Headers(response.headers);
   let body = response.body;
   let scriptHashes = [];
@@ -154,9 +169,15 @@ export async function secureResponse(response, configuredOrigins, isHTML) {
   headers.delete('set-cookie');
   headers.set(
     'Content-Security-Policy',
-    rendererCSP(configuredOrigins, scriptHashes),
+    rendererCSP(configuredOrigins, scriptHashes, resourceOrigin),
   );
-  headers.set('Cross-Origin-Resource-Policy', 'same-origin');
+  // `sandbox="allow-scripts"` gives the fallback child an opaque origin. Its
+  // module requests therefore use CORS even though their URLs share the
+  // nonce hostname. These are immutable public build assets, fetched
+  // upstream without credentials; allowing that opaque reader does not grant
+  // realm or Host API authority.
+  headers.set('Access-Control-Allow-Origin', '*');
+  headers.set('Cross-Origin-Resource-Policy', 'cross-origin');
   headers.set(
     'Permissions-Policy',
     'camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), bluetooth=(), browsing-topics=()',
@@ -320,6 +341,7 @@ async function handleRequest(request, env) {
       fetched.response,
       env.ALLOWED_PARENT_ORIGINS,
       false,
+      url.origin,
     );
   }
 
@@ -359,6 +381,7 @@ async function handleRequest(request, env) {
       }),
       env.ALLOWED_PARENT_ORIGINS,
       true,
+      url.origin,
     );
   }
   return json({ error: 'renderer documents are bootstrap-only' }, 404);

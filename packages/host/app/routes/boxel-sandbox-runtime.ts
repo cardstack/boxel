@@ -20,7 +20,8 @@ const SANDBOX_RUNTIME_PATH = '/_boxel-sandbox-runtime';
  * Boot-time gates elsewhere in the app (matrix/realm/session start —
  * see `instance-initializers/register-auth-service-worker.ts`) consult
  * this: the Sandbox child boots the full host application inside a
- * credentialless, cross-origin iframe (RP-15.3), where matrix login,
+ * credential-isolated cross-origin iframe (credentialless or opaque-origin,
+ * RP-15.3), where matrix login,
  * `document.requestStorageAccess()`, and realm/sliding-sync network calls
  * are neither available nor needed — this route's own authority arrives
  * entirely over one transferred `MessagePort` (`sandbox-runtime-host.ts`).

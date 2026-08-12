@@ -97,12 +97,29 @@ export interface SandboxRuntimeProcessOptions {
   connectTimeout?: number;
   /** Retain post-paint DOM diagnostics for explicit performance debugging. */
   keepRenderDiagnostics?: boolean;
+  /**
+   * How the browser withholds ambient origin credentials from the child.
+   * Chromium supports a credentialless iframe while Safari and Firefox
+   * currently need the standards-based opaque-origin sandbox fallback
+   * (RP-15.3).
+   */
+  isolationMode?: SandboxIframeIsolationMode;
 }
+
+export type SandboxIframeIsolationMode = 'credentialless' | 'opaque-origin';
 
 export function supportsCredentiallessIframe(
   prototype: object = HTMLIFrameElement.prototype,
 ): boolean {
   return 'credentialless' in prototype;
+}
+
+export function sandboxIframeIsolationMode(
+  prototype: object = HTMLIFrameElement.prototype,
+): SandboxIframeIsolationMode {
+  return supportsCredentiallessIframe(prototype)
+    ? 'credentialless'
+    : 'opaque-origin';
 }
 
 export interface SandboxRenderSlot {
@@ -980,6 +997,9 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
 
   private connect(): Promise<SandboxBoxelRuntimeClient> {
     let { childOrigin, childURL } = this.options;
+    let isolationMode =
+      this.options.isolationMode ?? sandboxIframeIsolationMode();
+    let opaqueOrigin = isolationMode === 'opaque-origin';
     let iframe = this._iframe;
     let bootstrapId = randomBootstrapId();
     let child = new URL(childURL);
@@ -995,13 +1015,26 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
     }
     child.searchParams.set('bootstrapId', bootstrapId);
     child.searchParams.set('parentOrigin', globalThis.location.origin);
-    // The child needs its declared origin for the origin-checked bootstrap and
-    // for server-side execution-principal checks. `allow-same-origin` is safe
-    // here only because we reject the Host origin above; SOP still prevents
-    // the child from reaching the parent document. `credentialless` removes
-    // ambient cookies and storage from this otherwise normal child origin.
-    iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin');
-    iframe.setAttribute('credentialless', '');
+    if (opaqueOrigin) {
+      // Safari and Firefox do not currently implement credentialless
+      // iframes. Withholding allow-same-origin gives the child a unique opaque
+      // origin instead: it cannot read cookies/storage for the nonce hostname,
+      // and SOP still prevents parent DOM access. The bootstrap announcement
+      // consequently has origin "null" and is bound below to this exact
+      // WindowProxy plus the unguessable bootstrap id before the private port
+      // is transferred.
+      iframe.setAttribute('sandbox', 'allow-scripts');
+      iframe.removeAttribute('credentialless');
+    } else {
+      // The child needs its declared origin for the origin-checked bootstrap
+      // and for server-side execution-principal checks. `allow-same-origin`
+      // is safe here only because we reject the Host origin above; SOP still
+      // prevents the child from reaching the parent document.
+      // `credentialless` removes ambient cookies and storage from this
+      // otherwise normal child origin.
+      iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin');
+      iframe.setAttribute('credentialless', '');
+    }
 
     return new Promise((resolve, reject) => {
       let client: SandboxBoxelRuntimeClient | undefined;
@@ -1081,7 +1114,8 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
       };
       let receive = (event: MessageEvent<unknown>) => {
         if (
-          event.origin !== childOrigin ||
+          event.origin !== (opaqueOrigin ? 'null' : childOrigin) ||
+          (opaqueOrigin && event.source !== iframe.contentWindow) ||
           !isSandboxListening(event.data) ||
           event.data.bootstrapId !== bootstrapId
         ) {
@@ -1161,7 +1195,13 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
           fail(new Error('Sandbox child window is unavailable'));
           return;
         }
-        contentWindow.postMessage(connect, childOrigin, [channel.port2]);
+        // An opaque origin cannot be named as a postMessage target. The `*`
+        // below targets only the already captured WindowProxy; the receiver
+        // still authenticates the real parent origin, bootstrap id, transport
+        // version, and one transferred private port before accepting it.
+        contentWindow.postMessage(connect, opaqueOrigin ? '*' : childOrigin, [
+          channel.port2,
+        ]);
         // The child now has the only ambient bootstrap listener. Runtime
         // readiness and all later authority travel over the transferred port.
         globalThis.removeEventListener('message', receive);

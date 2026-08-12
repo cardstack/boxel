@@ -1556,11 +1556,14 @@ vertical system, not as three independent prototypes:
    records, retain authored component state, and emit only explicitly granted
    effects. Trusted Glimmer managers render the resulting component and scoped
    styles in the Host document.
-3. **Sandbox is end to end.** Browser-dependent formats run in a credentialless
-   iframe on the configured Sandbox origin. A transferred private
-   `MessageChannel` carries versioned render and Surface messages. Authored
-   module fetches are Host-brokered, GET-only, recursively admitted from literal
-   imports, bounded in size, and cancelled when the process is destroyed.
+3. **Sandbox is end to end.** Browser-dependent formats run in an
+   origin-isolated iframe on the configured Sandbox origin: credentialless in
+   supporting browsers, and an `allow-scripts`-only opaque origin in Safari and
+   Firefox. A
+   transferred private `MessageChannel` carries versioned render and Surface
+   messages. Authored module fetches are Host-brokered, GET-only, recursively
+   admitted from literal imports, bounded in size, and cancelled when the
+   process is destroyed.
 4. **Composition crosses mixed tiers.** `BoxelFieldPortal` is the Host-owned
    invocation capability for nested authored FieldDefs, CardDefs, and FileDefs.
    It recursively routes contained and linked Boxels through the same engine;
@@ -1580,10 +1583,10 @@ vertical system, not as three independent prototypes:
 7. **Security and lifecycle are evidence, not assumptions.** Tests cover ambient
    browser denial in Capsule, stylesheet confinement, exact recursive Sandbox
    module authority, header stripping, origin and protocol validation,
-   credentialless iframe construction, last-known-good retention, deterministic
-   Surface release, iframe removal, and runtime eviction. No runtime request or
-   record contains a live Store, Loader, service, CardDef instance, or Host DOM
-   object.
+   browser-negotiated iframe isolation, last-known-good retention,
+   deterministic Surface release, iframe removal, and runtime eviction. No
+   runtime request or record contains a live Store, Loader, service, CardDef
+   instance, or Host DOM object.
 
 `data-boxel-execution` on the mounted slot is a temporary development and test
 diagnostic (`direct`, `capsule`, `sandbox`, or `prerender`), not a card-author

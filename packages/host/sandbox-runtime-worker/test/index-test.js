@@ -94,6 +94,7 @@ test('adds restrictive response policy and removes cookies', async () => {
     ),
     stagingAllowed,
     true,
+    `https://${sandboxHost}`,
   );
   assert.equal(response.headers.has('set-cookie'), false);
   assert.match(
@@ -110,11 +111,11 @@ test('adds restrictive response policy and removes cookies', async () => {
   );
   assert.match(
     response.headers.get('content-security-policy'),
-    /style-src 'self' 'unsafe-inline' https:\/\/fonts\.googleapis\.com/,
+    /style-src 'self' https:\/\/0123456789abcdef0123456789abcdef\.boxelusercontent\.dev 'unsafe-inline' https:\/\/fonts\.googleapis\.com/,
   );
   assert.match(
     response.headers.get('content-security-policy'),
-    /font-src 'self' data: https:\/\/fonts\.gstatic\.com/,
+    /font-src 'self' https:\/\/0123456789abcdef0123456789abcdef\.boxelusercontent\.dev data: https:\/\/fonts\.gstatic\.com/,
   );
   assert.doesNotMatch(
     response.headers.get('content-security-policy'),
@@ -127,6 +128,11 @@ test('adds restrictive response policy and removes cookies', async () => {
   assert.equal(response.headers.get('x-frame-options'), null);
   assert.equal(response.headers.get('referrer-policy'), 'no-referrer');
   assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+  assert.equal(response.headers.get('access-control-allow-origin'), '*');
+  assert.equal(
+    response.headers.get('cross-origin-resource-policy'),
+    'cross-origin',
+  );
   assert.equal(response.headers.get('cache-control'), 'no-store');
 });
 

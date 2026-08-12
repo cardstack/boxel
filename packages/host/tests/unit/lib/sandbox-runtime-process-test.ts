@@ -13,8 +13,10 @@ import { createSandboxRenderDiagnosticReporter } from '@cardstack/host/lib/sandb
 import SandboxRuntimeProcess, {
   isSandboxRuntimeControl,
   projectedResourceLinks,
+  sandboxIframeIsolationMode,
   sandboxRenderDiagnosticAcceptedKind,
   supportsCredentiallessIframe,
+  type SandboxIframeIsolationMode,
 } from '@cardstack/host/lib/sandbox-runtime-process';
 
 import type SurfaceService from '@cardstack/host/services/surface-service';
@@ -50,6 +52,7 @@ function createTestRuntime(
     loadTimeout?: number;
     connectTimeout?: number;
     resolveModuleURL?: (identifier: string) => string;
+    isolationMode?: SandboxIframeIsolationMode;
   } = {},
 ): SandboxRuntimeProcess {
   let { service } = overrides.service
@@ -70,19 +73,52 @@ function createTestRuntime(
     },
     loadTimeout: overrides.loadTimeout ?? overrides.connectTimeout ?? 30,
     connectTimeout: overrides.connectTimeout ?? 30,
+    isolationMode: overrides.isolationMode,
   });
 }
 
 module('Unit | Sandbox runtime process', function () {
-  test('credentialless support is an explicit browser capability gate', function (assert) {
+  test('browser support selects credentialless or opaque-origin isolation', function (assert) {
     assert.true(
       supportsCredentiallessIframe({ credentialless: true }),
-      'a browser implementation exposing credentialless is admitted',
+      'detects a browser implementation exposing credentialless',
     );
     assert.false(
       supportsCredentiallessIframe({}),
-      'a browser without credentialless support is refused',
+      'detects a browser without credentialless support',
     );
+    assert.strictEqual(
+      sandboxIframeIsolationMode({ credentialless: true }),
+      'credentialless',
+      'Chromium uses credentialless isolation',
+    );
+    assert.strictEqual(
+      sandboxIframeIsolationMode({}),
+      'opaque-origin',
+      'Safari and Firefox use the standards-based opaque-origin fallback',
+    );
+  });
+
+  test('opaque-origin isolation withholds same-origin and credentialless authority', function (assert) {
+    let runtime = createTestRuntime({ isolationMode: 'opaque-origin' });
+    let slot = document.createElement('div');
+    document.body.append(slot);
+
+    try {
+      runtime.mount(slot);
+      assert.strictEqual(
+        runtime.iframe.getAttribute('sandbox'),
+        'allow-scripts',
+        'the fallback omits allow-same-origin so the child receives an opaque origin',
+      );
+      assert.false(
+        runtime.iframe.hasAttribute('credentialless'),
+        'the unsupported Chromium-only attribute is not emitted',
+      );
+    } finally {
+      runtime.destroy();
+      slot.remove();
+    }
   });
 
   test('an accepted first paint stops later diagnostic posts', async function (assert) {

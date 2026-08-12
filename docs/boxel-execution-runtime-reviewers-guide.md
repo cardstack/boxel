@@ -39,18 +39,20 @@ Three corollaries explain most of the code:
 
 ## Layer 1 — the tiers
 
-| Tier        | Who executes                                                  | Whose DOM                                  | When                                                  |
-| ----------- | ------------------------------------------------------------- | ------------------------------------------ | ----------------------------------------------------- |
-| **Direct**  | Host loader + Host Glimmer                                    | Host document                              | Trusted Base and Cardstack package provenance         |
-| **Capsule** | SES compartment in the Host process                           | Host document, via reconstructed templates | Authored code with no browser-authority needs         |
-| **Sandbox** | Full child app in an origin-isolated, `credentialless` iframe | The child's own document                   | Authored code that needs real DOM / browser libraries |
+| Tier        | Who executes                                | Whose DOM                                  | When                                                  |
+| ----------- | ------------------------------------------- | ------------------------------------------ | ----------------------------------------------------- |
+| **Direct**  | Host loader + Host Glimmer                  | Host document                              | Trusted Base and Cardstack package provenance         |
+| **Capsule** | SES compartment in the Host process         | Host document, via reconstructed templates | Authored code with no browser-authority needs         |
+| **Sandbox** | Full child app in an origin-isolated iframe | The child's own document                   | Authored code that needs real DOM / browser libraries |
 
 Vocabulary: a **SES compartment** runs JS with a controlled global scope —
 no `document`, `window`, or `fetch` exists inside it; templates are
 compiled, inspected, and rebuilt by the Host rather than executed as
-authored. A **credentialless iframe** gets a throwaway cookie jar and
-storage — the child runs on a realm-user origin but carries none of the
-user's credentials; its only connection to anything is one message port.
+authored. Chromium's **credentialless iframe** gets a throwaway cookie jar and
+storage. Safari and Firefox instead get an opaque origin by omitting
+`allow-same-origin`. In either mode the child carries no usable origin
+credentials; its only authority-bearing connection is one private message
+port.
 
 Every render is stamped for triage:
 
@@ -377,11 +379,14 @@ Capsule scope; every Sandbox request dies at the gated port).
 What to verify rather than trust, with the code that enforces it:
 
 ```ts
-// Sandbox: distinct origin is mandatory, credentialless is set
+// Sandbox: distinct origin is mandatory; choose the strongest browser mode
 if (childOrigin === globalThis.location.origin) reject(...)
-if (!supportsCredentiallessIframe()) reject(...)
-iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin');
-iframe.setAttribute('credentialless', '');
+if (supportsCredentiallessIframe()) {
+  iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin');
+  iframe.setAttribute('credentialless', '');
+} else {
+  iframe.setAttribute('sandbox', 'allow-scripts'); // opaque origin (Safari/Firefox)
+}
 
 // fetch gate: exact-URL allow list, pre-authorization, redirect re-check
 if (!this.isAllowed(request.url)) throw new Error('...outside its classified graph...')
@@ -425,15 +430,17 @@ content-addressed Host assets, strips credentials, and applies restrictive
 CSP/referrer/permissions/nosniff headers. Each zone therefore needs the
 Worker routes in `wrangler.jsonc` plus a proxied wildcard DNS record (`AAAA *`
 to the originless placeholder `100::`). The Host refuses same-origin/missing
-configuration and browsers without `credentialless` support; deployment must
-stay disabled until that edge boundary resolves and `/healthz` succeeds.
+configuration. The edge must also serve public build assets with explicit
+CORS/CORP and nonce-origin CSP entries so an opaque-origin child can load
+them; deployment must stay disabled until that boundary resolves and
+`/healthz` succeeds.
 The CSP has one deliberate third-party egress exception: stylesheets may load
 from the exact `https://fonts.googleapis.com` origin and font binaries from
 the exact `https://fonts.gstatic.com` origin. It does not allow wildcard
 Google origins or Google access from script, connect, image, or media lanes.
 Google receives the requested URL, client IP, and user agent, while
-`credentialless` plus `Referrer-Policy: no-referrer` exclude cookies and the
-parent/card URL.
+credentialless or opaque-origin isolation plus
+`Referrer-Policy: no-referrer` exclude usable cookies and the parent/card URL.
 
 Failure posture: fail closed and say so. Silence after an ack is a protocol
 violation (RP-15.3); unavailability must refuse visibly (RP-21.3); nothing
