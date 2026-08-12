@@ -264,6 +264,53 @@ module('Acceptance | file chooser tests', function (hooks) {
       .exists('attachment field now shows the uploaded file');
   });
 
+  test('a file name carrying URL syntax keeps its extension when uploaded', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}FileLinkCard/empty`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click(`[data-test-operator-mode-stack="0"] [data-test-edit-button]`);
+    await click(
+      '[data-test-links-to-editor="attachment"] [data-test-add-new="attachment"]',
+    );
+    await click('[data-test-choose-file-modal-upload-button]');
+
+    let fileUpload = getService('file-upload') as FileUploadService;
+    await waitUntil(() => fileUpload.activeUploads.length > 0, {
+      timeout: 2000,
+      timeoutMessage: 'upload task was not created',
+    });
+
+    // A "#" would otherwise open a URL fragment and take the rest of the name
+    // with it, writing this file as "notes" — extensionless, and so typed as
+    // application/octet-stream by every layer that reads it back.
+    let task = fileUpload.activeUploads[0];
+    task.__provideFileForTesting(
+      new File(['hello upload'], 'notes#3.txt', { type: 'text/plain' }),
+    );
+
+    await waitUntil(
+      () => !document.querySelector('[data-test-choose-file-modal]'),
+      {
+        timeout: 10000,
+        timeoutMessage: 'file chooser modal did not close after upload',
+      },
+    );
+
+    assert
+      .dom(
+        '[data-test-links-to-editor="attachment"] [data-test-card="http://test-realm/test/notes-3.txt"]',
+      )
+      .exists('the file is stored under a name that kept its extension');
+  });
+
   test('can drag and drop a file into chooser modal and see workspace feedback', async function (assert) {
     await visitOperatorMode({
       stacks: [
