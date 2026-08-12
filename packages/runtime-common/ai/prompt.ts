@@ -1311,6 +1311,14 @@ const CORRECTNESS_SUCCESS_SUMMARY_INSTRUCTION =
 
 const CORRECTNESS_FAILURE_LIMIT_INSTRUCTION = `Automated correctness fixes have already been attempted ${MAX_CORRECTNESS_FIX_ATTEMPTS} times and the target is still failing validation. Stop proposing further automated patches; instead, summarize the remaining errors and ask the user how they want to proceed. Do not mention correctness or automated checks or tool calls.`;
 
+// This lands mid-answer, right after a file is written, and it is the last
+// thing the model reads before replying — so an instruction that only asks
+// for a summary reads as the end of the work. It was: a build announced as
+// two cards delivered one, reported it was clean, and stopped, because
+// nothing resumes a plan across turns.
+const CHECK_CORRECTNESS_SUMMARY_INSTRUCTION =
+  'The automated correctness checks have finished. Summarize the results based on the tool output above in one short sentence. Do not mention: correctness, automated correctness checks, tool calls. If work you already described remains unfinished, carry straight on with it in the same reply — this is a note on what just landed, not a request to stop.';
+
 function extractCorrectnessResultCard(
   toolResult?: ToolResultEvent,
 ): CorrectnessResultSummary | undefined {
@@ -1653,18 +1661,6 @@ export async function buildPromptForModel(
       }
     }
   }
-  if (shouldPromptCheckCorrectnessSummary(history, aiBotUserId)) {
-    historicalMessages.push({
-      role: 'user',
-      content:
-        // This lands mid-answer, right after a file is written, and it is the
-        // last thing the model reads before replying — so an instruction that
-        // only asks for a summary reads as the end of the work. It was: a build
-        // announced as two cards delivered one, reported it was clean, and
-        // stopped, because nothing resumes a plan across turns.
-        'The automated correctness checks have finished. Summarize the results based on the tool output above in one short sentence. Do not mention: correctness, automated correctness checks, tool calls. If work you already described remains unfinished, carry straight on with it in the same reply — this is a note on what just landed, not a request to stop.',
-    });
-  }
   let systemMessageParts = [SYSTEM_MESSAGE];
 
   systemMessageParts.push(
@@ -1730,7 +1726,19 @@ export async function buildPromptForModel(
   // re-billed at full price on every later request.
   normalizeHistoryContentShape(messages);
   addHistoryCacheBreakpoint(messages, messages.length - 1);
-  messages.push({ role: 'system', content: contextContent });
+  // The correctness-summary instruction exists for this one request only, so
+  // it rides the volatile trailing message. As its own history entry — how
+  // this used to work — it changed the history's byte layout between
+  // requests (present on this one, gone on the next) and drew the cache
+  // marker onto a message that would never exist again, wasting the turn's
+  // cache entry. Appending keeps it the last thing the model reads.
+  let trailingContent = shouldPromptCheckCorrectnessSummary(
+    history,
+    aiBotUserId,
+  )
+    ? `${contextContent}\n\n${CHECK_CORRECTNESS_SUMMARY_INSTRUCTION}`
+    : contextContent;
+  messages.push({ role: 'system', content: trailingContent });
 
   return messages;
 }

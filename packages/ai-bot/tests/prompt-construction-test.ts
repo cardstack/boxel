@@ -5272,11 +5272,20 @@ new
     );
     let enabledUserMessages =
       promptParts.messages?.filter((message) => message.role === 'user') ?? [];
+    // The instruction exists for this one request only, so it rides the
+    // volatile trailing context message rather than the history — a history
+    // entry that vanishes on the next request would defeat the prompt cache.
+    let trailingMessage = promptParts.messages?.at(-1);
+    assert.equal(trailingMessage?.role, 'system');
     assert.true(
+      messageText(trailingMessage).endsWith(summaryMessage),
+      'Summary should be appended to the trailing context message',
+    );
+    assert.false(
       enabledUserMessages.some((message) =>
-        messageText(message).endsWith(summaryMessage),
+        messageText(message).includes(summaryMessage),
       ),
-      'Summary should be included',
+      'Summary must not be a history entry — it vanishes on the next request',
     );
     assert.false(
       enabledUserMessages.some((message) =>
