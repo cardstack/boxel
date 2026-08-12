@@ -401,6 +401,25 @@ module('Integration | rp-continuity', function (hooks) {
       input,
       'focus remains on the retained Direct field',
     );
+
+    getService('loader-service').resetLoader({
+      force: true,
+      reason: 'RP-20.1 unrelated-loader-replacement',
+    });
+    await settled();
+
+    assert.strictEqual(
+      [...document.querySelectorAll<HTMLInputElement>('input')].find(
+        (candidate) => candidate.value === 'First Light',
+      ),
+      input,
+      'an unrelated Loader replacement does not remount the Direct field',
+    );
+    assert.strictEqual(
+      document.activeElement,
+      input,
+      'focus remains on the retained Direct field across Loader replacement',
+    );
   });
 
   test('RP-20.1: a retained Direct presentation follows an edit-to-isolated format transition', async function (assert) {

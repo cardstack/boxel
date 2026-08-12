@@ -499,7 +499,16 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
     let moduleIdentifier = this.boxelExecution.moduleIdentifierFor(card);
     if (moduleIdentifier) {
       this.boxelExecution.isVolatile(moduleIdentifier);
-      on.cleanup(this.boxelExecution.retainExecutableModule(moduleIdentifier));
+      // Retaining presentation-lifecycle interest is bookkeeping, not a
+      // reactive Loader dependency. `retainExecutableModule` resolves the
+      // Loader's canonical module key; keep that tracked read out of this
+      // resource frame so an unrelated Loader replacement cannot
+      // rematerialize an otherwise stable Direct/Capsule/Sandbox generation.
+      on.cleanup(
+        untrack(() =>
+          this.boxelExecution.retainExecutableModule(moduleIdentifier),
+        ),
+      );
     }
     // RP-20.1: this resource's tracked dependency set is EXACTLY the four
     // reads above — the card's identity (the `args.card` reference), the
