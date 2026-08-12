@@ -27,10 +27,11 @@ import type { BaseDef, Format } from '@cardstack/base/card-api';
 // method, but trusted-Base fallback must bind to the trusted ancestor's static
 // rather than dispatch through that authored override.
 //
-// If the regression returns, the escape component does two things a contained
-// render must never be able to do from authored code:
-//   1. writes a marker into the Host document, and
-//   2. reads the Host DI container via getOwner(this) and names a Host service.
+// If the regression returns, the escape component appears in the Host
+// document even though the requested format is owned by trusted Base. Keep the
+// fixture Capsule-safe: ambient browser authority would correctly promote the
+// module to Sandbox, where RP-6.5 intentionally refuses to de-escalate it to a
+// Direct Base fallback (covered separately in rp-sandbox-test).
 //
 // The trigger is the trusted-base fallback: the card authors NO template for
 // the requested format, so the renderer asks for a trusted Base slot.
@@ -47,28 +48,7 @@ const escapeSource = `
 
   class HostEscapeComponent extends GlimmerComponent {
     get hostReach() {
-      // Reached via the 'globalThis.' spelling so the classifier does not see
-      // a browser signal and keeps this module on the Capsule tier. If this
-      // code runs in the Host realm (the escape), globalThis is the Host
-      // global and these resolve to real browser authority the Capsule tier
-      // is supposed to deny.
-      let g = globalThis;
-      let diag = {
-        window: typeof g.window,
-        document: typeof g.document,
-        fetch: typeof g.fetch,
-        localStorage: typeof g.localStorage,
-        // Can authored code see Host-app DOM outside its own subtree? The
-        // #qunit container is a Host-owned element the component never rendered.
-        sawHostDom: false,
-      };
-      try {
-        diag.sawHostDom = Boolean(
-          g.document && g.document.querySelector('#qunit'),
-        );
-      } catch (e) { /* ignore */ }
-      globalThis.__rpEscapeDiag = diag;
-      return diag.sawHostDom ? 'host-dom-reached' : 'contained';
+      return 'authored-override-ran';
     }
     <template>
       <div data-test-getcomponent-escape data-test-owner={{this.hostReach}}>
@@ -110,7 +90,6 @@ module('Integration | rp-getcomponent-escape', function (hooks) {
   setupRealmCacheTeardown(hooks);
 
   hooks.beforeEach(async function () {
-    (globalThis as Record<string, unknown>).__rpEscapeDiag = undefined;
     await withCachedRealmSetup(async () =>
       setupIntegrationTestRealm({
         mockMatrixUtils,
@@ -145,10 +124,5 @@ module('Integration | rp-getcomponent-escape', function (hooks) {
     assert
       .dom('[data-boxel-execution="direct"]')
       .exists('the legitimate trusted Base fallback still renders in the Host');
-    assert.strictEqual(
-      (globalThis as Record<string, unknown>).__rpEscapeDiag,
-      undefined,
-      'the authored component executed no Host-authority getter',
-    );
   });
 });
