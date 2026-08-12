@@ -14,6 +14,7 @@ import { TrackedObject } from 'tracked-built-ins';
 import { Deferred, baseRealm, param, query } from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
+import type RealmService from '@cardstack/host/services/realm';
 
 import {
   withCachedRealmSetup,
@@ -265,6 +266,13 @@ module('Acceptance | host submode', function (hooks) {
           contents: realmContents,
         });
       });
+
+      // `withUpdatedTestRealmInfo` reads the realm service's resource for this
+      // realm, and some tests read it before their own visit. Nothing in the
+      // harness registers it — app components do, incidentally, while rendering
+      // during setup — so ask for it here rather than depend on what the setup
+      // visit happened to render.
+      await (getService('realm') as RealmService).ensureRealmMeta(testRealmURL);
     });
 
     test('publish modal warns that a routing rule points to a missing card', async function (assert) {
@@ -300,6 +308,13 @@ module('Acceptance | host submode', function (hooks) {
           contents: realmContents,
         });
       });
+
+      // `withUpdatedTestRealmInfo` reads the realm service's resource for this
+      // realm, and some tests read it before their own visit. Nothing in the
+      // harness registers it — app components do, incidentally, while rendering
+      // during setup — so ask for it here rather than depend on what the setup
+      // visit happened to render.
+      await (getService('realm') as RealmService).ensureRealmMeta(testRealmURL);
     });
 
     test('host submode is not available', async function (assert) {
@@ -347,6 +362,13 @@ module('Acceptance | host submode', function (hooks) {
           contents: realmContents,
         });
       });
+
+      // `withUpdatedTestRealmInfo` reads the realm service's resource for this
+      // realm, and some tests read it before their own visit. Nothing in the
+      // harness registers it — app components do, incidentally, while rendering
+      // during setup — so ask for it here rather than depend on what the setup
+      // visit happened to render.
+      await (getService('realm') as RealmService).ensureRealmMeta(testRealmURL);
     });
 
     test('host submode is available', async function (assert) {
