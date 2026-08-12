@@ -73,6 +73,24 @@ export default class BoxelRuntimeRouter {
     return { runtime, decision, release };
   }
 
+  /**
+   * Fan an executable invalidation out to every retained runtime that could
+   * hold it. Direct's Loader is owned by LoaderService and is invalidated by
+   * the Store rebuild. Capsules evict the module in place. A Sandbox that has
+   * admitted the module remints its child process so no old executable state
+   * survives the canonical server generation.
+   */
+  invalidateModule(moduleIdentifier: string): void {
+    for (let runtime of this.capsuleRuntimes.values()) {
+      runtime.invalidateModule(moduleIdentifier);
+    }
+    for (let runtime of this.sandboxRuntimes.values()) {
+      if (runtime.isModuleAdmitted(moduleIdentifier)) {
+        runtime.reloadSandbox();
+      }
+    }
+  }
+
   destroy(): void {
     this.capsuleRuntimes.destroy();
     this.sandboxRuntimes.destroy();

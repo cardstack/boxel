@@ -3726,27 +3726,49 @@ module('Integration | Store', function (hooks) {
     );
 
     let rebuilds = countRebuilds();
+    let invalidationBatches: string[][] = [];
+    let originalReestablish = (storeService as any)
+      .reestablishReferencesForCodeChange;
+    (storeService as any).reestablishReferencesForCodeChange = async (
+      invalidations: string[],
+    ) => {
+      invalidationBatches.push(invalidations);
+      return originalReestablish.call(storeService, invalidations);
+    };
+    let invalidatedModules = [
+      personModule,
+      ...Array.from(
+        { length: 5 },
+        (_, index) => `${testRealmURL}burst-${index}.gts`,
+      ),
+    ];
     try {
       // Deliver executable invalidations faster than a rebuild can complete —
       // synchronously, before the first rebuild's re-fetch settles.
-      let event: RealmEventContent = {
-        eventName: 'index',
-        indexType: 'incremental',
-        realmURL: testRealmURL,
-        invalidations: [personModule],
-      };
-      for (let i = 0; i < 6; i++) {
-        (storeService as any).handleInvalidations(event);
+      for (let module of invalidatedModules) {
+        (storeService as any).handleInvalidations({
+          eventName: 'index',
+          indexType: 'incremental',
+          realmURL: testRealmURL,
+          invalidations: [module],
+        } as RealmEventContent);
       }
       await settled();
     } finally {
       rebuilds.restore();
+      (storeService as any).reestablishReferencesForCodeChange =
+        originalReestablish;
     }
 
     let coalesced = rebuilds.count >= 1 && rebuilds.count <= 2;
     assert.ok(
       coalesced,
       `6 rapid executable invalidations coalesce to at most 2 rebuilds (saw ${rebuilds.count})`,
+    );
+    assert.deepEqual(
+      [...new Set(invalidationBatches.flat())].sort(),
+      [...invalidatedModules].sort(),
+      'coalescing preserves every executable invalidation for retained runtime eviction',
     );
 
     // End state reflects the latest generation: the open card is re-established

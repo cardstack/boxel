@@ -7,9 +7,13 @@ import { module, test } from 'qunit';
 import type {
   LooseCardResource,
   LooseSingleCardDocument,
+  Realm,
 } from '@cardstack/runtime-common';
 
-import { PermissionsContextName } from '@cardstack/runtime-common';
+import {
+  isCardInstance,
+  PermissionsContextName,
+} from '@cardstack/runtime-common';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
 import { createLiveBoxelModel } from '@cardstack/host/lib/boxel-projection';
@@ -80,6 +84,7 @@ module('Integration | rp-continuity', function (hooks) {
     autostart: true,
   });
   setupRealmCacheTeardown(hooks);
+  let testRealm: Realm;
 
   hooks.beforeEach(async function () {
     // RP-9.1: absent permissions context, editors render DISABLED — and
@@ -91,14 +96,28 @@ module('Integration | rp-continuity', function (hooks) {
       canRead: true,
       canWrite: true,
     });
-    await withCachedRealmSetup(async () =>
-      setupIntegrationTestRealm({
+    await withCachedRealmSetup(async () => {
+      ({ realm: testRealm } = await setupIntegrationTestRealm({
         mockMatrixUtils,
         contents: {
           'journal.gts': journalSource,
+          'Journal/sample.json': JSON.stringify({
+            data: {
+              attributes: {
+                headline: 'First Light',
+                entries: ['Entry 1', 'Entry 2'],
+              },
+              meta: {
+                adoptsFrom: {
+                  module: testRRI('journal'),
+                  name: 'Journal',
+                },
+              },
+            },
+          } as LooseSingleCardDocument),
         },
-      }),
-    );
+      }));
+    });
   });
 
   setupCardLogs(hooks, async () =>
@@ -120,6 +139,54 @@ module('Integration | rp-continuity', function (hooks) {
       new URL(testRealmURL),
     );
   }
+
+  async function loadPersistedJournal(): Promise<CardDef> {
+    let id = `${testRealmURL}Journal/sample`;
+    let store = getService('store');
+    store.addReference(id);
+    await store.flush();
+    let card = store.peek(id);
+    if (!isCardInstance(card)) {
+      throw new Error(`Expected ${id} to be a card instance`);
+    }
+    return card;
+  }
+
+  test('RP-20.4: an executable generation publishes only after the canonical card graph is re-established', async function (assert) {
+    let store = getService('store');
+    let initialGeneration = store.settledExecutableGeneration;
+    let card = await loadPersistedJournal();
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <CardRenderer @card={{card}} @format='isolated' @execution='auto' />
+        </template>
+      },
+    );
+    await waitFor('[data-test-journal]', { timeout: 10000 });
+
+    await testRealm.write(
+      'journal.gts',
+      journalSource.replace(
+        '<div data-test-journal>',
+        '<div data-test-journal data-test-executable-generation="two">',
+      ),
+    );
+
+    await waitUntil(
+      () => store.settledExecutableGeneration > initialGeneration,
+      { timeout: 10000 },
+    );
+
+    await waitFor('[data-test-executable-generation="two"]', {
+      timeout: 10000,
+    });
+    assert
+      .dom('[data-test-executable-generation="two"]')
+      .exists(
+        'the mounted surface resolves the replacement component with the re-established canonical instance',
+      );
+  });
 
   test('RP-20.1, RP-20.2, RP-20.5: a data mutation reaches every mounted Capsule view in place — same slot, same DOM, updated model, no loading re-entry', async function (assert) {
     let card = await createJournal();

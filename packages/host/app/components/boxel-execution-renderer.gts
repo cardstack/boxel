@@ -338,13 +338,21 @@ export default class BoxelExecutionRenderer extends Component<Signature> {
 
   @use private execution = resource(({ on }) => {
     let session = this.session;
-    // Loader replacement is the Host's executable-generation boundary. Read
-    // it synchronously in this resource's tracking frame, then resolve the
-    // caller-held instance back to canonical Store state. This covers code
-    // rebuilds where the surrounding component remains mounted with the old
-    // CardDef object while the Store has installed a fresh constructor.
-    void this.boxelExecution.executableGeneration;
-    let card = this.boxelExecution.canonicalCardFor(this.args.card);
+    // The Store publishes this generation only after a Loader replacement has
+    // been followed by re-establishing every live canonical instance. Read it
+    // synchronously in this resource's tracking frame, then resolve the
+    // caller-held instance back to that settled Store state.
+    void this.boxelExecution.prepareExecutableGeneration();
+    let requestedCard = this.args.card;
+    // `StoreService.peek()` observes the Store's tracked identity map. If the
+    // lookup participates in this resource's dependency frame, ordinary data
+    // changes are misread as executable changes: the resource is recreated,
+    // the render slot disappears, and focus/scroll/DOM identity are lost. The
+    // settled generation above is the deliberate invalidation edge; when it
+    // changes, this untracked lookup resolves the newly canonical object.
+    let card = untrack(() =>
+      this.boxelExecution.canonicalCardFor(requestedCard),
+    );
     let format = this.args.format;
     let relativeTo = this.args.relativeTo;
     let componentCodeRef = this.args.componentCodeRef;

@@ -250,6 +250,15 @@ export default class StoreService extends Service implements StoreInterface {
   // client-side search filter recomputes on edits too — not only on the
   // server search re-running.
   @tracked private _instanceMutationVersion = 0;
+  // An executable Loader can be replaced before the live card graph has been
+  // re-established against it. Consumers must not treat that intermediate
+  // Loader identity as a renderable generation: the Store still contains the
+  // old constructors at that point. This token advances only after the Store
+  // has installed the canonical instances for the new executable generation.
+  @tracked private _settledExecutableGeneration = {
+    number: 0,
+    invalidations: [] as string[],
+  };
   private cardApiCache?: typeof CardAPI;
   private gcInterval: number | undefined;
   private ready: Promise<void>;
@@ -383,6 +392,14 @@ export default class StoreService extends Service implements StoreInterface {
     await this.ready;
   }
 
+  get settledExecutableGeneration(): number {
+    return this._settledExecutableGeneration.number;
+  }
+
+  get settledExecutableInvalidations(): readonly string[] {
+    return this._settledExecutableGeneration.invalidations;
+  }
+
   // Drop every pending in-flight search entry. Callers awaiting an
   // existing promise still get their answer (the underlying HTTP is
   // already in motion); only *new* same-key callers after the drop
@@ -436,7 +453,9 @@ export default class StoreService extends Service implements StoreInterface {
     let telemetry = this.#clientTelemetry();
     let start = telemetry?.isEnabled ? performance.now() : undefined;
     this.store.reset();
-    let refetch = this.reestablishReferences.perform();
+    let refetch = this.reestablishReferencesForCodeChange(
+      opts?.triggerModule ? [opts.triggerModule] : [],
+    );
     if (telemetry?.isEnabled && start !== undefined) {
       let triggerModules = opts?.triggerModule ? [opts.triggerModule] : [];
       // A code-mode save re-establishes the graph without waiting for the
@@ -2047,6 +2066,9 @@ export default class StoreService extends Service implements StoreInterface {
           alreadyFlushed,
         );
       }
+      for (let module of executableInvalidations) {
+        this.#pendingExecutableInvalidations.add(module);
+      }
       this.rebuildForCodeChange.perform();
       // The rebuild subsumes the per-invalidation reloads below: store.reset
       // empties the graph and reestablishReferences re-fetches every live
@@ -2248,6 +2270,21 @@ export default class StoreService extends Service implements StoreInterface {
     return remoteIds.size;
   });
 
+  private async reestablishReferencesForCodeChange(
+    invalidations: readonly string[],
+  ): Promise<number> {
+    let cardsReloaded = await this.reestablishReferences.perform();
+    // Publish the generation only after every live reference has been formed
+    // with the replacement Loader. A renderer that reacts earlier can pair a
+    // new component with an obsolete CardDef object; one that observes the
+    // Store's identity map directly also remounts on ordinary data changes.
+    this._settledExecutableGeneration = {
+      number: this._settledExecutableGeneration.number + 1,
+      invalidations: [...new Set(invalidations)],
+    };
+    return cardsReloaded;
+  }
+
   // Telemetry metadata for the pending/in-flight coalesced rebuild, merged
   // across every executable invalidation that collapses into it. Drained when
   // the rebuild task begins so the emitted `rebuild` event describes exactly
@@ -2261,6 +2298,13 @@ export default class StoreService extends Service implements StoreInterface {
         events: number;
       }
     | undefined = undefined;
+
+  // `keepLatestTask` collapses intermediate invocations. Keep the executable
+  // payload independently so coalescing never drops a module that must be
+  // evicted from retained Capsule and Sandbox graphs. Each task run drains the
+  // complete batch accumulated before it starts; invalidations arriving while
+  // it is running remain for the one pending run.
+  #pendingExecutableInvalidations = new Set<string>();
 
   #accumulatePendingRebuild(
     realm: string,
@@ -2300,6 +2344,8 @@ export default class StoreService extends Service implements StoreInterface {
   // scheduling only: each rebuild is the full load-bearing reset, not a partial
   // one.
   private rebuildForCodeChange = keepLatestTask(async () => {
+    let invalidations = [...this.#pendingExecutableInvalidations];
+    this.#pendingExecutableInvalidations.clear();
     let telemetry = this.#clientTelemetry();
     let pending = this.#pendingRebuild;
     this.#pendingRebuild = undefined;
@@ -2318,13 +2364,23 @@ export default class StoreService extends Service implements StoreInterface {
     // duplicate-call window (for example, a session/setup reset immediately
     // before the realm index event).
     this.loaderService.resetLoader({
+      clearFetchCache: true,
       force: true,
       reason: 'code-change-rebuild',
     });
     this.store.reset();
     let cardsReloaded: number | undefined;
     try {
-      cardsReloaded = await this.reestablishReferences.perform();
+      cardsReloaded =
+        await this.reestablishReferencesForCodeChange(invalidations);
+    } catch (error) {
+      // No executable generation was published. Preserve the invalidation
+      // payload so a later realm event can retry without allowing a retained
+      // runtime to keep the failed generation indefinitely.
+      for (let module of invalidations) {
+        this.#pendingExecutableInvalidations.add(module);
+      }
+      throw error;
     } finally {
       // A rebuild that failed partway is still a rebuild the tab paid for, and
       // the one most worth seeing on the dashboard.

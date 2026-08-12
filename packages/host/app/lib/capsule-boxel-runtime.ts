@@ -359,6 +359,24 @@ export default class CapsuleBoxelRuntime implements BoxelRuntime {
     }
   }
 
+  /**
+   * Evict one changed authored module from this retained Capsule graph.
+   *
+   * Loader invalidation also removes known dependants. Type metadata and
+   * render-slot promises are derived from that graph but live one layer above
+   * it, so clear those small indexes as a unit. Existing mounted components
+   * remain last-known-good until their execution session publishes the next
+   * settled generation.
+   */
+  invalidateModule(moduleIdentifier: string): number {
+    let invalidated = this.evaluator.invalidateModule(moduleIdentifier);
+    if (invalidated > 0) {
+      this.metadata.clear();
+      this.renderSlots.clear();
+    }
+    return invalidated;
+  }
+
   destroy(): void {
     this.types.clear();
     this.instances.clear();

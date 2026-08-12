@@ -141,6 +141,7 @@ export default class BoxelExecutionService extends Service {
   private nextPerformanceOperation = 0;
   private nextLocalBoxel = 0;
   private sandboxCreationCount = 0;
+  private appliedExecutableGeneration = 0;
   /** Set on first `requestFor()`; see `liveModelFor()`. */
   private cardAPI?: Awaited<ReturnType<CardService['getAPI']>>;
   /**
@@ -252,15 +253,24 @@ export default class BoxelExecutionService extends Service {
   }
 
   /**
-   * Host-side executable generation token. Replacing the Loader is the
-   * established application-wide code-generation boundary: constructors and
-   * components imported by the discarded Loader must never remain the source
-   * of a later RP generation. Returning the tracked Loader identity lets the
-   * presentation resource depend on that boundary without exposing a Loader
-   * to Direct, Capsule, or Sandbox adapters.
+   * Host-side executable generation token. Loader replacement begins a code
+   * rebuild, but it is not yet a renderable generation: the Store still owns
+   * instances created by the outgoing Loader until its live graph has been
+   * re-established. The Store publishes this tracked token only after the new
+   * canonical instances are installed, so presentation never combines a new
+   * component with an obsolete CardDef object.
    */
-  get executableGeneration(): object {
-    return this.loaderService.loader;
+  prepareExecutableGeneration(): number {
+    let generation = this.store.settledExecutableGeneration;
+    if (generation === this.appliedExecutableGeneration) {
+      return generation;
+    }
+    for (let moduleIdentifier of this.store.settledExecutableInvalidations) {
+      this.classifier?.invalidate(moduleIdentifier);
+      this.router?.invalidateModule(moduleIdentifier);
+    }
+    this.appliedExecutableGeneration = generation;
+    return generation;
   }
 
   /**
