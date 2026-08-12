@@ -11,10 +11,7 @@ import {
 import StringField from '@cardstack/base/string';
 import NumberField from '@cardstack/base/number';
 import BooleanField from '@cardstack/base/boolean';
-import {
-  modelCostTier,
-  modelCostTierLabel,
-} from '@cardstack/runtime-common/model-cost';
+import { modelCostTier, modelCostTierLabel } from './model-cost';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 

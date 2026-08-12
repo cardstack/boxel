@@ -28,18 +28,36 @@ to_wait_scheme() {
 }
 
 if [ -n "$REALM_URL" ]; then
-  REALM_HOST="$REALM_URL"
-  REALM_SCHEME="$(to_wait_scheme "$REALM_URL")"
-  case "$REALM_HOST" in
-    http://*) REALM_HOST="${REALM_HOST#http://}" ;;
-    https://*) REALM_HOST="${REALM_HOST#https://}" ;;
-  esac
-  case "$REALM_HOST" in
-    */) ;;
-    *) REALM_HOST="${REALM_HOST}/" ;;
-  esac
-  REALM_READY="${REALM_SCHEME}://${REALM_HOST}${READY_PATH}"
-  READY_URLS="$BASE_REALM_READY|$REALM_READY|$SYNAPSE_URL|$SMTP_4_DEV_URL"
+  # REALM_URL may name one realm or a comma-separated list (see testem-live.js,
+  # which builds one discovery page per realm). Wait on every listed realm's
+  # readiness so a multi-realm run doesn't start discovery before each target
+  # has finished its from-scratch index.
+  REALM_READY_URLS=""
+  OLD_IFS="$IFS"
+  IFS=','
+  for realm_url in $REALM_URL; do
+    # URLs carry no internal whitespace, so strip any (e.g. after a ", ").
+    realm_url="$(printf '%s' "$realm_url" | tr -d '[:space:]')"
+    [ -z "$realm_url" ] && continue
+    REALM_SCHEME="$(to_wait_scheme "$realm_url")"
+    REALM_HOST="$realm_url"
+    case "$REALM_HOST" in
+      http://*) REALM_HOST="${REALM_HOST#http://}" ;;
+      https://*) REALM_HOST="${REALM_HOST#https://}" ;;
+    esac
+    case "$REALM_HOST" in
+      */) ;;
+      *) REALM_HOST="${REALM_HOST}/" ;;
+    esac
+    REALM_READY="${REALM_SCHEME}://${REALM_HOST}${READY_PATH}"
+    if [ -z "$REALM_READY_URLS" ]; then
+      REALM_READY_URLS="$REALM_READY"
+    else
+      REALM_READY_URLS="$REALM_READY_URLS|$REALM_READY"
+    fi
+  done
+  IFS="$OLD_IFS"
+  READY_URLS="$BASE_REALM_READY|$REALM_READY_URLS|$SYNAPSE_URL|$SMTP_4_DEV_URL"
 else
   # The live-test job uses the skills realm as its empty-by-default test
   # discovery target (no *.test.gts files = single "no realm tests found"

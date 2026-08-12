@@ -215,8 +215,10 @@ jobs:
           info='_info'
           base_ready="https://realm-server.ci.localhost/base/${ready}"
           skills_ready="https://realm-server.ci.localhost/skills/${ready}"
+          openrouter_ready="https://realm-server.ci.localhost/openrouter/${ready}"
           skills_info="https://realm-server.ci.localhost/skills/${info}"
           base_info="https://realm-server.ci.localhost/base/${info}"
+          openrouter_info="https://realm-server.ci.localhost/openrouter/${info}"
           ok=0
           for i in $(seq 1 120); do
             code=$(curl -sS -o /tmp/base_ready.json -w '%{http_code}' \
@@ -241,12 +243,29 @@ jobs:
             echo "::error::skills/_readiness-check did not return 200 within timeout (last $code)"
             exit 1
           fi
+          # openrouter carries the model-cost banding live test; the live-test
+          # runner discovers its *.test.gts, so it must be indexed and publicly
+          # readable before testem launches, same as skills.
+          ok=0
+          for i in $(seq 1 120); do
+            code=$(curl -sS -o /tmp/openrouter_ready.json -w '%{http_code}' \
+              -H "Accept: ${accept}" --max-time 15 "$openrouter_ready" || echo 000)
+            if [ "$code" = "200" ]; then ok=1; break; fi
+            echo "attempt $i: openrouter/_readiness-check -> $code (waiting)"
+            sleep 10
+          done
+          if [ "$ok" != "1" ]; then
+            echo "::error::openrouter/_readiness-check did not return 200 within timeout (last $code)"
+            exit 1
+          fi
           skills_code=$(curl -sS -o /tmp/skills_info.json -w '%{http_code}' \
             -H "Accept: ${accept}" --max-time 15 "$skills_info" || echo 000)
           base_code=$(curl -sS -o /tmp/base_info.json -w '%{http_code}' \
             -H "Accept: ${accept}" --max-time 15 "$base_info" || echo 000)
-          if [ "$skills_code" != "200" ] || [ "$base_code" != "200" ]; then
-            echo "::error::Public-read parity broken (skills=$skills_code base=$base_code)"
+          openrouter_code=$(curl -sS -o /tmp/openrouter_info.json -w '%{http_code}' \
+            -H "Accept: ${accept}" --max-time 15 "$openrouter_info" || echo 000)
+          if [ "$skills_code" != "200" ] || [ "$base_code" != "200" ] || [ "$openrouter_code" != "200" ]; then
+            echo "::error::Public-read parity broken (skills=$skills_code base=$base_code openrouter=$openrouter_code)"
             exit 1
           fi
 
@@ -274,12 +293,13 @@ jobs:
         working-directory: packages/host
         env:
           DBUS_SYSTEM_BUS_ADDRESS: unix:path=/run/dbus/system_bus_socket
-          # testem-live.js defaults to https://localhost:4201/skills/ as the
-          # realm under test; in env mode the skills realm sits at
-          # https://realm-server.<slug>.localhost/skills/. live-test-wait-for-
-          # servers.sh also reads this to know which realm readiness probe to
-          # wait on alongside base.
-          REALM_URL: https://realm-server.ci.localhost/skills/
+          # Comma-separated list of realms to discover live tests from (see
+          # testem-live.js, which builds one discovery page per realm, and
+          # live-test-wait-for-servers.sh, which waits on each realm's
+          # readiness alongside base). skills is the empty smoke target;
+          # openrouter carries the model-cost banding live test. In env mode the
+          # realms sit at https://realm-server.<slug>.localhost/<realm>/.
+          REALM_URL: https://realm-server.ci.localhost/skills/,https://realm-server.ci.localhost/openrouter/
 
       - name: Upload junit report
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

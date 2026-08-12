@@ -33,45 +33,30 @@ import { setupMockMatrix } from '../../../helpers/mock-matrix';
 import { renderComponent } from '../../../helpers/render-component';
 import { setupRenderingTest } from '../../../helpers/setup';
 
-// A minimal stand-in for the real `OpenRouterModel` catalog card — just the
-// fields the picker's cost-tier lookup reads (`modelId` + `pricing`).
+// A minimal stand-in for the real `OpenRouterModel` catalog card — just the two
+// fields the picker's cost-tier lookup reads: `modelId` (the join key) and the
+// derived `costTierLabel` badge text. The real card derives `costTierLabel` from
+// its own pricing via a `computeVia`; that derivation (and the banding math) is
+// covered by the openrouter realm's `model-cost` live test, so this fixture
+// stores the already-derived label directly. That keeps this test focused on the
+// host behavior it owns — given a catalog card with `costTierLabel = X`, the
+// picker renders badge X — rather than re-deriving the tier.
 const OPENROUTER_MODEL_SOURCE = `
-  import { CardDef, FieldDef, field, contains } from 'https://cardstack.com/base/card-api';
+  import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
   import StringField from 'https://cardstack.com/base/string';
-  import { modelCostTierLabel } from '@cardstack/runtime-common/model-cost';
-
-  export class OpenRouterPricing extends FieldDef {
-    static displayName = 'OpenRouter Pricing';
-    @field prompt = contains(StringField);
-    @field completion = contains(StringField);
-  }
 
   export class OpenRouterModel extends CardDef {
     static displayName = 'OpenRouter Model';
     @field modelId = contains(StringField);
-    @field pricing = contains(OpenRouterPricing);
-    // Mirrors the real card: the tier is a computed derived from the card's own
-    // pricing, and the picker reads it straight off the catalog search.
-    @field costTierLabel = contains(StringField, {
-      computeVia: function () {
-        return modelCostTierLabel(this.pricing?.prompt, this.pricing?.completion);
-      },
-    });
+    @field costTierLabel = contains(StringField);
   }
 `;
 
-function openRouterModelInstance(
-  modelId: string,
-  prompt: string,
-  completion: string,
-) {
+function openRouterModelInstance(modelId: string, costTierLabel: string) {
   return {
     data: {
       type: 'card',
-      attributes: {
-        modelId,
-        pricing: { prompt, completion, request: null, image: null },
-      },
+      attributes: { modelId, costTierLabel },
       meta: {
         adoptsFrom: {
           module: `${testRealmURL}openrouter-model`,
@@ -122,23 +107,17 @@ async function seedRealm(
       mockMatrixUtils,
       contents: {
         'openrouter-model.gts': OPENROUTER_MODEL_SOURCE,
-        // sonnet: blended (3*3 + 15)/4 = 6/M => $$$
         'OpenRouterModel/sonnet.json': openRouterModelInstance(
           'anthropic/claude-sonnet-4.6',
-          '0.000003',
-          '0.000015',
+          '$$$',
         ),
-        // flash: blended (3*0.1 + 0.4)/4 = 0.175/M => $
         'OpenRouterModel/flash.json': openRouterModelInstance(
           'google/gemini-3-flash-preview',
-          '0.0000001',
-          '0.0000004',
+          '$',
         ),
-        // gpt-5.4: zero-priced => Free
         'OpenRouterModel/gpt.json': openRouterModelInstance(
           'openai/gpt-5.4',
-          '0',
-          '0',
+          'Free',
         ),
         '.realm.json': `{ "name": "${realmName}" }`,
         ...extraContents,
@@ -287,8 +266,7 @@ module(
         ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'OpenRouterModel/sonnet-45.json': openRouterModelInstance(
           'anthropic/claude-sonnet-4.5',
-          '0',
-          '0',
+          'Free',
         ),
       });
       let matrixService = getService('matrix-service') as MatrixService;
