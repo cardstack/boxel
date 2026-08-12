@@ -34,32 +34,27 @@
       },
       "cards.3": {
         "links": {
-          "self": "@cardstack/base/Theme/boxel-brand-guide"
+          "self": "../../llm-model-environment/Model/bd5a43c0-0681-476d-af80-be4ad46d908c"
         }
       },
       "cards.4": {
         "links": {
-          "self": "@cardstack/base/Theme/cardstack-brand-guide"
+          "self": "../../Country/argentina"
         }
       },
       "cards.5": {
         "links": {
-          "self": "../../llm-model-environment/Model/bd5a43c0-0681-476d-af80-be4ad46d908c"
+          "self": "../../llm-model-environment/Environment/3f6cde92-99b2-4bb5-a471-20d907cb682b"
         }
       },
       "cards.6": {
         "links": {
-          "self": "../../Country/argentina"
+          "self": "../../carving-turn-entry"
         }
       },
       "cards.7": {
         "links": {
-          "self": "../../llm-model-environment/Environment/3f6cde92-99b2-4bb5-a471-20d907cb682b"
-        }
-      },
-      "cards.8": {
-        "links": {
-          "self": "../../carving-turn-entry"
+          "self": "../../DetailedStyleReference/8af54c49-13b5-4bd4-9b2d-95dd569c1f44"
         }
       }
     }
